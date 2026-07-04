@@ -1,0 +1,16 @@
+﻿# Flutter/Dart
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+
+# Generated desktop folders
+windows/flutter/ephemeral/
+
+# IDE
+.idea/
+.vscode/
+*.iml
