@@ -28,6 +28,11 @@ class LibraryStore {
 
   LibraryVideoPersistence get _videoPersistence => LibraryVideoPersistence(_db);
 
+  LibraryMetadataPersistence get _metadataPersistence =>
+      LibraryMetadataPersistence(_db);
+
+  LibraryTagMaintenance get _tagMaintenance => LibraryTagMaintenance(this);
+
   TagQueryContext get tagQueryContext => TagQueryContext(
         tagsById: tagsById,
         videoTagIdsByPathKey: videoTagIdsByPathKey,
@@ -209,19 +214,19 @@ class LibraryStore {
       {
         'id': 'folder.primary',
         'name': 'folder.primary',
-        'display_name': '一级文件夹',
+        'display_name': '\u4e00\u7ea7\u6587\u4ef6\u5939',
         'sort_order': 10,
       },
       {
         'id': 'folder.child',
         'name': 'folder.child',
-        'display_name': '二级文件夹',
+        'display_name': '\u4e8c\u7ea7\u6587\u4ef6\u5939',
         'sort_order': 20,
       },
       {
         'id': 'manual',
         'name': 'manual',
-        'display_name': '手动标签',
+        'display_name': '\u624b\u52a8\u6807\u7b7e',
         'sort_order': 30,
       },
     ];
@@ -325,17 +330,7 @@ class LibraryStore {
 
   static Future<LibraryStore> _loadFromDatabase(
       File legacyFile, Database db) async {
-    final metadata = <String, String>{};
-    for (final row in await db.query('metadata')) {
-      metadata[row['key'] as String] = row['value'] as String;
-    }
-
-    final roots = _dedupeRoots(
-        ((jsonDecode(metadata['roots'] ?? '[]') as List?) ?? const [])
-            .cast<String>());
-    final favoriteTags = _dedupeTags(
-        ((jsonDecode(metadata['favoriteTags'] ?? '[]') as List?) ?? const [])
-            .cast<String>());
+    final metadata = await LibraryMetadataPersistence(db).load();
     final videos = <String, VideoItem>{};
     for (final row in await db.query('videos')) {
       final item = LibraryVideoPersistence.videoFromRow(row);
@@ -347,9 +342,9 @@ class LibraryStore {
     return LibraryStore._(
       legacyFile,
       db,
-      roots,
+      metadata.roots,
       videos,
-      favoriteTags,
+      metadata.favoriteTags,
       tagGroups,
       tagsById,
       videoTagIdsByPathKey,
@@ -375,7 +370,7 @@ class LibraryStore {
       }
       await save();
     } catch (_) {
-      // 损坏的旧 JSON 不应阻止新的 SQLite 媒体库启动。
+      // 损坏的旧 JSON 不应阻塞新的 SQLite 媒体库启动。
     }
   }
 
@@ -384,7 +379,7 @@ class LibraryStore {
     batch.delete('video_tags');
     videoTagIdsByPathKey.clear();
     for (final item in videos.values) {
-      _syncFolderTagsInBatch(batch, item);
+      _tagMaintenance.syncFolderTagsInBatch(batch, item);
     }
     await batch.commit(noResult: true);
   }
@@ -398,7 +393,7 @@ class LibraryStore {
     for (final item in videos.values) {
       final tagIds = videoTagIdsByPathKey[TagRules.pathKey(item.path)];
       if (tagIds == null || tagIds.isEmpty) {
-        _syncFolderTagsInBatch(batch, item);
+        _tagMaintenance.syncFolderTagsInBatch(batch, item);
         changed = true;
       }
     }
@@ -411,10 +406,7 @@ class LibraryStore {
     VideoItem item, {
     String? parentTag,
   }) async {
-    final batch = _db.batch();
-    _syncManualTagsInBatch(batch, item, parentTag: parentTag);
-    _videoPersistence.insertInBatch(batch, item);
-    await batch.commit(noResult: true);
+    await _tagMaintenance.replaceManualTags(item, parentTag: parentTag);
   }
 
   Future<void> saveTag(TagItem tag) async {
@@ -433,13 +425,16 @@ class LibraryStore {
     final id = _tagIdFor(name: normalized, groupId: groupId);
     final existing = tagsById[id];
     if (existing != null && existing.source != TagSource.manual) {
-      throw StateError('同名标签已存在于该分组且来源不是 manual');
+      throw StateError('manual tag conflicts with an existing non-manual tag');
     }
-    final tag = _tagFor(
-      name: normalized,
-      groupId: groupId,
-      source: TagSource.manual,
-    );
+    final tag = existing ??
+        TagItem(
+          id: id,
+          name: normalized,
+          displayName: normalized,
+          groupId: groupId,
+          source: TagSource.manual,
+        );
     final updated = TagItem(
       id: tag.id,
       name: tag.name,
@@ -492,220 +487,12 @@ class LibraryStore {
   }
 
   Future<int> batchAddManualTag(TagItem tag, Iterable<VideoItem> items) async {
-    if (tag.source != TagSource.manual) {
-      throw StateError('批量添加只支持 manual 标签');
-    }
-    final videosToUpdate = items.toList();
-    if (videosToUpdate.isEmpty) {
-      return 0;
-    }
-    final batch = _db.batch();
-    for (final item in videosToUpdate) {
-      _addManualTagToItem(item, tag);
-      _videoPersistence.insertInBatch(batch, item);
-      _tagPersistence.attachTagInBatch(
-        batch,
-        item.path,
-        tag,
-        source: TagSource.manual,
-      );
-    }
-    await batch.commit(noResult: true);
-    return videosToUpdate.length;
+    return _tagMaintenance.batchAddManualTag(tag, items);
   }
 
   Future<int> batchRemoveManualTag(
       TagItem tag, Iterable<VideoItem> items) async {
-    if (tag.source != TagSource.manual) {
-      throw StateError('批量移除只支持 manual 标签');
-    }
-    final videosToUpdate = items.toList();
-    if (videosToUpdate.isEmpty) {
-      return 0;
-    }
-    final batch = _db.batch();
-    var changed = 0;
-    for (final item in videosToUpdate) {
-      final hadManualLink =
-          videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.contains(tag.id) ??
-              false;
-      final changedCompat = _removeManualTagFromItem(item, tag);
-      batch.delete(
-        'video_tags',
-        where: Platform.isWindows
-            ? 'video_path = ? COLLATE NOCASE AND tag_id = ? AND source = ?'
-            : 'video_path = ? AND tag_id = ? AND source = ?',
-        whereArgs: [item.path, tag.id, TagSource.manual.name],
-      );
-      videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.remove(tag.id);
-      if (videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.isEmpty ?? false) {
-        videoTagIdsByPathKey.remove(TagRules.pathKey(item.path));
-      }
-      if (hadManualLink || changedCompat) {
-        changed++;
-      }
-      _videoPersistence.insertInBatch(batch, item);
-    }
-    await batch.commit(noResult: true);
-    return changed;
-  }
-
-  void _addManualTagToItem(VideoItem item, TagItem tag) {
-    final parentId = tag.parentId;
-    if (parentId == null) {
-      item.tags.add(tag.name);
-      return;
-    }
-    (item.childTags[parentId] ??= <String>{}).add(tag.name);
-  }
-
-  bool _removeManualTagFromItem(VideoItem item, TagItem tag) {
-    final parentId = tag.parentId;
-    if (parentId == null) {
-      final folderTags = _folderTagsForItem(item);
-      final shouldKeepFolder =
-          folderTags.any((folderTag) => TagRules.sameTag(folderTag, tag.name));
-      if (shouldKeepFolder) {
-        return false;
-      }
-      final before = item.tags.length;
-      item.tags.removeWhere((value) => TagRules.sameTag(value, tag.name));
-      return item.tags.length != before;
-    }
-    final folderChildren = _folderChildTagsForItem(item, parentId);
-    final shouldKeepFolder = folderChildren
-        .any((folderTag) => TagRules.sameTag(folderTag, tag.name));
-    if (shouldKeepFolder) {
-      return false;
-    }
-    final children = item.childTags[parentId];
-    if (children == null) {
-      return false;
-    }
-    final before = children.length;
-    children.removeWhere((value) => TagRules.sameTag(value, tag.name));
-    if (children.isEmpty) {
-      item.childTags.remove(parentId);
-    }
-    return children.length != before;
-  }
-
-  void _syncFolderTagsInBatch(Batch batch, VideoItem item) {
-    _tagPersistence.removeVideoTagSourceInBatch(
-        batch, item.path, TagSource.folder);
-    for (final tag in item.tags) {
-      _tagPersistence.attachTagInBatch(
-        batch,
-        item.path,
-        _tagFor(
-          name: tag,
-          groupId: 'folder.primary',
-          source: TagSource.folder,
-        ),
-        source: TagSource.folder,
-      );
-    }
-    for (final entry in item.childTags.entries) {
-      for (final child in entry.value) {
-        _tagPersistence.attachTagInBatch(
-          batch,
-          item.path,
-          _tagFor(
-            name: child,
-            groupId: 'folder.child',
-            source: TagSource.folder,
-            parentId: entry.key,
-          ),
-          source: TagSource.folder,
-        );
-      }
-    }
-  }
-
-  void _syncManualTagsInBatch(Batch batch, VideoItem item,
-      {String? parentTag}) {
-    _tagPersistence.removeManualTagScopeInBatch(
-      batch,
-      item.path,
-      parentTag: parentTag,
-    );
-    if (parentTag == null) {
-      final folderTags = _folderTagsForItem(item);
-      for (final tag in item.tags) {
-        if (folderTags.any((folderTag) => TagRules.sameTag(folderTag, tag))) {
-          continue;
-        }
-        _tagPersistence.attachTagInBatch(
-          batch,
-          item.path,
-          _tagFor(
-            name: tag,
-            groupId: 'manual',
-            source: TagSource.manual,
-          ),
-          source: TagSource.manual,
-        );
-      }
-      return;
-    }
-    final folderChildTags = _folderChildTagsForItem(item, parentTag);
-    for (final child in item.childTags[parentTag] ?? const <String>{}) {
-      if (folderChildTags
-          .any((folderTag) => TagRules.sameTag(folderTag, child))) {
-        continue;
-      }
-      _tagPersistence.attachTagInBatch(
-        batch,
-        item.path,
-        _tagFor(
-          name: child,
-          groupId: 'manual',
-          source: TagSource.manual,
-          parentId: parentTag,
-        ),
-        source: TagSource.manual,
-      );
-    }
-  }
-
-  Set<String> _folderTagsForItem(VideoItem item) {
-    final rootPath = item.rootPath;
-    if (rootPath == null || rootPath.isEmpty) {
-      return const <String>{};
-    }
-    return TagRules.parentTagsFor(rootPath, item.path);
-  }
-
-  Set<String> _folderChildTagsForItem(VideoItem item, String parentTag) {
-    final rootPath = item.rootPath;
-    if (rootPath == null || rootPath.isEmpty) {
-      return const <String>{};
-    }
-    return TagRules.childTagsFor(rootPath, item.path)[parentTag] ??
-        const <String>{};
-  }
-
-  TagItem _tagFor({
-    required String name,
-    required String groupId,
-    required TagSource source,
-    String? parentId,
-  }) {
-    final id = _tagIdFor(name: name, groupId: groupId, parentId: parentId);
-    final existing = tagsById[id];
-    if (existing != null) {
-      return existing;
-    }
-    final item = TagItem(
-      id: id,
-      name: name,
-      displayName: name,
-      groupId: groupId,
-      parentId: parentId,
-      source: source,
-    );
-    tagsById[id] = item;
-    return item;
+    return _tagMaintenance.batchRemoveManualTag(tag, items);
   }
 
   static String _tagIdFor({
@@ -719,34 +506,36 @@ class LibraryStore {
 
   Future<void> save() async {
     final batch = _db.batch();
-    batch.insert('metadata', {'key': 'roots', 'value': jsonEncode(roots)},
-        conflictAlgorithm: ConflictAlgorithm.replace);
-    batch.insert(
-        'metadata', {'key': 'favoriteTags', 'value': jsonEncode(favoriteTags)},
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    _metadataPersistence.saveInBatch(
+      batch,
+      roots: roots,
+      favoriteTags: favoriteTags,
+    );
     batch.delete('videos');
     for (final item in videos.values) {
       _videoPersistence.insertInBatch(batch, item);
-      _syncFolderTagsInBatch(batch, item);
+      _tagMaintenance.syncFolderTagsInBatch(batch, item);
     }
     await batch.commit(noResult: true);
   }
 
   Future<void> saveMetadata() async {
-    final batch = _db.batch();
-    batch.insert('metadata', {'key': 'roots', 'value': jsonEncode(roots)},
-        conflictAlgorithm: ConflictAlgorithm.replace);
-    batch.insert(
-        'metadata', {'key': 'favoriteTags', 'value': jsonEncode(favoriteTags)},
-        conflictAlgorithm: ConflictAlgorithm.replace);
-    await batch.commit(noResult: true);
+    await _metadataPersistence.save(
+      roots: roots,
+      favoriteTags: favoriteTags,
+    );
   }
 
   /**
+   *
    * 关闭当前媒体库数据库连接。
    *
-   * 应用运行期通常随进程持有 `LibraryStore`，测试和未来 repository 拆分需要显式释放
-   * SQLite 文件句柄，避免临时 profile 或测试数据库目录被占用。
+   *
+娴嬭瘯鍜?
+ repository
+   * 测试和 repository 拆分需要显式释放
+ SQLite
+   * SQLite 文件句柄。
    */
   Future<void> close() => _db.close();
 
@@ -775,10 +564,13 @@ class LibraryStore {
   }
 
   /**
+   *
    * 从媒体库根目录列表移除一个目录。
    *
-   * 这里只更新 root 配置，不删除磁盘文件，也不立即清理已有视频记录；
-   * 后续 stable identity / missing-relink 阶段再决定视频记录如何标记。
+   *
+鍙洿鏂?
+ root
+   * 只更新 root 配置，不删除磁盘文件，也不立即清理已有视频记录。
    */
   Future<void> removeRoot(String rootPath) async {
     final rootKey = TagRules.pathKey(TagRules.normalizeRootPath(rootPath));
@@ -787,99 +579,7 @@ class LibraryStore {
   }
 
   Future<int> scan() async {
-    final scanResult = await const LibraryScanService().scanRoots(roots);
-    final batch = _db.batch();
-    var added = 0;
-
-    for (final scanned in scanResult.entries) {
-      final videoKey = TagRules.pathKey(scanned.path);
-      final existing = videos[videoKey];
-      if (existing == null) {
-        final item = VideoItem(
-          path: scanned.path,
-          title: scanned.title,
-          folder: scanned.folder,
-          tags: scanned.tags,
-          childTags: scanned.childTags,
-          rootPath: scanned.rootPath,
-          relativePath: scanned.relativePath,
-          fileSize: scanned.fileSize,
-          modifiedMs: scanned.modifiedMs,
-          mediaFingerprint: scanned.mediaFingerprint,
-          addedAt: DateTime.now(),
-        );
-        videos[videoKey] = item;
-        _videoPersistence.insertInBatch(batch, item);
-        _syncFolderTagsInBatch(batch, item);
-        added++;
-      } else {
-        final tagsChanged = !_setEquals(existing.tags, scanned.tags);
-        final childTagsChanged =
-            !_childTagsEquals(existing.childTags, scanned.childTags);
-        final contentChanged = existing.mediaFingerprint != null &&
-            existing.mediaFingerprint != scanned.mediaFingerprint;
-        final indexChanged = existing.rootPath != scanned.rootPath ||
-            existing.relativePath != scanned.relativePath ||
-            existing.fileSize != scanned.fileSize ||
-            existing.modifiedMs != scanned.modifiedMs ||
-            existing.mediaFingerprint != scanned.mediaFingerprint;
-        existing.tags
-          ..clear()
-          ..addAll(scanned.tags);
-        existing.childTags
-          ..clear()
-          ..addAll(scanned.childTags
-              .map((key, value) => MapEntry(key, <String>{...value})));
-        existing.rootPath = scanned.rootPath;
-        existing.relativePath = scanned.relativePath;
-        existing.fileSize = scanned.fileSize;
-        existing.modifiedMs = scanned.modifiedMs;
-        existing.mediaFingerprint = scanned.mediaFingerprint;
-        if (contentChanged) {
-          existing.mediaDetails = null;
-          existing.mediaDetailsError = null;
-          existing.thumbnailError = null;
-        }
-        if (tagsChanged || childTagsChanged || indexChanged) {
-          _videoPersistence.insertInBatch(batch, existing);
-          if (tagsChanged || childTagsChanged) {
-            _syncFolderTagsInBatch(batch, existing);
-          }
-        }
-      }
-    }
-
-    final removedPaths = <String>[];
-    videos.removeWhere((pathKey, item) {
-      final shouldRemove = !scanResult.seenPathKeys.contains(pathKey) &&
-          !File(item.path).existsSync();
-      if (shouldRemove) {
-        removedPaths.add(item.path);
-      }
-      return shouldRemove;
-    });
-    for (final path in removedPaths) {
-      videoTagIdsByPathKey.remove(TagRules.pathKey(path));
-      batch.delete(
-        'video_tags',
-        where: Platform.isWindows
-            ? 'video_path = ? COLLATE NOCASE'
-            : 'video_path = ?',
-        whereArgs: [path],
-      );
-      batch.delete(
-        'videos',
-        where: Platform.isWindows ? 'path = ? COLLATE NOCASE' : 'path = ?',
-        whereArgs: [path],
-      );
-    }
-    batch.insert('metadata', {'key': 'roots', 'value': jsonEncode(roots)},
-        conflictAlgorithm: ConflictAlgorithm.replace);
-    batch.insert(
-        'metadata', {'key': 'favoriteTags', 'value': jsonEncode(favoriteTags)},
-        conflictAlgorithm: ConflictAlgorithm.replace);
-    await batch.commit(noResult: true);
-    return added;
+    return LibraryScanCoordinator(this).scan();
   }
 
   static Future<String?> mediaFingerprintFor(String path) async {

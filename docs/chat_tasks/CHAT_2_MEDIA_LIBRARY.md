@@ -106,3 +106,11 @@
 - 新增 `LibraryTagPersistence`，集中 `tags`、`tag_aliases`、`video_tags` 的写入、手动标签作用域清理和引用计数。
 - 新增 `LibraryVideoPersistence`，集中 `videos` 表行映射、批量写入、单条 upsert 和删除。
 - `LibraryStore` 仍负责扫描协调、folder/manual 来源语义、内存索引协调和兼容字段维护；本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 过滤语义。
+
+## 2026-07-08 LibraryStore metadata / scan / tag maintenance 拆分
+
+- 补充 focused tests：metadata roots / favoriteTags 去重持久化、扫描删除缺失视频并保留剩余 manual 标签、manual child link 删除不破坏 folder child 兼容字段。
+- 新增 `LibraryMetadataPersistence`，集中 metadata 表读写和去重。
+- 新增 `LibraryScanCoordinator`，集中扫描结果合并、增量写库、缺失视频清理、folder 标签索引刷新和 metadata batch 保存。
+- 新增 `LibraryTagMaintenance`，集中 manual/folder 来源分离策略和批量 manual 标签维护。
+- 本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、stable identity 或 missing/relink 行为。

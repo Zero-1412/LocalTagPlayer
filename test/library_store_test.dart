@@ -323,4 +323,132 @@ void main() {
     expect(deleted.videoTagIdsByPathKey[TagRules.pathKey(file.path)], isNull);
     expect((await deleted.tagUsageSummaries())[tag.id]?.manual ?? 0, 0);
   });
+
+  test('metadata repository dedupes roots and favorite tags on reload',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('metadata_repo');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    await mediaRoot.create(recursive: true);
+
+    final store = await _loadTrackedStore(stores);
+    store.roots
+      ..add(mediaRoot.path)
+      ..add('${mediaRoot.path}${Platform.pathSeparator}');
+    store.favoriteTags
+      ..add('alpha')
+      ..add('Alpha')
+      ..add('beta');
+    await store.saveMetadata();
+
+    final reloaded = await _loadTrackedStore(stores);
+    expect(reloaded.roots, [mediaRoot.path]);
+    expect(reloaded.favoriteTags, ['alpha', 'beta']);
+
+    await reloaded.removeRoot('${mediaRoot.path}${Platform.pathSeparator}');
+    final withoutRoot = await _loadTrackedStore(stores);
+    expect(withoutRoot.roots, isEmpty);
+    expect(withoutRoot.favoriteTags, ['alpha', 'beta']);
+  });
+
+  test(
+      'scan coordinator removes missing videos and keeps remaining manual tags',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('scan_remove');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final kept = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Series', 'Album', 'kept.mp4'],
+    );
+    final removed = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Series', 'Album', 'removed.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    expect(await store.addRootAndScan(mediaRoot.path), 2);
+    final keptItem = _videoByPath(store, kept.path);
+    final removedItem = _videoByPath(store, removed.path);
+    final manual =
+        await store.createManualTag(name: 'manual', groupId: 'manual');
+    expect(await store.batchAddManualTag(manual, [keptItem, removedItem]), 2);
+
+    await removed.delete();
+    expect(await store.scan(), 0);
+
+    expect(store.videos[TagRules.pathKey(removed.path)], isNull);
+    expect(store.videoTagIdsByPathKey[TagRules.pathKey(removed.path)], isNull);
+    expect(store.videoTagIdsByPathKey[TagRules.pathKey(kept.path)],
+        contains(manual.id));
+
+    final reloaded = await _loadTrackedStore(stores);
+    expect(reloaded.videos[TagRules.pathKey(removed.path)], isNull);
+    expect(
+        reloaded.videoTagIdsByPathKey[TagRules.pathKey(removed.path)], isNull);
+    expect(reloaded.videoTagIdsByPathKey[TagRules.pathKey(kept.path)],
+        contains(manual.id));
+  });
+
+  test(
+      'tag maintenance removes manual child link without deleting folder child',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('tag_strategy');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Series', 'Album', 'strategy.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, file.path);
+    final manualChild = const TagItem(
+      id: 'manual:series:album',
+      name: 'Album',
+      displayName: 'manual Album',
+      groupId: 'manual',
+      parentId: 'Series',
+      source: TagSource.manual,
+    );
+    await store.saveTag(manualChild);
+    expect(await store.batchAddManualTag(manualChild, [item]), 1);
+    expect(store.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
+        contains(manualChild.id));
+
+    expect(await store.batchRemoveManualTag(manualChild, [item]), 1);
+
+    expect(item.childTags['Series'], contains('Album'));
+    expect(
+      store.videoTagIdsByPathKey[TagRules.pathKey(file.path)]
+              ?.contains(manualChild.id) ??
+          false,
+      isFalse,
+    );
+    final reloaded = await _loadTrackedStore(stores);
+    final reloadedItem = _videoByPath(reloaded, file.path);
+    expect(reloadedItem.childTags['Series'], contains('Album'));
+    expect(
+      reloaded.videoTagIdsByPathKey[TagRules.pathKey(file.path)]
+              ?.contains(manualChild.id) ??
+          false,
+      isFalse,
+    );
+  });
 }

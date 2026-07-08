@@ -201,6 +201,22 @@ class LibraryTagPersistence {
   }
 
   /**
+   * 在批处理中删除视频的所有标签关联。
+   *
+   * 扫描清理缺失视频时需要和视频表删除同批提交，避免中间状态留下悬空关联。
+   */
+  void deleteVideoLinksInBatch(Batch batch, String path) {
+    _videoTagIdsByPathKey.remove(TagRules.pathKey(path));
+    batch.delete(
+      'video_tags',
+      where: Platform.isWindows
+          ? 'video_path = ? COLLATE NOCASE'
+          : 'video_path = ?',
+      whereArgs: [path],
+    );
+  }
+
+  /**
    * 统计标签被多少视频引用。
    *
    * 该方法属于持久化边界，因为它直接读取关联表，不复制过滤查询语义。

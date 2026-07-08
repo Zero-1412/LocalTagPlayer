@@ -228,6 +228,7 @@ flutter build windows --debug
 - 2026-07-08 本轮补充 `LibraryStore` focused tests，覆盖标签别名/隐藏/收藏/排序持久化、手动二级标签与 folder 二级标签分离、视频直接 upsert/delete 后的标签关联清理。
 - 2026-07-08 `LibraryStore` 已拆出 `LibraryTagPersistence` 与 `LibraryVideoPersistence`，store 继续负责扫描、folder/manual 语义和内存状态协调；本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 语义。
 - 2026-07-08 播放页已拆出 `PlayerPlaybackController` 和 `player_diagnostics_dialog.dart`；播放器仍消费媒体库传入的当前过滤队列，未修改 `PlayerBackend`、mpv 打开流程或缩略图/media 队列。
+- 2026-07-08 继续补充 metadata / scan / tag maintenance focused tests，并拆出 `LibraryMetadataPersistence`、`LibraryScanCoordinator`、`LibraryTagMaintenance`；播放器侧拆出 `PlayerOpenRequestController` 和 `player_delete_dialog.dart`。
 - 本轮验证：`flutter test`、`flutter analyze`、`flutter build windows --debug` 通过；debug exe 已启动并通过 Computer Use smoke 到主界面，确认“添加目录 / 媒体库 / 本地收藏 / 目录管理 / 标签筛选”等入口可见。
 - 第一阶段拆分已完成，但仍是同一个 Dart library；下一阶段需要小步把低风险 core/model 文件迁移到普通 import，并逐步让实现依赖新接口。
 - 本轮 `dart format`、`flutter analyze` 和 Windows debug 构建通过；历史上本机 formatter 偶发超时，后续如复现需单独确认。
@@ -241,11 +242,11 @@ flutter build windows --debug
 优先级从高到低：
 
 1. 小步迁移平台与数据接口实现：让 `LibraryStore`、媒体工具和页面逐步依赖 `FileSystemAdapter`、`DatabaseProvider`、Repository 接口，迁移时必须保持 Windows 行为不变。
-2. 继续把 `LibraryStore` 中的扫描协调、标签维护策略、metadata 读写拆成更小服务；只有在 focused tests 覆盖后再移动行为逻辑。
-3. 排查播放卡顿：结合新增后台并发统计，确认播放时缩略图队列暂停后是否仍有已启动任务造成 I/O 抖动。
-4. 完善诊断能力：继续增加 FFmpeg/FFprobe 实际调用耗时、可复制诊断摘要和播放诊断入口联动。
-5. 继续优化媒体库 schema：推进 `videoId + fingerprint + mutable path`，增加 `missing` 标记、单文件 relink 和批量路径替换。
-6. 继续优化播放器右侧列表：基于滚动可见区动态预取缩略图，并减少播放中列表状态刷新频率。
+2. 继续收敛 `LibraryStore` 剩余职责：tag usage summary 查询、schema/default groups 初始化、legacy JSON 导入可继续拆成更小 helper，但先补 focused tests。
+3. 播放器侧下一步可拆视频信息弹窗和诊断采样 builder，继续缩小 `PlayerPage`。
+4. 排查播放卡顿：结合新增后台并发统计，确认播放时缩略图队列暂停后是否仍有已启动任务造成 I/O 抖动。
+5. 完善诊断能力：继续增加 FFmpeg/FFprobe 实际调用耗时、可复制诊断摘要和播放诊断入口联动。
+6. 继续优化媒体库 schema：推进 `videoId + fingerprint + mutable path`，增加 `missing` 标记、单文件 relink 和批量路径替换。
 
 ## 新 Chat 启动提示词
 

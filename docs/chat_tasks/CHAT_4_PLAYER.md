@@ -83,3 +83,9 @@
 - 新增 `PlayerPlaybackController`，集中维护来源播放队列、当前二级标签、正在播放索引和选中索引；页面仍负责 mpv 打开、快捷键、删除确认和 UI 生命周期。
 - 新增 `player_diagnostics_dialog.dart`，承接播放诊断弹窗、连续采样 timer 和播放状态订阅；关闭弹窗时继续释放异步资源。
 - 本轮未修改 `PlayerBackend`、filtered queue 来源、当前 index 展示、右侧二级标签切换语义或缩略图/media 队列。
+
+## 2026-07-08 播放 open 请求与删除确认拆分
+
+- 新增 `PlayerOpenRequestController`，集中最新待打开路径、open worker 运行状态和打开中遮罩状态；`PlayerPage` 继续负责实际 `Player.open` 调用和 mpv 参数设置。
+- 新增 `player_delete_dialog.dart`，承接删除视频文件确认弹窗，后续可继续扩展删除影响提示。
+- 本轮未修改 `PlayerBackend`、filtered queue 来源、当前 index 展示、右侧二级标签切换语义或缩略图/media 队列。

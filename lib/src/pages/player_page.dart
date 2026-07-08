@@ -78,9 +78,7 @@ class _PlayerPageState extends State<PlayerPage> {
   late final ScrollController _queueScrollController;
   late final MediaDetailsService _detailsService;
   late final PlayerPlaybackController _playback;
-  var _isOpening = false;
-  var _openWorkerRunning = false;
-  String? _pendingOpenPath;
+  final _openRequests = PlayerOpenRequestController();
   DateTime? _ignoreQueueSelectionBefore;
 
   static const double _queueItemExtent = 82;
@@ -249,25 +247,22 @@ class _PlayerPageState extends State<PlayerPage> {
     if (_queue.isEmpty) {
       return;
     }
-    _pendingOpenPath = _currentItem.path;
-    if (!_openWorkerRunning) {
+    if (_openRequests.request(_currentItem.path)) {
       unawaited(_drainOpenRequests());
     }
   }
 
   Future<void> _drainOpenRequests() async {
-    _openWorkerRunning = true;
     if (mounted) {
-      setState(() => _isOpening = true);
+      setState(_openRequests.beginDrain);
     }
     var shouldContinue = false;
     try {
       while (mounted) {
-        final path = _pendingOpenPath;
+        final path = _openRequests.takePendingPath();
         if (path == null) {
           break;
         }
-        _pendingOpenPath = null;
         try {
           await _applyPlaybackPerformanceProfile();
           if (!mounted) {
@@ -290,10 +285,10 @@ class _PlayerPageState extends State<PlayerPage> {
         }
       }
     } finally {
-      _openWorkerRunning = false;
-      shouldContinue = mounted && _pendingOpenPath != null;
+      shouldContinue = mounted && _openRequests.hasPending;
+      _openRequests.finishDrain(keepOpening: shouldContinue);
       if (mounted && !shouldContinue) {
-        setState(() => _isOpening = false);
+        setState(() {});
       }
     }
     if (shouldContinue) {
@@ -376,24 +371,8 @@ class _PlayerPageState extends State<PlayerPage> {
     }
 
     final item = _queue[_selectedIndex];
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('\u5220\u9664\u89c6\u9891\u6587\u4ef6'),
-        content: Text('${item.title}\n\n${item.path}'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('\u53d6\u6d88'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('\u5220\u9664'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
+    final confirmed = await showPlayerDeleteConfirmationDialog(context, item);
+    if (!confirmed || !mounted) {
       return;
     }
 
@@ -723,7 +702,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   @override
   void dispose() {
-    _pendingOpenPath = null;
+    _openRequests.cancel();
     _queueScrollController.dispose();
     _focusNode.dispose();
     _player.dispose();
@@ -868,7 +847,7 @@ class _PlayerPageState extends State<PlayerPage> {
                                 ),
                               ),
                             ),
-                            if (_isOpening)
+                            if (_openRequests.isOpening)
                               const Positioned.fill(
                                 child: ColoredBox(
                                   color: Color(0x66000000),

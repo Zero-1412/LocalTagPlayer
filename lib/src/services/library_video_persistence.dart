@@ -125,4 +125,17 @@ class LibraryVideoPersistence {
       whereArgs: [path],
     );
   }
+
+  /**
+   * 在外层批处理中删除视频行。
+   *
+   * 扫描清理缺失文件时与标签关联删除同批提交，保持视频表和关联表一致。
+   */
+  void deleteInBatch(Batch batch, String path) {
+    batch.delete(
+      'videos',
+      where: Platform.isWindows ? 'path = ? COLLATE NOCASE' : 'path = ?',
+      whereArgs: [path],
+    );
+  }
 }

@@ -2,6 +2,15 @@
 
 ## 2026-07-08
 
+### LibraryStore 边界继续拆分
+
+- `LibraryStore` focused tests 继续覆盖 metadata 去重持久化、扫描删除缺失视频并保留剩余 manual 标签、manual child link 删除不破坏 folder child 兼容字段。
+- 新增 `LibraryMetadataPersistence`，集中 metadata 表 roots / favoriteTags 的加载、去重和保存。
+- 新增 `LibraryScanCoordinator`，承接扫描结果合并、增量视频写入、缺失视频清理、folder 标签索引刷新和 metadata batch 保存。
+- 新增 `LibraryTagMaintenance`，承接 manual/folder 标签来源分离策略、批量 manual 标签添加/移除、folder/manual 标签索引同步。
+- 播放器侧新增 `PlayerOpenRequestController` 和 `player_delete_dialog.dart`，把 open 请求最新路径/worker/遮罩状态与删除确认弹窗从 `PlayerPage` 拆出。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、`PlayerBackend` 或缩略图/media 队列。
+
 ### Store 测试保护与播放器拆分
 
 - 新增 `test/library_store_test.dart` focused tests，覆盖临时目录扫描、folder 一级/二级标签派生、manual 标签添加/移除不破坏 folder 标签，以及 roots、favoriteTags、收藏和播放时间的 `save/load` 持久化。
