@@ -80,6 +80,14 @@ flutter analyze
 flutter build windows --debug
 ```
 
+Git 规则：
+
+```text
+验证通过后只提交本次任务相关文件。
+提交成功后自动执行 git push 到当前分支的远程跟踪分支。
+如果远程不存在、认证失败、网络失败或用户明确要求暂不推送，记录原因并保留本地提交。
+```
+
 已知本机注意事项：
 
 ```text

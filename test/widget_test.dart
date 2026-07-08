@@ -326,6 +326,25 @@ void main() {
     expect(expanded, isTrue);
   });
 
+  testWidgets('top search field accepts keyboard input', (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    var latestKeyword = '';
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (value) => latestKeyword = value,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.enterText(find.byKey(LibrarySmokeKeys.searchField), 'lupa');
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(controller.text, 'lupa');
+    expect(latestKeyword, 'lupa');
+  });
+
   test('cleared filter query returns to empty state', () {
     const active = FilterQuery(
       primaryTagId: '原神',

@@ -17,6 +17,10 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 新增 Git 远程提交规则：验证通过并完成本地提交后，必须 `git push` 到当前分支远程跟踪分支；远程/认证/网络失败时记录原因并保留本地提交。
+- 顶部搜索框从 `SearchBar` 改为稳定 `TextField` 输入链路，保留原搜索图标、`Ctrl + K` 提示、controller 和 `onChanged` 筛选触发方式。
+- 新增顶部搜索框 widget smoke test，直接输入 `lupa` 并断言 `TextEditingController` 与 `onSearchChanged` 同步更新。
+- 真实窗口复测：Computer Use 的 `type_text` / `set_value` 仍受 Flutter Windows UIA 限制，但逐键输入可触发搜索筛选；后续仍需人工确认物理键盘中文/英文输入体验。
 - 完成主界面第一轮真实窗口 smoke test：覆盖媒体库、最近播放、智能收藏、标签中心、设置、排序菜单、右侧标签面板收起/恢复和播放入口。
 - 修复右侧标签筛选面板收起后恢复入口缺少按钮语义：收起窄条新增“展开标签筛选”语义、Tooltip 和稳定 smoke key，真实窗口复测可恢复面板。
 - 新增收起窄条 widget smoke test，覆盖 key、Tooltip 和点击回调；本轮 `dart format`、`flutter test`、`flutter analyze`、`flutter build windows --debug` 均通过。

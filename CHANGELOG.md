@@ -2,6 +2,14 @@
 
 ## 2026-07-08
 
+### 搜索输入与 Git 规则
+
+- 新增 Git 远程提交规则：验证通过并完成本地提交后，必须执行 `git push` 到当前分支远程跟踪分支；如果远程不存在、认证失败、网络失败或用户明确要求暂不推送，记录原因并保留本地提交。
+- 顶部搜索框从 `SearchBar` 改为稳定 `TextField` 输入链路，保留原搜索图标、`Ctrl + K` 提示、controller 和 `onChanged` 筛选刷新方式。
+- 新增顶部搜索框 widget smoke test：输入 `lupa` 后断言 `TextEditingController` 和 `onSearchChanged` 都收到新关键字。
+- 真实窗口 QA 继续复测：Computer Use 的 `type_text` / `set_value` 对 Flutter Windows 文本控件仍不稳定；逐键输入可触发搜索筛选，但目录管理、本地媒体库路径和右侧一级/二级筛选因 Windows 自动化前台窗口状态中断，仍需人工复测。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue 或缩略图/media 队列。
+
 ### 主界面 smoke test
 
 - 使用 debug exe 对主界面第一轮 smoke test：覆盖媒体库、最近播放、智能收藏、标签中心、设置、排序菜单、右侧标签面板收起/恢复和播放入口。

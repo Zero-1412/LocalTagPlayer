@@ -16,6 +16,7 @@ class LibrarySmokeKeys {
       ValueKey<String>('smoke.tag.more-secondary-tags');
   static const listActionState = ValueKey<String>('smoke.list.action-state');
   static const collapsedTagRail = ValueKey<String>('smoke.tag.collapsed-rail');
+  static const searchField = ValueKey<String>('smoke.top.search-field');
 
   /**
    * 本地媒体库 root 项命中标识。
@@ -2928,38 +2929,72 @@ class _ReferenceTopBar extends StatelessWidget {
                   ),
                   boxShadow: _appSoftShadow,
                 ),
-                child: SearchBar(
+                /**
+                 * 主搜索框使用 TextField 而不是 Material SearchBar。
+                 *
+                 * Windows 桌面自动化和真实键盘输入都需要稳定触发 EditableText 的输入链路；
+                 * SearchBar 在 smoke test 中出现过可聚焦但 type_text 不写入的问题。
+                 */
+                child: TextField(
+                  key: LibrarySmokeKeys.searchField,
                   controller: controller,
-                  leading: Icon(
-                    Icons.search_rounded,
-                    size: 23,
-                    color: keywordActive
-                        ? _appAccentViolet
-                        : const Color(0xff566274),
-                  ),
-                  hintText: compact
-                      ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
-                      : '\u641c\u7d22\u6587\u4ef6\u540d\u0020\u002f\u0020\u6807\u7b7e\u0020\u002f\u0020\u8def\u5f84\u002e\u002e\u002e',
+                  textInputAction: TextInputAction.search,
                   onChanged: onSearchChanged,
-                  elevation: const WidgetStatePropertyAll(0),
-                  backgroundColor:
-                      const WidgetStatePropertyAll(Colors.transparent),
-                  side: const WidgetStatePropertyAll(BorderSide.none),
-                  padding: const WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(horizontal: 14),
+                  onSubmitted: onSearchChanged,
+                  style: const TextStyle(
+                    color: _appText,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
                   ),
-                  trailing: constrained
-                      ? null
-                      : const [
-                          Text(
-                            'Ctrl + K',
-                            style: TextStyle(
-                              color: Color(0xff8a94a6),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 0,
+                      vertical: 15,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      size: 23,
+                      color: keywordActive
+                          ? _appAccentViolet
+                          : const Color(0xff566274),
+                    ),
+                    prefixIconConstraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 44,
+                    ),
+                    hintText: compact
+                        ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
+                        : '\u641c\u7d22\u6587\u4ef6\u540d\u0020\u002f\u0020\u6807\u7b7e\u0020\u002f\u0020\u8def\u5f84\u002e\u002e\u002e',
+                    hintStyle: const TextStyle(
+                      color: Color(0xff566274),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    suffixIcon: constrained
+                        ? null
+                        : const Padding(
+                            padding: EdgeInsets.only(right: 14),
+                            child: Center(
+                              widthFactor: 1,
+                              child: Text(
+                                'Ctrl + K',
+                                style: TextStyle(
+                                  color: Color(0xff8a94a6),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
-                        ],
+                    suffixIconConstraints: const BoxConstraints(
+                      minWidth: 68,
+                      minHeight: 44,
+                    ),
+                  ),
                 ),
               ),
             );
@@ -3014,6 +3049,39 @@ class _ReferenceTopBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/**
+ * 顶部搜索栏 smoke test 入口。
+ *
+ * 只暴露真实顶部栏里的搜索输入链路，避免测试复制一份搜索 UI 后漏掉桌面输入问题。
+ */
+@visibleForTesting
+Widget referenceTopBarSearchSmokeHarness({
+  required TextEditingController controller,
+  required ValueChanged<String> onSearchChanged,
+}) {
+  return MaterialApp(
+    home: Scaffold(
+      body: _ReferenceTopBar(
+        controller: controller,
+        videoCount: 0,
+        totalCount: 0,
+        keyword: controller.text,
+        sortMode: SortMode.recent,
+        layoutSize: LayoutSize.expanded,
+        hasActiveFilters: false,
+        favoritesSelected: false,
+        onSearchChanged: onSearchChanged,
+        onSortChanged: (_) {},
+        denseResultGrid: false,
+        onResultViewChanged: (_) {},
+        onFavoritesToggle: () {},
+        onOpenTagManager: () {},
+        onOpenFilters: () {},
+      ),
+    ),
+  );
 }
 
 class _ReferenceActionButton extends StatelessWidget {
