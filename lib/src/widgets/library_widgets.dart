@@ -3914,7 +3914,7 @@ class _VideoListRowSmokeHarnessState extends State<VideoListRowSmokeHarness> {
     return MaterialApp(
       home: Scaffold(
         body: SizedBox(
-          width: 980,
+          width: 1400,
           height: 160,
           child: Column(
             children: [
@@ -4331,96 +4331,81 @@ class _InteractiveVideoListRow extends StatelessWidget {
               // 中等宽度窗口下右侧标签面板会压缩列表列宽；行按钮应先降级为图标，
               // 而不是继续保留 276px 操作区导致整行底部出现 overflow 条纹。
               final compactActions = constraints.maxWidth < 700;
-              final rowContentWidth = math.min(
-                constraints.maxWidth,
-                narrow ? constraints.maxWidth : 980.0,
-              );
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: SizedBox(
-                  width: rowContentWidth,
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: thumbnailWidth,
-                        child: _VideoPreview(
-                          item: item,
-                          thumbnailService: thumbnailService,
-                          playbackSettings: playbackSettings,
-                          onOpen: (_) => onOpen(),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              item.title,
-                              maxLines: narrow ? 1 : 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
-                                  ?.copyWith(
+              return Row(
+                children: [
+                  SizedBox(
+                    width: thumbnailWidth,
+                    child: _VideoPreview(
+                      item: item,
+                      thumbnailService: thumbnailService,
+                      playbackSettings: playbackSettings,
+                      onOpen: (_) => onOpen(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          item.title,
+                          maxLines: narrow ? 1 : 2,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
                                     color: _appText,
                                     fontWeight: FontWeight.w800,
                                     height: 1.2,
                                   ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              item.folder,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xff718096),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              height: 24,
-                              child: ListView(
-                                scrollDirection: Axis.horizontal,
-                                children: [
-                                  if (tags.isEmpty)
-                                    const _ListTagPill(
-                                      label: '\u672a\u6dfb\u52a0\u6807\u7b7e',
-                                    )
-                                  else ...[
-                                    for (final tag
-                                        in tags.take(visibleTagCount))
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(right: 6),
-                                        child: _ListTagPill(label: tag),
-                                      ),
-                                    if (tags.length > visibleTagCount)
-                                      _ListTagPill(
-                                        label:
-                                            '+${tags.length - visibleTagCount}',
-                                      ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      _ListRowActions(
-                        item: item,
-                        onOpen: onOpen,
-                        onToggleFavorite: onToggleFavorite,
-                        onEditTags: onEditTags,
-                        compact: compactActions,
-                      ),
-                    ],
+                        const SizedBox(height: 5),
+                        Text(
+                          item.folder,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xff718096),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 24,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            children: [
+                              if (tags.isEmpty)
+                                const _ListTagPill(
+                                  label: '\u672a\u6dfb\u52a0\u6807\u7b7e',
+                                )
+                              else ...[
+                                for (final tag in tags.take(visibleTagCount))
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 6),
+                                    child: _ListTagPill(label: tag),
+                                  ),
+                                if (tags.length > visibleTagCount)
+                                  _ListTagPill(
+                                    label: '+${tags.length - visibleTagCount}',
+                                  ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 16),
+                  _ListRowActions(
+                    item: item,
+                    onOpen: onOpen,
+                    onToggleFavorite: onToggleFavorite,
+                    onEditTags: onEditTags,
+                    compact: compactActions,
+                  ),
+                ],
               );
             },
           ),

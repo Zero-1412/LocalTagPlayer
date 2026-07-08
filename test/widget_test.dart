@@ -446,7 +446,7 @@ void main() {
       (tester) async {
     const path = r'C:\smoke\media\Alpha\clip.mp4';
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(1200, 420);
+    tester.view.physicalSize = const Size(1500, 420);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const VideoListRowSmokeHarness());
@@ -456,6 +456,12 @@ void main() {
         tester.widget<Text>(find.byKey(LibrarySmokeKeys.listActionState)).data!;
 
     expect(actionState(), 'open=0 favorite=0 more=0');
+    final rowRect =
+        tester.getRect(find.byKey(LibrarySmokeKeys.videoListRow(path)));
+    final moreRect =
+        tester.getRect(find.byKey(LibrarySmokeKeys.listMore(path)));
+    expect(rowRect.right - moreRect.right, inInclusiveRange(6, 18));
+
     await tester.ensureVisible(find.byKey(LibrarySmokeKeys.listPlay(path)));
     await tester.tap(find.byKey(LibrarySmokeKeys.listPlay(path)));
     await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
