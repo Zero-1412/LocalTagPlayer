@@ -2,6 +2,13 @@
 
 ## 2026-07-08
 
+### 标签筛选一级列表层级修复
+
+- 右侧标签发现面板增加文件树层级守卫：一级列表只接收 `folder.primary`、`folder` 来源、无父级且 id 形态为 `folder.primary:*` 的标签。
+- 二级候选只接收 `folder.child`、`folder` 来源、带父级且 id 形态为 `folder.child:*` 的标签；二级标签继续只在一级展开卡或“全部二级标签”页签展示。
+- 补充 widget test，模拟历史污染数据把二级/manual 标签误放进 `folder.primary` 组，确认一级候选不会展示这些污染项。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、`PlayerBackend` 或缩略图/media 队列。
+
 ### 主界面标签与排序性能 QA
 
 - `LibraryStore` focused tests 增加扫描异常路径覆盖：内容变化会清理旧媒体详情/缩略图错误，不可访问 root 不会误删仍存在的视频，非 manual 来源标签不能走批量 manual 添加/移除。

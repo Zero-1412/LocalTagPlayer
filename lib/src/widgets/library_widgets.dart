@@ -41,7 +41,7 @@ Map<String, List<TagItem>> childTagItemsByParentId(
 ) {
   final primaryByName = <String, TagItem>{};
   for (final tag in tags) {
-    if (tag.groupId == 'folder.primary') {
+    if (_isFolderPrimaryDiscoveryTag(tag)) {
       primaryByName[tag.name] = tag;
       if (tag.displayName != null) {
         primaryByName[tag.displayName!] = tag;
@@ -51,7 +51,7 @@ Map<String, List<TagItem>> childTagItemsByParentId(
 
   final grouped = <String, List<TagItem>>{};
   for (final tag in tags) {
-    if (tag.groupId != 'folder.child') {
+    if (!_isFolderChildDiscoveryTag(tag)) {
       continue;
     }
     final parentKey = tag.parentId?.trim();
@@ -129,6 +129,33 @@ bool secondaryTagNameHasConflict(
   return false;
 }
 
+/**
+ * 判断标签是否可作为右侧发现面板的一级文件夹标签。
+ *
+ * 一级标签只能来自本地媒体库 root 下第一层目录；历史数据里如果有二级或 manual 标签被错误写入
+ * `folder.primary` 组，这里会在展示层过滤掉，避免破坏文件树层级。
+ */
+bool _isFolderPrimaryDiscoveryTag(TagItem tag) {
+  return tag.source == TagSource.folder &&
+      tag.groupId == 'folder.primary' &&
+      tag.parentId == null &&
+      tag.id.startsWith('folder.primary:');
+}
+
+/**
+ * 判断标签是否可作为右侧发现面板的二级文件夹标签。
+ *
+ * 二级标签必须有父级一级目录，且只在一级展开卡或“全部二级标签”页签中展示。
+ */
+bool _isFolderChildDiscoveryTag(TagItem tag) {
+  final parentId = tag.parentId?.trim();
+  return tag.source == TagSource.folder &&
+      tag.groupId == 'folder.child' &&
+      parentId != null &&
+      parentId.isNotEmpty &&
+      tag.id.startsWith('folder.child:');
+}
+
 List<TagGroup> primaryTagGroupsForDiscovery(List<TagGroup> groups) {
   return [
     for (final group in groups)
@@ -140,7 +167,10 @@ List<TagGroup> primaryTagGroupsForDiscovery(List<TagGroup> groups) {
           sortOrder: group.sortOrder,
           allowMultiSelect: group.allowMultiSelect,
           defaultLogic: group.defaultLogic,
-          items: group.items,
+          items: [
+            for (final tag in group.items)
+              if (_isFolderPrimaryDiscoveryTag(tag)) tag,
+          ],
           excludedItems: group.excludedItems,
         ),
   ];
@@ -154,10 +184,11 @@ List<TagItem> secondaryTagsForDiscovery(
     for (final group in groups)
       if (group.id == 'folder.child')
         for (final tag in group.items)
-          if (!TagRules.sameTag(
-            tag.displayName ?? tag.name,
-            TagRules.defaultAlbumTag,
-          ))
+          if (_isFolderChildDiscoveryTag(tag) &&
+              !TagRules.sameTag(
+                tag.displayName ?? tag.name,
+                TagRules.defaultAlbumTag,
+              ))
             tag,
   ];
   tags.sort((a, b) {

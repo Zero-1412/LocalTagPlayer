@@ -231,6 +231,7 @@ flutter build windows --debug
 - 2026-07-08 继续补充 metadata / scan / tag maintenance focused tests，并拆出 `LibraryMetadataPersistence`、`LibraryScanCoordinator`、`LibraryTagMaintenance`；播放器侧拆出 `PlayerOpenRequestController` 和 `player_delete_dialog.dart`。
 - 2026-07-08 继续补充 `LibraryScanCoordinator` / `LibraryTagMaintenance` 异常路径测试：内容变化清理旧媒体缓存、缺失 root 不误删仍存在视频、非 manual 标签批量操作被拒绝。
 - 2026-07-08 修复右侧标签层级展示：一级页签只展示 `folder.primary` 文件夹一级标签，二级标签只在“全部二级标签”页签展示，避免一级页签混入热门二级标签。
+- 2026-07-08 继续加固右侧一级列表：展示候选会校验 `folder.primary` + `folder` 来源 + 无父级 + `folder.primary:*` id 形态，历史污染的二级/manual 标签不会混入一级列表；二级候选也校验 `folder.child` + 父级。
 - 2026-07-08 排序切换改为直接重排当前 `FilterState`，不再触发完整筛选刷新和标签计数重算；“添加时间”按 `addedAt` 排序，播放器返回更新 `lastPlayedAt` 不再导致主媒体库默认排序重排。
 - 2026-07-08 播放器 controller tests 覆盖二级队列切换回退和 open 请求失败后继续保留最新打开请求；未修改播放器 filtered queue 来源或 `PlayerBackend`。
 - 本轮验证：`flutter test`、`flutter analyze`、`flutter build windows --debug` 通过；debug exe 已启动到主界面。当前会话未暴露可调用的 Computer Use 控件工具，使用 Windows UIA/截图替代 smoke，UIA 只能看到 Flutter 根视图，交互路径由 widget smoke 覆盖。

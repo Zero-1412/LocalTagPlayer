@@ -160,8 +160,29 @@ void main() {
       source: TagSource.manual,
       groupId: 'manual',
     );
+    const pollutedChildInPrimaryGroup = TagItem(
+      id: 'folder.child:genshin:polluted',
+      name: '污染二级',
+      source: TagSource.folder,
+      groupId: 'folder.primary',
+      parentId: '原神',
+    );
+    const pollutedManualInPrimaryGroup = TagItem(
+      id: 'folder.primary:manual',
+      name: '手动污染',
+      source: TagSource.manual,
+      groupId: 'folder.primary',
+    );
     const groups = [
-      TagGroup(id: 'folder.primary', name: '一级标签', items: [genshin]),
+      TagGroup(
+        id: 'folder.primary',
+        name: '一级标签',
+        items: [
+          genshin,
+          pollutedChildInPrimaryGroup,
+          pollutedManualInPrimaryGroup
+        ],
+      ),
       TagGroup(id: 'folder.child', name: '二级标签', items: [lisa, yae]),
       TagGroup(id: 'manual', name: '手动标签', items: [manual]),
     ];
