@@ -12,6 +12,8 @@ class LibrarySmokeKeys {
   static const localBackButton = ValueKey<String>('smoke.local.back-button');
   static const primaryTab = ValueKey<String>('smoke.tag.primary-tab');
   static const secondaryTab = ValueKey<String>('smoke.tag.secondary-tab');
+  static const moreSecondaryTags =
+      ValueKey<String>('smoke.tag.more-secondary-tags');
   static const listActionState = ValueKey<String>('smoke.list.action-state');
 
   /**
@@ -185,6 +187,29 @@ String? secondaryTagParentLabel(
   }
   final parentLabel = tag.parentId?.trim();
   return parentLabel == null || parentLabel.isEmpty ? null : parentLabel;
+}
+
+bool secondaryTagNameHasConflict(
+  TagItem tag,
+  Iterable<TagItem> allSecondaryTags,
+) {
+  final name = (tag.displayName ?? tag.name).trim().toLowerCase();
+  if (name.isEmpty) {
+    return false;
+  }
+  var matches = 0;
+  for (final candidate in allSecondaryTags) {
+    final candidateName =
+        (candidate.displayName ?? candidate.name).trim().toLowerCase();
+    if (candidateName != name) {
+      continue;
+    }
+    matches += 1;
+    if (matches > 1) {
+      return true;
+    }
+  }
+  return false;
 }
 
 List<TagGroup> primaryTagGroupsForDiscovery(List<TagGroup> groups) {
@@ -1391,6 +1416,8 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
 
   var _showAllPrimaryTags = false;
 
+  var _showAllHotSecondaryTags = false;
+
   final _expandedChildTagIds = <String>{};
 
   @override
@@ -1430,13 +1457,14 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
   Widget build(BuildContext context) {
     final primaryGroups =
         primaryTagGroupsForDiscovery(widget.tagGroups).map(_filteredGroup);
-    final secondaryTags = secondaryTagsForDiscovery(
+    final allSecondaryTags = secondaryTagsForDiscovery(
       widget.tagGroups,
       widget.resultCounts,
-    )
-        .where((tag) => _matchesSearch(tag.displayName ?? tag.name))
-        .take(12)
-        .toList();
+    ).where((tag) => _matchesSearch(tag.displayName ?? tag.name)).toList();
+    // 热门区保留蓝图里的轻量入口，完整列表由“全部二级标签”页签承载。
+    final hotSecondaryTags = _showAllHotSecondaryTags
+        ? allSecondaryTags
+        : allSecondaryTags.take(12).toList();
 
     final panel = Container(
       width: widget.dense ? double.infinity : 438,
@@ -1570,22 +1598,36 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
                     const _HotSecondaryTitle(),
                     const SizedBox(height: 10),
                     _SecondaryTagCloud(
-                      tags: secondaryTags,
+                      tags: hotSecondaryTags,
+                      allSecondaryTags: allSecondaryTags,
                       resultCounts: widget.resultCounts,
                       selectedGroupTagIds: widget.selectedGroupTagIds,
                       excludedTagIds: widget.excludedTagIds,
                       showParentLabel: false,
+                      showParentLabelForConflicts: true,
                       onGroupTagToggle: widget.onGroupTagToggle,
                       onGroupTagExcludeToggle: widget.onGroupTagExcludeToggle,
                     ),
-                    const _MoreSecondaryButton(),
+                    _MoreSecondaryButton(
+                      expanded: _showAllHotSecondaryTags,
+                      visibleCount: hotSecondaryTags.length,
+                      totalCount: allSecondaryTags.length,
+                      onPressed: allSecondaryTags.length > 12
+                          ? () => setState(() {
+                                _showAllHotSecondaryTags =
+                                    !_showAllHotSecondaryTags;
+                              })
+                          : null,
+                    ),
                   ] else ...[
                     _SecondaryTagCloud(
-                      tags: secondaryTags,
+                      tags: allSecondaryTags,
+                      allSecondaryTags: allSecondaryTags,
                       resultCounts: widget.resultCounts,
                       selectedGroupTagIds: widget.selectedGroupTagIds,
                       excludedTagIds: widget.excludedTagIds,
                       showParentLabel: true,
+                      showParentLabelForConflicts: false,
                       onGroupTagToggle: widget.onGroupTagToggle,
                       onGroupTagExcludeToggle: widget.onGroupTagExcludeToggle,
                     ),
@@ -1864,19 +1906,23 @@ class _PopularTagRail extends StatelessWidget {
 class _SecondaryTagCloud extends StatelessWidget {
   const _SecondaryTagCloud({
     required this.tags,
+    required this.allSecondaryTags,
     required this.resultCounts,
     required this.selectedGroupTagIds,
     required this.excludedTagIds,
     required this.showParentLabel,
+    required this.showParentLabelForConflicts,
     required this.onGroupTagToggle,
     required this.onGroupTagExcludeToggle,
   });
 
   final List<TagItem> tags;
+  final List<TagItem> allSecondaryTags;
   final Map<String, int> resultCounts;
   final Map<String, Set<String>> selectedGroupTagIds;
   final Set<String> excludedTagIds;
   final bool showParentLabel;
+  final bool showParentLabelForConflicts;
   final ValueChanged<TagItem> onGroupTagToggle;
   final ValueChanged<TagItem> onGroupTagExcludeToggle;
 
@@ -1893,7 +1939,9 @@ class _SecondaryTagCloud extends StatelessWidget {
               _SecondaryTagPill(
                 tag: tag,
                 count: resultCounts[tag.id] ?? 0,
-                showParentLabel: showParentLabel,
+                showParentLabel: showParentLabel ||
+                    (showParentLabelForConflicts &&
+                        secondaryTagNameHasConflict(tag, allSecondaryTags)),
                 selected: selectedGroupTagIds[tag.groupId ?? 'manual']
                         ?.contains(tag.id) ??
                     false,
@@ -1926,18 +1974,33 @@ class _HotSecondaryTitle extends StatelessWidget {
 }
 
 class _MoreSecondaryButton extends StatelessWidget {
-  const _MoreSecondaryButton();
+  const _MoreSecondaryButton({
+    required this.expanded,
+    required this.visibleCount,
+    required this.totalCount,
+    required this.onPressed,
+  });
+
+  final bool expanded;
+  final int visibleCount;
+  final int totalCount;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
+    final label = expanded
+        ? '\u6536\u8d77\u6807\u7b7e \u2303'
+        : '\u66f4\u591a\u6807\u7b7e ($visibleCount/$totalCount) \u2304';
     return Padding(
       padding: const EdgeInsets.only(top: 1),
       child: Center(
         child: OutlinedButton(
-          onPressed: null,
+          key: LibrarySmokeKeys.moreSecondaryTags,
+          onPressed: onPressed,
           style: OutlinedButton.styleFrom(
-            disabledForegroundColor: _appAccentViolet.withAlpha(190),
-            disabledBackgroundColor: const Color(0xfffbfaff),
+            foregroundColor: _appAccentViolet,
+            disabledForegroundColor: _appTextMuted,
+            backgroundColor: const Color(0xfffbfaff),
             side: const BorderSide(color: Color(0xffd8d4ff)),
             visualDensity: VisualDensity.compact,
             minimumSize: const Size(118, 32),
@@ -1945,7 +2008,7 @@ class _MoreSecondaryButton extends StatelessWidget {
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
-          child: const Text('\u66f4\u591a\u6807\u7b7e \u2304'),
+          child: Text(label),
         ),
       ),
     );

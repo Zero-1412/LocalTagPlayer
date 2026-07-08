@@ -1,6 +1,6 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
-Current Version: `0.2.21`
+Current Version: `0.2.22`
 Status: completed
 Owner: Chat 3 / Media Library Tag UI
 
@@ -88,6 +88,14 @@ Do not do:
 - List-row actions now switch to compact icon controls at medium row widths so Play/Favorite/More stay visible instead of pushing past the row edge.
 - Computer-use QA covered normal and maximized debug windows: top toolbar, list-row actions, right tag panel, and local-library back entry stayed inside the visible window.
 - Validation passed: `dart format`, `flutter test` with 16 tests, `flutter analyze`, and `flutter build windows --debug`.
+
+## 0.2.22 Secondary Tag Panel Pass
+
+- Hot secondary tags now use a real More/Less button instead of a disabled visual button. The button expands the hot list and shows visible/total counts.
+- The "All secondary tags" tab now receives the full secondary-tag list instead of the hot-list slice.
+- Hot secondary chips stay lightweight by default, but duplicate names display their parent primary tag so ambiguous names such as NTR/ntr are distinguishable.
+- Media Library and Local Media Library entry semantics were rechecked: Media Library resets to all videos, while Local Media Library opens a file-path browser for configured roots and subfolders.
+- Validation passed: `dart format`, `flutter test` with 18 tests, `flutter analyze`, `flutter build windows --debug`, and computer-use smoke paths for More tags, all-secondary tags, Media Library reset, and Local Media Library browsing.
 
 ## 0.2.15 Sidebar + List QA Pass
 
@@ -224,6 +232,7 @@ Do not build complex animation first. Keep the layout practical and stable.
 
 - `0.2.20`: Extended stable smoke coverage to list-row Play/Favorite/More, local-library dense-list back navigation, and right tag chip result-state assertions. No schema, query, player queue, or cache queue behavior changed.
 - `0.2.21`: Fixed non-maximized window overflow in the media-library top bar, grid cards, and list-row actions, then verified normal and maximized debug windows with computer-use. No schema, query, player queue, or cache queue behavior changed.
+- `0.2.22`: Fixed hot-secondary More/Less interaction, restored full all-secondary listing, disambiguated duplicate secondary names with parent labels, and rechecked Media Library vs Local Media Library semantics. No schema, query, player queue, or cache queue behavior changed.
 - `0.2.19`: Added stable key/harness smoke tests for local-library back paths and right-tag-panel expand/collapse paths, avoiding screenshot-coordinate desktop automation for these flows. No schema, query, player queue, or cache queue behavior changed.
 - `0.2.10`: Stabilized primary count sorting, added runtime-only frequent sorting, removed the extra primary-sort label, shortened sort option labels, prevented fallback expansion of the first row, and kept the all-secondary tab populated under active filters. No schema, player queue, or cache queue behavior changed.
 - `0.2.11`: Decoupled primary row expansion from filtering, stabilized result-grid repaint during tag switches, and added a collapsible right tag-filter rail. No schema, query, player queue, or cache queue behavior changed.

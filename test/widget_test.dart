@@ -213,6 +213,39 @@ void main() {
     expect(secondaryTagParentLabel(lisa, showParentLabel: true), '原神');
   });
 
+  test('hot secondary tag conflicts require parent labels', () {
+    const lisa = TagItem(
+      id: 'folder.child:genshin:lisa',
+      name: 'Lisa',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: 'Genshin',
+    );
+    const ntrA = TagItem(
+      id: 'folder.child:genshin:ntr',
+      name: 'ntr',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: 'Genshin',
+    );
+    const ntrB = TagItem(
+      id: 'folder.child:honkai:ntr',
+      name: 'ntr',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: 'Honkai',
+    );
+
+    expect(
+      secondaryTagNameHasConflict(lisa, const [lisa, ntrA, ntrB]),
+      isFalse,
+    );
+    expect(
+      secondaryTagNameHasConflict(ntrA, const [lisa, ntrA, ntrB]),
+      isTrue,
+    );
+  });
+
   test('recent playback clear targets honor single and bulk selection', () {
     final playedA = VideoItem(
       path: 'D:/video/a.mp4',
@@ -421,6 +454,23 @@ void main() {
       find.byKey(LibrarySmokeKeys.primaryHeader(alphaTagId)),
       findsOneWidget,
     );
+  });
+
+  testWidgets('smoke path expands hot secondary tags and shows all secondary',
+      (tester) async {
+    await tester.pumpWidget(const TagDiscoverySmokeHarness(childCount: 13));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Child13'), findsNothing);
+    await tester.ensureVisible(find.byKey(LibrarySmokeKeys.moreSecondaryTags));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byKey(LibrarySmokeKeys.moreSecondaryTags));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Child13'), findsOneWidget);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.secondaryTab));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Child13'), findsWidgets);
   });
 
   testWidgets('smoke path updates tag result state after chip selection',
