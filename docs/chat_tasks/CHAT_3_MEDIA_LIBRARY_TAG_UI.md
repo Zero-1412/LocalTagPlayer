@@ -62,22 +62,22 @@ Do not do:
 - Temporary-profile mouse QA covered Recent Playback single delete, select-all delete, and clear-all. Each path cleared only `lastPlayedAt` in the temporary database.
 - Temporary-profile entry switching timings were recorded: Media Library first switch ~213ms, Recent Playback ~63ms, Smart Favorites ~59ms, back to Media Library ~51ms.
 - Hot secondary tags now render only the secondary tag name. The parent-primary mini label is hidden in the hot section while remaining available in the full secondary tab.
-- Secondary discovery filters out the default-album tag so it does not appear in hot/all secondary candidates.
-- Expanded primary cards filter real child tags named default album and keep only the leading virtual default-album chip.
-- Local Media Library folder browsing now has a path back stack. Folder clicks push the current path, and both the header back button and mouse back side-button pop to the previous path.
-- Recent Playback cleanup gained unit coverage for single-selected deletion and bulk clear target selection, ensuring unplayed videos are not affected.
+- 二级标签候选会过滤真实“默认专辑”标签，避免它出现在热门/全部二级标签候选中。
+- 一级展开卡会过滤真实子标签里的“默认专辑”，只保留卡片开头的虚拟默认专辑 chip。
+- 本地媒体库文件夹浏览新增路径返回栈：点击文件夹会压入当前路径，顶部返回按钮和鼠标后退侧键都会回到上一层。
+- 最近播放清理补充单选删除和批量清空目标测试，确认未播放视频不会被误影响。
 
 ## 0.2.19 Stable Smoke Harness Pass
 
-- Replaced screenshot-coordinate smoke testing for the highest-risk media-library clicks with stable widget keys and harnesses.
-- Added `LibrarySmokeKeys`, `LocalLibrarySmokeHarness`, and `TagDiscoverySmokeHarness` so tests can drive the real local-library folder view and right tag-discovery panel without opening the real database or depending on desktop DPI.
-- Widget smoke coverage now includes local-folder open, header back button, mouse back side-button, primary tag expand/collapse, child "expand all / collapse", and primary/secondary tab switching.
-- Validation passed: `dart format`, `flutter test`, `flutter analyze`, `flutter build windows --debug`; debug exe also starts with a temporary profile and stays running for the launch smoke window.
+- 将最高风险的媒体库点击 smoke test 从截图坐标改为稳定 widget key 和测试宿主。
+- 新增 `LibrarySmokeKeys`、`LocalLibrarySmokeHarness` 和 `TagDiscoverySmokeHarness`，让测试可驱动真实本地媒体库文件夹视图和右侧标签发现面板，而不打开真实数据库，也不依赖桌面 DPI。
+- Widget smoke 覆盖本地文件夹打开、顶部返回按钮、鼠标后退侧键、一级标签展开/收起、二级“展开全部 / 收起”和一级/二级页签切换。
+- 验证通过：`dart format`、`flutter test`、`flutter analyze`、`flutter build windows --debug`；debug exe 也能使用临时 profile 启动并在启动 smoke 窗口内保持运行。
 
 ## 0.2.20 List Row + Result State Smoke Pass
 
-- Extended the stable smoke harness to cover dense-list local folder navigation, list-row Play/Favorite/More controls, and right-panel tag result-state assertions.
-- Added stable keys for list-row controls and tag chips. The list-row smoke test waits past the row double-click recognition window so single-click button assertions are deterministic.
+- 扩展稳定 smoke harness，覆盖密集列表模式下的本地文件夹导航、列表行播放/收藏/更多控件，以及右侧标签结果状态断言。
+- 为列表行控件和标签 chip 增加稳定 key；列表行 smoke test 会等待超过行双击识别窗口，让单击按钮断言保持确定性。
 - The right tag harness now renders a small result-state surface: selecting the default album shows all current-primary sample results, while selecting Child01 narrows the surface to only Child01.
 - Validation passed: `dart format`, `flutter test` with 16 tests, `flutter analyze`, and `flutter build windows --debug`.
 

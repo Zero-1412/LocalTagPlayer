@@ -17,6 +17,9 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 新增中文优先规则：除代码、第三方 API、协议、命令、路径、固定术语和外部错误信息外，文档、代码注释、任务记录和 Git 提交信息都默认使用中文。
+- 清理右侧标签面板周边残留乱码注释：`_SmartFilterContextCard` 和 `TagDiscoverySmokeHarness` 的维护说明已改为中文，避免 smoke test 与面板交互语义被历史编码问题干扰。
+- 本轮验证通过：`dart format lib/src/widgets/library_widgets.dart`、`flutter analyze`、`flutter build windows --debug`。
 - 修复右侧热门二级标签“更多标签”不可点击：按钮现在可展开/收起热门二级标签列表，并显示当前可见数量/总数。
 - 右侧“全部二级标签”页签不再复用热门区 12 个限制，改为展示完整二级标签列表；热门区只保留默认精简列表。
 - 热门二级标签名发生冲突时自动显示所属一级标签，例如 `NTR 原神`、`NTR 崩铁`、`ntr mod`；无冲突标签继续保持轻量显示。

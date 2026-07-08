@@ -1692,7 +1692,7 @@ class _SmartFilterContextCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ??????????????????????????????
+    // 空筛选时仍展示“全部视频”，避免上下文卡片在空列表下消失。
     final effectiveItems =
         items.isEmpty ? const ['\u5168\u90e8\u89c6\u9891'] : items;
     return Container(
@@ -3817,7 +3817,9 @@ class TagDiscoverySmokeHarness extends StatefulWidget {
   });
 
   /**
-   * 为一级标签生成的二级标签数量；大于 9 时可覆盖“展开全部 / 收起”路径。
+   * 为一级标签生成的二级标签数量。
+   *
+   * 数量大于 9 时可覆盖右侧面板的“展开全部 / 收起”交互路径。
    */
   final int childCount;
 
@@ -3855,7 +3857,7 @@ class _TagDiscoverySmokeHarnessState extends State<TagDiscoverySmokeHarness> {
    * 根据右侧标签 chip 的当前选中态生成测试结果标题。
    *
    * 该结果区只用于验证 UI 事件链是否把默认专辑和二级标签选择传到上层状态；
-   * 真正媒体库筛选仍由 `FilterQuery` / `TagQueryService` 负责。
+   * 真实媒体库筛选仍由 `FilterQuery` / `TagQueryService` 负责。
    */
   List<String> get _resultTitles {
     final selectedPrimary =
@@ -3880,9 +3882,9 @@ class _TagDiscoverySmokeHarnessState extends State<TagDiscoverySmokeHarness> {
   }
 
   /**
-   * 测试用的一级/二级互斥选择回调。
+   * 测试用的一级 / 二级互斥选择回调。
    *
-   * 这里不复刻筛选引擎，只维护右侧面板需要的选中态，避免 smoke test 扩大到查询语义。
+   * 这里不复制筛选引擎，只维护右侧面板需要的选中态，避免 smoke test 扩大到查询语义。
    */
   void _selectPrimaryChild(TagItem primary, TagItem? child) {
     setState(() {

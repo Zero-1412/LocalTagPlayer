@@ -4,6 +4,9 @@
 
 ### Media Library Reference Top Layout
 
+- 新增中文优先规则：文档新增/修改、代码注释、任务记录和 Git 提交信息默认使用中文；只有代码、第三方 API、命令、路径、固定术语和外部错误信息保留必要原文。
+- 清理右侧标签面板周边残留乱码注释：`_SmartFilterContextCard` 和 `TagDiscoverySmokeHarness` 的维护说明改为中文，不改变筛选逻辑、播放队列或数据库。
+- 本轮验证通过：`dart format lib/src/widgets/library_widgets.dart`、`flutter analyze`、`flutter build windows --debug`。
 - 修复右侧热门二级标签“更多标签”按钮：从禁用样式改为可点击展开/收起，并显示 `当前/总数`。
 - “全部二级标签”页签改为使用完整二级标签列表，不再被热门区默认 12 个标签截断。
 - 热门二级标签仅在同名冲突时显示所属一级标签，解决 `ntr/NTR` 等同名标签无法区分的问题。
