@@ -403,6 +403,17 @@ void main() {
     expect(find.text('收藏筛选'), findsNothing);
     expect(find.text('倒序'), findsOneWidget);
 
+    final sortButtonRect =
+        tester.getRect(find.byKey(LibrarySmokeKeys.topSortFieldButton));
+    await tester.tap(find.byKey(LibrarySmokeKeys.topSortFieldButton));
+    await tester.pumpAndSettle();
+    final firstMenuItemRect =
+        tester.getRect(find.byType(PopupMenuItem<SortMode>).first);
+    expect(firstMenuItemRect.top, greaterThan(sortButtonRect.bottom));
+
+    await tester.tap(find.text('添加时间').last);
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('倒序'));
     await tester.pump(const Duration(milliseconds: 100));
 

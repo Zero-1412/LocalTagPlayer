@@ -19,6 +19,8 @@ class LibrarySmokeKeys {
   static const listActionState = ValueKey<String>('smoke.list.action-state');
   static const collapsedTagRail = ValueKey<String>('smoke.tag.collapsed-rail');
   static const searchField = ValueKey<String>('smoke.top.search-field');
+  static const topSortFieldButton =
+      ValueKey<String>('smoke.top.sort-field-button');
 
   /**
    * 本地媒体库 root 项命中标识。
@@ -924,7 +926,7 @@ class _LibraryHeroArea extends StatelessWidget {
       if (showFavoritesOnly)
         _CurrentFilterChip(
           avatar: const Icon(Icons.favorite, size: 18),
-          label: const Text('\u667a\u80fd\u6536\u85cf'),
+          label: const Text('\u672c\u5730\u6536\u85cf'),
           onDeleted: onClearFavoritesOnly,
         ),
       for (final tag in selectedTags)
@@ -3223,8 +3225,10 @@ class _TopSortControl extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           PopupMenuButton<SortMode>(
+            key: LibrarySmokeKeys.topSortFieldButton,
             tooltip: '\u6392\u5e8f\u5b57\u6bb5',
             position: PopupMenuPosition.under,
+            offset: const Offset(0, 8),
             color: _appPanel,
             elevation: 10,
             shape: RoundedRectangleBorder(

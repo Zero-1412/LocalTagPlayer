@@ -552,7 +552,8 @@ class _LibraryPageState extends State<LibraryPage> {
   /**
    * 切换到收藏结果视图。
    *
-   * 该入口直接从当前内存视频集合筛选收藏项，避免走标签筛选刷新路径，让左侧三大入口切换保持轻量。
+   * 该入口直接从当前内存视频集合筛选收藏项，同时保留 favoriteOnly 状态；
+   * 后续再点击右侧标签时会切回普通媒体库筛选，但收藏条件仍会作为 AND 条件叠加。
    */
   void _showFavoriteVideos() {
     setState(() {
@@ -565,7 +566,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _selectedChildTags.clear();
       _selectedGroupTagIds.clear();
       _excludedTagIds.clear();
-      _showFavoritesOnly = false;
+      _showFavoritesOnly = true;
     });
   }
 
@@ -1319,7 +1320,8 @@ class _LibraryPageState extends State<LibraryPage> {
         selectedGroupTagIds: _selectedGroupTagIds,
         excludedTagIds: _excludedTagIds,
         favoriteCount: favoriteCount,
-        favoriteVideosSelected: _resultMode == _LibraryResultMode.favorites,
+        favoriteVideosSelected:
+            _resultMode == _LibraryResultMode.favorites || _showFavoritesOnly,
         recentPlaybackSelected: _resultMode == _LibraryResultMode.recent,
         localLibrarySelected: _resultMode == _LibraryResultMode.local,
         selectedTags: _selectedTags,
