@@ -382,7 +382,7 @@ void main() {
   testWidgets(
       'top bar removes duplicate favorite filter and toggles sort order',
       (tester) async {
-    tester.view.physicalSize = const Size(1400, 300);
+    tester.view.physicalSize = const Size(2400, 360);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -407,11 +407,14 @@ void main() {
         tester.getRect(find.byKey(LibrarySmokeKeys.topSortFieldButton));
     await tester.tap(find.byKey(LibrarySmokeKeys.topSortFieldButton));
     await tester.pumpAndSettle();
-    final firstMenuItemRect =
-        tester.getRect(find.byType(PopupMenuItem<SortMode>).first);
-    expect(firstMenuItemRect.top, greaterThan(sortButtonRect.bottom));
+    final menuPanelRect =
+        tester.getRect(find.byKey(LibrarySmokeKeys.topSortMenuPanel));
+    expect(menuPanelRect.top, closeTo(sortButtonRect.bottom - 1, 1.5));
+    expect(menuPanelRect.width, closeTo(sortButtonRect.width, 1));
 
-    await tester.tap(find.text('添加时间').last);
+    await tester.tap(find.byKey(LibrarySmokeKeys.topSortMenuItem(
+      SortMode.recent,
+    )));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('倒序'));

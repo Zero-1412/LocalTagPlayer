@@ -21,6 +21,10 @@ class LibrarySmokeKeys {
   static const searchField = ValueKey<String>('smoke.top.search-field');
   static const topSortFieldButton =
       ValueKey<String>('smoke.top.sort-field-button');
+  static const topSortMenuPanel = ValueKey<String>('smoke.top.sort-menu-panel');
+
+  static ValueKey<String> topSortMenuItem(SortMode mode) =>
+      ValueKey<String>('smoke.top.sort-menu-item:${mode.name}');
 
   /**
    * 本地媒体库 root 项命中标识。
@@ -3198,7 +3202,7 @@ class _ReferenceIconButton extends StatelessWidget {
   }
 }
 
-class _TopSortControl extends StatelessWidget {
+class _TopSortControl extends StatefulWidget {
   const _TopSortControl({
     required this.sortMode,
     required this.sortDirection,
@@ -3212,8 +3216,155 @@ class _TopSortControl extends StatelessWidget {
   final VoidCallback onDirectionToggle;
 
   @override
+  State<_TopSortControl> createState() => _TopSortControlState();
+}
+
+class _TopSortControlState extends State<_TopSortControl>
+    with SingleTickerProviderStateMixin {
+  final _fieldKey = GlobalKey();
+  late final AnimationController _menuController;
+  late final Animation<double> _menuSize;
+  OverlayEntry? _menuEntry;
+  Size _fieldSize = Size.zero;
+  Offset _fieldOffset = Offset.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _menuController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+      reverseDuration: const Duration(milliseconds: 110),
+    );
+    _menuSize = CurvedAnimation(
+      parent: _menuController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _TopSortControl oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _menuEntry?.markNeedsBuild();
+  }
+
+  @override
+  void dispose() {
+    _removeSortMenu(immediate: true);
+    _menuController.dispose();
+    super.dispose();
+  }
+
+  void _toggleSortMenu() {
+    if (_menuEntry != null) {
+      _removeSortMenu();
+      return;
+    }
+    final renderBox =
+        _fieldKey.currentContext?.findRenderObject() as RenderBox?;
+    _fieldSize = renderBox?.size ?? const Size(132, 48);
+    _fieldOffset = renderBox?.localToGlobal(Offset.zero) ?? Offset.zero;
+    _menuEntry = OverlayEntry(builder: _buildSortMenuOverlay);
+    Overlay.of(context).insert(_menuEntry!);
+    _menuController.forward(from: 0);
+  }
+
+  Future<void> _removeSortMenu({bool immediate = false}) async {
+    final entry = _menuEntry;
+    if (entry == null) {
+      return;
+    }
+    _menuEntry = null;
+    if (!immediate && _menuController.isAnimating == false) {
+      await _menuController.reverse();
+    }
+    entry.remove();
+  }
+
+  Widget _buildSortMenuOverlay(BuildContext context) {
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _removeSortMenu,
+            ),
+          ),
+          Positioned(
+            left: _fieldOffset.dx,
+            top: _fieldOffset.dy + _fieldSize.height - 1,
+            width: _fieldSize.width,
+            child: Material(
+              color: Colors.transparent,
+              child: AnimatedBuilder(
+                animation: _menuSize,
+                builder: (context, child) {
+                  return ClipRect(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      heightFactor: _menuSize.value,
+                      child: child,
+                    ),
+                  );
+                },
+                child: Container(
+                  key: LibrarySmokeKeys.topSortMenuPanel,
+                  width: _fieldSize.width,
+                  decoration: const BoxDecoration(
+                    color: _appPanel,
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(10),
+                    ),
+                    border: Border(
+                      left: BorderSide(color: _appBorder),
+                      right: BorderSide(color: _appBorder),
+                      bottom: BorderSide(color: _appBorder),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x1f0f172a),
+                        blurRadius: 14,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final mode in SortMode.values)
+                        InkWell(
+                          key: LibrarySmokeKeys.topSortMenuItem(mode),
+                          onTap: () {
+                            widget.onChanged(mode);
+                            _removeSortMenu();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 13,
+                            ),
+                            child: _SortMenuItem(
+                              label: sortModeLabel(mode),
+                              selected: widget.sortMode == mode,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final directionAscending = sortDirection == SortDirection.ascending;
+    final directionAscending = widget.sortDirection == SortDirection.ascending;
     return Container(
       height: 48,
       decoration: BoxDecoration(
@@ -3224,48 +3375,36 @@ class _TopSortControl extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          PopupMenuButton<SortMode>(
-            key: LibrarySmokeKeys.topSortFieldButton,
-            tooltip: '\u6392\u5e8f\u5b57\u6bb5',
-            position: PopupMenuPosition.under,
-            offset: const Offset(0, 8),
-            color: _appPanel,
-            elevation: 10,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(color: _appBorder),
-            ),
-            onSelected: onChanged,
-            itemBuilder: (context) => [
-              for (final mode in SortMode.values)
-                PopupMenuItem(
-                  value: mode,
-                  child: _SortMenuItem(
-                    label: sortModeLabel(mode),
-                    selected: sortMode == mode,
-                  ),
-                ),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.only(left: 12, right: 10),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.sort_rounded,
-                      size: 18, color: _appAccentStrong),
-                  const SizedBox(width: 7),
-                  Text(
-                    sortModeLabel(sortMode),
-                    style: const TextStyle(
-                      color: _appText,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
+          Tooltip(
+            message: '\u6392\u5e8f\u5b57\u6bb5',
+            child: InkWell(
+              key: LibrarySmokeKeys.topSortFieldButton,
+              borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(10),
+              ),
+              onTap: _toggleSortMenu,
+              child: Padding(
+                key: _fieldKey,
+                padding: const EdgeInsets.only(left: 12, right: 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.sort_rounded,
+                        size: 18, color: _appAccentStrong),
+                    const SizedBox(width: 7),
+                    Text(
+                      sortModeLabel(widget.sortMode),
+                      style: const TextStyle(
+                        color: _appText,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.expand_more_rounded,
-                      size: 18, color: _appTextMuted),
-                ],
+                    const SizedBox(width: 4),
+                    const Icon(Icons.expand_more_rounded,
+                        size: 18, color: _appTextMuted),
+                  ],
+                ),
               ),
             ),
           ),
@@ -3281,7 +3420,7 @@ class _TopSortControl extends StatelessWidget {
               borderRadius: const BorderRadius.horizontal(
                 right: Radius.circular(10),
               ),
-              onTap: onDirectionToggle,
+              onTap: widget.onDirectionToggle,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 11),
                 child: Row(
