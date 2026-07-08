@@ -2,6 +2,13 @@
 
 ## 2026-07-08
 
+### 主界面模块继续拆分
+
+- 继续按职责拆分 `library_widgets.dart`：本地媒体库路径浏览迁到 `widgets/library_local_view.dart`，右侧标签筛选面板迁到 `widgets/library_tag_discovery_panel.dart`，视频网格、列表行和卡片迁到 `widgets/library_video_results.dart`。
+- `library_page.dart` 中的筛选摘要、显示表达式、播放队列标题、排序比较和排序切换逻辑迁到 `pages/library_page_helpers.dart`，保留页面主体负责状态输入和布局编排。
+- 评估 `library_store.dart` 后确认它仍耦合 SQLite 持久化、目录扫描、标签索引同步和手动标签维护；本轮只记录边界，不在缺少专门测试时拆分扫描/标签/持久化层。
+- 本次保持 `part of '../app.dart'` 编译边界，不改变私有符号可见性、SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue 或缩略图/media 队列。
+
 ### 主界面 UI 模块拆分
 
 - 分析当前代码行数后确认最大耦合点：`library_widgets.dart` 约 5001 行、`player_page.dart` 约 2126 行、`library_page.dart` 约 1943 行、`library_store.dart` 约 1140 行。

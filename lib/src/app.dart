@@ -29,11 +29,15 @@ part 'services/external_media_tools.dart';
 part 'services/thumbnail_service.dart';
 part 'services/media_details_service.dart';
 part 'platform/platform_interfaces.dart';
+part 'pages/library_page_helpers.dart';
 part 'pages/library_page.dart';
 part 'pages/tag_manager_page.dart';
 part 'pages/player_page.dart';
 part 'widgets/library_smoke_keys.dart';
 part 'widgets/library_sort_control.dart';
+part 'widgets/library_tag_discovery_panel.dart';
+part 'widgets/library_local_view.dart';
+part 'widgets/library_video_results.dart';
 part 'widgets/library_widgets.dart';
 
 const _appAccent = Color(0xff0f766e);

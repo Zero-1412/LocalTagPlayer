@@ -105,3 +105,9 @@ flutter build windows --debug
 - 仍保留 `part of '../app.dart'` 编译边界，避免为一次小拆分同时重写 import/export 和私有符号访问规则。
 - 拆分后 `library_widgets.dart` 降到约 4647 行；debug exe 真实窗口复测排序下拉仍可打开。
 - 后续建议继续按职责拆出本地媒体库视图、标签发现面板、视频卡片/列表行，再评估 `library_page.dart` 的状态协调逻辑是否需要 controller/service 层。
+## 2026-07-08 主界面模块继续拆分
+
+- `library_widgets.dart` 继续按 UI 责任拆分：本地媒体库路径浏览迁到 `widgets/library_local_view.dart`，右侧标签筛选面板迁到 `widgets/library_tag_discovery_panel.dart`，视频网格、视频卡片和列表行迁到 `widgets/library_video_results.dart`。
+- `library_page.dart` 中的筛选摘要、筛选表达式、播放队列标题、排序比较和排序切换迁到 `pages/library_page_helpers.dart`，页面主体继续负责状态读取、布局组合和事件分发。
+- `library_store.dart` 已做边界评估：当前同时承担 SQLite schema/读写、目录扫描、标签索引同步、手动标签维护和统计查询。本轮不拆该文件，避免在扫描、标签维护、持久化读写缺少专项测试时引入数据风险。
+- 本轮不修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、缩略图/media 队列或用户数据维护规则。

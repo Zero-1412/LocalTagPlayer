@@ -17,6 +17,9 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 继续拆分主界面 UI 大文件：本地媒体库视图迁到 `widgets/library_local_view.dart`，右侧标签筛选面板迁到 `widgets/library_tag_discovery_panel.dart`，视频网格/列表行/卡片迁到 `widgets/library_video_results.dart`。
+- `library_page.dart` 的筛选摘要、播放队列标题、排序比较和排序状态切换迁到 `pages/library_page_helpers.dart`，页面主体继续只协调视图和用户交互入口。
+- 评估 `library_store.dart` 后确认它同时包含 SQLite 读写、目录扫描、标签索引同步、手动标签维护和统计查询；本轮不在测试覆盖不足时强拆，后续应先补持久化/扫描/标签维护边界测试。
 - 完成第一轮低风险模块化拆分：`library_widgets.dart` 中的 smoke test key 迁到 `widgets/library_smoke_keys.dart`，顶部排序控件迁到 `widgets/library_sort_control.dart`。
 - 结构分析确认当前最大耦合点仍是 `library_widgets.dart`、`player_page.dart`、`library_page.dart` 和 `library_store.dart`；本轮先拆纯 UI / 测试基础设施，避免触碰筛选、播放队列或 schema。
 - 拆分后 `library_widgets.dart` 从约 5001 行降到约 4647 行；`flutter test`、`flutter analyze`、`flutter build windows --debug` 和 debug exe 排序下拉真实窗口 smoke 均通过。
