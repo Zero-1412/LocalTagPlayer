@@ -1,6 +1,8 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 
-import 'package:local_tag_player/main.dart';
+import 'package:local_tag_player/src/app.dart';
 
 void main() {
   testWidgets('app mounts', (WidgetTester tester) async {
@@ -8,5 +10,453 @@ void main() {
     await tester.pump();
 
     expect(find.byType(LocalTagPlayerApp), findsOneWidget);
+  });
+
+  test('reference top bar collapses actions below expanded width', () {
+    expect(LayoutBreakpoints.fromWidth(699), LayoutSize.compact);
+    expect(LayoutBreakpoints.fromWidth(900), LayoutSize.medium);
+    expect(LayoutBreakpoints.fromWidth(1280), LayoutSize.expanded);
+
+    expect(referenceTopBarShouldCollapseActions(LayoutSize.compact), isTrue);
+    expect(referenceTopBarShouldCollapseActions(LayoutSize.medium), isTrue);
+    expect(referenceTopBarShouldCollapseActions(LayoutSize.expanded), isFalse);
+  });
+
+  test('player queue visibility detects offscreen locator targets', () {
+    const itemExtent = 82.0;
+    const viewportExtent = itemExtent * 4;
+
+    expect(
+      playerQueueIndexIsVisible(
+        index: 0,
+        scrollOffset: 0,
+        viewportExtent: viewportExtent,
+        itemExtent: itemExtent,
+      ),
+      isTrue,
+    );
+    expect(
+      playerQueueIndexIsVisible(
+        index: 5,
+        scrollOffset: 0,
+        viewportExtent: viewportExtent,
+        itemExtent: itemExtent,
+      ),
+      isFalse,
+    );
+    expect(
+      playerQueueIndexIsVisible(
+        index: 5,
+        scrollOffset: itemExtent * 4,
+        viewportExtent: viewportExtent,
+        itemExtent: itemExtent,
+      ),
+      isTrue,
+    );
+  });
+
+  test('tag accordion children are scoped to their parent tag', () {
+    const genshin = TagItem(
+      id: 'folder.primary:genshin',
+      name: '原神',
+      source: TagSource.folder,
+      groupId: 'folder.primary',
+    );
+    const honkai = TagItem(
+      id: 'folder.primary:honkai',
+      name: '崩坏三',
+      source: TagSource.folder,
+      groupId: 'folder.primary',
+    );
+    const lisa = TagItem(
+      id: 'folder.child:genshin:lisa',
+      name: '丽莎',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: '原神',
+      usageCount: 12,
+    );
+    const kiana = TagItem(
+      id: 'folder.child:honkai:kiana',
+      name: '琪亚娜',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: '崩坏三',
+      usageCount: 30,
+    );
+
+    final mapping = childTagItemsByParentId(
+      const [genshin, honkai, lisa, kiana],
+      TagQueryContext(tagsById: {
+        genshin.id: genshin,
+        honkai.id: honkai,
+        lisa.id: lisa,
+        kiana.id: kiana,
+      }),
+    );
+
+    expect(strictChildItemsForParent(genshin, mapping), [lisa]);
+    expect(strictChildItemsForParent(honkai, mapping), [kiana]);
+  });
+
+  test('tag discovery separates primary and secondary candidates', () {
+    const genshin = TagItem(
+      id: 'folder.primary:genshin',
+      name: '原神',
+      source: TagSource.folder,
+      groupId: 'folder.primary',
+    );
+    const lisa = TagItem(
+      id: 'folder.child:genshin:lisa',
+      name: '丽莎',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: '原神',
+    );
+    const yae = TagItem(
+      id: 'folder.child:genshin:yae',
+      name: '八重神子',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: '原神',
+    );
+    const manual = TagItem(
+      id: 'manual:剧情',
+      name: '剧情',
+      source: TagSource.manual,
+      groupId: 'manual',
+    );
+    const groups = [
+      TagGroup(id: 'folder.primary', name: '一级标签', items: [genshin]),
+      TagGroup(id: 'folder.child', name: '二级标签', items: [lisa, yae]),
+      TagGroup(id: 'manual', name: '手动标签', items: [manual]),
+    ];
+
+    expect(primaryTagGroupsForDiscovery(groups).single.items, [genshin]);
+    expect(
+      secondaryTagsForDiscovery(groups, {
+        lisa.id: 3,
+        yae.id: 9,
+        manual.id: 99,
+      }),
+      [yae, lisa],
+    );
+  });
+
+  test('secondary discovery hides default album from secondary lists', () {
+    const defaultAlbum = TagItem(
+      id: 'folder.child:genshin:default',
+      name: TagRules.defaultAlbumTag,
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: '原神',
+      usageCount: 100,
+    );
+    const lisa = TagItem(
+      id: 'folder.child:genshin:lisa',
+      name: '丽莎',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: '原神',
+      usageCount: 12,
+    );
+    const groups = [
+      TagGroup(id: 'folder.child', name: '二级标签', items: [defaultAlbum, lisa]),
+    ];
+
+    expect(secondaryTagsForDiscovery(groups, const {}), [lisa]);
+  });
+
+  test('primary child display keeps only the leading virtual default album',
+      () {
+    const genshin = TagItem(
+      id: 'folder.primary:genshin',
+      name: '原神',
+      source: TagSource.folder,
+      groupId: 'folder.primary',
+    );
+    const defaultAlbum = TagItem(
+      id: 'folder.child:genshin:default',
+      name: TagRules.defaultAlbumTag,
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: '原神',
+      usageCount: 100,
+    );
+    const lisa = TagItem(
+      id: 'folder.child:genshin:lisa',
+      name: '丽莎',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: '原神',
+      usageCount: 12,
+    );
+
+    expect(
+      displayChildItemsForPrimary(genshin, {
+        genshin.id: [defaultAlbum, lisa],
+      }),
+      [lisa],
+    );
+  });
+
+  test('hot secondary tags hide parent labels', () {
+    const lisa = TagItem(
+      id: 'folder.child:genshin:lisa',
+      name: '丽莎',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: '原神',
+    );
+
+    expect(secondaryTagParentLabel(lisa, showParentLabel: false), isNull);
+    expect(secondaryTagParentLabel(lisa, showParentLabel: true), '原神');
+  });
+
+  test('recent playback clear targets honor single and bulk selection', () {
+    final playedA = VideoItem(
+      path: 'D:/video/a.mp4',
+      title: 'a',
+      folder: 'video',
+      tags: const {'原神'},
+      addedAt: DateTime(2026),
+      lastPlayedAt: DateTime(2026, 1, 2),
+    );
+    final playedB = VideoItem(
+      path: 'D:/video/b.mp4',
+      title: 'b',
+      folder: 'video',
+      tags: const {'原神'},
+      addedAt: DateTime(2026),
+      lastPlayedAt: DateTime(2026, 1, 3),
+    );
+    final neverPlayed = VideoItem(
+      path: 'D:/video/c.mp4',
+      title: 'c',
+      folder: 'video',
+      tags: const {'原神'},
+      addedAt: DateTime(2026),
+    );
+
+    expect(
+      recentPlaybackClearTargets(
+        [playedA, playedB, neverPlayed],
+        selectedPathKeys: {TagRules.pathKey(playedB.path)},
+        selectedOnly: true,
+      ),
+      [playedB],
+    );
+    expect(
+      recentPlaybackClearTargets(
+        [playedA, playedB, neverPlayed],
+        selectedPathKeys: const {},
+        selectedOnly: false,
+      ),
+      [playedA, playedB],
+    );
+  });
+
+  testWidgets('result view toggle switches to dense list mode', (tester) async {
+    var dense = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ResultViewToggle(
+            dense: dense,
+            onChanged: (value) => dense = value,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.view_list_rounded));
+    await tester.pump();
+
+    expect(dense, isTrue);
+  });
+
+  test('cleared filter query returns to empty state', () {
+    const active = FilterQuery(
+      primaryTagId: '原神',
+      childTagId: '丽莎',
+      favoriteOnly: true,
+    );
+    expect(active.isEmpty, isFalse);
+
+    const cleared = FilterQuery();
+    expect(cleared.isEmpty, isTrue);
+  });
+
+  testWidgets('smoke path opens local folders and returns by button or mouse',
+      (tester) async {
+    const rootPath = r'C:\smoke\media';
+    const childPath = r'C:\smoke\media\Alpha';
+    await tester.pumpWidget(
+      const LocalLibrarySmokeHarness(rootPath: rootPath, childPath: childPath),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(
+      find.byKey(LibrarySmokeKeys.localFolder(childPath)),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.localFolder(childPath)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text(childPath), findsOneWidget);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.localBackButton));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text(rootPath), findsOneWidget);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.localFolder(childPath)));
+    await tester.pump(const Duration(milliseconds: 100));
+    final backRegion =
+        tester.getCenter(find.byKey(LibrarySmokeKeys.localPointerBackRegion));
+    tester.binding.handlePointerEvent(
+      PointerDownEvent(position: backRegion, buttons: kBackMouseButton),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text(rootPath), findsOneWidget);
+  });
+
+  testWidgets('smoke path opens local folders in dense list mode',
+      (tester) async {
+    const rootPath = r'C:\smoke\media';
+    const childPath = r'C:\smoke\media\Alpha';
+    await tester.pumpWidget(
+      const LocalLibrarySmokeHarness(
+        rootPath: rootPath,
+        childPath: childPath,
+        dense: true,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.localFolder(childPath)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text(childPath), findsOneWidget);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.localBackButton));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text(rootPath), findsOneWidget);
+  });
+
+  testWidgets('smoke path hits list row play favorite and more',
+      (tester) async {
+    const path = r'C:\smoke\media\Alpha\clip.mp4';
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 420);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(const VideoListRowSmokeHarness());
+    await tester.pump(const Duration(milliseconds: 100));
+
+    String actionState() =>
+        tester.widget<Text>(find.byKey(LibrarySmokeKeys.listActionState)).data!;
+
+    expect(actionState(), 'open=0 favorite=0 more=0');
+    await tester.ensureVisible(find.byKey(LibrarySmokeKeys.listPlay(path)));
+    await tester.tap(find.byKey(LibrarySmokeKeys.listPlay(path)));
+    await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    expect(actionState(), 'open=1 favorite=0 more=0');
+
+    await tester.ensureVisible(find.byKey(LibrarySmokeKeys.listFavorite(path)));
+    await tester.tap(find.byKey(LibrarySmokeKeys.listFavorite(path)));
+    await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    expect(actionState(), 'open=1 favorite=1 more=0');
+
+    await tester.ensureVisible(find.byKey(LibrarySmokeKeys.listMore(path)));
+    await tester.tap(find.byKey(LibrarySmokeKeys.listMore(path)));
+    await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    expect(actionState(), 'open=1 favorite=1 more=1');
+  });
+
+  testWidgets('smoke path toggles tag panel rows and child expansion',
+      (tester) async {
+    const alphaTagId = 'folder.primary:alpha';
+    await tester.pumpWidget(const TagDiscoverySmokeHarness(childCount: 12));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.primaryRow(alphaTagId)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      find.byKey(LibrarySmokeKeys.primaryHeader(alphaTagId)),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.primaryHeader(alphaTagId)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(LibrarySmokeKeys.primaryRow(alphaTagId)), findsOneWidget);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.primaryRow(alphaTagId)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('展开全部'), findsOneWidget);
+
+    await tester.ensureVisible(
+      find.byKey(LibrarySmokeKeys.childExpandButton(alphaTagId)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester
+        .tap(find.byKey(LibrarySmokeKeys.childExpandButton(alphaTagId)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('收起'), findsOneWidget);
+
+    await tester.ensureVisible(
+      find.byKey(LibrarySmokeKeys.childExpandButton(alphaTagId)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester
+        .tap(find.byKey(LibrarySmokeKeys.childExpandButton(alphaTagId)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('展开全部'), findsOneWidget);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.secondaryTab));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Child01'), findsWidgets);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.primaryTab));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      find.byKey(LibrarySmokeKeys.primaryHeader(alphaTagId)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('smoke path updates tag result state after chip selection',
+      (tester) async {
+    const alphaTagId = 'folder.primary:alpha';
+    const defaultAlbumChipId = 'folder.primary:alpha::default-album';
+    const child01ChipId = 'folder.child:alpha:child01';
+    await tester.pumpWidget(const TagDiscoverySmokeHarness(childCount: 12));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.primaryRow(alphaTagId)));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byKey(LibrarySmokeKeys.tagChip(defaultAlbumChipId)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      find.byKey(LibrarySmokeKeys.tagResult('Alpha Default Video')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(LibrarySmokeKeys.tagResult('Child01 Video')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.tagChip(child01ChipId)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      find.byKey(LibrarySmokeKeys.tagResult('Child01 Video')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(LibrarySmokeKeys.tagResult('Alpha Default Video')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(LibrarySmokeKeys.tagResult('Child02 Video')),
+      findsNothing,
+    );
   });
 }
