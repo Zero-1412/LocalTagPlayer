@@ -29,6 +29,10 @@ void main() {
       referenceTopBarSearchShouldFillRow(LayoutSize.medium, 900),
       isTrue,
     );
+
+    expect(sortModeLabel(SortMode.recent), '添加时间');
+    expect(sortModeLabel(SortMode.name), '名称');
+    expect(sortModeLabel(SortMode.folder), '目录');
   });
 
   test('expanded main layout keeps proportional slots while resizing', () {
@@ -373,6 +377,36 @@ void main() {
 
     expect(controller.text, 'lupa');
     expect(latestKeyword, 'lupa');
+  });
+
+  testWidgets(
+      'top bar removes duplicate favorite filter and toggles sort order',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    var directionToggles = 0;
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        onSortDirectionToggle: () => directionToggles++,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('收藏筛选'), findsNothing);
+    expect(find.text('倒序'), findsOneWidget);
+
+    await tester.tap(find.text('倒序'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(directionToggles, 1);
   });
 
   test('cleared filter query returns to empty state', () {

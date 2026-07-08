@@ -4,6 +4,8 @@ part of '../app.dart';
 
 enum SortMode { recent, name, folder }
 
+enum SortDirection { descending, ascending }
+
 class LibrarySmokeKeys {
   const LibrarySmokeKeys._();
 
@@ -372,7 +374,7 @@ class _Sidebar extends StatelessWidget {
                         ),
                         _SidebarNavItem(
                           icon: Icons.auto_awesome_outlined,
-                          label: '\u667a\u80fd\u6536\u85cf',
+                          label: '\u672c\u5730\u6536\u85cf',
                           selected: favoriteVideosSelected,
                           trailing: favoriteCount.toString(),
                           onTap: onFavoritesToggle,
@@ -2876,14 +2878,14 @@ class _ReferenceTopBar extends StatelessWidget {
     required this.totalCount,
     required this.keyword,
     required this.sortMode,
+    required this.sortDirection,
     required this.layoutSize,
     required this.hasActiveFilters,
-    required this.favoritesSelected,
     required this.onSearchChanged,
     required this.onSortChanged,
+    required this.onSortDirectionToggle,
     required this.denseResultGrid,
     required this.onResultViewChanged,
-    required this.onFavoritesToggle,
     required this.onOpenTagManager,
     required this.onOpenFilters,
   });
@@ -2898,21 +2900,21 @@ class _ReferenceTopBar extends StatelessWidget {
 
   final SortMode sortMode;
 
+  final SortDirection sortDirection;
+
   final LayoutSize layoutSize;
 
   final bool hasActiveFilters;
-
-  final bool favoritesSelected;
 
   final ValueChanged<String> onSearchChanged;
 
   final ValueChanged<SortMode> onSortChanged;
 
+  final VoidCallback onSortDirectionToggle;
+
   final bool denseResultGrid;
 
   final ValueChanged<bool> onResultViewChanged;
-
-  final VoidCallback onFavoritesToggle;
 
   final VoidCallback onOpenTagManager;
 
@@ -3047,20 +3049,13 @@ class _ReferenceTopBar extends StatelessWidget {
                   label: collapseActions ? null : '\u6807\u7b7e\u4e2d\u5fc3',
                   onPressed: onOpenTagManager,
                 ),
-                const SizedBox(width: 8),
-                _ReferenceActionButton(
-                  tooltip: '\u6536\u85cf\u7b5b\u9009',
-                  icon: Icons.star_border_rounded,
-                  label: collapseActions ? null : '\u6536\u85cf\u7b5b\u9009',
-                  selected: favoritesSelected,
-                  onPressed: onFavoritesToggle,
-                ),
-                const SizedBox(width: 8),
                 const SizedBox(width: 12),
                 if (!compact)
-                  _TopSortMenu(
+                  _TopSortControl(
                     sortMode: sortMode,
+                    sortDirection: sortDirection,
                     onChanged: onSortChanged,
+                    onDirectionToggle: onSortDirectionToggle,
                   ),
                 if (!compact) const SizedBox(width: 8),
                 if (!compact)
@@ -3086,6 +3081,9 @@ class _ReferenceTopBar extends StatelessWidget {
 Widget referenceTopBarSearchSmokeHarness({
   required TextEditingController controller,
   required ValueChanged<String> onSearchChanged,
+  SortDirection sortDirection = SortDirection.descending,
+  ValueChanged<SortMode>? onSortChanged,
+  VoidCallback? onSortDirectionToggle,
 }) {
   return MaterialApp(
     home: Scaffold(
@@ -3095,14 +3093,14 @@ Widget referenceTopBarSearchSmokeHarness({
         totalCount: 0,
         keyword: controller.text,
         sortMode: SortMode.recent,
+        sortDirection: sortDirection,
         layoutSize: LayoutSize.expanded,
         hasActiveFilters: false,
-        favoritesSelected: false,
         onSearchChanged: onSearchChanged,
-        onSortChanged: (_) {},
+        onSortChanged: onSortChanged ?? (_) {},
+        onSortDirectionToggle: onSortDirectionToggle ?? () {},
         denseResultGrid: false,
         onResultViewChanged: (_) {},
-        onFavoritesToggle: () {},
         onOpenTagManager: () {},
         onOpenFilters: () {},
       ),
@@ -3116,7 +3114,6 @@ class _ReferenceActionButton extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     this.label,
-    this.selected = false,
   });
 
   final String tooltip;
@@ -3127,14 +3124,12 @@ class _ReferenceActionButton extends StatelessWidget {
 
   final String? label;
 
-  final bool selected;
-
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: selected ? const Color(0xfff5f3ff) : _appPanel,
+        color: _appPanel,
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -3145,15 +3140,13 @@ class _ReferenceActionButton extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: selected ? const Color(0xffd8d4ff) : _appBorder,
+                color: _appBorder,
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon,
-                    size: 19,
-                    color: selected ? _appAccentViolet : _appAccentStrong),
+                Icon(icon, size: 19, color: _appAccentStrong),
                 if (label != null) ...[
                   const SizedBox(width: 8),
                   Text(
@@ -3203,60 +3196,159 @@ class _ReferenceIconButton extends StatelessWidget {
   }
 }
 
-class _TopSortMenu extends StatelessWidget {
-  const _TopSortMenu({
+class _TopSortControl extends StatelessWidget {
+  const _TopSortControl({
     required this.sortMode,
+    required this.sortDirection,
     required this.onChanged,
+    required this.onDirectionToggle,
   });
 
   final SortMode sortMode;
+  final SortDirection sortDirection;
   final ValueChanged<SortMode> onChanged;
+  final VoidCallback onDirectionToggle;
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (sortMode) {
-      SortMode.recent => '\u6309\u6dfb\u52a0\u65f6\u95f4',
-      SortMode.name => '\u6309\u540d\u79f0',
-      SortMode.folder => '\u6309\u76ee\u5f55',
-    };
-    return PopupMenuButton<SortMode>(
-      tooltip: '\u6392\u5e8f',
-      onSelected: onChanged,
-      itemBuilder: (context) => const [
-        PopupMenuItem(
-            value: SortMode.recent,
-            child: Text('\u6309\u6dfb\u52a0\u65f6\u95f4')),
-        PopupMenuItem(value: SortMode.name, child: Text('\u6309\u540d\u79f0')),
-        PopupMenuItem(
-            value: SortMode.folder, child: Text('\u6309\u76ee\u5f55')),
-      ],
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: _appPanel,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _appBorder),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: _appText,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
+    final directionAscending = sortDirection == SortDirection.ascending;
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: _appPanel,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _appBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PopupMenuButton<SortMode>(
+            tooltip: '\u6392\u5e8f\u5b57\u6bb5',
+            position: PopupMenuPosition.under,
+            color: _appPanel,
+            elevation: 10,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: const BorderSide(color: _appBorder),
+            ),
+            onSelected: onChanged,
+            itemBuilder: (context) => [
+              for (final mode in SortMode.values)
+                PopupMenuItem(
+                  value: mode,
+                  child: _SortMenuItem(
+                    label: sortModeLabel(mode),
+                    selected: sortMode == mode,
+                  ),
+                ),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12, right: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.sort_rounded,
+                      size: 18, color: _appAccentStrong),
+                  const SizedBox(width: 7),
+                  Text(
+                    sortModeLabel(sortMode),
+                    style: const TextStyle(
+                      color: _appText,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.expand_more_rounded,
+                      size: 18, color: _appTextMuted),
+                ],
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.expand_more_rounded,
-                size: 18, color: _appTextMuted),
-          ],
-        ),
+          ),
+          const SizedBox(
+            height: 26,
+            child: VerticalDivider(width: 1, color: _appBorder),
+          ),
+          Tooltip(
+            message: directionAscending
+                ? '\u5207\u6362\u4e3a\u5012\u5e8f'
+                : '\u5207\u6362\u4e3a\u6b63\u5e8f',
+            child: InkWell(
+              borderRadius: const BorderRadius.horizontal(
+                right: Radius.circular(10),
+              ),
+              onTap: onDirectionToggle,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 11),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      directionAscending
+                          ? Icons.arrow_upward_rounded
+                          : Icons.arrow_downward_rounded,
+                      size: 17,
+                      color: _appAccentStrong,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      directionAscending ? '\u6b63\u5e8f' : '\u5012\u5e8f',
+                      style: const TextStyle(
+                        color: _appText,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _SortMenuItem extends StatelessWidget {
+  const _SortMenuItem({
+    required this.label,
+    required this.selected,
+  });
+
+  final String label;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          selected ? Icons.check_rounded : Icons.circle_outlined,
+          size: 18,
+          color: selected ? _appAccentViolet : _appTextMuted,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            color: _appText,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+@visibleForTesting
+String sortModeLabel(SortMode mode) {
+  return switch (mode) {
+    SortMode.recent => '\u6dfb\u52a0\u65f6\u95f4',
+    SortMode.name => '\u540d\u79f0',
+    SortMode.folder => '\u76ee\u5f55',
+  };
 }
 
 @visibleForTesting

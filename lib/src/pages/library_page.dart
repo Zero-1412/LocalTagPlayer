@@ -210,7 +210,7 @@ enum _LibraryResultMode {
   /** 最近播放结果，只展示有播放记录的视频。 */
   recent,
 
-  /** 智能收藏结果，只展示收藏视频。 */
+  /** 本地收藏结果，只展示用户收藏的视频。 */
   favorites,
 
   /** 本地媒体库路径浏览，按文件系统层级展示文件夹和视频。 */
@@ -286,6 +286,7 @@ class _LibraryPageState extends State<LibraryPage> {
   var _showFavoritesOnly = false;
   var _isScanning = false;
   var _sortMode = SortMode.recent;
+  var _sortDirection = SortDirection.descending;
   var _denseResultGrid = false;
   var _isTagDiscoveryPanelOpen = true;
   var _resultMode = _LibraryResultMode.library;
@@ -430,7 +431,7 @@ class _LibraryPageState extends State<LibraryPage> {
       ),
       totalCount: store.videos.length,
       sourceKey: _libraryDataRevision,
-      sortKey: _sortMode,
+      sortKey: (_sortMode, _sortDirection),
       compare: _compareVideos,
     );
     return _filterStateSource.update(query);
@@ -741,7 +742,7 @@ class _LibraryPageState extends State<LibraryPage> {
       return;
     }
 
-    // 最近播放、智能收藏和本地路径浏览只依赖当前内存对象重建轻量列表。
+    // 最近播放、本地收藏和本地路径浏览只依赖当前内存对象重建轻量列表。
     if (_resultMode == _LibraryResultMode.recent ||
         (_resultMode == _LibraryResultMode.favorites && item.isFavorite) ||
         _resultMode == _LibraryResultMode.local) {
@@ -1156,17 +1157,34 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   int _compareVideos(VideoItem a, VideoItem b) {
+    final int value;
     switch (_sortMode) {
       case SortMode.recent:
         final bTime = b.lastPlayedAt ?? b.addedAt;
         final aTime = a.lastPlayedAt ?? a.addedAt;
-        return bTime.compareTo(aTime);
+        value = bTime.compareTo(aTime);
+        break;
       case SortMode.name:
-        return a.title.compareTo(b.title);
+        value = a.title.compareTo(b.title);
+        break;
       case SortMode.folder:
         final folder = a.folder.compareTo(b.folder);
-        return folder == 0 ? a.title.compareTo(b.title) : folder;
+        value = folder == 0 ? a.title.compareTo(b.title) : folder;
+        break;
     }
+    return _sortDirection == SortDirection.descending ? value : -value;
+  }
+
+  void _setSortMode(SortMode mode) {
+    _mutateFilters(() => _sortMode = mode);
+  }
+
+  void _toggleSortDirection() {
+    _mutateFilters(() {
+      _sortDirection = _sortDirection == SortDirection.descending
+          ? SortDirection.ascending
+          : SortDirection.descending;
+    });
   }
 
   void _toggleSingleSelection(Set<String> target, String tag) {
@@ -1213,10 +1231,12 @@ class _LibraryPageState extends State<LibraryPage> {
 
     final filterState = _filterState ?? _buildImmediateFilterState(store);
     final filteredVideos = filterState.filteredVideos;
-    final recentVideos = store.videos.values
-        .where((item) => item.lastPlayedAt != null)
-        .toList()
-      ..sort((a, b) => b.lastPlayedAt!.compareTo(a.lastPlayedAt!));
+    final recentVideos =
+        store.videos.values.where((item) => item.lastPlayedAt != null).toList()
+          ..sort((a, b) {
+            final value = b.lastPlayedAt!.compareTo(a.lastPlayedAt!);
+            return _sortDirection == SortDirection.descending ? value : -value;
+          });
     final favoriteVideos = store.videos.values
         .where((item) => item.isFavorite)
         .toList()
@@ -1263,14 +1283,14 @@ class _LibraryPageState extends State<LibraryPage> {
     final displaySummary = _resultMode == _LibraryResultMode.recent
         ? '\u6700\u8fd1\u64ad\u653e  |  $displayResultCount / $displayTotalCount'
         : _resultMode == _LibraryResultMode.favorites
-            ? '\u667a\u80fd\u6536\u85cf  |  $displayResultCount / $displayTotalCount'
+            ? '\u672c\u5730\u6536\u85cf  |  $displayResultCount / $displayTotalCount'
             : _resultMode == _LibraryResultMode.local
                 ? '\u672c\u5730\u5a92\u4f53\u5e93  |  $displayResultCount \u9879'
                 : filterSummary;
     final displayExpression = _resultMode == _LibraryResultMode.recent
         ? '\u6309\u6700\u8fd1\u64ad\u653e\u65f6\u95f4\u6392\u5e8f'
         : _resultMode == _LibraryResultMode.favorites
-            ? '\u4ec5\u663e\u793a\u5df2\u6536\u85cf\u89c6\u9891'
+            ? '\u4ec5\u663e\u793a\u672c\u5730\u6536\u85cf\u89c6\u9891'
             : _resultMode == _LibraryResultMode.local
                 ? (_localLibraryPath ?? '\u672c\u5730\u5a92\u4f53\u5e93')
                 : filterExpression;
@@ -1388,7 +1408,7 @@ class _LibraryPageState extends State<LibraryPage> {
             keyword: _searchController.text,
             defaultChipLabel: switch (_resultMode) {
               _LibraryResultMode.recent => '\u6700\u8fd1\u64ad\u653e',
-              _LibraryResultMode.favorites => '\u667a\u80fd\u6536\u85cf',
+              _LibraryResultMode.favorites => '\u672c\u5730\u6536\u85cf',
               _LibraryResultMode.local => '\u672c\u5730\u5a92\u4f53\u5e93',
               _LibraryResultMode.library => '\u5168\u90e8\u89c6\u9891',
             },
@@ -1487,15 +1507,15 @@ class _LibraryPageState extends State<LibraryPage> {
         totalCount: displayTotalCount,
         keyword: _searchController.text,
         sortMode: _sortMode,
+        sortDirection: _sortDirection,
         layoutSize: layoutSize,
         hasActiveFilters: _hasActiveFilters,
-        favoritesSelected: _showFavoritesOnly,
         onSearchChanged: (_) => _mutateFilters(() {}),
-        onSortChanged: (value) => _mutateFilters(() => _sortMode = value),
+        onSortChanged: _setSortMode,
+        onSortDirectionToggle: _toggleSortDirection,
         denseResultGrid: _denseResultGrid,
         onResultViewChanged: (dense) =>
             setState(() => _denseResultGrid = dense),
-        onFavoritesToggle: _showFavoriteVideos,
         onOpenTagManager: () => _openTagManager(videos),
         onOpenFilters: () {
           showModalBottomSheet<void>(
@@ -1890,7 +1910,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final queueTitle = _resultMode == _LibraryResultMode.recent
         ? '\u6700\u8fd1\u64ad\u653e  |  ${playlist.length} / ${store.videos.length}'
         : _resultMode == _LibraryResultMode.favorites
-            ? '\u667a\u80fd\u6536\u85cf  |  ${playlist.length} / ${store.videos.length}'
+            ? '\u672c\u5730\u6536\u85cf  |  ${playlist.length} / ${store.videos.length}'
             : _resultMode == _LibraryResultMode.local
                 ? '${_localLibraryPath ?? '\u672c\u5730\u5a92\u4f53\u5e93'}  |  ${playlist.length} / ${store.videos.length}'
                 : _filterSummary(
