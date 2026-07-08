@@ -1,6 +1,6 @@
 # CHAT_2_MEDIA_LIBRARY.md
 
-Current Version: `0.4.1`
+Current Version: `0.4.3`
 Status: active
 Owner: Chat 2 / Tag Model + Filter Engine + Media Library
 
@@ -91,6 +91,8 @@ Do not do:
 
 ## Change Log
 
+- `0.4.3`: 恢复 `TagQueryService.resultCounts` 的分组结果计数批处理：候选标签按标签组分批，每个标签组只扫描一次视频集合，并在旧兼容匹配前优先使用标准化视频 tagId 做候选交集判断；未修改 SQLite schema。
+- `0.4.2`: 针对大媒体库优化分组结果计数：`TagQueryService.resultCounts` 按标签组批量计算候选计数，候选 tagId 可用时使用索引化关联减少重复扫描；筛选语义仍统一经过 `FilterQuery` / `TagQueryService`，未修改 SQLite schema。
 - `0.4.1`: Acceptance fixes for the first Tag Model + Filter Engine pass: tag index backfill now covers videos missing links without wiping manual links, manual tag writes only refresh the current manual scope and exclude folder-derived tags, result counts ignore the candidate tag group to avoid in-group count collapse, and SQLite gained alias/source lookup indexes.
 - `0.4.0`: Added normalized SQLite tag index tables (`tag_groups`, `tags`, `tag_aliases`, `video_tags`), synchronized folder/manual tag links from scan and tag editing, added `TagQueryContext` and `TagQueryService`, enabled alias-aware keyword matching for tags linked to each video, exposed grouped result counts, and kept the current filtered result as the player queue.
 - `0.3.0`: Rebased Media Library on the external cross-platform plan, expanded ownership to Tag Model + Filter Engine, aliases, grouped semantics, stable identity, missing/relink, and tag-source separation.

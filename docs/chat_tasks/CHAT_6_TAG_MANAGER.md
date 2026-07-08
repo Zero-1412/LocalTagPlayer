@@ -1,6 +1,6 @@
 # CHAT_6_TAG_MANAGER.md
 
-Current Version: `0.2.1`
+Current Version: `0.2.2`
 Status: first phase completed
 Owner: Chat 6 / Tag Manager + Batch Tagging
 
@@ -82,3 +82,4 @@ Do not do:
 - `0.1.0`: Created task from `local_tag_player_flutter_cross_platform_plan_v2.md`.
 - `0.2.0`: Added first-phase Tag Manager entry and page. Supports viewing groups/tags/aliases/source usage counts, searching tags, creating manual tags, editing displayName/aliases/hidden/favorite/sortOrder/group, and batch add/remove manual tags for the current filtered result. Delete/merge remain guarded placeholders with `video_tags` reference checks; folder-derived tags are not hard-deleted.
 - `0.2.1`: Acceptance fixes. Tag groups are shown directly in Tag Manager, batch add/remove is restricted to `manual` source tags, and manual tag creation now refuses to overwrite same-group non-manual tags.
+- `0.2.2`: 历史阶段中，媒体库侧栏“我的标签库”曾支持创建或复用标签作为快捷入口；移除快捷入口不删除真实标签记录或视频关系，破坏性标签维护仍归 Tag Manager。该侧栏入口后续已被“本地媒体库”路径浏览方向替换。
