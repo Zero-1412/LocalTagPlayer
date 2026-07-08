@@ -97,3 +97,11 @@ flutter build windows --debug
 - smoke test 锁定面板 top 与字段按钮 bottom 对齐、面板宽度与字段按钮宽度一致，避免回退到浮动菜单。
 - debug exe 真实窗口复测：点击“添加时间”后，“添加时间 / 名称 / 目录”列表从按钮底部向下展开，视觉上不再与按钮重叠。
 - 本次仅调整顶部排序控件视觉与测试，不修改筛选语义、播放队列、SQLite schema 或缓存队列。
+
+## 2026-07-08 主界面模块化拆分
+
+- 当前行数热点：`library_widgets.dart` 约 5001 行、`player_page.dart` 约 2126 行、`library_page.dart` 约 1943 行、`library_store.dart` 约 1140 行，说明主界面 UI、测试 key 和局部控件已经过度集中。
+- 本轮先做低风险拆分：`LibrarySmokeKeys` 迁到 `widgets/library_smoke_keys.dart`，排序枚举与顶部排序控件迁到 `widgets/library_sort_control.dart`。
+- 仍保留 `part of '../app.dart'` 编译边界，避免为一次小拆分同时重写 import/export 和私有符号访问规则。
+- 拆分后 `library_widgets.dart` 降到约 4647 行；debug exe 真实窗口复测排序下拉仍可打开。
+- 后续建议继续按职责拆出本地媒体库视图、标签发现面板、视频卡片/列表行，再评估 `library_page.dart` 的状态协调逻辑是否需要 controller/service 层。

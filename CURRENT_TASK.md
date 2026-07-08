@@ -17,6 +17,9 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 完成第一轮低风险模块化拆分：`library_widgets.dart` 中的 smoke test key 迁到 `widgets/library_smoke_keys.dart`，顶部排序控件迁到 `widgets/library_sort_control.dart`。
+- 结构分析确认当前最大耦合点仍是 `library_widgets.dart`、`player_page.dart`、`library_page.dart` 和 `library_store.dart`；本轮先拆纯 UI / 测试基础设施，避免触碰筛选、播放队列或 schema。
+- 拆分后 `library_widgets.dart` 从约 5001 行降到约 4647 行；`flutter test`、`flutter analyze`、`flutter build windows --debug` 和 debug exe 排序下拉真实窗口 smoke 均通过。
 - 排序字段弹层从浮动菜单改为贴合排序字段按钮底部的抽屉式下拉面板，展开时向下生长，避免与按钮视觉重叠。
 - 排序 smoke test 改为验证下拉面板与字段按钮底部对齐且同宽；debug exe 真实窗口确认“添加时间 / 名称 / 目录”列表不再压住按钮。
 - 修复“本地收藏”叠加右侧标签后收藏条件丢失的问题：左侧本地收藏入口现在同步设置 `favoriteOnly`，后续选择一级/二级标签会以 AND 关系保留收藏条件。

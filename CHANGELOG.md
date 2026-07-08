@@ -2,6 +2,14 @@
 
 ## 2026-07-08
 
+### 主界面 UI 模块拆分
+
+- 分析当前代码行数后确认最大耦合点：`library_widgets.dart` 约 5001 行、`player_page.dart` 约 2126 行、`library_page.dart` 约 1943 行、`library_store.dart` 约 1140 行。
+- 先按低风险边界拆分 `library_widgets.dart`：测试/自动化 key 移到 `widgets/library_smoke_keys.dart`，顶部排序控件和排序枚举移到 `widgets/library_sort_control.dart`。
+- 保持现有 `part of '../app.dart'` 架构，不切换 import/export 边界，避免一次性破坏私有符号访问和业务行为。
+- 拆分后 `library_widgets.dart` 降到约 4647 行，排序控件模块约 297 行，smoke key 模块约 68 行。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue 或缩略图/media 队列。
+
 ### 排序抽屉展开
 
 - 排序字段列表从 `PopupMenuButton` 浮动菜单改为自定义下拉面板，面板贴合排序字段按钮底部并向下展开。
