@@ -1,145 +1,145 @@
 # ROADMAP.md
 
-## Planning Source Of Truth
+## 规划基准
 
-The controlling product and architecture plan is:
+产品和架构规划以此文件为准：
 
 ```text
 <private-planning-document>
 ```
 
-When this project document conflicts with older project habits, the cross-platform plan wins. The current app state is treated as implementation history, not as the product direction.
+如果本项目文档与旧实现习惯冲突，以跨平台规划文件为准。当前应用状态只代表历史实现，不代表产品方向。
 
-The project is not a PotPlayer / VLC replacement. The target is:
-
-```text
-Tag-driven local video discovery player
-= local scan
-+ SQLite media library
-+ multi-level and grouped tags
-+ tag alias search
-+ web-style filter UX
-+ filtered playback queue
-+ basic player
-+ cache and diagnostics
-+ Flutter cross-platform shell
-```
-
-## Core Loop
-
-All later tasks should protect this loop:
+本项目不是 PotPlayer / VLC 替代品。目标是：
 
 ```text
-scan local folders
--> derive initial folder tags
--> add/edit player-owned tags
--> distinguish folder/manual/rule/filename/import/auto tag sources
--> filter by grouped tags and keyword
--> show current filter chips and result count
--> use filtered result as playback queue
--> player consumes the current queue
--> fix tags through tag manager / batch tagging
--> keep thumbnails, media details, diagnostics stable
+标签驱动的本地视频发现播放器
+= 本地扫描
++ SQLite 媒体库
++ 多级标签和分组标签
++ 标签别名搜索
++ 网页式筛选体验
++ 筛选结果播放队列
++ 基础播放器
++ 缓存和诊断
++ Flutter 跨平台壳
 ```
 
-## Non-Goals For Current Phase
+## 核心闭环
 
-Do not spend primary effort on:
-
-- subtitle, audio track, frame-step, A-B loop, filters, rotation, advanced playback controls.
-- over-polished animation or purely visual redesign before Tag discovery UX is stable.
-- Web support.
-- deep Android / iOS support.
-- replacing the current Windows app before desktop behavior is stable.
-
-## Architecture Baseline
-
-Completed baseline: `Architecture Baseline 0.4.0`
-
-Current target baseline: `Architecture Baseline 0.4.1`
-
-Completed 0.3.0 scope:
-
-- Added lightweight stubs for `FileSystemAdapter`, `PlayerBackend`, `FFmpegBackend`, `DatabaseProvider`.
-- Added platform-independent stubs for `TagGroup`, `TagItem`, `FilterQuery`, `PlaybackSession`, `CacheStatus`, `DiagnoseStatus`.
-- Kept current Windows behavior unchanged.
-- Kept current `part` structure as a transition state.
-
-Completed 0.3.1 scope:
-
-- Added tag aliases to the platform-independent tag model.
-- Added grouped/excluded tag semantics to `FilterQuery.matches`.
-- Defined group AND, in-group OR, excluded NOT matching behavior.
-- Routed existing media-library filtering through `FilterQuery` while keeping current Windows behavior.
-
-Completed 0.4.0 scope:
-
-- Align contracts with the cross-platform plan instead of current implementation habits.
-- Add or refine boundaries for `LibraryRepository`, `TagRepository`, `CacheRepository`, `PlaybackRepository`.
-- Add shared layout semantics for `compact`, `medium`, `expanded`.
-- Refine `FileSystemAdapter`, `PlayerBackend`, `FFmpegBackend`, and `DatabaseProvider` contracts without replacing current Windows implementations.
-- Keep `part` as the active transition structure after evaluating import migration risk for this small baseline.
-- Do not rewrite player behavior, SQLite query behavior, thumbnail queue behavior, or UI flows in Architecture.
-
-## Required Platform Boundaries
-
-`FileSystemAdapter` owns:
-
-- picking directories.
-- checking existence.
-- recursive video scanning.
-- reveal in file manager.
-- path normalization and relative path rules.
-
-`PlayerBackend` owns:
-
-- open/play/pause/seek/stop/dispose.
-- playback state stream.
-- diagnostics stream.
-- platform player implementation details.
-
-`FFmpegBackend` owns:
-
-- locating FFmpeg / FFprobe.
-- availability and version reporting.
-- media probing.
-- thumbnail generation.
-- platform-specific executable or library access.
-
-`DatabaseProvider` owns:
-
-- database open/close.
-- database file location.
-- schema version.
-- migration dispatch.
-
-Platform-independent code must not depend on Windows, mpv, FFmpeg executables, or concrete file-system APIs.
-
-## Tag Discovery Design
-
-Do not stop at the current first-level / second-level folder tag tree. Keep it as an initial source, then build grouped tags.
-
-Recommended groups:
+所有后续任务都要保护这条闭环：
 
 ```text
-作品: 原神 / FGO / 东方 / 崩坏三
-角色: 丽莎 / 雷电将军 / 丝柯克 / miku
-类型: 3D / MMD / mod / vtuber
-来源: Iwara / B站 / 本地录制
-质量: 720p / 1080p / 4K / H264 / H265
-状态: 收藏 / 未播放 / 已播放 / 缩略图异常 / 视频信息异常
+扫描本地文件夹
+-> 派生初始文件夹标签
+-> 添加 / 编辑播放器自有标签
+-> 区分 folder / manual / rule / filename / import / auto 标签来源
+-> 按分组标签和关键字筛选
+-> 展示当前筛选 chips 和结果数量
+-> 使用筛选结果作为播放队列
+-> 播放器消费当前队列
+-> 通过标签管理器 / 批量打标修正标签
+-> 保持缩略图、媒体信息和诊断稳定
 ```
 
-Filter semantics:
+## 当前阶段非目标
+
+当前阶段不要把主要精力放在：
+
+- 字幕、音轨、逐帧、A-B loop、滤镜、旋转、高级播放控制。
+- 标签发现体验稳定前的过度动画或纯视觉重设计。
+- Web 支持。
+- 深度 Android / iOS 支持。
+- Windows 桌面行为稳定前替换当前桌面应用。
+
+## 架构基线
+
+已完成基线：`Architecture Baseline 0.4.0`
+
+当前目标基线：`Architecture Baseline 0.4.1`
+
+已完成 `0.3.0` 范围：
+
+- 新增 `FileSystemAdapter`、`PlayerBackend`、`FFmpegBackend`、`DatabaseProvider` 轻量接口 stub。
+- 新增平台无关的 `TagGroup`、`TagItem`、`FilterQuery`、`PlaybackSession`、`CacheStatus`、`DiagnoseStatus` stub。
+- 保持当前 Windows 行为不变。
+- 保留当前 `part` 结构作为过渡状态。
+
+已完成 `0.3.1` 范围：
+
+- 在平台无关标签模型中增加标签别名。
+- 在 `FilterQuery.matches` 中增加分组 / 排除标签语义。
+- 定义不同组 AND、同组 OR、排除 NOT 的匹配行为。
+- 让现有媒体库筛选经过 `FilterQuery`，同时保持当前 Windows 行为。
+
+已完成 `0.4.0` 范围：
+
+- 让接口契约对齐跨平台规划，而不是当前实现惯性。
+- 新增或细化 `LibraryRepository`、`TagRepository`、`CacheRepository`、`PlaybackRepository` 边界。
+- 增加 `compact`、`medium`、`expanded` 共享布局语义。
+- 细化 `FileSystemAdapter`、`PlayerBackend`、`FFmpegBackend`、`DatabaseProvider` 契约，不替换当前 Windows 实现。
+- 评估导入迁移风险后，继续把 `part` 作为当前过渡结构。
+- Architecture 阶段不重写播放器行为、SQLite 查询行为、缩略图队列行为或 UI 流程。
+
+## 必须保持的平台边界
+
+`FileSystemAdapter` 负责：
+
+- 选择目录。
+- 检查文件是否存在。
+- 递归扫描视频。
+- 在文件管理器中定位。
+- 路径规范化和相对路径规则。
+
+`PlayerBackend` 负责：
+
+- 打开、播放、暂停、跳转、停止和释放。
+- 播放状态流。
+- 诊断状态流。
+- 平台播放器实现细节。
+
+`FFmpegBackend` 负责：
+
+- 定位 FFmpeg / FFprobe。
+- 可用性和版本报告。
+- 媒体探测。
+- 缩略图生成。
+- 平台相关可执行文件或库访问。
+
+`DatabaseProvider` 负责：
+
+- 数据库打开和关闭。
+- 数据库文件位置。
+- schema 版本。
+- migration 分发。
+
+平台无关代码不能依赖 Windows、mpv、FFmpeg 可执行文件或具体文件系统 API。
+
+## 标签发现设计
+
+不要止步于当前一级 / 二级文件夹标签树。它只能作为初始来源，后续要建设分组标签。
+
+推荐分组：
 
 ```text
-Different groups: AND
-Same group: OR
-Excluded tags: NOT
-Keyword: file name / path / tag name / tag alias
+作品：原神 / FGO / 东方 / 崩坏三
+角色：丽莎 / 雷电将军 / 丝柯克 / miku
+类型：3D / MMD / mod / vtuber
+来源：Iwara / B站 / 本地录制
+质量：720p / 1080p / 4K / H264 / H265
+状态：收藏 / 未播放 / 已播放 / 缩略图异常 / 视频信息异常
 ```
 
-Example:
+筛选语义：
+
+```text
+不同组：AND
+同组：OR
+排除标签：NOT
+关键字：文件名 / 路径 / 标签名 / 标签别名
+```
+
+示例：
 
 ```text
 作品 = 原神
@@ -148,18 +148,18 @@ AND (类型 = 3D OR MMD)
 AND NOT NTR
 ```
 
-## Target Models
+## 目标模型
 
-`TagGroup` should move toward:
+`TagGroup` 应逐步包含：
 
 - `id`
 - `name`
 - `displayName`
 - `sortOrder`
 - `allowMultiSelect`
-- `defaultLogic`: `sameGroupOr` or `sameGroupAnd`
+- `defaultLogic`：`sameGroupOr` 或 `sameGroupAnd`
 
-`TagItem` should move toward:
+`TagItem` 应逐步包含：
 
 - `id`
 - `name`
@@ -173,7 +173,7 @@ AND NOT NTR
 - `isHidden`
 - `sortOrder`
 
-`FilterQuery` should move toward:
+`FilterQuery` 应逐步包含：
 
 - `keyword`
 - `includeTagIds`
@@ -184,7 +184,7 @@ AND NOT NTR
 - `unplayedOnly`
 - `errorOnly`
 
-`PlaybackSession` should move toward:
+`PlaybackSession` 应逐步包含：
 
 - `sourceFilter`
 - `queue`
@@ -192,77 +192,77 @@ AND NOT NTR
 - `currentVideoId`
 - `createdAt`
 
-## Media Library Homepage
+## 媒体库首页
 
-The library homepage is a Tag discovery page, not a flat tag browser.
+媒体库首页是标签发现页，不是扁平标签浏览器。
 
-Recommended layout:
-
-```text
-top: search file name / path / tag / alias
-left: grouped tag filter sidebar
-center top: current filter chips + result count + clear + save smart list
-center: video card grid
-```
-
-Must support:
-
-- grouped tag filters.
-- current filter chips, for example `[原神 x] [丽莎 x] [3D x] [-NTR x]`.
-- per-tag counts.
-- clear filter.
-- excluded tags.
-- save current filter as a smart list entry.
-- current filtered result as the playback queue.
-
-Responsive rules:
+推荐布局：
 
 ```text
-expanded: persistent left filter sidebar
-medium: collapsible filter sidebar
-compact: filter in Drawer / BottomSheet
+顶部：搜索文件名 / 路径 / 标签 / 别名
+左侧：分组标签筛选栏
+中上：当前筛选 chips + 结果数量 + 清空 + 保存智能列表
+中部：视频卡片网格
 ```
 
-## Player Page
+必须支持：
 
-The player consumes the current filter result. It should not become a general professional player first.
+- 分组标签筛选。
+- 当前筛选 chips，例如 `[原神 x] [丽莎 x] [3D x] [-NTR x]`。
+- 每个标签的数量。
+- 清空筛选。
+- 排除标签。
+- 保存当前筛选为智能列表入口。
+- 当前筛选结果作为播放队列。
 
-Must support:
-
-- right queue bound to current `FilterQuery` / `PlaybackSession`.
-- current index display such as `1/1661`.
-- queue title or summary for the current filter.
-- return to library without losing filter state.
-- switch videos from right queue.
-- stable video information entry.
-- stable playback diagnostics entry.
-- copyable diagnostics later.
-- UI depending on `PlayerBackend`, not concrete player internals.
-
-Do not prioritize:
-
-- subtitles.
-- audio tracks.
-- frame-step.
-- A-B loop.
-- filters.
-- complex aspect-ratio controls.
-
-## Folder Tags And Stable Identity
-
-Keep current folder-derived first/second tags, but treat them as initial `folder` source tags.
-
-Target identity model:
+响应式规则：
 
 ```text
-videoId = stable database identity
-fingerprint = file/media identity
-path = current mutable location
+expanded：常驻左侧筛选栏
+medium：可折叠筛选栏
+compact：Drawer / BottomSheet 内筛选
 ```
 
-Video tags, favorites, play records, and playback progress bind to `videoId`, not mutable `path`.
+## 播放页
 
-Future `video_tags` relation should move toward:
+播放器消费当前筛选结果，不应优先演变成通用专业播放器。
+
+必须支持：
+
+- 右侧队列绑定当前 `FilterQuery` / `PlaybackSession`。
+- 当前序号显示，例如 `1/1661`。
+- 队列标题或摘要展示当前筛选。
+- 返回媒体库时不丢失筛选状态。
+- 从右侧队列切换视频。
+- 稳定的视频信息入口。
+- 稳定的播放诊断入口。
+- 后续可复制诊断信息。
+- UI 依赖 `PlayerBackend`，不依赖具体播放器内部实现。
+
+当前不优先：
+
+- 字幕。
+- 音轨。
+- 逐帧。
+- A-B loop。
+- 滤镜。
+- 复杂画面比例控制。
+
+## 文件夹标签与稳定身份
+
+保留当前文件夹派生的一/二级标签，但把它们视为初始 `folder` 来源标签。
+
+目标身份模型：
+
+```text
+videoId = 稳定数据库身份
+fingerprint = 文件 / 媒体身份
+path = 当前可变位置
+```
+
+视频标签、收藏、播放记录和播放进度绑定到 `videoId`，不绑定可变 `path`。
+
+未来 `video_tags` 关系应逐步包含：
 
 ```text
 videoId
@@ -273,227 +273,227 @@ createdAt
 updatedAt
 ```
 
-Rules:
+规则：
 
-- manual tags are never removed because a file moved.
-- folder tags can be recalculated from path rules.
-- rule and filename tags can be recalculated by their owners.
-- important tags can be locked.
-- missing files are marked `missing`; records are not immediately deleted.
-- relink and bulk path replacement come after stable identity design.
+- 手动标签不能因为文件移动而被删除。
+- 文件夹标签可以按路径规则重新计算。
+- 规则标签和文件名标签由各自系统重新计算。
+- 重要标签可以 locked。
+- 文件缺失时标记为 `missing`，不立即删除记录。
+- relink 和批量路径替换在稳定身份设计之后推进。
 
-## New Import Flow
+## 新导入流程
 
-Recommended flow:
+推荐流程：
 
 ```text
-new video appears in monitored folder
--> scan detects it
--> path rules derive folder tags if possible
--> otherwise put it in 未分类 / 待整理 / 新导入
--> user batch-tags it in the app
--> optional future action can move files by tag
+监控文件夹出现新视频
+-> 扫描发现它
+-> 路径规则尽量派生 folder 标签
+-> 无法识别时放入 未分类 / 待整理 / 新导入
+-> 用户在应用内批量打标签
+-> 未来可选：按标签移动文件
 ```
 
-Moving files by tag is optional. It must never be required for classification.
+按标签移动文件是可选能力，不能成为分类的必要条件。
 
-## Chat Execution Plan
+## Chat 执行计划
 
-### Chat 1: Architecture + Cross Platform Boundary
+### Chat 1：架构与跨平台边界
 
-Task file: `docs/chat_tasks/CHAT_1_ARCHITECTURE.md`
+任务文件：`docs/chat_tasks/CHAT_1_ARCHITECTURE.md`
 
-Owns architecture, contracts, module boundaries, route rules, and version records.
+负责架构、契约、模块边界、路由规则和版本记录。
 
-Allowed:
+允许：
 
-- `main.dart`, core/model boundaries, future import migration.
-- `FileSystemAdapter`, `PlayerBackend`, `FFmpegBackend`, `DatabaseProvider`.
-- repository interface planning.
-- layout-size shared contract.
-- documentation and versioning.
+- `main.dart`、core/model 边界、未来 import 迁移。
+- `FileSystemAdapter`、`PlayerBackend`、`FFmpegBackend`、`DatabaseProvider`。
+- repository 接口规划。
+- 布局尺寸共享契约。
+- 文档和版本记录。
 
-Do not do:
+禁止：
 
-- rewrite player behavior.
-- rewrite SQLite query behavior.
-- rewrite thumbnail queue.
-- broad UI redesign.
+- 重写播放器行为。
+- 重写 SQLite 查询行为。
+- 重写缩略图队列。
+- 大范围 UI 重设计。
 
-Next task:
+下一步：
 
-- progress `Architecture Baseline 0.4.1` with low-risk import migration or implementation adoption of the 0.4.0 contracts.
+- 推进 `Architecture Baseline 0.4.1`，做低风险 import 迁移或逐步采用 `0.4.0` 契约。
 
-### Chat 2: Tag Model + Filter Engine + Media Library
+### Chat 2：标签模型、筛选引擎与媒体库
 
-Task file: `docs/chat_tasks/CHAT_2_MEDIA_LIBRARY.md`
+任务文件：`docs/chat_tasks/CHAT_2_MEDIA_LIBRARY.md`
 
-Owns SQLite, scanning, folder tags, grouped tag model, aliases, filter engine, stable identity planning.
+负责 SQLite、扫描、文件夹标签、分组标签模型、别名、筛选引擎和稳定身份规划。
 
-P0:
+P0：
 
-- implement grouped tag model.
-- implement aliases.
-- implement `FilterQuery`.
-- implement AND/OR/NOT filter semantics.
-- keyword search across file name, path, tag name, alias.
-- result counts.
-- pass filtered result to player queue.
+- 实现分组标签模型。
+- 实现别名。
+- 实现 `FilterQuery`。
+- 实现 AND / OR / NOT 筛选语义。
+- 关键字搜索覆盖文件名、路径、标签名、别名。
+- 结果数量。
+- 把筛选结果传给播放器队列。
 
-P1:
+P1：
 
-- folder/manual/rule/filename/import/auto tag sources.
-- `video_tags.source` and `locked`.
-- stable `videoId + fingerprint + mutable path`.
-- `missing`.
-- relink and bulk path replacement.
+- folder / manual / rule / filename / import / auto 标签来源。
+- `video_tags.source` 和 `locked`。
+- 稳定 `videoId + fingerprint + mutable path`。
+- `missing`。
+- relink 和批量路径替换。
 
-### Chat 3: Media Library Tag UI
+### Chat 3：媒体库标签 UI
 
-Task file: `docs/chat_tasks/CHAT_3_MEDIA_LIBRARY_TAG_UI.md`
+任务文件：`docs/chat_tasks/CHAT_3_MEDIA_LIBRARY_TAG_UI.md`
 
-Owns feature UI for Tag discovery and the first responsive layout pass.
+负责标签发现功能 UI 和第一轮响应式布局。
 
-P0:
+P0：
 
-- grouped filter sidebar.
-- current filter chips.
-- result count.
-- clear filter.
-- excluded tag UI.
-- save smart list entry.
-- preserve click-to-play filtered queue behavior.
-- expanded/medium/compact structure.
+- 分组筛选侧栏。
+- 当前筛选 chips。
+- 结果数量。
+- 清空筛选。
+- 排除标签 UI。
+- 保存智能列表入口。
+- 保持点击播放进入筛选队列。
+- expanded / medium / compact 结构。
 
-Do not wait for final visual polish to build Tag discovery UI.
+不要等最终视觉 polish 才建设标签发现 UI。
 
-### Chat 4: Player Filter Queue + PlayerBackend
+### Chat 4：播放器筛选队列与 PlayerBackend
 
-Task file: `docs/chat_tasks/CHAT_4_PLAYER.md`
+任务文件：`docs/chat_tasks/CHAT_4_PLAYER.md`
 
-Owns playback stability, filtered queue consumption, player diagnostics, and `PlayerBackend` implementation.
+负责播放稳定性、筛选队列消费、播放器诊断和 `PlayerBackend` 实现。
 
-P0/P1:
+P0/P1：
 
-- player queue is current filtered result.
-- player displays current index like `1/1661`.
-- right queue title summarizes current filter.
-- return to library preserves filter state.
-- right queue switching remains stable.
-- player page moves behind `PlayerBackend` without rewriting the player core.
+- 播放器队列是当前筛选结果。
+- 播放器显示类似 `1/1661` 的当前序号。
+- 右侧队列标题概括当前筛选。
+- 返回媒体库保留筛选状态。
+- 右侧队列切换保持稳定。
+- 播放页逐步迁移到 `PlayerBackend` 后面，不重写播放器核心。
 
-### Chat 5: Thumbnail + Diagnostics + FFmpegBackend
+### Chat 5：缩略图、诊断与 FFmpegBackend
 
-Task file: `docs/chat_tasks/CHAT_5_THUMBNAIL_DIAGNOSTICS.md`
+任务文件：`docs/chat_tasks/CHAT_5_THUMBNAIL_DIAGNOSTICS.md`
 
-Owns thumbnail queue, FFprobe cache, cache diagnostics, failures, retry, FFmpeg backend implementation.
+负责缩略图队列、FFprobe 缓存、缓存诊断、失败、重试和 FFmpeg backend 实现。
 
-P0/P1:
+P0/P1：
 
-- keep playback-time queue load conservative.
-- route FFmpeg/FFprobe through `FFmpegBackend`.
-- expose availability/version/status.
-- retry failed cache tasks.
-- clear failure records.
-- abnormal file list.
-- card-based diagnostics page.
+- 播放时保持队列负载保守。
+- FFmpeg / FFprobe 通过 `FFmpegBackend` 调用。
+- 展示可用性、版本和状态。
+- 重试失败的缓存任务。
+- 清除失败记录。
+- 异常文件列表。
+- 卡片式诊断页。
 
-### Chat 6: Tag Manager + Batch Tagging
+### Chat 6：标签管理器与批量打标
 
-Task file: `docs/chat_tasks/CHAT_6_TAG_MANAGER.md`
+任务文件：`docs/chat_tasks/CHAT_6_TAG_MANAGER.md`
 
-Owns long-term tag maintenance UI and batch operations.
+负责长期标签维护 UI 和批量操作。
 
-P1:
+P1：
 
-- tag manager page.
-- tag search.
-- create/rename/delete tags.
-- merge duplicate tags.
-- aliases.
-- tag groups.
-- hide/favorite/sort tags.
-- batch tag current filtered result.
-- batch remove tags.
+- 标签管理页。
+- 标签搜索。
+- 创建 / 重命名 / 删除标签。
+- 合并重复标签。
+- 别名。
+- 标签组。
+- hidden / favorite / sort 标签状态。
+- 给当前筛选结果批量打标签。
+- 批量移除标签。
 
-### Chat 7: Responsive UI + Platform Polish
+### Chat 7：响应式 UI 与平台 polish
 
-Task file: `docs/chat_tasks/CHAT_7_RESPONSIVE_UI.md`
+任务文件：`docs/chat_tasks/CHAT_7_RESPONSIVE_UI.md`
 
-Owns final visual consistency and platform polish after core Tag UX works.
+负责核心标签 UX 可用后的最终视觉一致性和平台 polish。
 
-P1/P2:
+P1/P2：
 
-- unified card, button, dialog, sidebar styles.
-- light media-library mode and dark player mode consistency.
-- complete `compact`, `medium`, `expanded` layouts.
-- macOS/Linux adaptation notes.
+- 统一卡片、按钮、弹窗、侧栏风格。
+- 媒体库浅色模式和播放器深色模式保持一致。
+- 完成 `compact`、`medium`、`expanded` 布局。
+- macOS / Linux 适配说明。
 
-## Priority Table
+## 优先级表
 
 ### P0
 
-1. Keep Windows desktop stable.
-2. Keep folder-derived first/second tags during transition.
-3. Grouped tag model.
-4. `FilterQuery`.
-5. Group AND, in-group OR, excluded NOT.
-6. Keyword search by file name, path, tag name, alias.
-7. Tag result counts.
-8. Current filter state chips.
-9. Filter result becomes playback queue.
-10. Return from player preserves filter state.
-11. Core platform boundaries.
+1. 保持 Windows 桌面稳定。
+2. 过渡期保留文件夹派生的一/二级标签。
+3. 分组标签模型。
+4. `FilterQuery`。
+5. 组间 AND、组内 OR、排除 NOT。
+6. 按文件名、路径、标签名、别名搜索。
+7. 标签结果数量。
+8. 当前筛选状态 chips。
+9. 筛选结果成为播放队列。
+10. 从播放器返回时保留筛选状态。
+11. 核心平台边界。
 
 ### P1
 
-1. Separate folder/manual tag sources.
-2. `video_tags.source` and `locked`.
-3. Stable identity: `videoId + fingerprint + mutable path`.
-4. Missing state.
-5. Relink.
-6. Bulk path replacement.
-7. Tag Manager.
-8. Batch tagging.
-9. Saved filters / smart lists.
-10. Recent play / continue play.
-11. Cache failure retry.
-12. Abnormal file list.
-13. Diagnostics cards.
-14. Initial responsive layout.
+1. 区分 folder / manual 标签来源。
+2. `video_tags.source` 和 `locked`。
+3. 稳定身份：`videoId + fingerprint + mutable path`。
+4. Missing 状态。
+5. Relink。
+6. 批量路径替换。
+7. 标签管理器。
+8. 批量打标。
+9. 保存筛选 / 智能列表。
+10. 最近播放 / 继续播放。
+11. 缓存失败重试。
+12. 异常文件列表。
+13. 诊断卡片。
+14. 初始响应式布局。
 
 ### P2
 
-1. Automatic tagging rules.
-2. Tag import/export.
-3. Advanced search syntax.
-4. Optional move-by-tag file organization.
-5. Advanced fingerprint dedupe.
-6. Advanced player features.
-7. macOS/Linux adaptation.
-8. Android/iOS exploration.
-9. Web exploration, low priority.
+1. 自动标签规则。
+2. 标签导入 / 导出。
+3. 高级搜索语法。
+4. 可选按标签移动文件。
+5. 高级指纹去重。
+6. 高级播放器功能。
+7. macOS / Linux 适配。
+8. Android / iOS 探索。
+9. Web 探索，低优先级。
 
-## Versioning Rules
+## 版本规则
 
-- Each Chat owns one task document in `docs/chat_tasks/`.
-- Chat documents must follow this roadmap and the external cross-platform plan.
-- If implementation conflicts with the external plan, update implementation or document a temporary deviation with reason and owner.
-- Any change to `src/core`, platform boundaries, schema, identity model, or shared service contracts must update `ARCHITECTURE.md`.
-- Every implementation chat runs:
+- 每个 Chat 拥有 `docs/chat_tasks/` 下的一个任务文档。
+- Chat 文档必须跟随本 roadmap 和外部跨平台规划。
+- 如果实现与外部规划冲突，更新实现，或在文档中记录临时偏离原因和 owner。
+- 修改 `src/core`、平台边界、schema、身份模型或共享服务契约时，必须更新 `ARCHITECTURE.md`。
+- 每个实现 Chat 都运行：
 
 ```powershell
 flutter analyze
 flutter build windows --debug
 ```
 
-## New Chat Rule
+## 新对话规则
 
-When opening a new chat, paste the matching prompt from `docs/chat_tasks/CHAT_*`. The new chat must first read:
+新开 Chat 时，使用匹配的 `docs/chat_tasks/CHAT_*` 提示。新对话必须先阅读：
 
 - `PROJECT.md`
 - `ARCHITECTURE.md`
 - `CURRENT_TASK.md`
 - `ROADMAP.md`
 - `<private-planning-document>`
-- its own `docs/chat_tasks/CHAT_*.md`
+- 自己的 `docs/chat_tasks/CHAT_*.md`

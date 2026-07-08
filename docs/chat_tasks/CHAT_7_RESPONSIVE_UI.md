@@ -1,88 +1,87 @@
 # CHAT_7_RESPONSIVE_UI.md
 
-Current Version: `0.2.0`
-Status: first-stage accepted
-Owner: Chat 7 / Responsive UI + Platform Polish
+当前版本：`0.2.0`
+状态：第一阶段验收完成
+负责人：Chat 7 / 响应式 UI + 平台 polish
 
-## Planning Source
+## 规划来源
 
-Primary source:
+主要来源：
 
 ```text
 <private-planning-document>
 ```
 
-If this task document conflicts with that file, the external plan wins.
+如果本文档与该文件冲突，以外部规划为准。
 
-## Scope
+## 范围
 
-Owns final visual consistency, responsive layout completion, platform polish, and macOS/Linux adaptation notes after the core Tag discovery UI is functional.
+在核心标签发现 UI 可用后，负责最终视觉一致性、响应式布局补全、平台 polish 和 macOS / Linux 适配说明。
 
-Allowed:
+允许：
 
-- Visual consistency for cards, buttons, dialogs, sidebars.
-- Light media-library style and dark player style consistency.
-- Full `compact`, `medium`, `expanded` layout behavior.
-- Platform polish notes for desktop targets.
-- Shared UI tokens after Architecture defines the boundary.
+- 卡片、按钮、弹窗、侧栏的视觉一致性。
+- 浅色媒体库风格和深色播放器风格的一致性。
+- 完整 `compact`、`medium`、`expanded` 布局行为。
+- 桌面端平台 polish 说明。
+- Architecture 定义边界后的共享 UI token。
 
-Do not do:
+禁止：
 
-- Delay Tag discovery UI until this phase.
-- SQLite schema changes.
-- Core Tag query behavior.
-- Player backend or FFmpeg internals.
-- Mobile/Web deep adaptation in current phase.
+- 为等这个阶段而延迟标签发现 UI。
+- SQLite schema 修改。
+- 核心标签查询行为修改。
+- 播放器 backend 或 FFmpeg 内部逻辑修改。
+- 当前阶段深度适配 Mobile / Web。
 
-## P1/P2 Tasks
+## P1 / P2 任务
 
-- Unify video cards.
-- Unify buttons.
-- Unify dialogs.
-- Unify sidebars.
-- Keep media library and player visually coherent.
-- Complete responsive layouts:
-  - `expanded`: persistent filter/sidebar layouts.
-  - `medium`: collapsible sidebars and side sheets.
-  - `compact`: drawer/bottom-sheet filters and compact video list/card layout.
-- Add macOS/Linux adaptation notes after Windows remains stable.
+- 统一视频卡片。
+- 统一按钮。
+- 统一弹窗。
+- 统一侧栏。
+- 保持媒体库和播放器视觉一致。
+- 完成响应式布局：
+  - `expanded`：常驻筛选 / 侧栏布局。
+  - `medium`：可折叠侧栏和侧边 sheet。
+  - `compact`：drawer / bottom sheet 筛选和紧凑视频列表 / 卡片布局。
+- Windows 稳定后增加 macOS / Linux 适配说明。
 
-## First Stage Result
+## 第一阶段结果
 
-Completed in `0.2.0`:
+`0.2.0` 已完成：
 
-- Unified dialog baseline through app theme: light surface, border, 8px radius, and stronger title hierarchy.
-- Unified media-library sidebar spacing and action button behavior; directory actions wrap instead of overflowing narrow side sheets.
-- Unified video card behavior: responsive grid spacing, compact single-column sizing, stable bottom action row, and fixed icon button dimensions.
-- Unified cache diagnostics spacing with media-library pages; compact AppBar actions now collapse into a menu.
-- Unified Tag Manager basic layout with responsive `expanded` / `medium` / `compact` behavior:
-  - `expanded`: persistent 360px tag management sidebar.
-  - `medium`: persistent but narrower 316px management sidebar.
-  - `compact`: vertical list/detail layout without horizontal overflow.
-- Player dark queue sidebar now remains persistent only when width allows it; compact opens the queue from the AppBar as a bottom sheet.
-- Media library compact filter BottomSheet uses the same light surface and 8px top radius as the rest of the app.
+- 通过 app theme 统一弹窗基线：浅色 surface、边框、8px 圆角和更强标题层级。
+- 统一媒体库侧栏间距和动作按钮行为；窄 side sheet 下目录动作会换行而不是 overflow。
+- 统一视频卡片行为：响应式网格间距、compact 单列尺寸、稳定底部操作行和固定图标按钮尺寸。
+- 统一缓存诊断与媒体库页面间距；compact AppBar 动作折叠进菜单。
+- 统一 Tag Manager 基础布局，并实现 `expanded` / `medium` / `compact` 响应式行为：
+  - `expanded`：常驻 360px 标签管理侧栏。
+  - `medium`：常驻但更窄的 316px 管理侧栏。
+  - `compact`：纵向列表 / 详情布局，无横向 overflow。
+- 播放器深色队列侧栏仅在宽度允许时常驻；compact 时从 AppBar 打开 bottom sheet。
+- 媒体库 compact 筛选 BottomSheet 使用与其它页面一致的浅色 surface 和 8px 顶部圆角。
 
-Not changed:
+未改变：
 
-- SQLite schema.
-- `TagQueryService`, `FilterQuery`, or `TagQueryContext`.
-- Player filtered queue semantics, player open worker, or playback backend.
-- Thumbnail queue, FFmpeg/FFprobe backend behavior, or cache diagnostics logic.
-- Smart List, relink/missing, file move, tag delete, or tag merge migration.
+- SQLite schema。
+- `TagQueryService`、`FilterQuery` 或 `TagQueryContext`。
+- 播放器筛选队列语义、播放器 open worker 或播放 backend。
+- 缩略图队列、FFmpeg/FFprobe backend 行为或缓存诊断逻辑。
+- Smart List、relink/missing、文件移动、标签删除或标签合并 migration。
 
-## macOS / Linux Adaptation Notes
+## macOS / Linux 适配说明
 
-- FFmpeg bundled tools: current Windows layout expects `.exe` tools under `tools/ffmpeg/bin`; macOS/Linux packaging needs platform-specific binaries, executable permissions, quarantine/signing checks on macOS, and separate lookup order per platform.
-- sqlite3 dynamic library: Windows currently bundles `sqlite3.dll`; macOS/Linux need `.dylib` / `.so` placement compatible with Flutter desktop packaging and runtime library search paths.
-- File manager reveal: Windows reveal behavior should map to Finder `open -R` on macOS and desktop-environment-specific reveal/open commands on Linux; fallback should open the parent folder when exact reveal is unavailable.
-- Window sizes: the current desktop UX is best at `expanded`; macOS/Linux should set sensible minimum window sizes and test compact/medium resizing because tiling window managers can create very narrow desktop windows.
-- Shortcuts: verify Command vs Control conventions on macOS, Delete/Backspace differences, function key behavior, and mouse side-button availability across Linux desktop environments.
+- FFmpeg bundled tools：当前 Windows 布局期望 `.exe` 工具位于 `tools/ffmpeg/bin`；macOS / Linux 打包需要平台专属二进制、可执行权限、macOS quarantine / signing 检查，以及按平台分离查找顺序。
+- sqlite3 动态库：Windows 当前打包 `sqlite3.dll`；macOS / Linux 需要 `.dylib` / `.so` 放在 Flutter desktop 打包和运行时库搜索路径兼容的位置。
+- 文件管理器定位：Windows reveal 行为在 macOS 应映射到 Finder `open -R`，在 Linux 映射到具体桌面环境的 reveal/open 命令；无法精确定位时回退打开父目录。
+- 窗口尺寸：当前桌面 UX 在 `expanded` 最佳；macOS / Linux 应设置合理最小窗口尺寸，并测试 compact / medium，因为平铺窗口管理器可能产生很窄的桌面窗口。
+- 快捷键：验证 macOS 上 Command / Control 约定、Delete / Backspace 差异、功能键行为，以及 Linux 桌面环境中的鼠标侧键可用性。
 
-## Prompt For New Chat
+## 新对话提示
 
 ```text
-这是 Chat 7 / Responsive UI + Platform Polish。项目路径：<project-root>。
-
+这是 Chat 7 / 响应式 UI + 平台 polish。项目路径：<project-root>。
 请先阅读：
 - PROJECT.md
 - ARCHITECTURE.md
@@ -91,20 +90,13 @@ Not changed:
 - <private-planning-document>
 - docs/chat_tasks/CHAT_7_RESPONSIVE_UI.md
 
-后续方向以 local_tag_player_flutter_cross_platform_plan_v2.md 为准；当前项目实现只代表历史状态。
-
-职责：负责最终视觉统一、完整响应式布局和平台 polish。注意：Tag 检索 UI 不应等到 Chat 7 才做；Chat 7 是在核心 Tag UX 可用后的统一和完善。
-
-当前目标：统一卡片、按钮、弹窗、侧栏、媒体库浅色区域和播放器深色区域；完善 compact / medium / expanded 响应式布局；补充 macOS/Linux 适配点。不要改 SQLite schema、Tag 查询核心、播放器内核或 FFmpeg 队列。
-
+职责：视觉一致性、响应式布局、桌面平台 polish 和 macOS/Linux 适配说明。不要修改标签查询语义、播放器 backend、FFmpeg 内部逻辑或 SQLite schema。
 修改代码后运行：
 - flutter analyze
 - flutter build windows --debug
-
-涉及 shared layout token、src/core 或平台边界时，更新 ARCHITECTURE.md、ROADMAP.md 和本文件版本记录。
 ```
 
-## Change Log
+## 变更记录
 
-- `0.2.0`: Completed first-stage responsive UI polish and added macOS/Linux adaptation notes.
-- `0.1.0`: Created task from `local_tag_player_flutter_cross_platform_plan_v2.md`.
+- `0.2.0`：完成第一阶段响应式 UI polish，并增加 macOS / Linux 适配说明。
+- `0.1.0`：从 `local_tag_player_flutter_cross_platform_plan_v2.md` 创建任务。

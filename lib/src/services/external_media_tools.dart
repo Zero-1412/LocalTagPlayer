@@ -54,8 +54,12 @@ class ExternalMediaTools {
     );
   }
 
-  static Future<String?> _findExecutable(String command, List<String> localCandidates) async {
-    final bases = <String>{Directory.current.path, p.dirname(Platform.resolvedExecutable)};
+  static Future<String?> _findExecutable(
+      String command, List<String> localCandidates) async {
+    final bases = <String>{
+      Directory.current.path,
+      p.dirname(Platform.resolvedExecutable)
+    };
     for (final base in bases) {
       for (final relative in localCandidates) {
         final file = File(p.join(base, relative));
@@ -66,7 +70,8 @@ class ExternalMediaTools {
     }
 
     try {
-      final result = await Process.run('where.exe', [command]).timeout(const Duration(seconds: 2));
+      final result = await Process.run('where.exe', [command])
+          .timeout(const Duration(seconds: 2));
       if (result.exitCode == 0) {
         final output = result.stdout.toString().trim();
         if (output.isNotEmpty) {
@@ -74,13 +79,14 @@ class ExternalMediaTools {
         }
       }
     } catch (_) {
-      // Missing external tools are expected; media_kit remains the fallback.
+      // 外部工具缺失是可接受状态；media_kit 仍作为兜底方案。
     }
     return null;
   }
 
   static Future<File?> createThumbnail(VideoItem item, File output) async {
-    return backend.createThumbnail(item: item, output: output, allowFallback: false);
+    return backend.createThumbnail(
+        item: item, output: output, allowFallback: false);
   }
 
   static Future<MediaDetails?> probe(VideoItem item) async {
@@ -89,7 +95,8 @@ class ExternalMediaTools {
 
   static Future<String?> _versionFor(String executable) async {
     try {
-      final result = await Process.run(executable, ['-version']).timeout(const Duration(seconds: 2));
+      final result = await Process.run(executable, ['-version'])
+          .timeout(const Duration(seconds: 2));
       if (result.exitCode != 0) {
         return null;
       }
@@ -192,7 +199,9 @@ class DesktopFFmpegBackend implements FFmpegBackend {
       throw Exception('ffmpeg timeout ${_thumbnailFfmpegTimeout.inSeconds}s');
     }
 
-    if (result.exitCode == 0 && await tempOutput.exists() && await tempOutput.length() > 0) {
+    if (result.exitCode == 0 &&
+        await tempOutput.exists() &&
+        await tempOutput.length() > 0) {
       if (await output.exists()) {
         await output.delete();
       }
@@ -205,7 +214,8 @@ class DesktopFFmpegBackend implements FFmpegBackend {
     final message = result.stderr.toString().trim().isNotEmpty
         ? result.stderr.toString().trim()
         : result.stdout.toString().trim();
-    throw Exception('ffmpeg exit ${result.exitCode}${message.isEmpty ? '' : ': $message'}');
+    throw Exception(
+        'ffmpeg exit ${result.exitCode}${message.isEmpty ? '' : ': $message'}');
   }
 
   @override
@@ -236,7 +246,8 @@ class DesktopFFmpegBackend implements FFmpegBackend {
       final message = result.stderr.toString().trim().isNotEmpty
           ? result.stderr.toString().trim()
           : result.stdout.toString().trim();
-      throw Exception('ffprobe exit ${result.exitCode}${message.isEmpty ? '' : ': $message'}');
+      throw Exception(
+          'ffprobe exit ${result.exitCode}${message.isEmpty ? '' : ': $message'}');
     }
 
     final decoded = jsonDecode(result.stdout.toString());
@@ -274,5 +285,3 @@ class DesktopFFmpegBackend implements FFmpegBackend {
     );
   }
 }
-
-

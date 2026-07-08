@@ -1,71 +1,70 @@
 # CHAT_2_MEDIA_LIBRARY.md
 
-Current Version: `0.4.3`
-Status: active
-Owner: Chat 2 / Tag Model + Filter Engine + Media Library
+当前版本：`0.4.3`
+状态：进行中
+负责人：Chat 2 / 标签模型 + 筛选引擎 + 媒体库
 
-## Planning Source
+## 规划来源
 
-Primary source:
+主要来源：
 
 ```text
 <private-planning-document>
 ```
 
-If this task document conflicts with that file, the external plan wins.
+如果本文档与该文件冲突，以外部规划为准。
 
-## Scope
+## 范围
 
-Owns SQLite, scanning, folder-derived tags, grouped tag model, aliases, filter engine, favorites, search, stable media identity, missing/relink planning.
+负责 SQLite、扫描、文件夹派生标签、分组标签模型、别名、筛选引擎、收藏、搜索、稳定媒体身份和 missing/relink 规划。
 
-Allowed:
+允许：
 
-- `LibraryStore` and future `MediaScanService`.
-- SQLite migrations.
-- `VideoItem` data fields needed for media identity and tags.
-- `TagGroup`, `TagItem`, `FilterQuery`.
-- `TagRepository`, `VideoRepository`, `TagQueryService`.
-- Folder/manual/rule/filename/import/auto tag-source design.
-- `videoId + fingerprint + mutable path` planning and migration.
+- `LibraryStore` 和未来 `MediaScanService`。
+- SQLite migrations。
+- 媒体身份和标签所需的 `VideoItem` 数据字段。
+- `TagGroup`、`TagItem`、`FilterQuery`。
+- `TagRepository`、`VideoRepository`、`TagQueryService`。
+- folder / manual / rule / filename / import / auto 标签来源设计。
+- `videoId + fingerprint + mutable path` 规划和 migration。
 
-Do not do:
+禁止：
 
-- Player UI/core changes.
-- FFmpeg/thumbnail queue changes.
-- Visual polish except minimal controls needed for media-library function.
-- Windows-specific logic in platform-independent tag query code.
+- 播放器 UI / core 改动。
+- FFmpeg / 缩略图队列改动。
+- 与媒体库功能无关的视觉 polish。
+- 在平台无关标签查询代码中写入 Windows 专属逻辑。
 
-## P0 Tasks
+## P0 任务
 
-- Preserve current folder-derived first/second tag behavior during transition.
-- Implement grouped tag model.
-- Implement tag aliases.
-- Implement `FilterQuery`.
-- Implement filter semantics:
-  - different groups use AND.
-  - tags inside the same group use OR.
-  - excluded tags use NOT.
-- Search must match file name, path, tag name, and tag alias.
-- Implement result counts for grouped filters.
-- Ensure filtered result can be passed to Player as current playback queue.
-- Keep Tag query/filter logic platform independent.
+- 过渡期间保留当前文件夹派生的一/二级标签行为。
+- 实现分组标签模型。
+- 实现标签别名。
+- 实现 `FilterQuery`。
+- 实现筛选语义：
+  - 不同组使用 AND。
+  - 同组标签使用 OR。
+  - 排除标签使用 NOT。
+- 搜索必须匹配文件名、路径、标签名和标签别名。
+- 实现分组筛选结果计数。
+- 确保筛选结果可传给 Player 作为当前播放队列。
+- 保持 Tag 查询 / 筛选逻辑平台无关。
 
-## P1 Tasks
+## P1 任务
 
-- Separate folder tags and manual tags.
-- Add or plan `video_tags.source`: `manual`, `folder`, `rule`, `filename`, `import`, `auto`.
-- Add or plan `video_tags.locked`.
-- Move toward stable `videoId + fingerprint + mutable path`.
-- Add `missing` state instead of deleting records immediately when files disappear.
-- Add single-file relink.
-- Add bulk path replacement, for example `X:\test-media -> E:\video`.
-- Put unrecognized new imports into `未分类 / 待整理 / 新导入`.
+- 区分 folder 标签和 manual 标签。
+- 新增或规划 `video_tags.source`：`manual`、`folder`、`rule`、`filename`、`import`、`auto`。
+- 新增或规划 `video_tags.locked`。
+- 推进稳定 `videoId + fingerprint + mutable path`。
+- 文件消失时增加 `missing` 状态，而不是立即删除记录。
+- 增加单文件 relink。
+- 增加批量路径替换，例如 `X:\test-media -> E:\video`。
+- 未识别的新导入放入 `未分类 / 待整理 / 新导入`。
 
-## Prompt For New Chat
+## 新对话提示
 
 ```text
-这是 Chat 2 / Tag Model + Filter Engine + Media Library。项目路径：<project-root>。
-
+这是 Chat 2 / 标签模型 + 筛选引擎 + 媒体库。项目路径：<project-root>。
 请先阅读：
 - PROJECT.md
 - ARCHITECTURE.md
@@ -75,26 +74,21 @@ Do not do:
 - docs/chat_tasks/CHAT_2_MEDIA_LIBRARY.md
 
 后续方向以 local_tag_player_flutter_cross_platform_plan_v2.md 为准；当前项目实现只代表历史状态。
-
-职责：负责 SQLite、目录扫描、folder/manual Tag、分组 Tag、标签别名、FilterQuery、组合筛选、稳定视频身份、missing/relink 规划。不要修改播放器内核、缩略图队列或 UI 美化。
-
-当前目标：实现 Tag Model + Filter Engine。保留文件夹树生成一级/二级 Tag，同时建立播放器自己的分组 Tag 检索能力。不同标签组 AND，同组 OR，排除标签 NOT。搜索匹配文件名、路径、标签名、标签别名。筛选结果必须可传给播放器作为当前播放队列。
-
+职责：负责 SQLite、目录扫描、folder/manual 标签、分组 Tag、标签别名、FilterQuery、组合筛选、稳定视频身份和 missing/relink 规划。不要修改播放器内核、缩略图队列或 UI 美化。
+当前目标：实现 Tag Model + Filter Engine。保留文件夹树生成一/二级 Tag，同时建立播放器自己的分组 Tag 检索能力。不同标签组 AND，同组 OR，排除标签 NOT。搜索匹配文件名、路径、标签名和标签别名。筛选结果必须可传给播放器作为当前播放队列。
 后续目标：区分 folder/manual/rule/filename/import/auto Tag 来源，规划 video_tags.source/locked，推进 videoId + fingerprint + mutable path，路径失效标记 missing，不立即删除记录。
-
-如果需要修改 src/core、数据库 schema 或共享模型，更新 ARCHITECTURE.md 的架构基线说明和本文件版本号。
-
+如果需要修改 src/core、数据库 schema 或共享模型，更新 ARCHITECTURE.md 的架构基线说明和本文档版本号。
 修改代码后运行：
 - flutter analyze
 - flutter build windows --debug
 ```
 
-## Change Log
+## 变更记录
 
-- `0.4.3`: 恢复 `TagQueryService.resultCounts` 的分组结果计数批处理：候选标签按标签组分批，每个标签组只扫描一次视频集合，并在旧兼容匹配前优先使用标准化视频 tagId 做候选交集判断；未修改 SQLite schema。
-- `0.4.2`: 针对大媒体库优化分组结果计数：`TagQueryService.resultCounts` 按标签组批量计算候选计数，候选 tagId 可用时使用索引化关联减少重复扫描；筛选语义仍统一经过 `FilterQuery` / `TagQueryService`，未修改 SQLite schema。
-- `0.4.1`: Acceptance fixes for the first Tag Model + Filter Engine pass: tag index backfill now covers videos missing links without wiping manual links, manual tag writes only refresh the current manual scope and exclude folder-derived tags, result counts ignore the candidate tag group to avoid in-group count collapse, and SQLite gained alias/source lookup indexes.
-- `0.4.0`: Added normalized SQLite tag index tables (`tag_groups`, `tags`, `tag_aliases`, `video_tags`), synchronized folder/manual tag links from scan and tag editing, added `TagQueryContext` and `TagQueryService`, enabled alias-aware keyword matching for tags linked to each video, exposed grouped result counts, and kept the current filtered result as the player queue.
-- `0.3.0`: Rebased Media Library on the external cross-platform plan, expanded ownership to Tag Model + Filter Engine, aliases, grouped semantics, stable identity, missing/relink, and tag-source separation.
-- `0.2.0`: Implemented platform-independent `FilterQuery.matches` semantics with tag groups AND, in-group OR, excluded tags NOT, tag aliases for search, and wired current media-library filtering through `FilterQuery` while preserving folder-derived first/second tag behavior.
-- `0.1.0`: Created task template from roadmap.
+- `0.4.3`：恢复 `TagQueryService.resultCounts` 的分组结果计数批处理：候选标签按标签组分批，每个标签组只扫描一次视频集合，并在旧兼容匹配前优先使用标准化视频 tagId 做候选交集判断；未修改 SQLite schema。
+- `0.4.2`：针对大媒体库优化分组结果计数：`TagQueryService.resultCounts` 按标签组批量计算候选计数，候选 tagId 可用时使用索引化关联减少重复扫描；筛选语义仍统一经过 `FilterQuery` / `TagQueryService`，未修改 SQLite schema。
+- `0.4.1`：第一轮标签模型 + 筛选引擎验收修复：tag 索引回填覆盖缺失关联的视频但不清空手动关联；manual tag 写入只刷新当前 manual 范围并排除 folder 派生标签；结果计数忽略候选标签所在组，避免同组计数塌缩；SQLite 增加 alias/source 查询索引。
+- `0.4.0`：新增标准化 SQLite tag 索引表（`tag_groups`、`tags`、`tag_aliases`、`video_tags`），扫描和标签编辑同步 folder/manual 关联；新增 `TagQueryContext` 与 `TagQueryService`；关键字搜索支持当前视频关联标签和别名；暴露分组结果计数，并保持当前筛选结果作为播放器队列。
+- `0.3.0`：按外部跨平台规划重定媒体库职责，扩展为 Tag Model + Filter Engine、别名、分组语义、稳定身份、missing/relink 和标签来源分离。
+- `0.2.0`：实现平台无关 `FilterQuery.matches` 语义：标签组 AND、同组 OR、排除 NOT、标签别名搜索；媒体库筛选接入 `FilterQuery`，同时保留文件夹派生的一/二级标签行为。
+- `0.1.0`：从 roadmap 创建任务模板。

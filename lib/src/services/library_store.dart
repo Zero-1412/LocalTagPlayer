@@ -370,7 +370,7 @@ class LibraryStore {
       }
       await save();
     } catch (_) {
-      // Corrupt legacy JSON should not block a new SQLite library.
+      // 损坏的旧 JSON 不应阻止新的 SQLite 媒体库启动。
     }
   }
 

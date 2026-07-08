@@ -245,7 +245,7 @@ class _PlayerPageState extends State<PlayerPage> {
       }
       await (platform as dynamic).setProperty(property, value);
     } catch (_) {
-      // Some mpv builds reject a subset of properties; diagnostics will expose actual values.
+      // 部分 mpv 构建会拒绝少数属性；诊断信息会展示实际生效值。
     }
   }
 

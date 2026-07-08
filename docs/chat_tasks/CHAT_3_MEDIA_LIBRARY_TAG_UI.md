@@ -1,249 +1,150 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
-Current Version: `0.2.22`
-Status: completed
-Owner: Chat 3 / Media Library Tag UI
+当前版本：`0.2.22`
+状态：已完成
+负责人：Chat 3 / 媒体库标签 UI
 
-## Planning Source
+## 规划来源
 
-Primary source:
+主要来源：
 
 ```text
 <private-planning-document>
 ```
 
-If this task document conflicts with that file, the external plan wins.
+如果本文档与该文件冲突，以外部规划为准。
 
-## Scope
+## 范围
 
-Owns the media-library homepage Tag discovery UI. This is feature UI, not final visual polish.
+负责媒体库首页的标签发现 UI。这是功能 UI，不是最终视觉 polish。
 
-Allowed:
+允许：
 
-- `LibraryPage` layout required for Tag discovery.
-- Filter sidebar.
-- Filter bar.
-- Tag chips.
-- Result count UI.
-- Clear filter UI.
-- Save smart list entry UI.
-- First pass of `expanded`, `medium`, `compact` layout behavior for Tag discovery.
+- `LibraryPage` 中标签发现所需布局。
+- 筛选侧栏。
+- 筛选条。
+- 标签 chip。
+- 结果数量 UI。
+- 清空筛选 UI。
+- 保存智能列表入口 UI。
+- 第一轮 `expanded`、`medium`、`compact` 响应式行为。
 
-Do not do:
+禁止：
 
-- SQLite schema changes.
-- Core Tag query behavior.
-- Player backend or FFmpeg internals.
-- Broad final visual polish unrelated to Tag discovery.
+- SQLite schema 修改。
+- 核心标签查询行为。
+- 播放器 backend 或 FFmpeg 内部逻辑。
+- 与标签发现无关的大范围最终视觉 polish。
 
-## P0 Tasks
+## P0 任务
 
-- Upgrade homepage from flat tags to web-style grouped filter UI.
-- Left side: grouped tag filter.
-- Top: search file name / path / tag / alias.
-- Center top: current filter chips.
-- Show current result count and total count.
-- Support clear filter.
-- Support excluded tag UI, for example `[-NTR x]`.
-- Add save current filter as smart list entry.
-- Ensure click-to-play still enters the current filtered playback queue.
+- 把首页从扁平标签升级为网页式分组筛选 UI。
+- 左侧：分组标签筛选。
+- 顶部：搜索文件名 / 路径 / 标签 / 别名。
+- 中上：当前筛选 chips。
+- 展示当前结果数量和总数量。
+- 支持清空筛选。
+- 支持排除标签 UI，例如 `[-NTR x]`。
+- 增加保存当前筛选为智能列表入口。
+- 确保点击播放仍进入当前筛选播放队列。
 
-## 0.2.17 Main Source + Local Library Pass
+## 变更记录
 
-- Media Library, Recent Playback, and Smart Favorites now behave as lightweight main result sources. Recent/Favorites use in-memory lists, while Media Library clears filters and immediately rebuilds the all-video result state.
-- Recent Playback gained a result-area management toolbar with single select, select all, delete selected, and clear all. These actions only clear `lastPlayedAt`; they do not delete video files, tags, favorites, or playback progress.
-- "My tag library" was renamed to "Local Media Library". Its add/remove affordances now manage local root paths only and no longer open the tag-add dialog.
-- Local Media Library root browsing displays folders as folder entries and indexed videos as normal video cards/list rows. The existing grid/list toggle continues to control the layout.
-- Settings was removed from the top toolbar and kept at the bottom of the left function bar. Debug exe smoke testing confirmed the bottom entry opens the existing settings page.
+### `0.2.22` 二级标签面板修复
 
-## 0.2.18 Local Folder Back + Secondary Cleanup Pass
+- 热门二级标签使用真实“更多 / 收起”按钮，不再是禁用态视觉按钮；按钮可展开热门列表，并显示当前可见数量 / 总数量。
+- “全部二级标签”页签接收完整二级标签列表，不再复用热门列表切片。
+- 热门二级 chip 默认保持轻量；重名标签显示所属一级标签，让 `NTR/ntr` 等歧义名称可区分。
+- 复查媒体库和本地媒体库入口语义：媒体库重置为全部视频，本地媒体库打开已配置 root 或子目录的文件路径浏览。
+- 验证通过：`dart format`、`flutter test`（18 项）、`flutter analyze`、`flutter build windows --debug`，并用 computer-use smoke 覆盖更多标签、全部二级标签、媒体库重置和本地媒体库浏览。
 
-- Added `LOCAL_TAG_PLAYER_DATA_DIR` as a temporary profile override for reversible UI smoke tests. Normal app data paths are unchanged when the variable is absent.
-- Temporary-profile mouse QA covered Recent Playback single delete, select-all delete, and clear-all. Each path cleared only `lastPlayedAt` in the temporary database.
-- Temporary-profile entry switching timings were recorded: Media Library first switch ~213ms, Recent Playback ~63ms, Smart Favorites ~59ms, back to Media Library ~51ms.
-- Hot secondary tags now render only the secondary tag name. The parent-primary mini label is hidden in the hot section while remaining available in the full secondary tab.
-- 二级标签候选会过滤真实“默认专辑”标签，避免它出现在热门/全部二级标签候选中。
-- 一级展开卡会过滤真实子标签里的“默认专辑”，只保留卡片开头的虚拟默认专辑 chip。
-- 本地媒体库文件夹浏览新增路径返回栈：点击文件夹会压入当前路径，顶部返回按钮和鼠标后退侧键都会回到上一层。
-- 最近播放清理补充单选删除和批量清空目标测试，确认未播放视频不会被误影响。
+### `0.2.21` 非最大化窗口可视性修复
 
-## 0.2.19 Stable Smoke Harness Pass
+- 普通 debug 窗口下，expanded 顶部搜索框可随实际行宽收缩，避免被右侧标签面板挤出。
+- 提高单列视频卡片高度，让 16:9 缩略图、标题、标签和底部操作不出现 Flutter overflow 条纹。
+- 列表行动作在中等宽度下切换为紧凑图标按钮，保证播放 / 收藏 / 更多不越界。
+- computer-use 覆盖普通窗口和最大化窗口：顶部工具条、列表行动作、右侧标签面板和本地媒体库返回入口都保持在可视范围内。
+- 验证通过：`dart format`、`flutter test`（16 项）、`flutter analyze`、`flutter build windows --debug`。
+
+### `0.2.20` 列表行与结果状态 smoke
+
+- 扩展稳定 smoke harness，覆盖密集列表模式下的本地文件夹导航、列表行播放 / 收藏 / 更多控件，以及右侧标签结果状态断言。
+- 为列表行控件和标签 chip 增加稳定 key；列表行 smoke test 会等待超过行双击识别窗口，让单击按钮断言保持确定性。
+- 右侧标签 harness 增加小型结果状态区：选择默认专辑显示当前一级下全部示例结果，选择 Child01 则收敛到 Child01。
+- 验证通过：`dart format`、`flutter test`（16 项）、`flutter analyze`、`flutter build windows --debug`。
+
+### `0.2.19` 稳定 smoke harness
 
 - 将最高风险的媒体库点击 smoke test 从截图坐标改为稳定 widget key 和测试宿主。
 - 新增 `LibrarySmokeKeys`、`LocalLibrarySmokeHarness` 和 `TagDiscoverySmokeHarness`，让测试可驱动真实本地媒体库文件夹视图和右侧标签发现面板，而不打开真实数据库，也不依赖桌面 DPI。
 - Widget smoke 覆盖本地文件夹打开、顶部返回按钮、鼠标后退侧键、一级标签展开/收起、二级“展开全部 / 收起”和一级/二级页签切换。
-- 验证通过：`dart format`、`flutter test`、`flutter analyze`、`flutter build windows --debug`；debug exe 也能使用临时 profile 启动并在启动 smoke 窗口内保持运行。
+- 验证通过：`dart format`、`flutter test`、`flutter analyze`、`flutter build windows --debug`；debug exe 可用临时 profile 启动并保持运行。
 
-## 0.2.20 List Row + Result State Smoke Pass
+### `0.2.18` 本地文件夹返回与二级标签清理
 
-- 扩展稳定 smoke harness，覆盖密集列表模式下的本地文件夹导航、列表行播放/收藏/更多控件，以及右侧标签结果状态断言。
-- 为列表行控件和标签 chip 增加稳定 key；列表行 smoke test 会等待超过行双击识别窗口，让单击按钮断言保持确定性。
-- The right tag harness now renders a small result-state surface: selecting the default album shows all current-primary sample results, while selecting Child01 narrows the surface to only Child01.
-- Validation passed: `dart format`, `flutter test` with 16 tests, `flutter analyze`, and `flutter build windows --debug`.
+- 新增 `LOCAL_TAG_PLAYER_DATA_DIR` 临时 profile 覆盖能力，用于可回滚 UI smoke test；未设置时真实应用数据路径不变。
+- 临时 profile 鼠标 QA 覆盖最近播放单条删除、全选删除、清空全部；每条路径只清理临时库里的 `lastPlayedAt`。
+- 临时 profile 下记录入口切换耗时：媒体库首次约 213ms，最近播放约 63ms，智能收藏约 59ms，返回媒体库约 51ms。
+- 热门二级标签只显示二级标签名；所属一级小标签在热门区隐藏，但全部二级页签仍可显示。
+- 二级候选过滤真实“默认专辑”标签，避免它出现在热门 / 全部二级候选中。
+- 一级展开卡过滤真实子标签里的“默认专辑”，只保留卡片开头的虚拟默认专辑 chip。
+- 本地媒体库文件夹浏览新增路径返回栈：点击文件夹压入当前路径，顶部返回按钮和鼠标后退侧键都回到上一层。
+- 最近播放清理补充单选删除和批量清空目标测试，确认未播放视频不受影响。
 
-## 0.2.21 Non-Maximized Visibility Pass
+### `0.2.17` 主来源与本地媒体库
 
-- Fixed normal debug-window overflow by allowing the expanded top search field to shrink when the actual row width is constrained by the right tag panel.
-- Increased single-column video-card height so 16:9 thumbnails, titles, tags, and bottom actions fit without Flutter overflow stripes.
-- List-row actions now switch to compact icon controls at medium row widths so Play/Favorite/More stay visible instead of pushing past the row edge.
-- Computer-use QA covered normal and maximized debug windows: top toolbar, list-row actions, right tag panel, and local-library back entry stayed inside the visible window.
-- Validation passed: `dart format`, `flutter test` with 16 tests, `flutter analyze`, and `flutter build windows --debug`.
+- 媒体库、最近播放和智能收藏作为轻量主结果来源：最近播放 / 收藏使用内存列表，媒体库清空筛选并立即重建全量视频状态。
+- 最近播放主结果区增加管理工具条：单选、全选、删除已选、清空全部；这些动作只清理 `lastPlayedAt`，不删除视频文件、标签、收藏或播放进度。
+- “我的标签库”改名为“本地媒体库”，添加 / 移除入口只管理本地 root 路径，不再打开标签新增弹窗。
+- 本地媒体库 root 浏览中，文件夹显示为文件夹条目，已索引视频显示为普通视频卡片 / 列表行；既有网格 / 列表切换继续控制布局。
+- 设置从顶部工具条移除，保留在左侧功能栏底部；debug exe smoke 确认底部入口可打开已有设置页。
 
-## 0.2.22 Secondary Tag Panel Pass
+### `0.2.16` 主入口行为
 
-- Hot secondary tags now use a real More/Less button instead of a disabled visual button. The button expands the hot list and shows visible/total counts.
-- The "All secondary tags" tab now receives the full secondary-tag list instead of the hot-list slice.
-- Hot secondary chips stay lightweight by default, but duplicate names display their parent primary tag so ambiguous names such as NTR/ntr are distinguishable.
-- Media Library and Local Media Library entry semantics were rechecked: Media Library resets to all videos, while Local Media Library opens a file-path browser for configured roots and subfolders.
-- Validation passed: `dart format`, `flutter test` with 18 tests, `flutter analyze`, `flutter build windows --debug`, and computer-use smoke paths for More tags, all-secondary tags, Media Library reset, and Local Media Library browsing.
+- 最近播放改为主结果模式，不再是弹窗；中间网格 / 列表展示最近播放视频，并把可见列表传给播放器队列。
+- 媒体库侧栏项作为重置入口：清空搜索、一级 / 二级 / 分组 / 排除 / 收藏筛选，返回全部视频。
+- 设置从顶部工具条和左侧侧栏暴露，复用已有缓存 / 播放设置页。
+- “我的标签库”新增弹窗在输入时过滤已有标签，并通过 SnackBar 报告创建 / 保存错误。
+- 从最近播放打开视频时使用“最近播放”队列标题，避免播放器显示误导性的全库筛选摘要。
 
-## 0.2.15 Sidebar + List QA Pass
+### `0.2.15` 侧栏与列表 QA
 
-- Left sidebar was reduced to the workflow entries that still serve the media-library loop: duplicate "playback history", low-value "current filters", and "common tags" entries were removed.
-- "Recent playback" now opens the recent-video dialog directly from the sidebar.
-- Directory Manager gained a non-destructive root removal affordance. It only updates configured roots and deliberately does not delete disk files or purge indexed videos.
-- "My tag library" became a scrollable shortcut list with add/remove controls. Adding can reuse an existing tag or create a tag; removing only removes the shortcut, not the tag record or video relationships.
-- Right-panel tag counts now use a stable all-library count cache so unrelated tag counts stay visible after selecting a primary or secondary tag.
-- The top toolbar search field no longer consumes all expanded-width space, so Tag Center, favorite filter, sorting, and grid/list controls stay visible on wide desktop windows.
-- Dense list mode was tightened after real-window QA: rows use a readable content width, slightly taller row extent, and visible Play/Favorite/More controls without overflow.
-- Validation: `dart format`, `flutter analyze`, `flutter test`, and `flutter build windows --debug` passed. Real-window QA confirmed Recent Playback, Directory Manager, toolbar visibility, and list-mode no-overflow; scripted Win32 coordinates still did not reliably open the list-row More dialog, so that exact hit path needs one manual mouse pass.
+- 左侧侧栏收敛到仍服务媒体库闭环的入口：删除重复“播放历史”、低价值“当前筛选”和“常用标签”。
+- “最近播放”从侧栏直接打开最近视频入口。
+- 目录管理增加非破坏性 root 移除入口，只更新配置 root，不删除磁盘文件或清理已索引视频。
+- “我的标签库”曾作为可滚动快捷标签列表，支持添加 / 移除；移除只删除快捷入口，不删除真实 tag 或视频关系。
+- 右侧标签数量使用全库稳定计数缓存，选择一级 / 二级标签后无关标签数量仍可见。
+- 顶部工具条搜索框不再占满 expanded 宽度，宽屏下标签中心、收藏筛选、排序和网格 / 列表控件保持可见。
+- 密集列表模式经真实窗口 QA 后收紧：行内容宽度可读，行高略增，播放 / 收藏 / 更多按钮可见且无 overflow。
+- 验证通过：`dart format`、`flutter analyze`、`flutter test`、`flutter build windows --debug`；真实窗口 QA 确认最近播放、目录管理、工具条可见性和列表无 overflow。
 
-## 0.2.16 Main Entry Behavior Pass
+### `0.2.5` 参考布局像素调整
 
-- Recent Playback is now a main result mode instead of a dialog. The center grid/list displays recently played videos and passes that visible list to the player queue.
-- The Media Library sidebar item acts as a reset entry: it clears search, primary/secondary/group/excluded/favorite filters and returns to all videos.
-- Settings is exposed from both the top toolbar and the left sidebar, reusing the existing cache/playback settings page.
-- The "My tag library" add dialog now filters existing tags while typing and reports create/save errors through SnackBar.
-- Opening a video from Recent Playback uses a "Recent Playback" queue title so the player does not show a misleading all-library filter summary.
+- 顶部搜索框增加桌面最大宽度，避免超宽窗口横向拉满。
+- 当前筛选行和右侧标签筛选面板保持参考图两行归属：工具条横跨内容区，下面再分为中心筛选 / 结果和右侧标签卡片。
+- 右侧标签筛选面板成为独立卡片，外边距、固定桌面宽度、嵌套组弱化和 segmented tabs 更接近参考图。
+- 交互 smoke 覆盖收藏筛选、排序菜单、网格 / 列表切换、右侧页签切换、标签 chip 选择和筛选 chip 移除。
 
-## 0.2.5 Reference Layout Pixel Pass
+### 早期版本摘要
 
-- Top toolbar: search width now has a desktop maximum so it stays close to the reference proportions instead of stretching across ultra-wide windows.
-- Current filter row and right tag filter panel keep the reference two-row ownership: toolbar spans the content area, then center filter/results and right tag card split below it.
-- Right tag filter panel now reads as an independent card with reference-like outside spacing, fixed desktop width, softer nested group treatment, and segmented tabs.
-- Interaction smoke test covered favorite filter, sort menu, grid/list toggle, right-panel tab switching, tag chip selection, and filter chip removal.
-- Follow-up: recheck the “clear all” hit target/disabled state because coordinate automation did not reliably trigger it.
+- `0.2.0` 到 `0.2.4`：完成媒体库标签发现主结构、当前筛选条、右侧标签面板、参考图第一轮视觉对齐和基础点击 smoke。
+- `0.1.0`：创建媒体库标签 UI 任务模板。
 
-## 0.2.6 Right Tag Panel Interaction Pass
-
-- Primary tags now use a local accordion state: clicking a collapsed primary row expands that specific primary tag and shows its own child tags.
-- The primary panel defaults to more visible primary candidates and provides a “more primary tags” control instead of hard-limiting the list to a tiny subset.
-- Expanded primary rows separate “expand this row” from “filter by this primary tag” through a dedicated filter icon.
-- Child tag chips have larger hit targets and stable Chinese tooltips; smoke test confirmed selecting a child tag adds the active filter chip and updates the result count.
-- The active filter bar clear-all button is fixed outside the horizontal chips scroller to reduce missed clicks.
-
-## 0.2.7 Right Panel Chip Expansion Pass
-
-- Expanded primary cards now default to 9 secondary chips, matching the reference card density more closely.
-- The “expand all” affordance is now a full-row lightweight button and expands only the current primary tag’s secondary chips in local UI state.
-- The “more primary tags” affordance is visually weakened into a short full-row text button at the bottom of the primary list.
-- The hot secondary tag area has tighter reference-like vertical rhythm: fewer default primary rows so the section is visible, fixed 3-column chips, smaller title, and a centered fixed-height lightweight more button.
-- Cleaned residual mojibake comments and tooltip notes in the right tag filter panel source so visual QA is not polluted by historical encoding artifacts.
-- Smoke test covered app startup, right-panel visibility, segmented tab switching, and primary accordion row clicks. Coordinate automation for the lower “expand all” button was unstable under the current desktop/DPI environment, so that button still needs one manual click confirmation.
-
-## 0.2.8 Right Panel Mutual Selection Pass
-
-- Primary collapsed rows now select the clicked primary tag's "default album" and expand that primary row, so primary tag clicks are mutually exclusive.
-- Every expanded primary card includes a virtual "默认专辑" child chip. It represents "all videos under the current primary tag" by keeping only the primary tag filter active; it does not create or persist a new tag.
-- Child tag chips under the same primary are mutually exclusive. Selecting a new child replaces the old child; selecting the already active child returns to the current primary default album.
-- Expanded primary headers use a fixed-height full-row hit target, and the child "expand all" control remains a per-primary toggle that can expand and collapse local UI state.
-- Debug exe smoke test confirmed real child-chip clicks update the active filter chips, result count, and visible video paths for "崩铁 + 克拉拉/停云". Windows DPI made coordinate automation unreliable for final header-collapse and expand-all screenshots, so those two paths still need a short manual mouse confirmation.
-
-## 0.2.9 Right Panel Primary Sort + Filter Targeting Pass
-
-- Primary tags now default to 7 visible rows, with a lightweight "more primary tags" control that expands and collapses the remaining rows.
-- Primary tags have a local sort control for count-descending and name-ascending order. Sorting affects only the right discovery panel and does not change filter semantics.
-- Count sorting now uses the visible result count so the selected "按数量" control matches the displayed list order.
-- Right-panel child tag selection now maps folder.child tagId back to the legacy child tag name used by `FilterQuery.childTagId`.
-- Child tag fallback matching resolves a child tag's parentId back to the primary tag name before checking `VideoItem.childTags`, so default album and secondary tags can target videos under the correct primary tag even when a legacy path-derived lookup is used.
-- The right panel scroll list has its own Scrollbar and right-side content padding so the thumb does not overlap primary rows.
-
-## 0.2.10 Right Panel Stable Sorting Pass
-
-- Removed the separate primary-sort label and shortened the sort options to "数量 / 名称 / 常用" so the control stays lightweight.
-- Added a local "常用" primary sort mode based on in-session primary tag click counts. It does not persist data or change schema.
-- Count sorting now uses the maximum known primary count with `usageCount` fallback, so selecting a primary tag no longer promotes that tag or reshuffles the rest of the list because of the active filter.
-- Expanded primary state no longer falls back to expanding the first visible row when the previously expanded tag is outside the current visible slice.
-- The "全部二级标签" tab now lists folder child tags from the tag library even when current result counts are zero, avoiding an empty tab after active filtering.
-
-## 0.2.11 Right Panel Interaction Smoothness Pass
-
-- Collapsed primary rows now only expand/collapse local UI. Filtering is handled by the expanded card's default-album chip or child chips, reducing click conflicts and delayed expansion.
-- The result grid no longer uses a filter-keyed `AnimatedSwitcher`; it keeps a stable repaint boundary during tag switching to reduce visual shaking.
-- The expanded desktop layout now supports collapsing the right tag filter panel into a slim rail and restoring it without clearing filter state.
-
-## 0.2.12 Library Filter Refresh Pipeline Pass
-
-- Library filtering no longer runs synchronously from `build()`. The page keeps cached filtered videos and candidate counts in State.
-- Filter changes now update selected chips immediately, then refresh filtered videos and candidate counts in revision-guarded stages.
-- The current filter bar shows a lightweight spinner while videos or candidate counts are refreshing, without blocking grid scrolling or clicks.
-
-## 0.2.13 Main Surface Click Smoke Pass
-
-- Main media-library controls were smoke tested in the debug exe: sorting, favorite filtering, result view toggle, right-panel collapse/restore, tag tabs, tag chips, tag manager navigation, playback history, directory manager, card more/edit dialog, and play entry.
-- The active filter bar now includes a search-keyword chip. Search is part of `FilterQuery`, so it must be visible and individually clearable from the current filter surface.
-- The left sidebar playback-history and directory-manager entries now open lightweight dialogs instead of being inert navigation rows. These dialogs do not change schema, tag semantics, or playback queue behavior.
-
-## 0.2.14 Dense List View Pass
-
-- Dense result mode now uses a real vertical `ListView.builder` instead of a card-like grid with smaller dimensions.
-- Each list row keeps the existing media actions but changes the visual structure to thumbnail, title/path/tag summary, and compact right-side actions.
-- Repaired source damage exposed by historical mojibake cleanup and restored the helper widgets/classes needed for media-library build stability.
-- Cleaned remaining mojibake comments and visible strings in the touched media-library source files.
-- Validation passed: `dart format`, `flutter analyze`, `flutter build windows --debug`, and `flutter test`. The widget test taps the result-view toggle and confirms dense mode is selected.
-
-## Responsive Requirements
+## 新对话提示
 
 ```text
-expanded: persistent left filter sidebar
-medium: collapsible filter sidebar
-compact: filter in Drawer / BottomSheet
-```
-
-Do not build complex animation first. Keep the layout practical and stable.
-
-## Prompt For New Chat
-
-```text
-这是 Chat 3 / Media Library Tag UI。项目路径：<project-root>。
-
+这是 Chat 3 / 媒体库标签 UI。项目路径：<project-root>。
 请先阅读：
 - PROJECT.md
-- ARCHITECTURE.md
 - CURRENT_TASK.md
-- ROADMAP.md
-- <private-planning-document>
 - docs/chat_tasks/CHAT_3_MEDIA_LIBRARY_TAG_UI.md
+- 与 LibraryPage / library_widgets 直接相关的源码
 
-后续方向以 local_tag_player_flutter_cross_platform_plan_v2.md 为准；当前项目实现只代表历史状态。
-
-职责：负责媒体库首页的网页式 Tag 检索 UI。注意：Tag 检索 UI 是核心功能，不是最后才做的普通美化。不要改 SQLite schema、Tag 查询核心、播放器内核或缩略图队列。
-
-当前目标：把首页从平铺标签升级为分组筛选 UI。实现左侧分组标签筛选、顶部当前筛选 Chips、结果数量、清空筛选、排除标签显示、保存筛选入口，并保持点击播放进入当前筛选结果队列。预留 expanded / medium / compact 响应式结构。
-
+目标：维护媒体库首页的标签发现 UI、筛选 chips、结果数量、右侧标签面板和响应式布局。
+禁止：不改 SQLite schema、不改 FilterQuery / TagQueryService 语义、不改播放器 backend、不做无关视觉重构。
 修改代码后运行：
+- dart format
 - flutter analyze
 - flutter build windows --debug
-
-涉及 shared layout token、src/core 或数据/平台边界时，先同步 Architecture 或更新 ARCHITECTURE.md 基线记录。
+UI 行为变更还要做 widget smoke 或 computer-use / debug exe 点击验证。
 ```
-
-## Change Log
-
-- `0.2.20`: Extended stable smoke coverage to list-row Play/Favorite/More, local-library dense-list back navigation, and right tag chip result-state assertions. No schema, query, player queue, or cache queue behavior changed.
-- `0.2.21`: Fixed non-maximized window overflow in the media-library top bar, grid cards, and list-row actions, then verified normal and maximized debug windows with computer-use. No schema, query, player queue, or cache queue behavior changed.
-- `0.2.22`: Fixed hot-secondary More/Less interaction, restored full all-secondary listing, disambiguated duplicate secondary names with parent labels, and rechecked Media Library vs Local Media Library semantics. No schema, query, player queue, or cache queue behavior changed.
-- `0.2.19`: Added stable key/harness smoke tests for local-library back paths and right-tag-panel expand/collapse paths, avoiding screenshot-coordinate desktop automation for these flows. No schema, query, player queue, or cache queue behavior changed.
-- `0.2.10`: Stabilized primary count sorting, added runtime-only frequent sorting, removed the extra primary-sort label, shortened sort option labels, prevented fallback expansion of the first row, and kept the all-secondary tab populated under active filters. No schema, player queue, or cache queue behavior changed.
-- `0.2.11`: Decoupled primary row expansion from filtering, stabilized result-grid repaint during tag switches, and added a collapsible right tag-filter rail. No schema, query, player queue, or cache queue behavior changed.
-- `0.2.12`: Moved library filter result and candidate-count computation out of `build()` into cached, revision-guarded staged refreshes with a lightweight refresh indicator. No schema, player queue, or cache queue behavior changed.
-- `0.2.9`: Added primary-list expand/collapse at 7 rows, local count/name sorting, child tagId-to-name query mapping, parentId-to-primary-name fallback matching, and right-panel scrollbar padding. No schema, player queue, or cache queue behavior changed.
-- `0.2.8`: Added right-panel default-album selection, mutually exclusive primary and child selection, larger expanded header hit targets, and preserved local expand/collapse state without changing schema, query contracts, player queue, or cache queue behavior.
-- `0.2.7`: Tuned the right tag filter panel’s expanded primary card density, changed “expand all” into a full-row local UI control, weakened the “more primary tags” affordance, made hot secondary tags visible in the reference viewport with fixed 3-column rhythm, and cleaned right-panel mojibake comments. No schema, query, player queue, or cache queue behavior changed.
-- `0.2.6`: Reworked the right tag filter panel interaction model: primary tags now expand their own secondary tags, more primary candidates can be shown, primary filtering has a separate icon, child chips have larger hit targets, and clear-all is no longer inside the horizontal chip scroller. No schema, query, player queue, or cache queue behavior changed.
-- `0.2.4`: Corrected the expanded Media Library structure against the reference red boxes: the top toolbar now spans both the result area and the right tag filter panel, while the active filter bar remains scoped to the center result column and the tag filter panel starts on the second row. No schema, query, player queue, or cache queue behavior changed.
-- `0.2.3`: Aligned the Media Library top selected area with the reference layout: flexible search row with tag manager, favorite filter, sort, and view toggles; active filter row now shows direct chips, clear-all action, and result count in one white bar. No schema, tag query, player queue, or cache queue behavior changed.
-- `0.2.2`: Improved Media Library tag interaction responsiveness: `LibraryPage` caches the current filtered result and result counts in State, moves expensive refresh work out of `build()`, updates selected tags/chips immediately, refreshes videos and candidate counts in staged async passes, and guards stale async completions with `_filterRevision`. Lightweight busy indicators show refresh progress without blocking the whole page.
-- `0.2.1`: Acceptance pass fixes: synchronized equivalent legacy first/second-level tag state with grouped tag state to avoid duplicated filters, and made the active filter bar wrap on narrow layouts.
-- `0.2.0`: Implemented first-phase Media Library Tag discovery UI: grouped filter sidebar, active filter chips, result count, clear filter, exclude tag chips, save smart list TODO entry, and expanded/medium/compact layout structure.
-- `0.1.0`: Created task from `local_tag_player_flutter_cross_platform_plan_v2.md`; Chat 3 owns Media Library Tag UI.

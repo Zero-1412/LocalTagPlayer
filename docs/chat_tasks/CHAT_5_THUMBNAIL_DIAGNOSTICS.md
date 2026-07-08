@@ -1,56 +1,55 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
-Current Version: `0.2.1`
-Status: first phase complete
-Owner: Chat 5 / Thumbnail + Diagnostics + FFmpegBackend
+当前版本：`0.2.1`
+状态：第一阶段完成
+负责人：Chat 5 / 缩略图 + 诊断 + FFmpegBackend
 
-## Planning Source
+## 规划来源
 
-Primary source:
+主要来源：
 
 ```text
 <private-planning-document>
 ```
 
-If this task document conflicts with that file, the external plan wins.
+如果本文档与该文件冲突，以外部规划为准。
 
-## Scope
+## 范围
 
-Owns FFmpeg/FFprobe integration, thumbnail cache queue, media probe cache, retry/failure reporting, abnormal file list, diagnostics cards, and `FFmpegBackend` implementation.
+负责 FFmpeg / FFprobe 接入、缩略图缓存队列、媒体探测缓存、重试 / 失败报告、异常文件列表、诊断卡片和 `FFmpegBackend` 实现。
 
-Allowed:
+允许：
 
-- `ThumbnailService`.
-- `MediaDetailsService`.
-- `ExternalMediaTools` until it is wrapped by `FFmpegBackend`.
-- Future `platform/ffmpeg`.
-- Cache diagnostics views if needed for cache function.
-- Cache-related repository planning.
+- `ThumbnailService`。
+- `MediaDetailsService`。
+- 被 `FFmpegBackend` 包装前的 `ExternalMediaTools`。
+- 未来 `platform/ffmpeg`。
+- 缓存功能需要的缓存诊断视图。
+- 缓存相关 repository 规划。
 
-Do not do:
+禁止：
 
-- Tag filter logic.
-- Player page main structure.
-- SQLite tag schema, except cache-related fields after coordination.
-- Windows exe paths outside platform/backend layer.
+- 标签筛选逻辑。
+- 播放页主结构。
+- SQLite 标签 schema，除非缓存相关字段已协调。
+- 在平台 / backend 层外散落 Windows exe 路径。
 
-## P0/P1 Tasks
+## P0 / P1 任务
 
-- Keep thumbnail queue conservative during playback.
-- Route FFmpeg / FFprobe discovery and execution through `FFmpegBackend`.
-- Expose FFmpeg / FFprobe availability, path, and version.
-- Keep FFprobe output minimal and cacheable.
-- Add retry for failed thumbnail/media-probe tasks.
-- Add clear failure records.
-- Add abnormal file list.
-- Improve diagnostics page into actionable cards.
-- Preserve current Windows bundled-tool behavior behind the backend.
+- 播放期间保持缩略图队列保守。
+- FFmpeg / FFprobe 发现和执行必须经过 `FFmpegBackend`。
+- 展示 FFmpeg / FFprobe 可用性、路径和版本。
+- FFprobe 输出保持精简且可缓存。
+- 为失败的缩略图 / 媒体探测任务增加重试。
+- 增加清除失败记录。
+- 增加异常文件列表。
+- 把诊断页改进成可操作卡片。
+- 保留当前 Windows bundled tool 行为，并放在 backend 后面。
 
-## Prompt For New Chat
+## 新对话提示
 
 ```text
-这是 Chat 5 / Thumbnail + Diagnostics + FFmpegBackend。项目路径：<project-root>。
-
+这是 Chat 5 / 缩略图 + 诊断 + FFmpegBackend。项目路径：<project-root>。
 请先阅读：
 - PROJECT.md
 - ARCHITECTURE.md
@@ -59,21 +58,15 @@ Do not do:
 - <private-planning-document>
 - docs/chat_tasks/CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
-后续方向以 local_tag_player_flutter_cross_platform_plan_v2.md 为准；当前项目实现只代表历史状态。
-
-职责：负责 FFmpeg/FFprobe、缩略图缓存队列、媒体信息缓存、失败重试、异常文件列表、缓存诊断和 FFmpegBackend。不要改 Tag 筛选逻辑、播放器主结构或 UI 美化。
-
-当前目标：稳定缩略图与 FFprobe 缓存，补充失败原因、失败重试、清除失败记录、异常文件列表和诊断卡片。把 FFmpeg/FFprobe 路径解析和调用逐步收敛到 FFmpegBackend，不要在业务层写死 Windows exe 路径。
-
+职责：缩略图缓存、媒体信息探测、FFmpeg/FFprobe backend、失败重试、异常文件和诊断 UI。
+不要修改标签筛选语义、播放器主结构或无关 SQLite schema。
 修改代码后运行：
 - flutter analyze
 - flutter build windows --debug
-
-涉及 src/core、平台接口或共享服务协议时，先同步 Architecture 或更新 ARCHITECTURE.md 基线记录。
 ```
 
-## Change Log
+## 变更记录
 
-- `0.1.0`: Created task from `local_tag_player_flutter_cross_platform_plan_v2.md`; Chat 5 now owns Thumbnail + Diagnostics + FFmpegBackend.
-- `0.2.0`: Implemented first-phase cache diagnostics: FFmpeg/FFprobe calls now route through a `DesktopFFmpegBackend` compatibility adapter, tool versions are surfaced, thumbnail fallback writes through a temp file before replace, background thumbnail queueing is capped, media probe queue state is visible, and the diagnostics page can retry failures, clear failure records, and list abnormal files.
-- `0.2.1`: Acceptance fix: existing thumbnail cache files now validate JPEG markers and length before being treated as cached, so 0-byte or truncated files are discarded; retry and clear-failure actions are disabled while already running or while cache jobs are active.
+- `0.2.1`：验收修复：现有缩略图缓存文件会先验证 JPEG 标记和长度，0-byte 或截断文件会被丢弃；重试和清除失败动作在已有任务运行或缓存队列活跃时禁用。
+- `0.2.0`：完成第一阶段缓存诊断：FFmpeg/FFprobe 通过 `DesktopFFmpegBackend` 兼容适配层调用；工具版本可见；缩略图兜底先写临时文件再替换；后台缩略图队列限流；媒体探测队列状态可见；诊断页可重试失败、清除失败记录并列出异常文件。
+- `0.1.0`：从 `local_tag_player_flutter_cross_platform_plan_v2.md` 创建任务；Chat 5 负责 Thumbnail + Diagnostics + FFmpegBackend。

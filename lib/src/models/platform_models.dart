@@ -272,7 +272,7 @@ class FilterQuery {
       return false;
     }
 
-    // Filter groups are ANDed together; each group matches when any included item matches and no group-level NOT item matches.
+// 不同筛选组之间是 AND；组内任一包含项命中且没有组级排除项命中时，该组视为命中。
     for (final group in groups.where((group) => !group.isEmpty)) {
       if (group.excludedItems
           .any((tag) => _matchesTagItem(item, tag, tagContext))) {

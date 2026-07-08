@@ -73,7 +73,7 @@ manual real-window QA with large media library is still needed
 修改代码前，先选择能安全完成任务的最小上下文级别。
 不要为了小修复读取完整项目历史。
 
-### Context Budget / Handoff
+### 上下文预算 / 会话交接
 
 当背景信息窗口达到、超过或接近软件限定上下文长度的 70% 时，必须优先压缩上下文或把当前对话记录、任务状态、已改文件、验证结果和下一步计划传递给下一个新对话，保证继续开发时上下文占用不超过软件限定值的 70%。
 
@@ -83,7 +83,7 @@ manual real-window QA with large media library is still needed
 从第一性原理出发，后续修改进行对抗式审查，任务结束后自己给出下一步计划
 ```
 
-### Level 1: Small Fix
+### Level 1：小修复
 
 适用：analyzer/build 报错、单文件编译错误、缺失符号、小 UI 溢出、拼写修复。
 
@@ -99,7 +99,7 @@ AGENTS.md
 不要读取完整 `ROADMAP.md`、`CHANGELOG.md`、全部 `docs/chat_tasks/CHAT_*.md` 或完整跨平台计划。
 只用 `rg` 查精确符号或错误；除非直接引用无法解析，否则不要全项目扫描。
 
-### Level 2: Bounded Feature / UI Task
+### Level 2：有限功能 / UI 任务
 
 适用：一个有限功能、一个页面/组件/服务改动、一个 Chat 阶段内的有限任务。
 
@@ -118,7 +118,7 @@ CURRENT_TASK.md
 仅当优先级或阶段归属不清时读取 `ROADMAP.md`。
 仅当更新历史记录或确认行为是否已改过时读取 `CHANGELOG.md`。
 
-### Level 3: Architecture / Schema / Boundary Task
+### Level 3：架构 / Schema / 边界任务
 
 仅适用：SQLite schema/migrations、`src/core`、平台接口、repository contracts、`FilterQuery`、`TagQueryService`、`PlayerBackend`、`FFmpegBackend`、stable identity、missing/relink、文件移动、标签删除/合并迁移、项目 roadmap/architecture 文档修改。
 

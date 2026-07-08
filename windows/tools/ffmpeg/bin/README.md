@@ -1,13 +1,15 @@
-# Bundled FFmpeg Tools
+# 内置 FFmpeg 工具
 
-Put Windows ffmpeg binaries here before building the app:
+构建应用前，把 Windows FFmpeg 二进制文件放在这里：
 
-- ffmpeg.exe
-- ffprobe.exe
-- any required .dll files from the same FFmpeg distribution
+- `ffmpeg.exe`
+- `ffprobe.exe`
+- 同一 FFmpeg 发行包中必需的 `.dll` 文件
 
-The Windows CMake build copies these files into the app bundle at:
+Windows CMake 构建会把这些文件复制到应用包内：
 
-  tools/ffmpeg/bin
+```text
+tools/ffmpeg/bin
+```
 
-At runtime the app checks this bundled path first, then falls back to PATH.
+运行时应用会先检查此内置路径，然后再回退到 `PATH`。

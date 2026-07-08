@@ -2,8 +2,9 @@
 
 ## 2026-07-07
 
-### Media Library Reference Top Layout
+### 媒体库参考顶部布局
 
+- 全仓库自有文档和代码注释完成中文化审查：Dart 注释英文句子已改为中文，`ROADMAP.md`、`docs/chat_tasks`、`.agents/skills`、安装说明和 FFmpeg 工具说明中的英文/乱码正文已改为中文；保留必要技术术语、路径、命令和 API 名称。
 - 新增中文优先规则：文档新增/修改、代码注释、任务记录和 Git 提交信息默认使用中文；只有代码、第三方 API、命令、路径、固定术语和外部错误信息保留必要原文。
 - 清理右侧标签面板周边残留乱码注释：`_SmartFilterContextCard` 和 `TagDiscoverySmokeHarness` 的维护说明改为中文，不改变筛选逻辑、播放队列或数据库。
 - 本轮验证通过：`dart format lib/src/widgets/library_widgets.dart`、`flutter analyze`、`flutter build windows --debug`。
@@ -93,7 +94,7 @@
 
 ## 2026-07-05
 
-### Media Library Tag Interaction Performance
+### 媒体库标签交互性能
 
 - `TagQueryService.resultCounts` 改为按标签组分批统计候选数量；每个标签组只扫描一次当前视频集合，并优先使用 `videoTagIdsByPathKey` 与候选 tagId 集合求交集，避免每个候选标签都全库扫描。
 - `LibraryPage` 不再在 `build()` 中同步执行筛选结果和 `resultCounts` 重计算；当前视频列表与候选数量缓存到页面 State 中，由筛选条件变化后异步刷新。
@@ -108,7 +109,7 @@
 
 ## 2026-07-04
 
-### Responsive UI + Platform Polish
+### 响应式 UI 与平台 polish
 
 - Chat 7 第一阶段完成：统一应用弹窗的浅色 surface、8px 圆角、边框和标题层级。
 - 媒体库侧栏目录操作按钮改为可换行按钮组，compact 筛选 BottomSheet 使用统一背景和顶部圆角。

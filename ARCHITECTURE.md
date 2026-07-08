@@ -70,7 +70,7 @@ lib/src/widgets
 
 ## 主要模块
 
-### Core
+### 核心层
 
 职责：
 
@@ -82,7 +82,7 @@ lib/src/widgets
 
 当前仍使用 Dart `part`，这些 core 类是后续抽平台接口和独立 import 模块的过渡基建。
 
-### Repositories
+### 仓储接口
 
 职责：
 
@@ -93,7 +93,7 @@ lib/src/widgets
 
 当前仅定义接口，不替换 `LibraryStore` 的 SQLite 实现，避免在 Architecture Chat 重写查询与扫描行为。
 
-### LibraryStore
+### 媒体库存储
 
 职责：
 
@@ -115,24 +115,24 @@ X:\test-media\原神\b.mp4
 二级标签: 默认专辑
 ```
 
-### VideoItem
+### 视频条目
 
 职责：单个视频的领域对象。
 
 包含：
 
-- path
-- title
-- folder
-- tags
-- childTags
-- isFavorite
-- mediaFingerprint
-- thumbnailError
-- mediaDetailsError
-- addedAt / lastPlayedAt
+- `path`：当前路径。
+- `title`：显示标题。
+- `folder`：来源文件夹。
+- `tags`：一级标签兼容字段。
+- `childTags`：二级标签兼容字段。
+- `isFavorite`：收藏状态。
+- `mediaFingerprint`：媒体指纹。
+- `thumbnailError`：缩略图错误。
+- `mediaDetailsError`：媒体信息错误。
+- `addedAt / lastPlayedAt`：入库时间 / 最近播放时间。
 
-### ThumbnailService
+### 缩略图服务
 
 职责：缩略图缓存队列。
 
@@ -149,7 +149,7 @@ X:\test-media\原神\b.mp4
 
 播放时会暂停缩略图队列，降低卡顿概率。
 
-### MediaDetailsService
+### 媒体信息服务
 
 职责：读取和缓存媒体信息。
 
@@ -160,7 +160,7 @@ X:\test-media\原神\b.mp4
 - 读取队列串行执行，并向诊断页暴露排队、执行中、本轮完成和失败数量。
 - 缓存视频编码、音频编码、分辨率等。
 
-### LibraryPage
+### 媒体库页面
 
 职责：主界面。
 
@@ -172,7 +172,7 @@ X:\test-media\原神\b.mp4
 - 顶部二级标签横向条。
 - 中间视频网格。
 
-### TagManagerPage
+### 标签管理页面
 
 职责：标签维护和批量打标签第一阶段入口。
 
@@ -191,7 +191,7 @@ X:\test-media\原神\b.mp4
 - 二级标签单选。
 - 二级标签可再次点击取消。
 
-### PlayerPage
+### 播放页面
 
 职责：播放页面。
 
@@ -213,7 +213,7 @@ X:\test-media\原神\b.mp4
 - Ctrl + Shift + Delete：删除当前正在播放且已选中的视频。
 - 鼠标侧键返回：退出播放器。
 
-### PlayerQueueSidebar
+### 播放队列侧栏
 
 职责：播放器右侧列表。
 

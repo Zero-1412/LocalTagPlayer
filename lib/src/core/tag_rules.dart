@@ -16,7 +16,7 @@ class TagRules {
     '.ts',
   };
 
-  // Keep folder-derived tag rules in one place so scanning, filtering, and player queues stay consistent.
+  // 文件夹派生标签规则集中在这里，保证扫描、筛选和播放器队列使用同一套语义。
   static List<String> sortedChildTags(Iterable<String> tags) {
     final values = tags.where((tag) => tag.trim().isNotEmpty).toSet().toList()
       ..sort();
@@ -26,10 +26,13 @@ class TagRules {
     return values;
   }
 
-  static bool matchesChildTag(VideoItem item, String parentTag, String childTag) {
+  static bool matchesChildTag(
+      VideoItem item, String parentTag, String childTag) {
     final children = item.childTags[parentTag];
     if (childTag == defaultAlbumTag) {
-      return children == null || children.isEmpty || children.contains(defaultAlbumTag);
+      return children == null ||
+          children.isEmpty ||
+          children.contains(defaultAlbumTag);
     }
     return children?.contains(childTag) ?? false;
   }
@@ -42,7 +45,7 @@ class TagRules {
     return p.normalize(path.trim());
   }
 
-  // Windows paths are case-insensitive; keep display paths unchanged but compare with a stable key.
+  // Windows 路径比较不区分大小写；展示路径保持原样，比较时使用稳定 key。
   static String pathKey(String path) {
     final normalized = p.normalize(path.trim());
     return Platform.isWindows ? normalized.toLowerCase() : normalized;
@@ -88,7 +91,9 @@ class TagRules {
       ],
     ].join('\n').toLowerCase();
     return tokens.every(
-      (token) => haystack.contains(token) || tagItems.any((tag) => tag.matchesNameOrAlias(token)),
+      (token) =>
+          haystack.contains(token) ||
+          tagItems.any((tag) => tag.matchesNameOrAlias(token)),
     );
   }
 

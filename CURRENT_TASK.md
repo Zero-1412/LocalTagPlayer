@@ -17,6 +17,7 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 全仓库自有文档和代码注释执行中文化审查：Dart 注释英文句子已改为中文，`ROADMAP.md`、`docs/chat_tasks`、`.agents/skills`、安装说明和 FFmpeg 工具说明中的英文/乱码正文已改为中文；保留类名、字段名、路径、命令、schema/migration 等固定技术术语。
 - 新增中文优先规则：除代码、第三方 API、协议、命令、路径、固定术语和外部错误信息外，文档、代码注释、任务记录和 Git 提交信息都默认使用中文。
 - 清理右侧标签面板周边残留乱码注释：`_SmartFilterContextCard` 和 `TagDiscoverySmokeHarness` 的维护说明已改为中文，避免 smoke test 与面板交互语义被历史编码问题干扰。
 - 本轮验证通过：`dart format lib/src/widgets/library_widgets.dart`、`flutter analyze`、`flutter build windows --debug`。
