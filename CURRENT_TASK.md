@@ -17,6 +17,9 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 主界面 expanded 布局从固定左右栏宽度改为按窗口总宽度比例计算：左侧导航、中央结果区、右侧标签筛选在窗口放大/缩小时同步变化，并在较窄 expanded 宽度下优先保护中央结果区。
+- 新增主界面布局比例纯函数测试，覆盖 1280 / 1600 / 1920 宽度下左右栏与中心区的占比和总宽度守恒。
+- 使用 debug exe 真实窗口验证普通窗口和最大化窗口：左侧导航、中央视频结果区、右侧标签筛选面板均按比例扩展，未发现横向 overflow 或面板遮挡。
 - 新增 Git 远程提交规则：验证通过并完成本地提交后，必须 `git push` 到当前分支远程跟踪分支；远程/认证/网络失败时记录原因并保留本地提交。
 - 顶部搜索框从 `SearchBar` 改为稳定 `TextField` 输入链路，保留原搜索图标、`Ctrl + K` 提示、controller 和 `onChanged` 筛选触发方式。
 - 新增顶部搜索框 widget smoke test，直接输入 `lupa` 并断言 `TextEditingController` 与 `onSearchChanged` 同步更新。

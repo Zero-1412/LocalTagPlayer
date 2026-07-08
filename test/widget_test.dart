@@ -22,6 +22,27 @@ void main() {
     expect(referenceTopBarShouldCollapseActions(LayoutSize.expanded), isFalse);
   });
 
+  test('expanded main layout keeps proportional slots while resizing', () {
+    final narrow = mainLibraryLayoutSlotsForWidth(1280);
+    final regular = mainLibraryLayoutSlotsForWidth(1600);
+    final wide = mainLibraryLayoutSlotsForWidth(1920);
+
+    expect(narrow.sidebarWidth, closeTo(256, 0.01));
+    expect(narrow.filterPanelWidth, closeTo(409.6, 0.01));
+    expect(narrow.contentWidth, greaterThan(600));
+
+    expect(regular.sidebarWidth, greaterThan(narrow.sidebarWidth));
+    expect(regular.filterPanelWidth, greaterThan(narrow.filterPanelWidth));
+    expect(regular.contentWidth, greaterThan(narrow.contentWidth));
+
+    expect(wide.sidebarWidth / 1920, inInclusiveRange(0.17, 0.18));
+    expect(wide.filterPanelWidth / 1920, inInclusiveRange(0.31, 0.33));
+    expect(
+      wide.sidebarWidth + wide.filterPanelWidth + wide.contentWidth,
+      closeTo(1920, 0.01),
+    );
+  });
+
   test('player queue visibility detects offscreen locator targets', () {
     const itemExtent = 82.0;
     const viewportExtent = itemExtent * 4;

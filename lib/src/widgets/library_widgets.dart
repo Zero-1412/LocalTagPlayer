@@ -288,6 +288,7 @@ class _Sidebar extends StatelessWidget {
     required this.onClearChildTags,
     required this.onGroupTagToggle,
     required this.onGroupTagExcludeToggle,
+    this.width,
   });
 
   final List<String> roots;
@@ -320,10 +321,12 @@ class _Sidebar extends StatelessWidget {
   final VoidCallback onClearChildTags;
   final ValueChanged<TagItem> onGroupTagToggle;
   final ValueChanged<TagItem> onGroupTagExcludeToggle;
+  /** expanded 主界面按窗口比例计算出的侧栏宽度；medium 继续使用默认密度宽度。 */
+  final double? width;
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: dense ? 248 : 274,
+      width: width ?? (dense ? 248 : 274),
       height: MediaQuery.sizeOf(context).height,
       child: DecoratedBox(
         decoration: const BoxDecoration(
@@ -1378,6 +1381,7 @@ class _TagDiscoveryZone extends StatefulWidget {
     required this.onFolderPrimaryChildSelected,
     required this.onGroupTagExcludeToggle,
     this.onCollapse,
+    this.panelWidth,
   });
 
   final List<TagGroup> tagGroups;
@@ -1401,6 +1405,8 @@ class _TagDiscoveryZone extends StatefulWidget {
       onFolderPrimaryChildSelected;
   final ValueChanged<TagItem> onGroupTagExcludeToggle;
   final VoidCallback? onCollapse;
+  /** expanded 主界面按窗口比例计算出的右侧面板外框宽度。 */
+  final double? panelWidth;
 
   @override
   State<_TagDiscoveryZone> createState() => _TagDiscoveryZoneState();
@@ -1468,8 +1474,11 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
         ? allSecondaryTags
         : allSecondaryTags.take(12).toList();
 
+    final outerPanelWidth = widget.panelWidth ?? 482.0;
+    final innerPanelWidth =
+        (outerPanelWidth - 44).clamp(276.0, 576.0).toDouble();
     final panel = Container(
-      width: widget.dense ? double.infinity : 438,
+      width: widget.dense ? double.infinity : innerPanelWidth,
       margin: EdgeInsets.fromLTRB(widget.dense ? 16 : 20, 16, 24, 24),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1645,7 +1654,7 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
     if (widget.dense) {
       return panel;
     }
-    return SizedBox(width: 482, child: panel);
+    return SizedBox(width: outerPanelWidth, child: panel);
   }
 }
 
