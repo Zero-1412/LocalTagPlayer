@@ -1,12 +1,57 @@
-﻿part of '../main.dart';
+import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+part 'core/app_paths.dart';
+part 'core/layout_size.dart';
+part 'core/playback_settings.dart';
+part 'core/tag_rules.dart';
+part 'models/video_item.dart';
+part 'models/media_details.dart';
+part 'models/platform_models.dart';
+part 'repositories/repository_interfaces.dart';
+part 'services/library_store.dart';
+part 'services/tag_query_service.dart';
+part 'services/external_media_tools.dart';
+part 'services/thumbnail_service.dart';
+part 'services/media_details_service.dart';
+part 'platform/platform_interfaces.dart';
+part 'pages/library_page.dart';
+part 'pages/tag_manager_page.dart';
+part 'pages/player_page.dart';
+part 'widgets/library_widgets.dart';
 
 const _appAccent = Color(0xff0f766e);
 const _appAccentStrong = Color(0xff0b5d57);
-const _appBackground = Color(0xffeef3f1);
+const _appAccentViolet = Color(0xff6d5dfc);
+const _appShell = Color(0xff111827);
+const _appBackground = Color(0xfff4f7fb);
 const _appSurface = Color(0xfffbfdfc);
 const _appSurfaceAlt = Color(0xfff4f8f7);
-const _appBorder = Color(0xffd6e2df);
+const _appPanel = Color(0xffffffff);
+const _appBorder = Color(0xffdce4ee);
 const _appTextMuted = Color(0xff62706d);
+const _appText = Color(0xff17202e);
+const _appSoftShadow = [
+  BoxShadow(
+    color: Color(0x140f172a),
+    blurRadius: 24,
+    offset: Offset(0, 12),
+  ),
+];
 const _motionDuration = Duration(milliseconds: 180);
 const _motionCurve = Curves.easeOutCubic;
 const _thumbnailWidth = 384;
@@ -35,7 +80,7 @@ Route<T> _smoothRoute<T>(Widget page) {
   );
 }
 
-Future<void> main() async {
+Future<void> bootstrapLocalTagPlayer() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   sqfliteFfiInit();
@@ -99,7 +144,8 @@ class LocalTagPlayerApp extends StatelessWidget {
             backgroundColor: _appAccent,
             foregroundColor: Colors.white,
             textStyle: const TextStyle(fontWeight: FontWeight.w700),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             minimumSize: const Size(0, 40),
           ),
         ),
@@ -107,14 +153,16 @@ class LocalTagPlayerApp extends StatelessWidget {
           style: OutlinedButton.styleFrom(
             foregroundColor: _appAccentStrong,
             side: const BorderSide(color: _appBorder),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             minimumSize: const Size(0, 40),
           ),
         ),
         iconButtonTheme: IconButtonThemeData(
           style: IconButton.styleFrom(
             foregroundColor: _appAccentStrong,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
         chipTheme: ChipThemeData(
@@ -123,8 +171,10 @@ class LocalTagPlayerApp extends StatelessWidget {
           disabledColor: const Color(0xffe7ecea),
           side: const BorderSide(color: _appBorder),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          labelStyle: const TextStyle(color: Color(0xff20302d), fontWeight: FontWeight.w600),
-          secondaryLabelStyle: const TextStyle(color: _appAccentStrong, fontWeight: FontWeight.w700),
+          labelStyle: const TextStyle(
+              color: Color(0xff20302d), fontWeight: FontWeight.w600),
+          secondaryLabelStyle: const TextStyle(
+              color: _appAccentStrong, fontWeight: FontWeight.w700),
           padding: const EdgeInsets.symmetric(horizontal: 8),
           showCheckmark: false,
         ),
@@ -168,8 +218,3 @@ class LocalTagPlayerApp extends StatelessWidget {
     );
   }
 }
-
-
-
-
-

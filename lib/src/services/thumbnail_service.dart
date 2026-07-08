@@ -1,4 +1,6 @@
-﻿part of '../../main.dart';
+part of '../app.dart';
+
+// ignore_for_file: slash_for_doc_comments
 
 class _ThumbnailJob {
   const _ThumbnailJob({
@@ -10,6 +12,47 @@ class _ThumbnailJob {
   final String cacheKey;
   final Future<void> Function() run;
   final bool isBackground;
+}
+
+/**
+ * 缩略图缓存统计快照，供设置/诊断页展示当前缓存队列状态。
+ */
+class CacheStats {
+  const CacheStats({
+    required this.total,
+    required this.cached,
+    required this.missing,
+    required this.errors,
+    required this.queued,
+    required this.active,
+    required this.activeBackground,
+    required this.maxConcurrent,
+    required this.maxBackground,
+    required this.maxBackgroundQueued,
+    required this.paused,
+    required this.completedThisRun,
+    required this.failedThisRun,
+    required this.ffmpegCompleted,
+    required this.fallbackCompleted,
+    required this.averageMs,
+  });
+
+  final int total;
+  final int cached;
+  final int missing;
+  final int errors;
+  final int queued;
+  final int active;
+  final int activeBackground;
+  final int maxConcurrent;
+  final int maxBackground;
+  final int maxBackgroundQueued;
+  final bool paused;
+  final int completedThisRun;
+  final int failedThisRun;
+  final int ffmpegCompleted;
+  final int fallbackCompleted;
+  final int averageMs;
 }
 
 class ThumbnailService {
@@ -98,7 +141,8 @@ class ThumbnailService {
     return null;
   }
 
-  void prefetchAll(Iterable<VideoItem> items, {bool allowPlayerFallback = false}) {
+  void prefetchAll(Iterable<VideoItem> items,
+      {bool allowPlayerFallback = false}) {
     for (final item in items) {
       unawaited(_queuePrefetch(item, allowPlayerFallback: allowPlayerFallback));
       if (_backgroundQueued.length >= _maxBackgroundQueuedJobs) {
@@ -109,7 +153,8 @@ class ThumbnailService {
 
   void prefetchVisible(Iterable<VideoItem> items) {
     for (final item in items) {
-      unawaited(_queuePrefetch(item, priority: true, allowPlayerFallback: true));
+      unawaited(
+          _queuePrefetch(item, priority: true, allowPlayerFallback: true));
     }
   }
 
@@ -163,7 +208,8 @@ class ThumbnailService {
       if (_backgroundQueued.length >= _maxBackgroundQueuedJobs) {
         return;
       }
-      if (_backgroundQueued.contains(cacheKey) || _priorityQueued.contains(cacheKey)) {
+      if (_backgroundQueued.contains(cacheKey) ||
+          _priorityQueued.contains(cacheKey)) {
         return;
       }
       _backgroundQueued.add(cacheKey);
@@ -188,7 +234,8 @@ class ThumbnailService {
     if (_isPaused) {
       return;
     }
-    while (_activeJobs < _maxConcurrentJobs && (_priorityJobs.isNotEmpty || _backgroundJobs.isNotEmpty)) {
+    while (_activeJobs < _maxConcurrentJobs &&
+        (_priorityJobs.isNotEmpty || _backgroundJobs.isNotEmpty)) {
       final job = _nextJob();
       if (job == null) {
         return;
@@ -215,7 +262,8 @@ class ThumbnailService {
     if (_priorityJobs.isNotEmpty) {
       return _priorityJobs.removeFirst();
     }
-    if (_backgroundJobs.isNotEmpty && _activeBackgroundJobs < _maxBackgroundJobs) {
+    if (_backgroundJobs.isNotEmpty &&
+        _activeBackgroundJobs < _maxBackgroundJobs) {
       return _backgroundJobs.removeFirst();
     }
     return null;
@@ -253,7 +301,8 @@ class ThumbnailService {
     }
 
     if (!allowPlayerFallback) {
-      item.thumbnailError ??= 'ffmpeg: \u672a\u627e\u5230 FFmpeg\uff0c\u540e\u53f0\u6279\u91cf\u7f13\u5b58\u5df2\u8df3\u8fc7\u64ad\u653e\u5668\u515c\u5e95';
+      item.thumbnailError ??=
+          'ffmpeg: \u672a\u627e\u5230 FFmpeg\uff0c\u540e\u53f0\u6279\u91cf\u7f13\u5b58\u5df2\u8df3\u8fc7\u64ad\u653e\u5668\u515c\u5e95';
       _failed++;
       _totalGenerateMs += stopwatch.elapsedMilliseconds;
       _memoryCache[cacheKey] = null;
@@ -367,7 +416,9 @@ class ThumbnailService {
       failedThisRun: _failed,
       ffmpegCompleted: _ffmpegCompleted,
       fallbackCompleted: _fallbackCompleted,
-      averageMs: _completed + _failed == 0 ? 0 : (_totalGenerateMs / (_completed + _failed)).round(),
+      averageMs: _completed + _failed == 0
+          ? 0
+          : (_totalGenerateMs / (_completed + _failed)).round(),
     );
   }
 
@@ -425,7 +476,8 @@ class ThumbnailService {
       if (stat.type != FileSystemEntityType.file) {
         return null;
       }
-      final fingerprint = '$videoPath|${stat.size}|${stat.modified.millisecondsSinceEpoch}';
+      final fingerprint =
+          '$videoPath|${stat.size}|${stat.modified.millisecondsSinceEpoch}';
       return _stableKey(fingerprint);
     } catch (_) {
       return null;
@@ -441,9 +493,3 @@ class ThumbnailService {
     return hash.toRadixString(16).padLeft(16, '0');
   }
 }
-
-
-
-
-
-

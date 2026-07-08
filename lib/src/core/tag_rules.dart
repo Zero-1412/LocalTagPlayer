@@ -1,4 +1,4 @@
-﻿part of '../../main.dart';
+part of '../app.dart';
 
 class TagRules {
   const TagRules._();
@@ -74,13 +74,22 @@ class TagRules {
         .expand((entry) => <String>[entry.key, ...entry.value]);
     final haystack = <String>[
       item.title,
+      p.basename(item.path),
       item.path,
+      item.relativePath ?? '',
       item.folder,
       ...item.tags,
       ...childTags,
-      for (final tag in tagItems) ...<String>[tag.name, ...tag.aliases],
+      for (final tag in tagItems) ...<String>[
+        tag.id,
+        tag.name,
+        tag.displayName ?? '',
+        ...tag.aliases,
+      ],
     ].join('\n').toLowerCase();
-    return tokens.every(haystack.contains);
+    return tokens.every(
+      (token) => haystack.contains(token) || tagItems.any((tag) => tag.matchesNameOrAlias(token)),
+    );
   }
 
   static Set<String> parentTagsFor(String root, String filePath) {

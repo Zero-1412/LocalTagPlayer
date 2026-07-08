@@ -1,4 +1,128 @@
-part of '../../main.dart';
+part of '../app.dart';
+
+typedef VideoItemComparator = int Function(VideoItem a, VideoItem b);
+
+class FilterState {
+  const FilterState({
+    required this.query,
+    required this.filteredVideos,
+    required this.resultCount,
+    required this.totalCount,
+  });
+
+  final FilterQuery query;
+  final List<VideoItem> filteredVideos;
+  final int resultCount;
+  final int totalCount;
+}
+
+class FilterStateSource {
+  FilterState? _cachedState;
+  String? _cachedSignature;
+  TagQueryService _engine = const TagQueryService(
+    videos: <VideoItem>[],
+    tagContext: TagQueryContext(),
+  );
+  int _totalCount = 0;
+  Object? _sourceKey;
+  Object? _sortKey;
+  VideoItemComparator? _compare;
+
+  FilterState get state {
+    final cachedState = _cachedState;
+    if (cachedState != null) {
+      return cachedState;
+    }
+    return update(const FilterQuery());
+  }
+
+  void configure({
+    required TagQueryService engine,
+    required int totalCount,
+    Object? sourceKey,
+    Object? sortKey,
+    VideoItemComparator? compare,
+  }) {
+    _engine = engine;
+    _totalCount = totalCount;
+    _sourceKey = sourceKey ?? engine.sourceSignature;
+    _sortKey = sortKey;
+    _compare = compare;
+  }
+
+  FilterState update(FilterQuery query) {
+    final signature = _signature(
+      query: query,
+      sourceKey: _sourceKey,
+      sortKey: _sortKey,
+    );
+    final cachedState = _cachedState;
+    if (cachedState != null && _cachedSignature == signature) {
+      return cachedState;
+    }
+
+    final filteredVideos = _engine.filter(query);
+    final compare = _compare;
+    if (compare != null) {
+      filteredVideos.sort(compare);
+    }
+    final state = FilterState(
+      query: query,
+      filteredVideos: List<VideoItem>.unmodifiable(filteredVideos),
+      resultCount: filteredVideos.length,
+      totalCount: _totalCount,
+    );
+    _cachedSignature = signature;
+    _cachedState = state;
+    return state;
+  }
+
+  String _signature({
+    required FilterQuery query,
+    Object? sourceKey,
+    Object? sortKey,
+  }) {
+    final buffer = StringBuffer()
+      ..write(_querySignature(query))
+      ..write('|source:')
+      ..write(sourceKey)
+      ..write('|sort:')
+      ..write(sortKey);
+    return buffer.toString();
+  }
+
+  String _sortedStrings(Iterable<String> values) {
+    return (values.toList()..sort()).join(',');
+  }
+
+  String _querySignature(FilterQuery query) {
+    String sortedGroups(Map<String, Set<String>> values) {
+      final entries = values.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+      return entries
+          .map((entry) => '${entry.key}:${_sortedStrings(entry.value)}')
+          .join(';');
+    }
+
+    return [
+      query.keyword ?? '',
+      query.primaryTagId ?? '',
+      query.childTagId ?? '',
+      _sortedStrings(query.includeTagIds),
+      _sortedStrings(query.excludeTagIds),
+      sortedGroups(query.selectedGroupTagIds),
+      query.sortRule.name,
+      query.favoriteOnly,
+      query.unplayedOnly,
+      query.errorOnly,
+      query.groups
+          .map((group) =>
+              '${group.id}:${group.items.map((tag) => tag.id).join(',')}')
+          .join(';'),
+      query.excludedItems.map((tag) => tag.id).join(','),
+    ].join('|');
+  }
+}
 
 class TagQueryService {
   const TagQueryService({
@@ -9,6 +133,31 @@ class TagQueryService {
   final Iterable<VideoItem> videos;
   final TagQueryContext tagContext;
 
+  String get sourceSignature {
+    final buffer = StringBuffer();
+    for (final item in videos) {
+      buffer
+        ..write(TagRules.pathKey(item.path))
+        ..write(',')
+        ..write(_sortedStrings(item.tags))
+        ..write(',')
+        ..write(_childTagSignature(item.childTags))
+        ..write(',')
+        ..write(item.isFavorite)
+        ..write(',')
+        ..write(item.lastPlayedAt?.millisecondsSinceEpoch)
+        ..write(',')
+        ..write(item.thumbnailError)
+        ..write(',')
+        ..write(item.mediaDetailsError)
+        ..write(';');
+    }
+    buffer
+      ..write('|tags:')
+      ..write(_tagContextSignature);
+    return buffer.toString();
+  }
+
   List<VideoItem> filter(FilterQuery query) {
     return videos
         .where((item) => query.matches(item, tagContext: tagContext))
@@ -17,12 +166,41 @@ class TagQueryService {
 
   Map<String, int> resultCounts(FilterQuery query, Iterable<TagItem> tags) {
     final counts = <String, int>{for (final tag in tags) tag.id: 0};
-    final tagList = tags.toList();
-    for (final tag in tagList) {
-      final baseQuery = _withoutCandidateGroup(query, tag);
-      for (final item in videos.where((item) => baseQuery.matches(item, tagContext: tagContext))) {
-        if (_hasTag(item, tag)) {
-          counts[tag.id] = (counts[tag.id] ?? 0) + 1;
+    final tagsByGroup = <String, List<TagItem>>{};
+    for (final tag in tags) {
+      (tagsByGroup[tag.groupId ?? '__ungrouped__'] ??= <TagItem>[]).add(tag);
+    }
+
+    for (final groupTags in tagsByGroup.values) {
+      if (groupTags.isEmpty) {
+        continue;
+      }
+      final candidateIds = {for (final tag in groupTags) tag.id};
+      // 同组候选共享同一个 baseQuery：移除候选所在组后只扫描一次视频集合，
+      // 避免“候选标签数 x 全量视频”的同步阻塞。
+      final baseQuery = _withoutCandidateGroup(query, groupTags.first);
+      for (final item in videos) {
+        if (!baseQuery.matches(item, tagContext: tagContext)) {
+          continue;
+        }
+        final countedIds = <String>{};
+        final indexedTagIds =
+            tagContext.videoTagIdsByPathKey[TagRules.pathKey(item.path)];
+        if (indexedTagIds != null) {
+          for (final tagId in indexedTagIds) {
+            if (candidateIds.contains(tagId)) {
+              counts[tagId] = (counts[tagId] ?? 0) + 1;
+              countedIds.add(tagId);
+            }
+          }
+        }
+        for (final tag in groupTags) {
+          if (countedIds.contains(tag.id)) {
+            continue;
+          }
+          if (_hasTag(item, tag)) {
+            counts[tag.id] = (counts[tag.id] ?? 0) + 1;
+          }
         }
       }
     }
@@ -59,7 +237,8 @@ class TagQueryService {
     );
   }
 
-  Map<String, int> selectedResultCounts(FilterQuery query, Iterable<TagItem> tags) {
+  Map<String, int> selectedResultCounts(
+      FilterQuery query, Iterable<TagItem> tags) {
     final counts = <String, int>{for (final tag in tags) tag.id: 0};
     for (final item in filter(query)) {
       for (final tag in tags) {
@@ -77,7 +256,32 @@ class TagQueryService {
     }
     return item.tags.any((value) => TagRules.sameTag(value, tag.name)) ||
         item.childTags.values.any(
-          (children) => children.any((value) => TagRules.sameTag(value, tag.name)),
+          (children) =>
+              children.any((value) => TagRules.sameTag(value, tag.name)),
         );
+  }
+
+  String _sortedStrings(Iterable<String> values) {
+    return (values.toList()..sort()).join(',');
+  }
+
+  String _childTagSignature(Map<String, Set<String>> childTags) {
+    final entries = childTags.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return entries
+        .map((entry) => '${entry.key}:${_sortedStrings(entry.value)}')
+        .join('/');
+  }
+
+  String get _tagContextSignature {
+    final tagIds = tagContext.tagsById.keys.toList()..sort();
+    final videoLinks = tagContext.videoTagIdsByPathKey.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return [
+      for (final id in tagIds)
+        '$id:${tagContext.tagsById[id]?.aliases.join(',') ?? ''}',
+      for (final entry in videoLinks)
+        '${entry.key}:${(entry.value.toList()..sort()).join(',')}',
+    ].join(';');
   }
 }

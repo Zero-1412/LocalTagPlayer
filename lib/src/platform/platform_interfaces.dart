@@ -1,4 +1,4 @@
-part of '../../main.dart';
+part of '../app.dart';
 
 abstract interface class FileSystemAdapter {
   Future<List<String>> pickDirectories();

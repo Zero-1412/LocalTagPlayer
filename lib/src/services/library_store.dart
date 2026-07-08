@@ -1,4 +1,6 @@
-﻿part of '../../main.dart';
+part of '../app.dart';
+
+// ignore_for_file: slash_for_doc_comments
 
 class LibraryStore {
   LibraryStore._(
@@ -48,7 +50,8 @@ class LibraryStore {
       final tagId = row['tag_id'] as String;
       final source = _tagSourceFromName(row['source'] as String?);
       final count = row['count'] as int? ?? 0;
-      summaries[tagId] = (summaries[tagId] ?? const TagUsageSummary()).increment(source, count);
+      summaries[tagId] = (summaries[tagId] ?? const TagUsageSummary())
+          .increment(source, count);
     }
     return summaries;
   }
@@ -110,13 +113,20 @@ class LibraryStore {
       )
     ''');
     await _ensureVideoColumns(db);
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_videos_folder ON videos(folder)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_videos_title ON videos(title)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_videos_root_path ON videos(root_path)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_videos_favorite ON videos(is_favorite)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_videos_modified ON videos(modified_ms)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_videos_added ON videos(added_at)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_videos_last_played ON videos(last_played_at)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_folder ON videos(folder)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_title ON videos(title)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_root_path ON videos(root_path)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_favorite ON videos(is_favorite)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_modified ON videos(modified_ms)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_added ON videos(added_at)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_last_played ON videos(last_played_at)');
     await db.execute('''
       CREATE TABLE IF NOT EXISTS tag_groups (
         id TEXT PRIMARY KEY,
@@ -161,11 +171,16 @@ class LibraryStore {
         PRIMARY KEY (video_path, tag_id, source)
       )
     ''');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_tags_group ON tags(group_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_tag_aliases_alias ON tag_aliases(alias)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_video_tags_video ON video_tags(video_path)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_video_tags_tag ON video_tags(tag_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_video_tags_source ON video_tags(source)');
+    await db
+        .execute('CREATE INDEX IF NOT EXISTS idx_tags_group ON tags(group_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_tag_aliases_alias ON tag_aliases(alias)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_video_tags_video ON video_tags(video_path)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_video_tags_tag ON video_tags(tag_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_video_tags_source ON video_tags(source)');
     await _ensureDefaultTagGroups(db);
   }
 
@@ -219,7 +234,8 @@ class LibraryStore {
   }
 
   static Future<List<TagGroup>> _loadTagGroups(Database db) async {
-    final rows = await db.query('tag_groups', orderBy: 'sort_order ASC, display_name ASC');
+    final rows = await db.query('tag_groups',
+        orderBy: 'sort_order ASC, display_name ASC');
     return rows
         .map(
           (row) => TagGroup(
@@ -228,7 +244,8 @@ class LibraryStore {
             displayName: row['display_name'] as String?,
             sortOrder: row['sort_order'] as int? ?? 0,
             allowMultiSelect: (row['allow_multi_select'] as int? ?? 1) == 1,
-            defaultLogic: _tagGroupLogicFromName(row['default_logic'] as String?),
+            defaultLogic:
+                _tagGroupLogicFromName(row['default_logic'] as String?),
             items: const <TagItem>[],
           ),
         )
@@ -248,7 +265,8 @@ class LibraryStore {
     final tags = <String, TagItem>{};
     for (final row in rows) {
       final id = row['id'] as String;
-      tags[id] = _tagFromRow(row, extraAliases: aliasesByTagId[id] ?? const <String>{});
+      tags[id] = _tagFromRow(row,
+          extraAliases: aliasesByTagId[id] ?? const <String>{});
     }
     return tags;
   }
@@ -277,9 +295,12 @@ class LibraryStore {
     );
   }
 
-  static TagItem _tagFromRow(Map<String, Object?> row, {Iterable<String> extraAliases = const <String>[]}) {
-    final aliases = ((jsonDecode(row['aliases_json'] as String? ?? '[]') as List?) ?? const [])
-        .cast<String>();
+  static TagItem _tagFromRow(Map<String, Object?> row,
+      {Iterable<String> extraAliases = const <String>[]}) {
+    final aliases =
+        ((jsonDecode(row['aliases_json'] as String? ?? '[]') as List?) ??
+                const [])
+            .cast<String>();
     final mergedAliases = _dedupeTags(<String>[...aliases, ...extraAliases]);
     return TagItem(
       id: row['id'] as String,
@@ -297,14 +318,19 @@ class LibraryStore {
     );
   }
 
-  static Future<LibraryStore> _loadFromDatabase(File legacyFile, Database db) async {
+  static Future<LibraryStore> _loadFromDatabase(
+      File legacyFile, Database db) async {
     final metadata = <String, String>{};
     for (final row in await db.query('metadata')) {
       metadata[row['key'] as String] = row['value'] as String;
     }
 
-    final roots = _dedupeRoots(((jsonDecode(metadata['roots'] ?? '[]') as List?) ?? const []).cast<String>());
-    final favoriteTags = _dedupeTags(((jsonDecode(metadata['favoriteTags'] ?? '[]') as List?) ?? const []).cast<String>());
+    final roots = _dedupeRoots(
+        ((jsonDecode(metadata['roots'] ?? '[]') as List?) ?? const [])
+            .cast<String>());
+    final favoriteTags = _dedupeTags(
+        ((jsonDecode(metadata['favoriteTags'] ?? '[]') as List?) ?? const [])
+            .cast<String>());
     final videos = <String, VideoItem>{};
     for (final row in await db.query('videos')) {
       final item = _videoFromRow(row);
@@ -327,13 +353,16 @@ class LibraryStore {
 
   Future<void> _importLegacyJson() async {
     try {
-      final decoded = jsonDecode(await _file.readAsString()) as Map<String, Object?>;
+      final decoded =
+          jsonDecode(await _file.readAsString()) as Map<String, Object?>;
       roots
         ..clear()
-        ..addAll(_dedupeRoots(((decoded['roots'] as List?) ?? const []).cast<String>()));
+        ..addAll(_dedupeRoots(
+            ((decoded['roots'] as List?) ?? const []).cast<String>()));
       favoriteTags
         ..clear()
-        ..addAll(_dedupeTags(((decoded['favoriteTags'] as List?) ?? const []).cast<String>()));
+        ..addAll(_dedupeTags(
+            ((decoded['favoriteTags'] as List?) ?? const []).cast<String>()));
       videos.clear();
       for (final raw in (decoded['videos'] as List? ?? const [])) {
         final item = VideoItem.fromJson((raw as Map).cast<String, Object?>());
@@ -351,9 +380,14 @@ class LibraryStore {
       path: row['path'] as String,
       title: row['title'] as String,
       folder: row['folder'] as String,
-      tags: ((jsonDecode(row['tags_json'] as String) as List?) ?? const []).cast<String>().toSet(),
-      childTags: ((jsonDecode(row['child_tags_json'] as String) as Map?) ?? const {}).map(
-        (key, value) => MapEntry(key as String, ((value as List?) ?? const []).cast<String>().toSet()),
+      tags: ((jsonDecode(row['tags_json'] as String) as List?) ?? const [])
+          .cast<String>()
+          .toSet(),
+      childTags:
+          ((jsonDecode(row['child_tags_json'] as String) as Map?) ?? const {})
+              .map(
+        (key, value) => MapEntry(key as String,
+            ((value as List?) ?? const []).cast<String>().toSet()),
       ),
       rootPath: row['root_path'] as String?,
       relativePath: row['relative_path'] as String?,
@@ -362,11 +396,13 @@ class LibraryStore {
       isFavorite: (row['is_favorite'] as int? ?? 0) == 1,
       mediaDetails: mediaDetailsJson == null || mediaDetailsJson.isEmpty
           ? null
-          : MediaDetails.fromJson((jsonDecode(mediaDetailsJson) as Map).cast<String, Object?>()),
+          : MediaDetails.fromJson(
+              (jsonDecode(mediaDetailsJson) as Map).cast<String, Object?>()),
       mediaFingerprint: row['media_fingerprint'] as String?,
       thumbnailError: row['thumbnail_error'] as String?,
       mediaDetailsError: row['media_details_error'] as String?,
-      addedAt: DateTime.tryParse(row['added_at'] as String? ?? '') ?? DateTime.now(),
+      addedAt:
+          DateTime.tryParse(row['added_at'] as String? ?? '') ?? DateTime.now(),
       lastPlayedAt: DateTime.tryParse(row['last_played_at'] as String? ?? ''),
     );
   }
@@ -380,9 +416,12 @@ class LibraryStore {
         'file_size': item.fileSize,
         'modified_ms': item.modifiedMs,
         'tags_json': jsonEncode(item.tags.toList()..sort()),
-        'child_tags_json': jsonEncode(item.childTags.map((key, value) => MapEntry(key, value.toList()..sort()))),
+        'child_tags_json': jsonEncode(item.childTags
+            .map((key, value) => MapEntry(key, value.toList()..sort()))),
         'is_favorite': item.isFavorite ? 1 : 0,
-        'media_details_json': item.mediaDetails == null ? null : jsonEncode(item.mediaDetails!.toJson()),
+        'media_details_json': item.mediaDetails == null
+            ? null
+            : jsonEncode(item.mediaDetails!.toJson()),
         'media_fingerprint': item.mediaFingerprint,
         'thumbnail_error': item.thumbnailError,
         'media_details_error': item.mediaDetailsError,
@@ -424,7 +463,8 @@ class LibraryStore {
   }) async {
     final batch = _db.batch();
     _syncManualTagsInBatch(batch, item, parentTag: parentTag);
-    batch.insert('videos', _videoToRow(item), conflictAlgorithm: ConflictAlgorithm.replace);
+    batch.insert('videos', _videoToRow(item),
+        conflictAlgorithm: ConflictAlgorithm.replace);
     await batch.commit(noResult: true);
   }
 
@@ -545,14 +585,16 @@ class LibraryStore {
     final batch = _db.batch();
     for (final item in videosToUpdate) {
       _addManualTagToItem(item, tag);
-      batch.insert('videos', _videoToRow(item), conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert('videos', _videoToRow(item),
+          conflictAlgorithm: ConflictAlgorithm.replace);
       _attachTagInBatch(batch, item.path, tag, source: TagSource.manual);
     }
     await batch.commit(noResult: true);
     return videosToUpdate.length;
   }
 
-  Future<int> batchRemoveManualTag(TagItem tag, Iterable<VideoItem> items) async {
+  Future<int> batchRemoveManualTag(
+      TagItem tag, Iterable<VideoItem> items) async {
     if (tag.source != TagSource.manual) {
       throw StateError('批量移除只支持 manual 标签');
     }
@@ -564,7 +606,8 @@ class LibraryStore {
     var changed = 0;
     for (final item in videosToUpdate) {
       final hadManualLink =
-          videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.contains(tag.id) ?? false;
+          videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.contains(tag.id) ??
+              false;
       final changedCompat = _removeManualTagFromItem(item, tag);
       batch.delete(
         'video_tags',
@@ -580,7 +623,8 @@ class LibraryStore {
       if (hadManualLink || changedCompat) {
         changed++;
       }
-      batch.insert('videos', _videoToRow(item), conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert('videos', _videoToRow(item),
+          conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
     return changed;
@@ -599,7 +643,8 @@ class LibraryStore {
     final parentId = tag.parentId;
     if (parentId == null) {
       final folderTags = _folderTagsForItem(item);
-      final shouldKeepFolder = folderTags.any((folderTag) => TagRules.sameTag(folderTag, tag.name));
+      final shouldKeepFolder =
+          folderTags.any((folderTag) => TagRules.sameTag(folderTag, tag.name));
       if (shouldKeepFolder) {
         return false;
       }
@@ -608,7 +653,8 @@ class LibraryStore {
       return item.tags.length != before;
     }
     final folderChildren = _folderChildTagsForItem(item, parentId);
-    final shouldKeepFolder = folderChildren.any((folderTag) => TagRules.sameTag(folderTag, tag.name));
+    final shouldKeepFolder = folderChildren
+        .any((folderTag) => TagRules.sameTag(folderTag, tag.name));
     if (shouldKeepFolder) {
       return false;
     }
@@ -655,7 +701,8 @@ class LibraryStore {
     }
   }
 
-  void _syncManualTagsInBatch(Batch batch, VideoItem item, {String? parentTag}) {
+  void _syncManualTagsInBatch(Batch batch, VideoItem item,
+      {String? parentTag}) {
     _removeManualTagScopeInBatch(batch, item.path, parentTag: parentTag);
     if (parentTag == null) {
       final folderTags = _folderTagsForItem(item);
@@ -678,7 +725,8 @@ class LibraryStore {
     }
     final folderChildTags = _folderChildTagsForItem(item, parentTag);
     for (final child in item.childTags[parentTag] ?? const <String>{}) {
-      if (folderChildTags.any((folderTag) => TagRules.sameTag(folderTag, child))) {
+      if (folderChildTags
+          .any((folderTag) => TagRules.sameTag(folderTag, child))) {
         continue;
       }
       _attachTagInBatch(
@@ -695,7 +743,8 @@ class LibraryStore {
     }
   }
 
-  void _removeManualTagScopeInBatch(Batch batch, String videoPath, {String? parentTag}) {
+  void _removeManualTagScopeInBatch(Batch batch, String videoPath,
+      {String? parentTag}) {
     final key = TagRules.pathKey(videoPath);
     final retained = videoTagIdsByPathKey[key];
     if (retained == null || retained.isEmpty) {
@@ -707,7 +756,8 @@ class LibraryStore {
       if (tag == null || tag.source != TagSource.manual) {
         continue;
       }
-      final sameScope = parentTag == null ? tag.parentId == null : tag.parentId == parentTag;
+      final sameScope =
+          parentTag == null ? tag.parentId == null : tag.parentId == parentTag;
       if (!sameScope) {
         continue;
       }
@@ -739,13 +789,17 @@ class LibraryStore {
     if (rootPath == null || rootPath.isEmpty) {
       return const <String>{};
     }
-    return TagRules.childTagsFor(rootPath, item.path)[parentTag] ?? const <String>{};
+    return TagRules.childTagsFor(rootPath, item.path)[parentTag] ??
+        const <String>{};
   }
 
-  void _removeVideoTagSourceInBatch(Batch batch, String videoPath, TagSource source) {
+  void _removeVideoTagSourceInBatch(
+      Batch batch, String videoPath, TagSource source) {
     batch.delete(
       'video_tags',
-      where: Platform.isWindows ? 'video_path = ? COLLATE NOCASE AND source = ?' : 'video_path = ? AND source = ?',
+      where: Platform.isWindows
+          ? 'video_path = ? COLLATE NOCASE AND source = ?'
+          : 'video_path = ? AND source = ?',
       whereArgs: [videoPath, source.name],
     );
     final key = TagRules.pathKey(videoPath);
@@ -819,7 +873,8 @@ class LibraryStore {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    (videoTagIdsByPathKey[TagRules.pathKey(videoPath)] ??= <String>{}).add(tag.id);
+    (videoTagIdsByPathKey[TagRules.pathKey(videoPath)] ??= <String>{})
+        .add(tag.id);
   }
 
   static String _tagIdFor({
@@ -833,11 +888,15 @@ class LibraryStore {
 
   Future<void> save() async {
     final batch = _db.batch();
-    batch.insert('metadata', {'key': 'roots', 'value': jsonEncode(roots)}, conflictAlgorithm: ConflictAlgorithm.replace);
-    batch.insert('metadata', {'key': 'favoriteTags', 'value': jsonEncode(favoriteTags)}, conflictAlgorithm: ConflictAlgorithm.replace);
+    batch.insert('metadata', {'key': 'roots', 'value': jsonEncode(roots)},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    batch.insert(
+        'metadata', {'key': 'favoriteTags', 'value': jsonEncode(favoriteTags)},
+        conflictAlgorithm: ConflictAlgorithm.replace);
     batch.delete('videos');
     for (final item in videos.values) {
-      batch.insert('videos', _videoToRow(item), conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert('videos', _videoToRow(item),
+          conflictAlgorithm: ConflictAlgorithm.replace);
       _syncFolderTagsInBatch(batch, item);
     }
     await batch.commit(noResult: true);
@@ -845,20 +904,26 @@ class LibraryStore {
 
   Future<void> saveMetadata() async {
     final batch = _db.batch();
-    batch.insert('metadata', {'key': 'roots', 'value': jsonEncode(roots)}, conflictAlgorithm: ConflictAlgorithm.replace);
-    batch.insert('metadata', {'key': 'favoriteTags', 'value': jsonEncode(favoriteTags)}, conflictAlgorithm: ConflictAlgorithm.replace);
+    batch.insert('metadata', {'key': 'roots', 'value': jsonEncode(roots)},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    batch.insert(
+        'metadata', {'key': 'favoriteTags', 'value': jsonEncode(favoriteTags)},
+        conflictAlgorithm: ConflictAlgorithm.replace);
     await batch.commit(noResult: true);
   }
 
   Future<void> upsertVideo(VideoItem item) async {
-    await _db.insert('videos', _videoToRow(item), conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db.insert('videos', _videoToRow(item),
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> deleteVideo(String path) async {
     videoTagIdsByPathKey.remove(TagRules.pathKey(path));
     await _db.delete(
       'video_tags',
-      where: Platform.isWindows ? 'video_path = ? COLLATE NOCASE' : 'video_path = ?',
+      where: Platform.isWindows
+          ? 'video_path = ? COLLATE NOCASE'
+          : 'video_path = ?',
       whereArgs: [path],
     );
     await _db.delete(
@@ -881,6 +946,18 @@ class LibraryStore {
     return scan();
   }
 
+  /**
+   * 从媒体库根目录列表移除一个目录。
+   *
+   * 这里只更新 root 配置，不删除磁盘文件，也不立即清理已有视频记录；
+   * 后续 stable identity / missing-relink 阶段再决定视频记录如何标记。
+   */
+  Future<void> removeRoot(String rootPath) async {
+    final rootKey = TagRules.pathKey(TagRules.normalizeRootPath(rootPath));
+    roots.removeWhere((root) => TagRules.pathKey(root) == rootKey);
+    await saveMetadata();
+  }
+
   Future<int> scan() async {
     final seen = <String>{};
     final batch = _db.batch();
@@ -892,7 +969,8 @@ class LibraryStore {
         continue;
       }
       try {
-        await for (final entity in dir.list(recursive: true, followLinks: false)) {
+        await for (final entity
+            in dir.list(recursive: true, followLinks: false)) {
           if (entity is! File) {
             continue;
           }
@@ -925,12 +1003,14 @@ class LibraryStore {
               addedAt: DateTime.now(),
             );
             videos[videoKey] = item;
-            batch.insert('videos', _videoToRow(item), conflictAlgorithm: ConflictAlgorithm.replace);
+            batch.insert('videos', _videoToRow(item),
+                conflictAlgorithm: ConflictAlgorithm.replace);
             _syncFolderTagsInBatch(batch, item);
             added++;
           } else {
             final tagsChanged = !_setEquals(existing.tags, folderTags);
-            final childTagsChanged = !_childTagsEquals(existing.childTags, childTags);
+            final childTagsChanged =
+                !_childTagsEquals(existing.childTags, childTags);
             final contentChanged = existing.mediaFingerprint != null &&
                 existing.mediaFingerprint != fingerprint;
             final indexChanged = existing.rootPath != root ||
@@ -943,7 +1023,8 @@ class LibraryStore {
               ..addAll(folderTags);
             existing.childTags
               ..clear()
-              ..addAll(childTags.map((key, value) => MapEntry(key, <String>{...value})));
+              ..addAll(childTags
+                  .map((key, value) => MapEntry(key, <String>{...value})));
             existing.rootPath = root;
             existing.relativePath = relativePath;
             existing.fileSize = stat.size;
@@ -955,7 +1036,8 @@ class LibraryStore {
               existing.thumbnailError = null;
             }
             if (tagsChanged || childTagsChanged || indexChanged) {
-              batch.insert('videos', _videoToRow(existing), conflictAlgorithm: ConflictAlgorithm.replace);
+              batch.insert('videos', _videoToRow(existing),
+                  conflictAlgorithm: ConflictAlgorithm.replace);
               if (tagsChanged || childTagsChanged) {
                 _syncFolderTagsInBatch(batch, existing);
               }
@@ -969,7 +1051,8 @@ class LibraryStore {
 
     final removedPaths = <String>[];
     videos.removeWhere((pathKey, item) {
-      final shouldRemove = !seen.contains(pathKey) && !File(item.path).existsSync();
+      final shouldRemove =
+          !seen.contains(pathKey) && !File(item.path).existsSync();
       if (shouldRemove) {
         removedPaths.add(item.path);
       }
@@ -979,7 +1062,9 @@ class LibraryStore {
       videoTagIdsByPathKey.remove(TagRules.pathKey(path));
       batch.delete(
         'video_tags',
-        where: Platform.isWindows ? 'video_path = ? COLLATE NOCASE' : 'video_path = ?',
+        where: Platform.isWindows
+            ? 'video_path = ? COLLATE NOCASE'
+            : 'video_path = ?',
         whereArgs: [path],
       );
       batch.delete(
@@ -988,8 +1073,11 @@ class LibraryStore {
         whereArgs: [path],
       );
     }
-    batch.insert('metadata', {'key': 'roots', 'value': jsonEncode(roots)}, conflictAlgorithm: ConflictAlgorithm.replace);
-    batch.insert('metadata', {'key': 'favoriteTags', 'value': jsonEncode(favoriteTags)}, conflictAlgorithm: ConflictAlgorithm.replace);
+    batch.insert('metadata', {'key': 'roots', 'value': jsonEncode(roots)},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    batch.insert(
+        'metadata', {'key': 'favoriteTags', 'value': jsonEncode(favoriteTags)},
+        conflictAlgorithm: ConflictAlgorithm.replace);
     await batch.commit(noResult: true);
     return added;
   }
@@ -1014,7 +1102,8 @@ class LibraryStore {
     return a.length == b.length && a.containsAll(b);
   }
 
-  static bool _childTagsEquals(Map<String, Set<String>> a, Map<String, Set<String>> b) {
+  static bool _childTagsEquals(
+      Map<String, Set<String>> a, Map<String, Set<String>> b) {
     if (a.length != b.length) {
       return false;
     }
@@ -1081,23 +1170,25 @@ class LibraryStore {
         continue;
       }
       try {
-        await for (final entity in dir.list(recursive: true, followLinks: false)) {
-        if (entity is! File) {
-          continue;
+        await for (final entity
+            in dir.list(recursive: true, followLinks: false)) {
+          if (entity is! File) {
+            continue;
+          }
+          if (!TagRules.isVideoPath(entity.path)) {
+            continue;
+          }
+          if (!videos.containsKey(TagRules.pathKey(entity.path))) {
+            count++;
+          }
         }
-        if (!TagRules.isVideoPath(entity.path)) {
-          continue;
-        }
-        if (!videos.containsKey(TagRules.pathKey(entity.path))) {
-          count++;
-        }
-      }
       } on FileSystemException {
         continue;
       }
     }
     return count;
   }
+
   Set<String> get allTags {
     final tags = <String>{};
     for (final item in videos.values) {
@@ -1105,6 +1196,7 @@ class LibraryStore {
     }
     return tags;
   }
+
   Set<String> childTagsFor(String parentTag) {
     final tags = <String>{};
     for (final item in videos.values) {
@@ -1113,7 +1205,3 @@ class LibraryStore {
     return tags;
   }
 }
-
-
-
-

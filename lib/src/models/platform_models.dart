@@ -1,4 +1,4 @@
-part of '../../main.dart';
+part of '../app.dart';
 
 enum TagSource { folder, manual, rule, filename, import, auto }
 
@@ -40,12 +40,16 @@ class TagItem {
   final int sortOrder;
 
   bool matchesNameOrAlias(String normalizedToken) {
-    if (id.toLowerCase().contains(normalizedToken) ||
-        name.toLowerCase().contains(normalizedToken) ||
-        (displayName?.toLowerCase().contains(normalizedToken) ?? false)) {
+    final token = normalizedToken.trim().toLowerCase();
+    if (token.isEmpty) {
       return true;
     }
-    return aliases.any((alias) => alias.toLowerCase().contains(normalizedToken));
+    if (id.toLowerCase().contains(token) ||
+        name.toLowerCase().contains(token) ||
+        (displayName?.toLowerCase().contains(token) ?? false)) {
+      return true;
+    }
+    return aliases.any((alias) => alias.toLowerCase().contains(token));
   }
 }
 
@@ -122,7 +126,8 @@ class TagQueryContext {
   final Map<String, Set<String>> videoTagIdsByPathKey;
 
   Iterable<TagItem> tagsFor(VideoItem item) sync* {
-    final ids = videoTagIdsByPathKey[TagRules.pathKey(item.path)] ?? const <String>{};
+    final ids =
+        videoTagIdsByPathKey[TagRules.pathKey(item.path)] ?? const <String>{};
     for (final id in ids) {
       final tag = tagsById[id];
       if (tag != null) {
@@ -132,7 +137,28 @@ class TagQueryContext {
   }
 
   bool videoHasTagId(VideoItem item, String tagId) {
-    return videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.contains(tagId) ?? false;
+    return videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.contains(tagId) ??
+        false;
+  }
+
+  TagItem? findTag(String tagIdOrName) {
+    final direct = tagsById[tagIdOrName];
+    if (direct != null) {
+      return direct;
+    }
+    final normalized = tagIdOrName.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    for (final tag in tagsById.values) {
+      if (tag.id.toLowerCase() == normalized ||
+          tag.name.toLowerCase() == normalized ||
+          tag.displayName?.toLowerCase() == normalized ||
+          tag.aliases.any((alias) => alias.toLowerCase() == normalized)) {
+        return tag;
+      }
+    }
+    return null;
   }
 }
 
@@ -202,33 +228,43 @@ class FilterQuery {
       !unplayedOnly &&
       !errorOnly;
 
-  bool matches(VideoItem item, {TagQueryContext tagContext = const TagQueryContext()}) {
+  bool matches(VideoItem item,
+      {TagQueryContext tagContext = const TagQueryContext()}) {
     if (favoriteOnly && !item.isFavorite) {
       return false;
     }
     if (unplayedOnly && item.lastPlayedAt != null) {
       return false;
     }
-    if (errorOnly && item.thumbnailError == null && item.mediaDetailsError == null) {
+    if (errorOnly &&
+        item.thumbnailError == null &&
+        item.mediaDetailsError == null) {
       return false;
     }
-    if (primaryTagId != null && !item.tags.any((tag) => TagRules.sameTag(tag, primaryTagId!))) {
+    if (primaryTagId != null &&
+        !item.tags.any((tag) => TagRules.sameTag(tag, primaryTagId!))) {
       return false;
     }
-    if (primaryTagId != null && childTagId != null && !TagRules.matchesChildTag(item, primaryTagId!, childTagId!)) {
+    if (primaryTagId != null &&
+        childTagId != null &&
+        !TagRules.matchesChildTag(item, primaryTagId!, childTagId!)) {
       return false;
     }
-    if (!TagRules.matchesSearch(item, keyword ?? '', tagItems: tagContext.tagsFor(item))) {
+    if (!TagRules.matchesSearch(item, keyword ?? '',
+        tagItems: tagContext.tagsFor(item))) {
       return false;
     }
-    if (includeTagIds.any((tagId) => !_matchesTagIdOrName(item, tagId, tagContext))) {
+    if (!_matchesGroupedIncludeTags(item, tagContext)) {
       return false;
     }
-    if (excludeTagIds.any((tagId) => _matchesTagIdOrName(item, tagId, tagContext))) {
+    if (excludeTagIds
+        .any((tagId) => _matchesTagIdOrName(item, tagId, tagContext))) {
       return false;
     }
     if (selectedGroupTagIds.values.any(
-      (tagIds) => tagIds.isNotEmpty && !tagIds.any((tagId) => _matchesTagIdOrName(item, tagId, tagContext)),
+      (tagIds) =>
+          tagIds.isNotEmpty &&
+          !tagIds.any((tagId) => _matchesTagIdOrName(item, tagId, tagContext)),
     )) {
       return false;
     }
@@ -238,45 +274,69 @@ class FilterQuery {
 
     // Filter groups are ANDed together; each group matches when any included item matches and no group-level NOT item matches.
     for (final group in groups.where((group) => !group.isEmpty)) {
-      if (group.excludedItems.any((tag) => _matchesTagItem(item, tag, tagContext))) {
+      if (group.excludedItems
+          .any((tag) => _matchesTagItem(item, tag, tagContext))) {
         return false;
       }
-      if (group.items.isNotEmpty && !group.items.any((tag) => _matchesTagItem(item, tag, tagContext))) {
+      if (group.items.isNotEmpty &&
+          !group.items.any((tag) => _matchesTagItem(item, tag, tagContext))) {
         return false;
       }
     }
     return true;
   }
 
-  static bool _matchesTagItem(VideoItem item, TagItem tag, TagQueryContext tagContext) {
+  bool _matchesGroupedIncludeTags(VideoItem item, TagQueryContext tagContext) {
+    if (includeTagIds.isEmpty) {
+      return true;
+    }
+    final grouped = <String, Set<String>>{};
+    for (final tagId in includeTagIds) {
+      final tag = tagContext.findTag(tagId);
+      final groupKey = tag?.groupId ?? tag?.id ?? tagId;
+      (grouped[groupKey] ??= <String>{}).add(tag?.id ?? tagId);
+    }
+    return grouped.values.every(
+      (sameGroupTagIds) => sameGroupTagIds
+          .any((tagId) => _matchesTagIdOrName(item, tagId, tagContext)),
+    );
+  }
+
+  static bool _matchesTagItem(
+      VideoItem item, TagItem tag, TagQueryContext tagContext) {
     if (tagContext.videoHasTagId(item, tag.id)) {
       return true;
     }
-    final indexedTagIds = tagContext.videoTagIdsByPathKey[TagRules.pathKey(item.path)];
+    final indexedTagIds =
+        tagContext.videoTagIdsByPathKey[TagRules.pathKey(item.path)];
     if (indexedTagIds != null && tagContext.tagsById.containsKey(tag.id)) {
       return false;
     }
     final parentId = tag.parentId;
     if (parentId != null) {
-      return TagRules.matchesChildTag(item, parentId, tag.name);
+      final parentName = tagContext.findTag(parentId)?.name ?? parentId;
+      return TagRules.matchesChildTag(item, parentName, tag.name);
     }
     if (tag.id != tag.name && _matchesTagIdOrName(item, tag.id, tagContext)) {
       return true;
     }
     return item.tags.any((itemTag) => TagRules.sameTag(itemTag, tag.name)) ||
-        item.childTags.values.any((children) => children.any((childTag) => TagRules.sameTag(childTag, tag.name)));
+        item.childTags.values.any((children) =>
+            children.any((childTag) => TagRules.sameTag(childTag, tag.name)));
   }
 
-  static bool _matchesTagIdOrName(VideoItem item, String tagIdOrName, TagQueryContext tagContext) {
+  static bool _matchesTagIdOrName(
+      VideoItem item, String tagIdOrName, TagQueryContext tagContext) {
     if (tagContext.videoHasTagId(item, tagIdOrName)) {
       return true;
     }
-    final indexedTag = tagContext.tagsById[tagIdOrName];
+    final indexedTag = tagContext.findTag(tagIdOrName);
     if (indexedTag != null) {
       return _matchesTagItem(item, indexedTag, tagContext);
     }
     return item.tags.any((itemTag) => TagRules.sameTag(itemTag, tagIdOrName)) ||
-        item.childTags.values.any((children) => children.any((childTag) => TagRules.sameTag(childTag, tagIdOrName)));
+        item.childTags.values.any((children) => children
+            .any((childTag) => TagRules.sameTag(childTag, tagIdOrName)));
   }
 }
 

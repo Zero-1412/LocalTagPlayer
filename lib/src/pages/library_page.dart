@@ -1,4 +1,195 @@
-part of '../../main.dart';
+part of '../app.dart';
+
+// ignore_for_file: slash_for_doc_comments
+
+class CacheSettingsPage extends StatefulWidget {
+  const CacheSettingsPage({
+    super.key,
+    required this.store,
+    required this.thumbnailService,
+    required this.playbackSettings,
+    required this.onPlaybackSettingsChanged,
+  });
+
+  final LibraryStore store;
+
+  final ThumbnailService thumbnailService;
+
+  final PlaybackSettings playbackSettings;
+
+  final Future<void> Function(PlaybackSettings settings)
+      onPlaybackSettingsChanged;
+
+  @override
+  State<CacheSettingsPage> createState() => _CacheSettingsPageState();
+}
+
+class _CacheSettingsPageState extends State<CacheSettingsPage> {
+  late PlaybackSettings _settings = widget.playbackSettings;
+
+  late Future<CacheStats> _statsFuture =
+      widget.thumbnailService.statsFor(widget.store.videos.values);
+
+  void _refreshStats() {
+    setState(() {
+      _statsFuture =
+          widget.thumbnailService.statsFor(widget.store.videos.values);
+    });
+  }
+
+  Future<void> _changeDecoder(String value) async {
+    final next = _settings.copyWith(hwdec: value);
+    setState(() => _settings = next);
+    await widget.onPlaybackSettingsChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _appBackground,
+      appBar: AppBar(
+        title: const Text('\u8bbe\u7f6e'),
+        actions: [
+          IconButton(
+            tooltip: '\u5237\u65b0\u7f13\u5b58\u7edf\u8ba1',
+            onPressed: _refreshStats,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '\u64ad\u653e\u89e3\u7801',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: _settings.hwdec,
+                    decoration: const InputDecoration(
+                      labelText: '\u786c\u4ef6\u89e3\u7801',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final option in PlaybackSettings.decoderOptions)
+                        DropdownMenuItem(
+                          value: option,
+                          child: Text(PlaybackSettings.labelFor(option)),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        _changeDecoder(value);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: FutureBuilder<CacheStats>(
+                future: _statsFuture,
+                builder: (context, snapshot) {
+                  final stats = snapshot.data;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        '\u7f29\u7565\u56fe\u7f13\u5b58',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (stats == null)
+                        const LinearProgressIndicator()
+                      else ...[
+                        _SettingsStatLine(
+                          label: '\u603b\u6570',
+                          value: _formatCount(stats.total),
+                        ),
+                        _SettingsStatLine(
+                          label: '\u5df2\u7f13\u5b58',
+                          value: _formatCount(stats.cached),
+                        ),
+                        _SettingsStatLine(
+                          label: '\u7f3a\u5931',
+                          value: _formatCount(stats.missing),
+                        ),
+                        _SettingsStatLine(
+                          label: '\u9519\u8bef',
+                          value: _formatCount(stats.errors),
+                        ),
+                        _SettingsStatLine(
+                          label: '\u961f\u5217',
+                          value:
+                              '${stats.active}/${stats.queued}  avg ${stats.averageMs}ms',
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsStatLine extends StatelessWidget {
+  const _SettingsStatLine({required this.label, required this.value});
+
+  /**
+   * 统计项名称。
+   */
+  final String label;
+
+  /**
+   * 统计项展示值。
+   */
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: _appTextMuted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: _appText,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
@@ -7,19 +198,118 @@ class LibraryPage extends StatefulWidget {
   State<LibraryPage> createState() => _LibraryPageState();
 }
 
+/**
+ * 媒体库主结果区当前展示的数据来源。
+ *
+ * 这里只控制页面展示列表，不改变底层标签筛选语义；播放时仍把当前可见结果作为播放队列传入播放器。
+ */
+enum _LibraryResultMode {
+  /** 全量媒体库结果，受搜索、标签和收藏筛选影响。 */
+  library,
+
+  /** 最近播放结果，只展示有播放记录的视频。 */
+  recent,
+
+  /** 智能收藏结果，只展示收藏视频。 */
+  favorites,
+
+  /** 本地媒体库路径浏览，按文件系统层级展示文件夹和视频。 */
+  local,
+}
+
+/**
+ * 本地媒体库浏览项。
+ *
+ * 文件夹用于进入下一层路径；视频项复用已入库的 VideoItem，以保持播放、收藏、缩略图和更多操作仍走现有媒体库闭环。
+ */
+class _LocalLibraryEntry {
+  const _LocalLibraryEntry.folder(this.path) : video = null;
+
+  _LocalLibraryEntry.video(VideoItem item)
+      : path = item.path,
+        video = item;
+
+  /** 文件夹路径或视频文件路径。 */
+  final String path;
+
+  /** 视频项；为空时表示该条目是文件夹。 */
+  final VideoItem? video;
+
+  bool get isFolder => video == null;
+
+  String get title => isFolder ? p.basename(path) : video!.title;
+}
+
+List<VideoItem> recentPlaybackClearTargets(
+  Iterable<VideoItem> videos, {
+  required Set<String> selectedPathKeys,
+  required bool selectedOnly,
+}) {
+  return videos.where((item) {
+    if (item.lastPlayedAt == null) {
+      return false;
+    }
+    return !selectedOnly ||
+        selectedPathKeys.contains(TagRules.pathKey(item.path));
+  }).toList();
+}
+
 class _LibraryPageState extends State<LibraryPage> {
   LibraryStore? _store;
   ThumbnailService? _thumbnailService;
   PlaybackSettings _playbackSettings = PlaybackSettings.defaults;
+  final _filterStateSource = FilterStateSource();
   final _searchController = TextEditingController();
   final _selectedTags = <String>{};
   final _selectedChildTags = <String>{};
   final _selectedGroupTagIds = <String, Set<String>>{};
   final _excludedTagIds = <String>{};
+  FilterState? _filterState;
+
+  Map<String, int> _visibleResultCounts = const <String, int>{};
+
+  /**
+   * 右侧标签发现面板使用的全库稳定计数。
+   *
+   * 当前筛选会改变视频结果，但标签面板中的其它标签数量不能因为当前筛选被压缩到 0，
+   * 否则用户无法判断原始标签规模。
+   */
+  Map<String, int> _stableTagCounts = const <String, int>{};
+
+  var _filterRevision = 0;
+
+  var _isRefreshingVideos = false;
+
+  var _isRefreshingCounts = false;
+
+  var _libraryDataRevision = 0;
   var _showFavoritesOnly = false;
   var _isScanning = false;
   var _sortMode = SortMode.recent;
-  var _isFilterSidebarOpen = false;
+  var _denseResultGrid = false;
+  var _isTagDiscoveryPanelOpen = true;
+  var _resultMode = _LibraryResultMode.library;
+
+  /**
+   * 最近播放清理时的临时选择集。
+   *
+   * 只保存 pathKey，不新增数据库字段；确认删除时把对应视频的 lastPlayedAt 清空。
+   */
+  final _selectedRecentPathKeys = <String>{};
+
+  /**
+   * 本地媒体库当前浏览路径。
+   *
+   * 该路径来自已配置 root 或其子目录，只用于文件系统式浏览，不改变扫描和标签规则。
+   */
+  String? _localLibraryPath;
+
+  /**
+   * 本地媒体库文件夹浏览返回栈。
+   *
+   * 从侧栏 root 入口进入时清空；从文件夹项进入时记录上一级路径，让返回按钮和鼠标侧键能回到上一层。
+   */
+  final _localLibraryBackStack = <String>[];
 
   @override
   void initState() {
@@ -44,7 +334,11 @@ class _LibraryPageState extends State<LibraryPage> {
       _store = store;
       _thumbnailService = thumbnailService;
       _playbackSettings = playbackSettings;
+      _filterState = _buildImmediateFilterState(store);
+      _visibleResultCounts = _fallbackResultCounts(store);
+      _stableTagCounts = store.resultCounts(const FilterQuery());
     });
+    _scheduleFilterRefresh();
     unawaited(_promptForNewVideos(store));
   }
 
@@ -108,6 +402,7 @@ class _LibraryPageState extends State<LibraryPage> {
       }
       _thumbnailService
           ?.prefetchAll(_store?.videos.values ?? const <VideoItem>[]);
+      _markLibraryDataChanged();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(
@@ -127,30 +422,345 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
-  List<VideoItem> _filteredVideos() {
-    final store = _store;
-    final thumbnailService = _thumbnailService;
-    if (store == null || thumbnailService == null) {
-      return const [];
+  FilterState _computeFilterState(LibraryStore store, FilterQuery query) {
+    _filterStateSource.configure(
+      engine: TagQueryService(
+        videos: store.videos.values,
+        tagContext: store.tagQueryContext,
+      ),
+      totalCount: store.videos.length,
+      sourceKey: _libraryDataRevision,
+      sortKey: _sortMode,
+      compare: _compareVideos,
+    );
+    return _filterStateSource.update(query);
+  }
+
+  FilterState _buildImmediateFilterState(LibraryStore store) {
+    final videos = store.videos.values.toList();
+    videos.sort(_compareVideos);
+    return FilterState(
+      query: _currentFilterQuery(),
+      filteredVideos: List<VideoItem>.unmodifiable(videos),
+      resultCount: videos.length,
+      totalCount: store.videos.length,
+    );
+  }
+
+  Map<String, int> _fallbackResultCounts(LibraryStore store) {
+    return {
+      for (final tag in store.allTagItems) tag.id: tag.usageCount,
+    };
+  }
+
+  /**
+   * 构建本地媒体库当前路径的直接子项。
+   *
+   * 文件夹从磁盘目录读取；视频只取已入库项目，确保播放、缩略图、收藏和更多操作继续复用现有 VideoItem 管线。
+   */
+  List<_LocalLibraryEntry> _localLibraryEntries(LibraryStore store) {
+    final currentPath = _localLibraryPath;
+    if (currentPath == null || currentPath.isEmpty) {
+      return const <_LocalLibraryEntry>[];
     }
+    final directory = Directory(currentPath);
+    if (!directory.existsSync()) {
+      return const <_LocalLibraryEntry>[];
+    }
+    final entries = <_LocalLibraryEntry>[];
+    final videoByPathKey = {
+      for (final item in store.videos.values) TagRules.pathKey(item.path): item,
+    };
+    final children = directory.listSync(followLinks: false);
+    children.sort((a, b) {
+      final aIsDirectory = a is Directory;
+      final bIsDirectory = b is Directory;
+      if (aIsDirectory != bIsDirectory) {
+        return aIsDirectory ? -1 : 1;
+      }
+      return p.basename(a.path).compareTo(p.basename(b.path));
+    });
+    for (final child in children) {
+      if (child is Directory) {
+        entries.add(_LocalLibraryEntry.folder(child.path));
+        continue;
+      }
+      if (child is File && TagRules.isVideoPath(child.path)) {
+        final video = videoByPathKey[TagRules.pathKey(child.path)];
+        if (video != null) {
+          entries.add(_LocalLibraryEntry.video(video));
+        }
+      }
+    }
+    return entries;
+  }
 
-    final items = TagQueryService(
-      videos: store.videos.values,
-      tagContext: store.tagQueryContext,
-    ).filter(_currentFilterQuery());
+  void _mutateFilters(VoidCallback mutation) {
+    setState(() {
+      _resultMode = _LibraryResultMode.library;
+      mutation();
+    });
+    _scheduleFilterRefresh();
+  }
 
-    _sortVideos(items);
-    return items;
+  /**
+   * 回到媒体库全量视图。
+   *
+   * 侧栏“媒体库”应像重置入口：清空搜索、一级/二级/分组/排除/收藏筛选，并展示全量视频，
+   * 避免用户从最近播放或某个标签视图返回时仍被旧条件限制。
+   */
+  void _showAllLibraryVideos() {
+    final store = _store;
+    setState(() {
+      _resultMode = _LibraryResultMode.library;
+      _localLibraryPath = null;
+      _localLibraryBackStack.clear();
+      _selectedRecentPathKeys.clear();
+      _searchController.clear();
+      _selectedTags.clear();
+      _selectedChildTags.clear();
+      _selectedGroupTagIds.clear();
+      _excludedTagIds.clear();
+      _showFavoritesOnly = false;
+      if (store != null) {
+        _filterState = _buildImmediateFilterState(store);
+      }
+    });
+  }
+
+  /**
+   * 切换到最近播放结果视图。
+   *
+   * 最近播放是主结果区的一种数据源，不再用弹窗承载；切换时清空筛选条件，让用户看到的列表只由播放记录决定。
+   */
+  void _showRecentPlaybackVideos() {
+    setState(() {
+      _resultMode = _LibraryResultMode.recent;
+      _localLibraryPath = null;
+      _localLibraryBackStack.clear();
+      _selectedRecentPathKeys.clear();
+      _searchController.clear();
+      _selectedTags.clear();
+      _selectedChildTags.clear();
+      _selectedGroupTagIds.clear();
+      _excludedTagIds.clear();
+      _showFavoritesOnly = false;
+    });
+  }
+
+  /**
+   * 切换到收藏结果视图。
+   *
+   * 该入口直接从当前内存视频集合筛选收藏项，避免走标签筛选刷新路径，让左侧三大入口切换保持轻量。
+   */
+  void _showFavoriteVideos() {
+    setState(() {
+      _resultMode = _LibraryResultMode.favorites;
+      _localLibraryPath = null;
+      _localLibraryBackStack.clear();
+      _selectedRecentPathKeys.clear();
+      _searchController.clear();
+      _selectedTags.clear();
+      _selectedChildTags.clear();
+      _selectedGroupTagIds.clear();
+      _excludedTagIds.clear();
+      _showFavoritesOnly = false;
+    });
+  }
+
+  /**
+   * 打开本地媒体库路径。
+   *
+   * 只切换当前浏览路径和结果模式；实际文件扫描仍由添加目录/重新扫描负责。
+   */
+  void _showLocalLibraryPath(String rootPath) {
+    setState(() {
+      _resultMode = _LibraryResultMode.local;
+      _localLibraryPath = TagRules.normalizeRootPath(rootPath);
+      _localLibraryBackStack.clear();
+      _selectedRecentPathKeys.clear();
+      _searchController.clear();
+      _selectedTags.clear();
+      _selectedChildTags.clear();
+      _selectedGroupTagIds.clear();
+      _excludedTagIds.clear();
+      _showFavoritesOnly = false;
+    });
+  }
+
+  /**
+   * 从当前本地媒体库路径进入子文件夹。
+   *
+   * 该操作只改变 UI 浏览路径，不触发扫描，也不改变 root 配置或视频索引。
+   */
+  void _openLocalLibraryFolder(String folderPath) {
+    final currentPath = _localLibraryPath;
+    setState(() {
+      if (currentPath != null && currentPath.isNotEmpty) {
+        _localLibraryBackStack.add(currentPath);
+      }
+      _resultMode = _LibraryResultMode.local;
+      _localLibraryPath = TagRules.normalizeRootPath(folderPath);
+    });
+  }
+
+  /**
+   * 回到本地媒体库上一个浏览路径。
+   *
+   * 返回按钮和鼠标侧键共用该方法，保证两种入口的历史栈行为一致。
+   */
+  void _goBackLocalLibraryPath() {
+    if (_localLibraryBackStack.isEmpty) {
+      return;
+    }
+    setState(() {
+      _resultMode = _LibraryResultMode.local;
+      _localLibraryPath = _localLibraryBackStack.removeLast();
+    });
+  }
+
+  /**
+   * 从侧栏本地媒体库列表移除 root。
+   *
+   * 与目录管理保持同一安全语义：只更新配置，不删除磁盘文件，也不清除已索引视频。
+   */
+  Future<void> _removeLocalLibraryRoot(String root) async {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    final confirmed = await _confirmRemoveRoot(root);
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    await store.removeRoot(root);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      if (_localLibraryPath != null &&
+          TagRules.pathKey(_localLibraryPath!) == TagRules.pathKey(root)) {
+        _resultMode = _LibraryResultMode.library;
+        _localLibraryPath = null;
+        _localLibraryBackStack.clear();
+      }
+      _stableTagCounts = store.resultCounts(const FilterQuery());
+    });
+    _scheduleFilterRefresh();
+  }
+
+  /**
+   * 清理最近播放记录。
+   *
+   * 该动作只清空 lastPlayedAt，不删除视频、收藏、标签或播放进度数据。
+   */
+  Future<void> _clearRecentPlayback({required bool selectedOnly}) async {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    final targets = recentPlaybackClearTargets(
+      store.videos.values,
+      selectedPathKeys: _selectedRecentPathKeys,
+      selectedOnly: selectedOnly,
+    );
+    for (final item in targets) {
+      item.lastPlayedAt = null;
+      await store.upsertVideo(item);
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(_selectedRecentPathKeys.clear);
+    _markLibraryDataChanged();
+  }
+
+  /**
+   * 清理单个最近播放记录。
+   *
+   * 单条删除不能依赖“先选中再批量删除”的状态刷新顺序，否则真实鼠标快速点击时会出现命中但未删除。
+   */
+  Future<void> _clearOneRecentPlayback(VideoItem item) async {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    item.lastPlayedAt = null;
+    await store.upsertVideo(item);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _selectedRecentPathKeys.remove(TagRules.pathKey(item.path)));
+    _markLibraryDataChanged();
+  }
+
+  /**
+   * 切换最近播放清理选择状态。
+   */
+  void _toggleRecentSelection(VideoItem item) {
+    final key = TagRules.pathKey(item.path);
+    setState(() {
+      if (!_selectedRecentPathKeys.remove(key)) {
+        _selectedRecentPathKeys.add(key);
+      }
+    });
+  }
+
+  void _markLibraryDataChanged() {
+    _libraryDataRevision += 1;
+    final store = _store;
+    if (store != null) {
+      _stableTagCounts = store.resultCounts(const FilterQuery());
+    }
+    _scheduleFilterRefresh();
+  }
+
+  void _scheduleFilterRefresh() {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    final revision = ++_filterRevision;
+    final query = _currentFilterQuery();
+    if (!_isRefreshingVideos) {
+      setState(() => _isRefreshingVideos = true);
+    }
+    Future<void>.delayed(const Duration(milliseconds: 16), () {
+      if (!mounted || revision != _filterRevision || _store != store) {
+        return;
+      }
+      final nextState = _computeFilterState(store, query);
+      if (!mounted || revision != _filterRevision || _store != store) {
+        return;
+      }
+      setState(() {
+        _filterState = nextState;
+        _isRefreshingVideos = false;
+        _isRefreshingCounts = true;
+      });
+      _thumbnailService?.prefetchVisible(nextState.filteredVideos.take(36));
+      Future<void>.delayed(const Duration(milliseconds: 16), () {
+        if (!mounted || revision != _filterRevision || _store != store) {
+          return;
+        }
+        final nextCounts = store.resultCounts(query);
+        if (!mounted || revision != _filterRevision || _store != store) {
+          return;
+        }
+        setState(() {
+          _visibleResultCounts = nextCounts;
+          _isRefreshingCounts = false;
+        });
+      });
+    });
   }
 
   FilterQuery _currentFilterQuery() {
-    final selectedTag = _selectedTags.isEmpty ? null : _selectedTags.first;
     final parentTag = _activeChildParentTag;
-    final selectedChildTag =
-        _selectedChildTags.isEmpty ? null : _selectedChildTags.first;
+    final selectedChildTag = _activeChildTagName;
     return FilterQuery(
       keyword: _searchController.text,
-      primaryTagId: selectedTag,
+      primaryTagId: parentTag,
       childTagId: parentTag == null ? null : selectedChildTag,
       selectedGroupTagIds: {
         for (final entry in _selectedGroupTagIds.entries)
@@ -237,13 +847,20 @@ class _LibraryPageState extends State<LibraryPage> {
   void _toggleGroupTag(TagItem tag) {
     final groupId = tag.groupId ?? 'manual';
     final selected = _selectedGroupTagIds[groupId] ?? <String>{};
-    setState(() {
+    _mutateFilters(() {
       _removeEquivalentLegacySelection(tag);
       _excludedTagIds.remove(tag.id);
       if (selected.contains(tag.id)) {
         selected.remove(tag.id);
       } else {
+        if (groupId == 'folder.primary' || groupId == 'folder.child') {
+          selected.clear();
+        }
         selected.add(tag.id);
+      }
+      if (groupId == 'folder.primary') {
+        _selectedChildTags.clear();
+        _selectedGroupTagIds.remove('folder.child');
       }
       if (selected.isEmpty) {
         _selectedGroupTagIds.remove(groupId);
@@ -253,8 +870,34 @@ class _LibraryPageState extends State<LibraryPage> {
     });
   }
 
+  void _selectFolderPrimaryChild(TagItem primary, TagItem? child) {
+    _mutateFilters(() {
+      _removeEquivalentLegacySelection(primary);
+      if (child != null) {
+        _removeEquivalentLegacySelection(child);
+      }
+      _excludedTagIds
+        ..remove(primary.id)
+        ..remove(child?.id);
+      _selectedTags.clear();
+      _selectedChildTags.clear();
+      _selectedGroupTagIds['folder.primary'] = <String>{primary.id};
+      if (child == null) {
+        _selectedGroupTagIds.remove('folder.child');
+        return;
+      }
+      final selectedChildIds =
+          _selectedGroupTagIds['folder.child'] ?? const <String>{};
+      if (selectedChildIds.length == 1 && selectedChildIds.contains(child.id)) {
+        _selectedGroupTagIds.remove('folder.child');
+      } else {
+        _selectedGroupTagIds['folder.child'] = <String>{child.id};
+      }
+    });
+  }
+
   void _toggleExcludedTag(TagItem tag) {
-    setState(() {
+    _mutateFilters(() {
       for (final selected in _selectedGroupTagIds.values) {
         selected.remove(tag.id);
       }
@@ -267,18 +910,18 @@ class _LibraryPageState extends State<LibraryPage> {
 
   void _removeGroupTag(TagItem tag) {
     final groupId = tag.groupId ?? 'manual';
-    setState(() {
+    _mutateFilters(() {
       _selectedGroupTagIds[groupId]?.remove(tag.id);
       _selectedGroupTagIds.removeWhere((_, selected) => selected.isEmpty);
     });
   }
 
   void _removeExcludedTag(TagItem tag) {
-    setState(() => _excludedTagIds.remove(tag.id));
+    _mutateFilters(() => _excludedTagIds.remove(tag.id));
   }
 
   void _clearAllFilters() {
-    setState(() {
+    _mutateFilters(() {
       _searchController.clear();
       _selectedTags.clear();
       _selectedChildTags.clear();
@@ -337,9 +980,52 @@ class _LibraryPageState extends State<LibraryPage> {
     _excludedTagIds.removeAll(removedIds);
   }
 
+  // ignore: unused_element
   void _showSaveSmartListTodo() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('保存当前筛选 / Smart List 将在后续阶段接入持久化。')),
+      const SnackBar(
+        content: Text(
+          '\u4fdd\u5b58\u5f53\u524d\u7b5b\u9009 / Smart List \u5c06\u5728\u540e\u7eed\u9636\u6bb5\u63a5\u5165\u6301\u4e45\u5316\u3002',
+        ),
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  void _showSmartListDraftDialog() {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    final filterState = _filterState ?? _buildImmediateFilterState(store);
+    final querySummary = _filterSummary(
+      store: store,
+      resultCount: filterState.resultCount,
+      totalCount: filterState.totalCount,
+    );
+    final queryExpression = _filterExpression(
+      store: store,
+      resultCount: filterState.resultCount,
+      totalCount: filterState.totalCount,
+    );
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _SmartListDraftDialog(
+        suggestedName: querySummary,
+        querySummary: querySummary,
+        queryExpression: queryExpression,
+        resultCount: filterState.resultCount,
+        totalCount: filterState.totalCount,
+        onConfirmDraft: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Smart List \u6301\u4e45\u5316\u5c06\u5728\u540e\u7eed\u63a5\u5165\u3002',
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -359,42 +1045,93 @@ class _LibraryPageState extends State<LibraryPage> {
     ]..sort((a, b) => _tagLabel(a).compareTo(_tagLabel(b)));
   }
 
-  String _currentQueueTitle() {
-    final store = _store;
+  String _filterExpression({
+    required LibraryStore store,
+    required int resultCount,
+    required int totalCount,
+  }) {
     final parts = <String>[];
     final keyword = _searchController.text.trim();
     if (keyword.isNotEmpty) {
-      parts.add('搜索 "$keyword"');
+      parts.add('keyword:"$keyword"');
     }
     final primaryTags = _selectedTags.toList()..sort();
-    parts.addAll(primaryTags);
+    parts.addAll(primaryTags.map((tag) => 'legacy:$tag'));
     final childTags = _selectedChildTags.toList()..sort();
-    parts.addAll(childTags);
-    if (store != null) {
-      parts.addAll(_selectedGroupTagItems(store).map(_tagLabel));
-      parts.addAll(_excludedTagItems(store).map((tag) => '-${_tagLabel(tag)}'));
+    if (childTags.isNotEmpty) {
+      parts.add('child:(${childTags.join('|')})');
     }
+    final groupsById = {
+      for (final group in _tagGroupsForSidebar(store)) group.id: group
+    };
+    final selectedEntries = _selectedGroupTagIds.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    for (final entry in selectedEntries) {
+      final tagLabels = [
+        for (final id in entry.value)
+          if (store.tagsById[id] != null) _tagLabel(store.tagsById[id]!),
+      ]..sort();
+      if (tagLabels.isEmpty) {
+        continue;
+      }
+      final group = groupsById[entry.key];
+      parts.add(
+          '${group == null ? entry.key : _groupLabel(group)}:(${tagLabels.join('|')})');
+    }
+    parts.addAll(_excludedTagItems(store).map((tag) => '-${_tagLabel(tag)}'));
     if (_showFavoritesOnly) {
-      parts.add('我的收藏');
+      parts.add('favorite');
     }
-    return parts.isEmpty ? '当前列表' : parts.join(' / ');
+    final expression =
+        parts.isEmpty ? '\u5168\u90e8\u89c6\u9891' : parts.join(' AND ');
+    return '$expression  |  $resultCount / $totalCount';
   }
 
-  void _sortVideos(List<VideoItem> items) {
+  String _filterSummary({
+    required LibraryStore store,
+    required int resultCount,
+    required int totalCount,
+  }) {
+    final parts = <String>[];
+    final keyword = _searchController.text.trim();
+    if (keyword.isNotEmpty) {
+      parts.add('"$keyword"');
+    }
+    final groupsById = {
+      for (final group in _tagGroupsForSidebar(store)) group.id: group
+    };
+    final activeGroupLabels = [
+      for (final entry in _selectedGroupTagIds.entries)
+        if (entry.value.isNotEmpty)
+          _groupLabel(groupsById[entry.key] ??
+              TagGroup(id: entry.key, name: entry.key, items: const [])),
+    ]..sort();
+    if (activeGroupLabels.isNotEmpty) {
+      parts.add(activeGroupLabels.join(' + '));
+    }
+    final excludedCount = _excludedTagIds.length;
+    if (excludedCount > 0) {
+      parts.add('NOT $excludedCount');
+    }
+    if (_showFavoritesOnly) {
+      parts.add('favorite');
+    }
+    final label =
+        parts.isEmpty ? '\u5168\u90e8\u89c6\u9891' : parts.join(' 路 ');
+    return '$label  路  $resultCount / $totalCount';
+  }
+
+  int _compareVideos(VideoItem a, VideoItem b) {
     switch (_sortMode) {
       case SortMode.recent:
-        items.sort((a, b) {
-          final bTime = b.lastPlayedAt ?? b.addedAt;
-          final aTime = a.lastPlayedAt ?? a.addedAt;
-          return bTime.compareTo(aTime);
-        });
+        final bTime = b.lastPlayedAt ?? b.addedAt;
+        final aTime = a.lastPlayedAt ?? a.addedAt;
+        return bTime.compareTo(aTime);
       case SortMode.name:
-        items.sort((a, b) => a.title.compareTo(b.title));
+        return a.title.compareTo(b.title);
       case SortMode.folder:
-        items.sort((a, b) {
-          final folder = a.folder.compareTo(b.folder);
-          return folder == 0 ? a.title.compareTo(b.title) : folder;
-        });
+        final folder = a.folder.compareTo(b.folder);
+        return folder == 0 ? a.title.compareTo(b.title) : folder;
     }
   }
 
@@ -407,10 +1144,29 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   String? get _activeChildParentTag {
-    if (_selectedTags.length != 1) {
+    if (_selectedTags.length == 1) {
+      return _selectedTags.first;
+    }
+    final store = _store;
+    final selectedFolderIds =
+        _selectedGroupTagIds['folder.primary'] ?? const <String>{};
+    if (store == null || selectedFolderIds.length != 1) {
       return null;
     }
-    return _selectedTags.first;
+    return store.tagQueryContext.findTag(selectedFolderIds.first)?.name;
+  }
+
+  String? get _activeChildTagName {
+    if (_selectedChildTags.length == 1) {
+      return _selectedChildTags.first;
+    }
+    final store = _store;
+    final selectedChildIds =
+        _selectedGroupTagIds['folder.child'] ?? const <String>{};
+    if (store == null || selectedChildIds.length != 1) {
+      return null;
+    }
+    return store.tagQueryContext.findTag(selectedChildIds.first)?.name;
   }
 
   @override
@@ -421,48 +1177,111 @@ class _LibraryPageState extends State<LibraryPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final videos = _filteredVideos();
+    final filterState = _filterState ?? _buildImmediateFilterState(store);
+    final filteredVideos = filterState.filteredVideos;
+    final recentVideos = store.videos.values
+        .where((item) => item.lastPlayedAt != null)
+        .toList()
+      ..sort((a, b) => b.lastPlayedAt!.compareTo(a.lastPlayedAt!));
+    final favoriteVideos = store.videos.values
+        .where((item) => item.isFavorite)
+        .toList()
+      ..sort(_compareVideos);
+    final videos = switch (_resultMode) {
+      _LibraryResultMode.recent => List<VideoItem>.unmodifiable(recentVideos),
+      _LibraryResultMode.favorites =>
+        List<VideoItem>.unmodifiable(favoriteVideos),
+      _LibraryResultMode.local => const <VideoItem>[],
+      _LibraryResultMode.library => filteredVideos,
+    };
+    final localEntries = _resultMode == _LibraryResultMode.local
+        ? _localLibraryEntries(store)
+        : const <_LocalLibraryEntry>[];
+    final displayResultCount = switch (_resultMode) {
+      _LibraryResultMode.recent => videos.length,
+      _LibraryResultMode.favorites => videos.length,
+      _LibraryResultMode.local => localEntries.length,
+      _LibraryResultMode.library => filterState.resultCount,
+    };
+    final displayTotalCount = _resultMode == _LibraryResultMode.library
+        ? filterState.totalCount
+        : store.videos.length;
     final tags = store.allTags.toList()..sort();
-    final filterQuery = _currentFilterQuery();
     final tagGroups = _tagGroupsForSidebar(store);
-    final resultCounts = store.resultCounts(filterQuery);
+    final resultCounts = _visibleResultCounts.isEmpty
+        ? _fallbackResultCounts(store)
+        : _visibleResultCounts;
+    final stableTagCounts = _stableTagCounts.isEmpty
+        ? _fallbackResultCounts(store)
+        : _stableTagCounts;
     final selectedGroupTags = _selectedGroupTagItems(store);
     final excludedTags = _excludedTagItems(store);
+    final filterExpression = _filterExpression(
+      store: store,
+      resultCount: filterState.resultCount,
+      totalCount: filterState.totalCount,
+    );
+    final filterSummary = _filterSummary(
+      store: store,
+      resultCount: displayResultCount,
+      totalCount: displayTotalCount,
+    );
+    final displaySummary = _resultMode == _LibraryResultMode.recent
+        ? '\u6700\u8fd1\u64ad\u653e  |  $displayResultCount / $displayTotalCount'
+        : _resultMode == _LibraryResultMode.favorites
+            ? '\u667a\u80fd\u6536\u85cf  |  $displayResultCount / $displayTotalCount'
+            : _resultMode == _LibraryResultMode.local
+                ? '\u672c\u5730\u5a92\u4f53\u5e93  |  $displayResultCount \u9879'
+                : filterSummary;
+    final displayExpression = _resultMode == _LibraryResultMode.recent
+        ? '\u6309\u6700\u8fd1\u64ad\u653e\u65f6\u95f4\u6392\u5e8f'
+        : _resultMode == _LibraryResultMode.favorites
+            ? '\u4ec5\u663e\u793a\u5df2\u6536\u85cf\u89c6\u9891'
+            : _resultMode == _LibraryResultMode.local
+                ? (_localLibraryPath ?? '\u672c\u5730\u5a92\u4f53\u5e93')
+                : filterExpression;
     final childParentTag = _activeChildParentTag;
     final childTags = childParentTag == null
         ? <String>[]
-        : TagRules.sortedChildTags(store.childTagsFor(childParentTag));
+        : TagRules.sortedChildTags(store.childTagsFor(childParentTag))
+            .where((tag) =>
+                !TagRules.sameTag(tag, TagRules.defaultAlbumTag) &&
+                !TagRules.sameTag(tag, childParentTag))
+            .toList();
+    final childTagItemsByParent =
+        childTagItemsByParentId(store.allTagItems, store.tagQueryContext);
     final favoriteCount =
         store.videos.values.where((item) => item.isFavorite).length;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _thumbnailService?.prefetchVisible(videos.take(36));
-    });
-
     Widget buildSidebar({required bool dense}) {
       return _Sidebar(
         roots: store.roots,
         tags: tags,
         tagGroups: tagGroups,
         resultCounts: resultCounts,
-        favoriteTags: store.favoriteTags,
+        selectedLocalLibraryPath: _localLibraryPath,
         childParentTag: childParentTag,
         childTags: childTags,
         selectedChildTags: _selectedChildTags,
         selectedGroupTagIds: _selectedGroupTagIds,
         excludedTagIds: _excludedTagIds,
         favoriteCount: favoriteCount,
-        showFavoritesOnly: _showFavoritesOnly,
+        favoriteVideosSelected: _resultMode == _LibraryResultMode.favorites,
+        recentPlaybackSelected: _resultMode == _LibraryResultMode.recent,
+        localLibrarySelected: _resultMode == _LibraryResultMode.local,
         selectedTags: _selectedTags,
         isScanning: _isScanning,
         dense: dense,
         onPickFolder: _pickFolder,
+        onShowAllLibrary: _showAllLibraryVideos,
         onRescan: _rescan,
-        onAddFavoriteTag: _addFavoriteTag,
-        onRemoveFavoriteTag: _removeFavoriteTag,
-        onFavoritesToggle: () =>
-            setState(() => _showFavoritesOnly = !_showFavoritesOnly),
+        onRemoveLocalLibraryRoot: _removeLocalLibraryRoot,
+        onFavoritesToggle: _showFavoriteVideos,
+        onOpenRecentPlayback: _showRecentPlaybackVideos,
+        onOpenLocalLibraryRoot: _showLocalLibraryPath,
+        onOpenDirectoryManager: _openDirectoryManager,
+        onOpenSettings: _openSettings,
         onChildTagToggle: (tag) {
-          setState(() {
+          _mutateFilters(() {
             _removeEquivalentGroupSelection(
               tagName: tag,
               parentTag: _activeChildParentTag,
@@ -470,113 +1289,225 @@ class _LibraryPageState extends State<LibraryPage> {
             _toggleSingleSelection(_selectedChildTags, tag);
           });
         },
-        onClearChildTags: () => setState(_selectedChildTags.clear),
-        onTagToggle: (tag) {
-          setState(() {
-            _removeEquivalentGroupSelection(tagName: tag);
-            _toggleSingleSelection(_selectedTags, tag);
-            _selectedChildTags.clear();
-          });
-        },
-        onClearTags: () => setState(() {
-          _selectedTags.clear();
-          _selectedChildTags.clear();
-        }),
+        onClearChildTags: () => _mutateFilters(_selectedChildTags.clear),
         onGroupTagToggle: _toggleGroupTag,
         onGroupTagExcludeToggle: _toggleExcludedTag,
       );
     }
 
-    Widget buildMain(LayoutSize layoutSize) {
+    Widget buildFilterPanel({required bool dense}) {
+      return _TagDiscoveryZone(
+        tagGroups: tagGroups,
+        resultCounts: stableTagCounts,
+        favoriteTags: store.favoriteTags,
+        selectedTags: _selectedTags,
+        selectedChildTags: _selectedChildTags,
+        selectedGroupTagIds: _selectedGroupTagIds,
+        excludedTagIds: _excludedTagIds,
+        childParentTag: childParentTag,
+        childTags: childTags,
+        childTagItemsByParent: childTagItemsByParent,
+        favoriteCount: favoriteCount,
+        showFavoritesOnly: _showFavoritesOnly,
+        dense: dense,
+        onFavoritesToggle: () =>
+            _mutateFilters(() => _showFavoritesOnly = !_showFavoritesOnly),
+        onTagToggle: (tag) {
+          _mutateFilters(() {
+            _removeEquivalentGroupSelection(tagName: tag);
+            _toggleSingleSelection(_selectedTags, tag);
+            _selectedChildTags.clear();
+          });
+        },
+        onChildTagToggle: (tag) {
+          _mutateFilters(() {
+            _removeEquivalentGroupSelection(
+              tagName: tag,
+              parentTag: _activeChildParentTag,
+            );
+            _toggleSingleSelection(_selectedChildTags, tag);
+          });
+        },
+        onGroupTagToggle: _toggleGroupTag,
+        onFolderPrimaryChildSelected: _selectFolderPrimaryChild,
+        onGroupTagExcludeToggle: _toggleExcludedTag,
+        onCollapse: dense
+            ? null
+            : () => setState(() => _isTagDiscoveryPanelOpen = false),
+      );
+    }
+
+    Widget buildMain(
+      LayoutSize layoutSize, {
+      Widget? topBar,
+    }) {
       return Column(
         children: [
-          _TopBar(
-            controller: _searchController,
-            videoCount: videos.length,
-            totalCount: store.videos.length,
-            sortMode: _sortMode,
-            layoutSize: layoutSize,
-            hasActiveFilters: _hasActiveFilters,
-            onSearchChanged: (_) => setState(() {}),
-            onSortChanged: (value) => setState(() => _sortMode = value),
-            onOpenSettings: _openSettings,
-            onOpenTagManager: () => _openTagManager(videos),
-            onOpenFilters: () {
-              if (layoutSize == LayoutSize.compact) {
-                showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: _appSurface,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
-                  ),
-                  builder: (_) => FractionallySizedBox(
-                    heightFactor: 0.92,
-                    child: buildSidebar(dense: true),
-                  ),
-                );
-                return;
-              }
-              setState(() => _isFilterSidebarOpen = !_isFilterSidebarOpen);
-            },
-          ),
-          _ActiveFilterBar(
+          if (topBar != null) topBar,
+          _LibraryHeroArea(
             selectedTags: _selectedTags.toList()..sort(),
             selectedChildTags: _selectedChildTags.toList()..sort(),
             selectedGroupTags: selectedGroupTags,
             excludedTags: excludedTags,
+            keyword: _searchController.text,
+            defaultChipLabel: switch (_resultMode) {
+              _LibraryResultMode.recent => '\u6700\u8fd1\u64ad\u653e',
+              _LibraryResultMode.favorites => '\u667a\u80fd\u6536\u85cf',
+              _LibraryResultMode.local => '\u672c\u5730\u5a92\u4f53\u5e93',
+              _LibraryResultMode.library => '\u5168\u90e8\u89c6\u9891',
+            },
+            querySummary: displaySummary,
+            queryExpression: displayExpression,
             showFavoritesOnly: _showFavoritesOnly,
-            resultCount: videos.length,
-            totalCount: store.videos.length,
-            onRemovePrimaryTag: (tag) => setState(() {
+            resultCount: displayResultCount,
+            totalCount: displayTotalCount,
+            refreshing: _isRefreshingVideos || _isRefreshingCounts,
+            onRemovePrimaryTag: (tag) => _mutateFilters(() {
               _selectedTags.remove(tag);
               _selectedChildTags.clear();
             }),
             onRemoveChildTag: (tag) =>
-                setState(() => _selectedChildTags.remove(tag)),
+                _mutateFilters(() => _selectedChildTags.remove(tag)),
             onRemoveGroupTag: _removeGroupTag,
             onRemoveExcludedTag: _removeExcludedTag,
+            onClearKeyword: () => _mutateFilters(_searchController.clear),
             onClearFavoritesOnly: () =>
-                setState(() => _showFavoritesOnly = false),
+                _mutateFilters(() => _showFavoritesOnly = false),
             onClearAll: _hasActiveFilters ? _clearAllFilters : null,
-            onSaveSmartList: _showSaveSmartListTodo,
           ),
-          if (childParentTag != null)
-            _ChildTagStrip(
-              parentTag: childParentTag,
-              tags: childTags,
-              selectedTags: _selectedChildTags,
-              onToggle: (tag) {
-                setState(() {
-                  _removeEquivalentGroupSelection(
-                    tagName: tag,
-                    parentTag: _activeChildParentTag,
-                  );
-                  _toggleSingleSelection(_selectedChildTags, tag);
-                });
+          Expanded(
+            child: RepaintBoundary(
+              child: switch (_resultMode) {
+                _LibraryResultMode.local => _LocalLibraryView(
+                    currentPath: _localLibraryPath,
+                    entries: localEntries,
+                    thumbnailService: thumbnailService,
+                    playbackSettings: _playbackSettings,
+                    dense: _denseResultGrid,
+                    canGoBack: _localLibraryBackStack.isNotEmpty,
+                    onBack: _goBackLocalLibraryPath,
+                    onOpenFolder: _openLocalLibraryFolder,
+                    onOpenVideo: _openVideo,
+                    onEditTags: _editTags,
+                    onToggleFavorite: _toggleFavorite,
+                  ),
+                _LibraryResultMode.recent => videos.isEmpty
+                    ? _EmptyState(
+                        hasLibrary: store.videos.isNotEmpty,
+                        message:
+                            '\u8fd8\u6ca1\u6709\u6700\u8fd1\u64ad\u653e\u8bb0\u5f55',
+                      )
+                    : _RecentPlaybackView(
+                        videos: videos,
+                        selectedPathKeys: _selectedRecentPathKeys,
+                        thumbnailService: thumbnailService,
+                        playbackSettings: _playbackSettings,
+                        dense: _denseResultGrid,
+                        onOpen: _openVideo,
+                        onEditTags: _editTags,
+                        onToggleFavorite: _toggleFavorite,
+                        onToggleSelected: _toggleRecentSelection,
+                        onSelectAll: () => setState(() {
+                          _selectedRecentPathKeys
+                            ..clear()
+                            ..addAll(videos
+                                .map((item) => TagRules.pathKey(item.path)));
+                        }),
+                        onClearSelection: () =>
+                            setState(_selectedRecentPathKeys.clear),
+                        onDeleteOne: _clearOneRecentPlayback,
+                        onDeleteSelected: () =>
+                            _clearRecentPlayback(selectedOnly: true),
+                        onDeleteAll: () =>
+                            _clearRecentPlayback(selectedOnly: false),
+                      ),
+                _ => videos.isEmpty
+                    ? _EmptyState(
+                        hasLibrary: store.videos.isNotEmpty,
+                        message: _resultMode == _LibraryResultMode.favorites
+                            ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u89c6\u9891'
+                            : null,
+                      )
+                    : _VideoGrid(
+                        videos: videos,
+                        thumbnailService: thumbnailService,
+                        playbackSettings: _playbackSettings,
+                        dense: _denseResultGrid,
+                        onOpen: _openVideo,
+                        onEditTags: _editTags,
+                        onToggleFavorite: _toggleFavorite,
+                      ),
               },
             ),
+          ),
+        ],
+      );
+    }
+
+    Widget buildTopBar(LayoutSize layoutSize) {
+      return _ReferenceTopBar(
+        controller: _searchController,
+        videoCount: displayResultCount,
+        totalCount: displayTotalCount,
+        keyword: _searchController.text,
+        sortMode: _sortMode,
+        layoutSize: layoutSize,
+        hasActiveFilters: _hasActiveFilters,
+        favoritesSelected: _showFavoritesOnly,
+        onSearchChanged: (_) => _mutateFilters(() {}),
+        onSortChanged: (value) => _mutateFilters(() => _sortMode = value),
+        denseResultGrid: _denseResultGrid,
+        onResultViewChanged: (dense) =>
+            setState(() => _denseResultGrid = dense),
+        onFavoritesToggle: _showFavoriteVideos,
+        onOpenTagManager: () => _openTagManager(videos),
+        onOpenFilters: () {
+          showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: _appBackground,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+            ),
+            builder: (_) => FractionallySizedBox(
+              heightFactor: 0.92,
+              child: buildFilterPanel(dense: true),
+            ),
+          );
+        },
+      );
+    }
+
+    Widget buildExpandedContent() {
+      return Column(
+        children: [
+          buildTopBar(LayoutSize.expanded),
           Expanded(
-            child: AnimatedSwitcher(
-              duration: _motionDuration,
-              switchInCurve: _motionCurve,
-              switchOutCurve: Curves.easeInCubic,
-              child: videos.isEmpty
-                  ? _EmptyState(
-                      key: ValueKey('empty-${store.videos.isNotEmpty}'),
-                      hasLibrary: store.videos.isNotEmpty,
-                    )
-                  : _VideoGrid(
-                      key: ValueKey(
-                        '${videos.length}-${_selectedTags.join('|')}-${_selectedChildTags.join('|')}-${_selectedGroupTagIds.values.expand((ids) => ids).join('|')}-${_excludedTagIds.join('|')}-${_searchController.text}',
-                      ),
-                      videos: videos,
-                      thumbnailService: thumbnailService,
-                      playbackSettings: _playbackSettings,
-                      onOpen: _openVideo,
-                      onEditTags: _editTags,
-                      onToggleFavorite: _toggleFavorite,
-                    ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: buildMain(
+                    LayoutSize.expanded,
+                  ),
+                ),
+                AnimatedSize(
+                  duration: _motionDuration,
+                  curve: _motionCurve,
+                  alignment: Alignment.centerRight,
+                  child: AnimatedSwitcher(
+                    duration: _motionDuration,
+                    switchInCurve: _motionCurve,
+                    switchOutCurve: Curves.easeInCubic,
+                    child: _isTagDiscoveryPanelOpen
+                        ? buildFilterPanel(dense: false)
+                        : _CollapsedTagDiscoveryRail(
+                            onExpand: () => setState(
+                              () => _isTagDiscoveryPanelOpen = true,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -588,13 +1519,19 @@ class _LibraryPageState extends State<LibraryPage> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           final layoutSize = LayoutBreakpoints.fromWidth(constraints.maxWidth);
-          final showPersistentSidebar = layoutSize == LayoutSize.expanded ||
-              (layoutSize == LayoutSize.medium && _isFilterSidebarOpen);
+          final showMainSidebar = layoutSize != LayoutSize.compact;
           return Row(
             children: [
-              if (showPersistentSidebar)
+              if (showMainSidebar)
                 buildSidebar(dense: layoutSize != LayoutSize.expanded),
-              Expanded(child: buildMain(layoutSize)),
+              Expanded(
+                child: layoutSize == LayoutSize.expanded
+                    ? buildExpandedContent()
+                    : buildMain(
+                        layoutSize,
+                        topBar: buildTopBar(layoutSize),
+                      ),
+              ),
             ],
           );
         },
@@ -624,7 +1561,7 @@ class _LibraryPageState extends State<LibraryPage> {
       ),
     );
     if (mounted) {
-      setState(() {});
+      _markLibraryDataChanged();
     }
   }
 
@@ -642,94 +1579,279 @@ class _LibraryPageState extends State<LibraryPage> {
       ),
     );
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _stableTagCounts = store.resultCounts(const FilterQuery());
+      });
+      _scheduleFilterRefresh();
     }
   }
 
-  Future<void> _addFavoriteTag() async {
-    final controller = TextEditingController();
-    final existingTags = _store?.allTags.toList() ?? const <String>[];
-    existingTags.sort();
-    final picked = await showDialog<String>(
+  Future<void> _openDirectoryManager() async {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('\u6dfb\u52a0\u5e38\u7528\u6807\u7b7e'),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('\u76ee\u5f55\u7ba1\u7406'),
         content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: '\u6807\u7b7e\u540d',
-                  hintText: '\u8f93\u5165\u6216\u9009\u62e9\u6807\u7b7e\u540d',
-                ),
-                onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
-              ),
-              const SizedBox(height: 12),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220),
-                child: SingleChildScrollView(
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final tag in existingTags)
-                        ActionChip(
-                          label: Text(tag),
-                          onPressed: () => Navigator.of(context).pop(tag),
+          width: 520,
+          child: store.roots.isEmpty
+              ? const Text(
+                  '\u8fd8\u6ca1\u6709\u6dfb\u52a0\u89c6\u9891\u76ee\u5f55\u3002')
+              : ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 320),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: store.roots.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, index) {
+                      final root = store.roots[index];
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.folder_outlined),
+                        title: Text(
+                          root,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                    ],
+                        trailing: IconButton(
+                          tooltip: '\u79fb\u9664\u76ee\u5f55',
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          onPressed: () async {
+                            final confirmed = await _confirmRemoveRoot(root);
+                            if (confirmed != true) {
+                              return;
+                            }
+                            await store.removeRoot(root);
+                            if (!mounted || !dialogContext.mounted) {
+                              return;
+                            }
+                            Navigator.of(dialogContext).pop();
+                            _markLibraryDataChanged();
+                          },
+                        ),
+                      );
+                    },
                   ),
                 ),
-              ),
-            ],
-          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('\u53d6\u6d88'),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('\u5173\u95ed'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('\u6dfb\u52a0'),
+          OutlinedButton.icon(
+            onPressed: _isScanning
+                ? null
+                : () {
+                    Navigator.of(dialogContext).pop();
+                    unawaited(_pickFolder());
+                  },
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('\u6dfb\u52a0\u76ee\u5f55'),
+          ),
+          FilledButton.icon(
+            onPressed: _isScanning || store.roots.isEmpty
+                ? null
+                : () {
+                    Navigator.of(dialogContext).pop();
+                    unawaited(_rescan());
+                  },
+            icon: const Icon(Icons.sync_rounded),
+            label: const Text('\u91cd\u65b0\u626b\u63cf'),
           ),
         ],
       ),
+    );
+  }
+
+  Future<bool?> _confirmRemoveRoot(String root) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('\u79fb\u9664\u76ee\u5f55'),
+        content: Text(
+          '\u53ea\u4ece\u76ee\u5f55\u5217\u8868\u79fb\u9664\uff0c\u4e0d\u5220\u9664\u78c1\u76d8\u6587\u4ef6\uff0c\u4e5f\u4e0d\u4f1a\u7acb\u5373\u5220\u9664\u5df2\u5165\u5e93\u89c6\u9891\u8bb0\u5f55\u3002\n\n$root',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('\u53d6\u6d88'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('\u79fb\u9664'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  Future<void> _addLibraryTag() async {
+    final controller = TextEditingController();
+    final existingTags = _store?.allTagItems.toList() ?? const <TagItem>[];
+    existingTags.sort((a, b) => _tagLabel(a).compareTo(_tagLabel(b)));
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        var keyword = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            /**
+             * 弹窗内搜索只影响候选展示，不改变真实标签数据。
+             */
+            final visibleTags = existingTags
+                .where((tag) {
+                  final label = _tagLabel(tag);
+                  if (keyword.trim().isEmpty) {
+                    return true;
+                  }
+                  final normalizedKeyword = keyword.toLowerCase();
+                  return label.toLowerCase().contains(normalizedKeyword) ||
+                      tag.name.toLowerCase().contains(normalizedKeyword);
+                })
+                .take(80)
+                .toList();
+            return AlertDialog(
+              title: const Text(
+                  '\u6dfb\u52a0\u5230\u6211\u7684\u6807\u7b7e\u5e93'),
+              content: SizedBox(
+                width: 460,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: '\u641c\u7d22\u6216\u65b0\u5efa\u6807\u7b7e',
+                        hintText:
+                            '\u8f93\u5165\u6807\u7b7e\u540d\uff0c\u4e0b\u65b9\u4f1a\u5373\u65f6\u8fc7\u6ee4',
+                        prefixIcon: Icon(Icons.search_rounded),
+                      ),
+                      onChanged: (value) =>
+                          setDialogState(() => keyword = value),
+                      onSubmitted: (value) =>
+                          Navigator.of(context).pop(value.trim()),
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 240),
+                      child: visibleTags.isEmpty
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 18),
+                                child: Text(
+                                    '\u6ca1\u6709\u5339\u914d\u7684\u5df2\u6709\u6807\u7b7e'),
+                              ),
+                            )
+                          : ScrollConfiguration(
+                              behavior: const _DesktopDragScrollBehavior(),
+                              child: SingleChildScrollView(
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final tag in visibleTags)
+                                      ActionChip(
+                                        label: Text(_tagLabel(tag)),
+                                        onPressed: () => Navigator.of(context)
+                                            .pop(_tagLabel(tag)),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('\u53d6\u6d88'),
+                ),
+                FilledButton(
+                  onPressed: () =>
+                      Navigator.of(context).pop(controller.text.trim()),
+                  child: const Text('\u6dfb\u52a0'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
     controller.dispose();
     final tag = picked == null ? null : TagRules.normalizeTag(picked);
     if (tag == null || tag.isEmpty || _store == null) {
       return;
     }
-    if (!_store!.favoriteTags
-        .any((existing) => TagRules.sameTag(existing, tag))) {
-      setState(() => _store!.favoriteTags.add(tag));
-      await _store!.saveMetadata();
+    try {
+      if (!_store!.allTagItems.any(
+        (existing) =>
+            (existing.groupId ?? 'manual') == 'manual' &&
+            TagRules.sameTag(existing.name, tag),
+      )) {
+        await _store!.createManualTag(name: tag, groupId: 'manual');
+      }
+      if (!_store!.favoriteTags
+          .any((existing) => TagRules.sameTag(existing, tag))) {
+        setState(() {
+          _store!.favoriteTags.add(tag);
+          _stableTagCounts = _store!.resultCounts(const FilterQuery());
+        });
+        await _store!.saveMetadata();
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('\u6dfb\u52a0\u6807\u7b7e\u5931\u8d25\uff1a$error')),
+      );
     }
   }
 
-  Future<void> _removeFavoriteTag(String tag) async {
+  // ignore: unused_element
+  Future<void> _removeLibraryTag(String tag) async {
     final store = _store;
     if (store == null) {
       return;
     }
-    setState(() {
+    _mutateFilters(() {
       store.favoriteTags.remove(tag);
       _selectedTags.remove(tag);
       _selectedChildTags.clear();
+      _stableTagCounts = store.resultCounts(const FilterQuery());
     });
     await store.saveMetadata();
   }
 
   Future<void> _openVideo(VideoItem item, List<VideoItem> playlist) async {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
     final thumbnailService = _thumbnailService!;
     final activeChildTag =
         _selectedChildTags.isEmpty ? null : _selectedChildTags.first;
+    final queueTitle = _resultMode == _LibraryResultMode.recent
+        ? '\u6700\u8fd1\u64ad\u653e  |  ${playlist.length} / ${store.videos.length}'
+        : _resultMode == _LibraryResultMode.favorites
+            ? '\u667a\u80fd\u6536\u85cf  |  ${playlist.length} / ${store.videos.length}'
+            : _resultMode == _LibraryResultMode.local
+                ? '${_localLibraryPath ?? '\u672c\u5730\u5a92\u4f53\u5e93'}  |  ${playlist.length} / ${store.videos.length}'
+                : _filterSummary(
+                    store: store,
+                    resultCount: playlist.length,
+                    totalCount: store.videos.length,
+                  );
     final wasPaused = thumbnailService.isPaused;
     thumbnailService.pause();
     try {
@@ -742,7 +1864,7 @@ class _LibraryPageState extends State<LibraryPage> {
             playbackSettings: _playbackSettings,
             activeTags: _selectedTags.toList()..sort(),
             activeChildTag: activeChildTag,
-            queueTitle: _currentQueueTitle(),
+            queueTitle: queueTitle,
             onDeleteFile: _deleteVideoFile,
             onToggleFavorite: _toggleFavorite,
             onMediaDetailsUpdated: _updateMediaDetails,
@@ -757,13 +1879,16 @@ class _LibraryPageState extends State<LibraryPage> {
     item.lastPlayedAt = DateTime.now();
     await _store?.upsertVideo(item);
     if (mounted) {
-      setState(() {});
+      _markLibraryDataChanged();
     }
   }
 
   Future<void> _toggleFavorite(VideoItem item) async {
     setState(() => item.isFavorite = !item.isFavorite);
     await _store?.upsertVideo(item);
+    if (mounted) {
+      _markLibraryDataChanged();
+    }
   }
 
   Future<void> _updateMediaDetails(
@@ -775,7 +1900,7 @@ class _LibraryPageState extends State<LibraryPage> {
     item.mediaFingerprint = fingerprint ?? item.mediaFingerprint;
     await _store?.upsertVideo(item);
     if (mounted) {
-      setState(() {});
+      _markLibraryDataChanged();
     }
   }
 
@@ -787,7 +1912,7 @@ class _LibraryPageState extends State<LibraryPage> {
     _store?.videos.remove(TagRules.pathKey(item.path));
     await _store?.deleteVideo(item.path);
     if (mounted) {
-      setState(() {});
+      _markLibraryDataChanged();
     }
   }
 
@@ -828,6 +1953,9 @@ class _LibraryPageState extends State<LibraryPage> {
     });
     await _store?.replaceManualTags(item,
         parentTag: editingChildTags ? childParentTag : null);
+    if (mounted) {
+      _markLibraryDataChanged();
+    }
   }
 
   Set<String> _folderTagsForItem(VideoItem item) {

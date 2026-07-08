@@ -1,4 +1,4 @@
-part of '../../main.dart';
+part of '../app.dart';
 
 class TagManagerPage extends StatefulWidget {
   const TagManagerPage({
