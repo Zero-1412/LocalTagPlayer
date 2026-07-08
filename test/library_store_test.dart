@@ -186,4 +186,141 @@ void main() {
     expect(reloadedItem.tags, contains('Series'));
     expect(reloadedItem.childTags['Series'], contains('Album'));
   });
+
+  test('tag repository persists aliases and visibility flags', () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('tag_metadata');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+
+    final store = await _loadTrackedStore(stores);
+    final tag = await store.createManualTag(
+      name: 'favorite-set',
+      groupId: 'manual',
+      displayName: '收藏集合',
+    );
+
+    await store.updateTagDetails(
+      tag,
+      displayName: '本地收藏集合',
+      aliases: const ['fav', '收藏', 'fav'],
+      isFavorite: true,
+      isHidden: true,
+      sortOrder: 42,
+    );
+
+    final reloaded = await _loadTrackedStore(stores);
+    final persisted = reloaded.tagsById[tag.id];
+    expect(persisted, isNotNull);
+    expect(persisted!.displayName, '本地收藏集合');
+    expect(persisted.aliases, ['fav', '收藏']);
+    expect(persisted.isFavorite, isTrue);
+    expect(persisted.isHidden, isTrue);
+    expect(persisted.sortOrder, 42);
+  });
+
+  test('manual child tag persistence keeps folder child tags separate',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('manual_child');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Series', 'Album', 'child.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, file.path);
+    final manualChild = const TagItem(
+      id: 'manual:series:manual-child',
+      name: 'manual-child',
+      displayName: '手动子标签',
+      groupId: 'manual',
+      parentId: 'Series',
+      source: TagSource.manual,
+    );
+    await store.saveTag(manualChild);
+    item.childTags['Series'] = <String>{'Album', 'manual-child'};
+
+    await store.replaceManualTags(item, parentTag: 'Series');
+
+    final reloaded = await _loadTrackedStore(stores);
+    final reloadedItem = _videoByPath(reloaded, file.path);
+    final pathKey = TagRules.pathKey(file.path);
+    expect(reloadedItem.childTags['Series'],
+        containsAll(['Album', 'manual-child']));
+    expect(reloaded.videoTagIdsByPathKey[pathKey], contains(manualChild.id));
+    final summaries = await reloaded.tagUsageSummaries();
+    expect(summaries[manualChild.id]?.manual, 1);
+    expect(
+      reloaded.tagsById.values.where((tag) =>
+          tag.source == TagSource.folder &&
+          tag.parentId == 'Series' &&
+          tag.name == 'Album'),
+      isNotEmpty,
+    );
+  });
+
+  test('video repository persists direct upserts and deletes tag links',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('video_repo');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Direct', 'upsert.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    final addedAt = DateTime.utc(2026, 7, 8, 11, 30);
+    final direct = VideoItem(
+      path: file.path,
+      title: 'upsert',
+      folder: file.parent.path,
+      rootPath: mediaRoot.path,
+      relativePath: 'Direct${Platform.pathSeparator}upsert.mp4',
+      fileSize: await file.length(),
+      modifiedMs: (await file.lastModified()).millisecondsSinceEpoch,
+      tags: {'Direct'},
+      childTags: const <String, Set<String>>{},
+      isFavorite: true,
+      mediaFingerprint: 'fingerprint-1',
+      addedAt: addedAt,
+      lastPlayedAt: addedAt.add(const Duration(minutes: 5)),
+    );
+
+    await store.upsertVideo(direct);
+    final reloaded = await _loadTrackedStore(stores);
+    final persisted = _videoByPath(reloaded, file.path);
+    expect(persisted.isFavorite, isTrue);
+    expect(persisted.mediaFingerprint, 'fingerprint-1');
+    expect(persisted.relativePath, 'Direct${Platform.pathSeparator}upsert.mp4');
+
+    final tag =
+        await reloaded.createManualTag(name: 'manual', groupId: 'manual');
+    expect(await reloaded.batchAddManualTag(tag, [persisted]), 1);
+    expect(
+      reloaded.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
+      contains(tag.id),
+    );
+
+    await reloaded.deleteVideo(file.path);
+    final deleted = await _loadTrackedStore(stores);
+    expect(deleted.videos[TagRules.pathKey(file.path)], isNull);
+    expect(deleted.videoTagIdsByPathKey[TagRules.pathKey(file.path)], isNull);
+    expect((await deleted.tagUsageSummaries())[tag.id]?.manual ?? 0, 0);
+  });
 }

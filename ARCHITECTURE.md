@@ -284,11 +284,15 @@ lib/
       repository_interfaces.dart
     services/
       library_store.dart
+      library_tag_persistence.dart
+      library_video_persistence.dart
       external_media_tools.dart
       thumbnail_service.dart
       media_details_service.dart
     pages/
       library_page.dart
+      player_diagnostics_dialog.dart
+      player_playback_controller.dart
       player_page.dart
     widgets/
       library_widgets.dart
@@ -297,6 +301,7 @@ lib/
 
 - 继续把 `TagRules` 从 part 过渡为独立 import 模块，并保护目录派生标签与用户手动标签的边界。
 - 抽出 `LibraryRepository`，隔离 SQLite schema、查询和写入。
+- 继续收敛 `LibraryTagPersistence` / `LibraryVideoPersistence`，在测试保护下再拆 metadata、扫描协调和标签维护策略。
 - 抽出 `MediaTools`，隔离 Windows FFmpeg/FFprobe 与移动端实现。
 - 继续把 `AppPaths` 扩展为平台文件系统适配，避免服务层直接依赖平台路径。
 

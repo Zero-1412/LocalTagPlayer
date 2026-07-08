@@ -99,3 +99,10 @@
 - `0.3.0`：按外部跨平台规划重定媒体库职责，扩展为 Tag Model + Filter Engine、别名、分组语义、稳定身份、missing/relink 和标签来源分离。
 - `0.2.0`：实现平台无关 `FilterQuery.matches` 语义：标签组 AND、同组 OR、排除 NOT、标签别名搜索；媒体库筛选接入 `FilterQuery`，同时保留文件夹派生的一/二级标签行为。
 - `0.1.0`：从 roadmap 创建任务模板。
+
+## 2026-07-08 LibraryStore tag/video persistence 拆分
+
+- 补充 repository 边界 focused tests：标签别名、隐藏、收藏、排序字段会跨 store reload 保留；manual child tag 与 folder child tag 会按来源分离；video upsert/delete 会持久化视频字段并清理 `video_tags` 关联。
+- 新增 `LibraryTagPersistence`，集中 `tags`、`tag_aliases`、`video_tags` 的写入、手动标签作用域清理和引用计数。
+- 新增 `LibraryVideoPersistence`，集中 `videos` 表行映射、批量写入、单条 upsert 和删除。
+- `LibraryStore` 仍负责扫描协调、folder/manual 来源语义、内存索引协调和兼容字段维护；本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 过滤语义。

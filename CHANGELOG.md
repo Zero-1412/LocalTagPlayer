@@ -259,6 +259,9 @@
 
 ### 媒体库与 SQLite
 
+- 新增 `LibraryStore` 持久化边界 focused tests，覆盖 tag aliases / hidden / favorite / sortOrder 持久化、manual child tag 与 folder child tag 分离、video upsert/delete 后关联清理。
+- `LibraryStore` 拆出 `LibraryTagPersistence` 和 `LibraryVideoPersistence`：标签/别名/视频标签关联写入、视频行映射和视频删除写入进入独立 helper，扫描和 folder/manual 业务语义仍留在 store 协调。
+- `deleteVideo` 同步移除内存视频索引和 `video_tags` 关联，避免删除后当前 store 与重载 store 状态不一致。
 - 右侧标签筛选面板一级排序去除独立标题，选项改为“数量 / 名称 / 常用”；“常用”使用本次会话一级标签点击次数，不新增 schema。
 - 右侧一级标签数量排序改为稳定数量基准，避免点击一级标签后因当前筛选结果数变化导致该标签置顶或其它标签重排。
 - “全部二级标签”页签改为从标签库展示二级标签，当前筛选下结果数为 0 的标签也保留展示，避免空面板。
@@ -309,6 +312,8 @@
 
 ### 架构拆分
 
+- 播放页拆出 `PlayerPlaybackController`，集中维护来源播放队列、当前二级标签、正在播放索引和选中索引；`PlayerPage` 继续负责播放器生命周期、mpv 打开和页面交互。
+- 播放诊断弹窗迁移到 `player_diagnostics_dialog.dart`，保留持续采样、暂停停止采样和关闭释放 timer/subscription 的行为。
 - `lib/main.dart` 按现有类边界拆分为 `src/models`、`src/services`、`src/pages`、`src/widgets`。
 - 当前拆分采用 Dart part 机制，保持行为不变，先降低单文件维护成本。
 - 明确下一阶段需要抽出平台与数据接口，再从 part 文件演进为真正独立模块。

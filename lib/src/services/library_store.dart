@@ -23,6 +23,11 @@ class LibraryStore {
   final Map<String, TagItem> tagsById;
   final Map<String, Set<String>> videoTagIdsByPathKey;
 
+  LibraryTagPersistence get _tagPersistence =>
+      LibraryTagPersistence(_db, tagsById, videoTagIdsByPathKey);
+
+  LibraryVideoPersistence get _videoPersistence => LibraryVideoPersistence(_db);
+
   TagQueryContext get tagQueryContext => TagQueryContext(
         tagsById: tagsById,
         videoTagIdsByPathKey: videoTagIdsByPathKey,
@@ -333,7 +338,7 @@ class LibraryStore {
             .cast<String>());
     final videos = <String, VideoItem>{};
     for (final row in await db.query('videos')) {
-      final item = _videoFromRow(row);
+      final item = LibraryVideoPersistence.videoFromRow(row);
       videos[TagRules.pathKey(item.path)] = item;
     }
     final tagGroups = await _loadTagGroups(db);
@@ -374,61 +379,6 @@ class LibraryStore {
     }
   }
 
-  static VideoItem _videoFromRow(Map<String, Object?> row) {
-    final mediaDetailsJson = row['media_details_json'] as String?;
-    return VideoItem(
-      path: row['path'] as String,
-      title: row['title'] as String,
-      folder: row['folder'] as String,
-      tags: ((jsonDecode(row['tags_json'] as String) as List?) ?? const [])
-          .cast<String>()
-          .toSet(),
-      childTags:
-          ((jsonDecode(row['child_tags_json'] as String) as Map?) ?? const {})
-              .map(
-        (key, value) => MapEntry(key as String,
-            ((value as List?) ?? const []).cast<String>().toSet()),
-      ),
-      rootPath: row['root_path'] as String?,
-      relativePath: row['relative_path'] as String?,
-      fileSize: row['file_size'] as int?,
-      modifiedMs: row['modified_ms'] as int?,
-      isFavorite: (row['is_favorite'] as int? ?? 0) == 1,
-      mediaDetails: mediaDetailsJson == null || mediaDetailsJson.isEmpty
-          ? null
-          : MediaDetails.fromJson(
-              (jsonDecode(mediaDetailsJson) as Map).cast<String, Object?>()),
-      mediaFingerprint: row['media_fingerprint'] as String?,
-      thumbnailError: row['thumbnail_error'] as String?,
-      mediaDetailsError: row['media_details_error'] as String?,
-      addedAt:
-          DateTime.tryParse(row['added_at'] as String? ?? '') ?? DateTime.now(),
-      lastPlayedAt: DateTime.tryParse(row['last_played_at'] as String? ?? ''),
-    );
-  }
-
-  Map<String, Object?> _videoToRow(VideoItem item) => {
-        'path': item.path,
-        'title': item.title,
-        'folder': item.folder,
-        'root_path': item.rootPath,
-        'relative_path': item.relativePath,
-        'file_size': item.fileSize,
-        'modified_ms': item.modifiedMs,
-        'tags_json': jsonEncode(item.tags.toList()..sort()),
-        'child_tags_json': jsonEncode(item.childTags
-            .map((key, value) => MapEntry(key, value.toList()..sort()))),
-        'is_favorite': item.isFavorite ? 1 : 0,
-        'media_details_json': item.mediaDetails == null
-            ? null
-            : jsonEncode(item.mediaDetails!.toJson()),
-        'media_fingerprint': item.mediaFingerprint,
-        'thumbnail_error': item.thumbnailError,
-        'media_details_error': item.mediaDetailsError,
-        'added_at': item.addedAt.toIso8601String(),
-        'last_played_at': item.lastPlayedAt?.toIso8601String(),
-      };
-
   Future<void> rebuildTagIndex() async {
     final batch = _db.batch();
     batch.delete('video_tags');
@@ -463,41 +413,12 @@ class LibraryStore {
   }) async {
     final batch = _db.batch();
     _syncManualTagsInBatch(batch, item, parentTag: parentTag);
-    batch.insert('videos', _videoToRow(item),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    _videoPersistence.insertInBatch(batch, item);
     await batch.commit(noResult: true);
   }
 
   Future<void> saveTag(TagItem tag) async {
-    tagsById[tag.id] = tag;
-    final batch = _db.batch();
-    batch.insert(
-      'tags',
-      {
-        'id': tag.id,
-        'name': tag.name,
-        'display_name': tag.displayName,
-        'group_id': tag.groupId,
-        'parent_id': tag.parentId,
-        'color': tag.color,
-        'source': tag.source.name,
-        'aliases_json': jsonEncode(tag.aliases),
-        'usage_count': tag.usageCount,
-        'is_favorite': tag.isFavorite ? 1 : 0,
-        'is_hidden': tag.isHidden ? 1 : 0,
-        'sort_order': tag.sortOrder,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    batch.delete('tag_aliases', where: 'tag_id = ?', whereArgs: [tag.id]);
-    for (final alias in _dedupeTags(tag.aliases)) {
-      batch.insert(
-        'tag_aliases',
-        {'tag_id': tag.id, 'alias': alias},
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
-    }
-    await batch.commit(noResult: true);
+    await _tagPersistence.saveTag(tag);
   }
 
   Future<TagItem> createManualTag({
@@ -567,11 +488,7 @@ class LibraryStore {
   }
 
   Future<int> countTagReferences(TagItem tag) async {
-    final rows = await _db.rawQuery(
-      'SELECT COUNT(*) AS count FROM video_tags WHERE tag_id = ?',
-      [tag.id],
-    );
-    return rows.isEmpty ? 0 : rows.first['count'] as int? ?? 0;
+    return _tagPersistence.countTagReferences(tag);
   }
 
   Future<int> batchAddManualTag(TagItem tag, Iterable<VideoItem> items) async {
@@ -585,9 +502,13 @@ class LibraryStore {
     final batch = _db.batch();
     for (final item in videosToUpdate) {
       _addManualTagToItem(item, tag);
-      batch.insert('videos', _videoToRow(item),
-          conflictAlgorithm: ConflictAlgorithm.replace);
-      _attachTagInBatch(batch, item.path, tag, source: TagSource.manual);
+      _videoPersistence.insertInBatch(batch, item);
+      _tagPersistence.attachTagInBatch(
+        batch,
+        item.path,
+        tag,
+        source: TagSource.manual,
+      );
     }
     await batch.commit(noResult: true);
     return videosToUpdate.length;
@@ -623,8 +544,7 @@ class LibraryStore {
       if (hadManualLink || changedCompat) {
         changed++;
       }
-      batch.insert('videos', _videoToRow(item),
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      _videoPersistence.insertInBatch(batch, item);
     }
     await batch.commit(noResult: true);
     return changed;
@@ -671,9 +591,10 @@ class LibraryStore {
   }
 
   void _syncFolderTagsInBatch(Batch batch, VideoItem item) {
-    _removeVideoTagSourceInBatch(batch, item.path, TagSource.folder);
+    _tagPersistence.removeVideoTagSourceInBatch(
+        batch, item.path, TagSource.folder);
     for (final tag in item.tags) {
-      _attachTagInBatch(
+      _tagPersistence.attachTagInBatch(
         batch,
         item.path,
         _tagFor(
@@ -686,7 +607,7 @@ class LibraryStore {
     }
     for (final entry in item.childTags.entries) {
       for (final child in entry.value) {
-        _attachTagInBatch(
+        _tagPersistence.attachTagInBatch(
           batch,
           item.path,
           _tagFor(
@@ -703,14 +624,18 @@ class LibraryStore {
 
   void _syncManualTagsInBatch(Batch batch, VideoItem item,
       {String? parentTag}) {
-    _removeManualTagScopeInBatch(batch, item.path, parentTag: parentTag);
+    _tagPersistence.removeManualTagScopeInBatch(
+      batch,
+      item.path,
+      parentTag: parentTag,
+    );
     if (parentTag == null) {
       final folderTags = _folderTagsForItem(item);
       for (final tag in item.tags) {
         if (folderTags.any((folderTag) => TagRules.sameTag(folderTag, tag))) {
           continue;
         }
-        _attachTagInBatch(
+        _tagPersistence.attachTagInBatch(
           batch,
           item.path,
           _tagFor(
@@ -729,7 +654,7 @@ class LibraryStore {
           .any((folderTag) => TagRules.sameTag(folderTag, child))) {
         continue;
       }
-      _attachTagInBatch(
+      _tagPersistence.attachTagInBatch(
         batch,
         item.path,
         _tagFor(
@@ -740,39 +665,6 @@ class LibraryStore {
         ),
         source: TagSource.manual,
       );
-    }
-  }
-
-  void _removeManualTagScopeInBatch(Batch batch, String videoPath,
-      {String? parentTag}) {
-    final key = TagRules.pathKey(videoPath);
-    final retained = videoTagIdsByPathKey[key];
-    if (retained == null || retained.isEmpty) {
-      return;
-    }
-    final removed = <String>[];
-    for (final tagId in retained) {
-      final tag = tagsById[tagId];
-      if (tag == null || tag.source != TagSource.manual) {
-        continue;
-      }
-      final sameScope =
-          parentTag == null ? tag.parentId == null : tag.parentId == parentTag;
-      if (!sameScope) {
-        continue;
-      }
-      removed.add(tagId);
-      batch.delete(
-        'video_tags',
-        where: Platform.isWindows
-            ? 'video_path = ? COLLATE NOCASE AND tag_id = ? AND source = ?'
-            : 'video_path = ? AND tag_id = ? AND source = ?',
-        whereArgs: [videoPath, tagId, TagSource.manual.name],
-      );
-    }
-    retained.removeAll(removed);
-    if (retained.isEmpty) {
-      videoTagIdsByPathKey.remove(key);
     }
   }
 
@@ -791,25 +683,6 @@ class LibraryStore {
     }
     return TagRules.childTagsFor(rootPath, item.path)[parentTag] ??
         const <String>{};
-  }
-
-  void _removeVideoTagSourceInBatch(
-      Batch batch, String videoPath, TagSource source) {
-    batch.delete(
-      'video_tags',
-      where: Platform.isWindows
-          ? 'video_path = ? COLLATE NOCASE AND source = ?'
-          : 'video_path = ? AND source = ?',
-      whereArgs: [videoPath, source.name],
-    );
-    final key = TagRules.pathKey(videoPath);
-    final retained = videoTagIdsByPathKey[key];
-    if (retained != null) {
-      retained.removeWhere((tagId) => tagsById[tagId]?.source == source);
-      if (retained.isEmpty) {
-        videoTagIdsByPathKey.remove(key);
-      }
-    }
   }
 
   TagItem _tagFor({
@@ -835,48 +708,6 @@ class LibraryStore {
     return item;
   }
 
-  void _attachTagInBatch(
-    Batch batch,
-    String videoPath,
-    TagItem tag, {
-    required TagSource source,
-    bool locked = false,
-  }) {
-    batch.insert(
-      'tags',
-      {
-        'id': tag.id,
-        'name': tag.name,
-        'display_name': tag.displayName,
-        'group_id': tag.groupId,
-        'parent_id': tag.parentId,
-        'color': tag.color,
-        'source': tag.source.name,
-        'aliases_json': jsonEncode(tag.aliases),
-        'usage_count': tag.usageCount,
-        'is_favorite': tag.isFavorite ? 1 : 0,
-        'is_hidden': tag.isHidden ? 1 : 0,
-        'sort_order': tag.sortOrder,
-      },
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
-    final now = DateTime.now().toIso8601String();
-    batch.insert(
-      'video_tags',
-      {
-        'video_path': videoPath,
-        'tag_id': tag.id,
-        'source': source.name,
-        'locked': locked ? 1 : 0,
-        'created_at': now,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    (videoTagIdsByPathKey[TagRules.pathKey(videoPath)] ??= <String>{})
-        .add(tag.id);
-  }
-
   static String _tagIdFor({
     required String name,
     required String groupId,
@@ -895,8 +726,7 @@ class LibraryStore {
         conflictAlgorithm: ConflictAlgorithm.replace);
     batch.delete('videos');
     for (final item in videos.values) {
-      batch.insert('videos', _videoToRow(item),
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      _videoPersistence.insertInBatch(batch, item);
       _syncFolderTagsInBatch(batch, item);
     }
     await batch.commit(noResult: true);
@@ -921,24 +751,14 @@ class LibraryStore {
   Future<void> close() => _db.close();
 
   Future<void> upsertVideo(VideoItem item) async {
-    await _db.insert('videos', _videoToRow(item),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    videos[TagRules.pathKey(item.path)] = item;
+    await _videoPersistence.upsert(item);
   }
 
   Future<void> deleteVideo(String path) async {
-    videoTagIdsByPathKey.remove(TagRules.pathKey(path));
-    await _db.delete(
-      'video_tags',
-      where: Platform.isWindows
-          ? 'video_path = ? COLLATE NOCASE'
-          : 'video_path = ?',
-      whereArgs: [path],
-    );
-    await _db.delete(
-      'videos',
-      where: Platform.isWindows ? 'path = ? COLLATE NOCASE' : 'path = ?',
-      whereArgs: [path],
-    );
+    videos.remove(TagRules.pathKey(path));
+    await _tagPersistence.deleteVideoLinks(path);
+    await _videoPersistence.delete(path);
   }
 
   Future<int> addRootAndScan(String rootPath) async {
@@ -989,8 +809,7 @@ class LibraryStore {
           addedAt: DateTime.now(),
         );
         videos[videoKey] = item;
-        batch.insert('videos', _videoToRow(item),
-            conflictAlgorithm: ConflictAlgorithm.replace);
+        _videoPersistence.insertInBatch(batch, item);
         _syncFolderTagsInBatch(batch, item);
         added++;
       } else {
@@ -1022,8 +841,7 @@ class LibraryStore {
           existing.thumbnailError = null;
         }
         if (tagsChanged || childTagsChanged || indexChanged) {
-          batch.insert('videos', _videoToRow(existing),
-              conflictAlgorithm: ConflictAlgorithm.replace);
+          _videoPersistence.insertInBatch(batch, existing);
           if (tagsChanged || childTagsChanged) {
             _syncFolderTagsInBatch(batch, existing);
           }

@@ -77,11 +77,7 @@ class _PlayerPageState extends State<PlayerPage> {
   late final FocusNode _focusNode;
   late final ScrollController _queueScrollController;
   late final MediaDetailsService _detailsService;
-  late final List<VideoItem> _sourcePlaylist;
-  late final List<VideoItem> _queue;
-  String? _selectedChildTag;
-  late int _index;
-  late int _selectedIndex;
+  late final PlayerPlaybackController _playback;
   var _isOpening = false;
   var _openWorkerRunning = false;
   String? _pendingOpenPath;
@@ -89,7 +85,17 @@ class _PlayerPageState extends State<PlayerPage> {
 
   static const double _queueItemExtent = 82;
 
-  VideoItem get _currentItem => _queue[_index];
+  List<VideoItem> get _sourcePlaylist => _playback.sourcePlaylist;
+
+  List<VideoItem> get _queue => _playback.queue;
+
+  String? get _selectedChildTag => _playback.selectedChildTag;
+
+  int get _index => _playback.playingIndex;
+
+  int get _selectedIndex => _playback.selectedIndex;
+
+  VideoItem get _currentItem => _playback.currentItem;
 
   String get _filterSummary {
     final value = widget.queueTitle.trim();
@@ -103,38 +109,13 @@ class _PlayerPageState extends State<PlayerPage> {
     return widget.activeTags.first;
   }
 
-  List<VideoItem> _playlistForChildTag(String? childTag) {
-    final parent = _activeParentTag;
-    if (parent == null || childTag == null) {
-      return List<VideoItem>.of(_sourcePlaylist);
-    }
-    return _sourcePlaylist
-        .where((item) => TagRules.matchesChildTag(item, parent, childTag))
-        .toList();
-  }
-
-  void _setPlaylistForChildTag(String? childTag,
-      {required String preferredPath}) {
-    final next = _playlistForChildTag(childTag);
-    _queue
-      ..clear()
-      ..addAll(next.isEmpty ? _sourcePlaylist : next);
-    _index = _queue.indexWhere((item) => item.path == preferredPath);
-    if (_index < 0) {
-      _index = 0;
-    }
-    _selectedIndex = _index;
-  }
-
   void _selectChildTag(String tag) {
     if (_queue.isEmpty) {
       return;
     }
     final preferredPath = _currentItem.path;
-    final nextTag = _selectedChildTag == tag ? null : tag;
     setState(() {
-      _selectedChildTag = nextTag;
-      _setPlaylistForChildTag(nextTag, preferredPath: preferredPath);
+      _playback.toggleChildTag(tag, preferredPath: preferredPath);
     });
     _ensureQueueIndexVisible(_index, center: true);
     _requestOpenCurrent();
@@ -148,13 +129,14 @@ class _PlayerPageState extends State<PlayerPage> {
     _queueScrollController = ScrollController();
     _detailsService =
         MediaDetailsService(onUpdated: widget.onMediaDetailsUpdated);
-    _sourcePlaylist = widget.playlist.isEmpty
-        ? <VideoItem>[widget.initialItem]
-        : List<VideoItem>.of(widget.playlist);
-    _queue = <VideoItem>[];
-    _selectedChildTag = widget.activeChildTag;
-    _setPlaylistForChildTag(_selectedChildTag,
-        preferredPath: widget.initialItem.path);
+    _playback = PlayerPlaybackController(
+      sourcePlaylist: widget.playlist.isEmpty
+          ? <VideoItem>[widget.initialItem]
+          : widget.playlist,
+      activeParentTag: _activeParentTag,
+      initialChildTag: widget.activeChildTag,
+      initialPath: widget.initialItem.path,
+    );
     _player = Player(
       configuration: const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
     );
@@ -330,7 +312,7 @@ class _PlayerPageState extends State<PlayerPage> {
       }
       _ignoreQueueSelectionBefore = null;
     }
-    setState(() => _selectedIndex = index);
+    setState(() => _playback.select(index));
     _ensureQueueIndexVisible(index, center: false);
   }
 
@@ -338,8 +320,8 @@ class _PlayerPageState extends State<PlayerPage> {
     if (_queue.isEmpty) {
       return;
     }
-    final nextIndex = (_selectedIndex + delta).clamp(0, _queue.length - 1);
-    setState(() => _selectedIndex = nextIndex);
+    late int nextIndex;
+    setState(() => nextIndex = _playback.moveSelection(delta));
     _ensureQueueIndexVisible(nextIndex, center: center);
   }
 
@@ -347,8 +329,8 @@ class _PlayerPageState extends State<PlayerPage> {
     if (_queue.isEmpty) {
       return;
     }
-    final nextIndex = index.clamp(0, _queue.length - 1);
-    setState(() => _selectedIndex = nextIndex);
+    late int nextIndex;
+    setState(() => nextIndex = _playback.selectQueueIndex(index));
     _ensureQueueIndexVisible(nextIndex, center: center);
   }
 
@@ -374,10 +356,7 @@ class _PlayerPageState extends State<PlayerPage> {
       _ignoreQueueSelectionBefore =
           DateTime.now().add(const Duration(milliseconds: 700));
     }
-    setState(() {
-      _index = index;
-      _selectedIndex = index;
-    });
+    setState(() => _playback.jumpTo(index));
     _ensureQueueIndexVisible(index, center: true);
     _requestOpenCurrent();
     _prefetchQueueWindow();
@@ -425,15 +404,7 @@ class _PlayerPageState extends State<PlayerPage> {
         return;
       }
       setState(() {
-        _sourcePlaylist.removeWhere((video) => video.path == item.path);
-        _queue.removeAt(_selectedIndex);
-        if (_queue.isEmpty) {
-          return;
-        }
-        if (_selectedIndex >= _queue.length) {
-          _selectedIndex = _queue.length - 1;
-        }
-        _index = _selectedIndex;
+        _playback.removeSelectedItem(item);
       });
       if (_queue.isEmpty) {
         Navigator.of(context).maybePop();
@@ -925,239 +896,6 @@ class _PlayerPageState extends State<PlayerPage> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _PlaybackDiagnosticsSnapshot {
-  const _PlaybackDiagnosticsSnapshot({
-    required this.lines,
-    required this.sampledAt,
-    required this.wasPlaying,
-    required this.wasBuffering,
-    required this.progressMs,
-    required this.expectedMs,
-    required this.smooth,
-    required this.avSync,
-    required this.mistimedFrames,
-    required this.voDelayedFrames,
-    required this.voDroppedFrames,
-    required this.decoderDroppedFrames,
-    required this.totalDroppedFrames,
-    required this.cacheDuration,
-    required this.cacheBufferingState,
-  });
-
-  final List<String> lines;
-  final DateTime sampledAt;
-  final bool wasPlaying;
-  final bool wasBuffering;
-  final int progressMs;
-  final int expectedMs;
-  final bool smooth;
-  final double? avSync;
-  final int? mistimedFrames;
-  final int? voDelayedFrames;
-  final int? voDroppedFrames;
-  final int? decoderDroppedFrames;
-  final int? totalDroppedFrames;
-  final double? cacheDuration;
-  final double? cacheBufferingState;
-}
-
-class _PlaybackDiagnosticsDialog extends StatefulWidget {
-  const _PlaybackDiagnosticsDialog({
-    required this.playerPage,
-    required this.title,
-  });
-
-  final _PlayerPageState playerPage;
-  final String title;
-
-  @override
-  State<_PlaybackDiagnosticsDialog> createState() =>
-      _PlaybackDiagnosticsDialogState();
-}
-
-class _PlaybackDiagnosticsDialogState
-    extends State<_PlaybackDiagnosticsDialog> {
-  Timer? _nextRefreshTimer;
-  StreamSubscription<bool>? _playingSubscription;
-  _PlaybackDiagnosticsSnapshot? _snapshot;
-  _PlaybackDiagnosticsSnapshot? _previousSnapshot;
-  var _sampleCount = 0;
-  var _isSampling = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _playingSubscription =
-        widget.playerPage._player.stream.playing.listen((playing) {
-      if (playing && !_isSampling) {
-        _scheduleRefresh(Duration.zero);
-      } else if (!playing) {
-        _nextRefreshTimer?.cancel();
-      }
-    });
-    _scheduleRefresh(Duration.zero);
-  }
-
-  @override
-  void dispose() {
-    _nextRefreshTimer?.cancel();
-    unawaited(_playingSubscription?.cancel());
-    super.dispose();
-  }
-
-  void _scheduleRefresh(Duration delay) {
-    _nextRefreshTimer?.cancel();
-    _nextRefreshTimer = Timer(delay, () {
-      unawaited(_refresh());
-    });
-  }
-
-  Future<void> _refresh() async {
-    if (_isSampling || !mounted) {
-      return;
-    }
-    setState(() {
-      _isSampling = true;
-      _error = null;
-    });
-    try {
-      final snapshot = await widget.playerPage._buildDiagnosticsSnapshot();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _previousSnapshot = _snapshot;
-        _snapshot = snapshot;
-        _sampleCount++;
-        _isSampling = false;
-      });
-      if (snapshot.wasPlaying) {
-        _scheduleRefresh(const Duration(milliseconds: 250));
-      }
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _error = error.toString();
-        _isSampling = false;
-      });
-      _scheduleRefresh(const Duration(seconds: 2));
-    }
-  }
-
-  List<String> _analysisLines() {
-    final snapshot = _snapshot;
-    if (snapshot == null) {
-      return const ['诊断状态: 正在采集第一组样本'];
-    }
-
-    final reasons = <String>[];
-    if (!snapshot.wasPlaying) {
-      reasons.add('视频已暂停，诊断已停止在最后一组样本');
-    }
-    if (snapshot.wasBuffering) {
-      reasons.add('播放器正在缓冲，优先检查磁盘读取、文件源或缓存状态');
-    }
-    if (!snapshot.smooth && snapshot.wasPlaying && !snapshot.wasBuffering) {
-      reasons.add('播放位置推进不足，可能存在渲染阻塞、解码跟不上或 UI 线程压力');
-    }
-    final decoderDelta = _delta(
-        snapshot.decoderDroppedFrames, _previousSnapshot?.decoderDroppedFrames);
-    if (decoderDelta != null && decoderDelta > 0) {
-      reasons.add('解码掉帧增加 $decoderDelta，可能是 HEVC 解码压力或硬解回退/拷贝开销');
-    }
-    final voDelta =
-        _delta(snapshot.voDroppedFrames, _previousSnapshot?.voDroppedFrames);
-    if (voDelta != null && voDelta > 0) {
-      reasons.add('视频输出掉帧增加 $voDelta，可能是渲染/显示同步压力');
-    }
-    final delayedDelta =
-        _delta(snapshot.voDelayedFrames, _previousSnapshot?.voDelayedFrames);
-    if (delayedDelta != null && delayedDelta > 0) {
-      reasons.add('视频输出延迟帧增加 $delayedDelta，显示链路可能跟不上');
-    }
-    final mistimedDelta =
-        _delta(snapshot.mistimedFrames, _previousSnapshot?.mistimedFrames);
-    if (mistimedDelta != null && mistimedDelta > 0) {
-      reasons.add('时序异常帧增加 $mistimedDelta，可能是刷新率/同步策略不稳定');
-    }
-    final avSync = snapshot.avSync?.abs();
-    if (avSync != null && avSync > 0.08) {
-      reasons.add('AV 偏移 ${snapshot.avSync!.toStringAsFixed(3)} 秒，音画同步正在明显修正');
-    }
-    if (snapshot.cacheDuration != null && snapshot.cacheDuration! < 3) {
-      reasons.add('缓存时长低于 3 秒，可能存在读盘或解复用供给不足');
-    }
-    if (snapshot.cacheBufferingState != null &&
-        snapshot.cacheBufferingState! < 100) {
-      reasons.add('缓存状态未满，播放器可能正在等待数据');
-    }
-    if (reasons.isEmpty) {
-      reasons.add('未发现明显掉帧、缓冲或音画同步异常');
-    }
-
-    return <String>[
-      '诊断状态: ${snapshot.wasPlaying ? '播放中持续采集' : '暂停，停止采集'}',
-      '连续采样: $_sampleCount',
-      '最近采样: ${_formatSampleTime(snapshot.sampledAt)}',
-      '异常提示: ${reasons.join('；')}',
-      '',
-    ];
-  }
-
-  int? _delta(int? current, int? previous) {
-    if (current == null || previous == null) {
-      return null;
-    }
-    return current - previous;
-  }
-
-  String _formatSampleTime(DateTime value) {
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
-    final second = value.second.toString().padLeft(2, '0');
-    return '$hour:$minute:$second';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final lines = <String>[
-      ..._analysisLines(),
-      if (_error != null) '诊断错误: $_error',
-      ...?_snapshot?.lines,
-    ];
-    return AlertDialog(
-      title: Row(
-        children: [
-          Expanded(child: Text(widget.title)),
-          if (_isSampling)
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-        ],
-      ),
-      content: SizedBox(
-        width: 760,
-        child: SelectionArea(
-          child: SingleChildScrollView(
-            child: Text(lines.join('\n')),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
-        ),
-      ],
     );
   }
 }
