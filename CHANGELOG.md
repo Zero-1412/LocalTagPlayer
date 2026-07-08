@@ -2,6 +2,15 @@
 
 ## 2026-07-08
 
+### 文件树层级标签与本地媒体库排序
+
+- 右侧标签发现面板的 folder 一级/二级候选改为从 `store.videos` 的真实路径和 `store.roots` 重新派生，不再信任历史 `tags` 表里的 folder.primary / folder.child 记录。
+- 多个 root 同时命中同一视频时优先使用最上层 root，例如 `X:\test-media\崩坏三\李素裳\clip.mp4` 会派生一级 `崩坏三`、二级 `李素裳`，不会把 `李素裳` 当一级。
+- folder 组筛选继续通过 `primaryTagId/childTagId` 的路径兼容字段执行，避免历史 tag id 与当前文件树 root 不一致时影响筛选结果。
+- 本地媒体库路径浏览里的视频项现在使用与媒体库、标签筛选、本地收藏、最近播放相同的 `sortedLibraryVideos` 排序规则；文件夹仍固定在视频前面。
+- 新增 widget test 覆盖 `X:\test-media` 与子 root 并存时的一级/二级派生。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、`PlayerBackend` 或缩略图/media 队列。
+
 ### 媒体库排序状态持久化
 
 - 新增媒体库排序偏好持久化到独立 `library_sort.json`，不再每次进入媒体库页面都回到默认排序。

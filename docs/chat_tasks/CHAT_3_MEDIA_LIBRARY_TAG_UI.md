@@ -55,10 +55,12 @@
 - 右侧标签筛选的“一级标签”页签只展示 `folder.primary` 文件夹一级标签，不再在同一页签底部混入热门二级标签。
 - 一级候选额外校验 `folder` 来源、无父级和 `folder.primary:*` id 形态；历史污染数据中误入 `folder.primary` 组的二级/manual 标签不会出现在一级列表。
 - 二级候选额外校验 `folder.child`、`folder` 来源、带父级和 `folder.child:*` id 形态，继续只在一级展开卡或“全部二级标签”页签展示。
+- folder 一级/二级候选最终以真实视频路径和本地媒体库 root 重新派生；多个 root 命中时优先使用最上层 root，保证 `X:\test-media\崩坏三` 是一级、`X:\test-media\崩坏三\李素裳` 是二级。
 - “全部二级标签”继续展示完整 `folder.child` 候选，一级展开卡内仍可查看当前一级下的二级标签。
 - 排序字段和方向切换改为直接重排当前结果，不触发完整筛选刷新和标签计数重算，降低切换排序时的卡顿。
 - “添加时间”排序只使用 `addedAt`，不再受播放器返回时更新 `lastPlayedAt` 影响。
 - 排序字段和方向保存到独立 `library_sort.json`；全量媒体库、标签筛选、本地收藏和最近播放统一使用同一排序 helper。
+- 本地媒体库路径浏览的视频项也使用同一排序 helper；文件夹继续显示在视频前面。
 - 新增 widget smoke 覆盖一级页签不显示二级标签云、默认排序立即生效和全部二级页签展示完整二级标签。
 - 本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue 或缩略图/media 队列。
 

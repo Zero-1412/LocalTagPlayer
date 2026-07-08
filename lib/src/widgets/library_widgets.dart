@@ -156,6 +156,142 @@ bool _isFolderChildDiscoveryTag(TagItem tag) {
       tag.id.startsWith('folder.child:');
 }
 
+/**
+ * 从真实本地媒体库路径派生右侧发现面板的文件夹标签。
+ *
+ * 该函数不信任历史 `tags` 表里的 folder.primary / folder.child 记录，而是按当前视频路径相对
+ * 媒体库 root 的层级重新计算：root 下一层是一级，下一层是二级。多个 root 命中时优先使用最上层
+ * root，避免 `X:\test-media\崩坏三` 这样的子 root 把 `李素裳` 误当一级。
+ */
+List<TagGroup> folderTagGroupsFromLibraryPaths({
+  required Iterable<VideoItem> videos,
+  required Iterable<String> roots,
+  required Iterable<TagGroup> templates,
+}) {
+  final primaryCounts = <String, int>{};
+  final childCounts = <String, int>{};
+  final childParents = <String, String>{};
+  for (final item in videos) {
+    final root = _bestRootForVideoPath(
+      item.path,
+      roots: roots,
+      fallbackRoot: item.rootPath,
+    );
+    if (root == null || root.isEmpty) {
+      continue;
+    }
+    final segments = TagRules.relativeFolderSegments(root, item.path);
+    if (segments.isEmpty) {
+      continue;
+    }
+    final primary = segments.first;
+    final primaryId = LibraryStore._tagIdFor(
+      name: primary,
+      groupId: 'folder.primary',
+    );
+    primaryCounts[primaryId] = (primaryCounts[primaryId] ?? 0) + 1;
+    final child = segments.length > 1 ? segments[1] : TagRules.defaultAlbumTag;
+    final childId = LibraryStore._tagIdFor(
+      name: child,
+      groupId: 'folder.child',
+      parentId: primary,
+    );
+    childCounts[childId] = (childCounts[childId] ?? 0) + 1;
+    childParents[childId] = primary;
+  }
+
+  final templateById = {for (final group in templates) group.id: group};
+  final primaryTemplate = templateById['folder.primary'] ??
+      const TagGroup(id: 'folder.primary', name: 'folder.primary', items: []);
+  final childTemplate = templateById['folder.child'] ??
+      const TagGroup(id: 'folder.child', name: 'folder.child', items: []);
+
+  TagGroup copyTemplate(TagGroup template, List<TagItem> items) => TagGroup(
+        id: template.id,
+        name: template.name,
+        displayName: template.displayName,
+        sortOrder: template.sortOrder,
+        allowMultiSelect: template.allowMultiSelect,
+        defaultLogic: template.defaultLogic,
+        items: items,
+        excludedItems: template.excludedItems,
+      );
+
+  final primaryItems = [
+    for (final entry in primaryCounts.entries)
+      TagItem(
+        id: entry.key,
+        name: entry.key.split(':').last,
+        displayName: entry.key.split(':').last,
+        groupId: 'folder.primary',
+        source: TagSource.folder,
+        usageCount: entry.value,
+      ),
+  ]..sort((a, b) {
+      final byCount = b.usageCount.compareTo(a.usageCount);
+      if (byCount != 0) {
+        return byCount;
+      }
+      return (a.displayName ?? a.name).compareTo(b.displayName ?? b.name);
+    });
+
+  final childItems = [
+    for (final entry in childCounts.entries)
+      TagItem(
+        id: entry.key,
+        name: entry.key.split(':').last,
+        displayName: entry.key.split(':').last,
+        groupId: 'folder.child',
+        parentId: childParents[entry.key],
+        source: TagSource.folder,
+        usageCount: entry.value,
+      ),
+  ]..sort((a, b) {
+      final byCount = b.usageCount.compareTo(a.usageCount);
+      if (byCount != 0) {
+        return byCount;
+      }
+      return (a.displayName ?? a.name).compareTo(b.displayName ?? b.name);
+    });
+
+  return [
+    copyTemplate(primaryTemplate, primaryItems),
+    copyTemplate(childTemplate, childItems),
+  ];
+}
+
+/**
+ * 为视频选择用于文件夹标签派生的媒体库 root。
+ */
+String? _bestRootForVideoPath(
+  String filePath, {
+  required Iterable<String> roots,
+  String? fallbackRoot,
+}) {
+  final candidates = <String>[
+    for (final root in roots)
+      if (_rootContainsFile(root, filePath)) TagRules.normalizeRootPath(root),
+  ];
+  if (candidates.isEmpty) {
+    final fallback = fallbackRoot?.trim();
+    return fallback == null || fallback.isEmpty
+        ? null
+        : TagRules.normalizeRootPath(fallback);
+  }
+  candidates.sort((a, b) => p.split(a).length.compareTo(p.split(b).length));
+  return candidates.first;
+}
+
+/**
+ * 判断 root 是否包含 filePath，并避免简单 startsWith 误匹配相似路径前缀。
+ */
+bool _rootContainsFile(String root, String filePath) {
+  final normalizedRoot = TagRules.normalizeRootPath(root);
+  final normalizedFile = p.normalize(filePath);
+  return TagRules.pathKey(normalizedFile) == TagRules.pathKey(normalizedRoot) ||
+      p.isWithin(normalizedRoot, normalizedFile);
+}
+
 List<TagGroup> primaryTagGroupsForDiscovery(List<TagGroup> groups) {
   return [
     for (final group in groups)

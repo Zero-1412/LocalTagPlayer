@@ -200,6 +200,34 @@ void main() {
     );
   });
 
+  test('folder discovery derives hierarchy from library root paths', () {
+    final item = VideoItem(
+      path: r'X:\test-media\崩坏三\李素裳\clip.mp4',
+      title: 'clip',
+      folder: r'X:\test-media\崩坏三\李素裳',
+      rootPath: r'X:\test-media\崩坏三',
+      tags: {'李素裳'},
+      childTags: const {
+        '李素裳': {'默认专辑'},
+      },
+      addedAt: DateTime.utc(2026, 7, 8),
+    );
+    final groups = folderTagGroupsFromLibraryPaths(
+      videos: [item],
+      roots: const [r'X:\test-media', r'X:\test-media\崩坏三'],
+      templates: const [
+        TagGroup(id: 'folder.primary', name: '一级标签', items: []),
+        TagGroup(id: 'folder.child', name: '二级标签', items: []),
+      ],
+    );
+    final primary = groups.firstWhere((group) => group.id == 'folder.primary');
+    final child = groups.firstWhere((group) => group.id == 'folder.child');
+
+    expect(primary.items.map((tag) => tag.name), ['崩坏三']);
+    expect(
+        child.items.map((tag) => '${tag.parentId}/${tag.name}'), ['崩坏三/李素裳']);
+  });
+
   testWidgets('primary discovery tab does not render secondary tag cloud',
       (tester) async {
     await tester.pumpWidget(const TagDiscoverySmokeHarness(childCount: 12));

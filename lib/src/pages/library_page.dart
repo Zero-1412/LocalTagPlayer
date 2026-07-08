@@ -473,7 +473,8 @@ class _LibraryPageState extends State<LibraryPage> {
     if (!directory.existsSync()) {
       return const <_LocalLibraryEntry>[];
     }
-    final entries = <_LocalLibraryEntry>[];
+    final folders = <_LocalLibraryEntry>[];
+    final videos = <VideoItem>[];
     final videoByPathKey = {
       for (final item in store.videos.values) TagRules.pathKey(item.path): item,
     };
@@ -488,17 +489,25 @@ class _LibraryPageState extends State<LibraryPage> {
     });
     for (final child in children) {
       if (child is Directory) {
-        entries.add(_LocalLibraryEntry.folder(child.path));
+        folders.add(_LocalLibraryEntry.folder(child.path));
         continue;
       }
       if (child is File && TagRules.isVideoPath(child.path)) {
         final video = videoByPathKey[TagRules.pathKey(child.path)];
         if (video != null) {
-          entries.add(_LocalLibraryEntry.video(video));
+          videos.add(video);
         }
       }
     }
-    return entries;
+    return [
+      ...folders,
+      for (final video in sortedLibraryVideos(
+        videos,
+        sortMode: _sortMode,
+        sortDirection: _sortDirection,
+      ))
+        _LocalLibraryEntry.video(video),
+    ];
   }
 
   void _mutateFilters(VoidCallback mutation) {
@@ -828,7 +837,10 @@ class _LibraryPageState extends State<LibraryPage> {
       childTagId: parentTag == null ? null : selectedChildTag,
       selectedGroupTagIds: {
         for (final entry in _selectedGroupTagIds.entries)
-          if (entry.value.isNotEmpty) entry.key: {...entry.value},
+          if (entry.value.isNotEmpty &&
+              entry.key != 'folder.primary' &&
+              entry.key != 'folder.child')
+            entry.key: {...entry.value},
       },
       excludeTagIds: {..._excludedTagIds},
       favoriteOnly: _showFavoritesOnly,
@@ -836,17 +848,37 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   List<TagGroup> _tagGroupsForSidebar(LibraryStore store) {
+    final folderGroups = folderTagGroupsFromLibraryPaths(
+      videos: store.videos.values,
+      roots: store.roots,
+      templates: store.tagGroups,
+    );
+    final folderGroupById = {for (final group in folderGroups) group.id: group};
     final itemsByGroup = <String, List<TagItem>>{};
     for (final tag in store.allTagItems.where((tag) => !tag.isHidden)) {
       final groupId = tag.groupId ?? 'manual';
+      if (groupId == 'folder.primary' || groupId == 'folder.child') {
+        continue;
+      }
       (itemsByGroup[groupId] ??= <TagItem>[]).add(tag);
     }
     final groups = <TagGroup>[];
     final knownGroupIds = <String>{};
     for (final group in store.tagGroups) {
       knownGroupIds.add(group.id);
+      final folderGroup = folderGroupById[group.id];
+      if (folderGroup != null) {
+        groups.add(folderGroup);
+        continue;
+      }
       final items = itemsByGroup[group.id] ?? const <TagItem>[];
       groups.add(_copyGroupWithItems(group, items));
+    }
+    for (final folderGroup in folderGroups) {
+      if (!knownGroupIds.contains(folderGroup.id)) {
+        groups.add(folderGroup);
+        knownGroupIds.add(folderGroup.id);
+      }
     }
     for (final entry in itemsByGroup.entries) {
       if (knownGroupIds.contains(entry.key)) {
@@ -1127,7 +1159,8 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null || selectedFolderIds.length != 1) {
       return null;
     }
-    return store.tagQueryContext.findTag(selectedFolderIds.first)?.name;
+    return _folderDiscoveryTagById(store, selectedFolderIds.first)?.name ??
+        store.tagQueryContext.findTag(selectedFolderIds.first)?.name;
   }
 
   String? get _activeChildTagName {
@@ -1140,7 +1173,29 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null || selectedChildIds.length != 1) {
       return null;
     }
-    return store.tagQueryContext.findTag(selectedChildIds.first)?.name;
+    return _folderDiscoveryTagById(store, selectedChildIds.first)?.name ??
+        store.tagQueryContext.findTag(selectedChildIds.first)?.name;
+  }
+
+  /**
+   * 从真实路径派生的 folder 标签候选中按 id 查找标签。
+   *
+   * 该查找用于把 UI 选中态转换回 `primaryTagId/childTagId`，避免历史 SQLite tag id
+   * 与当前文件树 root 不一致时影响筛选结果。
+   */
+  TagItem? _folderDiscoveryTagById(LibraryStore store, String tagId) {
+    for (final group in folderTagGroupsFromLibraryPaths(
+      videos: store.videos.values,
+      roots: store.roots,
+      templates: store.tagGroups,
+    )) {
+      for (final tag in group.items) {
+        if (tag.id == tagId) {
+          return tag;
+        }
+      }
+    }
+    return null;
   }
 
   @override
@@ -1186,9 +1241,17 @@ class _LibraryPageState extends State<LibraryPage> {
     final resultCounts = _visibleResultCounts.isEmpty
         ? _fallbackResultCounts(store)
         : _visibleResultCounts;
-    final stableTagCounts = _stableTagCounts.isEmpty
-        ? _fallbackResultCounts(store)
-        : _stableTagCounts;
+    final pathDerivedTagCounts = {
+      for (final group in tagGroups)
+        if (group.id == 'folder.primary' || group.id == 'folder.child')
+          for (final tag in group.items) tag.id: tag.usageCount,
+    };
+    final stableTagCounts = {
+      ...(_stableTagCounts.isEmpty
+          ? _fallbackResultCounts(store)
+          : _stableTagCounts),
+      ...pathDerivedTagCounts,
+    };
     final selectedGroupTags = _selectedGroupTagItems(store);
     final excludedTags = _excludedTagItems(store);
     final filterExpression = _filterExpression(
@@ -1217,8 +1280,10 @@ class _LibraryPageState extends State<LibraryPage> {
                 !TagRules.sameTag(tag, TagRules.defaultAlbumTag) &&
                 !TagRules.sameTag(tag, childParentTag))
             .toList();
-    final childTagItemsByParent =
-        childTagItemsByParentId(store.allTagItems, store.tagQueryContext);
+    final childTagItemsByParent = childTagItemsByParentId(
+      tagGroups.expand((group) => group.items),
+      store.tagQueryContext,
+    );
     final favoriteCount =
         store.videos.values.where((item) => item.isFavorite).length;
     Widget buildSidebar({required bool dense, double? width}) {
