@@ -58,6 +58,7 @@
 - “全部二级标签”继续展示完整 `folder.child` 候选，一级展开卡内仍可查看当前一级下的二级标签。
 - 排序字段和方向切换改为直接重排当前结果，不触发完整筛选刷新和标签计数重算，降低切换排序时的卡顿。
 - “添加时间”排序只使用 `addedAt`，不再受播放器返回时更新 `lastPlayedAt` 影响。
+- 排序字段和方向保存到独立 `library_sort.json`；全量媒体库、标签筛选、本地收藏和最近播放统一使用同一排序 helper。
 - 新增 widget smoke 覆盖一级页签不显示二级标签云、默认排序立即生效和全部二级页签展示完整二级标签。
 - 本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue 或缩略图/media 队列。
 

@@ -15,6 +15,73 @@ enum SortMode { recent, name, folder }
 enum SortDirection { descending, ascending }
 
 /**
+ * 媒体库排序偏好。
+ *
+ * 该偏好只影响媒体库、标签筛选、本地收藏和最近播放结果的展示顺序；
+ * 不写入 SQLite，也不改变 `FilterQuery` 的筛选语义。
+ */
+class LibrarySortPreferences {
+  const LibrarySortPreferences({
+    this.mode = SortMode.recent,
+    this.direction = SortDirection.descending,
+  });
+
+  /** 当前排序字段。 */
+  final SortMode mode;
+
+  /** 当前排序方向。 */
+  final SortDirection direction;
+
+  /** 从 JSON 恢复排序偏好，未知值回退到默认排序。 */
+  factory LibrarySortPreferences.fromJson(Map<String, Object?> json) {
+    final modeName = json['mode']?.toString();
+    final directionName = json['direction']?.toString();
+    return LibrarySortPreferences(
+      mode: SortMode.values.firstWhere(
+        (value) => value.name == modeName,
+        orElse: () => SortMode.recent,
+      ),
+      direction: SortDirection.values.firstWhere(
+        (value) => value.name == directionName,
+        orElse: () => SortDirection.descending,
+      ),
+    );
+  }
+
+  /** 转成可持久化 JSON。 */
+  Map<String, Object?> toJson() => {
+        'mode': mode.name,
+        'direction': direction.name,
+      };
+
+  /** 读取上次媒体库排序偏好。 */
+  static Future<LibrarySortPreferences> load() async {
+    try {
+      final file = await AppPaths.librarySortPreferencesFile();
+      if (!await file.exists()) {
+        return const LibrarySortPreferences();
+      }
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is Map<String, Object?>) {
+        return LibrarySortPreferences.fromJson(decoded);
+      }
+      if (decoded is Map) {
+        return LibrarySortPreferences.fromJson(decoded.cast<String, Object?>());
+      }
+    } catch (_) {
+      return const LibrarySortPreferences();
+    }
+    return const LibrarySortPreferences();
+  }
+
+  /** 保存当前媒体库排序偏好。 */
+  Future<void> save() async {
+    final file = await AppPaths.librarySortPreferencesFile();
+    await file.writeAsString(jsonEncode(toJson()), flush: true);
+  }
+}
+
+/**
  * 顶部排序控件。
  *
  * 字段选择使用贴合按钮底部的抽屉式 overlay，方向切换使用独立按钮，二者只通过回调把用户意图传回页面状态。

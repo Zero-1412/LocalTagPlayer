@@ -233,6 +233,7 @@ flutter build windows --debug
 - 2026-07-08 修复右侧标签层级展示：一级页签只展示 `folder.primary` 文件夹一级标签，二级标签只在“全部二级标签”页签展示，避免一级页签混入热门二级标签。
 - 2026-07-08 继续加固右侧一级列表：展示候选会校验 `folder.primary` + `folder` 来源 + 无父级 + `folder.primary:*` id 形态，历史污染的二级/manual 标签不会混入一级列表；二级候选也校验 `folder.child` + 父级。
 - 2026-07-08 排序切换改为直接重排当前 `FilterState`，不再触发完整筛选刷新和标签计数重算；“添加时间”按 `addedAt` 排序，播放器返回更新 `lastPlayedAt` 不再导致主媒体库默认排序重排。
+- 2026-07-08 媒体库排序偏好保存到独立 `library_sort.json`；全量媒体库、标签筛选、本地收藏和最近播放统一使用 `sortedLibraryVideos`，进入媒体库不再重置排序字段/方向。
 - 2026-07-08 播放器 controller tests 覆盖二级队列切换回退和 open 请求失败后继续保留最新打开请求；未修改播放器 filtered queue 来源或 `PlayerBackend`。
 - 本轮验证：`flutter test`、`flutter analyze`、`flutter build windows --debug` 通过；debug exe 已启动到主界面。当前会话未暴露可调用的 Computer Use 控件工具，使用 Windows UIA/截图替代 smoke，UIA 只能看到 Flutter 根视图，交互路径由 widget smoke 覆盖。
 - 第一阶段拆分已完成，但仍是同一个 Dart library；下一阶段需要小步把低风险 core/model 文件迁移到普通 import，并逐步让实现依赖新接口。

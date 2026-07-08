@@ -328,10 +328,13 @@ class _LibraryPageState extends State<LibraryPage> {
     final store = await LibraryStore.load();
     final thumbnailService = await ThumbnailService.create();
     final playbackSettings = await PlaybackSettings.load();
+    final sortPreferences = await LibrarySortPreferences.load();
     if (!mounted) {
       return;
     }
     setState(() {
+      _sortMode = sortPreferences.mode;
+      _sortDirection = sortPreferences.direction;
       _store = store;
       _thumbnailService = thumbnailService;
       _playbackSettings = playbackSettings;
@@ -438,12 +441,14 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   FilterState _buildImmediateFilterState(LibraryStore store) {
-    final videos = store.videos.values.toList();
-    videos.sort(_compareVideos);
     return FilterState(
       query: _currentFilterQuery(),
-      filteredVideos: List<VideoItem>.unmodifiable(videos),
-      resultCount: videos.length,
+      filteredVideos: sortedLibraryVideos(
+        store.videos.values,
+        sortMode: _sortMode,
+        sortDirection: _sortDirection,
+      ),
+      resultCount: store.videos.length,
       totalCount: store.videos.length,
     );
   }
@@ -514,22 +519,30 @@ class _LibraryPageState extends State<LibraryPage> {
     SortMode? sortMode,
     SortDirection? sortDirection,
   }) {
+    late final LibrarySortPreferences preferences;
     setState(() {
       _sortMode = sortMode ?? _sortMode;
       _sortDirection = sortDirection ?? _sortDirection;
+      preferences = LibrarySortPreferences(
+        mode: _sortMode,
+        direction: _sortDirection,
+      );
       if (_resultMode != _LibraryResultMode.library || _filterState == null) {
         return;
       }
       final currentState = _filterState!;
-      final reorderedVideos = currentState.filteredVideos.toList()
-        ..sort(_compareVideos);
       _filterState = FilterState(
         query: currentState.query,
-        filteredVideos: List<VideoItem>.unmodifiable(reorderedVideos),
+        filteredVideos: sortedLibraryVideos(
+          currentState.filteredVideos,
+          sortMode: _sortMode,
+          sortDirection: _sortDirection,
+        ),
         resultCount: currentState.resultCount,
         totalCount: currentState.totalCount,
       );
     });
+    unawaited(preferences.save());
   }
 
   /**
@@ -1140,20 +1153,19 @@ class _LibraryPageState extends State<LibraryPage> {
 
     final filterState = _filterState ?? _buildImmediateFilterState(store);
     final filteredVideos = filterState.filteredVideos;
-    final recentVideos =
-        store.videos.values.where((item) => item.lastPlayedAt != null).toList()
-          ..sort((a, b) {
-            final value = b.lastPlayedAt!.compareTo(a.lastPlayedAt!);
-            return _sortDirection == SortDirection.descending ? value : -value;
-          });
-    final favoriteVideos = store.videos.values
-        .where((item) => item.isFavorite)
-        .toList()
-      ..sort(_compareVideos);
+    final recentVideos = sortedLibraryVideos(
+      store.videos.values.where((item) => item.lastPlayedAt != null),
+      sortMode: _sortMode,
+      sortDirection: _sortDirection,
+    );
+    final favoriteVideos = sortedLibraryVideos(
+      store.videos.values.where((item) => item.isFavorite),
+      sortMode: _sortMode,
+      sortDirection: _sortDirection,
+    );
     final videos = switch (_resultMode) {
-      _LibraryResultMode.recent => List<VideoItem>.unmodifiable(recentVideos),
-      _LibraryResultMode.favorites =>
-        List<VideoItem>.unmodifiable(favoriteVideos),
+      _LibraryResultMode.recent => recentVideos,
+      _LibraryResultMode.favorites => favoriteVideos,
       _LibraryResultMode.local => const <VideoItem>[],
       _LibraryResultMode.library => filteredVideos,
     };

@@ -212,3 +212,25 @@ int compareLibraryVideosForSort(
   }
   return sortDirection == SortDirection.descending ? -value : value;
 }
+
+/**
+ * 按媒体库当前排序规则返回不可变视频列表。
+ *
+ * [videos] 可以来自全库、标签筛选结果、本地收藏或最近播放；统一入口能避免不同来源各自实现排序，
+ * 导致“媒体库排序”和“标签筛选排序”表现不一致。
+ */
+@visibleForTesting
+List<VideoItem> sortedLibraryVideos(
+  Iterable<VideoItem> videos, {
+  required SortMode sortMode,
+  required SortDirection sortDirection,
+}) {
+  final sorted = videos.toList()
+    ..sort((a, b) => compareLibraryVideosForSort(
+          a,
+          b,
+          sortMode: sortMode,
+          sortDirection: sortDirection,
+        ));
+  return List<VideoItem>.unmodifiable(sorted);
+}

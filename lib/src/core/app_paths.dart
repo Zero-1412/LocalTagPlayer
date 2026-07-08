@@ -49,6 +49,16 @@ class AppPaths {
     return File(p.join(directory.path, 'settings.json'));
   }
 
+  /**
+   * 媒体库排序偏好文件。
+   *
+   * 排序属于媒体库视图状态，不与播放硬解设置混写，避免任一设置保存时覆盖另一方字段。
+   */
+  static Future<File> librarySortPreferencesFile() async {
+    final directory = await dataDirectory();
+    return File(p.join(directory.path, 'library_sort.json'));
+  }
+
   static Future<File> legacyLibraryFile() async {
     final directory = await dataDirectory();
     return File(p.join(directory.path, 'library.json'));

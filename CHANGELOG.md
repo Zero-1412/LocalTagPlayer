@@ -2,6 +2,14 @@
 
 ## 2026-07-08
 
+### 媒体库排序状态持久化
+
+- 新增媒体库排序偏好持久化到独立 `library_sort.json`，不再每次进入媒体库页面都回到默认排序。
+- 媒体库全量结果、标签筛选结果、本地收藏和最近播放统一使用 `sortedLibraryVideos` 排序 helper，避免不同来源各自排序导致选择的排序方式不生效。
+- 排序偏好独立于播放硬解 `settings.json`，播放设置保存不会覆盖媒体库排序字段和方向。
+- 新增 widget tests 覆盖排序偏好 save/load，以及筛选、收藏、最近播放三类来源使用同一排序规则。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、`PlayerBackend` 或缩略图/media 队列。
+
 ### 标签筛选一级列表层级修复
 
 - 右侧标签发现面板增加文件树层级守卫：一级列表只接收 `folder.primary`、`folder` 来源、无父级且 id 形态为 `folder.primary:*` 的标签。

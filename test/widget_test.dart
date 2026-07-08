@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -239,6 +241,62 @@ void main() {
           sortDirection: SortDirection.ascending,
         ));
     expect(videos, [newer, older]);
+  });
+
+  test('library sort preferences persist outside playback settings', () async {
+    final directory = await Directory.systemTemp.createTemp('ltp_sort_pref_');
+    addTearDown(() async {
+      AppPaths.debugUseDataDirectoryForTesting(null);
+      await directory.delete(recursive: true);
+    });
+    AppPaths.debugUseDataDirectoryForTesting(directory);
+
+    const preferences = LibrarySortPreferences(
+      mode: SortMode.folder,
+      direction: SortDirection.ascending,
+    );
+    await preferences.save();
+    final loaded = await LibrarySortPreferences.load();
+
+    expect(loaded.mode, SortMode.folder);
+    expect(loaded.direction, SortDirection.ascending);
+    expect(await AppPaths.settingsFile(),
+        isNot(await AppPaths.librarySortPreferencesFile()));
+  });
+
+  test('library sort helper applies to every video source list', () {
+    final alpha = VideoItem(
+      path: 'D:\\video\\B\\alpha.mp4',
+      title: 'Alpha',
+      folder: 'D:\\video\\B',
+      tags: const {},
+      isFavorite: true,
+      addedAt: DateTime.utc(2026, 1, 3),
+      lastPlayedAt: DateTime.utc(2026, 7, 8),
+    );
+    final beta = VideoItem(
+      path: 'D:\\video\\A\\beta.mp4',
+      title: 'Beta',
+      folder: 'D:\\video\\A',
+      tags: const {},
+      isFavorite: true,
+      addedAt: DateTime.utc(2026, 1, 1),
+      lastPlayedAt: DateTime.utc(2026, 7, 9),
+    );
+    final filtered = [alpha, beta];
+    final favorites = filtered.where((item) => item.isFavorite);
+    final recent = filtered.where((item) => item.lastPlayedAt != null);
+
+    for (final source in [filtered, favorites, recent]) {
+      expect(
+        sortedLibraryVideos(
+          source,
+          sortMode: SortMode.folder,
+          sortDirection: SortDirection.ascending,
+        ),
+        [beta, alpha],
+      );
+    }
   });
 
   test('player playback controller keeps queue stable on child switches', () {
