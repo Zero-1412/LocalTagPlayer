@@ -2771,6 +2771,20 @@ bool referenceTopBarShouldCollapseActions(LayoutSize layoutSize) {
   return layoutSize != LayoutSize.expanded;
 }
 
+@visibleForTesting
+bool referenceTopBarSearchShouldFillRow(
+  LayoutSize layoutSize,
+  double rowWidth,
+) {
+  /**
+   * expanded 主界面顶部栏要把搜索框扩展到按钮左侧剩余空间；
+   * medium / compact 或窄行宽下也继续使用弹性宽度，避免右侧动作按钮溢出。
+   */
+  return layoutSize == LayoutSize.expanded ||
+      layoutSize == LayoutSize.compact ||
+      rowWidth < 1040;
+}
+
 /**
  * 右侧标签筛选面板收起后的恢复入口。
  *
@@ -2921,7 +2935,10 @@ class _ReferenceTopBar extends StatelessWidget {
             // 非最大化窗口虽然仍可能处于 expanded 断点，但右侧面板会挤占可用宽度；
             // 搜索框必须在真实行宽不足时让出空间，避免工具条右侧按钮越界。
             final fitSearchToRemainingWidth =
-                compact || constraints.maxWidth < 1040;
+                referenceTopBarSearchShouldFillRow(
+              layoutSize,
+              constraints.maxWidth,
+            );
             final searchField = ConstrainedBox(
               constraints: BoxConstraints(
                 minWidth: 180,

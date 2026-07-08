@@ -715,6 +715,40 @@ class _LibraryPageState extends State<LibraryPage> {
     _scheduleFilterRefresh();
   }
 
+  /**
+   * 播放器返回后只更新播放时间相关的可见状态。
+   *
+   * `lastPlayedAt` 不会改变标签、收藏、路径或筛选命中集合；因此不能复用
+   * `_markLibraryDataChanged` 的全库标签计数与完整筛选刷新路径，否则从播放器
+   * 返回主界面会在大媒体库上产生明显卡顿。
+   */
+  void _markPlaybackTimestampChanged(VideoItem item) {
+    if (_resultMode == _LibraryResultMode.library) {
+      final currentState = _filterState;
+      if (_sortMode != SortMode.recent || currentState == null) {
+        return;
+      }
+      final reorderedVideos = currentState.filteredVideos.toList()
+        ..sort(_compareVideos);
+      setState(() {
+        _filterState = FilterState(
+          query: currentState.query,
+          filteredVideos: List<VideoItem>.unmodifiable(reorderedVideos),
+          resultCount: currentState.resultCount,
+          totalCount: currentState.totalCount,
+        );
+      });
+      return;
+    }
+
+    // 最近播放、智能收藏和本地路径浏览只依赖当前内存对象重建轻量列表。
+    if (_resultMode == _LibraryResultMode.recent ||
+        (_resultMode == _LibraryResultMode.favorites && item.isFavorite) ||
+        _resultMode == _LibraryResultMode.local) {
+      setState(() {});
+    }
+  }
+
   void _scheduleFilterRefresh() {
     final store = _store;
     if (store == null) {
@@ -1891,7 +1925,7 @@ class _LibraryPageState extends State<LibraryPage> {
     item.lastPlayedAt = DateTime.now();
     await _store?.upsertVideo(item);
     if (mounted) {
-      _markLibraryDataChanged();
+      _markPlaybackTimestampChanged(item);
     }
   }
 

@@ -20,6 +20,15 @@ void main() {
     expect(referenceTopBarShouldCollapseActions(LayoutSize.compact), isTrue);
     expect(referenceTopBarShouldCollapseActions(LayoutSize.medium), isTrue);
     expect(referenceTopBarShouldCollapseActions(LayoutSize.expanded), isFalse);
+
+    expect(
+      referenceTopBarSearchShouldFillRow(LayoutSize.expanded, 1600),
+      isTrue,
+    );
+    expect(
+      referenceTopBarSearchShouldFillRow(LayoutSize.medium, 900),
+      isTrue,
+    );
   });
 
   test('expanded main layout keeps proportional slots while resizing', () {
