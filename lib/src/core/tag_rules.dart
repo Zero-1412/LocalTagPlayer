@@ -1,5 +1,7 @@
 part of '../app.dart';
 
+// ignore_for_file: slash_for_doc_comments
+
 class TagRules {
   const TagRules._();
 
@@ -35,6 +37,33 @@ class TagRules {
           children.contains(defaultAlbumTag);
     }
     return children?.contains(childTag) ?? false;
+  }
+
+  /**
+   * 按当前媒体库 root 重新派生文件夹层级并匹配一级/二级标签。
+   *
+   * 扫描历史里可能存在 `X:\test-media` 与 `X:\test-media\鸣潮` 同时作为 root 的情况，旧记录会把
+   * `尤诺` 当作一级；筛选时必须以当前最上层 root 重新计算，保证右侧 UI 和真实结果一致。
+   */
+  static bool matchesFolderPath(
+    VideoItem item,
+    Iterable<String> roots, {
+    required String primaryTag,
+    String? childTag,
+  }) {
+    final segments = relativeFolderSegmentsForBestRoot(
+      item.path,
+      roots: roots,
+      fallbackRoot: item.rootPath,
+    );
+    if (segments.isEmpty || !sameTag(segments.first, primaryTag)) {
+      return false;
+    }
+    if (childTag == null) {
+      return true;
+    }
+    final derivedChild = segments.length > 1 ? segments[1] : defaultAlbumTag;
+    return sameTag(derivedChild, childTag);
   }
 
   static bool isVideoPath(String path) {
@@ -114,6 +143,58 @@ class TagRules {
     return <String, Set<String>>{
       segments.first: <String>{child},
     };
+  }
+
+  /**
+   * 使用命中文件的最上层媒体库 root 计算相对文件夹层级。
+   *
+   * 多 root 命中时选路径段最少的 root，避免子 root 把原本的二级目录提升成一级标签。
+   */
+  static List<String> relativeFolderSegmentsForBestRoot(
+    String filePath, {
+    required Iterable<String> roots,
+    String? fallbackRoot,
+  }) {
+    final root = bestRootForFilePath(
+      filePath,
+      roots: roots,
+      fallbackRoot: fallbackRoot,
+    );
+    return root == null
+        ? const <String>[]
+        : relativeFolderSegments(root, filePath);
+  }
+
+  /**
+   * 查找包含文件的最上层媒体库 root。
+   */
+  static String? bestRootForFilePath(
+    String filePath, {
+    required Iterable<String> roots,
+    String? fallbackRoot,
+  }) {
+    final candidates = <String>[
+      for (final root in roots)
+        if (rootContainsFile(root, filePath)) normalizeRootPath(root),
+    ];
+    if (candidates.isEmpty) {
+      final fallback = fallbackRoot?.trim();
+      return fallback == null || fallback.isEmpty
+          ? null
+          : normalizeRootPath(fallback);
+    }
+    candidates.sort((a, b) => p.split(a).length.compareTo(p.split(b).length));
+    return candidates.first;
+  }
+
+  /**
+   * 判断 root 是否包含 filePath，并避免简单 startsWith 误匹配相似路径前缀。
+   */
+  static bool rootContainsFile(String root, String filePath) {
+    final normalizedRoot = normalizeRootPath(root);
+    final normalizedFile = p.normalize(filePath);
+    return pathKey(normalizedFile) == pathKey(normalizedRoot) ||
+        p.isWithin(normalizedRoot, normalizedFile);
   }
 
   static List<String> relativeFolderSegments(String root, String filePath) {

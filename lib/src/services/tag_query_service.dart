@@ -1,6 +1,7 @@
 part of '../app.dart';
 
 typedef VideoItemComparator = int Function(VideoItem a, VideoItem b);
+typedef VideoItemSorter = List<VideoItem> Function(Iterable<VideoItem> videos);
 
 class FilterState {
   const FilterState({
@@ -27,6 +28,7 @@ class FilterStateSource {
   Object? _sourceKey;
   Object? _sortKey;
   VideoItemComparator? _compare;
+  VideoItemSorter? _sortVideos;
 
   FilterState get state {
     final cachedState = _cachedState;
@@ -42,12 +44,14 @@ class FilterStateSource {
     Object? sourceKey,
     Object? sortKey,
     VideoItemComparator? compare,
+    VideoItemSorter? sortVideos,
   }) {
     _engine = engine;
     _totalCount = totalCount;
     _sourceKey = sourceKey ?? engine.sourceSignature;
     _sortKey = sortKey;
     _compare = compare;
+    _sortVideos = sortVideos;
   }
 
   FilterState update(FilterQuery query) {
@@ -61,9 +65,13 @@ class FilterStateSource {
       return cachedState;
     }
 
-    final filteredVideos = _engine.filter(query);
+    var filteredVideos = _engine.filter(query);
+    final sortVideos = _sortVideos;
+    if (sortVideos != null) {
+      filteredVideos = sortVideos(filteredVideos);
+    }
     final compare = _compare;
-    if (compare != null) {
+    if (sortVideos == null && compare != null) {
       filteredVideos.sort(compare);
     }
     final state = FilterState(
@@ -108,6 +116,7 @@ class FilterStateSource {
       query.keyword ?? '',
       query.primaryTagId ?? '',
       query.childTagId ?? '',
+      _sortedStrings(query.folderRoots),
       _sortedStrings(query.includeTagIds),
       _sortedStrings(query.excludeTagIds),
       sortedGroups(query.selectedGroupTagIds),
@@ -229,6 +238,7 @@ class TagQueryService {
         for (final entry in query.selectedGroupTagIds.entries)
           if (entry.key != groupId) entry.key: entry.value,
       },
+      folderRoots: query.folderRoots,
       sortRule: query.sortRule,
       excludedItems: query.excludedItems,
       favoriteOnly: query.favoriteOnly,

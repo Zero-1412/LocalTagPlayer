@@ -231,6 +231,28 @@ void main() {
         child.items.map((tag) => '${tag.parentId}/${tag.name}'), ['崩坏三/李素裳']);
   });
 
+  test('folder filter matches hierarchy derived from current library roots',
+      () {
+    final item = VideoItem(
+      path: r'X:\test-media\鸣潮\尤诺\clip.mp4',
+      title: 'clip',
+      folder: r'X:\test-media\鸣潮\尤诺',
+      rootPath: r'X:\test-media\鸣潮',
+      tags: {'尤诺'},
+      childTags: const {
+        '尤诺': {'默认专辑'},
+      },
+      addedAt: DateTime.utc(2026, 7, 8),
+    );
+    final query = FilterQuery(
+      primaryTagId: '鸣潮',
+      childTagId: '尤诺',
+      folderRoots: const [r'X:\test-media', r'X:\test-media\鸣潮'],
+    );
+
+    expect(query.matches(item), isTrue);
+  });
+
   testWidgets('primary discovery tab does not render secondary tag cloud',
       (tester) async {
     await tester.pumpWidget(const TagDiscoverySmokeHarness(childCount: 12));

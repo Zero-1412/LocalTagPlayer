@@ -172,15 +172,11 @@ List<TagGroup> folderTagGroupsFromLibraryPaths({
   final childCounts = <String, int>{};
   final childParents = <String, String>{};
   for (final item in videos) {
-    final root = _bestRootForVideoPath(
+    final segments = TagRules.relativeFolderSegmentsForBestRoot(
       item.path,
       roots: roots,
       fallbackRoot: item.rootPath,
     );
-    if (root == null || root.isEmpty) {
-      continue;
-    }
-    final segments = TagRules.relativeFolderSegments(root, item.path);
     if (segments.isEmpty) {
       continue;
     }
@@ -258,38 +254,6 @@ List<TagGroup> folderTagGroupsFromLibraryPaths({
     copyTemplate(primaryTemplate, primaryItems),
     copyTemplate(childTemplate, childItems),
   ];
-}
-
-/**
- * 为视频选择用于文件夹标签派生的媒体库 root。
- */
-String? _bestRootForVideoPath(
-  String filePath, {
-  required Iterable<String> roots,
-  String? fallbackRoot,
-}) {
-  final candidates = <String>[
-    for (final root in roots)
-      if (_rootContainsFile(root, filePath)) TagRules.normalizeRootPath(root),
-  ];
-  if (candidates.isEmpty) {
-    final fallback = fallbackRoot?.trim();
-    return fallback == null || fallback.isEmpty
-        ? null
-        : TagRules.normalizeRootPath(fallback);
-  }
-  candidates.sort((a, b) => p.split(a).length.compareTo(p.split(b).length));
-  return candidates.first;
-}
-
-/**
- * 判断 root 是否包含 filePath，并避免简单 startsWith 误匹配相似路径前缀。
- */
-bool _rootContainsFile(String root, String filePath) {
-  final normalizedRoot = TagRules.normalizeRootPath(root);
-  final normalizedFile = p.normalize(filePath);
-  return TagRules.pathKey(normalizedFile) == TagRules.pathKey(normalizedRoot) ||
-      p.isWithin(normalizedRoot, normalizedFile);
 }
 
 List<TagGroup> primaryTagGroupsForDiscovery(List<TagGroup> groups) {

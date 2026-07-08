@@ -436,6 +436,11 @@ class _LibraryPageState extends State<LibraryPage> {
       sourceKey: _libraryDataRevision,
       sortKey: (_sortMode, _sortDirection),
       compare: _compareVideos,
+      sortVideos: (videos) => sortedLibraryVideos(
+        videos,
+        sortMode: _sortMode,
+        sortDirection: _sortDirection,
+      ),
     );
     return _filterStateSource.update(query);
   }
@@ -809,12 +814,14 @@ class _LibraryPageState extends State<LibraryPage> {
       setState(() {
         _filterState = nextState;
         _isRefreshingVideos = false;
-        _isRefreshingCounts = true;
       });
       _thumbnailService?.prefetchVisible(nextState.filteredVideos.take(36));
-      Future<void>.delayed(const Duration(milliseconds: 120), () {
+      Future<void>.delayed(const Duration(milliseconds: 420), () {
         if (!mounted || revision != _filterRevision || _store != store) {
           return;
+        }
+        if (!_isRefreshingCounts) {
+          setState(() => _isRefreshingCounts = true);
         }
         final nextCounts = store.resultCounts(query);
         if (!mounted || revision != _filterRevision || _store != store) {
@@ -829,12 +836,16 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   FilterQuery _currentFilterQuery() {
+    final store = _store;
     final parentTag = _activeChildParentTag;
     final selectedChildTag = _activeChildTagName;
     return FilterQuery(
       keyword: _searchController.text,
       primaryTagId: parentTag,
       childTagId: parentTag == null ? null : selectedChildTag,
+      folderRoots: parentTag == null
+          ? const <String>[]
+          : store?.roots ?? const <String>[],
       selectedGroupTagIds: {
         for (final entry in _selectedGroupTagIds.entries)
           if (entry.value.isNotEmpty &&

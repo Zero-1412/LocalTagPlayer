@@ -195,6 +195,7 @@ class FilterQuery {
     this.includeTagIds = const <String>{},
     this.excludeTagIds = const <String>{},
     this.selectedGroupTagIds = const <String, Set<String>>{},
+    this.folderRoots = const <String>[],
     this.sortRule = SortRule.titleAsc,
     this.excludedItems = const <TagItem>[],
     this.favoriteOnly = false,
@@ -209,6 +210,7 @@ class FilterQuery {
   final Set<String> includeTagIds;
   final Set<String> excludeTagIds;
   final Map<String, Set<String>> selectedGroupTagIds;
+  final List<String> folderRoots;
   final SortRule sortRule;
   final List<TagItem> excludedItems;
   final bool favoriteOnly;
@@ -241,12 +243,30 @@ class FilterQuery {
         item.mediaDetailsError == null) {
       return false;
     }
+    final pathMatchesPrimary = primaryTagId != null &&
+        folderRoots.isNotEmpty &&
+        TagRules.matchesFolderPath(
+          item,
+          folderRoots,
+          primaryTag: primaryTagId!,
+        );
     if (primaryTagId != null &&
+        !pathMatchesPrimary &&
         !item.tags.any((tag) => TagRules.sameTag(tag, primaryTagId!))) {
       return false;
     }
+    final pathMatchesChild = primaryTagId != null &&
+        childTagId != null &&
+        folderRoots.isNotEmpty &&
+        TagRules.matchesFolderPath(
+          item,
+          folderRoots,
+          primaryTag: primaryTagId!,
+          childTag: childTagId!,
+        );
     if (primaryTagId != null &&
         childTagId != null &&
+        !pathMatchesChild &&
         !TagRules.matchesChildTag(item, primaryTagId!, childTagId!)) {
       return false;
     }

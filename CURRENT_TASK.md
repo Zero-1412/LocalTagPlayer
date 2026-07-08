@@ -237,6 +237,8 @@ flutter build windows --debug
 - 2026-07-08 排序切换改为直接重排当前 `FilterState`，不再触发完整筛选刷新和标签计数重算；“添加时间”按 `addedAt` 排序，播放器返回更新 `lastPlayedAt` 不再导致主媒体库默认排序重排。
 - 2026-07-08 媒体库排序偏好保存到独立 `library_sort.json`；全量媒体库、标签筛选、本地收藏和最近播放统一使用 `sortedLibraryVideos`，进入媒体库不再重置排序字段/方向。
 - 2026-07-08 顶部排序字段对齐 Windows 文件排序：展示“名称 / 日期 / 类型 / 大小 / 目录 / 添加时间”；“日期”优先按文件修改时间排序并兼容旧 `recent` 偏好 key，名称使用自然排序。
+- 2026-07-08 修复二级标签筛选路径层级不一致：`FilterQuery` 携带当前媒体库 roots，按最上层 root 重新派生一级/二级后匹配视频，避免子 root 历史扫描把二级当一级导致结果为 0。
+- 2026-07-08 排序和标签筛选流畅度继续加固：排序预计算自然排序 token、扩展名、日期和路径 key；筛选后排序复用同一入口，标签计数延后到可见结果更新之后。
 - 2026-07-08 本地媒体库路径浏览的视频项接入同一 `sortedLibraryVideos` 排序规则；文件夹继续固定在视频前面。
 - 2026-07-08 播放器 controller tests 覆盖二级队列切换回退和 open 请求失败后继续保留最新打开请求；未修改播放器 filtered queue 来源或 `PlayerBackend`。
 - 本轮验证：`flutter test`、`flutter analyze`、`flutter build windows --debug` 通过；debug exe 已启动到主界面。当前会话未暴露可调用的 Computer Use 控件工具，使用 Windows UIA/截图替代 smoke，UIA 只能看到 Flutter 根视图，交互路径由 widget smoke 覆盖。
