@@ -17,6 +17,9 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 修复非最大化窗口下的可视区域溢出：顶部工具条在实际行宽不足时让搜索框弹性收缩，单列视频卡片提高高度以容纳 16:9 缩略图和底部按钮，列表行动作区在中等宽度下切换为图标模式。
+- 使用 computer-use 复测 debug exe：普通窗口和最大化窗口下，顶部工具条、列表行“播放 / 收藏 / 更多”、右侧标签筛选面板、本地媒体库返回入口均在可视范围内；普通窗口不再出现 Flutter overflow 条纹。
+- 本轮验证通过：`dart format`、`flutter test`（16 项）、`flutter analyze`、`flutter build windows --debug`。
 - 稳定 smoke harness 继续扩展：列表行“播放 / 收藏 / 更多”现在有稳定 key 和回调计数断言，覆盖真实列表行按钮入口。
 - 本地媒体库文件夹返回新增列表模式 smoke：`dense=true` 下文件夹行进入子目录后，顶部返回按钮能回到 root。
 - 右侧标签筛选新增结果状态 smoke：点击默认专辑 chip 后显示当前一级下全部示例结果；点击 Child01 chip 后结果收敛到 Child01，默认专辑和 Child02 结果消失。

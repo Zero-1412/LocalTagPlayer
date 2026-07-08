@@ -1,6 +1,6 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
-Current Version: `0.2.20`
+Current Version: `0.2.21`
 Status: completed
 Owner: Chat 3 / Media Library Tag UI
 
@@ -79,6 +79,14 @@ Do not do:
 - Extended the stable smoke harness to cover dense-list local folder navigation, list-row Play/Favorite/More controls, and right-panel tag result-state assertions.
 - Added stable keys for list-row controls and tag chips. The list-row smoke test waits past the row double-click recognition window so single-click button assertions are deterministic.
 - The right tag harness now renders a small result-state surface: selecting the default album shows all current-primary sample results, while selecting Child01 narrows the surface to only Child01.
+- Validation passed: `dart format`, `flutter test` with 16 tests, `flutter analyze`, and `flutter build windows --debug`.
+
+## 0.2.21 Non-Maximized Visibility Pass
+
+- Fixed normal debug-window overflow by allowing the expanded top search field to shrink when the actual row width is constrained by the right tag panel.
+- Increased single-column video-card height so 16:9 thumbnails, titles, tags, and bottom actions fit without Flutter overflow stripes.
+- List-row actions now switch to compact icon controls at medium row widths so Play/Favorite/More stay visible instead of pushing past the row edge.
+- Computer-use QA covered normal and maximized debug windows: top toolbar, list-row actions, right tag panel, and local-library back entry stayed inside the visible window.
 - Validation passed: `dart format`, `flutter test` with 16 tests, `flutter analyze`, and `flutter build windows --debug`.
 
 ## 0.2.15 Sidebar + List QA Pass
@@ -215,6 +223,7 @@ Do not build complex animation first. Keep the layout practical and stable.
 ## Change Log
 
 - `0.2.20`: Extended stable smoke coverage to list-row Play/Favorite/More, local-library dense-list back navigation, and right tag chip result-state assertions. No schema, query, player queue, or cache queue behavior changed.
+- `0.2.21`: Fixed non-maximized window overflow in the media-library top bar, grid cards, and list-row actions, then verified normal and maximized debug windows with computer-use. No schema, query, player queue, or cache queue behavior changed.
 - `0.2.19`: Added stable key/harness smoke tests for local-library back paths and right-tag-panel expand/collapse paths, avoiding screenshot-coordinate desktop automation for these flows. No schema, query, player queue, or cache queue behavior changed.
 - `0.2.10`: Stabilized primary count sorting, added runtime-only frequent sorting, removed the extra primary-sort label, shortened sort option labels, prevented fallback expansion of the first row, and kept the all-secondary tab populated under active filters. No schema, player queue, or cache queue behavior changed.
 - `0.2.11`: Decoupled primary row expansion from filtering, stabilized result-grid repaint during tag switches, and added a collapsible right tag-filter rail. No schema, query, player queue, or cache queue behavior changed.

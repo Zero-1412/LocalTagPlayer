@@ -2806,10 +2806,14 @@ class _ReferenceTopBar extends StatelessWidget {
             final constrained = constraints.maxWidth < 760;
             final collapseActions =
                 referenceTopBarShouldCollapseActions(layoutSize) || constrained;
+            // 非最大化窗口虽然仍可能处于 expanded 断点，但右侧面板会挤占可用宽度；
+            // 搜索框必须在真实行宽不足时让出空间，避免工具条右侧按钮越界。
+            final fitSearchToRemainingWidth =
+                compact || constraints.maxWidth < 1040;
             final searchField = ConstrainedBox(
               constraints: BoxConstraints(
                 minWidth: 180,
-                maxWidth: compact ? double.infinity : 760,
+                maxWidth: fitSearchToRemainingWidth ? double.infinity : 760,
               ),
               child: Container(
                 height: compact ? 44 : 50,
@@ -2869,7 +2873,10 @@ class _ReferenceTopBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                 ],
-                if (compact) Expanded(child: searchField) else searchField,
+                if (fitSearchToRemainingWidth)
+                  Expanded(child: searchField)
+                else
+                  searchField,
                 SizedBox(width: collapseActions ? 8 : 12),
                 _ReferenceActionButton(
                   tooltip: '\u6807\u7b7e\u4e2d\u5fc3',
@@ -3509,7 +3516,9 @@ class _LocalLibraryView extends StatelessWidget {
                         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                           maxCrossAxisExtent:
                               narrow ? 500 : (compact ? 248 : 286),
-                          mainAxisExtent: narrow ? 344 : (compact ? 300 : 326),
+                          // 单列网格会把 16:9 缩略图拉高，卡片高度必须跟着增长；
+                          // 否则普通窗口下标题、标签和底部按钮会挤出可视区域。
+                          mainAxisExtent: narrow ? 430 : (compact ? 300 : 340),
                           mainAxisSpacing: compact ? 14 : 16,
                           crossAxisSpacing: compact ? 10 : 14,
                         ),
@@ -4047,7 +4056,9 @@ class _VideoGrid extends StatelessWidget {
               EdgeInsets.fromLTRB(compact ? 14 : 22, 2, compact ? 14 : 22, 22),
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: narrow ? 500 : (compact ? 248 : 286),
-            mainAxisExtent: narrow ? 344 : (compact ? 300 : 326),
+            // 单列网格会把 16:9 缩略图拉高，卡片高度必须跟着增长；
+            // 否则普通窗口下标题、标签和底部按钮会挤出可视区域。
+            mainAxisExtent: narrow ? 430 : (compact ? 300 : 340),
             mainAxisSpacing: compact ? 14 : 16,
             crossAxisSpacing: compact ? 10 : 14,
           ),
@@ -4119,6 +4130,9 @@ class _InteractiveVideoListRow extends StatelessWidget {
               final narrow = constraints.maxWidth < 560;
               final thumbnailWidth = narrow ? 116.0 : 146.0;
               final visibleTagCount = narrow ? 2 : 4;
+              // 中等宽度窗口下右侧标签面板会压缩列表列宽；行按钮应先降级为图标，
+              // 而不是继续保留 276px 操作区导致整行底部出现 overflow 条纹。
+              final compactActions = constraints.maxWidth < 700;
               final rowContentWidth = math.min(
                 constraints.maxWidth,
                 narrow ? constraints.maxWidth : 980.0,
@@ -4204,7 +4218,7 @@ class _InteractiveVideoListRow extends StatelessWidget {
                         onOpen: onOpen,
                         onToggleFavorite: onToggleFavorite,
                         onEditTags: onEditTags,
-                        compact: narrow,
+                        compact: compactActions,
                       ),
                     ],
                   ),
