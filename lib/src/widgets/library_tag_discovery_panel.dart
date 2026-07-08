@@ -71,8 +71,6 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
 
   var _showAllPrimaryTags = false;
 
-  var _showAllHotSecondaryTags = false;
-
   final _expandedChildTagIds = <String>{};
 
   @override
@@ -116,11 +114,6 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
       widget.tagGroups,
       widget.resultCounts,
     ).where((tag) => _matchesSearch(tag.displayName ?? tag.name)).toList();
-    // 热门区保留蓝图里的轻量入口，完整列表由“全部二级标签”页签承载。
-    final hotSecondaryTags = _showAllHotSecondaryTags
-        ? allSecondaryTags
-        : allSecondaryTags.take(12).toList();
-
     final outerPanelWidth = widget.panelWidth ?? 482.0;
     final innerPanelWidth =
         (outerPanelWidth - 44).clamp(276.0, 576.0).toDouble();
@@ -252,31 +245,6 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
                           }
                         }),
                       ),
-                    const SizedBox(height: 16),
-                    const _HotSecondaryTitle(),
-                    const SizedBox(height: 10),
-                    _SecondaryTagCloud(
-                      tags: hotSecondaryTags,
-                      allSecondaryTags: allSecondaryTags,
-                      resultCounts: widget.resultCounts,
-                      selectedGroupTagIds: widget.selectedGroupTagIds,
-                      excludedTagIds: widget.excludedTagIds,
-                      showParentLabel: false,
-                      showParentLabelForConflicts: true,
-                      onGroupTagToggle: widget.onGroupTagToggle,
-                      onGroupTagExcludeToggle: widget.onGroupTagExcludeToggle,
-                    ),
-                    _MoreSecondaryButton(
-                      expanded: _showAllHotSecondaryTags,
-                      visibleCount: hotSecondaryTags.length,
-                      totalCount: allSecondaryTags.length,
-                      onPressed: allSecondaryTags.length > 12
-                          ? () => setState(() {
-                                _showAllHotSecondaryTags =
-                                    !_showAllHotSecondaryTags;
-                              })
-                          : null,
-                    ),
                   ] else ...[
                     _SecondaryTagCloud(
                       tags: allSecondaryTags,
@@ -610,65 +578,6 @@ class _SecondaryTagCloud extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _HotSecondaryTitle extends StatelessWidget {
-  const _HotSecondaryTitle();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Text(
-      '\u70ed\u95e8\u4e8c\u7ea7\u6807\u7b7e\uff08\u53ef\u76f4\u63a5\u9009\u62e9\uff09',
-      style: TextStyle(
-        color: _appText,
-        fontSize: 14,
-        height: 1.2,
-        fontWeight: FontWeight.w800,
-      ),
-    );
-  }
-}
-
-class _MoreSecondaryButton extends StatelessWidget {
-  const _MoreSecondaryButton({
-    required this.expanded,
-    required this.visibleCount,
-    required this.totalCount,
-    required this.onPressed,
-  });
-
-  final bool expanded;
-  final int visibleCount;
-  final int totalCount;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = expanded
-        ? '\u6536\u8d77\u6807\u7b7e \u2303'
-        : '\u66f4\u591a\u6807\u7b7e ($visibleCount/$totalCount) \u2304';
-    return Padding(
-      padding: const EdgeInsets.only(top: 1),
-      child: Center(
-        child: OutlinedButton(
-          key: LibrarySmokeKeys.moreSecondaryTags,
-          onPressed: onPressed,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: _appAccentViolet,
-            disabledForegroundColor: _appTextMuted,
-            backgroundColor: const Color(0xfffbfaff),
-            side: const BorderSide(color: Color(0xffd8d4ff)),
-            visualDensity: VisualDensity.compact,
-            minimumSize: const Size(118, 32),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-          child: Text(label),
-        ),
-      ),
     );
   }
 }

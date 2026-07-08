@@ -2,6 +2,15 @@
 
 ## 2026-07-08
 
+### 主界面标签与排序性能 QA
+
+- `LibraryStore` focused tests 增加扫描异常路径覆盖：内容变化会清理旧媒体详情/缩略图错误，不可访问 root 不会误删仍存在的视频，非 manual 来源标签不能走批量 manual 添加/移除。
+- 右侧标签筛选的“一级标签”页签只展示 `folder.primary` 文件夹一级标签；二级标签统一收敛到“全部二级标签”页签，避免一级页签混入热门二级标签造成层级误解。
+- 媒体库排序切换改为直接重排当前 `FilterState`，不再触发完整筛选刷新和 `resultCounts` 重算；标签计数刷新延后执行，降低切换排序或标签时的主线程阻塞感。
+- “添加时间”排序只使用 `addedAt`，播放器返回更新 `lastPlayedAt` 不再导致主媒体库默认排序重排。
+- 播放器 controller tests 覆盖二级队列切换回退和 open 请求失败后继续保留最新打开请求。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue 来源、`PlayerBackend` 或缩略图/media 队列。
+
 ### LibraryStore 边界继续拆分
 
 - `LibraryStore` focused tests 继续覆盖 metadata 去重持久化、扫描删除缺失视频并保留剩余 manual 标签、manual child link 删除不破坏 folder child 兼容字段。

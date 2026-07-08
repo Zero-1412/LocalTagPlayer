@@ -400,6 +400,67 @@ void main() {
         contains(manual.id));
   });
 
+  test('scan coordinator clears stale media cache after content changes',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('scan_content_change');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Series', 'Album', 'changed.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, file.path);
+    final oldFingerprint = item.mediaFingerprint;
+    item.mediaDetails = const MediaDetails(videoCodec: 'h264');
+    item.mediaDetailsError = 'old details error';
+    item.thumbnailError = 'old thumbnail error';
+    await store.upsertVideo(item);
+
+    await Future<void>.delayed(const Duration(milliseconds: 2));
+    await file.writeAsBytes([9, 8, 7, 6, 5, 4]);
+    await store.scan();
+
+    final rescanned = _videoByPath(store, file.path);
+    expect(rescanned.mediaFingerprint, isNot(oldFingerprint));
+    expect(rescanned.mediaDetails, isNull);
+    expect(rescanned.mediaDetailsError, isNull);
+    expect(rescanned.thumbnailError, isNull);
+  });
+
+  test('scan service ignores inaccessible or missing roots without deleting',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('scan_missing_root');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final missingRoot = '${dataDir.path}${Platform.pathSeparator}missing-root';
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Series', 'Album', 'kept.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    store.roots
+      ..clear()
+      ..add(missingRoot);
+
+    expect(await store.scan(), 0);
+    expect(store.videos[TagRules.pathKey(file.path)], isNotNull);
+  });
+
   test(
       'tag maintenance removes manual child link without deleting folder child',
       () async {
@@ -449,6 +510,37 @@ void main() {
               ?.contains(manualChild.id) ??
           false,
       isFalse,
+    );
+  });
+
+  test('tag maintenance rejects non-manual tags in batch operations', () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('tag_reject_source');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Series', 'Album', 'reject.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, file.path);
+    final folderTag = store.tagsById.values.firstWhere(
+      (tag) => tag.source == TagSource.folder && tag.groupId == 'folder.child',
+    );
+
+    await expectLater(
+      store.batchAddManualTag(folderTag, [item]),
+      throwsA(isA<StateError>()),
+    );
+    await expectLater(
+      store.batchRemoveManualTag(folderTag, [item]),
+      throwsA(isA<StateError>()),
     );
   });
 }

@@ -96,40 +96,33 @@ extension _LibraryPageDerivedState on _LibraryPageState {
    * 当前排序控件对应的视频比较器。
    */
   int _compareVideos(VideoItem a, VideoItem b) {
-    final int value;
-    switch (_sortMode) {
-      case SortMode.recent:
-        final bTime = b.lastPlayedAt ?? b.addedAt;
-        final aTime = a.lastPlayedAt ?? a.addedAt;
-        value = bTime.compareTo(aTime);
-        break;
-      case SortMode.name:
-        value = a.title.compareTo(b.title);
-        break;
-      case SortMode.folder:
-        final folder = a.folder.compareTo(b.folder);
-        value = folder == 0 ? a.title.compareTo(b.title) : folder;
-        break;
-    }
-    return _sortDirection == SortDirection.descending ? value : -value;
+    return compareLibraryVideosForSort(
+      a,
+      b,
+      sortMode: _sortMode,
+      sortDirection: _sortDirection,
+    );
   }
 
   /**
-   * 切换排序字段，并复用统一筛选刷新路径。
+   * 切换排序字段，并只重排当前结果。
+   *
+   * 排序不改变筛选命中集合和标签计数，因此不能复用完整筛选刷新路径；
+   * 否则大媒体库会在每次切换字段时额外触发 resultCounts 重算。
    */
   void _setSortMode(SortMode mode) {
-    _mutateFilters(() => _sortMode = mode);
+    _applySortChange(sortMode: mode);
   }
 
   /**
-   * 切换排序方向，并复用统一筛选刷新路径。
+   * 切换排序方向，并只重排当前结果。
    */
   void _toggleSortDirection() {
-    _mutateFilters(() {
-      _sortDirection = _sortDirection == SortDirection.descending
+    _applySortChange(
+      sortDirection: _sortDirection == SortDirection.descending
           ? SortDirection.ascending
-          : SortDirection.descending;
-    });
+          : SortDirection.descending,
+    );
   }
 
   /**
@@ -189,4 +182,33 @@ extension _LibraryPageDerivedState on _LibraryPageState {
         ),
     };
   }
+}
+
+/**
+ * 媒体库视频排序比较器。
+ *
+ * [sortMode] 指定字段，[sortDirection] 指定方向。添加时间只使用 `addedAt`，
+ * 播放返回更新 `lastPlayedAt` 时不应改变主媒体库默认顺序。
+ */
+@visibleForTesting
+int compareLibraryVideosForSort(
+  VideoItem a,
+  VideoItem b, {
+  required SortMode sortMode,
+  required SortDirection sortDirection,
+}) {
+  final int value;
+  switch (sortMode) {
+    case SortMode.recent:
+      value = a.addedAt.compareTo(b.addedAt);
+      break;
+    case SortMode.name:
+      value = a.title.compareTo(b.title);
+      break;
+    case SortMode.folder:
+      final folder = a.folder.compareTo(b.folder);
+      value = folder == 0 ? a.title.compareTo(b.title) : folder;
+      break;
+  }
+  return sortDirection == SortDirection.descending ? -value : value;
 }

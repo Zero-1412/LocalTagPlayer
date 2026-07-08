@@ -89,3 +89,9 @@
 - 新增 `PlayerOpenRequestController`，集中最新待打开路径、open worker 运行状态和打开中遮罩状态；`PlayerPage` 继续负责实际 `Player.open` 调用和 mpv 参数设置。
 - 新增 `player_delete_dialog.dart`，承接删除视频文件确认弹窗，后续可继续扩展删除影响提示。
 - 本轮未修改 `PlayerBackend`、filtered queue 来源、当前 index 展示、右侧二级标签切换语义或缩略图/media 队列。
+
+## 2026-07-08 播放状态协调测试补强
+
+- 新增 `PlayerPlaybackController` focused test，覆盖二级标签切换、再次点击取消二级筛选，以及二级标签无结果时回退来源过滤队列。
+- 新增 `PlayerOpenRequestController` focused test，覆盖 open worker 运行中失败或结束前仍保留最新待打开请求，避免快速切换时丢失最后一次打开意图。
+- 本轮未修改 `PlayerBackend`、filtered queue 来源、当前 index 展示、右侧二级标签切换语义或缩略图/media 队列。

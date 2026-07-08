@@ -505,6 +505,34 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   /**
+   * 应用排序字段或方向变更。
+   *
+   * 排序只改变当前结果的展示顺序，不改变筛选条件、标签数量或收藏状态；
+   * 这里直接重排内存中的 `FilterState`，避免切换排序时触发完整过滤和 resultCounts 统计。
+   */
+  void _applySortChange({
+    SortMode? sortMode,
+    SortDirection? sortDirection,
+  }) {
+    setState(() {
+      _sortMode = sortMode ?? _sortMode;
+      _sortDirection = sortDirection ?? _sortDirection;
+      if (_resultMode != _LibraryResultMode.library || _filterState == null) {
+        return;
+      }
+      final currentState = _filterState!;
+      final reorderedVideos = currentState.filteredVideos.toList()
+        ..sort(_compareVideos);
+      _filterState = FilterState(
+        query: currentState.query,
+        filteredVideos: List<VideoItem>.unmodifiable(reorderedVideos),
+        resultCount: currentState.resultCount,
+        totalCount: currentState.totalCount,
+      );
+    });
+  }
+
+  /**
    * 回到媒体库全量视图。
    *
    * 侧栏“媒体库”应像重置入口：清空搜索、一级/二级/分组/排除/收藏筛选，并展示全量视频，
@@ -726,20 +754,7 @@ class _LibraryPageState extends State<LibraryPage> {
    */
   void _markPlaybackTimestampChanged(VideoItem item) {
     if (_resultMode == _LibraryResultMode.library) {
-      final currentState = _filterState;
-      if (_sortMode != SortMode.recent || currentState == null) {
-        return;
-      }
-      final reorderedVideos = currentState.filteredVideos.toList()
-        ..sort(_compareVideos);
-      setState(() {
-        _filterState = FilterState(
-          query: currentState.query,
-          filteredVideos: List<VideoItem>.unmodifiable(reorderedVideos),
-          resultCount: currentState.resultCount,
-          totalCount: currentState.totalCount,
-        );
-      });
+      // 主媒体库默认排序使用添加时间，播放时间更新不再改变当前结果顺序。
       return;
     }
 
@@ -775,7 +790,7 @@ class _LibraryPageState extends State<LibraryPage> {
         _isRefreshingCounts = true;
       });
       _thumbnailService?.prefetchVisible(nextState.filteredVideos.take(36));
-      Future<void>.delayed(const Duration(milliseconds: 16), () {
+      Future<void>.delayed(const Duration(milliseconds: 120), () {
         if (!mounted || revision != _filterRevision || _store != store) {
           return;
         }

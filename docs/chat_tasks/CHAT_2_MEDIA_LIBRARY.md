@@ -114,3 +114,10 @@
 - 新增 `LibraryScanCoordinator`，集中扫描结果合并、增量写库、缺失视频清理、folder 标签索引刷新和 metadata batch 保存。
 - 新增 `LibraryTagMaintenance`，集中 manual/folder 来源分离策略和批量 manual 标签维护。
 - 本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、stable identity 或 missing/relink 行为。
+
+## 2026-07-08 LibraryStore 异常路径测试补强
+
+- 继续补充扫描协调 focused tests：视频内容变化后会清理旧 `mediaDetails`、`mediaDetailsError` 和 `thumbnailError`，避免缓存字段描述旧文件内容。
+- 缺失或不可访问 root 会被扫描服务跳过，不会把仍存在但本轮未枚举的旧视频误删。
+- `LibraryTagMaintenance` 批量添加/移除继续只允许 `manual` 来源标签；folder 来源标签会被拒绝，保护 folder/manual 来源分离。
+- 本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、stable identity 或 missing/relink 行为。

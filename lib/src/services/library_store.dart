@@ -527,15 +527,9 @@ class LibraryStore {
   }
 
   /**
-   *
    * 关闭当前媒体库数据库连接。
    *
-   *
-娴嬭瘯鍜?
- repository
-   * 测试和 repository 拆分需要显式释放
- SQLite
-   * SQLite 文件句柄。
+   * 测试和 repository 拆分需要显式释放 SQLite 文件句柄，避免临时目录清理失败。
    */
   Future<void> close() => _db.close();
 

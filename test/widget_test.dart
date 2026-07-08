@@ -177,6 +177,107 @@ void main() {
     );
   });
 
+  testWidgets('primary discovery tab does not render secondary tag cloud',
+      (tester) async {
+    await tester.pumpWidget(const TagDiscoverySmokeHarness(childCount: 12));
+
+    expect(find.byKey(LibrarySmokeKeys.primaryTab), findsOneWidget);
+    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.text('Child01'), findsNothing);
+  });
+
+  test('library sort comparator applies default order immediately', () {
+    final older = VideoItem(
+      path: 'D:\\video\\older.mp4',
+      title: 'B',
+      folder: 'D:\\video',
+      tags: const {},
+      addedAt: DateTime.utc(2026, 1, 1),
+      lastPlayedAt: DateTime.utc(2026, 7, 8),
+    );
+    final newer = VideoItem(
+      path: 'D:\\video\\newer.mp4',
+      title: 'A',
+      folder: 'D:\\video',
+      tags: const {},
+      addedAt: DateTime.utc(2026, 2, 1),
+    );
+
+    final videos = [older, newer]..sort((a, b) => compareLibraryVideosForSort(
+          a,
+          b,
+          sortMode: SortMode.recent,
+          sortDirection: SortDirection.descending,
+        ));
+    expect(videos, [newer, older]);
+
+    videos.sort((a, b) => compareLibraryVideosForSort(
+          a,
+          b,
+          sortMode: SortMode.name,
+          sortDirection: SortDirection.ascending,
+        ));
+    expect(videos, [newer, older]);
+  });
+
+  test('player playback controller keeps queue stable on child switches', () {
+    final alpha = VideoItem(
+      path: 'D:\\video\\alpha.mp4',
+      title: 'alpha',
+      folder: 'D:\\video',
+      tags: {'Series'},
+      addedAt: DateTime.utc(2026, 1, 1),
+      childTags: {
+        'Series': {'AlbumA'},
+      },
+    );
+    final beta = VideoItem(
+      path: 'D:\\video\\beta.mp4',
+      title: 'beta',
+      folder: 'D:\\video',
+      tags: {'Series'},
+      addedAt: DateTime.utc(2026, 1, 2),
+      childTags: {
+        'Series': {'AlbumB'},
+      },
+    );
+    final playback = PlayerPlaybackController(
+      sourcePlaylist: [alpha, beta],
+      activeParentTag: 'Series',
+      initialPath: alpha.path,
+    );
+
+    playback.toggleChildTag('AlbumB', preferredPath: alpha.path);
+    expect(playback.queue, [beta]);
+    expect(playback.currentItem, beta);
+
+    playback.toggleChildTag('AlbumB', preferredPath: beta.path);
+    expect(playback.queue, [alpha, beta]);
+    expect(playback.currentItem, beta);
+
+    playback.setPlaylistForChildTag('Missing', preferredPath: beta.path);
+    expect(playback.queue, [alpha, beta]);
+    expect(playback.currentItem, beta);
+  });
+
+  test('player open request controller keeps latest request after failure', () {
+    final requests = PlayerOpenRequestController();
+
+    expect(requests.request('first.mp4'), isTrue);
+    requests.beginDrain();
+    expect(requests.takePendingPath(), 'first.mp4');
+    expect(requests.request('second.mp4'), isFalse);
+    expect(requests.hasPending, isTrue);
+
+    requests.finishDrain(keepOpening: true);
+    expect(requests.isOpening, isTrue);
+    expect(requests.takePendingPath(), 'second.mp4');
+
+    requests.finishDrain(keepOpening: false);
+    expect(requests.isOpening, isFalse);
+    expect(requests.hasPending, isFalse);
+  });
+
   test('secondary discovery hides default album from secondary lists', () {
     const defaultAlbum = TagItem(
       id: 'folder.child:genshin:default',
@@ -577,18 +678,12 @@ void main() {
     );
   });
 
-  testWidgets('smoke path expands hot secondary tags and shows all secondary',
+  testWidgets('smoke path shows all secondary only in secondary tab',
       (tester) async {
     await tester.pumpWidget(const TagDiscoverySmokeHarness(childCount: 13));
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('Child13'), findsNothing);
-    await tester.ensureVisible(find.byKey(LibrarySmokeKeys.moreSecondaryTags));
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.tap(find.byKey(LibrarySmokeKeys.moreSecondaryTags));
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('Child13'), findsOneWidget);
-
     await tester.tap(find.byKey(LibrarySmokeKeys.secondaryTab));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Child13'), findsWidgets);

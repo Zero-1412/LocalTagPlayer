@@ -229,7 +229,11 @@ flutter build windows --debug
 - 2026-07-08 `LibraryStore` 已拆出 `LibraryTagPersistence` 与 `LibraryVideoPersistence`，store 继续负责扫描、folder/manual 语义和内存状态协调；本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 语义。
 - 2026-07-08 播放页已拆出 `PlayerPlaybackController` 和 `player_diagnostics_dialog.dart`；播放器仍消费媒体库传入的当前过滤队列，未修改 `PlayerBackend`、mpv 打开流程或缩略图/media 队列。
 - 2026-07-08 继续补充 metadata / scan / tag maintenance focused tests，并拆出 `LibraryMetadataPersistence`、`LibraryScanCoordinator`、`LibraryTagMaintenance`；播放器侧拆出 `PlayerOpenRequestController` 和 `player_delete_dialog.dart`。
-- 本轮验证：`flutter test`、`flutter analyze`、`flutter build windows --debug` 通过；debug exe 已启动并通过 Computer Use smoke 到主界面，确认“添加目录 / 媒体库 / 本地收藏 / 目录管理 / 标签筛选”等入口可见。
+- 2026-07-08 继续补充 `LibraryScanCoordinator` / `LibraryTagMaintenance` 异常路径测试：内容变化清理旧媒体缓存、缺失 root 不误删仍存在视频、非 manual 标签批量操作被拒绝。
+- 2026-07-08 修复右侧标签层级展示：一级页签只展示 `folder.primary` 文件夹一级标签，二级标签只在“全部二级标签”页签展示，避免一级页签混入热门二级标签。
+- 2026-07-08 排序切换改为直接重排当前 `FilterState`，不再触发完整筛选刷新和标签计数重算；“添加时间”按 `addedAt` 排序，播放器返回更新 `lastPlayedAt` 不再导致主媒体库默认排序重排。
+- 2026-07-08 播放器 controller tests 覆盖二级队列切换回退和 open 请求失败后继续保留最新打开请求；未修改播放器 filtered queue 来源或 `PlayerBackend`。
+- 本轮验证：`flutter test`、`flutter analyze`、`flutter build windows --debug` 通过；debug exe 已启动到主界面。当前会话未暴露可调用的 Computer Use 控件工具，使用 Windows UIA/截图替代 smoke，UIA 只能看到 Flutter 根视图，交互路径由 widget smoke 覆盖。
 - 第一阶段拆分已完成，但仍是同一个 Dart library；下一阶段需要小步把低风险 core/model 文件迁移到普通 import，并逐步让实现依赖新接口。
 - 本轮 `dart format`、`flutter analyze` 和 Windows debug 构建通过；历史上本机 formatter 偶发超时，后续如复现需单独确认。
 - 播放时仍可能有轻微卡顿感，需要继续结合持续诊断结果，从缩略图队列、mpv 参数、硬解模式三个方向排查。
@@ -242,11 +246,12 @@ flutter build windows --debug
 优先级从高到低：
 
 1. 小步迁移平台与数据接口实现：让 `LibraryStore`、媒体工具和页面逐步依赖 `FileSystemAdapter`、`DatabaseProvider`、Repository 接口，迁移时必须保持 Windows 行为不变。
-2. 继续收敛 `LibraryStore` 剩余职责：tag usage summary 查询、schema/default groups 初始化、legacy JSON 导入可继续拆成更小 helper，但先补 focused tests。
-3. 播放器侧下一步可拆视频信息弹窗和诊断采样 builder，继续缩小 `PlayerPage`。
-4. 排查播放卡顿：结合新增后台并发统计，确认播放时缩略图队列暂停后是否仍有已启动任务造成 I/O 抖动。
-5. 完善诊断能力：继续增加 FFmpeg/FFprobe 实际调用耗时、可复制诊断摘要和播放诊断入口联动。
-6. 继续优化媒体库 schema：推进 `videoId + fingerprint + mutable path`，增加 `missing` 标记、单文件 relink 和批量路径替换。
+2. 继续针对大库交互做性能拆分：把标签计数刷新移到更明确的后台/空闲协调层，并记录排序/标签切换耗时。
+3. 继续收敛 `LibraryStore` 剩余职责：tag usage summary 查询、schema/default groups 初始化、legacy JSON 导入可继续拆成更小 helper，但先补 focused tests。
+4. 播放器侧下一步可拆视频信息弹窗和诊断采样 builder，继续缩小 `PlayerPage`。
+5. 排查播放卡顿：结合新增后台并发统计，确认播放时缩略图队列暂停后是否仍有已启动任务造成 I/O 抖动。
+6. 完善诊断能力：继续增加 FFmpeg/FFprobe 实际调用耗时、可复制诊断摘要和播放诊断入口联动。
+7. 继续优化媒体库 schema：推进 `videoId + fingerprint + mutable path`，增加 `missing` 标记、单文件 relink 和批量路径替换。
 
 ## 新 Chat 启动提示词
 
