@@ -7,7 +7,7 @@ part of '../app.dart';
  *
  * 只描述 UI 可选字段；真正排序仍由 LibraryPage 根据当前视频集合执行，避免控件复制筛选或排序业务。
  */
-enum SortMode { recent, name, folder }
+enum SortMode { name, recent, type, size, folder, added }
 
 /**
  * 媒体库顶部排序方向。
@@ -180,6 +180,7 @@ class _TopSortControlState extends State<_TopSortControl>
    * 构建贴合字段按钮底部的排序字段抽屉。
    */
   Widget _buildSortMenuOverlay(BuildContext context) {
+    final menuWidth = math.max(_fieldSize.width, 136.0);
     return Positioned.fill(
       child: Stack(
         children: [
@@ -192,7 +193,7 @@ class _TopSortControlState extends State<_TopSortControl>
           Positioned(
             left: _fieldOffset.dx,
             top: _fieldOffset.dy + _fieldSize.height - 1,
-            width: _fieldSize.width,
+            width: menuWidth,
             child: Material(
               color: Colors.transparent,
               child: AnimatedBuilder(
@@ -208,7 +209,7 @@ class _TopSortControlState extends State<_TopSortControl>
                 },
                 child: Container(
                   key: LibrarySmokeKeys.topSortMenuPanel,
-                  width: _fieldSize.width,
+                  width: menuWidth,
                   decoration: const BoxDecoration(
                     color: _appPanel,
                     borderRadius: BorderRadius.vertical(
@@ -385,8 +386,11 @@ class _SortMenuItem extends StatelessWidget {
 @visibleForTesting
 String sortModeLabel(SortMode mode) {
   return switch (mode) {
-    SortMode.recent => '\u6dfb\u52a0\u65f6\u95f4',
     SortMode.name => '\u540d\u79f0',
+    SortMode.recent => '\u65e5\u671f',
+    SortMode.type => '\u7c7b\u578b',
+    SortMode.size => '\u5927\u5c0f',
     SortMode.folder => '\u76ee\u5f55',
+    SortMode.added => '\u6dfb\u52a0\u65f6\u95f4',
   };
 }

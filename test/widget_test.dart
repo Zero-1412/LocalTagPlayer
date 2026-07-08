@@ -32,9 +32,12 @@ void main() {
       isTrue,
     );
 
-    expect(sortModeLabel(SortMode.recent), '添加时间');
     expect(sortModeLabel(SortMode.name), '名称');
+    expect(sortModeLabel(SortMode.recent), '日期');
+    expect(sortModeLabel(SortMode.type), '类型');
+    expect(sortModeLabel(SortMode.size), '大小');
     expect(sortModeLabel(SortMode.folder), '目录');
+    expect(sortModeLabel(SortMode.added), '添加时间');
   });
 
   test('expanded main layout keeps proportional slots while resizing', () {
@@ -244,6 +247,7 @@ void main() {
       folder: 'D:\\video',
       tags: const {},
       addedAt: DateTime.utc(2026, 1, 1),
+      modifiedMs: DateTime.utc(2026, 1, 3).millisecondsSinceEpoch,
       lastPlayedAt: DateTime.utc(2026, 7, 8),
     );
     final newer = VideoItem(
@@ -252,6 +256,7 @@ void main() {
       folder: 'D:\\video',
       tags: const {},
       addedAt: DateTime.utc(2026, 2, 1),
+      modifiedMs: DateTime.utc(2026, 1, 2).millisecondsSinceEpoch,
     );
 
     final videos = [older, newer]..sort((a, b) => compareLibraryVideosForSort(
@@ -260,7 +265,7 @@ void main() {
           sortMode: SortMode.recent,
           sortDirection: SortDirection.descending,
         ));
-    expect(videos, [newer, older]);
+    expect(videos, [older, newer]);
 
     videos.sort((a, b) => compareLibraryVideosForSort(
           a,
@@ -269,6 +274,68 @@ void main() {
           sortDirection: SortDirection.ascending,
         ));
     expect(videos, [newer, older]);
+  });
+
+  test('library sort comparator follows Windows style fields', () {
+    final video2 = VideoItem(
+      path: 'D:\\video\\B\\video2.mp4',
+      title: 'video2',
+      folder: 'D:\\video\\B',
+      tags: const {},
+      fileSize: 200,
+      modifiedMs: DateTime.utc(2026, 1, 2).millisecondsSinceEpoch,
+      addedAt: DateTime.utc(2026, 1, 10),
+    );
+    final video10 = VideoItem(
+      path: 'D:\\video\\A\\video10.avi',
+      title: 'video10',
+      folder: 'D:\\video\\A',
+      tags: const {},
+      fileSize: 100,
+      modifiedMs: DateTime.utc(2026, 1, 3).millisecondsSinceEpoch,
+      addedAt: DateTime.utc(2026, 1, 1),
+    );
+
+    expect(
+      sortedLibraryVideos(
+        [video10, video2],
+        sortMode: SortMode.name,
+        sortDirection: SortDirection.ascending,
+      ),
+      [video2, video10],
+    );
+    expect(
+      sortedLibraryVideos(
+        [video2, video10],
+        sortMode: SortMode.type,
+        sortDirection: SortDirection.ascending,
+      ),
+      [video10, video2],
+    );
+    expect(
+      sortedLibraryVideos(
+        [video2, video10],
+        sortMode: SortMode.size,
+        sortDirection: SortDirection.ascending,
+      ),
+      [video10, video2],
+    );
+    expect(
+      sortedLibraryVideos(
+        [video2, video10],
+        sortMode: SortMode.recent,
+        sortDirection: SortDirection.descending,
+      ),
+      [video10, video2],
+    );
+    expect(
+      sortedLibraryVideos(
+        [video2, video10],
+        sortMode: SortMode.added,
+        sortDirection: SortDirection.descending,
+      ),
+      [video2, video10],
+    );
   });
 
   test('library sort preferences persist outside playback settings', () async {
@@ -618,7 +685,9 @@ void main() {
     final menuPanelRect =
         tester.getRect(find.byKey(LibrarySmokeKeys.topSortMenuPanel));
     expect(menuPanelRect.top, closeTo(sortButtonRect.bottom - 1, 1.5));
-    expect(menuPanelRect.width, closeTo(sortButtonRect.width, 1));
+    expect(menuPanelRect.left, closeTo(sortButtonRect.left, 1));
+    expect(menuPanelRect.width, greaterThanOrEqualTo(sortButtonRect.width));
+    expect(menuPanelRect.width, greaterThanOrEqualTo(136));
 
     await tester.tap(find.byKey(LibrarySmokeKeys.topSortMenuItem(
       SortMode.recent,

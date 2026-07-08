@@ -187,8 +187,8 @@ extension _LibraryPageDerivedState on _LibraryPageState {
 /**
  * 媒体库视频排序比较器。
  *
- * [sortMode] 指定字段，[sortDirection] 指定方向。添加时间只使用 `addedAt`，
- * 播放返回更新 `lastPlayedAt` 时不应改变主媒体库默认顺序。
+ * [sortMode] 指定字段，[sortDirection] 指定方向。`recent` 保留旧偏好名，但 UI 展示为
+ * Windows 风格的“日期”，优先使用文件修改时间；“添加时间”单独对应应用入库时间。
  */
 @visibleForTesting
 int compareLibraryVideosForSort(
@@ -197,20 +197,118 @@ int compareLibraryVideosForSort(
   required SortMode sortMode,
   required SortDirection sortDirection,
 }) {
+  if (sortMode == SortMode.size) {
+    final value = _compareNullableFileSize(a.fileSize, b.fileSize);
+    if (value != 0) {
+      return sortDirection == SortDirection.descending ? -value : value;
+    }
+    return _compareVideoIdentity(a, b);
+  }
+
   final int value;
   switch (sortMode) {
-    case SortMode.recent:
-      value = a.addedAt.compareTo(b.addedAt);
-      break;
     case SortMode.name:
-      value = a.title.compareTo(b.title);
+      value = _compareWindowsLikeText(a.title, b.title);
+      break;
+    case SortMode.recent:
+      value = _sortDateMs(a).compareTo(_sortDateMs(b));
+      break;
+    case SortMode.type:
+      final type = _compareWindowsLikeText(
+        p.extension(a.path).toLowerCase(),
+        p.extension(b.path).toLowerCase(),
+      );
+      value = type == 0 ? _compareWindowsLikeText(a.title, b.title) : type;
+      break;
+    case SortMode.size:
+      value = 0;
       break;
     case SortMode.folder:
-      final folder = a.folder.compareTo(b.folder);
-      value = folder == 0 ? a.title.compareTo(b.title) : folder;
+      final folder = _compareWindowsLikeText(a.folder, b.folder);
+      value = folder == 0 ? _compareWindowsLikeText(a.title, b.title) : folder;
+      break;
+    case SortMode.added:
+      value = a.addedAt.compareTo(b.addedAt);
       break;
   }
+  if (value == 0) {
+    return _compareVideoIdentity(a, b);
+  }
   return sortDirection == SortDirection.descending ? -value : value;
+}
+
+/**
+ * Windows 资源管理器常用的“日期”更接近文件修改时间。
+ *
+ * 旧库或手工构造测试项可能没有 `modifiedMs`，此时回退到应用入库时间，保证排序稳定可用。
+ */
+int _sortDateMs(VideoItem item) {
+  return item.modifiedMs ?? item.addedAt.millisecondsSinceEpoch;
+}
+
+/**
+ * 比较文件大小，并把未知大小稳定放在列表末尾。
+ */
+int _compareNullableFileSize(int? a, int? b) {
+  if (a == null && b == null) {
+    return 0;
+  }
+  if (a == null) {
+    return 1;
+  }
+  if (b == null) {
+    return -1;
+  }
+  return a.compareTo(b);
+}
+
+/**
+ * 对文件名、目录和扩展名做接近 Windows 的大小写不敏感自然排序。
+ *
+ * 这样 `video2` 会排在 `video10` 前面，比单纯字符串比较更符合文件管理器习惯。
+ */
+int _compareWindowsLikeText(String a, String b) {
+  final left = _naturalSortTokens(a);
+  final right = _naturalSortTokens(b);
+  final length = math.min(left.length, right.length);
+  for (var index = 0; index < length; index += 1) {
+    final l = left[index];
+    final r = right[index];
+    final lNumber = int.tryParse(l);
+    final rNumber = int.tryParse(r);
+    final int result;
+    if (lNumber != null && rNumber != null) {
+      result = lNumber.compareTo(rNumber);
+    } else {
+      result = l.toLowerCase().compareTo(r.toLowerCase());
+    }
+    if (result != 0) {
+      return result;
+    }
+  }
+  return left.length.compareTo(right.length);
+}
+
+/**
+ * 将文本拆成数字和非数字片段，供自然排序比较器复用。
+ */
+List<String> _naturalSortTokens(String value) {
+  return RegExp(r'\d+|\D+')
+      .allMatches(value)
+      .map((match) => match.group(0) ?? '')
+      .where((token) => token.isNotEmpty)
+      .toList();
+}
+
+/**
+ * 字段值完全相同时使用标题和路径兜底，避免列表在刷新后出现不必要跳动。
+ */
+int _compareVideoIdentity(VideoItem a, VideoItem b) {
+  final title = _compareWindowsLikeText(a.title, b.title);
+  if (title != 0) {
+    return title;
+  }
+  return TagRules.pathKey(a.path).compareTo(TagRules.pathKey(b.path));
 }
 
 /**

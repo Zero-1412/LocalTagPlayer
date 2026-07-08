@@ -2,6 +2,15 @@
 
 ## 2026-07-08
 
+### Windows 风格排序字段
+
+- 顶部排序字段对齐 Windows 文件排序习惯：菜单按“名称 / 日期 / 类型 / 大小 / 目录 / 添加时间”展示。
+- “日期”沿用旧的 `recent` 偏好 key 以兼容已保存设置，但排序语义改为优先使用文件修改时间，缺失时回退到应用入库时间。
+- “名称”改为大小写不敏感的自然排序，`video2` 会排在 `video10` 前面；“类型”按扩展名排序，“大小”按扫描到的文件大小排序。
+- 排序下拉面板增加最小宽度，避免新增长字段后菜单文字溢出或与按钮宽度强绑定。
+- 新增 widget tests 覆盖 Windows 风格字段、自然排序、类型/大小/日期/添加时间排序和菜单宽度稳定性。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、`PlayerBackend` 或缩略图/media 队列。
+
 ### 文件树层级标签与本地媒体库排序
 
 - 右侧标签发现面板的 folder 一级/二级候选改为从 `store.videos` 的真实路径和 `store.roots` 重新派生，不再信任历史 `tags` 表里的 folder.primary / folder.child 记录。
