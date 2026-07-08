@@ -17,6 +17,7 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 新增 `docs/agent_harness.md`，把长程执行规则整理为 Agent Harness 迭代闭环；后续较大功能或真实媒体目录 QA 需要按该文档在 `CURRENT_TASK.md` 或对应 `docs/chat_tasks/CHAT_*.md` 记录 champion/challenger、baseline、patch、验证结果、真实媒体 smoke 和是否晋级。
 - 新增 `test/library_store_test.dart` focused tests，使用临时 profile 和真实小型文件树覆盖目录扫描、folder 标签派生、manual 标签添加/移除、`save/load` 持久化读写。
 - `LibraryStore` 新增 `close()` 释放 SQLite 句柄，测试和未来 repository 拆分可安全清理临时数据库目录。
 - 新增 `services/library_scan_service.dart`，把文件系统扫描、folder 标签派生和轻量媒体指纹从 `LibraryStore.scan()` 中拆出；`LibraryStore` 继续负责 SQLite 写入、标签索引同步和用户维护数据。

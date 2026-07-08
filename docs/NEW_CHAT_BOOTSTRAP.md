@@ -46,6 +46,8 @@ Level 3: Architecture / Schema / Boundary Task
 
 `.agents/skills` 是本项目的 repo-scoped Codex skill 目录。需要专门流程时，优先使用最小相关 skill，例如 `$ltp-small-fix`、`$ltp-tag-filter-data`、`$ltp-player-filter-queue`。
 
+较大功能、Level 3 任务或真实媒体目录 QA 需要读取 `docs/agent_harness.md`，并在 `CURRENT_TASK.md` 或对应 `docs/chat_tasks/CHAT_*.md` 记录 champion/challenger、baseline、patch、验证结果、真实媒体 smoke 和是否晋级。
+
 当前必须保护的核心闭环：
 
 ```text
