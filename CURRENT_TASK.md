@@ -17,6 +17,10 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 完成主界面第一轮真实窗口 smoke test：覆盖媒体库、最近播放、智能收藏、标签中心、设置、排序菜单、右侧标签面板收起/恢复和播放入口。
+- 修复右侧标签筛选面板收起后恢复入口缺少按钮语义：收起窄条新增“展开标签筛选”语义、Tooltip 和稳定 smoke key，真实窗口复测可恢复面板。
+- 新增收起窄条 widget smoke test，覆盖 key、Tooltip 和点击回调；本轮 `dart format`、`flutter test`、`flutter analyze`、`flutter build windows --debug` 均通过。
+- 播放入口复测通过：从主界面底部“播放”进入播放器，右侧筛选结果队列显示 `1 / 11078`，返回主界面正常。
 - 全仓库自有文档和代码注释执行中文化审查：Dart 注释英文句子已改为中文，`ROADMAP.md`、`docs/chat_tasks`、`.agents/skills`、安装说明和 FFmpeg 工具说明中的英文/乱码正文已改为中文；保留类名、字段名、路径、命令、schema/migration 等固定技术术语。
 - 新增中文优先规则：除代码、第三方 API、协议、命令、路径、固定术语和外部错误信息外，文档、代码注释、任务记录和 Git 提交信息都默认使用中文。
 - 清理右侧标签面板周边残留乱码注释：`_SmartFilterContextCard` 和 `TagDiscoverySmokeHarness` 的维护说明已改为中文，避免 smoke test 与面板交互语义被历史编码问题干扰。

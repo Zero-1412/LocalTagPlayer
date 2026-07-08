@@ -15,6 +15,7 @@ class LibrarySmokeKeys {
   static const moreSecondaryTags =
       ValueKey<String>('smoke.tag.more-secondary-tags');
   static const listActionState = ValueKey<String>('smoke.list.action-state');
+  static const collapsedTagRail = ValueKey<String>('smoke.tag.collapsed-rail');
 
   /**
    * 本地媒体库 root 项命中标识。
@@ -2760,50 +2761,88 @@ bool referenceTopBarShouldCollapseActions(LayoutSize layoutSize) {
   return layoutSize != LayoutSize.expanded;
 }
 
+/**
+ * 右侧标签筛选面板收起后的恢复入口。
+ *
+ * 窄条需要保留按钮语义和稳定 key，真实窗口 smoke test 与辅助技术都依赖该入口恢复右侧标签发现闭环。
+ */
 class _CollapsedTagDiscoveryRail extends StatelessWidget {
   const _CollapsedTagDiscoveryRail({required this.onExpand});
 
+  /**
+   * 恢复右侧标签筛选面板的回调。
+   */
   final VoidCallback onExpand;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 58,
-      margin: const EdgeInsets.fromLTRB(10, 16, 24, 24),
-      decoration: BoxDecoration(
-        color: _appPanel,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xffe6ecf5)),
-        boxShadow: _appSoftShadow,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onExpand,
-          child: const Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.filter_alt_outlined, color: _appAccentViolet),
-              SizedBox(height: 10),
-              RotatedBox(
-                quarterTurns: 1,
-                child: Text(
-                  '\u6807\u7b7e\u7b5b\u9009',
-                  style: TextStyle(
-                    color: _appText,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
+    return Semantics(
+      key: LibrarySmokeKeys.collapsedTagRail,
+      button: true,
+      label: '\u5c55\u5f00\u6807\u7b7e\u7b5b\u9009',
+      hint: '\u6062\u590d\u53f3\u4fa7\u6807\u7b7e\u7b5b\u9009\u9762\u677f',
+      onTap: onExpand,
+      child: Tooltip(
+        message: '\u5c55\u5f00\u6807\u7b7e\u7b5b\u9009',
+        child: Container(
+          width: 58,
+          margin: const EdgeInsets.fromLTRB(10, 16, 24, 24),
+          decoration: BoxDecoration(
+            color: _appPanel,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xffe6ecf5)),
+            boxShadow: _appSoftShadow,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: onExpand,
+              child: const ExcludeSemantics(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.filter_alt_outlined, color: _appAccentViolet),
+                    SizedBox(height: 10),
+                    RotatedBox(
+                      quarterTurns: 1,
+                      child: Text(
+                        '\u6807\u7b7e\u7b5b\u9009',
+                        style: TextStyle(
+                          color: _appText,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/**
+ * 为 widget smoke test 暴露收起窄条，不把私有实现泄漏到业务入口。
+ */
+@visibleForTesting
+Widget collapsedTagDiscoveryRailSmokeHarness({
+  required VoidCallback onExpand,
+}) {
+  return MaterialApp(
+    home: Scaffold(
+      body: Center(
+        child: _CollapsedTagDiscoveryRail(
+          onExpand: onExpand,
+        ),
+      ),
+    ),
+  );
 }
 
 class _ReferenceTopBar extends StatelessWidget {

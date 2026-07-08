@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-08
+
+### 主界面 smoke test
+
+- 使用 debug exe 对主界面第一轮 smoke test：覆盖媒体库、最近播放、智能收藏、标签中心、设置、排序菜单、右侧标签面板收起/恢复和播放入口。
+- 修复右侧标签筛选面板收起后恢复入口缺少按钮语义的问题：收起窄条现在暴露“展开标签筛选”语义、Tooltip 和稳定 smoke key，点击后可恢复右侧标签面板。
+- 新增 `collapsedTagDiscoveryRailSmokeHarness` widget smoke test，覆盖收起窄条 key、Tooltip 和点击回调，避免恢复入口再次退化。
+- 播放入口复测通过：从主界面底部“播放”进入播放器，右侧队列显示 `1 / 11078`，返回主界面正常。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 语义、播放器队列规则、缩略图/media 队列或用户数据维护规则。
+
 ## 2026-07-07
 
 ### 媒体库参考顶部布局

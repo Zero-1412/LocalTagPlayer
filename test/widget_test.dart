@@ -308,6 +308,24 @@ void main() {
     expect(dense, isTrue);
   });
 
+  testWidgets('collapsed tag rail exposes a stable expand action',
+      (tester) async {
+    var expanded = false;
+    await tester.pumpWidget(
+      collapsedTagDiscoveryRailSmokeHarness(
+        onExpand: () => expanded = true,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(LibrarySmokeKeys.collapsedTagRail), findsOneWidget);
+    expect(find.byTooltip('展开标签筛选'), findsOneWidget);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.collapsedTagRail));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(expanded, isTrue);
+  });
+
   test('cleared filter query returns to empty state', () {
     const active = FilterQuery(
       primaryTagId: '原神',
