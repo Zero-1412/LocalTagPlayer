@@ -1,3 +1,10 @@
+## 2026-07-08 Store focused tests 与扫描边界
+
+- 新增 `test/library_store_test.dart`，用临时数据目录和真实小型文件树覆盖 `LibraryStore` 的扫描、folder 标签派生、manual 标签维护和 SQLite 持久化读写。
+- 新增 `LibraryScanService`，只负责目录遍历、视频文件识别、stat 读取、folder 来源一级/二级标签派生和轻量媒体指纹。
+- `LibraryStore` 继续负责 SQLite 写入、内存 `VideoItem` 状态、folder/manual 标签索引同步、用户收藏和播放记录字段，避免扫描服务直接接触用户维护数据。
+- 本轮不修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、stable identity 或 missing/relink 规则。
+
 # CHAT_2_MEDIA_LIBRARY.md
 
 当前版本：`0.4.3`

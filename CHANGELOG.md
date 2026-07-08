@@ -2,6 +2,14 @@
 
 ## 2026-07-08
 
+### Store 测试保护与播放器拆分
+
+- 新增 `test/library_store_test.dart` focused tests，覆盖临时目录扫描、folder 一级/二级标签派生、manual 标签添加/移除不破坏 folder 标签，以及 roots、favoriteTags、收藏和播放时间的 `save/load` 持久化。
+- `LibraryStore` 增加 `close()`，用于测试和后续 repository/service 拆分时释放 SQLite 文件句柄。
+- 新增 `LibraryScanService`，将文件系统扫描、视频扩展名识别、stat 读取、folder 标签派生和轻量媒体指纹从 `LibraryStore.scan()` 中拆出；`LibraryStore` 仍负责 SQLite 写入、内存状态和标签索引同步。
+- `player_page.dart` 拆出 `player_context_panel.dart` 和 `player_queue_sidebar.dart`，保留播放器生命周期、跳转、快捷键和队列语义不变。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue 或缩略图/media 队列。
+
 ### 主界面模块继续拆分
 
 - 继续按职责拆分 `library_widgets.dart`：本地媒体库路径浏览迁到 `widgets/library_local_view.dart`，右侧标签筛选面板迁到 `widgets/library_tag_discovery_panel.dart`，视频网格、列表行和卡片迁到 `widgets/library_video_results.dart`。

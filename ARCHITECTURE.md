@@ -46,6 +46,7 @@ lib/src/widgets
 - `0.4.2`：补齐 Tag 索引验收修复；旧库加载时按视频缺失情况回填 folder 来源索引；手动标签同步只刷新 manual 当前编辑范围并排除路径派生 folder 标签；结果计数忽略候选标签所在组，避免同组计数塌缩；补充 alias/source 查询索引。
 - `0.4.3`：Chat 5 第一阶段落地 `DesktopFFmpegBackend` 兼容适配层，`ExternalMediaTools` 统一通过 `FFmpegBackend` 定位和调用 FFmpeg/FFprobe；诊断页显示工具版本、缩略图/媒体信息队列状态，并提供失败重试、清除失败记录和异常文件列表。Windows bundled tools 查找顺序保持不变。
 - `0.4.4`：Chat 6 第一阶段新增 Tag Manager 入口和页面；`LibraryStore` 增加标签来源使用统计、创建/编辑标签、别名、hidden/favorite/sortOrder、移动标签组和当前筛选结果批量添加/移除 manual 标签能力。批量移除只删除 `source=manual` 关系并同步兼容字段，folder 来源关系不被移除；删除/合并暂只做引用检查与风险提示。
+- `0.4.5`：补充 `LibraryStore` focused tests，覆盖目录扫描、folder/manual 标签维护和 SQLite 持久化读写；新增 `LibraryScanService` 隔离文件系统扫描、folder 标签派生和轻量媒体指纹，`LibraryStore` 继续负责 SQLite 写入、内存状态和标签索引同步。播放器页面继续拆分为主页面、底部上下文面板和右侧队列侧栏，播放队列语义不变。
 
 协作要求：
 
@@ -102,6 +103,12 @@ lib/src/widgets
 - 维护 `Map<String, VideoItem>`。
 - 根据文件夹生成一级标签和二级标签。
 - 保存收藏、标签、媒体信息到 SQLite。
+
+当前扫描边界：
+
+- `LibraryScanService` 只遍历文件系统、识别视频扩展名、读取 stat、派生 folder 来源标签和轻量媒体指纹。
+- `LibraryStore` 消费扫描结果，继续负责 `VideoItem` 内存状态、SQLite 写入、folder/manual 标签索引同步和持久化读写。
+- manual 标签维护、用户收藏、播放记录和媒体缓存字段不由扫描服务直接修改。
 
 标签规则：
 
@@ -201,6 +208,12 @@ X:\test-media\原神\b.mp4
 - 快捷键控制。
 - 右键菜单：视频信息、诊断检查。
 - 右侧播放列表。
+
+当前页面拆分：
+
+- `player_page.dart` 保留播放器生命周期、键盘快捷键、播放跳转和页面级状态协调。
+- `player_context_panel.dart` 负责底部当前视频和筛选上下文摘要。
+- `player_queue_sidebar.dart` 负责右侧筛选结果队列、队列定位按钮、队列项展示和队列可见性测试 helper。
 
 快捷键：
 

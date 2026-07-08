@@ -912,6 +912,14 @@ class LibraryStore {
     await batch.commit(noResult: true);
   }
 
+  /**
+   * 关闭当前媒体库数据库连接。
+   *
+   * 应用运行期通常随进程持有 `LibraryStore`，测试和未来 repository 拆分需要显式释放
+   * SQLite 文件句柄，避免临时 profile 或测试数据库目录被占用。
+   */
+  Future<void> close() => _db.close();
+
   Future<void> upsertVideo(VideoItem item) async {
     await _db.insert('videos', _videoToRow(item),
         conflictAlgorithm: ConflictAlgorithm.replace);
@@ -959,100 +967,74 @@ class LibraryStore {
   }
 
   Future<int> scan() async {
-    final seen = <String>{};
+    final scanResult = await const LibraryScanService().scanRoots(roots);
     final batch = _db.batch();
     var added = 0;
 
-    for (final root in roots) {
-      final dir = Directory(root);
-      if (!await _directoryExists(dir)) {
-        continue;
-      }
-      try {
-        await for (final entity
-            in dir.list(recursive: true, followLinks: false)) {
-          if (entity is! File) {
-            continue;
-          }
-          if (!TagRules.isVideoPath(entity.path)) {
-            continue;
-          }
-          final videoKey = TagRules.pathKey(entity.path);
-          seen.add(videoKey);
-          final stat = await _fileStat(entity);
-          if (stat == null || stat.type != FileSystemEntityType.file) {
-            continue;
-          }
-          final folderTags = TagRules.parentTagsFor(root, entity.path);
-          final childTags = TagRules.childTagsFor(root, entity.path);
-          final relativePath = p.relative(entity.path, from: root);
-          final fingerprint = _mediaFingerprintFromStat(stat);
-          final existing = videos[videoKey];
-          if (existing == null) {
-            final item = VideoItem(
-              path: entity.path,
-              title: p.basenameWithoutExtension(entity.path),
-              folder: p.dirname(entity.path),
-              tags: folderTags,
-              childTags: childTags,
-              rootPath: root,
-              relativePath: relativePath,
-              fileSize: stat.size,
-              modifiedMs: stat.modified.millisecondsSinceEpoch,
-              mediaFingerprint: fingerprint,
-              addedAt: DateTime.now(),
-            );
-            videos[videoKey] = item;
-            batch.insert('videos', _videoToRow(item),
-                conflictAlgorithm: ConflictAlgorithm.replace);
-            _syncFolderTagsInBatch(batch, item);
-            added++;
-          } else {
-            final tagsChanged = !_setEquals(existing.tags, folderTags);
-            final childTagsChanged =
-                !_childTagsEquals(existing.childTags, childTags);
-            final contentChanged = existing.mediaFingerprint != null &&
-                existing.mediaFingerprint != fingerprint;
-            final indexChanged = existing.rootPath != root ||
-                existing.relativePath != relativePath ||
-                existing.fileSize != stat.size ||
-                existing.modifiedMs != stat.modified.millisecondsSinceEpoch ||
-                existing.mediaFingerprint != fingerprint;
-            existing.tags
-              ..clear()
-              ..addAll(folderTags);
-            existing.childTags
-              ..clear()
-              ..addAll(childTags
-                  .map((key, value) => MapEntry(key, <String>{...value})));
-            existing.rootPath = root;
-            existing.relativePath = relativePath;
-            existing.fileSize = stat.size;
-            existing.modifiedMs = stat.modified.millisecondsSinceEpoch;
-            existing.mediaFingerprint = fingerprint;
-            if (contentChanged) {
-              existing.mediaDetails = null;
-              existing.mediaDetailsError = null;
-              existing.thumbnailError = null;
-            }
-            if (tagsChanged || childTagsChanged || indexChanged) {
-              batch.insert('videos', _videoToRow(existing),
-                  conflictAlgorithm: ConflictAlgorithm.replace);
-              if (tagsChanged || childTagsChanged) {
-                _syncFolderTagsInBatch(batch, existing);
-              }
-            }
+    for (final scanned in scanResult.entries) {
+      final videoKey = TagRules.pathKey(scanned.path);
+      final existing = videos[videoKey];
+      if (existing == null) {
+        final item = VideoItem(
+          path: scanned.path,
+          title: scanned.title,
+          folder: scanned.folder,
+          tags: scanned.tags,
+          childTags: scanned.childTags,
+          rootPath: scanned.rootPath,
+          relativePath: scanned.relativePath,
+          fileSize: scanned.fileSize,
+          modifiedMs: scanned.modifiedMs,
+          mediaFingerprint: scanned.mediaFingerprint,
+          addedAt: DateTime.now(),
+        );
+        videos[videoKey] = item;
+        batch.insert('videos', _videoToRow(item),
+            conflictAlgorithm: ConflictAlgorithm.replace);
+        _syncFolderTagsInBatch(batch, item);
+        added++;
+      } else {
+        final tagsChanged = !_setEquals(existing.tags, scanned.tags);
+        final childTagsChanged =
+            !_childTagsEquals(existing.childTags, scanned.childTags);
+        final contentChanged = existing.mediaFingerprint != null &&
+            existing.mediaFingerprint != scanned.mediaFingerprint;
+        final indexChanged = existing.rootPath != scanned.rootPath ||
+            existing.relativePath != scanned.relativePath ||
+            existing.fileSize != scanned.fileSize ||
+            existing.modifiedMs != scanned.modifiedMs ||
+            existing.mediaFingerprint != scanned.mediaFingerprint;
+        existing.tags
+          ..clear()
+          ..addAll(scanned.tags);
+        existing.childTags
+          ..clear()
+          ..addAll(scanned.childTags
+              .map((key, value) => MapEntry(key, <String>{...value})));
+        existing.rootPath = scanned.rootPath;
+        existing.relativePath = scanned.relativePath;
+        existing.fileSize = scanned.fileSize;
+        existing.modifiedMs = scanned.modifiedMs;
+        existing.mediaFingerprint = scanned.mediaFingerprint;
+        if (contentChanged) {
+          existing.mediaDetails = null;
+          existing.mediaDetailsError = null;
+          existing.thumbnailError = null;
+        }
+        if (tagsChanged || childTagsChanged || indexChanged) {
+          batch.insert('videos', _videoToRow(existing),
+              conflictAlgorithm: ConflictAlgorithm.replace);
+          if (tagsChanged || childTagsChanged) {
+            _syncFolderTagsInBatch(batch, existing);
           }
         }
-      } on FileSystemException {
-        continue;
       }
     }
 
     final removedPaths = <String>[];
     videos.removeWhere((pathKey, item) {
-      final shouldRemove =
-          !seen.contains(pathKey) && !File(item.path).existsSync();
+      final shouldRemove = !scanResult.seenPathKeys.contains(pathKey) &&
+          !File(item.path).existsSync();
       if (shouldRemove) {
         removedPaths.add(item.path);
       }
@@ -1083,19 +1065,7 @@ class LibraryStore {
   }
 
   static Future<String?> mediaFingerprintFor(String path) async {
-    try {
-      final stat = await File(path).stat();
-      if (stat.type != FileSystemEntityType.file) {
-        return null;
-      }
-      return _mediaFingerprintFromStat(stat);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static String _mediaFingerprintFromStat(FileStat stat) {
-    return '${stat.size}|${stat.modified.millisecondsSinceEpoch}';
+    return LibraryScanService.mediaFingerprintFor(path);
   }
 
   static bool _setEquals(Set<String> a, Set<String> b) {
@@ -1114,22 +1084,6 @@ class LibraryStore {
       }
     }
     return true;
-  }
-
-  static Future<bool> _directoryExists(Directory directory) async {
-    try {
-      return await directory.exists();
-    } catch (_) {
-      return false;
-    }
-  }
-
-  static Future<FileStat?> _fileStat(File file) async {
-    try {
-      return await file.stat();
-    } catch (_) {
-      return null;
-    }
   }
 
   static List<String> _dedupeRoots(Iterable<String> rawRoots) {
@@ -1163,30 +1117,10 @@ class LibraryStore {
   }
 
   Future<int> countUntrackedVideos() async {
-    var count = 0;
-    for (final root in roots) {
-      final dir = Directory(root);
-      if (!await _directoryExists(dir)) {
-        continue;
-      }
-      try {
-        await for (final entity
-            in dir.list(recursive: true, followLinks: false)) {
-          if (entity is! File) {
-            continue;
-          }
-          if (!TagRules.isVideoPath(entity.path)) {
-            continue;
-          }
-          if (!videos.containsKey(TagRules.pathKey(entity.path))) {
-            count++;
-          }
-        }
-      } on FileSystemException {
-        continue;
-      }
-    }
-    return count;
+    return const LibraryScanService().countUntrackedVideos(
+      roots,
+      videos.keys.toSet(),
+    );
   }
 
   Set<String> get allTags {

@@ -17,6 +17,10 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 新增 `test/library_store_test.dart` focused tests，使用临时 profile 和真实小型文件树覆盖目录扫描、folder 标签派生、manual 标签添加/移除、`save/load` 持久化读写。
+- `LibraryStore` 新增 `close()` 释放 SQLite 句柄，测试和未来 repository 拆分可安全清理临时数据库目录。
+- 新增 `services/library_scan_service.dart`，把文件系统扫描、folder 标签派生和轻量媒体指纹从 `LibraryStore.scan()` 中拆出；`LibraryStore` 继续负责 SQLite 写入、标签索引同步和用户维护数据。
+- `player_page.dart` 继续拆分：底部播放上下文面板迁到 `pages/player_context_panel.dart`，右侧筛选结果队列迁到 `pages/player_queue_sidebar.dart`，队列可见性 helper 保持测试覆盖。
 - 继续拆分主界面 UI 大文件：本地媒体库视图迁到 `widgets/library_local_view.dart`，右侧标签筛选面板迁到 `widgets/library_tag_discovery_panel.dart`，视频网格/列表行/卡片迁到 `widgets/library_video_results.dart`。
 - `library_page.dart` 的筛选摘要、播放队列标题、排序比较和排序状态切换迁到 `pages/library_page_helpers.dart`，页面主体继续只协调视图和用户交互入口。
 - 评估 `library_store.dart` 后确认它同时包含 SQLite 读写、目录扫描、标签索引同步、手动标签维护和统计查询；本轮不在测试覆盖不足时强拆，后续应先补持久化/扫描/标签维护边界测试。

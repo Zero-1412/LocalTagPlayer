@@ -1,3 +1,10 @@
+## 2026-07-08 播放页面队列 UI 拆分
+
+- `player_page.dart` 保留播放器生命周期、跳转、快捷键、播放诊断采样和页面级状态协调。
+- 底部当前视频与筛选上下文摘要迁到 `pages/player_context_panel.dart`。
+- 右侧筛选结果队列、队列项、子标签切换、定位按钮和 `playerQueueIndexIsVisible` 测试 helper 迁到 `pages/player_queue_sidebar.dart`。
+- 本轮只做 part 文件拆分，不修改 filtered queue 来源、当前 index、右侧二级标签切换语义、`PlayerBackend` 或缩略图/media 队列。
+
 # CHAT_4_PLAYER.md
 
 当前版本：`0.3.0`
