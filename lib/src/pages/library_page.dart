@@ -38,6 +38,32 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   }
 
   Future<void> _changeDecoder(String value) async {
+    if (value == _settings.hwdec) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('切换播放解码'),
+        content: Text(
+          '将硬件解码从 ${PlaybackSettings.labelFor(_settings.hwdec)} 切换为 ${PlaybackSettings.labelFor(value)}。如果只是误触，请取消。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认切换'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      setState(() {});
+      return;
+    }
     final next = _settings.copyWith(hwdec: value);
     setState(() => _settings = next);
     await widget.onPlaybackSettingsChanged(next);

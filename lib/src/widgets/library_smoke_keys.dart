@@ -82,6 +82,8 @@ class LibrarySmokeKeys {
    */
   static ValueKey<String> listMore(String path) =>
       ValueKey<String>('smoke.list.more:${TagRules.pathKey(path)}');
+  static const videoMoreEditTags =
+      ValueKey<String>('smoke.video.more.edit-tags');
 
   /**
    * 右侧标签 chip 命中标识。

@@ -577,6 +577,49 @@ void main() {
     );
   });
 
+  test('tag manager coalesces case variants within the same source boundary',
+      () {
+    const manualUpper = TagItem(
+      id: 'manual:ntr-upper',
+      name: 'NTR',
+      source: TagSource.manual,
+      groupId: 'manual',
+    );
+    const manualLower = TagItem(
+      id: 'manual:ntr-lower',
+      name: 'ntr',
+      source: TagSource.manual,
+      groupId: 'manual',
+    );
+    const folderAlpha = TagItem(
+      id: 'folder.child:alpha:ntr',
+      name: 'ntr',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: 'Alpha',
+    );
+    const folderBeta = TagItem(
+      id: 'folder.child:beta:ntr',
+      name: 'NTR',
+      source: TagSource.folder,
+      groupId: 'folder.child',
+      parentId: 'Beta',
+    );
+
+    expect(
+      tagManagerDisplayRowsForTesting(
+        tags: const [manualUpper, manualLower, folderAlpha, folderBeta],
+        usage: const {
+          'manual:ntr-upper': TagUsageSummary(total: 2, manual: 2),
+          'manual:ntr-lower': TagUsageSummary(total: 3, manual: 3),
+          'folder.child:alpha:ntr': TagUsageSummary(total: 4, folder: 4),
+          'folder.child:beta:ntr': TagUsageSummary(total: 5, folder: 5),
+        },
+      ),
+      ['Alpha / ntr|4|1', 'Beta / NTR|5|1', 'ntr|5|2'],
+    );
+  });
+
   test('recent playback clear targets honor single and bulk selection', () {
     final playedA = VideoItem(
       path: 'D:/video/a.mp4',
@@ -821,8 +864,10 @@ void main() {
 
     await tester.ensureVisible(find.byKey(LibrarySmokeKeys.listMore(path)));
     await tester.tap(find.byKey(LibrarySmokeKeys.listMore(path)));
-    await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
-    expect(actionState(), 'open=1 favorite=1 more=1');
+    await tester.pump(const Duration(seconds: 1));
+    expect(actionState(), 'open=1 favorite=1 more=0');
+    expect(find.byKey(LibrarySmokeKeys.videoMoreEditTags), findsOneWidget);
+    expect(find.text('编辑标签'), findsOneWidget);
   });
 
   testWidgets('smoke path toggles tag panel rows and child expansion',

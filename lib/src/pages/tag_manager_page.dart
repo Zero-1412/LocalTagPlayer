@@ -40,24 +40,51 @@ class _TagManagerPageState extends State<TagManagerPage> {
     super.dispose();
   }
 
-  List<TagItem> _filteredTags() {
+  List<_TagManagerTagRow> _filteredTagRows(
+    Map<String, TagUsageSummary> usage,
+  ) {
     final token = _searchController.text.trim().toLowerCase();
-    final tags = widget.store.allTagItems.toList();
-    tags.sort((a, b) {
-      final group = (a.groupId ?? '').compareTo(b.groupId ?? '');
+    final grouped = <String, List<TagItem>>{};
+    for (final tag in widget.store.allTagItems) {
+      (grouped[_tagDedupeKey(tag)] ??= <TagItem>[]).add(tag);
+    }
+    final rows = [
+      for (final items in grouped.values)
+        _TagManagerTagRow.fromItems(items, usage),
+    ];
+    rows.sort((a, b) {
+      final group = (a.tag.groupId ?? '').compareTo(b.tag.groupId ?? '');
       if (group != 0) {
         return group;
       }
-      final order = a.sortOrder.compareTo(b.sortOrder);
+      final parent = (a.tag.parentId ?? '').compareTo(b.tag.parentId ?? '');
+      if (parent != 0) {
+        return parent;
+      }
+      final order = a.tag.sortOrder.compareTo(b.tag.sortOrder);
       if (order != 0) {
         return order;
       }
-      return _tagLabel(a).compareTo(_tagLabel(b));
+      return _tagLabel(a.tag).compareTo(_tagLabel(b.tag));
     });
     if (token.isEmpty) {
-      return tags;
+      return rows;
     }
-    return tags.where((tag) => tag.matchesNameOrAlias(token)).toList();
+    return rows.where((row) => row.matches(token)).toList();
+  }
+
+  String _tagDedupeKey(TagItem tag) {
+    return tagManagerDedupeKeyForTesting(tag);
+  }
+
+  _TagManagerTagRow _rowFor(TagItem tag, Map<String, TagUsageSummary> usage) {
+    return _TagManagerTagRow.fromItems(
+      [
+        for (final item in widget.store.allTagItems)
+          if (_tagDedupeKey(item) == _tagDedupeKey(tag)) item,
+      ],
+      usage,
+    );
   }
 
   TagItem? get _selectedTag {
@@ -118,7 +145,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
       await _refreshUsage();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('创建标签失败：$error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('创建标签失败：$error')));
       }
     }
   }
@@ -128,7 +156,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
     if (tag == null) {
       return;
     }
-    final sortOrder = int.tryParse(_sortOrderController.text.trim()) ?? tag.sortOrder;
+    final sortOrder =
+        int.tryParse(_sortOrderController.text.trim()) ?? tag.sortOrder;
     await widget.store.updateTagDetails(
       tag,
       displayName: TagRules.normalizeTag(_displayNameController.text),
@@ -146,7 +175,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('标签已保存')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('标签已保存')));
   }
 
   Future<void> _batchAdd(TagItem tag) async {
@@ -156,13 +186,15 @@ class _TagManagerPageState extends State<TagManagerPage> {
     }
     final confirmed = await _confirmBatch(
       title: '批量添加标签',
-      message: '将给当前筛选结果中的 ${widget.currentResults.length} 个视频添加 manual 标签“${_tagLabel(tag)}”。',
+      message:
+          '将给当前筛选结果中的 ${widget.currentResults.length} 个视频添加 manual 标签“${_tagLabel(tag)}”。',
       action: '添加',
     );
     if (confirmed != true) {
       return;
     }
-    final count = await widget.store.batchAddManualTag(tag, widget.currentResults);
+    final count =
+        await widget.store.batchAddManualTag(tag, widget.currentResults);
     if (!mounted) {
       return;
     }
@@ -170,7 +202,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已添加到 $count 个视频')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('已添加到 $count 个视频')));
   }
 
   Future<void> _batchRemove(TagItem tag) async {
@@ -180,13 +213,15 @@ class _TagManagerPageState extends State<TagManagerPage> {
     }
     final confirmed = await _confirmBatch(
       title: '批量移除标签',
-      message: '将只从当前筛选结果中的 ${widget.currentResults.length} 个视频移除 manual 标签“${_tagLabel(tag)}”。folder 来源关系不会被移除。',
+      message:
+          '将只从当前筛选结果中的 ${widget.currentResults.length} 个视频移除 manual 标签“${_tagLabel(tag)}”。folder 来源关系不会被移除。',
       action: '移除',
     );
     if (confirmed != true) {
       return;
     }
-    final count = await widget.store.batchRemoveManualTag(tag, widget.currentResults);
+    final count =
+        await widget.store.batchRemoveManualTag(tag, widget.currentResults);
     if (!mounted) {
       return;
     }
@@ -194,7 +229,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已从 $count 个视频移除 manual 标签')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('已从 $count 个视频移除 manual 标签')));
   }
 
   Future<bool?> _confirmBatch({
@@ -213,7 +249,9 @@ class _TagManagerPageState extends State<TagManagerPage> {
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: widget.currentResults.isEmpty ? null : () => Navigator.of(context).pop(true),
+            onPressed: widget.currentResults.isEmpty
+                ? null
+                : () => Navigator.of(context).pop(true),
             child: Text(action),
           ),
         ],
@@ -223,7 +261,9 @@ class _TagManagerPageState extends State<TagManagerPage> {
 
   void _showManualOnlyNotice(String action) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$action 只支持 manual 标签。folder 来源标签由路径派生，不能作为普通 manual 批量操作对象。')),
+      SnackBar(
+          content: Text(
+              '$action 只支持 manual 标签。folder 来源标签由路径派生，不能作为普通 manual 批量操作对象。')),
     );
   }
 
@@ -261,7 +301,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('合并标签尚未启用'),
-        content: Text('“${_tagLabel(tag)}” 当前有 $refs 条 video_tags 引用。合并需要迁移引用并处理 folder/manual 来源边界，第一阶段先保留入口。'),
+        content: Text(
+            '“${_tagLabel(tag)}” 当前有 $refs 条 video_tags 引用。合并需要迁移引用并处理 folder/manual 来源边界，第一阶段先保留入口。'),
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -274,8 +315,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final tags = _filteredTags();
-    final layoutSize = LayoutBreakpoints.fromWidth(MediaQuery.sizeOf(context).width);
+    final layoutSize =
+        LayoutBreakpoints.fromWidth(MediaQuery.sizeOf(context).width);
     final compact = layoutSize == LayoutSize.compact;
     return Scaffold(
       backgroundColor: _appBackground,
@@ -306,6 +347,7 @@ class _TagManagerPageState extends State<TagManagerPage> {
         future: _usageFuture,
         builder: (context, snapshot) {
           final usage = snapshot.data ?? const <String, TagUsageSummary>{};
+          final rows = _filteredTagRows(usage);
           return Flex(
             direction: compact ? Axis.vertical : Axis.horizontal,
             children: [
@@ -335,17 +377,22 @@ class _TagManagerPageState extends State<TagManagerPage> {
                       const Divider(height: 1),
                       Expanded(
                         child: ListView.builder(
-                          itemCount: tags.length,
+                          itemCount: rows.length,
                           itemBuilder: (context, index) {
-                            final tag = tags[index];
-                            final summary = usage[tag.id] ?? const TagUsageSummary();
+                            final row = rows[index];
+                            final tag = row.tag;
                             return ListTile(
                               selected: tag.id == _selectedTagId,
-                              leading: Icon(tag.source == TagSource.folder ? Icons.folder_outlined : Icons.sell_outlined),
-                              title: Text(_tagLabel(tag), maxLines: 1, overflow: TextOverflow.ellipsis),
-                              subtitle: Text('${_groupLabel(tag.groupId)} · ${tag.source.name} · 使用 ${summary.total}'),
+                              leading: Icon(tag.source == TagSource.folder
+                                  ? Icons.folder_outlined
+                                  : Icons.sell_outlined),
+                              title: Text(row.displayLabel,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle:
+                                  Text(row.subtitle(_groupLabel(tag.groupId))),
                               trailing: tag.isHidden
-                                  ? const Icon(Icons.visibility_off_outlined, size: 18)
+                                  ? const Icon(Icons.visibility_off_outlined,
+                                      size: 18)
                                   : tag.isFavorite
                                       ? const Icon(Icons.star, size: 18)
                                       : null,
@@ -363,7 +410,7 @@ class _TagManagerPageState extends State<TagManagerPage> {
                     ? const Center(child: Text('选择一个标签查看和维护详情'))
                     : _TagManagerDetail(
                         tag: _selectedTag!,
-                        usage: usage[_selectedTag!.id] ?? const TagUsageSummary(),
+                        usage: _rowFor(_selectedTag!, usage).usage,
                         groups: widget.store.tagGroups,
                         currentResultCount: widget.currentResults.length,
                         displayNameController: _displayNameController,
@@ -372,9 +419,12 @@ class _TagManagerPageState extends State<TagManagerPage> {
                         groupId: _editingGroupId,
                         isHidden: _editingHidden,
                         isFavorite: _editingFavorite,
-                        onGroupChanged: (value) => setState(() => _editingGroupId = value),
-                        onHiddenChanged: (value) => setState(() => _editingHidden = value),
-                        onFavoriteChanged: (value) => setState(() => _editingFavorite = value),
+                        onGroupChanged: (value) =>
+                            setState(() => _editingGroupId = value),
+                        onHiddenChanged: (value) =>
+                            setState(() => _editingHidden = value),
+                        onFavoriteChanged: (value) =>
+                            setState(() => _editingFavorite = value),
                         onSave: _saveSelectedTag,
                         onBatchAdd: () => _batchAdd(_selectedTag!),
                         onBatchRemove: () => _batchRemove(_selectedTag!),
@@ -388,6 +438,126 @@ class _TagManagerPageState extends State<TagManagerPage> {
       ),
     );
   }
+}
+
+class _TagManagerTagRow {
+  const _TagManagerTagRow({
+    required this.tag,
+    required this.usage,
+    required this.duplicateCount,
+    required this.caseVariants,
+  });
+
+  final TagItem tag;
+  final TagUsageSummary usage;
+  final int duplicateCount;
+  final List<String> caseVariants;
+
+  factory _TagManagerTagRow.fromItems(
+    List<TagItem> items,
+    Map<String, TagUsageSummary> usageById,
+  ) {
+    final sorted = [...items]..sort((a, b) {
+        final usageA = usageById[a.id]?.total ?? a.usageCount;
+        final usageB = usageById[b.id]?.total ?? b.usageCount;
+        final byUsage = usageB.compareTo(usageA);
+        if (byUsage != 0) {
+          return byUsage;
+        }
+        final byOrder = a.sortOrder.compareTo(b.sortOrder);
+        if (byOrder != 0) {
+          return byOrder;
+        }
+        return (a.displayName ?? a.name).compareTo(b.displayName ?? b.name);
+      });
+    final tag = sorted.first;
+    final variants = <String>{};
+    var total = const TagUsageSummary();
+    for (final item in sorted) {
+      variants.add(item.displayName ?? item.name);
+      final usage = usageById[item.id] ??
+          TagUsageSummary(
+            total: item.usageCount,
+            folder: item.source == TagSource.folder ? item.usageCount : 0,
+            manual: item.source == TagSource.manual ? item.usageCount : 0,
+            rule: item.source == TagSource.rule ? item.usageCount : 0,
+            filename: item.source == TagSource.filename ? item.usageCount : 0,
+            imported: item.source == TagSource.import ? item.usageCount : 0,
+            auto: item.source == TagSource.auto ? item.usageCount : 0,
+          );
+      total = TagUsageSummary(
+        total: total.total + usage.total,
+        folder: total.folder + usage.folder,
+        manual: total.manual + usage.manual,
+        rule: total.rule + usage.rule,
+        filename: total.filename + usage.filename,
+        imported: total.imported + usage.imported,
+        auto: total.auto + usage.auto,
+      );
+    }
+    return _TagManagerTagRow(
+      tag: tag,
+      usage: total,
+      duplicateCount: sorted.length,
+      caseVariants: variants.toList()..sort(),
+    );
+  }
+
+  String get displayLabel {
+    final parent = tag.parentId?.trim();
+    final label = tag.displayName ?? tag.name;
+    if (parent == null || parent.isEmpty || tag.groupId != 'folder.child') {
+      return label;
+    }
+    return '$parent / $label';
+  }
+
+  bool matches(String token) {
+    if (tag.matchesNameOrAlias(token)) {
+      return true;
+    }
+    return caseVariants.any((value) => value.toLowerCase().contains(token));
+  }
+
+  String subtitle(String groupLabel) {
+    final parts = <String>[
+      groupLabel,
+      tag.source.name,
+      '使用 ${usage.total}',
+    ];
+    if (duplicateCount > 1) {
+      parts.add('已合并 $duplicateCount 个大小写变体');
+    }
+    return parts.join(' · ');
+  }
+}
+
+@visibleForTesting
+String tagManagerDedupeKeyForTesting(TagItem tag) {
+  final source = tag.source.name;
+  final group = tag.groupId ?? 'manual';
+  final parent = (tag.parentId ?? '').trim().toLowerCase();
+  final name = tag.name.trim().toLowerCase();
+  return '$source|$group|$parent|$name';
+}
+
+@visibleForTesting
+List<String> tagManagerDisplayRowsForTesting({
+  required Iterable<TagItem> tags,
+  required Map<String, TagUsageSummary> usage,
+}) {
+  final grouped = <String, List<TagItem>>{};
+  for (final tag in tags) {
+    (grouped[tagManagerDedupeKeyForTesting(tag)] ??= <TagItem>[]).add(tag);
+  }
+  final rows = [
+    for (final items in grouped.values)
+      _TagManagerTagRow.fromItems(items, usage),
+  ]..sort((a, b) => a.displayLabel.compareTo(b.displayLabel));
+  return [
+    for (final row in rows)
+      '${row.displayLabel}|${row.usage.total}|${row.duplicateCount}',
+  ];
 }
 
 class _TagManagerDetail extends StatelessWidget {
@@ -434,9 +604,13 @@ class _TagManagerDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canBatchEdit = tag.source == TagSource.manual;
-    final compact = LayoutBreakpoints.fromWidth(MediaQuery.sizeOf(context).width) == LayoutSize.compact;
+    final compact =
+        LayoutBreakpoints.fromWidth(MediaQuery.sizeOf(context).width) ==
+            LayoutSize.compact;
     final groupItems = groups.isEmpty
-        ? const <DropdownMenuItem<String>>[DropdownMenuItem(value: 'manual', child: Text('手动标签'))]
+        ? const <DropdownMenuItem<String>>[
+            DropdownMenuItem(value: 'manual', child: Text('手动标签'))
+          ]
         : <DropdownMenuItem<String>>[
             for (final group in groups)
               DropdownMenuItem(
@@ -445,9 +619,14 @@ class _TagManagerDetail extends StatelessWidget {
               ),
           ];
     return ListView(
-      padding: EdgeInsets.fromLTRB(compact ? 14 : 24, 20, compact ? 14 : 24, 28),
+      padding:
+          EdgeInsets.fromLTRB(compact ? 14 : 24, 20, compact ? 14 : 24, 28),
       children: [
-        Text(tag.name, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+        Text(tag.name,
+            style: Theme.of(context)
+                .textTheme
+                .headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
         Text('ID: ${tag.id}', style: const TextStyle(color: _appTextMuted)),
         const SizedBox(height: 18),
@@ -474,7 +653,8 @@ class _TagManagerDetail extends StatelessWidget {
           controller: aliasesController,
           minLines: 2,
           maxLines: 4,
-          decoration: const InputDecoration(labelText: '别名', hintText: '用逗号或换行分隔'),
+          decoration:
+              const InputDecoration(labelText: '别名', hintText: '用逗号或换行分隔'),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
@@ -509,21 +689,29 @@ class _TagManagerDetail extends StatelessWidget {
           label: const Text('保存标签'),
         ),
         const SizedBox(height: 24),
-        Text('批量打标签', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        Text('批量打标签',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
-        Text('当前筛选结果：$currentResultCount 个视频', style: const TextStyle(color: _appTextMuted)),
+        Text('当前筛选结果：$currentResultCount 个视频',
+            style: const TextStyle(color: _appTextMuted)),
         const SizedBox(height: 12),
         Wrap(
           spacing: 12,
           runSpacing: 12,
           children: [
             FilledButton.icon(
-              onPressed: currentResultCount == 0 || !canBatchEdit ? null : onBatchAdd,
+              onPressed:
+                  currentResultCount == 0 || !canBatchEdit ? null : onBatchAdd,
               icon: const Icon(Icons.playlist_add),
               label: const Text('批量添加 manual'),
             ),
             OutlinedButton.icon(
-              onPressed: currentResultCount == 0 || !canBatchEdit ? null : onBatchRemove,
+              onPressed: currentResultCount == 0 || !canBatchEdit
+                  ? null
+                  : onBatchRemove,
               icon: const Icon(Icons.playlist_remove),
               label: const Text('批量移除 manual'),
             ),
@@ -537,7 +725,11 @@ class _TagManagerDetail extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 24),
-        Text('高风险操作', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        Text('高风险操作',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
         Wrap(
           spacing: 12,
@@ -580,7 +772,10 @@ class _TagGroupSummary extends StatelessWidget {
         children: [
           Text(
             '标签组',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+            style: Theme.of(context)
+                .textTheme
+                .labelLarge
+                ?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
           Wrap(

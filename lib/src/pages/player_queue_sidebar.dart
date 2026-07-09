@@ -86,7 +86,7 @@ class _PlayerQueueSidebar extends StatelessWidget {
   final ValueChanged<int> onSelect;
 
   /**
-   * 双击队列项时跳转播放。
+   * 单击或双击队列项时跳转播放。
    */
   final ValueChanged<int> onPlay;
 
@@ -331,7 +331,7 @@ class _PlayerQueueSidebar extends StatelessWidget {
                       selected: index == selectedIndex,
                       thumbnailService: thumbnailService,
                       detailsService: detailsService,
-                      onTap: () => onSelect(index),
+                      onTap: () => onPlay(index),
                       onDoubleTap: () => onPlay(index),
                     );
                   },
@@ -685,7 +685,7 @@ class _QueueListItem extends StatefulWidget {
   final MediaDetailsService detailsService;
 
   /**
-   * 单击队列项时只移动选择，不直接改变播放。
+   * 单击队列项时直接切换实际播放位置。
    */
   final VoidCallback onTap;
 
@@ -941,7 +941,7 @@ class _QueueListItemState extends State<_QueueListItem> {
                             child: const Padding(
                               padding: EdgeInsets.only(top: 2),
                               child: Text(
-                                '双击播放',
+                                '单击播放',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(

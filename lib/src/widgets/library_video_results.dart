@@ -330,15 +330,9 @@ class _ListRowActions extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          IconButton.outlined(
+          _VideoMoreButton(
             key: LibrarySmokeKeys.listMore(item.path),
-            onPressed: onEditTags,
-            tooltip: '\u66f4\u591a',
-            icon: const Icon(Icons.more_horiz_rounded),
-            style: IconButton.styleFrom(
-              fixedSize: const Size(34, 34),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+            onEditTags: onEditTags,
           ),
         ],
       ),
@@ -518,15 +512,8 @@ class _InteractiveVideoCardState extends State<_InteractiveVideoCard> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              IconButton.outlined(
-                                tooltip: '\u66f4\u591a',
-                                onPressed: widget.onEditTags,
-                                icon: const Icon(Icons.more_horiz_rounded),
-                                style: IconButton.styleFrom(
-                                  fixedSize: const Size(34, 34),
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
+                              _VideoMoreButton(
+                                onEditTags: widget.onEditTags,
                               ),
                             ],
                           );
@@ -543,6 +530,50 @@ class _InteractiveVideoCardState extends State<_InteractiveVideoCard> {
     );
   }
 }
+
+class _VideoMoreButton extends StatelessWidget {
+  const _VideoMoreButton({
+    super.key,
+    required this.onEditTags,
+  });
+
+  final VoidCallback onEditTags;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_VideoMoreAction>(
+      tooltip: '更多操作',
+      icon: const Icon(Icons.more_horiz_rounded),
+      position: PopupMenuPosition.under,
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          key: LibrarySmokeKeys.videoMoreEditTags,
+          value: _VideoMoreAction.editTags,
+          child: Row(
+            children: [
+              Icon(Icons.sell_outlined),
+              SizedBox(width: 10),
+              Text('编辑标签'),
+            ],
+          ),
+        ),
+      ],
+      onSelected: (value) {
+        switch (value) {
+          case _VideoMoreAction.editTags:
+            onEditTags();
+            break;
+        }
+      },
+      style: IconButton.styleFrom(
+        fixedSize: const Size(34, 34),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
+}
+
+enum _VideoMoreAction { editTags }
 
 class _VideoPreview extends StatefulWidget {
   const _VideoPreview({
