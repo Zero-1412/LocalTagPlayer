@@ -773,48 +773,54 @@ class _SidebarLocalLibraryItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = p.basename(path).isEmpty ? path : p.basename(path);
-    return Material(
-      key: LibrarySmokeKeys.localRoot(path),
-      color: selected ? const Color(0xff263244) : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: LibrarySmokeSemantics.localRoot(path),
+      value: path,
+      child: Material(
+        key: LibrarySmokeKeys.localRoot(path),
+        color: selected ? const Color(0xff263244) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 10, right: 2),
-          child: Row(
-            children: [
-              Icon(
-                Icons.folder_outlined,
-                size: 17,
-                color: selected ? _appAccentViolet : const Color(0xff94a3b8),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: selected ? Colors.white : const Color(0xffcbd5e1),
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 10, right: 2),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.folder_outlined,
+                  size: 17,
+                  color: selected ? _appAccentViolet : const Color(0xff94a3b8),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selected ? Colors.white : const Color(0xffcbd5e1),
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-              IconButton(
-                tooltip: '\u79fb\u9664\u672c\u5730\u5e93\u8def\u5f84',
-                onPressed: onRemove,
-                icon: const Icon(Icons.close_rounded, size: 16),
-                color: const Color(0xff94a3b8),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(
-                  width: 28,
-                  height: 28,
+                IconButton(
+                  tooltip: '\u79fb\u9664\u672c\u5730\u5e93\u8def\u5f84',
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  color: const Color(0xff94a3b8),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 28,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

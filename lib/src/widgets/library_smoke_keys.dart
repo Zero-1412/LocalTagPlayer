@@ -23,6 +23,8 @@ class LibrarySmokeKeys {
   static const topSortFieldButton =
       ValueKey<String>('smoke.top.sort-field-button');
   static const topSortMenuPanel = ValueKey<String>('smoke.top.sort-menu-panel');
+  static const topSortDirectionButton =
+      ValueKey<String>('smoke.top.sort-direction-button');
 
   static ValueKey<String> topSortMenuItem(SortMode mode) =>
       ValueKey<String>('smoke.top.sort-menu-item:${mode.name}');
@@ -86,6 +88,27 @@ class LibrarySmokeKeys {
       ValueKey<String>('smoke.video.more.edit-tags');
 
   /**
+   * 视频网格卡片播放按钮命中标识。
+   *
+   * 真实窗口 QA 主要依赖下方语义标签；key 继续服务 widget smoke，避免脚本退回到
+   * 随窗口尺寸漂移的固定坐标。
+   */
+  static ValueKey<String> cardPlay(String path) =>
+      ValueKey<String>('smoke.card.play:${TagRules.pathKey(path)}');
+
+  /**
+   * 视频网格卡片收藏按钮命中标识。
+   */
+  static ValueKey<String> cardFavorite(String path) =>
+      ValueKey<String>('smoke.card.favorite:${TagRules.pathKey(path)}');
+
+  /**
+   * 视频网格卡片更多按钮命中标识。
+   */
+  static ValueKey<String> cardMore(String path) =>
+      ValueKey<String>('smoke.card.more:${TagRules.pathKey(path)}');
+
+  /**
    * 右侧标签 chip 命中标识。
    */
   static ValueKey<String> tagChip(String tagId) =>
@@ -96,4 +119,42 @@ class LibrarySmokeKeys {
    */
   static ValueKey<String> tagResult(String title) =>
       ValueKey<String>('smoke.tag.result:$title');
+}
+
+/**
+ * 真实窗口 QA 辅助树使用的稳定语义标签。
+ *
+ * 这些 label 是自动化协议，不是用户可见文案；修改时必须同步更新
+ * `scripts/qa/main_window_stress_semantic.mjs`，否则压测会重新退化为坐标命中。
+ */
+class LibrarySmokeSemantics {
+  const LibrarySmokeSemantics._();
+
+  static const sortFieldButton = 'qa.sort.field.button';
+  static const sortDirectionButton = 'qa.sort.direction.button';
+
+  static String sortMenuItem(SortMode mode) =>
+      'qa.sort.field.${mode.name}.${sortModeLabel(mode)}';
+
+  static String localRoot(String path) =>
+      'qa.local.root.${p.basename(path).isEmpty ? path : p.basename(path)}';
+
+  static String localFolder(String path) =>
+      'qa.local.folder.${p.basename(path).isEmpty ? path : p.basename(path)}';
+
+  static String primaryTag(TagItem tag) =>
+      'qa.tag.primary.${tag.displayName ?? tag.name}';
+
+  static String childTag(TagItem primary, TagItem tag) =>
+      'qa.tag.child.${primary.displayName ?? primary.name}.${tag.displayName ?? tag.name}';
+
+  static String genericTag(TagItem tag) =>
+      'qa.tag.${tag.displayName ?? tag.name}';
+
+  static String videoPlay(VideoItem item) => 'qa.video.play.${item.title}';
+
+  static String videoFavorite(VideoItem item) =>
+      'qa.video.favorite.${item.title}';
+
+  static String videoMore(VideoItem item) => 'qa.video.more.${item.title}';
 }

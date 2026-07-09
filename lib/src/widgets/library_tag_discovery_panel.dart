@@ -701,6 +701,7 @@ class _TagFilterChip extends StatelessWidget {
     required this.excluded,
     required this.onToggle,
     required this.onExcludeToggle,
+    this.semanticLabel,
   });
 
   final TagItem tag;
@@ -717,6 +718,13 @@ class _TagFilterChip extends StatelessWidget {
 
   final VoidCallback onExcludeToggle;
 
+  /**
+   * 真实窗口 QA 使用的稳定语义标签。
+   *
+   * 二级标签需要携带所属一级上下文，避免辅助树定位时把不同层级的同名标签混在一起。
+   */
+  final String? semanticLabel;
+
   @override
   Widget build(BuildContext context) {
     final textColor = excluded ? const Color(0xffb42318) : groupColor;
@@ -730,55 +738,61 @@ class _TagFilterChip extends StatelessWidget {
         : selected
             ? const Color(0xfff3f0ff)
             : Colors.white;
-    return GestureDetector(
-      onLongPress: onExcludeToggle,
-      child: Material(
-        key: LibrarySmokeKeys.tagChip(tag.id),
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(9),
-        child: InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: semanticLabel ?? LibrarySmokeSemantics.genericTag(tag),
+      value: _formatCount(count),
+      child: GestureDetector(
+        onLongPress: onExcludeToggle,
+        child: Material(
+          key: LibrarySmokeKeys.tagChip(tag.id),
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(9),
-          onTap: onToggle,
-          child: Container(
-            height: 34,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: borderColor),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (selected || excluded) ...[
-                  Icon(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(9),
+            onTap: onToggle,
+            child: Container(
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: borderColor),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (selected || excluded) ...[
+                    Icon(
+                      excluded
+                          ? Icons.remove_circle_outline
+                          : Icons.check_circle_rounded,
+                      size: 16,
+                      color: textColor,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Text(
                     excluded
-                        ? Icons.remove_circle_outline
-                        : Icons.check_circle_rounded,
-                    size: 16,
-                    color: textColor,
+                        ? 'NOT ${tag.displayName ?? tag.name}'
+                        : (tag.displayName ?? tag.name),
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
+                  Text(
+                    _formatCount(count),
+                    style: const TextStyle(
+                      color: _appTextMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ],
-                Text(
-                  excluded
-                      ? 'NOT ${tag.displayName ?? tag.name}'
-                      : (tag.displayName ?? tag.name),
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _formatCount(count),
-                  style: const TextStyle(
-                    color: _appTextMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -1079,36 +1093,43 @@ class _PrimaryAccordionRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          GestureDetector(
-            key: LibrarySmokeKeys.primaryHeader(tag.id),
-            behavior: HitTestBehavior.opaque,
-            onTap: onToggle,
-            child: SizedBox(
-              height: 40,
-              child: Row(
-                children: [
-                  Icon(Icons.expand_more_rounded,
-                      size: 20, color: selected ? _appAccentViolet : _appText),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      tag.displayName ?? tag.name,
+          Semantics(
+            button: true,
+            selected: selected,
+            label: LibrarySmokeSemantics.primaryTag(tag),
+            value: _formatCount(count),
+            child: GestureDetector(
+              key: LibrarySmokeKeys.primaryHeader(tag.id),
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggle,
+              child: SizedBox(
+                height: 40,
+                child: Row(
+                  children: [
+                    Icon(Icons.expand_more_rounded,
+                        size: 20,
+                        color: selected ? _appAccentViolet : _appText),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        tag.displayName ?? tag.name,
+                        style: const TextStyle(
+                          color: _appText,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _formatCount(count),
                       style: const TextStyle(
-                        color: _appText,
-                        fontSize: 15,
+                        color: _appTextMuted,
+                        fontSize: 13,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                  ),
-                  Text(
-                    _formatCount(count),
-                    style: const TextStyle(
-                      color: _appTextMuted,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -1134,6 +1155,17 @@ class _PrimaryAccordionRow extends StatelessWidget {
                   excluded: false,
                   onToggle: onDefaultAlbumToggle,
                   onExcludeToggle: () {},
+                  semanticLabel: LibrarySmokeSemantics.childTag(
+                    tag,
+                    TagItem(
+                      id: '${tag.id}::default-album',
+                      name: TagRules.defaultAlbumTag,
+                      displayName: TagRules.defaultAlbumTag,
+                      groupId: 'folder.child',
+                      parentId: tag.id,
+                      source: TagSource.folder,
+                    ),
+                  ),
                 ),
                 for (final child in childTags)
                   _TagFilterChip(
@@ -1144,6 +1176,7 @@ class _PrimaryAccordionRow extends StatelessWidget {
                     excluded: excludedIds.contains(child.id),
                     onToggle: () => onChildToggle(child),
                     onExcludeToggle: () => onChildExcludeToggle(child),
+                    semanticLabel: LibrarySmokeSemantics.childTag(tag, child),
                   ),
               ],
             ),
@@ -1229,49 +1262,55 @@ class _CollapsedPrimaryRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        key: LibrarySmokeKeys.primaryRow(tag.id),
-        color: selected ? const Color(0xfff5f3ff) : const Color(0xfffbfcff),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: LibrarySmokeSemantics.primaryTag(tag),
+        value: _formatCount(count),
+        child: Material(
+          key: LibrarySmokeKeys.primaryRow(tag.id),
+          color: selected ? const Color(0xfff5f3ff) : const Color(0xfffbfcff),
           borderRadius: BorderRadius.circular(12),
-          onTap: onToggle,
-          child: Container(
-            height: 52,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: selected
-                    ? const Color(0xffd8d4ff)
-                    : const Color(0xffe6ecf5),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onToggle,
+            child: Container(
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: selected
+                      ? const Color(0xffd8d4ff)
+                      : const Color(0xffe6ecf5),
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.chevron_right_rounded,
-                    size: 20, color: _appText),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    tag.displayName ?? tag.name,
-                    overflow: TextOverflow.ellipsis,
+              child: Row(
+                children: [
+                  const Icon(Icons.chevron_right_rounded,
+                      size: 20, color: _appText),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      tag.displayName ?? tag.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _appText,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    _formatCount(count),
                     style: const TextStyle(
-                      color: _appText,
-                      fontSize: 15,
+                      color: _appTextMuted,
+                      fontSize: 13,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                ),
-                Text(
-                  _formatCount(count),
-                  style: const TextStyle(
-                    color: _appTextMuted,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

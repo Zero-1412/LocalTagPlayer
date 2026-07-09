@@ -111,3 +111,11 @@ flutter build windows --debug
 - `library_page.dart` 中的筛选摘要、筛选表达式、播放队列标题、排序比较和排序切换迁到 `pages/library_page_helpers.dart`，页面主体继续负责状态读取、布局组合和事件分发。
 - `library_store.dart` 已做边界评估：当前同时承担 SQLite schema/读写、目录扫描、标签索引同步、手动标签维护和统计查询。本轮不拆该文件，避免在扫描、标签维护、持久化读写缺少专项测试时引入数据风险。
 - 本轮不修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、缩略图/media 队列或用户数据维护规则。
+
+## 2026-07-09 主界面语义压测
+
+- 排序控件、本地媒体库 root / 文件夹、右侧一级/二级标签和视频卡片/列表操作入口补充 `qa.*` 语义标签，真实窗口 QA 优先走辅助树定位，避免坐标压测在窗口尺寸变化后漂移。
+- 新增 `scripts/qa/main_window_stress_semantic.mjs`，随机执行标签、排序、本地媒体库路径和视频打开/返回；检测到应用退出、窗口丢失、连续找不到目标或重复点击同一目标时立即停止。
+- 脚本点击前执行两次辅助树快照校验，要求目标唯一且 `element_index` / 文本稳定，并过滤关闭、最小化、最大化等窗口 chrome 元素，降低 UI 刷新后误点标题栏的风险。
+- 重新压测 5 分钟共 28 轮：未触发应用退出、窗口丢失或重复点击同一位置；残余失败集中在动态界面状态下语义目标短暂不可见。stderr 中出现 Flutter Windows `AXTree` 更新错误，但进程仍响应，Windows Application 日志未记录 `local_tag_player` 崩溃。
+- 本轮只加强真实窗口 QA 定位和非破坏性压测，不修改 SQLite schema、标签筛选语义、播放器队列或缓存队列。

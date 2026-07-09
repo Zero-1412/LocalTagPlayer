@@ -283,56 +283,69 @@ class _ListRowActions extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           if (!compact) ...[
-            SizedBox(
-              width: 78,
-              height: 34,
-              child: GestureDetector(
-                key: LibrarySmokeKeys.listPlay(item.path),
-                behavior: HitTestBehavior.opaque,
-                onTap: onOpen,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: _appAccentViolet,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.play_arrow_rounded,
-                          size: 18, color: Colors.white),
-                      SizedBox(width: 4),
-                      Text(
-                        '\u64ad\u653e',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
+            Semantics(
+              button: true,
+              label: LibrarySmokeSemantics.videoPlay(item),
+              child: SizedBox(
+                width: 78,
+                height: 34,
+                child: GestureDetector(
+                  key: LibrarySmokeKeys.listPlay(item.path),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onOpen,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: _appAccentViolet,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.play_arrow_rounded,
+                            size: 18, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text(
+                          '\u64ad\u653e',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 8),
           ],
-          IconButton.outlined(
-            key: LibrarySmokeKeys.listFavorite(item.path),
-            tooltip: item.isFavorite
-                ? '\u53d6\u6d88\u6536\u85cf'
-                : '\u6dfb\u52a0\u6536\u85cf',
-            onPressed: onToggleFavorite,
-            icon:
-                Icon(item.isFavorite ? Icons.favorite : Icons.favorite_border),
-            style: IconButton.styleFrom(
-              fixedSize: const Size(34, 34),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          Semantics(
+            button: true,
+            label: LibrarySmokeSemantics.videoFavorite(item),
+            selected: item.isFavorite,
+            child: IconButton.outlined(
+              key: LibrarySmokeKeys.listFavorite(item.path),
+              tooltip: item.isFavorite
+                  ? '\u53d6\u6d88\u6536\u85cf'
+                  : '\u6dfb\u52a0\u6536\u85cf',
+              onPressed: onToggleFavorite,
+              icon: Icon(
+                  item.isFavorite ? Icons.favorite : Icons.favorite_border),
+              style: IconButton.styleFrom(
+                fixedSize: const Size(34, 34),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ),
           const SizedBox(width: 8),
-          _VideoMoreButton(
-            key: LibrarySmokeKeys.listMore(item.path),
-            onEditTags: onEditTags,
+          Semantics(
+            button: true,
+            label: LibrarySmokeSemantics.videoMore(item),
+            child: _VideoMoreButton(
+              key: LibrarySmokeKeys.listMore(item.path),
+              onEditTags: onEditTags,
+            ),
           ),
         ],
       ),
@@ -481,39 +494,56 @@ class _InteractiveVideoCardState extends State<_InteractiveVideoCard> {
                           return Row(
                             children: [
                               Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: widget.onOpen,
-                                  icon: const Icon(Icons.play_arrow),
-                                  label: Text(iconOnly ? '' : '\u64ad\u653e'),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: _appAccentViolet,
-                                    foregroundColor: Colors.white,
-                                    fixedSize: const Size.fromHeight(34),
-                                    padding: EdgeInsets.zero,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
+                                child: Semantics(
+                                  button: true,
+                                  label: LibrarySmokeSemantics.videoPlay(item),
+                                  child: FilledButton.icon(
+                                    key: LibrarySmokeKeys.cardPlay(item.path),
+                                    onPressed: widget.onOpen,
+                                    icon: const Icon(Icons.play_arrow),
+                                    label: Text(iconOnly ? '' : '\u64ad\u653e'),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: _appAccentViolet,
+                                      foregroundColor: Colors.white,
+                                      fixedSize: const Size.fromHeight(34),
+                                      padding: EdgeInsets.zero,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              IconButton.outlined(
-                                tooltip: item.isFavorite
-                                    ? '\u53d6\u6d88\u6536\u85cf'
-                                    : '\u6dfb\u52a0\u6536\u85cf',
-                                onPressed: widget.onToggleFavorite,
-                                icon: Icon(item.isFavorite
-                                    ? Icons.favorite
-                                    : Icons.favorite_border),
-                                style: IconButton.styleFrom(
-                                  fixedSize: const Size(34, 34),
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
+                              Semantics(
+                                button: true,
+                                selected: item.isFavorite,
+                                label:
+                                    LibrarySmokeSemantics.videoFavorite(item),
+                                child: IconButton.outlined(
+                                  key: LibrarySmokeKeys.cardFavorite(item.path),
+                                  tooltip: item.isFavorite
+                                      ? '\u53d6\u6d88\u6536\u85cf'
+                                      : '\u6dfb\u52a0\u6536\u85cf',
+                                  onPressed: widget.onToggleFavorite,
+                                  icon: Icon(item.isFavorite
+                                      ? Icons.favorite
+                                      : Icons.favorite_border),
+                                  style: IconButton.styleFrom(
+                                    fixedSize: const Size(34, 34),
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              _VideoMoreButton(
-                                onEditTags: widget.onEditTags,
+                              Semantics(
+                                button: true,
+                                label: LibrarySmokeSemantics.videoMore(item),
+                                child: _VideoMoreButton(
+                                  key: LibrarySmokeKeys.cardMore(item.path),
+                                  onEditTags: widget.onEditTags,
+                                ),
                               ),
                             ],
                           );

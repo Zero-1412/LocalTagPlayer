@@ -232,20 +232,25 @@ class _TopSortControlState extends State<_TopSortControl>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       for (final mode in SortMode.values)
-                        InkWell(
-                          key: LibrarySmokeKeys.topSortMenuItem(mode),
-                          onTap: () {
-                            widget.onChanged(mode);
-                            _removeSortMenu();
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 13,
-                            ),
-                            child: _SortMenuItem(
-                              label: sortModeLabel(mode),
-                              selected: widget.sortMode == mode,
+                        Semantics(
+                          button: true,
+                          selected: widget.sortMode == mode,
+                          label: LibrarySmokeSemantics.sortMenuItem(mode),
+                          child: InkWell(
+                            key: LibrarySmokeKeys.topSortMenuItem(mode),
+                            onTap: () {
+                              widget.onChanged(mode);
+                              _removeSortMenu();
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 13,
+                              ),
+                              child: _SortMenuItem(
+                                label: sortModeLabel(mode),
+                                selected: widget.sortMode == mode,
+                              ),
                             ),
                           ),
                         ),
@@ -273,35 +278,40 @@ class _TopSortControlState extends State<_TopSortControl>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Tooltip(
-            message: '\u6392\u5e8f\u5b57\u6bb5',
-            child: InkWell(
-              key: LibrarySmokeKeys.topSortFieldButton,
-              borderRadius: const BorderRadius.horizontal(
-                left: Radius.circular(10),
-              ),
-              onTap: _toggleSortMenu,
-              child: Padding(
-                key: _fieldKey,
-                padding: const EdgeInsets.only(left: 12, right: 10),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.sort_rounded,
-                        size: 18, color: _appAccentStrong),
-                    const SizedBox(width: 7),
-                    Text(
-                      sortModeLabel(widget.sortMode),
-                      style: const TextStyle(
-                        color: _appText,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
+          Semantics(
+            button: true,
+            label: LibrarySmokeSemantics.sortFieldButton,
+            value: sortModeLabel(widget.sortMode),
+            child: Tooltip(
+              message: '\u6392\u5e8f\u5b57\u6bb5',
+              child: InkWell(
+                key: LibrarySmokeKeys.topSortFieldButton,
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(10),
+                ),
+                onTap: _toggleSortMenu,
+                child: Padding(
+                  key: _fieldKey,
+                  padding: const EdgeInsets.only(left: 12, right: 10),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.sort_rounded,
+                          size: 18, color: _appAccentStrong),
+                      const SizedBox(width: 7),
+                      Text(
+                        sortModeLabel(widget.sortMode),
+                        style: const TextStyle(
+                          color: _appText,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.expand_more_rounded,
-                        size: 18, color: _appTextMuted),
-                  ],
+                      const SizedBox(width: 4),
+                      const Icon(Icons.expand_more_rounded,
+                          size: 18, color: _appTextMuted),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -310,37 +320,43 @@ class _TopSortControlState extends State<_TopSortControl>
             height: 26,
             child: VerticalDivider(width: 1, color: _appBorder),
           ),
-          Tooltip(
-            message: directionAscending
-                ? '\u5207\u6362\u4e3a\u5012\u5e8f'
-                : '\u5207\u6362\u4e3a\u6b63\u5e8f',
-            child: InkWell(
-              borderRadius: const BorderRadius.horizontal(
-                right: Radius.circular(10),
-              ),
-              onTap: widget.onDirectionToggle,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 11),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      directionAscending
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded,
-                      size: 17,
-                      color: _appAccentStrong,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      directionAscending ? '\u6b63\u5e8f' : '\u5012\u5e8f',
-                      style: const TextStyle(
-                        color: _appText,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
+          Semantics(
+            key: LibrarySmokeKeys.topSortDirectionButton,
+            button: true,
+            label: LibrarySmokeSemantics.sortDirectionButton,
+            value: directionAscending ? '\u6b63\u5e8f' : '\u5012\u5e8f',
+            child: Tooltip(
+              message: directionAscending
+                  ? '\u5207\u6362\u4e3a\u5012\u5e8f'
+                  : '\u5207\u6362\u4e3a\u6b63\u5e8f',
+              child: InkWell(
+                borderRadius: const BorderRadius.horizontal(
+                  right: Radius.circular(10),
+                ),
+                onTap: widget.onDirectionToggle,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 11),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        directionAscending
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        size: 17,
+                        color: _appAccentStrong,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      Text(
+                        directionAscending ? '\u6b63\u5e8f' : '\u5012\u5e8f',
+                        style: const TextStyle(
+                          color: _appText,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

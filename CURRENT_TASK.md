@@ -17,6 +17,11 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 为主界面压测补稳定语义标签：排序、本地媒体库、一级/二级标签和视频操作入口现在暴露 `qa.*` 辅助树标签，自动化不再优先依赖窗口坐标。
+- 新增 `scripts/qa/main_window_stress_semantic.mjs` 语义优先压测脚本：随机点击一级标签、二级标签、排序字段、正倒序、本地媒体库路径和视频入口，并在应用退出、窗口丢失、连续找不到目标或重复命中同一目标时停止。
+- 重新压测发现：旧脚本偶发“应用消失”更符合动态 UI 刷新后 `element_index` 过期导致的误点风险；加入双快照稳定校验和窗口 chrome 过滤后，5 分钟真实窗口压测执行 28 轮，未出现应用退出、异常停止或重复点击同一目标。
+- 压测 stderr 中出现 Flutter Windows accessibility bridge `AXTree` 更新错误；当前判断为高频辅助树刷新噪音，进程仍 `Responding=True`，Windows Application 日志未记录 `local_tag_player` 崩溃。
+
 - 标签计数刷新收口到 `LibraryCountRefreshCoordinator`：页面不再内联维护计数延时和 revision，高频标签/搜索交互会取消旧计数任务，低频库结构变化才安排空闲计数刷新。
 - 新增 focused test 覆盖计数刷新协调器：旧任务被取消后不会执行 `resultCounts`，只保留最新空闲计数结果，防止标签点击再次退化为多次全量计数排队。
 - 新增 `docs/qa/main_window_latency_smoke.md`：记录真实窗口标签点击、搜索和本地媒体库路径切换的耗时采样模板，后续复测可输出每轮 `elapsedMs` 与结果摘要。

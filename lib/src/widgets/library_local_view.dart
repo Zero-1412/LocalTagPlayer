@@ -521,37 +521,42 @@ class _LocalFolderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      key: LibrarySmokeKeys.localFolder(path),
-      color: _appPanel,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
+    return Semantics(
+      button: true,
+      label: LibrarySmokeSemantics.localFolder(path),
+      value: path,
+      child: Material(
+        key: LibrarySmokeKeys.localFolder(path),
+        color: _appPanel,
         borderRadius: BorderRadius.circular(8),
-        onTap: onOpen,
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            border: Border.all(color: _appBorder),
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: _appSoftShadow,
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.folder_rounded,
-                  size: 58, color: _appAccentViolet),
-              const SizedBox(height: 16),
-              Text(
-                p.basename(path),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: _appText,
-                  fontWeight: FontWeight.w800,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onOpen,
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              border: Border.all(color: _appBorder),
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: _appSoftShadow,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.folder_rounded,
+                    size: 58, color: _appAccentViolet),
+                const SizedBox(height: 16),
+                Text(
+                  p.basename(path),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: _appText,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -567,37 +572,42 @@ class _LocalFolderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      key: LibrarySmokeKeys.localFolder(path),
-      color: _appPanel,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
+    return Semantics(
+      button: true,
+      label: LibrarySmokeSemantics.localFolder(path),
+      value: path,
+      child: Material(
+        key: LibrarySmokeKeys.localFolder(path),
+        color: _appPanel,
         borderRadius: BorderRadius.circular(8),
-        onTap: onOpen,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            border: Border.all(color: _appBorder),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.folder_rounded,
-                  color: _appAccentViolet, size: 32),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  p.basename(path),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _appText,
-                    fontWeight: FontWeight.w800,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onOpen,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              border: Border.all(color: _appBorder),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.folder_rounded,
+                    color: _appAccentViolet, size: 32),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    p.basename(path),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _appText,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: _appTextMuted),
-            ],
+                const Icon(Icons.chevron_right_rounded, color: _appTextMuted),
+              ],
+            ),
           ),
         ),
       ),

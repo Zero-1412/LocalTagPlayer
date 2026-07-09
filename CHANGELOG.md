@@ -2,6 +2,14 @@
 
 ## 2026-07-09
 
+### 主界面语义压测稳定化
+
+- 为排序按钮、排序项、本地媒体库 root / 文件夹、一级/二级标签 chip、视频播放/收藏/更多入口补充稳定语义标签，真实窗口 QA 可优先通过辅助树定位，减少普通窗口和最大化窗口之间的坐标漂移。
+- 新增 `scripts/qa/main_window_stress_semantic.mjs`：随机执行一级标签、二级标签、排序字段、正倒序、本地媒体库路径、视频打开和返回，并在应用退出、窗口丢失、连续找不到目标或重复命中同一目标时停止。
+- 压测脚本点击前会做双快照稳定校验，并过滤关闭、最小化、最大化等窗口 chrome 元素，避免动态 UI 刷新后复用过期 `element_index` 误点到标题栏。
+- 真实窗口 5 分钟语义压测执行 28 轮，未触发应用退出、窗口丢失或重复点击同一目标；残余失败主要是动态 UI 状态下语义目标暂时不可见，stderr 出现 Flutter Windows `AXTree` 更新错误但进程保持响应。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、`PlayerBackend` 或缩略图/media 队列。
+
 ### 标签计数刷新协调与耗时采样
 
 - 新增 `LibraryCountRefreshCoordinator`，统一管理标签计数的空闲延后、取消和过期丢弃，`LibraryPage` 不再内联维护计数刷新 revision。
