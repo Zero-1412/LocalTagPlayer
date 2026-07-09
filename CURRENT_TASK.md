@@ -17,6 +17,7 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 固化 Agent Harness 结构原则：主规则稳定、能力按需加载、长程任务持久化记录、验证结果决定是否晋级；后续较大功能或真实媒体目录 QA 不再把临时规则堆进 `AGENTS.md`，而按 `docs/agent_harness.md` 和对应任务文档记录。
 - 为主界面压测补稳定语义标签：排序、本地媒体库、一级/二级标签和视频操作入口现在暴露 `qa.*` 辅助树标签，自动化不再优先依赖窗口坐标。
 - 新增 `scripts/qa/main_window_stress_semantic.mjs` 语义优先压测脚本：随机点击一级标签、二级标签、排序字段、正倒序、本地媒体库路径和视频入口，并在应用退出、窗口丢失、连续找不到目标或重复命中同一目标时停止。
 - 主界面压测脚本的残余失败已从笼统“目标暂时不可见”拆成 `ui_state_wait`、`list_visibility`、`tag_expansion` 三类，并返回 `failureDetails` 按阶段和原因聚合，方便沉淀为长期 smoke 门禁。

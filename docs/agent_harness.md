@@ -24,6 +24,15 @@ not a PotPlayer / VLC replacement
 not a general professional video player
 ```
 
+## 结构原则
+
+后续 agent 框架优化只按以下四条原则演进，不把临时经验继续堆进主规则：
+
+- 主规则稳定：`AGENTS.md` 只保留长期有效的产品边界、安全约束和验证规则，不承载单次任务细节。
+- 能力按需加载：repo skills、`docs/agent_harness.md`、`docs/qa/*` 和 `docs/chat_tasks/*` 只在任务触发时读取，避免把全部历史塞进上下文。
+- 长程任务持久化记录：较大功能、Level 3 任务和真实媒体目录 QA 必须在 `CURRENT_TASK.md` 或对应 `docs/chat_tasks/CHAT_*.md` 留下目标、baseline、patch、验证和剩余阻塞。
+- 验证结果决定是否晋级：本轮 `challenger` 只有在必要验证通过、核心闭环未退化、用户数据无新增风险时，才成为新的 `champion`。
+
 优先保护的产品闭环：
 
 ```text
