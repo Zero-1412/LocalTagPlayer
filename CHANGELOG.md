@@ -8,6 +8,7 @@
 - 高频标签点击和搜索输入会取消待执行计数任务，低频库结构变化才安排空闲计数刷新，优先保证可见视频结果更新和界面流畅度。
 - 新增 focused test 覆盖旧计数任务取消后不会执行 `resultCounts`，只保留最新空闲计数结果。
 - 新增 `docs/qa/main_window_latency_smoke.md`，提供真实窗口标签切换、搜索输入和路径切换的耗时采样模板，后续 QA 可记录每轮 `elapsedMs` 与结果摘要。
+- 耗时采样模板升级为辅助树优先：脚本先按标签文本解析 `element_index` 并点击，二级 chip 无独立语义时才回退到右侧面板相对坐标，减少普通窗口/最大化窗口坐标漂移造成的误命中。
 - 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、`PlayerBackend` 或缩略图/media 队列。
 
 ### 搜索输入与标签切换流畅度
