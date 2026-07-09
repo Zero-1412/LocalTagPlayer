@@ -746,6 +746,42 @@ void main() {
     expect(find.text('ntr-bronya-sex-02_720p'), findsNothing);
   });
 
+  test('count refresh coordinator drops stale queued counts', () async {
+    final coordinator = LibraryCountRefreshCoordinator(
+      idleDelay: const Duration(milliseconds: 20),
+    );
+    addTearDown(coordinator.dispose);
+    final completed = <Map<String, int>>[];
+    var computeCalls = 0;
+
+    coordinator.schedule(
+      query: const FilterQuery(keyword: 'old'),
+      compute: (_) {
+        computeCalls++;
+        return {'old': 1};
+      },
+      isStillCurrent: (_) => true,
+      onComplete: completed.add,
+    );
+    coordinator.cancelPending();
+    coordinator.schedule(
+      query: const FilterQuery(keyword: 'new'),
+      compute: (_) {
+        computeCalls++;
+        return {'new': 2};
+      },
+      isStillCurrent: (_) => true,
+      onComplete: completed.add,
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(computeCalls, 1);
+    expect(completed, [
+      {'new': 2},
+    ]);
+  });
+
   testWidgets(
       'top bar removes duplicate favorite filter and toggles sort order',
       (tester) async {

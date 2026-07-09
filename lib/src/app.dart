@@ -25,6 +25,7 @@ part 'models/platform_models.dart';
 part 'repositories/repository_interfaces.dart';
 part 'services/library_metadata_persistence.dart';
 part 'services/library_scan_coordinator.dart';
+part 'services/library_count_refresh_coordinator.dart';
 part 'services/library_tag_persistence.dart';
 part 'services/library_tag_maintenance.dart';
 part 'services/library_video_persistence.dart';

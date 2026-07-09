@@ -285,6 +285,7 @@ class _LibraryPageState extends State<LibraryPage> {
   ThumbnailService? _thumbnailService;
   PlaybackSettings _playbackSettings = PlaybackSettings.defaults;
   final _filterStateSource = FilterStateSource();
+  final _countRefreshCoordinator = LibraryCountRefreshCoordinator();
   final _searchController = TextEditingController();
   /**
    * 主搜索框焦点节点。
@@ -310,7 +311,6 @@ class _LibraryPageState extends State<LibraryPage> {
   Map<String, int> _stableTagCounts = const <String, int>{};
 
   var _filterRevision = 0;
-  var _countRefreshRevision = 0;
   var _playbackDataRevision = 0;
   var _suppressSearchControllerChange = false;
   var _searchControllerChangeQueued = false;
@@ -371,6 +371,7 @@ class _LibraryPageState extends State<LibraryPage> {
     _searchController.removeListener(_handleSearchControllerChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _countRefreshCoordinator.dispose();
     super.dispose();
   }
 
@@ -979,7 +980,7 @@ class _LibraryPageState extends State<LibraryPage> {
     }
     final revision = ++_filterRevision;
     if (!refreshCounts) {
-      _countRefreshRevision += 1;
+      _countRefreshCoordinator.cancelPending();
     }
     final query = _currentFilterQuery();
     Future<void>.delayed(Duration.zero, () {
@@ -998,26 +999,18 @@ class _LibraryPageState extends State<LibraryPage> {
       if (!refreshCounts) {
         return;
       }
-      final countRevision = ++_countRefreshRevision;
-      Future<void>.delayed(const Duration(milliseconds: 1200), () {
-        if (!mounted ||
-            revision != _filterRevision ||
-            countRevision != _countRefreshRevision ||
-            _store != store) {
-          return;
-        }
-        final nextCounts = store.resultCounts(query);
-        if (!mounted ||
-            revision != _filterRevision ||
-            countRevision != _countRefreshRevision ||
-            _store != store) {
-          return;
-        }
-        setState(() {
-          _visibleResultCounts = nextCounts;
-          _isRefreshingCounts = false;
-        });
-      });
+      _countRefreshCoordinator.schedule(
+        query: query,
+        compute: store.resultCounts,
+        isStillCurrent: (_) =>
+            mounted && revision == _filterRevision && _store == store,
+        onComplete: (nextCounts) {
+          setState(() {
+            _visibleResultCounts = nextCounts;
+            _isRefreshingCounts = false;
+          });
+        },
+      );
     });
   }
 
