@@ -17,6 +17,10 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 修复 P0 搜索输入可靠性：主搜索框继续使用 `TextField`，并由 `TextEditingController` 监听驱动筛选刷新；真实键盘、自动化输入和 controller 文本变化走同一条路径，页面内部清空搜索使用静默更新，避免进入本地媒体库/最近播放时被误切回全库。
+- 优化 P1 切换卡顿路径：最近播放、本地收藏和本地媒体库路径浏览的排序结果增加轻量缓存，排序/播放时间/库数据/路径变化才重算；本地路径浏览不再每次构建全库 path map，减少列表 rebuild 时的 UI 线程开销。
+- 修复右侧“全部二级标签”直接点击的层级语义：二级文件夹标签会先绑定所属一级标签，再以一级+二级组合参与筛选；当前筛选 chips 优先使用路径派生标签，避免历史 SQLite folder 标签污染展示。
+- 新增项目规则：用户体验优先；标签筛选、排序方式、路径切换和搜索输入必须优先保护界面流畅度；二级标签必须始终归属在一级标签下面，不能越界与一级标签同层展示或脱离父级筛选。
 - 新增 `docs/agent_harness.md`，把长程执行规则整理为 Agent Harness 迭代闭环；后续较大功能或真实媒体目录 QA 需要按该文档在 `CURRENT_TASK.md` 或对应 `docs/chat_tasks/CHAT_*.md` 记录 champion/challenger、baseline、patch、验证结果、真实媒体 smoke 和是否晋级。
 - 新增 `test/library_store_test.dart` focused tests，使用临时 profile 和真实小型文件树覆盖目录扫描、folder 标签派生、manual 标签添加/移除、`save/load` 持久化读写。
 - `LibraryStore` 新增 `close()` 释放 SQLite 句柄，测试和未来 repository 拆分可安全清理临时数据库目录。

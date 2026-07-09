@@ -277,6 +277,10 @@ class _LibraryPageState extends State<LibraryPage> {
   Map<String, int> _stableTagCounts = const <String, int>{};
 
   var _filterRevision = 0;
+  var _playbackDataRevision = 0;
+  var _suppressSearchControllerChange = false;
+  var _searchControllerChangeQueued = false;
+  var _lastObservedSearchText = '';
 
   var _isRefreshingVideos = false;
 
@@ -290,6 +294,12 @@ class _LibraryPageState extends State<LibraryPage> {
   var _denseResultGrid = false;
   var _isTagDiscoveryPanelOpen = true;
   var _resultMode = _LibraryResultMode.library;
+  Object? _recentVideoCacheKey;
+  Object? _favoriteVideoCacheKey;
+  Object? _localEntryCacheKey;
+  List<VideoItem> _recentVideoCache = const <VideoItem>[];
+  List<VideoItem> _favoriteVideoCache = const <VideoItem>[];
+  List<_LocalLibraryEntry> _localEntryCache = const <_LocalLibraryEntry>[];
 
   /**
    * 最近播放清理时的临时选择集。
@@ -315,14 +325,48 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_handleSearchControllerChanged);
     _load();
   }
 
   @override
   void dispose() {
+    _searchController.removeListener(_handleSearchControllerChanged);
     _searchController.dispose();
     super.dispose();
   }
+
+  void _handleSearchControllerChanged() {
+    if (_suppressSearchControllerChange) {
+      return;
+    }
+    final keyword = _searchController.text;
+    if (keyword == _lastObservedSearchText || _searchControllerChangeQueued) {
+      return;
+    }
+    _lastObservedSearchText = keyword;
+    _searchControllerChangeQueued = true;
+    scheduleMicrotask(() {
+      _searchControllerChangeQueued = false;
+      if (!mounted || _searchController.text != _lastObservedSearchText) {
+        return;
+      }
+      _mutateFilters(() {});
+    });
+  }
+
+  void _setSearchTextSilently(String value) {
+    if (_searchController.text == value) {
+      _lastObservedSearchText = value;
+      return;
+    }
+    _suppressSearchControllerChange = true;
+    _searchController.text = value;
+    _lastObservedSearchText = value;
+    _suppressSearchControllerChange = false;
+  }
+
+  void _clearSearchSilently() => _setSearchTextSilently('');
 
   Future<void> _load() async {
     final store = await LibraryStore.load();
@@ -338,6 +382,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _store = store;
       _thumbnailService = thumbnailService;
       _playbackSettings = playbackSettings;
+      _lastObservedSearchText = _searchController.text;
       _filterState = _buildImmediateFilterState(store);
       _visibleResultCounts = _fallbackResultCounts(store);
       _stableTagCounts = store.resultCounts(const FilterQuery());
@@ -480,9 +525,6 @@ class _LibraryPageState extends State<LibraryPage> {
     }
     final folders = <_LocalLibraryEntry>[];
     final videos = <VideoItem>[];
-    final videoByPathKey = {
-      for (final item in store.videos.values) TagRules.pathKey(item.path): item,
-    };
     final children = directory.listSync(followLinks: false);
     children.sort((a, b) {
       final aIsDirectory = a is Directory;
@@ -498,7 +540,7 @@ class _LibraryPageState extends State<LibraryPage> {
         continue;
       }
       if (child is File && TagRules.isVideoPath(child.path)) {
-        final video = videoByPathKey[TagRules.pathKey(child.path)];
+        final video = store.videos[TagRules.pathKey(child.path)];
         if (video != null) {
           videos.add(video);
         }
@@ -572,7 +614,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _localLibraryPath = null;
       _localLibraryBackStack.clear();
       _selectedRecentPathKeys.clear();
-      _searchController.clear();
+      _clearSearchSilently();
       _selectedTags.clear();
       _selectedChildTags.clear();
       _selectedGroupTagIds.clear();
@@ -595,7 +637,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _localLibraryPath = null;
       _localLibraryBackStack.clear();
       _selectedRecentPathKeys.clear();
-      _searchController.clear();
+      _clearSearchSilently();
       _selectedTags.clear();
       _selectedChildTags.clear();
       _selectedGroupTagIds.clear();
@@ -616,7 +658,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _localLibraryPath = null;
       _localLibraryBackStack.clear();
       _selectedRecentPathKeys.clear();
-      _searchController.clear();
+      _clearSearchSilently();
       _selectedTags.clear();
       _selectedChildTags.clear();
       _selectedGroupTagIds.clear();
@@ -636,7 +678,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _localLibraryPath = TagRules.normalizeRootPath(rootPath);
       _localLibraryBackStack.clear();
       _selectedRecentPathKeys.clear();
-      _searchController.clear();
+      _clearSearchSilently();
       _selectedTags.clear();
       _selectedChildTags.clear();
       _selectedGroupTagIds.clear();
@@ -780,6 +822,7 @@ class _LibraryPageState extends State<LibraryPage> {
    * 返回主界面会在大媒体库上产生明显卡顿。
    */
   void _markPlaybackTimestampChanged(VideoItem item) {
+    _playbackDataRevision += 1;
     if (_resultMode == _LibraryResultMode.library) {
       // 主媒体库默认排序使用添加时间，播放时间更新不再改变当前结果顺序。
       return;
@@ -791,6 +834,61 @@ class _LibraryPageState extends State<LibraryPage> {
         _resultMode == _LibraryResultMode.local) {
       setState(() {});
     }
+  }
+
+  List<VideoItem> _sortedRecentVideos(LibraryStore store) {
+    final key = (
+      'recent',
+      _libraryDataRevision,
+      _playbackDataRevision,
+      _sortMode,
+      _sortDirection,
+    );
+    if (_recentVideoCacheKey == key) {
+      return _recentVideoCache;
+    }
+    _recentVideoCacheKey = key;
+    _recentVideoCache = sortedLibraryVideos(
+      store.videos.values.where((item) => item.lastPlayedAt != null),
+      sortMode: _sortMode,
+      sortDirection: _sortDirection,
+    );
+    return _recentVideoCache;
+  }
+
+  List<VideoItem> _sortedFavoriteVideos(LibraryStore store) {
+    final key = (
+      'favorites',
+      _libraryDataRevision,
+      _sortMode,
+      _sortDirection,
+    );
+    if (_favoriteVideoCacheKey == key) {
+      return _favoriteVideoCache;
+    }
+    _favoriteVideoCacheKey = key;
+    _favoriteVideoCache = sortedLibraryVideos(
+      store.videos.values.where((item) => item.isFavorite),
+      sortMode: _sortMode,
+      sortDirection: _sortDirection,
+    );
+    return _favoriteVideoCache;
+  }
+
+  List<_LocalLibraryEntry> _cachedLocalLibraryEntries(LibraryStore store) {
+    final key = (
+      'local',
+      _libraryDataRevision,
+      _localLibraryPath,
+      _sortMode,
+      _sortDirection,
+    );
+    if (_localEntryCacheKey == key) {
+      return _localEntryCache;
+    }
+    _localEntryCacheKey = key;
+    _localEntryCache = _localLibraryEntries(store);
+    return _localEntryCache;
   }
 
   void _scheduleFilterRefresh() {
@@ -953,6 +1051,10 @@ class _LibraryPageState extends State<LibraryPage> {
 
   void _toggleGroupTag(TagItem tag) {
     final groupId = tag.groupId ?? 'manual';
+    if (groupId == 'folder.child') {
+      _toggleFolderChildTag(tag);
+      return;
+    }
     final selected = _selectedGroupTagIds[groupId] ?? <String>{};
     _mutateFilters(() {
       _removeEquivalentLegacySelection(tag);
@@ -975,6 +1077,56 @@ class _LibraryPageState extends State<LibraryPage> {
         _selectedGroupTagIds[groupId] = selected;
       }
     });
+  }
+
+  void _toggleFolderChildTag(TagItem child) {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    final primary = _folderPrimaryForChild(store, child);
+    if (primary == null) {
+      return;
+    }
+    _mutateFilters(() {
+      _removeEquivalentLegacySelection(primary);
+      _removeEquivalentLegacySelection(child);
+      _excludedTagIds
+        ..remove(primary.id)
+        ..remove(child.id);
+      _selectedTags.clear();
+      _selectedChildTags.clear();
+      _selectedGroupTagIds['folder.primary'] = <String>{primary.id};
+      final selectedChildIds =
+          _selectedGroupTagIds['folder.child'] ?? const <String>{};
+      if (selectedChildIds.length == 1 && selectedChildIds.contains(child.id)) {
+        _selectedGroupTagIds.remove('folder.child');
+      } else {
+        _selectedGroupTagIds['folder.child'] = <String>{child.id};
+      }
+    });
+  }
+
+  TagItem? _folderPrimaryForChild(LibraryStore store, TagItem child) {
+    final parent = child.parentId?.trim();
+    if (parent == null || parent.isEmpty) {
+      return null;
+    }
+    for (final group in folderTagGroupsFromLibraryPaths(
+      videos: store.videos.values,
+      roots: store.roots,
+      templates: store.tagGroups,
+    )) {
+      if (group.id != 'folder.primary') {
+        continue;
+      }
+      for (final primary in group.items) {
+        if (primary.id == parent || TagRules.sameTag(primary.name, parent)) {
+          return primary;
+        }
+      }
+    }
+    return null;
   }
 
   void _selectFolderPrimaryChild(TagItem primary, TagItem? child) {
@@ -1029,7 +1181,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   void _clearAllFilters() {
     _mutateFilters(() {
-      _searchController.clear();
+      _clearSearchSilently();
       _selectedTags.clear();
       _selectedChildTags.clear();
       _selectedGroupTagIds.clear();
@@ -1139,9 +1291,20 @@ class _LibraryPageState extends State<LibraryPage> {
   List<TagItem> _selectedGroupTagItems(LibraryStore store) {
     final selectedIds =
         _selectedGroupTagIds.values.expand((ids) => ids).toSet();
+    final folderTagsById = {
+      for (final group in folderTagGroupsFromLibraryPaths(
+        videos: store.videos.values,
+        roots: store.roots,
+        templates: store.tagGroups,
+      ))
+        for (final tag in group.items) tag.id: tag,
+    };
     return [
       for (final id in selectedIds)
-        if (store.tagsById[id] != null) store.tagsById[id]!,
+        if (folderTagsById[id] != null)
+          folderTagsById[id]!
+        else if (store.tagsById[id] != null)
+          store.tagsById[id]!,
     ]..sort((a, b) => _tagLabel(a).compareTo(_tagLabel(b)));
   }
 
@@ -1219,16 +1382,8 @@ class _LibraryPageState extends State<LibraryPage> {
 
     final filterState = _filterState ?? _buildImmediateFilterState(store);
     final filteredVideos = filterState.filteredVideos;
-    final recentVideos = sortedLibraryVideos(
-      store.videos.values.where((item) => item.lastPlayedAt != null),
-      sortMode: _sortMode,
-      sortDirection: _sortDirection,
-    );
-    final favoriteVideos = sortedLibraryVideos(
-      store.videos.values.where((item) => item.isFavorite),
-      sortMode: _sortMode,
-      sortDirection: _sortDirection,
-    );
+    final recentVideos = _sortedRecentVideos(store);
+    final favoriteVideos = _sortedFavoriteVideos(store);
     final videos = switch (_resultMode) {
       _LibraryResultMode.recent => recentVideos,
       _LibraryResultMode.favorites => favoriteVideos,
@@ -1236,7 +1391,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _LibraryResultMode.library => filteredVideos,
     };
     final localEntries = _resultMode == _LibraryResultMode.local
-        ? _localLibraryEntries(store)
+        ? _cachedLocalLibraryEntries(store)
         : const <_LocalLibraryEntry>[];
     final displayResultCount = switch (_resultMode) {
       _LibraryResultMode.recent => videos.length,
@@ -1418,7 +1573,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 _mutateFilters(() => _selectedChildTags.remove(tag)),
             onRemoveGroupTag: _removeGroupTag,
             onRemoveExcludedTag: _removeExcludedTag,
-            onClearKeyword: () => _mutateFilters(_searchController.clear),
+            onClearKeyword: () => _mutateFilters(_clearSearchSilently),
             onClearFavoritesOnly: () =>
                 _mutateFilters(() => _showFavoritesOnly = false),
             onClearAll: _hasActiveFilters ? _clearAllFilters : null,
@@ -1502,7 +1657,7 @@ class _LibraryPageState extends State<LibraryPage> {
         sortDirection: _sortDirection,
         layoutSize: layoutSize,
         hasActiveFilters: _hasActiveFilters,
-        onSearchChanged: (_) => _mutateFilters(() {}),
+        onSearchChanged: (_) => _handleSearchControllerChanged(),
         onSortChanged: _setSortMode,
         onSortDirectionToggle: _toggleSortDirection,
         denseResultGrid: _denseResultGrid,
