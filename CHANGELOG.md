@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-09
+
+### 搜索输入与标签切换流畅度
+
+- 搜索框新增页面级 `FocusNode` 协调，`Ctrl+K` 会稳定聚焦主搜索框并选中现有文本，真实键盘输入、自动化输入和 controller 文本变化继续统一走 `onChanged` 筛选入口。
+- 标签点击和搜索输入默认只刷新当前可见视频结果，不再同步触发全量标签计数刷新；需要刷新计数时使用 revision 保护的延后任务，旧任务完成后不会覆盖新筛选状态。
+- 新增 widget smoke 覆盖 `Ctrl+K -> 输入 firefly -> onChanged -> 结果计数/列表更新`，确保搜索结果计数和可见列表同步变化。
+- debug exe 真实窗口复测：连续 10 轮随机切换不同一级标签并点击其下二级标签两次，未观察到全页空白或冻结；`Ctrl+K -> 逐键输入` 可触发搜索筛选，结果从全量收敛到匹配列表。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、`PlayerBackend` 或缩略图/media 队列。
+
 ## 2026-07-08
 
 ### 二级标签筛选与交互流畅度

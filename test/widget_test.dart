@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:local_tag_player/src/app.dart';
@@ -717,6 +718,32 @@ void main() {
 
     expect(controller.text, 'lupa');
     expect(latestKeyword, 'lupa');
+  });
+
+  testWidgets('Ctrl+K search input updates result count and visible list',
+      (tester) async {
+    await tester.pumpWidget(
+      const ReferenceTopBarSearchResultSmokeHarness(
+        items: [
+          'firefly-x-celestia-strinova_1080p',
+          'ntr-bronya-sex-02_720p',
+          'firefly-holiday-720p',
+        ],
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.enterText(find.byKey(LibrarySmokeKeys.searchField), 'firefly');
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('结果 2/3'), findsOneWidget);
+    expect(find.text('firefly-x-celestia-strinova_1080p'), findsOneWidget);
+    expect(find.text('firefly-holiday-720p'), findsOneWidget);
+    expect(find.text('ntr-bronya-sex-02_720p'), findsNothing);
   });
 
   testWidgets(

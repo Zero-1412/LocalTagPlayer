@@ -1404,6 +1404,7 @@ class _SmartListPreviewPanel extends StatelessWidget {
 class _ReferenceTopBar extends StatelessWidget {
   const _ReferenceTopBar({
     required this.controller,
+    required this.searchFocusNode,
     required this.videoCount,
     required this.totalCount,
     required this.keyword,
@@ -1421,6 +1422,14 @@ class _ReferenceTopBar extends StatelessWidget {
   });
 
   final TextEditingController controller;
+
+  /**
+   * 主搜索框焦点节点。
+   *
+   * 顶部栏内部处理 `Ctrl+K` 时只请求该节点焦点，不直接改写搜索业务状态；
+   * 文本变化仍统一从 TextField 的 controller / onChanged 进入筛选链路。
+   */
+  final FocusNode searchFocusNode;
 
   final int videoCount;
 
@@ -1454,152 +1463,188 @@ class _ReferenceTopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = layoutSize == LayoutSize.compact;
     final keywordActive = keyword.trim().isNotEmpty;
-    return SafeArea(
-      bottom: false,
-      child: Padding(
-        padding:
-            EdgeInsets.fromLTRB(compact ? 12 : 20, 14, compact ? 12 : 20, 8),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final constrained = constraints.maxWidth < 760;
-            final collapseActions =
-                referenceTopBarShouldCollapseActions(layoutSize) || constrained;
-            // 非最大化窗口虽然仍可能处于 expanded 断点，但右侧面板会挤占可用宽度；
-            // 搜索框必须在真实行宽不足时让出空间，避免工具条右侧按钮越界。
-            final fitSearchToRemainingWidth =
-                referenceTopBarSearchShouldFillRow(
-              layoutSize,
-              constraints.maxWidth,
-            );
-            final searchField = ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: 180,
-                maxWidth: fitSearchToRemainingWidth ? double.infinity : 760,
-              ),
-              child: Container(
-                height: compact ? 44 : 50,
-                decoration: BoxDecoration(
-                  color: _appPanel,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: keywordActive ? _appAccentViolet : _appBorder,
-                    width: keywordActive ? 1.4 : 1,
-                  ),
-                  boxShadow: _appSoftShadow,
-                ),
-                /**
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            const _FocusLibrarySearchIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _FocusLibrarySearchIntent: CallbackAction<_FocusLibrarySearchIntent>(
+            onInvoke: (_) {
+              searchFocusNode.requestFocus();
+              controller.selection = TextSelection(
+                baseOffset: 0,
+                extentOffset: controller.text.length,
+              );
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                  compact ? 12 : 20, 14, compact ? 12 : 20, 8),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final constrained = constraints.maxWidth < 760;
+                  final collapseActions =
+                      referenceTopBarShouldCollapseActions(layoutSize) ||
+                          constrained;
+                  // 非最大化窗口虽然仍可能处于 expanded 断点，但右侧面板会挤占可用宽度；
+                  // 搜索框必须在真实行宽不足时让出空间，避免工具条右侧按钮越界。
+                  final fitSearchToRemainingWidth =
+                      referenceTopBarSearchShouldFillRow(
+                    layoutSize,
+                    constraints.maxWidth,
+                  );
+                  final searchField = ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minWidth: 180,
+                      maxWidth:
+                          fitSearchToRemainingWidth ? double.infinity : 760,
+                    ),
+                    child: Container(
+                      height: compact ? 44 : 50,
+                      decoration: BoxDecoration(
+                        color: _appPanel,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: keywordActive ? _appAccentViolet : _appBorder,
+                          width: keywordActive ? 1.4 : 1,
+                        ),
+                        boxShadow: _appSoftShadow,
+                      ),
+                      /**
                  * 主搜索框使用 TextField 而不是 Material SearchBar。
                  *
                  * Windows 桌面自动化和真实键盘输入都需要稳定触发 EditableText 的输入链路；
                  * SearchBar 在 smoke test 中出现过可聚焦但 type_text 不写入的问题。
                  */
-                child: TextField(
-                  key: LibrarySmokeKeys.searchField,
-                  controller: controller,
-                  textInputAction: TextInputAction.search,
-                  onChanged: onSearchChanged,
-                  onSubmitted: onSearchChanged,
-                  style: const TextStyle(
-                    color: _appText,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 0,
-                      vertical: 15,
-                    ),
-                    prefixIcon: Icon(
-                      Icons.search_rounded,
-                      size: 23,
-                      color: keywordActive
-                          ? _appAccentViolet
-                          : const Color(0xff566274),
-                    ),
-                    prefixIconConstraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 44,
-                    ),
-                    hintText: compact
-                        ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
-                        : '\u641c\u7d22\u6587\u4ef6\u540d\u0020\u002f\u0020\u6807\u7b7e\u0020\u002f\u0020\u8def\u5f84\u002e\u002e\u002e',
-                    hintStyle: const TextStyle(
-                      color: Color(0xff566274),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    suffixIcon: constrained
-                        ? null
-                        : const Padding(
-                            padding: EdgeInsets.only(right: 14),
-                            child: Center(
-                              widthFactor: 1,
-                              child: Text(
-                                'Ctrl + K',
-                                style: TextStyle(
-                                  color: Color(0xff8a94a6),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
+                      child: TextField(
+                        key: LibrarySmokeKeys.searchField,
+                        controller: controller,
+                        focusNode: searchFocusNode,
+                        textInputAction: TextInputAction.search,
+                        onChanged: onSearchChanged,
+                        onSubmitted: onSearchChanged,
+                        style: const TextStyle(
+                          color: _appText,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 0,
+                            vertical: 15,
                           ),
-                    suffixIconConstraints: const BoxConstraints(
-                      minWidth: 68,
-                      minHeight: 44,
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            size: 23,
+                            color: keywordActive
+                                ? _appAccentViolet
+                                : const Color(0xff566274),
+                          ),
+                          prefixIconConstraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 44,
+                          ),
+                          hintText: compact
+                              ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
+                              : '\u641c\u7d22\u6587\u4ef6\u540d\u0020\u002f\u0020\u6807\u7b7e\u0020\u002f\u0020\u8def\u5f84\u002e\u002e\u002e',
+                          hintStyle: const TextStyle(
+                            color: Color(0xff566274),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          suffixIcon: constrained
+                              ? null
+                              : const Padding(
+                                  padding: EdgeInsets.only(right: 14),
+                                  child: Center(
+                                    widthFactor: 1,
+                                    child: Text(
+                                      'Ctrl + K',
+                                      style: TextStyle(
+                                        color: Color(0xff8a94a6),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 68,
+                            minHeight: 44,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                  return Row(
+                    children: [
+                      if (layoutSize != LayoutSize.expanded) ...[
+                        _ReferenceIconButton(
+                          tooltip: '\u6253\u5f00\u667a\u80fd\u7b5b\u9009',
+                          icon: hasActiveFilters
+                              ? Icons.filter_alt_rounded
+                              : Icons.filter_alt_outlined,
+                          onPressed: onOpenFilters,
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      if (fitSearchToRemainingWidth)
+                        Expanded(child: searchField)
+                      else
+                        searchField,
+                      SizedBox(width: collapseActions ? 8 : 12),
+                      _ReferenceActionButton(
+                        tooltip: '\u6807\u7b7e\u4e2d\u5fc3',
+                        icon: Icons.sell_outlined,
+                        label:
+                            collapseActions ? null : '\u6807\u7b7e\u4e2d\u5fc3',
+                        onPressed: onOpenTagManager,
+                      ),
+                      const SizedBox(width: 12),
+                      if (!compact)
+                        _TopSortControl(
+                          sortMode: sortMode,
+                          sortDirection: sortDirection,
+                          onChanged: onSortChanged,
+                          onDirectionToggle: onSortDirectionToggle,
+                        ),
+                      if (!compact) const SizedBox(width: 8),
+                      if (!compact)
+                        ResultViewToggle(
+                          dense: denseResultGrid,
+                          onChanged: onResultViewChanged,
+                        ),
+                    ],
+                  );
+                },
               ),
-            );
-            return Row(
-              children: [
-                if (layoutSize != LayoutSize.expanded) ...[
-                  _ReferenceIconButton(
-                    tooltip: '\u6253\u5f00\u667a\u80fd\u7b5b\u9009',
-                    icon: hasActiveFilters
-                        ? Icons.filter_alt_rounded
-                        : Icons.filter_alt_outlined,
-                    onPressed: onOpenFilters,
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                if (fitSearchToRemainingWidth)
-                  Expanded(child: searchField)
-                else
-                  searchField,
-                SizedBox(width: collapseActions ? 8 : 12),
-                _ReferenceActionButton(
-                  tooltip: '\u6807\u7b7e\u4e2d\u5fc3',
-                  icon: Icons.sell_outlined,
-                  label: collapseActions ? null : '\u6807\u7b7e\u4e2d\u5fc3',
-                  onPressed: onOpenTagManager,
-                ),
-                const SizedBox(width: 12),
-                if (!compact)
-                  _TopSortControl(
-                    sortMode: sortMode,
-                    sortDirection: sortDirection,
-                    onChanged: onSortChanged,
-                    onDirectionToggle: onSortDirectionToggle,
-                  ),
-                if (!compact) const SizedBox(width: 8),
-                if (!compact)
-                  ResultViewToggle(
-                    dense: denseResultGrid,
-                    onChanged: onResultViewChanged,
-                  ),
-              ],
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+/**
+ * 顶部搜索框聚焦意图。
+ *
+ * 独立 intent 让快捷键层只负责焦点转移，不复制搜索和筛选逻辑。
+ */
+class _FocusLibrarySearchIntent extends Intent {
+  const _FocusLibrarySearchIntent();
 }
 
 /**
@@ -1611,6 +1656,7 @@ class _ReferenceTopBar extends StatelessWidget {
 Widget referenceTopBarSearchSmokeHarness({
   required TextEditingController controller,
   required ValueChanged<String> onSearchChanged,
+  FocusNode? searchFocusNode,
   SortDirection sortDirection = SortDirection.descending,
   ValueChanged<SortMode>? onSortChanged,
   VoidCallback? onSortDirectionToggle,
@@ -1619,6 +1665,8 @@ Widget referenceTopBarSearchSmokeHarness({
     home: Scaffold(
       body: _ReferenceTopBar(
         controller: controller,
+        searchFocusNode:
+            searchFocusNode ?? FocusNode(debugLabel: 'search-smoke-field'),
         videoCount: 0,
         totalCount: 0,
         keyword: controller.text,
@@ -1636,6 +1684,97 @@ Widget referenceTopBarSearchSmokeHarness({
       ),
     ),
   );
+}
+
+/**
+ * 顶部搜索到结果列表的 smoke test 入口。
+ *
+ * 该 harness 只验证输入链路会驱动结果数量和可见列表变化；真实业务过滤仍由
+ * `LibraryPage` / `TagQueryService` 负责，测试里不复制完整标签筛选语义。
+ */
+@visibleForTesting
+class ReferenceTopBarSearchResultSmokeHarness extends StatefulWidget {
+  const ReferenceTopBarSearchResultSmokeHarness({
+    super.key,
+    required this.items,
+  });
+
+  /**
+   * 用于 smoke 的可搜索标题列表。
+   *
+   * 只使用字符串能避免测试依赖真实媒体库或数据库。
+   */
+  final List<String> items;
+
+  @override
+  State<ReferenceTopBarSearchResultSmokeHarness> createState() =>
+      _ReferenceTopBarSearchResultSmokeHarnessState();
+}
+
+class _ReferenceTopBarSearchResultSmokeHarnessState
+    extends State<ReferenceTopBarSearchResultSmokeHarness> {
+  /**
+   * smoke harness 自己持有 controller，模拟真实页面中的单一输入源。
+   */
+  final _controller = TextEditingController();
+
+  /**
+   * smoke harness 自己持有焦点节点，验证 `Ctrl+K` 能把焦点转给 TextField。
+   */
+  final _focusNode = FocusNode(debugLabel: 'search-result-smoke-field');
+
+  var _keyword = '';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final token = _keyword.trim().toLowerCase();
+    final filtered = token.isEmpty
+        ? widget.items
+        : widget.items
+            .where((item) => item.toLowerCase().contains(token))
+            .toList();
+    return MaterialApp(
+      home: Scaffold(
+        body: Column(
+          children: [
+            _ReferenceTopBar(
+              controller: _controller,
+              searchFocusNode: _focusNode,
+              videoCount: filtered.length,
+              totalCount: widget.items.length,
+              keyword: _keyword,
+              sortMode: SortMode.recent,
+              sortDirection: SortDirection.descending,
+              layoutSize: LayoutSize.expanded,
+              hasActiveFilters: token.isNotEmpty,
+              onSearchChanged: (value) => setState(() => _keyword = value),
+              onSortChanged: (_) {},
+              onSortDirectionToggle: () {},
+              denseResultGrid: false,
+              onResultViewChanged: (_) {},
+              onOpenTagManager: () {},
+              onOpenFilters: () {},
+            ),
+            Text('结果 ${filtered.length}/${widget.items.length}'),
+            Expanded(
+              child: ListView(
+                children: [
+                  for (final item in filtered) Text(item),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ReferenceActionButton extends StatelessWidget {

@@ -286,6 +286,13 @@ class _LibraryPageState extends State<LibraryPage> {
   PlaybackSettings _playbackSettings = PlaybackSettings.defaults;
   final _filterStateSource = FilterStateSource();
   final _searchController = TextEditingController();
+  /**
+   * 主搜索框焦点节点。
+   *
+   * `Ctrl+K`、真实键盘输入和桌面自动化都必须落到同一个 EditableText，
+   * 否则搜索文字不会进入 controller，也就不会触发 `onChanged` 筛选链路。
+   */
+  final _searchFocusNode = FocusNode(debugLabel: 'library-search-field');
   final _selectedTags = <String>{};
   final _selectedChildTags = <String>{};
   final _selectedGroupTagIds = <String, Set<String>>{};
@@ -303,6 +310,7 @@ class _LibraryPageState extends State<LibraryPage> {
   Map<String, int> _stableTagCounts = const <String, int>{};
 
   var _filterRevision = 0;
+  var _countRefreshRevision = 0;
   var _playbackDataRevision = 0;
   var _suppressSearchControllerChange = false;
   var _searchControllerChangeQueued = false;
@@ -362,6 +370,7 @@ class _LibraryPageState extends State<LibraryPage> {
   void dispose() {
     _searchController.removeListener(_handleSearchControllerChanged);
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -380,7 +389,7 @@ class _LibraryPageState extends State<LibraryPage> {
       if (!mounted || _searchController.text != _lastObservedSearchText) {
         return;
       }
-      _mutateFilters(() {});
+      _mutateFilters(() {}, refreshCounts: false);
     });
   }
 
@@ -396,6 +405,20 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   void _clearSearchSilently() => _setSearchTextSilently('');
+
+  /**
+   * 聚焦主搜索框并选中已有关键字。
+   *
+   * 该方法只处理焦点，不直接触发筛选；真实键盘或自动化输入随后写入
+   * `TextEditingController`，再由统一的监听链路刷新结果。
+   */
+  void _focusSearchField() {
+    _searchFocusNode.requestFocus();
+    _searchController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _searchController.text.length,
+    );
+  }
 
   Future<void> _load() async {
     final store = await LibraryStore.load();
@@ -586,12 +609,21 @@ class _LibraryPageState extends State<LibraryPage> {
     ];
   }
 
-  void _mutateFilters(VoidCallback mutation) {
+  /**
+   * 修改筛选条件并刷新当前可见结果。
+   *
+   * 高频交互（标签点击、搜索输入）默认只刷新视频列表，标签计数这类重任务
+   * 只在库结构变化、扫描、标签管理返回等低频路径显式开启，避免大媒体库下点击卡顿。
+   */
+  void _mutateFilters(
+    VoidCallback mutation, {
+    bool refreshCounts = false,
+  }) {
     setState(() {
       _resultMode = _LibraryResultMode.library;
       mutation();
     });
-    _scheduleFilterRefresh(refreshCounts: true);
+    _scheduleFilterRefresh(refreshCounts: refreshCounts);
   }
 
   /**
@@ -653,6 +685,7 @@ class _LibraryPageState extends State<LibraryPage> {
         _filterState = _buildImmediateFilterState(store);
       }
     });
+    _scheduleFilterRefresh();
   }
 
   /**
@@ -945,6 +978,9 @@ class _LibraryPageState extends State<LibraryPage> {
       return;
     }
     final revision = ++_filterRevision;
+    if (!refreshCounts) {
+      _countRefreshRevision += 1;
+    }
     final query = _currentFilterQuery();
     Future<void>.delayed(Duration.zero, () {
       if (!mounted || revision != _filterRevision || _store != store) {
@@ -962,12 +998,19 @@ class _LibraryPageState extends State<LibraryPage> {
       if (!refreshCounts) {
         return;
       }
+      final countRevision = ++_countRefreshRevision;
       Future<void>.delayed(const Duration(milliseconds: 1200), () {
-        if (!mounted || revision != _filterRevision || _store != store) {
+        if (!mounted ||
+            revision != _filterRevision ||
+            countRevision != _countRefreshRevision ||
+            _store != store) {
           return;
         }
         final nextCounts = store.resultCounts(query);
-        if (!mounted || revision != _filterRevision || _store != store) {
+        if (!mounted ||
+            revision != _filterRevision ||
+            countRevision != _countRefreshRevision ||
+            _store != store) {
           return;
         }
         setState(() {
@@ -1703,6 +1746,7 @@ class _LibraryPageState extends State<LibraryPage> {
         videoCount: displayResultCount,
         totalCount: displayTotalCount,
         keyword: _searchController.text,
+        searchFocusNode: _searchFocusNode,
         sortMode: _sortMode,
         sortDirection: _sortDirection,
         layoutSize: layoutSize,
@@ -1770,34 +1814,54 @@ class _LibraryPageState extends State<LibraryPage> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: _appBackground,
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final layoutSize = LayoutBreakpoints.fromWidth(constraints.maxWidth);
-          final showMainSidebar = layoutSize != LayoutSize.compact;
-          final expandedSlots =
-              mainLibraryLayoutSlotsForWidth(constraints.maxWidth);
-          return Row(
-            children: [
-              if (showMainSidebar)
-                buildSidebar(
-                  dense: layoutSize != LayoutSize.expanded,
-                  width: layoutSize == LayoutSize.expanded
-                      ? expandedSlots.sidebarWidth
-                      : null,
-                ),
-              Expanded(
-                child: layoutSize == LayoutSize.expanded
-                    ? buildExpandedContent(expandedSlots)
-                    : buildMain(
-                        layoutSize,
-                        topBar: buildTopBar(layoutSize),
-                      ),
-              ),
-            ],
-          );
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            const _FocusLibrarySearchIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _FocusLibrarySearchIntent: CallbackAction<_FocusLibrarySearchIntent>(
+            onInvoke: (_) {
+              _focusSearchField();
+              return null;
+            },
+          ),
         },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            backgroundColor: _appBackground,
+            body: LayoutBuilder(
+              builder: (context, constraints) {
+                final layoutSize =
+                    LayoutBreakpoints.fromWidth(constraints.maxWidth);
+                final showMainSidebar = layoutSize != LayoutSize.compact;
+                final expandedSlots =
+                    mainLibraryLayoutSlotsForWidth(constraints.maxWidth);
+                return Row(
+                  children: [
+                    if (showMainSidebar)
+                      buildSidebar(
+                        dense: layoutSize != LayoutSize.expanded,
+                        width: layoutSize == LayoutSize.expanded
+                            ? expandedSlots.sidebarWidth
+                            : null,
+                      ),
+                    Expanded(
+                      child: layoutSize == LayoutSize.expanded
+                          ? buildExpandedContent(expandedSlots)
+                          : buildMain(
+                              layoutSize,
+                              topBar: buildTopBar(layoutSize),
+                            ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
