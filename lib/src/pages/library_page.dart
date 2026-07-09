@@ -323,9 +323,12 @@ class _LibraryPageState extends State<LibraryPage> {
   Object? _recentVideoCacheKey;
   Object? _favoriteVideoCacheKey;
   Object? _localEntryCacheKey;
+  Object? _tagGroupsCacheKey;
   List<VideoItem> _recentVideoCache = const <VideoItem>[];
   List<VideoItem> _favoriteVideoCache = const <VideoItem>[];
   List<_LocalLibraryEntry> _localEntryCache = const <_LocalLibraryEntry>[];
+  final _localEntryCacheByKey = <Object, List<_LocalLibraryEntry>>{};
+  List<TagGroup> _tagGroupsCache = const <TagGroup>[];
 
   /**
    * 最近播放清理时的临时选择集。
@@ -588,7 +591,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _resultMode = _LibraryResultMode.library;
       mutation();
     });
-    _scheduleFilterRefresh();
+    _scheduleFilterRefresh(refreshCounts: true);
   }
 
   /**
@@ -771,7 +774,7 @@ class _LibraryPageState extends State<LibraryPage> {
       }
       _stableTagCounts = store.resultCounts(const FilterQuery());
     });
-    _scheduleFilterRefresh();
+    _scheduleFilterRefresh(refreshCounts: true);
   }
 
   /**
@@ -833,11 +836,20 @@ class _LibraryPageState extends State<LibraryPage> {
 
   void _markLibraryDataChanged() {
     _libraryDataRevision += 1;
+    _invalidateDerivedCaches();
     final store = _store;
     if (store != null) {
       _stableTagCounts = store.resultCounts(const FilterQuery());
     }
-    _scheduleFilterRefresh();
+    _scheduleFilterRefresh(refreshCounts: true);
+  }
+
+  void _invalidateDerivedCaches() {
+    _tagGroupsCacheKey = null;
+    _localEntryCacheKey = null;
+    _localEntryCacheByKey.clear();
+    _recentVideoCacheKey = null;
+    _favoriteVideoCacheKey = null;
   }
 
   /**
@@ -912,22 +924,29 @@ class _LibraryPageState extends State<LibraryPage> {
     if (_localEntryCacheKey == key) {
       return _localEntryCache;
     }
+    final cached = _localEntryCacheByKey[key];
+    if (cached != null) {
+      _localEntryCacheKey = key;
+      _localEntryCache = cached;
+      return cached;
+    }
     _localEntryCacheKey = key;
     _localEntryCache = _localLibraryEntries(store);
+    _localEntryCacheByKey[key] = _localEntryCache;
+    while (_localEntryCacheByKey.length > 24) {
+      _localEntryCacheByKey.remove(_localEntryCacheByKey.keys.first);
+    }
     return _localEntryCache;
   }
 
-  void _scheduleFilterRefresh() {
+  void _scheduleFilterRefresh({bool refreshCounts = false}) {
     final store = _store;
     if (store == null) {
       return;
     }
     final revision = ++_filterRevision;
     final query = _currentFilterQuery();
-    if (!_isRefreshingVideos) {
-      setState(() => _isRefreshingVideos = true);
-    }
-    Future<void>.delayed(const Duration(milliseconds: 16), () {
+    Future<void>.delayed(Duration.zero, () {
       if (!mounted || revision != _filterRevision || _store != store) {
         return;
       }
@@ -940,12 +959,12 @@ class _LibraryPageState extends State<LibraryPage> {
         _isRefreshingVideos = false;
       });
       _thumbnailService?.prefetchVisible(nextState.filteredVideos.take(36));
-      Future<void>.delayed(const Duration(milliseconds: 420), () {
+      if (!refreshCounts) {
+        return;
+      }
+      Future<void>.delayed(const Duration(milliseconds: 1200), () {
         if (!mounted || revision != _filterRevision || _store != store) {
           return;
-        }
-        if (!_isRefreshingCounts) {
-          setState(() => _isRefreshingCounts = true);
         }
         final nextCounts = store.resultCounts(query);
         if (!mounted || revision != _filterRevision || _store != store) {
@@ -983,6 +1002,14 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   List<TagGroup> _tagGroupsForSidebar(LibraryStore store) {
+    final cacheKey = (
+      _libraryDataRevision,
+      store.tagsById.length,
+      _rootsSignature(store.roots),
+    );
+    if (_tagGroupsCacheKey == cacheKey) {
+      return _tagGroupsCache;
+    }
     final folderGroups = folderTagGroupsFromLibraryPaths(
       videos: store.videos.values,
       roots: store.roots,
@@ -1037,7 +1064,16 @@ class _LibraryPageState extends State<LibraryPage> {
       }
       return _groupLabel(a).compareTo(_groupLabel(b));
     });
-    return groups;
+    _tagGroupsCacheKey = cacheKey;
+    _tagGroupsCache = List<TagGroup>.unmodifiable(groups);
+    return _tagGroupsCache;
+  }
+
+  String _rootsSignature(Iterable<String> roots) {
+    final normalized = [
+      for (final root in roots) TagRules.pathKey(root),
+    ]..sort();
+    return normalized.join('|');
   }
 
   TagGroup _copyGroupWithItems(TagGroup group, Iterable<TagItem> items) {
@@ -1138,11 +1174,7 @@ class _LibraryPageState extends State<LibraryPage> {
     if (parent == null || parent.isEmpty) {
       return null;
     }
-    for (final group in folderTagGroupsFromLibraryPaths(
-      videos: store.videos.values,
-      roots: store.roots,
-      templates: store.tagGroups,
-    )) {
+    for (final group in _tagGroupsForSidebar(store)) {
       if (group.id != 'folder.primary') {
         continue;
       }
@@ -1318,11 +1350,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final selectedIds =
         _selectedGroupTagIds.values.expand((ids) => ids).toSet();
     final folderTagsById = {
-      for (final group in folderTagGroupsFromLibraryPaths(
-        videos: store.videos.values,
-        roots: store.roots,
-        templates: store.tagGroups,
-      ))
+      for (final group in _tagGroupsForSidebar(store))
         for (final tag in group.items) tag.id: tag,
     };
     return [
@@ -1384,11 +1412,7 @@ class _LibraryPageState extends State<LibraryPage> {
    * 与当前文件树 root 不一致时影响筛选结果。
    */
   TagItem? _folderDiscoveryTagById(LibraryStore store, String tagId) {
-    for (final group in folderTagGroupsFromLibraryPaths(
-      videos: store.videos.values,
-      roots: store.roots,
-      templates: store.tagGroups,
-    )) {
+    for (final group in _tagGroupsForSidebar(store)) {
       for (final tag in group.items) {
         if (tag.id == tagId) {
           return tag;
@@ -1819,9 +1843,10 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     if (mounted) {
       setState(() {
+        _invalidateDerivedCaches();
         _stableTagCounts = store.resultCounts(const FilterQuery());
       });
-      _scheduleFilterRefresh();
+      _scheduleFilterRefresh(refreshCounts: true);
     }
   }
 
@@ -2041,6 +2066,7 @@ class _LibraryPageState extends State<LibraryPage> {
       if (!_store!.favoriteTags
           .any((existing) => TagRules.sameTag(existing, tag))) {
         setState(() {
+          _invalidateDerivedCaches();
           _store!.favoriteTags.add(tag);
           _stableTagCounts = _store!.resultCounts(const FilterQuery());
         });
@@ -2064,6 +2090,7 @@ class _LibraryPageState extends State<LibraryPage> {
       return;
     }
     _mutateFilters(() {
+      _invalidateDerivedCaches();
       store.favoriteTags.remove(tag);
       _selectedTags.remove(tag);
       _selectedChildTags.clear();
