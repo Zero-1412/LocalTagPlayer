@@ -2,6 +2,105 @@ part of '../app.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/**
+ * 播放硬件解码设置控件，负责把高影响解码切换收口到确认弹窗之后。
+ */
+class PlaybackDecoderDropdown extends StatefulWidget {
+  const PlaybackDecoderDropdown({
+    super.key,
+    required this.settings,
+    required this.onChanged,
+  });
+
+  /** 当前已确认并可传给播放器的播放设置。 */
+  final PlaybackSettings settings;
+
+  /** 用户确认切换后回传新的播放设置，由外层负责持久化。 */
+  final Future<void> Function(PlaybackSettings settings) onChanged;
+
+  @override
+  State<PlaybackDecoderDropdown> createState() =>
+      _PlaybackDecoderDropdownState();
+}
+
+class _PlaybackDecoderDropdownState extends State<PlaybackDecoderDropdown> {
+  late PlaybackSettings _settings = widget.settings;
+
+  /** 下拉框重建版本，用于取消确认后清理 `FormField` 的内部临时选中态。 */
+  var _fieldRevision = 0;
+
+  @override
+  void didUpdateWidget(covariant PlaybackDecoderDropdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.settings.hwdec != widget.settings.hwdec) {
+      _settings = widget.settings;
+    }
+  }
+
+  /**
+   * 只在用户确认后写入解码设置，取消时恢复下拉框显示的旧值。
+   */
+  Future<void> _changeDecoder(String value) async {
+    if (value == _settings.hwdec) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('切换播放解码'),
+        content: Text(
+          '将硬件解码从 ${PlaybackSettings.labelFor(_settings.hwdec)} 切换为 ${PlaybackSettings.labelFor(value)}。如果只是误触，请取消。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认切换'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      setState(() => _fieldRevision++);
+      return;
+    }
+    final next = _settings.copyWith(hwdec: value);
+    setState(() {
+      _settings = next;
+      _fieldRevision++;
+    });
+    await widget.onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      // 取消确认弹窗时设置值可能不变，revision 让表单字段丢弃内部临时选中态。
+      key: ValueKey('${_settings.hwdec}:$_fieldRevision'),
+      initialValue: _settings.hwdec,
+      decoration: const InputDecoration(
+        labelText: '\u786c\u4ef6\u89e3\u7801',
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        for (final option in PlaybackSettings.decoderOptions)
+          DropdownMenuItem(
+            value: option,
+            child: Text(PlaybackSettings.labelFor(option)),
+          ),
+      ],
+      onChanged: (value) {
+        if (value != null) {
+          _changeDecoder(value);
+        }
+      },
+    );
+  }
+}
+
 class CacheSettingsPage extends StatefulWidget {
   const CacheSettingsPage({
     super.key,
@@ -37,38 +136,6 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     });
   }
 
-  Future<void> _changeDecoder(String value) async {
-    if (value == _settings.hwdec) {
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('切换播放解码'),
-        content: Text(
-          '将硬件解码从 ${PlaybackSettings.labelFor(_settings.hwdec)} 切换为 ${PlaybackSettings.labelFor(value)}。如果只是误触，请取消。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('确认切换'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
-      setState(() {});
-      return;
-    }
-    final next = _settings.copyWith(hwdec: value);
-    setState(() => _settings = next);
-    await widget.onPlaybackSettingsChanged(next);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -97,23 +164,11 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 14),
-                  DropdownButtonFormField<String>(
-                    initialValue: _settings.hwdec,
-                    decoration: const InputDecoration(
-                      labelText: '\u786c\u4ef6\u89e3\u7801',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      for (final option in PlaybackSettings.decoderOptions)
-                        DropdownMenuItem(
-                          value: option,
-                          child: Text(PlaybackSettings.labelFor(option)),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        _changeDecoder(value);
-                      }
+                  PlaybackDecoderDropdown(
+                    settings: _settings,
+                    onChanged: (settings) async {
+                      setState(() => _settings = settings);
+                      await widget.onPlaybackSettingsChanged(settings);
                     },
                   ),
                 ],

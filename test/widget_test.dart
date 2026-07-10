@@ -382,6 +382,81 @@ void main() {
         isNot(await AppPaths.librarySortPreferencesFile()));
   });
 
+  testWidgets('playback decoder dropdown only changes after confirmation',
+      (tester) async {
+    PlaybackSettings? savedSettings;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlaybackDecoderDropdown(
+            settings: PlaybackSettings.defaults,
+            onChanged: (settings) async {
+              savedSettings = settings;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text(PlaybackSettings.labelFor('d3d11va')).last);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('切换播放解码'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(savedSettings, isNull);
+    expect(
+      (tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>),
+      ).key! as ValueKey<String>)
+          .value,
+      startsWith('auto-safe:'),
+    );
+    expect(find.text(PlaybackSettings.labelFor('d3d11va')), findsNothing);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text(PlaybackSettings.labelFor('d3d11va')).last);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('确认切换'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(savedSettings?.hwdec, 'd3d11va');
+    expect(
+      (tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>),
+      ).key! as ValueKey<String>)
+          .value,
+      startsWith('d3d11va:'),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlaybackDecoderDropdown(
+            settings: savedSettings!,
+            onChanged: (settings) async {
+              savedSettings = settings;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      (tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>),
+      ).key! as ValueKey<String>)
+          .value,
+      startsWith('d3d11va:'),
+    );
+  });
+
   test('library sort helper applies to every video source list', () {
     final alpha = VideoItem(
       path: 'D:\\video\\B\\alpha.mp4',

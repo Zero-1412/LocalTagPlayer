@@ -1,6 +1,6 @@
 # CHAT_7_RESPONSIVE_UI.md
 
-当前版本：`0.2.0`
+当前版本：`0.2.1`
 状态：第一阶段验收完成
 负责人：Chat 7 / 响应式 UI + 平台 polish
 
@@ -98,5 +98,6 @@
 
 ## 变更记录
 
+- `0.2.1`：修复设置页硬件解码下拉取消确认后仍残留新选项显示的问题；解码切换控件抽为独立可测 widget，保持确认后才保存设置。
 - `0.2.0`：完成第一阶段响应式 UI polish，并增加 macOS / Linux 适配说明。
 - `0.1.0`：从 `local_tag_player_flutter_cross_platform_plan_v2.md` 创建任务。

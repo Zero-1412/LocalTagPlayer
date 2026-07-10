@@ -1,5 +1,14 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-10
+
+### 设置页解码切换确认态
+
+- 播放硬件解码下拉抽出为 `PlaybackDecoderDropdown`，解码切换仍必须先经过确认弹窗。
+- 修复取消确认后下拉框内部临时选中态残留的问题：取消不会保存设置，也不会继续显示未确认的新解码选项。
+- 新增 focused widget test 覆盖取消不保存、确认后才切换的行为。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、播放器 filtered queue、`PlayerBackend` 或缩略图/media 队列。
+
 ## 2026-07-09
 
 ### 主界面语义压测稳定化
