@@ -2238,6 +2238,7 @@ class _LibraryPageState extends State<LibraryPage> {
             queueTitle: queueTitle,
             onDeleteFile: _deleteVideoFile,
             onToggleFavorite: _toggleFavorite,
+            onEditManualTags: _editManualTagsFromPlayer,
             onMediaDetailsUpdated: _updateMediaDetails,
           ),
         ),
@@ -2301,6 +2302,9 @@ class _LibraryPageState extends State<LibraryPage> {
         existingTags: editingChildTags
             ? (_store?.childTagsFor(childParentTag) ?? const {})
             : (_store?.allTags ?? const {}),
+        lockedTags: editingChildTags
+            ? _folderChildTagsForItem(item, childParentTag)
+            : _folderTagsForItem(item),
       ),
     );
     if (updated == null) {
@@ -2327,6 +2331,159 @@ class _LibraryPageState extends State<LibraryPage> {
     if (mounted) {
       _markLibraryDataChanged();
     }
+  }
+
+  /**
+   * 从播放器快速编辑单个视频的一级 manual 标签。
+   *
+   * folder 标签以锁定 chip 展示并在保存时重新合并；建议列表只包含未隐藏的一级 manual
+   * 标签，避免把 folder/rule/filename/import/auto 来源误写成手动数据。
+   */
+  Future<void> _editManualTagsFromPlayer(VideoItem item) async {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    final folderTags = _folderTagsForItem(item);
+    final linkedManualTags = _linkedTopLevelManualTags(store, item);
+    final manualSuggestions = <String>{
+      for (final tag in store.allTagItems)
+        if (tag.source == TagSource.manual &&
+            tag.parentId == null &&
+            !tag.isHidden)
+          tag.name,
+    };
+    final initialManualTags = <String>{
+      for (final tag in linkedManualTags) tag.name,
+      // 兼容旧数据：只接受能解析到已知 manual 来源的兼容字段，不能把其它来源提升为 manual。
+      for (final name in item.tags)
+        if (manualSuggestions.any(
+          (manualName) => TagRules.sameTag(manualName, name),
+        ))
+          name,
+    };
+    final updated = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => TagEditorDialog(
+        title: '${item.title} / 手动标签',
+        helperText: '只修改手动标签；文件夹标签由目录结构维护。',
+        initialTags: <String>{...folderTags, ...initialManualTags},
+        existingTags: manualSuggestions,
+        lockedTags: folderTags,
+      ),
+    );
+    if (updated == null) {
+      return;
+    }
+    final selectedManualNames = _normalizeTagSet(updated)
+        .where(
+          (tag) => !folderTags.any(
+            (folderTag) => TagRules.sameTag(folderTag, tag),
+          ),
+        )
+        .toSet();
+    final protectedTagNames = _linkedTopLevelNonManualTagNames(store, item)
+      ..addAll(folderTags);
+    try {
+      for (final tag in linkedManualTags) {
+        if (!selectedManualNames.any(
+          (selected) => TagRules.sameTag(selected, tag.name),
+        )) {
+          await store.batchRemoveManualTag(tag, [item]);
+        }
+      }
+      for (final name in selectedManualNames) {
+        if (linkedManualTags.any(
+          (tag) => TagRules.sameTag(tag.name, name),
+        )) {
+          continue;
+        }
+        final tag = await _resolveQuickManualTag(store, name);
+        await store.batchAddManualTag(tag, [item]);
+      }
+      // 兼容字段只重建“受保护的非 manual 来源 + 用户本次选择的 manual 标签”。
+      item.tags
+        ..clear()
+        ..addAll(protectedTagNames)
+        ..addAll(selectedManualNames);
+      await store.upsertVideo(item);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('更新手动标签失败：$error')),
+        );
+      }
+    }
+    if (mounted) {
+      setState(() {});
+      _markLibraryDataChanged();
+    }
+  }
+
+  /** 获取当前视频已关联的非 manual 一级标签名，防止快速编辑覆盖其它来源。 */
+  Set<String> _linkedTopLevelNonManualTagNames(
+    LibraryStore store,
+    VideoItem item,
+  ) {
+    final linkedIds = store.videoTagIdsByPathKey[TagRules.pathKey(item.path)] ??
+        const <String>{};
+    final tagNames = <String>{};
+    for (final id in linkedIds) {
+      final tag = store.tagsById[id];
+      if (tag != null &&
+          tag.source != TagSource.manual &&
+          tag.parentId == null) {
+        tagNames.add(tag.name);
+      }
+    }
+    return tagNames;
+  }
+
+  /** 获取当前视频真实关联的一级 manual 标签，后续增删优先按 tagId 执行。 */
+  List<TagItem> _linkedTopLevelManualTags(
+    LibraryStore store,
+    VideoItem item,
+  ) {
+    final linkedIds = store.videoTagIdsByPathKey[TagRules.pathKey(item.path)] ??
+        const <String>{};
+    final result = <TagItem>[];
+    for (final id in linkedIds) {
+      final tag = store.tagsById[id];
+      if (tag != null &&
+          tag.source == TagSource.manual &&
+          tag.parentId == null) {
+        result.add(tag);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * 将新输入名称解析到稳定 manual tagId。
+   *
+   * 优先复用 `manual` 默认组；只有一个同名候选时复用该候选；多组同名且无默认组时创建默认组标签，
+   * 避免仅按名称随机修改其它分组。
+   */
+  Future<TagItem> _resolveQuickManualTag(
+    LibraryStore store,
+    String name,
+  ) async {
+    final matches = [
+      for (final tag in store.allTagItems)
+        if (tag.source == TagSource.manual &&
+            tag.parentId == null &&
+            TagRules.sameTag(tag.name, name))
+          tag,
+    ];
+    for (final tag in matches) {
+      if ((tag.groupId ?? 'manual') == 'manual') {
+        return tag;
+      }
+    }
+    if (matches.length == 1) {
+      return matches.single;
+    }
+    return store.createManualTag(name: name, groupId: 'manual');
   }
 
   Set<String> _folderTagsForItem(VideoItem item) {

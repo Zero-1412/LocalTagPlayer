@@ -13,6 +13,7 @@ class _PlayerContextPanel extends StatelessWidget {
     required this.previousIndex,
     required this.nextIndex,
     required this.queueEndReached,
+    required this.onEditManualTags,
     required this.onPlayIndex,
   });
 
@@ -31,6 +32,9 @@ class _PlayerContextPanel extends StatelessWidget {
 
   /** 当前筛选队列是否已经自然播放到末尾。 */
   final bool queueEndReached;
+
+  /** 打开当前视频的 manual 标签快速编辑器。 */
+  final VoidCallback onEditManualTags;
 
   /** 用户通过显式前后项按钮请求切换播放的位置。 */
   final ValueChanged<int> onPlayIndex;
@@ -101,6 +105,12 @@ class _PlayerContextPanel extends StatelessWidget {
                           : () => onPlayIndex(nextIndex!),
                       icon: const Icon(Icons.skip_next_rounded, size: 18),
                       label: const Text('下一条'),
+                    ),
+                    OutlinedButton.icon(
+                      key: const ValueKey('player.editManualTags'),
+                      onPressed: onEditManualTags,
+                      icon: const Icon(Icons.sell_outlined, size: 18),
+                      label: const Text('编辑手动标签'),
                     ),
                   ],
                 ),

@@ -2,6 +2,16 @@
 
 ## 2026-07-10
 
+### 真实坏文件 smoke 与播放器内快速编辑 manual 标签
+
+- 播放器打开媒体后增加短时可播放性确认：当时长、视频编码和音频编码均不可用时进入稳定 `unplayable_media` 错误态，避免 0-byte 文件被 `Player.open` 接受后永久停在 `00:00`。
+- 使用独立 `LOCAL_TAG_PLAYER_DATA_DIR`、0-byte MP4 和两条真实 H264/AAC 媒体完成隔离窗口 smoke；坏文件的“诊断详情”可见安全错误类型，“跳过此项”会继续播放下一条正常媒体。
+- 播放器上下文面板新增“编辑手动标签”入口；编辑器明确锁定 folder 来源标签，只允许维护 manual 标签，并在保存时优先按已有 `tagId` 增删关联。
+- 兼容保留其它来源标签与旧视频标签字段；隔离 profile 中新增 manual 标签后播放器立即刷新、filtered queue 不变，重启应用后标签仍存在。
+- 新增 focused tests 覆盖无时长且无编码媒体的拒绝逻辑，以及 folder 标签不可删除、manual 标签可编辑的弹窗行为。
+- 播放进度记忆本轮不实施，等待 Stable Video Identity 后绑定稳定 `videoId`，避免继续绑定可变路径。
+- 本次未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、filtered queue 来源、缩略图/media 队列或播放进度数据。
+
 ### 播放器连续播放与错误恢复闭环
 
 - 播放器订阅 `media_kit` 完成事件，在当前 filtered queue 内顺序进入下一条；到达队尾后停止，不默认循环，并持续显示“当前筛选队列已播放完毕”。

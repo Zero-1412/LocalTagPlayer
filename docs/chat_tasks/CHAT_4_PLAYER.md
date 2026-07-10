@@ -7,6 +7,14 @@
 
 # CHAT_4_PLAYER.md
 
+## 2026-07-10 隔离坏文件 smoke 与播放器标签入口
+
+- `Player.open` 返回后会检查时长和音视频编码是否至少有一项可用；真实 0-byte MP4 不再停留在假播放状态，而是进入稳定 `unplayable_media` 恢复面板。
+- 隔离 profile 的三条队列 smoke 覆盖坏文件诊断与跳过：单条损坏不会阻塞后续正常 H264/AAC 文件。
+- 播放器上下文面板新增“编辑手动标签”，保存后刷新当前视频信息但不重建或替换来源 filtered queue。
+- 播放进度记忆明确等待 Stable Video Identity 后实施，本轮不新增 path 绑定的进度持久化。
+- 本轮未修改 schema、`PlayerBackend`、filtered queue 来源、`FilterQuery` / `TagQueryService` 或缩略图/media 队列。
+
 ## 2026-07-10 连续播放与错误恢复闭环
 
 - `PlayerPage` 订阅 `media_kit` 完成事件，只在库页传入的 filtered queue 内顺序推进；队尾停止并持续显示完成提示，不默认循环。

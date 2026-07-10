@@ -604,6 +604,62 @@ void main() {
     expect(requests.failureCode, isNull);
   });
 
+  test('player media readiness rejects zero-duration media without codecs', () {
+    expect(
+      playerMediaStateIsPlayable(
+        duration: Duration.zero,
+        videoCodec: 'empty',
+        audioCodec: 'unavailable',
+      ),
+      isFalse,
+    );
+    expect(
+      playerMediaStateIsPlayable(
+        duration: const Duration(seconds: 2),
+        videoCodec: 'empty',
+        audioCodec: 'empty',
+      ),
+      isTrue,
+    );
+    expect(
+      playerMediaStateIsPlayable(
+        duration: Duration.zero,
+        videoCodec: 'h264',
+        audioCodec: 'empty',
+      ),
+      isTrue,
+    );
+  });
+
+  testWidgets('manual tag editor locks folder tags', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: TagEditorDialog(
+            title: '视频 / 手动标签',
+            helperText: '只修改手动标签；文件夹标签由目录结构维护。',
+            initialTags: {'FolderTag', 'ManualTag'},
+            existingTags: {'SuggestedTag'},
+            lockedTags: {'FolderTag'},
+          ),
+        ),
+      ),
+    );
+
+    final chips = tester.widgetList<InputChip>(find.byType(InputChip));
+    final folderChip = chips.firstWhere(
+      (chip) => (chip.label as Text).data == 'FolderTag',
+    );
+    final manualChip = chips.firstWhere(
+      (chip) => (chip.label as Text).data == 'ManualTag',
+    );
+
+    expect(folderChip.onDeleted, isNull);
+    expect(manualChip.onDeleted, isNotNull);
+    expect(find.text('只修改手动标签；文件夹标签由目录结构维护。'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
+  });
+
   test('secondary discovery hides default album from secondary lists', () {
     const defaultAlbum = TagItem(
       id: 'folder.child:genshin:default',

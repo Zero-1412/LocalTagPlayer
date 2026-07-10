@@ -3,6 +3,31 @@ part of '../app.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
+ * 判断播放器打开后的媒体状态是否已经具备可播放证据。
+ *
+ * 本地视频通常会先得到有效时长；少数容器时长稍晚，但 mpv 已能报告音频或视频编码。
+ * 两类证据都缺失时不能把 `Player.open` 的成功返回直接当成可播放成功。
+ */
+bool playerMediaStateIsPlayable({
+  required Duration duration,
+  required String videoCodec,
+  required String audioCodec,
+}) {
+  if (duration > Duration.zero) {
+    return true;
+  }
+  bool hasCodec(String value) {
+    final normalized = value.trim().toLowerCase();
+    return normalized.isNotEmpty &&
+        normalized != 'empty' &&
+        normalized != 'unavailable' &&
+        normalized != 'null';
+  }
+
+  return hasCodec(videoCodec) || hasCodec(audioCodec);
+}
+
+/**
  * 播放页 open 请求队列协调器。
  *
  * 该 controller 只维护“最新待打开路径、是否有 drain worker、是否展示打开中遮罩”，不直接调用

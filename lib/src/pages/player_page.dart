@@ -51,6 +51,7 @@ class PlayerPage extends StatefulWidget {
     required this.queueTitle,
     required this.onDeleteFile,
     required this.onToggleFavorite,
+    required this.onEditManualTags,
     required this.onMediaDetailsUpdated,
   });
 
@@ -63,6 +64,7 @@ class PlayerPage extends StatefulWidget {
   final String queueTitle;
   final Future<void> Function(VideoItem item) onDeleteFile;
   final Future<void> Function(VideoItem item) onToggleFavorite;
+  final Future<void> Function(VideoItem item) onEditManualTags;
   final Future<void> Function(
           VideoItem item, MediaDetails details, String? fingerprint)
       onMediaDetailsUpdated;
@@ -80,6 +82,7 @@ class _PlayerPageState extends State<PlayerPage> {
   late final PlayerPlaybackController _playback;
   final _openRequests = PlayerOpenRequestController();
   StreamSubscription<bool>? _completedSubscription;
+  StreamSubscription<String>? _playerErrorSubscription;
   DateTime? _ignoreQueueSelectionBefore;
   String? _handledCompletedPath;
   String? _openedPath;
@@ -155,6 +158,7 @@ class _PlayerPageState extends State<PlayerPage> {
     );
     _completedSubscription =
         _player.stream.completed.listen(_handlePlaybackCompleted);
+    _playerErrorSubscription = _player.stream.error.listen(_handlePlayerError);
     _requestOpenCurrent();
     _prefetchQueueWindow();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -163,6 +167,25 @@ class _PlayerPageState extends State<PlayerPage> {
         _ensureQueueIndexVisible(_index, center: true, animated: false);
       }
     });
+  }
+
+  /**
+   * 处理播放内核在 open 完成后才报告的运行期错误。
+   *
+   * 打开 worker 运行期间由可播放性确认统一收口，避免旧媒体迟到错误覆盖快速切换后的新视频。
+   */
+  void _handlePlayerError(String _) {
+    if (!mounted || _openRequests.isOpening) {
+      return;
+    }
+    final path = _openedPath;
+    if (path == null || path != _currentItem.path) {
+      return;
+    }
+    _openedPath = null;
+    _openRequests.markFailure(path, code: 'media_kit_error');
+    unawaited(_player.stop());
+    setState(() {});
   }
 
   /**
@@ -327,6 +350,19 @@ class _PlayerPageState extends State<PlayerPage> {
             return;
           }
           await _applyPlaybackPerformanceProfile();
+          final playable = await _waitForPlayableMedia();
+          if (!playable) {
+            // 快速切换已有更新请求时只放弃旧验证，不展示过时错误。
+            if (!_openRequests.hasPending) {
+              _openedPath = null;
+              _openRequests.markFailure(
+                path,
+                code: 'unplayable_media',
+              );
+              await _player.stop();
+            }
+            continue;
+          }
           _openedPath = path;
           _openRequests.markSuccess();
         } catch (error) {
@@ -350,6 +386,32 @@ class _PlayerPageState extends State<PlayerPage> {
     if (shouldContinue) {
       unawaited(_drainOpenRequests());
     }
+  }
+
+  /**
+   * 等待本地媒体产生有效时长或 codec 证据。
+   *
+   * 0 字节/损坏 MP4 的 `Player.open` 可能成功返回却永久停在 00:00；限定等待窗口后将其
+   * 归入稳定错误面板。检测期间如出现更新 open 请求则立即放弃旧验证，保护快速切换流畅度。
+   */
+  Future<bool> _waitForPlayableMedia() async {
+    const attempts = 6;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      if (_openRequests.hasPending) {
+        return false;
+      }
+      final videoCodec = await _getMpvProperty('video-codec');
+      final audioCodec = await _getMpvProperty('audio-codec');
+      if (playerMediaStateIsPlayable(
+        duration: _player.state.duration,
+        videoCodec: videoCodec,
+        audioCodec: audioCodec,
+      )) {
+        return true;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    return false;
   }
 
   /** 重新打开最近失败的视频，并继续复用 latest-request worker。 */
@@ -565,6 +627,14 @@ class _PlayerPageState extends State<PlayerPage> {
         title: '\u64ad\u653e\u8bca\u65ad',
       ),
     );
+  }
+
+  /** 打开当前视频的 manual 标签编辑器，并在保存后刷新播放器上下文。 */
+  Future<void> _editManualTags() async {
+    await widget.onEditManualTags(_currentItem);
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<_PlaybackDiagnosticsSnapshot> _buildDiagnosticsSnapshot() async {
@@ -788,6 +858,7 @@ class _PlayerPageState extends State<PlayerPage> {
   void dispose() {
     _openRequests.cancel();
     unawaited(_completedSubscription?.cancel());
+    unawaited(_playerErrorSubscription?.cancel());
     _queueScrollController.dispose();
     _focusNode.dispose();
     _player.dispose();
@@ -973,6 +1044,9 @@ class _PlayerPageState extends State<PlayerPage> {
                       previousIndex: _playback.previousIndex,
                       nextIndex: _playback.nextIndex,
                       queueEndReached: _queueEndReached,
+                      onEditManualTags: () {
+                        unawaited(_editManualTags());
+                      },
                       onPlayIndex: (index) {
                         _jumpTo(index, ignoreFollowUpSelection: true);
                       },

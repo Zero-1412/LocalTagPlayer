@@ -2206,11 +2206,19 @@ class TagEditorDialog extends StatefulWidget {
     required this.title,
     required this.initialTags,
     required this.existingTags,
+    this.lockedTags = const <String>{},
+    this.helperText,
   });
 
   final String title;
   final Set<String> initialTags;
   final Set<String> existingTags;
+
+  /** 由 folder 等外部来源维护、在当前弹窗中只能查看不能删除的标签。 */
+  final Set<String> lockedTags;
+
+  /** 当前编辑范围和来源边界说明。 */
+  final String? helperText;
 
   @override
   State<TagEditorDialog> createState() => _TagEditorDialogState();
@@ -2243,6 +2251,10 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
     }
   }
 
+  /** 标签是否由当前弹窗之外的来源维护。 */
+  bool _isLocked(String tag) =>
+      widget.lockedTags.any((locked) => TagRules.sameTag(locked, tag));
+
   Set<String> _normalizeTags(Iterable<String> tags) {
     final normalized = <String>{};
     for (final raw in tags) {
@@ -2272,6 +2284,13 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.helperText != null) ...[
+              Text(
+                widget.helperText!,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+            ],
             TextField(
               controller: _controller,
               decoration: const InputDecoration(
@@ -2286,9 +2305,17 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
               runSpacing: 8,
               children: [
                 for (final tag in (_tags.toList()..sort()))
-                  InputChip(
-                    label: Text(tag),
-                    onDeleted: () => setState(() => _tags.remove(tag)),
+                  Tooltip(
+                    message: _isLocked(tag) ? '文件夹来源标签，只能通过目录结构修改' : '移除手动标签',
+                    child: InputChip(
+                      avatar: _isLocked(tag)
+                          ? const Icon(Icons.lock_outline_rounded, size: 15)
+                          : null,
+                      label: Text(tag),
+                      onDeleted: _isLocked(tag)
+                          ? null
+                          : () => setState(() => _tags.remove(tag)),
+                    ),
                   ),
               ],
             ),
