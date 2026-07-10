@@ -7,6 +7,15 @@
 
 # CHAT_4_PLAYER.md
 
+## 2026-07-10 连续播放与错误恢复闭环
+
+- `PlayerPage` 订阅 `media_kit` 完成事件，只在库页传入的 filtered queue 内顺序推进；队尾停止并持续显示完成提示，不默认循环。
+- 播放器上下文面板增加显式上一条/下一条按钮；原有 `PageUp / PageDown` 快捷键保持不变。
+- `PlayerOpenRequestController` 增加可恢复失败状态；稳定错误面板提供重试、跳过和诊断详情，同时避免把异常正文和本地路径写入可复制摘要。
+- 播放诊断入口移动到顶部，诊断弹窗支持复制不含本地路径的摘要，并显示弹窗内复制完成态。
+- focused tests 覆盖顺序队列边界、队尾不循环、快速 open 最新请求和失败重试；真实窗口覆盖 EOF 自动下一条、队尾停止、诊断复制和返回筛选状态。
+- 本轮未修改 `PlayerBackend`、filtered queue 来源、SQLite schema、`FilterQuery` / `TagQueryService` 或缩略图/media 队列。
+
 当前版本：`0.3.0`
 状态：进行中
 负责人：Chat 4 / 播放器筛选队列 + PlayerBackend

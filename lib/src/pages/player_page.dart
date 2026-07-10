@@ -79,7 +79,11 @@ class _PlayerPageState extends State<PlayerPage> {
   late final MediaDetailsService _detailsService;
   late final PlayerPlaybackController _playback;
   final _openRequests = PlayerOpenRequestController();
+  StreamSubscription<bool>? _completedSubscription;
   DateTime? _ignoreQueueSelectionBefore;
+  String? _handledCompletedPath;
+  String? _openedPath;
+  var _queueEndReached = false;
 
   static const double _queueItemExtent = 82;
 
@@ -113,6 +117,7 @@ class _PlayerPageState extends State<PlayerPage> {
     }
     final preferredPath = _currentItem.path;
     setState(() {
+      _queueEndReached = false;
       _playback.toggleChildTag(tag, preferredPath: preferredPath);
     });
     _ensureQueueIndexVisible(_index, center: true);
@@ -148,6 +153,8 @@ class _PlayerPageState extends State<PlayerPage> {
             widget.playbackSettings.hardwareDecodingEnabled,
       ),
     );
+    _completedSubscription =
+        _player.stream.completed.listen(_handlePlaybackCompleted);
     _requestOpenCurrent();
     _prefetchQueueWindow();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -156,6 +163,53 @@ class _PlayerPageState extends State<PlayerPage> {
         _ensureQueueIndexVisible(_index, center: true, animated: false);
       }
     });
+  }
+
+  /**
+   * 处理播放完成事件，在当前 filtered queue 内顺序进入下一条。
+   *
+   * media_kit 在打开新媒体时会发送 false，因此路径去重只防御同一 EOF 的重复 true；
+   * 到达队尾时明确停止并提示，不默认循环到队首。
+   */
+  void _handlePlaybackCompleted(bool completed) {
+    if (!completed) {
+      _handledCompletedPath = null;
+      // 用户在队尾重新播放或拖动进度后，完成提示应立即退出。
+      if (mounted && _queueEndReached) {
+        setState(() => _queueEndReached = false);
+      }
+      return;
+    }
+    if (!mounted || _queue.isEmpty) {
+      return;
+    }
+    final completedPath = _currentItem.path;
+    // 旧媒体在快速切换期间迟到的 EOF 不能推进新队列项。
+    if (_openedPath != completedPath) {
+      return;
+    }
+    if (_handledCompletedPath == completedPath) {
+      return;
+    }
+    _handledCompletedPath = completedPath;
+    final nextIndex = _playback.nextIndex;
+    if (nextIndex == null) {
+      setState(() => _queueEndReached = true);
+      _showQueueEndMessage();
+      return;
+    }
+    _jumpTo(nextIndex, ignoreFollowUpSelection: true);
+  }
+
+  /** 提示当前筛选队列已经播放完毕，避免用户误以为播放器卡住。 */
+  void _showQueueEndMessage() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('已播放到当前筛选队列末尾，共 ${_queue.length} 项'),
+        ),
+      );
   }
 
   void _ensureQueueIndexVisible(int index,
@@ -273,14 +327,16 @@ class _PlayerPageState extends State<PlayerPage> {
             return;
           }
           await _applyPlaybackPerformanceProfile();
-        } catch (_) {
+          _openedPath = path;
+          _openRequests.markSuccess();
+        } catch (error) {
           if (!mounted) {
             return;
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text(
-                    '\u89c6\u9891\u6253\u5f00\u5931\u8d25\uff0c\u53ef\u80fd\u662f\u7f16\u7801\u4e0d\u652f\u6301\u6216\u6587\u4ef6\u635f\u574f')),
+          // 只记录错误类型，避免异常正文中的本地路径进入 UI 或可复制诊断摘要。
+          _openRequests.markFailure(
+            path,
+            code: error.runtimeType.toString(),
           );
         }
       }
@@ -294,6 +350,28 @@ class _PlayerPageState extends State<PlayerPage> {
     if (shouldContinue) {
       unawaited(_drainOpenRequests());
     }
+  }
+
+  /** 重新打开最近失败的视频，并继续复用 latest-request worker。 */
+  void _retryFailedOpen() {
+    if (_openRequests.retryFailure()) {
+      setState(() => _queueEndReached = false);
+      unawaited(_drainOpenRequests());
+    }
+  }
+
+  /** 跳过失败项；队尾不循环，只显示当前筛选队列结束提示。 */
+  void _skipFailedOpen() {
+    final nextIndex = _playback.nextIndex;
+    setState(() {
+      _queueEndReached = nextIndex == null;
+      _openRequests.clearFailure();
+    });
+    if (nextIndex == null) {
+      _showQueueEndMessage();
+      return;
+    }
+    _jumpTo(nextIndex, ignoreFollowUpSelection: true);
   }
 
   void _select(int index) {
@@ -351,7 +429,10 @@ class _PlayerPageState extends State<PlayerPage> {
       _ignoreQueueSelectionBefore =
           DateTime.now().add(const Duration(milliseconds: 700));
     }
-    setState(() => _playback.jumpTo(index));
+    setState(() {
+      _queueEndReached = false;
+      _playback.jumpTo(index);
+    });
     _ensureQueueIndexVisible(index, center: true);
     _requestOpenCurrent();
     _prefetchQueueWindow();
@@ -383,6 +464,7 @@ class _PlayerPageState extends State<PlayerPage> {
         return;
       }
       setState(() {
+        _queueEndReached = false;
         _playback.removeSelectedItem(item);
       });
       if (_queue.isEmpty) {
@@ -556,6 +638,8 @@ class _PlayerPageState extends State<PlayerPage> {
       '\u7f29\u7565\u56fe\u6392\u961f: ${widget.thumbnailService.queuedJobs}',
       '\u8fdb\u7a0b\u5185\u5b58: ${_formatBytes(ProcessInfo.currentRss)}',
       '\u5904\u7406\u5668\u6838\u5fc3: ${Platform.numberOfProcessors}',
+      if (_openRequests.hasFailure)
+        '最近打开错误类型: ${_openRequests.failureCode ?? 'unknown'}',
     ];
     return _PlaybackDiagnosticsSnapshot(
       lines: lines,
@@ -703,6 +787,7 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void dispose() {
     _openRequests.cancel();
+    unawaited(_completedSubscription?.cancel());
     _queueScrollController.dispose();
     _focusNode.dispose();
     _player.dispose();
@@ -783,6 +868,11 @@ class _PlayerPageState extends State<PlayerPage> {
             ),
             actions: [
               IconButton(
+                tooltip: '播放诊断',
+                onPressed: _showDiagnosticsDialog,
+                icon: const Icon(Icons.monitor_heart_outlined),
+              ),
+              IconButton(
                 tooltip: _currentItem.isFavorite ? '取消收藏' : '收藏',
                 onPressed: () {
                   unawaited(widget.onToggleFavorite(_currentItem));
@@ -855,6 +945,20 @@ class _PlayerPageState extends State<PlayerPage> {
                                       child: CircularProgressIndicator()),
                                 ),
                               ),
+                            if (!_openRequests.isOpening &&
+                                _openRequests.hasFailure)
+                              Positioned.fill(
+                                child: _PlayerOpenFailurePanel(
+                                  failureCode:
+                                      _openRequests.failureCode ?? 'unknown',
+                                  canSkip: _playback.hasNext,
+                                  onRetry: _retryFailedOpen,
+                                  onSkip: _skipFailedOpen,
+                                  onDiagnostics: () {
+                                    unawaited(_showDiagnosticsDialog());
+                                  },
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -866,6 +970,12 @@ class _PlayerPageState extends State<PlayerPage> {
                       total: _queue.length,
                       activeTags: widget.activeTags,
                       activeChildTag: _selectedChildTag,
+                      previousIndex: _playback.previousIndex,
+                      nextIndex: _playback.nextIndex,
+                      queueEndReached: _queueEndReached,
+                      onPlayIndex: (index) {
+                        _jumpTo(index, ignoreFollowUpSelection: true);
+                      },
                     ),
                   ],
                 ),

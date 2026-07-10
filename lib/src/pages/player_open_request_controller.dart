@@ -18,8 +18,17 @@ class PlayerOpenRequestController {
   /** 页面是否应展示打开中遮罩。 */
   var isOpening = false;
 
+  /** 最近一次最终未能打开的视频路径，仅在播放器页生命周期内保留。 */
+  String? failedPath;
+
+  /** 不包含本地路径的安全错误类型，用于稳定错误面板和诊断摘要。 */
+  String? failureCode;
+
   /** 当前是否还有待处理路径。 */
   bool get hasPending => _pendingOpenPath != null;
+
+  /** 当前是否有需要用户重试或跳过的稳定打开错误。 */
+  bool get hasFailure => failedPath != null;
 
   /**
    * 记录一次打开请求。
@@ -27,11 +36,38 @@ class PlayerOpenRequestController {
    * 返回 `true` 表示调用方需要启动 drain worker；返回 `false` 表示已有 worker 会消费最新路径。
    */
   bool request(String path) {
+    clearFailure();
     _pendingOpenPath = path;
     if (_workerRunning) {
       return false;
     }
     return true;
+  }
+
+  /** 记录最终打开失败状态，错误详情只保留安全类型，不保存异常文本。 */
+  void markFailure(String path, {required String code}) {
+    failedPath = path;
+    failureCode = code;
+  }
+
+  /** 成功打开视频后清理旧错误，避免失败遮罩覆盖已经切换成功的视频。 */
+  void markSuccess() {
+    clearFailure();
+  }
+
+  /** 清理当前打开错误。 */
+  void clearFailure() {
+    failedPath = null;
+    failureCode = null;
+  }
+
+  /** 重新排队最近失败的视频，并复用原有 latest-request worker 语义。 */
+  bool retryFailure() {
+    final path = failedPath;
+    if (path == null) {
+      return false;
+    }
+    return request(path);
   }
 
   /**
@@ -70,5 +106,6 @@ class PlayerOpenRequestController {
     _pendingOpenPath = null;
     _workerRunning = false;
     isOpening = false;
+    clearFailure();
   }
 }

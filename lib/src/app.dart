@@ -43,6 +43,7 @@ part 'pages/player_context_panel.dart';
 part 'pages/player_delete_dialog.dart';
 part 'pages/player_diagnostics_dialog.dart';
 part 'pages/player_open_request_controller.dart';
+part 'pages/player_open_failure_panel.dart';
 part 'pages/player_playback_controller.dart';
 part 'pages/player_queue_sidebar.dart';
 part 'pages/player_page.dart';

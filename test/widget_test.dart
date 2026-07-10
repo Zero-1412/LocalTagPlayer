@@ -519,6 +519,9 @@ void main() {
       initialPath: alpha.path,
     );
 
+    expect(playback.previousIndex, isNull);
+    expect(playback.nextIndex, 1);
+
     playback.toggleChildTag('AlbumB', preferredPath: alpha.path);
     expect(playback.queue, [beta]);
     expect(playback.currentItem, beta);
@@ -530,6 +533,37 @@ void main() {
     playback.setPlaylistForChildTag('Missing', preferredPath: beta.path);
     expect(playback.queue, [alpha, beta]);
     expect(playback.currentItem, beta);
+    expect(playback.previousIndex, 0);
+    expect(playback.nextIndex, isNull);
+  });
+
+  test('player playback controller stops sequential continuation at queue end',
+      () {
+    final first = VideoItem(
+      path: 'D:\\video\\first.mp4',
+      title: 'first',
+      folder: 'D:\\video',
+      tags: const {},
+      addedAt: DateTime.utc(2026, 1, 1),
+    );
+    final second = VideoItem(
+      path: 'D:\\video\\second.mp4',
+      title: 'second',
+      folder: 'D:\\video',
+      tags: const {},
+      addedAt: DateTime.utc(2026, 1, 2),
+    );
+    final playback = PlayerPlaybackController(
+      sourcePlaylist: [first, second],
+      activeParentTag: null,
+      initialPath: first.path,
+    );
+
+    expect(playback.nextIndex, 1);
+    expect(playback.jumpTo(playback.nextIndex!), isTrue);
+    expect(playback.currentItem, second);
+    expect(playback.nextIndex, isNull);
+    expect(playback.queue, [first, second]);
   });
 
   test('player open request controller keeps latest request after failure', () {
@@ -548,6 +582,26 @@ void main() {
     requests.finishDrain(keepOpening: false);
     expect(requests.isOpening, isFalse);
     expect(requests.hasPending, isFalse);
+  });
+
+  test('player open request controller keeps recoverable safe failure state',
+      () {
+    final requests = PlayerOpenRequestController();
+
+    requests.markFailure('D:\\private\\broken.mp4', code: 'StateError');
+    expect(requests.hasFailure, isTrue);
+    expect(requests.failureCode, 'StateError');
+
+    expect(requests.retryFailure(), isTrue);
+    expect(requests.hasFailure, isFalse);
+    requests.beginDrain();
+    expect(requests.takePendingPath(), 'D:\\private\\broken.mp4');
+    requests.markFailure('D:\\private\\broken.mp4', code: 'StateError');
+    requests.markSuccess();
+    requests.finishDrain(keepOpening: false);
+
+    expect(requests.hasFailure, isFalse);
+    expect(requests.failureCode, isNull);
   });
 
   test('secondary discovery hides default album from secondary lists', () {

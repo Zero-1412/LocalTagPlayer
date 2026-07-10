@@ -123,6 +123,9 @@ class _PlaybackDiagnosticsDialogState
   /** 最近一次采样错误。 */
   String? _error;
 
+  /** 当前弹窗内诊断摘要是否已经成功复制，用于提供模态层内可见反馈。 */
+  var _copied = false;
+
   @override
   void initState() {
     super.initState();
@@ -276,6 +279,20 @@ class _PlaybackDiagnosticsDialogState
     return '$hour:$minute:$second';
   }
 
+  /**
+   * 复制当前诊断摘要。
+   *
+   * `_buildDiagnosticsSnapshot` 不写入本地路径，按钮文案也明确这一隐私边界；
+   * 文件名用于定位当前媒体问题，但不会携带目录结构。
+   */
+  Future<void> _copySummary(List<String> lines) async {
+    await Clipboard.setData(ClipboardData(text: lines.join('\n')));
+    if (!mounted) {
+      return;
+    }
+    setState(() => _copied = true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final lines = <String>[
@@ -304,6 +321,19 @@ class _PlaybackDiagnosticsDialogState
         ),
       ),
       actions: [
+        TextButton.icon(
+          onPressed: _snapshot == null
+              ? null
+              : () {
+                  unawaited(_copySummary(lines));
+                },
+          icon: Icon(
+            _copied ? Icons.check_rounded : Icons.copy_all_outlined,
+          ),
+          label: Text(
+            _copied ? '已复制（不含路径）' : '复制诊断摘要（不含路径）',
+          ),
+        ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('关闭'),

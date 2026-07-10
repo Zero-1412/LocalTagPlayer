@@ -10,6 +10,10 @@ class _PlayerContextPanel extends StatelessWidget {
     required this.total,
     required this.activeTags,
     required this.activeChildTag,
+    required this.previousIndex,
+    required this.nextIndex,
+    required this.queueEndReached,
+    required this.onPlayIndex,
   });
 
   final VideoItem item;
@@ -18,6 +22,18 @@ class _PlayerContextPanel extends StatelessWidget {
   final int total;
   final List<String> activeTags;
   final String? activeChildTag;
+
+  /** 可播放的上一条索引；为 null 时按钮禁用。 */
+  final int? previousIndex;
+
+  /** 可播放的下一条索引；为 null 时按钮禁用。 */
+  final int? nextIndex;
+
+  /** 当前筛选队列是否已经自然播放到末尾。 */
+  final bool queueEndReached;
+
+  /** 用户通过显式前后项按钮请求切换播放的位置。 */
+  final ValueChanged<int> onPlayIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +81,53 @@ class _PlayerContextPanel extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      key: const ValueKey('player.previous'),
+                      onPressed: previousIndex == null
+                          ? null
+                          : () => onPlayIndex(previousIndex!),
+                      icon: const Icon(Icons.skip_previous_rounded, size: 18),
+                      label: const Text('上一条'),
+                    ),
+                    OutlinedButton.icon(
+                      key: const ValueKey('player.next'),
+                      onPressed: nextIndex == null
+                          ? null
+                          : () => onPlayIndex(nextIndex!),
+                      icon: const Icon(Icons.skip_next_rounded, size: 18),
+                      label: const Text('下一条'),
+                    ),
+                  ],
+                ),
+                if (queueEndReached) ...[
+                  const SizedBox(height: 10),
+                  const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle_outline_rounded,
+                        size: 17,
+                        color: Color(0xff86efac),
+                      ),
+                      SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          '当前筛选队列已播放完毕',
+                          style: TextStyle(
+                            color: Color(0xffbbf7d0),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

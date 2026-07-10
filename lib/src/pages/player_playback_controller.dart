@@ -45,6 +45,19 @@ class PlayerPlaybackController {
   /** 当前正在播放的视频。 */
   VideoItem get currentItem => queue[playingIndex];
 
+  /** 当前播放项之前是否还有可播放视频。 */
+  bool get hasPrevious => queue.isNotEmpty && playingIndex > 0;
+
+  /** 当前播放项之后是否还有可播放视频。 */
+  bool get hasNext =>
+      queue.isNotEmpty && playingIndex >= 0 && playingIndex < queue.length - 1;
+
+  /** 上一条视频索引；队首返回 null，避免页面层重复边界判断。 */
+  int? get previousIndex => hasPrevious ? playingIndex - 1 : null;
+
+  /** 下一条视频索引；队尾返回 null，确保连续播放不会默认循环。 */
+  int? get nextIndex => hasNext ? playingIndex + 1 : null;
+
   /**
    * 按二级标签生成候选播放队列。
    *
