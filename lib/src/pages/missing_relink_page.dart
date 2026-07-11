@@ -182,15 +182,21 @@ class _BulkPathRelinkDialog extends StatefulWidget {
 class _BulkPathRelinkDialogState extends State<_BulkPathRelinkDialog> {
   final _oldPrefixController = TextEditingController();
   final _newPrefixController = TextEditingController();
+  final _searchController = TextEditingController();
   final _service = const BulkPathRelinkService();
   List<BulkPathRelinkPreview> _previews = const <BulkPathRelinkPreview>[];
   var _loading = false;
   var _executing = false;
+  Set<String> _failedVideoIds = <String>{};
+  List<BulkPathRelinkPreview> _auditPreviews = const <BulkPathRelinkPreview>[];
+  var _totalSucceeded = 0;
+  var _rootUpdateFailed = false;
 
   @override
   void dispose() {
     _oldPrefixController.dispose();
     _newPrefixController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -213,6 +219,10 @@ class _BulkPathRelinkDialogState extends State<_BulkPathRelinkDialog> {
     if (mounted) {
       setState(() {
         _previews = result;
+        _auditPreviews = result;
+        _failedVideoIds = <String>{};
+        _totalSucceeded = 0;
+        _rootUpdateFailed = false;
         _loading = false;
       });
     }
@@ -246,14 +256,95 @@ class _BulkPathRelinkDialogState extends State<_BulkPathRelinkDialog> {
       return;
     }
     setState(() => _executing = true);
-    final count = await _service.execute(
+    final result = await _service.execute(
       store: widget.store,
       previews: _previews,
       oldPrefix: _oldPrefixController.text,
       newPrefix: _newPrefixController.text,
     );
     if (mounted) {
-      Navigator.of(context).pop(count);
+      setState(() {
+        _totalSucceeded += result.succeededCount;
+        _failedVideoIds = result.failedVideoIds;
+        _rootUpdateFailed = result.rootUpdateFailed;
+        _previews = [
+          for (final preview in _previews)
+            if (preview.status != BulkRelinkStatus.ready)
+              preview
+            else if (result.failedVideoIds.contains(preview.item.videoId))
+              BulkPathRelinkPreview(
+                item: preview.item,
+                newPath: preview.newPath,
+                status: BulkRelinkStatus.executionFailed,
+              ),
+        ];
+        _executing = false;
+      });
+    }
+  }
+
+  /** 只重新预览并提交上次执行失败的 videoId。 */
+  Future<void> _retryFailed() async {
+    if (_failedVideoIds.isEmpty) {
+      return;
+    }
+    setState(() => _executing = true);
+    final refreshed = await _service.preview(
+      store: widget.store,
+      oldPrefix: _oldPrefixController.text,
+      newPrefix: _newPrefixController.text,
+    );
+    final retryable = refreshed
+        .where((preview) => _failedVideoIds.contains(preview.item.videoId))
+        .toList();
+    final result = await _service.execute(
+      store: widget.store,
+      previews: retryable,
+      oldPrefix: _oldPrefixController.text,
+      newPrefix: _newPrefixController.text,
+    );
+    if (!mounted) {
+      return;
+    }
+    final stillFailedIds = <String>{
+      ...result.failedVideoIds,
+      for (final preview in retryable)
+        if (preview.status != BulkRelinkStatus.ready) preview.item.videoId,
+    };
+    setState(() {
+      _totalSucceeded += result.succeededCount;
+      _failedVideoIds = stillFailedIds;
+      _rootUpdateFailed = _rootUpdateFailed || result.rootUpdateFailed;
+      _previews = [
+        for (final preview in retryable)
+          if (stillFailedIds.contains(preview.item.videoId))
+            BulkPathRelinkPreview(
+              item: preview.item,
+              newPath: preview.newPath,
+              status: BulkRelinkStatus.executionFailed,
+            ),
+      ];
+      _executing = false;
+    });
+  }
+
+  /** 复制不包含本地路径和文件标题的审计摘要。 */
+  Future<void> _copyAuditSummary() async {
+    final result = BulkRelinkExecutionResult(
+      succeededCount: _totalSucceeded,
+      failedVideoIds: _failedVideoIds,
+      rootUpdateFailed: _rootUpdateFailed,
+    );
+    await Clipboard.setData(ClipboardData(
+      text: bulkRelinkAuditSummary(
+        _auditPreviews.isEmpty ? _previews : _auditPreviews,
+        result: result,
+      ),
+    ));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已复制不含本地路径的审计摘要')),
+      );
     }
   }
 
@@ -262,6 +353,8 @@ class _BulkPathRelinkDialogState extends State<_BulkPathRelinkDialog> {
     final ready = _previews
         .where((preview) => preview.status == BulkRelinkStatus.ready)
         .length;
+    final visiblePreviews =
+        filterBulkRelinkPreviews(_previews, _searchController.text);
     return AlertDialog(
       title: const Text('批量路径替换预览'),
       content: SizedBox(
@@ -300,14 +393,35 @@ class _BulkPathRelinkDialogState extends State<_BulkPathRelinkDialog> {
                     : '共 ${_previews.length} 条，$ready 条可安全更新',
               ),
             ),
+            if (_rootUpdateFailed) ...[
+              const SizedBox(height: 6),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '视频已更新，但扫描 root 保存失败；请在目录管理中确认新 root。',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('missingRelink.previewSearch'),
+              controller: _searchController,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                isDense: true,
+                prefixIcon: Icon(Icons.search_rounded),
+                hintText: '搜索标题、旧/新路径或状态',
+              ),
+            ),
             const SizedBox(height: 8),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : ListView.builder(
-                      itemCount: _previews.length,
+                      itemCount: visiblePreviews.length,
                       itemBuilder: (context, index) {
-                        final preview = _previews[index];
+                        final preview = visiblePreviews[index];
                         return ListTile(
                           dense: true,
                           leading: Icon(_bulkRelinkStatusIcon(preview.status)),
@@ -324,9 +438,26 @@ class _BulkPathRelinkDialogState extends State<_BulkPathRelinkDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _executing ? null : () => Navigator.of(context).pop(),
+          onPressed: _executing
+              ? null
+              : () => Navigator.of(context).pop(_totalSucceeded),
           child: const Text('关闭'),
         ),
+        TextButton.icon(
+          key: const ValueKey('missingRelink.copyAudit'),
+          onPressed: _previews.isEmpty && _auditPreviews.isEmpty
+              ? null
+              : _copyAuditSummary,
+          icon: const Icon(Icons.copy_all_rounded),
+          label: const Text('复制审计摘要'),
+        ),
+        if (_failedVideoIds.isNotEmpty)
+          OutlinedButton.icon(
+            key: const ValueKey('missingRelink.retryFailed'),
+            onPressed: _executing ? null : _retryFailed,
+            icon: const Icon(Icons.refresh_rounded),
+            label: Text('重试失败项 ${_failedVideoIds.length}'),
+          ),
         OutlinedButton.icon(
           key: const ValueKey('missingRelink.generatePreview'),
           onPressed: _loading || _executing ? null : _preview,
@@ -349,6 +480,7 @@ String _bulkRelinkStatusLabel(BulkRelinkStatus status) => switch (status) {
       BulkRelinkStatus.targetMissing => '目标不存在',
       BulkRelinkStatus.pathConflict => '路径冲突',
       BulkRelinkStatus.fingerprintMismatch => '指纹不一致',
+      BulkRelinkStatus.executionFailed => '执行失败，可重试',
     };
 
 IconData _bulkRelinkStatusIcon(BulkRelinkStatus status) => switch (status) {
@@ -356,4 +488,5 @@ IconData _bulkRelinkStatusIcon(BulkRelinkStatus status) => switch (status) {
       BulkRelinkStatus.targetMissing => Icons.help_outline_rounded,
       BulkRelinkStatus.pathConflict => Icons.warning_amber_rounded,
       BulkRelinkStatus.fingerprintMismatch => Icons.fingerprint_rounded,
+      BulkRelinkStatus.executionFailed => Icons.refresh_rounded,
     };

@@ -678,15 +678,14 @@ void main() {
     expect(previews, hasLength(20));
     expect(previews.every((entry) => entry.status == BulkRelinkStatus.ready),
         isTrue);
-    expect(
-      await const BulkPathRelinkService().execute(
-        store: store,
-        previews: previews,
-        oldPrefix: sourceRoot.path,
-        newPrefix: targetRoot.path,
-      ),
-      20,
+    final execution = await const BulkPathRelinkService().execute(
+      store: store,
+      previews: previews,
+      oldPrefix: sourceRoot.path,
+      newPrefix: targetRoot.path,
     );
+    expect(execution.succeededCount, 20);
+    expect(execution.failedVideoIds, isEmpty);
 
     final reloaded = await _loadTrackedStore(stores);
     expect(reloaded.videos.length, 20);
@@ -700,6 +699,51 @@ void main() {
       expect(reloaded.videoTagIdsByPathKey[TagRules.pathKey(item.path)],
           contains(manual.id));
     }
+  });
+
+  test('bulk relink retains stale preview failures for retry', () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('bulk_retry');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final oldRoot = Directory(p.join(dataDir.path, 'old'));
+    final newRoot = Directory(p.join(dataDir.path, 'new'));
+    final original = await _writeVideoPlaceholder(oldRoot, ['retry.mp4']);
+    final target = await _writeVideoPlaceholder(newRoot, ['retry.mp4']);
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(oldRoot.path);
+    final item = _videoByPath(store, original.path);
+    await original.delete();
+    await store.scan();
+    final previews = await const BulkPathRelinkService().preview(
+      store: store,
+      oldPrefix: oldRoot.path,
+      newPrefix: newRoot.path,
+    );
+    expect(previews.single.status, BulkRelinkStatus.ready);
+
+    await target.delete();
+    final failed = await const BulkPathRelinkService().execute(
+      store: store,
+      previews: previews,
+      oldPrefix: oldRoot.path,
+      newPrefix: newRoot.path,
+    );
+    expect(failed.succeededCount, 0);
+    expect(failed.failedVideoIds, {item.videoId});
+    expect(item.isMissing, isTrue);
+
+    await _writeVideoPlaceholder(newRoot, ['retry.mp4']);
+    final retried = await const BulkPathRelinkService().execute(
+      store: store,
+      previews: previews,
+      oldPrefix: oldRoot.path,
+      newPrefix: newRoot.path,
+    );
+    expect(retried.succeededCount, 1);
+    expect(retried.failedVideoIds, isEmpty);
   });
 
   test('ambiguous fingerprints never auto-relink user data', () async {

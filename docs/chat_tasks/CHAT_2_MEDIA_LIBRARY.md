@@ -7,6 +7,12 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-11 批事务与失败重试
+
+- ready 项在执行前统一重验，并通过一个 SQLite batch 原子提交；异常时恢复内存视频、标签和关联索引。
+- 执行返回成功数与失败 videoId，UI 只定向重试失败项，不重复提交成功记录。
+- 预览搜索只作用于内存结果；审计摘要隐藏路径和标题，不修改 Schema。
+
 ## 2026-07-11 跨盘批量路径替换
 
 - `BulkPathRelinkService` 对 missing 条目执行旧/新前缀映射，只读检查目标存在、路径占用和 fingerprint。

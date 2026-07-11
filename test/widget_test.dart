@@ -741,6 +741,34 @@ void main() {
     await queue.dispose();
   });
 
+  test('bulk relink preview search and audit summary stay local and private',
+      () {
+    final ready = BulkPathRelinkPreview(
+      item: _testVideo(path: r'C:\private\alpha.mp4', title: 'Private Alpha'),
+      newPath: r'E:\moved\alpha.mp4',
+      status: BulkRelinkStatus.ready,
+    );
+    final missing = BulkPathRelinkPreview(
+      item: _testVideo(path: r'C:\private\beta.mp4', title: 'Private Beta'),
+      newPath: r'E:\moved\beta.mp4',
+      status: BulkRelinkStatus.targetMissing,
+    );
+    expect(filterBulkRelinkPreviews([ready, missing], 'alpha'), [ready]);
+    expect(filterBulkRelinkPreviews([ready, missing], '目标不存在'), [missing]);
+
+    final summary = bulkRelinkAuditSummary(
+      [ready, missing],
+      result: const BulkRelinkExecutionResult(
+        succeededCount: 1,
+        failedVideoIds: <String>{},
+      ),
+    );
+    expect(summary, contains('预览总数: 2'));
+    expect(summary, contains('执行成功: 1'));
+    expect(summary, isNot(contains(r'C:\private')));
+    expect(summary, isNot(contains('Private Alpha')));
+  });
+
   testWidgets('resume dialog offers continue and restart choices',
       (tester) async {
     PlayerResumeChoice? choice;

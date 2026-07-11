@@ -35,16 +35,7 @@ class LibraryScanCoordinator {
       throw StateError('所选文件已经存在于媒体库');
     }
     final normalizedPath = p.normalize(newPath);
-    final matchingRoots = _store.roots.where((root) {
-      final comparableRoot = Platform.isWindows ? root.toLowerCase() : root;
-      final comparablePath =
-          Platform.isWindows ? normalizedPath.toLowerCase() : normalizedPath;
-      return TagRules.pathKey(root) == TagRules.pathKey(normalizedPath) ||
-          p.isWithin(comparableRoot, comparablePath);
-    }).toList()
-      ..sort((a, b) => b.length.compareTo(a.length));
-    final root =
-        matchingRoots.isEmpty ? p.dirname(normalizedPath) : matchingRoots.first;
+    final root = _rootForRelinkPath(normalizedPath);
     final scanned = await const LibraryScanService().inspectVideo(
       path: normalizedPath,
       root: root,
@@ -59,6 +50,100 @@ class LibraryScanCoordinator {
     final batch = _store._db.batch();
     _relinkScannedVideo(batch, missing, scanned, newKey);
     await batch.commit(noResult: true);
+  }
+
+  /**
+   * 在一个 SQLite batch 中提交多条已预览 Relink。
+   *
+   * 返回执行前重新校验失败的 videoId；可提交项要么全部落库，要么在 batch 异常时全部回滚。
+   */
+  Future<Set<String>> relinkMissingVideosInBatch(
+    Map<VideoItem, String> targets,
+  ) async {
+    final failedVideoIds = <String>{};
+    final prepared = <({
+      VideoItem original,
+      VideoItem clone,
+      LibraryScannedVideo scanned,
+    })>[];
+    final reservedNewKeys = <String>{};
+    for (final entry in targets.entries) {
+      final item = entry.key;
+      final newPath = p.normalize(entry.value);
+      final newKey = TagRules.pathKey(newPath);
+      final occupied = _store.videos[newKey];
+      if (!item.isMissing ||
+          (occupied != null && !identical(occupied, item)) ||
+          !reservedNewKeys.add(newKey)) {
+        failedVideoIds.add(item.videoId);
+        continue;
+      }
+      final root = _rootForRelinkPath(newPath);
+      final scanned = await const LibraryScanService().inspectVideo(
+        path: newPath,
+        root: root,
+      );
+      if (scanned == null ||
+          item.mediaFingerprint == null ||
+          item.mediaFingerprint != scanned.mediaFingerprint) {
+        failedVideoIds.add(item.videoId);
+        continue;
+      }
+      prepared.add((
+        original: item,
+        clone: VideoItem.fromJson(item.toJson()),
+        scanned: scanned,
+      ));
+    }
+    if (prepared.isEmpty) {
+      return failedVideoIds;
+    }
+
+    final videosSnapshot = Map<String, VideoItem>.of(_store.videos);
+    final tagIdsSnapshot = {
+      for (final entry in _store.videoTagIdsByPathKey.entries)
+        entry.key: <String>{...entry.value},
+    };
+    final tagsSnapshot = Map<String, TagItem>.of(_store.tagsById);
+    final batch = _store._db.batch();
+    try {
+      for (final target in prepared) {
+        _relinkScannedVideo(
+          batch,
+          target.clone,
+          target.scanned,
+          TagRules.pathKey(target.scanned.path),
+        );
+      }
+      await batch.commit(noResult: true);
+    } catch (_) {
+      _store.videos
+        ..clear()
+        ..addAll(videosSnapshot);
+      _store.videoTagIdsByPathKey
+        ..clear()
+        ..addAll(tagIdsSnapshot);
+      _store.tagsById
+        ..clear()
+        ..addAll(tagsSnapshot);
+      failedVideoIds.addAll(prepared.map((target) => target.original.videoId));
+    }
+    return failedVideoIds;
+  }
+
+  /** 为新路径选择最具体的已配置 root；无匹配时使用文件所在目录。 */
+  String _rootForRelinkPath(String normalizedPath) {
+    final matchingRoots = _store.roots.where((root) {
+      final comparableRoot = Platform.isWindows ? root.toLowerCase() : root;
+      final comparablePath =
+          Platform.isWindows ? normalizedPath.toLowerCase() : normalizedPath;
+      return TagRules.pathKey(root) == TagRules.pathKey(normalizedPath) ||
+          p.isWithin(comparableRoot, comparablePath);
+    }).toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    return matchingRoots.isEmpty
+        ? p.dirname(normalizedPath)
+        : matchingRoots.first;
   }
 
   /**

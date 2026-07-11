@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.4` 已完成，`Architecture Baseline 0.5.5` 当前推进中。
+架构版本状态：`Architecture Baseline 0.5.5` 已完成，`Architecture Baseline 0.5.6` 当前推进中。
 
 最近一次验证：
 
@@ -17,6 +17,11 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 批量路径预览新增本地搜索，可匹配标题、旧/新路径和状态，不访问 SQLite 或重新扫描文件系统。
+- 新增可复制审计摘要，汇总预览分类、批事务成功/失败数量，并强制隐藏本地路径与文件标题。
+- ready Relink 改为单个 SQLite batch 原子提交；执行前统一重验 missing、路径占用、目标文件和 fingerprint，事务异常回滚内存索引。
+- 预览后失效或事务失败的 videoId 会保留在弹窗中，可恢复文件后定向重新预览并重试，不重复提交已成功项。
+- 隔离真实窗口 smoke 已确认旧/新前缀、预览搜索、复制审计、生成预览和应用按钮在 1280×720 桌面布局中无溢出；无预览时复制与应用保持禁用。
 - 完成 20 条隔离视频的真实 C:→E: 跨盘移动 soak：复制删除式移动、missing 标记、批量预览、Relink 和数据库重载后，videoId、manual 标签、收藏与播放进度全部保留。
 - Missing 管理页新增批量路径前缀替换预览：按目标不存在、路径冲突、指纹不一致和可更新分类；应用前二次确认，不移动或删除磁盘文件。
 - 新增按 videoId 合并的 `PlaybackSnapshotWriteQueue`：同一视频只保留最新待写快照，不同视频严格串行落库；离开播放器前 flush，写入失败提供稳定提示。

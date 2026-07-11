@@ -671,6 +671,13 @@ class LibraryStore {
     return LibraryScanCoordinator(this).relinkMissingVideo(item, newPath);
   }
 
+  /** 在单个 SQLite batch 中提交多条 Relink，并返回重新校验或事务失败的 videoId。 */
+  Future<Set<String>> relinkMissingVideosInBatch(
+    Map<VideoItem, String> targets,
+  ) {
+    return LibraryScanCoordinator(this).relinkMissingVideosInBatch(targets);
+  }
+
   static Future<String?> mediaFingerprintFor(String path) async {
     return LibraryScanService.mediaFingerprintFor(path);
   }
