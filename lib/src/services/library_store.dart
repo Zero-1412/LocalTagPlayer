@@ -658,6 +658,15 @@ class LibraryStore {
     return LibraryScanCoordinator(this).scan();
   }
 
+  /**
+   * 通过 fingerprint 校验把一个 missing 条目关联到用户选择的新文件。
+   *
+   * 稳定 videoId 以及 manual 标签、收藏、播放记录和进度保持不变；folder 标签随新路径更新。
+   */
+  Future<void> relinkMissingVideo(VideoItem item, String newPath) {
+    return LibraryScanCoordinator(this).relinkMissingVideo(item, newPath);
+  }
+
   static Future<String?> mediaFingerprintFor(String path) async {
     return LibraryScanService.mediaFingerprintFor(path);
   }

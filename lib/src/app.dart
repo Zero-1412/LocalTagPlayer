@@ -39,6 +39,7 @@ part 'platform/platform_interfaces.dart';
 part 'platform/desktop_file_location_service.dart';
 part 'pages/library_page_helpers.dart';
 part 'pages/library_page.dart';
+part 'pages/missing_relink_page.dart';
 part 'pages/tag_manager_page.dart';
 part 'pages/player_context_panel.dart';
 part 'pages/player_delete_dialog.dart';

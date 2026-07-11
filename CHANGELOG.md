@@ -1,5 +1,12 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-11 · Missing/Relink 用户闭环与播放器键盘基准
+
+- 标签编辑弹窗新增 autofocus、焦点遍历、Ctrl+Enter 保存和 Escape 取消。
+- 当前队列搜索增加 50,000 条性能回归基准，防止误接全库扫描或超线性退化。
+- 侧栏新增“缺失与重新关联”；单文件 relink 校验扩展名、路径占用和 fingerprint，失败不改变稳定条目。
+- 成功 relink 保留 videoId、manual 标签、收藏、播放记录和进度，并重新派生 folder 标签；未修改 SQLite Schema。
+
 ## 2026-07-11
 
 ### 标签播放器差异化第二阶段

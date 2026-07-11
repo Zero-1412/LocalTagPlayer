@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.1` 已完成，`Architecture Baseline 0.5.2` 当前推进中。
+架构版本状态：`Architecture Baseline 0.5.2` 已完成，`Architecture Baseline 0.5.3` 当前推进中。
 
 最近一次验证：
 
@@ -17,6 +17,10 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 播放器 manual 标签弹窗补齐桌面键盘链路：自动聚焦、Tab 遍历候选、Enter 添加、Ctrl+Enter 保存、Escape 取消。
+- 新增 50,000 条 filtered queue 最坏命中性能基准，本机约 24ms；只遍历播放器已持有队列。
+- 新增“缺失与重新关联”管理页；只有 fingerprint 一致时才更新 mutable path，并保留稳定 videoId、manual 标签、收藏与播放记录。
+- 隔离 profile 真实窗口 smoke 已确认侧栏入口、0 条空状态和返回媒体库路径；匹配/拒绝 relink 由真实临时文件与 SQLite focused test 覆盖。
 - 完成标签播放器差异化第二阶段：播放页“编辑标签”只维护 manual 来源，folder 标签以锁定路径来源展示；弹窗支持最近使用、收藏标签和即时搜索/新建。
 - 播放页新增“打开文件位置”，Windows/macOS/Linux 命令收口到 `DesktopFileLocationService` 平台边界；缺失文件显示稳定提示。
 - 右侧 filtered queue 新增轻量搜索定位，只遍历当前队列的标题、路径和标签，不访问或重新扫描全媒体库，也不替换来源队列。

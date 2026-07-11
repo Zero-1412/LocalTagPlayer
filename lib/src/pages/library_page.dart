@@ -1599,6 +1599,8 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     final favoriteCount =
         store.videos.values.where((item) => item.isFavorite).length;
+    final missingCount =
+        store.videos.values.where((item) => item.isMissing).length;
     Widget buildSidebar({required bool dense, double? width}) {
       return _Sidebar(
         roots: store.roots,
@@ -1612,6 +1614,7 @@ class _LibraryPageState extends State<LibraryPage> {
         selectedGroupTagIds: _selectedGroupTagIds,
         excludedTagIds: _excludedTagIds,
         favoriteCount: favoriteCount,
+        missingCount: missingCount,
         favoriteVideosSelected:
             _resultMode == _LibraryResultMode.favorites || _showFavoritesOnly,
         recentPlaybackSelected: _resultMode == _LibraryResultMode.recent,
@@ -1628,6 +1631,7 @@ class _LibraryPageState extends State<LibraryPage> {
         onOpenRecentPlayback: _showRecentPlaybackVideos,
         onOpenLocalLibraryRoot: _showLocalLibraryPath,
         onOpenDirectoryManager: _openDirectoryManager,
+        onOpenMissingRelink: _openMissingRelink,
         onOpenSettings: _openSettings,
         onChildTagToggle: (tag) {
           _mutateFilters(() {
@@ -2047,6 +2051,26 @@ class _LibraryPageState extends State<LibraryPage> {
         ],
       ),
     );
+  }
+
+  /**
+   * 打开缺失视频管理页；返回后只在确有 relink 时刷新派生缓存与标签计数。
+   */
+  Future<void> _openMissingRelink() async {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    final changed = await Navigator.of(context).push<bool>(
+      _smoothRoute<bool>(MissingRelinkPage(store: store)),
+    );
+    if (changed == true && mounted) {
+      setState(() {
+        _invalidateDerivedCaches();
+        _stableTagCounts = store.resultCounts(const FilterQuery());
+      });
+      _scheduleFilterRefresh(refreshCounts: true);
+    }
   }
 
   Future<bool?> _confirmRemoveRoot(String root) {

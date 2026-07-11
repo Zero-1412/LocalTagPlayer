@@ -560,6 +560,52 @@ void main() {
         contains(manual.id));
   });
 
+  test('manual missing relink preserves identity and rejects wrong content',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('manual_relink');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final original =
+        await _writeVideoPlaceholder(mediaRoot, ['Series', 'original.mp4']);
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, original.path);
+    final videoId = item.videoId;
+    final manual =
+        await store.createManualTag(name: 'manual-keep', groupId: 'manual');
+    await store.batchAddManualTag(manual, [item]);
+    await original.delete();
+    await store.scan();
+    expect(item.isMissing, isTrue);
+
+    final wrong = await _writeVideoPlaceholder(
+      Directory('${dataDir.path}${Platform.pathSeparator}outside'),
+      ['wrong.mp4'],
+    );
+    await wrong.writeAsBytes([9, 9, 9]);
+    await expectLater(
+      store.relinkMissingVideo(item, wrong.path),
+      throwsA(isA<StateError>()),
+    );
+    expect(item.isMissing, isTrue);
+
+    final replacement = await _writeVideoPlaceholder(
+      Directory('${dataDir.path}${Platform.pathSeparator}replacement'),
+      ['renamed.mp4'],
+    );
+    await store.relinkMissingVideo(item, replacement.path);
+    final relinked = _videoByPath(store, replacement.path);
+    expect(relinked.videoId, videoId);
+    expect(relinked.isMissing, isFalse);
+    expect(store.videoTagIdsByPathKey[TagRules.pathKey(replacement.path)],
+        contains(manual.id));
+  });
+
   test('ambiguous fingerprints never auto-relink user data', () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('ambiguous_relink');

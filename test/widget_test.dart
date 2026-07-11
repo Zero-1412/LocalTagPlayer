@@ -674,6 +674,27 @@ void main() {
     expect(playerQueueSearchIndex(items, 'missing', startIndex: 0), isNull);
   });
 
+  test('player queue search keeps a 50000 item baseline lightweight', () {
+    final items = List<VideoItem>.generate(
+      50000,
+      (index) => _testVideo(
+        path: 'C:/queue/video_$index.mp4',
+        title: index == 49999 ? 'Target Needle' : 'Video $index',
+      ),
+      growable: false,
+    );
+    final stopwatch = Stopwatch()..start();
+    final result = playerQueueSearchIndex(items, 'target needle');
+    stopwatch.stop();
+    debugPrint(
+      'PLAYER_QUEUE_BENCHMARK items=50000 elapsed_us=${stopwatch.elapsedMicroseconds}',
+    );
+
+    expect(result, 49999);
+    // 宽松阈值只防止误接全库扫描或明显的超线性退化，不绑定具体开发机性能。
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+  });
+
   test('file location service rejects missing files before platform launch',
       () async {
     final missing = '${Directory.systemTemp.path}${Platform.pathSeparator}'
@@ -723,6 +744,52 @@ void main() {
     expect(find.text('搜索结果'), findsOneWidget);
     expect(find.text('SuggestedTag'), findsOneWidget);
     expect(find.text('RecentTag'), findsNothing);
+  });
+
+  testWidgets('manual tag editor supports keyboard save', (tester) async {
+    Set<String>? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                onPressed: () async {
+                  saved = await showDialog<Set<String>>(
+                    context: context,
+                    builder: (_) => const TagEditorDialog(
+                      title: '键盘标签编辑',
+                      initialTags: <String>{},
+                      existingTags: <String>{'Existing'},
+                    ),
+                  );
+                },
+                child: const Text('打开'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Ctrl+Enter'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(
+      tester.widgetList<InputChip>(find.byType(InputChip)).any(
+            (chip) => (chip.label as Text).data == 'Existing',
+          ),
+      isTrue,
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(saved, contains('Existing'));
+    expect(find.text('键盘标签编辑'), findsNothing);
   });
 
   test('secondary discovery hides default album from secondary lists', () {

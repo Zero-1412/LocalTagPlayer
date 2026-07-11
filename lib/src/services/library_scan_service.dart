@@ -171,6 +171,27 @@ class LibraryScanService {
   }
 
   /**
+   * 为用户手动选择的单个视频生成与目录扫描一致的索引快照。
+   *
+   * [root] 是用于重新派生 folder 标签的上下文；文件不在已配置 root 中时，调用方可传入
+   * 文件所在目录，使 relink 仍能安全恢复稳定身份而不会伪造旧目录标签。
+   */
+  Future<LibraryScannedVideo?> inspectVideo({
+    required String path,
+    required String root,
+  }) async {
+    if (!TagRules.isVideoPath(path)) {
+      return null;
+    }
+    final file = File(path);
+    final stat = await _fileStat(file);
+    if (stat == null || stat.type != FileSystemEntityType.file) {
+      return null;
+    }
+    return _entryFor(root: root, file: file, stat: stat);
+  }
+
+  /**
    * 读取首尾各 4KB 生成轻量内容指纹。
    *
    * 自动 relink 仍要求两侧唯一，因此小样本碰撞只会拒绝自动合并，不会静默串档。

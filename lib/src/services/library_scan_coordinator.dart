@@ -20,6 +20,48 @@ class LibraryScanCoordinator {
   final LibraryStore _store;
 
   /**
+   * 将用户选择的新文件重新关联到一个 missing 条目。
+   *
+   * 只有新旧 fingerprint 完全一致且目标路径未被其它条目占用时才写入，避免手动误选造成
+   * manual 标签、收藏和播放记录串档；folder 标签按新位置重新派生。
+   */
+  Future<void> relinkMissingVideo(VideoItem missing, String newPath) async {
+    if (!missing.isMissing) {
+      throw StateError('只能重新关联具有稳定身份的缺失视频');
+    }
+    final newKey = TagRules.pathKey(newPath);
+    final occupied = _store.videos[newKey];
+    if (occupied != null && !identical(occupied, missing)) {
+      throw StateError('所选文件已经存在于媒体库');
+    }
+    final normalizedPath = p.normalize(newPath);
+    final matchingRoots = _store.roots.where((root) {
+      final comparableRoot = Platform.isWindows ? root.toLowerCase() : root;
+      final comparablePath =
+          Platform.isWindows ? normalizedPath.toLowerCase() : normalizedPath;
+      return TagRules.pathKey(root) == TagRules.pathKey(normalizedPath) ||
+          p.isWithin(comparableRoot, comparablePath);
+    }).toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    final root =
+        matchingRoots.isEmpty ? p.dirname(normalizedPath) : matchingRoots.first;
+    final scanned = await const LibraryScanService().inspectVideo(
+      path: normalizedPath,
+      root: root,
+    );
+    if (scanned == null) {
+      throw StateError('所选路径不是可读取的视频文件');
+    }
+    if (missing.mediaFingerprint == null ||
+        missing.mediaFingerprint != scanned.mediaFingerprint) {
+      throw StateError('文件指纹不一致，已拒绝重新关联以避免串档');
+    }
+    final batch = _store._db.batch();
+    _relinkScannedVideo(batch, missing, scanned, newKey);
+    await batch.commit(noResult: true);
+  }
+
+  /**
    * 扫描所有根目录，并把变化增量写入数据库。
    *
    * 返回新增视频数量；已有视频的索引刷新、缺失文件清理和 metadata 保存会在同一 batch 中提交。

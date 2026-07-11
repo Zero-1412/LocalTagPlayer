@@ -7,6 +7,13 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-11 Missing/Relink 用户界面第一阶段
+
+- 新增 missing 列表入口和单文件 relink；不立即删除缺失记录。
+- relink 仅接受可读取视频、未占用目标路径和完全一致 fingerprint，拒绝误选串档。
+- 成功后保持 videoId、manual 标签、收藏、播放记录与进度，只重新派生新路径的 folder 标签。
+- 本轮不修改 SQLite Schema；后续再做批量路径前缀替换与冲突预览。
+
 ## 2026-07-11 Stable Video Identity 第一阶段
 
 - SQLite 兼容增加 `videos.video_id`、missing 与播放进度字段；旧 path 主键记录启动时幂等回填，不清空用户数据库。

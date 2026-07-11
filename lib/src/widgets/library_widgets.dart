@@ -315,6 +315,7 @@ class _Sidebar extends StatelessWidget {
     required this.selectedGroupTagIds,
     required this.excludedTagIds,
     required this.favoriteCount,
+    required this.missingCount,
     required this.favoriteVideosSelected,
     required this.recentPlaybackSelected,
     required this.localLibrarySelected,
@@ -329,6 +330,7 @@ class _Sidebar extends StatelessWidget {
     required this.onOpenRecentPlayback,
     required this.onOpenLocalLibraryRoot,
     required this.onOpenDirectoryManager,
+    required this.onOpenMissingRelink,
     required this.onOpenSettings,
     required this.onChildTagToggle,
     required this.onClearChildTags,
@@ -348,6 +350,8 @@ class _Sidebar extends StatelessWidget {
   final Map<String, Set<String>> selectedGroupTagIds;
   final Set<String> excludedTagIds;
   final int favoriteCount;
+  /** 保留稳定身份但当前路径失效的视频数量。 */
+  final int missingCount;
   final bool favoriteVideosSelected;
   final bool recentPlaybackSelected;
   final bool localLibrarySelected;
@@ -362,6 +366,8 @@ class _Sidebar extends StatelessWidget {
   final VoidCallback onOpenRecentPlayback;
   final ValueChanged<String> onOpenLocalLibraryRoot;
   final VoidCallback onOpenDirectoryManager;
+  /** 打开缺失视频与重新关联管理页。 */
+  final VoidCallback onOpenMissingRelink;
   final VoidCallback onOpenSettings;
   final ValueChanged<String> onChildTagToggle;
   final VoidCallback onClearChildTags;
@@ -434,6 +440,15 @@ class _Sidebar extends StatelessWidget {
                           trailing:
                               roots.isEmpty ? null : roots.length.toString(),
                           onTap: onOpenDirectoryManager,
+                        ),
+                        _SidebarNavItem(
+                          icon: Icons.link_off_rounded,
+                          label: '缺失与重新关联',
+                          selected: false,
+                          trailing: missingCount == 0
+                              ? null
+                              : missingCount.toString(),
+                          onTap: onOpenMissingRelink,
                         ),
                         _SidebarNavItem(
                           icon: isScanning
@@ -2237,6 +2252,15 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
   final _controller = TextEditingController();
   String _query = '';
 
+  /** 统一保存入口，让按钮和 Ctrl+Enter 走同一条结果归一化链路。 */
+  void _save() {
+    _addTag(_controller.text);
+    Navigator.of(context).pop(_tags);
+  }
+
+  /** 关闭弹窗但不提交修改；Escape 与取消按钮共用此入口。 */
+  void _cancel() => Navigator.of(context).pop();
+
   @override
   void dispose() {
     _controller.dispose();
@@ -2300,99 +2324,109 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
     final suggestions = _availableTags(widget.existingTags);
     final recent = _availableTags(widget.recentTags, sort: false);
     final favorites = _availableTags(widget.favoriteTags);
-    return AlertDialog(
-      title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      content: SizedBox(
-        width: 520,
-        height: math.min(560, MediaQuery.sizeOf(context).height * 0.7),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.helperText != null) ...[
-              Text(
-                widget.helperText!,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-            ],
-            TextField(
-              controller: _controller,
-              decoration: const InputDecoration(
-                labelText: '搜索或新建 manual 标签',
-                prefixIcon: Icon(Icons.search_rounded),
-              ),
-              onChanged: (value) => setState(() => _query = value),
-              onSubmitted: _addTag,
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): _save,
+        const SingleActivator(LogicalKeyboardKey.escape): _cancel,
+      },
+      child: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: AlertDialog(
+          title:
+              Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          content: SizedBox(
+            width: 520,
+            height: math.min(560, MediaQuery.sizeOf(context).height * 0.7),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.helperText != null) ...[
+                  Text(
+                    widget.helperText!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: _controller,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: '搜索或新建 manual 标签',
+                    prefixIcon: Icon(Icons.search_rounded),
+                    helperText: 'Tab 浏览候选，Enter 添加，Ctrl+Enter 保存，Esc 取消',
+                  ),
+                  onChanged: (value) => setState(() => _query = value),
+                  onSubmitted: _addTag,
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final tag in (_tags.toList()..sort()))
-                          Tooltip(
-                            message: _isLocked(tag)
-                                ? '文件夹来源标签，只能通过目录结构修改'
-                                : '移除手动标签',
-                            child: InputChip(
-                              avatar: _isLocked(tag)
-                                  ? const Icon(Icons.lock_outline_rounded,
-                                      size: 15)
-                                  : null,
-                              label: Text(tag),
-                              onDeleted: _isLocked(tag)
-                                  ? null
-                                  : () => setState(() => _tags.remove(tag)),
-                            ),
-                          ),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final tag in (_tags.toList()..sort()))
+                              Tooltip(
+                                message: _isLocked(tag)
+                                    ? '文件夹来源标签，只能通过目录结构修改'
+                                    : '移除手动标签',
+                                child: InputChip(
+                                  avatar: _isLocked(tag)
+                                      ? const Icon(Icons.lock_outline_rounded,
+                                          size: 15)
+                                      : null,
+                                  label: Text(tag),
+                                  onDeleted: _isLocked(tag)
+                                      ? null
+                                      : () => setState(() => _tags.remove(tag)),
+                                ),
+                              ),
+                          ],
+                        ),
+                        _TagSuggestionSection(
+                          title: '最近使用',
+                          tags: recent.take(8).toList(),
+                          icon: Icons.history_rounded,
+                          onSelected: (tag) =>
+                              setState(() => _addNormalizedTag(tag)),
+                        ),
+                        _TagSuggestionSection(
+                          title: '收藏标签',
+                          tags: favorites.take(8).toList(),
+                          icon: Icons.star_rounded,
+                          onSelected: (tag) =>
+                              setState(() => _addNormalizedTag(tag)),
+                        ),
+                        _TagSuggestionSection(
+                          title:
+                              _query.trim().isEmpty ? '全部 manual 标签' : '搜索结果',
+                          tags: suggestions.take(24).toList(),
+                          icon: Icons.sell_outlined,
+                          onSelected: (tag) =>
+                              setState(() => _addNormalizedTag(tag)),
+                        ),
                       ],
                     ),
-                    _TagSuggestionSection(
-                      title: '最近使用',
-                      tags: recent.take(8).toList(),
-                      icon: Icons.history_rounded,
-                      onSelected: (tag) =>
-                          setState(() => _addNormalizedTag(tag)),
-                    ),
-                    _TagSuggestionSection(
-                      title: '收藏标签',
-                      tags: favorites.take(8).toList(),
-                      icon: Icons.star_rounded,
-                      onSelected: (tag) =>
-                          setState(() => _addNormalizedTag(tag)),
-                    ),
-                    _TagSuggestionSection(
-                      title: _query.trim().isEmpty ? '全部 manual 标签' : '搜索结果',
-                      tags: suggestions.take(24).toList(),
-                      icon: Icons.sell_outlined,
-                      onSelected: (tag) =>
-                          setState(() => _addNormalizedTag(tag)),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: _cancel,
+              child: const Text('\u53d6\u6d88'),
+            ),
+            FilledButton(
+              onPressed: _save,
+              child: const Text('\u4fdd\u5b58'),
             ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('\u53d6\u6d88'),
-        ),
-        FilledButton(
-          onPressed: () {
-            _addTag(_controller.text);
-            Navigator.of(context).pop(_tags);
-          },
-          child: const Text('\u4fdd\u5b58'),
-        ),
-      ],
     );
   }
 }
