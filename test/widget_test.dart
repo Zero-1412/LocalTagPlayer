@@ -427,9 +427,11 @@ void main() {
 
     expect(savedSettings, isNull);
     expect(
-      (tester.widget<DropdownButtonFormField<String>>(
-        find.byType(DropdownButtonFormField<String>),
-      ).key! as ValueKey<String>)
+      (tester
+              .widget<DropdownButtonFormField<String>>(
+                find.byType(DropdownButtonFormField<String>),
+              )
+              .key! as ValueKey<String>)
           .value,
       startsWith('auto-safe:'),
     );
@@ -444,9 +446,11 @@ void main() {
 
     expect(savedSettings?.hwdec, 'd3d11va');
     expect(
-      (tester.widget<DropdownButtonFormField<String>>(
-        find.byType(DropdownButtonFormField<String>),
-      ).key! as ValueKey<String>)
+      (tester
+              .widget<DropdownButtonFormField<String>>(
+                find.byType(DropdownButtonFormField<String>),
+              )
+              .key! as ValueKey<String>)
           .value,
       startsWith('d3d11va:'),
     );
@@ -465,9 +469,11 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
     expect(
-      (tester.widget<DropdownButtonFormField<String>>(
-        find.byType(DropdownButtonFormField<String>),
-      ).key! as ValueKey<String>)
+      (tester
+              .widget<DropdownButtonFormField<String>>(
+                find.byType(DropdownButtonFormField<String>),
+              )
+              .key! as ValueKey<String>)
           .value,
       startsWith('d3d11va:'),
     );
@@ -580,6 +586,51 @@ void main() {
     expect(playback.currentItem, second);
     expect(playback.nextIndex, isNull);
     expect(playback.queue, [first, second]);
+  });
+
+  test('player completion modes preserve filtered queue boundaries', () {
+    expect(
+      playerCompletionTargetIndex(
+        mode: PlayerPlaybackMode.sequential,
+        currentIndex: 2,
+        queueLength: 3,
+      ),
+      isNull,
+    );
+    expect(
+      playerCompletionTargetIndex(
+        mode: PlayerPlaybackMode.repeatOne,
+        currentIndex: 1,
+        queueLength: 3,
+      ),
+      1,
+    );
+    expect(
+      playerCompletionTargetIndex(
+        mode: PlayerPlaybackMode.repeatAll,
+        currentIndex: 2,
+        queueLength: 3,
+      ),
+      0,
+    );
+    expect(
+      playerCompletionTargetIndex(
+        mode: PlayerPlaybackMode.shuffle,
+        currentIndex: 1,
+        queueLength: 3,
+        randomValue: 0,
+      ),
+      0,
+    );
+    expect(
+      playerCompletionTargetIndex(
+        mode: PlayerPlaybackMode.shuffle,
+        currentIndex: 1,
+        queueLength: 3,
+        randomValue: 0.99,
+      ),
+      2,
+    );
   });
 
   test('player open request controller keeps latest request after failure', () {

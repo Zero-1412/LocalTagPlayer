@@ -102,6 +102,11 @@ class _PlayerPageState extends State<PlayerPage> {
   /** 恢复选择弹窗期间暂停进度写入，避免刚打开的 0 秒覆盖稳定进度。 */
   var _choosingPlaybackStart = false;
   var _queueEndReached = false;
+  var _playbackMode = PlayerPlaybackMode.sequential;
+  var _playbackRate = 1.0;
+  final _random = math.Random();
+
+  static const _playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
 
   static const double _queueItemExtent = 82;
 
@@ -284,13 +289,73 @@ class _PlayerPageState extends State<PlayerPage> {
         true,
       ),
     );
-    final nextIndex = _playback.nextIndex;
-    if (nextIndex == null) {
+    final targetIndex = playerCompletionTargetIndex(
+      mode: _playbackMode,
+      currentIndex: _index,
+      queueLength: _queue.length,
+      randomValue: _random.nextDouble(),
+    );
+    if (targetIndex == null) {
       setState(() => _queueEndReached = true);
       _showQueueEndMessage();
       return;
     }
-    _jumpTo(nextIndex, ignoreFollowUpSelection: true);
+    _jumpTo(targetIndex, ignoreFollowUpSelection: true);
+  }
+
+  /** 修改倍速并立即应用到当前播放内核；切换视频时 media_kit 会保留该状态。 */
+  void _setPlaybackRate(double rate) {
+    if (!_playbackRates.contains(rate)) {
+      return;
+    }
+    setState(() => _playbackRate = rate);
+    unawaited(_player.setRate(rate));
+  }
+
+  /** 按固定档位调整倍速，供菜单与键盘快捷键共用同一条状态链路。 */
+  void _stepPlaybackRate(int delta) {
+    final current = _playbackRates.indexOf(_playbackRate);
+    final next = (current + delta).clamp(0, _playbackRates.length - 1);
+    _setPlaybackRate(_playbackRates[next]);
+  }
+
+  /** 在全屏画面顶部提供最小队列语境和标签入口，不复制完整队列侧栏。 */
+  Widget _buildVideoControls(VideoState state) {
+    return Stack(
+      children: [
+        AdaptiveVideoControls(state),
+        if (isFullscreen(state.context))
+          Positioned(
+            left: 20,
+            right: 20,
+            top: 18,
+            child: SafeArea(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_index + 1} / ${_queue.length} · $_filterSummary',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        shadows: [Shadow(color: Colors.black, blurRadius: 8)],
+                      ),
+                    ),
+                  ),
+                  FilledButton.tonalIcon(
+                    key: const ValueKey('player.fullscreenEditTags'),
+                    onPressed: () => unawaited(_editManualTags()),
+                    icon: const Icon(Icons.sell_outlined, size: 18),
+                    label: const Text('编辑标签'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   /** 提示当前筛选队列已经播放完毕，避免用户误以为播放器卡住。 */
@@ -1015,6 +1080,23 @@ class _PlayerPageState extends State<PlayerPage> {
       return KeyEventResult.handled;
     }
     switch (event.logicalKey) {
+      case LogicalKeyboardKey.space:
+        unawaited(_player.playOrPause());
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyJ:
+        unawaited(
+            _player.seek(_player.state.position - const Duration(seconds: 5)));
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyL:
+        unawaited(
+            _player.seek(_player.state.position + const Duration(seconds: 5)));
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.bracketLeft:
+        _stepPlaybackRate(-1);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.bracketRight:
+        _stepPlaybackRate(1);
+        return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowUp:
         _moveQueueSelection(-1);
         return KeyEventResult.handled;
@@ -1137,6 +1219,44 @@ class _PlayerPageState extends State<PlayerPage> {
               ],
             ),
             actions: [
+              PopupMenuButton<PlayerPlaybackMode>(
+                key: const ValueKey('player.playbackMode'),
+                tooltip: _playbackMode.label,
+                initialValue: _playbackMode,
+                onSelected: (value) => setState(() {
+                  _playbackMode = value;
+                  _queueEndReached = false;
+                }),
+                itemBuilder: (_) => PlayerPlaybackMode.values
+                    .map((mode) => PopupMenuItem(
+                          value: mode,
+                          child: Row(children: [
+                            Icon(mode.icon, size: 18),
+                            const SizedBox(width: 10),
+                            Text(mode.label),
+                          ]),
+                        ))
+                    .toList(),
+                icon: Icon(_playbackMode.icon),
+              ),
+              PopupMenuButton<double>(
+                key: const ValueKey('player.playbackRate'),
+                tooltip: '播放速度',
+                initialValue: _playbackRate,
+                onSelected: _setPlaybackRate,
+                itemBuilder: (_) => _playbackRates
+                    .map((rate) => PopupMenuItem(
+                          value: rate,
+                          child: Text('${rate}x'),
+                        ))
+                    .toList(),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text('${_playbackRate}x'),
+                  ),
+                ),
+              ),
               IconButton(
                 tooltip: '播放诊断',
                 onPressed: _showDiagnosticsDialog,
@@ -1203,7 +1323,10 @@ class _PlayerPageState extends State<PlayerPage> {
                                 behavior: HitTestBehavior.opaque,
                                 onSecondaryTapDown: _showPlayerContextMenu,
                                 child: Center(
-                                  child: Video(controller: _controller),
+                                  child: Video(
+                                    controller: _controller,
+                                    controls: _buildVideoControls,
+                                  ),
                                 ),
                               ),
                             ),
