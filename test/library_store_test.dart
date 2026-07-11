@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/app.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -616,6 +617,89 @@ void main() {
     expect(relinked.isMissing, isFalse);
     expect(store.videoTagIdsByPathKey[TagRules.pathKey(replacement.path)],
         contains(manual.id));
+  });
+
+  test('cross-drive bulk relink soak preserves stable user data', () async {
+    if (!Platform.isWindows || !await Directory('E:\\').exists()) {
+      return;
+    }
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('cross_drive_soak');
+    final targetRoot = Directory(
+      'E:\\LocalTagPlayerSoak_${DateTime.now().microsecondsSinceEpoch}',
+    );
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+      if (await targetRoot.exists()) {
+        await targetRoot.delete(recursive: true);
+      }
+    });
+    final sourceRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}source');
+    final originals = <File>[];
+    for (var index = 0; index < 20; index++) {
+      originals.add(await _writeVideoPlaceholder(
+        sourceRoot,
+        ['Series', 'Album', 'soak_$index.mp4'],
+      ));
+    }
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(sourceRoot.path);
+    final manual =
+        await store.createManualTag(name: 'cross-drive', groupId: 'manual');
+    final originalIds = <String>{};
+    for (final item in store.videos.values) {
+      originalIds.add(item.videoId);
+      await store.batchAddManualTag(manual, [item]);
+      item
+        ..isFavorite = true
+        ..lastPlayedAt = DateTime.utc(2026, 7, 11, 14)
+        ..playbackPosition = const Duration(seconds: 12)
+        ..playbackDuration = const Duration(minutes: 2);
+      await store.upsertVideo(item);
+    }
+
+    for (final original in originals) {
+      final relative = p.relative(original.path, from: sourceRoot.path);
+      final target = File(p.join(targetRoot.path, relative));
+      await target.parent.create(recursive: true);
+      await original.copy(target.path);
+      await original.delete();
+    }
+    await store.scan();
+    expect(store.videos.values.every((item) => item.isMissing), isTrue);
+
+    final previews = await const BulkPathRelinkService().preview(
+      store: store,
+      oldPrefix: sourceRoot.path,
+      newPrefix: targetRoot.path,
+    );
+    expect(previews, hasLength(20));
+    expect(previews.every((entry) => entry.status == BulkRelinkStatus.ready),
+        isTrue);
+    expect(
+      await const BulkPathRelinkService().execute(
+        store: store,
+        previews: previews,
+        oldPrefix: sourceRoot.path,
+        newPrefix: targetRoot.path,
+      ),
+      20,
+    );
+
+    final reloaded = await _loadTrackedStore(stores);
+    expect(reloaded.videos.length, 20);
+    expect(reloaded.roots, [TagRules.normalizeRootPath(targetRoot.path)]);
+    expect(reloaded.videos.values.map((item) => item.videoId).toSet(),
+        originalIds);
+    for (final item in reloaded.videos.values) {
+      expect(item.isMissing, isFalse);
+      expect(item.isFavorite, isTrue);
+      expect(item.playbackPosition, const Duration(seconds: 12));
+      expect(reloaded.videoTagIdsByPathKey[TagRules.pathKey(item.path)],
+          contains(manual.id));
+    }
   });
 
   test('ambiguous fingerprints never auto-relink user data', () async {

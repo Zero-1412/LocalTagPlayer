@@ -337,6 +337,7 @@ List<VideoItem> recentPlaybackClearTargets(
 
 class _LibraryPageState extends State<LibraryPage> {
   LibraryStore? _store;
+  PlaybackSnapshotWriteQueue? _playbackSnapshotQueue;
   ThumbnailService? _thumbnailService;
   PlaybackSettings _playbackSettings = PlaybackSettings.defaults;
   final _filterStateSource = FilterStateSource();
@@ -431,6 +432,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   @override
   void dispose() {
+    unawaited(_playbackSnapshotQueue?.dispose());
     _searchController.removeListener(_handleSearchControllerChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -490,8 +492,20 @@ class _LibraryPageState extends State<LibraryPage> {
     final playbackSettings = await PlaybackSettings.load();
     final sortPreferences = await LibrarySortPreferences.load();
     if (!mounted) {
+      await store.close();
       return;
     }
+    _playbackSnapshotQueue = PlaybackSnapshotWriteQueue(
+      writer: (snapshot) async {
+        snapshot.item
+          ..playbackPosition = snapshot.position
+          ..playbackDuration = snapshot.duration
+          ..playbackCompleted = snapshot.completed
+          ..playbackPositionUpdatedAt = snapshot.updatedAt
+          ..lastPlayedAt = snapshot.updatedAt;
+        await store.upsertVideo(snapshot.item);
+      },
+    );
     setState(() {
       _sortMode = sortPreferences.mode;
       _sortDirection = sortPreferences.direction;
@@ -2289,6 +2303,13 @@ class _LibraryPageState extends State<LibraryPage> {
         ),
       );
     } finally {
+      await _playbackSnapshotQueue?.flush();
+      final snapshotError = _playbackSnapshotQueue?.takeLastError();
+      if (snapshotError != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('部分播放进度保存失败，请稍后重试')),
+        );
+      }
       if (!wasPaused) {
         thumbnailService.resume();
       }
@@ -2321,9 +2342,16 @@ class _LibraryPageState extends State<LibraryPage> {
       item.playbackDuration = duration;
       item.playbackCompleted = completed;
     }
-    item.playbackPositionUpdatedAt = DateTime.now();
-    item.lastPlayedAt = item.playbackPositionUpdatedAt;
-    await _store?.upsertVideo(item);
+    final updatedAt = DateTime.now();
+    item.playbackPositionUpdatedAt = updatedAt;
+    item.lastPlayedAt = updatedAt;
+    _playbackSnapshotQueue?.enqueue(PlaybackSnapshot(
+      item: item,
+      position: item.playbackPosition,
+      duration: item.playbackDuration,
+      completed: item.playbackCompleted,
+      updatedAt: updatedAt,
+    ));
     if (mounted) {
       _markPlaybackTimestampChanged(item);
     }

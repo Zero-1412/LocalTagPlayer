@@ -31,9 +31,9 @@ lib/src/widgets
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.3`
+已完成基线：`Architecture Baseline 0.5.4`
 
-当前推进中：`Architecture Baseline 0.5.4`
+当前推进中：`Architecture Baseline 0.5.5`
 
 变更点：
 
@@ -51,6 +51,7 @@ lib/src/widgets
 - `0.5.1`：强化标签播放器闭环。播放器 manual 标签编辑支持最近使用、收藏标签和搜索；队列搜索严格限定当前 filtered queue；收藏和打标只做单条写入并延后无计数刷新。新增 `DesktopFileLocationService`，把 Windows/macOS/Linux 文件管理器定位命令留在 platform 边界。
 - `0.5.2`：开放 Missing/Relink 首个用户闭环。`MissingRelinkPage` 展示 missing 稳定条目；手动 relink 复用单文件扫描快照和标签同步事务，只在 fingerprint 一致且路径未占用时更新 mutable path。播放器标签弹窗补齐键盘链路，并用 50,000 条队列基准保护轻量搜索边界。
 - `0.5.3`：播放状态完整绑定 stable videoId。`videos` 幂等增加总时长与完成态，播放器低频/切换/退出/EOF 统一保存稳定播放快照；继续观看只消费有效未完成进度。missing 队列项停止失效路径 I/O，并从播放器失败面板复用 fingerprint Relink。
+- `0.5.4`：增加批量路径前缀替换的只读预览与安全执行，所有 ready 项仍复用单文件 fingerprint Relink；新增按 videoId 合并、全局串行的播放快照写入队列，并在播放器返回前 flush。真实 C:→E: 20 条跨盘 soak 覆盖移动、重载与用户数据保留。
 
 协作要求：
 

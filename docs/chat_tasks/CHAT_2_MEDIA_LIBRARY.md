@@ -7,6 +7,12 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-11 跨盘批量路径替换
+
+- `BulkPathRelinkService` 对 missing 条目执行旧/新前缀映射，只读检查目标存在、路径占用和 fingerprint。
+- 批量执行仅消费 ready 预览，逐条复用安全 relink；旧前缀精确匹配媒体 root 时同步更新扫描 root；不修改 Schema、不移动文件、不删除 missing 记录。
+- 20 条真实 C:→E: soak 覆盖重载后的 videoId、manual 标签、收藏和播放进度保留。
+
 ## 2026-07-11 稳定播放状态迁移
 
 - `videos` 幂等增加总时长与完成态字段；位置、时长、完成态和更新时间都随稳定 videoId 保留。

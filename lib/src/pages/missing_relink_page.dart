@@ -101,6 +101,27 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
           icon: const Icon(Icons.arrow_back_rounded),
         ),
         title: Text('缺失视频 · ${missing.length}'),
+        actions: [
+          TextButton.icon(
+            key: const ValueKey('missingRelink.bulkPreview'),
+            onPressed: missing.isEmpty
+                ? null
+                : () async {
+                    final count = await showDialog<int>(
+                      context: context,
+                      builder: (_) => _BulkPathRelinkDialog(
+                        store: widget.store,
+                      ),
+                    );
+                    if (count != null && count > 0 && mounted) {
+                      setState(() => _changed = true);
+                    }
+                  },
+            icon: const Icon(Icons.drive_file_move_outline),
+            label: const Text('批量路径替换'),
+          ),
+          const SizedBox(width: 12),
+        ],
       ),
       body: missing.isEmpty
           ? const Center(
@@ -147,3 +168,192 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
     );
   }
 }
+
+/** 批量路径替换的只读预览与二次确认弹窗。 */
+class _BulkPathRelinkDialog extends StatefulWidget {
+  const _BulkPathRelinkDialog({required this.store});
+
+  final LibraryStore store;
+
+  @override
+  State<_BulkPathRelinkDialog> createState() => _BulkPathRelinkDialogState();
+}
+
+class _BulkPathRelinkDialogState extends State<_BulkPathRelinkDialog> {
+  final _oldPrefixController = TextEditingController();
+  final _newPrefixController = TextEditingController();
+  final _service = const BulkPathRelinkService();
+  List<BulkPathRelinkPreview> _previews = const <BulkPathRelinkPreview>[];
+  var _loading = false;
+  var _executing = false;
+
+  @override
+  void dispose() {
+    _oldPrefixController.dispose();
+    _newPrefixController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickNewPrefix() async {
+    final path = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: '选择迁移后的新目录',
+    );
+    if (path != null && mounted) {
+      _newPrefixController.text = path;
+    }
+  }
+
+  Future<void> _preview() async {
+    setState(() => _loading = true);
+    final result = await _service.preview(
+      store: widget.store,
+      oldPrefix: _oldPrefixController.text,
+      newPrefix: _newPrefixController.text,
+    );
+    if (mounted) {
+      setState(() {
+        _previews = result;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _execute() async {
+    final ready = _previews
+        .where((preview) => preview.status == BulkRelinkStatus.ready)
+        .length;
+    if (ready == 0) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认批量重新关联'),
+        content: Text('将更新 $ready 条视频的 mutable path。文件本身不会被移动或删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认更新'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    setState(() => _executing = true);
+    final count = await _service.execute(
+      store: widget.store,
+      previews: _previews,
+      oldPrefix: _oldPrefixController.text,
+      newPrefix: _newPrefixController.text,
+    );
+    if (mounted) {
+      Navigator.of(context).pop(count);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = _previews
+        .where((preview) => preview.status == BulkRelinkStatus.ready)
+        .length;
+    return AlertDialog(
+      title: const Text('批量路径替换预览'),
+      content: SizedBox(
+        width: 720,
+        height: 520,
+        child: Column(
+          children: [
+            TextField(
+              key: const ValueKey('missingRelink.oldPrefix'),
+              controller: _oldPrefixController,
+              decoration: const InputDecoration(
+                labelText: '旧路径前缀',
+                hintText: r'X:\test-media',
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const ValueKey('missingRelink.newPrefix'),
+              controller: _newPrefixController,
+              decoration: InputDecoration(
+                labelText: '新路径前缀',
+                hintText: r'E:\video',
+                suffixIcon: IconButton(
+                  tooltip: '选择新目录',
+                  onPressed: _pickNewPrefix,
+                  icon: const Icon(Icons.folder_open_rounded),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _previews.isEmpty
+                    ? '输入前缀后先生成只读预览'
+                    : '共 ${_previews.length} 条，$ready 条可安全更新',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView.builder(
+                      itemCount: _previews.length,
+                      itemBuilder: (context, index) {
+                        final preview = _previews[index];
+                        return ListTile(
+                          dense: true,
+                          leading: Icon(_bulkRelinkStatusIcon(preview.status)),
+                          title: Text(preview.item.path),
+                          subtitle: Text(preview.newPath),
+                          trailing:
+                              Text(_bulkRelinkStatusLabel(preview.status)),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _executing ? null : () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+        OutlinedButton.icon(
+          key: const ValueKey('missingRelink.generatePreview'),
+          onPressed: _loading || _executing ? null : _preview,
+          icon: const Icon(Icons.preview_outlined),
+          label: const Text('生成预览'),
+        ),
+        FilledButton.icon(
+          key: const ValueKey('missingRelink.executePreview'),
+          onPressed: ready == 0 || _executing ? null : _execute,
+          icon: const Icon(Icons.link_rounded),
+          label: Text(_executing ? '更新中' : '应用 $ready 条'),
+        ),
+      ],
+    );
+  }
+}
+
+String _bulkRelinkStatusLabel(BulkRelinkStatus status) => switch (status) {
+      BulkRelinkStatus.ready => '可更新',
+      BulkRelinkStatus.targetMissing => '目标不存在',
+      BulkRelinkStatus.pathConflict => '路径冲突',
+      BulkRelinkStatus.fingerprintMismatch => '指纹不一致',
+    };
+
+IconData _bulkRelinkStatusIcon(BulkRelinkStatus status) => switch (status) {
+      BulkRelinkStatus.ready => Icons.check_circle_outline_rounded,
+      BulkRelinkStatus.targetMissing => Icons.help_outline_rounded,
+      BulkRelinkStatus.pathConflict => Icons.warning_amber_rounded,
+      BulkRelinkStatus.fingerprintMismatch => Icons.fingerprint_rounded,
+    };

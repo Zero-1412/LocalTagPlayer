@@ -1,5 +1,12 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-11 · 跨盘迁移、批量路径预览与快照串行队列
+
+- Missing 管理页新增旧/新路径前缀预览，分类显示可更新、目标不存在、路径冲突和指纹不一致。
+- 批量应用前二次确认，只更新 mutable path；每条执行仍复用 fingerprint 校验，不移动或删除文件；旧前缀精确等于媒体 root 时同步迁移扫描 root。
+- 新增 `PlaybackSnapshotWriteQueue`，按 videoId 合并待写状态并严格串行 upsert；播放器退出前 flush，错误可见。
+- 新增 20 条真实 C:→E: 跨盘 soak，确认重载后稳定身份、manual 标签、收藏和播放进度完整保留。
+
 ## 2026-07-11 · Stable Video Identity 播放状态第三阶段
 
 - SQLite `videos` 幂等增加 `playback_duration_ms` 与 `playback_completed`，和既有位置字段一起绑定稳定 videoId。

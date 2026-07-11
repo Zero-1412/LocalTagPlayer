@@ -30,6 +30,8 @@ part 'services/library_tag_persistence.dart';
 part 'services/library_tag_maintenance.dart';
 part 'services/library_video_persistence.dart';
 part 'services/library_store.dart';
+part 'services/playback_snapshot_write_queue.dart';
+part 'services/bulk_path_relink_service.dart';
 part 'services/library_scan_service.dart';
 part 'services/tag_query_service.dart';
 part 'services/external_media_tools.dart';

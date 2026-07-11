@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -698,6 +700,45 @@ void main() {
       ..playbackCompleted = false
       ..playbackPosition = const Duration(seconds: 119);
     expect(videoIsContinueWatching(item), isFalse);
+  });
+
+  test('playback snapshot queue coalesces by videoId and writes serially',
+      () async {
+    final firstWriteGate = Completer<void>();
+    final writes = <Duration>[];
+    var activeWriters = 0;
+    var maxActiveWriters = 0;
+    final queue = PlaybackSnapshotWriteQueue(
+      writer: (snapshot) async {
+        activeWriters++;
+        maxActiveWriters = math.max(maxActiveWriters, activeWriters);
+        writes.add(snapshot.position);
+        if (writes.length == 1) {
+          await firstWriteGate.future;
+        }
+        activeWriters--;
+      },
+    );
+    final item = _testVideo(path: 'C:/queue/snapshot.mp4', title: 'Snapshot');
+    PlaybackSnapshot snapshot(int seconds) => PlaybackSnapshot(
+          item: item,
+          position: Duration(seconds: seconds),
+          duration: const Duration(minutes: 2),
+          completed: false,
+          updatedAt: DateTime.utc(2026, 7, 11, 14, 30, seconds),
+        );
+
+    queue.enqueue(snapshot(1));
+    await Future<void>.delayed(Duration.zero);
+    queue
+      ..enqueue(snapshot(2))
+      ..enqueue(snapshot(3));
+    firstWriteGate.complete();
+    await queue.flush();
+
+    expect(writes, [const Duration(seconds: 1), const Duration(seconds: 3)]);
+    expect(maxActiveWriters, 1);
+    await queue.dispose();
   });
 
   testWidgets('resume dialog offers continue and restart choices',

@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.3` 已完成，`Architecture Baseline 0.5.4` 当前推进中。
+架构版本状态：`Architecture Baseline 0.5.4` 已完成，`Architecture Baseline 0.5.5` 当前推进中。
 
 最近一次验证：
 
@@ -17,6 +17,10 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 完成 20 条隔离视频的真实 C:→E: 跨盘移动 soak：复制删除式移动、missing 标记、批量预览、Relink 和数据库重载后，videoId、manual 标签、收藏与播放进度全部保留。
+- Missing 管理页新增批量路径前缀替换预览：按目标不存在、路径冲突、指纹不一致和可更新分类；应用前二次确认，不移动或删除磁盘文件。
+- 新增按 videoId 合并的 `PlaybackSnapshotWriteQueue`：同一视频只保留最新待写快照，不同视频严格串行落库；离开播放器前 flush，写入失败提供稳定提示。
+- 隔离真实窗口 smoke 已确认 missing 列表、批量替换入口、旧/新前缀字段、只读预览区和禁用的零项应用状态。
 - Stable Video Identity 第三阶段完成：播放位置、总时长和完成态与稳定 videoId 同行保存；旧库幂等增加默认字段，不使用 mutable path 建立临时记录。
 - 再次打开有效未完成视频时提供“从上次位置继续 / 从头播放”；恢复选择期间暂停写入，避免刚打开的 0 秒覆盖旧进度。
 - “最近播放”升级为“继续观看”，只展示至少观看 3 秒且未进入动态完成阈值的条目，卡片/列表展示稳定进度条。
