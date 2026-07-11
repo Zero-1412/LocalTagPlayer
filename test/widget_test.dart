@@ -660,6 +660,75 @@ void main() {
       ),
       isNull,
     );
+    expect(
+      playerResumePosition(
+        saved: const Duration(seconds: 18),
+        duration: const Duration(seconds: 20),
+      ),
+      isNull,
+    );
+    expect(
+      playerResumePosition(
+        saved: const Duration(seconds: 2),
+        duration: const Duration(seconds: 20),
+      ),
+      isNull,
+    );
+    expect(
+      playerResumePosition(
+        saved: const Duration(seconds: 20),
+        duration: const Duration(minutes: 2),
+        completed: true,
+      ),
+      isNull,
+    );
+  });
+
+  test('continue watching requires meaningful unfinished stable progress', () {
+    final item = _testVideo(path: 'C:/queue/continue.mp4', title: 'Continue')
+      ..lastPlayedAt = DateTime.utc(2026, 7, 11)
+      ..playbackPosition = const Duration(seconds: 30)
+      ..playbackDuration = const Duration(minutes: 2);
+    expect(videoIsContinueWatching(item), isTrue);
+    expect(videoPlaybackProgressFraction(item), closeTo(0.25, 0.001));
+
+    item.playbackCompleted = true;
+    expect(videoIsContinueWatching(item), isFalse);
+    item
+      ..playbackCompleted = false
+      ..playbackPosition = const Duration(seconds: 119);
+    expect(videoIsContinueWatching(item), isFalse);
+  });
+
+  testWidgets('resume dialog offers continue and restart choices',
+      (tester) async {
+    PlayerResumeChoice? choice;
+    final item = _testVideo(path: 'C:/queue/resume.mp4', title: 'Resume');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () async {
+              choice = await showPlayerResumeDialog(
+                context,
+                item: item,
+                position: const Duration(seconds: 37),
+                duration: const Duration(minutes: 2),
+              );
+            },
+            child: const Text('打开恢复选择'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开恢复选择'));
+    await tester.pumpAndSettle();
+    expect(find.text('从上次位置继续'), findsOneWidget);
+    expect(find.text('从头播放'), findsOneWidget);
+    expect(find.textContaining('00:37 / 02:00'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('player.resume.restart')));
+    await tester.pumpAndSettle();
+    expect(choice, PlayerResumeChoice.restart);
   });
 
   test('player queue search stays within the provided queue', () {

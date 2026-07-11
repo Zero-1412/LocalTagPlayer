@@ -123,6 +123,8 @@ class LibraryStore {
         last_played_at TEXT,
         is_missing INTEGER NOT NULL DEFAULT 0,
         playback_position_ms INTEGER NOT NULL DEFAULT 0,
+        playback_duration_ms INTEGER NOT NULL DEFAULT 0,
+        playback_completed INTEGER NOT NULL DEFAULT 0,
         playback_position_updated_at TEXT
       )
     ''');
@@ -234,6 +236,8 @@ class LibraryStore {
     await addColumn('video_id', 'TEXT');
     await addColumn('is_missing', 'INTEGER NOT NULL DEFAULT 0');
     await addColumn('playback_position_ms', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn('playback_duration_ms', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn('playback_completed', 'INTEGER NOT NULL DEFAULT 0');
     await addColumn('playback_position_updated_at', 'TEXT');
   }
 

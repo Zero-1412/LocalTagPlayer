@@ -15,6 +15,7 @@ class _PlayerOpenFailurePanel extends StatelessWidget {
     required this.onRetry,
     required this.onSkip,
     required this.onDiagnostics,
+    this.onRelink,
   });
 
   /** 不包含文件路径和异常正文的安全错误类型。 */
@@ -31,6 +32,9 @@ class _PlayerOpenFailurePanel extends StatelessWidget {
 
   /** 打开播放诊断详情。 */
   final VoidCallback onDiagnostics;
+
+  /** missing 条目可用的重新关联入口；普通坏文件保持为空。 */
+  final VoidCallback? onRelink;
 
   @override
   Widget build(BuildContext context) {
@@ -65,8 +69,10 @@ class _PlayerOpenFailurePanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  '可能是编码不支持、文件损坏或文件暂时不可访问。',
+                Text(
+                  onRelink == null
+                      ? '可能是编码不支持、文件损坏或文件暂时不可访问。'
+                      : '原路径已经失效，稳定记录、标签、收藏和播放进度仍已保留。',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Color(0xffc4cede)),
                 ),
@@ -85,12 +91,20 @@ class _PlayerOpenFailurePanel extends StatelessWidget {
                   runSpacing: 8,
                   alignment: WrapAlignment.center,
                   children: [
-                    FilledButton.icon(
-                      key: const ValueKey('player.openFailure.retry'),
-                      onPressed: onRetry,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('重试'),
-                    ),
+                    if (onRelink != null)
+                      FilledButton.icon(
+                        key: const ValueKey('player.openFailure.relink'),
+                        onPressed: onRelink,
+                        icon: const Icon(Icons.find_in_page_outlined),
+                        label: const Text('重新关联'),
+                      ),
+                    if (onRelink == null)
+                      FilledButton.icon(
+                        key: const ValueKey('player.openFailure.retry'),
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('重试'),
+                      ),
                     OutlinedButton.icon(
                       key: const ValueKey('player.openFailure.skip'),
                       onPressed: canSkip ? onSkip : null,

@@ -23,6 +23,8 @@ class VideoItem {
     this.lastPlayedAt,
     this.isMissing = false,
     this.playbackPosition = Duration.zero,
+    this.playbackDuration = Duration.zero,
+    this.playbackCompleted = false,
     this.playbackPositionUpdatedAt,
   })  : videoId = videoId ?? _newVideoId(),
         childTags = childTags ?? <String, Set<String>>{};
@@ -53,6 +55,10 @@ class VideoItem {
   bool isMissing;
   /** 与稳定 videoId 同行保存的最近播放位置。 */
   Duration playbackPosition;
+  /** 最近一次可用的媒体总时长，与稳定 videoId 同行保存。 */
+  Duration playbackDuration;
+  /** 最近一次播放是否已经进入动态完成阈值。 */
+  bool playbackCompleted;
   /** 最近一次写入播放位置的时间。 */
   DateTime? playbackPositionUpdatedAt;
 
@@ -77,6 +83,8 @@ class VideoItem {
         'lastPlayedAt': lastPlayedAt?.toIso8601String(),
         'isMissing': isMissing,
         'playbackPositionMs': playbackPosition.inMilliseconds,
+        'playbackDurationMs': playbackDuration.inMilliseconds,
+        'playbackCompleted': playbackCompleted,
         'playbackPositionUpdatedAt':
             playbackPositionUpdatedAt?.toIso8601String(),
       };
@@ -110,6 +118,9 @@ class VideoItem {
       isMissing: json['isMissing'] as bool? ?? false,
       playbackPosition:
           Duration(milliseconds: json['playbackPositionMs'] as int? ?? 0),
+      playbackDuration:
+          Duration(milliseconds: json['playbackDurationMs'] as int? ?? 0),
+      playbackCompleted: json['playbackCompleted'] as bool? ?? false,
       playbackPositionUpdatedAt:
           DateTime.tryParse(json['playbackPositionUpdatedAt'] as String? ?? ''),
     );

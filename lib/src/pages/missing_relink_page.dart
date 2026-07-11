@@ -3,6 +3,44 @@ part of '../app.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
+ * 选择并安全重新关联单个 missing 视频；播放器和管理页共用同一文件类型与校验入口。
+ */
+Future<bool> pickAndRelinkMissingVideo(
+  BuildContext context, {
+  required LibraryStore store,
+  required VideoItem item,
+}) async {
+  final result = await FilePicker.platform.pickFiles(
+    dialogTitle: '选择与 ${item.title} 对应的新文件',
+    type: FileType.custom,
+    allowedExtensions: TagRules.videoExtensions
+        .map((extension) => extension.substring(1))
+        .toList(),
+    allowMultiple: false,
+  );
+  final path = result?.files.single.path;
+  if (path == null) {
+    return false;
+  }
+  try {
+    await store.relinkMissingVideo(item, path);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已重新关联：${item.title}')),
+      );
+    }
+    return true;
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error')),
+      );
+    }
+    return false;
+  }
+}
+
+/**
  * 缺失视频管理页：展示保留的稳定条目，并提供经过 fingerprint 校验的单文件 relink。
  */
 class MissingRelinkPage extends StatefulWidget {
@@ -27,34 +65,19 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
 
   /** 选择新文件并请求 store 做稳定身份与 fingerprint 校验。 */
   Future<void> _relink(VideoItem item) async {
-    final result = await FilePicker.platform.pickFiles(
-      dialogTitle: '选择与 ${item.title} 对应的新文件',
-      type: FileType.custom,
-      allowedExtensions: TagRules.videoExtensions
-          .map((extension) => extension.substring(1))
-          .toList(),
-      allowMultiple: false,
-    );
-    final path = result?.files.single.path;
-    if (path == null || !mounted) {
-      return;
-    }
     final videoId = item.videoId;
     setState(() => _relinkingVideoIds.add(videoId));
     try {
-      await widget.store.relinkMissingVideo(item, path);
+      final changed = await pickAndRelinkMissingVideo(
+        context,
+        store: widget.store,
+        item: item,
+      );
       if (!mounted) {
         return;
       }
-      setState(() => _changed = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已重新关联：${item.title}')),
-      );
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$error')),
-        );
+      if (changed) {
+        setState(() => _changed = true);
       }
     } finally {
       if (mounted) {
@@ -93,7 +116,7 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final item = missing[index];
-                  final videoId = item.videoId;
+                final videoId = item.videoId;
                 final busy = _relinkingVideoIds.contains(videoId);
                 return Card(
                   child: ListTile(

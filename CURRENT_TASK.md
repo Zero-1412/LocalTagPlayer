@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.2` 已完成，`Architecture Baseline 0.5.3` 当前推进中。
+架构版本状态：`Architecture Baseline 0.5.3` 已完成，`Architecture Baseline 0.5.4` 当前推进中。
 
 最近一次验证：
 
@@ -17,6 +17,12 @@ flutter build windows --debug
 
 ## 最近完成
 
+- Stable Video Identity 第三阶段完成：播放位置、总时长和完成态与稳定 videoId 同行保存；旧库幂等增加默认字段，不使用 mutable path 建立临时记录。
+- 再次打开有效未完成视频时提供“从上次位置继续 / 从头播放”；恢复选择期间暂停写入，避免刚打开的 0 秒覆盖旧进度。
+- “最近播放”升级为“继续观看”，只展示至少观看 3 秒且未进入动态完成阈值的条目，卡片/列表展示稳定进度条。
+- 短视频完成阈值为 1-2 秒，长视频采用约 5% 且封顶 30 秒；完成或接近结尾的记录不反复恢复。
+- filtered queue 中 missing 条目显示明确“缺失 / 路径失效”状态，不派发失效路径 I/O；打开后可直接 Relink，记录不会删除。
+- 隔离 profile 真实 30 秒 H264/AAC smoke 已确认“继续观看”入口与进度条、`00:08 / 00:30` 恢复选择，以及继续后播放器从 8 秒位置起播。
 - 播放器 manual 标签弹窗补齐桌面键盘链路：自动聚焦、Tab 遍历候选、Enter 添加、Ctrl+Enter 保存、Escape 取消。
 - 新增 50,000 条 filtered queue 最坏命中性能基准，本机约 24ms；只遍历播放器已持有队列。
 - 新增“缺失与重新关联”管理页；只有 fingerprint 一致时才更新 mutable path，并保留稳定 videoId、manual 标签、收藏与播放记录。

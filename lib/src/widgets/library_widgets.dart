@@ -417,7 +417,7 @@ class _Sidebar extends StatelessWidget {
                         ),
                         _SidebarNavItem(
                           icon: Icons.history_rounded,
-                          label: '\u6700\u8fd1\u64ad\u653e',
+                          label: '继续观看',
                           selected: recentPlaybackSelected,
                           trailing: null,
                           onTap: onOpenRecentPlayback,
@@ -1962,7 +1962,7 @@ class _TopViewButton extends StatelessWidget {
 }
 
 /**
- * 最近播放结果视图。
+ * 继续观看结果视图。
  *
  * 这里的删除只清理播放记录，不删除视频文件；选择状态由 LibraryPage 保存，
  * 避免滚动重建时丢失用户正在批量清理的选择。
@@ -2135,13 +2135,25 @@ class _RecentPlaybackRow extends StatelessWidget {
       children: [
         Checkbox(value: selected, onChanged: (_) => onToggleSelected()),
         Expanded(
-          child: _InteractiveVideoListRow(
-            item: item,
-            thumbnailService: thumbnailService,
-            playbackSettings: playbackSettings,
-            onOpen: onOpen,
-            onEditTags: onEditTags,
-            onToggleFavorite: onToggleFavorite,
+          child: Column(
+            children: [
+              Expanded(
+                child: _InteractiveVideoListRow(
+                  item: item,
+                  thumbnailService: thumbnailService,
+                  playbackSettings: playbackSettings,
+                  onOpen: onOpen,
+                  onEditTags: onEditTags,
+                  onToggleFavorite: onToggleFavorite,
+                ),
+              ),
+              LinearProgressIndicator(
+                value: videoPlaybackProgressFraction(item),
+                minHeight: 3,
+                color: _appAccentViolet,
+                backgroundColor: _appBorder,
+              ),
+            ],
           ),
         ),
         IconButton(
@@ -2194,6 +2206,18 @@ class _RecentPlaybackCard extends StatelessWidget {
           left: 8,
           child:
               Checkbox(value: selected, onChanged: (_) => onToggleSelected()),
+        ),
+        Positioned(
+          left: 8,
+          right: 8,
+          bottom: 6,
+          child: LinearProgressIndicator(
+            value: videoPlaybackProgressFraction(item),
+            minHeight: 4,
+            borderRadius: BorderRadius.circular(99),
+            color: _appAccentViolet,
+            backgroundColor: const Color(0x55000000),
+          ),
         ),
         Positioned(
           top: 8,

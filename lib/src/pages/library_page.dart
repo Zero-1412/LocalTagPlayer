@@ -288,7 +288,7 @@ enum _LibraryResultMode {
   /** 全量媒体库结果，受搜索、标签和收藏筛选影响。 */
   library,
 
-  /** 最近播放结果，只展示有播放记录的视频。 */
+  /** 继续观看结果，只展示具有有效未完成进度的视频。 */
   recent,
 
   /** 本地收藏结果，只展示用户收藏的视频。 */
@@ -376,6 +376,8 @@ class _LibraryPageState extends State<LibraryPage> {
 
   /** 播放器内单条修改延后到返回媒体库时刷新可见结果，不刷新全库计数。 */
   var _playerScopedLibraryDataChanged = false;
+  /** 播放器内 relink 会改变 folder 标签，需要在返回后低频刷新标签计数。 */
+  var _playerScopedNeedsCountRefresh = false;
 
   var _isRefreshingVideos = false;
 
@@ -875,7 +877,7 @@ class _LibraryPageState extends State<LibraryPage> {
   /**
    * 清理最近播放记录。
    *
-   * 该动作只清空 lastPlayedAt，不删除视频、收藏、标签或播放进度数据。
+   * 该动作清空继续观看状态，但不删除视频、收藏或标签。
    */
   Future<void> _clearRecentPlayback({required bool selectedOnly}) async {
     final store = _store;
@@ -888,7 +890,7 @@ class _LibraryPageState extends State<LibraryPage> {
       selectedOnly: selectedOnly,
     );
     for (final item in targets) {
-      item.lastPlayedAt = null;
+      _resetContinueWatchingState(item);
       await store.upsertVideo(item);
     }
     if (!mounted) {
@@ -908,13 +910,23 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       return;
     }
-    item.lastPlayedAt = null;
+    _resetContinueWatchingState(item);
     await store.upsertVideo(item);
     if (!mounted) {
       return;
     }
     setState(() => _selectedRecentPathKeys.remove(TagRules.pathKey(item.path)));
     _markLibraryDataChanged();
+  }
+
+  /** 清空单条稳定播放快照；videoId 和其它用户维护数据保持不变。 */
+  void _resetContinueWatchingState(VideoItem item) {
+    item
+      ..lastPlayedAt = null
+      ..playbackPosition = Duration.zero
+      ..playbackDuration = Duration.zero
+      ..playbackCompleted = false
+      ..playbackPositionUpdatedAt = null;
   }
 
   /**
@@ -982,7 +994,7 @@ class _LibraryPageState extends State<LibraryPage> {
     }
     _recentVideoCacheKey = key;
     _recentVideoCache = sortedLibraryVideos(
-      store.videos.values.where((item) => item.lastPlayedAt != null),
+      store.videos.values.where(videoIsContinueWatching),
       sortMode: _sortMode,
       sortDirection: _sortDirection,
     );
@@ -1705,7 +1717,7 @@ class _LibraryPageState extends State<LibraryPage> {
             excludedTags: excludedTags,
             keyword: _searchController.text,
             defaultChipLabel: switch (_resultMode) {
-              _LibraryResultMode.recent => '\u6700\u8fd1\u64ad\u653e',
+              _LibraryResultMode.recent => '继续观看',
               _LibraryResultMode.favorites => '\u672c\u5730\u6536\u85cf',
               _LibraryResultMode.local => '\u672c\u5730\u5a92\u4f53\u5e93',
               _LibraryResultMode.library => '\u5168\u90e8\u89c6\u9891',
@@ -1748,8 +1760,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 _LibraryResultMode.recent => videos.isEmpty
                     ? _EmptyState(
                         hasLibrary: store.videos.isNotEmpty,
-                        message:
-                            '\u8fd8\u6ca1\u6709\u6700\u8fd1\u64ad\u653e\u8bb0\u5f55',
+                        message: '当前没有未完成的观看记录',
                       )
                     : _RecentPlaybackView(
                         videos: videos,
@@ -2256,6 +2267,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final wasPaused = thumbnailService.isPaused;
     thumbnailService.pause();
     _playerScopedLibraryDataChanged = false;
+    _playerScopedNeedsCountRefresh = false;
     try {
       await Navigator.of(context).push(
         _smoothRoute<void>(
@@ -2270,6 +2282,7 @@ class _LibraryPageState extends State<LibraryPage> {
             onDeleteFile: _deleteVideoFile,
             onToggleFavorite: _toggleFavoriteFromPlayer,
             onEditManualTags: _editManualTagsFromPlayer,
+            onRelinkMissing: _relinkMissingFromPlayer,
             onPlaybackProgressUpdated: _updatePlaybackProgress,
             onMediaDetailsUpdated: _updateMediaDetails,
           ),
@@ -2282,8 +2295,9 @@ class _LibraryPageState extends State<LibraryPage> {
     }
     if (mounted && _playerScopedLibraryDataChanged) {
       _invalidateDerivedCaches();
-      _scheduleFilterRefresh(refreshCounts: false);
+      _scheduleFilterRefresh(refreshCounts: _playerScopedNeedsCountRefresh);
       _playerScopedLibraryDataChanged = false;
+      _playerScopedNeedsCountRefresh = false;
     }
   }
 
@@ -2298,14 +2312,39 @@ class _LibraryPageState extends State<LibraryPage> {
   Future<void> _updatePlaybackProgress(
     VideoItem item,
     Duration position,
+    Duration duration,
+    bool completed,
   ) async {
     item.playbackPosition = position;
+    if (duration > Duration.zero) {
+      // 播放内核偶发的临时 0 时长不能覆盖已经持久化的可靠总时长与完成判断。
+      item.playbackDuration = duration;
+      item.playbackCompleted = completed;
+    }
     item.playbackPositionUpdatedAt = DateTime.now();
     item.lastPlayedAt = item.playbackPositionUpdatedAt;
     await _store?.upsertVideo(item);
     if (mounted) {
       _markPlaybackTimestampChanged(item);
     }
+  }
+
+  /** 播放器错误面板复用 missing 管理页的安全 picker 与 fingerprint 校验。 */
+  Future<bool> _relinkMissingFromPlayer(VideoItem item) async {
+    final store = _store;
+    if (store == null) {
+      return false;
+    }
+    final changed = await pickAndRelinkMissingVideo(
+      context,
+      store: store,
+      item: item,
+    );
+    if (changed) {
+      _playerScopedLibraryDataChanged = true;
+      _playerScopedNeedsCountRefresh = true;
+    }
+    return changed;
   }
 
   Future<void> _toggleFavorite(VideoItem item) async {

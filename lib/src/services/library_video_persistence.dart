@@ -59,6 +59,9 @@ class LibraryVideoPersistence {
       isMissing: (row['is_missing'] as int? ?? 0) == 1,
       playbackPosition:
           Duration(milliseconds: row['playback_position_ms'] as int? ?? 0),
+      playbackDuration:
+          Duration(milliseconds: row['playback_duration_ms'] as int? ?? 0),
+      playbackCompleted: (row['playback_completed'] as int? ?? 0) == 1,
       playbackPositionUpdatedAt: DateTime.tryParse(
           row['playback_position_updated_at'] as String? ?? ''),
     );
@@ -92,6 +95,8 @@ class LibraryVideoPersistence {
         'last_played_at': item.lastPlayedAt?.toIso8601String(),
         'is_missing': item.isMissing ? 1 : 0,
         'playback_position_ms': item.playbackPosition.inMilliseconds,
+        'playback_duration_ms': item.playbackDuration.inMilliseconds,
+        'playback_completed': item.playbackCompleted ? 1 : 0,
         'playback_position_updated_at':
             item.playbackPositionUpdatedAt?.toIso8601String(),
       };

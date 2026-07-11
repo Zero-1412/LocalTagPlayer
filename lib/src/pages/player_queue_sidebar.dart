@@ -804,6 +804,12 @@ class _QueueListItemState extends State<_QueueListItem> {
   }
 
   void _loadItemFutures() {
+    if (widget.item.isMissing) {
+      // missing 条目不再派发文件 I/O，避免大队列对失效路径反复探测。
+      _thumbnailFuture = Future<File?>.value(null);
+      _detailsFuture = Future<MediaDetails>.value(const MediaDetails());
+      return;
+    }
     _thumbnailFuture = widget.thumbnailService.thumbnailFor(widget.item);
     _detailsFuture = widget.detailsService.detailsFor(widget.item);
   }
@@ -851,18 +857,25 @@ class _QueueListItemState extends State<_QueueListItem> {
                 ? const Color(0xff7f8da3)
                 : const Color(0xff566171);
     final showHoverAction = _hovered && !widget.playing;
-    final stateBadgeLabel = widget.playing
-        ? '播放中'
-        : widget.selected
-            ? '已选中'
-            : null;
-    final stateBadgeIcon = widget.playing
-        ? Icons.play_arrow_rounded
-        : widget.selected
-            ? Icons.center_focus_strong_rounded
-            : null;
-    final stateBadgeColor =
-        widget.playing ? const Color(0xff7aa7ff) : const Color(0xffa7b4ff);
+    final stateBadgeLabel = widget.item.isMissing
+        ? '缺失'
+        : widget.playing
+            ? '播放中'
+            : widget.selected
+                ? '已选中'
+                : null;
+    final stateBadgeIcon = widget.item.isMissing
+        ? Icons.link_off_rounded
+        : widget.playing
+            ? Icons.play_arrow_rounded
+            : widget.selected
+                ? Icons.center_focus_strong_rounded
+                : null;
+    final stateBadgeColor = widget.item.isMissing
+        ? const Color(0xffffb4a9)
+        : widget.playing
+            ? const Color(0xff7aa7ff)
+            : const Color(0xffa7b4ff);
     final shadow = widget.playing
         ? const [
             BoxShadow(
@@ -1053,6 +1066,9 @@ class _QueueListItemState extends State<_QueueListItem> {
   }
 
   String _detailsLine(MediaDetails? details) {
+    if (widget.item.isMissing) {
+      return '路径失效 · 可重新关联';
+    }
     if (details == null) {
       return '\u5a92\u4f53\u4fe1\u606f\u8bfb\u53d6\u4e2d';
     }

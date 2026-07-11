@@ -1,5 +1,7 @@
 part of '../app.dart';
 
+// ignore_for_file: slash_for_doc_comments
+
 abstract interface class LibraryRepository {
   Future<List<String>> loadRoots();
 
@@ -49,9 +51,14 @@ abstract interface class PlaybackRepository {
 
   Future<PlaybackSession?> loadLastSession();
 
+  /**
+   * 按稳定 [videoId] 保存位置、总时长和完成态；mutable path 不参与播放状态身份。
+   */
   Future<void> savePlaybackPosition({
     required String videoId,
     required Duration position,
+    required Duration duration,
+    required bool completed,
     required DateTime updatedAt,
   });
 }

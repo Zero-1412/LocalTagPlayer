@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-11 · Stable Video Identity 播放状态第三阶段
+
+- SQLite `videos` 幂等增加 `playback_duration_ms` 与 `playback_completed`，和既有位置字段一起绑定稳定 videoId。
+- 播放器再次打开时提供继续/从头选择；切换、退出、低频进度和 EOF 均写入位置、总时长与完成态。
+- 最近播放升级为继续观看，并显示进度；完成项、少于 3 秒和接近结尾项自动排除。
+- 短视频使用 1-2 秒尾部阈值，长视频使用 5% 且 5-30 秒范围，避免最后几秒循环恢复。
+- 队列 missing 项显示明确状态并停止缩略图/媒体探测；失败面板可直接 Relink，保留标签、收藏和播放状态。
+
 ## 2026-07-11 · Missing/Relink 用户闭环与播放器键盘基准
 
 - 标签编辑弹窗新增 autofocus、焦点遍历、Ctrl+Enter 保存和 Escape 取消。

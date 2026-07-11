@@ -144,6 +144,8 @@ void main() {
     expect(item.isFavorite, isTrue);
     expect(item.isMissing, isFalse);
     expect(item.playbackPosition, Duration.zero);
+    expect(item.playbackDuration, Duration.zero);
+    expect(item.playbackCompleted, isFalse);
     expect(migrated.videoTagIdsByPathKey[TagRules.pathKey(legacyPath)],
         contains('manual:legacy'));
   });
@@ -532,6 +534,8 @@ void main() {
       ..isFavorite = true
       ..lastPlayedAt = DateTime.utc(2026, 7, 11, 8)
       ..playbackPosition = const Duration(seconds: 37)
+      ..playbackDuration = const Duration(minutes: 3)
+      ..playbackCompleted = false
       ..playbackPositionUpdatedAt = DateTime.utc(2026, 7, 11, 8, 1);
     await store.upsertVideo(item);
 
@@ -548,6 +552,9 @@ void main() {
     expect(relinked.videoId, videoId);
     expect(relinked.isFavorite, isTrue);
     expect(relinked.playbackPosition, const Duration(seconds: 37));
+    expect(relinked.playbackDuration, const Duration(minutes: 3));
+    expect(relinked.playbackCompleted, isFalse);
+    expect(videoIsContinueWatching(relinked), isTrue);
     expect(relinked.isMissing, isFalse);
     expect(store.videoTagIdsByPathKey[TagRules.pathKey(moved.path)],
         contains(manual.id));
@@ -556,6 +563,11 @@ void main() {
     final persisted = _videoByPath(reloaded, moved.path);
     expect(persisted.videoId, videoId);
     expect(persisted.playbackPosition, const Duration(seconds: 37));
+    expect(persisted.playbackDuration, const Duration(minutes: 3));
+    expect(persisted.playbackCompleted, isFalse);
+    expect(persisted.isFavorite, isTrue);
+    expect(persisted.lastPlayedAt, isNotNull);
+    expect(videoIsContinueWatching(persisted), isTrue);
     expect(reloaded.videoTagIdsByPathKey[TagRules.pathKey(moved.path)],
         contains(manual.id));
   });

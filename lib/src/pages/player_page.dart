@@ -52,6 +52,7 @@ class PlayerPage extends StatefulWidget {
     required this.onDeleteFile,
     required this.onToggleFavorite,
     required this.onEditManualTags,
+    required this.onRelinkMissing,
     required this.onPlaybackProgressUpdated,
     required this.onMediaDetailsUpdated,
   });
@@ -66,8 +67,13 @@ class PlayerPage extends StatefulWidget {
   final Future<void> Function(VideoItem item) onDeleteFile;
   final Future<void> Function(VideoItem item) onToggleFavorite;
   final Future<void> Function(VideoItem item) onEditManualTags;
-  final Future<void> Function(VideoItem item, Duration position)
-      onPlaybackProgressUpdated;
+  final Future<bool> Function(VideoItem item) onRelinkMissing;
+  final Future<void> Function(
+    VideoItem item,
+    Duration position,
+    Duration duration,
+    bool completed,
+  ) onPlaybackProgressUpdated;
   final Future<void> Function(
           VideoItem item, MediaDetails details, String? fingerprint)
       onMediaDetailsUpdated;
@@ -93,6 +99,8 @@ class _PlayerPageState extends State<PlayerPage> {
   DateTime? _ignoreQueueSelectionBefore;
   String? _handledCompletedPath;
   String? _openedPath;
+  /** 恢复选择弹窗期间暂停进度写入，避免刚打开的 0 秒覆盖稳定进度。 */
+  var _choosingPlaybackStart = false;
   var _queueEndReached = false;
 
   static const double _queueItemExtent = 82;
@@ -125,6 +133,7 @@ class _PlayerPageState extends State<PlayerPage> {
     if (_queue.isEmpty) {
       return;
     }
+    _persistOpenedProgress();
     final preferredPath = _currentItem.path;
     setState(() {
       _queueEndReached = false;
@@ -200,6 +209,7 @@ class _PlayerPageState extends State<PlayerPage> {
   void _handlePosition(Duration position) {
     final openedPath = _openedPath;
     if (_openRequests.isOpening ||
+        _choosingPlaybackStart ||
         openedPath == null ||
         position <= Duration.zero) {
       return;
@@ -219,7 +229,13 @@ class _PlayerPageState extends State<PlayerPage> {
     }
     _lastProgressWriteAt = now;
     _lastPersistedPosition = position;
-    unawaited(widget.onPlaybackProgressUpdated(item, position));
+    final duration = _player.state.duration;
+    unawaited(widget.onPlaybackProgressUpdated(
+      item,
+      position,
+      duration,
+      playerPlaybackIsNearCompletion(position: position, duration: duration),
+    ));
   }
 
   /** 从来源队列解析当前路径，确保进度写入对应视频而不是刚切换的新条目。 */
@@ -259,9 +275,14 @@ class _PlayerPageState extends State<PlayerPage> {
       return;
     }
     _handledCompletedPath = completedPath;
-    _currentItem.playbackPosition = Duration.zero;
+    final duration = _player.state.duration;
     unawaited(
-      widget.onPlaybackProgressUpdated(_currentItem, Duration.zero),
+      widget.onPlaybackProgressUpdated(
+        _currentItem,
+        duration,
+        duration,
+        true,
+      ),
     );
     final nextIndex = _playback.nextIndex;
     if (nextIndex == null) {
@@ -321,6 +342,10 @@ class _PlayerPageState extends State<PlayerPage> {
     final visibleItems = <VideoItem>[];
     for (var index = start; index <= end; index++) {
       final item = _queue[index];
+      if (item.isMissing) {
+        // missing 条目只展示稳定状态和 Relink，不派发失效路径的媒体/缩略图 I/O。
+        continue;
+      }
       visibleItems.add(item);
       unawaited(_detailsService.detailsFor(item));
     }
@@ -372,6 +397,17 @@ class _PlayerPageState extends State<PlayerPage> {
     if (_queue.isEmpty) {
       return;
     }
+    if (_currentItem.isMissing) {
+      _openedPath = null;
+      _openRequests.markFailure(
+        _currentItem.path,
+        code: 'missing_media',
+      );
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
     if (_openRequests.request(_currentItem.path)) {
       unawaited(_drainOpenRequests());
     }
@@ -415,7 +451,14 @@ class _PlayerPageState extends State<PlayerPage> {
           _openRequests.markSuccess();
           final openedItem = _itemForPath(path);
           if (openedItem != null) {
-            await _restorePlaybackPosition(openedItem);
+            _lastPersistedPosition = Duration.zero;
+            _lastProgressWriteAt = null;
+            _choosingPlaybackStart = true;
+            try {
+              await _choosePlaybackStart(openedItem);
+            } finally {
+              _choosingPlaybackStart = false;
+            }
           }
         } catch (error) {
           if (!mounted) {
@@ -466,18 +509,55 @@ class _PlayerPageState extends State<PlayerPage> {
     return false;
   }
 
-  /** 在有效时长范围内恢复稳定 videoId 对应的上次播放位置。 */
-  Future<void> _restorePlaybackPosition(VideoItem item) async {
+  /** 在有效进度存在时询问继续观看或从头播放。 */
+  Future<void> _choosePlaybackStart(VideoItem item) async {
+    final duration = _player.state.duration;
     final saved = playerResumePosition(
       saved: item.playbackPosition,
-      duration: _player.state.duration,
+      duration: duration,
+      completed: item.playbackCompleted,
     );
     if (saved == null) {
       return;
     }
-    await _player.seek(saved);
-    _lastPersistedPosition = saved;
+    await _player.pause();
+    if (!mounted || _openedPath != item.path) {
+      return;
+    }
+    final choice = await showPlayerResumeDialog(
+      context,
+      item: item,
+      position: saved,
+      duration: duration,
+    );
+    if (!mounted || _openedPath != item.path) {
+      return;
+    }
+    final start =
+        choice == PlayerResumeChoice.continueWatching ? saved : Duration.zero;
+    await _player.seek(start);
+    await _player.play();
+    _lastPersistedPosition = start;
     _lastProgressWriteAt = DateTime.now();
+    if (choice == PlayerResumeChoice.restart) {
+      unawaited(widget.onPlaybackProgressUpdated(
+        item,
+        Duration.zero,
+        duration,
+        false,
+      ));
+    }
+  }
+
+  /** 从失败面板重新关联 missing 文件，成功后原地打开同一稳定 videoId。 */
+  Future<void> _relinkCurrentMissing() async {
+    final item = _currentItem;
+    final relinked = await widget.onRelinkMissing(item);
+    if (!mounted || !relinked) {
+      return;
+    }
+    setState(() => _openRequests.clearFailure());
+    _requestOpenCurrent();
   }
 
   /** 重新打开最近失败的视频，并继续复用 latest-request worker。 */
@@ -569,6 +649,7 @@ class _PlayerPageState extends State<PlayerPage> {
     if (index < 0 || index >= _queue.length) {
       return;
     }
+    _persistOpenedProgress();
     if (ignoreFollowUpSelection) {
       _ignoreQueueSelectionBefore =
           DateTime.now().add(const Duration(milliseconds: 700));
@@ -580,6 +661,26 @@ class _PlayerPageState extends State<PlayerPage> {
     _ensureQueueIndexVisible(index, center: true);
     _requestOpenCurrent();
     _prefetchQueueWindow();
+  }
+
+  /** 切换或退出前补写当前位置、总时长和动态完成态。 */
+  void _persistOpenedProgress() {
+    final openedPath = _openedPath;
+    final position = _player.state.position;
+    final duration = _player.state.duration;
+    if (openedPath == null || position <= Duration.zero) {
+      return;
+    }
+    final item = _itemForPath(openedPath);
+    if (item == null) {
+      return;
+    }
+    unawaited(widget.onPlaybackProgressUpdated(
+      item,
+      position,
+      duration,
+      playerPlaybackIsNearCompletion(position: position, duration: duration),
+    ));
   }
 
   Future<void> _deleteSelectedFile() async {
@@ -955,14 +1056,7 @@ class _PlayerPageState extends State<PlayerPage> {
     unawaited(_completedSubscription?.cancel());
     unawaited(_playerErrorSubscription?.cancel());
     unawaited(_positionSubscription?.cancel());
-    final openedPath = _openedPath;
-    final position = _player.state.position;
-    if (openedPath != null && position > Duration.zero) {
-      final item = _itemForPath(openedPath);
-      if (item != null) {
-        unawaited(widget.onPlaybackProgressUpdated(item, position));
-      }
-    }
+    _persistOpenedProgress();
     _queueScrollController.dispose();
     _focusNode.dispose();
     _player.dispose();
@@ -1133,6 +1227,11 @@ class _PlayerPageState extends State<PlayerPage> {
                                   onDiagnostics: () {
                                     unawaited(_showDiagnosticsDialog());
                                   },
+                                  onRelink: _currentItem.isMissing
+                                      ? () {
+                                          unawaited(_relinkCurrentMissing());
+                                        }
+                                      : null,
                                 ),
                               ),
                           ],

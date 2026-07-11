@@ -7,6 +7,12 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-11 稳定播放状态迁移
+
+- `videos` 幂等增加总时长与完成态字段；位置、时长、完成态和更新时间都随稳定 videoId 保留。
+- 自动/手动 relink 仍只更新 mutable path 与 folder 标签，manual 标签、收藏、继续观看和播放进度不重建。
+- 旧库字段默认 0/false，迁移不清空用户数据；未修改 FilterQuery / TagQueryService 语义。
+
 ## 2026-07-11 Missing/Relink 用户界面第一阶段
 
 - 新增 missing 列表入口和单文件 relink；不立即删除缺失记录。
