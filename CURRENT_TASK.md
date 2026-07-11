@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.0` 已完成，`Architecture Baseline 0.5.1` 当前推进中。
+架构版本状态：`Architecture Baseline 0.5.1` 已完成，`Architecture Baseline 0.5.2` 当前推进中。
 
 最近一次验证：
 
@@ -17,6 +17,11 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 完成标签播放器差异化第二阶段：播放页“编辑标签”只维护 manual 来源，folder 标签以锁定路径来源展示；弹窗支持最近使用、收藏标签和即时搜索/新建。
+- 播放页新增“打开文件位置”，Windows/macOS/Linux 命令收口到 `DesktopFileLocationService` 平台边界；缺失文件显示稳定提示。
+- 右侧 filtered queue 新增轻量搜索定位，只遍历当前队列的标题、路径和标签，不访问或重新扫描全媒体库，也不替换来源队列。
+- 播放器内收藏和打标只写当前视频及必要 `video_tags` 索引；返回媒体库时仅刷新可见结果，不触发全库标签计数重算。
+- 使用隔离 profile 和两条真实 H264/AAC 媒体完成窗口 smoke：确认连续播放期间可打开编辑标签、folder 来源保持锁定、收藏/manual 候选可见并可保存，当前 filtered queue 保持 2 项不变。
 - 完成 Stable Video Identity 第一阶段：`VideoItem` 新增稳定 `videoId`，`path` 改为可变位置，SQLite 启动时幂等回填旧记录与 `video_tags.video_id`，收藏、标签关系、最近播放和进度均随稳定条目保留。
 - 媒体 fingerprint 升级为与路径和修改时间无关的“文件大小 + 首尾各 4KB 内容采样哈希”；扫描仅在新旧两侧 fingerprint 都唯一时自动 relink，冲突时保守新建，避免串档。
 - 扫描不再删除路径失效记录：可访问 root 中未找到的文件标记为 `missing`；唯一 fingerprint 重新出现时更新 mutable path 并保留 manual 标签、收藏、播放记录和进度。

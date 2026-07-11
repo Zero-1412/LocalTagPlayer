@@ -1,5 +1,12 @@
 # ROADMAP.md
 
+## 2026-07-11 标签播放器差异化第二阶段完成
+
+- 播放器内可完成收藏、manual 标签搜索/新增/移除，并快速使用最近和收藏标签。
+- folder 标签只展示路径来源，不允许在播放器中删除。
+- 当前队列支持轻量搜索定位；不扫描全库、不改变 filtered queue。
+- 文件位置入口已进入桌面平台边界；下一步继续补 missing/relink UI 与播放器标签操作的真实大库耗时采样。
+
 ## 2026-07-11 Stable Video Identity 第一阶段完成
 
 - 已完成 `videoId + fingerprint + mutable path` 兼容迁移，旧数据库无需清空。

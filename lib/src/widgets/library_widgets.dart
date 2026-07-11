@@ -2208,6 +2208,8 @@ class TagEditorDialog extends StatefulWidget {
     required this.existingTags,
     this.lockedTags = const <String>{},
     this.helperText,
+    this.recentTags = const <String>[],
+    this.favoriteTags = const <String>{},
   });
 
   final String title;
@@ -2220,6 +2222,12 @@ class TagEditorDialog extends StatefulWidget {
   /** 当前编辑范围和来源边界说明。 */
   final String? helperText;
 
+  /** 当前会话最近使用的 manual 标签，顺序由调用方维护。 */
+  final List<String> recentTags;
+
+  /** 用户在标签中心标记为收藏的 manual 标签。 */
+  final Set<String> favoriteTags;
+
   @override
   State<TagEditorDialog> createState() => _TagEditorDialogState();
 }
@@ -2227,6 +2235,7 @@ class TagEditorDialog extends StatefulWidget {
 class _TagEditorDialogState extends State<TagEditorDialog> {
   late final Set<String> _tags = _normalizeTags(widget.initialTags);
   final _controller = TextEditingController();
+  String _query = '';
 
   @override
   void dispose() {
@@ -2242,6 +2251,7 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
     setState(() {
       _addNormalizedTag(tag);
       _controller.clear();
+      _query = '';
     });
   }
 
@@ -2268,20 +2278,34 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
     return normalized;
   }
 
+  /** 返回未选中且匹配当前搜索词的候选，保持大小写不敏感。 */
+  List<String> _availableTags(
+    Iterable<String> source, {
+    bool sort = true,
+  }) {
+    final query = _query.trim().toLowerCase();
+    final result = _normalizeTags(source.where(
+      (tag) =>
+          !_tags.any((selected) => TagRules.sameTag(selected, tag)) &&
+          (query.isEmpty || tag.toLowerCase().contains(query)),
+    )).toList();
+    if (sort) {
+      result.sort();
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final suggestions = _normalizeTags(
-      widget.existingTags.where(
-        (tag) => !_tags.any((selected) => TagRules.sameTag(selected, tag)),
-      ),
-    ).toList()
-      ..sort();
+    final suggestions = _availableTags(widget.existingTags);
+    final recent = _availableTags(widget.recentTags, sort: false);
+    final favorites = _availableTags(widget.favoriteTags);
     return AlertDialog(
       title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       content: SizedBox(
         width: 520,
+        height: math.min(560, MediaQuery.sizeOf(context).height * 0.7),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (widget.helperText != null) ...[
@@ -2294,48 +2318,65 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
             TextField(
               controller: _controller,
               decoration: const InputDecoration(
-                labelText: '\u65b0\u6807\u7b7e',
-                prefixIcon: Icon(Icons.sell_outlined),
+                labelText: '搜索或新建 manual 标签',
+                prefixIcon: Icon(Icons.search_rounded),
               ),
+              onChanged: (value) => setState(() => _query = value),
               onSubmitted: _addTag,
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final tag in (_tags.toList()..sort()))
-                  Tooltip(
-                    message: _isLocked(tag) ? '文件夹来源标签，只能通过目录结构修改' : '移除手动标签',
-                    child: InputChip(
-                      avatar: _isLocked(tag)
-                          ? const Icon(Icons.lock_outline_rounded, size: 15)
-                          : null,
-                      label: Text(tag),
-                      onDeleted: _isLocked(tag)
-                          ? null
-                          : () => setState(() => _tags.remove(tag)),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final tag in (_tags.toList()..sort()))
+                          Tooltip(
+                            message: _isLocked(tag)
+                                ? '文件夹来源标签，只能通过目录结构修改'
+                                : '移除手动标签',
+                            child: InputChip(
+                              avatar: _isLocked(tag)
+                                  ? const Icon(Icons.lock_outline_rounded,
+                                      size: 15)
+                                  : null,
+                              label: Text(tag),
+                              onDeleted: _isLocked(tag)
+                                  ? null
+                                  : () => setState(() => _tags.remove(tag)),
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
-              ],
-            ),
-            if (suggestions.isNotEmpty) ...[
-              const SizedBox(height: 18),
-              Text('\u5df2\u6709\u6807\u7b7e',
-                  style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final tag in suggestions.take(24))
-                    ActionChip(
-                      label: Text(tag),
-                      onPressed: () => setState(() => _addNormalizedTag(tag)),
+                    _TagSuggestionSection(
+                      title: '最近使用',
+                      tags: recent.take(8).toList(),
+                      icon: Icons.history_rounded,
+                      onSelected: (tag) =>
+                          setState(() => _addNormalizedTag(tag)),
                     ),
-                ],
+                    _TagSuggestionSection(
+                      title: '收藏标签',
+                      tags: favorites.take(8).toList(),
+                      icon: Icons.star_rounded,
+                      onSelected: (tag) =>
+                          setState(() => _addNormalizedTag(tag)),
+                    ),
+                    _TagSuggestionSection(
+                      title: _query.trim().isEmpty ? '全部 manual 标签' : '搜索结果',
+                      tags: suggestions.take(24).toList(),
+                      icon: Icons.sell_outlined,
+                      onSelected: (tag) =>
+                          setState(() => _addNormalizedTag(tag)),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ],
         ),
       ),
@@ -2352,6 +2393,55 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
           child: const Text('\u4fdd\u5b58'),
         ),
       ],
+    );
+  }
+}
+
+/** manual 标签编辑器中的轻量候选分区。 */
+class _TagSuggestionSection extends StatelessWidget {
+  const _TagSuggestionSection({
+    required this.title,
+    required this.tags,
+    required this.icon,
+    required this.onSelected,
+  });
+
+  final String title;
+  final List<String> tags;
+  final IconData icon;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    if (tags.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16),
+              const SizedBox(width: 6),
+              Text(title, style: Theme.of(context).textTheme.labelLarge),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final tag in tags)
+                ActionChip(
+                  label: Text(tag),
+                  onPressed: () => onSelected(tag),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

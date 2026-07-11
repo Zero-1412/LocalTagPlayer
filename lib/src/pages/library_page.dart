@@ -371,6 +371,12 @@ class _LibraryPageState extends State<LibraryPage> {
   var _searchControllerChangeQueued = false;
   var _lastObservedSearchText = '';
 
+  /** 播放器会话内最近使用的 manual 标签，只保留轻量内存顺序。 */
+  final List<String> _recentPlayerManualTags = <String>[];
+
+  /** 播放器内单条修改延后到返回媒体库时刷新可见结果，不刷新全库计数。 */
+  var _playerScopedLibraryDataChanged = false;
+
   var _isRefreshingVideos = false;
 
   var _isRefreshingCounts = false;
@@ -2225,6 +2231,7 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     final wasPaused = thumbnailService.isPaused;
     thumbnailService.pause();
+    _playerScopedLibraryDataChanged = false;
     try {
       await Navigator.of(context).push(
         _smoothRoute<void>(
@@ -2237,7 +2244,7 @@ class _LibraryPageState extends State<LibraryPage> {
             activeChildTag: activeChildTag,
             queueTitle: queueTitle,
             onDeleteFile: _deleteVideoFile,
-            onToggleFavorite: _toggleFavorite,
+            onToggleFavorite: _toggleFavoriteFromPlayer,
             onEditManualTags: _editManualTagsFromPlayer,
             onPlaybackProgressUpdated: _updatePlaybackProgress,
             onMediaDetailsUpdated: _updateMediaDetails,
@@ -2249,6 +2256,18 @@ class _LibraryPageState extends State<LibraryPage> {
         thumbnailService.resume();
       }
     }
+    if (mounted && _playerScopedLibraryDataChanged) {
+      _invalidateDerivedCaches();
+      _scheduleFilterRefresh(refreshCounts: false);
+      _playerScopedLibraryDataChanged = false;
+    }
+  }
+
+  /** 播放器内收藏只写当前视频，返回媒体库后再做一次无计数轻刷新。 */
+  Future<void> _toggleFavoriteFromPlayer(VideoItem item) async {
+    item.isFavorite = !item.isFavorite;
+    await _store?.upsertVideo(item);
+    _playerScopedLibraryDataChanged = true;
   }
 
   /** 将播放位置和最近播放时间写入稳定 videoId 对应的视频记录。 */
@@ -2362,6 +2381,14 @@ class _LibraryPageState extends State<LibraryPage> {
             !tag.isHidden)
           tag.name,
     };
+    final favoriteManualTags = <String>{
+      for (final tag in store.allTagItems)
+        if (tag.source == TagSource.manual &&
+            tag.parentId == null &&
+            tag.isFavorite &&
+            !tag.isHidden)
+          tag.name,
+    };
     final initialManualTags = <String>{
       for (final tag in linkedManualTags) tag.name,
       // 兼容旧数据：只接受能解析到已知 manual 来源的兼容字段，不能把其它来源提升为 manual。
@@ -2379,6 +2406,8 @@ class _LibraryPageState extends State<LibraryPage> {
         initialTags: <String>{...folderTags, ...initialManualTags},
         existingTags: manualSuggestions,
         lockedTags: folderTags,
+        recentTags: _recentPlayerManualTags,
+        favoriteTags: favoriteManualTags,
       ),
     );
     if (updated == null) {
@@ -2422,11 +2451,17 @@ class _LibraryPageState extends State<LibraryPage> {
           SnackBar(content: Text('更新手动标签失败：$error')),
         );
       }
+      return;
     }
-    if (mounted) {
-      setState(() {});
-      _markLibraryDataChanged();
+    for (final name in selectedManualNames) {
+      _recentPlayerManualTags
+          .removeWhere((recent) => TagRules.sameTag(recent, name));
+      _recentPlayerManualTags.insert(0, name);
     }
+    if (_recentPlayerManualTags.length > 12) {
+      _recentPlayerManualTags.removeRange(12, _recentPlayerManualTags.length);
+    }
+    _playerScopedLibraryDataChanged = true;
   }
 
   /** 获取当前视频已关联的非 manual 一级标签名，防止快速编辑覆盖其它来源。 */

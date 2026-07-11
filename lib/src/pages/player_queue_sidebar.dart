@@ -2,6 +2,37 @@ part of '../app.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/** 只在当前播放器队列内执行轻量关键字定位，不访问媒体库或重新扫描。 */
+int? playerQueueSearchIndex(
+  List<VideoItem> items,
+  String query, {
+  int startIndex = 0,
+}) {
+  final keywords = query
+      .trim()
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .where((value) => value.isNotEmpty)
+      .toList();
+  if (items.isEmpty || keywords.isEmpty) {
+    return null;
+  }
+  for (var offset = 1; offset <= items.length; offset++) {
+    final index = (startIndex + offset) % items.length;
+    final item = items[index];
+    final searchable = <String>[
+      item.title,
+      item.path,
+      ...item.tags,
+      for (final children in item.childTags.values) ...children,
+    ].join('\n').toLowerCase();
+    if (keywords.every(searchable.contains)) {
+      return index;
+    }
+  }
+  return null;
+}
+
 /**
  * 播放器右侧的筛选结果队列，承接库页传入的 filteredVideos。
  */
@@ -23,6 +54,7 @@ class _PlayerQueueSidebar extends StatelessWidget {
     required this.onLocatePlaying,
     required this.onLocateSelected,
     required this.onDeleteSelected,
+    required this.onSearchQueue,
   });
 
   /**
@@ -104,6 +136,9 @@ class _PlayerQueueSidebar extends StatelessWidget {
    * 删除当前视频的入口；为 null 时禁用。
    */
   final VoidCallback? onDeleteSelected;
+
+  /** 在当前队列内搜索并定位，不改变队列内容。 */
+  final ValueChanged<String> onSearchQueue;
 
   String? get _activeParentTag {
     if (activeTags.length != 1) {
@@ -291,6 +326,8 @@ class _PlayerQueueSidebar extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: 8),
+                _QueueSearchField(onSearch: onSearchQueue),
               ],
             ),
           ),
@@ -380,6 +417,55 @@ class _PlayerQueueSidebar extends StatelessWidget {
       scrollOffset: top,
       viewportExtent: position.viewportDimension,
       itemExtent: _PlayerPageState._queueItemExtent,
+    );
+  }
+}
+
+/**
+ * 当前播放队列的轻量搜索框，同时支持键盘提交和可见按钮提交。
+ */
+class _QueueSearchField extends StatefulWidget {
+  const _QueueSearchField({required this.onSearch});
+
+  /** 仅在播放器已持有的队列中定位，不访问媒体库或触发重新扫描。 */
+  final ValueChanged<String> onSearch;
+
+  @override
+  State<_QueueSearchField> createState() => _QueueSearchFieldState();
+}
+
+/** 维护搜索输入，避免把临时查询状态提升到播放器或媒体库控制器。 */
+class _QueueSearchFieldState extends State<_QueueSearchField> {
+  final TextEditingController _controller = TextEditingController();
+
+  /** 提交当前查询；空查询由队列搜索规则稳定忽略。 */
+  void _submit() => widget.onSearch(_controller.text);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      key: const ValueKey('player.queueSearch'),
+      controller: _controller,
+      style: const TextStyle(color: Colors.white, fontSize: 12),
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: '搜索当前队列并定位',
+        prefixIcon: const Icon(Icons.search_rounded, size: 18),
+        suffixIcon: IconButton(
+          key: const ValueKey('player.queueSearchSubmit'),
+          tooltip: '定位下一条匹配视频',
+          onPressed: _submit,
+          icon: const Icon(Icons.my_location_rounded, size: 17),
+        ),
+      ),
+      onSubmitted: (_) => _submit(),
     );
   }
 }

@@ -7,6 +7,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:local_tag_player/src/app.dart';
 
+VideoItem _testVideo({
+  required String path,
+  required String title,
+  Set<String> tags = const <String>{},
+}) {
+  return VideoItem(
+    path: path,
+    title: title,
+    folder: 'C:/queue',
+    tags: <String>{...tags},
+    addedAt: DateTime.utc(2026, 7, 11),
+  );
+}
+
 void main() {
   testWidgets('app mounts', (WidgetTester tester) async {
     await tester.pumpWidget(const LocalTagPlayerApp());
@@ -648,6 +662,28 @@ void main() {
     );
   });
 
+  test('player queue search stays within the provided queue', () {
+    final items = [
+      _testVideo(path: 'C:/queue/alpha.mp4', title: 'Alpha'),
+      _testVideo(path: 'C:/queue/beta.mp4', title: 'Beta', tags: {'favorite'}),
+      _testVideo(path: 'C:/queue/gamma.mp4', title: 'Gamma'),
+    ];
+
+    expect(playerQueueSearchIndex(items, 'favorite', startIndex: 0), 1);
+    expect(playerQueueSearchIndex(items, 'alpha', startIndex: 0), 0);
+    expect(playerQueueSearchIndex(items, 'missing', startIndex: 0), isNull);
+  });
+
+  test('file location service rejects missing files before platform launch',
+      () async {
+    final missing = '${Directory.systemTemp.path}${Platform.pathSeparator}'
+        'ltp_missing_reveal_target.mp4';
+    await expectLater(
+      const DesktopFileLocationService().reveal(missing),
+      throwsA(isA<FileSystemException>()),
+    );
+  });
+
   testWidgets('manual tag editor locks folder tags', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -658,6 +694,8 @@ void main() {
             initialTags: {'FolderTag', 'ManualTag'},
             existingTags: {'SuggestedTag'},
             lockedTags: {'FolderTag'},
+            recentTags: ['RecentTag'],
+            favoriteTags: {'FavoriteTag'},
           ),
         ),
       ),
@@ -675,6 +713,16 @@ void main() {
     expect(manualChip.onDeleted, isNotNull);
     expect(find.text('只修改手动标签；文件夹标签由目录结构维护。'), findsOneWidget);
     expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
+    expect(find.text('最近使用'), findsOneWidget);
+    expect(find.text('RecentTag'), findsOneWidget);
+    expect(find.text('收藏标签'), findsOneWidget);
+    expect(find.text('FavoriteTag'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Suggested');
+    await tester.pump();
+    expect(find.text('搜索结果'), findsOneWidget);
+    expect(find.text('SuggestedTag'), findsOneWidget);
+    expect(find.text('RecentTag'), findsNothing);
   });
 
   test('secondary discovery hides default album from secondary lists', () {

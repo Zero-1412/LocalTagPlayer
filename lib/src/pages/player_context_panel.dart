@@ -14,6 +14,7 @@ class _PlayerContextPanel extends StatelessWidget {
     required this.nextIndex,
     required this.queueEndReached,
     required this.onEditManualTags,
+    required this.onRevealFile,
     required this.onPlayIndex,
   });
 
@@ -35,6 +36,9 @@ class _PlayerContextPanel extends StatelessWidget {
 
   /** 打开当前视频的 manual 标签快速编辑器。 */
   final VoidCallback onEditManualTags;
+
+  /** 在系统文件管理器中定位当前视频。 */
+  final VoidCallback onRevealFile;
 
   /** 用户通过显式前后项按钮请求切换播放的位置。 */
   final ValueChanged<int> onPlayIndex;
@@ -110,7 +114,13 @@ class _PlayerContextPanel extends StatelessWidget {
                       key: const ValueKey('player.editManualTags'),
                       onPressed: onEditManualTags,
                       icon: const Icon(Icons.sell_outlined, size: 18),
-                      label: const Text('编辑手动标签'),
+                      label: const Text('编辑标签'),
+                    ),
+                    OutlinedButton.icon(
+                      key: const ValueKey('player.revealFile'),
+                      onPressed: onRevealFile,
+                      icon: const Icon(Icons.folder_open_rounded, size: 18),
+                      label: const Text('打开文件位置'),
                     ),
                   ],
                 ),

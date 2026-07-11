@@ -36,6 +36,7 @@ part 'services/external_media_tools.dart';
 part 'services/thumbnail_service.dart';
 part 'services/media_details_service.dart';
 part 'platform/platform_interfaces.dart';
+part 'platform/desktop_file_location_service.dart';
 part 'pages/library_page_helpers.dart';
 part 'pages/library_page.dart';
 part 'pages/tag_manager_page.dart';

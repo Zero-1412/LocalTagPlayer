@@ -82,6 +82,7 @@ class _PlayerPageState extends State<PlayerPage> {
   late final FocusNode _focusNode;
   late final ScrollController _queueScrollController;
   late final MediaDetailsService _detailsService;
+  final _fileLocationService = const DesktopFileLocationService();
   late final PlayerPlaybackController _playback;
   final _openRequests = PlayerOpenRequestController();
   StreamSubscription<bool>? _completedSubscription;
@@ -548,6 +549,22 @@ class _PlayerPageState extends State<PlayerPage> {
     _ensureQueueIndexVisible(_selectedIndex, center: true);
   }
 
+  /** 搜索当前 filtered queue 并直接定位播放，不访问全媒体库。 */
+  void _searchQueue(String query) {
+    final index = playerQueueSearchIndex(
+      _queue,
+      query,
+      startIndex: _index,
+    );
+    if (index == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('当前队列没有匹配项')),
+      );
+      return;
+    }
+    _jumpTo(index, ignoreFollowUpSelection: true);
+  }
+
   void _jumpTo(int index, {bool ignoreFollowUpSelection = false}) {
     if (index < 0 || index >= _queue.length) {
       return;
@@ -699,6 +716,19 @@ class _PlayerPageState extends State<PlayerPage> {
     await widget.onEditManualTags(_currentItem);
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  /** 通过平台边界定位当前媒体文件，并稳定展示失败原因。 */
+  Future<void> _revealCurrentFile() async {
+    try {
+      await _fileLocationService.reveal(_currentItem.path);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法打开文件位置，请确认文件仍然存在')),
+        );
+      }
     }
   }
 
@@ -958,6 +988,7 @@ class _PlayerPageState extends State<PlayerPage> {
       onPlay: _jumpTo,
       onLocatePlaying: _focusPlayingQueueItem,
       onLocateSelected: _focusSelectedQueueItem,
+      onSearchQueue: _searchQueue,
       onDeleteSelected: _selectedIndex == _index ? _deleteSelectedFile : null,
     );
     return Focus(
@@ -1120,6 +1151,9 @@ class _PlayerPageState extends State<PlayerPage> {
                       queueEndReached: _queueEndReached,
                       onEditManualTags: () {
                         unawaited(_editManualTags());
+                      },
+                      onRevealFile: () {
+                        unawaited(_revealCurrentFile());
                       },
                       onPlayIndex: (index) {
                         _jumpTo(index, ignoreFollowUpSelection: true);

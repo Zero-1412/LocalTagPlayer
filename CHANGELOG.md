@@ -2,6 +2,16 @@
 
 ## 2026-07-11
 
+### 标签播放器差异化第二阶段
+
+- 播放器保留可见“编辑标签”入口，编辑器只展示/维护已知 manual 标签；folder 标签锁定显示，不能从播放器误删。
+- manual 标签编辑器新增“最近使用 / 收藏标签 / 全部或搜索结果”分区，输入框同时支持即时搜索和新建标签。
+- 右侧队列新增轻量搜索定位，匹配当前 filtered queue 的标题、路径、一级/二级标签；搜索只返回队列索引，不重新查询或扫描媒体库。
+- 播放页新增“打开文件位置”；系统调用集中在 `DesktopFileLocationService` 平台边界，Windows 选中文件，macOS 使用 reveal，Linux 打开父目录。
+- 播放器内收藏与 manual 打标改为单条写库；操作期间不重建队列、不刷新标签计数，返回媒体库后只执行无计数可见结果刷新。
+- 新增 focused tests 覆盖队列内搜索、最近/收藏/搜索标签分区、folder 标签锁定和缺失文件定位失败。
+- 本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 语义、filtered queue 来源或缩略图/media 队列。
+
 ### Stable Video Identity 与播放进度迁移
 
 - `videos` 表兼容新增 `video_id`、`is_missing`、`playback_position_ms`、`playback_position_updated_at`；旧库启动时幂等生成稳定 ID，不要求清库。
