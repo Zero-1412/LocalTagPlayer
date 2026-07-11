@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.4.4` 已完成，`Architecture Baseline 0.4.5` 当前推进中。
+架构版本状态：`Architecture Baseline 0.5.0` 已完成，`Architecture Baseline 0.5.1` 当前推进中。
 
 最近一次验证：
 
@@ -17,6 +17,11 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 完成 Stable Video Identity 第一阶段：`VideoItem` 新增稳定 `videoId`，`path` 改为可变位置，SQLite 启动时幂等回填旧记录与 `video_tags.video_id`，收藏、标签关系、最近播放和进度均随稳定条目保留。
+- 媒体 fingerprint 升级为与路径和修改时间无关的“文件大小 + 首尾各 4KB 内容采样哈希”；扫描仅在新旧两侧 fingerprint 都唯一时自动 relink，冲突时保守新建，避免串档。
+- 扫描不再删除路径失效记录：可访问 root 中未找到的文件标记为 `missing`；唯一 fingerprint 重新出现时更新 mutable path 并保留 manual 标签、收藏、播放记录和进度。
+- 播放器每约 5 秒低频保存当前 videoId 的进度，切换/退出时补写；重新打开时恢复安全位置，距离结尾不足 5 秒则从头播放，EOF 后清零。
+- 隔离 profile 的真实 debug exe 已完成旧库迁移启动和真实 H264/AAC 卡片加载；播放器点击复测受其它全屏置顶窗口持续抢占系统焦点阻塞，进度写入、重载、移动后保留与恢复边界已由 focused tests 替代覆盖，仍需在无置顶窗口环境复点“播放约 8 秒 → 返回 → 重开”。
 - 使用独立 `LOCAL_TAG_PLAYER_DATA_DIR` 和隔离媒体目录完成真实坏文件 smoke：0-byte MP4 会进入稳定 `unplayable_media` 错误态，诊断可见错误类型，“跳过此项”可继续播放队列中的正常 H264/AAC 文件，不会阻塞剩余队列。
 - 播放器上下文面板新增“编辑手动标签”入口；弹窗锁定 folder 来源标签，只允许增删 manual 标签，保存时优先按已关联 `tagId` 操作，并兼容同步旧视频标签字段。
 - 隔离 profile 真实窗口验证播放器内新增 `smoke-manual` 后立即显示、队列不变，重启应用后标签仍持久化；播放进度记忆明确等待 Stable Video Identity 后实施。

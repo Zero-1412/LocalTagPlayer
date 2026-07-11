@@ -31,9 +31,9 @@ lib/src/widgets
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.4.4`
+已完成基线：`Architecture Baseline 0.5.0`
 
-当前推进中：`Architecture Baseline 0.4.5`
+当前推进中：`Architecture Baseline 0.5.1`
 
 变更点：
 
@@ -47,6 +47,7 @@ lib/src/widgets
 - `0.4.3`：Chat 5 第一阶段落地 `DesktopFFmpegBackend` 兼容适配层，`ExternalMediaTools` 统一通过 `FFmpegBackend` 定位和调用 FFmpeg/FFprobe；诊断页显示工具版本、缩略图/媒体信息队列状态，并提供失败重试、清除失败记录和异常文件列表。Windows bundled tools 查找顺序保持不变。
 - `0.4.4`：Chat 6 第一阶段新增 Tag Manager 入口和页面；`LibraryStore` 增加标签来源使用统计、创建/编辑标签、别名、hidden/favorite/sortOrder、移动标签组和当前筛选结果批量添加/移除 manual 标签能力。批量移除只删除 `source=manual` 关系并同步兼容字段，folder 来源关系不被移除；删除/合并暂只做引用检查与风险提示。
 - `0.4.5`：补充 `LibraryStore` focused tests，覆盖目录扫描、folder/manual 标签维护和 SQLite 持久化读写；新增 `LibraryScanService` 隔离文件系统扫描、folder 标签派生和轻量媒体指纹，`LibraryStore` 继续负责 SQLite 写入、内存状态和标签索引同步。播放器页面继续拆分为主页面、底部上下文面板和右侧队列侧栏，播放队列语义不变。
+- `0.5.0`：落地 Stable Video Identity 第一阶段。`videos.video_id` 成为稳定身份，path 为 mutable location；`video_tags.video_id` 承载标签关联，旧 path 关联自动回填。扫描使用路径无关的小样本内容 fingerprint 做唯一 relink，歧义匹配拒绝合并；缺失路径标记 missing 而不删除记录。播放进度与最近播放写入稳定视频行，移动后随 videoId 保留。
 
 协作要求：
 

@@ -27,6 +27,19 @@ bool playerMediaStateIsPlayable({
   return hasCodec(videoCodec) || hasCodec(audioCodec);
 }
 
+/** 返回安全可恢复的播放位置；接近结尾时从头播放，避免一打开就触发 EOF。 */
+Duration? playerResumePosition({
+  required Duration saved,
+  required Duration duration,
+}) {
+  if (saved <= Duration.zero ||
+      duration <= Duration.zero ||
+      saved >= duration - const Duration(seconds: 5)) {
+    return null;
+  }
+  return saved;
+}
+
 /**
  * 播放页 open 请求队列协调器。
  *

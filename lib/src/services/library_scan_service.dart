@@ -42,13 +42,13 @@ class LibraryScannedVideo {
   /** 从根目录第二层派生的 folder 来源二级标签。 */
   final Map<String, Set<String>> childTags;
 
-  /** 文件大小，参与当前路径时代的轻量媒体指纹。 */
+  /** 文件大小，参与稳定内容指纹并用于增量缓存判断。 */
   final int fileSize;
 
-  /** 文件修改时间毫秒值，参与当前路径时代的轻量媒体指纹。 */
+  /** 文件修改时间毫秒值，仅用于变更检测，不作为稳定身份本身。 */
   final int modifiedMs;
 
-  /** 当前轻量媒体指纹，后续可替换为更稳定的 fingerprint 策略。 */
+  /** 基于大小与首尾小样本内容生成、与路径和修改时间无关的媒体指纹。 */
   final String mediaFingerprint;
 }
 
@@ -62,6 +62,7 @@ class LibraryScanResult {
   const LibraryScanResult({
     required this.entries,
     required this.seenPathKeys,
+    required this.scannedRootKeys,
   });
 
   /** 可安全写入媒体库的视频扫描条目。 */
@@ -69,6 +70,9 @@ class LibraryScanResult {
 
   /** 本轮扫描见过的视频路径 key。 */
   final Set<String> seenPathKeys;
+
+  /** 本轮确认可访问并完成枚举的根目录，用于安全标记 missing。 */
+  final Set<String> scannedRootKeys;
 }
 
 /**
@@ -88,6 +92,7 @@ class LibraryScanService {
   Future<LibraryScanResult> scanRoots(List<String> roots) async {
     final entries = <LibraryScannedVideo>[];
     final seen = <String>{};
+    final scannedRootKeys = <String>{};
     for (final root in roots) {
       final dir = Directory(root);
       if (!await _directoryExists(dir)) {
@@ -105,13 +110,18 @@ class LibraryScanService {
           if (stat == null || stat.type != FileSystemEntityType.file) {
             continue;
           }
-          entries.add(_entryFor(root: root, file: entity, stat: stat));
+          entries.add(await _entryFor(root: root, file: entity, stat: stat));
         }
+        scannedRootKeys.add(TagRules.pathKey(root));
       } on FileSystemException {
         continue;
       }
     }
-    return LibraryScanResult(entries: entries, seenPathKeys: seen);
+    return LibraryScanResult(
+      entries: entries,
+      seenPathKeys: seen,
+      scannedRootKeys: scannedRootKeys,
+    );
   }
 
   /**
@@ -149,28 +159,50 @@ class LibraryScanService {
    */
   static Future<String?> mediaFingerprintFor(String path) async {
     try {
-      final stat = await File(path).stat();
+      final file = File(path);
+      final stat = await file.stat();
       if (stat.type != FileSystemEntityType.file) {
         return null;
       }
-      return mediaFingerprintFromStat(stat);
+      return _mediaFingerprintForFile(file, stat);
     } catch (_) {
       return null;
     }
   }
 
   /**
-   * 用文件大小和修改时间生成当前阶段的轻量媒体指纹。
+   * 读取首尾各 4KB 生成轻量内容指纹。
+   *
+   * 自动 relink 仍要求两侧唯一，因此小样本碰撞只会拒绝自动合并，不会静默串档。
    */
-  static String mediaFingerprintFromStat(FileStat stat) {
-    return '${stat.size}|${stat.modified.millisecondsSinceEpoch}';
+  static Future<String> _mediaFingerprintForFile(
+    File file,
+    FileStat stat,
+  ) async {
+    const sampleSize = 4096;
+    final handle = await file.open();
+    try {
+      final first = await handle.read(math.min(sampleSize, stat.size));
+      final tailStart = math.max(first.length, stat.size - sampleSize);
+      await handle.setPosition(tailStart);
+      final last =
+          await handle.read(math.min(sampleSize, stat.size - tailStart));
+      var hash = 0xcbf29ce484222325;
+      for (final byte in <int>[...first, ...last]) {
+        hash ^= byte;
+        hash = (hash * 0x100000001b3) & 0xffffffffffffffff;
+      }
+      return 'v2:${stat.size}:${hash.toRadixString(16).padLeft(16, '0')}';
+    } finally {
+      await handle.close();
+    }
   }
 
-  LibraryScannedVideo _entryFor({
+  Future<LibraryScannedVideo> _entryFor({
     required String root,
     required File file,
     required FileStat stat,
-  }) {
+  }) async {
     return LibraryScannedVideo(
       path: file.path,
       title: p.basenameWithoutExtension(file.path),
@@ -181,7 +213,7 @@ class LibraryScanService {
       childTags: TagRules.childTagsFor(root, file.path),
       fileSize: stat.size,
       modifiedMs: stat.modified.millisecondsSinceEpoch,
-      mediaFingerprint: mediaFingerprintFromStat(stat),
+      mediaFingerprint: await _mediaFingerprintForFile(file, stat),
     );
   }
 

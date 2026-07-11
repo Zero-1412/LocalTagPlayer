@@ -5,7 +5,8 @@ abstract interface class LibraryRepository {
 
   Future<void> saveRoots(List<String> roots);
 
-  Future<List<VideoItem>> loadVideos({FilterQuery filter = const FilterQuery()});
+  Future<List<VideoItem>> loadVideos(
+      {FilterQuery filter = const FilterQuery()});
 
   Future<void> upsertVideo(VideoItem item);
 
@@ -49,7 +50,7 @@ abstract interface class PlaybackRepository {
   Future<PlaybackSession?> loadLastSession();
 
   Future<void> savePlaybackPosition({
-    required String videoPath,
+    required String videoId,
     required Duration position,
     required DateTime updatedAt,
   });

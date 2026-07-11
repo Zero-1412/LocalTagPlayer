@@ -77,6 +77,77 @@ void main() {
     AppPaths.debugUseDataDirectoryForTesting(null);
   });
 
+  test('legacy path-keyed schema backfills stable video identity', () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('identity_migration');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final databaseFile = await AppPaths.libraryDatabaseFile();
+    final legacyDb = await databaseFactory.openDatabase(databaseFile.path);
+    await legacyDb.execute('''
+      CREATE TABLE videos (
+        path TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        folder TEXT NOT NULL,
+        root_path TEXT,
+        relative_path TEXT,
+        file_size INTEGER,
+        modified_ms INTEGER,
+        tags_json TEXT NOT NULL,
+        child_tags_json TEXT NOT NULL,
+        is_favorite INTEGER NOT NULL,
+        media_details_json TEXT,
+        media_fingerprint TEXT,
+        thumbnail_error TEXT,
+        media_details_error TEXT,
+        added_at TEXT NOT NULL,
+        last_played_at TEXT
+      )
+    ''');
+    await legacyDb.execute('''
+      CREATE TABLE video_tags (
+        video_path TEXT NOT NULL,
+        tag_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        locked INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (video_path, tag_id, source)
+      )
+    ''');
+    final legacyPath = '${dataDir.path}${Platform.pathSeparator}legacy.mp4';
+    await legacyDb.insert('videos', {
+      'path': legacyPath,
+      'title': 'legacy',
+      'folder': dataDir.path,
+      'tags_json': '[]',
+      'child_tags_json': '{}',
+      'is_favorite': 1,
+      'media_fingerprint': '5|123',
+      'added_at': DateTime.utc(2026, 7, 1).toIso8601String(),
+    });
+    await legacyDb.insert('video_tags', {
+      'video_path': legacyPath,
+      'tag_id': 'manual:legacy',
+      'source': 'manual',
+      'locked': 0,
+      'created_at': DateTime.utc(2026, 7, 1).toIso8601String(),
+      'updated_at': DateTime.utc(2026, 7, 1).toIso8601String(),
+    });
+    await legacyDb.close();
+
+    final migrated = await _loadTrackedStore(stores);
+    final item = _videoByPath(migrated, legacyPath);
+    expect(item.videoId, startsWith('vid_'));
+    expect(item.isFavorite, isTrue);
+    expect(item.isMissing, isFalse);
+    expect(item.playbackPosition, Duration.zero);
+    expect(migrated.videoTagIdsByPathKey[TagRules.pathKey(legacyPath)],
+        contains('manual:legacy'));
+  });
+
   test('scan derives folder tags and persists scanned videos', () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('scan');
@@ -356,8 +427,7 @@ void main() {
     expect(withoutRoot.favoriteTags, ['alpha', 'beta']);
   });
 
-  test(
-      'scan coordinator removes missing videos and keeps remaining manual tags',
+  test('scan coordinator marks missing videos and preserves manual tags',
       () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('scan_remove');
@@ -387,15 +457,16 @@ void main() {
     await removed.delete();
     expect(await store.scan(), 0);
 
-    expect(store.videos[TagRules.pathKey(removed.path)], isNull);
-    expect(store.videoTagIdsByPathKey[TagRules.pathKey(removed.path)], isNull);
+    expect(store.videos[TagRules.pathKey(removed.path)]?.isMissing, isTrue);
+    expect(store.videoTagIdsByPathKey[TagRules.pathKey(removed.path)],
+        contains(manual.id));
     expect(store.videoTagIdsByPathKey[TagRules.pathKey(kept.path)],
         contains(manual.id));
 
     final reloaded = await _loadTrackedStore(stores);
-    expect(reloaded.videos[TagRules.pathKey(removed.path)], isNull);
-    expect(
-        reloaded.videoTagIdsByPathKey[TagRules.pathKey(removed.path)], isNull);
+    expect(reloaded.videos[TagRules.pathKey(removed.path)]?.isMissing, isTrue);
+    expect(reloaded.videoTagIdsByPathKey[TagRules.pathKey(removed.path)],
+        contains(manual.id));
     expect(reloaded.videoTagIdsByPathKey[TagRules.pathKey(kept.path)],
         contains(manual.id));
   });
@@ -433,6 +504,94 @@ void main() {
     expect(rescanned.mediaDetails, isNull);
     expect(rescanned.mediaDetailsError, isNull);
     expect(rescanned.thumbnailError, isNull);
+  });
+
+  test('unique fingerprint relink preserves stable identity and user data',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('stable_relink');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final original = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['OldSeries', 'Album', 'moving.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, original.path);
+    final videoId = item.videoId;
+    final manual =
+        await store.createManualTag(name: 'keep-me', groupId: 'manual');
+    await store.batchAddManualTag(manual, [item]);
+    item
+      ..isFavorite = true
+      ..lastPlayedAt = DateTime.utc(2026, 7, 11, 8)
+      ..playbackPosition = const Duration(seconds: 37)
+      ..playbackPositionUpdatedAt = DateTime.utc(2026, 7, 11, 8, 1);
+    await store.upsertVideo(item);
+
+    final moved = File(
+      [mediaRoot.path, 'NewSeries', 'Renamed', 'moved.mp4']
+          .join(Platform.pathSeparator),
+    );
+    await moved.parent.create(recursive: true);
+    await original.rename(moved.path);
+    await store.scan();
+
+    expect(store.videos[TagRules.pathKey(original.path)], isNull);
+    final relinked = _videoByPath(store, moved.path);
+    expect(relinked.videoId, videoId);
+    expect(relinked.isFavorite, isTrue);
+    expect(relinked.playbackPosition, const Duration(seconds: 37));
+    expect(relinked.isMissing, isFalse);
+    expect(store.videoTagIdsByPathKey[TagRules.pathKey(moved.path)],
+        contains(manual.id));
+
+    final reloaded = await _loadTrackedStore(stores);
+    final persisted = _videoByPath(reloaded, moved.path);
+    expect(persisted.videoId, videoId);
+    expect(persisted.playbackPosition, const Duration(seconds: 37));
+    expect(reloaded.videoTagIdsByPathKey[TagRules.pathKey(moved.path)],
+        contains(manual.id));
+  });
+
+  test('ambiguous fingerprints never auto-relink user data', () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('ambiguous_relink');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final first = await _writeVideoPlaceholder(mediaRoot, ['A', 'first.mp4']);
+    final second = await _writeVideoPlaceholder(mediaRoot, ['B', 'second.mp4']);
+    final sharedModified = DateTime.utc(2026, 7, 11, 9);
+    await first.setLastModified(sharedModified);
+    await second.setLastModified(sharedModified);
+
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final originalIds = {
+      _videoByPath(store, first.path).videoId,
+      _videoByPath(store, second.path).videoId,
+    };
+    final moved = File(
+      [mediaRoot.path, 'C', 'moved.mp4'].join(Platform.pathSeparator),
+    );
+    await moved.parent.create(recursive: true);
+    await first.rename(moved.path);
+    await second.delete();
+    await store.scan();
+
+    final imported = _videoByPath(store, moved.path);
+    expect(originalIds, isNot(contains(imported.videoId)));
+    expect(store.videos.values.where((item) => item.isMissing).length, 2);
   });
 
   test('scan service ignores inaccessible or missing roots without deleting',

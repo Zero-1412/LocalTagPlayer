@@ -7,6 +7,13 @@
 
 # CHAT_4_PLAYER.md
 
+## 2026-07-11 稳定身份播放进度
+
+- 播放位置不再按 path 单独记忆，而是保存在稳定 `videoId` 对应的视频记录中；文件移动并自动 relink 后继续沿用原进度。
+- 播放中约每 5 秒低频写入，切换或退出时补写；open 成功并确认可播放后恢复位置。
+- 距离结尾不足 5 秒的进度不恢复，EOF 后清零，避免自动续播闭环被旧进度重复触发。
+- 本轮未改变 filtered queue 来源、连续播放顺序、`PlayerBackend` 或 `FilterQuery` / `TagQueryService` 语义。
+
 ## 2026-07-10 隔离坏文件 smoke 与播放器标签入口
 
 - `Player.open` 返回后会检查时长和音视频编码是否至少有一项可用；真实 0-byte MP4 不再停留在假播放状态，而是进入稳定 `unplayable_media` 恢复面板。

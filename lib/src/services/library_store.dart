@@ -49,7 +49,7 @@ class LibraryStore {
 
   Future<Map<String, TagUsageSummary>> tagUsageSummaries() async {
     final rows = await _db.rawQuery('''
-      SELECT tag_id, source, COUNT(DISTINCT video_path) AS count
+      SELECT tag_id, source, COUNT(DISTINCT video_id) AS count
       FROM video_tags
       GROUP BY tag_id, source
     ''');
@@ -105,6 +105,7 @@ class LibraryStore {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS videos (
         path TEXT PRIMARY KEY,
+        video_id TEXT,
         title TEXT NOT NULL,
         folder TEXT NOT NULL,
         root_path TEXT,
@@ -119,7 +120,10 @@ class LibraryStore {
         thumbnail_error TEXT,
         media_details_error TEXT,
         added_at TEXT NOT NULL,
-        last_played_at TEXT
+        last_played_at TEXT,
+        is_missing INTEGER NOT NULL DEFAULT 0,
+        playback_position_ms INTEGER NOT NULL DEFAULT 0,
+        playback_position_updated_at TEXT
       )
     ''');
     await _ensureVideoColumns(db);
@@ -173,6 +177,7 @@ class LibraryStore {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS video_tags (
         video_path TEXT NOT NULL,
+        video_id TEXT,
         tag_id TEXT NOT NULL,
         source TEXT NOT NULL,
         locked INTEGER NOT NULL DEFAULT 0,
@@ -181,12 +186,31 @@ class LibraryStore {
         PRIMARY KEY (video_path, tag_id, source)
       )
     ''');
+    await _ensureVideoTagColumns(db);
+    await _backfillStableVideoIds(db);
+    // 旧版本可能残留同一身份的重复 path 兼容行；建唯一索引前只清理冗余关系。
+    await db.execute('''
+      DELETE FROM video_tags
+      WHERE video_id IS NOT NULL
+        AND rowid NOT IN (
+          SELECT MIN(rowid)
+          FROM video_tags
+          WHERE video_id IS NOT NULL
+          GROUP BY video_id, tag_id, source
+        )
+    ''');
+    await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_video_id ON videos(video_id)');
     await db
         .execute('CREATE INDEX IF NOT EXISTS idx_tags_group ON tags(group_id)');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_tag_aliases_alias ON tag_aliases(alias)');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_video_tags_video ON video_tags(video_path)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_video_tags_video_id ON video_tags(video_id)');
+    await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_video_tags_identity ON video_tags(video_id, tag_id, source) WHERE video_id IS NOT NULL');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_video_tags_tag ON video_tags(tag_id)');
     await db.execute(
@@ -207,6 +231,57 @@ class LibraryStore {
     await addColumn('relative_path', 'TEXT');
     await addColumn('file_size', 'INTEGER');
     await addColumn('modified_ms', 'INTEGER');
+    await addColumn('video_id', 'TEXT');
+    await addColumn('is_missing', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn('playback_position_ms', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn('playback_position_updated_at', 'TEXT');
+  }
+
+  /** 为旧版 `video_tags` 增加稳定身份兼容列，保留旧 path 列用于平滑迁移。 */
+  static Future<void> _ensureVideoTagColumns(Database db) async {
+    final rows = await db.rawQuery('PRAGMA table_info(video_tags)');
+    final columns = rows.map((row) => row['name'] as String).toSet();
+    if (!columns.contains('video_id')) {
+      await db.execute('ALTER TABLE video_tags ADD COLUMN video_id TEXT');
+    }
+  }
+
+  /** 幂等回填旧视频身份，并把既有标签关系绑定到对应 `videoId`。 */
+  static Future<void> _backfillStableVideoIds(Database db) async {
+    final rows = await db.query(
+      'videos',
+      columns: const ['path', 'video_id'],
+      orderBy: 'added_at ASC, path ASC',
+    );
+    final batch = db.batch();
+    final seenIds = <String>{};
+    var changed = false;
+    for (final row in rows) {
+      final currentId = (row['video_id'] as String? ?? '').trim();
+      if (currentId.isNotEmpty && seenIds.add(currentId)) {
+        continue;
+      }
+      final newId = VideoItem._newVideoId();
+      seenIds.add(newId);
+      batch.update(
+        'videos',
+        {'video_id': newId},
+        where: Platform.isWindows ? 'path = ? COLLATE NOCASE' : 'path = ?',
+        whereArgs: [row['path']],
+      );
+      changed = true;
+    }
+    if (changed) {
+      await batch.commit(noResult: true);
+    }
+    await db.execute('''
+      UPDATE video_tags
+      SET video_id = (
+        SELECT videos.video_id
+        FROM videos
+        WHERE ${Platform.isWindows ? 'videos.path = video_tags.video_path COLLATE NOCASE' : 'videos.path = video_tags.video_path'}
+      )
+    ''');
   }
 
   static Future<void> _ensureDefaultTagGroups(Database db) async {
@@ -283,8 +358,13 @@ class LibraryStore {
 
   static Future<Map<String, Set<String>>> _loadVideoTagIds(Database db) async {
     final links = <String, Set<String>>{};
-    for (final row in await db.query('video_tags')) {
-      final path = row['video_path'] as String;
+    final rows = await db.rawQuery('''
+      SELECT vt.tag_id, v.path
+      FROM video_tags vt
+      INNER JOIN videos v ON v.video_id = vt.video_id
+    ''');
+    for (final row in rows) {
+      final path = row['path'] as String;
       final tagId = row['tag_id'] as String;
       (links[TagRules.pathKey(path)] ??= <String>{}).add(tagId);
     }
@@ -539,8 +619,10 @@ class LibraryStore {
   }
 
   Future<void> deleteVideo(String path) async {
-    videos.remove(TagRules.pathKey(path));
-    await _tagPersistence.deleteVideoLinks(path);
+    final item = videos.remove(TagRules.pathKey(path));
+    if (item != null) {
+      await _tagPersistence.deleteVideoLinks(item);
+    }
     await _videoPersistence.delete(path);
   }
 

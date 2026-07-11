@@ -1,5 +1,17 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-11
+
+### Stable Video Identity 与播放进度迁移
+
+- `videos` 表兼容新增 `video_id`、`is_missing`、`playback_position_ms`、`playback_position_updated_at`；旧库启动时幂等生成稳定 ID，不要求清库。
+- `video_tags` 兼容新增 `video_id` 并从旧 `video_path` 关系回填；新增、移除、统计和扫描重建均改按稳定身份操作，`video_path` 暂保留为兼容列。
+- `VideoItem.path` 改为 mutable location；扫描发现旧路径失效时不再硬删除记录，而是标记 missing，保留标签、收藏、最近播放、媒体详情与进度。
+- fingerprint 升级为 `v2:文件大小:首尾各 4KB 内容哈希`，不依赖路径或修改时间；只有 fingerprint 在旧记录和新扫描结果两侧都唯一时才自动 relink，冲突时拒绝自动合并。
+- 播放器按稳定条目低频保存进度并在重新打开时恢复；接近结尾的进度不恢复，播放完成后清零。
+- 新增迁移、missing 保留、唯一 fingerprint relink、歧义 fingerprint 防串档、进度持久化和安全恢复 focused tests。
+- 迁移向后兼容且幂等；未修改 `FilterQuery` / `TagQueryService` 过滤语义、filtered queue 来源或缩略图队列。
+
 ## 2026-07-10
 
 ### 真实坏文件 smoke 与播放器内快速编辑 manual 标签

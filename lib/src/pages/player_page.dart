@@ -52,6 +52,7 @@ class PlayerPage extends StatefulWidget {
     required this.onDeleteFile,
     required this.onToggleFavorite,
     required this.onEditManualTags,
+    required this.onPlaybackProgressUpdated,
     required this.onMediaDetailsUpdated,
   });
 
@@ -65,6 +66,8 @@ class PlayerPage extends StatefulWidget {
   final Future<void> Function(VideoItem item) onDeleteFile;
   final Future<void> Function(VideoItem item) onToggleFavorite;
   final Future<void> Function(VideoItem item) onEditManualTags;
+  final Future<void> Function(VideoItem item, Duration position)
+      onPlaybackProgressUpdated;
   final Future<void> Function(
           VideoItem item, MediaDetails details, String? fingerprint)
       onMediaDetailsUpdated;
@@ -83,6 +86,9 @@ class _PlayerPageState extends State<PlayerPage> {
   final _openRequests = PlayerOpenRequestController();
   StreamSubscription<bool>? _completedSubscription;
   StreamSubscription<String>? _playerErrorSubscription;
+  StreamSubscription<Duration>? _positionSubscription;
+  DateTime? _lastProgressWriteAt;
+  Duration _lastPersistedPosition = Duration.zero;
   DateTime? _ignoreQueueSelectionBefore;
   String? _handledCompletedPath;
   String? _openedPath;
@@ -159,6 +165,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _completedSubscription =
         _player.stream.completed.listen(_handlePlaybackCompleted);
     _playerErrorSubscription = _player.stream.error.listen(_handlePlayerError);
+    _positionSubscription = _player.stream.position.listen(_handlePosition);
     _requestOpenCurrent();
     _prefetchQueueWindow();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -188,6 +195,42 @@ class _PlayerPageState extends State<PlayerPage> {
     setState(() {});
   }
 
+  /** 以低频写入当前已打开视频的进度，避免播放流每帧触发 SQLite。 */
+  void _handlePosition(Duration position) {
+    final openedPath = _openedPath;
+    if (_openRequests.isOpening ||
+        openedPath == null ||
+        position <= Duration.zero) {
+      return;
+    }
+    final now = DateTime.now();
+    final elapsed = _lastProgressWriteAt == null
+        ? const Duration(days: 1)
+        : now.difference(_lastProgressWriteAt!);
+    final advanced = (position - _lastPersistedPosition).abs();
+    if (elapsed < const Duration(seconds: 5) &&
+        advanced < const Duration(seconds: 5)) {
+      return;
+    }
+    final item = _itemForPath(openedPath);
+    if (item == null) {
+      return;
+    }
+    _lastProgressWriteAt = now;
+    _lastPersistedPosition = position;
+    unawaited(widget.onPlaybackProgressUpdated(item, position));
+  }
+
+  /** 从来源队列解析当前路径，确保进度写入对应视频而不是刚切换的新条目。 */
+  VideoItem? _itemForPath(String path) {
+    for (final item in _sourcePlaylist) {
+      if (TagRules.pathKey(item.path) == TagRules.pathKey(path)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
   /**
    * 处理播放完成事件，在当前 filtered queue 内顺序进入下一条。
    *
@@ -215,6 +258,10 @@ class _PlayerPageState extends State<PlayerPage> {
       return;
     }
     _handledCompletedPath = completedPath;
+    _currentItem.playbackPosition = Duration.zero;
+    unawaited(
+      widget.onPlaybackProgressUpdated(_currentItem, Duration.zero),
+    );
     final nextIndex = _playback.nextIndex;
     if (nextIndex == null) {
       setState(() => _queueEndReached = true);
@@ -365,6 +412,10 @@ class _PlayerPageState extends State<PlayerPage> {
           }
           _openedPath = path;
           _openRequests.markSuccess();
+          final openedItem = _itemForPath(path);
+          if (openedItem != null) {
+            await _restorePlaybackPosition(openedItem);
+          }
         } catch (error) {
           if (!mounted) {
             return;
@@ -412,6 +463,20 @@ class _PlayerPageState extends State<PlayerPage> {
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
     return false;
+  }
+
+  /** 在有效时长范围内恢复稳定 videoId 对应的上次播放位置。 */
+  Future<void> _restorePlaybackPosition(VideoItem item) async {
+    final saved = playerResumePosition(
+      saved: item.playbackPosition,
+      duration: _player.state.duration,
+    );
+    if (saved == null) {
+      return;
+    }
+    await _player.seek(saved);
+    _lastPersistedPosition = saved;
+    _lastProgressWriteAt = DateTime.now();
   }
 
   /** 重新打开最近失败的视频，并继续复用 latest-request worker。 */
@@ -859,6 +924,15 @@ class _PlayerPageState extends State<PlayerPage> {
     _openRequests.cancel();
     unawaited(_completedSubscription?.cancel());
     unawaited(_playerErrorSubscription?.cancel());
+    unawaited(_positionSubscription?.cancel());
+    final openedPath = _openedPath;
+    final position = _player.state.position;
+    if (openedPath != null && position > Duration.zero) {
+      final item = _itemForPath(openedPath);
+      if (item != null) {
+        unawaited(widget.onPlaybackProgressUpdated(item, position));
+      }
+    }
     _queueScrollController.dispose();
     _focusNode.dispose();
     _player.dispose();

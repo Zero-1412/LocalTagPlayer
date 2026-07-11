@@ -56,7 +56,7 @@ class LibraryTagMaintenance {
       _store._videoPersistence.insertInBatch(batch, item);
       _store._tagPersistence.attachTagInBatch(
         batch,
-        item.path,
+        item,
         tag,
         source: TagSource.manual,
       );
@@ -91,10 +91,8 @@ class LibraryTagMaintenance {
       final changedCompat = _removeManualTagFromItem(item, tag);
       batch.delete(
         'video_tags',
-        where: Platform.isWindows
-            ? 'video_path = ? COLLATE NOCASE AND tag_id = ? AND source = ?'
-            : 'video_path = ? AND tag_id = ? AND source = ?',
-        whereArgs: [item.path, tag.id, TagSource.manual.name],
+        where: 'video_id = ? AND tag_id = ? AND source = ?',
+        whereArgs: [item.videoId, tag.id, TagSource.manual.name],
       );
       _store.videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.remove(tag.id);
       if (_store.videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.isEmpty ??
@@ -117,11 +115,11 @@ class LibraryTagMaintenance {
    */
   void syncFolderTagsInBatch(Batch batch, VideoItem item) {
     _store._tagPersistence
-        .removeVideoTagSourceInBatch(batch, item.path, TagSource.folder);
+        .removeVideoTagSourceInBatch(batch, item, TagSource.folder);
     for (final tag in item.tags) {
       _store._tagPersistence.attachTagInBatch(
         batch,
-        item.path,
+        item,
         _tagFor(
           name: tag,
           groupId: 'folder.primary',
@@ -134,7 +132,7 @@ class LibraryTagMaintenance {
       for (final child in entry.value) {
         _store._tagPersistence.attachTagInBatch(
           batch,
-          item.path,
+          item,
           _tagFor(
             name: child,
             groupId: 'folder.child',
@@ -159,7 +157,7 @@ class LibraryTagMaintenance {
   }) {
     _store._tagPersistence.removeManualTagScopeInBatch(
       batch,
-      item.path,
+      item,
       parentTag: parentTag,
     );
     if (parentTag == null) {
@@ -170,7 +168,7 @@ class LibraryTagMaintenance {
         }
         _store._tagPersistence.attachTagInBatch(
           batch,
-          item.path,
+          item,
           _tagFor(
             name: tag,
             groupId: 'manual',
@@ -189,7 +187,7 @@ class LibraryTagMaintenance {
       }
       _store._tagPersistence.attachTagInBatch(
         batch,
-        item.path,
+        item,
         _tagFor(
           name: child,
           groupId: 'manual',

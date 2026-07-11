@@ -2239,6 +2239,7 @@ class _LibraryPageState extends State<LibraryPage> {
             onDeleteFile: _deleteVideoFile,
             onToggleFavorite: _toggleFavorite,
             onEditManualTags: _editManualTagsFromPlayer,
+            onPlaybackProgressUpdated: _updatePlaybackProgress,
             onMediaDetailsUpdated: _updateMediaDetails,
           ),
         ),
@@ -2248,7 +2249,16 @@ class _LibraryPageState extends State<LibraryPage> {
         thumbnailService.resume();
       }
     }
-    item.lastPlayedAt = DateTime.now();
+  }
+
+  /** 将播放位置和最近播放时间写入稳定 videoId 对应的视频记录。 */
+  Future<void> _updatePlaybackProgress(
+    VideoItem item,
+    Duration position,
+  ) async {
+    item.playbackPosition = position;
+    item.playbackPositionUpdatedAt = DateTime.now();
+    item.lastPlayedAt = item.playbackPositionUpdatedAt;
     await _store?.upsertVideo(item);
     if (mounted) {
       _markPlaybackTimestampChanged(item);
@@ -2281,7 +2291,6 @@ class _LibraryPageState extends State<LibraryPage> {
     if (await file.exists()) {
       await file.delete();
     }
-    _store?.videos.remove(TagRules.pathKey(item.path));
     await _store?.deleteVideo(item.path);
     if (mounted) {
       _markLibraryDataChanged();

@@ -7,6 +7,14 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-11 Stable Video Identity 第一阶段
+
+- SQLite 兼容增加 `videos.video_id`、missing 与播放进度字段；旧 path 主键记录启动时幂等回填，不清空用户数据库。
+- `video_tags` 增加并改用 `video_id` 关联；path 暂作为兼容列，移动时只更新位置快照。
+- fingerprint 使用大小与首尾各 4KB 内容采样，不依赖 path/mtime；仅新旧两侧唯一时自动 relink，歧义时保守新建，防止标签、收藏和进度串档。
+- 可访问 root 中消失的记录改为 missing，不再删除；自动 relink 保留 videoId、manual 标签、收藏、播放记录、媒体缓存字段和进度，并重新计算 folder 标签。
+- focused tests 覆盖旧 schema 回填、missing 保留、唯一移动认领、歧义拒绝合并与重载持久化。
+
 当前版本：`0.4.3`
 状态：进行中
 负责人：Chat 2 / 标签模型 + 筛选引擎 + 媒体库

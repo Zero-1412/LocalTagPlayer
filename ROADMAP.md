@@ -1,5 +1,12 @@
 # ROADMAP.md
 
+## 2026-07-11 Stable Video Identity 第一阶段完成
+
+- 已完成 `videoId + fingerprint + mutable path` 兼容迁移，旧数据库无需清空。
+- 已完成扫描期唯一 fingerprint 自动 relink、歧义拒绝合并和 missing 保留。
+- 已完成标签、收藏、最近播放与播放进度随稳定 videoId 保留。
+- 下一阶段：提供 missing 列表、单文件手动 relink 与批量路径前缀替换 UI；在真实跨盘目录迁移上补大库性能与冲突审计。
+
 ## 规划基准
 
 产品和架构规划以此文件为准：

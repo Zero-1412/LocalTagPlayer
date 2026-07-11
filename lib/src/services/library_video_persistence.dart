@@ -28,6 +28,7 @@ class LibraryVideoPersistence {
   static VideoItem videoFromRow(Map<String, Object?> row) {
     final mediaDetailsJson = row['media_details_json'] as String?;
     return VideoItem(
+      videoId: row['video_id'] as String?,
       path: row['path'] as String,
       title: row['title'] as String,
       folder: row['folder'] as String,
@@ -55,6 +56,11 @@ class LibraryVideoPersistence {
       addedAt:
           DateTime.tryParse(row['added_at'] as String? ?? '') ?? DateTime.now(),
       lastPlayedAt: DateTime.tryParse(row['last_played_at'] as String? ?? ''),
+      isMissing: (row['is_missing'] as int? ?? 0) == 1,
+      playbackPosition:
+          Duration(milliseconds: row['playback_position_ms'] as int? ?? 0),
+      playbackPositionUpdatedAt: DateTime.tryParse(
+          row['playback_position_updated_at'] as String? ?? ''),
     );
   }
 
@@ -64,6 +70,7 @@ class LibraryVideoPersistence {
    * 标签快照保持排序后写入，确保同一业务状态不会产生不必要的持久化差异。
    */
   static Map<String, Object?> videoToRow(VideoItem item) => {
+        'video_id': item.videoId,
         'path': item.path,
         'title': item.title,
         'folder': item.folder,
@@ -83,6 +90,10 @@ class LibraryVideoPersistence {
         'media_details_error': item.mediaDetailsError,
         'added_at': item.addedAt.toIso8601String(),
         'last_played_at': item.lastPlayedAt?.toIso8601String(),
+        'is_missing': item.isMissing ? 1 : 0,
+        'playback_position_ms': item.playbackPosition.inMilliseconds,
+        'playback_position_updated_at':
+            item.playbackPositionUpdatedAt?.toIso8601String(),
       };
 
   /**
@@ -137,5 +148,11 @@ class LibraryVideoPersistence {
       where: Platform.isWindows ? 'path = ? COLLATE NOCASE' : 'path = ?',
       whereArgs: [path],
     );
+  }
+
+  /** 在同一批次中删除旧 path 行并用相同 videoId 写入新位置。 */
+  void relinkInBatch(Batch batch, String oldPath, VideoItem item) {
+    deleteInBatch(batch, oldPath);
+    insertInBatch(batch, item);
   }
 }

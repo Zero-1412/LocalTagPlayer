@@ -92,17 +92,15 @@ class LibraryTagPersistence {
    */
   void removeVideoTagSourceInBatch(
     Batch batch,
-    String videoPath,
+    VideoItem video,
     TagSource source,
   ) {
     batch.delete(
       'video_tags',
-      where: Platform.isWindows
-          ? 'video_path = ? COLLATE NOCASE AND source = ?'
-          : 'video_path = ? AND source = ?',
-      whereArgs: [videoPath, source.name],
+      where: 'video_id = ? AND source = ?',
+      whereArgs: [video.videoId, source.name],
     );
-    final key = TagRules.pathKey(videoPath);
+    final key = TagRules.pathKey(video.path);
     final retained = _videoTagIdsByPathKey[key];
     if (retained != null) {
       retained.removeWhere((tagId) => _tagsById[tagId]?.source == source);
@@ -120,10 +118,10 @@ class LibraryTagPersistence {
    */
   void removeManualTagScopeInBatch(
     Batch batch,
-    String videoPath, {
+    VideoItem video, {
     String? parentTag,
   }) {
-    final key = TagRules.pathKey(videoPath);
+    final key = TagRules.pathKey(video.path);
     final retained = _videoTagIdsByPathKey[key];
     if (retained == null || retained.isEmpty) {
       return;
@@ -142,10 +140,8 @@ class LibraryTagPersistence {
       removed.add(tagId);
       batch.delete(
         'video_tags',
-        where: Platform.isWindows
-            ? 'video_path = ? COLLATE NOCASE AND tag_id = ? AND source = ?'
-            : 'video_path = ? AND tag_id = ? AND source = ?',
-        whereArgs: [videoPath, tagId, TagSource.manual.name],
+        where: 'video_id = ? AND tag_id = ? AND source = ?',
+        whereArgs: [video.videoId, tagId, TagSource.manual.name],
       );
     }
     retained.removeAll(removed);
@@ -161,7 +157,7 @@ class LibraryTagPersistence {
    */
   void attachTagInBatch(
     Batch batch,
-    String videoPath,
+    VideoItem video,
     TagItem tag, {
     required TagSource source,
     bool locked = false,
@@ -171,7 +167,8 @@ class LibraryTagPersistence {
     batch.insert(
       'video_tags',
       {
-        'video_path': videoPath,
+        'video_path': video.path,
+        'video_id': video.videoId,
         'tag_id': tag.id,
         'source': source.name,
         'locked': locked ? 1 : 0,
@@ -180,7 +177,7 @@ class LibraryTagPersistence {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    (_videoTagIdsByPathKey[TagRules.pathKey(videoPath)] ??= <String>{})
+    (_videoTagIdsByPathKey[TagRules.pathKey(video.path)] ??= <String>{})
         .add(tag.id);
   }
 
@@ -189,14 +186,12 @@ class LibraryTagPersistence {
    *
    * 删除视频文件或记录前显式清理关联，保护未启用外键的旧环境。
    */
-  Future<void> deleteVideoLinks(String path) async {
-    _videoTagIdsByPathKey.remove(TagRules.pathKey(path));
+  Future<void> deleteVideoLinks(VideoItem video) async {
+    _videoTagIdsByPathKey.remove(TagRules.pathKey(video.path));
     await _db.delete(
       'video_tags',
-      where: Platform.isWindows
-          ? 'video_path = ? COLLATE NOCASE'
-          : 'video_path = ?',
-      whereArgs: [path],
+      where: 'video_id = ?',
+      whereArgs: [video.videoId],
     );
   }
 
@@ -205,14 +200,25 @@ class LibraryTagPersistence {
    *
    * 扫描清理缺失视频时需要和视频表删除同批提交，避免中间状态留下悬空关联。
    */
-  void deleteVideoLinksInBatch(Batch batch, String path) {
-    _videoTagIdsByPathKey.remove(TagRules.pathKey(path));
+  void deleteVideoLinksInBatch(Batch batch, VideoItem video) {
+    _videoTagIdsByPathKey.remove(TagRules.pathKey(video.path));
     batch.delete(
       'video_tags',
-      where: Platform.isWindows
-          ? 'video_path = ? COLLATE NOCASE'
-          : 'video_path = ?',
-      whereArgs: [path],
+      where: 'video_id = ?',
+      whereArgs: [video.videoId],
+    );
+  }
+
+  /** 文件移动后只更新兼容 path，标签关系仍以 videoId 保持不变。 */
+  void relinkVideoPathInBatch(
+    Batch batch,
+    VideoItem video,
+  ) {
+    batch.update(
+      'video_tags',
+      {'video_path': video.path},
+      where: 'video_id = ?',
+      whereArgs: [video.videoId],
     );
   }
 

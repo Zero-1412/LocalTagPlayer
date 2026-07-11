@@ -28,19 +28,50 @@ class LibraryScanCoordinator {
     final scanResult = await const LibraryScanService().scanRoots(_store.roots);
     final batch = _store._db.batch();
     var added = 0;
+    final scannedFingerprintCounts = <String, int>{};
+    for (final scanned in scanResult.entries) {
+      scannedFingerprintCounts.update(
+        scanned.mediaFingerprint,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    final relocationCandidates = <String, List<VideoItem>>{};
+    for (final item in _store.videos.values) {
+      final fingerprint = item.mediaFingerprint;
+      if (fingerprint == null ||
+          scanResult.seenPathKeys.contains(TagRules.pathKey(item.path)) ||
+          File(item.path).existsSync()) {
+        continue;
+      }
+      (relocationCandidates[fingerprint] ??= <VideoItem>[]).add(item);
+    }
 
     for (final scanned in scanResult.entries) {
       final videoKey = TagRules.pathKey(scanned.path);
       final existing = _store.videos[videoKey];
       if (existing == null) {
-        _insertNewScannedVideo(batch, scanned, videoKey);
-        added++;
+        final candidates = relocationCandidates[scanned.mediaFingerprint] ??
+            const <VideoItem>[];
+        if (candidates.length == 1 &&
+            scannedFingerprintCounts[scanned.mediaFingerprint] == 1) {
+          _relinkScannedVideo(batch, candidates.single, scanned, videoKey);
+          relocationCandidates.remove(scanned.mediaFingerprint);
+        } else {
+          // 指纹任一侧不唯一时拒绝自动认领，防止相同大小/时间戳文件串档。
+          _insertNewScannedVideo(batch, scanned, videoKey);
+          added++;
+        }
       } else {
         _mergeExistingScannedVideo(batch, existing, scanned);
       }
     }
 
-    _removeMissingVideos(batch, scanResult.seenPathKeys);
+    _markMissingVideos(
+      batch,
+      scanResult.seenPathKeys,
+      scanResult.scannedRootKeys,
+    );
     _store._metadataPersistence.saveInBatch(
       batch,
       roots: _store.roots,
@@ -89,13 +120,18 @@ class LibraryScanCoordinator {
     final tagsChanged = !LibraryStore._setEquals(existing.tags, scanned.tags);
     final childTagsChanged =
         !LibraryStore._childTagsEquals(existing.childTags, scanned.childTags);
-    final contentChanged = existing.mediaFingerprint != null &&
+    final fingerprintChanged = existing.mediaFingerprint != null &&
         existing.mediaFingerprint != scanned.mediaFingerprint;
+    final contentChanged = existing.fileSize != scanned.fileSize ||
+        existing.modifiedMs != scanned.modifiedMs ||
+        (existing.mediaFingerprint?.startsWith('v2:') == true &&
+            fingerprintChanged);
     final indexChanged = existing.rootPath != scanned.rootPath ||
         existing.relativePath != scanned.relativePath ||
         existing.fileSize != scanned.fileSize ||
         existing.modifiedMs != scanned.modifiedMs ||
-        existing.mediaFingerprint != scanned.mediaFingerprint;
+        existing.mediaFingerprint != scanned.mediaFingerprint ||
+        existing.isMissing;
     existing.tags
       ..clear()
       ..addAll(scanned.tags);
@@ -108,6 +144,7 @@ class LibraryScanCoordinator {
     existing.fileSize = scanned.fileSize;
     existing.modifiedMs = scanned.modifiedMs;
     existing.mediaFingerprint = scanned.mediaFingerprint;
+    existing.isMissing = false;
     if (contentChanged) {
       existing.mediaDetails = null;
       existing.mediaDetailsError = null;
@@ -121,24 +158,65 @@ class LibraryScanCoordinator {
     }
   }
 
+  /** 用唯一 fingerprint 将新路径认领给旧 videoId，并保留全部用户数据。 */
+  void _relinkScannedVideo(
+    Batch batch,
+    VideoItem existing,
+    LibraryScannedVideo scanned,
+    String newVideoKey,
+  ) {
+    final oldPath = existing.path;
+    final oldKey = TagRules.pathKey(oldPath);
+    final linkedTagIds = _store.videoTagIdsByPathKey.remove(oldKey);
+    _store.videos.remove(oldKey);
+    existing
+      ..path = scanned.path
+      ..title = scanned.title
+      ..folder = scanned.folder
+      ..rootPath = scanned.rootPath
+      ..relativePath = scanned.relativePath
+      ..fileSize = scanned.fileSize
+      ..modifiedMs = scanned.modifiedMs
+      ..mediaFingerprint = scanned.mediaFingerprint
+      ..isMissing = false;
+    existing.tags
+      ..clear()
+      ..addAll(scanned.tags);
+    existing.childTags
+      ..clear()
+      ..addAll(scanned.childTags
+          .map((key, value) => MapEntry(key, <String>{...value})));
+    _store.videos[newVideoKey] = existing;
+    if (linkedTagIds != null) {
+      _store.videoTagIdsByPathKey[newVideoKey] = linkedTagIds;
+    }
+    _store._videoPersistence.relinkInBatch(batch, oldPath, existing);
+    _store._tagPersistence.relinkVideoPathInBatch(batch, existing);
+    _store._tagMaintenance.syncFolderTagsInBatch(batch, existing);
+  }
+
   /**
-   * 清理扫描根目录内已经不存在的旧视频记录。
+   * 只为本轮成功枚举的 root 更新 missing 状态。
    *
-   * 现阶段仍按旧行为删除不存在的记录；stable identity / missing-relink 阶段再改为 missing 标记。
+   * 不可访问 root 不参与判断，防止临时掉盘把整库误标；记录、标签和播放数据始终保留。
    */
-  void _removeMissingVideos(Batch batch, Set<String> seenPathKeys) {
-    final removedPaths = <String>[];
-    _store.videos.removeWhere((pathKey, item) {
-      final shouldRemove =
-          !seenPathKeys.contains(pathKey) && !File(item.path).existsSync();
-      if (shouldRemove) {
-        removedPaths.add(item.path);
+  void _markMissingVideos(
+    Batch batch,
+    Set<String> seenPathKeys,
+    Set<String> scannedRootKeys,
+  ) {
+    for (final item in _store.videos.values) {
+      final rootPath = item.rootPath;
+      final rootWasScanned = rootPath != null &&
+          scannedRootKeys.contains(TagRules.pathKey(rootPath));
+      final shouldBeMissing = rootWasScanned &&
+          !seenPathKeys.contains(TagRules.pathKey(item.path)) &&
+          !File(item.path).existsSync();
+      if (item.isMissing == shouldBeMissing) {
+        continue;
       }
-      return shouldRemove;
-    });
-    for (final path in removedPaths) {
-      _store._tagPersistence.deleteVideoLinksInBatch(batch, path);
-      _store._videoPersistence.deleteInBatch(batch, path);
+      item.isMissing = shouldBeMissing;
+      _store._videoPersistence.insertInBatch(batch, item);
     }
   }
 }

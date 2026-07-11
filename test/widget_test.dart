@@ -631,6 +631,23 @@ void main() {
     );
   });
 
+  test('player resume position rejects queue-end progress', () {
+    expect(
+      playerResumePosition(
+        saved: const Duration(seconds: 37),
+        duration: const Duration(minutes: 2),
+      ),
+      const Duration(seconds: 37),
+    );
+    expect(
+      playerResumePosition(
+        saved: const Duration(seconds: 58),
+        duration: const Duration(minutes: 1),
+      ),
+      isNull,
+    );
+  });
+
   testWidgets('manual tag editor locks folder tags', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
