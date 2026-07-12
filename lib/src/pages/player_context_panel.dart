@@ -195,6 +195,8 @@ class _PlayerContextPanel extends StatelessWidget {
               key: const ValueKey('player.more'),
               tooltip: '更多',
               color: const Color(0xff17202c),
+              position: PopupMenuPosition.under,
+              offset: const Offset(0, 6),
               child: Container(
                 height: 38,
                 padding: const EdgeInsets.symmetric(horizontal: 18),

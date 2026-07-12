@@ -582,12 +582,26 @@ class _PlayerPageState extends State<PlayerPage> {
                               ),
                             ),
                             const Spacer(),
-                            PopupMenuButton<Object>(
-                              tooltip: '播放设置',
-                              onSelected: _handleControlSettingsSelection,
-                              itemBuilder: (_) => _buildControlSettingsItems(),
-                              icon:
-                                  const Icon(Icons.settings_outlined, size: 21),
+                            IconButton(
+                              key: const ValueKey('player.screenshot'),
+                              tooltip: '当前帧截图',
+                              onPressed: () =>
+                                  unawaited(_saveCurrentFrameScreenshot()),
+                              icon: const Icon(Icons.photo_camera_outlined,
+                                  size: 21),
+                            ),
+                            MenuAnchor(
+                              menuChildren: _buildControlSettingsMenu(),
+                              builder: (context, controller, child) =>
+                                  IconButton(
+                                key: const ValueKey('player.settings'),
+                                tooltip: '播放设置',
+                                onPressed: () => controller.isOpen
+                                    ? controller.close()
+                                    : controller.open(),
+                                icon: const Icon(Icons.settings_outlined,
+                                    size: 21),
+                              ),
                             ),
                             IconButton(
                               tooltip: _isWindowFullscreen ? '退出全屏' : '全屏',
@@ -636,79 +650,51 @@ class _PlayerPageState extends State<PlayerPage> {
     _showVideoControls();
   }
 
-  /** 处理齿轮菜单中的播放辅助功能，避免控制栏重复堆叠低频按钮。 */
-  void _handleControlSettingsSelection(Object value) {
-    if (value is double) {
-      _setPlaybackRate(value);
-      return;
-    }
-    if (value is PlayerPlaybackMode) {
-      setState(() {
-        _playbackMode = value;
-        _queueEndReached = false;
-      });
-      return;
-    }
-    if (value == 'shortcuts') {
-      _showControlShortcutHelp();
-    } else if (value == 'screenshot') {
-      unawaited(_saveCurrentFrameScreenshot());
-    } else if (value == 'diagnostics') {
-      unawaited(_showDiagnosticsDialog());
-    }
-  }
-
-  /** 构建统一播放设置菜单，包含倍速、模式和低频辅助动作。 */
-  List<PopupMenuEntry<Object>> _buildControlSettingsItems() {
-    return <PopupMenuEntry<Object>>[
-      const PopupMenuItem<Object>(
-        enabled: false,
-        child: Text('播放速度'),
+  /** 构建播放设置二级菜单，避免倍速与模式选项占满一级菜单。 */
+  List<Widget> _buildControlSettingsMenu() {
+    return <Widget>[
+      SubmenuButton(
+        menuChildren: [
+          for (final rate in _playbackRates)
+            MenuItemButton(
+              onPressed: () => _setPlaybackRate(rate),
+              trailingIcon: rate == _playbackRate
+                  ? const Icon(Icons.check_rounded, size: 18)
+                  : null,
+              child: Text('${rate}x'),
+            ),
+        ],
+        child: const Text('播放速度'),
       ),
-      for (final rate in _playbackRates)
-        PopupMenuItem<Object>(
-          value: rate,
-          child: Text('${rate}x${rate == _playbackRate ? '  ✓' : ''}'),
-        ),
-      const PopupMenuDivider(),
-      const PopupMenuItem<Object>(enabled: false, child: Text('播放模式')),
-      for (final mode in PlayerPlaybackMode.values)
-        PopupMenuItem<Object>(
-          value: mode,
-          child: Row(children: [
-            Icon(mode.icon, size: 18),
-            const SizedBox(width: 8),
-            Text(mode.label),
-            if (mode == _playbackMode) ...[
-              const Spacer(),
-              const Icon(Icons.check_rounded, size: 18),
-            ],
-          ]),
-        ),
-      const PopupMenuDivider(),
-      const PopupMenuItem<Object>(
-        value: 'shortcuts',
-        child: ListTile(
-          dense: true,
-          leading: Icon(Icons.keyboard_alt_outlined),
-          title: Text('快捷键'),
-        ),
+      SubmenuButton(
+        menuChildren: [
+          for (final mode in PlayerPlaybackMode.values)
+            MenuItemButton(
+              leadingIcon: Icon(mode.icon, size: 18),
+              trailingIcon: mode == _playbackMode
+                  ? const Icon(Icons.check_rounded, size: 18)
+                  : null,
+              onPressed: () {
+                setState(() {
+                  _playbackMode = mode;
+                  _queueEndReached = false;
+                });
+              },
+              child: Text(mode.label),
+            ),
+        ],
+        child: const Text('播放模式'),
       ),
-      const PopupMenuItem<Object>(
-        value: 'screenshot',
-        child: ListTile(
-          dense: true,
-          leading: Icon(Icons.photo_camera_outlined),
-          title: Text('当前帧截图'),
-        ),
+      const Divider(height: 1),
+      MenuItemButton(
+        leadingIcon: const Icon(Icons.keyboard_alt_outlined, size: 18),
+        onPressed: _showControlShortcutHelp,
+        child: const Text('快捷键'),
       ),
-      const PopupMenuItem<Object>(
-        value: 'diagnostics',
-        child: ListTile(
-          dense: true,
-          leading: Icon(Icons.monitor_heart_outlined),
-          title: Text('播放诊断'),
-        ),
+      MenuItemButton(
+        leadingIcon: const Icon(Icons.monitor_heart_outlined, size: 18),
+        onPressed: () => unawaited(_showDiagnosticsDialog()),
+        child: const Text('播放诊断'),
       ),
     ];
   }
@@ -1497,6 +1483,11 @@ class _PlayerPageState extends State<PlayerPage> {
       // 弹窗自己的 Escape 只负责取消编辑；播放器页面不能再对同一按键执行返回。
       return KeyEventResult.ignored;
     }
+    if (_isWindowFullscreen && event.logicalKey == LogicalKeyboardKey.escape) {
+      // Escape 是桌面全屏的固定安全出口，必须先于页面返回逻辑消费。
+      unawaited(_toggleWindowFullscreen());
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.keyK &&
         HardwareKeyboard.instance.isControlPressed) {
       // 顶部搜索与右侧队列搜索共用定位逻辑，Ctrl+K 仅负责聚焦而不重建队列。
@@ -1773,8 +1764,21 @@ class _PlayerPageState extends State<PlayerPage> {
                           ],
                         ),
                       ),
-                      if (showQueueSidebar && !_isWindowFullscreen)
-                        queueSidebar,
+                      if (hasWideQueueSidebar && !_isWindowFullscreen)
+                        AnimatedSize(
+                          duration: _motionDuration,
+                          curve: _motionCurve,
+                          child: ClipRect(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              widthFactor: _queueSidebarCollapsed ? 0 : 1,
+                              child: IgnorePointer(
+                                ignoring: _queueSidebarCollapsed,
+                                child: queueSidebar,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
