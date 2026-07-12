@@ -14,6 +14,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:window_manager/window_manager.dart';
 
 part 'core/app_paths.dart';
 part 'core/layout_size.dart';
@@ -31,6 +32,7 @@ part 'services/library_tag_maintenance.dart';
 part 'services/library_video_persistence.dart';
 part 'services/library_store.dart';
 part 'services/playback_snapshot_write_queue.dart';
+part 'services/desktop_window_state_service.dart';
 part 'services/bulk_path_relink_service.dart';
 part 'services/library_scan_service.dart';
 part 'services/tag_query_service.dart';
@@ -111,6 +113,7 @@ Future<void> bootstrapLocalTagPlayer() async {
   MediaKit.ensureInitialized();
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
+  await DesktopWindowStateService.instance.initialize();
   runApp(const LocalTagPlayerApp());
 }
 
@@ -164,6 +167,43 @@ class LocalTagPlayerApp extends StatelessWidget {
             fontSize: 20,
             fontWeight: FontWeight.w800,
           ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        ),
+        popupMenuTheme: PopupMenuThemeData(
+          color: _appSurface,
+          surfaceTintColor: Colors.transparent,
+          textStyle: const TextStyle(color: _appText, fontSize: 13),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: _appBorder),
+          ),
+        ),
+        menuTheme: MenuThemeData(
+          style: MenuStyle(
+            backgroundColor: const WidgetStatePropertyAll(_appSurface),
+            surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: _appBorder),
+              ),
+            ),
+          ),
+        ),
+        bottomSheetTheme: const BottomSheetThemeData(
+          backgroundColor: _appSurface,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+          ),
+        ),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: _appShell,
+          contentTextStyle: const TextStyle(color: Colors.white),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          behavior: SnackBarBehavior.floating,
         ),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(

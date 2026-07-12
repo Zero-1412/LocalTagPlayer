@@ -510,6 +510,33 @@ void main() {
     );
   });
 
+  test('playback settings preserve custom shortcut bindings safely', () {
+    final settings = PlaybackSettings.fromJson({
+      'hwdec': 'auto-safe',
+      'resumeBehavior': 'continueWatching',
+      'shortcuts': {'playPause': 'F', 'fullscreen': 'Space'},
+    });
+    expect(settings.shortcuts[PlayerShortcutAction.playPause], 'F');
+    expect(settings.shortcuts[PlayerShortcutAction.fullscreen], 'Space');
+    expect(settings.shortcuts[PlayerShortcutAction.screenshot], 'S');
+    expect(settings.toJson()['shortcuts'], isA<Map>());
+  });
+
+  test('desktop window layout rejects unsafe tiny snapshots', () {
+    expect(
+      DesktopWindowLayout.fromJson(
+        <String, Object?>{'width': 640, 'height': 480, 'maximized': false},
+      ),
+      isNull,
+    );
+    final layout = DesktopWindowLayout.fromJson(
+      <String, Object?>{'width': 1440, 'height': 900, 'maximized': true},
+    );
+    expect(layout?.width, 1440);
+    expect(layout?.height, 900);
+    expect(layout?.maximized, isTrue);
+  });
+
   test('library sort helper applies to every video source list', () {
     final alpha = VideoItem(
       path: 'D:\\video\\B\\alpha.mp4',

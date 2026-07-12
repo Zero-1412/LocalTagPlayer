@@ -192,6 +192,36 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     });
   }
 
+  /** 更新单个快捷键；发生冲突时交换两个功能的按键，保证绑定始终唯一。 */
+  Future<void> _changeShortcut(
+    PlayerShortcutAction action,
+    String key,
+  ) async {
+    final shortcuts = Map<PlayerShortcutAction, String>.of(_settings.shortcuts);
+    final oldKey = shortcuts[action]!;
+    PlayerShortcutAction? conflict;
+    for (final entry in shortcuts.entries) {
+      if (entry.key != action && entry.value == key) {
+        conflict = entry.key;
+        break;
+      }
+    }
+    shortcuts[action] = key;
+    if (conflict != null) shortcuts[conflict] = oldKey;
+    final next = _settings.copyWith(shortcuts: Map.unmodifiable(shortcuts));
+    setState(() => _settings = next);
+    await widget.onPlaybackSettingsChanged(next);
+  }
+
+  /** 恢复项目默认快捷键，并立即持久化。 */
+  Future<void> _resetShortcuts() async {
+    final next = _settings.copyWith(
+      shortcuts: PlaybackSettings.defaultShortcuts,
+    );
+    setState(() => _settings = next);
+    await widget.onPlaybackSettingsChanged(next);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -228,6 +258,73 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                       setState(() => _settings = settings);
                       await widget.onPlaybackSettingsChanged(settings);
                     },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('播放器快捷键',
+                              style: TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.w800)),
+                          SizedBox(height: 6),
+                          Text('修改后立即生效；选择已占用按键时会自动交换两个功能。',
+                              style: TextStyle(color: _appTextMuted)),
+                        ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      key: const ValueKey('settings.shortcuts.reset'),
+                      onPressed: _resetShortcuts,
+                      icon: const Icon(Icons.restart_alt_rounded),
+                      label: const Text('恢复默认'),
+                    ),
+                  ]),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 12,
+                    children: [
+                      for (final action in PlayerShortcutAction.values)
+                        SizedBox(
+                          width: 310,
+                          child: DropdownButtonFormField<String>(
+                            key: ValueKey(
+                              'settings.shortcut.${action.name}.'
+                              '${_settings.shortcuts[action]}',
+                            ),
+                            initialValue: _settings.shortcuts[action],
+                            decoration: InputDecoration(
+                              labelText:
+                                  PlaybackSettings.shortcutActionLabel(action),
+                            ),
+                            items: [
+                              for (final key
+                                  in PlaybackSettings.shortcutKeyOptions)
+                                DropdownMenuItem(
+                                  value: key,
+                                  child: Text(
+                                    PlaybackSettings.shortcutKeyLabel(key),
+                                  ),
+                                ),
+                            ],
+                            onChanged: (key) {
+                              if (key != null) _changeShortcut(action, key);
+                            },
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),

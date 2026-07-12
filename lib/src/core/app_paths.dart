@@ -69,6 +69,12 @@ class AppPaths {
     return File(p.join(directory.path, 'library.db'));
   }
 
+  /** 桌面窗口尺寸使用独立 JSON，避免与播放设置互相覆盖。 */
+  static Future<File> windowLayoutFile() async {
+    final directory = await dataDirectory();
+    return File(p.join(directory.path, 'window_layout.json'));
+  }
+
   static Future<Directory> thumbnailDirectory() async {
     final directory =
         Directory(p.join((await dataDirectory()).path, 'thumbnails'));
