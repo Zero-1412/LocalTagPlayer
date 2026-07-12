@@ -323,3 +323,8 @@ lib/
 
 
 
+## 2026-07-12 桌面全屏窗口状态边界补充
+
+- 播放器全屏通过既有 `window_manager` 桌面边界切换，不把平台命令散落到业务数据层。
+- `DesktopWindowStateService` 在全屏期间跳过尺寸快照，避免显示器尺寸污染普通窗口恢复状态。
+- 本次未修改 `PlayerBackend`、SQLite schema、filtered queue 或标签查询契约。

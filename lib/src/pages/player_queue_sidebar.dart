@@ -53,7 +53,6 @@ class _PlayerQueueSidebar extends StatelessWidget {
     required this.onPlay,
     required this.onLocatePlaying,
     required this.onLocateSelected,
-    required this.onDiagnostics,
     required this.onDeleteSelected,
     required this.onSearchQueue,
   });
@@ -132,9 +131,6 @@ class _PlayerQueueSidebar extends StatelessWidget {
    * 将右侧队列滚动回当前选中项，不改变选择或播放状态。
    */
   final VoidCallback onLocateSelected;
-
-  /** 从队列头部打开播放器诊断，不改变当前播放或选择状态。 */
-  final VoidCallback onDiagnostics;
 
   /**
    * 删除当前视频的入口；为 null 时禁用。
@@ -252,13 +248,6 @@ class _PlayerQueueSidebar extends StatelessWidget {
                           ),
                         ],
                       ),
-                    ),
-                    IconButton(
-                      tooltip: '播放诊断',
-                      onPressed: onDiagnostics,
-                      icon: const Icon(Icons.settings_outlined, size: 18),
-                      color: const Color(0xff94a3c7),
-                      visualDensity: VisualDensity.compact,
                     ),
                     IconButton(
                       tooltip: '定位当前播放',

@@ -14,13 +14,10 @@ class _PlayerContextPanel extends StatelessWidget {
     required this.index,
     required this.total,
     required this.queueEndReached,
-    required this.playbackMode,
     required this.onToggleFavorite,
     required this.onEditManualTags,
     required this.onRevealFile,
     required this.onVideoInfo,
-    required this.onDiagnostics,
-    required this.onPlaybackModeChanged,
   });
 
   final VideoItem item;
@@ -28,13 +25,10 @@ class _PlayerContextPanel extends StatelessWidget {
   final int index;
   final int total;
   final bool queueEndReached;
-  final PlayerPlaybackMode playbackMode;
   final VoidCallback onToggleFavorite;
   final VoidCallback onEditManualTags;
   final VoidCallback onRevealFile;
   final VoidCallback onVideoInfo;
-  final VoidCallback onDiagnostics;
-  final ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -217,8 +211,6 @@ class _PlayerContextPanel extends StatelessWidget {
               onSelected: (value) {
                 if (value == 'favorite') onToggleFavorite();
                 if (value == 'info') onVideoInfo();
-                if (value == 'diagnostics') onDiagnostics();
-                if (value is PlayerPlaybackMode) onPlaybackModeChanged(value);
               },
               itemBuilder: (_) => [
                 PopupMenuItem(
@@ -226,21 +218,6 @@ class _PlayerContextPanel extends StatelessWidget {
                   child: Text(item.isFavorite ? '取消收藏' : '收藏'),
                 ),
                 const PopupMenuItem(value: 'info', child: Text('视频信息')),
-                const PopupMenuItem(value: 'diagnostics', child: Text('播放诊断')),
-                const PopupMenuDivider(),
-                for (final mode in PlayerPlaybackMode.values)
-                  PopupMenuItem(
-                    value: mode,
-                    child: Row(children: [
-                      Icon(mode.icon, size: 18),
-                      const SizedBox(width: 8),
-                      Text(mode.label),
-                      if (mode == playbackMode) ...[
-                        const Spacer(),
-                        const Icon(Icons.check_rounded, size: 18),
-                      ],
-                    ]),
-                  ),
               ],
             ),
           ]),

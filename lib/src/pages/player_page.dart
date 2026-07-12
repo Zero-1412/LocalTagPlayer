@@ -99,8 +99,6 @@ class _PlayerPageState extends State<PlayerPage> {
   StreamSubscription<bool>? _playingSubscription;
   Timer? _controlsHideTimer;
   var _controlsVisible = true;
-  /** 最近一次视频控件上下文，供页面级 F 快捷键切换同一 Video 全屏状态。 */
-  BuildContext? _videoControlsContext;
   DateTime? _lastProgressWriteAt;
   Duration _lastPersistedPosition = Duration.zero;
   DateTime? _ignoreQueueSelectionBefore;
@@ -113,6 +111,10 @@ class _PlayerPageState extends State<PlayerPage> {
   var _editingManualTags = false;
   var _playbackMode = PlayerPlaybackMode.sequential;
   var _playbackRate = 1.0;
+  /** 用户主动折叠宽屏右侧队列时保持当前页面内的显示状态。 */
+  var _queueSidebarCollapsed = false;
+  /** 是否由播放器页面进入桌面窗口全屏。 */
+  var _isWindowFullscreen = false;
   final _random = math.Random();
 
   static const _playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -409,7 +411,6 @@ class _PlayerPageState extends State<PlayerPage> {
 
   /** 构建画面底部统一控制条，并在全屏顶部保留最小队列语境。 */
   Widget _buildVideoControls(VideoState state) {
-    _videoControlsContext = state.context;
     return MouseRegion(
       onEnter: (_) => _showVideoControls(),
       onHover: (_) => _showVideoControls(),
@@ -417,7 +418,7 @@ class _PlayerPageState extends State<PlayerPage> {
         behavior: HitTestBehavior.translucent,
         onTap: _showVideoControls,
         child: Stack(children: [
-          if (isFullscreen(state.context))
+          if (_isWindowFullscreen)
             Positioned(
               left: 20,
               right: 20,
@@ -581,100 +582,34 @@ class _PlayerPageState extends State<PlayerPage> {
                               ),
                             ),
                             const Spacer(),
-                            PopupMenuButton<double>(
-                              tooltip: '播放速度',
-                              initialValue: _playbackRate,
-                              onSelected: _setPlaybackRate,
-                              itemBuilder: (_) => [
-                                for (final rate in _playbackRates)
-                                  PopupMenuItem(
-                                    value: rate,
-                                    child: Text('${rate}x'),
-                                  ),
-                              ],
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '${_playbackRate}x',
-                                      style: const TextStyle(
-                                        color: Color(0xffcbd5e1),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Icon(
-                                      Icons.keyboard_arrow_down_rounded,
-                                      size: 17,
-                                      color: Color(0xff8794ac),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: '快捷键',
-                              onPressed: _showControlShortcutHelp,
-                              icon: const Icon(Icons.keyboard_alt_outlined,
-                                  size: 21),
-                            ),
-                            IconButton(
-                              tooltip: '截图',
-                              onPressed: () =>
-                                  unawaited(_saveCurrentFrameScreenshot()),
-                              icon: const Icon(Icons.photo_camera_outlined,
-                                  size: 21),
-                            ),
-                            PopupMenuButton<PlayerPlaybackMode>(
-                              tooltip: '播放模式',
-                              initialValue: _playbackMode,
-                              onSelected: (mode) {
-                                setState(() {
-                                  _playbackMode = mode;
-                                  _queueEndReached = false;
-                                });
-                              },
-                              itemBuilder: (_) => [
-                                for (final mode in PlayerPlaybackMode.values)
-                                  PopupMenuItem(
-                                    value: mode,
-                                    child: Row(children: [
-                                      Icon(mode.icon, size: 18),
-                                      const SizedBox(width: 8),
-                                      Text(mode.label),
-                                      if (mode == _playbackMode) ...[
-                                        const Spacer(),
-                                        const Icon(Icons.check_rounded,
-                                            size: 18),
-                                      ],
-                                    ]),
-                                  ),
-                              ],
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 10),
-                                child: Icon(
-                                    Icons.picture_in_picture_alt_outlined,
-                                    size: 21),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: '播放诊断',
-                              onPressed: () =>
-                                  unawaited(_showDiagnosticsDialog()),
+                            PopupMenuButton<Object>(
+                              tooltip: '播放设置',
+                              onSelected: _handleControlSettingsSelection,
+                              itemBuilder: (_) => _buildControlSettingsItems(),
                               icon:
                                   const Icon(Icons.settings_outlined, size: 21),
                             ),
                             IconButton(
-                              tooltip:
-                                  isFullscreen(state.context) ? '退出全屏' : '全屏',
+                              tooltip: _isWindowFullscreen ? '退出全屏' : '全屏',
                               onPressed: () =>
-                                  unawaited(toggleFullscreen(state.context)),
-                              icon: Icon(isFullscreen(state.context)
+                                  unawaited(_toggleWindowFullscreen()),
+                              icon: Icon(_isWindowFullscreen
                                   ? Icons.fullscreen_exit_rounded
                                   : Icons.fullscreen_rounded),
+                            ),
+                            IconButton(
+                              tooltip: _queueSidebarCollapsed
+                                  ? '展开筛选结果队列'
+                                  : '折叠筛选结果队列',
+                              onPressed: () {
+                                setState(() {
+                                  _queueSidebarCollapsed =
+                                      !_queueSidebarCollapsed;
+                                });
+                              },
+                              icon: Icon(_queueSidebarCollapsed
+                                  ? Icons.keyboard_double_arrow_left_rounded
+                                  : Icons.keyboard_double_arrow_right_rounded),
                             ),
                           ]),
                         ]),
@@ -688,6 +623,94 @@ class _PlayerPageState extends State<PlayerPage> {
         ]),
       ),
     );
+  }
+
+  /** 切换桌面窗口全屏，并让页面布局与窗口状态同步更新。 */
+  Future<void> _toggleWindowFullscreen() async {
+    final target = !_isWindowFullscreen;
+    await windowManager.setFullScreen(target);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isWindowFullscreen = target);
+    _showVideoControls();
+  }
+
+  /** 处理齿轮菜单中的播放辅助功能，避免控制栏重复堆叠低频按钮。 */
+  void _handleControlSettingsSelection(Object value) {
+    if (value is double) {
+      _setPlaybackRate(value);
+      return;
+    }
+    if (value is PlayerPlaybackMode) {
+      setState(() {
+        _playbackMode = value;
+        _queueEndReached = false;
+      });
+      return;
+    }
+    if (value == 'shortcuts') {
+      _showControlShortcutHelp();
+    } else if (value == 'screenshot') {
+      unawaited(_saveCurrentFrameScreenshot());
+    } else if (value == 'diagnostics') {
+      unawaited(_showDiagnosticsDialog());
+    }
+  }
+
+  /** 构建统一播放设置菜单，包含倍速、模式和低频辅助动作。 */
+  List<PopupMenuEntry<Object>> _buildControlSettingsItems() {
+    return <PopupMenuEntry<Object>>[
+      const PopupMenuItem<Object>(
+        enabled: false,
+        child: Text('播放速度'),
+      ),
+      for (final rate in _playbackRates)
+        PopupMenuItem<Object>(
+          value: rate,
+          child: Text('${rate}x${rate == _playbackRate ? '  ✓' : ''}'),
+        ),
+      const PopupMenuDivider(),
+      const PopupMenuItem<Object>(enabled: false, child: Text('播放模式')),
+      for (final mode in PlayerPlaybackMode.values)
+        PopupMenuItem<Object>(
+          value: mode,
+          child: Row(children: [
+            Icon(mode.icon, size: 18),
+            const SizedBox(width: 8),
+            Text(mode.label),
+            if (mode == _playbackMode) ...[
+              const Spacer(),
+              const Icon(Icons.check_rounded, size: 18),
+            ],
+          ]),
+        ),
+      const PopupMenuDivider(),
+      const PopupMenuItem<Object>(
+        value: 'shortcuts',
+        child: ListTile(
+          dense: true,
+          leading: Icon(Icons.keyboard_alt_outlined),
+          title: Text('快捷键'),
+        ),
+      ),
+      const PopupMenuItem<Object>(
+        value: 'screenshot',
+        child: ListTile(
+          dense: true,
+          leading: Icon(Icons.photo_camera_outlined),
+          title: Text('当前帧截图'),
+        ),
+      ),
+      const PopupMenuItem<Object>(
+        value: 'diagnostics',
+        child: ListTile(
+          dense: true,
+          leading: Icon(Icons.monitor_heart_outlined),
+          title: Text('播放诊断'),
+        ),
+      ),
+    ];
   }
 
   /** 提示当前筛选队列已经播放完毕，避免用户误以为播放器卡住。 */
@@ -1537,11 +1560,8 @@ class _PlayerPageState extends State<PlayerPage> {
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.fullscreen)) {
-      final videoContext = _videoControlsContext;
-      if (videoContext != null) {
-        unawaited(toggleFullscreen(videoContext));
-        return KeyEventResult.handled;
-      }
+      unawaited(_toggleWindowFullscreen());
+      return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.speedDown)) {
       _stepPlaybackRate(-1);
@@ -1601,7 +1621,8 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   Widget build(BuildContext context) {
     // 中窄窗口改用底部队列，避免侧栏挤压蓝图式横向控制层。
-    final showQueueSidebar = MediaQuery.sizeOf(context).width >= 1100;
+    final hasWideQueueSidebar = MediaQuery.sizeOf(context).width >= 1100;
+    final showQueueSidebar = hasWideQueueSidebar && !_queueSidebarCollapsed;
     final queueSidebar = _PlayerQueueSidebar(
       playlist: _queue,
       sourcePlaylist: _sourcePlaylist,
@@ -1618,7 +1639,6 @@ class _PlayerPageState extends State<PlayerPage> {
       onPlay: _jumpTo,
       onLocatePlaying: _focusPlayingQueueItem,
       onLocateSelected: _focusSelectedQueueItem,
-      onDiagnostics: () => unawaited(_showDiagnosticsDialog()),
       onSearchQueue: _searchQueue,
       onDeleteSelected: _selectedIndex == _index ? _deleteSelectedFile : null,
     );
@@ -1634,25 +1654,26 @@ class _PlayerPageState extends State<PlayerPage> {
             backgroundColor: const Color(0xff070d1d),
             body: Column(
               children: [
-                _PlayerTopBar(
-                  searchController: _queueSearchController,
-                  searchFocusNode: _queueSearchFocusNode,
-                  onBack: () => Navigator.of(context).maybePop(),
-                  onSearch: _searchQueue,
-                  onOpenQueue: showQueueSidebar
-                      ? null
-                      : () {
-                          showModalBottomSheet<void>(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: const Color(0xff0d1528),
-                            builder: (_) => FractionallySizedBox(
-                              heightFactor: 0.82,
-                              child: queueSidebar,
-                            ),
-                          );
-                        },
-                ),
+                if (!_isWindowFullscreen)
+                  _PlayerTopBar(
+                    searchController: _queueSearchController,
+                    searchFocusNode: _queueSearchFocusNode,
+                    onBack: () => Navigator.of(context).maybePop(),
+                    onSearch: _searchQueue,
+                    onOpenQueue: showQueueSidebar
+                        ? null
+                        : () {
+                            showModalBottomSheet<void>(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: const Color(0xff0d1528),
+                              builder: (_) => FractionallySizedBox(
+                                heightFactor: 0.82,
+                                child: queueSidebar,
+                              ),
+                            );
+                          },
+                  ),
                 Expanded(
                   child: Row(
                     children: [
@@ -1661,8 +1682,9 @@ class _PlayerPageState extends State<PlayerPage> {
                           children: [
                             Expanded(
                               child: Container(
-                                margin:
-                                    const EdgeInsets.fromLTRB(18, 18, 18, 12),
+                                margin: _isWindowFullscreen
+                                    ? EdgeInsets.zero
+                                    : const EdgeInsets.fromLTRB(18, 18, 18, 12),
                                 decoration: BoxDecoration(
                                   color: Colors.black,
                                   borderRadius: BorderRadius.circular(8),
@@ -1726,41 +1748,33 @@ class _PlayerPageState extends State<PlayerPage> {
                                 ),
                               ),
                             ),
-                            _PlayerContextPanel(
-                              item: _currentItem,
-                              queueTitle: _filterSummary,
-                              index: _index,
-                              total: _queue.length,
-                              queueEndReached: _queueEndReached,
-                              playbackMode: _playbackMode,
-                              onToggleFavorite: () {
-                                unawaited(
-                                    widget.onToggleFavorite(_currentItem));
-                                setState(() {});
-                              },
-                              onEditManualTags: () {
-                                unawaited(_editManualTags());
-                              },
-                              onRevealFile: () {
-                                unawaited(_revealCurrentFile());
-                              },
-                              onVideoInfo: () {
-                                unawaited(_showVideoInfoDialog());
-                              },
-                              onDiagnostics: () {
-                                unawaited(_showDiagnosticsDialog());
-                              },
-                              onPlaybackModeChanged: (mode) {
-                                setState(() {
-                                  _playbackMode = mode;
-                                  _queueEndReached = false;
-                                });
-                              },
-                            ),
+                            if (!_isWindowFullscreen)
+                              _PlayerContextPanel(
+                                item: _currentItem,
+                                queueTitle: _filterSummary,
+                                index: _index,
+                                total: _queue.length,
+                                queueEndReached: _queueEndReached,
+                                onToggleFavorite: () {
+                                  unawaited(
+                                      widget.onToggleFavorite(_currentItem));
+                                  setState(() {});
+                                },
+                                onEditManualTags: () {
+                                  unawaited(_editManualTags());
+                                },
+                                onRevealFile: () {
+                                  unawaited(_revealCurrentFile());
+                                },
+                                onVideoInfo: () {
+                                  unawaited(_showVideoInfoDialog());
+                                },
+                              ),
                           ],
                         ),
                       ),
-                      if (showQueueSidebar) queueSidebar,
+                      if (showQueueSidebar && !_isWindowFullscreen)
+                        queueSidebar,
                     ],
                   ),
                 ),

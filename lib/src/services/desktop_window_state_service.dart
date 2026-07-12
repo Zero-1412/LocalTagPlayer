@@ -98,6 +98,8 @@ class DesktopWindowStateService with WindowListener {
 
   Future<void> _save() async {
     try {
+      // 全屏尺寸不是用户的普通窗口布局，退出全屏后再由 resize 事件保存恢复值。
+      if (await windowManager.isFullScreen()) return;
       final maximized = await windowManager.isMaximized();
       if (!maximized) _lastNormalSize = await windowManager.getSize();
       final size = _lastNormalSize ?? await windowManager.getSize();
