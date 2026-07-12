@@ -99,6 +99,7 @@ class _PlayerPageState extends State<PlayerPage> {
   StreamSubscription<bool>? _playingSubscription;
   Timer? _controlsHideTimer;
   Timer? _queuePrefetchTimer;
+  Timer? _fullscreenQueueHideTimer;
   var _controlsVisible = true;
   DateTime? _lastProgressWriteAt;
   Duration _lastPersistedPosition = Duration.zero;
@@ -648,7 +649,13 @@ class _PlayerPageState extends State<PlayerPage> {
                                       : '折叠筛选结果队列',
                               onPressed: () {
                                 if (_isWindowFullscreen) {
-                                  unawaited(_showFullscreenQueue());
+                                  if (_fullscreenQueueVisible) {
+                                    _fullscreenQueueHideTimer?.cancel();
+                                    setState(
+                                        () => _fullscreenQueueVisible = false);
+                                  } else {
+                                    _showFullscreenQueueSidebar();
+                                  }
                                 } else {
                                   setState(() {
                                     _queueSidebarCollapsed =
@@ -686,53 +693,22 @@ class _PlayerPageState extends State<PlayerPage> {
     _showVideoControls();
   }
 
-  /**
-   * 在根 Overlay 右侧展示全屏队列，避免播放器视频纹理覆盖普通兄弟组件。
-   *
-   * 面板继续复用当前 filtered queue、当前索引与滚动控制器；关闭只改变可见状态。
-   */
-  Future<void> _showFullscreenQueue() async {
-    if (_fullscreenQueueVisible || !mounted) {
-      return;
+  /** 鼠标进入右侧热区或队列时展示全屏侧栏，并取消待执行的自动隐藏。 */
+  void _showFullscreenQueueSidebar() {
+    _fullscreenQueueHideTimer?.cancel();
+    if (mounted && !_fullscreenQueueVisible) {
+      setState(() => _fullscreenQueueVisible = true);
     }
-    setState(() => _fullscreenQueueVisible = true);
-    await showGeneralDialog<void>(
-      context: context,
-      useRootNavigator: true,
-      barrierDismissible: true,
-      barrierLabel: '关闭播放列表',
-      barrierColor: const Color(0x22000000),
-      transitionDuration: const Duration(milliseconds: 180),
-      pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return SafeArea(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: SizedBox(
-              key: const ValueKey('player.fullscreenQueue'),
-              width: 440,
-              height: MediaQuery.sizeOf(dialogContext).height - 48,
-              child: Material(
-                color: Colors.transparent,
-                elevation: 18,
-                child: _buildQueueSidebar(),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).animate(CurvedAnimation(parent: animation, curve: _motionCurve)),
-          child: FadeTransition(opacity: animation, child: child),
-        );
-      },
-    );
-    if (mounted) {
-      setState(() => _fullscreenQueueVisible = false);
-    }
+  }
+
+  /** 鼠标离开队列宽度后短延迟收回侧栏，避免边缘抖动导致反复闪烁。 */
+  void _scheduleFullscreenQueueHide() {
+    _fullscreenQueueHideTimer?.cancel();
+    _fullscreenQueueHideTimer = Timer(const Duration(milliseconds: 180), () {
+      if (mounted && _fullscreenQueueVisible) {
+        setState(() => _fullscreenQueueVisible = false);
+      }
+    });
   }
 
   /** 构建播放设置二级菜单，避免倍速与模式选项占满一级菜单。 */
@@ -1693,6 +1669,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _openRequests.cancel();
     _controlsHideTimer?.cancel();
     _queuePrefetchTimer?.cancel();
+    _fullscreenQueueHideTimer?.cancel();
     unawaited(_completedSubscription?.cancel());
     unawaited(_playerErrorSubscription?.cancel());
     unawaited(_positionSubscription?.cancel());
@@ -1745,145 +1722,196 @@ class _PlayerPageState extends State<PlayerPage> {
           onPointerDown: _handlePointerDown,
           child: Scaffold(
             backgroundColor: const Color(0xff070d1d),
-            body: Column(
+            body: Stack(
               children: [
-                if (!_isWindowFullscreen)
-                  _PlayerTopBar(
-                    searchController: _queueSearchController,
-                    searchFocusNode: _queueSearchFocusNode,
-                    onBack: () => Navigator.of(context).maybePop(),
-                    onSearch: _searchQueue,
-                    onOpenQueue: hasWideQueueSidebar
-                        ? null
-                        : () {
-                            showModalBottomSheet<void>(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: const Color(0xff0d1528),
-                              builder: (_) => FractionallySizedBox(
-                                heightFactor: 0.82,
-                                child: queueSidebar,
-                              ),
-                            );
-                          },
-                  ),
-                Expanded(
-                  child: Row(
+                Positioned.fill(
+                  child: Column(
                     children: [
+                      if (!_isWindowFullscreen)
+                        _PlayerTopBar(
+                          searchController: _queueSearchController,
+                          searchFocusNode: _queueSearchFocusNode,
+                          onBack: () => Navigator.of(context).maybePop(),
+                          onSearch: _searchQueue,
+                          onOpenQueue: hasWideQueueSidebar
+                              ? null
+                              : () {
+                                  showModalBottomSheet<void>(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: const Color(0xff0d1528),
+                                    builder: (_) => FractionallySizedBox(
+                                      heightFactor: 0.82,
+                                      child: queueSidebar,
+                                    ),
+                                  );
+                                },
+                        ),
                       Expanded(
-                        child: Column(
+                        child: Row(
                           children: [
                             Expanded(
-                              child: Container(
-                                margin: _isWindowFullscreen
-                                    ? EdgeInsets.zero
-                                    : const EdgeInsets.fromLTRB(18, 18, 18, 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.black,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                      color: const Color(0xff1f2937)),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x66000000),
-                                      blurRadius: 26,
-                                      offset: Offset(0, 14),
-                                    ),
-                                  ],
-                                ),
-                                clipBehavior: Clip.antiAlias,
-                                child: Stack(
-                                  children: [
-                                    Positioned.fill(
-                                      child: GestureDetector(
-                                        behavior: HitTestBehavior.opaque,
-                                        onSecondaryTapDown:
-                                            _showPlayerContextMenu,
-                                        child: Center(
-                                          child: Video(
-                                            controller: _controller,
-                                            controls: _buildVideoControls,
+                              child: Column(
+                                children: [
+                                  Expanded(
+                                    child: Container(
+                                      margin: _isWindowFullscreen
+                                          ? EdgeInsets.zero
+                                          : const EdgeInsets.fromLTRB(
+                                              18, 18, 18, 12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                            color: const Color(0xff1f2937)),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            color: Color(0x66000000),
+                                            blurRadius: 26,
+                                            offset: Offset(0, 14),
                                           ),
-                                        ),
+                                        ],
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: Stack(
+                                        children: [
+                                          Positioned.fill(
+                                            child: GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onSecondaryTapDown:
+                                                  _showPlayerContextMenu,
+                                              child: Center(
+                                                child: Video(
+                                                  controller: _controller,
+                                                  controls: _buildVideoControls,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          if (_openRequests.isOpening)
+                                            const Positioned.fill(
+                                              child: ColoredBox(
+                                                color: Color(0x66000000),
+                                                child: Center(
+                                                    child:
+                                                        CircularProgressIndicator()),
+                                              ),
+                                            ),
+                                          if (!_openRequests.isOpening &&
+                                              _openRequests.hasFailure)
+                                            Positioned.fill(
+                                              child: _PlayerOpenFailurePanel(
+                                                failureCode:
+                                                    _openRequests.failureCode ??
+                                                        'unknown',
+                                                canSkip: _playback.hasNext,
+                                                onRetry: _retryFailedOpen,
+                                                onSkip: _skipFailedOpen,
+                                                onDiagnostics: () {
+                                                  unawaited(
+                                                      _showDiagnosticsDialog());
+                                                },
+                                                onRelink: _currentItem.isMissing
+                                                    ? () {
+                                                        unawaited(
+                                                            _relinkCurrentMissing());
+                                                      }
+                                                    : null,
+                                              ),
+                                            ),
+                                        ],
                                       ),
                                     ),
-                                    if (_openRequests.isOpening)
-                                      const Positioned.fill(
-                                        child: ColoredBox(
-                                          color: Color(0x66000000),
-                                          child: Center(
-                                              child:
-                                                  CircularProgressIndicator()),
-                                        ),
-                                      ),
-                                    if (!_openRequests.isOpening &&
-                                        _openRequests.hasFailure)
-                                      Positioned.fill(
-                                        child: _PlayerOpenFailurePanel(
-                                          failureCode:
-                                              _openRequests.failureCode ??
-                                                  'unknown',
-                                          canSkip: _playback.hasNext,
-                                          onRetry: _retryFailedOpen,
-                                          onSkip: _skipFailedOpen,
-                                          onDiagnostics: () {
-                                            unawaited(_showDiagnosticsDialog());
-                                          },
-                                          onRelink: _currentItem.isMissing
-                                              ? () {
-                                                  unawaited(
-                                                      _relinkCurrentMissing());
-                                                }
-                                              : null,
-                                        ),
-                                      ),
-                                  ],
-                                ),
+                                  ),
+                                  if (!_isWindowFullscreen)
+                                    _PlayerContextPanel(
+                                      item: _currentItem,
+                                      queueTitle: _filterSummary,
+                                      index: _index,
+                                      total: _queue.length,
+                                      queueEndReached: _queueEndReached,
+                                      onToggleFavorite: () {
+                                        unawaited(widget
+                                            .onToggleFavorite(_currentItem));
+                                        setState(() {});
+                                      },
+                                      onEditManualTags: () {
+                                        unawaited(_editManualTags());
+                                      },
+                                      onRevealFile: () {
+                                        unawaited(_revealCurrentFile());
+                                      },
+                                      onVideoInfo: () {
+                                        unawaited(_showVideoInfoDialog());
+                                      },
+                                    ),
+                                ],
                               ),
                             ),
-                            if (!_isWindowFullscreen)
-                              _PlayerContextPanel(
-                                item: _currentItem,
-                                queueTitle: _filterSummary,
-                                index: _index,
-                                total: _queue.length,
-                                queueEndReached: _queueEndReached,
-                                onToggleFavorite: () {
-                                  unawaited(
-                                      widget.onToggleFavorite(_currentItem));
-                                  setState(() {});
-                                },
-                                onEditManualTags: () {
-                                  unawaited(_editManualTags());
-                                },
-                                onRevealFile: () {
-                                  unawaited(_revealCurrentFile());
-                                },
-                                onVideoInfo: () {
-                                  unawaited(_showVideoInfoDialog());
-                                },
+                            if (hasWideQueueSidebar && !_isWindowFullscreen)
+                              AnimatedSize(
+                                duration: _motionDuration,
+                                curve: _motionCurve,
+                                child: ClipRect(
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    widthFactor: _queueSidebarCollapsed ? 0 : 1,
+                                    child: IgnorePointer(
+                                      ignoring: _queueSidebarCollapsed,
+                                      child: queueSidebar,
+                                    ),
+                                  ),
+                                ),
                               ),
                           ],
                         ),
                       ),
-                      if (hasWideQueueSidebar && !_isWindowFullscreen)
-                        AnimatedSize(
-                          duration: _motionDuration,
-                          curve: _motionCurve,
-                          child: ClipRect(
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              widthFactor: _queueSidebarCollapsed ? 0 : 1,
-                              child: IgnorePointer(
-                                ignoring: _queueSidebarCollapsed,
-                                child: queueSidebar,
-                              ),
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
+                if (_isWindowFullscreen)
+                  Positioned(
+                    key: const ValueKey('player.fullscreenQueue.edge'),
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    width: 12,
+                    child: MouseRegion(
+                      opaque: true,
+                      onEnter: (_) => _showFullscreenQueueSidebar(),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                if (_isWindowFullscreen && _fullscreenQueueVisible)
+                  Positioned(
+                    key: const ValueKey('player.fullscreenQueue'),
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    width: 440,
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween<double>(begin: 1, end: 0),
+                      duration: _motionDuration,
+                      curve: _motionCurve,
+                      builder: (context, progress, child) {
+                        return Transform.translate(
+                          offset: Offset(440 * progress, 0),
+                          child: child,
+                        );
+                      },
+                      child: MouseRegion(
+                        onEnter: (_) => _showFullscreenQueueSidebar(),
+                        onExit: (_) => _scheduleFullscreenQueueHide(),
+                        child: SafeArea(
+                          child: Material(
+                            color: Colors.transparent,
+                            elevation: 18,
+                            child: _buildQueueSidebar(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

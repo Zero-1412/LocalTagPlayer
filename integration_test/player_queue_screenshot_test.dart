@@ -73,11 +73,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(toggle);
     await tester.pumpAndSettle(const Duration(seconds: 2));
-    expect(
-      find.byKey(const ValueKey('player.fullscreenQueue')),
-      findsOneWidget,
-    );
+    final fullscreenQueue =
+        find.byKey(const ValueKey('player.fullscreenQueue'));
+    final logicalSize = tester.view.physicalSize / tester.view.devicePixelRatio;
+    expect(tester.getRect(fullscreenQueue).right,
+        lessThanOrEqualTo(logicalSize.width));
     await _signalDesktopCapture('player-fullscreen-queue');
+
+    await mouse.moveTo(Offset(logicalSize.width / 2, logicalSize.height / 2));
+    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+    expect(fullscreenQueue, findsNothing);
+
+    await mouse.moveTo(Offset(logicalSize.width - 1, logicalSize.height / 2));
+    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+    expect(fullscreenQueue, findsOneWidget);
+    expect(tester.getRect(fullscreenQueue).right,
+        lessThanOrEqualTo(logicalSize.width));
+    await _signalDesktopCapture('player-fullscreen-queue-edge');
     await mouse.removePointer();
   });
 }

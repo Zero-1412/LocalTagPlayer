@@ -32,6 +32,7 @@ public static class LtpWindowCapture {
     'player-queue-restored'
     'player-controls-hidden'
     'player-fullscreen-queue'
+    'player-fullscreen-queue-edge'
   )) {
     $marker = Join-Path $Output "$name.ready"
     while (-not (Test-Path -LiteralPath $marker)) { Start-Sleep -Milliseconds 100 }
