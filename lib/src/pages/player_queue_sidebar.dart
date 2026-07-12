@@ -167,27 +167,6 @@ class _PlayerQueueSidebar extends StatelessWidget {
     return queueTitle;
   }
 
-  List<Widget> _contextPathWidgets() {
-    if (activeTags.length == 1 && selectedChildTag != null) {
-      return [
-        _QueueContextChip(label: activeTags.first, emphasized: true),
-        const Icon(Icons.chevron_right_rounded,
-            size: 16, color: Color(0xff7686a0)),
-        _QueueContextChip(label: selectedChildTag!, emphasized: true),
-      ];
-    }
-    final contextChips = <String>[
-      ...activeTags,
-      if (selectedChildTag != null) selectedChildTag!,
-    ];
-    if (contextChips.isEmpty) {
-      return [_QueueContextChip(label: _filterSummary, emphasized: true)];
-    }
-    return [
-      for (final tag in contextChips.take(5)) _QueueContextChip(label: tag),
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
     final sidebarWidth = math.min(360.0, MediaQuery.sizeOf(context).width);
@@ -305,32 +284,29 @@ class _PlayerQueueSidebar extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 5,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: _contextPathWidgets(),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${playlist.length} 项',
-                          style: const TextStyle(
-                            color: Color(0xffcbd5e1),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
+                        Row(children: [
+                          Expanded(
+                            child: Text(
+                              _filterSummary.replaceAll('个结果', '项'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xffe2e8f0),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '已选中 ${selectedIndex + 1} / 正在播放 ${playingIndex + 1} / 共 ${playlist.length} 项',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xff9aa7bb),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                          const SizedBox(width: 8),
+                          Text(
+                            '${playingIndex + 1} / ${playlist.length}',
+                            style: const TextStyle(
+                              color: Color(0xffa5b4fc),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
-                        ),
+                        ]),
                       ],
                     ),
                   ),
@@ -495,61 +471,6 @@ bool playerQueueIndexIsVisible({
   final itemTop = index * itemExtent;
   final itemBottom = itemTop + itemExtent;
   return itemBottom > top + tolerance && itemTop < bottom - tolerance;
-}
-
-/**
- * 播放器队列顶部的紧凑上下文芯片，用于在播放时保留库页筛选语境。
- */
-class _QueueContextChip extends StatelessWidget {
-  const _QueueContextChip({
-    required this.label,
-    this.emphasized = false,
-  });
-
-  /**
-   * 从当前父标签或子标签上下文复制出的筛选标签。
-   */
-  final String label;
-
-  /**
-   * 是否作为层级路径中的关键节点强调显示。
-   */
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 22,
-      constraints: const BoxConstraints(maxWidth: 108),
-      padding: const EdgeInsets.symmetric(horizontal: 7),
-      decoration: BoxDecoration(
-        color: emphasized ? const Color(0xff253861) : const Color(0xff1c2740),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(
-            color:
-                emphasized ? const Color(0xff5c78c9) : const Color(0xff344369)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.sell_outlined, size: 12, color: Color(0xffa7b4ff)),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xffdbe4ff),
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _PlayerChildTagChip extends StatelessWidget {
