@@ -537,6 +537,12 @@ void main() {
     );
     expect(changed.toJson()['fullscreenQueueEdgeWidth'], 20);
     expect(changed.toJson()['fullscreenQueueHideDelayMs'], 450);
+    final reset = changed.resetFullscreenQueueInteraction();
+    expect(reset.fullscreenQueueEdgeWidth, 12);
+    expect(reset.fullscreenQueueHideDelayMs, 180);
+    expect(reset.hwdec, changed.hwdec);
+    expect(reset.resumeBehavior, changed.resumeBehavior);
+    expect(reset.shortcuts, changed.shortcuts);
   });
 
   test('desktop window layout rejects unsafe tiny snapshots', () {

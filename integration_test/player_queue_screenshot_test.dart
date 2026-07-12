@@ -64,10 +64,14 @@ void main() {
     expect(controlsOpacity.opacity, 0);
     await _signalDesktopCapture('player-controls-hidden');
 
-    await mouse.moveTo(const Offset(800, 500));
+    final fullscreenToggle =
+        find.byKey(const ValueKey('player.fullscreen.toggle'));
+    await mouse.moveTo(tester.getCenter(fullscreenToggle));
     await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.byKey(const ValueKey('player.fullscreen.toggle')));
+    await tester.tap(fullscreenToggle);
     await tester.pumpAndSettle(const Duration(seconds: 2));
+    final videoSurface = find.byKey(const ValueKey('player.video.surface'));
+    final fullscreenVideoWidth = tester.getSize(videoSurface).width;
     await mouse.moveTo(tester.getCenter(toggle));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(toggle);
@@ -77,18 +81,26 @@ void main() {
     final logicalSize = tester.view.physicalSize / tester.view.devicePixelRatio;
     expect(tester.getRect(fullscreenQueue).right,
         lessThanOrEqualTo(logicalSize.width));
+    expect(tester.getSize(videoSurface).width,
+        lessThan(fullscreenVideoWidth - 400));
     await _signalDesktopCapture('player-fullscreen-queue');
 
     await mouse.moveTo(Offset(logicalSize.width / 2, logicalSize.height / 2));
     await tester.pumpAndSettle(const Duration(milliseconds: 1200));
     expect(fullscreenQueue, findsNothing);
+    expect(
+        tester.getSize(videoSurface).width, closeTo(fullscreenVideoWidth, 1));
 
     await mouse.moveTo(Offset(logicalSize.width - 1, logicalSize.height / 2));
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
     expect(fullscreenQueue, findsOneWidget);
     expect(tester.getRect(fullscreenQueue).right,
         lessThanOrEqualTo(logicalSize.width));
+    expect(tester.getSize(videoSurface).width,
+        lessThan(fullscreenVideoWidth - 400));
     await _signalDesktopCapture('player-fullscreen-queue-edge');
+    await mouse.moveTo(Offset(logicalSize.width / 2, logicalSize.height / 2));
+    await tester.pump(const Duration(milliseconds: 1200));
     await mouse.removePointer();
   });
 }

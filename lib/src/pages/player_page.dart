@@ -89,6 +89,7 @@ class _PlayerPageState extends State<PlayerPage> {
   late final FocusNode _queueSearchFocusNode;
   late final TextEditingController _queueSearchController;
   late final ScrollController _queueScrollController;
+  late final ScrollController _fullscreenQueueScrollController;
   late final MediaDetailsService _detailsService;
   final _fileLocationService = const DesktopFileLocationService();
   late final PlayerPlaybackController _playback;
@@ -170,6 +171,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _queueSearchFocusNode = FocusNode(debugLabel: 'player-queue-search');
     _queueSearchController = TextEditingController();
     _queueScrollController = ScrollController();
+    _fullscreenQueueScrollController = ScrollController();
     _detailsService =
         MediaDetailsService(onUpdated: widget.onMediaDetailsUpdated);
     _playback = PlayerPlaybackController(
@@ -774,16 +776,24 @@ class _PlayerPageState extends State<PlayerPage> {
       );
   }
 
-  void _ensureQueueIndexVisible(int index,
-      {required bool center, bool animated = true}) {
+  void _ensureQueueIndexVisible(
+    int index, {
+    required bool center,
+    bool animated = true,
+    ScrollController? controller,
+  }) {
     if (index < 0 || index >= _queue.length) {
       return;
     }
+    final targetController = controller ??
+        (_isWindowFullscreen && _fullscreenQueueVisible
+            ? _fullscreenQueueScrollController
+            : _queueScrollController);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_queueScrollController.hasClients) {
+      if (!mounted || !targetController.hasClients) {
         return;
       }
-      final position = _queueScrollController.position;
+      final position = targetController.position;
       final viewport = position.viewportDimension;
       final baseOffset = index * _queueItemExtent;
       final targetOffset = center
@@ -792,13 +802,13 @@ class _PlayerPageState extends State<PlayerPage> {
       final clampedOffset = targetOffset.clamp(
           position.minScrollExtent, position.maxScrollExtent);
       if (animated) {
-        unawaited(_queueScrollController.animateTo(
+        unawaited(targetController.animateTo(
           clampedOffset,
           duration: const Duration(milliseconds: 220),
           curve: _motionCurve,
         ));
       } else {
-        _queueScrollController.jumpTo(clampedOffset);
+        targetController.jumpTo(clampedOffset);
       }
     });
   }
@@ -1104,20 +1114,6 @@ class _PlayerPageState extends State<PlayerPage> {
     late int nextIndex;
     setState(() => nextIndex = _playback.selectQueueIndex(index));
     _ensureQueueIndexVisible(nextIndex, center: center);
-  }
-
-  void _focusPlayingQueueItem() {
-    if (_queue.isEmpty) {
-      return;
-    }
-    _ensureQueueIndexVisible(_index, center: true);
-  }
-
-  void _focusSelectedQueueItem() {
-    if (_queue.isEmpty) {
-      return;
-    }
-    _ensureQueueIndexVisible(_selectedIndex, center: true);
   }
 
   /** 搜索当前 filtered queue 并直接定位播放，不访问全媒体库。 */
@@ -1679,6 +1675,7 @@ class _PlayerPageState extends State<PlayerPage> {
     unawaited(_playingSubscription?.cancel());
     _persistOpenedProgress();
     _queueScrollController.dispose();
+    _fullscreenQueueScrollController.dispose();
     _queueSearchFocusNode.dispose();
     _queueSearchController.dispose();
     _focusNode.dispose();
@@ -1686,15 +1683,19 @@ class _PlayerPageState extends State<PlayerPage> {
     super.dispose();
   }
 
-  /** 构建当前 filtered queue 侧栏，普通布局与全屏浮层共享同一状态和滚动位置。 */
-  Widget _buildQueueSidebar() {
+  /** 构建当前 filtered queue 侧栏；不同布局实例使用独立滚动控制器。 */
+  Widget _buildQueueSidebar({
+    ScrollController? scrollController,
+    Key? key,
+  }) {
+    final controller = scrollController ?? _queueScrollController;
     return _PlayerQueueSidebar(
-      key: const ValueKey('player.queue.sidebar'),
+      key: key ?? const ValueKey('player.queue.sidebar'),
       playlist: _queue,
       sourcePlaylist: _sourcePlaylist,
       playingIndex: _index,
       selectedIndex: _selectedIndex,
-      scrollController: _queueScrollController,
+      scrollController: controller,
       thumbnailService: widget.thumbnailService,
       detailsService: _detailsService,
       activeTags: widget.activeTags,
@@ -1703,8 +1704,16 @@ class _PlayerPageState extends State<PlayerPage> {
       onChildTagSelected: _selectChildTag,
       onSelect: _select,
       onPlay: _jumpTo,
-      onLocatePlaying: _focusPlayingQueueItem,
-      onLocateSelected: _focusSelectedQueueItem,
+      onLocatePlaying: () => _ensureQueueIndexVisible(
+        _index,
+        center: true,
+        controller: controller,
+      ),
+      onLocateSelected: () => _ensureQueueIndexVisible(
+        _selectedIndex,
+        center: true,
+        controller: controller,
+      ),
       onSearchQueue: _searchQueue,
       onDeleteSelected: _selectedIndex == _index ? _deleteSelectedFile : null,
     );
@@ -1758,6 +1767,8 @@ class _PlayerPageState extends State<PlayerPage> {
                                 children: [
                                   Expanded(
                                     child: Container(
+                                      key: const ValueKey(
+                                          'player.video.surface'),
                                       margin: _isWindowFullscreen
                                           ? EdgeInsets.zero
                                           : const EdgeInsets.fromLTRB(
@@ -1851,6 +1862,38 @@ class _PlayerPageState extends State<PlayerPage> {
                                 ],
                               ),
                             ),
+                            if (_isWindowFullscreen && _fullscreenQueueVisible)
+                              TweenAnimationBuilder<double>(
+                                key: const ValueKey('player.fullscreenQueue'),
+                                tween: Tween<double>(begin: 0, end: 440),
+                                duration: _motionDuration,
+                                curve: _motionCurve,
+                                builder: (context, width, child) {
+                                  return SizedBox(
+                                    width: width,
+                                    child: ClipRect(
+                                      child: OverflowBox(
+                                        alignment: Alignment.centerRight,
+                                        minWidth: 440,
+                                        maxWidth: 440,
+                                        child: child,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: MouseRegion(
+                                  onEnter: (_) => _showFullscreenQueueSidebar(),
+                                  onExit: (_) => _scheduleFullscreenQueueHide(),
+                                  child: SafeArea(
+                                    child: _buildQueueSidebar(
+                                      key: const ValueKey(
+                                          'player.fullscreenQueue.sidebar'),
+                                      scrollController:
+                                          _fullscreenQueueScrollController,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             if (hasWideQueueSidebar && !_isWindowFullscreen)
                               AnimatedSize(
                                 duration: _motionDuration,
@@ -1884,36 +1927,6 @@ class _PlayerPageState extends State<PlayerPage> {
                       opaque: true,
                       onEnter: (_) => _showFullscreenQueueSidebar(),
                       child: const SizedBox.expand(),
-                    ),
-                  ),
-                if (_isWindowFullscreen && _fullscreenQueueVisible)
-                  Positioned(
-                    key: const ValueKey('player.fullscreenQueue'),
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    width: 440,
-                    child: TweenAnimationBuilder<double>(
-                      tween: Tween<double>(begin: 1, end: 0),
-                      duration: _motionDuration,
-                      curve: _motionCurve,
-                      builder: (context, progress, child) {
-                        return Transform.translate(
-                          offset: Offset(440 * progress, 0),
-                          child: child,
-                        );
-                      },
-                      child: MouseRegion(
-                        onEnter: (_) => _showFullscreenQueueSidebar(),
-                        onExit: (_) => _scheduleFullscreenQueueHide(),
-                        child: SafeArea(
-                          child: Material(
-                            color: Colors.transparent,
-                            elevation: 18,
-                            child: _buildQueueSidebar(),
-                          ),
-                        ),
-                      ),
                     ),
                   ),
               ],
@@ -2013,6 +2026,7 @@ class _PlayerTopBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Row(children: [
           IconButton(
+            key: const ValueKey('player.back'),
             tooltip: '返回媒体库',
             onPressed: onBack,
             icon: const Icon(Icons.arrow_back_rounded),

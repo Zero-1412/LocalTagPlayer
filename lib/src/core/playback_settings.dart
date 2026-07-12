@@ -109,6 +109,12 @@ class PlaybackSettings {
     );
   }
 
+  /** 仅恢复全屏队列交互默认值，保留其它所有播放设置。 */
+  PlaybackSettings resetFullscreenQueueInteraction() => copyWith(
+        fullscreenQueueEdgeWidth: defaults.fullscreenQueueEdgeWidth,
+        fullscreenQueueHideDelayMs: defaults.fullscreenQueueHideDelayMs,
+      );
+
   Map<String, Object?> toJson() => {
         'hwdec': hwdec,
         'resumeBehavior': resumeBehavior.name,

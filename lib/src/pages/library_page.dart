@@ -240,6 +240,13 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     await widget.onPlaybackSettingsChanged(_settings);
   }
 
+  /** 仅恢复全屏队列交互参数，不触碰解码、快捷键或继续观看设置。 */
+  Future<void> _resetFullscreenQueueSettings() async {
+    final next = _settings.resetFullscreenQueueInteraction();
+    setState(() => _settings = next);
+    await widget.onPlaybackSettingsChanged(next);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -289,9 +296,24 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    '全屏播放列表',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          '全屏播放列表',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        key: const ValueKey('settings.fullscreenQueue.reset'),
+                        onPressed: _resetFullscreenQueueSettings,
+                        icon: const Icon(Icons.restart_alt_rounded),
+                        label: const Text('恢复默认'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   const Text(
