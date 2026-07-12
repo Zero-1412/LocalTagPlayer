@@ -102,6 +102,8 @@ class _PlayerPageState extends State<PlayerPage> {
   /** 恢复选择弹窗期间暂停进度写入，避免刚打开的 0 秒覆盖稳定进度。 */
   var _choosingPlaybackStart = false;
   var _queueEndReached = false;
+  /** 标签弹窗打开期间阻止底层播放器重复消费 Escape，避免意外返回媒体库。 */
+  var _editingManualTags = false;
   var _playbackMode = PlayerPlaybackMode.sequential;
   var _playbackRate = 1.0;
   final _random = math.Random();
@@ -879,9 +881,14 @@ class _PlayerPageState extends State<PlayerPage> {
 
   /** 打开当前视频的 manual 标签编辑器，并在保存后刷新播放器上下文。 */
   Future<void> _editManualTags() async {
-    await widget.onEditManualTags(_currentItem);
-    if (mounted) {
-      setState(() {});
+    _editingManualTags = true;
+    try {
+      await widget.onEditManualTags(_currentItem);
+      if (mounted) {
+        setState(() {});
+      }
+    } finally {
+      _editingManualTags = false;
     }
   }
 
@@ -1059,6 +1066,10 @@ class _PlayerPageState extends State<PlayerPage> {
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (_editingManualTags && event.logicalKey == LogicalKeyboardKey.escape) {
+      // 弹窗自己的 Escape 只负责取消编辑；播放器页面不能再对同一按键执行返回。
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.insert &&
