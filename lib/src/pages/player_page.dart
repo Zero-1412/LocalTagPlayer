@@ -99,6 +99,8 @@ class _PlayerPageState extends State<PlayerPage> {
   StreamSubscription<bool>? _playingSubscription;
   Timer? _controlsHideTimer;
   var _controlsVisible = true;
+  /** 最近一次视频控件上下文，供页面级 F 快捷键切换同一 Video 全屏状态。 */
+  BuildContext? _videoControlsContext;
   DateTime? _lastProgressWriteAt;
   Duration _lastPersistedPosition = Duration.zero;
   DateTime? _ignoreQueueSelectionBefore;
@@ -360,7 +362,7 @@ class _PlayerPageState extends State<PlayerPage> {
         const SnackBar(
           content: Text(
             'Space 播放/暂停 · J/L 快退/快进 · ↑/↓ 选择队列 · '
-            'PageUp/PageDown 上一条/下一条 · [/] 调整倍速',
+            'T 添加标签 · F 全屏 · S 截图 · [/] 调整倍速',
           ),
         ),
       );
@@ -407,6 +409,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   /** 构建画面底部统一控制条，并在全屏顶部保留最小队列语境。 */
   Widget _buildVideoControls(VideoState state) {
+    _videoControlsContext = state.context;
     return MouseRegion(
       onEnter: (_) => _showVideoControls(),
       onHover: (_) => _showVideoControls(),
@@ -1455,6 +1458,19 @@ class _PlayerPageState extends State<PlayerPage> {
         unawaited(
             _player.seek(_player.state.position + const Duration(seconds: 5)));
         return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyT:
+        unawaited(_editManualTags());
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyS:
+        unawaited(_saveCurrentFrameScreenshot());
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyF:
+        final videoContext = _videoControlsContext;
+        if (videoContext != null) {
+          unawaited(toggleFullscreen(videoContext));
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
       case LogicalKeyboardKey.bracketLeft:
         _stepPlaybackRate(-1);
         return KeyEventResult.handled;
@@ -1801,9 +1817,9 @@ class _PlayerShortcutHintBar extends StatelessWidget {
           SizedBox(width: 16),
           _ShortcutHint(keys: 'Space', label: '播放/暂停'),
           _ShortcutHint(keys: 'J / L', label: '快退/快进'),
-          _ShortcutHint(keys: '↑ / ↓', label: '选择队列'),
-          _ShortcutHint(keys: 'PgUp / PgDn', label: '上一条/下一条'),
-          _ShortcutHint(keys: '[ / ]', label: '倍速'),
+          _ShortcutHint(keys: 'T', label: '添加标签'),
+          _ShortcutHint(keys: 'F', label: '全屏/退出全屏'),
+          _ShortcutHint(keys: 'S', label: '截图'),
         ]),
       ),
     );

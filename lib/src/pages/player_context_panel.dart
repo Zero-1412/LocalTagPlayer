@@ -38,26 +38,24 @@ class _PlayerContextPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final conciseQueueTitle = queueTitle.replaceAll('个结果', '项');
     final details = item.mediaDetails;
     final extension =
         p.extension(item.path).replaceFirst('.', '').toUpperCase();
-    final metadata = <String>[
-      if (item.playbackDuration > Duration.zero)
-        _formatPanelDuration(item.playbackDuration),
-      if (item.fileSize != null) _formatPanelBytes(item.fileSize!),
+    final displayTitle = extension.isNotEmpty &&
+            !item.title.toLowerCase().endsWith('.${extension.toLowerCase()}')
+        ? '${item.title}.${extension.toLowerCase()}'
+        : item.title;
+    final codecSummary = <String>[
       if (extension.isNotEmpty) extension,
       if (details?.videoCodec?.trim().isNotEmpty ?? false)
         details!.videoCodec!.toUpperCase(),
       if (details?.audioCodec?.trim().isNotEmpty ?? false)
         details!.audioCodec!.toUpperCase(),
-      if (details?.width != null && details?.height != null)
-        '${details!.width}x${details.height}',
-    ];
+    ].join('  ·  ');
     final visibleTags = item.tags.toList()..sort();
     return Container(
       margin: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       decoration: BoxDecoration(
         color: const Color(0xff101722),
         borderRadius: BorderRadius.circular(8),
@@ -67,36 +65,48 @@ class _PlayerContextPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
                 color: const Color(0xff211b50),
                 borderRadius: BorderRadius.circular(9),
               ),
               child: const Icon(Icons.video_library_outlined,
-                  color: Color(0xff8b73ff), size: 25),
+                  color: Color(0xff8b73ff), size: 31),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Tooltip(
-                    message: item.title,
-                    child: Text(
-                      item.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
+                  Row(children: [
+                    Flexible(
+                      child: Tooltip(
+                        message: displayTitle,
+                        child: Text(
+                          displayTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 5),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: '编辑标签',
+                      onPressed: onEditManualTags,
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.edit_outlined,
+                          size: 18, color: Color(0xff9aa8c2)),
+                    ),
+                  ]),
+                  const SizedBox(height: 2),
                   Tooltip(
                     message: item.path,
                     child: Text(
@@ -110,22 +120,36 @@ class _PlayerContextPanel extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 12),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text(
-                '${index + 1} / $total',
-                style: const TextStyle(
-                  color: Color(0xffc4b5fd),
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(metadata.join('  ·  '),
-                  style:
-                      const TextStyle(color: Color(0xff8996ab), fontSize: 11)),
-            ]),
+            const SizedBox(width: 18),
+            Wrap(
+              spacing: 18,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (item.playbackDuration > Duration.zero)
+                  _PlayerMetadataItem(
+                    icon: Icons.schedule_rounded,
+                    label: _formatPanelDuration(item.playbackDuration),
+                  ),
+                if (item.fileSize != null)
+                  _PlayerMetadataItem(
+                    icon: Icons.description_outlined,
+                    label: _formatPanelBytes(item.fileSize!),
+                  ),
+                if (codecSummary.isNotEmpty)
+                  _PlayerMetadataItem(
+                    icon: Icons.center_focus_weak_rounded,
+                    label: codecSummary,
+                  ),
+                if (details?.width != null && details?.height != null)
+                  _PlayerResolutionBadge(
+                    label: '${details!.width}x${details.height}',
+                  ),
+              ],
+            ),
           ]),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: Color(0xff202b40)),
           const SizedBox(height: 10),
           Row(children: [
             Expanded(
@@ -134,34 +158,24 @@ class _PlayerContextPanel extends StatelessWidget {
                 runSpacing: 5,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(conciseQueueTitle,
-                      style: const TextStyle(
-                          color: Color(0xffaebbd0),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700)),
+                  const Text('标签',
+                      style: TextStyle(color: Color(0xff8794ac), fontSize: 12)),
                   for (final tag in visibleTags.take(4))
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 9, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xff151e36),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: const Color(0xff2b3856)),
-                      ),
-                      child: Text(tag,
-                          style: const TextStyle(
-                              color: Color(0xffaab6d0), fontSize: 11)),
+                    _PlayerTagChip(label: tag),
+                  ActionChip(
+                    onPressed: onEditManualTags,
+                    avatar: const Icon(Icons.add_rounded, size: 16),
+                    label: const Text('添加标签'),
+                    side: const BorderSide(color: Color(0xff2b3856)),
+                    backgroundColor: const Color(0xff151e36),
+                    labelStyle: const TextStyle(
+                      color: Color(0xffaab6d0),
+                      fontSize: 11,
                     ),
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ],
               ),
-            ),
-            IconButton(
-              tooltip: item.isFavorite ? '取消收藏' : '收藏',
-              onPressed: onToggleFavorite,
-              icon: Icon(
-                  item.isFavorite ? Icons.favorite : Icons.favorite_border),
-              color: item.isFavorite ? const Color(0xfffb7185) : Colors.white70,
-              visualDensity: VisualDensity.compact,
             ),
             OutlinedButton.icon(
               key: const ValueKey('player.editManualTags'),
@@ -187,13 +201,30 @@ class _PlayerContextPanel extends StatelessWidget {
               key: const ValueKey('player.more'),
               tooltip: '更多',
               color: const Color(0xff17202c),
-              icon: const Icon(Icons.more_horiz_rounded, color: Colors.white),
+              child: Container(
+                height: 38,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xff2b3856)),
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.more_horiz_rounded, color: Colors.white, size: 18),
+                  SizedBox(width: 8),
+                  Text('更多', style: TextStyle(color: Color(0xffc4cee0))),
+                ]),
+              ),
               onSelected: (value) {
+                if (value == 'favorite') onToggleFavorite();
                 if (value == 'info') onVideoInfo();
                 if (value == 'diagnostics') onDiagnostics();
                 if (value is PlayerPlaybackMode) onPlaybackModeChanged(value);
               },
               itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'favorite',
+                  child: Text(item.isFavorite ? '取消收藏' : '收藏'),
+                ),
                 const PopupMenuItem(value: 'info', child: Text('视频信息')),
                 const PopupMenuItem(value: 'diagnostics', child: Text('播放诊断')),
                 const PopupMenuDivider(),
@@ -227,6 +258,71 @@ class _PlayerContextPanel extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/** 信息卡顶部的图标化媒体摘要。 */
+class _PlayerMetadataItem extends StatelessWidget {
+  const _PlayerMetadataItem({required this.icon, required this.label});
+
+  /** 摘要类型图标。 */
+  final IconData icon;
+
+  /** 当前媒体的摘要值。 */
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 17, color: const Color(0xff7686a3)),
+      const SizedBox(width: 6),
+      Text(label,
+          style: const TextStyle(color: Color(0xff8996ab), fontSize: 11)),
+    ]);
+  }
+}
+
+/** 蓝图中的独立分辨率徽标。 */
+class _PlayerResolutionBadge extends StatelessWidget {
+  const _PlayerResolutionBadge({required this.label});
+
+  /** 视频像素尺寸。 */
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xff121b2e),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xff283550)),
+      ),
+      child: Text(label,
+          style: const TextStyle(color: Color(0xff9ba8c2), fontSize: 11)),
+    );
+  }
+}
+
+/** 当前视频已关联标签的紧凑胶囊展示。 */
+class _PlayerTagChip extends StatelessWidget {
+  const _PlayerTagChip({required this.label});
+
+  /** 标签名称。 */
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xff151e36),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xff2b3856)),
+      ),
+      child: Text(label,
+          style: const TextStyle(color: Color(0xffaab6d0), fontSize: 11)),
     );
   }
 }
