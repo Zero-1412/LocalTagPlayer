@@ -352,6 +352,59 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
+  /** 在播放器内展示已经实现的快捷键，不引入蓝图中的占位能力。 */
+  void _showControlShortcutHelp() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Space 播放/暂停 · J/L 快退/快进 · ↑/↓ 选择队列 · '
+            'PageUp/PageDown 上一条/下一条 · [/] 调整倍速',
+          ),
+        ),
+      );
+  }
+
+  /**
+   * 抓取当前视频帧并让用户选择保存位置。
+   *
+   * 截图由 media_kit 获取编码后的 JPEG；文件写入只发生在用户确认保存路径后，
+   * 不修改媒体库记录、缩略图缓存或当前 filtered queue。
+   */
+  Future<void> _saveCurrentFrameScreenshot() async {
+    try {
+      final bytes = await _player.screenshot(format: 'image/jpeg');
+      if (!mounted) return;
+      if (bytes == null || bytes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('当前画面暂时无法截图')),
+        );
+        return;
+      }
+      final safeTitle =
+          _currentItem.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: '保存当前画面',
+        fileName: '${safeTitle.isEmpty ? 'video' : safeTitle}_$timestamp.jpg',
+        type: FileType.custom,
+        allowedExtensions: const ['jpg'],
+      );
+      if (outputPath == null || !mounted) return;
+      await File(outputPath).writeAsBytes(bytes, flush: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('截图已保存')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('截图保存失败，请重试')),
+      );
+    }
+  }
+
   /** 构建画面底部统一控制条，并在全屏顶部保留最小队列语境。 */
   Widget _buildVideoControls(VideoState state) {
     return MouseRegion(
@@ -461,6 +514,7 @@ class _PlayerPageState extends State<PlayerPage> {
                                       ),
                               icon: const Icon(Icons.skip_previous_rounded),
                             ),
+                            const SizedBox(width: 12),
                             IconButton(
                               tooltip: _player.state.playing ? '暂停' : '播放',
                               color: Colors.white,
@@ -475,6 +529,7 @@ class _PlayerPageState extends State<PlayerPage> {
                                 size: 30,
                               ),
                             ),
+                            const SizedBox(width: 12),
                             IconButton(
                               tooltip: '下一条',
                               color: Colors.white,
@@ -487,10 +542,10 @@ class _PlayerPageState extends State<PlayerPage> {
                                       ),
                               icon: const Icon(Icons.skip_next_rounded),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 16),
                             const Icon(Icons.volume_up_rounded, size: 20),
                             SizedBox(
-                              width: 92,
+                              width: 130,
                               child: SliderTheme(
                                 data: const SliderThemeData(
                                   trackHeight: 3,
@@ -512,9 +567,10 @@ class _PlayerPageState extends State<PlayerPage> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 24),
                             Text(
-                              '${_formatDuration(position)} / ${_formatDuration(duration)}',
+                              '${_formatControlDuration(position)} / '
+                              '${_formatControlDuration(duration)}',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 13,
@@ -536,13 +592,69 @@ class _PlayerPageState extends State<PlayerPage> {
                               child: Padding(
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 8),
-                                child: Text(
-                                  '${_playbackRate}x',
-                                  style: const TextStyle(
-                                    color: Color(0xffcbd5e1),
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '${_playbackRate}x',
+                                      style: const TextStyle(
+                                        color: Color(0xffcbd5e1),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      size: 17,
+                                      color: Color(0xff8794ac),
+                                    ),
+                                  ],
                                 ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: '快捷键',
+                              onPressed: _showControlShortcutHelp,
+                              icon: const Icon(Icons.keyboard_alt_outlined,
+                                  size: 21),
+                            ),
+                            IconButton(
+                              tooltip: '截图',
+                              onPressed: () =>
+                                  unawaited(_saveCurrentFrameScreenshot()),
+                              icon: const Icon(Icons.photo_camera_outlined,
+                                  size: 21),
+                            ),
+                            PopupMenuButton<PlayerPlaybackMode>(
+                              tooltip: '播放模式',
+                              initialValue: _playbackMode,
+                              onSelected: (mode) {
+                                setState(() {
+                                  _playbackMode = mode;
+                                  _queueEndReached = false;
+                                });
+                              },
+                              itemBuilder: (_) => [
+                                for (final mode in PlayerPlaybackMode.values)
+                                  PopupMenuItem(
+                                    value: mode,
+                                    child: Row(children: [
+                                      Icon(mode.icon, size: 18),
+                                      const SizedBox(width: 8),
+                                      Text(mode.label),
+                                      if (mode == _playbackMode) ...[
+                                        const Spacer(),
+                                        const Icon(Icons.check_rounded,
+                                            size: 18),
+                                      ],
+                                    ]),
+                                  ),
+                              ],
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 10),
+                                child: Icon(
+                                    Icons.picture_in_picture_alt_outlined,
+                                    size: 21),
                               ),
                             ),
                             IconButton(
@@ -1267,6 +1379,14 @@ class _PlayerPageState extends State<PlayerPage> {
     return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
   }
 
+  /** 蓝图控制栏固定显示两位小时，避免时长跨小时后横向跳动。 */
+  String _formatControlDuration(Duration value) {
+    final hours = value.inHours.toString().padLeft(2, '0');
+    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$hours:$minutes:$seconds';
+  }
+
   String _formatBytes(int bytes) {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     var size = bytes.toDouble();
@@ -1395,7 +1515,8 @@ class _PlayerPageState extends State<PlayerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final showQueueSidebar = MediaQuery.sizeOf(context).width >= 760;
+    // 中窄窗口改用底部队列，避免侧栏挤压蓝图式横向控制层。
+    final showQueueSidebar = MediaQuery.sizeOf(context).width >= 1100;
     final queueSidebar = _PlayerQueueSidebar(
       playlist: _queue,
       sourcePlaylist: _sourcePlaylist,
