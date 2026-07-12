@@ -33,6 +33,12 @@
 
 # CHAT_4_PLAYER.md
 
+## 2026-07-12 播放器蓝图双栏比例修正
+
+- 右侧 filtered queue 宽度改为桌面窗口的约 30%，并限制在 360–500px，保持宽屏信息密度与蓝图一致。
+- 队列容器顶边与左侧视频画面统一为 18px；focused test 覆盖 960、1280、1600 和 1920 宽度。
+- 未修改 filtered queue 来源、当前 index、EOF、PlayerBackend、标签语义或缩略图/media queue。
+
 ## 2026-07-11 播放快照串行写入
 
 - `PlaybackSnapshotWriteQueue` 以稳定 videoId 为合并键，同一视频只保留最新待写状态。

@@ -111,6 +111,14 @@ void main() {
     );
   });
 
+  test('player queue sidebar follows blueprint proportions on wide windows',
+      () {
+    expect(playerQueueSidebarWidthForWindow(960), 360);
+    expect(playerQueueSidebarWidthForWindow(1280), 384);
+    expect(playerQueueSidebarWidthForWindow(1600), 480);
+    expect(playerQueueSidebarWidthForWindow(1920), 500);
+  });
+
   test('tag accordion children are scoped to their parent tag', () {
     const genshin = TagItem(
       id: 'folder.primary:genshin',

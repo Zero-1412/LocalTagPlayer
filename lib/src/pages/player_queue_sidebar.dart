@@ -169,10 +169,13 @@ class _PlayerQueueSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sidebarWidth = math.min(360.0, MediaQuery.sizeOf(context).width);
+    final sidebarWidth = playerQueueSidebarWidthForWindow(
+      MediaQuery.sizeOf(context).width,
+    );
     return Container(
       width: sidebarWidth,
-      margin: const EdgeInsets.fromLTRB(0, 4, 14, 12),
+      // 与左侧视频画面的顶边对齐，保持蓝图中的双栏视觉基线。
+      margin: const EdgeInsets.fromLTRB(0, 18, 14, 12),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: const Color(0xff0d1528),
@@ -427,6 +430,17 @@ class _PlayerQueueSidebar extends StatelessWidget {
       itemExtent: _PlayerPageState._queueItemExtent,
     );
   }
+}
+
+/**
+ * 按桌面窗口宽度计算播放队列栏宽度。
+ *
+ * 队列栏在宽屏下保持接近蓝图的三成占比，同时通过上下限避免窄窗挤压
+ * 播放画面，或在超宽屏上让单行队列信息变得过度松散。
+ */
+@visibleForTesting
+double playerQueueSidebarWidthForWindow(double windowWidth) {
+  return (windowWidth * 0.30).clamp(360.0, 500.0).toDouble();
 }
 
 /**
