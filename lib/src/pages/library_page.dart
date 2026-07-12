@@ -426,6 +426,7 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_handleGlobalSearchShortcut);
     _searchController.addListener(_handleSearchControllerChanged);
     _load();
   }
@@ -433,11 +434,29 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   void dispose() {
     unawaited(_playbackSnapshotQueue?.dispose());
+    HardwareKeyboard.instance.removeHandler(_handleGlobalSearchShortcut);
     _searchController.removeListener(_handleSearchControllerChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
     _countRefreshCoordinator.dispose();
     super.dispose();
+  }
+
+  /**
+   * 在媒体库页面处于最上层时稳定处理 Ctrl+K。
+   *
+   * Windows 真实窗口中焦点可能停在页面容器而不进入局部 Shortcuts 焦点链，
+   * 因此页面生命周期内补充全局键盘处理；弹窗或播放器路由位于上层时不抢焦点。
+   */
+  bool _handleGlobalSearchShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.keyK ||
+        !HardwareKeyboard.instance.isControlPressed ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return false;
+    }
+    _focusSearchField();
+    return true;
   }
 
   void _handleSearchControllerChanged() {
@@ -484,6 +503,18 @@ class _LibraryPageState extends State<LibraryPage> {
       baseOffset: 0,
       extentOffset: _searchController.text.length,
     );
+    // Windows 全局快捷键可能与本帧的页面 Focus 重建竞争；下一帧再次确认焦点，
+    // 让真实键盘和自动化输入稳定落到同一个 EditableText。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _searchFocusNode.requestFocus();
+      _searchController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _searchController.text.length,
+      );
+    });
   }
 
   Future<void> _load() async {

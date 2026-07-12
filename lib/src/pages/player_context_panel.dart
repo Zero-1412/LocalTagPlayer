@@ -101,26 +101,30 @@ class _PlayerContextPanel extends StatelessWidget {
                           : () => onPlayIndex(previousIndex!),
                       icon: const Icon(Icons.skip_previous_rounded, size: 18),
                       label: const Text('上一条'),
+                      style: _secondaryPlayerActionStyle,
                     ),
-                    OutlinedButton.icon(
+                    FilledButton.icon(
                       key: const ValueKey('player.next'),
                       onPressed: nextIndex == null
                           ? null
                           : () => onPlayIndex(nextIndex!),
                       icon: const Icon(Icons.skip_next_rounded, size: 18),
                       label: const Text('下一条'),
+                      style: _primaryPlayerActionStyle,
                     ),
                     OutlinedButton.icon(
                       key: const ValueKey('player.editManualTags'),
                       onPressed: onEditManualTags,
                       icon: const Icon(Icons.sell_outlined, size: 18),
                       label: const Text('编辑标签'),
+                      style: _secondaryPlayerActionStyle,
                     ),
                     OutlinedButton.icon(
                       key: const ValueKey('player.revealFile'),
                       onPressed: onRevealFile,
                       icon: const Icon(Icons.folder_open_rounded, size: 18),
                       label: const Text('打开文件位置'),
+                      style: _secondaryPlayerActionStyle,
                     ),
                   ],
                 ),
@@ -184,6 +188,27 @@ class _PlayerContextPanel extends StatelessWidget {
     );
   }
 }
+
+/** 暗色播放器中普通操作的高对比度边框样式。 */
+final ButtonStyle _secondaryPlayerActionStyle = OutlinedButton.styleFrom(
+  foregroundColor: const Color(0xfff1f5f9),
+  disabledForegroundColor: const Color(0xff94a3b8),
+  side: const BorderSide(color: Color(0xff64748b)),
+).copyWith(
+  side: WidgetStateProperty.resolveWith((states) => BorderSide(
+        color: states.contains(WidgetState.disabled)
+            ? const Color(0xff475569)
+            : const Color(0xff94a3b8),
+      )),
+);
+
+/** 高频“下一条”使用主色填充，并保留可辨识的禁用状态。 */
+final ButtonStyle _primaryPlayerActionStyle = FilledButton.styleFrom(
+  backgroundColor: const Color(0xff6d5dfc),
+  foregroundColor: Colors.white,
+  disabledBackgroundColor: const Color(0xff334155),
+  disabledForegroundColor: const Color(0xff94a3b8),
+);
 
 class _PlayerMetaChip extends StatelessWidget {
   const _PlayerMetaChip({

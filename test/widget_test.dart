@@ -1243,6 +1243,10 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).focusNode.hasFocus,
+      isTrue,
+    );
     await tester.enterText(find.byKey(LibrarySmokeKeys.searchField), 'firefly');
     await tester.pump(const Duration(milliseconds: 100));
 

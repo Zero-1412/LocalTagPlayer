@@ -1234,6 +1234,7 @@ class _PlayerPageState extends State<PlayerPage> {
                 key: const ValueKey('player.playbackMode'),
                 tooltip: _playbackMode.label,
                 initialValue: _playbackMode,
+                color: const Color(0xff17202c),
                 onSelected: (value) => setState(() {
                   _playbackMode = value;
                   _queueEndReached = false;
@@ -1242,9 +1243,14 @@ class _PlayerPageState extends State<PlayerPage> {
                     .map((mode) => PopupMenuItem(
                           value: mode,
                           child: Row(children: [
-                            Icon(mode.icon, size: 18),
+                            Icon(mode.icon,
+                                size: 18, color: const Color(0xffe2e8f0)),
                             const SizedBox(width: 10),
-                            Text(mode.label),
+                            Text(mode.label,
+                                style: const TextStyle(
+                                  color: Color(0xfff8fafc),
+                                  fontWeight: FontWeight.w700,
+                                )),
                           ]),
                         ))
                     .toList(),
@@ -1254,11 +1260,16 @@ class _PlayerPageState extends State<PlayerPage> {
                 key: const ValueKey('player.playbackRate'),
                 tooltip: '播放速度',
                 initialValue: _playbackRate,
+                color: const Color(0xff17202c),
                 onSelected: _setPlaybackRate,
                 itemBuilder: (_) => _playbackRates
                     .map((rate) => PopupMenuItem(
                           value: rate,
-                          child: Text('${rate}x'),
+                          child: Text('${rate}x',
+                              style: const TextStyle(
+                                color: Color(0xfff8fafc),
+                                fontWeight: FontWeight.w700,
+                              )),
                         ))
                     .toList(),
                 child: Center(

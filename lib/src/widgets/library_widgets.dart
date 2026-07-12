@@ -1196,42 +1196,27 @@ class _FilterResultLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: querySummary,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            '\u5171',
-            style: TextStyle(
-              color: _appTextMuted,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Text(
-            _formatCount(resultCount),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Flexible(
+          child: Text(
+            querySummary,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: _appAccentViolet,
               fontSize: 13,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const Text(
-            ' \u4e2a\u89c6\u9891',
-            style: TextStyle(
-              color: _appTextMuted,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
+        ),
+        if (refreshing) ...[
+          const SizedBox(width: 8),
+          const SizedBox.square(
+            dimension: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
           ),
-          if (refreshing) ...[
-            const SizedBox(width: 8),
-            const SizedBox.square(
-              dimension: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ],
         ],
-      ),
+      ]),
     );
   }
 }
@@ -1498,6 +1483,14 @@ class _ReferenceTopBar extends StatelessWidget {
                 baseOffset: 0,
                 extentOffset: controller.text.length,
               );
+              // 顶部栏单独作为 smoke 宿主时也补一次下一帧聚焦，保持与真实页面一致。
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                searchFocusNode.requestFocus();
+                controller.selection = TextSelection(
+                  baseOffset: 0,
+                  extentOffset: controller.text.length,
+                );
+              });
               return null;
             },
           ),

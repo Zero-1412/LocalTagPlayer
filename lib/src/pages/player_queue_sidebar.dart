@@ -181,7 +181,7 @@ class _PlayerQueueSidebar extends StatelessWidget {
       if (selectedChildTag != null) selectedChildTag!,
     ];
     if (contextChips.isEmpty) {
-      return const [_QueueContextChip(label: '全部视频')];
+      return [_QueueContextChip(label: _filterSummary, emphasized: true)];
     }
     return [
       for (final tag in contextChips.take(5)) _QueueContextChip(label: tag),
@@ -310,6 +310,15 @@ class _PlayerQueueSidebar extends StatelessWidget {
                           runSpacing: 5,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: _contextPathWidgets(),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${playlist.length} 项',
+                          style: const TextStyle(
+                            color: Color(0xffcbd5e1),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         Text(

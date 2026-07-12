@@ -64,21 +64,27 @@ extension _LibraryPageDerivedState on _LibraryPageState {
     required int totalCount,
   }) {
     final parts = <String>[];
+    final hierarchyParts = <String>[];
     final keyword = _searchController.text.trim();
-    if (keyword.isNotEmpty) {
-      parts.add('"$keyword"');
+    hierarchyParts.addAll(_selectedTags.toList()..sort());
+    hierarchyParts.addAll(_selectedChildTags.toList()..sort());
+    final selectedItems = _selectedGroupTagItems(store);
+    hierarchyParts.addAll([
+      for (final tag in selectedItems)
+        if (tag.groupId == 'folder.primary' || tag.groupId == 'folder.child')
+          tag.displayName ?? tag.name,
+    ]);
+    if (hierarchyParts.isNotEmpty) {
+      parts.add(hierarchyParts.toSet().join(' / '));
     }
-    final groupsById = {
-      for (final group in _tagGroupsForSidebar(store)) group.id: group
-    };
-    final activeGroupLabels = [
-      for (final entry in _selectedGroupTagIds.entries)
-        if (entry.value.isNotEmpty)
-          _groupLabel(groupsById[entry.key] ??
-              TagGroup(id: entry.key, name: entry.key, items: const [])),
+    final otherLabels = [
+      for (final tag in selectedItems)
+        if (tag.groupId != 'folder.primary' && tag.groupId != 'folder.child')
+          tag.displayName ?? tag.name,
     ]..sort();
-    if (activeGroupLabels.isNotEmpty) {
-      parts.add(activeGroupLabels.join(' + '));
+    parts.addAll(otherLabels);
+    if (keyword.isNotEmpty) {
+      parts.add('关键词 $keyword');
     }
     final excludedCount = _excludedTagIds.length;
     if (excludedCount > 0) {
@@ -87,9 +93,8 @@ extension _LibraryPageDerivedState on _LibraryPageState {
     if (_showFavoritesOnly) {
       parts.add('favorite');
     }
-    final label =
-        parts.isEmpty ? '\u5168\u90e8\u89c6\u9891' : parts.join(' 路 ');
-    return '$label  路  $resultCount / $totalCount';
+    final label = parts.isEmpty ? '全部视频' : parts.join(' + ');
+    return '$label · $resultCount 个结果';
   }
 
   /**
