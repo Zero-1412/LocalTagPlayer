@@ -1,5 +1,12 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-12 · 长视频隔离复测与菜单方向纠正
+
+- 生成 600 秒同路径隔离视频，排除 18–24 秒 EOF 对 UI 自动化退出的干扰。
+- 真实截图发现 `bottomEnd` 会让菜单向上展开，修正为 `topEnd` 后确认菜单从齿轮下方向下展开。
+- 日志确认自动化退出前没有 Dart、media_kit、mpv 或 FFmpeg 异常，唯一错误为 Flutter Windows AXTree 更新失败并进入 `ax_platform_node_win.cc` unreachable code。
+- 队列折叠/恢复真实截图仍被该 Flutter Windows 辅助功能桥崩溃阻塞；保活布局由 71 项测试、analyze 和 Windows build 继续覆盖。
+
 ## 2026-07-12 · 播放器菜单方向与队列入口收敛
 
 - 播放设置菜单使用 root overlay、底部对齐和向下偏移，固定从齿轮按钮下方展开。

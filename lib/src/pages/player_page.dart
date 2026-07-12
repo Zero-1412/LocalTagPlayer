@@ -594,7 +594,7 @@ class _PlayerPageState extends State<PlayerPage> {
                               useRootOverlay: true,
                               alignmentOffset: const Offset(0, 8),
                               style: const MenuStyle(
-                                alignment: AlignmentDirectional.bottomEnd,
+                                alignment: AlignmentDirectional.topEnd,
                               ),
                               menuChildren: _buildControlSettingsMenu(),
                               builder: (context, controller, child) =>

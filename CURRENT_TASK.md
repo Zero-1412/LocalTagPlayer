@@ -17,6 +17,11 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 使用 600 秒长视频隔离样本复测，确认设置菜单在 `topEnd` 对齐后从齿轮下方向下展开。
+- 短视频并非退出原因：长视频下同样可由 Windows UI 自动化触发 Flutter `accessibility_bridge.cc` AXTree 连续失败，最终进入 `ax_platform_node_win.cc` unreachable code。
+- 日志未发现 Dart、media_kit、mpv、FFmpeg 或 filtered queue 错误；不通过关闭语义树规避，以免破坏屏幕阅读器能力。
+- 队列折叠/恢复截图受辅助功能桥崩溃阻塞；本轮 71 项测试、analyze、Windows debug build 通过。
+
 - 播放设置菜单固定从齿轮下方展开；队列折叠按钮改为播放队列图标。
 - 宽屏队列折叠后顶栏不再显示重复播放队列入口，窄屏底部队列入口保持不变。
 - `AGENTS.md` 已要求所有业务代码修改自动启动并点击测试，UI 改动必须触发后截图分析。
