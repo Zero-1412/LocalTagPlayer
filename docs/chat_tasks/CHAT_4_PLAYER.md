@@ -1,3 +1,9 @@
+## 2026-07-12 accessibility bridge 隔离验证与无 UIA 截图
+
+- 新增 Windows 桌面集成测试，通过 Flutter Finder/VM Service 点击队列按钮，并以桌面像素采集补拍折叠、恢复状态，不查询 Windows UI Automation 语义树。
+- 队列浮动定位器在 `ScrollPosition` 已绑定但内容尺寸尚未建立时按可见处理，避免首次挂载与恢复动画的 viewport 空值竞态。
+- stable 3.44.4 与隔离 beta 3.46.0-0.3.pre 均通过无 UIA 用例；由于问题 UIA 客户端不能枚举 beta 测试窗口，不能据此宣称引擎 bridge 已修复，生产 SDK 保持 stable。
+
 ## 2026-07-12 长视频隔离复测与辅助功能桥排查
 
 - 将 `purple-grid.mp4` 同路径替换为 600 秒循环样本，现有隔离数据库无需改路径即可复测。

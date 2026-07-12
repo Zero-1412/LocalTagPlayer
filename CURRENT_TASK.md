@@ -17,6 +17,10 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 使用 Flutter VM Service 驱动真实 Windows 窗口，并通过桌面像素采集补拍队列折叠与恢复；该链路不创建 Windows UIA 客户端，两次状态切换均未触发进程退出。
+- 修复队列首次挂载/恢复动画期间 `ScrollPosition` 尚无 viewport 尺寸时的空值竞态；新增可重复的播放器队列桌面集成测试与截图脚本。
+- 隔离验证 Flutter stable 3.44.4 与 beta 3.46.0-0.3.pre 均通过无 UIA 用例；beta 的问题 UIA 客户端验证未能枚举测试窗口，缺少 bridge 已修复证据，因此暂不升级生产 SDK。
+
 - 使用 600 秒长视频隔离样本复测，确认设置菜单在 `topEnd` 对齐后从齿轮下方向下展开。
 - 短视频并非退出原因：长视频下同样可由 Windows UI 自动化触发 Flutter `accessibility_bridge.cc` AXTree 连续失败，最终进入 `ax_platform_node_win.cc` unreachable code。
 - 日志未发现 Dart、media_kit、mpv、FFmpeg 或 filtered queue 错误；不通过关闭语义树规避，以免破坏屏幕阅读器能力。

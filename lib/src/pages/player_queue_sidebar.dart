@@ -38,6 +38,7 @@ int? playerQueueSearchIndex(
  */
 class _PlayerQueueSidebar extends StatelessWidget {
   const _PlayerQueueSidebar({
+    super.key,
     required this.playlist,
     required this.sourcePlaylist,
     required this.playingIndex,
@@ -401,6 +402,11 @@ class _PlayerQueueSidebar extends StatelessWidget {
       return true;
     }
     final position = scrollController.position;
+    // 列表首次挂载或从压缩动画恢复时，ScrollPosition 可能已经绑定但尚未取得
+    // viewport 尺寸；此时按可见处理，下一帧会由 ScrollController 自动重算。
+    if (!position.hasContentDimensions) {
+      return true;
+    }
     final top = position.pixels;
     return playerQueueIndexIsVisible(
       index: index,

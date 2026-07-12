@@ -617,6 +617,7 @@ class _PlayerPageState extends State<PlayerPage> {
                                   : Icons.fullscreen_rounded),
                             ),
                             IconButton(
+                              key: const ValueKey('player.queue.toggle'),
                               tooltip: _queueSidebarCollapsed
                                   ? '展开筛选结果队列'
                                   : '折叠筛选结果队列',
@@ -1617,6 +1618,7 @@ class _PlayerPageState extends State<PlayerPage> {
     // 中窄窗口改用底部队列，避免侧栏挤压蓝图式横向控制层。
     final hasWideQueueSidebar = MediaQuery.sizeOf(context).width >= 1100;
     final queueSidebar = _PlayerQueueSidebar(
+      key: const ValueKey('player.queue.sidebar'),
       playlist: _queue,
       sourcePlaylist: _sourcePlaylist,
       playingIndex: _index,

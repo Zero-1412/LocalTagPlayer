@@ -1,5 +1,11 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-12 · accessibility bridge 隔离验证与无 UIA 截图
+
+- 增加播放器队列折叠/恢复的无 UIA Windows 桌面集成测试和像素截图脚本。
+- 修复队列首次布局时 viewport 尺寸尚未建立导致的空值异常。
+- 隔离比较 Flutter stable 3.44.4 与 beta 3.46.0-0.3.pre，因缺少 UIA bridge 修复证据暂不升级生产 SDK。
+
 ## 2026-07-12 · 长视频隔离复测与菜单方向纠正
 
 - 生成 600 秒同路径隔离视频，排除 18–24 秒 EOF 对 UI 自动化退出的干扰。
