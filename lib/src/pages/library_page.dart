@@ -2524,6 +2524,21 @@ class _LibraryPageState extends State<LibraryPage> {
       store: store,
       playlistLength: playlist.length,
     );
+    // 在路由切换前把当前项附近已经生成的缩略图提升到同步内存视图，播放器队列
+    // 首帧可直接复用，不需要先绘制占位底色再等待异步 Future 完成。
+    final initialIndex =
+        playlist.indexWhere((video) => video.path == item.path);
+    final warmStart = math.max(0, initialIndex - 2);
+    final warmEnd = math.min(playlist.length, initialIndex + 7);
+    await Future.wait(
+      playlist
+          .sublist(warmStart, warmEnd)
+          .where((video) => !video.isMissing)
+          .map(thumbnailService.thumbnailFor),
+    );
+    if (!mounted) {
+      return;
+    }
     final wasPaused = thumbnailService.isPaused;
     thumbnailService.pause();
     _playerScopedLibraryDataChanged = false;

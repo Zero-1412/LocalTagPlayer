@@ -12,15 +12,39 @@ Remove-Item -Force -ErrorAction SilentlyContinue "$Output\*.ready", "$Output\*.p
 $captureJob = Start-Job -ArgumentList $Output -ScriptBlock {
   param($Output)
   Add-Type -AssemblyName System.Drawing
-  Add-Type -AssemblyName System.Windows.Forms
+  Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class LtpWindowCapture {
+  [StructLayout(LayoutKind.Sequential)]
+  public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+  [DllImport("user32.dll")]
+  public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+  [DllImport("user32.dll")]
+  public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+}
+'@
+  [LtpWindowCapture]::SetProcessDpiAwarenessContext([IntPtr](-4)) | Out-Null
 
-  foreach ($name in @('player-queue-collapsed', 'player-queue-restored')) {
+  foreach ($name in @(
+    'player-queue-initial'
+    'player-queue-collapsed'
+    'player-queue-restored'
+    'player-controls-hidden'
+    'player-fullscreen-queue'
+  )) {
     $marker = Join-Path $Output "$name.ready"
     while (-not (Test-Path -LiteralPath $marker)) { Start-Sleep -Milliseconds 100 }
-    $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-    $bitmap = [System.Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
+    $process = Get-Process local_tag_player | Where-Object MainWindowHandle -ne 0 | Select-Object -First 1
+    $rect = New-Object LtpWindowCapture+RECT
+    if (-not ([LtpWindowCapture]::GetWindowRect($process.MainWindowHandle, [ref]$rect))) {
+      throw 'Failed to read player window rectangle.'
+    }
+    $width = $rect.Right - $rect.Left
+    $height = $rect.Bottom - $rect.Top
+    $bitmap = [System.Drawing.Bitmap]::new($width, $height)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size)
+    $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
     $graphics.Dispose()
     $screenshotPath = Join-Path $Output "$name.png"
     $bitmap.Save($screenshotPath)

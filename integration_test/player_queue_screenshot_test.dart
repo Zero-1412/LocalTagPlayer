@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/main.dart' as app;
@@ -25,6 +26,7 @@ void main() {
     expect(playButton, findsOneWidget);
     await tester.tap(playButton);
     await tester.pumpAndSettle(const Duration(seconds: 8));
+    await _signalDesktopCapture('player-queue-initial');
 
     final toggle = find.byKey(const ValueKey('player.queue.toggle'));
     expect(toggle, findsOneWidget);
@@ -43,6 +45,39 @@ void main() {
     await tester.tap(toggle);
     await tester.pumpAndSettle(const Duration(seconds: 2));
     await _signalDesktopCapture('player-queue-restored');
+
+    final volume = find.byKey(const ValueKey('player.volume'));
+    final volumeBefore = tester.widget<Slider>(volume).value;
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: tester.getCenter(volume),
+        scrollDelta: const Offset(0, 20),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(tester.widget<Slider>(volume).value, lessThan(volumeBefore));
+
+    await mouse.moveTo(const Offset(2, 2));
+    await tester.pump(const Duration(seconds: 4));
+    final controlsOpacity = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey('player.controls.opacity')),
+    );
+    expect(controlsOpacity.opacity, 0);
+    await _signalDesktopCapture('player-controls-hidden');
+
+    await mouse.moveTo(const Offset(800, 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byKey(const ValueKey('player.fullscreen.toggle')));
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+    await mouse.moveTo(tester.getCenter(toggle));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(toggle);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+    expect(
+      find.byKey(const ValueKey('player.fullscreenQueue')),
+      findsOneWidget,
+    );
+    await _signalDesktopCapture('player-fullscreen-queue');
     await mouse.removePointer();
   });
 }

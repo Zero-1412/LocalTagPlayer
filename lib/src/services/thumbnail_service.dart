@@ -76,6 +76,13 @@ class ThumbnailService {
   }
 
   final Map<String, File?> _memoryCache = {};
+  /**
+   * 已验证缩略图按媒体路径保存的同步视图，供页面切换首帧直接复用。
+   *
+   * 真正的有效性检查仍由 [thumbnailFor] 完成；这里只返回本次进程内已经验证过的文件，
+   * 避免播放器队列即使命中缓存也必须先绘制一帧占位背景。
+   */
+  final Map<String, File?> _pathMemoryCache = {};
   final Set<String> _activeCacheKeys = {};
   final Set<String> _backgroundQueued = {};
   final Set<String> _priorityQueued = {};
@@ -123,23 +130,31 @@ class ThumbnailService {
     if (_memoryCache.containsKey(cacheKey)) {
       final cached = _memoryCache[cacheKey];
       if (cached == null) {
+        _pathMemoryCache[item.path] = null;
         return null;
       }
       if (await _isValidThumbnailFile(cached)) {
+        _pathMemoryCache[item.path] = cached;
         return cached;
       }
       _memoryCache.remove(cacheKey);
+      _pathMemoryCache.remove(item.path);
       return null;
     }
 
     final file = File(p.join(_directory.path, '$cacheKey.jpg'));
     if (await _isValidThumbnailFile(file)) {
       _memoryCache[cacheKey] = file;
+      _pathMemoryCache[item.path] = file;
       return file;
     }
 
+    _pathMemoryCache[item.path] = null;
     return null;
   }
+
+  /** 返回本次进程内已验证的缩略图，不触发文件系统访问。 */
+  File? cachedThumbnailFor(VideoItem item) => _pathMemoryCache[item.path];
 
   void prefetchAll(Iterable<VideoItem> items,
       {bool allowPlayerFallback = false}) {

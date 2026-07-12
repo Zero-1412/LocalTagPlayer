@@ -98,6 +98,7 @@ class _PlayerPageState extends State<PlayerPage> {
   StreamSubscription<Duration>? _positionSubscription;
   StreamSubscription<bool>? _playingSubscription;
   Timer? _controlsHideTimer;
+  Timer? _queuePrefetchTimer;
   var _controlsVisible = true;
   DateTime? _lastProgressWriteAt;
   Duration _lastPersistedPosition = Duration.zero;
@@ -115,6 +116,8 @@ class _PlayerPageState extends State<PlayerPage> {
   var _queueSidebarCollapsed = false;
   /** 是否由播放器页面进入桌面窗口全屏。 */
   var _isWindowFullscreen = false;
+  /** 全屏时是否在画面右侧显示当前筛选队列浮层。 */
+  var _fullscreenQueueVisible = false;
   final _random = math.Random();
 
   static const _playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -157,7 +160,6 @@ class _PlayerPageState extends State<PlayerPage> {
     });
     _ensureQueueIndexVisible(_index, center: true);
     _requestOpenCurrent();
-    _prefetchQueueWindow();
   }
 
   @override
@@ -204,7 +206,6 @@ class _PlayerPageState extends State<PlayerPage> {
       }
     });
     _requestOpenCurrent();
-    _prefetchQueueWindow();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _focusNode.requestFocus();
@@ -453,8 +454,9 @@ class _PlayerPageState extends State<PlayerPage> {
             right: 0,
             bottom: 0,
             child: AnimatedOpacity(
+              key: const ValueKey('player.controls.opacity'),
               duration: const Duration(milliseconds: 180),
-              opacity: _controlsVisible ? 1 : 0.12,
+              opacity: _controlsVisible ? 1 : 0,
               child: IgnorePointer(
                 ignoring: !_controlsVisible,
                 child: StreamBuilder<Duration>(
@@ -547,28 +549,48 @@ class _PlayerPageState extends State<PlayerPage> {
                               icon: const Icon(Icons.skip_next_rounded),
                             ),
                             const SizedBox(width: 16),
-                            const Icon(Icons.volume_up_rounded, size: 20),
-                            SizedBox(
-                              width: 130,
-                              child: SliderTheme(
-                                data: const SliderThemeData(
-                                  trackHeight: 3,
-                                  activeTrackColor: controlAccent,
-                                  inactiveTrackColor: Color(0xff26314b),
-                                  thumbColor: Color(0xffd7deff),
-                                  thumbShape: RoundSliderThumbShape(
-                                    enabledThumbRadius: 4,
+                            Listener(
+                              onPointerSignal: (event) {
+                                if (event is PointerScrollEvent) {
+                                  final delta =
+                                      event.scrollDelta.dy < 0 ? 5 : -5;
+                                  final volume = (_player.state.volume + delta)
+                                      .clamp(0, 100)
+                                      .toDouble();
+                                  unawaited(_player.setVolume(volume));
+                                  _showVideoControls();
+                                }
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.volume_up_rounded, size: 20),
+                                  SizedBox(
+                                    width: 130,
+                                    child: SliderTheme(
+                                      data: const SliderThemeData(
+                                        trackHeight: 3,
+                                        activeTrackColor: controlAccent,
+                                        inactiveTrackColor: Color(0xff26314b),
+                                        thumbColor: Color(0xffd7deff),
+                                        thumbShape: RoundSliderThumbShape(
+                                          enabledThumbRadius: 4,
+                                        ),
+                                        overlayShape: RoundSliderOverlayShape(
+                                          overlayRadius: 10,
+                                        ),
+                                      ),
+                                      child: Slider(
+                                        key: const ValueKey('player.volume'),
+                                        value:
+                                            _player.state.volume.clamp(0, 100),
+                                        max: 100,
+                                        onChanged: (value) =>
+                                            unawaited(_player.setVolume(value)),
+                                      ),
+                                    ),
                                   ),
-                                  overlayShape: RoundSliderOverlayShape(
-                                    overlayRadius: 10,
-                                  ),
-                                ),
-                                child: Slider(
-                                  value: _player.state.volume.clamp(0, 100),
-                                  max: 100,
-                                  onChanged: (value) =>
-                                      unawaited(_player.setVolume(value)),
-                                ),
+                                ],
                               ),
                             ),
                             const SizedBox(width: 24),
@@ -609,6 +631,7 @@ class _PlayerPageState extends State<PlayerPage> {
                               ),
                             ),
                             IconButton(
+                              key: const ValueKey('player.fullscreen.toggle'),
                               tooltip: _isWindowFullscreen ? '退出全屏' : '全屏',
                               onPressed: () =>
                                   unawaited(_toggleWindowFullscreen()),
@@ -618,14 +641,20 @@ class _PlayerPageState extends State<PlayerPage> {
                             ),
                             IconButton(
                               key: const ValueKey('player.queue.toggle'),
-                              tooltip: _queueSidebarCollapsed
-                                  ? '展开筛选结果队列'
-                                  : '折叠筛选结果队列',
+                              tooltip: _isWindowFullscreen
+                                  ? '播放列表'
+                                  : _queueSidebarCollapsed
+                                      ? '展开筛选结果队列'
+                                      : '折叠筛选结果队列',
                               onPressed: () {
-                                setState(() {
-                                  _queueSidebarCollapsed =
-                                      !_queueSidebarCollapsed;
-                                });
+                                if (_isWindowFullscreen) {
+                                  unawaited(_showFullscreenQueue());
+                                } else {
+                                  setState(() {
+                                    _queueSidebarCollapsed =
+                                        !_queueSidebarCollapsed;
+                                  });
+                                }
                               },
                               icon: const Icon(Icons.playlist_play_rounded),
                             ),
@@ -650,8 +679,60 @@ class _PlayerPageState extends State<PlayerPage> {
     if (!mounted) {
       return;
     }
-    setState(() => _isWindowFullscreen = target);
+    setState(() {
+      _isWindowFullscreen = target;
+      _fullscreenQueueVisible = false;
+    });
     _showVideoControls();
+  }
+
+  /**
+   * 在根 Overlay 右侧展示全屏队列，避免播放器视频纹理覆盖普通兄弟组件。
+   *
+   * 面板继续复用当前 filtered queue、当前索引与滚动控制器；关闭只改变可见状态。
+   */
+  Future<void> _showFullscreenQueue() async {
+    if (_fullscreenQueueVisible || !mounted) {
+      return;
+    }
+    setState(() => _fullscreenQueueVisible = true);
+    await showGeneralDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: true,
+      barrierLabel: '关闭播放列表',
+      barrierColor: const Color(0x22000000),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return SafeArea(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: SizedBox(
+              key: const ValueKey('player.fullscreenQueue'),
+              width: 440,
+              height: MediaQuery.sizeOf(dialogContext).height - 48,
+              child: Material(
+                color: Colors.transparent,
+                elevation: 18,
+                child: _buildQueueSidebar(),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: animation, curve: _motionCurve)),
+          child: FadeTransition(opacity: animation, child: child),
+        );
+      },
+    );
+    if (mounted) {
+      setState(() => _fullscreenQueueVisible = false);
+    }
   }
 
   /** 构建播放设置二级菜单，避免倍速与模式选项占满一级菜单。 */
@@ -762,6 +843,18 @@ class _PlayerPageState extends State<PlayerPage> {
     widget.thumbnailService.prefetchVisible(visibleItems);
   }
 
+  /**
+   * 媒体确认可播放后再预取队列窗口，避免大文件首次 open 与 FFprobe/缩略图任务争抢磁盘。
+   */
+  void _scheduleQueuePrefetch() {
+    _queuePrefetchTimer?.cancel();
+    _queuePrefetchTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted && !_openRequests.isOpening) {
+        _prefetchQueueWindow();
+      }
+    });
+  }
+
   Future<void> _applyPlaybackPerformanceProfile() async {
     final options = <String, String>{
       'video-sync': 'display-resample',
@@ -859,6 +952,7 @@ class _PlayerPageState extends State<PlayerPage> {
           }
           _openedPath = path;
           _openRequests.markSuccess();
+          _scheduleQueuePrefetch();
           final openedItem = _itemForPath(path);
           if (openedItem != null) {
             _lastPersistedPosition = Duration.zero;
@@ -1078,7 +1172,6 @@ class _PlayerPageState extends State<PlayerPage> {
     });
     _ensureQueueIndexVisible(index, center: true);
     _requestOpenCurrent();
-    _prefetchQueueWindow();
   }
 
   /** 切换或退出前补写当前位置、总时长和动态完成态。 */
@@ -1136,7 +1229,6 @@ class _PlayerPageState extends State<PlayerPage> {
       }
       _ensureQueueIndexVisible(_index, center: true);
       _requestOpenCurrent();
-      _prefetchQueueWindow();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('\u5df2\u5220\u9664\u89c6\u9891\u6587\u4ef6')),
@@ -1600,6 +1692,7 @@ class _PlayerPageState extends State<PlayerPage> {
   void dispose() {
     _openRequests.cancel();
     _controlsHideTimer?.cancel();
+    _queuePrefetchTimer?.cancel();
     unawaited(_completedSubscription?.cancel());
     unawaited(_playerErrorSubscription?.cancel());
     unawaited(_positionSubscription?.cancel());
@@ -1613,11 +1706,9 @@ class _PlayerPageState extends State<PlayerPage> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // 中窄窗口改用底部队列，避免侧栏挤压蓝图式横向控制层。
-    final hasWideQueueSidebar = MediaQuery.sizeOf(context).width >= 1100;
-    final queueSidebar = _PlayerQueueSidebar(
+  /** 构建当前 filtered queue 侧栏，普通布局与全屏浮层共享同一状态和滚动位置。 */
+  Widget _buildQueueSidebar() {
+    return _PlayerQueueSidebar(
       key: const ValueKey('player.queue.sidebar'),
       playlist: _queue,
       sourcePlaylist: _sourcePlaylist,
@@ -1637,6 +1728,13 @@ class _PlayerPageState extends State<PlayerPage> {
       onSearchQueue: _searchQueue,
       onDeleteSelected: _selectedIndex == _index ? _deleteSelectedFile : null,
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 中窄窗口改用底部队列，避免侧栏挤压蓝图式横向控制层。
+    final hasWideQueueSidebar = MediaQuery.sizeOf(context).width >= 1100;
+    final queueSidebar = _buildQueueSidebar();
     return Theme(
       data: _playerPageTheme(),
       child: Focus(

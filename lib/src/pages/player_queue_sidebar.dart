@@ -935,6 +935,10 @@ class _QueueListItemState extends State<_QueueListItem> {
                       children: [
                         FutureBuilder<File?>(
                           future: _thumbnailFuture,
+                          initialData:
+                              widget.thumbnailService.cachedThumbnailFor(
+                            widget.item,
+                          ),
                           builder: (context, snapshot) {
                             final file = snapshot.data;
                             if (file != null && file.existsSync()) {
