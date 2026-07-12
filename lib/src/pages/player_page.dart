@@ -115,7 +115,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   static const _playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
 
-  static const double _queueItemExtent = 94;
+  static const double _queueItemExtent = 104;
 
   List<VideoItem> get _sourcePlaylist => _playback.sourcePlaylist;
 
@@ -408,8 +408,9 @@ class _PlayerPageState extends State<PlayerPage> {
                     final duration = _player.state.duration;
                     final maxMs =
                         math.max(1, duration.inMilliseconds).toDouble();
+                    const controlAccent = Color(0xff7457ff);
                     return Container(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
@@ -421,29 +422,37 @@ class _PlayerPageState extends State<PlayerPage> {
                         data: const IconThemeData(color: Colors.white),
                         child:
                             Column(mainAxisSize: MainAxisSize.min, children: [
-                          Slider(
-                            value: position.inMilliseconds
-                                .clamp(0, maxMs.toInt())
-                                .toDouble(),
-                            max: maxMs,
-                            onChanged: (value) => unawaited(
-                              _player
-                                  .seek(Duration(milliseconds: value.round())),
+                          SliderTheme(
+                            data: const SliderThemeData(
+                              trackHeight: 3,
+                              activeTrackColor: controlAccent,
+                              inactiveTrackColor: Color(0xff26314b),
+                              thumbColor: Color(0xffd7deff),
+                              thumbShape: RoundSliderThumbShape(
+                                enabledThumbRadius: 5,
+                              ),
+                              overlayColor: Color(0x337457ff),
+                              overlayShape: RoundSliderOverlayShape(
+                                overlayRadius: 12,
+                              ),
+                            ),
+                            child: Slider(
+                              value: position.inMilliseconds
+                                  .clamp(0, maxMs.toInt())
+                                  .toDouble(),
+                              max: maxMs,
+                              onChanged: (value) => unawaited(
+                                _player.seek(
+                                  Duration(milliseconds: value.round()),
+                                ),
+                              ),
                             ),
                           ),
                           Row(children: [
                             IconButton(
-                              tooltip: _player.state.playing ? '暂停' : '播放',
-                              onPressed: () {
-                                unawaited(_player.playOrPause());
-                                _showVideoControls();
-                              },
-                              icon: Icon(_player.state.playing
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded),
-                            ),
-                            IconButton(
                               tooltip: '上一条',
+                              color: Colors.white,
+                              disabledColor: const Color(0xff5e6a82),
                               onPressed: _playback.previousIndex == null
                                   ? null
                                   : () => _jumpTo(
@@ -453,7 +462,23 @@ class _PlayerPageState extends State<PlayerPage> {
                               icon: const Icon(Icons.skip_previous_rounded),
                             ),
                             IconButton(
+                              tooltip: _player.state.playing ? '暂停' : '播放',
+                              color: Colors.white,
+                              onPressed: () {
+                                unawaited(_player.playOrPause());
+                                _showVideoControls();
+                              },
+                              icon: Icon(
+                                _player.state.playing
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                size: 30,
+                              ),
+                            ),
+                            IconButton(
                               tooltip: '下一条',
+                              color: Colors.white,
+                              disabledColor: const Color(0xff5e6a82),
                               onPressed: _playback.nextIndex == null
                                   ? null
                                   : () => _jumpTo(
@@ -462,10 +487,39 @@ class _PlayerPageState extends State<PlayerPage> {
                                       ),
                               icon: const Icon(Icons.skip_next_rounded),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.volume_up_rounded, size: 20),
+                            SizedBox(
+                              width: 92,
+                              child: SliderTheme(
+                                data: const SliderThemeData(
+                                  trackHeight: 3,
+                                  activeTrackColor: controlAccent,
+                                  inactiveTrackColor: Color(0xff26314b),
+                                  thumbColor: Color(0xffd7deff),
+                                  thumbShape: RoundSliderThumbShape(
+                                    enabledThumbRadius: 4,
+                                  ),
+                                  overlayShape: RoundSliderOverlayShape(
+                                    overlayRadius: 10,
+                                  ),
+                                ),
+                                child: Slider(
+                                  value: _player.state.volume.clamp(0, 100),
+                                  max: 100,
+                                  onChanged: (value) =>
+                                      unawaited(_player.setVolume(value)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
                             Text(
                               '${_formatDuration(position)} / ${_formatDuration(duration)}',
-                              style: const TextStyle(color: Colors.white),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             const Spacer(),
                             PopupMenuButton<double>(
@@ -484,27 +538,19 @@ class _PlayerPageState extends State<PlayerPage> {
                                     const EdgeInsets.symmetric(horizontal: 8),
                                 child: Text(
                                   '${_playbackRate}x',
-                                  style: const TextStyle(color: Colors.white),
+                                  style: const TextStyle(
+                                    color: Color(0xffcbd5e1),
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ),
-                            SizedBox(
-                              width: 110,
-                              child: Row(children: [
-                                const Icon(
-                                  Icons.volume_up_rounded,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                                Expanded(
-                                  child: Slider(
-                                    value: _player.state.volume.clamp(0, 100),
-                                    max: 100,
-                                    onChanged: (value) =>
-                                        unawaited(_player.setVolume(value)),
-                                  ),
-                                ),
-                              ]),
+                            IconButton(
+                              tooltip: '播放诊断',
+                              onPressed: () =>
+                                  unawaited(_showDiagnosticsDialog()),
+                              icon:
+                                  const Icon(Icons.settings_outlined, size: 21),
                             ),
                             IconButton(
                               tooltip:
@@ -1366,6 +1412,7 @@ class _PlayerPageState extends State<PlayerPage> {
       onPlay: _jumpTo,
       onLocatePlaying: _focusPlayingQueueItem,
       onLocateSelected: _focusSelectedQueueItem,
+      onDiagnostics: () => unawaited(_showDiagnosticsDialog()),
       onSearchQueue: _searchQueue,
       onDeleteSelected: _selectedIndex == _index ? _deleteSelectedFile : null,
     );
@@ -1614,6 +1661,7 @@ class _PlayerShortcutHintBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       height: 38,
       margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
       padding: const EdgeInsets.symmetric(horizontal: 12),

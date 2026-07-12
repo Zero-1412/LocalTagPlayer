@@ -53,6 +53,7 @@ class _PlayerQueueSidebar extends StatelessWidget {
     required this.onPlay,
     required this.onLocatePlaying,
     required this.onLocateSelected,
+    required this.onDiagnostics,
     required this.onDeleteSelected,
     required this.onSearchQueue,
   });
@@ -132,6 +133,9 @@ class _PlayerQueueSidebar extends StatelessWidget {
    */
   final VoidCallback onLocateSelected;
 
+  /** 从队列头部打开播放器诊断，不改变当前播放或选择状态。 */
+  final VoidCallback onDiagnostics;
+
   /**
    * 删除当前视频的入口；为 null 时禁用。
    */
@@ -185,7 +189,7 @@ class _PlayerQueueSidebar extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
             decoration: const BoxDecoration(
               color: Color(0xff0d1528),
               border: Border(
@@ -197,16 +201,10 @@ class _PlayerQueueSidebar extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: const Color(0xff312e81),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xff6d5dfc)),
-                      ),
-                      child: const Icon(Icons.format_list_bulleted_rounded,
-                          color: Colors.white, size: 17),
+                    const Icon(
+                      Icons.filter_alt_outlined,
+                      color: Color(0xffa9b8ff),
+                      size: 24,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -255,14 +253,12 @@ class _PlayerQueueSidebar extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const Tooltip(
-                      message:
-                          '↑/↓ 选中队列项\nEnter 播放选中\nPageUp/PageDown 切换上/下一个视频\nHome/End 跳到队首/队尾',
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 6),
-                        child: Icon(Icons.keyboard_alt_outlined,
-                            size: 17, color: Colors.white54),
-                      ),
+                    IconButton(
+                      tooltip: '播放诊断',
+                      onPressed: onDiagnostics,
+                      icon: const Icon(Icons.settings_outlined, size: 18),
+                      color: const Color(0xff94a3c7),
+                      visualDensity: VisualDensity.compact,
                     ),
                     IconButton(
                       tooltip: '定位当前播放',
@@ -294,7 +290,10 @@ class _PlayerQueueSidebar extends StatelessWidget {
                   message: _filterSummary,
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 7,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xff121c2b),
                       borderRadius: BorderRadius.circular(8),
@@ -307,34 +306,25 @@ class _PlayerQueueSidebar extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          Expanded(
-                            child: Text(
-                              _filterSummary.replaceAll('个结果', '项'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xffe2e8f0),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${playingIndex + 1} / ${playlist.length}',
-                            style: const TextStyle(
-                              color: Color(0xffa5b4fc),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ]),
-                      ],
-                    ),
+                    child: Row(children: [
+                      const _QueueFilterChip(
+                        label: '全部视频',
+                        emphasized: true,
+                      ),
+                      const SizedBox(width: 6),
+                      const _QueueFilterChip(label: '时长：全部'),
+                      const SizedBox(width: 6),
+                      const _QueueFilterChip(label: '大小：全部'),
+                      const Spacer(),
+                      Text(
+                        '${playingIndex + 1} / ${playlist.length}',
+                        style: const TextStyle(
+                          color: Color(0xffa5b4fc),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ]),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -365,7 +355,7 @@ class _PlayerQueueSidebar extends StatelessWidget {
                 ListView.builder(
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-                  itemExtent: 94,
+                  itemExtent: _PlayerPageState._queueItemExtent,
                   scrollCacheExtent: const ScrollCacheExtent.pixels(720),
                   addAutomaticKeepAlives: false,
                   addRepaintBoundaries: true,
@@ -432,6 +422,39 @@ class _PlayerQueueSidebar extends StatelessWidget {
   }
 }
 
+/** 蓝图队列头部的只读筛选状态，不伪装为尚未实现的交互按钮。 */
+class _QueueFilterChip extends StatelessWidget {
+  const _QueueFilterChip({required this.label, this.emphasized = false});
+
+  /** 当前筛选维度的摘要文本。 */
+  final String label;
+
+  /** 是否为当前主要筛选入口。 */
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: emphasized ? const Color(0xff18254a) : const Color(0xff11192c),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(
+          color: emphasized ? const Color(0xff4f68a8) : const Color(0xff283550),
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: emphasized ? const Color(0xffdbe4ff) : const Color(0xff9ba8c2),
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
 /**
  * 按桌面窗口宽度计算播放队列栏宽度。
  *
@@ -479,7 +502,19 @@ class _QueueSearchFieldState extends State<_QueueSearchField> {
       decoration: InputDecoration(
         isDense: true,
         hintText: '搜索当前队列并定位',
-        prefixIcon: const Icon(Icons.search_rounded, size: 18),
+        hintStyle: const TextStyle(color: Color(0xff6f7d99)),
+        prefixIcon: const Icon(Icons.search_rounded,
+            size: 18, color: Color(0xff8fa0c5)),
+        filled: true,
+        fillColor: const Color(0xff0a1122),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xff253251)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xff7457ff)),
+        ),
         suffixIcon: IconButton(
           key: const ValueKey('player.queueSearchSubmit'),
           tooltip: '定位下一条匹配视频',
@@ -803,21 +838,21 @@ class _QueueListItemState extends State<_QueueListItem> {
                 ? const Color(0xffdde4ed)
                 : const Color(0xffb9c1cc);
     final backgroundColor = widget.playing
-        ? const Color(0xff20385c)
+        ? const Color(0xff20204d)
         : widget.selected
             ? const Color(0xff242d3a)
             : _hovered
                 ? const Color(0xff1d2530)
                 : const Color(0xff151a21);
     final borderColor = widget.playing
-        ? const Color(0xff7aa7ff)
+        ? const Color(0xff7457ff)
         : widget.selected
             ? const Color(0xff52647d)
             : _hovered
                 ? const Color(0xff3a4658)
                 : const Color(0xff222936);
     final accentColor = widget.playing
-        ? const Color(0xff8fb8ff)
+        ? const Color(0xff8b73ff)
         : widget.selected
             ? const Color(0xffa7b4ff)
             : _hovered
@@ -841,12 +876,12 @@ class _QueueListItemState extends State<_QueueListItem> {
     final stateBadgeColor = widget.item.isMissing
         ? const Color(0xffffb4a9)
         : widget.playing
-            ? const Color(0xff7aa7ff)
+            ? const Color(0xff8b73ff)
             : const Color(0xffa7b4ff);
     final shadow = widget.playing
         ? const [
             BoxShadow(
-              color: Color(0x550c3b7b),
+              color: Color(0x557457ff),
               blurRadius: 18,
               offset: Offset(0, 8),
             ),
@@ -867,16 +902,16 @@ class _QueueListItemState extends State<_QueueListItem> {
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
         child: InkWell(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           onTap: widget.onTap,
           onDoubleTap: widget.onDoubleTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             curve: _motionCurve,
-            padding: const EdgeInsets.all(5),
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               color: backgroundColor,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: borderColor),
               boxShadow: shadow,
             ),
@@ -886,7 +921,7 @@ class _QueueListItemState extends State<_QueueListItem> {
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 120),
                   width: 3,
-                  height: 52,
+                  height: 60,
                   decoration: BoxDecoration(
                     color: widget.playing || widget.selected || _hovered
                         ? accentColor
@@ -896,10 +931,10 @@ class _QueueListItemState extends State<_QueueListItem> {
                 ),
                 const SizedBox(width: 5),
                 SizedBox(
-                  width: 88,
-                  height: 50,
+                  width: 100,
+                  height: 58,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(6),
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
@@ -953,14 +988,14 @@ class _QueueListItemState extends State<_QueueListItem> {
                           Row(
                             children: [
                               SizedBox(
-                                width: 28,
+                                width: 30,
                                 child: Text(
                                   (widget.index + 1).toString().padLeft(2, '0'),
                                   maxLines: 1,
                                   overflow: TextOverflow.clip,
                                   style: TextStyle(
                                     color: accentColor,
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     fontWeight: emphasis >= 2
                                         ? FontWeight.w900
                                         : FontWeight.w700,
@@ -974,7 +1009,7 @@ class _QueueListItemState extends State<_QueueListItem> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: titleColor,
-                                    fontSize: 12,
+                                    fontSize: 13,
                                     height: 1.15,
                                     fontWeight: emphasis >= 2
                                         ? FontWeight.w700

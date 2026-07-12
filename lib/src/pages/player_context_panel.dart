@@ -56,8 +56,8 @@ class _PlayerContextPanel extends StatelessWidget {
     ];
     final visibleTags = item.tags.toList()..sort();
     return Container(
-      margin: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xff101722),
         borderRadius: BorderRadius.circular(8),
@@ -69,14 +69,14 @@ class _PlayerContextPanel extends StatelessWidget {
         children: [
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Container(
-              width: 48,
-              height: 48,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 color: const Color(0xff211b50),
                 borderRadius: BorderRadius.circular(9),
               ),
               child: const Icon(Icons.video_library_outlined,
-                  color: Color(0xff8b73ff), size: 27),
+                  color: Color(0xff8b73ff), size: 25),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -91,7 +91,7 @@ class _PlayerContextPanel extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: 17,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -104,7 +104,7 @@ class _PlayerContextPanel extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          color: Color(0xff7f8ba0), fontSize: 11),
+                          color: Color(0xff8794ac), fontSize: 12),
                     ),
                   ),
                 ],
