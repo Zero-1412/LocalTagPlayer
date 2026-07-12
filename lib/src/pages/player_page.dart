@@ -1186,22 +1186,101 @@ class _PlayerPageState extends State<PlayerPage> {
     if (!mounted) {
       return;
     }
-    final lines = <String>[
-      '\u6587\u4ef6\u540d: ${item.title}',
-      '\u8def\u5f84: ${item.path}',
-      '\u76ee\u5f55: ${item.folder}',
-      '\u5927\u5c0f: ${_formatBytes(stat.size)}',
-      '\u4fee\u6539\u65f6\u95f4: ${stat.modified}',
-      '\u6807\u7b7e: ${item.tags.isEmpty ? '\u672a\u6dfb\u52a0' : (item.tags.toList()..sort()).join(', ')}',
-      '\u4e8c\u7ea7\u6807\u7b7e: ${_childTagSummary(item)}',
-      '\u6536\u85cf: ${item.isFavorite ? '\u662f' : '\u5426'}',
-      '\u89c6\u9891: ${details.videoLabel}',
-      '\u97f3\u9891: ${details.audioLabel}',
-      '\u5a92\u4f53\u6307\u7eb9: ${item.mediaFingerprint ?? '\u672a\u8bfb\u53d6'}',
-      '\u5a92\u4f53\u4fe1\u606f\u9519\u8bef: ${item.mediaDetailsError ?? '\u65e0'}',
-      '\u7f29\u7565\u56fe\u9519\u8bef: ${item.thumbnailError ?? '\u65e0'}',
-    ];
-    await _showTextDialog('\u89c6\u9891\u4fe1\u606f', lines);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline_rounded),
+            SizedBox(width: 10),
+            Text('视频信息'),
+          ],
+        ),
+        content: SizedBox(
+          width: 700,
+          height: math.min(590, MediaQuery.sizeOf(context).height * 0.72),
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                _PlayerDialogSectionCard(
+                  title: '文件',
+                  icon: Icons.insert_drive_file_outlined,
+                  child: Column(
+                    children: [
+                      _PlayerDialogInfoRow(
+                          label: '文件名', value: item.title, emphasize: true),
+                      _PlayerDialogInfoRow(label: '路径', value: item.path),
+                      _PlayerDialogInfoRow(label: '目录', value: item.folder),
+                      _PlayerDialogInfoRow(
+                          label: '大小', value: _formatBytes(stat.size)),
+                      _PlayerDialogInfoRow(
+                          label: '修改时间', value: stat.modified.toString()),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _PlayerDialogSectionCard(
+                  title: '媒体',
+                  icon: Icons.movie_outlined,
+                  child: Column(
+                    children: [
+                      _PlayerDialogInfoRow(
+                          label: '视频', value: details.videoLabel),
+                      _PlayerDialogInfoRow(
+                          label: '音频', value: details.audioLabel),
+                      _PlayerDialogInfoRow(
+                          label: '媒体指纹', value: item.mediaFingerprint ?? '未读取'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _PlayerDialogSectionCard(
+                  title: '整理状态',
+                  icon: Icons.sell_outlined,
+                  child: Column(
+                    children: [
+                      _PlayerDialogInfoRow(
+                          label: '标签',
+                          value: item.tags.isEmpty
+                              ? '未添加'
+                              : (item.tags.toList()..sort()).join('、')),
+                      _PlayerDialogInfoRow(
+                          label: '二级标签', value: _childTagSummary(item)),
+                      _PlayerDialogInfoRow(
+                          label: '收藏', value: item.isFavorite ? '是' : '否'),
+                    ],
+                  ),
+                ),
+                if (item.mediaDetailsError != null ||
+                    item.thumbnailError != null) ...[
+                  const SizedBox(height: 12),
+                  _PlayerDialogSectionCard(
+                    title: '异常',
+                    icon: Icons.warning_amber_rounded,
+                    child: Column(
+                      children: [
+                        if (item.mediaDetailsError != null)
+                          _PlayerDialogInfoRow(
+                              label: '媒体信息', value: item.mediaDetailsError!),
+                        if (item.thumbnailError != null)
+                          _PlayerDialogInfoRow(
+                              label: '缩略图', value: item.thumbnailError!),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showDiagnosticsDialog() async {
@@ -1350,29 +1429,6 @@ class _PlayerPageState extends State<PlayerPage> {
   static int? _parseMpvInt(String? value) {
     final number = _parseMpvNumber(value);
     return number?.round();
-  }
-
-  Future<void> _showTextDialog(String title, List<String> lines) {
-    return showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 680,
-          child: SelectionArea(
-            child: SingleChildScrollView(
-              child: Text(lines.join('\n')),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('\u5173\u95ed'),
-          ),
-        ],
-      ),
-    );
   }
 
   String _formatDuration(Duration value) {

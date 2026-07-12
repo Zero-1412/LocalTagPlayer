@@ -46,6 +46,7 @@ part 'pages/library_page.dart';
 part 'pages/missing_relink_page.dart';
 part 'pages/tag_manager_page.dart';
 part 'pages/player_context_panel.dart';
+part 'pages/player_dialog_content.dart';
 part 'pages/player_delete_dialog.dart';
 part 'pages/player_diagnostics_dialog.dart';
 part 'pages/player_open_request_controller.dart';

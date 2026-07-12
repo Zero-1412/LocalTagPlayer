@@ -2349,8 +2349,19 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
       child: FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
         child: AlertDialog(
-          title:
-              Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Row(
+            children: [
+              const Icon(Icons.sell_outlined),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
           content: SizedBox(
             width: 520,
             height: math.min(560, MediaQuery.sizeOf(context).height * 0.7),
@@ -2358,9 +2369,14 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (widget.helperText != null) ...[
-                  Text(
-                    widget.helperText!,
-                    style: Theme.of(context).textTheme.bodySmall,
+                  _PlayerDialogSectionCard(
+                    title: '编辑范围',
+                    icon: Icons.info_outline_rounded,
+                    padding: const EdgeInsets.all(14),
+                    child: Text(
+                      widget.helperText!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -2377,55 +2393,65 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final tag in (_tags.toList()..sort()))
-                              Tooltip(
-                                message: _isLocked(tag)
-                                    ? '文件夹来源标签，只能通过目录结构修改'
-                                    : '移除手动标签',
-                                child: InputChip(
-                                  avatar: _isLocked(tag)
-                                      ? const Icon(Icons.lock_outline_rounded,
-                                          size: 15)
-                                      : null,
-                                  label: Text(tag),
-                                  onDeleted: _isLocked(tag)
-                                      ? null
-                                      : () => setState(() => _tags.remove(tag)),
+                  child: _PlayerDialogSectionCard(
+                    title: '标签选择',
+                    icon: Icons.local_offer_outlined,
+                    expandChild: true,
+                    trailing: Text(
+                      '${_tags.length} 个已选',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final tag in (_tags.toList()..sort()))
+                                Tooltip(
+                                  message: _isLocked(tag)
+                                      ? '文件夹来源标签，只能通过目录结构修改'
+                                      : '移除手动标签',
+                                  child: InputChip(
+                                    avatar: _isLocked(tag)
+                                        ? const Icon(Icons.lock_outline_rounded,
+                                            size: 15)
+                                        : null,
+                                    label: Text(tag),
+                                    onDeleted: _isLocked(tag)
+                                        ? null
+                                        : () =>
+                                            setState(() => _tags.remove(tag)),
+                                  ),
                                 ),
-                              ),
-                          ],
-                        ),
-                        _TagSuggestionSection(
-                          title: '最近使用',
-                          tags: recent.take(8).toList(),
-                          icon: Icons.history_rounded,
-                          onSelected: (tag) =>
-                              setState(() => _addNormalizedTag(tag)),
-                        ),
-                        _TagSuggestionSection(
-                          title: '收藏标签',
-                          tags: favorites.take(8).toList(),
-                          icon: Icons.star_rounded,
-                          onSelected: (tag) =>
-                              setState(() => _addNormalizedTag(tag)),
-                        ),
-                        _TagSuggestionSection(
-                          title:
-                              _query.trim().isEmpty ? '全部 manual 标签' : '搜索结果',
-                          tags: suggestions.take(24).toList(),
-                          icon: Icons.sell_outlined,
-                          onSelected: (tag) =>
-                              setState(() => _addNormalizedTag(tag)),
-                        ),
-                      ],
+                            ],
+                          ),
+                          _TagSuggestionSection(
+                            title: '最近使用',
+                            tags: recent.take(8).toList(),
+                            icon: Icons.history_rounded,
+                            onSelected: (tag) =>
+                                setState(() => _addNormalizedTag(tag)),
+                          ),
+                          _TagSuggestionSection(
+                            title: '收藏标签',
+                            tags: favorites.take(8).toList(),
+                            icon: Icons.star_rounded,
+                            onSelected: (tag) =>
+                                setState(() => _addNormalizedTag(tag)),
+                          ),
+                          _TagSuggestionSection(
+                            title:
+                                _query.trim().isEmpty ? '全部 manual 标签' : '搜索结果',
+                            tags: suggestions.take(24).toList(),
+                            icon: Icons.sell_outlined,
+                            onSelected: (tag) =>
+                                setState(() => _addNormalizedTag(tag)),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
