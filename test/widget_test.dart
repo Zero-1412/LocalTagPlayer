@@ -416,7 +416,11 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.text('高级选项'));
+    await tester.pumpAndSettle();
+    await tester
+        .ensureVisible(find.byType(DropdownButtonFormField<String>).last);
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
     await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.text(PlaybackSettings.labelFor('d3d11va')).last);
     await tester.pump(const Duration(milliseconds: 100));
@@ -429,15 +433,17 @@ void main() {
     expect(
       (tester
               .widget<DropdownButtonFormField<String>>(
-                find.byType(DropdownButtonFormField<String>),
+                find.byType(DropdownButtonFormField<String>).first,
               )
               .key! as ValueKey<String>)
           .value,
-      startsWith('auto-safe:'),
+      startsWith('common:auto-safe:'),
     );
     expect(find.text(PlaybackSettings.labelFor('d3d11va')), findsNothing);
 
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester
+        .ensureVisible(find.byType(DropdownButtonFormField<String>).last);
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
     await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.text(PlaybackSettings.labelFor('d3d11va')).last);
     await tester.pump(const Duration(milliseconds: 100));
@@ -448,11 +454,11 @@ void main() {
     expect(
       (tester
               .widget<DropdownButtonFormField<String>>(
-                find.byType(DropdownButtonFormField<String>),
+                find.byType(DropdownButtonFormField<String>).last,
               )
               .key! as ValueKey<String>)
           .value,
-      startsWith('d3d11va:'),
+      startsWith('advanced:d3d11va:'),
     );
 
     await tester.pumpWidget(
@@ -471,11 +477,28 @@ void main() {
     expect(
       (tester
               .widget<DropdownButtonFormField<String>>(
-                find.byType(DropdownButtonFormField<String>),
+                find.byType(DropdownButtonFormField<String>).last,
               )
               .key! as ValueKey<String>)
           .value,
-      startsWith('d3d11va:'),
+      startsWith('advanced:d3d11va:'),
+    );
+  });
+
+  test('playback settings default to continuing without a prompt', () {
+    expect(
+      PlaybackSettings.defaults.resumeBehavior,
+      PlaybackResumeBehavior.continueWatching,
+    );
+    final ask = PlaybackSettings.fromJson({
+      'hwdec': 'no',
+      'resumeBehavior': 'ask',
+    });
+    expect(ask.resumeBehavior, PlaybackResumeBehavior.ask);
+    expect(ask.toJson()['resumeBehavior'], 'ask');
+    expect(
+      ask.copyWith(hwdec: 'auto-safe').resumeBehavior,
+      PlaybackResumeBehavior.ask,
     );
   });
 

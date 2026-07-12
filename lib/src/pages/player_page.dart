@@ -576,7 +576,7 @@ class _PlayerPageState extends State<PlayerPage> {
     return false;
   }
 
-  /** 在有效进度存在时询问继续观看或从头播放。 */
+  /** 按设置页默认行为处理有效进度；仅“每次询问”继续弹出选择框。 */
   Future<void> _choosePlaybackStart(VideoItem item) async {
     final duration = _player.state.duration;
     final saved = playerResumePosition(
@@ -587,16 +587,24 @@ class _PlayerPageState extends State<PlayerPage> {
     if (saved == null) {
       return;
     }
-    await _player.pause();
-    if (!mounted || _openedPath != item.path) {
-      return;
+    final behavior = widget.playbackSettings.resumeBehavior;
+    PlayerResumeChoice choice;
+    if (behavior == PlaybackResumeBehavior.ask) {
+      await _player.pause();
+      if (!mounted || _openedPath != item.path) {
+        return;
+      }
+      choice = await showPlayerResumeDialog(
+        context,
+        item: item,
+        position: saved,
+        duration: duration,
+      );
+    } else {
+      choice = behavior == PlaybackResumeBehavior.continueWatching
+          ? PlayerResumeChoice.continueWatching
+          : PlayerResumeChoice.restart;
     }
-    final choice = await showPlayerResumeDialog(
-      context,
-      item: item,
-      position: saved,
-      duration: duration,
-    );
     if (!mounted || _openedPath != item.path) {
       return;
     }

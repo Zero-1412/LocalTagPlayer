@@ -1,9 +1,18 @@
 part of '../app.dart';
 
-class PlaybackSettings {
-  const PlaybackSettings({required this.hwdec});
+// ignore_for_file: slash_for_doc_comments
 
-  static const defaults = PlaybackSettings(hwdec: 'auto-safe');
+/** 有有效播放进度时的默认起播行为。 */
+enum PlaybackResumeBehavior { continueWatching, restart, ask }
+
+class PlaybackSettings {
+  const PlaybackSettings({required this.hwdec, required this.resumeBehavior});
+
+  static const defaults = PlaybackSettings(
+    hwdec: 'auto-safe',
+    resumeBehavior: PlaybackResumeBehavior.continueWatching,
+  );
+  static const commonDecoderOptions = <String>['auto-safe', 'auto', 'no'];
   static const decoderOptions = <String>[
     'auto',
     'auto-safe',
@@ -22,19 +31,34 @@ class PlaybackSettings {
   ];
 
   final String hwdec;
+  /** 用户在设置页选择的继续观看默认策略。 */
+  final PlaybackResumeBehavior resumeBehavior;
 
   bool get hardwareDecodingEnabled => hwdec != 'no';
 
-  PlaybackSettings copyWith({String? hwdec}) {
-    return PlaybackSettings(hwdec: hwdec ?? this.hwdec);
+  PlaybackSettings copyWith({
+    String? hwdec,
+    PlaybackResumeBehavior? resumeBehavior,
+  }) {
+    return PlaybackSettings(
+      hwdec: hwdec ?? this.hwdec,
+      resumeBehavior: resumeBehavior ?? this.resumeBehavior,
+    );
   }
 
-  Map<String, Object?> toJson() => {'hwdec': hwdec};
+  Map<String, Object?> toJson() => {
+        'hwdec': hwdec,
+        'resumeBehavior': resumeBehavior.name,
+      };
 
   static PlaybackSettings fromJson(Map<String, Object?> json) {
     final value = json['hwdec']?.toString();
     return PlaybackSettings(
       hwdec: decoderOptions.contains(value) ? value! : defaults.hwdec,
+      resumeBehavior: PlaybackResumeBehavior.values.firstWhere(
+        (behavior) => behavior.name == json['resumeBehavior']?.toString(),
+        orElse: () => defaults.resumeBehavior,
+      ),
     );
   }
 
@@ -62,8 +86,10 @@ class PlaybackSettings {
   static String labelFor(String value) {
     return switch (value) {
       'auto' => 'auto - \u542f\u7528\u4efb\u610f\u53ef\u7528\u89e3\u7801\u5668',
-      'auto-safe' => 'auto-safe - \u542f\u7528\u6700\u4f73\u5b89\u5168\u89e3\u7801\u5668',
-      'auto-copy' => 'auto-copy - \u542f\u7528\u5e26\u62f7\u8d1d\u7684\u6700\u4f73\u89e3\u7801\u5668',
+      'auto-safe' =>
+        'auto-safe - \u542f\u7528\u6700\u4f73\u5b89\u5168\u89e3\u7801\u5668',
+      'auto-copy' =>
+        'auto-copy - \u542f\u7528\u5e26\u62f7\u8d1d\u7684\u6700\u4f73\u89e3\u7801\u5668',
       'd3d11va' => 'd3d11va - DirectX11',
       'd3d11va-copy' => 'd3d11va-copy - DirectX11 \u975e\u76f4\u901a',
       'dxva2' => 'dxva2 - Windows DXVA2',
@@ -78,4 +104,20 @@ class PlaybackSettings {
       _ => value,
     };
   }
+
+  /** 设置页常用解码档位使用面向产品目标的名称。 */
+  static String commonLabelFor(String value) => switch (value) {
+        'auto-safe' => '推荐：自动安全',
+        'auto' => '性能优先：自动零拷贝',
+        'no' => '兼容优先：软件解码',
+        _ => labelFor(value),
+      };
+
+  /** 设置页继续观看行为名称。 */
+  static String resumeLabelFor(PlaybackResumeBehavior behavior) =>
+      switch (behavior) {
+        PlaybackResumeBehavior.continueWatching => '从上次位置继续',
+        PlaybackResumeBehavior.restart => '从头播放',
+        PlaybackResumeBehavior.ask => '每次询问',
+      };
 }

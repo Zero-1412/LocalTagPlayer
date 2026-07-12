@@ -25,6 +25,9 @@ class PlaybackDecoderDropdown extends StatefulWidget {
 
 class _PlaybackDecoderDropdownState extends State<PlaybackDecoderDropdown> {
   late PlaybackSettings _settings = widget.settings;
+  /** 具体后端默认折叠；当前已使用高级值时自动展开，避免隐藏真实配置。 */
+  late bool _showAdvanced =
+      !PlaybackSettings.commonDecoderOptions.contains(widget.settings.hwdec);
 
   /** 下拉框重建版本，用于取消确认后清理 `FormField` 的内部临时选中态。 */
   var _fieldRevision = 0;
@@ -32,7 +35,9 @@ class _PlaybackDecoderDropdownState extends State<PlaybackDecoderDropdown> {
   @override
   void didUpdateWidget(covariant PlaybackDecoderDropdown oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.settings.hwdec != widget.settings.hwdec) {
+    if (oldWidget.settings.hwdec != widget.settings.hwdec ||
+        oldWidget.settings.resumeBehavior != widget.settings.resumeBehavior) {
+      // 解码控件必须同步保留外层刚修改的继续观看策略，避免随后切换解码时用旧副本覆盖它。
       _settings = widget.settings;
     }
   }
@@ -77,26 +82,77 @@ class _PlaybackDecoderDropdownState extends State<PlaybackDecoderDropdown> {
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      // 取消确认弹窗时设置值可能不变，revision 让表单字段丢弃内部临时选中态。
-      key: ValueKey('${_settings.hwdec}:$_fieldRevision'),
-      initialValue: _settings.hwdec,
-      decoration: const InputDecoration(
-        labelText: '\u786c\u4ef6\u89e3\u7801',
-        border: OutlineInputBorder(),
-      ),
-      items: [
-        for (final option in PlaybackSettings.decoderOptions)
-          DropdownMenuItem(
-            value: option,
-            child: Text(PlaybackSettings.labelFor(option)),
+    final commonValue =
+        PlaybackSettings.commonDecoderOptions.contains(_settings.hwdec)
+            ? _settings.hwdec
+            : null;
+    final advancedOptions = PlaybackSettings.decoderOptions
+        .where(
+            (option) => !PlaybackSettings.commonDecoderOptions.contains(option))
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          // 取消确认弹窗时设置值可能不变，revision 让表单字段丢弃内部临时选中态。
+          key: ValueKey('common:${_settings.hwdec}:$_fieldRevision'),
+          initialValue: commonValue,
+          hint: Text(
+            commonValue == null ? '当前使用高级后端' : '选择播放解码策略',
           ),
+          decoration: const InputDecoration(
+            labelText: '播放解码策略',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            for (final option in PlaybackSettings.commonDecoderOptions)
+              DropdownMenuItem(
+                value: option,
+                child: Text(PlaybackSettings.commonLabelFor(option)),
+              ),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              _changeDecoder(value);
+            }
+          },
+        ),
+        const SizedBox(height: 8),
+        ExpansionTile(
+          initiallyExpanded: _showAdvanced,
+          onExpansionChanged: (expanded) => _showAdvanced = expanded,
+          tilePadding: EdgeInsets.zero,
+          title: const Text(
+            '高级选项',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle: const Text('仅在排查特定显卡或驱动兼容问题时选择具体后端'),
+          children: [
+            DropdownButtonFormField<String>(
+              key: ValueKey('advanced:${_settings.hwdec}:$_fieldRevision'),
+              initialValue: advancedOptions.contains(_settings.hwdec)
+                  ? _settings.hwdec
+                  : null,
+              decoration: const InputDecoration(
+                labelText: '具体解码后端',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final option in advancedOptions)
+                  DropdownMenuItem(
+                    value: option,
+                    child: Text(PlaybackSettings.labelFor(option)),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  _changeDecoder(value);
+                }
+              },
+            ),
+          ],
+        ),
       ],
-      onChanged: (value) {
-        if (value != null) {
-          _changeDecoder(value);
-        }
-      },
     );
   }
 }
@@ -143,10 +199,12 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       appBar: AppBar(
         title: const Text('\u8bbe\u7f6e'),
         actions: [
-          IconButton(
-            tooltip: '\u5237\u65b0\u7f13\u5b58\u7edf\u8ba1',
+          TextButton.icon(
+            key: const ValueKey('settings.refreshCacheStats'),
+            style: TextButton.styleFrom(foregroundColor: _appText),
             onPressed: _refreshStats,
             icon: const Icon(Icons.refresh_rounded),
+            label: const Text('刷新统计'),
           ),
         ],
       ),
@@ -169,6 +227,51 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                     onChanged: (settings) async {
                       setState(() => _settings = settings);
                       await widget.onPlaybackSettingsChanged(settings);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '继续观看',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    '打开有未完成进度的视频时，默认执行以下操作。',
+                    style: TextStyle(color: _appTextMuted),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<PlaybackResumeBehavior>(
+                    key: const ValueKey('settings.resumeBehavior'),
+                    initialValue: _settings.resumeBehavior,
+                    decoration: const InputDecoration(
+                      labelText: '默认打开行为',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final behavior in PlaybackResumeBehavior.values)
+                        DropdownMenuItem(
+                          value: behavior,
+                          child:
+                              Text(PlaybackSettings.resumeLabelFor(behavior)),
+                        ),
+                    ],
+                    onChanged: (behavior) async {
+                      if (behavior == null) {
+                        return;
+                      }
+                      final next = _settings.copyWith(resumeBehavior: behavior);
+                      setState(() => _settings = next);
+                      await widget.onPlaybackSettingsChanged(next);
                     },
                   ),
                 ],
@@ -210,13 +313,20 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                           value: _formatCount(stats.missing),
                         ),
                         _SettingsStatLine(
-                          label: '\u9519\u8bef',
+                          label: '失败',
                           value: _formatCount(stats.errors),
                         ),
                         _SettingsStatLine(
-                          label: '\u961f\u5217',
-                          value:
-                              '${stats.active}/${stats.queued}  avg ${stats.averageMs}ms',
+                          label: '活动任务',
+                          value: '${stats.active} / ${stats.maxConcurrent}',
+                        ),
+                        _SettingsStatLine(
+                          label: '排队任务',
+                          value: _formatCount(stats.queued),
+                        ),
+                        _SettingsStatLine(
+                          label: '平均耗时',
+                          value: '${stats.averageMs} ms',
                         ),
                       ],
                     ],
