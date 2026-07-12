@@ -86,6 +86,8 @@ class _PlayerPageState extends State<PlayerPage> {
   late final Player _player;
   late final VideoController _controller;
   late final FocusNode _focusNode;
+  late final FocusNode _queueSearchFocusNode;
+  late final TextEditingController _queueSearchController;
   late final ScrollController _queueScrollController;
   late final MediaDetailsService _detailsService;
   final _fileLocationService = const DesktopFileLocationService();
@@ -113,7 +115,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   static const _playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
 
-  static const double _queueItemExtent = 82;
+  static const double _queueItemExtent = 94;
 
   List<VideoItem> get _sourcePlaylist => _playback.sourcePlaylist;
 
@@ -158,6 +160,8 @@ class _PlayerPageState extends State<PlayerPage> {
   void initState() {
     super.initState();
     _focusNode = FocusNode(debugLabel: 'player-shortcuts');
+    _queueSearchFocusNode = FocusNode(debugLabel: 'player-queue-search');
+    _queueSearchController = TextEditingController();
     _queueScrollController = ScrollController();
     _detailsService =
         MediaDetailsService(onUpdated: widget.onMediaDetailsUpdated);
@@ -1245,6 +1249,16 @@ class _PlayerPageState extends State<PlayerPage> {
       // 弹窗自己的 Escape 只负责取消编辑；播放器页面不能再对同一按键执行返回。
       return KeyEventResult.ignored;
     }
+    if (event.logicalKey == LogicalKeyboardKey.keyK &&
+        HardwareKeyboard.instance.isControlPressed) {
+      // 顶部搜索与右侧队列搜索共用定位逻辑，Ctrl+K 仅负责聚焦而不重建队列。
+      _queueSearchFocusNode.requestFocus();
+      _queueSearchController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _queueSearchController.text.length,
+      );
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.insert &&
         HardwareKeyboard.instance.isAltPressed) {
       unawaited(widget.onToggleFavorite(_currentItem));
@@ -1326,6 +1340,8 @@ class _PlayerPageState extends State<PlayerPage> {
     unawaited(_playingSubscription?.cancel());
     _persistOpenedProgress();
     _queueScrollController.dispose();
+    _queueSearchFocusNode.dispose();
+    _queueSearchController.dispose();
     _focusNode.dispose();
     _player.dispose();
     super.dispose();
@@ -1360,139 +1376,298 @@ class _PlayerPageState extends State<PlayerPage> {
       child: Listener(
         onPointerDown: _handlePointerDown,
         child: Scaffold(
-          backgroundColor: const Color(0xff080b10),
-          appBar: AppBar(
-            toolbarHeight: 68,
-            backgroundColor: const Color(0xff080b10),
-            foregroundColor: Colors.white,
-            surfaceTintColor: Colors.transparent,
-            title: const Text(
-              '播放器',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-            ),
-            actions: [
-              if (!showQueueSidebar)
-                IconButton(
-                  tooltip: '播放队列',
-                  onPressed: () {
-                    showModalBottomSheet<void>(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: const Color(0xff17191c),
-                      builder: (_) => FractionallySizedBox(
-                        heightFactor: 0.82,
-                        child: queueSidebar,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.playlist_play),
-                ),
-            ],
-          ),
-          body: Row(
+          backgroundColor: const Color(0xff070d1d),
+          body: Column(
             children: [
+              _PlayerTopBar(
+                searchController: _queueSearchController,
+                searchFocusNode: _queueSearchFocusNode,
+                onBack: () => Navigator.of(context).maybePop(),
+                onSearch: _searchQueue,
+                onOpenQueue: showQueueSidebar
+                    ? null
+                    : () {
+                        showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: const Color(0xff0d1528),
+                          builder: (_) => FractionallySizedBox(
+                            heightFactor: 0.82,
+                            child: queueSidebar,
+                          ),
+                        );
+                      },
+              ),
               Expanded(
-                child: Column(
+                child: Row(
                   children: [
                     Expanded(
-                      child: Container(
-                        margin: const EdgeInsets.fromLTRB(18, 18, 18, 12),
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xff1f2937)),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x66000000),
-                              blurRadius: 26,
-                              offset: Offset(0, 14),
-                            ),
-                          ],
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onSecondaryTapDown: _showPlayerContextMenu,
-                                child: Center(
-                                  child: Video(
-                                    controller: _controller,
-                                    controls: _buildVideoControls,
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              margin: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(8),
+                                border:
+                                    Border.all(color: const Color(0xff1f2937)),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x66000000),
+                                    blurRadius: 26,
+                                    offset: Offset(0, 14),
                                   ),
-                                ),
+                                ],
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onSecondaryTapDown:
+                                          _showPlayerContextMenu,
+                                      child: Center(
+                                        child: Video(
+                                          controller: _controller,
+                                          controls: _buildVideoControls,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (_openRequests.isOpening)
+                                    const Positioned.fill(
+                                      child: ColoredBox(
+                                        color: Color(0x66000000),
+                                        child: Center(
+                                            child: CircularProgressIndicator()),
+                                      ),
+                                    ),
+                                  if (!_openRequests.isOpening &&
+                                      _openRequests.hasFailure)
+                                    Positioned.fill(
+                                      child: _PlayerOpenFailurePanel(
+                                        failureCode:
+                                            _openRequests.failureCode ??
+                                                'unknown',
+                                        canSkip: _playback.hasNext,
+                                        onRetry: _retryFailedOpen,
+                                        onSkip: _skipFailedOpen,
+                                        onDiagnostics: () {
+                                          unawaited(_showDiagnosticsDialog());
+                                        },
+                                        onRelink: _currentItem.isMissing
+                                            ? () {
+                                                unawaited(
+                                                    _relinkCurrentMissing());
+                                              }
+                                            : null,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
-                            if (_openRequests.isOpening)
-                              const Positioned.fill(
-                                child: ColoredBox(
-                                  color: Color(0x66000000),
-                                  child: Center(
-                                      child: CircularProgressIndicator()),
-                                ),
-                              ),
-                            if (!_openRequests.isOpening &&
-                                _openRequests.hasFailure)
-                              Positioned.fill(
-                                child: _PlayerOpenFailurePanel(
-                                  failureCode:
-                                      _openRequests.failureCode ?? 'unknown',
-                                  canSkip: _playback.hasNext,
-                                  onRetry: _retryFailedOpen,
-                                  onSkip: _skipFailedOpen,
-                                  onDiagnostics: () {
-                                    unawaited(_showDiagnosticsDialog());
-                                  },
-                                  onRelink: _currentItem.isMissing
-                                      ? () {
-                                          unawaited(_relinkCurrentMissing());
-                                        }
-                                      : null,
-                                ),
-                              ),
-                          ],
-                        ),
+                          ),
+                          _PlayerContextPanel(
+                            item: _currentItem,
+                            queueTitle: _filterSummary,
+                            index: _index,
+                            total: _queue.length,
+                            queueEndReached: _queueEndReached,
+                            playbackMode: _playbackMode,
+                            onToggleFavorite: () {
+                              unawaited(widget.onToggleFavorite(_currentItem));
+                              setState(() {});
+                            },
+                            onEditManualTags: () {
+                              unawaited(_editManualTags());
+                            },
+                            onRevealFile: () {
+                              unawaited(_revealCurrentFile());
+                            },
+                            onVideoInfo: () {
+                              unawaited(_showVideoInfoDialog());
+                            },
+                            onDiagnostics: () {
+                              unawaited(_showDiagnosticsDialog());
+                            },
+                            onPlaybackModeChanged: (mode) {
+                              setState(() {
+                                _playbackMode = mode;
+                                _queueEndReached = false;
+                              });
+                            },
+                          ),
+                          const _PlayerShortcutHintBar(),
+                        ],
                       ),
                     ),
-                    _PlayerContextPanel(
-                      item: _currentItem,
-                      queueTitle: _filterSummary,
-                      index: _index,
-                      total: _queue.length,
-                      queueEndReached: _queueEndReached,
-                      playbackMode: _playbackMode,
-                      onToggleFavorite: () {
-                        unawaited(widget.onToggleFavorite(_currentItem));
-                        setState(() {});
-                      },
-                      onEditManualTags: () {
-                        unawaited(_editManualTags());
-                      },
-                      onRevealFile: () {
-                        unawaited(_revealCurrentFile());
-                      },
-                      onVideoInfo: () {
-                        unawaited(_showVideoInfoDialog());
-                      },
-                      onDiagnostics: () {
-                        unawaited(_showDiagnosticsDialog());
-                      },
-                      onPlaybackModeChanged: (mode) {
-                        setState(() {
-                          _playbackMode = mode;
-                          _queueEndReached = false;
-                        });
-                      },
-                    ),
+                    if (showQueueSidebar) queueSidebar,
                   ],
                 ),
               ),
-              if (showQueueSidebar) queueSidebar,
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/** 蓝图风格的播放器顶栏；刻意不提供“打开文件”，避免绕过媒体库与筛选队列。 */
+class _PlayerTopBar extends StatelessWidget {
+  const _PlayerTopBar({
+    required this.searchController,
+    required this.searchFocusNode,
+    required this.onBack,
+    required this.onSearch,
+    required this.onOpenQueue,
+  });
+
+  final TextEditingController searchController;
+  final FocusNode searchFocusNode;
+  final VoidCallback onBack;
+  final ValueChanged<String> onSearch;
+  final VoidCallback? onOpenQueue;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 66,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Row(children: [
+          IconButton(
+            tooltip: '返回媒体库',
+            onPressed: onBack,
+            icon: const Icon(Icons.arrow_back_rounded),
+            color: const Color(0xffcbd5e1),
+          ),
+          const Icon(Icons.play_arrow_rounded,
+              color: Color(0xff7c5cff), size: 30),
+          const SizedBox(width: 8),
+          const Text(
+            'local_tag_player',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const Spacer(),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 396),
+            child: TextField(
+              controller: searchController,
+              focusNode: searchFocusNode,
+              onSubmitted: onSearch,
+              textInputAction: TextInputAction.search,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Ctrl + K   搜索当前队列',
+                hintStyle: const TextStyle(color: Color(0xff77839a)),
+                prefixIcon: const Icon(Icons.search_rounded, size: 19),
+                suffixIcon: searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: '清除搜索',
+                        onPressed: () {
+                          searchController.clear();
+                          onSearch('');
+                        },
+                        icon: const Icon(Icons.close_rounded, size: 17),
+                      ),
+                filled: true,
+                fillColor: const Color(0xff0b1326),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(9),
+                  borderSide: const BorderSide(color: Color(0xff202c46)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(9),
+                  borderSide: const BorderSide(color: Color(0xff202c46)),
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          if (onOpenQueue != null)
+            IconButton(
+              tooltip: '播放队列',
+              onPressed: onOpenQueue,
+              icon: const Icon(Icons.playlist_play_rounded),
+            )
+          else
+            const SizedBox(width: 48),
+        ]),
+      ),
+    );
+  }
+}
+
+/** 只提示已经实现的快捷键，避免蓝图占位能力误导用户。 */
+class _PlayerShortcutHintBar extends StatelessWidget {
+  const _PlayerShortcutHintBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 38,
+      margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xff0d1528),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xff202c46)),
+      ),
+      child: const SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          Icon(Icons.lightbulb_outline_rounded,
+              color: Color(0xffd7a855), size: 18),
+          SizedBox(width: 7),
+          Text('快捷键', style: TextStyle(color: Color(0xff8895aa))),
+          SizedBox(width: 16),
+          _ShortcutHint(keys: 'Space', label: '播放/暂停'),
+          _ShortcutHint(keys: 'J / L', label: '快退/快进'),
+          _ShortcutHint(keys: '↑ / ↓', label: '选择队列'),
+          _ShortcutHint(keys: 'PgUp / PgDn', label: '上一条/下一条'),
+          _ShortcutHint(keys: '[ / ]', label: '倍速'),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ShortcutHint extends StatelessWidget {
+  const _ShortcutHint({required this.keys, required this.label});
+
+  final String keys;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 16),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: const Color(0xff182141),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(keys,
+              style: const TextStyle(
+                  color: Color(0xffb7b9ff),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800)),
+        ),
+        const SizedBox(width: 5),
+        Text(label,
+            style: const TextStyle(color: Color(0xff7f8ba0), fontSize: 11)),
+      ]),
     );
   }
 }

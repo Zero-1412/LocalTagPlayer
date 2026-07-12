@@ -172,15 +172,20 @@ class _PlayerQueueSidebar extends StatelessWidget {
     final sidebarWidth = math.min(360.0, MediaQuery.sizeOf(context).width);
     return Container(
       width: sidebarWidth,
-      color: const Color(0xff0f1621),
+      margin: const EdgeInsets.fromLTRB(0, 4, 14, 12),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xff0d1528),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xff202c46)),
+      ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
             decoration: const BoxDecoration(
-              color: Color(0xff0f1621),
+              color: Color(0xff0d1528),
               border: Border(
-                left: BorderSide(color: Color(0xff243044)),
                 bottom: BorderSide(color: Color(0xff243044)),
               ),
             ),
@@ -201,22 +206,40 @@ class _PlayerQueueSidebar extends StatelessWidget {
                           color: Colors.white, size: 17),
                     ),
                     const SizedBox(width: 8),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            '筛选结果队列',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
+                          Row(children: [
+                            const Flexible(
+                              child: Text(
+                                '筛选结果队列',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
                             ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
+                            const SizedBox(width: 7),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xff1b2544),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text('${playlist.length}',
+                                  style: const TextStyle(
+                                      color: Color(0xffb7c2d8),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800)),
+                            ),
+                          ]),
+                          const SizedBox(height: 2),
+                          const Text(
                             '当前筛选（AND）',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -339,7 +362,7 @@ class _PlayerQueueSidebar extends StatelessWidget {
                 ListView.builder(
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-                  itemExtent: 82,
+                  itemExtent: 94,
                   scrollCacheExtent: const ScrollCacheExtent.pixels(720),
                   addAutomaticKeepAlives: false,
                   addRepaintBoundaries: true,
