@@ -591,6 +591,11 @@ class _PlayerPageState extends State<PlayerPage> {
                                   size: 21),
                             ),
                             MenuAnchor(
+                              useRootOverlay: true,
+                              alignmentOffset: const Offset(0, 8),
+                              style: const MenuStyle(
+                                alignment: AlignmentDirectional.bottomEnd,
+                              ),
                               menuChildren: _buildControlSettingsMenu(),
                               builder: (context, controller, child) =>
                                   IconButton(
@@ -621,9 +626,7 @@ class _PlayerPageState extends State<PlayerPage> {
                                       !_queueSidebarCollapsed;
                                 });
                               },
-                              icon: Icon(_queueSidebarCollapsed
-                                  ? Icons.keyboard_double_arrow_left_rounded
-                                  : Icons.keyboard_double_arrow_right_rounded),
+                              icon: const Icon(Icons.playlist_play_rounded),
                             ),
                           ]),
                         ]),
@@ -1613,7 +1616,6 @@ class _PlayerPageState extends State<PlayerPage> {
   Widget build(BuildContext context) {
     // 中窄窗口改用底部队列，避免侧栏挤压蓝图式横向控制层。
     final hasWideQueueSidebar = MediaQuery.sizeOf(context).width >= 1100;
-    final showQueueSidebar = hasWideQueueSidebar && !_queueSidebarCollapsed;
     final queueSidebar = _PlayerQueueSidebar(
       playlist: _queue,
       sourcePlaylist: _sourcePlaylist,
@@ -1651,7 +1653,7 @@ class _PlayerPageState extends State<PlayerPage> {
                     searchFocusNode: _queueSearchFocusNode,
                     onBack: () => Navigator.of(context).maybePop(),
                     onSearch: _searchQueue,
-                    onOpenQueue: showQueueSidebar
+                    onOpenQueue: hasWideQueueSidebar
                         ? null
                         : () {
                             showModalBottomSheet<void>(
