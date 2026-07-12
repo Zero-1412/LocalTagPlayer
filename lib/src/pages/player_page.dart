@@ -704,7 +704,10 @@ class _PlayerPageState extends State<PlayerPage> {
   /** 鼠标离开队列宽度后短延迟收回侧栏，避免边缘抖动导致反复闪烁。 */
   void _scheduleFullscreenQueueHide() {
     _fullscreenQueueHideTimer?.cancel();
-    _fullscreenQueueHideTimer = Timer(const Duration(milliseconds: 180), () {
+    _fullscreenQueueHideTimer = Timer(
+        Duration(
+          milliseconds: widget.playbackSettings.fullscreenQueueHideDelayMs,
+        ), () {
       if (mounted && _fullscreenQueueVisible) {
         setState(() => _fullscreenQueueVisible = false);
       }
@@ -1875,7 +1878,8 @@ class _PlayerPageState extends State<PlayerPage> {
                     top: 0,
                     right: 0,
                     bottom: 0,
-                    width: 12,
+                    width: widget.playbackSettings.fullscreenQueueEdgeWidth
+                        .toDouble(),
                     child: MouseRegion(
                       opaque: true,
                       onEnter: (_) => _showFullscreenQueueSidebar(),

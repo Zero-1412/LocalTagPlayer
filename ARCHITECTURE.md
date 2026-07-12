@@ -33,7 +33,7 @@ lib/src/widgets
 
 已完成基线：`Architecture Baseline 0.5.7`
 
-当前推进中：`Architecture Baseline 0.5.8`
+当前推进中：`Architecture Baseline 0.5.9`
 
 变更点：
 
@@ -55,6 +55,7 @@ lib/src/widgets
 - `0.5.5`：批量 Relink 升级为执行前统一重验和单 SQLite batch 原子提交，事务失败恢复内存索引并返回失败 videoId；预览支持内存搜索、隐私安全审计摘要和失败项定向重试。
 - `0.5.6`：`PlaybackSettings` 增加向后兼容的默认恢复行为；旧设置文件自动采用“从上次位置继续”，仅用户选择“每次询问”时播放器才显示恢复弹窗。设置页同时把常用解码策略与具体高级后端分层展示，不改变 PlayerBackend 或 SQLite schema。
 - `0.5.7`：新增 `DesktopWindowStateService` 桌面边界，通过 `window_manager` 恢复并延迟保存窗口大小与最大化状态；`PlaybackSettings` 向后兼容扩展用户快捷键映射，设置页负责编辑和冲突交换。窗口状态使用独立 JSON，不修改 SQLite schema、PlayerBackend 或 filtered queue。
+- `0.5.8`：`PlaybackSettings` 向后兼容增加全屏队列右侧热区宽度和自动隐藏延迟；旧 JSON 缺字段时使用 12px / 180ms，异常值约束在 4–40px、0–1000ms。设置页滑杆松开后持久化，播放器仅消费共享配置，不修改 PlayerBackend、SQLite schema 或 filtered queue。
 
 协作要求：
 
@@ -85,7 +86,7 @@ lib/src/widgets
 
 - `TagRules` 集中一级/二级标签派生、默认专辑排序、视频扩展名判断。
 - `AppPaths` 集中应用数据目录、设置文件、媒体库数据库、缩略图目录。
-- `PlaybackSettings` 保存播放硬解配置和有稳定进度时的默认起播行为。
+- `PlaybackSettings` 保存播放硬解、稳定进度默认起播、快捷键和全屏队列交互参数。
 - `platform_interfaces.dart` 定义文件系统、播放器、FFmpeg/FFprobe、数据库 Provider 的跨平台接口边界。
 - `layout_size.dart` 定义 `compact`、`medium`、`expanded` 共享布局语义，避免后续页面各自写死宽度规则。
 

@@ -8,7 +8,6 @@ import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/main.dart' as app;
 
 // ignore: slash_for_doc_comments
-// ignore: slash_for_doc_comments
 /**
  * 在真实 Windows Flutter 窗口中验证播放队列折叠和恢复。
  *
@@ -81,7 +80,7 @@ void main() {
     await _signalDesktopCapture('player-fullscreen-queue');
 
     await mouse.moveTo(Offset(logicalSize.width / 2, logicalSize.height / 2));
-    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle(const Duration(milliseconds: 1200));
     expect(fullscreenQueue, findsNothing);
 
     await mouse.moveTo(Offset(logicalSize.width - 1, logicalSize.height / 2));

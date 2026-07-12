@@ -520,6 +520,23 @@ void main() {
     expect(settings.shortcuts[PlayerShortcutAction.fullscreen], 'Space');
     expect(settings.shortcuts[PlayerShortcutAction.screenshot], 'S');
     expect(settings.toJson()['shortcuts'], isA<Map>());
+    expect(settings.fullscreenQueueEdgeWidth, 12);
+    expect(settings.fullscreenQueueHideDelayMs, 180);
+  });
+
+  test('playback settings clamp fullscreen queue interaction values', () {
+    final settings = PlaybackSettings.fromJson({
+      'fullscreenQueueEdgeWidth': 99,
+      'fullscreenQueueHideDelayMs': -20,
+    });
+    expect(settings.fullscreenQueueEdgeWidth, 40);
+    expect(settings.fullscreenQueueHideDelayMs, 0);
+    final changed = settings.copyWith(
+      fullscreenQueueEdgeWidth: 20,
+      fullscreenQueueHideDelayMs: 450,
+    );
+    expect(changed.toJson()['fullscreenQueueEdgeWidth'], 20);
+    expect(changed.toJson()['fullscreenQueueHideDelayMs'], 450);
   });
 
   test('desktop window layout rejects unsafe tiny snapshots', () {

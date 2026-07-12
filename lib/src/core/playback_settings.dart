@@ -24,12 +24,16 @@ class PlaybackSettings {
     required this.hwdec,
     required this.resumeBehavior,
     required this.shortcuts,
+    required this.fullscreenQueueEdgeWidth,
+    required this.fullscreenQueueHideDelayMs,
   });
 
   static const defaults = PlaybackSettings(
     hwdec: 'auto-safe',
     resumeBehavior: PlaybackResumeBehavior.continueWatching,
     shortcuts: defaultShortcuts,
+    fullscreenQueueEdgeWidth: 12,
+    fullscreenQueueHideDelayMs: 180,
   );
   static const defaultShortcuts = <PlayerShortcutAction, String>{
     PlayerShortcutAction.playPause: 'Space',
@@ -80,6 +84,10 @@ class PlaybackSettings {
   final PlaybackResumeBehavior resumeBehavior;
   /** 播放器功能到单键标识的持久化绑定。 */
   final Map<PlayerShortcutAction, String> shortcuts;
+  /** 全屏时用于唤出播放队列的右侧鼠标热区宽度，单位为逻辑像素。 */
+  final int fullscreenQueueEdgeWidth;
+  /** 鼠标离开全屏队列后的自动隐藏延迟，单位为毫秒。 */
+  final int fullscreenQueueHideDelayMs;
 
   bool get hardwareDecodingEnabled => hwdec != 'no';
 
@@ -87,11 +95,17 @@ class PlaybackSettings {
     String? hwdec,
     PlaybackResumeBehavior? resumeBehavior,
     Map<PlayerShortcutAction, String>? shortcuts,
+    int? fullscreenQueueEdgeWidth,
+    int? fullscreenQueueHideDelayMs,
   }) {
     return PlaybackSettings(
       hwdec: hwdec ?? this.hwdec,
       resumeBehavior: resumeBehavior ?? this.resumeBehavior,
       shortcuts: shortcuts ?? this.shortcuts,
+      fullscreenQueueEdgeWidth:
+          fullscreenQueueEdgeWidth ?? this.fullscreenQueueEdgeWidth,
+      fullscreenQueueHideDelayMs:
+          fullscreenQueueHideDelayMs ?? this.fullscreenQueueHideDelayMs,
     );
   }
 
@@ -101,6 +115,8 @@ class PlaybackSettings {
         'shortcuts': {
           for (final entry in shortcuts.entries) entry.key.name: entry.value,
         },
+        'fullscreenQueueEdgeWidth': fullscreenQueueEdgeWidth,
+        'fullscreenQueueHideDelayMs': fullscreenQueueHideDelayMs,
       };
 
   static PlaybackSettings fromJson(Map<String, Object?> json) {
@@ -122,7 +138,30 @@ class PlaybackSettings {
         orElse: () => defaults.resumeBehavior,
       ),
       shortcuts: Map.unmodifiable(shortcuts),
+      fullscreenQueueEdgeWidth: _boundedInt(
+        json['fullscreenQueueEdgeWidth'],
+        fallback: defaults.fullscreenQueueEdgeWidth,
+        min: 4,
+        max: 40,
+      ),
+      fullscreenQueueHideDelayMs: _boundedInt(
+        json['fullscreenQueueHideDelayMs'],
+        fallback: defaults.fullscreenQueueHideDelayMs,
+        min: 0,
+        max: 1000,
+      ),
     );
+  }
+
+  /** 读取旧版或手工编辑的设置值，并约束到播放器可安全使用的范围。 */
+  static int _boundedInt(
+    Object? value, {
+    required int fallback,
+    required int min,
+    required int max,
+  }) {
+    final parsed = int.tryParse(value?.toString() ?? '');
+    return parsed == null ? fallback : parsed.clamp(min, max);
   }
 
   static Future<PlaybackSettings> load() async {

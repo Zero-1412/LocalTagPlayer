@@ -222,6 +222,24 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     await widget.onPlaybackSettingsChanged(next);
   }
 
+  /** 预览全屏队列交互参数；滑杆松开时由调用方统一持久化。 */
+  void _previewFullscreenQueueSettings({
+    int? edgeWidth,
+    int? hideDelayMs,
+  }) {
+    setState(() {
+      _settings = _settings.copyWith(
+        fullscreenQueueEdgeWidth: edgeWidth,
+        fullscreenQueueHideDelayMs: hideDelayMs,
+      );
+    });
+  }
+
+  /** 将当前全屏队列交互参数写入现有播放设置文件。 */
+  Future<void> _saveFullscreenQueueSettings() async {
+    await widget.onPlaybackSettingsChanged(_settings);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -257,6 +275,61 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                     onChanged: (settings) async {
                       setState(() => _settings = settings);
                       await widget.onPlaybackSettingsChanged(settings);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            key: const ValueKey('settings.fullscreenQueue.card'),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '全屏播放列表',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    '鼠标移到屏幕右侧边缘时展开，离开列表范围后自动隐藏。',
+                    style: TextStyle(color: _appTextMuted),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('边缘热区宽度：${_settings.fullscreenQueueEdgeWidth}px'),
+                  Slider(
+                    key: const ValueKey('settings.fullscreenQueue.edgeWidth'),
+                    min: 4,
+                    max: 40,
+                    divisions: 18,
+                    value: _settings.fullscreenQueueEdgeWidth.toDouble(),
+                    label: '${_settings.fullscreenQueueEdgeWidth}px',
+                    onChanged: (value) => _previewFullscreenQueueSettings(
+                      edgeWidth: value.round(),
+                    ),
+                    onChangeEnd: (_) {
+                      unawaited(_saveFullscreenQueueSettings());
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '自动隐藏延迟：${_settings.fullscreenQueueHideDelayMs}ms',
+                  ),
+                  Slider(
+                    key: const ValueKey('settings.fullscreenQueue.hideDelay'),
+                    min: 0,
+                    max: 1000,
+                    divisions: 20,
+                    value: _settings.fullscreenQueueHideDelayMs.toDouble(),
+                    label: '${_settings.fullscreenQueueHideDelayMs}ms',
+                    onChanged: (value) => _previewFullscreenQueueSettings(
+                      hideDelayMs: value.round(),
+                    ),
+                    onChangeEnd: (_) {
+                      unawaited(_saveFullscreenQueueSettings());
                     },
                   ),
                 ],
