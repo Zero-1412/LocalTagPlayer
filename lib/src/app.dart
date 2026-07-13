@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
@@ -26,6 +27,8 @@ part 'models/media_details.dart';
 part 'models/platform_models.dart';
 part 'repositories/repository_interfaces.dart';
 part 'services/library_metadata_persistence.dart';
+part 'services/library_load_diagnostics.dart';
+part 'services/library_scan_backend.dart';
 part 'services/library_scan_coordinator.dart';
 part 'services/library_count_refresh_coordinator.dart';
 part 'services/library_tag_persistence.dart';

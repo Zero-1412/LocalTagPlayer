@@ -3,6 +3,63 @@ part of '../app.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
+ * Application 层提交扫描差量后的不可变结果。
+ *
+ * [changedVideos] 供 UI 做差量失效，[probeCandidates] 只包含新增或内容变化的视频；
+ * 两者都引用提交成功后的稳定 `VideoItem`，不会包含已取消代次的部分结果。
+ */
+class LibraryScanCommitResult {
+  LibraryScanCommitResult({
+    required this.generationId,
+    required this.addedCount,
+    required this.modifiedCount,
+    required this.missingCount,
+    required this.relinkedCount,
+    required Iterable<VideoItem> changedVideos,
+    required Iterable<VideoItem> probeCandidates,
+    this.cancelled = false,
+  })  : changedVideos = List<VideoItem>.unmodifiable(changedVideos),
+        probeCandidates = List<VideoItem>.unmodifiable(probeCandidates);
+
+  /** 扫描代次。 */
+  final int generationId;
+
+  /** 新建稳定记录数量。 */
+  final int addedCount;
+
+  /** 已有路径内容或索引发生变化的数量。 */
+  final int modifiedCount;
+
+  /** 本轮新标记为 missing 的数量。 */
+  final int missingCount;
+
+  /** 通过唯一 fingerprint 保留稳定身份的移动数量。 */
+  final int relinkedCount;
+
+  /** 事务提交后需要刷新 UI 的稳定对象。 */
+  final List<VideoItem> changedVideos;
+
+  /** 只允许送入缩略图或 MediaProbe 队列的新增/内容变化对象。 */
+  final List<VideoItem> probeCandidates;
+
+  /** 代次是否在提交前取消。 */
+  final bool cancelled;
+
+  /** 创建不产生任何数据库或 UI 副作用的取消结果。 */
+  factory LibraryScanCommitResult.cancelled(int generationId) =>
+      LibraryScanCommitResult(
+        generationId: generationId,
+        addedCount: 0,
+        modifiedCount: 0,
+        missingCount: 0,
+        relinkedCount: 0,
+        changedVideos: const <VideoItem>[],
+        probeCandidates: const <VideoItem>[],
+        cancelled: true,
+      );
+}
+
+/**
  * 媒体库扫描状态协调器。
  *
  * 目录遍历由 `LibraryScanService` 负责；本类负责把扫描结果合并进 `LibraryStore`
@@ -151,23 +208,34 @@ class LibraryScanCoordinator {
    *
    * 返回新增视频数量；已有视频的索引刷新、缺失文件清理和 metadata 保存会在同一 batch 中提交。
    */
-  Future<int> scan() async {
+  Future<LibraryScanCommitResult> scan({required int generationId}) async {
     final knownMetadata = <String, LibraryScanKnownMetadata>{
       for (final item in _store.videos.values)
         TagRules.pathKey(item.path): LibraryScanKnownMetadata(
           fileSize: item.fileSize,
           modifiedMs: item.modifiedMs,
           mediaFingerprint: item.mediaFingerprint,
+          rootPath: item.rootPath,
+          relativePath: item.relativePath,
+          isMissing: item.isMissing,
         ),
     };
-    final scanResult = await const LibraryScanService().scanRoots(
-      _store.roots,
+    final scanDelta = await _store._scanBackend.scan(
+      generationId: generationId,
+      roots: List<String>.unmodifiable(_store.roots),
       knownMetadata: knownMetadata,
     );
+    if (scanDelta.cancelled || generationId != _store._scanGeneration) {
+      return LibraryScanCommitResult.cancelled(generationId);
+    }
     final batch = _store._db.batch();
     var added = 0;
+    var modified = 0;
+    var relinked = 0;
+    final changedById = <String, VideoItem>{};
+    final probeById = <String, VideoItem>{};
     final scannedFingerprintCounts = <String, int>{};
-    for (final scanned in scanResult.entries) {
+    for (final scanned in scanDelta.changedEntries) {
       scannedFingerprintCounts.update(
         scanned.mediaFingerprint,
         (count) => count + 1,
@@ -178,14 +246,14 @@ class LibraryScanCoordinator {
     for (final item in _store.videos.values) {
       final fingerprint = item.mediaFingerprint;
       if (fingerprint == null ||
-          scanResult.seenPathKeys.contains(TagRules.pathKey(item.path)) ||
+          scanDelta.seenPathKeys.contains(TagRules.pathKey(item.path)) ||
           File(item.path).existsSync()) {
         continue;
       }
       (relocationCandidates[fingerprint] ??= <VideoItem>[]).add(item);
     }
 
-    for (final scanned in scanResult.entries) {
+    for (final scanned in scanDelta.changedEntries) {
       final videoKey = TagRules.pathKey(scanned.path);
       final existing = _store.videos[videoKey];
       if (existing == null) {
@@ -193,36 +261,58 @@ class LibraryScanCoordinator {
             const <VideoItem>[];
         if (candidates.length == 1 &&
             scannedFingerprintCounts[scanned.mediaFingerprint] == 1) {
-          _relinkScannedVideo(batch, candidates.single, scanned, videoKey);
+          final relinkedItem = candidates.single;
+          _relinkScannedVideo(batch, relinkedItem, scanned, videoKey);
+          changedById[relinkedItem.videoId] = relinkedItem;
+          relinked++;
           relocationCandidates.remove(scanned.mediaFingerprint);
         } else {
           // 指纹任一侧不唯一时拒绝自动认领，防止相同大小/时间戳文件串档。
-          _insertNewScannedVideo(batch, scanned, videoKey);
+          final newItem = _insertNewScannedVideo(batch, scanned, videoKey);
+          changedById[newItem.videoId] = newItem;
+          probeById[newItem.videoId] = newItem;
           added++;
         }
       } else {
-        _mergeExistingScannedVideo(batch, existing, scanned);
+        final contentChanged =
+            _mergeExistingScannedVideo(batch, existing, scanned);
+        changedById[existing.videoId] = existing;
+        if (contentChanged) {
+          probeById[existing.videoId] = existing;
+        }
+        modified++;
       }
     }
 
-    _markMissingVideos(
+    final missingVideos = _markMissingVideos(
       batch,
-      scanResult.seenPathKeys,
-      scanResult.scannedRootKeys,
+      scanDelta.seenPathKeys,
+      scanDelta.scannedRootKeys,
     );
+    for (final item in missingVideos) {
+      changedById[item.videoId] = item;
+    }
     _store._metadataPersistence.saveInBatch(
       batch,
       roots: _store.roots,
       favoriteTags: _store.favoriteTags,
     );
     await batch.commit(noResult: true);
-    return added;
+    return LibraryScanCommitResult(
+      generationId: generationId,
+      addedCount: added,
+      modifiedCount: modified,
+      missingCount: missingVideos.length,
+      relinkedCount: relinked,
+      changedVideos: changedById.values,
+      probeCandidates: probeById.values,
+    );
   }
 
   /**
    * 把新发现的视频加入内存索引、视频表和 folder 标签索引。
    */
-  void _insertNewScannedVideo(
+  VideoItem _insertNewScannedVideo(
     Batch batch,
     LibraryScannedVideo scanned,
     String videoKey,
@@ -243,6 +333,7 @@ class LibraryScanCoordinator {
     _store.videos[videoKey] = item;
     _store._videoPersistence.insertInBatch(batch, item);
     _store._tagMaintenance.syncFolderTagsInBatch(batch, item);
+    return item;
   }
 
   /**
@@ -250,7 +341,7 @@ class LibraryScanCoordinator {
    *
    * 只刷新扫描派生字段；收藏、播放时间、手动标签、媒体详情等用户或缓存数据保持原样。
    */
-  void _mergeExistingScannedVideo(
+  bool _mergeExistingScannedVideo(
     Batch batch,
     VideoItem existing,
     LibraryScannedVideo scanned,
@@ -294,6 +385,7 @@ class LibraryScanCoordinator {
         _store._tagMaintenance.syncFolderTagsInBatch(batch, existing);
       }
     }
+    return contentChanged;
   }
 
   /** 用唯一 fingerprint 将新路径认领给旧 videoId，并保留全部用户数据。 */
@@ -338,11 +430,12 @@ class LibraryScanCoordinator {
    *
    * 不可访问 root 不参与判断，防止临时掉盘把整库误标；记录、标签和播放数据始终保留。
    */
-  void _markMissingVideos(
+  List<VideoItem> _markMissingVideos(
     Batch batch,
     Set<String> seenPathKeys,
     Set<String> scannedRootKeys,
   ) {
+    final changed = <VideoItem>[];
     for (final item in _store.videos.values) {
       final rootPath = item.rootPath;
       final rootWasScanned = rootPath != null &&
@@ -355,6 +448,8 @@ class LibraryScanCoordinator {
       }
       item.isMissing = shouldBeMissing;
       _store._videoPersistence.insertInBatch(batch, item);
+      changed.add(item);
     }
+    return changed;
   }
 }

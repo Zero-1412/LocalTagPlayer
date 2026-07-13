@@ -12,6 +12,7 @@ class LibraryStore {
     this.tagGroups,
     this.tagsById,
     this.videoTagIdsByPathKey,
+    this._scanBackend,
   );
 
   final File _file;
@@ -22,6 +23,12 @@ class LibraryStore {
   final List<TagGroup> tagGroups;
   final Map<String, TagItem> tagsById;
   final Map<String, Set<String>> videoTagIdsByPathKey;
+
+  /** 只读文件系统扫描边界；不拥有 SQLite 连接。 */
+  final LibraryScanBackend _scanBackend;
+
+  /** 当前有效扫描代次；旧代次返回后不得提交数据库或回写 UI。 */
+  int _scanGeneration = 0;
 
   LibraryTagPersistence get _tagPersistence =>
       LibraryTagPersistence(_db, tagsById, videoTagIdsByPathKey);
@@ -66,14 +73,40 @@ class LibraryStore {
     return summaries;
   }
 
-  static Future<LibraryStore> load() async {
+  /**
+   * 从 SQLite 恢复媒体库；[diagnostics] 仅供显式性能基准收集阶段耗时。
+   *
+   * 默认调用不保留诊断对象，也不会记录任何媒体路径或标签内容。
+   */
+  static Future<LibraryStore> load({
+    LibraryLoadDiagnostics? diagnostics,
+    LibraryScanBackend? scanBackend,
+  }) async {
     final legacyFile = await AppPaths.legacyLibraryFile();
-    final db = await _openDatabase(await AppPaths.libraryDatabaseFile());
-    final store = await _loadFromDatabase(legacyFile, db);
+    final databaseFile = await AppPaths.libraryDatabaseFile();
+    final db = diagnostics == null
+        ? await _openDatabase(databaseFile)
+        : await diagnostics.measureAsync(
+            'sqlite.open_and_maintenance',
+            () => _openDatabase(databaseFile),
+          );
+    final store = await _loadFromDatabase(
+      legacyFile,
+      db,
+      diagnostics: diagnostics,
+      scanBackend: scanBackend ?? createLibraryScanBackend(),
+    );
     if (store.videos.isEmpty && await legacyFile.exists()) {
-      await store._importLegacyJson();
+      if (diagnostics == null) {
+        await store._importLegacyJson();
+      } else {
+        await diagnostics.measureAsync(
+          'legacy.import',
+          store._importLegacyJson,
+        );
+      }
     }
-    await store.ensureTagIndexCoverage();
+    await store.ensureTagIndexCoverage(diagnostics: diagnostics);
     return store;
   }
 
@@ -189,18 +222,36 @@ class LibraryStore {
       )
     ''');
     await _ensureVideoTagColumns(db);
+    if (Platform.isWindows) {
+      // 旧库只在缺失稳定身份时执行 path 回填；NOCASE 索引避免每条关系都全表扫描 videos。
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_path_nocase '
+        'ON videos(path COLLATE NOCASE)',
+      );
+    }
     await _backfillStableVideoIds(db);
-    // 旧版本可能残留同一身份的重复 path 兼容行；建唯一索引前只清理冗余关系。
-    await db.execute('''
-      DELETE FROM video_tags
+    // 先用轻量查询判断迁移遗留，正常启动不执行全表删除。
+    final duplicateRelations = await db.rawQuery('''
+      SELECT 1
+      FROM video_tags
       WHERE video_id IS NOT NULL
-        AND rowid NOT IN (
-          SELECT MIN(rowid)
-          FROM video_tags
-          WHERE video_id IS NOT NULL
-          GROUP BY video_id, tag_id, source
-        )
+      GROUP BY video_id, tag_id, source
+      HAVING COUNT(*) > 1
+      LIMIT 1
     ''');
+    if (duplicateRelations.isNotEmpty) {
+      // 仅旧版迁移可能遗留同一稳定身份的重复 path 兼容行；正常启动不再执行全表 DELETE。
+      await db.execute('''
+        DELETE FROM video_tags
+        WHERE video_id IS NOT NULL
+          AND rowid NOT IN (
+            SELECT MIN(rowid)
+            FROM video_tags
+            WHERE video_id IS NOT NULL
+            GROUP BY video_id, tag_id, source
+          )
+      ''');
+    }
     await db.execute(
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_video_id ON videos(video_id)');
     await db
@@ -250,7 +301,12 @@ class LibraryStore {
     }
   }
 
-  /** 幂等回填旧视频身份，并把既有标签关系绑定到对应 `videoId`。 */
+  /**
+   * 幂等回填旧视频稳定身份，并只修复缺少 `video_id` 的旧标签关系。
+   *
+   * 已绑定稳定身份的关系不能在每次启动时按 mutable path 重写；这既会破坏 relink 语义，
+   * 也会在 Windows NOCASE 比较缺少对应索引时退化为关系数乘视频数的全表扫描。
+   */
   static Future<void> _backfillStableVideoIds(Database db) async {
     final rows = await db.query(
       'videos',
@@ -285,6 +341,7 @@ class LibraryStore {
         FROM videos
         WHERE ${Platform.isWindows ? 'videos.path = video_tags.video_path COLLATE NOCASE' : 'videos.path = video_tags.video_path'}
       )
+      WHERE video_id IS NULL OR TRIM(video_id) = ''
     ''');
   }
 
@@ -322,9 +379,8 @@ class LibraryStore {
     }
   }
 
-  static Future<List<TagGroup>> _loadTagGroups(Database db) async {
-    final rows = await db.query('tag_groups',
-        orderBy: 'sort_order ASC, display_name ASC');
+  /** 将已读取的标签组行转换为不可变业务模型。 */
+  static List<TagGroup> _tagGroupsFromRows(List<Map<String, Object?>> rows) {
     return rows
         .map(
           (row) => TagGroup(
@@ -341,18 +397,21 @@ class LibraryStore {
         .toList();
   }
 
-  static Future<Map<String, TagItem>> _loadTagsById(Database db) async {
+  /** 将别名行和标签行合并为按 tagId 索引的标签模型。 */
+  static Map<String, TagItem> _tagsByIdFromRows(
+    List<Map<String, Object?>> aliasRows,
+    List<Map<String, Object?>> tagRows,
+  ) {
     final aliasesByTagId = <String, Set<String>>{};
-    for (final row in await db.query('tag_aliases')) {
+    for (final row in aliasRows) {
       final tagId = row['tag_id'] as String;
       final alias = TagRules.normalizeTag(row['alias'] as String? ?? '');
       if (alias.isNotEmpty) {
         (aliasesByTagId[tagId] ??= <String>{}).add(alias);
       }
     }
-    final rows = await db.query('tags');
     final tags = <String, TagItem>{};
-    for (final row in rows) {
+    for (final row in tagRows) {
       final id = row['id'] as String;
       tags[id] = _tagFromRow(row,
           extraAliases: aliasesByTagId[id] ?? const <String>{});
@@ -360,13 +419,10 @@ class LibraryStore {
     return tags;
   }
 
-  static Future<Map<String, Set<String>>> _loadVideoTagIds(Database db) async {
+  /** 将视频标签 JOIN 结果 hydration 为规范化路径索引。 */
+  static Map<String, Set<String>> _videoTagIdsFromRows(
+      List<Map<String, Object?>> rows) {
     final links = <String, Set<String>>{};
-    final rows = await db.rawQuery('''
-      SELECT vt.tag_id, v.path
-      FROM video_tags vt
-      INNER JOIN videos v ON v.video_id = vt.video_id
-    ''');
     for (final row in rows) {
       final path = row['path'] as String;
       final tagId = row['tag_id'] as String;
@@ -413,16 +469,86 @@ class LibraryStore {
   }
 
   static Future<LibraryStore> _loadFromDatabase(
-      File legacyFile, Database db) async {
-    final metadata = await LibraryMetadataPersistence(db).load();
-    final videos = <String, VideoItem>{};
-    for (final row in await db.query('videos')) {
-      final item = LibraryVideoPersistence.videoFromRow(row);
-      videos[TagRules.pathKey(item.path)] = item;
-    }
-    final tagGroups = await _loadTagGroups(db);
-    final tagsById = await _loadTagsById(db);
-    final videoTagIdsByPathKey = await _loadVideoTagIds(db);
+    File legacyFile,
+    Database db, {
+    LibraryLoadDiagnostics? diagnostics,
+    required LibraryScanBackend scanBackend,
+  }) async {
+    final metadata = diagnostics == null
+        ? await LibraryMetadataPersistence(db).load()
+        : await diagnostics.measureAsync(
+            'sqlite.metadata_query_and_build',
+            () => LibraryMetadataPersistence(db).load(),
+          );
+    final videoRows = diagnostics == null
+        ? await db.query('videos')
+        : await diagnostics.measureAsync(
+            'sqlite.video_rows_query',
+            () => db.query('videos'),
+            itemCount: (rows) => rows.length,
+          );
+    final videos = diagnostics == null
+        ? _videosFromRows(videoRows)
+        : diagnostics.measureSync(
+            'dart.video_object_build',
+            () => _videosFromRows(videoRows),
+            itemCount: (items) => items.length,
+          );
+    final groupRows = diagnostics == null
+        ? await db.query(
+            'tag_groups',
+            orderBy: 'sort_order ASC, display_name ASC',
+          )
+        : await diagnostics.measureAsync(
+            'sqlite.tag_group_rows_query',
+            () => db.query(
+              'tag_groups',
+              orderBy: 'sort_order ASC, display_name ASC',
+            ),
+            itemCount: (rows) => rows.length,
+          );
+    final aliasRows = diagnostics == null
+        ? await db.query('tag_aliases')
+        : await diagnostics.measureAsync(
+            'sqlite.tag_alias_rows_query',
+            () => db.query('tag_aliases'),
+            itemCount: (rows) => rows.length,
+          );
+    final tagRows = diagnostics == null
+        ? await db.query('tags')
+        : await diagnostics.measureAsync(
+            'sqlite.tag_rows_query',
+            () => db.query('tags'),
+            itemCount: (rows) => rows.length,
+          );
+    final tagGroups = diagnostics == null
+        ? _tagGroupsFromRows(groupRows)
+        : diagnostics.measureSync(
+            'dart.tag_group_object_build',
+            () => _tagGroupsFromRows(groupRows),
+            itemCount: (groups) => groups.length,
+          );
+    final tagsById = diagnostics == null
+        ? _tagsByIdFromRows(aliasRows, tagRows)
+        : diagnostics.measureSync(
+            'dart.tag_object_and_alias_hydration',
+            () => _tagsByIdFromRows(aliasRows, tagRows),
+            itemCount: (tags) => tags.length,
+          );
+    final relationRows = diagnostics == null
+        ? await _queryVideoTagRows(db)
+        : await diagnostics.measureAsync(
+            'sqlite.video_tag_relation_query',
+            () => _queryVideoTagRows(db),
+            itemCount: (rows) => rows.length,
+          );
+    final videoTagIdsByPathKey = diagnostics == null
+        ? _videoTagIdsFromRows(relationRows)
+        : diagnostics.measureSync(
+            'dart.video_tag_relation_hydration',
+            () => _videoTagIdsFromRows(relationRows),
+            itemCount: (links) => links.length,
+          );
     return LibraryStore._(
       legacyFile,
       db,
@@ -432,7 +558,28 @@ class LibraryStore {
       tagGroups,
       tagsById,
       videoTagIdsByPathKey,
+      scanBackend,
     );
+  }
+
+  /** 将视频表行转换为按规范化路径索引的对象集合。 */
+  static Map<String, VideoItem> _videosFromRows(
+      List<Map<String, Object?>> rows) {
+    final videos = <String, VideoItem>{};
+    for (final row in rows) {
+      final item = LibraryVideoPersistence.videoFromRow(row);
+      videos[TagRules.pathKey(item.path)] = item;
+    }
+    return videos;
+  }
+
+  /** 一次性读取稳定身份对应的视频标签关系，避免逐视频 N+1 查询。 */
+  static Future<List<Map<String, Object?>>> _queryVideoTagRows(Database db) {
+    return db.rawQuery('''
+      SELECT vt.tag_id, v.path
+      FROM video_tags vt
+      INNER JOIN videos v ON v.video_id = vt.video_id
+    ''');
   }
 
   Future<void> _importLegacyJson() async {
@@ -468,22 +615,55 @@ class LibraryStore {
     await batch.commit(noResult: true);
   }
 
-  Future<void> ensureTagIndexCoverage() async {
+  Future<void> ensureTagIndexCoverage(
+      {LibraryLoadDiagnostics? diagnostics}) async {
     if (videos.isEmpty) {
       return;
     }
     final batch = _db.batch();
-    var changed = false;
-    for (final item in videos.values) {
-      final tagIds = videoTagIdsByPathKey[TagRules.pathKey(item.path)];
-      if (tagIds == null || tagIds.isEmpty) {
-        _tagMaintenance.syncFolderTagsInBatch(batch, item);
-        changed = true;
+    final missingCoverage = diagnostics == null
+        ? _videosMissingFolderTagCoverage()
+        : diagnostics.measureSync(
+            'dart.folder_tag_coverage_evaluation',
+            _videosMissingFolderTagCoverage,
+            itemCount: (items) => items.length,
+          );
+    for (final item in missingCoverage) {
+      _tagMaintenance.syncFolderTagsInBatch(batch, item);
+    }
+    if (missingCoverage.isNotEmpty) {
+      if (diagnostics == null) {
+        await batch.commit(noResult: true);
+      } else {
+        await diagnostics.measureAsync(
+          'sqlite.folder_tag_coverage_write',
+          () => batch.commit(noResult: true),
+          itemCount: (_) => missingCoverage.length,
+        );
       }
     }
-    if (changed) {
-      await batch.commit(noResult: true);
+  }
+
+  /**
+   * 只返回确实缺少路径派生 folder tagId 的视频。
+   *
+   * root 直属视频合法地没有一级/二级 folder 标签，不能因为关系集合为空就在每次启动时
+   * 重复排入 SQLite batch；manual 关系也不能被误当作 folder 覆盖证明。
+   */
+  List<VideoItem> _videosMissingFolderTagCoverage() {
+    final missing = <VideoItem>[];
+    for (final item in videos.values) {
+      final expected = _tagMaintenance.expectedFolderTagIds(item);
+      if (expected.isEmpty) {
+        continue;
+      }
+      final actual =
+          videoTagIdsByPathKey[TagRules.pathKey(item.path)] ?? const <String>{};
+      if (!actual.containsAll(expected)) {
+        missing.add(item);
+      }
     }
+    return missing;
   }
 
   Future<void> replaceManualTags(
@@ -615,7 +795,12 @@ class LibraryStore {
    *
    * 测试和 repository 拆分需要显式释放 SQLite 文件句柄，避免临时目录清理失败。
    */
-  Future<void> close() => _db.close();
+  Future<void> close() async {
+    if (_scanGeneration > 0) {
+      _scanBackend.cancelGeneration(_scanGeneration);
+    }
+    await _db.close();
+  }
 
   Future<void> upsertVideo(VideoItem item) async {
     videos[TagRules.pathKey(item.path)] = item;
@@ -631,25 +816,27 @@ class LibraryStore {
   }
 
   Future<int> addRootAndScan(String rootPath) async {
+    return (await addRootAndScanWithChanges(rootPath)).addedCount;
+  }
+
+  /** 添加 root 并返回可供 UI 与探测队列差量消费的事务提交结果。 */
+  Future<LibraryScanCommitResult> addRootAndScanWithChanges(
+      String rootPath) async {
     final normalizedRoot = TagRules.normalizeRootPath(rootPath);
     if (normalizedRoot.isEmpty) {
-      return 0;
+      return LibraryScanCommitResult.cancelled(_scanGeneration);
     }
     final rootKey = TagRules.pathKey(normalizedRoot);
     if (!roots.any((root) => TagRules.pathKey(root) == rootKey)) {
       roots.add(normalizedRoot);
       await saveMetadata();
     }
-    return scan();
+    return scanWithChanges();
   }
 
   /**
-   *
    * 从媒体库根目录列表移除一个目录。
    *
-   *
-鍙洿鏂?
- root
    * 只更新 root 配置，不删除磁盘文件，也不立即清理已有视频记录。
    */
   Future<void> removeRoot(String rootPath) async {
@@ -659,7 +846,19 @@ class LibraryStore {
   }
 
   Future<int> scan() async {
-    return LibraryScanCoordinator(this).scan();
+    return (await scanWithChanges()).addedCount;
+  }
+
+  /**
+   * 取消旧代次并执行只读后端扫描；只有当前代次可进入 Application 事务提交。
+   */
+  Future<LibraryScanCommitResult> scanWithChanges() async {
+    final previousGeneration = _scanGeneration;
+    if (previousGeneration > 0) {
+      _scanBackend.cancelGeneration(previousGeneration);
+    }
+    final generation = ++_scanGeneration;
+    return LibraryScanCoordinator(this).scan(generationId: generation);
   }
 
   /**

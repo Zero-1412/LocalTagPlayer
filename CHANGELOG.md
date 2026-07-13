@@ -1,5 +1,16 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-13 · SQLite 启动修复与 Rust LibraryScanBackend
+
+- 真实 11,135 条库分阶段确认约 40 秒加载中 `sqlite.open_and_maintenance` 占 38.55 秒（87.64%）：Windows `COLLATE NOCASE` 相关子查询对 20,306 条关系逐条全表扫描 videos，并在每次启动无条件重写 `video_id`。
+- 增加 `videos(path COLLATE NOCASE)` 兼容索引，稳定身份和重复关系只在旧库确有缺失/重复时迁移；root 直属视频不再被误判为缺少 folder 标签而每次排入空 batch。真实副本总加载由 43.99 秒降至 0.844 秒，真实窗口首帧约 1.42 秒。
+- `TagQueryService.resultCounts` 改为按视频实际标签名反查候选，保持同组 OR/跨组 AND/排除语义不变；全库初始计数由 4.81 秒降至约 205 毫秒，并移到首帧后的可取消空闲任务。
+- 新增 `LibraryScanBackend`、不可变 `LibraryScanDelta`、generation 取消与 `LibraryScanCommitResult`；扫描后端只读文件系统，Dart Application 继续校验唯一 fingerprint、stable videoId/relink 并用单 SQLite batch 提交。
+- 新增无第三方依赖 Rust Windows 扫描 sidecar；CMake 检测 cargo 后随构建供应可执行文件与 MIT 许可证，缺失/失败时运行时回退 Dart。父子 root 按最上层优先并按 pathKey 去重，保持一级/二级 folder 标签硬规则。
+- 真实大库 A/B：去重后 11,133 条，Dart 已缓存扫描 1.751 秒，Rust 1.073 秒；隔离副本首次统一历史 root 上下文并提交 11,061 条修改 1.897 秒，第二轮 Rust 稳定态端到端 240 毫秒且零差量。
+- UI 只消费提交成功的变化集合；缩略图和 `MediaProbeBackend` 仅接收新增/内容变化项，旧探测 generation 在新扫描前取消。真实窗口标签切换保持 172 条结果，首次扫描显示修改 11,061，第二轮显示新增/修改/移动/缺失均为 0。
+- SQLite 未新增数据列或业务表，manual 标签、收藏、进度和播放记录继续绑定 videoId；未修改 `FilterQuery` 语义、filtered queue 来源或播放器后端。
+
 ## 2026-07-13 · 原生媒体探测与大库扫描基准
 
 - D3D11/ANGLE 最终归因确认桥接层、ANGLE 与 Flutter 存在多个设备/上下文，双 1080p BGRA 纹理仅约 15.8 MiB，剩余差额主要来自独立解码池、D3D11VA 表面和驱动缓存；原生 Private/GPU P95 约为 MediaKit 的 114.5%/113.8%，未进入 110% 门槛，停止默认替换路线。

@@ -185,6 +185,11 @@ class TagQueryService {
         continue;
       }
       final candidateIds = {for (final tag in groupTags) tag.id};
+      final candidateIdsByName = <String, Set<String>>{};
+      for (final tag in groupTags) {
+        (candidateIdsByName[tag.name.trim().toLowerCase()] ??= <String>{})
+            .add(tag.id);
+      }
       // 同组候选共享同一个 baseQuery：移除候选所在组后只扫描一次视频集合，
       // 避免“候选标签数 x 全量视频”的同步阻塞。
       final baseQuery = _withoutCandidateGroup(query, groupTags.first);
@@ -203,12 +208,17 @@ class TagQueryService {
             }
           }
         }
-        for (final tag in groupTags) {
-          if (countedIds.contains(tag.id)) {
-            continue;
-          }
-          if (_hasTag(item, tag)) {
-            counts[tag.id] = (counts[tag.id] ?? 0) + 1;
+        // 兼容旧库快照时按视频实际拥有的标签名反查候选，避免每个视频再次遍历整组标签。
+        final legacyNames = <String>{
+          for (final tag in item.tags) tag.trim().toLowerCase(),
+          for (final children in item.childTags.values)
+            for (final tag in children) tag.trim().toLowerCase(),
+        };
+        for (final name in legacyNames) {
+          for (final tagId in candidateIdsByName[name] ?? const <String>{}) {
+            if (countedIds.add(tagId)) {
+              counts[tagId] = (counts[tagId] ?? 0) + 1;
+            }
           }
         }
       }

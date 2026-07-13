@@ -1,0 +1,15 @@
+[package]
+name = "ltp_rust_library_scan"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "ltp_rust_library_scan"
+path = "src/main.rs"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

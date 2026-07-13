@@ -63,6 +63,7 @@ class LibraryScanResult {
     required this.entries,
     required this.seenPathKeys,
     required this.scannedRootKeys,
+    this.cancelled = false,
   });
 
   /** 可安全写入媒体库的视频扫描条目。 */
@@ -73,6 +74,9 @@ class LibraryScanResult {
 
   /** 本轮确认可访问并完成枚举的根目录，用于安全标记 missing。 */
   final Set<String> scannedRootKeys;
+
+  /** 是否因调用方取消当前 generation 而只得到不完整快照。 */
+  final bool cancelled;
 }
 
 /**
@@ -85,6 +89,9 @@ class LibraryScanKnownMetadata {
     required this.fileSize,
     required this.modifiedMs,
     required this.mediaFingerprint,
+    this.rootPath,
+    this.relativePath,
+    this.isMissing = false,
   });
 
   /** 上次成功扫描记录的文件大小。 */
@@ -95,6 +102,15 @@ class LibraryScanKnownMetadata {
 
   /** 上次成功生成的路径无关内容指纹。 */
   final String? mediaFingerprint;
+
+  /** 上次索引命中的媒体库 root，用于识别路径层级变化。 */
+  final String? rootPath;
+
+  /** 上次相对 root 的路径，用于识别 folder 标签上下文变化。 */
+  final String? relativePath;
+
+  /** 上次持久化的 missing 状态；文件重新出现时必须形成修改差量。 */
+  final bool isMissing;
 }
 
 /**
@@ -115,11 +131,22 @@ class LibraryScanService {
     List<String> roots, {
     Map<String, LibraryScanKnownMetadata> knownMetadata =
         const <String, LibraryScanKnownMetadata>{},
+    bool Function()? isCancelled,
   }) async {
     final entries = <LibraryScannedVideo>[];
     final seen = <String>{};
     final scannedRootKeys = <String>{};
-    for (final root in roots) {
+    final orderedRoots = roots.toList()
+      ..sort((a, b) => p.split(a).length.compareTo(p.split(b).length));
+    for (final root in orderedRoots) {
+      if (isCancelled?.call() ?? false) {
+        return LibraryScanResult(
+          entries: entries,
+          seenPathKeys: seen,
+          scannedRootKeys: scannedRootKeys,
+          cancelled: true,
+        );
+      }
       final dir = Directory(root);
       if (!await _directoryExists(dir)) {
         continue;
@@ -127,11 +154,22 @@ class LibraryScanService {
       try {
         await for (final entity
             in dir.list(recursive: true, followLinks: false)) {
+          if (isCancelled?.call() ?? false) {
+            return LibraryScanResult(
+              entries: entries,
+              seenPathKeys: seen,
+              scannedRootKeys: scannedRootKeys,
+              cancelled: true,
+            );
+          }
           if (entity is! File || !TagRules.isVideoPath(entity.path)) {
             continue;
           }
           final videoKey = TagRules.pathKey(entity.path);
-          seen.add(videoKey);
+          // 父子 root 重叠时只保留最上层 root 的第一次命中，维持 folder 层级硬规则。
+          if (!seen.add(videoKey)) {
+            continue;
+          }
           final stat = await _fileStat(entity);
           if (stat == null || stat.type != FileSystemEntityType.file) {
             continue;

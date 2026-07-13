@@ -7,6 +7,15 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-13 SQLite hydration 与 Rust ScanDelta
+
+- 真实库分阶段定位启动 38.55 秒为 stable identity 兼容 UPDATE 的 Windows NOCASE 全表相关扫描；普通视频 SQL 约 40–58 毫秒、对象构建约 208–275 毫秒、标签关系查询与 hydration 约 50–71 毫秒。
+- stable identity 回填只处理缺失 `video_id` 的旧行，并建立 path NOCASE 索引；重复关系先轻量检查，root 直属视频合法零 folder 标签不再重复写入。
+- `LibraryScanBackend` 只返回不可变 `LibraryScanDelta`，支持 generation 取消；Rust/Dart 后端都不访问 SQLite。
+- Dart Application 继续校验 fingerprint 两侧唯一性，保留 videoId/manual 标签/收藏/播放记录/进度，并在单 batch 中提交 added/modified/missing/relink。
+- 父子 root 重叠时最上层 root 优先并按 pathKey 去重，符合一级/二级 folder 标签硬规则；扫描稳定态只差量刷新 UI，新增/内容变化才进入媒体探测队列。
+- 未新增 SQLite 数据列或业务表，`FilterQuery` / `TagQueryService` 语义与播放器 filtered queue 不变。
+
 ## 2026-07-11 批事务与失败重试
 
 - ready 项在执行前统一重验，并通过一个 SQLite batch 原子提交；异常时恢复内存视频、标签和关联索引。

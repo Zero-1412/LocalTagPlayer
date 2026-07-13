@@ -1,10 +1,17 @@
 # ROADMAP.md
 
+## 2026-07-13 SQLite hydration 与 Rust 扫描边界完成
+
+- 分阶段诊断确认约 40 秒并非普通 SQLite 查询或对象 hydration，而是启动维护中的无条件 NOCASE 相关回填；修复后真实副本加载低于 1 秒，真实窗口首帧约 1.42 秒。
+- Rust `LibraryScanBackend` 已作为 Windows 只读 sidecar 接入，运行时失败回退 Dart；SQLite 仍由 Dart Repository 单写，不引入双端 migration/transaction 风险。
+- 父子 root 重叠按最上层 root 和 pathKey 去重；首次提交把历史 root 上下文统一到当前文件树，第二轮 11,133 条稳定态端到端 240 毫秒且零差量。
+- 下一步只在真实 NAS/掉盘环境评估 watcher 事件丢失与周期性全量 reconciliation；在证据出现前不让 watcher 直接标记 missing，也不迁移 SQLite 或标签查询到 Rust。
+
 ## 2026-07-13 原生核心服务渐进路线决策
 
 - D3D11/ANGLE 最终调查未达到 Private/GPU P95 为 MediaKit 110% 以内的门槛，默认播放器继续使用 MediaKit，C++ 播放器只保留实验 A/B，不继续扩大剩余生命周期改造。
 - Windows 原生核心先落地独立 `MediaProbeBackend`，使用 FFmpeg C API 批处理与 generation 取消；SQLite、标签查询和用户数据继续由 Dart Repository 独占。
-- 真实 11,135 条索引库证明扫描耗时来自冷盘随机指纹读取；复用数据库 fingerprint 后 15,958 文件热扫描为 2.72 秒，暂不引入 Rust。下一性能优先级转为 Repository/SQLite hydration。
+- 该阶段“暂不引入 Rust”的结论已被后续 hydration 修复与稳定态 A/B 更新：Rust 仅作为可回滚只读扫描边界接入，SQLite 单写和用户数据所有权不变。
 
 ## 2026-07-13 Windows 原生播放器 A/B 第一阶段完成
 

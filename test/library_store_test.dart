@@ -78,6 +78,41 @@ void main() {
     AppPaths.debugUseDataDirectoryForTesting(null);
   });
 
+  test('root-level videos do not repeat empty folder-tag coverage writes',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('root_coverage');
+    final mediaRoot = Directory(p.join(dataDir.path, 'media'));
+    await mediaRoot.create();
+    final direct = await _writeVideoPlaceholder(mediaRoot, ['direct.mp4']);
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+
+    final store = await _loadTrackedStore(stores);
+    expect(await store.addRootAndScan(mediaRoot.path), 1);
+    expect(
+      store.videoTagIdsByPathKey[TagRules.pathKey(direct.path)],
+      isNull,
+    );
+    await store.close();
+    stores.remove(store);
+
+    final diagnostics = LibraryLoadDiagnostics();
+    final reloaded = await LibraryStore.load(diagnostics: diagnostics);
+    stores.add(reloaded);
+    final coverage = diagnostics.stages.singleWhere(
+      (stage) => stage.name == 'dart.folder_tag_coverage_evaluation',
+    );
+    expect(coverage.itemCount, 0);
+    expect(
+      diagnostics.stages
+          .where((stage) => stage.name == 'sqlite.folder_tag_coverage_write'),
+      isEmpty,
+    );
+  });
+
   test('legacy path-keyed schema backfills stable video identity', () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('identity_migration');

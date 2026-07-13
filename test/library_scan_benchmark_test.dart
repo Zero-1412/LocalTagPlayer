@@ -30,9 +30,15 @@ void main() {
       final outputPath =
           Platform.environment['LOCAL_TAG_PLAYER_SCAN_BENCHMARK_OUTPUT'];
       expect(outputPath, isNotNull);
+      final rustExecutable = File(
+        'build/windows/x64/runner/Debug/ltp_rust_library_scan.exe',
+      ).absolute;
+      final rustBackend = Platform.isWindows && rustExecutable.existsSync()
+          ? RustProcessLibraryScanBackend(executable: rustExecutable)
+          : null;
 
       final loadWatch = Stopwatch()..start();
-      final store = await LibraryStore.load();
+      final store = await LibraryStore.load(scanBackend: rustBackend);
       loadWatch.stop();
       addTearDown(store.close);
       expect(store.videos.length, greaterThanOrEqualTo(11000));
@@ -62,6 +68,9 @@ void main() {
             fileSize: item.fileSize,
             modifiedMs: item.modifiedMs,
             mediaFingerprint: item.mediaFingerprint,
+            rootPath: item.rootPath,
+            relativePath: item.relativePath,
+            isMissing: item.isMissing,
           ),
       };
       final indexedScanWatch = Stopwatch()..start();
@@ -70,6 +79,33 @@ void main() {
         knownMetadata: knownMetadata,
       );
       indexedScanWatch.stop();
+
+      LibraryScanDelta? rustDelta;
+      Duration? rustElapsed;
+      LibraryScanCommitResult? rustInitialCommit;
+      Duration? rustInitialCommitElapsed;
+      LibraryScanCommitResult? rustSteadyCommit;
+      Duration? rustSteadyElapsed;
+      if (rustBackend != null) {
+        final rustWatch = Stopwatch()..start();
+        rustDelta = await rustBackend.scan(
+          generationId: 1,
+          roots: store.roots,
+          knownMetadata: knownMetadata,
+        );
+        rustWatch.stop();
+        rustElapsed = rustWatch.elapsed;
+
+        // 只写隔离数据库副本：首轮提交统一 root 层级，第二轮测量真正稳定态差量。
+        final initialCommitWatch = Stopwatch()..start();
+        rustInitialCommit = await store.scanWithChanges();
+        initialCommitWatch.stop();
+        rustInitialCommitElapsed = initialCommitWatch.elapsed;
+        final steadyWatch = Stopwatch()..start();
+        rustSteadyCommit = await store.scanWithChanges();
+        steadyWatch.stop();
+        rustSteadyElapsed = steadyWatch.elapsed;
+      }
       timer.cancel();
 
       final sortedGaps = timerGaps..sort();
@@ -94,6 +130,20 @@ void main() {
         'fullScanMs': scanWatch.elapsedMilliseconds,
         'indexedScanVideos': indexedResult.entries.length,
         'indexedScanMs': indexedScanWatch.elapsedMilliseconds,
+        if (rustDelta != null) ...<String, Object?>{
+          'rustScanMs': rustElapsed!.inMilliseconds,
+          'rustAdded': rustDelta.added.length,
+          'rustModified': rustDelta.modified.length,
+          'rustUnchanged': rustDelta.unchangedCount,
+          'rustInitialCommitMs': rustInitialCommitElapsed!.inMilliseconds,
+          'rustInitialModified': rustInitialCommit!.modifiedCount,
+          'rustInitialRelinked': rustInitialCommit.relinkedCount,
+          'rustInitialMissing': rustInitialCommit.missingCount,
+          'rustSteadyEndToEndMs': rustSteadyElapsed!.inMilliseconds,
+          'rustSteadyModified': rustSteadyCommit!.modifiedCount,
+          'rustSteadyAdded': rustSteadyCommit.addedCount,
+          'rustSteadyMissing': rustSteadyCommit.missingCount,
+        },
         'entriesPerSecond': scanSeconds == 0
             ? 0
             : double.parse(

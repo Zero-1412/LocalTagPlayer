@@ -649,6 +649,7 @@ class _LibraryPageState extends State<LibraryPage> {
   LibraryStore? _store;
   PlaybackSnapshotWriteQueue? _playbackSnapshotQueue;
   ThumbnailService? _thumbnailService;
+  MediaDetailsService? _libraryMediaDetailsService;
   PlaybackSettings _playbackSettings = PlaybackSettings.defaults;
   final _filterStateSource = FilterStateSource();
   final _countRefreshCoordinator = LibraryCountRefreshCoordinator();
@@ -744,6 +745,7 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   void dispose() {
     unawaited(_playbackSnapshotQueue?.dispose());
+    _libraryMediaDetailsService?.dispose();
     HardwareKeyboard.instance.removeHandler(_handleGlobalSearchShortcut);
     _searchController.removeListener(_handleSearchControllerChanged);
     _searchController.dispose();
@@ -828,10 +830,27 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Future<void> _load() async {
-    final store = await LibraryStore.load();
-    final thumbnailService = await ThumbnailService.create();
-    final playbackSettings = await PlaybackSettings.load();
-    final sortPreferences = await LibrarySortPreferences.load();
+    final diagnostics = kDebugMode ? LibraryLoadDiagnostics() : null;
+    final startupWatch = Stopwatch()..start();
+    final store = await LibraryStore.load(diagnostics: diagnostics);
+    final thumbnailService = diagnostics == null
+        ? await ThumbnailService.create()
+        : await diagnostics.measureAsync(
+            'startup.thumbnail_service_create',
+            ThumbnailService.create,
+          );
+    final playbackSettings = diagnostics == null
+        ? await PlaybackSettings.load()
+        : await diagnostics.measureAsync(
+            'startup.playback_settings_load',
+            PlaybackSettings.load,
+          );
+    final sortPreferences = diagnostics == null
+        ? await LibrarySortPreferences.load()
+        : await diagnostics.measureAsync(
+            'startup.sort_preferences_load',
+            LibrarySortPreferences.load,
+          );
     if (!mounted) {
       await store.close();
       return;
@@ -847,19 +866,90 @@ class _LibraryPageState extends State<LibraryPage> {
         await store.upsertVideo(snapshot.item);
       },
     );
-    setState(() {
-      _sortMode = sortPreferences.mode;
-      _sortDirection = sortPreferences.direction;
-      _store = store;
-      _thumbnailService = thumbnailService;
-      _playbackSettings = playbackSettings;
-      _lastObservedSearchText = _searchController.text;
-      _filterState = _buildImmediateFilterState(store);
-      _visibleResultCounts = _fallbackResultCounts(store);
-      _stableTagCounts = store.resultCounts(const FilterQuery());
+    final firstFrameWatch = Stopwatch()..start();
+    void applyHydratedState() => setState(() {
+          _sortMode = sortPreferences.mode;
+          _sortDirection = sortPreferences.direction;
+          _store = store;
+          _thumbnailService = thumbnailService;
+          _playbackSettings = playbackSettings;
+          _lastObservedSearchText = _searchController.text;
+          _filterState = _buildImmediateFilterState(store);
+          _visibleResultCounts = _fallbackResultCounts(store);
+          _stableTagCounts = const <String, int>{};
+        });
+    if (diagnostics == null) {
+      applyHydratedState();
+    } else {
+      diagnostics.measureSync(
+        'ui.hydrated_state_prepare',
+        applyHydratedState,
+      );
+      unawaited(_writeDebugStartupDiagnostics(
+        diagnostics,
+        startupWatch.elapsed,
+        marker: 'hydrated_state_ready',
+      ));
+    }
+    // 首帧只消费 SQLite 已恢复的对象和持久化 usageCount；目录扫描与全库计数不得阻塞首屏。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _store != store) {
+        return;
+      }
+      firstFrameWatch.stop();
+      if (diagnostics != null) {
+        diagnostics.record(
+            'ui.first_frame_build_and_layout', firstFrameWatch.elapsed);
+        unawaited(_writeDebugStartupDiagnostics(
+          diagnostics,
+          startupWatch.elapsed,
+          marker: 'first_frame_ready',
+        ));
+      }
+      _scheduleFilterRefresh();
+      _scheduleInitialStableTagCounts(store);
+      unawaited(_promptForNewVideos(store));
     });
-    _scheduleFilterRefresh();
-    unawaited(_promptForNewVideos(store));
+  }
+
+  /**
+   * 把 debug 启动阶段写到系统临时目录；仅包含耗时、数量和完成标记。
+   */
+  Future<void> _writeDebugStartupDiagnostics(
+    LibraryLoadDiagnostics diagnostics,
+    Duration totalElapsed, {
+    required String marker,
+  }) async {
+    try {
+      final file = File(p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_startup_diagnostics.json',
+      ));
+      await file.writeAsString(jsonEncode(<String, Object?>{
+        'marker': marker,
+        'totalMs': double.parse(
+          (totalElapsed.inMicroseconds / 1000).toStringAsFixed(3),
+        ),
+        ...diagnostics.toJson(),
+      }));
+    } catch (_) {
+      // debug 诊断写入失败不能阻塞媒体库首帧。
+    }
+  }
+
+  /** 在首帧之后的空闲窗口刷新稳定标签计数，过期页面结果会被丢弃。 */
+  void _scheduleInitialStableTagCounts(LibraryStore store) {
+    _countRefreshCoordinator.schedule(
+      query: const FilterQuery(),
+      compute: store.resultCounts,
+      isStillCurrent: (_) => mounted && _store == store,
+      onComplete: (counts) {
+        if (!mounted || _store != store) {
+          return;
+        }
+        setState(() => _stableTagCounts = counts);
+      },
+    );
   }
 
   Future<void> _promptForNewVideos(LibraryStore store) async {
@@ -900,33 +990,38 @@ class _LibraryPageState extends State<LibraryPage> {
     if (path == null || _store == null) {
       return;
     }
-    await _scan(() => _store!.addRootAndScan(path));
+    await _scan(() => _store!.addRootAndScanWithChanges(path));
   }
 
   Future<void> _rescan() async {
     if (_store == null) {
       return;
     }
-    await _scan(_store!.scan);
+    await _scan(_store!.scanWithChanges);
   }
 
-  Future<void> _scan(Future<int> Function() action) async {
+  Future<void> _scan(Future<LibraryScanCommitResult> Function() action) async {
     if (_isScanning) {
       return;
     }
     setState(() => _isScanning = true);
     try {
-      final added = await action();
+      final result = await action();
       if (!mounted) {
         return;
       }
-      _thumbnailService
-          ?.prefetchAll(_store?.videos.values ?? const <VideoItem>[]);
+      if (result.cancelled) {
+        return;
+      }
+      // 只为新增或内容变化项目进入缓存队列，避免每次扫描重新排队整个媒体库。
+      _thumbnailService?.prefetchAll(result.probeCandidates);
+      _startLibraryMediaProbes(result);
       _markLibraryDataChanged();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(
-                '\u626b\u63cf\u5b8c\u6210\uff0c\u65b0\u589e $added \u4e2a\u89c6\u9891')),
+            content:
+                Text('扫描完成：新增 ${result.addedCount}，修改 ${result.modifiedCount}，'
+                    '移动 ${result.relinkedCount}，缺失 ${result.missingCount}')),
       );
     } catch (error) {
       if (!mounted) {
@@ -939,6 +1034,35 @@ class _LibraryPageState extends State<LibraryPage> {
       if (mounted) {
         setState(() => _isScanning = false);
       }
+    }
+  }
+
+  /**
+   * 仅把本轮新增或内容变化项目送入串行媒体探测队列。
+   *
+   * 新扫描会先 dispose 旧服务并取消其 generation；回调还会校验 store 与 fingerprint，
+   * 防止旧文件结果覆盖新内容。SQLite 写入继续由 Dart Repository 完成。
+   */
+  void _startLibraryMediaProbes(LibraryScanCommitResult result) {
+    _libraryMediaDetailsService?.dispose();
+    _libraryMediaDetailsService = null;
+    final store = _store;
+    if (store == null || result.probeCandidates.isEmpty) {
+      return;
+    }
+    final service = MediaDetailsService(
+      onUpdated: (item, details, fingerprint) async {
+        if (_store != store || item.mediaFingerprint != fingerprint) {
+          return;
+        }
+        item.mediaDetails = details;
+        await store.upsertVideo(item);
+      },
+    );
+    _libraryMediaDetailsService = service;
+    for (final item in result.probeCandidates) {
+      // MediaDetailsService 内部串行执行并用 generation 丢弃过期回调，不在 UI 线程等待。
+      unawaited(service.detailsFor(item));
     }
   }
 
@@ -1301,7 +1425,8 @@ class _LibraryPageState extends State<LibraryPage> {
     _invalidateDerivedCaches();
     final store = _store;
     if (store != null) {
-      _stableTagCounts = store.resultCounts(const FilterQuery());
+      // 数据变化后先回退到持久化 usageCount，精确计数由延后刷新任务更新。
+      _stableTagCounts = const <String, int>{};
     }
     _scheduleFilterRefresh(refreshCounts: true);
   }

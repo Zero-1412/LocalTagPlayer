@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.7` 已完成，`Architecture Baseline 0.5.8` 当前推进中。
+架构版本状态：`Architecture Baseline 0.5.17` 已完成。
 
 最近一次验证：
 
@@ -16,6 +16,13 @@ flutter build windows --debug
 结果：通过。
 
 ## 最近完成
+
+- 真实 11,135 条媒体库启动分解为 SQLite 打开/维护、视频 SQL、对象构建、标签与关系 hydration、folder 覆盖检查、首屏排序和标签计数；定位 38.55 秒来自启动时无条件 stable identity 回填的 Windows NOCASE 相关全表扫描。
+- 增加 NOCASE path 索引并只迁移缺失身份/重复关系；root 直属视频合法零 folder 标签不再反复补写。隔离副本加载从 43.99 秒降至 0.844 秒，真实窗口首帧诊断为 1.42 秒。
+- 建立 `LibraryScanBackend` / 不可变 `LibraryScanDelta` / generation 取消 / `LibraryScanCommitResult`，Dart Application 继续独占 stable identity、relink 唯一性与 SQLite 单 batch 提交。
+- Windows Rust 只读扫描 sidecar 已随构建供应并保留 Dart fallback；父子 root 最上层优先去重。11,133 条稳定态 Rust 端到端扫描 240 毫秒且零差量。
+- 首帧不等待目录统计或媒体探测；扫描后缩略图与 `MediaProbeBackend` 只处理新增/内容变化项，并在下一代扫描前取消旧 generation。
+- focused store/scan/widget tests、Rust test/release build、`flutter analyze`、Windows debug build通过；真实窗口完成首屏、一级展开、二级标签 172 条切换、两轮 Rust 扫描与截图检查。
 
 - 五轮真实媒体进出播放器完成分阶段内存采样：Player构造、纹理就绪、media open、pause/stop、dispose、返回媒体库0/500/2000 ms均记录RSS、Flutter ImageCache、纹理ID和mpv demux状态；Windows同步记录GPU Dedicated/Shared/Committed。
 - Flutter ImageCache稳定在约93–100 MiB；mpv demux约96 MiB并在stop后清零，RSS同步下降约132–156 MiB；两者均不是退出后数百MiB高位保留主因。

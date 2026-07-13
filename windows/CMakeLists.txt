@@ -51,6 +51,42 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("native_player")
+
+# Rust 媒体库扫描 sidecar 是可选构建依赖；没有 cargo 时保留 Dart 后端并继续正常构建。
+find_program(LTP_CARGO_EXECUTABLE cargo)
+if(LTP_CARGO_EXECUTABLE)
+  execute_process(
+    COMMAND "${LTP_CARGO_EXECUTABLE}" --version
+    RESULT_VARIABLE LTP_CARGO_VERSION_RESULT
+    OUTPUT_QUIET
+    ERROR_QUIET
+    TIMEOUT 5)
+endif()
+if(LTP_CARGO_EXECUTABLE AND LTP_CARGO_VERSION_RESULT EQUAL 0)
+  set(LTP_RUST_SCAN_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/rust_library_scan/Cargo.toml")
+  set(LTP_RUST_SCAN_EXE "${CMAKE_CURRENT_SOURCE_DIR}/rust_library_scan/target/release/ltp_rust_library_scan.exe")
+  file(GLOB_RECURSE LTP_RUST_SCAN_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/rust_library_scan/src/*.rs"
+    "${LTP_RUST_SCAN_MANIFEST}")
+  add_custom_command(
+    OUTPUT "${LTP_RUST_SCAN_EXE}"
+    COMMAND "${LTP_CARGO_EXECUTABLE}" build --release --manifest-path "${LTP_RUST_SCAN_MANIFEST}"
+    DEPENDS ${LTP_RUST_SCAN_SOURCES}
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/rust_library_scan"
+    COMMENT "Building read-only Rust LibraryScanBackend"
+    VERBATIM)
+  add_custom_target(ltp_rust_library_scan ALL DEPENDS "${LTP_RUST_SCAN_EXE}")
+  install(PROGRAMS "${LTP_RUST_SCAN_EXE}"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+  install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/rust_library_scan/LICENSE"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/data/licenses/rust_library_scan"
+    COMPONENT Runtime)
+else()
+  message(STATUS "Rust toolchain unavailable; using Dart LibraryScanBackend fallback")
+endif()
+
 add_subdirectory("runner")
 
 

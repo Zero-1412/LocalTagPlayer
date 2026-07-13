@@ -146,6 +146,36 @@ class LibraryTagMaintenance {
   }
 
   /**
+   * 根据当前 root 与路径计算该视频应具备的 folder 来源 tagId。
+   *
+   * 该集合专供启动覆盖检查使用；root 直属视频返回空集合，表示“无需 folder 关系”，
+   * 而不是“索引损坏”。tagId 仍包含 group 与 parent，避免同名层级标签混淆。
+   */
+  Set<String> expectedFolderTagIds(VideoItem item) {
+    final rootPath = item.rootPath;
+    if (rootPath == null || rootPath.isEmpty) {
+      return const <String>{};
+    }
+    final ids = <String>{};
+    for (final tag in TagRules.parentTagsFor(rootPath, item.path)) {
+      ids.add(LibraryStore._tagIdFor(
+        name: tag,
+        groupId: 'folder.primary',
+      ));
+    }
+    for (final entry in TagRules.childTagsFor(rootPath, item.path).entries) {
+      for (final child in entry.value) {
+        ids.add(LibraryStore._tagIdFor(
+          name: child,
+          groupId: 'folder.child',
+          parentId: entry.key,
+        ));
+      }
+    }
+    return ids;
+  }
+
+  /**
    * 在批处理中刷新 manual 来源标签索引。
    *
    * folder 派生标签会被排除，避免同名 folder 标签被误写成 manual 来源。
