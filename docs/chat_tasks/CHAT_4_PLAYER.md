@@ -309,3 +309,10 @@
 - 将队列预建范围从约七项收窄到约两项，并把播放后的媒体详情预取限制为当前视频。
 - 播放器输入缓冲提升到 128 MiB；mpv 使用受限 30 秒预读与缓存耗尽暂停，降低高码率长视频持续丢帧追赶的风险。
 - 未修改 filtered queue 来源、当前索引、播放模式或标签筛选语义。
+# 2026-07-13 PlayerBackend 完整会话与纹理边界
+
+- `PlayerBackend` 现统一暴露播放命令、轻量状态、位置/播放/完成/错误流、纹理 ID、诊断属性、截图、视频表面和原生释放完成信号。
+- `MediaKitPlayerBackend` 独占现有 Player 与 VideoController；`PlayerPage`、诊断弹窗和内存阶段采样只通过后端契约访问，不再穿透 libmpv 平台对象。
+- 页面构造支持 `PlayerBackendFactory` 注入，默认继续使用现有 media_kit/libmpv 与 `d3d11va-copy`，后续 C++ 后端可做可回滚 A/B 切换。
+- filtered queue 来源、当前 index、标签语义、缩略图/媒体详情队列和 SQLite schema 均未修改。
+- 74 项测试、analyze、Windows debug build 与 90 秒真实媒体库 4 轮回归通过；视频/音频停滞事件均为 0，退出后纹理 ID 均失效。

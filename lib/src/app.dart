@@ -6,6 +6,7 @@ import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -40,6 +41,7 @@ part 'services/external_media_tools.dart';
 part 'services/thumbnail_service.dart';
 part 'services/media_details_service.dart';
 part 'services/player_hardware_acceleration.dart';
+part 'services/media_kit_player_backend.dart';
 part 'services/player_memory_diagnostics.dart';
 part 'platform/platform_interfaces.dart';
 part 'platform/desktop_file_location_service.dart';

@@ -59,6 +59,7 @@ lib/src/widgets
 - `0.5.9`：Windows 播放器继续通过 media_kit/libmpv 平台边界使用 D3D11 硬解；页面层限制输入与 demux 缓存预算，并持续独立采样视频帧号和音频 PTS。退出协议在路由 pop 前确认 pause，路由释放后等待原生 Player dispose；不修改 filtered queue、SQLite schema 或标签查询契约。
 - `0.5.10`：Windows 推荐硬解固定为 `d3d11va-copy`。实测会话 dispose 快且重复进入无线程累积，因此 PlayerBackend 的目标是串行拥有并释放每次播放会话，而不是保留全局长驻 libmpv/D3D11 实例；后者会把原生驱动线程带回媒体库页面，不能降低播放峰值。
 - `0.5.11`：播放器生命周期诊断跨 Flutter ImageCache、media_kit 纹理 ID、libmpv demux 状态与 Windows GPU Process Memory 对齐。VideoController 仍由 Player release 回调释放；退出后 D3D Shared 回落而 NVIDIA Dedicated/Committed 可保留为驱动缓存，不引入平台命令强制清理或破坏缩略图缓存。
+- `0.5.12`：`PlayerBackend` 扩展为完整播放会话、纹理、轻量状态、诊断属性与释放完成契约。`MediaKitPlayerBackend` 独占现有 Player/VideoController，`PlayerPage` 只消费可注入后端，不再穿透 media_kit 或 libmpv；默认行为仍为现有 `d3d11va-copy` 路径，为后续 Windows C++ 后端保留可回滚 A/B 切换点。
 
 协作要求：
 

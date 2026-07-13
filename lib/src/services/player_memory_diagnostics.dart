@@ -14,22 +14,19 @@ class PlayerMemoryDiagnostics {
   /** 记录一个阶段；播放器已经释放时应省略 [player] 与 [controller]。 */
   static Future<void> logStage(
     String stage, {
-    Player? player,
-    VideoController? controller,
+    PlayerBackend? backend,
   }) async {
     final imageCache = PaintingBinding.instance.imageCache;
     var demuxSeconds = 'unavailable';
     var demuxState = 'unavailable';
-    if (player?.platform != null) {
+    if (backend != null) {
       try {
-        demuxSeconds =
-            '${await (player!.platform as dynamic).getProperty('demuxer-cache-duration')}';
+        demuxSeconds = await backend.getProperty('demuxer-cache-duration');
       } catch (_) {
         // 文件尚未打开或 Player 正在释放时，mpv 属性允许暂时不可用。
       }
       try {
-        demuxState =
-            '${await (player!.platform as dynamic).getProperty('demuxer-cache-state')}';
+        demuxState = await backend.getProperty('demuxer-cache-state');
       } catch (_) {
         // 复杂 node 属性在部分构建中不可转换为字符串，保留 unavailable。
       }
@@ -41,7 +38,7 @@ class PlayerMemoryDiagnostics {
       'image_cache_count=${imageCache.currentSize} '
       'image_cache_live=${imageCache.liveImageCount} '
       'image_cache_pending=${imageCache.pendingImageCount} '
-      'texture_id=${controller?.id.value ?? -1} '
+      'texture_id=${backend?.textureId.value ?? -1} '
       'demux_seconds=$demuxSeconds demux_state=$demuxState',
     );
   }

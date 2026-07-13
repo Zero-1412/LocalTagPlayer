@@ -467,3 +467,9 @@ flutter build windows --debug
 
 
 
+# 2026-07-13 PlayerBackend 完整边界第一轮
+
+- 扩展 `PlayerBackend`，覆盖播放命令、轻量状态、纹理通知、诊断属性、截图、视频表面和释放完成信号。
+- 新增 `MediaKitPlayerBackend`，集中持有 Player、VideoController 与 libmpv 属性访问；`PlayerPage` 和诊断弹窗不再直接依赖 media_kit 实例。
+- `PlayerPage` 支持注入 `PlayerBackendFactory`，默认仍使用 media_kit/libmpv，后续 Windows C++ 后端可在组合根做 A/B 切换。
+- 74 项测试、`flutter analyze`、Windows debug build 通过；真实媒体库 90 秒回归完成 4 轮，硬解均为 `d3d11va-copy`，视频/音频停滞事件为 0，seek 为 26–27ms，退出后纹理 ID 均变为 `-1`。
