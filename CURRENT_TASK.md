@@ -17,6 +17,9 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 完成 PlayerBackend 长驻实例可行性评估：连续两轮退出的原生 dispose 仅约 2–20 ms，且下一轮线程不累积；长驻 libmpv/D3D11 实例只会让约 150 个原生/驱动线程在媒体库页面继续驻留，不能降低播放峰值，因此本轮明确不采用全局 Player 单例。
+- Windows 推荐硬解由枚举候选后端的 `auto-copy` 收敛为已验证的 `d3d11va-copy`；真实媒体峰值线程从 283 小幅降至 279，Private 峰值约从 1023 MiB 降至 993 MiB，两轮视频帧与音频 PTS 均持续推进。
+
 - 播放器单实例资源对照确认：播放阶段约从 131 线程增加到 281–283 线程；固定 `vd-lavc-threads=4` 后线程峰值未下降，增量主要属于 media_kit/libmpv 初始化 D3D11/NVIDIA 视频输出后的原生及驱动线程，不能归因于队列 rebuild 或 FFprobe。
 - 播放缓存组合预算由 128 MiB Player buffer + 256/128 MiB mpv 前后缓存收敛为 64 MiB + 96/32 MiB；真实媒体库对照中工作集峰值约从 1016 MiB 降至 789 MiB，Private 峰值约从 1300 MiB 降至 1023 MiB。
 - 播放器后台每秒分别采样 mpv `estimated-frame-number` 与 `audio-pts`，独立识别视频冻结、音频停顿和两路同时停顿；退出链路记录请求、pause 确认、pop、dispose 开始/结束时间。

@@ -1646,9 +1646,9 @@ void main() {
     expect(result.width, isNull);
   });
 
-  test('Windows recommended decoding requests stable copy hardware mode', () {
+  test('Windows recommended decoding requests stable D3D11 copy mode', () {
     final resolved = PlayerHardwareAcceleration.resolve('auto-safe');
-    expect(resolved, Platform.isWindows ? 'auto-copy' : 'auto-safe');
+    expect(resolved, Platform.isWindows ? 'd3d11va-copy' : 'auto-safe');
     expect(PlayerHardwareAcceleration.resolve('no'), 'no');
     expect(PlayerHardwareAcceleration.resolve('nvdec'), 'nvdec');
   });

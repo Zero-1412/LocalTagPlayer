@@ -9,12 +9,12 @@ class PlayerHardwareAcceleration {
   const PlayerHardwareAcceleration._();
 
   /**
-   * Windows 的 `auto-safe` 可能退回软件解码；推荐档改用带内存拷贝的自动硬解，
-   * 牺牲少量复制开销换取比零拷贝更稳定的设备兼容性。
+   * Windows 的 `auto-safe` 可能退回软件解码，`auto-copy` 还会枚举 CUDA 等候选后端；
+   * 推荐档固定使用已经过真实样本验证的 D3D11VA 拷贝模式，减少无关驱动初始化。
    */
   static String resolve(String configured) {
     if (Platform.isWindows && configured == 'auto-safe') {
-      return 'auto-copy';
+      return 'd3d11va-copy';
     }
     return configured;
   }

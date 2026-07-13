@@ -1,3 +1,10 @@
+## 2026-07-13 D3D11VA 直连与长驻实例评估
+
+- 推荐硬解从 `auto-copy` 收敛为 `d3d11va-copy`，真实媒体峰值线程由 283 小幅降到 279，Private 峰值约下降 30 MiB。
+- 两轮退出的原生 dispose 均在约 2–20 ms 内完成，下一轮没有线程或句柄累积。
+- 全局长驻 Player 不会降低播放期间的单实例峰值，只会让 D3D11/NVIDIA 驱动线程在媒体库继续驻留，因此不采用。
+- PlayerBackend 后续只负责串行会话所有权与释放；单实例线程优化继续留在 media_kit/libmpv 视频输出平台边界。
+
 ## 2026-07-13 播放器原生资源与推进检测
 
 - 单播放器进入后线程峰值仍约 281–283；固定 lavc 线程后峰值不变，确认主要增量位于 media_kit/libmpv 的 D3D11/NVIDIA 视频输出边界，而不是 filtered queue 或 FFprobe。
