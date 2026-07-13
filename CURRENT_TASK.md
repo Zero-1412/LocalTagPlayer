@@ -17,6 +17,11 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 五轮真实媒体进出播放器完成分阶段内存采样：Player构造、纹理就绪、media open、pause/stop、dispose、返回媒体库0/500/2000 ms均记录RSS、Flutter ImageCache、纹理ID和mpv demux状态；Windows同步记录GPU Dedicated/Shared/Committed。
+- Flutter ImageCache稳定在约93–100 MiB；mpv demux约96 MiB并在stop后清零，RSS同步下降约132–156 MiB；两者均不是退出后数百MiB高位保留主因。
+- D3D共享纹理在dispose后纹理ID变为-1，并在约2秒内从20–79 MiB回落到5–6 MiB，确认VideoController注册到Player release的释放契约生效。
+- NVIDIA Dedicated/Committed返回媒体库2秒后仍约531–624 MiB，但第三轮峰值约931 MiB后可回落且非单调增长；结合线程/句柄回落，当前归因为驱动D3D缓存/复用池，而不是活动Player、共享纹理或单调泄漏。
+
 - 完成 180 秒、30 fps、AMF 硬件编码的无 UIA 压测录屏及逐帧分析。录屏实际得到 4597 帧，捕获链路存在 803 个均匀单帧缺口，但没有超过 66.7 ms 的录屏断档。
 - 逐帧差分发现播放器画面以约 12 秒为周期阶梯更新；根因是集成测试误把 `pumpAndSettle(Duration)` 的位置参数当成超时，实际把单次 pump 步长设成 12 秒，测试绑定主动制造了长时间只提交一帧。
 - 压测所有长等待已改为每 50 ms 连续 pump；媒体库启动改为持续驱动帧直到真实播放按钮出现，不再依赖固定等待猜测大库初始化完成。

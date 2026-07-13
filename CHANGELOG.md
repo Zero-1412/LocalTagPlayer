@@ -1,5 +1,12 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-13 · 播放器分阶段CPU/GPU内存归因
+
+- 播放器生命周期增加不含路径的阶段标记，记录Flutter ImageCache、纹理ID和mpv demux状态。
+- Windows压力脚本增加GPU Process Memory的Dedicated、Shared与Committed采样，并按约1秒周期输出。
+- 五轮实测确认demux缓存在stop后释放、D3D共享纹理在dispose后约2秒释放，Flutter图片缓存保持稳定。
+- 返回媒体库后的主要高位保留来自NVIDIA Dedicated/Committed驱动缓存；它会回落且不单调增长，当前不按活动播放器泄漏处理。
+
 ## 2026-07-13 · 压测录屏逐帧分析与 pump 修正
 
 - 使用同步握手确保媒体库加载完成后再计满 180 秒录屏，并为随机操作输出不含路径的时间标记。

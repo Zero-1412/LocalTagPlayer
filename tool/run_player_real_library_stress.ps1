@@ -14,21 +14,42 @@ Remove-Item -Force -ErrorAction SilentlyContinue "$Output\*.ready", "$Output\*.p
 $monitorJob = Start-Job -ArgumentList $Output -ScriptBlock {
   param($Output)
   $metrics = Join-Path $Output 'process-metrics.csv'
-  'timestamp,cpu_seconds,threads,working_set_mb,private_mb,handles,responding' | Set-Content $metrics
+  'timestamp,cpu_seconds,threads,working_set_mb,private_mb,handles,responding,gpu_dedicated_mb,gpu_shared_mb,gpu_committed_mb' | Set-Content $metrics
   while (-not (Test-Path -LiteralPath (Join-Path $Output 'stress.done'))) {
+    $sampleStarted = Get-Date
     $process = Get-Process local_tag_player -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -ne $process) {
-      $line = '{0},{1:F3},{2},{3:F1},{4:F1},{5},{6}' -f `
+      $gpuDedicated = 0.0
+      $gpuShared = 0.0
+      $gpuCommitted = 0.0
+      try {
+        $gpuPrefix = '\GPU Process Memory(pid_' + $process.Id + '_*)\'
+        $gpu = Get-Counter -Counter @(
+          ($gpuPrefix + 'Dedicated Usage'),
+          ($gpuPrefix + 'Shared Usage'),
+          ($gpuPrefix + 'Total Committed')
+        ) -ErrorAction Stop
+        foreach ($sample in $gpu.CounterSamples) {
+          if ($sample.Path -like '*\dedicated usage') { $gpuDedicated += $sample.CookedValue }
+          elseif ($sample.Path -like '*\shared usage') { $gpuShared += $sample.CookedValue }
+          elseif ($sample.Path -like '*\total committed') { $gpuCommitted += $sample.CookedValue }
+        }
+      } catch {}
+      $line = '{0},{1:F3},{2},{3:F1},{4:F1},{5},{6},{7:F1},{8:F1},{9:F1}' -f `
         $(Get-Date -Format o),
         $process.TotalProcessorTime.TotalSeconds,
         $process.Threads.Count,
         ($process.WorkingSet64 / 1MB),
         ($process.PrivateMemorySize64 / 1MB),
         $process.HandleCount,
-        $process.Responding
+        $process.Responding,
+        ($gpuDedicated / 1MB),
+        ($gpuShared / 1MB),
+        ($gpuCommitted / 1MB)
       Add-Content -LiteralPath $metrics -Value $line
     }
-    Start-Sleep -Seconds 15
+    $remainingMs = 1000 - ((Get-Date) - $sampleStarted).TotalMilliseconds
+    if ($remainingMs -gt 0) { Start-Sleep -Milliseconds $remainingMs }
   }
 }
 

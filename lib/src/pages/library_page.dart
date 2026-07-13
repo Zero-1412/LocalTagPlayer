@@ -2666,6 +2666,7 @@ class _LibraryPageState extends State<LibraryPage> {
         const Duration(seconds: 15),
         onTimeout: () {},
       );
+      unawaited(_sampleMemoryAfterPlayerRelease());
       await _playbackSnapshotQueue?.flush();
       final snapshotError = _playbackSnapshotQueue?.takeLastError();
       if (snapshotError != null && mounted) {
@@ -2683,6 +2684,15 @@ class _LibraryPageState extends State<LibraryPage> {
       _playerScopedLibraryDataChanged = false;
       _playerScopedNeedsCountRefresh = false;
     }
+  }
+
+  /** 返回媒体库后分三次采样，观察原生纹理释放与 Flutter ImageCache 的衰减是否同步。 */
+  Future<void> _sampleMemoryAfterPlayerRelease() async {
+    await PlayerMemoryDiagnostics.logStage('library_after_release_0ms');
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    await PlayerMemoryDiagnostics.logStage('library_after_release_500ms');
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    await PlayerMemoryDiagnostics.logStage('library_after_release_2000ms');
   }
 
   /** 播放器内收藏只写当前视频，返回媒体库后再做一次无计数轻刷新。 */

@@ -1,3 +1,10 @@
+## 2026-07-13 Player/纹理/GPU内存阶段归因
+
+- Player构造、纹理就绪、媒体打开、pause、stop、dispose与返回媒体库延迟阶段输出可对齐的内存标记。
+- 五轮实测中mpv demux在stop后清空，D3D Shared在Player dispose后约2秒回落，纹理ID同步失效。
+- 返回媒体库后NVIDIA Dedicated/Committed仍保留数百MiB但会回落，线程与句柄不累积；当前按驱动缓存/复用池处理，不采用全局Player或强制工作集清理。
+- filtered queue、播放索引、标签语义和SQLite schema均未修改。
+
 ## 2026-07-13 压测录屏逐帧分析
 
 - 录屏与压力计时通过 marker 握手，确保三分钟样本不包含大型媒体库初始化阶段。

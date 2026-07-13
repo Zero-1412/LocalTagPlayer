@@ -124,6 +124,7 @@ class _PlayerPageState extends State<PlayerPage> {
   var _audioProgressState = '等待首个音频样本';
   var _videoStallEvents = 0;
   var _audioStallEvents = 0;
+  var _textureReadyLogged = false;
   DateTime? _exitRequestedAt;
   DateTime? _pauseAcknowledgedAt;
   DateTime? _routePopRequestedAt;
@@ -222,6 +223,12 @@ class _PlayerPageState extends State<PlayerPage> {
             widget.playbackSettings.hardwareDecodingEnabled,
       ),
     );
+    _controller.id.addListener(_handleTextureReadyForDiagnostics);
+    unawaited(PlayerMemoryDiagnostics.logStage(
+      'player_constructed',
+      player: _player,
+      controller: _controller,
+    ));
     _completedSubscription =
         _player.stream.completed.listen(_handlePlaybackCompleted);
     _playerErrorSubscription = _player.stream.error.listen(_handlePlayerError);
@@ -424,6 +431,11 @@ class _PlayerPageState extends State<PlayerPage> {
     }
     _isExiting = true;
     _exitRequestedAt = DateTime.now();
+    unawaited(PlayerMemoryDiagnostics.logStage(
+      'exit_requested',
+      player: _player,
+      controller: _controller,
+    ));
     _pendingSeekTarget = null;
     _openRequests.cancel();
     _detailsService.dispose();
@@ -432,15 +444,46 @@ class _PlayerPageState extends State<PlayerPage> {
       // pause 的确认路径比 stop 短，先确保音频静音，不能让原生 stop 阻塞路由退出。
       await _player.pause().timeout(const Duration(milliseconds: 800));
       _pauseAcknowledgedAt = DateTime.now();
+      unawaited(PlayerMemoryDiagnostics.logStage(
+        'pause_acknowledged',
+        player: _player,
+        controller: _controller,
+      ));
     } catch (_) {
       // 即使 pause 超时也继续退出；下方 stop 与 dispose 仍会终止原生播放。
     }
-    unawaited(
-        _player.stop().timeout(const Duration(seconds: 3)).catchError((_) {}));
+    unawaited(_stopForExitDiagnostics());
     if (mounted) {
       _routePopRequestedAt = DateTime.now();
       Navigator.of(context).maybePop();
     }
+  }
+
+  /** 原生 stop 不阻塞路由退出，但完成时必须留下可与 GPU 计数器对齐的阶段标记。 */
+  Future<void> _stopForExitDiagnostics() async {
+    try {
+      await _player.stop().timeout(const Duration(seconds: 3));
+      await PlayerMemoryDiagnostics.logStage(
+        'stop_acknowledged',
+        player: _player,
+        controller: _controller,
+      );
+    } catch (_) {
+      debugPrint('PLAYER_MEMORY_STAGE stage=stop_timeout');
+    }
+  }
+
+  /** 首个有效纹理ID只记录一次，避免每次尺寸变化污染阶段日志。 */
+  void _handleTextureReadyForDiagnostics() {
+    if (_textureReadyLogged || _controller.id.value == null) {
+      return;
+    }
+    _textureReadyLogged = true;
+    unawaited(PlayerMemoryDiagnostics.logStage(
+      'texture_ready',
+      player: _player,
+      controller: _controller,
+    ));
   }
 
   /**
@@ -1106,6 +1149,11 @@ class _PlayerPageState extends State<PlayerPage> {
             continue;
           }
           _openedPath = path;
+          unawaited(PlayerMemoryDiagnostics.logStage(
+            'media_opened',
+            player: _player,
+            controller: _controller,
+          ));
           _openRequests.markSuccess();
           _scheduleQueuePrefetch();
           final openedItem = _itemForPath(path);
@@ -1868,6 +1916,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _queuePrefetchTimer?.cancel();
     _fullscreenQueueHideTimer?.cancel();
     _playbackHealthTimer?.cancel();
+    _controller.id.removeListener(_handleTextureReadyForDiagnostics);
     _detailsService.dispose();
     _persistOpenedProgress();
     _queueScrollController.dispose();
@@ -1884,6 +1933,11 @@ class _PlayerPageState extends State<PlayerPage> {
    */
   Future<void> _releaseAsyncResources() async {
     final releaseStartedAt = DateTime.now();
+    await PlayerMemoryDiagnostics.logStage(
+      'dispose_started',
+      player: _player,
+      controller: _controller,
+    );
     try {
       await Future.wait<void>([
         if (_completedSubscription != null) _completedSubscription!.cancel(),
@@ -1894,6 +1948,7 @@ class _PlayerPageState extends State<PlayerPage> {
       ]);
       await _player.dispose();
     } finally {
+      await PlayerMemoryDiagnostics.logStage('player_disposed');
       debugPrint(
         'PLAYER_EXIT requested=${_exitRequestedAt?.toIso8601String()} '
         'pause_ack=${_pauseAcknowledgedAt?.toIso8601String()} '

@@ -1,5 +1,11 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
+## 2026-07-13 Flutter与原生播放器缓存归因
+
+- 生命周期阶段记录ImageCache字节数、条目数、live/pending数量；五轮保持约93–100 MiB，排除为数百MiB高位保留主因。
+- mpv demux state记录缓存时长与total/fw bytes，stop后清零；诊断不启动FFprobe或详情探测Player。
+- 不为降低进程数字强制清空缩略图ImageCache，避免返回媒体库后重新解码图片造成可见卡顿。
+
 ## 2026-07-13 播放诊断禁止派生探测 Player
 
 - 播放诊断和右侧队列只读取已缓存媒体详情，打开弹窗或快速滚动不能启动 FFprobe 或 media_kit 兜底探测。
