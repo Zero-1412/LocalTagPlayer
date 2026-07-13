@@ -61,4 +61,28 @@ void main() {
     expect(backend.cancelled, hasLength(1));
     expect(backend.cancelled.single, greaterThan(0));
   });
+
+  test('playback preflight refreshes an incomplete cached detail', () async {
+    final backend = _RecordingProbeBackend();
+    final item = VideoItem(
+      videoId: 'incomplete-video-id',
+      path: r'Z:\does-not-need-to-exist\incomplete.mp4',
+      title: 'incomplete',
+      folder: r'Z:\does-not-need-to-exist',
+      tags: const <String>{},
+      mediaDetails: const MediaDetails(videoCodec: 'h264'),
+      addedAt: DateTime.utc(2026, 7, 14),
+    );
+    final service = MediaDetailsService(probeBackend: backend);
+
+    final cached = await service.detailsFor(item);
+    expect(cached.width, isNull);
+    expect(backend.requests, isEmpty);
+
+    final refreshed = await service.detailsFor(item, refreshIncomplete: true);
+    service.dispose();
+
+    expect(refreshed.resolution, '1920x1080');
+    expect(backend.requests.single.videoId, 'incomplete-video-id');
+  });
 }

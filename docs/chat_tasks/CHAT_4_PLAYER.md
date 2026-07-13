@@ -364,3 +364,10 @@
 - 10 轮共进入播放器 20 次并随机 seek 60 次；诊断样本中视频/音频停滞均为 0，seek 总体 P95 140 ms、最大 154 ms。
 - 6/20 样本确认实际硬解为 `no`，对应已知 8K H.264 风险路径；硬解样本 seek 通常为 25–28 ms。
 - 线程/Private/GPU committed 峰值分别为 318、2,342 MiB、941 MiB，退出后的高位资源保留仍需后续底层专项；filtered queue 与 PlayerBackend 默认实现未修改。
+
+# 2026-07-14 原生释放屏障与 8K 预检
+
+- 页面退出先等待 stop，再执行 backend dispose；Windows MediaKit 的 `released` 延后到依赖内置的 5 秒 `mpv_terminate_destroy` 宽限期结束，下一会话不再与旧 mpv/D3D 资源重叠。
+- 用户点击但媒体规格尚未缓存时，媒体库只对当前项执行独立高优先级预检；播放器页面与 filtered queue 继续只读缓存，不启动 FFprobe。
+- 已确认 7680×4320 H.264 回退 CPU 时默认阻止直接播放，保留代理/转码建议。三轮真实回归中两次命中均在纹理创建前阻止，6 个实际播放会话全部硬解，seek P95 28 ms且无音视频停滞。
+- 多轮返回媒体库后的 Private/GPU 高位仍未完全回到启动基线，后续应继续在原生 Backend/驱动边界分析，不在页面层强制 GC 或清理 Flutter ImageCache。

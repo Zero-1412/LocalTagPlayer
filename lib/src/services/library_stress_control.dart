@@ -57,6 +57,7 @@ class LibraryStressControl {
   static Object? _owner;
   static Future<LibraryScanCommitResult> Function()? _addRoot;
   static Future<int> Function()? _removeRoot;
+  static Future<void> Function()? _waitForPlayerRelease;
   static LibraryStressSnapshot Function()? _snapshot;
 
   /** 页面是否已完成 hydration 并注册压测控制。 */
@@ -64,6 +65,7 @@ class LibraryStressControl {
       _owner != null &&
       _addRoot != null &&
       _removeRoot != null &&
+      _waitForPlayerRelease != null &&
       _snapshot != null;
 
   /** 注册当前媒体库页面；重复页面会替换旧页面，避免回调指向已 dispose 状态。 */
@@ -71,12 +73,14 @@ class LibraryStressControl {
     required Object owner,
     required Future<LibraryScanCommitResult> Function() addRoot,
     required Future<int> Function() removeRoot,
+    required Future<void> Function() waitForPlayerRelease,
     required LibraryStressSnapshot Function() snapshot,
   }) {
     assert(() {
       _owner = owner;
       _addRoot = addRoot;
       _removeRoot = removeRoot;
+      _waitForPlayerRelease = waitForPlayerRelease;
       _snapshot = snapshot;
       return true;
     }());
@@ -89,6 +93,7 @@ class LibraryStressControl {
         _owner = null;
         _addRoot = null;
         _removeRoot = null;
+        _waitForPlayerRelease = null;
         _snapshot = null;
       }
       return true;
@@ -107,6 +112,15 @@ class LibraryStressControl {
   /** 通过页面应用链路移除环境变量指定的 root，但绝不删除本地文件。 */
   static Future<int> removeConfiguredRoot() {
     final action = _removeRoot;
+    if (action == null) {
+      throw StateError('媒体库专项压测控制尚未注册');
+    }
+    return action();
+  }
+
+  /** 等待最近一次播放器完成真实原生销毁，避免压测把纹理解绑误当成资源已释放。 */
+  static Future<void> waitForPlayerRelease() {
+    final action = _waitForPlayerRelease;
     if (action == null) {
       throw StateError('媒体库专项压测控制尚未注册');
     }

@@ -101,8 +101,6 @@ class _PlayerPageState extends State<PlayerPage> {
   final _fileLocationService = const DesktopFileLocationService();
   late final PlayerPlaybackController _playback;
   final _openRequests = PlayerOpenRequestController();
-  /** 当前页面内已经由用户明确接受软件解码风险的视频身份。 */
-  final _approvedSoftwareDecodeVideoIds = <String>{};
   /** 正在等待兼容性确认的路径；避免快速点击叠加多个警告弹窗。 */
   String? _compatibilityPromptPath;
   StreamSubscription<bool>? _completedSubscription;
@@ -137,6 +135,8 @@ class _PlayerPageState extends State<PlayerPage> {
   var _audioStallEvents = 0;
   var _textureReadyLogged = false;
   DateTime? _exitRequestedAt;
+  /** 路由退出后继续执行的原生 stop；dispose 必须等待它结束，禁止两条命令并发释放。 */
+  Future<void>? _exitStopFuture;
   DateTime? _pauseAcknowledgedAt;
   DateTime? _routePopRequestedAt;
   Duration? _pendingSeekTarget;
@@ -474,7 +474,7 @@ class _PlayerPageState extends State<PlayerPage> {
     } catch (_) {
       // 即使 pause 超时也继续退出；下方 stop 与 dispose 仍会终止原生播放。
     }
-    unawaited(_stopForExitDiagnostics());
+    _exitStopFuture ??= _stopForExitDiagnostics();
     if (mounted) {
       _routePopRequestedAt = DateTime.now();
       Navigator.of(context).maybePop();
@@ -1154,9 +1154,8 @@ class _PlayerPageState extends State<PlayerPage> {
     );
     if (_openedPath != null &&
         _openedPath != _currentItem.path &&
-        compatibility.status == HardwareDecodeCompatibilityStatus.unsupported &&
-        !_approvedSoftwareDecodeVideoIds.contains(_currentItem.videoId)) {
-      // 队列切换先保留当前播放会话，只有用户确认后才把新路径交给 open worker。
+        compatibility.status == HardwareDecodeCompatibilityStatus.unsupported) {
+      // 队列切换先保留当前播放会话；超规格媒体不交给 open worker。
       unawaited(_confirmQueueHardwareDecodeRisk(
         _currentItem,
         compatibility,
@@ -1169,7 +1168,7 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   /**
-   * 串行确认播放器队列内的超规格视频。
+   * 串行阻止播放器队列内的超规格视频。
    *
    * 取消时恢复已经打开的视频索引；用户快速选择其它项时丢弃旧结果并重新评估
    * 最新选择，避免过期弹窗打开错误媒体。
@@ -1183,7 +1182,7 @@ class _PlayerPageState extends State<PlayerPage> {
     }
     final requestedPath = item.path;
     _compatibilityPromptPath = requestedPath;
-    final confirmed = await showPlayerHardwareDecodeWarningDialog(
+    await showPlayerHardwareDecodeWarningDialog(
       context,
       compatibility,
     );
@@ -1195,12 +1194,6 @@ class _PlayerPageState extends State<PlayerPage> {
       _requestOpenCurrent();
       return;
     }
-    if (confirmed) {
-      _approvedSoftwareDecodeVideoIds.add(item.videoId);
-      _requestOpenCurrent();
-      return;
-    }
-
     final openedPath = _openedPath;
     final openedIndex = openedPath == null
         ? -1
@@ -2066,6 +2059,9 @@ class _PlayerPageState extends State<PlayerPage> {
         if (_positionSubscription != null) _positionSubscription!.cancel(),
         if (_playingSubscription != null) _playingSubscription!.cancel(),
       ]);
+      // stop 与 dispose 必须串行；此前路由 pop 后两者可能并发进入 media_kit/libmpv，
+      // 导致纹理解绑完成但解码池和驱动缓存更晚才释放。
+      await (_exitStopFuture ??= _stopForExitDiagnostics());
       await _playerBackend.dispose();
       await _playerBackend.released;
     } finally {

@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.18` 已完成。
+架构版本状态：`Architecture Baseline 0.5.21` 已完成。
 
 最近一次验证：
 
@@ -16,6 +16,12 @@ flutter build windows --debug
 结果：通过。
 
 ## 最近完成
+
+- 媒体库后台缩略图新增 24 个候选校验并发上限；最多 500 条候选不再同时启动 cache key/JPEG 文件 I/O，可见卡片仍进入优先队列并在三轮真实快速滚动停稳后显示 8–9 张缩略图。
+- 三轮真实库剖析确认滚动主要瓶颈是 Dart build/layout：新增库 build P95 中位 86.69 ms、raster 3.39 ms，移除后为 51.87/1.86 ms；缩略图抢占已生效，但不能把构建长帧误报为 GPU 光栅问题。
+- 播放器退出改为 stop 完成后再 dispose；`MediaKitPlayerBackend.released` 在 Windows 上覆盖 media_kit 1.2.6 内置的 5 秒 `mpv_terminate_destroy` 延迟，压测等待真实销毁后才创建下一会话。
+- 点击详情未知的视频时执行单项高优先级媒体预检，播放器页面及队列仍只读缓存。真实 7680×4320 H.264 样本两次在纹理创建前被阻止，不再允许自动放行软件解码。
+- 三轮共 6 个实际播放会话全部使用 `d3d11va-copy`，音视频停滞与无响应均为 0，seek P95 28 ms；Private/GPU committed 峰值降至约 1,157/712 MiB，但多轮返回媒体库后的原生/驱动高位仍未完全消除。
 
 - 移除媒体 root 改为单 SQLite 事务删除 root 配置、仅属于该 root 的视频行及标签关系；磁盘文件不动，重叠 root 仍覆盖的记录保留，媒体库总量在事务完成后立即差量刷新。
 - 视频卡片“更多”新增删除入口，可选择仅移出媒体库或同步删除本地文件；数据库关联、收藏、播放进度、媒体详情与缩略图缓存一并清理。

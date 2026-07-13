@@ -15,7 +15,8 @@ const _transcode4kHevcCommand =
 /**
  * 在播放器创建前提示已确认无法硬解的超规格视频。
  *
- * 返回 true 表示用户明确接受软件解码风险；取消时调用方不得创建播放器。
+ * 已确认会退回 8K 软件解码时不允许继续创建播放器，避免单个会话持续占满
+ * CPU、私有内存和 UI 线程。返回值保留给调用方统一处理取消路径。
  */
 Future<bool> showPlayerHardwareDecodeWarningDialog(
   BuildContext context,
@@ -40,6 +41,11 @@ Future<bool> showPlayerHardwareDecodeWarningDialog(
               ),
               const SizedBox(height: 10),
               Text(assessment.reason ?? '当前规格不在可用硬解范围内。'),
+              const SizedBox(height: 10),
+              const Text(
+                '为避免 CPU、内存和界面持续卡顿，已阻止直接播放该文件。',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 16),
               const Text(
                 '建议先保留原文件，并生成代理文件：',
@@ -81,11 +87,6 @@ Future<bool> showPlayerHardwareDecodeWarningDialog(
           key: const ValueKey('player.hwdecWarning.cancel'),
           onPressed: () => Navigator.of(dialogContext).pop(false),
           child: const Text('取消播放'),
-        ),
-        FilledButton(
-          key: const ValueKey('player.hwdecWarning.continue'),
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('仍用软件解码'),
         ),
       ],
     ),

@@ -41,9 +41,21 @@ class MediaDetailsService {
     return _cache[item.path] ?? item.mediaDetails;
   }
 
-  Future<MediaDetails> detailsFor(VideoItem item) {
+  /**
+   * 返回媒体详情；[refreshIncomplete] 仅供用户点击后的播放前安全预检使用。
+   *
+   * 普通列表和播放器队列保持缓存优先，不能因缺少单个字段自动启动探测；播放前预检
+   * 可刷新缺少编码或分辨率的旧记录，防止半成品缓存永久绕过硬解兼容矩阵。
+   */
+  Future<MediaDetails> detailsFor(
+    VideoItem item, {
+    bool refreshIncomplete = false,
+  }) {
     final cached = cachedDetailsFor(item);
-    if (cached != null) {
+    final cachedIsComplete = cached?.videoCodec != null &&
+        cached?.width != null &&
+        cached?.height != null;
+    if (cached != null && (!refreshIncomplete || cachedIsComplete)) {
       _cache[item.path] = cached;
       return Future.value(cached);
     }

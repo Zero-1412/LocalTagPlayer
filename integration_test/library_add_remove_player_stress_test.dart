@@ -222,11 +222,25 @@ Future<void> _playRandomVideo(
   frameSampler.begin('${phasePrefix}_startup', cycle);
   await _setStressPhase(outputDirectory, '${phasePrefix}_startup', cycle);
   final candidates = buttons.evaluate().toList(growable: false);
-  final button =
-      find.byWidget(candidates[random.nextInt(candidates.length)].widget);
-  await tester.tap(button, warnIfMissed: false);
-  await tester.pump(const Duration(milliseconds: 50));
-  await _waitForPlayerSurface(tester);
+  final firstIndex = random.nextInt(candidates.length);
+  var opened = false;
+  for (var attempt = 0; attempt < candidates.length; attempt++) {
+    final candidate = candidates[(firstIndex + attempt) % candidates.length];
+    await tester.tap(find.byWidget(candidate.widget), warnIfMissed: false);
+    await tester.pump(const Duration(milliseconds: 50));
+    opened = await _waitForPlayerSurface(
+      tester,
+      outputDirectory,
+      captureName:
+          'cycle-${cycle.toString().padLeft(2, '0')}-${phasePrefix}_hwdec-blocked',
+    );
+    if (opened) {
+      break;
+    }
+  }
+  if (!opened) {
+    throw StateError('第 $cycle 轮 $phasePrefix 可见视频均被兼容性保护阻止');
+  }
   await _pumpContinuously(tester, const Duration(seconds: 3));
   frameSampler.flush();
 
@@ -261,6 +275,10 @@ Future<void> _playRandomVideo(
     const Duration(seconds: 10),
     '播放器退出后媒体库未恢复',
   );
+  await ltp.LibraryStressControl.waitForPlayerRelease().timeout(
+    const Duration(seconds: 12),
+    onTimeout: () => throw StateError('播放器原生资源释放超时'),
+  );
   frameSampler.flush();
 }
 
@@ -270,18 +288,26 @@ Future<void> _playRandomVideo(
  * 高分辨率兼容性检查可能在快速点击后的媒体详情读取完成时才显示，不能只在固定
  * 50 ms 时点探测一次，否则会把正常的硬解风险提示误报为播放器启动超时。
  */
-Future<void> _waitForPlayerSurface(WidgetTester tester) async {
+Future<bool> _waitForPlayerSurface(
+  WidgetTester tester,
+  Directory outputDirectory, {
+  required String captureName,
+}) async {
   final surface = find.byKey(const ValueKey('player.video.surface'));
-  final hardwareContinue =
-      find.byKey(const ValueKey('player.hwdecWarning.continue')).hitTestable();
+  final hardwareCancel =
+      find.byKey(const ValueKey('player.hwdecWarning.cancel')).hitTestable();
   final resumeContinue =
       find.byKey(const ValueKey('player.resume.continue')).hitTestable();
   final watch = Stopwatch()..start();
   while (surface.evaluate().isEmpty &&
       watch.elapsed < const Duration(seconds: 15)) {
-    if (hardwareContinue.evaluate().isNotEmpty) {
-      // 保留产品警告路径，测试仅模拟用户明确接受软件解码风险。
-      await tester.tap(hardwareContinue, warnIfMissed: false);
+    if (hardwareCancel.evaluate().isNotEmpty) {
+      // 8K 软件解码保护不再允许压测自动放行；返回媒体库后换一个可播放样本。
+      await _pumpContinuously(tester, const Duration(milliseconds: 500));
+      await _signalDesktopCapture(outputDirectory, captureName);
+      await tester.tap(hardwareCancel, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 50));
+      return false;
     } else if (resumeContinue.evaluate().isNotEmpty) {
       // 重复随机命中已有进度的视频时，继续播放而不是让弹窗阻塞压力循环。
       await tester.tap(resumeContinue, warnIfMissed: false);
@@ -291,6 +317,7 @@ Future<void> _waitForPlayerSurface(WidgetTester tester) async {
   if (surface.evaluate().isEmpty) {
     throw StateError('等待播放器表面超时');
   }
+  return true;
 }
 
 /** 快速交替拖动当前媒体库，模拟用户停止在随机位置后等待可见缩略图。 */

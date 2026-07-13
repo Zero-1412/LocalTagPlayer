@@ -1779,6 +1779,33 @@ void main() {
     expect(stats.active, 0);
   });
 
+  test('background thumbnail candidates stay dormant while paused', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('ltp_thumbnail_candidates_');
+    addTearDown(() async {
+      AppPaths.debugUseDataDirectoryForTesting(null);
+      await directory.delete(recursive: true);
+    });
+    AppPaths.debugUseDataDirectoryForTesting(directory);
+    final service = (await ThumbnailService.create())..pause();
+    final items = List<VideoItem>.generate(
+      80,
+      (index) => _testVideo(
+        path: '${directory.path}/candidate_$index.mp4',
+        title: 'candidate $index',
+      )
+        ..fileSize = index + 1
+        ..modifiedMs = index + 100,
+    );
+
+    service.prefetchAll(items);
+    final stats = await service.statsFor(const <VideoItem>[]);
+
+    expect(stats.pendingBackgroundRequests, 80);
+    expect(stats.queued, 80);
+    expect(stats.active, 0);
+  });
+
   test('Windows recommended decoding requests stable D3D11 copy mode', () {
     final resolved = PlayerHardwareAcceleration.resolve('auto-safe');
     expect(resolved, Platform.isWindows ? 'd3d11va-copy' : 'auto-safe');
@@ -1867,9 +1894,11 @@ void main() {
     expect(find.textContaining('3840×2160 H.264 代理'), findsOneWidget);
     expect(find.byKey(const ValueKey('player.hwdecWarning.proxyCommand')),
         findsOneWidget);
-    await tester
-        .tap(find.byKey(const ValueKey('player.hwdecWarning.continue')));
+    expect(find.textContaining('已阻止直接播放'), findsOneWidget);
+    expect(find.byKey(const ValueKey('player.hwdecWarning.continue')),
+        findsNothing);
+    await tester.tap(find.byKey(const ValueKey('player.hwdecWarning.cancel')));
     await tester.pumpAndSettle();
-    expect(result, isTrue);
+    expect(result, isFalse);
   });
 }

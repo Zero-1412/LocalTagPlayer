@@ -694,6 +694,8 @@ class _LibraryPageState extends State<LibraryPage> {
   var _playerScopedLibraryDataChanged = false;
   /** 播放器内 relink 会改变 folder 标签，需要在返回后低频刷新标签计数。 */
   var _playerScopedNeedsCountRefresh = false;
+  /** 最近一次播放器的原生释放信号；专项压测必须等它完成再开始下一会话。 */
+  Future<void> _latestPlayerRelease = Future<void>.value();
 
   var _isRefreshingVideos = false;
 
@@ -952,6 +954,7 @@ class _LibraryPageState extends State<LibraryPage> {
         return result;
       },
       removeRoot: () => _removeLibraryRootData(root),
+      waitForPlayerRelease: () => _latestPlayerRelease,
       snapshot: () {
         final probes = _libraryMediaDetailsService;
         return LibraryStressSnapshot(
@@ -1738,7 +1741,8 @@ class _LibraryPageState extends State<LibraryPage> {
         _filterState = nextState;
         _isRefreshingVideos = false;
       });
-      _thumbnailService?.prefetchVisible(nextState.filteredVideos.take(36));
+      // 真正的可见窗口由虚拟列表滚动停止后驱动；固定取结果前 36 条会在深度滚动时
+      // 抢占错误项目，因此这里不再猜测可见范围。
       if (!refreshCounts) {
         return;
       }
@@ -2944,12 +2948,39 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       return;
     }
+    var playbackDetails = item.mediaDetails;
+    if (Platform.isWindows &&
+        _playbackSettings.hardwareDecodingEnabled &&
+        (playbackDetails?.videoCodec == null ||
+            playbackDetails?.width == null ||
+            playbackDetails?.height == null)) {
+      playbackDetails = await _probeSelectedVideoBeforePlayback(item, store);
+      if (!mounted) {
+        return;
+      }
+      if (playbackDetails.videoCodec == null ||
+          playbackDetails.width == null ||
+          playbackDetails.height == null) {
+        // 未知超规格媒体曾绕过兼容矩阵并在创建 8K 纹理时推高内存甚至崩溃。
+        // 规格未确认前宁可让用户稍后重试，也不创建不可控的原生播放器会话。
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('尚未取得视频编码和分辨率，已暂缓播放；请等待解析完成后重试。'),
+          ),
+        );
+        return;
+      }
+    }
     final compatibility = PlayerHardwareCompatibility.assess(
-      details: item.mediaDetails,
+      details: playbackDetails,
       settings: _playbackSettings,
     );
     if (compatibility.status == HardwareDecodeCompatibilityStatus.unsupported) {
-      // 预检只读取 hydration 已恢复的缓存详情；用户确认前不创建播放器或预热队列。
+      // 兼容结论来自 hydration 缓存或当前点击项的单次预检；取消前不创建播放器或预热队列。
+      debugPrint(
+        'PLAYER_PREFLIGHT_BLOCKED video_id=${item.videoId} '
+        'spec=${compatibility.specification}',
+      );
       final confirmed = await showPlayerHardwareDecodeWarningDialog(
         context,
         compatibility,
@@ -2985,6 +3016,7 @@ class _LibraryPageState extends State<LibraryPage> {
     _playerScopedLibraryDataChanged = false;
     _playerScopedNeedsCountRefresh = false;
     final playerDisposed = Completer<void>();
+    _latestPlayerRelease = playerDisposed.future;
     try {
       await Navigator.of(context).push(
         _smoothRoute<void>(
@@ -3029,6 +3061,39 @@ class _LibraryPageState extends State<LibraryPage> {
       _scheduleFilterRefresh(refreshCounts: _playerScopedNeedsCountRefresh);
       _playerScopedLibraryDataChanged = false;
       _playerScopedNeedsCountRefresh = false;
+    }
+  }
+
+  /**
+   * 为用户刚点击且详情未知的视频执行一次独立高优先级预检。
+   *
+   * 后台批量探测可能排在数千条记录之后，不能让未知 8K 媒体绕过播放前兼容矩阵。
+   * 该服务只处理当前一项并在返回后取消代次；播放器页面和右侧队列仍只读缓存详情。
+   */
+  Future<MediaDetails> _probeSelectedVideoBeforePlayback(
+    VideoItem item,
+    LibraryStore store,
+  ) async {
+    final service = MediaDetailsService(
+      onUpdated: (updated, details, fingerprint) async {
+        final current = store.videos[TagRules.pathKey(updated.path)];
+        if (_store != store ||
+            current == null ||
+            current.videoId != updated.videoId ||
+            current.mediaFingerprint != fingerprint) {
+          return;
+        }
+        current.mediaDetails = details;
+        await store.upsertVideo(current);
+      },
+    );
+    try {
+      return await service.detailsFor(item, refreshIncomplete: true).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => const MediaDetails(),
+          );
+    } finally {
+      service.dispose();
     }
   }
 

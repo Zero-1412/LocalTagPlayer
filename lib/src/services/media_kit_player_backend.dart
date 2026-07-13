@@ -9,6 +9,14 @@ part of '../app.dart';
  * 轻量状态和纹理表面访问播放器，为后续 Windows C++ 后端保留可替换边界。
  */
 class MediaKitPlayerBackend implements PlayerBackend {
+  /**
+   * media_kit 1.2.6 的 Windows NativePlayer 会在 dispose 返回 5 秒后才调用
+   * `mpv_terminate_destroy`；多留 200 ms，确保 released 不早于真实原生销毁。
+   */
+  static const _windowsNativeDestroyGracePeriod = Duration(
+    milliseconds: 5200,
+  );
+
   MediaKitPlayerBackend({
     required String hwdec,
     required bool enableHardwareAcceleration,
@@ -134,6 +142,11 @@ class MediaKitPlayerBackend implements PlayerBackend {
     if (_released.isCompleted) return;
     try {
       await _player.dispose();
+      if (Platform.isWindows) {
+        // Flutter 纹理解绑早于 libmpv 最终销毁；下一会话必须等这段依赖内置延迟结束，
+        // 否则两个 mpv_handle、D3D 资源和解码缓存会在高位重叠。
+        await Future<void>.delayed(_windowsNativeDestroyGracePeriod);
+      }
     } finally {
       if (!_released.isCompleted) _released.complete();
     }

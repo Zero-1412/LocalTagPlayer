@@ -62,6 +62,7 @@ class CacheStats {
 class ThumbnailService {
   ThumbnailService._(this._directory);
   static const _maxBackgroundQueuedJobs = 500;
+  static const _maxBackgroundRequestsInFlight = 24;
 
   final Directory _directory;
   static int get _maxConcurrentJobs {
@@ -97,6 +98,9 @@ class ThumbnailService {
       <String, Completer<File?>>{};
   final Queue<_ThumbnailJob> _priorityJobs = Queue();
   final Queue<_ThumbnailJob> _backgroundJobs = Queue();
+  /** 尚未执行 cache key/JPEG 校验的后台候选，避免一次扫描同时唤醒 500 个文件 I/O Future。 */
+  final Queue<VideoItem> _backgroundCandidates = Queue();
+  final Set<String> _backgroundCandidatePaths = {};
   var _activeJobs = 0;
   var _activeBackgroundJobs = 0;
   /** 已接受但尚未结束的后台请求，包含 cache key 与 JPEG 验证阶段。 */
@@ -110,7 +114,10 @@ class ThumbnailService {
 
   bool get isPaused => _isPaused;
   int get activeJobs => _activeJobs;
-  int get queuedJobs => _priorityQueued.length + _backgroundQueued.length;
+  int get queuedJobs =>
+      _priorityQueued.length +
+      _backgroundQueued.length +
+      _backgroundCandidates.length;
   int get maxBackgroundQueuedJobs => _maxBackgroundQueuedJobs;
   int get maxConcurrentJobs => _maxConcurrentJobs;
   int get activeBackgroundJobs => _activeBackgroundJobs;
@@ -126,6 +133,7 @@ class ThumbnailService {
     }
     _isPaused = false;
     _drainQueue();
+    _pumpBackgroundCandidates(allowPlayerFallback: false);
   }
 
   static Future<ThumbnailService> create() async {
@@ -170,13 +178,38 @@ class ThumbnailService {
   void prefetchAll(Iterable<VideoItem> items,
       {bool allowPlayerFallback = false}) {
     for (final item in items) {
-      if (_backgroundRequestsInFlight >= _maxBackgroundQueuedJobs) {
+      if (_backgroundCandidates.length + _backgroundRequestsInFlight >=
+          _maxBackgroundQueuedJobs) {
         break;
       }
+      if (_backgroundCandidatePaths.add(item.path)) {
+        _backgroundCandidates.add(item);
+      }
+    }
+    _pumpBackgroundCandidates(allowPlayerFallback: allowPlayerFallback);
+  }
+
+  /**
+   * 小批量推进后台 cache key/JPEG 校验。
+   *
+   * 生成并发仍由 `_drainQueue` 限制；这里额外限制进入异步文件校验的 Future 数量，
+   * 防止扫描完成后数百个 completion 同时抢占 Flutter 事件循环。
+   */
+  void _pumpBackgroundCandidates({required bool allowPlayerFallback}) {
+    while (!_isPaused &&
+        _backgroundRequestsInFlight < _maxBackgroundRequestsInFlight &&
+        _backgroundCandidates.isNotEmpty) {
+      final item = _backgroundCandidates.removeFirst();
+      _backgroundCandidatePaths.remove(item.path);
       _backgroundRequestsInFlight++;
       unawaited(
         _queuePrefetch(item, allowPlayerFallback: allowPlayerFallback)
-            .whenComplete(() => _backgroundRequestsInFlight--),
+            .whenComplete(() {
+          _backgroundRequestsInFlight--;
+          _pumpBackgroundCandidates(
+            allowPlayerFallback: allowPlayerFallback,
+          );
+        }),
       );
     }
   }
@@ -194,6 +227,10 @@ class ThumbnailService {
    * cache key 优先复用扫描阶段持久化的 size/mtime，不为正常数据库记录重复 stat 原视频。
    */
   Future<void> deleteThumbnailFor(VideoItem item) async {
+    _backgroundCandidates.removeWhere(
+      (candidate) => candidate.path == item.path,
+    );
+    _backgroundCandidatePaths.remove(item.path);
     final cacheKey = await _cacheKeyFor(item);
     _pathMemoryCache.remove(item.path);
     if (cacheKey == null) {
@@ -254,6 +291,11 @@ class ThumbnailService {
     bool priority = false,
     bool allowPlayerFallback = false,
   }) async {
+    final verified = cachedThumbnailFor(item);
+    if (verified != null) {
+      // 进程内快照只会在 JPEG 完整性校验成功后写入；卡片重建不应重复打开文件。
+      return verified;
+    }
     final cacheKey = await _cacheKeyFor(item);
     if (cacheKey == null) {
       return null;
@@ -584,8 +626,9 @@ class ThumbnailService {
       cached: cached,
       missing: missing,
       errors: errors,
-      queued: _priorityQueued.length + _backgroundQueued.length,
-      pendingBackgroundRequests: _backgroundRequestsInFlight,
+      queued: queuedJobs,
+      pendingBackgroundRequests:
+          _backgroundRequestsInFlight + _backgroundCandidates.length,
       active: _activeJobs,
       activeBackground: _activeBackgroundJobs,
       maxConcurrent: _maxConcurrentJobs,
@@ -604,7 +647,8 @@ class ThumbnailService {
 
   Future<void> retryFailed(Iterable<VideoItem> items) async {
     for (final item in items.where((item) => item.thumbnailError != null)) {
-      if (_backgroundRequestsInFlight >= _maxBackgroundQueuedJobs) {
+      if (_backgroundCandidates.length + _backgroundRequestsInFlight >=
+          _maxBackgroundQueuedJobs) {
         break;
       }
       final cacheKey = await _cacheKeyFor(item);
@@ -612,11 +656,11 @@ class ThumbnailService {
         _memoryCache.remove(cacheKey);
       }
       item.thumbnailError = null;
-      _backgroundRequestsInFlight++;
-      unawaited(
-        _queuePrefetch(item).whenComplete(() => _backgroundRequestsInFlight--),
-      );
+      if (_backgroundCandidatePaths.add(item.path)) {
+        _backgroundCandidates.add(item);
+      }
     }
+    _pumpBackgroundCandidates(allowPlayerFallback: false);
   }
 
   Future<bool> _isValidThumbnailFile(File file) async {
