@@ -76,6 +76,28 @@ class LibraryScanResult {
 }
 
 /**
+ * 扫描前由数据库索引提供的不可变文件元数据。
+ *
+ * 大小和修改时间均未变化时可直接复用 fingerprint，避免每轮扫描重新执行首尾随机读取。
+ */
+class LibraryScanKnownMetadata {
+  const LibraryScanKnownMetadata({
+    required this.fileSize,
+    required this.modifiedMs,
+    required this.mediaFingerprint,
+  });
+
+  /** 上次成功扫描记录的文件大小。 */
+  final int? fileSize;
+
+  /** 上次成功扫描记录的修改时间毫秒值。 */
+  final int? modifiedMs;
+
+  /** 上次成功生成的路径无关内容指纹。 */
+  final String? mediaFingerprint;
+}
+
+/**
  * 媒体库文件系统扫描服务。
  *
  * 该服务只负责遍历目录、识别视频文件、读取 stat、派生 folder 标签和轻量指纹；
@@ -89,7 +111,11 @@ class LibraryScanService {
    *
    * 不存在或不可访问的目录会被跳过，单个目录的 `FileSystemException` 不会中断其它 root。
    */
-  Future<LibraryScanResult> scanRoots(List<String> roots) async {
+  Future<LibraryScanResult> scanRoots(
+    List<String> roots, {
+    Map<String, LibraryScanKnownMetadata> knownMetadata =
+        const <String, LibraryScanKnownMetadata>{},
+  }) async {
     final entries = <LibraryScannedVideo>[];
     final seen = <String>{};
     final scannedRootKeys = <String>{};
@@ -110,7 +136,12 @@ class LibraryScanService {
           if (stat == null || stat.type != FileSystemEntityType.file) {
             continue;
           }
-          entries.add(await _entryFor(root: root, file: entity, stat: stat));
+          entries.add(await _entryFor(
+            root: root,
+            file: entity,
+            stat: stat,
+            known: knownMetadata[videoKey],
+          ));
         }
         scannedRootKeys.add(TagRules.pathKey(root));
       } on FileSystemException {
@@ -223,7 +254,13 @@ class LibraryScanService {
     required String root,
     required File file,
     required FileStat stat,
+    LibraryScanKnownMetadata? known,
   }) async {
+    // 未变化文件复用数据库指纹；只有新增或大小/修改时间变化时才读取首尾样本。
+    final reusableFingerprint = known?.fileSize == stat.size &&
+            known?.modifiedMs == stat.modified.millisecondsSinceEpoch
+        ? known?.mediaFingerprint
+        : null;
     return LibraryScannedVideo(
       path: file.path,
       title: p.basenameWithoutExtension(file.path),
@@ -234,7 +271,8 @@ class LibraryScanService {
       childTags: TagRules.childTagsFor(root, file.path),
       fileSize: stat.size,
       modifiedMs: stat.modified.millisecondsSinceEpoch,
-      mediaFingerprint: await _mediaFingerprintForFile(file, stat),
+      mediaFingerprint:
+          reusableFingerprint ?? await _mediaFingerprintForFile(file, stat),
     );
   }
 

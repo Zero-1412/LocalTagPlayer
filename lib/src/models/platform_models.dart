@@ -1,5 +1,7 @@
 part of '../app.dart';
 
+// ignore_for_file: slash_for_doc_comments
+
 enum TagSource { folder, manual, rule, filename, import, auto }
 
 enum CacheStatusKind { unknown, missing, queued, loading, ready, failed }
@@ -9,6 +11,54 @@ enum DiagnoseSeverity { normal, warning, error }
 enum TagGroupLogic { sameGroupOr, sameGroupAnd }
 
 enum SortRule { titleAsc, addedDesc, lastPlayedDesc }
+
+/**
+ * 发送到原生媒体探测队列的不可变请求。
+ *
+ * 文件大小和修改时间优先复用数据库快照，原生层不得为了构造任务再次逐条 stat。
+ */
+class MediaProbeRequest {
+  const MediaProbeRequest({
+    required this.videoId,
+    required this.path,
+    this.knownSize,
+    this.knownModifiedAt,
+  });
+
+  /** 稳定视频身份，仅用于把紧凑结果映射回 Dart Repository。 */
+  final String videoId;
+
+  /** 当前可变媒体路径，只在原生调用边界内使用。 */
+  final String path;
+
+  /** 数据库中已有的文件大小，避免原生队列重复读取元数据。 */
+  final int? knownSize;
+
+  /** 数据库中已有的修改时间毫秒值。 */
+  final int? knownModifiedAt;
+}
+
+/** 原生批量媒体探测返回的紧凑结果，不包含路径或未压缩媒体数据。 */
+class MediaProbeResult {
+  const MediaProbeResult({
+    required this.videoId,
+    this.details,
+    this.error,
+    this.cancelled = false,
+  });
+
+  /** 与请求一致的稳定视频身份。 */
+  final String videoId;
+
+  /** 成功时返回的轻量编解码与分辨率详情。 */
+  final MediaDetails? details;
+
+  /** 失败原因；不得包含完整本地路径。 */
+  final String? error;
+
+  /** generation 被取消时为 true，调用方不得写回 SQLite。 */
+  final bool cancelled;
+}
 
 class TagItem {
   const TagItem({

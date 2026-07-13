@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-13 · 原生媒体探测与大库扫描基准
+
+- D3D11/ANGLE 最终归因确认桥接层、ANGLE 与 Flutter 存在多个设备/上下文，双 1080p BGRA 纹理仅约 15.8 MiB，剩余差额主要来自独立解码池、D3D11VA 表面和驱动缓存；原生 Private/GPU P95 约为 MediaKit 的 114.5%/113.8%，未进入 110% 门槛，停止默认替换路线。
+- 新增独立 `MediaProbeBackend` 与 Windows C++ `probeBatch/cancelGeneration`；固定 FFmpeg 8.1 LGPL shared 开发包，首次探测才延迟加载 DLL，原生工作线程限流并通过 interrupt callback 取消执行中 generation。
+- `MediaDetailsService` 复用数据库 size/mtime/fingerprint，不再失败后创建临时 media_kit Player；修复完成回调误等待自身 Future 的历史闭环。
+- 真实 11,135 条索引、6 个根目录基准中，15,958 个文件纯枚举 84ms，冷盘完整指纹扫描曾为 272.7 秒；复用未变化 fingerprint 后热扫描为 2.72 秒，事件循环 P95 16.95ms，因此不引入 Rust。
+- 76 项测试、原生媒体探测集成测试、analyze、Windows debug build和真实窗口两轮播放器回归通过。
+
 ## 2026-07-13 · 4K 长视频分阶段 A/B 与原生渲染收敛
 
 - 压测支持匿名锁定同一真实媒体样本，并在进程 CSV 中区分 `player_startup`、`player_stable`、`player_release` 和 `library_idle`；新增可重复生成中位数/P95/峰值的汇总脚本。

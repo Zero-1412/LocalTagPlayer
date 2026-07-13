@@ -338,3 +338,9 @@
 - MediaKit、原生基线和原生优化各完成 480 秒/18 轮同种子操作，均为 `d3d11va-copy`，音视频停滞和进程无响应均为 0。
 - 原生后端按 `MPV_RENDER_UPDATE_FRAME` 决定是否渲染，ANGLE 表面跟随 Flutter 请求量化，纹理读取与渲染分别计数；demux 预算收敛到 64+16 MiB。
 - 优化消除了 seek 高尾并降低工作集、Private 和 GPU P95，但原生 Private/GPU committed 仍高于 MediaKit；filtered queue、当前 index、SQLite、标签语义和缩略图/media 队列均未修改，默认后端不变。
+
+# 2026-07-13 D3D11/ANGLE 最终门槛判定
+
+- 源码与分阶段指标确认原生路径包含额外 D3D11 device/context、ANGLE 设备、双共享纹理和 D3D11VA 解码表面；双 1080p BGRA 纹理本身仅约 15.8 MiB。
+- 原生 Private/GPU committed P95 仍为 MediaKit 的约 114.5%/113.8%，未进入 110% 门槛；停止默认替换路线，不继续把 seek 合并、正式状态机和停滞判定下沉到该实验后端。
+- 默认 MediaKit、filtered queue、当前 index、标签语义和返回媒体库状态均不改变。

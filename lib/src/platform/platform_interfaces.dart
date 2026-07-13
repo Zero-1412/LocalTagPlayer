@@ -131,6 +131,23 @@ abstract interface class FFmpegBackend {
   Future<MediaDetails?> probe(VideoItem item);
 }
 
+/**
+ * 媒体信息批处理平台边界。
+ *
+ * 原生实现只负责读取文件与生成紧凑结果；SQLite 写入仍由 Dart Repository 串行完成，
+ * 避免双端数据库连接引入锁与迁移风险。
+ */
+abstract interface class MediaProbeBackend {
+  /** 批量探测同一代请求；实现必须限制并发并保留输入顺序。 */
+  Future<List<MediaProbeResult>> probeBatch({
+    required int generationId,
+    required List<MediaProbeRequest> requests,
+  });
+
+  /** 取消指定代的排队与执行中任务，旧结果不得继续写回。 */
+  Future<void> cancelGeneration(int generationId);
+}
+
 abstract interface class DatabaseProvider {
   Future<File> databaseFile();
 

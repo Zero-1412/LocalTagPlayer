@@ -1,5 +1,11 @@
 # ROADMAP.md
 
+## 2026-07-13 原生核心服务渐进路线决策
+
+- D3D11/ANGLE 最终调查未达到 Private/GPU P95 为 MediaKit 110% 以内的门槛，默认播放器继续使用 MediaKit，C++ 播放器只保留实验 A/B，不继续扩大剩余生命周期改造。
+- Windows 原生核心先落地独立 `MediaProbeBackend`，使用 FFmpeg C API 批处理与 generation 取消；SQLite、标签查询和用户数据继续由 Dart Repository 独占。
+- 真实 11,135 条索引库证明扫描耗时来自冷盘随机指纹读取；复用数据库 fingerprint 后 15,958 文件热扫描为 2.72 秒，暂不引入 Rust。下一性能优先级转为 Repository/SQLite hydration。
+
 ## 2026-07-13 Windows 原生播放器 A/B 第一阶段完成
 
 - 已固定供应 libmpv/ANGLE、补齐许可证，并贯通单会话、共享纹理、串行命令和原生诊断。

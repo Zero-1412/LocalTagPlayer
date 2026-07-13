@@ -498,3 +498,12 @@ flutter build windows --debug
 - 原生缓存收敛到 12 秒预读、64 MiB 前向和 16 MiB 后向预算。相对原生基线，稳定期工作集/Private 中位数约下降 63/68 MiB，GPU committed P95 约下降 73 MiB，seek P95 从 118 ms 降至 27 ms。
 - 优化原生稳定期中位数为 CPU 63.2%、279 线程、922.5 MiB 工作集、1492.4 MiB Private、1001.7 MiB GPU committed；MediaKit 为 75.4%、269、967.6、1296.6、812.5。原生仍有 Private/GPU/线程代价，默认继续使用 MediaKit。
 - 下一步只保留一个有门槛的底层调查：确认额外 D3D11/ANGLE device context 和驱动 committed 来源；若无法把 Private/GPU P95 收敛到 MediaKit 的 110% 以内，则停止默认替换路线，仅保留实验后端。
+
+# 2026-07-13 原生媒体探测与 11,000 条大库扫描决策
+
+- D3D11/ANGLE 最终调查确认双 1080p BGRA 共享纹理仅约 15.8 MiB，不能解释原生相对 MediaKit 的约 196 MiB Private 差额；主要来源是额外 libmpv/FFmpeg 解码池、D3D11VA 表面和多设备驱动缓存。
+- 原生稳定期 Private/GPU committed P95 分别约为 MediaKit 的 114.5%/113.8%，未进入 110% 门槛；停止默认播放器替换路线，不继续下沉 seek、状态机和诊断判定，实验开关保留。
+- 新增 `MediaProbeBackend`、不可变请求/结果 DTO，以及 Windows C++ FFmpeg 8.1 `probeBatch/cancelGeneration`；原生库首次探测才加载，SQLite 仍只由 Dart Repository 写入。
+- 真实 11,135 条索引库、6 个根目录、15,958 个文件基准：数据库加载约 40.2 秒、纯目录枚举 84ms、首次冷盘 stat+指纹 272.7 秒；复用 size/mtime/fingerprint 后热扫描 2.72 秒，事件循环 P95 16.95ms、最大 18.34ms。
+- 扫描瓶颈属于未变化文件的随机磁盘读取而非 Dart 事件循环，已在现有 Dart 边界消除，因此不引入 Rust `LibraryScanBackend`。下一步应单独优化约 40 秒的 Repository/SQLite hydration。
+- 76 项测试、原生媒体探测集成测试、`flutter analyze`、Windows debug build和隔离真实媒体两轮滚动/全屏/seek/诊断/退出通过。

@@ -38,6 +38,7 @@ part 'services/bulk_path_relink_service.dart';
 part 'services/library_scan_service.dart';
 part 'services/tag_query_service.dart';
 part 'services/external_media_tools.dart';
+part 'services/media_probe_backend.dart';
 part 'services/thumbnail_service.dart';
 part 'services/media_details_service.dart';
 part 'services/player_hardware_acceleration.dart';

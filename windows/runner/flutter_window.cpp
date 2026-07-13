@@ -4,6 +4,7 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "native_player_bridge.h"
+#include "native_media_probe_bridge.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -33,6 +34,12 @@ bool FlutterWindow::OnCreate() {
   native_player_bridge_ = std::make_unique<NativePlayerBridge>(
       native_player_registrar_->messenger(),
       native_player_registrar_->texture_registrar());
+  native_probe_registrar_ =
+      std::make_unique<flutter::PluginRegistrarWindows>(
+          flutter_controller_->engine()->GetRegistrarForPlugin(
+              "LocalTagPlayerNativeMediaProbe"));
+  native_probe_bridge_ = std::make_unique<NativeMediaProbeBridge>(
+      native_probe_registrar_->messenger());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -49,6 +56,8 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
+    native_probe_bridge_.reset();
+    native_probe_registrar_.reset();
     native_player_bridge_.reset();
     native_player_registrar_.reset();
     flutter_controller_ = nullptr;

@@ -31,9 +31,9 @@ lib/src/widgets
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.15`
+已完成基线：`Architecture Baseline 0.5.16`
 
-当前推进中：`Architecture Baseline 0.5.15`
+当前推进中：`Architecture Baseline 0.5.16`
 
 变更点：
 
@@ -63,6 +63,7 @@ lib/src/widgets
 - `0.5.13`：Windows runner新增`NativePlayerBridge`骨架，提供方法通道、外部像素纹理、单线程串行命令与确定性释放；`WindowsNativePlayerBackend`仅能通过环境开关显式启用假纹理，默认仍使用media_kit。真实libmpv/D3D11接入必须先供应固定版本、可重复构建的头文件和二进制，不允许依赖Pub Cache或build临时目录。
 - `0.5.14`：Windows 原生后端固定并按 SHA-256 校验 libmpv、ANGLE 和纹理桥接源码，构建产物随包安装运行库与许可证。单个 `mpv_handle`、`mpv_render_context` 和 ANGLE/D3D11 共享纹理均由串行工作线程拥有，EOF、错误、帧推进、AV 偏移、缓存和硬解状态通过节流快照进入现有 `PlayerBackend`；默认仍为 MediaKit，仅通过环境开关执行可回滚 A/B。
 - `0.5.15`：真实 3840×2160 长视频以同样本、同种子分别完成 MediaKit、原生基线和原生优化各 480 秒/18 轮。压力采样明确区分播放器启动、稳定播放、释放与媒体库空闲阶段；原生渲染调用 `mpv_render_context_update` 过滤非帧更新，ANGLE 表面按 Flutter 请求在 1280×720 到 1920×1080 间量化，demux 预算收敛到 64+16 MiB。优化后无音视频停滞且 seek P95 从 118 ms 降至 27 ms，但稳定期 Private/GPU committed 仍高于 MediaKit，因此默认后端不变。
+- `0.5.16`：完成 D3D11/ANGLE 最终内存归因并停止默认原生播放器替换路线；新增独立 `MediaProbeBackend`，Windows C++ 通过延迟加载的 FFmpeg 8.1 shared libraries 串行执行 `probeBatch/cancelGeneration`，SQLite 仍只由 Dart Repository 写入。真实 11,135 条索引库证明扫描瓶颈来自未变化文件的随机指纹读取，`LibraryScanService` 复用数据库 size/mtime/fingerprint 后 15,958 文件热扫描降至 2.72 秒，不引入 Rust。
 
 协作要求：
 

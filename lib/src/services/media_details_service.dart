@@ -3,10 +3,19 @@ part of '../app.dart';
 // ignore_for_file: slash_for_doc_comments
 
 class MediaDetailsService {
-  MediaDetailsService({this.onUpdated});
+  MediaDetailsService({
+    this.onUpdated,
+    MediaProbeBackend? probeBackend,
+  })  : _probeBackend = probeBackend ?? createMediaProbeBackend(),
+        _generation = _nextGeneration++;
+
+  /** 进程内递增代号，避免多个播放器页面取消同一个原生 generation。 */
+  static int _nextGeneration = 1;
 
   final Future<void> Function(
       VideoItem item, MediaDetails details, String? fingerprint)? onUpdated;
+  /** 批量媒体探测平台边界；SQLite 写回仍由 [onUpdated] 所在 Repository 完成。 */
+  final MediaProbeBackend _probeBackend;
   final Map<String, Future<MediaDetails>> _inFlight = {};
   final Map<String, MediaDetails> _cache = {};
   final Set<String> _queuedPaths = {};
@@ -14,7 +23,7 @@ class MediaDetailsService {
   var _completedThisRun = 0;
   var _failedThisRun = 0;
   Future<void> _queue = Future<void>.value();
-  var _generation = 0;
+  int _generation;
   var _disposed = false;
 
   int get queuedReads => _queuedPaths.length;
@@ -67,7 +76,10 @@ class MediaDetailsService {
         }
       });
       _queue = task.then((_) {}, onError: (_) {});
-      return task.whenComplete(() => _inFlight.remove(item.path));
+      // Map.remove 会返回被移除的 Future；必须用块体丢弃返回值，否则 whenComplete 会等待自身形成闭环。
+      return task.whenComplete(() {
+        _inFlight.remove(item.path);
+      });
     });
   }
 
@@ -76,70 +88,39 @@ class MediaDetailsService {
    */
   Future<MediaDetails> _read(VideoItem item, int generation) async {
     final path = item.path;
-    final fingerprint = await LibraryStore.mediaFingerprintFor(path);
+    // 扫描阶段已经保存 fingerprint、大小和修改时间，播放器详情不得再次 stat 或读取首尾样本。
+    final fingerprint = item.mediaFingerprint;
     try {
-      final details = await ExternalMediaTools.probe(item);
-      if (details != null) {
+      final results = await _probeBackend.probeBatch(
+        generationId: generation,
+        requests: <MediaProbeRequest>[
+          MediaProbeRequest(
+            videoId: item.videoId,
+            path: path,
+            knownSize: item.fileSize,
+            knownModifiedAt: item.modifiedMs,
+          ),
+        ],
+      );
+      final result = results.firstOrNull;
+      if (result?.cancelled == true || _disposed || generation != _generation) {
+        return const MediaDetails();
+      }
+      final details = result?.details;
+      if (details != null && result?.error == null) {
         item.mediaDetailsError = null;
         _cache[path] = details;
         await _notifyUpdated(item, details, fingerprint, generation);
         return details;
       }
+      item.mediaDetailsError = result?.error ?? 'media probe unavailable';
     } catch (error) {
-      item.mediaDetailsError = 'ffprobe: $error';
+      item.mediaDetailsError = 'media probe: ${error.runtimeType}';
     }
-
-    final player = Player(
-      configuration: const PlayerConfiguration(bufferSize: 4 * 1024 * 1024),
-    );
-    try {
-      await player.open(Media(path), play: false).timeout(
-            const Duration(seconds: 8),
-          );
-      final widthFuture =
-          player.stream.width.firstWhere((value) => value != null).timeout(
-                const Duration(seconds: 4),
-                onTimeout: () => player.state.width,
-              );
-      final heightFuture =
-          player.stream.height.firstWhere((value) => value != null).timeout(
-                const Duration(seconds: 4),
-                onTimeout: () => player.state.height,
-              );
-      final tracksFuture = player.stream.tracks.firstWhere((tracks) {
-        return tracks.video.any(_isRealVideoTrack) ||
-            tracks.audio.any(_isRealAudioTrack);
-      }).timeout(
-        const Duration(seconds: 4),
-        onTimeout: () => player.state.tracks,
-      );
-
-      final width = await widthFuture;
-      final height = await heightFuture;
-      final tracks = await tracksFuture;
-      final videoCodec =
-          tracks.video.where(_isRealVideoTrack).firstOrNull?.codec;
-      final audioCodec =
-          tracks.audio.where(_isRealAudioTrack).firstOrNull?.codec;
-      final details = MediaDetails(
-        videoCodec: videoCodec,
-        audioCodec: audioCodec,
-        width: width,
-        height: height,
-      );
-      item.mediaDetailsError = null;
-      _cache[path] = details;
-      await _notifyUpdated(item, details, fingerprint, generation);
-      return details;
-    } catch (error) {
-      const details = MediaDetails();
-      item.mediaDetailsError = 'media_kit: $error';
-      _cache[path] = details;
-      await _notifyUpdated(item, details, fingerprint, generation);
-      return details;
-    } finally {
-      await player.dispose();
-    }
+    const details = MediaDetails();
+    _cache[path] = details;
+    await _notifyUpdated(item, details, fingerprint, generation);
+    return details;
   }
 
   /** 仅允许当前播放器代际把详情写回媒体库。 */
@@ -166,14 +147,16 @@ class MediaDetailsService {
       return;
     }
     _disposed = true;
+    // 纯 Dart/widget test 没有 Windows runner 通道；取消仍应 best-effort，不能在 dispose 后抛出异步异常。
+    unawaited(
+      _probeBackend.cancelGeneration(_generation).then<void>(
+            (_) {},
+            onError: (_) {},
+          ),
+    );
     _generation++;
     _queuedPaths.clear();
     _inFlight.clear();
     _cache.clear();
   }
-
-  bool _isRealVideoTrack(VideoTrack track) =>
-      track.id != 'auto' && track.id != 'no';
-  bool _isRealAudioTrack(AudioTrack track) =>
-      track.id != 'auto' && track.id != 'no';
 }

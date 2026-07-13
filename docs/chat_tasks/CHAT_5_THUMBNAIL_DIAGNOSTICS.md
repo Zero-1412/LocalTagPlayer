@@ -93,3 +93,10 @@
 - 播放器进入后仍沿用既有缩略图队列暂停边界。
 - 队列快速滚动不再创建会访问磁盘的完整条目；播放后的 FFprobe 预取只处理当前视频，不再探测前后窗口。
 - 缓存 key、JPEG 有效性检查、失败重试和 FFmpegBackend 均未改变。
+
+# 2026-07-13 MediaProbeBackend 原生批处理
+
+- 新增与 `FFmpegBackend` 分离的 `MediaProbeBackend`，提供 `probeBatch` 和 `cancelGeneration`；请求只携带 videoId、路径及数据库已有 size/mtime，结果不回传路径或媒体帧。
+- Windows runner 使用固定 FFmpeg 8.1 LGPL shared libraries，首次探测才延迟加载；单工作线程限流，执行中任务由 FFmpeg interrupt callback 响应 generation 取消。
+- `MediaDetailsService` 不再重复生成 fingerprint，也不再用临时 media_kit Player 兜底；SQLite 写入继续由 Dart Repository 回调完成。
+- 缩略图仍只传路径/缓存 key/结果状态，未跨边界传未压缩位图，既有缩略图队列和失败重试语义不变。

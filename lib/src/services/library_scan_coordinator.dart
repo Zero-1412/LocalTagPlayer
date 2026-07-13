@@ -152,7 +152,18 @@ class LibraryScanCoordinator {
    * 返回新增视频数量；已有视频的索引刷新、缺失文件清理和 metadata 保存会在同一 batch 中提交。
    */
   Future<int> scan() async {
-    final scanResult = await const LibraryScanService().scanRoots(_store.roots);
+    final knownMetadata = <String, LibraryScanKnownMetadata>{
+      for (final item in _store.videos.values)
+        TagRules.pathKey(item.path): LibraryScanKnownMetadata(
+          fileSize: item.fileSize,
+          modifiedMs: item.modifiedMs,
+          mediaFingerprint: item.mediaFingerprint,
+        ),
+    };
+    final scanResult = await const LibraryScanService().scanRoots(
+      _store.roots,
+      knownMetadata: knownMetadata,
+    );
     final batch = _store._db.batch();
     var added = 0;
     final scannedFingerprintCounts = <String, int>{};

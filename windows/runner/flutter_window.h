@@ -10,6 +10,7 @@
 #include "win32_window.h"
 
 class NativePlayerBridge;
+class NativeMediaProbeBridge;
 
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
@@ -35,6 +36,9 @@ class FlutterWindow : public Win32Window {
   /** Windows 原生播放器通道与纹理生命周期所有者。 */
   std::unique_ptr<flutter::PluginRegistrarWindows> native_player_registrar_;
   std::unique_ptr<NativePlayerBridge> native_player_bridge_;
+  /** 原生 FFmpeg 批处理通道与工作线程所有者。 */
+  std::unique_ptr<flutter::PluginRegistrarWindows> native_probe_registrar_;
+  std::unique_ptr<NativeMediaProbeBridge> native_probe_bridge_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
