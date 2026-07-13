@@ -1,3 +1,10 @@
+## 2026-07-13 实际硬解持续复核
+
+- 每秒健康采样增加 `hwdec-current`，属性不可用不再直接等同于软件解码；已开始播放时的空值按 mpv 软件解码语义处理。
+- `hwdec-codecs=all` 只在 open 前设置；连续三次明确为软件解码后只记录真实回退，不在当前会话热切换后端，避免超规格 H.264 从可播放退化为 `media_kit_error`。
+- RTX 4070 SUPER 真实 7680×4320@60 H.264 样本采到 `hwdec-current=no`、总掉帧 4,240、AV offset 约 2.4 秒；这是本轮明确保留的软件兼容回退，4K 常规样本仍沿用既有 `d3d11va-copy` 验证基线。
+- filtered queue、播放索引、退出状态机和 PlayerBackend 接口均未修改。
+
 ## 2026-07-13 Player/纹理/GPU内存阶段归因
 
 - Player构造、纹理就绪、媒体打开、pause、stop、dispose与返回媒体库延迟阶段输出可对齐的内存标记。

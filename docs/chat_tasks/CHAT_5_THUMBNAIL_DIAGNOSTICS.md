@@ -1,5 +1,11 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
+## 2026-07-13 快速滚动抢占与删除失效
+
+- 新构建的可见卡片插入优先队首；已排队的同 cache key 可再次提升，减少快速滚动停止后被离屏任务阻塞。
+- 删除视频会同时移除内存缓存、等待队列、Flutter ImageCache 和磁盘 JPEG/临时文件。
+- 活动 FFmpeg/media_kit 生成不能强杀时使用一次性抑制标记，生成完成立即丢弃，避免已删除视频缓存回写。
+
 ## 2026-07-13 可见缩略图 Future 与旧 4K 缓存解码
 
 - 可见卡片现在等待真正的优先队列任务，同一 cache key 复用一个完成 Future；FFmpeg 生成完成即刷新，不再依赖下一次列表 rebuild。

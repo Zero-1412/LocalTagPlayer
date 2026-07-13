@@ -1396,9 +1396,9 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   /**
-   * 从侧栏本地媒体库列表移除 root。
+   * 从侧栏移除 root，并删除仅受该 root 管理的数据库记录与缩略图缓存。
    *
-   * 与目录管理保持同一安全语义：只更新配置，不删除磁盘文件，也不清除已索引视频。
+   * 本地视频文件保持不动；仍被其它重叠 root 覆盖的记录由 Store 保留。
    */
   Future<void> _removeLocalLibraryRoot(String root) async {
     final store = _store;
@@ -1409,7 +1409,7 @@ class _LibraryPageState extends State<LibraryPage> {
     if (confirmed != true || !mounted) {
       return;
     }
-    await store.removeRoot(root);
+    final removedVideos = await store.removeRoot(root);
     if (!mounted) {
       return;
     }
@@ -1423,6 +1423,11 @@ class _LibraryPageState extends State<LibraryPage> {
       _stableTagCounts = store.resultCounts(const FilterQuery());
     });
     _scheduleFilterRefresh(refreshCounts: true);
+    // 数据库提交后立即刷新总量；大量 JPEG 清理留在低优先级异步阶段，不能阻塞主界面。
+    final thumbnailService = _thumbnailService;
+    if (thumbnailService != null) {
+      unawaited(thumbnailService.deleteThumbnailsFor(removedVideos));
+    }
   }
 
   /**
@@ -2349,6 +2354,7 @@ class _LibraryPageState extends State<LibraryPage> {
                     onOpenVideo: _openVideo,
                     onEditTags: _editTags,
                     onToggleFavorite: _toggleFavorite,
+                    onDelete: _requestDeleteVideo,
                   ),
                 _LibraryResultMode.recent => videos.isEmpty
                     ? _EmptyState(
@@ -2364,6 +2370,7 @@ class _LibraryPageState extends State<LibraryPage> {
                         onOpen: _openVideo,
                         onEditTags: _editTags,
                         onToggleFavorite: _toggleFavorite,
+                        onDeleteVideo: _requestDeleteVideo,
                         onToggleSelected: _toggleRecentSelection,
                         onSelectAll: () => setState(() {
                           _selectedRecentPathKeys
@@ -2394,6 +2401,7 @@ class _LibraryPageState extends State<LibraryPage> {
                         onOpen: _openVideo,
                         onEditTags: _editTags,
                         onToggleFavorite: _toggleFavorite,
+                        onDelete: _requestDeleteVideo,
                       ),
               },
             ),
@@ -2614,12 +2622,17 @@ class _LibraryPageState extends State<LibraryPage> {
                             if (confirmed != true) {
                               return;
                             }
-                            await store.removeRoot(root);
+                            final removedVideos = await store.removeRoot(root);
                             if (!mounted || !dialogContext.mounted) {
                               return;
                             }
                             Navigator.of(dialogContext).pop();
                             _markLibraryDataChanged();
+                            final thumbnailService = _thumbnailService;
+                            if (thumbnailService != null) {
+                              unawaited(thumbnailService
+                                  .deleteThumbnailsFor(removedVideos));
+                            }
                           },
                         ),
                       );
@@ -2683,7 +2696,9 @@ class _LibraryPageState extends State<LibraryPage> {
       builder: (context) => AlertDialog(
         title: const Text('\u79fb\u9664\u76ee\u5f55'),
         content: Text(
-          '\u53ea\u4ece\u76ee\u5f55\u5217\u8868\u79fb\u9664\uff0c\u4e0d\u5220\u9664\u78c1\u76d8\u6587\u4ef6\uff0c\u4e5f\u4e0d\u4f1a\u7acb\u5373\u5220\u9664\u5df2\u5165\u5e93\u89c6\u9891\u8bb0\u5f55\u3002\n\n$root',
+          '将从媒体库移除该目录，并删除仅属于该目录的视频数据库记录、标签关系、'
+          '收藏、播放进度、媒体详情和缩略图缓存。\n\n'
+          '不会删除本地视频文件；仍被其它媒体库目录覆盖的视频会保留。\n\n$root',
         ),
         actions: [
           TextButton(
@@ -3013,9 +3028,100 @@ class _LibraryPageState extends State<LibraryPage> {
       await file.delete();
     }
     await _store?.deleteVideo(item.path);
+    await _thumbnailService?.deleteThumbnailFor(item);
     if (mounted) {
       _markLibraryDataChanged();
     }
+  }
+
+  /**
+   * 处理媒体卡片删除动作，并把磁盘文件删除保持为显式可选项。
+   *
+   * 数据库事务会一并删除标签关系、收藏、播放进度、媒体详情和稳定身份记录；选择仅移出
+   * 媒体库时，仍位于受监控 root 的文件会在下次扫描时作为新条目重新出现。
+   */
+  Future<void> _requestDeleteVideo(VideoItem item) async {
+    final deleteLocalFile = await _showVideoDeleteDialog(item);
+    if (deleteLocalFile == null || !mounted) {
+      return;
+    }
+    try {
+      if (deleteLocalFile) {
+        final file = File(item.path);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
+      await _store?.deleteVideo(item.path);
+      await _thumbnailService?.deleteThumbnailFor(item);
+      if (mounted) {
+        _markLibraryDataChanged();
+      }
+    } on FileSystemException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('删除失败：${error.message}')),
+      );
+    }
+  }
+
+  /** 返回 null 表示取消，false 表示仅删记录，true 表示同时删除本地文件。 */
+  Future<bool?> _showVideoDeleteDialog(VideoItem item) {
+    var deleteLocalFile = false;
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('删除视频'),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '将删除数据库记录、标签关系、收藏、播放进度、媒体详情和缩略图缓存。'
+                  '如果保留本地文件，它在下次扫描时可能重新加入媒体库。',
+                ),
+                const SizedBox(height: 10),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: deleteLocalFile,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('同时删除本地视频文件'),
+                  subtitle: const Text('此操作无法撤销'),
+                  onChanged: (value) => setDialogState(
+                    () => deleteLocalFile = value ?? false,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xffc53b4d),
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(deleteLocalFile),
+              child: Text(deleteLocalFile ? '删除文件和记录' : '仅移出媒体库'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _editTags(VideoItem item) async {

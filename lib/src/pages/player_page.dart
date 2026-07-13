@@ -123,6 +123,10 @@ class _PlayerPageState extends State<PlayerPage> {
   DateTime? _lastVideoAdvanceAt;
   DateTime? _lastAudioAdvanceAt;
   DateTime? _lastHealthSampleAt;
+  /** 最近一次 mpv 明确报告的实际硬解状态，不把属性不可用误判为软件解码。 */
+  String? _lastHwdecCurrent;
+  var _consecutiveSoftwareDecodeSamples = 0;
+  var _softwareDecodeConfirmed = false;
   var _videoProgressState = '等待首个视频样本';
   var _audioProgressState = '等待首个音频样本';
   var _videoStallEvents = 0;
@@ -513,6 +517,7 @@ class _PlayerPageState extends State<PlayerPage> {
       final frame =
           _parseMpvInt(await _getMpvProperty('estimated-frame-number'));
       final audioPts = _parseMpvNumber(await _getMpvProperty('audio-pts'));
+      final hwdecCurrent = await _getMpvProperty('hwdec-current');
       final now = DateTime.now();
       _lastHealthSampleAt = now;
       if (frame != null) {
@@ -534,6 +539,26 @@ class _PlayerPageState extends State<PlayerPage> {
       final canJudge = _playerBackend.state.playing &&
           !_playerBackend.state.buffering &&
           (_lastSeekAt == null || now.difference(_lastSeekAt!).inSeconds >= 2);
+      // mpv 在已开始软件解码时可能把 hwdec-current 返回为空；平台接口不可用才保持未知。
+      final effectiveHwdec =
+          hwdecCurrent == 'empty' && canJudge ? 'no' : hwdecCurrent;
+      if (effectiveHwdec != 'empty' && effectiveHwdec != 'unavailable') {
+        _lastHwdecCurrent = effectiveHwdec;
+        if (canJudge &&
+            widget.playbackSettings.hardwareDecodingEnabled &&
+            effectiveHwdec == 'no') {
+          _consecutiveSoftwareDecodeSamples++;
+        } else {
+          _consecutiveSoftwareDecodeSamples = 0;
+        }
+      }
+      if (_consecutiveSoftwareDecodeSamples >= 3 && !_softwareDecodeConfirmed) {
+        _softwareDecodeConfirmed = true;
+        // 运行时热切换 hwdec 会让部分超规格视频直接打开失败；只记录确认结果并保留软件回退可播放性。
+        debugPrint(
+          'PLAYER_HEALTH software_decode_confirmed requested=$_requestedHwdec actual=$hwdecCurrent',
+        );
+      }
       if (canJudge &&
           frame != null &&
           _lastVideoAdvanceAt != null &&
@@ -1071,6 +1096,8 @@ class _PlayerPageState extends State<PlayerPage> {
       'vd-lavc-threads': '4',
       'cache': 'yes',
       'hwdec': _requestedHwdec,
+      // 允许 mpv 对高分辨率 HEVC/VP9/AV1 等编码尝试用户选择的硬解后端。
+      'hwdec-codecs': 'all',
       // 缓存暂时耗尽时让 mpv 等待输入恢复，不以连续丢帧追赶播放时钟。
       'cache-pause': 'yes',
       'demuxer-readahead-secs': '15',
@@ -1134,6 +1161,10 @@ class _PlayerPageState extends State<PlayerPage> {
           break;
         }
         try {
+          // 每个新媒体独立判断实际解码器，不能沿用上一条视频的 no/恢复状态。
+          _lastHwdecCurrent = null;
+          _consecutiveSoftwareDecodeSamples = 0;
+          _softwareDecodeConfirmed = false;
           await _applyPlaybackPerformanceProfile();
           if (!mounted) {
             return;
@@ -1667,6 +1698,12 @@ class _PlayerPageState extends State<PlayerPage> {
     ]) {
       mpv[property] = await _getMpvProperty(property);
     }
+    final sampledHwdec = mpv['hwdec-current'];
+    if (sampledHwdec != null &&
+        sampledHwdec != 'empty' &&
+        sampledHwdec != 'unavailable') {
+      _lastHwdecCurrent = sampledHwdec;
+    }
     final estimatedFps = _parseMpvNumber(mpv['estimated-vf-fps']);
     final frameDurationMs =
         estimatedFps == null || estimatedFps <= 0 ? null : 1000 / estimatedFps;
@@ -1748,10 +1785,13 @@ class _PlayerPageState extends State<PlayerPage> {
       totalDroppedFrames: _parseMpvInt(mpv['frame-drop-count']),
       cacheDuration: _parseMpvNumber(mpv['demuxer-cache-duration']),
       cacheBufferingState: _parseMpvNumber(mpv['cache-buffering-state']),
-      hwdecCurrent: mpv['hwdec-current'] == 'empty' ||
-              mpv['hwdec-current'] == 'unavailable'
-          ? null
-          : mpv['hwdec-current'],
+      hwdecCurrent: _lastHwdecCurrent,
+      videoCodec:
+          mpv['video-codec'] == 'empty' || mpv['video-codec'] == 'unavailable'
+              ? details.videoCodec
+              : mpv['video-codec'],
+      videoWidth: details.width,
+      videoHeight: details.height,
       seekLatencyMs: _lastSeekLatencyMs,
       detailsQueued: _detailsService.queuedReads,
       frameDurationMs: frameDurationMs,

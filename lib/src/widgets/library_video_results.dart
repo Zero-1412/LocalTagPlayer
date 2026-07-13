@@ -11,6 +11,7 @@ class _VideoGrid extends StatelessWidget {
     required this.onOpen,
     required this.onEditTags,
     required this.onToggleFavorite,
+    required this.onDelete,
   });
 
   final List<VideoItem> videos;
@@ -26,6 +27,9 @@ class _VideoGrid extends StatelessWidget {
   final ValueChanged<VideoItem> onEditTags;
 
   final ValueChanged<VideoItem> onToggleFavorite;
+
+  /** 请求删除视频记录；是否同步删除本地文件由 Application 层确认。 */
+  final ValueChanged<VideoItem> onDelete;
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -55,6 +59,7 @@ class _VideoGrid extends StatelessWidget {
                   onOpen: () => onOpen(item, videos),
                   onEditTags: () => onEditTags(item),
                   onToggleFavorite: () => onToggleFavorite(item),
+                  onDelete: () => onDelete(item),
                 ),
               );
             },
@@ -82,6 +87,7 @@ class _VideoGrid extends StatelessWidget {
               onOpen: () => onOpen(item, videos),
               onEditTags: () => onEditTags(item),
               onToggleFavorite: () => onToggleFavorite(item),
+              onDelete: () => onDelete(item),
             );
           },
         );
@@ -104,6 +110,7 @@ class _InteractiveVideoListRow extends StatelessWidget {
     required this.onOpen,
     required this.onEditTags,
     required this.onToggleFavorite,
+    required this.onDelete,
   });
 
   final VideoItem item;
@@ -117,6 +124,8 @@ class _InteractiveVideoListRow extends StatelessWidget {
   final VoidCallback onEditTags;
 
   final VoidCallback onToggleFavorite;
+
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -214,6 +223,7 @@ class _InteractiveVideoListRow extends StatelessWidget {
                     onOpen: onOpen,
                     onToggleFavorite: onToggleFavorite,
                     onEditTags: onEditTags,
+                    onDelete: onDelete,
                     compact: compactActions,
                   ),
                 ],
@@ -262,6 +272,7 @@ class _ListRowActions extends StatelessWidget {
     required this.onOpen,
     required this.onToggleFavorite,
     required this.onEditTags,
+    required this.onDelete,
     required this.compact,
   });
 
@@ -272,6 +283,8 @@ class _ListRowActions extends StatelessWidget {
   final VoidCallback onToggleFavorite;
 
   final VoidCallback onEditTags;
+
+  final VoidCallback onDelete;
 
   final bool compact;
 
@@ -345,6 +358,7 @@ class _ListRowActions extends StatelessWidget {
             child: _VideoMoreButton(
               key: LibrarySmokeKeys.listMore(item.path),
               onEditTags: onEditTags,
+              onDelete: onDelete,
             ),
           ),
         ],
@@ -361,6 +375,7 @@ class _InteractiveVideoCard extends StatefulWidget {
     required this.onOpen,
     required this.onEditTags,
     required this.onToggleFavorite,
+    required this.onDelete,
   });
 
   final VideoItem item;
@@ -369,6 +384,7 @@ class _InteractiveVideoCard extends StatefulWidget {
   final VoidCallback onOpen;
   final VoidCallback onEditTags;
   final VoidCallback onToggleFavorite;
+  final VoidCallback onDelete;
 
   @override
   State<_InteractiveVideoCard> createState() => _InteractiveVideoCardState();
@@ -543,6 +559,7 @@ class _InteractiveVideoCardState extends State<_InteractiveVideoCard> {
                                 child: _VideoMoreButton(
                                   key: LibrarySmokeKeys.cardMore(item.path),
                                   onEditTags: widget.onEditTags,
+                                  onDelete: widget.onDelete,
                                 ),
                               ),
                             ],
@@ -565,9 +582,12 @@ class _VideoMoreButton extends StatelessWidget {
   const _VideoMoreButton({
     super.key,
     required this.onEditTags,
+    required this.onDelete,
   });
 
   final VoidCallback onEditTags;
+
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -587,11 +607,25 @@ class _VideoMoreButton extends StatelessWidget {
             ],
           ),
         ),
+        PopupMenuItem(
+          key: LibrarySmokeKeys.videoMoreDelete,
+          value: _VideoMoreAction.delete,
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline_rounded, color: Color(0xffc53b4d)),
+              SizedBox(width: 10),
+              Text('删除', style: TextStyle(color: Color(0xffc53b4d))),
+            ],
+          ),
+        ),
       ],
       onSelected: (value) {
         switch (value) {
           case _VideoMoreAction.editTags:
             onEditTags();
+            break;
+          case _VideoMoreAction.delete:
+            onDelete();
             break;
         }
       },
@@ -603,7 +637,7 @@ class _VideoMoreButton extends StatelessWidget {
   }
 }
 
-enum _VideoMoreAction { editTags }
+enum _VideoMoreAction { editTags, delete }
 
 class _VideoPreview extends StatefulWidget {
   const _VideoPreview({

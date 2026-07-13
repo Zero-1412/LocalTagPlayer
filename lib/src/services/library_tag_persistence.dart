@@ -200,8 +200,15 @@ class LibraryTagPersistence {
    *
    * 扫描清理缺失视频时需要和视频表删除同批提交，避免中间状态留下悬空关联。
    */
-  void deleteVideoLinksInBatch(Batch batch, VideoItem video) {
-    _videoTagIdsByPathKey.remove(TagRules.pathKey(video.path));
+  void deleteVideoLinksInBatch(
+    Batch batch,
+    VideoItem video, {
+    bool updateMemoryIndex = true,
+  }) {
+    // 需要等待外层事务成功时，先只排入 SQLite 删除，避免提交失败后内存索引先丢失。
+    if (updateMemoryIndex) {
+      _videoTagIdsByPathKey.remove(TagRules.pathKey(video.path));
+    }
     batch.delete(
       'video_tags',
       where: 'video_id = ?',

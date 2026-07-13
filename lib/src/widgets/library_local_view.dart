@@ -15,6 +15,7 @@ class _LocalLibraryView extends StatelessWidget {
     required this.onOpenVideo,
     required this.onEditTags,
     required this.onToggleFavorite,
+    required this.onDelete,
   });
 
   final String? currentPath;
@@ -28,6 +29,7 @@ class _LocalLibraryView extends StatelessWidget {
   final void Function(VideoItem item, List<VideoItem> playlist) onOpenVideo;
   final ValueChanged<VideoItem> onEditTags;
   final ValueChanged<VideoItem> onToggleFavorite;
+  final ValueChanged<VideoItem> onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +114,7 @@ class _LocalLibraryView extends StatelessWidget {
                               onOpen: () => onOpenVideo(video, localVideos),
                               onEditTags: () => onEditTags(video),
                               onToggleFavorite: () => onToggleFavorite(video),
+                              onDelete: () => onDelete(video),
                             );
                           },
                         );
@@ -149,6 +152,7 @@ class _LocalLibraryView extends StatelessWidget {
                             onOpen: () => onOpenVideo(video, localVideos),
                             onEditTags: () => onEditTags(video),
                             onToggleFavorite: () => onToggleFavorite(video),
+                            onDelete: () => onDelete(video),
                           );
                         },
                       );
@@ -259,6 +263,7 @@ class _LocalLibrarySmokeHarnessState extends State<LocalLibrarySmokeHarness> {
           onOpenVideo: (_, __) {},
           onEditTags: (_) {},
           onToggleFavorite: (_) {},
+          onDelete: (_) {},
         ),
       ),
     );
@@ -346,6 +351,7 @@ class _VideoListRowSmokeHarnessState extends State<VideoListRowSmokeHarness> {
                     });
                   },
                   onEditTags: () => setState(() => _moreCount += 1),
+                  onDelete: () => setState(() => _moreCount += 1),
                 ),
               ),
             ],

@@ -25,6 +25,9 @@ class _PlaybackDiagnosticsSnapshot {
     required this.cacheDuration,
     required this.cacheBufferingState,
     required this.hwdecCurrent,
+    required this.videoCodec,
+    required this.videoWidth,
+    required this.videoHeight,
     required this.seekLatencyMs,
     required this.detailsQueued,
     required this.frameDurationMs,
@@ -79,6 +82,11 @@ class _PlaybackDiagnosticsSnapshot {
 
   /** mpv 当前真正启用的硬件解码后端。 */
   final String? hwdecCurrent;
+
+  /** 当前视频编码与分辨率，用于解释硬解后端拒绝高规格样本的原因。 */
+  final String? videoCodec;
+  final int? videoWidth;
+  final int? videoHeight;
 
   /** 最近一次 seek 从请求到播放器返回的耗时。 */
   final int? seekLatencyMs;
@@ -248,8 +256,18 @@ class _PlaybackDiagnosticsDialogState
     if (snapshot.videoStalled && snapshot.audioStalled) {
       reasons.add('视频帧与音频播放头同时停滞，确认播放器整体停止推进');
     }
-    if (snapshot.hwdecCurrent == null || snapshot.hwdecCurrent == 'no') {
-      reasons.add('实际硬解未启用，高分辨率视频会持续占用 CPU 软件解码');
+    if (snapshot.hwdecCurrent == 'no') {
+      final resolution =
+          snapshot.videoWidth == null || snapshot.videoHeight == null
+              ? null
+              : '${snapshot.videoWidth}x${snapshot.videoHeight}';
+      reasons.add(
+        resolution == null
+            ? '实际硬解未启用，当前视频正在占用 CPU 软件解码'
+            : '实际硬解未启用：${snapshot.videoCodec ?? '未知编码'} $resolution 已回退到 CPU 软件解码',
+      );
+    } else if (snapshot.hwdecCurrent == null) {
+      reasons.add('暂时无法读取实际硬解状态，请在视频开始推进后再次采样');
     }
     if (snapshot.seekLatencyMs != null && snapshot.seekLatencyMs! > 500) {
       reasons.add('最近 seek 耗时 ${snapshot.seekLatencyMs} ms，随机拖动响应偏慢');

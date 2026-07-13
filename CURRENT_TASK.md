@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.17` 已完成。
+架构版本状态：`Architecture Baseline 0.5.18` 已完成。
 
 最近一次验证：
 
@@ -16,6 +16,13 @@ flutter build windows --debug
 结果：通过。
 
 ## 最近完成
+
+- 移除媒体 root 改为单 SQLite 事务删除 root 配置、仅属于该 root 的视频行及标签关系；磁盘文件不动，重叠 root 仍覆盖的记录保留，媒体库总量在事务完成后立即差量刷新。
+- 视频卡片“更多”新增删除入口，可选择仅移出媒体库或同步删除本地文件；数据库关联、收藏、播放进度、媒体详情与缩略图缓存一并清理。
+- 快速滚动产生的新可见缩略图请求提升到遗留队列之前；删除中的活动生成任务会被作废，不能把旧 JPEG 写回。
+- 播放器持续区分 `hwdec-current` 不可读与明确软件解码；打开前以 `hwdec-codecs=all` 允许高分辨率编码尝试 D3D11VA，连续三次确认 `no` 后只记录真实回退，不在播放中热切换后端。诊断会显示具体编码与分辨率。
+- 真实 11,135 条窗口验证：卡片删除弹窗无遮挡，快速滚动停止约 0.9 秒后当前可见缩略图均已显示。8K H.264 7680×4320@60 样本被 RTX 4070 SUPER/mpv 明确回退为 `no`，总掉帧 4,240、AV offset 约 2.4 秒；运行时 `auto-copy` A/B 会直接触发 `media_kit_error`，因此已撤回，不把该硬件边界伪装成修复。
+- 79 项 store/widget tests、`flutter analyze` 与 Windows debug build 通过；测试实例已正常关闭，未执行真实删除或 root 移除。
 
 - 缩略图可见卡片改为等待共享的受限队列生成 Future，同一 cache key 只生成一次；后台预取连同 cache key/JPEG 验证阶段一起限制在 500 个请求内。
 - 媒体库卡片移除 build 期间同步文件 stat，并对历史 4K fallback JPEG 使用 384px 解码尺寸；真实窗口像素截图中可见缩略图均已显示。

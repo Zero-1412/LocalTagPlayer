@@ -807,12 +807,28 @@ class LibraryStore {
     await _videoPersistence.upsert(item);
   }
 
-  Future<void> deleteVideo(String path) async {
-    final item = videos.remove(TagRules.pathKey(path));
+  /**
+   * 在单个 SQLite 事务中删除视频记录及其全部标签关系。
+   *
+   * 收藏、播放进度、媒体详情和稳定身份字段都存放在 videos 行中；删除该行后不会留下
+   * 孤立用户状态。磁盘文件与缩略图缓存由 Application 层按用户选择分别处理。
+   */
+  Future<VideoItem?> deleteVideo(String path) async {
+    final pathKey = TagRules.pathKey(path);
+    final item = videos[pathKey];
+    final batch = _db.batch();
     if (item != null) {
-      await _tagPersistence.deleteVideoLinks(item);
+      _tagPersistence.deleteVideoLinksInBatch(
+        batch,
+        item,
+        updateMemoryIndex: false,
+      );
     }
-    await _videoPersistence.delete(path);
+    _videoPersistence.deleteInBatch(batch, path);
+    await batch.commit(noResult: true);
+    videos.remove(pathKey);
+    videoTagIdsByPathKey.remove(pathKey);
+    return item;
   }
 
   Future<int> addRootAndScan(String rootPath) async {
@@ -837,12 +853,59 @@ class LibraryStore {
   /**
    * 从媒体库根目录列表移除一个目录。
    *
-   * 只更新 root 配置，不删除磁盘文件，也不立即清理已有视频记录。
+   * root 配置、仅受该 root 管理的视频行及其标签关系在同一事务中提交。重叠 root
+   * 仍覆盖的视频会保留，磁盘文件始终不由该操作删除。
    */
-  Future<void> removeRoot(String rootPath) async {
-    final rootKey = TagRules.pathKey(TagRules.normalizeRootPath(rootPath));
-    roots.removeWhere((root) => TagRules.pathKey(root) == rootKey);
-    await saveMetadata();
+  Future<List<VideoItem>> removeRoot(String rootPath) async {
+    final normalizedRoot = TagRules.normalizeRootPath(rootPath);
+    final rootKey = TagRules.pathKey(normalizedRoot);
+    if (!roots.any((root) => TagRules.pathKey(root) == rootKey)) {
+      return const <VideoItem>[];
+    }
+
+    // 取消进行中的只读扫描并推进代次，禁止旧扫描在 root 删除后重新提交旧结果。
+    if (_scanGeneration > 0) {
+      _scanBackend.cancelGeneration(_scanGeneration);
+      _scanGeneration++;
+    }
+    final remainingRoots = <String>[
+      for (final root in roots)
+        if (TagRules.pathKey(root) != rootKey) root,
+    ];
+    final removedVideos = <VideoItem>[
+      for (final item in videos.values)
+        if (TagRules.rootContainsFile(normalizedRoot, item.path) &&
+            !remainingRoots.any(
+              (root) => TagRules.rootContainsFile(root, item.path),
+            ))
+          item,
+    ];
+
+    final batch = _db.batch();
+    _metadataPersistence.saveInBatch(
+      batch,
+      roots: remainingRoots,
+      favoriteTags: favoriteTags,
+    );
+    for (final item in removedVideos) {
+      _tagPersistence.deleteVideoLinksInBatch(
+        batch,
+        item,
+        updateMemoryIndex: false,
+      );
+      _videoPersistence.deleteInBatch(batch, item.path);
+    }
+    await batch.commit(noResult: true);
+
+    roots
+      ..clear()
+      ..addAll(remainingRoots);
+    for (final item in removedVideos) {
+      final pathKey = TagRules.pathKey(item.path);
+      videos.remove(pathKey);
+      videoTagIdsByPathKey.remove(pathKey);
+    }
+    return List<VideoItem>.unmodifiable(removedVideos);
   }
 
   Future<int> scan() async {

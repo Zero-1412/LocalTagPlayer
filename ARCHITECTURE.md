@@ -31,7 +31,7 @@ lib/src/widgets
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.17`
+已完成基线：`Architecture Baseline 0.5.18`
 
 当前推进中：后续观察 Rust watcher / NAS 一致性，不扩大 SQLite 双写边界。
 
@@ -65,6 +65,7 @@ lib/src/widgets
 - `0.5.15`：真实 3840×2160 长视频以同样本、同种子分别完成 MediaKit、原生基线和原生优化各 480 秒/18 轮。压力采样明确区分播放器启动、稳定播放、释放与媒体库空闲阶段；原生渲染调用 `mpv_render_context_update` 过滤非帧更新，ANGLE 表面按 Flutter 请求在 1280×720 到 1920×1080 间量化，demux 预算收敛到 64+16 MiB。优化后无音视频停滞且 seek P95 从 118 ms 降至 27 ms，但稳定期 Private/GPU committed 仍高于 MediaKit，因此默认后端不变。
 - `0.5.16`：完成 D3D11/ANGLE 最终内存归因并停止默认原生播放器替换路线；新增独立 `MediaProbeBackend`，Windows C++ 通过延迟加载的 FFmpeg 8.1 shared libraries 串行执行 `probeBatch/cancelGeneration`，SQLite 仍只由 Dart Repository 写入。真实 11,135 条索引库证明扫描瓶颈来自未变化文件的随机指纹读取，`LibraryScanService` 复用数据库 size/mtime/fingerprint 后 15,958 文件热扫描降至 2.72 秒，不引入 Rust。
 - `0.5.17`：修复 SQLite 启动时无条件 stable identity 回填产生的 NOCASE 关系数乘视频数全表扫描，并建立 `LibraryScanBackend` / `LibraryScanDelta` / generation 取消边界。Windows Rust sidecar 只读目录、stat 与 fingerprint，缺失时回退 Dart；Dart Application 独占 stable identity/relink 校验和 SQLite 单 batch 提交。父子 root 最上层优先去重，首帧不等待扫描或媒体探测，新增/内容变化项才进入缓存与 `MediaProbeBackend`。
+- `0.5.18`：明确媒体库删除边界。移除 root 由 Dart Application/SQLite Repository 单事务删除不再受其它 root 管理的视频记录，磁盘文件不动；单视频删除由 UI 显式选择是否同步删文件，并清理稳定视频行、标签关系和缩略图缓存。缩略图可见任务可抢占滚动遗留队列；PlayerBackend 诊断持续区分硬解属性不可用与明确软件解码，硬解参数只在 open 前设置，播放中不热切换解码后端。SQLite schema、过滤语义与 filtered queue 不变。
 
 协作要求：
 

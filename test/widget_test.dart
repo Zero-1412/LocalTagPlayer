@@ -1490,7 +1490,7 @@ void main() {
       (tester) async {
     const path = r'C:\smoke\media\Alpha\clip.mp4';
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(1500, 420);
+    tester.view.physicalSize = const Size(1500, 600);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const VideoListRowSmokeHarness());
@@ -1521,6 +1521,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(actionState(), 'open=1 favorite=1 more=0');
     expect(find.byKey(LibrarySmokeKeys.videoMoreEditTags), findsOneWidget);
+    expect(find.byKey(LibrarySmokeKeys.videoMoreDelete), findsOneWidget);
     expect(find.text('编辑标签'), findsOneWidget);
   });
 

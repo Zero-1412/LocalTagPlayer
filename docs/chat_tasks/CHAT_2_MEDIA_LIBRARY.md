@@ -7,6 +7,12 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-13 目录与视频删除语义
+
+- 移除 root 不再保留脱离管理范围的视频总量：metadata、视频行和标签关系在单 SQLite batch 中提交，磁盘文件不删除。
+- 父子 root 重叠时，仅删除不再受任何剩余 root 覆盖的条目；focused test 覆盖父 root 移除后子 root 视频保留。
+- 卡片删除可选择仅移出媒体库或同步删除本地文件；stable 视频行中的收藏、播放进度和媒体详情随记录删除，标签关系显式清理。
+
 ## 2026-07-13 SQLite hydration 与 Rust ScanDelta
 
 - 真实库分阶段定位启动 38.55 秒为 stable identity 兼容 UPDATE 的 Windows NOCASE 全表相关扫描；普通视频 SQL 约 40–58 毫秒、对象构建约 208–275 毫秒、标签关系查询与 hydration 约 50–71 毫秒。

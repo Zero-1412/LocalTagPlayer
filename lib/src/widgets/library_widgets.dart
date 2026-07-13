@@ -1972,6 +1972,7 @@ class _RecentPlaybackView extends StatelessWidget {
     required this.onOpen,
     required this.onEditTags,
     required this.onToggleFavorite,
+    required this.onDeleteVideo,
     required this.onToggleSelected,
     required this.onSelectAll,
     required this.onClearSelection,
@@ -1988,6 +1989,8 @@ class _RecentPlaybackView extends StatelessWidget {
   final void Function(VideoItem item, List<VideoItem> playlist) onOpen;
   final ValueChanged<VideoItem> onEditTags;
   final ValueChanged<VideoItem> onToggleFavorite;
+  /** 卡片更多菜单的完整视频删除动作，与“清除播放记录”保持语义隔离。 */
+  final ValueChanged<VideoItem> onDeleteVideo;
   final ValueChanged<VideoItem> onToggleSelected;
   final VoidCallback onSelectAll;
   final VoidCallback onClearSelection;
@@ -2061,6 +2064,7 @@ class _RecentPlaybackView extends StatelessWidget {
                       onOpen: () => onOpen(item, videos),
                       onEditTags: () => onEditTags(item),
                       onToggleFavorite: () => onToggleFavorite(item),
+                      onDeleteVideo: () => onDeleteVideo(item),
                       onToggleSelected: () => onToggleSelected(item),
                       onDelete: () => onDeleteOne(item),
                     );
@@ -2088,6 +2092,7 @@ class _RecentPlaybackView extends StatelessWidget {
                     onOpen: () => onOpen(item, videos),
                     onEditTags: () => onEditTags(item),
                     onToggleFavorite: () => onToggleFavorite(item),
+                    onDeleteVideo: () => onDeleteVideo(item),
                     onToggleSelected: () => onToggleSelected(item),
                     onDelete: () => onDeleteOne(item),
                   );
@@ -2110,6 +2115,7 @@ class _RecentPlaybackRow extends StatelessWidget {
     required this.onOpen,
     required this.onEditTags,
     required this.onToggleFavorite,
+    required this.onDeleteVideo,
     required this.onToggleSelected,
     required this.onDelete,
   });
@@ -2121,6 +2127,7 @@ class _RecentPlaybackRow extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onEditTags;
   final VoidCallback onToggleFavorite;
+  final VoidCallback onDeleteVideo;
   final VoidCallback onToggleSelected;
   final VoidCallback onDelete;
 
@@ -2140,6 +2147,7 @@ class _RecentPlaybackRow extends StatelessWidget {
                   onOpen: onOpen,
                   onEditTags: onEditTags,
                   onToggleFavorite: onToggleFavorite,
+                  onDelete: onDeleteVideo,
                 ),
               ),
               LinearProgressIndicator(
@@ -2170,6 +2178,7 @@ class _RecentPlaybackCard extends StatelessWidget {
     required this.onOpen,
     required this.onEditTags,
     required this.onToggleFavorite,
+    required this.onDeleteVideo,
     required this.onToggleSelected,
     required this.onDelete,
   });
@@ -2181,6 +2190,7 @@ class _RecentPlaybackCard extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onEditTags;
   final VoidCallback onToggleFavorite;
+  final VoidCallback onDeleteVideo;
   final VoidCallback onToggleSelected;
   final VoidCallback onDelete;
 
@@ -2195,6 +2205,7 @@ class _RecentPlaybackCard extends StatelessWidget {
           onOpen: onOpen,
           onEditTags: onEditTags,
           onToggleFavorite: onToggleFavorite,
+          onDelete: onDeleteVideo,
         ),
         Positioned(
           top: 8,

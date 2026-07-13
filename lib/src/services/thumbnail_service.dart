@@ -90,6 +90,8 @@ class ThumbnailService {
   final Set<String> _activeCacheKeys = {};
   final Set<String> _backgroundQueued = {};
   final Set<String> _priorityQueued = {};
+  /** 删除发生在生成期间时阻止旧任务把已删除视频的 JPEG 重新写回缓存。 */
+  final Set<String> _suppressedActiveCacheKeys = {};
   /** 同一 cache key 的可见卡片与预取任务共享一个完成信号。 */
   final Map<String, Completer<File?>> _jobCompletions =
       <String, Completer<File?>>{};
@@ -187,6 +189,53 @@ class ThumbnailService {
   }
 
   /**
+   * 删除一个视频对应的内存缓存、等待任务与磁盘 JPEG。
+   *
+   * cache key 优先复用扫描阶段持久化的 size/mtime，不为正常数据库记录重复 stat 原视频。
+   */
+  Future<void> deleteThumbnailFor(VideoItem item) async {
+    final cacheKey = await _cacheKeyFor(item);
+    _pathMemoryCache.remove(item.path);
+    if (cacheKey == null) {
+      return;
+    }
+
+    _priorityJobs.removeWhere((job) => job.cacheKey == cacheKey);
+    _backgroundJobs.removeWhere((job) => job.cacheKey == cacheKey);
+    _priorityQueued.remove(cacheKey);
+    _backgroundQueued.remove(cacheKey);
+    _memoryCache.remove(cacheKey);
+    if (_activeCacheKeys.contains(cacheKey)) {
+      // 活动 FFmpeg/media_kit 任务不能强杀；完成写入时由抑制标记立即丢弃结果。
+      _suppressedActiveCacheKeys.add(cacheKey);
+    } else {
+      final completion = _jobCompletions.remove(cacheKey);
+      if (completion != null && !completion.isCompleted) {
+        completion.complete(null);
+      }
+    }
+
+    final file = File(p.join(_directory.path, '$cacheKey.jpg'));
+    PaintingBinding.instance.imageCache.evict(FileImage(file));
+    for (final candidate in <File>[file, File('${file.path}.tmp.jpg')]) {
+      try {
+        if (await candidate.exists()) {
+          await candidate.delete();
+        }
+      } on FileSystemException {
+        // 图片仍被解码器短暂持有时由后续缓存清理重试；数据库删除不应因此失败。
+      }
+    }
+  }
+
+  /** 批量清理已从媒体库移除的视频缩略图，避免一次创建无界 Future 列表。 */
+  Future<void> deleteThumbnailsFor(Iterable<VideoItem> items) async {
+    for (final item in items) {
+      await deleteThumbnailFor(item);
+    }
+  }
+
+  /**
    * 优先返回已验证缓存；未命中时等待该视频的优先生成任务。
    *
    * 可见卡片必须绑定到真正的生成 Future，否则 FFmpeg 完成后界面不会自动更新。
@@ -234,13 +283,26 @@ class ThumbnailService {
 
     if (priority) {
       if (_priorityQueued.contains(cacheKey)) {
+        // 快速滚动停止后，把当前可见项从旧可见队列中提升到队首。
+        _ThumbnailJob? queuedJob;
+        _priorityJobs.removeWhere((job) {
+          if (job.cacheKey != cacheKey) {
+            return false;
+          }
+          queuedJob = job;
+          return true;
+        });
+        if (queuedJob != null) {
+          _priorityJobs.addFirst(queuedJob!);
+        }
         return completion.future;
       }
       if (_backgroundQueued.remove(cacheKey)) {
         _backgroundJobs.removeWhere((job) => job.cacheKey == cacheKey);
       }
       _priorityQueued.add(cacheKey);
-      _priorityJobs.add(
+      // 最新构建的可见卡片优先于快速滚动遗留的离屏任务。
+      _priorityJobs.addFirst(
         _ThumbnailJob(
           cacheKey: cacheKey,
           isBackground: false,
@@ -368,6 +430,9 @@ class ThumbnailService {
     try {
       final file = await ExternalMediaTools.createThumbnail(item, output);
       if (file != null) {
+        if (await _discardSuppressedOutput(cacheKey, output)) {
+          return null;
+        }
         item.thumbnailError = null;
         _completed++;
         _ffmpegCompleted++;
@@ -378,6 +443,10 @@ class ThumbnailService {
       }
     } catch (error) {
       item.thumbnailError = 'ffmpeg: $error';
+    }
+
+    if (await _discardSuppressedOutput(cacheKey, output)) {
+      return null;
     }
 
     if (!allowPlayerFallback) {
@@ -440,6 +509,9 @@ class ThumbnailService {
         _pathMemoryCache[item.path] = null;
         return null;
       }
+      if (await _discardSuppressedOutput(cacheKey, output)) {
+        return null;
+      }
       await output.parent.create(recursive: true);
       final tempOutput = File('${output.path}.tmp.jpg');
       if (await tempOutput.exists()) {
@@ -450,6 +522,9 @@ class ThumbnailService {
         await output.delete();
       }
       await tempOutput.rename(output.path);
+      if (await _discardSuppressedOutput(cacheKey, output)) {
+        return null;
+      }
       item.thumbnailError = null;
       _completed++;
       _fallbackCompleted++;
@@ -467,6 +542,26 @@ class ThumbnailService {
     } finally {
       await player.dispose();
     }
+  }
+
+  /** 活动生成被删除操作作废时清理其产物，并消费一次抑制标记。 */
+  Future<bool> _discardSuppressedOutput(String cacheKey, File output) async {
+    if (!_suppressedActiveCacheKeys.remove(cacheKey)) {
+      return false;
+    }
+    try {
+      if (await output.exists()) {
+        await output.delete();
+      }
+      final temporary = File('${output.path}.tmp.jpg');
+      if (await temporary.exists()) {
+        await temporary.delete();
+      }
+    } on FileSystemException {
+      // 删除竞态只影响已作废缓存文件，不能让生成队列失去推进能力。
+    }
+    _memoryCache.remove(cacheKey);
+    return true;
   }
 
   Future<CacheStats> statsFor(Iterable<VideoItem> items) async {

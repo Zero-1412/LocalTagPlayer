@@ -465,6 +465,80 @@ void main() {
     expect(withoutRoot.favoriteTags, ['alpha', 'beta']);
   });
 
+  test('removing root deletes detached database records but keeps local files',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('remove_root_records');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Series', 'detached.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    expect(await store.addRootAndScan(mediaRoot.path), 1);
+    final item = _videoByPath(store, file.path)..isFavorite = true;
+    await store.upsertVideo(item);
+    final manual =
+        await store.createManualTag(name: '保留性测试', groupId: 'manual');
+    expect(await store.batchAddManualTag(manual, [item]), 1);
+
+    final removed = await store.removeRoot(mediaRoot.path);
+    expect(removed.map((item) => item.videoId), [item.videoId]);
+    expect(store.videos, isEmpty);
+    expect(await file.exists(), isTrue);
+
+    final reloaded = await _loadTrackedStore(stores);
+    expect(reloaded.roots, isEmpty);
+    expect(reloaded.videos, isEmpty);
+    expect(
+      reloaded.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
+      isNull,
+    );
+    expect((await reloaded.tagUsageSummaries())[manual.id]?.manual ?? 0, 0);
+  });
+
+  test('removing parent root keeps videos covered by a nested root', () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('remove_overlap_root');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final parentRoot = Directory(p.join(dataDir.path, 'media'));
+    final nestedRoot = Directory(p.join(parentRoot.path, 'nested'));
+    final file = await _writeVideoPlaceholder(nestedRoot, ['covered.mp4']);
+    final store = await _loadTrackedStore(stores);
+    store.roots.addAll([parentRoot.path, nestedRoot.path]);
+    await store.saveMetadata();
+    final item = VideoItem(
+      path: file.path,
+      title: 'covered',
+      folder: nestedRoot.path,
+      rootPath: nestedRoot.path,
+      relativePath: 'covered.mp4',
+      fileSize: await file.length(),
+      modifiedMs: (await file.lastModified()).millisecondsSinceEpoch,
+      tags: const <String>{},
+      addedAt: DateTime.utc(2026, 7, 13),
+    );
+    await store.upsertVideo(item);
+
+    final removed = await store.removeRoot(parentRoot.path);
+    expect(removed, isEmpty);
+    expect(store.roots, [nestedRoot.path]);
+    expect(store.videos[TagRules.pathKey(file.path)]?.videoId, item.videoId);
+
+    final reloaded = await _loadTrackedStore(stores);
+    expect(reloaded.roots, [nestedRoot.path]);
+    expect(reloaded.videos[TagRules.pathKey(file.path)]?.videoId, item.videoId);
+  });
+
   test('scan coordinator marks missing videos and preserves manual tags',
       () async {
     final stores = <LibraryStore>[];
