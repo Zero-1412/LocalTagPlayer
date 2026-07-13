@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "native_player_bridge.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -25,6 +26,13 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  native_player_registrar_ =
+      std::make_unique<flutter::PluginRegistrarWindows>(
+          flutter_controller_->engine()->GetRegistrarForPlugin(
+              "LocalTagPlayerNativePlayer"));
+  native_player_bridge_ = std::make_unique<NativePlayerBridge>(
+      native_player_registrar_->messenger(),
+      native_player_registrar_->texture_registrar());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -41,6 +49,8 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
+    native_player_bridge_.reset();
+    native_player_registrar_.reset();
     flutter_controller_ = nullptr;
   }
 

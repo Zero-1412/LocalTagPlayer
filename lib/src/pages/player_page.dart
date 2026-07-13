@@ -255,6 +255,12 @@ class _PlayerPageState extends State<PlayerPage> {
     required String hwdec,
     required bool enableHardwareAcceleration,
   }) {
+    // 仅显式环境开关启用未完成的原生骨架，避免用户误入无真实解码的测试后端。
+    if (Platform.isWindows &&
+        Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
+            'windows-native-stub') {
+      return WindowsNativePlayerBackend();
+    }
     return MediaKitPlayerBackend(
       hwdec: hwdec,
       enableHardwareAcceleration: enableHardwareAcceleration,

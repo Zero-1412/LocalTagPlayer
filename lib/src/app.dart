@@ -42,6 +42,7 @@ part 'services/thumbnail_service.dart';
 part 'services/media_details_service.dart';
 part 'services/player_hardware_acceleration.dart';
 part 'services/media_kit_player_backend.dart';
+part 'services/windows_native_player_backend.dart';
 part 'services/player_memory_diagnostics.dart';
 part 'platform/platform_interfaces.dart';
 part 'platform/desktop_file_location_service.dart';

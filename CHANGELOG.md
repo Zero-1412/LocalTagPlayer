@@ -684,6 +684,8 @@
 - 保持 filtered queue、标签语义、SQLite schema、缩略图缓存有效性与 FFmpegBackend 边界不变。
 # 2026-07-13
 
+- 新增Windows C++播放器桥接骨架和显式假后端开关，验证原生外部纹理、串行命令、Flutter控件叠加及退出释放；默认播放后端与用户设置保持不变。
+- 记录真实libmpv/D3D11接入的可重复构建要求，禁止从本机Pub Cache或build临时目录链接生产后端。
 - 将现有 media_kit/libmpv 播放链路收口到完整 `PlayerBackend` 适配器，播放器页面仅负责 filtered queue 与 UI，不再直接拥有 Player、VideoController 或原生属性入口。
 - 增加可注入后端工厂、纹理/状态/诊断/释放契约，为 Windows C++ 播放后端提供不改页面的可回滚 A/B 接入点；默认播放参数与硬解行为保持不变。
 - 真实媒体库 90 秒回归完成 4 轮播放、滚动、seek 和退出，实际硬解保持 `d3d11va-copy`，独立视频帧与音频 PTS 均持续推进。

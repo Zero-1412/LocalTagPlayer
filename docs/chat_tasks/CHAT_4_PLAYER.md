@@ -316,3 +316,11 @@
 - 页面构造支持 `PlayerBackendFactory` 注入，默认继续使用现有 media_kit/libmpv 与 `d3d11va-copy`，后续 C++ 后端可做可回滚 A/B 切换。
 - filtered queue 来源、当前 index、标签语义、缩略图/媒体详情队列和 SQLite schema 均未修改。
 - 74 项测试、analyze、Windows debug build 与 90 秒真实媒体库 4 轮回归通过；视频/音频停滞事件均为 0，退出后纹理 ID 均失效。
+# 2026-07-13 Windows C++假纹理与生命周期骨架
+
+- runner注册`local_tag_player/native_player`通道，原生层拥有外部纹理、生命周期状态和串行命令线程。
+- Flutter增加`WindowsNativePlayerBackend`，只允许环境开关`windows-native-stub`显式启用；生产默认继续使用media_kit。
+- 假后端真实媒体库2轮回归确认棋盘格纹理、队列滚动、全屏、seek和退出链路；每轮dispose后纹理ID变为`-1`。
+- 默认media_kit同媒体2轮对照仍为`d3d11va-copy`，seek约27ms，视频帧与音频PTS持续推进且无停滞事件。
+- 假后端峰值173线程/565.6MiB工作集/558.9MiB GPU committed，对照为315线程/830.3MiB/781.8MiB；由于假后端不解码，这组数据仅建立桥接开销基线，不宣称性能提升。
+- 真正libmpv/D3D11尚未接入：当前依赖只存在于生成目录，必须先建立固定版本第三方依赖供应，不能提交机器相关链接路径。

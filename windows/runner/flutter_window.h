@@ -3,10 +3,13 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/plugin_registrar_windows.h>
 
 #include <memory>
 
 #include "win32_window.h"
+
+class NativePlayerBridge;
 
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
@@ -28,6 +31,10 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  /** Windows 原生播放器通道与纹理生命周期所有者。 */
+  std::unique_ptr<flutter::PluginRegistrarWindows> native_player_registrar_;
+  std::unique_ptr<NativePlayerBridge> native_player_bridge_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

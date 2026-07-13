@@ -473,3 +473,10 @@ flutter build windows --debug
 - 新增 `MediaKitPlayerBackend`，集中持有 Player、VideoController 与 libmpv 属性访问；`PlayerPage` 和诊断弹窗不再直接依赖 media_kit 实例。
 - `PlayerPage` 支持注入 `PlayerBackendFactory`，默认仍使用 media_kit/libmpv，后续 Windows C++ 后端可在组合根做 A/B 切换。
 - 74 项测试、`flutter analyze`、Windows debug build 通过；真实媒体库 90 秒回归完成 4 轮，硬解均为 `d3d11va-copy`，视频/音频停滞事件为 0，seek 为 26–27ms，退出后纹理 ID 均变为 `-1`。
+# 2026-07-13 Windows C++播放器骨架
+
+- Windows runner新增原生播放器方法通道、2×2假像素纹理、单工作线程命令队列与纹理释放协议。
+- 新增`WindowsNativePlayerBackend`，仅当`LOCAL_TAG_PLAYER_BACKEND=windows-native-stub`时启用；默认media_kit路径不变。
+- 假后端真实媒体库30秒回归完成2轮纹理、滚动、全屏、seek和退出，退出后纹理ID均变为`-1`；默认media_kit对照2轮保持`d3d11va-copy`、AV offset接近0且无音视频停滞。
+- 同时段资源峰值为：假后端173线程、565.6MiB工作集、558.9MiB GPU committed；media_kit为315线程、830.3MiB工作集、781.8MiB GPU committed。假后端不执行解码，该数据只用于确认桥接开销，不能作为播放器性能结论。
+- libmpv DLL虽存在于运行目录，但头文件、导入库和ANGLE当前只存在于生成目录；真实D3D11后端不得依赖这些本机临时路径，下一轮先固定可重复构建的第三方依赖供应。
