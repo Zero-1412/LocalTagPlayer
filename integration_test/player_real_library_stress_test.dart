@@ -31,8 +31,9 @@ void main() {
     var cycle = 0;
 
     await app.main();
-    await tester.pumpAndSettle(const Duration(seconds: 15));
+    await _waitForLibraryReady(tester);
     await _signalDesktopCapture('stress-00m-start');
+    await _waitForScreenRecorder();
     // 压测时长从真实媒体库完成初始化后开始，避免大型数据库加载吞掉运行预算。
     final deadline = DateTime.now().add(Duration(seconds: durationSeconds));
     var nextCapture = DateTime.now().add(const Duration(minutes: 5));
@@ -46,26 +47,33 @@ void main() {
         throw StateError('真实媒体库当前视口没有可播放视频按钮');
       }
       final selected = playButtons[random.nextInt(playButtons.length)];
+      _logAction(cycle + 1, 'open_player');
       await tester.tap(selected);
-      await tester.pumpAndSettle(const Duration(seconds: 12));
+      await _pumpContinuously(tester, const Duration(seconds: 12));
 
       final videoSurface = find.byKey(const ValueKey('player.video.surface'));
       if (videoSurface.evaluate().isEmpty) {
         throw StateError('随机视频未进入播放器页面');
       }
 
+      _logAction(cycle + 1, 'queue_scroll_start');
       await _randomlyScrollQueue(tester, random);
+      _logAction(cycle + 1, 'seek_1');
       await _randomlySeek(tester, random, videoSurface);
+      _logAction(cycle + 1, 'fullscreen_roundtrip');
       await _toggleFullscreenRoundTrip(tester);
+      _logAction(cycle + 1, 'seek_2');
       await _randomlySeek(tester, random, videoSurface);
+      _logAction(cycle + 1, 'diagnostics');
       await _samplePlaybackDiagnostics(tester, videoSurface, cycle + 1);
 
       final back = find.byKey(const ValueKey('player.back')).hitTestable();
       if (back.evaluate().isEmpty) {
         throw StateError('播放器返回按钮当前不可点击');
       }
+      _logAction(cycle + 1, 'exit_player');
       await tester.tap(back);
-      await tester.pump(const Duration(seconds: 4));
+      await _pumpContinuously(tester, const Duration(seconds: 4));
       cycle++;
 
       final now = DateTime.now();
@@ -89,16 +97,60 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 40)));
 }
 
+/** 等待外部像素录屏器就绪后才开始三分钟压力计时。 */
+Future<void> _waitForScreenRecorder() async {
+  if (Platform.environment['LOCAL_TAG_PLAYER_RECORDING_HANDSHAKE'] != '1') {
+    return;
+  }
+  final outputPath = Platform.environment['LOCAL_TAG_PLAYER_STRESS_OUTPUT'];
+  if (outputPath == null || outputPath.isEmpty) {
+    throw StateError('录屏握手缺少压力测试输出目录');
+  }
+  final ready = File('$outputPath\\recorder-ready.ready');
+  final deadline = DateTime.now().add(const Duration(seconds: 30));
+  while (!ready.existsSync() && DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+  if (!ready.existsSync()) {
+    throw StateError('像素录屏器未在 30 秒内就绪');
+  }
+  _logAction(0, 'recording_started');
+}
+
+/** 输出不包含文件名和路径的操作时间标记，供逐帧分析对齐。 */
+void _logAction(int cycle, String action) {
+  // ignore: avoid_print
+  print('PLAYER_ACTION timestamp=${DateTime.now().toIso8601String()} '
+      'cycle=$cycle action=$action');
+}
+
 /** 确保循环从媒体库页面开始；播放器残留时通过页面内返回按钮退出。 */
 Future<void> _ensureLibraryPage(WidgetTester tester) async {
   // 路由反向动画会短暂保留 offstage 播放器；只点击当前真正可命中的返回按钮。
   final back = find.byKey(const ValueKey('player.back')).hitTestable();
   if (back.evaluate().isNotEmpty) {
     await tester.tap(back);
-    await tester.pump(const Duration(seconds: 4));
+    await _pumpContinuously(tester, const Duration(seconds: 4));
   }
   if (_visibleLibraryPlayButtons().isEmpty) {
-    await tester.pump(const Duration(seconds: 3));
+    await _waitForLibraryReady(
+      tester,
+      timeout: const Duration(seconds: 30),
+    );
+  }
+}
+
+/** 持续驱动帧直到媒体库真实播放入口出现，不用固定大步 pump 猜测初始化耗时。 */
+Future<void> _waitForLibraryReady(
+  WidgetTester tester, {
+  Duration timeout = const Duration(minutes: 3),
+}) async {
+  final stopwatch = Stopwatch()..start();
+  while (_visibleLibraryPlayButtons().isEmpty && stopwatch.elapsed < timeout) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  if (_visibleLibraryPlayButtons().isEmpty) {
+    throw StateError('真实媒体库未在 ${timeout.inSeconds} 秒内完成可播放入口加载');
   }
 }
 
@@ -114,7 +166,7 @@ Future<void> _randomizeLibraryViewport(
   final direction = random.nextBool() ? 1.0 : -1.0;
   final distance = 250.0 + random.nextDouble() * 700.0;
   await tester.drag(grid.first, Offset(0, direction * distance));
-  await tester.pumpAndSettle(const Duration(seconds: 2));
+  await _pumpContinuously(tester, const Duration(seconds: 2));
 }
 
 /** 返回当前视口已经构建且命中播放 key 协议的媒体库按钮。 */
@@ -178,7 +230,7 @@ Future<void> _randomlySeek(
     final fraction = 0.05 + random.nextDouble() * 0.9;
     await tester
         .tapAt(Offset(rect.left + rect.width * fraction, rect.center.dy));
-    await tester.pump(const Duration(milliseconds: 900));
+    await _pumpContinuously(tester, const Duration(milliseconds: 900));
   }
   await mouse.removePointer();
 }
@@ -190,9 +242,9 @@ Future<void> _toggleFullscreenRoundTrip(WidgetTester tester) async {
     throw StateError('播放器全屏按钮不存在');
   }
   await tester.tap(toggle);
-  await tester.pump(const Duration(seconds: 1));
+  await _pumpContinuously(tester, const Duration(seconds: 1));
   await tester.tap(toggle);
-  await tester.pump(const Duration(seconds: 1));
+  await _pumpContinuously(tester, const Duration(seconds: 1));
 }
 
 /**
@@ -215,7 +267,7 @@ Future<void> _samplePlaybackDiagnostics(
     throw StateError('播放器诊断菜单项不存在');
   }
   await tester.tap(open);
-  await tester.pump(const Duration(seconds: 4));
+  await _pumpContinuously(tester, const Duration(seconds: 4));
 
   final metricPrefixes = <String>[
     'mpv 请求硬解:',
@@ -253,8 +305,26 @@ Future<void> _samplePlaybackDiagnostics(
     await _signalDesktopCapture('stress-diagnostics-cycle-$cycle');
   }
   await tester.tap(find.byKey(const ValueKey('player.diagnostics.close')));
-  await tester.pump(const Duration(milliseconds: 500));
+  await _pumpContinuously(tester, const Duration(milliseconds: 500));
   await mouse.removePointer();
+}
+
+/**
+ * 以 50 ms 小步持续驱动 Flutter 帧，等待期间仍允许原生视频纹理和点击反馈刷新。
+ *
+ * `pumpAndSettle(Duration)` 的位置参数是单次 pump 步长而不是超时；传入数秒会人为制造
+ * 数秒只提交一帧的假卡顿，因此压力测试的长等待必须统一走该方法。
+ */
+Future<void> _pumpContinuously(
+  WidgetTester tester,
+  Duration duration,
+) async {
+  const step = Duration(milliseconds: 50);
+  final stopwatch = Stopwatch()..start();
+  while (stopwatch.elapsed < duration) {
+    final remaining = duration - stopwatch.elapsed;
+    await tester.pump(remaining < step ? remaining : step);
+  }
 }
 
 /** 通知外部纯像素捕获器保存当前真实窗口，不读取 Windows 语义树。 */
