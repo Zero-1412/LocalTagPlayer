@@ -21,10 +21,10 @@
 #include <thread>
 
 /**
- * Windows 原生播放器桥接骨架。
+ * Windows 原生播放器桥接。
  *
- * 当前阶段提供可验证的像素纹理、串行命令队列和确定性释放协议；后续 libmpv
- * 与 D3D11 实现只替换内部渲染资源，不改变 Flutter 方法通道契约。
+ * 统一拥有 libmpv 会话、ANGLE/D3D11 共享纹理、串行命令和节流诊断；Flutter
+ * 页面只能通过 PlayerBackend 适配器消费该契约。
  */
 class NativePlayerBridge {
  public:
@@ -73,8 +73,19 @@ class NativePlayerBridge {
   bool native_mpv_enabled_ = false;
   std::atomic<bool> rendering_enabled_{false};
   std::atomic<bool> render_requested_{false};
+  std::atomic<int32_t> desired_surface_width_{1280};
+  std::atomic<int32_t> desired_surface_height_{720};
+  std::atomic<int32_t> surface_width_{1280};
+  std::atomic<int32_t> surface_height_{720};
+  std::atomic<int64_t> render_request_count_{0};
+  std::atomic<int64_t> rendered_frame_count_{0};
+  std::atomic<int64_t> skipped_render_count_{0};
+  std::atomic<int64_t> texture_copy_count_{0};
+  std::atomic<int64_t> surface_resize_count_{0};
 
   mutable std::mutex mutex_;
+  /** 防止 Flutter raster 读取共享纹理时与工作线程重建或绘制表面交叉。 */
+  mutable std::mutex surface_mutex_;
   std::condition_variable condition_;
   std::queue<Command> commands_;
   std::thread worker_;

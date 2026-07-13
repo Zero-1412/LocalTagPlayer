@@ -1657,6 +1657,13 @@ class _PlayerPageState extends State<PlayerPage> {
       'cache-buffering-state',
       'estimated-frame-number',
       'audio-pts',
+      'native-render-requests',
+      'native-rendered-frames',
+      'native-skipped-renders',
+      'native-texture-copies',
+      'native-surface-resizes',
+      'native-surface-width',
+      'native-surface-height',
     ]) {
       mpv[property] = await _getMpvProperty(property);
     }
@@ -1691,6 +1698,12 @@ class _PlayerPageState extends State<PlayerPage> {
       'mpv \u603b\u6389\u5e27: ${mpv['frame-drop-count']}',
       'mpv \u7f13\u5b58\u65f6\u957f: ${mpv['demuxer-cache-duration']}',
       'mpv \u7f13\u5b58\u72b6\u6001: ${mpv['cache-buffering-state']}',
+      '原生渲染请求: ${mpv['native-render-requests']}',
+      '原生实际渲染帧: ${mpv['native-rendered-frames']}',
+      '原生跳过渲染: ${mpv['native-skipped-renders']}',
+      '原生纹理复制: ${mpv['native-texture-copies']}',
+      '原生表面重建: ${mpv['native-surface-resizes']}',
+      '原生表面尺寸: ${mpv['native-surface-width']}x${mpv['native-surface-height']}',
       '视频帧推进: $_videoProgressState',
       '视频当前帧号: ${_lastVideoFrameNumber ?? -1}',
       '视频停滞事件: $_videoStallEvents',

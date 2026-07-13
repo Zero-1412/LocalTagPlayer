@@ -489,3 +489,12 @@ flutter build windows --debug
 - 开关 `LOCAL_TAG_PLAYER_BACKEND=windows-native-mpv` 仅用于显式 A/B，默认 MediaKit 不变；`windows-native-stub` 仍保留生命周期回归入口。
 - 同 `Seed=20260713`、同真实媒体、同 20 秒随机循环下，两端均无视频/音频停滞且实际硬解均为 `d3d11va-copy`。原生 seek 7 ms、dispose 约 25 ms，对照 28 ms、约 8 ms；两端进程始终响应，短测线程峰值均为 315，原生 GPU committed 峰值更高，暂不切换默认后端。
 - 74 项测试、原生桥接集成测试、analyze、Windows debug build、真实播放与截图均通过。
+
+# 2026-07-13 4K 长视频分阶段 A/B 与原生优化
+
+- 压测可通过环境变量匿名锁定同一真实媒体，并在 CSV 中记录启动、稳定播放、释放和媒体库空闲阶段；新增 `summarize_player_stress_metrics.ps1` 生成阶段中位数、P95、峰值与 seek/dispose 摘要。
+- 同一 3840×2160/60fps、约 29 分钟真实视频在 MediaKit、原生基线、原生优化下分别运行 480 秒和 18 轮；三组实际硬解均为 `d3d11va-copy`，视频/音频停滞、无响应和崩溃均为 0。
+- 原生渲染只在 `MPV_RENDER_UPDATE_FRAME` 时提交纹理，表面从 1280×720 起按 Flutter 请求量化并封顶 1920×1080；新增渲染请求、实际帧、跳过、纹理复制、表面重建与尺寸诊断。
+- 原生缓存收敛到 12 秒预读、64 MiB 前向和 16 MiB 后向预算。相对原生基线，稳定期工作集/Private 中位数约下降 63/68 MiB，GPU committed P95 约下降 73 MiB，seek P95 从 118 ms 降至 27 ms。
+- 优化原生稳定期中位数为 CPU 63.2%、279 线程、922.5 MiB 工作集、1492.4 MiB Private、1001.7 MiB GPU committed；MediaKit 为 75.4%、269、967.6、1296.6、812.5。原生仍有 Private/GPU/线程代价，默认继续使用 MediaKit。
+- 下一步只保留一个有门槛的底层调查：确认额外 D3D11/ANGLE device context 和驱动 committed 来源；若无法把 Private/GPU P95 收敛到 MediaKit 的 110% 以内，则停止默认替换路线，仅保留实验后端。

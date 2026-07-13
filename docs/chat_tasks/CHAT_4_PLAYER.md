@@ -331,3 +331,10 @@
 - 原生单工作线程串行拥有 `mpv_handle`、`mpv_render_context`、ANGLE 表面与 D3D11 共享纹理；mpv 更新回调不直接渲染，避免回调重入死锁。
 - EOF、错误、帧推进、音频 PTS、AV offset、缓存、掉帧、帧率和实际硬解进入 `PlayerBackend` 节流快照；filtered queue、当前 index、SQLite 与缩略图/media 队列不变。
 - 同媒体 20 秒 A/B 中两端均使用 `d3d11va-copy` 且无音视频停滞；原生 seek 更低但释放更慢、GPU committed 峰值更高，因此默认仍保持 MediaKit，原生后端只由 `windows-native-mpv` 显式启用。
+
+# 2026-07-13 4K 长视频分阶段 A/B
+
+- 压测可固定同一真实 4K 长视频，并把进程指标按启动、稳定播放、释放和媒体库空闲分组；汇总脚本输出中位数、P95 和峰值，不再用启动峰值代表稳定播放。
+- MediaKit、原生基线和原生优化各完成 480 秒/18 轮同种子操作，均为 `d3d11va-copy`，音视频停滞和进程无响应均为 0。
+- 原生后端按 `MPV_RENDER_UPDATE_FRAME` 决定是否渲染，ANGLE 表面跟随 Flutter 请求量化，纹理读取与渲染分别计数；demux 预算收敛到 64+16 MiB。
+- 优化消除了 seek 高尾并降低工作集、Private 和 GPU P95，但原生 Private/GPU committed 仍高于 MediaKit；filtered queue、当前 index、SQLite、标签语义和缩略图/media 队列均未修改，默认后端不变。

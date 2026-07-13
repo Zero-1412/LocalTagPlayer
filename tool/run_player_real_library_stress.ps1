@@ -2,23 +2,33 @@ param(
   [string]$Flutter = 'E:\flutter\bin\flutter.bat',
   [int]$DurationSeconds = 1800,
   [int]$Seed = 20260713,
+  [string]$MediaPath = '',
   [string]$Output = "$env:TEMP\ltp_real_library_stress"
 )
 
 $ErrorActionPreference = 'Stop'
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 Remove-Item -Force -ErrorAction SilentlyContinue "$Output\*.ready", "$Output\*.png", "$Output\*.csv", "$Output\stress.done"
+Set-Content -LiteralPath "$Output\phase.current" -Value 'test_start|0'
 
 # 只读取进程指标并写入压测目录，不创建 UIA 客户端。
 
 $monitorJob = Start-Job -ArgumentList $Output -ScriptBlock {
   param($Output)
   $metrics = Join-Path $Output 'process-metrics.csv'
-  'timestamp,cpu_seconds,threads,working_set_mb,private_mb,handles,responding,gpu_dedicated_mb,gpu_shared_mb,gpu_committed_mb' | Set-Content $metrics
+  'timestamp,phase,cycle,cpu_seconds,threads,working_set_mb,private_mb,handles,responding,gpu_dedicated_mb,gpu_shared_mb,gpu_committed_mb' | Set-Content $metrics
   while (-not (Test-Path -LiteralPath (Join-Path $Output 'stress.done'))) {
     $sampleStarted = Get-Date
     $process = Get-Process local_tag_player -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -ne $process) {
+      $phase = 'unknown'
+      $cycle = 0
+      $phaseFile = Join-Path $Output 'phase.current'
+      if (Test-Path -LiteralPath $phaseFile) {
+        $parts = ((Get-Content -LiteralPath $phaseFile -Raw).Trim()) -split '\|', 2
+        if ($parts.Count -ge 1 -and $parts[0]) { $phase = $parts[0] }
+        if ($parts.Count -ge 2) { [void][int]::TryParse($parts[1], [ref]$cycle) }
+      }
       $gpuDedicated = 0.0
       $gpuShared = 0.0
       $gpuCommitted = 0.0
@@ -35,8 +45,10 @@ $monitorJob = Start-Job -ArgumentList $Output -ScriptBlock {
           elseif ($sample.Path -like '*\total committed') { $gpuCommitted += $sample.CookedValue }
         }
       } catch {}
-      $line = '{0},{1:F3},{2},{3:F1},{4:F1},{5},{6},{7:F1},{8:F1},{9:F1}' -f `
+      $line = '{0},{1},{2},{3:F3},{4},{5:F1},{6:F1},{7},{8},{9:F1},{10:F1},{11:F1}' -f `
         $(Get-Date -Format o),
+        $phase,
+        $cycle,
         $process.TotalProcessorTime.TotalSeconds,
         $process.Threads.Count,
         ($process.WorkingSet64 / 1MB),
@@ -96,6 +108,11 @@ public static class LtpStressWindowCapture {
 $env:LOCAL_TAG_PLAYER_STRESS_SECONDS = $DurationSeconds.ToString()
 $env:LOCAL_TAG_PLAYER_STRESS_SEED = $Seed.ToString()
 $env:LOCAL_TAG_PLAYER_STRESS_OUTPUT = $Output
+if ($MediaPath) {
+  $env:LOCAL_TAG_PLAYER_STRESS_MEDIA_PATH = $MediaPath
+} else {
+  Remove-Item Env:LOCAL_TAG_PLAYER_STRESS_MEDIA_PATH -ErrorAction SilentlyContinue
+}
 try {
   & $Flutter test integration_test/player_real_library_stress_test.dart -d windows
   $testExitCode = $LASTEXITCODE

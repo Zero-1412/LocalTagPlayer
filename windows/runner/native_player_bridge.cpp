@@ -1,5 +1,6 @@
 #include "native_player_bridge.h"
 
+#include <algorithm>
 #include <chrono>
 #include <mpv/render_gl.h>
 #include <utility>
@@ -23,6 +24,14 @@ int64_t IntegerArgument(const flutter::EncodableMap& arguments,
   if (const auto* value = std::get_if<int32_t>(&iterator->second)) return *value;
   return 0;
 }
+
+/** 将 Flutter 请求尺寸量化并限制在原生纹理预算内，避免窗口动画产生频繁小幅重建。 */
+int32_t NormalizeSurfaceDimension(size_t value, int32_t minimum,
+                                  int32_t maximum, int32_t quantum) {
+  const auto capped = std::min(value, static_cast<size_t>(maximum));
+  const auto safe = std::max(static_cast<int32_t>(capped), minimum);
+  return std::min(((safe + quantum - 1) / quantum) * quantum, maximum);
+}
 }  // namespace
 
 NativePlayerBridge::NativePlayerBridge(flutter::BinaryMessenger* messenger,
@@ -40,13 +49,17 @@ NativePlayerBridge::NativePlayerBridge(flutter::BinaryMessenger* messenger,
 
 NativePlayerBridge::~NativePlayerBridge() {
   channel_->SetMethodCallHandler(nullptr);
+  // runner 关闭也必须走与页面退出相同的纹理注销和原生资源释放顺序。
+  DisposeSession();
+  if (native_mpv_enabled_ && worker_.joinable()) {
+    EnqueueAndWait({"destroy", {}, 0, nullptr});
+  }
   {
     std::lock_guard<std::mutex> lock(mutex_);
     shutting_down_ = true;
   }
   condition_.notify_one();
   if (worker_.joinable()) worker_.join();
-  DisposeSession();
 }
 
 void NativePlayerBridge::HandleMethodCall(
@@ -105,12 +118,27 @@ void NativePlayerBridge::EnsureTexture() {
     gpu_texture_ = std::make_unique<flutter::TextureVariant>(
         flutter::GpuSurfaceTexture(
             kFlutterDesktopGpuSurfaceTypeDxgiSharedHandle,
-            [this](size_t, size_t) {
+            [this](size_t width, size_t height) {
+              if (!rendering_enabled_ || surface_manager_ == nullptr) {
+                return static_cast<FlutterDesktopGpuSurfaceDescriptor*>(
+                    nullptr);
+              }
+              desired_surface_width_ =
+                  NormalizeSurfaceDimension(width, 640, 1920, 64);
+              desired_surface_height_ =
+                  NormalizeSurfaceDimension(height, 360, 1080, 32);
+              std::lock_guard<std::mutex> surface_lock(surface_mutex_);
               if (!rendering_enabled_ || surface_manager_ == nullptr) {
                 return static_cast<FlutterDesktopGpuSurfaceDescriptor*>(
                     nullptr);
               }
               surface_manager_->Read();
+              gpu_descriptor_->handle = surface_manager_->handle();
+              gpu_descriptor_->width = gpu_descriptor_->visible_width =
+                  surface_manager_->width();
+              gpu_descriptor_->height = gpu_descriptor_->visible_height =
+                  surface_manager_->height();
+              ++texture_copy_count_;
               return gpu_descriptor_.get();
             }));
     texture_id_ = textures_->RegisterTexture(gpu_texture_.get());
@@ -163,8 +191,9 @@ void NativePlayerBridge::InitializePlayer() {
   mpv_set_option_string(player_, "hwdec", "d3d11va-copy");
   mpv_set_option_string(player_, "video-sync", "display-resample");
   mpv_set_option_string(player_, "cache", "yes");
-  mpv_set_option_string(player_, "demuxer-readahead-secs", "15");
-  mpv_set_option_string(player_, "demuxer-max-bytes", "96MiB");
+  mpv_set_option_string(player_, "demuxer-readahead-secs", "12");
+  mpv_set_option_string(player_, "demuxer-max-bytes", "64MiB");
+  mpv_set_option_string(player_, "demuxer-max-back-bytes", "16MiB");
   if (mpv_initialize(player_) < 0) {
     lifecycle_ = "mpv_initialize_failed";
     mpv_terminate_destroy(player_);
@@ -172,7 +201,9 @@ void NativePlayerBridge::InitializePlayer() {
     return;
   }
   try {
-    surface_manager_ = std::make_unique<ANGLESurfaceManager>(1920, 1080);
+    surface_manager_ = std::make_unique<ANGLESurfaceManager>(1280, 720);
+    surface_width_ = surface_manager_->width();
+    surface_height_ = surface_manager_->height();
     surface_manager_->MakeCurrent(true);
     mpv_opengl_init_params gl_init{
         [](void*, const char* name) {
@@ -196,6 +227,7 @@ void NativePlayerBridge::InitializePlayer() {
         render_context_,
         [](void* context) {
           auto* bridge = static_cast<NativePlayerBridge*>(context);
+          ++bridge->render_request_count_;
           bridge->render_requested_ = true;
           bridge->condition_.notify_one();
         },
@@ -214,7 +246,10 @@ void NativePlayerBridge::DestroyPlayer() {
     mpv_render_context_free(render_context_);
     render_context_ = nullptr;
   }
-  surface_manager_.reset();
+  {
+    std::lock_guard<std::mutex> surface_lock(surface_mutex_);
+    surface_manager_.reset();
+  }
   if (player_ != nullptr) {
     mpv_terminate_destroy(player_);
     player_ = nullptr;
@@ -319,6 +354,22 @@ void NativePlayerBridge::RenderFrame() {
       surface_manager_ == nullptr) {
     return;
   }
+  const auto update_flags = mpv_render_context_update(render_context_);
+  if ((update_flags & MPV_RENDER_UPDATE_FRAME) == 0) {
+    ++skipped_render_count_;
+    return;
+  }
+  std::lock_guard<std::mutex> surface_lock(surface_mutex_);
+  if (!rendering_enabled_ || surface_manager_ == nullptr) return;
+  const auto desired_width = desired_surface_width_.load();
+  const auto desired_height = desired_surface_height_.load();
+  if (desired_width != surface_manager_->width() ||
+      desired_height != surface_manager_->height()) {
+    surface_manager_->SetSize(desired_width, desired_height);
+    surface_width_ = surface_manager_->width();
+    surface_height_ = surface_manager_->height();
+    ++surface_resize_count_;
+  }
   surface_manager_->Draw([this]() {
     mpv_opengl_fbo framebuffer{0, surface_manager_->width(),
                                surface_manager_->height(), 0};
@@ -327,6 +378,7 @@ void NativePlayerBridge::RenderFrame() {
         {MPV_RENDER_PARAM_INVALID, nullptr}};
     mpv_render_context_render(render_context_, parameters);
   });
+  ++rendered_frame_count_;
   if (texture_id_ >= 0) textures_->MarkTextureFrameAvailable(texture_id_);
 }
 
@@ -430,6 +482,20 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(frame_number_)},
           {flutter::EncodableValue("frame-drop-count"),
            flutter::EncodableValue(dropped_frames_)},
+          {flutter::EncodableValue("native-render-requests"),
+           flutter::EncodableValue(render_request_count_.load())},
+          {flutter::EncodableValue("native-rendered-frames"),
+           flutter::EncodableValue(rendered_frame_count_.load())},
+          {flutter::EncodableValue("native-skipped-renders"),
+           flutter::EncodableValue(skipped_render_count_.load())},
+          {flutter::EncodableValue("native-texture-copies"),
+           flutter::EncodableValue(texture_copy_count_.load())},
+          {flutter::EncodableValue("native-surface-resizes"),
+           flutter::EncodableValue(surface_resize_count_.load())},
+          {flutter::EncodableValue("native-surface-width"),
+           flutter::EncodableValue(surface_width_.load())},
+          {flutter::EncodableValue("native-surface-height"),
+           flutter::EncodableValue(surface_height_.load())},
           {flutter::EncodableValue("completedCount"),
            flutter::EncodableValue(completed_count_)},
           {flutter::EncodableValue("errorCount"),

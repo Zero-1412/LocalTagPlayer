@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/main.dart' as app;
+import 'package:local_tag_player/src/app.dart' as ltp;
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -27,11 +28,17 @@ void main() {
           Platform.environment['LOCAL_TAG_PLAYER_STRESS_SEED'] ?? '',
         ) ??
         20260713;
+    final targetMediaPath =
+        Platform.environment['LOCAL_TAG_PLAYER_STRESS_MEDIA_PATH']?.trim();
     final random = Random(seed);
     var cycle = 0;
 
     await app.main();
     await _waitForLibraryReady(tester);
+    if (targetMediaPath != null && targetMediaPath.isNotEmpty) {
+      await _filterToTargetMedia(tester, targetMediaPath);
+    }
+    await _setStressPhase('library_ready', 0);
     await _signalDesktopCapture('stress-00m-start');
     await _waitForScreenRecorder();
     // 压测时长从真实媒体库完成初始化后开始，避免大型数据库加载吞掉运行预算。
@@ -40,14 +47,19 @@ void main() {
 
     while (DateTime.now().isBefore(deadline)) {
       await _ensureLibraryPage(tester);
-      await _randomizeLibraryViewport(tester, random);
+      if (targetMediaPath == null || targetMediaPath.isEmpty) {
+        await _randomizeLibraryViewport(tester, random);
+      }
 
-      final playButtons = _visibleLibraryPlayButtons();
+      final playButtons = targetMediaPath == null || targetMediaPath.isEmpty
+          ? _visibleLibraryPlayButtons()
+          : _targetMediaPlayButtons(targetMediaPath);
       if (playButtons.isEmpty) {
         throw StateError('真实媒体库当前视口没有可播放视频按钮');
       }
       final selected = playButtons[random.nextInt(playButtons.length)];
       _logAction(cycle + 1, 'open_player');
+      await _setStressPhase('player_startup', cycle + 1);
       await tester.tap(selected);
       await _pumpContinuously(tester, const Duration(seconds: 12));
 
@@ -55,6 +67,7 @@ void main() {
       if (videoSurface.evaluate().isEmpty) {
         throw StateError('随机视频未进入播放器页面');
       }
+      await _setStressPhase('player_stable', cycle + 1);
 
       _logAction(cycle + 1, 'queue_scroll_start');
       await _randomlyScrollQueue(tester, random);
@@ -72,9 +85,11 @@ void main() {
         throw StateError('播放器返回按钮当前不可点击');
       }
       _logAction(cycle + 1, 'exit_player');
+      await _setStressPhase('player_release', cycle + 1);
       await tester.tap(back);
       await _pumpContinuously(tester, const Duration(seconds: 4));
       cycle++;
+      await _setStressPhase('library_idle', cycle);
 
       final now = DateTime.now();
       if (!now.isBefore(nextCapture)) {
@@ -95,6 +110,33 @@ void main() {
     await _signalDesktopCapture('stress-30m-complete');
     expect(cycle, greaterThan(0));
   }, timeout: const Timeout(Duration(minutes: 40)));
+}
+
+/**
+ * 通过稳定搜索输入链路把真实媒体库收敛到指定样本，并只按匿名路径 key 验证命中。
+ *
+ * 路径只来自本机测试环境变量，不写入测试日志或压测产物。
+ */
+Future<void> _filterToTargetMedia(
+  WidgetTester tester,
+  String targetPath,
+) async {
+  final search = find.byKey(ltp.LibrarySmokeKeys.searchField);
+  if (search.evaluate().isEmpty) {
+    throw StateError('媒体库稳定搜索输入不存在');
+  }
+  final fileName = targetPath.split(Platform.pathSeparator).last;
+  final extension = fileName.lastIndexOf('.');
+  final query = extension > 0 ? fileName.substring(0, extension) : fileName;
+  await tester.enterText(search, query);
+  final stopwatch = Stopwatch()..start();
+  while (_targetMediaPlayButtons(targetPath).isEmpty &&
+      stopwatch.elapsed < const Duration(seconds: 15)) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  if (_targetMediaPlayButtons(targetPath).isEmpty) {
+    throw StateError('指定真实媒体样本未进入可见结果');
+  }
 }
 
 /** 等待外部像素录屏器就绪后才开始三分钟压力计时。 */
@@ -180,6 +222,18 @@ List<Finder> _visibleLibraryPlayButtons() {
   return <Finder>[
     for (var index = 0; index < finder.evaluate().length; index++)
       finder.at(index),
+  ];
+}
+
+/** 返回指定真实媒体的网格或列表播放入口，不暴露本地路径。 */
+List<Finder> _targetMediaPlayButtons(String targetPath) {
+  final candidates = <Finder>[
+    find.byKey(ltp.LibrarySmokeKeys.cardPlay(targetPath)).hitTestable(),
+    find.byKey(ltp.LibrarySmokeKeys.listPlay(targetPath)).hitTestable(),
+  ];
+  return [
+    for (final candidate in candidates)
+      if (candidate.evaluate().isNotEmpty) candidate
   ];
 }
 
@@ -277,6 +331,12 @@ Future<void> _samplePlaybackDiagnostics(
     '最近 seek 耗时:',
     '媒体详情活动读取:',
     '媒体详情排队读取:',
+    '原生渲染请求:',
+    '原生实际渲染帧:',
+    '原生跳过渲染:',
+    '原生纹理复制:',
+    '原生表面重建:',
+    '原生表面尺寸:',
     '视频帧推进:',
     '视频当前帧号:',
     '视频停滞事件:',
@@ -336,4 +396,16 @@ Future<void> _signalDesktopCapture(String name) async {
   final outputDirectory = Directory(outputPath)..createSync(recursive: true);
   File('${outputDirectory.path}\\$name.ready').writeAsStringSync('ready');
   await Future<void>.delayed(const Duration(milliseconds: 500));
+}
+
+/**
+ * 把当前生命周期阶段写给外部只读进程采样器，用于区分启动、稳定播放和释放区间。
+ */
+Future<void> _setStressPhase(String phase, int cycle) async {
+  final outputPath = Platform.environment['LOCAL_TAG_PLAYER_STRESS_OUTPUT'];
+  if (outputPath == null || outputPath.isEmpty) {
+    return;
+  }
+  File('$outputPath\\phase.current').writeAsStringSync('$phase|$cycle');
+  await Future<void>.delayed(const Duration(milliseconds: 50));
 }

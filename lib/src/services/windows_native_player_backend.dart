@@ -102,6 +102,13 @@ class WindowsNativePlayerBackend implements PlayerBackend {
       'display-fps',
       'estimated-frame-number',
       'frame-drop-count',
+      'native-render-requests',
+      'native-rendered-frames',
+      'native-skipped-renders',
+      'native-texture-copies',
+      'native-surface-resizes',
+      'native-surface-width',
+      'native-surface-height',
     ]) {
       final propertyValue = value[property];
       if (propertyValue != null) _properties[property] = '$propertyValue';
@@ -177,8 +184,18 @@ class WindowsNativePlayerBackend implements PlayerBackend {
   Future<void> playOrPause() => state.playing ? pause() : play();
 
   @override
-  Future<void> setProperty(String property, String value) =>
-      _command('property', text: '$property=$value');
+  Future<void> setProperty(String property, String value) {
+    // 原生后端没有 media_kit 的额外输入缓冲，因此使用更小但仍覆盖 4K seek 的 demux 预算。
+    final adjustedValue = mode == 'mpv'
+        ? switch (property) {
+            'demuxer-readahead-secs' => '12',
+            'demuxer-max-bytes' => '64MiB',
+            'demuxer-max-back-bytes' => '16MiB',
+            _ => value,
+          }
+        : value;
+    return _command('property', text: '$property=$adjustedValue');
+  }
 
   @override
   Future<String> getProperty(String property) async {

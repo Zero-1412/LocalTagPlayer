@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-13 · 4K 长视频分阶段 A/B 与原生渲染收敛
+
+- 压测支持匿名锁定同一真实媒体样本，并在进程 CSV 中区分 `player_startup`、`player_stable`、`player_release` 和 `library_idle`；新增可重复生成中位数/P95/峰值的汇总脚本。
+- MediaKit、原生基线、原生优化分别完成同一 3840×2160/60fps 长视频 480 秒、18 轮随机滚动、seek、全屏和退出，三组均无音视频停滞、崩溃或无响应。
+- 原生渲染增加 `mpv_render_context_update` 帧更新判定、Flutter 请求尺寸量化表面和共享纹理复制计数；原生 demux 预算由 96+32 MiB 收敛到 64+16 MiB。
+- 相对原生基线，稳定期工作集/Private 中位数约下降 63/68 MiB，GPU committed P95 下降约 73 MiB，seek P95 从 118 ms 降至 27 ms。
+- 优化后原生稳定期 CPU 与工作集低于 MediaKit，但 Private/GPU committed 中位数仍分别高约 196/189 MiB，线程多约 10；继续保留显式实验开关，不切换默认后端。
+
 ## 2026-07-13 · Windows 原生 libmpv/ANGLE A/B 后端
 
 - 固定 libmpv、ANGLE 与 media_kit_video Windows 纹理桥接源码的下载地址和 SHA-256，构建时供应运行库并安装第三方许可证与告知文件。
