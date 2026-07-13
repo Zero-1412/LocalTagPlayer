@@ -55,6 +55,7 @@ class PlayerPage extends StatefulWidget {
     required this.onRelinkMissing,
     required this.onPlaybackProgressUpdated,
     required this.onMediaDetailsUpdated,
+    required this.disposalCompleter,
   });
 
   final VideoItem initialItem;
@@ -77,6 +78,8 @@ class PlayerPage extends StatefulWidget {
   final Future<void> Function(
           VideoItem item, MediaDetails details, String? fingerprint)
       onMediaDetailsUpdated;
+  /** 页面退出后由播放器原生资源释放流程完成的路由协调信号。 */
+  final Completer<void> disposalCompleter;
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -91,6 +94,7 @@ class _PlayerPageState extends State<PlayerPage> {
   late final ScrollController _queueScrollController;
   late final ScrollController _fullscreenQueueScrollController;
   late final MediaDetailsService _detailsService;
+  late final String _requestedHwdec;
   final _fileLocationService = const DesktopFileLocationService();
   late final PlayerPlaybackController _playback;
   final _openRequests = PlayerOpenRequestController();
@@ -101,12 +105,31 @@ class _PlayerPageState extends State<PlayerPage> {
   Timer? _controlsHideTimer;
   Timer? _queuePrefetchTimer;
   Timer? _fullscreenQueueHideTimer;
+  Timer? _playbackHealthTimer;
+  var _playbackHealthSampling = false;
   var _controlsVisible = true;
   DateTime? _lastProgressWriteAt;
   Duration _lastPersistedPosition = Duration.zero;
   DateTime? _ignoreQueueSelectionBefore;
   String? _handledCompletedPath;
   String? _openedPath;
+  int? _lastSeekLatencyMs;
+  DateTime? _lastSeekAt;
+  int? _lastVideoFrameNumber;
+  double? _lastAudioPts;
+  DateTime? _lastVideoAdvanceAt;
+  DateTime? _lastAudioAdvanceAt;
+  DateTime? _lastHealthSampleAt;
+  var _videoProgressState = '等待首个视频样本';
+  var _audioProgressState = '等待首个音频样本';
+  var _videoStallEvents = 0;
+  var _audioStallEvents = 0;
+  DateTime? _exitRequestedAt;
+  DateTime? _pauseAcknowledgedAt;
+  DateTime? _routePopRequestedAt;
+  Duration? _pendingSeekTarget;
+  var _seekInFlight = false;
+  var _isExiting = false;
   /** 恢复选择弹窗期间暂停进度写入，避免刚打开的 0 秒覆盖稳定进度。 */
   var _choosingPlaybackStart = false;
   var _queueEndReached = false;
@@ -174,6 +197,8 @@ class _PlayerPageState extends State<PlayerPage> {
     _fullscreenQueueScrollController = ScrollController();
     _detailsService =
         MediaDetailsService(onUpdated: widget.onMediaDetailsUpdated);
+    _requestedHwdec =
+        PlayerHardwareAcceleration.resolve(widget.playbackSettings.hwdec);
     _playback = PlayerPlaybackController(
       sourcePlaylist: widget.playlist.isEmpty
           ? <VideoItem>[widget.initialItem]
@@ -185,14 +210,14 @@ class _PlayerPageState extends State<PlayerPage> {
     _player = Player(
       // 4K 长视频需要为 demux 与解码线程保留更稳定的输入窗口；该上限只作用于
       // 当前播放器，不扩大缩略图或媒体详情后台任务的内存占用。
-      configuration: const PlayerConfiguration(bufferSize: 128 * 1024 * 1024),
+      configuration: const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
     );
     _controller = VideoController(
       _player,
       configuration: VideoControllerConfiguration(
         width: 1920,
         height: 1080,
-        hwdec: widget.playbackSettings.hwdec,
+        hwdec: _requestedHwdec,
         enableHardwareAcceleration:
             widget.playbackSettings.hardwareDecodingEnabled,
       ),
@@ -211,6 +236,11 @@ class _PlayerPageState extends State<PlayerPage> {
       }
     });
     _requestOpenCurrent();
+    // 诊断弹窗关闭时仍持续独立观察视频帧与音频播放头，避免瞬时 AV offset 掩盖单路停滞。
+    _playbackHealthTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => unawaited(_sampleIndependentPlaybackProgress()),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _focusNode.requestFocus();
@@ -348,6 +378,134 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   /** 鼠标进入或移动时显示控制条；播放中空闲三秒后自动淡出。 */
+  /**
+   * 执行 seek 并记录从请求到播放器返回的耗时，供持续诊断识别随机拖动压力。
+   */
+  Future<void> _seekWithDiagnostics(Duration target) async {
+    if (_isExiting) {
+      return;
+    }
+    // 拖动进度条时只保留最新目标，避免大量并发 seek 让视频解码停止而音频继续推进。
+    _pendingSeekTarget = target < Duration.zero ? Duration.zero : target;
+    if (_seekInFlight) {
+      return;
+    }
+    _seekInFlight = true;
+    try {
+      while (!_isExiting && _pendingSeekTarget != null) {
+        final requested = _pendingSeekTarget!;
+        _pendingSeekTarget = null;
+        final stopwatch = Stopwatch()..start();
+        await _player.seek(requested);
+        // media_kit 的 seek Future 只代表命令已提交；等待位置接近目标后再记录真实延迟。
+        final deadline = DateTime.now().add(const Duration(seconds: 2));
+        while (!_isExiting && DateTime.now().isBefore(deadline)) {
+          final delta = (_player.state.position - requested).abs();
+          if (delta <= const Duration(milliseconds: 750)) {
+            break;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 25));
+        }
+        stopwatch.stop();
+        _lastSeekLatencyMs = stopwatch.elapsedMilliseconds;
+        _lastSeekAt = DateTime.now();
+      }
+    } finally {
+      _seekInFlight = false;
+    }
+  }
+
+  /**
+   * 在路由消失前先停止原生播放，保证返回媒体库后不会残留声音。
+   */
+  Future<void> _exitPlayer() async {
+    if (_isExiting) {
+      return;
+    }
+    _isExiting = true;
+    _exitRequestedAt = DateTime.now();
+    _pendingSeekTarget = null;
+    _openRequests.cancel();
+    _detailsService.dispose();
+    _persistOpenedProgress();
+    try {
+      // pause 的确认路径比 stop 短，先确保音频静音，不能让原生 stop 阻塞路由退出。
+      await _player.pause().timeout(const Duration(milliseconds: 800));
+      _pauseAcknowledgedAt = DateTime.now();
+    } catch (_) {
+      // 即使 pause 超时也继续退出；下方 stop 与 dispose 仍会终止原生播放。
+    }
+    unawaited(
+        _player.stop().timeout(const Duration(seconds: 3)).catchError((_) {}));
+    if (mounted) {
+      _routePopRequestedAt = DateTime.now();
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  /**
+   * 每秒分别读取 mpv 的当前视频帧号与音频播放头。
+   *
+   * `estimated-frame-number` 代表视频链路是否继续交付帧，`audio-pts` 包含音频驱动延迟；
+   * 两者不共用 `time-pos`，因此可以识别“画面停住但声音继续”及其反向故障。
+   */
+  Future<void> _sampleIndependentPlaybackProgress() async {
+    if (_playbackHealthSampling || _isExiting) {
+      return;
+    }
+    _playbackHealthSampling = true;
+    try {
+      final frame =
+          _parseMpvInt(await _getMpvProperty('estimated-frame-number'));
+      final audioPts = _parseMpvNumber(await _getMpvProperty('audio-pts'));
+      final now = DateTime.now();
+      _lastHealthSampleAt = now;
+      if (frame != null) {
+        if (_lastVideoFrameNumber == null || frame != _lastVideoFrameNumber) {
+          _lastVideoAdvanceAt = now;
+          _videoProgressState = '视频帧持续推进';
+        }
+        _lastVideoFrameNumber = frame;
+      }
+      if (audioPts != null) {
+        if (_lastAudioPts == null ||
+            (audioPts - _lastAudioPts!).abs() >= 0.01) {
+          _lastAudioAdvanceAt = now;
+          _audioProgressState = '音频播放头持续推进';
+        }
+        _lastAudioPts = audioPts;
+      }
+
+      final canJudge = _player.state.playing &&
+          !_player.state.buffering &&
+          (_lastSeekAt == null || now.difference(_lastSeekAt!).inSeconds >= 2);
+      if (canJudge &&
+          frame != null &&
+          _lastVideoAdvanceAt != null &&
+          now.difference(_lastVideoAdvanceAt!) >= const Duration(seconds: 3)) {
+        if (_videoProgressState != '视频帧停滞') {
+          _videoStallEvents++;
+          debugPrint(
+              'PLAYER_HEALTH video_stall frame=$frame audio_pts=$audioPts');
+        }
+        _videoProgressState = '视频帧停滞';
+      }
+      if (canJudge &&
+          audioPts != null &&
+          _lastAudioAdvanceAt != null &&
+          now.difference(_lastAudioAdvanceAt!) >= const Duration(seconds: 3)) {
+        if (_audioProgressState != '音频播放头停滞') {
+          _audioStallEvents++;
+          debugPrint(
+              'PLAYER_HEALTH audio_stall frame=$frame audio_pts=$audioPts');
+        }
+        _audioProgressState = '音频播放头停滞';
+      }
+    } finally {
+      _playbackHealthSampling = false;
+    }
+  }
+
   void _showVideoControls() {
     _controlsHideTimer?.cancel();
     if (!_controlsVisible && mounted) {
@@ -506,7 +664,7 @@ class _PlayerPageState extends State<PlayerPage> {
                                   .toDouble(),
                               max: maxMs,
                               onChanged: (value) => unawaited(
-                                _player.seek(
+                                _seekWithDiagnostics(
                                   Duration(milliseconds: value.round()),
                                 ),
                               ),
@@ -760,6 +918,7 @@ class _PlayerPageState extends State<PlayerPage> {
         child: const Text('快捷键'),
       ),
       MenuItemButton(
+        key: const ValueKey('player.diagnostics.open'),
         leadingIcon: const Icon(Icons.monitor_heart_outlined, size: 18),
         onPressed: () => unawaited(_showDiagnosticsDialog()),
         child: const Text('播放诊断'),
@@ -821,20 +980,18 @@ class _PlayerPageState extends State<PlayerPage> {
     }
     final start = math.max(0, _index - radius);
     final end = math.min(_queue.length - 1, _index + radius);
-    final visibleItems = <VideoItem>[];
     for (var index = start; index <= end; index++) {
       final item = _queue[index];
       if (item.isMissing) {
         // missing 条目只展示稳定状态和 Relink，不派发失效路径的媒体/缩略图 I/O。
         continue;
       }
-      visibleItems.add(item);
       if (index == _index) {
         // 播放期间只补齐当前视频详情，避免滚动列表时 FFprobe 与 4K 解码争抢磁盘。
         unawaited(_detailsService.detailsFor(item));
       }
     }
-    widget.thumbnailService.prefetchVisible(visibleItems);
+    // 播放期间不再补建队列缩略图，避免快速滚动与视频解码争抢磁盘和解码器。
   }
 
   /**
@@ -853,13 +1010,15 @@ class _PlayerPageState extends State<PlayerPage> {
     final options = <String, String>{
       'video-sync': 'display-resample',
       'interpolation': 'no',
-      'vd-lavc-threads': '0',
+      // 固定解码并发，避免 FFmpeg 在高核心数机器上为单个视频扩张大量工作线程。
+      'vd-lavc-threads': '4',
       'cache': 'yes',
+      'hwdec': _requestedHwdec,
       // 缓存暂时耗尽时让 mpv 等待输入恢复，不以连续丢帧追赶播放时钟。
       'cache-pause': 'yes',
-      'demuxer-readahead-secs': '30',
-      'demuxer-max-bytes': '256MiB',
-      'demuxer-max-back-bytes': '128MiB',
+      'demuxer-readahead-secs': '15',
+      'demuxer-max-bytes': '96MiB',
+      'demuxer-max-back-bytes': '32MiB',
     };
     for (final entry in options.entries) {
       await _setMpvProperty(entry.key, entry.value);
@@ -1043,7 +1202,7 @@ class _PlayerPageState extends State<PlayerPage> {
     }
     final start =
         choice == PlayerResumeChoice.continueWatching ? saved : Duration.zero;
-    await _player.seek(start);
+    await _seekWithDiagnostics(start);
     await _player.play();
     _lastPersistedPosition = start;
     _lastProgressWriteAt = DateTime.now();
@@ -1206,7 +1365,7 @@ class _PlayerPageState extends State<PlayerPage> {
         _playback.removeSelectedItem(item);
       });
       if (_queue.isEmpty) {
-        Navigator.of(context).maybePop();
+        await _exitPlayer();
         return;
       }
       _ensureQueueIndexVisible(_index, center: true);
@@ -1418,7 +1577,9 @@ class _PlayerPageState extends State<PlayerPage> {
     final progressMs = after.inMilliseconds - before.inMilliseconds;
     final expectedMs = wasPlaying && !wasBuffering ? 900 : 0;
     final smooth = expectedMs == 0 || progressMs >= expectedMs;
-    final details = await _detailsService.detailsFor(_currentItem);
+    // 播放诊断只读已有详情，打开弹窗不能为兜底探测再创建一个 media_kit Player。
+    final details =
+        _detailsService.cachedDetailsFor(_currentItem) ?? const MediaDetails();
     final tracks = _player.state.tracks;
     final mpv = <String, String>{};
     for (final property in const <String>[
@@ -1440,9 +1601,14 @@ class _PlayerPageState extends State<PlayerPage> {
       'frame-drop-count',
       'demuxer-cache-duration',
       'cache-buffering-state',
+      'estimated-frame-number',
+      'audio-pts',
     ]) {
       mpv[property] = await _getMpvProperty(property);
     }
+    final estimatedFps = _parseMpvNumber(mpv['estimated-vf-fps']);
+    final frameDurationMs =
+        estimatedFps == null || estimatedFps <= 0 ? null : 1000 / estimatedFps;
     final lines = <String>[
       '\u5f53\u524d\u89c6\u9891: ${_currentItem.title}',
       '\u64ad\u653e\u4f4d\u7f6e: ${_formatDuration(after)} / ${_formatDuration(_player.state.duration)}',
@@ -1451,12 +1617,14 @@ class _PlayerPageState extends State<PlayerPage> {
       '\u91c7\u6837\u63a8\u8fdb: $progressMs ms / 1200 ms',
       '\u6d41\u7545\u63a8\u65ad: ${smooth ? '\u6b63\u5e38' : '\u53ef\u80fd\u5361\u987f\u6216\u89e3\u7801\u8ddf\u4e0d\u4e0a'}',
       '\u8bbe\u7f6e\u786c\u89e3: ${widget.playbackSettings.hwdec}',
+      'mpv 请求硬解: $_requestedHwdec',
       'mpv \u5b9e\u9645\u786c\u89e3: ${mpv['hwdec-current']}',
       'mpv \u8f93\u51fa\u9a71\u52a8: ${mpv['current-vo']}',
       'mpv \u89c6\u9891\u7f16\u7801: ${mpv['video-codec']}',
       'mpv \u97f3\u9891\u7f16\u7801: ${mpv['audio-codec']}',
       'mpv \u5bb9\u5668 FPS: ${mpv['container-fps']}',
       'mpv \u4f30\u7b97\u89c6\u9891 FPS: ${mpv['estimated-vf-fps']}',
+      '估算单帧耗时: ${frameDurationMs?.toStringAsFixed(2) ?? 'unavailable'} ms',
       'mpv \u663e\u793a FPS: ${mpv['display-fps']}',
       'mpv \u89c6\u9891\u540c\u6b65: ${mpv['video-sync']}',
       'mpv \u63d2\u5e27: ${mpv['interpolation']}',
@@ -1469,6 +1637,20 @@ class _PlayerPageState extends State<PlayerPage> {
       'mpv \u603b\u6389\u5e27: ${mpv['frame-drop-count']}',
       'mpv \u7f13\u5b58\u65f6\u957f: ${mpv['demuxer-cache-duration']}',
       'mpv \u7f13\u5b58\u72b6\u6001: ${mpv['cache-buffering-state']}',
+      '视频帧推进: $_videoProgressState',
+      '视频当前帧号: ${_lastVideoFrameNumber ?? -1}',
+      '视频停滞事件: $_videoStallEvents',
+      '音频播放头推进: $_audioProgressState',
+      '音频当前 PTS: ${_lastAudioPts?.toStringAsFixed(3) ?? 'unavailable'}',
+      '音频停滞事件: $_audioStallEvents',
+      '独立推进采样时间: ${_lastHealthSampleAt?.toIso8601String() ?? 'none'}',
+      '退出请求时间: ${_exitRequestedAt?.toIso8601String() ?? 'none'}',
+      '暂停确认时间: ${_pauseAcknowledgedAt?.toIso8601String() ?? 'none'}',
+      '路由退出请求时间: ${_routePopRequestedAt?.toIso8601String() ?? 'none'}',
+      '最近 seek 耗时: ${_lastSeekLatencyMs ?? -1} ms',
+      '最近 seek 时间: ${_lastSeekAt?.toIso8601String() ?? 'none'}',
+      '媒体详情活动读取: ${_detailsService.activeReads}',
+      '媒体详情排队读取: ${_detailsService.queuedReads}',
       '\u89c6\u9891\u4fe1\u606f: ${details.videoLabel}',
       '\u97f3\u9891\u4fe1\u606f: ${details.audioLabel}',
       '\u5df2\u8bc6\u522b\u89c6\u9891\u8f68: ${tracks.video.length}',
@@ -1499,6 +1681,15 @@ class _PlayerPageState extends State<PlayerPage> {
       totalDroppedFrames: _parseMpvInt(mpv['frame-drop-count']),
       cacheDuration: _parseMpvNumber(mpv['demuxer-cache-duration']),
       cacheBufferingState: _parseMpvNumber(mpv['cache-buffering-state']),
+      hwdecCurrent: mpv['hwdec-current'] == 'empty' ||
+              mpv['hwdec-current'] == 'unavailable'
+          ? null
+          : mpv['hwdec-current'],
+      seekLatencyMs: _lastSeekLatencyMs,
+      detailsQueued: _detailsService.queuedReads,
+      frameDurationMs: frameDurationMs,
+      videoStalled: _videoProgressState == '视频帧停滞',
+      audioStalled: _audioProgressState == '音频播放头停滞',
     );
   }
 
@@ -1603,13 +1794,13 @@ class _PlayerPageState extends State<PlayerPage> {
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekBackward)) {
-      unawaited(
-          _player.seek(_player.state.position - const Duration(seconds: 5)));
+      unawaited(_seekWithDiagnostics(
+          _player.state.position - const Duration(seconds: 5)));
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekForward)) {
-      unawaited(
-          _player.seek(_player.state.position + const Duration(seconds: 5)));
+      unawaited(_seekWithDiagnostics(
+          _player.state.position + const Duration(seconds: 5)));
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.previous)) {
@@ -1658,7 +1849,7 @@ class _PlayerPageState extends State<PlayerPage> {
         _jumpTo(_selectedIndex, ignoreFollowUpSelection: true);
         return KeyEventResult.handled;
       case LogicalKeyboardKey.escape:
-        Navigator.of(context).maybePop();
+        unawaited(_exitPlayer());
         return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -1666,7 +1857,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   void _handlePointerDown(PointerDownEvent event) {
     if (event.buttons == kBackMouseButton) {
-      Navigator.of(context).maybePop();
+      unawaited(_exitPlayer());
     }
   }
 
@@ -1676,18 +1867,44 @@ class _PlayerPageState extends State<PlayerPage> {
     _controlsHideTimer?.cancel();
     _queuePrefetchTimer?.cancel();
     _fullscreenQueueHideTimer?.cancel();
-    unawaited(_completedSubscription?.cancel());
-    unawaited(_playerErrorSubscription?.cancel());
-    unawaited(_positionSubscription?.cancel());
-    unawaited(_playingSubscription?.cancel());
+    _playbackHealthTimer?.cancel();
+    _detailsService.dispose();
     _persistOpenedProgress();
     _queueScrollController.dispose();
     _fullscreenQueueScrollController.dispose();
     _queueSearchFocusNode.dispose();
     _queueSearchController.dispose();
     _focusNode.dispose();
-    _player.dispose();
+    unawaited(_releaseAsyncResources());
     super.dispose();
+  }
+
+  /**
+   * 等待流订阅和 media_kit 原生播放器真正释放，再通知媒体库允许下一次进入。
+   */
+  Future<void> _releaseAsyncResources() async {
+    final releaseStartedAt = DateTime.now();
+    try {
+      await Future.wait<void>([
+        if (_completedSubscription != null) _completedSubscription!.cancel(),
+        if (_playerErrorSubscription != null)
+          _playerErrorSubscription!.cancel(),
+        if (_positionSubscription != null) _positionSubscription!.cancel(),
+        if (_playingSubscription != null) _playingSubscription!.cancel(),
+      ]);
+      await _player.dispose();
+    } finally {
+      debugPrint(
+        'PLAYER_EXIT requested=${_exitRequestedAt?.toIso8601String()} '
+        'pause_ack=${_pauseAcknowledgedAt?.toIso8601String()} '
+        'pop=${_routePopRequestedAt?.toIso8601String()} '
+        'dispose_start=${releaseStartedAt.toIso8601String()} '
+        'dispose_end=${DateTime.now().toIso8601String()}',
+      );
+      if (!widget.disposalCompleter.isCompleted) {
+        widget.disposalCompleter.complete();
+      }
+    }
   }
 
   /** 构建当前 filtered queue 侧栏；不同布局实例使用独立滚动控制器。 */
@@ -1750,7 +1967,7 @@ class _PlayerPageState extends State<PlayerPage> {
                         _PlayerTopBar(
                           searchController: _queueSearchController,
                           searchFocusNode: _queueSearchFocusNode,
-                          onBack: () => Navigator.of(context).maybePop(),
+                          onBack: () => unawaited(_exitPlayer()),
                           onSearch: _searchQueue,
                           onOpenQueue: hasWideQueueSidebar
                               ? null

@@ -1,3 +1,10 @@
+## 2026-07-13 播放器原生资源与推进检测
+
+- 单播放器进入后线程峰值仍约 281–283；固定 lavc 线程后峰值不变，确认主要增量位于 media_kit/libmpv 的 D3D11/NVIDIA 视频输出边界，而不是 filtered queue 或 FFprobe。
+- 输入和 demux 缓存组合预算收敛后，真实媒体工作集峰值约下降 227 MiB；继续保留 `d3d11va-copy` 可靠硬解。
+- 每秒分别采样 `estimated-frame-number` 与 `audio-pts`，可独立报告视频冻结、音频停顿及两路同时停顿。
+- 返回媒体库前确认 pause，随后记录 pop 与原生 dispose 完成时间；两轮随机循环均完成释放。
+
 ## 2026-07-12 accessibility bridge 隔离验证与无 UIA 截图
 
 - 新增 Windows 桌面集成测试，通过 Flutter Finder/VM Service 点击队列按钮，并以桌面像素采集补拍折叠、恢复状态，不查询 Windows UI Automation 语义树。

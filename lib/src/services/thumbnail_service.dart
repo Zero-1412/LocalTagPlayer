@@ -123,7 +123,7 @@ class ThumbnailService {
   }
 
   Future<File?> thumbnailFor(VideoItem item) async {
-    final cacheKey = await _cacheKeyFor(item.path);
+    final cacheKey = await _cacheKeyFor(item);
     if (cacheKey == null) {
       return null;
     }
@@ -178,7 +178,7 @@ class ThumbnailService {
     bool priority = false,
     bool allowPlayerFallback = false,
   }) async {
-    final cacheKey = await _cacheKeyFor(item.path);
+    final cacheKey = await _cacheKeyFor(item);
     if (cacheKey == null) {
       return;
     }
@@ -439,7 +439,7 @@ class ThumbnailService {
 
   Future<void> retryFailed(Iterable<VideoItem> items) async {
     for (final item in items.where((item) => item.thumbnailError != null)) {
-      final cacheKey = await _cacheKeyFor(item.path);
+      final cacheKey = await _cacheKeyFor(item);
       if (cacheKey != null) {
         _memoryCache.remove(cacheKey);
       }
@@ -484,15 +484,23 @@ class ThumbnailService {
     }
   }
 
-  Future<String?> _cacheKeyFor(String videoPath) async {
+  Future<String?> _cacheKeyFor(VideoItem item) async {
+    final videoPath = item.path;
+    final knownSize = item.fileSize;
+    final knownModifiedMs = item.modifiedMs;
+    if (knownSize != null && knownModifiedMs != null) {
+      // 扫描阶段已经持久化文件快照时直接复用，避免列表滚动反复访问原视频。
+      return _stableKey('$videoPath|$knownSize|$knownModifiedMs');
+    }
     final file = File(videoPath);
     try {
       final stat = await file.stat();
       if (stat.type != FileSystemEntityType.file) {
         return null;
       }
-      final fingerprint =
-          '$videoPath|${stat.size}|${stat.modified.millisecondsSinceEpoch}';
+      item.fileSize = stat.size;
+      item.modifiedMs = stat.modified.millisecondsSinceEpoch;
+      final fingerprint = '$videoPath|${item.fileSize}|${item.modifiedMs}';
       return _stableKey(fingerprint);
     } catch (_) {
       return null;

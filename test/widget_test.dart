@@ -1622,4 +1622,34 @@ void main() {
       findsNothing,
     );
   });
+
+  test('media details disposal discards new reads and keeps cached snapshots',
+      () async {
+    const cached = MediaDetails(
+      videoCodec: 'h264',
+      audioCodec: 'aac',
+      width: 1920,
+      height: 1080,
+    );
+    final cachedItem = _testVideo(path: 'C:/queue/cached.mp4', title: 'cached')
+      ..mediaDetails = cached;
+    final uncachedItem =
+        _testVideo(path: 'C:/queue/uncached.mp4', title: 'uncached');
+    final service = MediaDetailsService();
+
+    expect(service.cachedDetailsFor(cachedItem), same(cached));
+    service.dispose();
+    final result = await service.detailsFor(uncachedItem);
+
+    expect(service.isDisposed, isTrue);
+    expect(service.queuedReads, 0);
+    expect(result.width, isNull);
+  });
+
+  test('Windows recommended decoding requests stable copy hardware mode', () {
+    final resolved = PlayerHardwareAcceleration.resolve('auto-safe');
+    expect(resolved, Platform.isWindows ? 'auto-copy' : 'auto-safe');
+    expect(PlayerHardwareAcceleration.resolve('no'), 'no');
+    expect(PlayerHardwareAcceleration.resolve('nvdec'), 'nvdec');
+  });
 }

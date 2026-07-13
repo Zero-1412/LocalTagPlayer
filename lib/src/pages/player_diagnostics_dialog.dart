@@ -24,6 +24,12 @@ class _PlaybackDiagnosticsSnapshot {
     required this.totalDroppedFrames,
     required this.cacheDuration,
     required this.cacheBufferingState,
+    required this.hwdecCurrent,
+    required this.seekLatencyMs,
+    required this.detailsQueued,
+    required this.frameDurationMs,
+    required this.videoStalled,
+    required this.audioStalled,
   });
 
   /** 展示给用户的诊断文本行。 */
@@ -70,6 +76,24 @@ class _PlaybackDiagnosticsSnapshot {
 
   /** mpv 缓存填充状态。 */
   final double? cacheBufferingState;
+
+  /** mpv 当前真正启用的硬件解码后端。 */
+  final String? hwdecCurrent;
+
+  /** 最近一次 seek 从请求到播放器返回的耗时。 */
+  final int? seekLatencyMs;
+
+  /** 当前媒体详情服务尚未执行的任务数量。 */
+  final int detailsQueued;
+
+  /** 根据 mpv 估算视频 FPS 换算的单帧预算。 */
+  final double? frameDurationMs;
+
+  /** 持续采样是否确认视频帧超过阈值未推进。 */
+  final bool videoStalled;
+
+  /** 持续采样是否确认音频播放头超过阈值未推进。 */
+  final bool audioStalled;
 }
 
 /**
@@ -215,6 +239,24 @@ class _PlaybackDiagnosticsDialogState
     if (!snapshot.smooth && snapshot.wasPlaying && !snapshot.wasBuffering) {
       reasons.add('播放位置推进不足，可能存在渲染阻塞、解码跟不上或 UI 线程压力');
     }
+    if (snapshot.videoStalled && !snapshot.audioStalled) {
+      reasons.add('视频帧已停滞但音频播放头仍推进，确认存在画面冻结、声音继续');
+    }
+    if (snapshot.audioStalled && !snapshot.videoStalled) {
+      reasons.add('音频播放头已停滞但视频帧仍推进，确认存在音频链路停顿');
+    }
+    if (snapshot.videoStalled && snapshot.audioStalled) {
+      reasons.add('视频帧与音频播放头同时停滞，确认播放器整体停止推进');
+    }
+    if (snapshot.hwdecCurrent == null || snapshot.hwdecCurrent == 'no') {
+      reasons.add('实际硬解未启用，高分辨率视频会持续占用 CPU 软件解码');
+    }
+    if (snapshot.seekLatencyMs != null && snapshot.seekLatencyMs! > 500) {
+      reasons.add('最近 seek 耗时 ${snapshot.seekLatencyMs} ms，随机拖动响应偏慢');
+    }
+    if (snapshot.detailsQueued > 0) {
+      reasons.add('媒体详情仍有 ${snapshot.detailsQueued} 项排队，可能与播放争抢磁盘');
+    }
     final decoderDelta = _delta(
         snapshot.decoderDroppedFrames, _previousSnapshot?.decoderDroppedFrames);
     if (decoderDelta != null && decoderDelta > 0) {
@@ -303,6 +345,7 @@ class _PlaybackDiagnosticsDialogState
     final copyLines = <String>[...analysisLines, ...detailLines];
     final snapshot = _snapshot;
     return AlertDialog(
+      key: const ValueKey('player.diagnostics.dialog'),
       title: Row(
         children: [
           const Icon(Icons.monitor_heart_outlined),
@@ -422,6 +465,7 @@ class _PlaybackDiagnosticsDialogState
           ),
         ),
         FilledButton.tonal(
+          key: const ValueKey('player.diagnostics.close'),
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('关闭'),
         ),

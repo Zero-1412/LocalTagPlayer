@@ -854,8 +854,15 @@ class _QueueListItemState extends State<_QueueListItem> {
       _detailsFuture = Future<MediaDetails>.value(const MediaDetails());
       return;
     }
-    _thumbnailFuture = widget.thumbnailService.thumbnailFor(widget.item);
-    _detailsFuture = widget.detailsService.detailsFor(widget.item);
+    // 播放队列只读取内存中已有缩略图，滚动不得启动磁盘校验或 FFmpeg 任务。
+    _thumbnailFuture = Future<File?>.value(
+      widget.thumbnailService.cachedThumbnailFor(widget.item),
+    );
+    // 播放期间队列只展示已缓存详情，禁止滚动创建新的 FFprobe 任务。
+    _detailsFuture = Future<MediaDetails>.value(
+      widget.detailsService.cachedDetailsFor(widget.item) ??
+          const MediaDetails(),
+    );
   }
 
   @override

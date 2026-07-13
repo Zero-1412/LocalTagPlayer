@@ -39,6 +39,7 @@ part 'services/tag_query_service.dart';
 part 'services/external_media_tools.dart';
 part 'services/thumbnail_service.dart';
 part 'services/media_details_service.dart';
+part 'services/player_hardware_acceleration.dart';
 part 'platform/platform_interfaces.dart';
 part 'platform/desktop_file_location_service.dart';
 part 'pages/library_page_helpers.dart';

@@ -17,6 +17,11 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 播放器单实例资源对照确认：播放阶段约从 131 线程增加到 281–283 线程；固定 `vd-lavc-threads=4` 后线程峰值未下降，增量主要属于 media_kit/libmpv 初始化 D3D11/NVIDIA 视频输出后的原生及驱动线程，不能归因于队列 rebuild 或 FFprobe。
+- 播放缓存组合预算由 128 MiB Player buffer + 256/128 MiB mpv 前后缓存收敛为 64 MiB + 96/32 MiB；真实媒体库对照中工作集峰值约从 1016 MiB 降至 789 MiB，Private 峰值约从 1300 MiB 降至 1023 MiB。
+- 播放器后台每秒分别采样 mpv `estimated-frame-number` 与 `audio-pts`，独立识别视频冻结、音频停顿和两路同时停顿；退出链路记录请求、pause 确认、pop、dispose 开始/结束时间。
+- 两轮真实媒体随机循环均使用 `d3d11va-copy`，视频帧与音频 PTS 持续推进、停滞事件为 0；pause 确认约 0–2 ms，原生 dispose 约 1–19 ms。56 项 focused tests、`flutter analyze`、Windows debug build 和真实窗口截图通过。
+
 - 播放器大队列快速滚动期间改用轻量占位，停止创建会触发缩略图磁盘校验与 FFprobe 的完整队列项；列表预建范围收窄到相邻约两项。
 - 播放开始后的详情预取只保留当前视频，避免前后队列探测与 4K 解码争抢磁盘；播放器输入缓冲提升到 128 MiB，并为 mpv 增加受限 30 秒预读与缓存耗尽暂停策略。
 - 本轮 54 项 focused widget tests、`flutter analyze`、Windows debug build 通过；隔离 Windows 播放器用例首次通过，但截图被并存默认窗口污染，关闭默认窗口后复跑出现测试宿主 `did not complete`，不作为 UI 通过证据。仍需隔离真实 4K 三小时样本完成滚动与长播 soak。

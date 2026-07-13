@@ -2638,6 +2638,7 @@ class _LibraryPageState extends State<LibraryPage> {
     thumbnailService.pause();
     _playerScopedLibraryDataChanged = false;
     _playerScopedNeedsCountRefresh = false;
+    final playerDisposed = Completer<void>();
     try {
       await Navigator.of(context).push(
         _smoothRoute<void>(
@@ -2655,10 +2656,16 @@ class _LibraryPageState extends State<LibraryPage> {
             onRelinkMissing: _relinkMissingFromPlayer,
             onPlaybackProgressUpdated: _updatePlaybackProgress,
             onMediaDetailsUpdated: _updateMediaDetails,
+            disposalCompleter: playerDisposed,
           ),
         ),
       );
     } finally {
+      // 路由返回不代表 media_kit 原生线程已释放；等待完成信号再恢复后台任务。
+      await playerDisposed.future.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {},
+      );
       await _playbackSnapshotQueue?.flush();
       final snapshotError = _playbackSnapshotQueue?.takeLastError();
       if (snapshotError != null && mounted) {
