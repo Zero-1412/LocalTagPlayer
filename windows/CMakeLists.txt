@@ -50,6 +50,7 @@ set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
 # Application build; see runner/CMakeLists.txt.
+add_subdirectory("native_player")
 add_subdirectory("runner")
 
 
@@ -84,6 +85,17 @@ install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
 if(PLUGIN_BUNDLED_LIBRARIES)
   install(FILES "${PLUGIN_BUNDLED_LIBRARIES}"
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
+if(LTP_NATIVE_RUNTIME_DLLS)
+  install(FILES ${LTP_NATIVE_RUNTIME_DLLS}
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+if(LTP_NATIVE_LICENSE_FILES)
+  install(FILES ${LTP_NATIVE_LICENSE_FILES}
+    DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/licenses/native_player"
     COMPONENT Runtime)
 endif()
 

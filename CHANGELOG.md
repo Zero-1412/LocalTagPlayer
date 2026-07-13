@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-13 · Windows 原生 libmpv/ANGLE A/B 后端
+
+- 固定 libmpv、ANGLE 与 media_kit_video Windows 纹理桥接源码的下载地址和 SHA-256，构建时供应运行库并安装第三方许可证与告知文件。
+- 原生会话使用单个 `mpv_handle`、单个 `mpv_render_context`、ANGLE 渲染表面和 D3D11 共享纹理；所有控制、事件消费、渲染和释放由一个工作线程串行协调。
+- 补齐 EOF、错误、实际硬解、AV 偏移、音频 PTS、帧号、掉帧、缓存、源帧率和显示刷新率的节流采样；页面仍只依赖 `PlayerBackend`。
+- 同媒体、同随机种子 20 秒真实 A/B 均为 `d3d11va-copy`，视频/音频停滞均为 0；原生 seek 7 ms、释放约 25 ms，对照分别为 28 ms、约 8 ms。默认后端保持 MediaKit，不据单轮短测宣称整体性能胜出。
+- 74 项测试、原生桥接集成测试、`flutter analyze`、Windows debug build 和真实窗口截图通过。
+
 ## 2026-07-13 · 播放器分阶段CPU/GPU内存归因
 
 - 播放器生命周期增加不含路径的阶段标记，记录Flutter ImageCache、纹理ID和mpv demux状态。

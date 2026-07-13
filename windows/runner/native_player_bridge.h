@@ -4,8 +4,13 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 #include <flutter/texture_registrar.h>
+#include <mpv/client.h>
+#include <mpv/render.h>
+
+#include "angle_surface_manager.h"
 
 #include <array>
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <future>
@@ -43,6 +48,11 @@ class NativePlayerBridge {
       const flutter::MethodCall<flutter::EncodableValue>& call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void EnsureTexture();
+  void InitializePlayer();
+  void DestroyPlayer();
+  void ExecutePlayerCommand(const Command& command);
+  void SamplePlayerState();
+  void RenderFrame();
   void DisposeSession();
   void Enqueue(Command command);
   void EnqueueAndWait(Command command);
@@ -52,9 +62,17 @@ class NativePlayerBridge {
   flutter::TextureRegistrar* textures_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::unique_ptr<flutter::TextureVariant> pixel_texture_;
+  std::unique_ptr<flutter::TextureVariant> gpu_texture_;
+  std::unique_ptr<FlutterDesktopGpuSurfaceDescriptor> gpu_descriptor_;
+  std::unique_ptr<ANGLESurfaceManager> surface_manager_;
+  mpv_handle* player_ = nullptr;
+  mpv_render_context* render_context_ = nullptr;
   FlutterDesktopPixelBuffer pixel_buffer_{};
   std::array<uint8_t, 16> pixels_{};
   int64_t texture_id_ = -1;
+  bool native_mpv_enabled_ = false;
+  std::atomic<bool> rendering_enabled_{false};
+  std::atomic<bool> render_requested_{false};
 
   mutable std::mutex mutex_;
   std::condition_variable condition_;
@@ -67,6 +85,19 @@ class NativePlayerBridge {
   int64_t duration_ms_ = 0;
   double volume_ = 100.0;
   std::string lifecycle_ = "idle";
+  std::string hwdec_ = "native-stub";
+  std::string video_codec_ = "unavailable";
+  std::string audio_codec_ = "unavailable";
+  double avsync_ = 0.0;
+  double audio_pts_ = 0.0;
+  double cache_duration_ = 0.0;
+  double estimated_vf_fps_ = 0.0;
+  double display_fps_ = 0.0;
+  int64_t frame_number_ = 0;
+  int64_t dropped_frames_ = 0;
+  int64_t completed_count_ = 0;
+  int64_t error_count_ = 0;
+  std::string last_error_;
 };
 
 #endif  // RUNNER_NATIVE_PLAYER_BRIDGE_H_

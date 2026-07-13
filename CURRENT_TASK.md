@@ -480,3 +480,12 @@ flutter build windows --debug
 - 假后端真实媒体库30秒回归完成2轮纹理、滚动、全屏、seek和退出，退出后纹理ID均变为`-1`；默认media_kit对照2轮保持`d3d11va-copy`、AV offset接近0且无音视频停滞。
 - 同时段资源峰值为：假后端173线程、565.6MiB工作集、558.9MiB GPU committed；media_kit为315线程、830.3MiB工作集、781.8MiB GPU committed。假后端不执行解码，该数据只用于确认桥接开销，不能作为播放器性能结论。
 - libmpv DLL虽存在于运行目录，但头文件、导入库和ANGLE当前只存在于生成目录；真实D3D11后端不得依赖这些本机临时路径，下一轮先固定可重复构建的第三方依赖供应。
+
+# 2026-07-13 Windows 原生 libmpv/ANGLE 实链与同媒体 A/B
+
+- CMake 固定并校验 libmpv、ANGLE 和 media_kit_video Windows C++ 源码，安装 DLL、许可证及第三方告知；不读取 Pub Cache 或机器相关临时链接路径。
+- `NativePlayerBridge` 以单工作线程拥有一个 `mpv_handle`、一个 `mpv_render_context` 和一个 ANGLE/D3D11 共享纹理，更新回调只发出渲染请求，避免在 mpv 回调中重入渲染死锁。
+- 原生快照补齐 EOF/错误计数、实际硬解、AV offset、音频 PTS、缓存时长、帧号、掉帧和帧率；Flutter 适配器恢复完整完成流和错误流。
+- 开关 `LOCAL_TAG_PLAYER_BACKEND=windows-native-mpv` 仅用于显式 A/B，默认 MediaKit 不变；`windows-native-stub` 仍保留生命周期回归入口。
+- 同 `Seed=20260713`、同真实媒体、同 20 秒随机循环下，两端均无视频/音频停滞且实际硬解均为 `d3d11va-copy`。原生 seek 7 ms、dispose 约 25 ms，对照 28 ms、约 8 ms；两端进程始终响应，短测线程峰值均为 315，原生 GPU committed 峰值更高，暂不切换默认后端。
+- 74 项测试、原生桥接集成测试、analyze、Windows debug build、真实播放与截图均通过。

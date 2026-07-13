@@ -31,9 +31,9 @@ lib/src/widgets
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.7`
+已完成基线：`Architecture Baseline 0.5.14`
 
-当前推进中：`Architecture Baseline 0.5.9`
+当前推进中：`Architecture Baseline 0.5.14`
 
 变更点：
 
@@ -61,6 +61,7 @@ lib/src/widgets
 - `0.5.11`：播放器生命周期诊断跨 Flutter ImageCache、media_kit 纹理 ID、libmpv demux 状态与 Windows GPU Process Memory 对齐。VideoController 仍由 Player release 回调释放；退出后 D3D Shared 回落而 NVIDIA Dedicated/Committed 可保留为驱动缓存，不引入平台命令强制清理或破坏缩略图缓存。
 - `0.5.12`：`PlayerBackend` 扩展为完整播放会话、纹理、轻量状态、诊断属性与释放完成契约。`MediaKitPlayerBackend` 独占现有 Player/VideoController，`PlayerPage` 只消费可注入后端，不再穿透 media_kit 或 libmpv；默认行为仍为现有 `d3d11va-copy` 路径，为后续 Windows C++ 后端保留可回滚 A/B 切换点。
 - `0.5.13`：Windows runner新增`NativePlayerBridge`骨架，提供方法通道、外部像素纹理、单线程串行命令与确定性释放；`WindowsNativePlayerBackend`仅能通过环境开关显式启用假纹理，默认仍使用media_kit。真实libmpv/D3D11接入必须先供应固定版本、可重复构建的头文件和二进制，不允许依赖Pub Cache或build临时目录。
+- `0.5.14`：Windows 原生后端固定并按 SHA-256 校验 libmpv、ANGLE 和纹理桥接源码，构建产物随包安装运行库与许可证。单个 `mpv_handle`、`mpv_render_context` 和 ANGLE/D3D11 共享纹理均由串行工作线程拥有，EOF、错误、帧推进、AV 偏移、缓存和硬解状态通过节流快照进入现有 `PlayerBackend`；默认仍为 MediaKit，仅通过环境开关执行可回滚 A/B。
 
 协作要求：
 

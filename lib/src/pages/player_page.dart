@@ -255,11 +255,16 @@ class _PlayerPageState extends State<PlayerPage> {
     required String hwdec,
     required bool enableHardwareAcceleration,
   }) {
-    // 仅显式环境开关启用未完成的原生骨架，避免用户误入无真实解码的测试后端。
+    // 原生后端仍处于 A/B 验证阶段，只允许显式环境开关启用，避免静默改变生产播放行为。
+    if (Platform.isWindows &&
+        Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
+            'windows-native-mpv') {
+      return WindowsNativePlayerBackend(mode: 'mpv');
+    }
     if (Platform.isWindows &&
         Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
             'windows-native-stub') {
-      return WindowsNativePlayerBackend();
+      return WindowsNativePlayerBackend(mode: 'stub');
     }
     return MediaKitPlayerBackend(
       hwdec: hwdec,

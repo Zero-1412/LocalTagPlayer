@@ -324,3 +324,10 @@
 - 默认media_kit同媒体2轮对照仍为`d3d11va-copy`，seek约27ms，视频帧与音频PTS持续推进且无停滞事件。
 - 假后端峰值173线程/565.6MiB工作集/558.9MiB GPU committed，对照为315线程/830.3MiB/781.8MiB；由于假后端不解码，这组数据仅建立桥接开销基线，不宣称性能提升。
 - 真正libmpv/D3D11尚未接入：当前依赖只存在于生成目录，必须先建立固定版本第三方依赖供应，不能提交机器相关链接路径。
+
+# 2026-07-13 Windows 原生 libmpv/ANGLE 实链
+
+- 构建按 SHA-256 固定供应 libmpv、ANGLE 和 Windows 纹理桥接 C++ 源码，运行库及许可证随 Windows bundle 安装。
+- 原生单工作线程串行拥有 `mpv_handle`、`mpv_render_context`、ANGLE 表面与 D3D11 共享纹理；mpv 更新回调不直接渲染，避免回调重入死锁。
+- EOF、错误、帧推进、音频 PTS、AV offset、缓存、掉帧、帧率和实际硬解进入 `PlayerBackend` 节流快照；filtered queue、当前 index、SQLite 与缩略图/media 队列不变。
+- 同媒体 20 秒 A/B 中两端均使用 `d3d11va-copy` 且无音视频停滞；原生 seek 更低但释放更慢、GPU committed 峰值更高，因此默认仍保持 MediaKit，原生后端只由 `windows-native-mpv` 显式启用。

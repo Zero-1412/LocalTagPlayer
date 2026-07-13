@@ -7,13 +7,13 @@ const _windowsNativePlayerChannel =
     MethodChannel('local_tag_player/native_player');
 
 /**
- * Windows C++ 播放器骨架的 Flutter 适配器。
+ * Windows C++ 播放器的 Flutter 适配器。
  *
- * 当前仅用于显式 A/B 开关验证纹理、命令串行化和生命周期；默认生产路径继续使用
- * MediaKitPlayerBackend，直到 libmpv/D3D11 后端通过同媒体基准验收。
+ * `stub`模式验证纹理与生命周期，`mpv`模式接入原生解码和 D3D11 共享纹理；两者
+ * 都只用于显式 A/B，默认生产路径继续使用 MediaKitPlayerBackend。
  */
 class WindowsNativePlayerBackend implements PlayerBackend {
-  WindowsNativePlayerBackend()
+  WindowsNativePlayerBackend({this.mode = 'stub'})
       : _positionChanges = StreamController<Duration>.broadcast(),
         _playingChanges = StreamController<bool>.broadcast(),
         _completedChanges = StreamController<bool>.broadcast(),
@@ -22,6 +22,8 @@ class WindowsNativePlayerBackend implements PlayerBackend {
   }
 
   final StreamController<Duration> _positionChanges;
+  /** 原生创建模式：`stub`仅验证纹理，`mpv`启用真实解码。 */
+  final String mode;
   final StreamController<bool> _playingChanges;
   final StreamController<bool> _completedChanges;
   final StreamController<String> _errorChanges;
@@ -39,12 +41,16 @@ class WindowsNativePlayerBackend implements PlayerBackend {
     audioTrackCount: 0,
   );
   String _lifecycle = 'creating';
+  final Map<String, String> _properties = <String, String>{};
+  int _completedCount = 0;
+  int _errorCount = 0;
+  bool _polling = false;
   bool _disposed = false;
 
-  /** 创建原生假纹理并启动低频状态轮询。 */
+  /** 创建指定原生会话并启动低频状态轮询。 */
   Future<void> _initialize() async {
     final value = await _windowsNativePlayerChannel
-        .invokeMapMethod<String, Object?>('create');
+        .invokeMapMethod<String, Object?>('create', {'mode': mode});
     _applyState(value);
     _pollTimer = Timer.periodic(
       const Duration(milliseconds: 100),
@@ -52,15 +58,19 @@ class WindowsNativePlayerBackend implements PlayerBackend {
     );
   }
 
-  /** 状态轮询仅用于骨架；真实后端将改为原生节流事件流。 */
+  /** 拉取原生节流快照；上一轮未结束时丢弃本轮，避免平台消息积压。 */
   Future<void> _pollState() async {
-    if (_disposed) return;
+    if (_disposed || _polling) return;
+    _polling = true;
     try {
       final value = await _windowsNativePlayerChannel
           .invokeMapMethod<String, Object?>('state');
       _applyState(value);
     } catch (error) {
-      _errorChanges.add(error.runtimeType.toString());
+      // dispose 可能与最后一次轮询交错；关闭后的错误流不能再接收事件。
+      if (!_disposed) _errorChanges.add(error.runtimeType.toString());
+    } finally {
+      _polling = false;
     }
   }
 
@@ -81,10 +91,33 @@ class WindowsNativePlayerBackend implements PlayerBackend {
       audioTrackCount: 0,
     );
     _lifecycle = value['lifecycle'] as String? ?? _lifecycle;
+    for (final property in const [
+      'hwdec-current',
+      'video-codec',
+      'audio-codec',
+      'avsync',
+      'audio-pts',
+      'demuxer-cache-duration',
+      'estimated-vf-fps',
+      'display-fps',
+      'estimated-frame-number',
+      'frame-drop-count',
+    ]) {
+      final propertyValue = value[property];
+      if (propertyValue != null) _properties[property] = '$propertyValue';
+    }
     final texture = value['textureId'] as int?;
     _textureId.value = texture == null || texture < 0 ? null : texture;
     if (position != previous.position) _positionChanges.add(position);
     if (playing != previous.playing) _playingChanges.add(playing);
+    final completedCount = value['completedCount'] as int? ?? _completedCount;
+    if (completedCount > _completedCount) _completedChanges.add(true);
+    _completedCount = completedCount;
+    final errorCount = value['errorCount'] as int? ?? _errorCount;
+    if (errorCount > _errorCount) {
+      _errorChanges.add(value['lastError'] as String? ?? 'mpv playback error');
+    }
+    _errorCount = errorCount;
   }
 
   /** 将所有控制动作送入同一个原生串行队列。 */
@@ -150,9 +183,10 @@ class WindowsNativePlayerBackend implements PlayerBackend {
   @override
   Future<String> getProperty(String property) async {
     await _ready;
-    if (property == 'video-codec') return 'native-stub';
-    if (property == 'hwdec-current') return 'native-stub';
-    if (property == 'current-vo') return 'flutter-pixel-buffer';
+    if (_properties.containsKey(property)) return _properties[property]!;
+    if (property == 'current-vo') {
+      return mode == 'mpv' ? 'libmpv-angle-d3d11' : 'flutter-pixel-buffer';
+    }
     if (property == 'native-lifecycle') return _lifecycle;
     return 'unavailable';
   }
