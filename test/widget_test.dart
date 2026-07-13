@@ -1750,4 +1750,91 @@ void main() {
     expect(PlayerHardwareAcceleration.resolve('no'), 'no');
     expect(PlayerHardwareAcceleration.resolve('nvdec'), 'nvdec');
   });
+
+  test('4K H264 HEVC and AV1 matrix does not show false warnings', () {
+    for (final codec in const ['H264', 'HEVC', 'AV1']) {
+      final result = PlayerHardwareCompatibility.assess(
+        details: MediaDetails(
+          videoCodec: codec,
+          width: 3840,
+          height: 2160,
+        ),
+        settings: PlaybackSettings.defaults,
+        isWindows: true,
+      );
+      expect(result.status, HardwareDecodeCompatibilityStatus.verified);
+    }
+  });
+
+  test('8K H264 matrix requires software decode confirmation', () {
+    final result = PlayerHardwareCompatibility.assess(
+      details: const MediaDetails(
+        videoCodec: 'H264',
+        width: 7680,
+        height: 4320,
+      ),
+      settings: PlaybackSettings.defaults,
+      isWindows: true,
+    );
+
+    expect(result.status, HardwareDecodeCompatibilityStatus.unsupported);
+    expect(result.reason, contains('CPU 软件解码'));
+  });
+
+  test('unknown or intentionally software-decoded media is not over-warned',
+      () {
+    final unknown = PlayerHardwareCompatibility.assess(
+      details: const MediaDetails(videoCodec: 'VP9', width: 7680, height: 4320),
+      settings: PlaybackSettings.defaults,
+      isWindows: true,
+    );
+    final software = PlayerHardwareCompatibility.assess(
+      details:
+          const MediaDetails(videoCodec: 'H264', width: 7680, height: 4320),
+      settings: PlaybackSettings.defaults.copyWith(hwdec: 'no'),
+      isWindows: true,
+    );
+
+    expect(unknown.status, HardwareDecodeCompatibilityStatus.unknown);
+    expect(software.status, HardwareDecodeCompatibilityStatus.unknown);
+  });
+
+  testWidgets('unsupported hardware decode dialog offers proxy advice',
+      (tester) async {
+    var result = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () async {
+                result = await showPlayerHardwareDecodeWarningDialog(
+                  context,
+                  const HardwareDecodeCompatibilityAssessment(
+                    status: HardwareDecodeCompatibilityStatus.unsupported,
+                    codec: 'H.264',
+                    width: 7680,
+                    height: 4320,
+                    reason: '测试软解回退',
+                  ),
+                );
+              },
+              child: const Text('打开'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开'));
+    await tester.pumpAndSettle();
+    expect(find.text('该视频无法可靠硬件解码'), findsOneWidget);
+    expect(find.textContaining('3840×2160 H.264 代理'), findsOneWidget);
+    expect(find.byKey(const ValueKey('player.hwdecWarning.proxyCommand')),
+        findsOneWidget);
+    await tester
+        .tap(find.byKey(const ValueKey('player.hwdecWarning.continue')));
+    await tester.pumpAndSettle();
+    expect(result, isTrue);
+  });
 }

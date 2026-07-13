@@ -525,3 +525,12 @@ flutter build windows --debug
 - 真实 11,135 条索引库、6 个根目录、15,958 个文件基准：数据库加载约 40.2 秒、纯目录枚举 84ms、首次冷盘 stat+指纹 272.7 秒；复用 size/mtime/fingerprint 后热扫描 2.72 秒，事件循环 P95 16.95ms、最大 18.34ms。
 - 扫描瓶颈属于未变化文件的随机磁盘读取而非 Dart 事件循环，已在现有 Dart 边界消除，因此不引入 Rust `LibraryScanBackend`。下一步应单独优化约 40 秒的 Repository/SQLite hydration。
 - 76 项测试、原生媒体探测集成测试、`flutter analyze`、Windows debug build和隔离真实媒体两轮滚动/全屏/seek/诊断/退出通过。
+
+# 2026-07-14 4K 硬解兼容矩阵与超规格提示
+
+- RTX 4070 SUPER / 驱动 595.97 下，以 MediaKit `d3d11va-copy` 分别测试真实 3840×2160/60 H.264、HEVC、AV1，每种两轮随机队列滚动、seek、全屏和退出；六轮实际硬解均为 `d3d11va-copy`，音视频停滞为 0，AV offset 最大约 0.000445 秒。
+- 新增不可变 `HardwareDecodeCompatibilityAssessment` 与只读 `PlayerHardwareCompatibility`；预检只消费数据库缓存详情，未知规格不猜测、不触发 FFprobe。
+- 已确认回退软件解码的 7680×4320/60 H.264 在 `PlayerBackend` 创建前要求确认；首次入口取消不会创建播放器，队列切换取消会恢复已打开项，确认后才提交新 open。
+- 弹窗提供 4K H.264 代理与 4K HEVC 转码建议及复制命令，要求保留源文件；不自动转码、不覆盖用户媒体。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 和缩略图/media 队列未修改。
+- 87 项测试、`flutter analyze` 和 Windows debug build 通过；真实窗口截图确认 1268×714 下弹窗无遮挡/溢出，取消保持媒体库，继续可进入 8K 视频且返回后停止播放。

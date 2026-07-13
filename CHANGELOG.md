@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-14 · 4K 硬解矩阵与超规格预检
+
+- 在 RTX 4070 SUPER / 驱动 595.97 / MediaKit `d3d11va-copy` 环境中，分别用真实 3840×2160/60 H.264、HEVC、AV1 样本各执行两轮播放器滚动、seek、全屏与退出；六轮实际硬解均为 `d3d11va-copy`，视频/音频停滞为 0，AV offset 最大约 0.000445 秒，seek 为 25–28 ms。
+- 新增只读硬解兼容矩阵，未验证规格保持 unknown，不因“4K”或“AV1”名称笼统告警；已确认软件回退的 7680×4320/60 H.264 在播放器创建前显示明确确认。
+- 首次进入播放器和页面内 filtered queue 切换都在新媒体 open 前预检；队列弹窗取消会恢复已打开项，确认后才提交新路径。提示同时提供保留源文件、生成 4K H.264 代理及 4K HEVC 转码的建议与可复制命令；应用不自动转码、不覆盖或删除源文件。
+- 预检只读取 hydration 已恢复的 `MediaDetails`，不启动 FFprobe，不修改 SQLite schema、filtered queue、标签语义或缩略图/media 队列。
+- 87 项测试、`flutter analyze` 和 Windows debug build 通过；真实窗口点击 8K 样本确认弹窗无遮挡/溢出，取消不创建播放器，明确继续后可进入并正常退出播放器。
+
 ## 2026-07-13 · 目录移除、视频删除、缩略图抢占与硬解复核
 
 - 移除 root 现在以单 SQLite batch 提交 metadata、视频行和 `video_tags` 删除；仅删除不再受其它 root 覆盖的记录，磁盘文件保持不动，事务后立即刷新媒体库总量。

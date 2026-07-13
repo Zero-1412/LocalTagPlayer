@@ -1,3 +1,11 @@
+## 2026-07-14 4K 硬解矩阵与超规格预检
+
+- RTX 4070 SUPER / 驱动 595.97 / MediaKit `d3d11va-copy` 下，真实 4K/60 H.264、HEVC、AV1 各两轮均启用实际硬解，视频/音频停滞为 0，AV offset 最大约 0.000445 秒。
+- `PlayerHardwareCompatibility` 只读取已缓存 `MediaDetails`；标准 4K 三种编码避免误报，未知规格保持 unknown，不在播放入口启动 FFprobe。
+- 已确认回退软件解码的 8K/60 H.264 在首次路由和 filtered queue 切换的新 open 前提示；队列取消恢复已打开项，确认后才提交路径，并给出不覆盖源文件的 4K H.264 代理与 4K HEVC 转码建议。
+- filtered queue、播放索引、PlayerBackend 打开参数与退出状态机未修改。
+- 87 项测试、analyze、Windows debug build 通过；真实窗口截图验证取消/继续/返回链路和弹窗布局。
+
 ## 2026-07-13 实际硬解持续复核
 
 - 每秒健康采样增加 `hwdec-current`，属性不可用不再直接等同于软件解码；已开始播放时的空值按 mpv 软件解码语义处理。

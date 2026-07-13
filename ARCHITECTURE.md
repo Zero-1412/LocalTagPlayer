@@ -66,6 +66,7 @@ lib/src/widgets
 - `0.5.16`：完成 D3D11/ANGLE 最终内存归因并停止默认原生播放器替换路线；新增独立 `MediaProbeBackend`，Windows C++ 通过延迟加载的 FFmpeg 8.1 shared libraries 串行执行 `probeBatch/cancelGeneration`，SQLite 仍只由 Dart Repository 写入。真实 11,135 条索引库证明扫描瓶颈来自未变化文件的随机指纹读取，`LibraryScanService` 复用数据库 size/mtime/fingerprint 后 15,958 文件热扫描降至 2.72 秒，不引入 Rust。
 - `0.5.17`：修复 SQLite 启动时无条件 stable identity 回填产生的 NOCASE 关系数乘视频数全表扫描，并建立 `LibraryScanBackend` / `LibraryScanDelta` / generation 取消边界。Windows Rust sidecar 只读目录、stat 与 fingerprint，缺失时回退 Dart；Dart Application 独占 stable identity/relink 校验和 SQLite 单 batch 提交。父子 root 最上层优先去重，首帧不等待扫描或媒体探测，新增/内容变化项才进入缓存与 `MediaProbeBackend`。
 - `0.5.18`：明确媒体库删除边界。移除 root 由 Dart Application/SQLite Repository 单事务删除不再受其它 root 管理的视频记录，磁盘文件不动；单视频删除由 UI 显式选择是否同步删文件，并清理稳定视频行、标签关系和缩略图缓存。缩略图可见任务可抢占滚动遗留队列；PlayerBackend 诊断持续区分硬解属性不可用与明确软件解码，硬解参数只在 open 前设置，播放中不热切换解码后端。SQLite schema、过滤语义与 filtered queue 不变。
+- `0.5.19`：新增只读 `PlayerHardwareCompatibility` 预检边界。它只消费 SQLite hydration 已恢复的 `MediaDetails` 与播放设置，不读取文件、不启动 FFprobe；4K H.264/HEVC/AV1 真实矩阵用于避免误报，已确认回退软件解码的 8K H.264 在创建 `PlayerBackend` 前要求用户确认，并给出不覆盖源文件的代理/转码建议。
 
 协作要求：
 
@@ -98,6 +99,7 @@ lib/src/widgets
 - `TagRules` 集中一级/二级标签派生、默认专辑排序、视频扩展名判断。
 - `AppPaths` 集中应用数据目录、设置文件、媒体库数据库、缩略图目录。
 - `PlaybackSettings` 保存播放硬解、稳定进度默认起播、快捷键和全屏队列交互参数。
+- `PlayerHardwareCompatibility` 把真实样本验证结论转成不可变预检结果；未知规格保持 unknown，UI 不得自行猜测硬解能力。
 - `platform_interfaces.dart` 定义文件系统、播放器、FFmpeg/FFprobe、数据库 Provider 的跨平台接口边界。
 - `layout_size.dart` 定义 `compact`、`medium`、`expanded` 共享布局语义，避免后续页面各自写死宽度规则。
 

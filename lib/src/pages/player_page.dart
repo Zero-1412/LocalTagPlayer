@@ -101,6 +101,10 @@ class _PlayerPageState extends State<PlayerPage> {
   final _fileLocationService = const DesktopFileLocationService();
   late final PlayerPlaybackController _playback;
   final _openRequests = PlayerOpenRequestController();
+  /** 当前页面内已经由用户明确接受软件解码风险的视频身份。 */
+  final _approvedSoftwareDecodeVideoIds = <String>{};
+  /** 正在等待兼容性确认的路径；避免快速点击叠加多个警告弹窗。 */
+  String? _compatibilityPromptPath;
   StreamSubscription<bool>? _completedSubscription;
   StreamSubscription<String>? _playerErrorSubscription;
   StreamSubscription<Duration>? _positionSubscription;
@@ -1144,8 +1148,66 @@ class _PlayerPageState extends State<PlayerPage> {
       }
       return;
     }
+    final compatibility = PlayerHardwareCompatibility.assess(
+      details: _currentItem.mediaDetails,
+      settings: widget.playbackSettings,
+    );
+    if (_openedPath != null &&
+        _openedPath != _currentItem.path &&
+        compatibility.status == HardwareDecodeCompatibilityStatus.unsupported &&
+        !_approvedSoftwareDecodeVideoIds.contains(_currentItem.videoId)) {
+      // 队列切换先保留当前播放会话，只有用户确认后才把新路径交给 open worker。
+      unawaited(_confirmQueueHardwareDecodeRisk(
+        _currentItem,
+        compatibility,
+      ));
+      return;
+    }
     if (_openRequests.request(_currentItem.path)) {
       unawaited(_drainOpenRequests());
+    }
+  }
+
+  /**
+   * 串行确认播放器队列内的超规格视频。
+   *
+   * 取消时恢复已经打开的视频索引；用户快速选择其它项时丢弃旧结果并重新评估
+   * 最新选择，避免过期弹窗打开错误媒体。
+   */
+  Future<void> _confirmQueueHardwareDecodeRisk(
+    VideoItem item,
+    HardwareDecodeCompatibilityAssessment compatibility,
+  ) async {
+    if (_compatibilityPromptPath != null) {
+      return;
+    }
+    final requestedPath = item.path;
+    _compatibilityPromptPath = requestedPath;
+    final confirmed = await showPlayerHardwareDecodeWarningDialog(
+      context,
+      compatibility,
+    );
+    _compatibilityPromptPath = null;
+    if (!mounted) {
+      return;
+    }
+    if (_currentItem.path != requestedPath) {
+      _requestOpenCurrent();
+      return;
+    }
+    if (confirmed) {
+      _approvedSoftwareDecodeVideoIds.add(item.videoId);
+      _requestOpenCurrent();
+      return;
+    }
+
+    final openedPath = _openedPath;
+    final openedIndex = openedPath == null
+        ? -1
+        : _queue.indexWhere((video) => video.path == openedPath);
+    if (openedIndex >= 0) {
+      setState(() => _playback.jumpTo(openedIndex));
+      _ensureQueueIndexVisible(openedIndex, center: true);
     }
   }
 

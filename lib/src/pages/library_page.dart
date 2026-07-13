@@ -2865,6 +2865,20 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       return;
     }
+    final compatibility = PlayerHardwareCompatibility.assess(
+      details: item.mediaDetails,
+      settings: _playbackSettings,
+    );
+    if (compatibility.status == HardwareDecodeCompatibilityStatus.unsupported) {
+      // 预检只读取 hydration 已恢复的缓存详情；用户确认前不创建播放器或预热队列。
+      final confirmed = await showPlayerHardwareDecodeWarningDialog(
+        context,
+        compatibility,
+      );
+      if (!confirmed || !mounted) {
+        return;
+      }
+    }
     final thumbnailService = _thumbnailService!;
     final activeChildTag =
         _selectedChildTags.isEmpty ? null : _selectedChildTags.first;
