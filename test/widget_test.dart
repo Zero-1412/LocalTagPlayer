@@ -1702,6 +1702,45 @@ void main() {
         ),
         same(unchanged));
     expect(next.totalCount, 4);
+
+    source.configure(
+      engine: TagQueryService(
+        videos: [changedOut, unchanged, changedIn, added],
+        tagContext: const TagQueryContext(),
+      ),
+      totalCount: 4,
+      sourceKey: 2,
+    );
+    final zeroDelta = source.applyVideoDelta(query, const <VideoItem>[]);
+    expect(zeroDelta.filteredVideos, same(next.filteredVideos));
+  });
+
+  test('visible thumbnail requests share one bounded queue job', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('ltp_thumbnail_queue_');
+    addTearDown(() async {
+      AppPaths.debugUseDataDirectoryForTesting(null);
+      await directory.delete(recursive: true);
+    });
+    AppPaths.debugUseDataDirectoryForTesting(directory);
+    final service = await ThumbnailService.create();
+    final item = _testVideo(
+      path: '${directory.path}/missing.mp4',
+      title: 'missing',
+    )
+      ..fileSize = 123
+      ..modifiedMs = 456;
+
+    final results = await Future.wait<File?>([
+      service.ensureThumbnailFor(item),
+      service.ensureThumbnailFor(item),
+    ]);
+    final stats = await service.statsFor([item]);
+
+    expect(results, [isNull, isNull]);
+    expect(stats.failedThisRun, 1);
+    expect(stats.queued, 0);
+    expect(stats.active, 0);
   });
 
   test('Windows recommended decoding requests stable D3D11 copy mode', () {

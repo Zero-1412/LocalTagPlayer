@@ -17,6 +17,10 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 缩略图可见卡片改为等待共享的受限队列生成 Future，同一 cache key 只生成一次；后台预取连同 cache key/JPEG 验证阶段一起限制在 500 个请求内。
+- 媒体库卡片移除 build 期间同步文件 stat，并对历史 4K fallback JPEG 使用 384px 解码尺寸；真实窗口像素截图中可见缩略图均已显示。
+- 扫描 UI 诊断按大量差量/零差量连续采样 3 秒：11,133 条差量的 folder 侧边栏重算约 102 ms、filter 替换约 73 ms；零差量不再触发两者。全流程更大峰值仍在 11,000 条 Application 合并/SQLite 提交。
+
 - 真实 11,135 条媒体库启动分解为 SQLite 打开/维护、视频 SQL、对象构建、标签与关系 hydration、folder 覆盖检查、首屏排序和标签计数；定位 38.55 秒来自启动时无条件 stable identity 回填的 Windows NOCASE 相关全表扫描。
 - 增加 NOCASE path 索引并只迁移缺失身份/重复关系；root 直属视频合法零 folder 标签不再反复补写。隔离副本加载从 43.99 秒降至 0.844 秒，真实窗口首帧诊断为 1.42 秒。
 - 建立 `LibraryScanBackend` / 不可变 `LibraryScanDelta` / generation 取消 / `LibraryScanCommitResult`，Dart Application 继续独占 stable identity、relink 唯一性与 SQLite 单 batch 提交。

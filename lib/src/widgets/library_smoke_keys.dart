@@ -25,6 +25,8 @@ class LibrarySmokeKeys {
   static const topSortMenuPanel = ValueKey<String>('smoke.top.sort-menu-panel');
   static const topSortDirectionButton =
       ValueKey<String>('smoke.top.sort-direction-button');
+  /** 真实窗口扫描帧诊断的稳定入口。 */
+  static const rescanButton = ValueKey<String>('smoke.sidebar.rescan');
 
   static ValueKey<String> topSortMenuItem(SortMode mode) =>
       ValueKey<String>('smoke.top.sort-menu-item:${mode.name}');

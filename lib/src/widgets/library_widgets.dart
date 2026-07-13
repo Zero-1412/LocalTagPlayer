@@ -451,6 +451,7 @@ class _Sidebar extends StatelessWidget {
                           onTap: onOpenMissingRelink,
                         ),
                         _SidebarNavItem(
+                          key: LibrarySmokeKeys.rescanButton,
                           icon: isScanning
                               ? Icons.hourglass_empty_rounded
                               : Icons.sync_rounded,
@@ -845,6 +846,7 @@ class _SidebarLocalLibraryItem extends StatelessWidget {
 
 class _SidebarNavItem extends StatelessWidget {
   const _SidebarNavItem({
+    super.key,
     required this.icon,
     required this.label,
     required this.selected,

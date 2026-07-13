@@ -104,7 +104,19 @@ class FilterStateSource {
     }
     final changed = changedVideos.toList(growable: false);
     if (changed.isEmpty) {
-      return update(query);
+      final state = FilterState(
+        query: query,
+        filteredVideos: cachedState.filteredVideos,
+        resultCount: cachedState.resultCount,
+        totalCount: _totalCount,
+      );
+      _cachedSignature = _signature(
+        query: query,
+        sourceKey: _sourceKey,
+        sortKey: _sortKey,
+      );
+      _cachedState = state;
+      return state;
     }
     final changedIds = {for (final item in changed) item.videoId};
     final filteredVideos = <VideoItem>[

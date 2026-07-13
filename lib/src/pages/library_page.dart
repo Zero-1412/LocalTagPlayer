@@ -525,6 +525,10 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                           value: _formatCount(stats.queued),
                         ),
                         _SettingsStatLine(
+                          label: '后台请求',
+                          value: _formatCount(stats.pendingBackgroundRequests),
+                        ),
+                        _SettingsStatLine(
                           label: '平均耗时',
                           value: '${stats.averageMs} ms',
                         ),
@@ -698,6 +702,8 @@ class _LibraryPageState extends State<LibraryPage> {
   var _libraryDataRevision = 0;
   var _showFavoritesOnly = false;
   var _isScanning = false;
+  /** debug 扫描帧采样器；发布构建始终为 null。 */
+  LibraryScanUiDiagnostics? _activeScanUiDiagnostics;
   var _sortMode = SortMode.recent;
   var _sortDirection = SortDirection.descending;
   var _denseResultGrid = false;
@@ -746,6 +752,7 @@ class _LibraryPageState extends State<LibraryPage> {
   void dispose() {
     unawaited(_playbackSnapshotQueue?.dispose());
     _libraryMediaDetailsService?.dispose();
+    _activeScanUiDiagnostics?.abort();
     HardwareKeyboard.instance.removeHandler(_handleGlobalSearchShortcut);
     _searchController.removeListener(_handleSearchControllerChanged);
     _searchController.dispose();
@@ -1004,9 +1011,21 @@ class _LibraryPageState extends State<LibraryPage> {
     if (_isScanning) {
       return;
     }
+    _activeScanUiDiagnostics?.abort();
+    final diagnostics = kDebugMode ? LibraryScanUiDiagnostics() : null;
+    diagnostics?.start();
+    _activeScanUiDiagnostics = diagnostics;
+    var diagnosticsWillFinish = false;
     setState(() => _isScanning = true);
     try {
+      final actionWatch = Stopwatch()..start();
       final result = await action();
+      actionWatch.stop();
+      diagnostics?.recordStage(
+        'scan.backend_and_commit',
+        actionWatch.elapsed,
+        itemCount: result.changedVideos.length,
+      );
       if (!mounted) {
         return;
       }
@@ -1016,7 +1035,23 @@ class _LibraryPageState extends State<LibraryPage> {
       // 只为新增或内容变化项目进入缓存队列，避免每次扫描重新排队整个媒体库。
       _thumbnailService?.prefetchAll(result.probeCandidates);
       _startLibraryMediaProbes(result);
+      diagnostics?.markPostApply();
+      final applyWatch = Stopwatch()..start();
       _applyLibraryScanDelta(result);
+      applyWatch.stop();
+      diagnostics?.recordStage(
+        'ui.delta_schedule',
+        applyWatch.elapsed,
+        itemCount: result.changedVideos.length,
+      );
+      if (diagnostics != null) {
+        diagnosticsWillFinish = true;
+        unawaited(diagnostics.finish(result).whenComplete(() {
+          if (identical(_activeScanUiDiagnostics, diagnostics)) {
+            _activeScanUiDiagnostics = null;
+          }
+        }));
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content:
@@ -1031,6 +1066,12 @@ class _LibraryPageState extends State<LibraryPage> {
         SnackBar(content: Text('\u626b\u63cf\u5931\u8d25\uff1a$error')),
       );
     } finally {
+      if (!diagnosticsWillFinish) {
+        diagnostics?.abort();
+        if (identical(_activeScanUiDiagnostics, diagnostics)) {
+          _activeScanUiDiagnostics = null;
+        }
+      }
       if (mounted) {
         setState(() => _isScanning = false);
       }
@@ -1091,6 +1132,7 @@ class _LibraryPageState extends State<LibraryPage> {
     FilterQuery query,
     Iterable<VideoItem> changedVideos,
   ) {
+    final watch = Stopwatch()..start();
     _filterStateSource.configure(
       engine: TagQueryService(
         videos: store.videos.values,
@@ -1105,7 +1147,14 @@ class _LibraryPageState extends State<LibraryPage> {
         sortDirection: _sortDirection,
       ),
     );
-    return _filterStateSource.applyVideoDelta(query, changedVideos);
+    final state = _filterStateSource.applyVideoDelta(query, changedVideos);
+    watch.stop();
+    _activeScanUiDiagnostics?.recordStage(
+      'ui.filter_delta_apply',
+      watch.elapsed,
+      itemCount: changedVideos.length,
+    );
+    return state;
   }
 
   FilterState _buildImmediateFilterState(LibraryStore store) {
@@ -1461,6 +1510,11 @@ class _LibraryPageState extends State<LibraryPage> {
    * 可能影响本地目录与侧边栏，因此只定向失效这两类派生缓存。
    */
   void _applyLibraryScanDelta(LibraryScanCommitResult result) {
+    if (result.changedVideos.isEmpty) {
+      // 零差量不得提升 revision 或失效 folder 侧边栏，否则每次点击重新扫描
+      // 都会无意义地重算整个媒体库。
+      return;
+    }
     _libraryDataRevision += 1;
     _tagGroupsCacheKey = null;
     _localEntryCacheKey = null;
@@ -1651,6 +1705,7 @@ class _LibraryPageState extends State<LibraryPage> {
     if (_tagGroupsCacheKey == cacheKey) {
       return _tagGroupsCache;
     }
+    final rebuildWatch = Stopwatch()..start();
     final folderGroups = folderTagGroupsFromLibraryPaths(
       videos: store.videos.values,
       roots: store.roots,
@@ -1707,6 +1762,12 @@ class _LibraryPageState extends State<LibraryPage> {
     });
     _tagGroupsCacheKey = cacheKey;
     _tagGroupsCache = List<TagGroup>.unmodifiable(groups);
+    rebuildWatch.stop();
+    _activeScanUiDiagnostics?.recordStage(
+      'ui.folder_sidebar_rebuild',
+      rebuildWatch.elapsed,
+      itemCount: store.videos.length,
+    );
     return _tagGroupsCache;
   }
 

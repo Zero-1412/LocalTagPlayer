@@ -1,5 +1,12 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
+## 2026-07-13 可见缩略图 Future 与旧 4K 缓存解码
+
+- 可见卡片现在等待真正的优先队列任务，同一 cache key 复用一个完成 Future；FFmpeg 生成完成即刷新，不再依赖下一次列表 rebuild。
+- build 阶段移除同步 `existsSync`，历史 4K fallback JPEG 通过 `cacheWidth=384` 限制解码尺寸。
+- 后台请求从 cache key/JPEG 验证起就计入 500 上限，避免大批差量在入队前一次启动数千个异步检查。
+- 设置缓存诊断补充“后台请求”，与已入队数、活动并发数分开显示。
+
 ## 2026-07-13 Flutter与原生播放器缓存归因
 
 - 生命周期阶段记录ImageCache字节数、条目数、live/pending数量；五轮保持约93–100 MiB，排除为数百MiB高位保留主因。
@@ -18,7 +25,7 @@
 - 右上角刷新入口使用图标加“刷新统计”文字，不再仅依赖用户猜测图标含义。
 - 仅重新编排已有 `CacheStats`，未改变缩略图任务限流、重试、缓存 key 或 FFmpegBackend 边界。
 
-当前版本：`0.2.1`
+当前版本：`0.2.2`
 状态：第一阶段完成
 负责人：Chat 5 / 缩略图 + 诊断 + FFmpegBackend
 
@@ -85,6 +92,7 @@
 
 ## 变更记录
 
+- `0.2.2`：修复可见卡片不等待生成完成的问题；同一 cache key 合并任务，限制入队前后台请求，并对历史 4K JPEG 按卡片尺寸解码。
 - `0.2.1`：验收修复：现有缩略图缓存文件会先验证 JPEG 标记和长度，0-byte 或截断文件会被丢弃；重试和清除失败动作在已有任务运行或缓存队列活跃时禁用。
 - `0.2.0`：完成第一阶段缓存诊断：FFmpeg/FFprobe 通过 `DesktopFFmpegBackend` 兼容适配层调用；工具版本可见；缩略图兜底先写临时文件再替换；后台缩略图队列限流；媒体探测队列状态可见；诊断页可重试失败、清除失败记录并列出异常文件。
 - `0.1.0`：从 `local_tag_player_flutter_cross_platform_plan_v2.md` 创建任务；Chat 5 负责 Thumbnail + Diagnostics + FFmpegBackend。

@@ -10,7 +10,8 @@ class _ThumbnailJob {
   });
 
   final String cacheKey;
-  final Future<void> Function() run;
+  /** 生成完成后返回可显示文件；失败时返回 null。 */
+  final Future<File?> Function() run;
   final bool isBackground;
 }
 
@@ -24,6 +25,7 @@ class CacheStats {
     required this.missing,
     required this.errors,
     required this.queued,
+    required this.pendingBackgroundRequests,
     required this.active,
     required this.activeBackground,
     required this.maxConcurrent,
@@ -42,6 +44,8 @@ class CacheStats {
   final int missing;
   final int errors;
   final int queued;
+  /** 包含 cache key/JPEG 验证与已入队生成的后台请求数。 */
+  final int pendingBackgroundRequests;
   final int active;
   final int activeBackground;
   final int maxConcurrent;
@@ -86,10 +90,15 @@ class ThumbnailService {
   final Set<String> _activeCacheKeys = {};
   final Set<String> _backgroundQueued = {};
   final Set<String> _priorityQueued = {};
+  /** 同一 cache key 的可见卡片与预取任务共享一个完成信号。 */
+  final Map<String, Completer<File?>> _jobCompletions =
+      <String, Completer<File?>>{};
   final Queue<_ThumbnailJob> _priorityJobs = Queue();
   final Queue<_ThumbnailJob> _backgroundJobs = Queue();
   var _activeJobs = 0;
   var _activeBackgroundJobs = 0;
+  /** 已接受但尚未结束的后台请求，包含 cache key 与 JPEG 验证阶段。 */
+  var _backgroundRequestsInFlight = 0;
   var _completed = 0;
   var _failed = 0;
   var _ffmpegCompleted = 0;
@@ -159,10 +168,14 @@ class ThumbnailService {
   void prefetchAll(Iterable<VideoItem> items,
       {bool allowPlayerFallback = false}) {
     for (final item in items) {
-      unawaited(_queuePrefetch(item, allowPlayerFallback: allowPlayerFallback));
-      if (_backgroundQueued.length >= _maxBackgroundQueuedJobs) {
+      if (_backgroundRequestsInFlight >= _maxBackgroundQueuedJobs) {
         break;
       }
+      _backgroundRequestsInFlight++;
+      unawaited(
+        _queuePrefetch(item, allowPlayerFallback: allowPlayerFallback)
+            .whenComplete(() => _backgroundRequestsInFlight--),
+      );
     }
   }
 
@@ -173,34 +186,55 @@ class ThumbnailService {
     }
   }
 
-  Future<void> _queuePrefetch(
+  /**
+   * 优先返回已验证缓存；未命中时等待该视频的优先生成任务。
+   *
+   * 可见卡片必须绑定到真正的生成 Future，否则 FFmpeg 完成后界面不会自动更新。
+   * 并发上限仍由全局队列约束，不会为每张卡片直接启动 FFmpeg。
+   */
+  Future<File?> ensureThumbnailFor(VideoItem item) {
+    return _queuePrefetch(
+      item,
+      priority: true,
+      allowPlayerFallback: true,
+    );
+  }
+
+  Future<File?> _queuePrefetch(
     VideoItem item, {
     bool priority = false,
     bool allowPlayerFallback = false,
   }) async {
     final cacheKey = await _cacheKeyFor(item);
     if (cacheKey == null) {
-      return;
+      return null;
     }
     final file = File(p.join(_directory.path, '$cacheKey.jpg'));
     if (_memoryCache.containsKey(cacheKey)) {
       final cached = _memoryCache[cacheKey];
       if (cached == null || await _isValidThumbnailFile(cached)) {
-        return;
+        _pathMemoryCache[item.path] = cached;
+        return cached;
       }
       _memoryCache.remove(cacheKey);
+      _pathMemoryCache.remove(item.path);
     }
     if (await _isValidThumbnailFile(file)) {
       _memoryCache[cacheKey] = file;
-      return;
+      _pathMemoryCache[item.path] = file;
+      return file;
     }
+    final completion = _jobCompletions.putIfAbsent(
+      cacheKey,
+      Completer<File?>.new,
+    );
     if (_activeCacheKeys.contains(cacheKey)) {
-      return;
+      return completion.future;
     }
 
     if (priority) {
       if (_priorityQueued.contains(cacheKey)) {
-        return;
+        return completion.future;
       }
       if (_backgroundQueued.remove(cacheKey)) {
         _backgroundJobs.removeWhere((job) => job.cacheKey == cacheKey);
@@ -212,7 +246,12 @@ class ThumbnailService {
           isBackground: false,
           run: () async {
             try {
-              await _generate(item, file, cacheKey, allowPlayerFallback);
+              return await _generate(
+                item,
+                file,
+                cacheKey,
+                allowPlayerFallback,
+              );
             } finally {
               _priorityQueued.remove(cacheKey);
             }
@@ -221,11 +260,15 @@ class ThumbnailService {
       );
     } else {
       if (_backgroundQueued.length >= _maxBackgroundQueuedJobs) {
-        return;
+        _jobCompletions.remove(cacheKey);
+        if (!completion.isCompleted) {
+          completion.complete(null);
+        }
+        return null;
       }
       if (_backgroundQueued.contains(cacheKey) ||
           _priorityQueued.contains(cacheKey)) {
-        return;
+        return completion.future;
       }
       _backgroundQueued.add(cacheKey);
       _backgroundJobs.add(
@@ -234,7 +277,12 @@ class ThumbnailService {
           isBackground: true,
           run: () async {
             try {
-              await _generate(item, file, cacheKey, allowPlayerFallback);
+              return await _generate(
+                item,
+                file,
+                cacheKey,
+                allowPlayerFallback,
+              );
             } finally {
               _backgroundQueued.remove(cacheKey);
             }
@@ -243,6 +291,7 @@ class ThumbnailService {
       );
     }
     _drainQueue();
+    return completion.future;
   }
 
   void _drainQueue() {
@@ -261,7 +310,13 @@ class ThumbnailService {
         _activeBackgroundJobs++;
       }
       unawaited(
-        job.run().whenComplete(() {
+        job
+            .run()
+            .then<void>(
+              (file) => _completeJob(job.cacheKey, file),
+              onError: (_) => _completeJob(job.cacheKey, null),
+            )
+            .whenComplete(() {
           _activeJobs--;
           if (job.isBackground) {
             _activeBackgroundJobs--;
@@ -270,6 +325,14 @@ class ThumbnailService {
           _drainQueue();
         }),
       );
+    }
+  }
+
+  /** 完成所有等待同一 cache key 的可见卡片，并立即释放信号。 */
+  void _completeJob(String cacheKey, File? file) {
+    final completion = _jobCompletions.remove(cacheKey);
+    if (completion != null && !completion.isCompleted) {
+      completion.complete(file);
     }
   }
 
@@ -298,6 +361,7 @@ class ThumbnailService {
       _failed++;
       _totalGenerateMs += stopwatch.elapsedMilliseconds;
       _memoryCache[cacheKey] = null;
+      _pathMemoryCache[item.path] = null;
       return null;
     }
 
@@ -309,6 +373,7 @@ class ThumbnailService {
         _ffmpegCompleted++;
         _totalGenerateMs += stopwatch.elapsedMilliseconds;
         _memoryCache[cacheKey] = file;
+        _pathMemoryCache[item.path] = file;
         return file;
       }
     } catch (error) {
@@ -321,6 +386,7 @@ class ThumbnailService {
       _failed++;
       _totalGenerateMs += stopwatch.elapsedMilliseconds;
       _memoryCache[cacheKey] = null;
+      _pathMemoryCache[item.path] = null;
       return null;
     }
 
@@ -371,6 +437,7 @@ class ThumbnailService {
         _failed++;
         _totalGenerateMs += stopwatch.elapsedMilliseconds;
         _memoryCache[cacheKey] = null;
+        _pathMemoryCache[item.path] = null;
         return null;
       }
       await output.parent.create(recursive: true);
@@ -388,12 +455,14 @@ class ThumbnailService {
       _fallbackCompleted++;
       _totalGenerateMs += stopwatch.elapsedMilliseconds;
       _memoryCache[cacheKey] = output;
+      _pathMemoryCache[item.path] = output;
       return output;
     } catch (error) {
       item.thumbnailError = 'media_kit: $error';
       _failed++;
       _totalGenerateMs += stopwatch.elapsedMilliseconds;
       _memoryCache[cacheKey] = null;
+      _pathMemoryCache[item.path] = null;
       return null;
     } finally {
       await player.dispose();
@@ -421,6 +490,7 @@ class ThumbnailService {
       missing: missing,
       errors: errors,
       queued: _priorityQueued.length + _backgroundQueued.length,
+      pendingBackgroundRequests: _backgroundRequestsInFlight,
       active: _activeJobs,
       activeBackground: _activeBackgroundJobs,
       maxConcurrent: _maxConcurrentJobs,
@@ -439,15 +509,18 @@ class ThumbnailService {
 
   Future<void> retryFailed(Iterable<VideoItem> items) async {
     for (final item in items.where((item) => item.thumbnailError != null)) {
+      if (_backgroundRequestsInFlight >= _maxBackgroundQueuedJobs) {
+        break;
+      }
       final cacheKey = await _cacheKeyFor(item);
       if (cacheKey != null) {
         _memoryCache.remove(cacheKey);
       }
       item.thumbnailError = null;
-      await _queuePrefetch(item);
-      if (_backgroundQueued.length >= _maxBackgroundQueuedJobs) {
-        break;
-      }
+      _backgroundRequestsInFlight++;
+      unawaited(
+        _queuePrefetch(item).whenComplete(() => _backgroundRequestsInFlight--),
+      );
     }
   }
 

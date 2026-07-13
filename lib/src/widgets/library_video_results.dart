@@ -633,7 +633,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
   @override
   void initState() {
     super.initState();
-    _future = widget.thumbnailService.thumbnailFor(widget.item);
+    _future = widget.thumbnailService.ensureThumbnailFor(widget.item);
   }
 
   @override
@@ -642,7 +642,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
     if (oldWidget.item.path != widget.item.path ||
         oldWidget.thumbnailService != widget.thumbnailService) {
       _stopHoverPreview();
-      _future = widget.thumbnailService.thumbnailFor(widget.item);
+      _future = widget.thumbnailService.ensureThumbnailFor(widget.item);
     }
   }
 
@@ -759,13 +759,16 @@ class _VideoPreviewState extends State<_VideoPreview> {
                 future: _future,
                 builder: (context, snapshot) {
                   final file = snapshot.data;
-                  if (file != null && file.existsSync()) {
+                  // Future 完成前已验证 JPEG 存在性与完整性，build 阶段不再同步 stat。
+                  if (file != null) {
                     return Image.file(
                       file,
                       key: ValueKey(file.path),
                       fit: BoxFit.cover,
                       filterQuality: FilterQuality.medium,
                       gaplessPlayback: false,
+                      // 历史 fallback 缓存中仍有 4K JPEG，按卡片尺寸解码避免占用数十 MiB。
+                      cacheWidth: _thumbnailWidth,
                     );
                   }
                   return Container(

@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-13 · 缩略图可见任务与扫描帧耗时诊断
+
+- 修复可见卡片只等待缓存查询、却不等待 FFmpeg 生成任务的链路；同一 cache key 共享单个受限队列 Future，生成完成后卡片立即刷新。
+- 卡片信任已完成的异步 JPEG 验证，不再在 build 中同步 `existsSync`；历史 4K fallback JPEG 统一按 384px 解码。
+- 真实缓存 11,571 张中发现 555 张超过 1 MiB，合计约 947 MiB；保留有效缓存而不一次性触发重生成。
+- debug 扫描新增固定 3 秒 Flutter 帧驱动和 JSONL 诊断。11,133 条大差量中 folder 侧边栏重算约 102 ms、filter 差量替换约 73 ms；零差量不再失效两者。
+- 真实 Windows Finder/VM Service 连续点击两轮扫描通过，像素截图确认首屏缩略图已显示，布局无遮挡或溢出。
+
 ## 2026-07-13 · SQLite 启动修复与 Rust LibraryScanBackend
 
 - 真实 11,135 条库分阶段确认约 40 秒加载中 `sqlite.open_and_maintenance` 占 38.55 秒（87.64%）：Windows `COLLATE NOCASE` 相关子查询对 20,306 条关系逐条全表扫描 videos，并在每次启动无条件重写 `video_id`。
