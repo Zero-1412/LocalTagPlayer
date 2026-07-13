@@ -1646,6 +1646,64 @@ void main() {
     expect(result.width, isNull);
   });
 
+  test(
+      'filter state source applies scan delta without rebuilding unchanged rows',
+      () {
+    final changedOut = _testVideo(
+      path: 'C:/queue/changed-out.mp4',
+      title: 'target old',
+    );
+    final unchanged = _testVideo(
+      path: 'C:/queue/unchanged.mp4',
+      title: 'target unchanged',
+    );
+    final changedIn = _testVideo(
+      path: 'C:/queue/changed-in.mp4',
+      title: 'other',
+    );
+    final source = FilterStateSource()
+      ..configure(
+        engine: TagQueryService(
+          videos: [changedOut, unchanged, changedIn],
+          tagContext: const TagQueryContext(),
+        ),
+        totalCount: 3,
+        sourceKey: 0,
+      );
+    const query = FilterQuery(keyword: 'target');
+    expect(
+      source.update(query).filteredVideos.map((item) => item.videoId),
+      [changedOut.videoId, unchanged.videoId],
+    );
+
+    changedOut.title = 'other now';
+    changedIn.title = 'target new';
+    final added = _testVideo(
+      path: 'C:/queue/added.mp4',
+      title: 'target added',
+    );
+    source.configure(
+      engine: TagQueryService(
+        videos: [changedOut, unchanged, changedIn, added],
+        tagContext: const TagQueryContext(),
+      ),
+      totalCount: 4,
+      sourceKey: 1,
+    );
+    final next = source.applyVideoDelta(query, [changedOut, changedIn, added]);
+
+    expect(
+      next.filteredVideos.map((item) => item.videoId).toSet(),
+      {unchanged.videoId, changedIn.videoId, added.videoId},
+    );
+    expect(
+        next.filteredVideos.singleWhere(
+          (item) => item.videoId == unchanged.videoId,
+        ),
+        same(unchanged));
+    expect(next.totalCount, 4);
+  });
+
   test('Windows recommended decoding requests stable D3D11 copy mode', () {
     final resolved = PlayerHardwareAcceleration.resolve('auto-safe');
     expect(resolved, Platform.isWindows ? 'd3d11va-copy' : 'auto-safe');

@@ -1,5 +1,7 @@
 part of '../app.dart';
 
+// ignore_for_file: slash_for_doc_comments
+
 typedef VideoItemComparator = int Function(VideoItem a, VideoItem b);
 typedef VideoItemSorter = List<VideoItem> Function(Iterable<VideoItem> videos);
 
@@ -81,6 +83,55 @@ class FilterStateSource {
       totalCount: _totalCount,
     );
     _cachedSignature = signature;
+    _cachedState = state;
+    return state;
+  }
+
+  /**
+   * 仅重新评估扫描差量中的视频，保留未变项的已过滤列表。
+   *
+   * 如果尚无可复用状态或查询已变，则回退到完整计算；扫描结果通过
+   * stable `videoId` 替换旧项，避免新增、missing 或 relink 导致整个列表重建。
+   */
+  FilterState applyVideoDelta(
+    FilterQuery query,
+    Iterable<VideoItem> changedVideos,
+  ) {
+    final cachedState = _cachedState;
+    if (cachedState == null ||
+        _querySignature(cachedState.query) != _querySignature(query)) {
+      return update(query);
+    }
+    final changed = changedVideos.toList(growable: false);
+    if (changed.isEmpty) {
+      return update(query);
+    }
+    final changedIds = {for (final item in changed) item.videoId};
+    final filteredVideos = <VideoItem>[
+      for (final item in cachedState.filteredVideos)
+        if (!changedIds.contains(item.videoId)) item,
+      ...changed.where(
+        (item) => query.matches(item, tagContext: _engine.tagContext),
+      ),
+    ];
+    final sortVideos = _sortVideos;
+    final sortedVideos =
+        sortVideos == null ? filteredVideos : sortVideos(filteredVideos);
+    final compare = _compare;
+    if (sortVideos == null && compare != null) {
+      sortedVideos.sort(compare);
+    }
+    final state = FilterState(
+      query: query,
+      filteredVideos: List<VideoItem>.unmodifiable(sortedVideos),
+      resultCount: sortedVideos.length,
+      totalCount: _totalCount,
+    );
+    _cachedSignature = _signature(
+      query: query,
+      sourceKey: _sourceKey,
+      sortKey: _sortKey,
+    );
     _cachedState = state;
     return state;
   }

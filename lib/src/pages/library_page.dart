@@ -1016,7 +1016,7 @@ class _LibraryPageState extends State<LibraryPage> {
       // 只为新增或内容变化项目进入缓存队列，避免每次扫描重新排队整个媒体库。
       _thumbnailService?.prefetchAll(result.probeCandidates);
       _startLibraryMediaProbes(result);
-      _markLibraryDataChanged();
+      _applyLibraryScanDelta(result);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content:
@@ -1083,6 +1083,29 @@ class _LibraryPageState extends State<LibraryPage> {
       ),
     );
     return _filterStateSource.update(query);
+  }
+
+  /** 使用扫描差量替换已缓存结果中的变化视频。 */
+  FilterState _computeFilterStateFromDelta(
+    LibraryStore store,
+    FilterQuery query,
+    Iterable<VideoItem> changedVideos,
+  ) {
+    _filterStateSource.configure(
+      engine: TagQueryService(
+        videos: store.videos.values,
+        tagContext: store.tagQueryContext,
+      ),
+      totalCount: store.videos.length,
+      sourceKey: _libraryDataRevision,
+      sortKey: (_sortMode, _sortDirection),
+      sortVideos: (videos) => sortedLibraryVideos(
+        videos,
+        sortMode: _sortMode,
+        sortDirection: _sortDirection,
+      ),
+    );
+    return _filterStateSource.applyVideoDelta(query, changedVideos);
   }
 
   FilterState _buildImmediateFilterState(LibraryStore store) {
@@ -1431,6 +1454,30 @@ class _LibraryPageState extends State<LibraryPage> {
     _scheduleFilterRefresh(refreshCounts: true);
   }
 
+  /**
+   * 把扫描层输出的不可变差量应用到当前界面。
+   *
+   * 主结果列表只重新评估变化的 stable `videoId`；路径或 folder 标签
+   * 可能影响本地目录与侧边栏，因此只定向失效这两类派生缓存。
+   */
+  void _applyLibraryScanDelta(LibraryScanCommitResult result) {
+    _libraryDataRevision += 1;
+    _tagGroupsCacheKey = null;
+    _localEntryCacheKey = null;
+    _localEntryCacheByKey.clear();
+    if (result.changedVideos.any((item) => item.lastPlayedAt != null)) {
+      _recentVideoCacheKey = null;
+    }
+    if (result.changedVideos.any((item) => item.isFavorite)) {
+      _favoriteVideoCacheKey = null;
+    }
+    _stableTagCounts = const <String, int>{};
+    _scheduleFilterRefresh(
+      refreshCounts: true,
+      changedVideos: result.changedVideos,
+    );
+  }
+
   void _invalidateDerivedCaches() {
     _tagGroupsCacheKey = null;
     _localEntryCacheKey = null;
@@ -1526,7 +1573,10 @@ class _LibraryPageState extends State<LibraryPage> {
     return _localEntryCache;
   }
 
-  void _scheduleFilterRefresh({bool refreshCounts = false}) {
+  void _scheduleFilterRefresh({
+    bool refreshCounts = false,
+    Iterable<VideoItem>? changedVideos,
+  }) {
     final store = _store;
     if (store == null) {
       return;
@@ -1540,7 +1590,9 @@ class _LibraryPageState extends State<LibraryPage> {
       if (!mounted || revision != _filterRevision || _store != store) {
         return;
       }
-      final nextState = _computeFilterState(store, query);
+      final nextState = changedVideos == null
+          ? _computeFilterState(store, query)
+          : _computeFilterStateFromDelta(store, query, changedVideos);
       if (!mounted || revision != _filterRevision || _store != store) {
         return;
       }
