@@ -31,7 +31,7 @@ lib/src/widgets
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.18`
+已完成基线：`Architecture Baseline 0.5.20`
 
 当前推进中：后续观察 Rust watcher / NAS 一致性，不扩大 SQLite 双写边界。
 
@@ -67,6 +67,7 @@ lib/src/widgets
 - `0.5.17`：修复 SQLite 启动时无条件 stable identity 回填产生的 NOCASE 关系数乘视频数全表扫描，并建立 `LibraryScanBackend` / `LibraryScanDelta` / generation 取消边界。Windows Rust sidecar 只读目录、stat 与 fingerprint，缺失时回退 Dart；Dart Application 独占 stable identity/relink 校验和 SQLite 单 batch 提交。父子 root 最上层优先去重，首帧不等待扫描或媒体探测，新增/内容变化项才进入缓存与 `MediaProbeBackend`。
 - `0.5.18`：明确媒体库删除边界。移除 root 由 Dart Application/SQLite Repository 单事务删除不再受其它 root 管理的视频记录，磁盘文件不动；单视频删除由 UI 显式选择是否同步删文件，并清理稳定视频行、标签关系和缩略图缓存。缩略图可见任务可抢占滚动遗留队列；PlayerBackend 诊断持续区分硬解属性不可用与明确软件解码，硬解参数只在 open 前设置，播放中不热切换解码后端。SQLite schema、过滤语义与 filtered queue 不变。
 - `0.5.19`：新增只读 `PlayerHardwareCompatibility` 预检边界。它只消费 SQLite hydration 已恢复的 `MediaDetails` 与播放设置，不读取文件、不启动 FFprobe；4K H.264/HEVC/AV1 真实矩阵用于避免误报，已确认回退软件解码的 8K H.264 在创建 `PlayerBackend` 前要求用户确认，并给出不覆盖源文件的代理/转码建议。
+- `0.5.20`：增加仅在显式环境变量下注册的 debug 媒体库压力控制边界，复用现有 Dart Application、SQLite Repository、LibraryScanBackend、MediaProbeBackend 与 PlayerBackend，不另建业务写入路径。root 移除会先取消媒体探测 generation，探测结果写回前必须确认 path、videoId、fingerprint 仍属于当前 Store；数据 revision 同步失效过滤派生缓存，防止 SQLite 与 UI 分裂。
 
 协作要求：
 

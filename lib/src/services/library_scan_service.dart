@@ -200,8 +200,11 @@ class LibraryScanService {
     List<String> roots,
     Set<String> trackedPathKeys,
   ) async {
+    // 首帧后的未入库统计可能与用户添加/移除 root 并发；入口立即冻结列表，避免
+    // await 目录枚举期间调用方修改同一个 GrowableList 导致迭代器崩溃。
+    final stableRoots = List<String>.unmodifiable(roots);
     var count = 0;
-    for (final root in roots) {
+    for (final root in stableRoots) {
       final dir = Directory(root);
       if (!await _directoryExists(dir)) {
         continue;

@@ -30,6 +30,7 @@ part 'models/platform_models.dart';
 part 'repositories/repository_interfaces.dart';
 part 'services/library_metadata_persistence.dart';
 part 'services/library_load_diagnostics.dart';
+part 'services/library_stress_control.dart';
 part 'services/library_scan_ui_diagnostics.dart';
 part 'services/library_scan_backend.dart';
 part 'services/library_scan_coordinator.dart';

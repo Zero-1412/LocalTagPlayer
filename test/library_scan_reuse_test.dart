@@ -7,6 +7,29 @@ import 'package:local_tag_player/src/app.dart';
 
 /** 验证未变化文件复用数据库 fingerprint，不重新读取首尾内容。 */
 void main() {
+  test('untracked count snapshots roots before asynchronous enumeration',
+      () async {
+    final first = await Directory.systemTemp.createTemp('ltp_count_first_');
+    final second = await Directory.systemTemp.createTemp('ltp_count_second_');
+    addTearDown(() async {
+      await first.delete(recursive: true);
+      await second.delete(recursive: true);
+    });
+    await File('${first.path}${Platform.pathSeparator}first.mp4')
+        .writeAsBytes([1]);
+    await File('${second.path}${Platform.pathSeparator}second.mp4')
+        .writeAsBytes([2]);
+    final roots = <String>[first.path, second.path];
+
+    final pending = const LibraryScanService().countUntrackedVideos(
+      roots,
+      const <String>{},
+    );
+    roots.clear();
+
+    expect(await pending, 2);
+  });
+
   test('scan reuses fingerprint when indexed size and modified time match',
       () async {
     final root = await Directory.systemTemp.createTemp('ltp_scan_reuse_');

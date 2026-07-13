@@ -169,3 +169,9 @@
 - 缺失或不可访问 root 会被扫描服务跳过，不会把仍存在但本轮未枚举的旧视频误删。
 - `LibraryTagMaintenance` 批量添加/移除继续只允许 `manual` 来源标签；folder 来源标签会被拒绝，保护 folder/manual 来源分离。
 - 本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService` 查询语义、stable identity 或 missing/relink 行为。
+# 2026-07-14 真实目录十轮增删一致性
+
+- 隔离 profile 下对真实 `X:\test-media` 连续执行十轮添加和移除；每轮新增/移除 6,308 条，Store、SQLite 与 UI 均稳定在 4,827 → 11,135 → 4,827。
+- 修复未入库统计遍历可变 roots 的并发修改；root 移除提交同步提升数据 revision，禁止过滤层复用删除前列表。
+- 移除前取消媒体探测 generation，回写前复核当前 path/videoId/fingerprint，旧回调不再复活已删除视频。
+- SQLite schema、`FilterQuery` / `TagQueryService` 语义、manual 标签和 filtered queue 来源不变；完整性能证据见 `docs/qa/library_add_remove_player_stress_20260714.md`。

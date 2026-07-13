@@ -114,3 +114,8 @@
 - Windows runner 使用固定 FFmpeg 8.1 LGPL shared libraries，首次探测才延迟加载；单工作线程限流，执行中任务由 FFmpeg interrupt callback 响应 generation 取消。
 - `MediaDetailsService` 不再重复生成 fingerprint，也不再用临时 media_kit Player 兜底；SQLite 写入继续由 Dart Repository 回调完成。
 - 缩略图仍只传路径/缓存 key/结果状态，未跨边界传未压缩位图，既有缩略图队列和失败重试语义不变。
+# 2026-07-14 真实目录十轮缩略图与媒体探测诊断
+
+- 每轮新增 6,308 条后快速滚动，媒体探测约完成 234 条时仍排队约 6,000 条；root 移除会取消旧 generation 并阻止旧回调复活删除记录。
+- 像素截图确认停止滚动后的可见卡片已显示缩略图；新增库/移除后滚动阶段 P95 中位数仍约 62/52 ms，后台预取与可见任务抢占需要继续剖析。
+- 诊断脚本已修正 `Image` 不接收点击导致 `hitTestable` 计数为 0 的误报；历史十轮截图作为本轮显示证据。

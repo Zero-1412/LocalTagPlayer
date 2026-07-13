@@ -1716,6 +1716,41 @@ void main() {
     expect(zeroDelta.filteredVideos, same(next.filteredVideos));
   });
 
+  test('filter state source drops removed rows when source revision changes',
+      () {
+    final removed = _testVideo(
+      path: 'C:/queue/removed.mp4',
+      title: 'removed',
+    );
+    final retained = _testVideo(
+      path: 'C:/queue/retained.mp4',
+      title: 'retained',
+    );
+    final source = FilterStateSource()
+      ..configure(
+        engine: TagQueryService(
+          videos: [removed, retained],
+          tagContext: const TagQueryContext(),
+        ),
+        totalCount: 2,
+        sourceKey: 0,
+      );
+    expect(source.update(const FilterQuery()).resultCount, 2);
+
+    source.configure(
+      engine: TagQueryService(
+        videos: [retained],
+        tagContext: const TagQueryContext(),
+      ),
+      totalCount: 1,
+      sourceKey: 1,
+    );
+
+    final refreshed = source.update(const FilterQuery());
+    expect(refreshed.filteredVideos, [retained]);
+    expect(refreshed.totalCount, 1);
+  });
+
   test('visible thumbnail requests share one bounded queue job', () async {
     final directory =
         await Directory.systemTemp.createTemp('ltp_thumbnail_queue_');

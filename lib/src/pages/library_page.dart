@@ -750,6 +750,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   @override
   void dispose() {
+    LibraryStressControl.unregister(this);
     unawaited(_playbackSnapshotQueue?.dispose());
     _libraryMediaDetailsService?.dispose();
     _activeScanUiDiagnostics?.abort();
@@ -898,6 +899,7 @@ class _LibraryPageState extends State<LibraryPage> {
         marker: 'hydrated_state_ready',
       ));
     }
+    _registerLibraryStressControl(store, thumbnailService);
     // 首帧只消费 SQLite 已恢复的对象和持久化 usageCount；目录扫描与全库计数不得阻塞首屏。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _store != store) {
@@ -917,6 +919,54 @@ class _LibraryPageState extends State<LibraryPage> {
       _scheduleInitialStableTagCounts(store);
       unawaited(_promptForNewVideos(store));
     });
+  }
+
+  /**
+   * 为显式隔离 profile 注册真实窗口专项压测入口。
+   *
+   * 环境变量缺失时不注册；回调固定使用同一个 root，防止测试代码把任意路径
+   * 传入生产页面。添加仍经过 `_scan`，移除仍经过 SQLite 单事务和 UI 差量刷新。
+   */
+  void _registerLibraryStressControl(
+    LibraryStore store,
+    ThumbnailService thumbnailService,
+  ) {
+    final root =
+        Platform.environment['LOCAL_TAG_PLAYER_LIBRARY_STRESS_ROOT']?.trim();
+    if (!kDebugMode || root == null || root.isEmpty) {
+      return;
+    }
+    LibraryStressControl.register(
+      owner: this,
+      addRoot: () async {
+        LibraryScanCommitResult? captured;
+        await _scan(() async {
+          final result = await store.addRootAndScanWithChanges(root);
+          captured = result;
+          return result;
+        });
+        final result = captured;
+        if (result == null || result.cancelled) {
+          throw StateError('专项压测添加目录未完成');
+        }
+        return result;
+      },
+      removeRoot: () => _removeLibraryRootData(root),
+      snapshot: () {
+        final probes = _libraryMediaDetailsService;
+        return LibraryStressSnapshot(
+          videoCount: store.videos.length,
+          visibleCount: _filterState?.filteredVideos.length ?? 0,
+          roots: List<String>.unmodifiable(store.roots),
+          thumbnailQueued: thumbnailService.queuedJobs,
+          thumbnailActive: thumbnailService.activeJobs,
+          probeQueued: probes?.queuedReads ?? 0,
+          probeActive: probes?.activeReads ?? 0,
+          probeCompleted: probes?.completedThisRun ?? 0,
+          probeFailed: probes?.failedThisRun ?? 0,
+        );
+      },
+    );
   }
 
   /**
@@ -1093,11 +1143,17 @@ class _LibraryPageState extends State<LibraryPage> {
     }
     final service = MediaDetailsService(
       onUpdated: (item, details, fingerprint) async {
-        if (_store != store || item.mediaFingerprint != fingerprint) {
+        final current = store.videos[TagRules.pathKey(item.path)];
+        if (_store != store ||
+            current == null ||
+            current.videoId != item.videoId ||
+            current.mediaFingerprint != fingerprint) {
           return;
         }
-        item.mediaDetails = details;
-        await store.upsertVideo(item);
+        // 探测完成可能晚于 root 移除或下一轮扫描；只更新 Store 中仍然有效的当前对象，
+        // 禁止旧回调通过 upsert 把已删除记录重新插回 SQLite 和内存索引。
+        current.mediaDetails = details;
+        await store.upsertVideo(current);
       },
     );
     _libraryMediaDetailsService = service;
@@ -1409,11 +1465,33 @@ class _LibraryPageState extends State<LibraryPage> {
     if (confirmed != true || !mounted) {
       return;
     }
+    await _removeLibraryRootData(root);
+  }
+
+  /**
+   * 提交 root 删除并把结果差量应用到当前媒体库。
+   *
+   * 系统确认弹窗和隔离压测共用此方法；这里只删除 SQLite 索引和缓存，绝不删除
+   * root 下的本地媒体文件。
+   */
+  Future<int> _removeLibraryRootData(String root) async {
+    final store = _store;
+    if (store == null) {
+      return 0;
+    }
+    // root 移除会使大批 probe candidate 失效。先推进 generation 并丢弃排队回调，
+    // 避免删除事务期间旧 FFmpeg 结果重新 upsert 已移除的视频。
+    _libraryMediaDetailsService?.dispose();
+    _libraryMediaDetailsService = null;
     final removedVideos = await store.removeRoot(root);
     if (!mounted) {
-      return;
+      return removedVideos.length;
     }
     setState(() {
+      // 删除改变了过滤引擎的数据源；必须提升 revision，禁止 FilterStateSource 复用
+      // 删除前的 11k 列表缓存，否则 SQLite 已完成但 UI 总量会长期停留在旧值。
+      _libraryDataRevision += 1;
+      _invalidateDerivedCaches();
       if (_localLibraryPath != null &&
           TagRules.pathKey(_localLibraryPath!) == TagRules.pathKey(root)) {
         _resultMode = _LibraryResultMode.library;
@@ -1428,6 +1506,7 @@ class _LibraryPageState extends State<LibraryPage> {
     if (thumbnailService != null) {
       unawaited(thumbnailService.deleteThumbnailsFor(removedVideos));
     }
+    return removedVideos.length;
   }
 
   /**

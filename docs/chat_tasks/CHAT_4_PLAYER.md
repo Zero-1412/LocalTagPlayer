@@ -359,3 +359,8 @@
 - 源码与分阶段指标确认原生路径包含额外 D3D11 device/context、ANGLE 设备、双共享纹理和 D3D11VA 解码表面；双 1080p BGRA 纹理本身仅约 15.8 MiB。
 - 原生 Private/GPU committed P95 仍为 MediaKit 的约 114.5%/113.8%，未进入 110% 门槛；停止默认替换路线，不继续把 seek 合并、正式状态机和停滞判定下沉到该实验后端。
 - 默认 MediaKit、filtered queue、当前 index、标签语义和返回媒体库状态均不改变。
+# 2026-07-14 媒体库增删联动播放器十轮压测
+
+- 10 轮共进入播放器 20 次并随机 seek 60 次；诊断样本中视频/音频停滞均为 0，seek 总体 P95 140 ms、最大 154 ms。
+- 6/20 样本确认实际硬解为 `no`，对应已知 8K H.264 风险路径；硬解样本 seek 通常为 25–28 ms。
+- 线程/Private/GPU committed 峰值分别为 318、2,342 MiB、941 MiB，退出后的高位资源保留仍需后续底层专项；filtered queue 与 PlayerBackend 默认实现未修改。

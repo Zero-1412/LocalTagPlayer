@@ -534,3 +534,10 @@ flutter build windows --debug
 - 弹窗提供 4K H.264 代理与 4K HEVC 转码建议及复制命令，要求保留源文件；不自动转码、不覆盖用户媒体。
 - SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 和缩略图/media 队列未修改。
 - 87 项测试、`flutter analyze` 和 Windows debug build 通过；真实窗口截图确认 1268×714 下弹窗无遮挡/溢出，取消保持媒体库，继续可进入 8K 视频且返回后停止播放。
+# 2026-07-14 媒体库增删与播放器十轮专项压测
+
+- 新增 debug-only 媒体库压力控制边界和 Finder/VM Service 十轮驱动，以隔离 profile 对真实 `X:\test-media` 执行添加、滚动、播放、3 次 seek、移除和剩余库播放，全程录屏并采样 SQLite、队列、帧耗时、进程、I/O、GPU 与播放器诊断。
+- 修复三项真实竞态：异步未入库统计遍历可变 roots、root 移除未失效过滤数据 revision、旧媒体探测回调在移除后重新 upsert 已删记录。
+- 10 轮均保持 4,827 → 11,135 → 4,827 的 Store/UI 一致性；添加 P95 2.405 秒、移除 P95 0.773 秒，UI 追平均小于 1 ms。
+- 快速滚动仍有明显长帧：添加后/移除后阶段 P95 中位数约 62/52 ms；20 个播放样本有 6 个 8K H.264 软件解码，进程 Private/GPU committed 峰值约 2,342/941 MiB。
+- 完整证据和下一步见 `docs/qa/library_add_remove_player_stress_20260714.md`。
