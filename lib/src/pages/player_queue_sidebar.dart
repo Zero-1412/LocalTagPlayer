@@ -346,21 +346,25 @@ class _PlayerQueueSidebar extends StatelessWidget {
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
                   itemExtent: _PlayerPageState._queueItemExtent,
-                  scrollCacheExtent: const ScrollCacheExtent.pixels(720),
+                  // 只预建邻近两项，避免大队列滚动时提前触发大量文件校验与 FFprobe。
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(208),
                   addAutomaticKeepAlives: false,
                   addRepaintBoundaries: true,
                   itemCount: playlist.length,
                   itemBuilder: (context, index) {
                     final item = playlist[index];
-                    return _QueueListItem(
+                    return _DeferredQueueListItem(
                       item: item,
-                      index: index,
-                      playing: index == playingIndex,
-                      selected: index == selectedIndex,
-                      thumbnailService: thumbnailService,
-                      detailsService: detailsService,
-                      onTap: () => onPlay(index),
-                      onDoubleTap: () => onPlay(index),
+                      child: _QueueListItem(
+                        item: item,
+                        index: index,
+                        playing: index == playingIndex,
+                        selected: index == selectedIndex,
+                        thumbnailService: thumbnailService,
+                        detailsService: detailsService,
+                        onTap: () => onPlay(index),
+                        onDoubleTap: () => onPlay(index),
+                      ),
                     );
                   },
                 ),
@@ -413,6 +417,49 @@ class _PlayerQueueSidebar extends StatelessWidget {
       scrollOffset: top,
       viewportExtent: position.viewportDimension,
       itemExtent: _PlayerPageState._queueItemExtent,
+    );
+  }
+}
+
+/**
+ * 快速滚动期间用轻量占位保护视频解码线程，滚动减速后再创建会访问磁盘的队列项。
+ */
+class _DeferredQueueListItem extends StatelessWidget {
+  const _DeferredQueueListItem({required this.item, required this.child});
+
+  /** 当前队列项，仅用于在占位状态展示稳定标题。 */
+  final VideoItem item;
+
+  /** 滚动负载允许时才创建的完整队列项。 */
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Scrollable.recommendDeferredLoadingForContext(context)) {
+      return child;
+    }
+    // 快速滚动期间不启动缩略图校验或媒体详情读取，只保留可辨认的标题反馈。
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xff151a21),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xff222936)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              item.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xff8f99a8), fontSize: 12),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

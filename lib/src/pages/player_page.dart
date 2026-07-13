@@ -183,7 +183,9 @@ class _PlayerPageState extends State<PlayerPage> {
       initialPath: widget.initialItem.path,
     );
     _player = Player(
-      configuration: const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
+      // 4K 长视频需要为 demux 与解码线程保留更稳定的输入窗口；该上限只作用于
+      // 当前播放器，不扩大缩略图或媒体详情后台任务的内存占用。
+      configuration: const PlayerConfiguration(bufferSize: 128 * 1024 * 1024),
     );
     _controller = VideoController(
       _player,
@@ -827,7 +829,10 @@ class _PlayerPageState extends State<PlayerPage> {
         continue;
       }
       visibleItems.add(item);
-      unawaited(_detailsService.detailsFor(item));
+      if (index == _index) {
+        // 播放期间只补齐当前视频详情，避免滚动列表时 FFprobe 与 4K 解码争抢磁盘。
+        unawaited(_detailsService.detailsFor(item));
+      }
     }
     widget.thumbnailService.prefetchVisible(visibleItems);
   }
@@ -850,8 +855,10 @@ class _PlayerPageState extends State<PlayerPage> {
       'interpolation': 'no',
       'vd-lavc-threads': '0',
       'cache': 'yes',
-      'cache-pause': 'no',
-      'demuxer-max-bytes': '512MiB',
+      // 缓存暂时耗尽时让 mpv 等待输入恢复，不以连续丢帧追赶播放时钟。
+      'cache-pause': 'yes',
+      'demuxer-readahead-secs': '30',
+      'demuxer-max-bytes': '256MiB',
       'demuxer-max-back-bytes': '128MiB',
     };
     for (final entry in options.entries) {

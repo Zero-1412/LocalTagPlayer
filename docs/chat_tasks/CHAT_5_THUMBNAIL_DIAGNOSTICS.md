@@ -76,3 +76,8 @@
 - `0.2.1`：验收修复：现有缩略图缓存文件会先验证 JPEG 标记和长度，0-byte 或截断文件会被丢弃；重试和清除失败动作在已有任务运行或缓存队列活跃时禁用。
 - `0.2.0`：完成第一阶段缓存诊断：FFmpeg/FFprobe 通过 `DesktopFFmpegBackend` 兼容适配层调用；工具版本可见；缩略图兜底先写临时文件再替换；后台缩略图队列限流；媒体探测队列状态可见；诊断页可重试失败、清除失败记录并列出异常文件。
 - `0.1.0`：从 `local_tag_player_flutter_cross_platform_plan_v2.md` 创建任务；Chat 5 负责 Thumbnail + Diagnostics + FFmpegBackend。
+# 2026-07-13 播放期间后台探测收敛
+
+- 播放器进入后仍沿用既有缩略图队列暂停边界。
+- 队列快速滚动不再创建会访问磁盘的完整条目；播放后的 FFprobe 预取只处理当前视频，不再探测前后窗口。
+- 缓存 key、JPEG 有效性检查、失败重试和 FFmpegBackend 均未改变。
