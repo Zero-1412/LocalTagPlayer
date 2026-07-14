@@ -17,6 +17,8 @@ flutter build windows --debug
 
 ## 最近完成
 
+- `pages`、`services`、`widgets` 已在现有一级模块内按 library/player/tags/media/relink/window 职责增加二级目录；所有 Dart 文件仍属于同一 `app.dart` part library，仅调整文件位置和相对引用。
+
 - 压力测试产物统一写入带安全标记的 `artifacts` 子目录；每次运行前自动清理超过 7 天的已标记目录，成功后只保留汇总报告与压缩清单，失败时保留完整诊断现场。
 - 媒体库增删与真实播放器 runner 支持 `-KeepRawArtifacts` 和可配置保留天数，避免隔离 profile、缩略图、临时数据库、录像及原始采样再次把仓库扩张到数十 GiB。
 
@@ -357,7 +359,7 @@ flutter build windows --debug
 - 重写 `ROADMAP.md`，补齐 Tag 驱动检索闭环、网页式分组筛选、Player 筛选队列、folder/manual Tag 解耦、稳定视频身份、missing/relink、Tag Manager、响应式 UI 等阶段计划。
 - 更新 `PROJECT.md` 和 `ARCHITECTURE.md`，写入外部规划文件优先级和新的多 Chat 协作边界。
 - 按外部规划重排 `docs/chat_tasks/`，统一为 7 个 Chat 分工，并新增 Chat 6 Tag Manager、Chat 7 Responsive UI。
-- `lib/main.dart` 已按现有类边界拆分为 `src/models`、`src/services`、`src/pages`、`src/widgets`，当前采用 Dart part 机制保持无行为变化。
+- `lib/main.dart` 已按现有类边界拆分为一级技术模块；文件较多的 `src/services`、`src/pages`、`src/widgets` 再按业务职责进入二级目录，当前采用 Dart part 机制保持无行为变化。
 - 新增 `src/core/TagRules` 和 `src/core/AppPaths`，集中标签派生规则、视频扩展名判断和应用数据路径。
 - 新增 `src/core/LayoutSize` 和 `LayoutBreakpoints`，统一预留 `compact`、`medium`、`expanded` 响应式布局语义。
 - 新增 `src/repositories/repository_interfaces.dart`，规划 `LibraryRepository`、`TagRepository`、`CacheRepository`、`PlaybackRepository` 数据边界，暂不替换现有 `LibraryStore`。

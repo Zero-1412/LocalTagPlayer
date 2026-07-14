@@ -1,5 +1,11 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-14 · 模块二级职责目录
+
+- 在现有一级技术模块下增加二级职责目录：页面按 library/player/tags，服务按 library/media/player/relink/tags/window，媒体库组件统一归入 widgets/library。
+- `app.dart` 的 part 声明按职责分组，移动文件的 `part of` 相对路径同步更新；测试和外部调用继续只导入 `src/app.dart`，没有新增跨模块耦合。
+- 本轮是纯目录与引用重组；SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/media 队列、平台 contract 和用户数据均未改变。
+
 ## 2026-07-14 · 压力测试产物自动过期与汇总保留
 
 - 新增统一压力测试产物生命周期脚本；只清理带 `.ltp-stress-artifact` 标记且超过保留期的直接子目录，默认保留 7 天，不触碰人工放入 `artifacts` 的文件。
