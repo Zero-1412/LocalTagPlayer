@@ -32,6 +32,7 @@ part 'services/library_metadata_persistence.dart';
 part 'services/library_load_diagnostics.dart';
 part 'services/library_stress_control.dart';
 part 'services/library_scan_ui_diagnostics.dart';
+part 'services/library_card_ui_diagnostics.dart';
 part 'services/library_scan_backend.dart';
 part 'services/library_scan_coordinator.dart';
 part 'services/library_count_refresh_coordinator.dart';

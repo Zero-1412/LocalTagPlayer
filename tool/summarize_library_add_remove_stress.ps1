@@ -32,6 +32,7 @@ function Get-Summary {
 
 $statusPath = Join-Path $InputDirectory 'library-status.jsonl'
 $framePath = Join-Path $InputDirectory 'frame-timings.jsonl'
+$cardPath = Join-Path $InputDirectory 'card-subtree-timings.jsonl'
 $metricsPath = Join-Path $InputDirectory 'process-metrics.csv'
 $logPath = Join-Path $InputDirectory 'stress.log'
 if (-not (Test-Path -LiteralPath $statusPath)) { throw "缺少状态日志：$statusPath" }
@@ -44,6 +45,40 @@ $frames = if (Test-Path -LiteralPath $framePath) {
   @(Get-Content -LiteralPath $framePath | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json })
 } else { @() }
 $metrics = if (Test-Path -LiteralPath $metricsPath) { @(Import-Csv -LiteralPath $metricsPath) } else { @() }
+$cardTimings = if (Test-Path -LiteralPath $cardPath) {
+  @(Get-Content -LiteralPath $cardPath | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json })
+} else { @() }
+$scrollCardTimings = @($cardTimings | Where-Object phase -like '*_library_scroll')
+$releaseTail = @($metrics | Where-Object phase -eq 'final_release_tail')
+$validGpuMetrics = @($metrics | Where-Object gpu_sample_valid -eq 'True')
+$validReleaseTailGpu = @($releaseTail | Where-Object gpu_sample_valid -eq 'True')
+
+<# 长尾阶段只比较同一进程的首尾与最低点，不把其它业务阶段峰值混入。 #>
+function Get-TailMetric {
+  param([object[]]$Rows, [string]$Property)
+  if ($Rows.Count -eq 0) { return [ordered]@{ start = 0; end = 0; delta = 0; min = 0 } }
+  $values = @($Rows | ForEach-Object { [double]($_.$Property) })
+  return [ordered]@{
+    start = [Math]::Round($values[0], 2)
+    end = [Math]::Round($values[-1], 2)
+    delta = [Math]::Round($values[-1] - $values[0], 2)
+    min = [Math]::Round(($values | Measure-Object -Minimum).Minimum, 2)
+  }
+}
+
+$cardSubtreeScroll = @($scrollCardTimings | Group-Object subtree | ForEach-Object {
+  $rows = @($_.Group)
+  [ordered]@{
+    subtree = $_.Name
+    phases = $rows.Count
+    buildCount = ($rows | Measure-Object buildCount -Sum).Sum
+    buildTotalMs = [Math]::Round(($rows | Measure-Object buildTotalMs -Sum).Sum, 2)
+    buildP95Ms = Get-Summary @($rows | ForEach-Object { [double]$_.buildP95Ms })
+    layoutCount = ($rows | Measure-Object layoutCount -Sum).Sum
+    layoutTotalMs = [Math]::Round(($rows | Measure-Object layoutTotalMs -Sum).Sum, 2)
+    layoutP95Ms = Get-Summary @($rows | ForEach-Object { [double]$_.layoutP95Ms })
+  }
+})
 
 $summary = [ordered]@{
   cyclesAdded = $added.Count
@@ -63,9 +98,21 @@ $summary = [ordered]@{
   workingSetMb = Get-Summary @($metrics | ForEach-Object { [double]$_.working_set_mb })
   privateMb = Get-Summary @($metrics | ForEach-Object { [double]$_.private_mb })
   threads = Get-Summary @($metrics | ForEach-Object { [double]$_.threads })
-  gpuCommittedMb = Get-Summary @($metrics | ForEach-Object { [double]$_.gpu_committed_mb })
+  gpuCommittedMb = Get-Summary @($validGpuMetrics | ForEach-Object { [double]$_.gpu_committed_mb })
   ioReadMbPerSecond = Get-Summary @($metrics | ForEach-Object { [double]$_.io_read_mb_s })
   ioWriteMbPerSecond = Get-Summary @($metrics | ForEach-Object { [double]$_.io_write_mb_s })
+  cardSubtreeScroll = $cardSubtreeScroll
+  releaseTail = [ordered]@{
+    samples = $releaseTail.Count
+    workingSetMb = Get-TailMetric $releaseTail 'working_set_mb'
+    privateMb = Get-TailMetric $releaseTail 'private_mb'
+    threads = Get-TailMetric $releaseTail 'threads'
+    handles = Get-TailMetric $releaseTail 'handles'
+    gpuSamples = $validReleaseTailGpu.Count
+    gpuDedicatedMb = Get-TailMetric $validReleaseTailGpu 'gpu_dedicated_mb'
+    gpuSharedMb = Get-TailMetric $validReleaseTailGpu 'gpu_shared_mb'
+    gpuCommittedMb = Get-TailMetric $validReleaseTailGpu 'gpu_committed_mb'
+  }
 }
 
 if (Test-Path -LiteralPath $logPath) {

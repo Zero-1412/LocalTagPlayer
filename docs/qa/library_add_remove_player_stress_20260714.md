@@ -38,3 +38,12 @@
 - 真实 8K H.264 未缓存详情曾绕过矩阵并在纹理创建后把 RSS 推到约 1.30 GiB，随后 `flutter_windows.dll` 以 `0xc0000409` 退出。单项高优先级预检修复后，同一样本两次均在创建纹理前被阻止。
 - media_kit 1.2.6 的 Windows NativePlayer 在 dispose 返回后延迟 5 秒调用 `mpv_terminate_destroy`；released 契约和压测等待现已覆盖该宽限期。6 个实际播放样本均为 `d3d11va-copy`，软件解码/音视频停滞为 0，seek P95 28 ms。
 - Private/GPU committed 峰值由十轮基线约 2,342/941 MiB 降至约 1,157/712 MiB，主要来自阻止 8K 软件解码和避免相邻会话重叠；返回媒体库后的跨轮高位仍存在，不能宣称原生/驱动缓存已经完全回收。
+
+## 卡片子树与释放长尾专项
+
+- 三轮产物位于 `artifacts/library_card_subtree_release_tail_3cycles_20260714`；三轮添加/移除、六个实际播放器会话和 18 次 seek 完成，未出现崩溃、无响应、软件解码或音视频停滞。干净截图 `cycle-02-added.png` 显示卡片无遮挡、错位或溢出。
+- 滚动阶段聚合中，`card_shell` 直接 build 共 300 次、总计 11.07 ms，单阶段 P95 最高 0.10 ms；`actions` 直接 build 共 300 次、总计 0.89 ms。该指标只覆盖传入 builder 的直接执行，不包含框架随后触发的后代 Widget build。
+- 包含式 layout 中，`card_shell` 单阶段 P95 最高 11.82 ms，`actions` 最高 8.52 ms；`preview`、`tags`、`metadata` 最高分别为 0.96/0.72/0.52 ms。各子树存在包含和重复布局，不能把总量直接相加；当前证据将下一轮 A/B 收敛到操作按钮的 Material/Semantics/LayoutBuilder 链。
+- 首轮添加扫描出现 106.34 秒冷存储异常值，但同阶段卡片探针仅记录 24 次直接 build、总计不足 1 ms；日志无 Flutter 异常或超时，不能把该扫描异常归因为卡片构建。
+- 修正 GPU counter 有效位后的单轮对照位于 `artifacts/library_card_subtree_release_tail_validgpu_1cycle_20260714`。最后一次真实 `released` 后 60 秒内，Working Set 563.1→560.1 MiB、Private 643.5→591.7 MiB、线程 128→125、句柄 1026→1020、GPU Dedicated 148.7→108.6 MiB、GPU committed 144.7→104.6 MiB。
+- `PlayerMemoryDiagnostics` 的 RSS 在 0/5/15/30/60 秒分别约为 609.7/552.6/554.8/552.0/548.5 MiB；Flutter ImageCache 始终为 19,611,648 bytes。测试未触发 GC、未清理 ImageCache，主要回落发生在前 15–20 秒，剩余约 52 MiB Private 高位继续留给 PlayerBackend/libmpv/驱动边界调查。

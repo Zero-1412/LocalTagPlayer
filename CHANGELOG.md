@@ -1,5 +1,12 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-14 · 卡片子树布局与播放器释放长尾诊断
+
+- 增加仅在 debug 压测环境启用的卡片子树探针，分别聚合外壳、预览、元数据、标签和操作区的直接 builder 与包含式 layout 耗时；阶段切换后才写 JSONL，避免逐帧磁盘 I/O 污染结果。
+- 三轮真实快速滚动显示直接 builder P95 均低于 0.1 ms；包含式布局热点集中在卡片外壳和操作按钮链。子树存在包含关系，结果不直接求和，也不把后代框架 Widget build 误算进应用 builder。
+- 压测在最后一次 `PlayerBackend.released` 后持续驱动 Flutter 帧并采样 60 秒；有效 GPU 样本显示 Private 下降 51.8 MiB、GPU committed 下降 40.1 MiB、线程下降 3，主要回落发生在前 15–20 秒。
+- Flutter ImageCache 在释放长尾内固定为 19,611,648 bytes；未触发 GC、未清理 ImageCache，也未在页面层制造表面回落。SQLite schema、标签筛选、filtered queue、缩略图缓存语义和播放器行为均未修改。
+
 ## 2026-07-14 · 滚动热点、原生释放屏障与 8K 软件解码门槛
 
 - 后台缩略图预取把最多 500 条候选与实际 cache key/JPEG 校验分层，校验阶段最多并行 24 条；真正可见卡片继续抢占优先队列，过滤刷新不再错误预取结果列表前 36 条。

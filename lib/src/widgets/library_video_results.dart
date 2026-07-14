@@ -397,176 +397,71 @@ class _InteractiveVideoCardState extends State<_InteractiveVideoCard> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapCancel: () => setState(() => _pressed = false),
-        onTapUp: (_) => setState(() => _pressed = false),
-        child: AnimatedScale(
-          duration: _motionDuration,
-          curve: _motionCurve,
-          scale: _pressed ? 0.992 : 1,
-          child: AnimatedContainer(
+    return LibraryCardUiDiagnostics.buildSubtree(
+      'card_shell',
+      () => MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() {
+          _hovered = false;
+          _pressed = false;
+        }),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTapUp: (_) => setState(() => _pressed = false),
+          child: AnimatedScale(
             duration: _motionDuration,
             curve: _motionCurve,
-            decoration: BoxDecoration(
-              color: _appPanel,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: _hovered ? _appAccentViolet : _appBorder,
-              ),
-              boxShadow: [
-                ..._appSoftShadow,
-                if (_hovered)
-                  BoxShadow(
-                    color: _appAccentViolet.withAlpha(45),
-                    blurRadius: 22,
-                    offset: const Offset(0, 12),
-                  ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
+            scale: _pressed ? 0.992 : 1,
+            child: AnimatedContainer(
+              duration: _motionDuration,
+              curve: _motionCurve,
+              decoration: BoxDecoration(
+                color: _appPanel,
                 borderRadius: BorderRadius.circular(8),
-                onDoubleTap: widget.onOpen,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _VideoPreview(
-                        item: item,
-                        thumbnailService: widget.thumbnailService,
-                        playbackSettings: widget.playbackSettings,
-                        onOpen: (_) => widget.onOpen(),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              color: _appText,
-                              fontWeight: FontWeight.w700,
-                              height: 1.25,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.folder,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xff718096),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                border: Border.all(
+                  color: _hovered ? _appAccentViolet : _appBorder,
+                ),
+                boxShadow: [
+                  ..._appSoftShadow,
+                  if (_hovered)
+                    BoxShadow(
+                      color: _appAccentViolet.withAlpha(45),
+                      blurRadius: 22,
+                      offset: const Offset(0, 12),
+                    ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onDoubleTap: widget.onOpen,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _VideoPreview(
+                          item: item,
+                          thumbnailService: widget.thumbnailService,
+                          playbackSettings: widget.playbackSettings,
+                          onOpen: (_) => widget.onOpen(),
                         ),
-                      ),
-                      const SizedBox(height: 5),
-                      SizedBox(
-                        height: 26,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: item.tags.isEmpty
-                                ? [
-                                    const Text(
-                                      '\u672a\u6dfb\u52a0\u6807\u7b7e',
-                                      style: TextStyle(color: Colors.black45),
-                                    ),
-                                  ]
-                                : [
-                                    for (final tag
-                                        in (item.tags.toList()..sort()))
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(right: 6),
-                                        child: Chip(
-                                          label: Text(tag),
-                                          labelStyle:
-                                              const TextStyle(fontSize: 12),
-                                          visualDensity: const VisualDensity(
-                                            horizontal: -3,
-                                            vertical: -4,
-                                          ),
-                                          materialTapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                      ),
-                                  ],
-                          ),
+                        const SizedBox(height: 6),
+                        _VideoCardMetadata(item: item),
+                        const SizedBox(height: 5),
+                        _VideoCardTags(item: item),
+                        const Spacer(),
+                        _VideoCardActions(
+                          item: item,
+                          onOpen: widget.onOpen,
+                          onToggleFavorite: widget.onToggleFavorite,
+                          onEditTags: widget.onEditTags,
+                          onDelete: widget.onDelete,
                         ),
-                      ),
-                      const Spacer(),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final iconOnly = constraints.maxWidth < 260;
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: Semantics(
-                                  button: true,
-                                  label: LibrarySmokeSemantics.videoPlay(item),
-                                  child: FilledButton.icon(
-                                    key: LibrarySmokeKeys.cardPlay(item.path),
-                                    onPressed: widget.onOpen,
-                                    icon: const Icon(Icons.play_arrow),
-                                    label: Text(iconOnly ? '' : '\u64ad\u653e'),
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: _appAccentViolet,
-                                      foregroundColor: Colors.white,
-                                      fixedSize: const Size.fromHeight(34),
-                                      padding: EdgeInsets.zero,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Semantics(
-                                button: true,
-                                selected: item.isFavorite,
-                                label:
-                                    LibrarySmokeSemantics.videoFavorite(item),
-                                child: IconButton.outlined(
-                                  key: LibrarySmokeKeys.cardFavorite(item.path),
-                                  tooltip: item.isFavorite
-                                      ? '\u53d6\u6d88\u6536\u85cf'
-                                      : '\u6dfb\u52a0\u6536\u85cf',
-                                  onPressed: widget.onToggleFavorite,
-                                  icon: Icon(item.isFavorite
-                                      ? Icons.favorite
-                                      : Icons.favorite_border),
-                                  style: IconButton.styleFrom(
-                                    fixedSize: const Size(34, 34),
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Semantics(
-                                button: true,
-                                label: LibrarySmokeSemantics.videoMore(item),
-                                child: _VideoMoreButton(
-                                  key: LibrarySmokeKeys.cardMore(item.path),
-                                  onEditTags: widget.onEditTags,
-                                  onDelete: widget.onDelete,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -576,6 +471,172 @@ class _InteractiveVideoCardState extends State<_InteractiveVideoCard> {
       ),
     );
   }
+}
+
+/** 卡片标题与路径子树；诊断探针不改变原有行高和文本截断规则。 */
+class _VideoCardMetadata extends StatelessWidget {
+  const _VideoCardMetadata({required this.item});
+
+  final VideoItem item;
+
+  @override
+  Widget build(BuildContext context) => LibraryCardUiDiagnostics.buildSubtree(
+        'metadata',
+        () => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: _appText,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              item.folder,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xff718096),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+/** 卡片标签子树；排序和 Chip 构建都计入 build 样本。 */
+class _VideoCardTags extends StatelessWidget {
+  const _VideoCardTags({required this.item});
+
+  final VideoItem item;
+
+  @override
+  Widget build(BuildContext context) => LibraryCardUiDiagnostics.buildSubtree(
+        'tags',
+        () {
+          final tags = item.tags.toList()..sort();
+          return SizedBox(
+            height: 26,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: tags.isEmpty
+                    ? const [
+                        Text(
+                          '\u672a\u6dfb\u52a0\u6807\u7b7e',
+                          style: TextStyle(color: Colors.black45),
+                        ),
+                      ]
+                    : [
+                        for (final tag in tags)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: Chip(
+                              label: Text(tag),
+                              labelStyle: const TextStyle(fontSize: 12),
+                              visualDensity: const VisualDensity(
+                                horizontal: -3,
+                                vertical: -4,
+                              ),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                      ],
+              ),
+            ),
+          );
+        },
+      );
+}
+
+/** 卡片底部操作子树；保留原有语义、key 与窄卡片图标模式。 */
+class _VideoCardActions extends StatelessWidget {
+  const _VideoCardActions({
+    required this.item,
+    required this.onOpen,
+    required this.onToggleFavorite,
+    required this.onEditTags,
+    required this.onDelete,
+  });
+
+  final VideoItem item;
+  final VoidCallback onOpen;
+  final VoidCallback onToggleFavorite;
+  final VoidCallback onEditTags;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => LibraryCardUiDiagnostics.buildSubtree(
+        'actions',
+        () => LayoutBuilder(
+          builder: (context, constraints) {
+            final iconOnly = constraints.maxWidth < 260;
+            return Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    label: LibrarySmokeSemantics.videoPlay(item),
+                    child: FilledButton.icon(
+                      key: LibrarySmokeKeys.cardPlay(item.path),
+                      onPressed: onOpen,
+                      icon: const Icon(Icons.play_arrow),
+                      label: Text(iconOnly ? '' : '\u64ad\u653e'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _appAccentViolet,
+                        foregroundColor: Colors.white,
+                        fixedSize: const Size.fromHeight(34),
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Semantics(
+                  button: true,
+                  selected: item.isFavorite,
+                  label: LibrarySmokeSemantics.videoFavorite(item),
+                  child: IconButton.outlined(
+                    key: LibrarySmokeKeys.cardFavorite(item.path),
+                    tooltip: item.isFavorite
+                        ? '\u53d6\u6d88\u6536\u85cf'
+                        : '\u6dfb\u52a0\u6536\u85cf',
+                    onPressed: onToggleFavorite,
+                    icon: Icon(
+                      item.isFavorite ? Icons.favorite : Icons.favorite_border,
+                    ),
+                    style: IconButton.styleFrom(
+                      fixedSize: const Size(34, 34),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Semantics(
+                  button: true,
+                  label: LibrarySmokeSemantics.videoMore(item),
+                  child: _VideoMoreButton(
+                    key: LibrarySmokeKeys.cardMore(item.path),
+                    onEditTags: onEditTags,
+                    onDelete: onDelete,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
 }
 
 class _VideoMoreButton extends StatelessWidget {
@@ -778,96 +839,102 @@ class _VideoPreviewState extends State<_VideoPreview> {
   @override
   Widget build(BuildContext context) {
     final hoverController = _hoverController;
-    return MouseRegion(
-      onEnter: _onEnter,
-      onExit: _onExit,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              FutureBuilder<File?>(
-                key: ValueKey(widget.item.path),
-                future: _future,
-                builder: (context, snapshot) {
-                  final file = snapshot.data;
-                  // Future 完成前已验证 JPEG 存在性与完整性，build 阶段不再同步 stat。
-                  if (file != null) {
-                    return Image.file(
-                      file,
-                      key: ValueKey(file.path),
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.medium,
-                      gaplessPlayback: false,
-                      // 历史 fallback 缓存中仍有 4K JPEG，按卡片尺寸解码避免占用数十 MiB。
-                      cacheWidth: _thumbnailWidth,
+    return LibraryCardUiDiagnostics.buildSubtree(
+      'preview',
+      () => MouseRegion(
+        onEnter: _onEnter,
+        onExit: _onExit,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                FutureBuilder<File?>(
+                  key: ValueKey(widget.item.path),
+                  future: _future,
+                  builder: (context, snapshot) {
+                    final file = snapshot.data;
+                    // Future 完成前已验证 JPEG 存在性与完整性，build 阶段不再同步 stat。
+                    if (file != null) {
+                      return Image.file(
+                        file,
+                        key: ValueKey(file.path),
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.medium,
+                        gaplessPlayback: false,
+                        // 历史 fallback 缓存中仍有 4K JPEG，按卡片尺寸解码避免占用数十 MiB。
+                        cacheWidth: _thumbnailWidth,
+                      );
+                    }
+                    return Container(
+                      color: const Color(0xffd8f0f0),
+                      child: Center(
+                        child: snapshot.connectionState ==
+                                ConnectionState.waiting
+                            ? const SizedBox.square(
+                                dimension: 22,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2.4),
+                              )
+                            : const Icon(Icons.movie_outlined, size: 42),
+                      ),
                     );
-                  }
-                  return Container(
-                    color: const Color(0xffd8f0f0),
-                    child: Center(
-                      child: snapshot.connectionState == ConnectionState.waiting
-                          ? const SizedBox.square(
-                              dimension: 22,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2.4),
-                            )
-                          : const Icon(Icons.movie_outlined, size: 42),
-                    ),
-                  );
-                },
-              ),
-              if (_isHoverPreviewReady && hoverController != null)
-                Video(
-                  controller: hoverController,
-                  controls: NoVideoControls,
-                  fit: BoxFit.cover,
+                  },
                 ),
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.02),
-                        Colors.black.withValues(alpha: 0.34),
-                      ],
+                if (_isHoverPreviewReady && hoverController != null)
+                  Video(
+                    controller: hoverController,
+                    controls: NoVideoControls,
+                    fit: BoxFit.cover,
+                  ),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.02),
+                          Colors.black.withValues(alpha: 0.34),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              Center(
-                child: _isHoverPreviewLoading
-                    ? DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.86),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Padding(
-                          padding: EdgeInsets.all(18),
-                          child: SizedBox.square(
-                            dimension: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                Center(
+                  child: _isHoverPreviewLoading
+                      ? DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.86),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(18),
+                            child: SizedBox.square(
+                              dimension: 24,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2.5),
+                            ),
+                          ),
+                        )
+                      : IconButton.filled(
+                          tooltip: _isHoverPreviewReady
+                              ? '\u6b63\u5728\u9884\u89c8\uff0c\u70b9\u51fb\u64ad\u653e'
+                              : '\u64ad\u653e',
+                          onPressed: () => widget.onOpen(widget.item),
+                          icon: const Icon(Icons.play_arrow_rounded, size: 34),
+                          style: IconButton.styleFrom(
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.88),
+                            foregroundColor: const Color(0xff073b3b),
+                            fixedSize: const Size(58, 58),
                           ),
                         ),
-                      )
-                    : IconButton.filled(
-                        tooltip: _isHoverPreviewReady
-                            ? '\u6b63\u5728\u9884\u89c8\uff0c\u70b9\u51fb\u64ad\u653e'
-                            : '\u64ad\u653e',
-                        onPressed: () => widget.onOpen(widget.item),
-                        icon: const Icon(Icons.play_arrow_rounded, size: 34),
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.88),
-                          foregroundColor: const Color(0xff073b3b),
-                          fixedSize: const Size(58, 58),
-                        ),
-                      ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

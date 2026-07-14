@@ -1,3 +1,10 @@
+## 2026-07-14 PlayerBackend 释放后 60 秒长尾
+
+- 压测等待最后一个真实 `released` 后继续驱动 Flutter 帧，并在 0/5/15/30/60 秒记录 RSS、ImageCache、线程、句柄和有效 GPU counter；不在 PlayerPage 调用 GC 或清理 ImageCache。
+- 一轮有效 GPU 对照中 Private 643.5→591.7 MiB、GPU committed 144.7→104.6 MiB、线程 128→125；主要回落发生在前 15–20 秒，证明 libmpv/D3D 销毁后仍存在异步驱动释放长尾。
+- 60 秒末 GPU committed 只比播放前新增库滚动阶段高约 4.5 MiB，线程更低；Private 仍高约 52 MiB，后续应在 PlayerBackend、libmpv allocator 与驱动分配池边界继续区分稳定复用池和跨轮泄漏。
+- filtered queue、播放索引、硬解选择和退出状态机未修改。
+
 ## 2026-07-14 4K 硬解矩阵与超规格预检
 
 - RTX 4070 SUPER / 驱动 595.97 / MediaKit `d3d11va-copy` 下，真实 4K/60 H.264、HEVC、AV1 各两轮均启用实际硬解，视频/音频停滞为 0，AV offset 最大约 0.000445 秒。

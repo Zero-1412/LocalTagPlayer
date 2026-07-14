@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.21` 已完成。
+架构版本状态：`Architecture Baseline 0.5.22` 已完成。
 
 最近一次验证：
 
@@ -16,6 +16,10 @@ flutter build windows --debug
 结果：通过。
 
 ## 最近完成
+
+- debug 压测为媒体库卡片增加 `card_shell`、`preview`、`metadata`、`tags`、`actions` 五个子树边界；直接 builder P95 均低于 0.1 ms，而包含式 layout 的主要热点落在卡片外壳与操作按钮链，不能把后代 Widget build 或重叠子树耗时错误相加。
+- 播放器真实 `released` 后连续采样 60 秒：Private 643.5→591.7 MiB、线程 128→125、GPU committed 144.7→104.6 MiB；Flutter ImageCache 全程固定 19,611,648 bytes，未调用 GC 或清理 ImageCache。剩余约 52 MiB Private 高位应继续在 PlayerBackend/libmpv/驱动边界归因。
+- 三轮真实快速滚动、六次播放与 18 次 seek 通过，卡片无遮挡或溢出；首次添加扫描 106.34 秒为冷存储异常值，卡片探针同期仅记录亚毫秒直接 build，不能据此归因为卡片构建。
 
 - 媒体库后台缩略图新增 24 个候选校验并发上限；最多 500 条候选不再同时启动 cache key/JPEG 文件 I/O，可见卡片仍进入优先队列并在三轮真实快速滚动停稳后显示 8–9 张缩略图。
 - 三轮真实库剖析确认滚动主要瓶颈是 Dart build/layout：新增库 build P95 中位 86.69 ms、raster 3.39 ms，移除后为 51.87/1.86 ms；缩略图抢占已生效，但不能把构建长帧误报为 GPU 光栅问题。

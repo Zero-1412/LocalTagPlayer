@@ -35,6 +35,10 @@ void main() {
           Platform.environment['LOCAL_TAG_PLAYER_STRESS_SEED'] ?? '',
         ) ??
         20260714;
+    final releaseTailSeconds = int.tryParse(
+          Platform.environment['LOCAL_TAG_PLAYER_RELEASE_TAIL_SECONDS'] ?? '',
+        ) ??
+        0;
     if (!Directory(stressRoot).existsSync()) {
       throw StateError('专项压测目录不存在');
     }
@@ -47,6 +51,8 @@ void main() {
     final frameSampler = _PhaseFrameSampler(frameFile);
     WidgetsBinding.instance.addTimingsCallback(frameSampler.onTimings);
     addTearDown(() {
+      frameSampler.flush();
+      ltp.LibraryCardUiDiagnostics.flush();
       WidgetsBinding.instance.removeTimingsCallback(frameSampler.onTimings);
     });
 
@@ -200,6 +206,23 @@ void main() {
           'added=${addResult.addedCount} removed=$removedCount');
     }
 
+    if (releaseTailSeconds > 0) {
+      frameSampler.begin('final_release_tail', cycles);
+      await _setStressPhase(outputDirectory, 'final_release_tail', cycles);
+      await ltp.PlayerMemoryDiagnostics.logStage('release_tail_0s');
+      const checkpoints = <int>{5, 15, 30, 60};
+      for (var second = 1; second <= releaseTailSeconds; second++) {
+        await _pumpContinuously(tester, const Duration(seconds: 1));
+        if (checkpoints.contains(second) || second == releaseTailSeconds) {
+          await ltp.PlayerMemoryDiagnostics.logStage(
+            'release_tail_${second}s',
+          );
+        }
+      }
+      frameSampler.flush();
+    }
+
+    frameSampler.begin('complete', cycles);
     await _setStressPhase(outputDirectory, 'complete', cycles);
     await _signalDesktopCapture(outputDirectory, 'cycle-10-complete');
     expect(ltp.LibraryStressControl.snapshot().videoCount, baseline.videoCount);
@@ -592,7 +615,9 @@ bool _samePath(String left, String right) =>
 
 /** 按阶段汇总真实 Flutter 帧 build/raster/总耗时与慢帧数量。 */
 class _PhaseFrameSampler {
-  _PhaseFrameSampler(this.output);
+  _PhaseFrameSampler(this.output) {
+    ltp.LibraryCardUiDiagnostics.beginPhase(_phase, _cycle);
+  }
 
   final File output;
   final List<ui.FrameTiming> _frames = [];
@@ -605,6 +630,7 @@ class _PhaseFrameSampler {
   /** 开始新的业务阶段；先提交上一阶段，避免跨阶段混合样本。 */
   void begin(String phase, int cycle) {
     flush();
+    ltp.LibraryCardUiDiagnostics.beginPhase(phase, cycle);
     _phase = phase;
     _cycle = cycle;
   }

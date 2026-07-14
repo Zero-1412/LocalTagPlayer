@@ -5,6 +5,7 @@
   [string]$RootPath = 'X:\test-media',
   [int]$Cycles = 10,
   [int]$Seed = 20260714,
+  [int]$ReleaseTailSeconds = 60,
   [string]$Output = ''
 )
 
@@ -41,7 +42,7 @@ Set-Content -LiteralPath (Join-Path $Output 'phase.current') -Value 'test_start|
 $monitorJob = Start-Job -ArgumentList $Output -ScriptBlock {
   param($Output)
   $metrics = Join-Path $Output 'process-metrics.csv'
-  'timestamp,phase,cycle,cpu_seconds,threads,working_set_mb,private_mb,handles,responding,io_read_mb_s,io_write_mb_s,gpu_dedicated_mb,gpu_shared_mb,gpu_committed_mb' | Set-Content $metrics
+  'timestamp,phase,cycle,cpu_seconds,threads,working_set_mb,private_mb,handles,responding,io_read_mb_s,io_write_mb_s,gpu_sample_valid,gpu_dedicated_mb,gpu_shared_mb,gpu_committed_mb' | Set-Content $metrics
   while (-not (Test-Path -LiteralPath (Join-Path $Output 'stress.done'))) {
     $started = Get-Date
     $process = Get-Process local_tag_player -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -57,6 +58,7 @@ $monitorJob = Start-Job -ArgumentList $Output -ScriptBlock {
       $gpuDedicated = 0.0
       $gpuShared = 0.0
       $gpuCommitted = 0.0
+      $gpuSampleValid = $false
       $ioRead = 0.0
       $ioWrite = 0.0
       try {
@@ -69,6 +71,7 @@ $monitorJob = Start-Job -ArgumentList $Output -ScriptBlock {
         foreach ($sample in $gpu.CounterSamples) {
           if ($sample.Path -like '*\dedicated usage') { $gpuDedicated += $sample.CookedValue } elseif ($sample.Path -like '*\shared usage') { $gpuShared += $sample.CookedValue } elseif ($sample.Path -like '*\total committed') { $gpuCommitted += $sample.CookedValue }
         }
+        $gpuSampleValid = $true
       } catch {}
       try {
         $instance = (Get-Counter '\Process(local_tag_player*)\ID Process' -ErrorAction Stop).CounterSamples |
@@ -85,12 +88,12 @@ $monitorJob = Start-Job -ArgumentList $Output -ScriptBlock {
           }
         }
       } catch {}
-      $line = '{0},{1},{2},{3:F3},{4},{5:F1},{6:F1},{7},{8},{9:F2},{10:F2},{11:F1},{12:F1},{13:F1}' -f `
+      $line = '{0},{1},{2},{3:F3},{4},{5:F1},{6:F1},{7},{8},{9:F2},{10:F2},{11},{12:F1},{13:F1},{14:F1}' -f `
         $(Get-Date -Format o), $phase, $cycle,
         $process.TotalProcessorTime.TotalSeconds, $process.Threads.Count,
         ($process.WorkingSet64 / 1MB), ($process.PrivateMemorySize64 / 1MB),
         $process.HandleCount, $process.Responding,
-        ($ioRead / 1MB), ($ioWrite / 1MB),
+        ($ioRead / 1MB), ($ioWrite / 1MB), $gpuSampleValid,
         ($gpuDedicated / 1MB), ($gpuShared / 1MB), ($gpuCommitted / 1MB)
       Add-Content -LiteralPath $metrics -Value $line
     }
@@ -174,6 +177,7 @@ $env:LOCAL_TAG_PLAYER_DATA_DIR = $profile
 $env:LOCAL_TAG_PLAYER_LIBRARY_STRESS_ROOT = $RootPath
 $env:LOCAL_TAG_PLAYER_LIBRARY_STRESS_CYCLES = $Cycles.ToString()
 $env:LOCAL_TAG_PLAYER_STRESS_SEED = $Seed.ToString()
+$env:LOCAL_TAG_PLAYER_RELEASE_TAIL_SECONDS = $ReleaseTailSeconds.ToString()
 $env:LOCAL_TAG_PLAYER_STRESS_OUTPUT = $Output
 $testExitCode = 1
 try {
@@ -189,6 +193,7 @@ try {
   Remove-Item Env:LOCAL_TAG_PLAYER_LIBRARY_STRESS_ROOT -ErrorAction SilentlyContinue
   Remove-Item Env:LOCAL_TAG_PLAYER_LIBRARY_STRESS_CYCLES -ErrorAction SilentlyContinue
   Remove-Item Env:LOCAL_TAG_PLAYER_STRESS_SEED -ErrorAction SilentlyContinue
+  Remove-Item Env:LOCAL_TAG_PLAYER_RELEASE_TAIL_SECONDS -ErrorAction SilentlyContinue
   Remove-Item Env:LOCAL_TAG_PLAYER_STRESS_OUTPUT -ErrorAction SilentlyContinue
 }
 
