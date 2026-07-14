@@ -11,14 +11,61 @@ file(MAKE_DIRECTORY "${LTP_NATIVE_DEPS}")
 function(ltp_download url sha256 output)
   if(EXISTS "${output}")
     file(SHA256 "${output}" actual)
-  endif()
-  if(NOT EXISTS "${output}" OR NOT actual STREQUAL sha256)
+    if("${actual}" STREQUAL "${sha256}")
+      return()
+    endif()
+    # 最终归档摘要不匹配时必须立即删除，禁止后续解压半成品。
     file(REMOVE "${output}")
-    file(DOWNLOAD "${url}" "${output}"
-      EXPECTED_HASH "SHA256=${sha256}"
-      TLS_VERIFY ON
-      SHOW_PROGRESS)
   endif()
+
+  set(download_temp "${output}.download")
+  file(REMOVE "${download_temp}")
+  set(download_verified FALSE)
+  foreach(attempt RANGE 1 3)
+    # 网络响应只写入临时文件；断线、代理错误或摘要不匹配都不能污染最终缓存。
+    file(DOWNLOAD "${url}" "${download_temp}"
+      TLS_VERIFY ON
+      SHOW_PROGRESS
+      TIMEOUT 300
+      INACTIVITY_TIMEOUT 30
+      STATUS download_status)
+    list(GET download_status 0 status_code)
+    list(GET download_status 1 status_message)
+    if(status_code EQUAL 0 AND EXISTS "${download_temp}")
+      file(SHA256 "${download_temp}" actual)
+      if("${actual}" STREQUAL "${sha256}")
+        file(RENAME "${download_temp}" "${output}")
+        set(download_verified TRUE)
+        break()
+      endif()
+      message(STATUS
+        "Dependency download attempt ${attempt}/3 returned an invalid SHA256")
+    else()
+      message(STATUS
+        "Dependency download attempt ${attempt}/3 failed: ${status_message}")
+    endif()
+    file(REMOVE "${download_temp}")
+    if(attempt LESS 3)
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep 2)
+    endif()
+  endforeach()
+  if(NOT download_verified)
+    file(REMOVE "${download_temp}")
+    message(FATAL_ERROR
+      "Failed to download and verify pinned dependency after 3 attempts: ${output}")
+  endif()
+endfunction()
+
+function(ltp_seed_verified_archive source output sha256)
+  if(EXISTS "${output}")
+    file(SHA256 "${output}" actual)
+    if("${actual}" STREQUAL "${sha256}")
+      return()
+    endif()
+    file(REMOVE "${output}")
+  endif()
+  # Flutter 插件与原生后端依赖相同归档时复用已校验文件，避免重复访问网络。
+  configure_file("${source}" "${output}" COPYONLY)
 endfunction()
 
 ltp_download(
@@ -49,6 +96,17 @@ ltp_download(
   "https://raw.githubusercontent.com/google/angle/chromium/5359/LICENSE"
   "bf4da21bd20bcfb5b60b7ecc67fa864a79be049e21d6178076887f178dd6c71a"
   "${LTP_NATIVE_DEPS}/LICENSE.ANGLE.txt")
+
+# media_kit 插件稍后会在同一 CMake binary directory 查找这两个固定文件名。
+# 在插件配置前提供项目已校验的副本，避免重复下载及半成品摘要错误。
+ltp_seed_verified_archive(
+  "${LTP_MPV_ARCHIVE}"
+  "${CMAKE_BINARY_DIR}/mpv-dev-x86_64-20230924-git-652a1dd.7z"
+  "dce982222d7a23e4a1c6f0fb6cc39f6e899a6714624b95ea49cff6558ee97572")
+ltp_seed_verified_archive(
+  "${LTP_ANGLE_ARCHIVE}"
+  "${CMAKE_BINARY_DIR}/ANGLE.7z"
+  "cc5911bb15d596fd5a2b362613ad35b7093b427117269a7359054a65746a5f9a")
 
 foreach(pair IN ITEMS "mpv;${LTP_MPV_ARCHIVE}" "angle;${LTP_ANGLE_ARCHIVE}" "video;${LTP_VIDEO_ARCHIVE}" "ffmpeg;${LTP_FFMPEG_ARCHIVE}")
   list(GET pair 0 name)

@@ -1,5 +1,11 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-14 · Windows 原生依赖原子下载
+
+- `native_player/CMakeLists.txt` 不再把网络响应直接写入最终归档；每次下载先写 `.download`，通过固定 SHA256 后再原子改名，失败时删除临时文件并最多重试三次。
+- 已校验的 mpv 与 ANGLE 归档复用给 `media_kit_libs_windows_video` 插件，避免同一次 CMake 配置重复访问网络并产生两套不一致缓存。
+- 从干净生成目录完成 Windows debug 构建；mpv、ANGLE、media_kit_video 及插件复用文件摘要均验证通过，未修改播放器、过滤、缓存或用户数据语义。
+
 ## 2026-07-14 · 模块二级职责目录
 
 - 在现有一级技术模块下增加二级职责目录：页面按 library/player/tags，服务按 library/media/player/relink/tags/window，媒体库组件统一归入 widgets/library。

@@ -17,6 +17,8 @@ flutter build windows --debug
 
 ## 最近完成
 
+- Windows CMake 固定依赖改为临时文件下载、SHA256 校验后原子落盘并有限重试；mpv/ANGLE 的已校验归档直接复用给 media_kit 插件，Android Studio 重建不再解压网络中断留下的半成品。
+
 - `pages`、`services`、`widgets` 已在现有一级模块内按 library/player/tags/media/relink/window 职责增加二级目录；所有 Dart 文件仍属于同一 `app.dart` part library，仅调整文件位置和相对引用。
 
 - 压力测试产物统一写入带安全标记的 `artifacts` 子目录；每次运行前自动清理超过 7 天的已标记目录，成功后只保留汇总报告与压缩清单，失败时保留完整诊断现场。

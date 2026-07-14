@@ -33,9 +33,9 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.23`
+已完成基线：`Architecture Baseline 0.5.24`
 
-当前推进中：在二级职责目录内继续缩小大文件，但不借目录整理扩大 SQLite 双写边界或改变业务语义。
+当前推进中：保持 Windows 原生依赖可重复构建，并继续在二级职责目录内缩小大文件；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
@@ -73,6 +73,7 @@ lib/src/widgets/library
 - `0.5.21`：缩略图后台候选与文件校验分层限流，可见卡片仍通过共享优先队列抢占；播放前仅对用户点击且缓存详情不完整的当前项执行独立 `MediaProbeBackend` 预检，播放器页面与 filtered queue 不主动探测。Windows MediaKit 的 released 契约覆盖依赖内部延迟执行的 `mpv_terminate_destroy`，下一会话不得与旧 libmpv/D3D 资源重叠；已确认回退 CPU 的 8K H.264 默认阻止直接播放。SQLite schema、标签语义和 filtered queue 来源不变。
 - `0.5.22`：debug 压测在卡片外壳、预览、元数据、标签和操作区建立显式 build/layout 诊断边界，并在最后一次 `PlayerBackend.released` 后持续采样进程、线程、句柄、有效 GPU counter 和播放器内存快照。诊断只观测应用 builder 与 RenderObject/PlayerBackend/驱动边界，不调用 GC、不清理 Flutter ImageCache，也不改变生产构建的缓存和释放策略。
 - `0.5.23`：在现有一级模块内增加职责二级目录：页面按 library/player/tags，服务按 library/media/player/relink/tags/window，媒体库组件归入 widgets/library。所有文件仍属于同一个 `app.dart` part library，本轮只移动文件并修正相对路径，不修改 schema、平台 contract、过滤语义、filtered queue 或缓存行为。
+- `0.5.24`：Windows 原生依赖下载改为临时文件、SHA256 校验通过后原子落盘并最多重试三次；项目已校验的 mpv/ANGLE 归档复用给 media_kit 插件，避免重复下载留下损坏缓存。PlayerBackend contract、运行时行为和用户数据不变。
 
 协作要求：
 

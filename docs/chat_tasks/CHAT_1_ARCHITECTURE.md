@@ -1,6 +1,6 @@
 # CHAT_1_ARCHITECTURE.md
 
-当前版本：`0.5.23`
+当前版本：`0.5.24`
 状态：进行中
 负责人：Chat 1 / 架构与跨平台边界
 
@@ -71,6 +71,7 @@ P0 / P1：
 
 ## 变更记录
 
+- `0.5.24`：Windows 原生依赖使用临时文件下载、固定 SHA256 校验、原子落盘和最多三次重试；mpv/ANGLE 的项目校验副本直接提供给 media_kit 插件，避免 Android Studio/CMake 重复下载与坏缓存连锁失败。
 - `0.5.23`：为文件较多的一级模块增加职责二级目录；`pages` 分为 library/player/tags，`services` 分为 library/media/player/relink/tags/window，`widgets` 的媒体库组件归入 library。继续保留单一 `app.dart` part library，不改变业务或平台边界。
 - `0.4.1`：为后续低风险 import 迁移和逐步采用 `0.4.0` 契约开启下一轮架构基线。
 - `0.4.0`：按 `local_tag_player_flutter_cross_platform_plan_v2.md` 重定架构职责，新增 repository 接口 stub、共享 `LayoutSize` / `LayoutBreakpoints`，扩展平台边界方法，并扩展 tag/filter/playback 模型 stub，同时保持 Windows 行为不变。
