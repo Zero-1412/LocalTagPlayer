@@ -59,7 +59,9 @@ VideoItem _videoByPath(LibraryStore store, String path) {
  * 加载并登记待关闭的媒体库实例，避免 SQLite 句柄阻塞临时目录清理。
  */
 Future<LibraryStore> _loadTrackedStore(List<LibraryStore> stores) async {
-  final store = await LibraryStore.load();
+  final store = await LibraryStore.load(
+    scanBackend: DartLibraryScanBackend(),
+  );
   stores.add(store);
   return store;
 }
@@ -100,7 +102,10 @@ void main() {
     stores.remove(store);
 
     final diagnostics = LibraryLoadDiagnostics();
-    final reloaded = await LibraryStore.load(diagnostics: diagnostics);
+    final reloaded = await LibraryStore.load(
+      diagnostics: diagnostics,
+      scanBackend: DartLibraryScanBackend(),
+    );
     stores.add(reloaded);
     final coverage = diagnostics.stages.singleWhere(
       (stage) => stage.name == 'dart.folder_tag_coverage_evaluation',

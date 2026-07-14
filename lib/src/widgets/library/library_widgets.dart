@@ -181,13 +181,13 @@ List<TagGroup> folderTagGroupsFromLibraryPaths({
       continue;
     }
     final primary = segments.first;
-    final primaryId = LibraryStore._tagIdFor(
+    final primaryId = TagRules.tagIdFor(
       name: primary,
       groupId: 'folder.primary',
     );
     primaryCounts[primaryId] = (primaryCounts[primaryId] ?? 0) + 1;
     final child = segments.length > 1 ? segments[1] : TagRules.defaultAlbumTag;
-    final childId = LibraryStore._tagIdFor(
+    final childId = TagRules.tagIdFor(
       name: child,
       groupId: 'folder.child',
       parentId: primary,

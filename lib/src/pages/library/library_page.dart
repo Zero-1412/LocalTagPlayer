@@ -166,7 +166,7 @@ class CacheSettingsPage extends StatefulWidget {
     required this.onPlaybackSettingsChanged,
   });
 
-  final LibraryStore store;
+  final LibraryApplicationFacade store;
 
   final ThumbnailService thumbnailService;
 
@@ -587,7 +587,10 @@ class _SettingsStatLine extends StatelessWidget {
 }
 
 class LibraryPage extends StatefulWidget {
-  const LibraryPage({super.key});
+  const LibraryPage({super.key, required this.dependencies});
+
+  /** 由应用组合根注入的 repository/backend/文件系统依赖。 */
+  final LocalTagPlayerDependencies dependencies;
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
@@ -650,7 +653,7 @@ List<VideoItem> recentPlaybackClearTargets(
 }
 
 class _LibraryPageState extends State<LibraryPage> {
-  LibraryStore? _store;
+  LibraryApplicationFacade? _store;
   PlaybackSnapshotWriteQueue? _playbackSnapshotQueue;
   ThumbnailService? _thumbnailService;
   MediaDetailsService? _libraryMediaDetailsService;
@@ -719,7 +722,12 @@ class _LibraryPageState extends State<LibraryPage> {
   List<VideoItem> _favoriteVideoCache = const <VideoItem>[];
   List<_LocalLibraryEntry> _localEntryCache = const <_LocalLibraryEntry>[];
   final _localEntryCacheByKey = <Object, List<_LocalLibraryEntry>>{};
+  /** 正在后台枚举的本地路径缓存键，避免每次 build 重复发起目录读取。 */
+  final _localEntryLoads = <Object>{};
   List<TagGroup> _tagGroupsCache = const <TagGroup>[];
+
+  /** 当前页面共享的文件系统平台边界。 */
+  FileSystemAdapter get _fileSystem => widget.dependencies.fileSystem;
 
   /**
    * 最近播放清理时的临时选择集。
@@ -842,7 +850,9 @@ class _LibraryPageState extends State<LibraryPage> {
   Future<void> _load() async {
     final diagnostics = kDebugMode ? LibraryLoadDiagnostics() : null;
     final startupWatch = Stopwatch()..start();
-    final store = await LibraryStore.load(diagnostics: diagnostics);
+    final store = await widget.dependencies.libraryApplicationFactory(
+      diagnostics: diagnostics,
+    );
     final thumbnailService = diagnostics == null
         ? await ThumbnailService.create()
         : await diagnostics.measureAsync(
@@ -930,7 +940,7 @@ class _LibraryPageState extends State<LibraryPage> {
    * 传入生产页面。添加仍经过 `_scan`，移除仍经过 SQLite 单事务和 UI 差量刷新。
    */
   void _registerLibraryStressControl(
-    LibraryStore store,
+    LibraryApplicationFacade store,
     ThumbnailService thumbnailService,
   ) {
     final root =
@@ -998,7 +1008,7 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   /** 在首帧之后的空闲窗口刷新稳定标签计数，过期页面结果会被丢弃。 */
-  void _scheduleInitialStableTagCounts(LibraryStore store) {
+  void _scheduleInitialStableTagCounts(LibraryApplicationFacade store) {
     _countRefreshCoordinator.schedule(
       query: const FilterQuery(),
       compute: store.resultCounts,
@@ -1012,7 +1022,7 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  Future<void> _promptForNewVideos(LibraryStore store) async {
+  Future<void> _promptForNewVideos(LibraryApplicationFacade store) async {
     if (store.roots.isEmpty) {
       return;
     }
@@ -1044,9 +1054,10 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Future<void> _pickFolder() async {
-    final path = await FilePicker.platform.getDirectoryPath(
+    final paths = await _fileSystem.pickDirectories(
       dialogTitle: '\u9009\u62e9\u89c6\u9891\u76ee\u5f55',
     );
+    final path = paths.isEmpty ? null : paths.first;
     if (path == null || _store == null) {
       return;
     }
@@ -1145,6 +1156,7 @@ class _LibraryPageState extends State<LibraryPage> {
       return;
     }
     final service = MediaDetailsService(
+      probeBackend: widget.dependencies.mediaProbeBackendFactory(),
       onUpdated: (item, details, fingerprint) async {
         final current = store.videos[TagRules.pathKey(item.path)];
         if (_store != store ||
@@ -1166,7 +1178,10 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
-  FilterState _computeFilterState(LibraryStore store, FilterQuery query) {
+  FilterState _computeFilterState(
+    LibraryApplicationFacade store,
+    FilterQuery query,
+  ) {
     _filterStateSource.configure(
       engine: TagQueryService(
         videos: store.videos.values,
@@ -1187,7 +1202,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   /** 使用扫描差量替换已缓存结果中的变化视频。 */
   FilterState _computeFilterStateFromDelta(
-    LibraryStore store,
+    LibraryApplicationFacade store,
     FilterQuery query,
     Iterable<VideoItem> changedVideos,
   ) {
@@ -1216,7 +1231,7 @@ class _LibraryPageState extends State<LibraryPage> {
     return state;
   }
 
-  FilterState _buildImmediateFilterState(LibraryStore store) {
+  FilterState _buildImmediateFilterState(LibraryApplicationFacade store) {
     return FilterState(
       query: _currentFilterQuery(),
       filteredVideos: sortedLibraryVideos(
@@ -1229,7 +1244,7 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  Map<String, int> _fallbackResultCounts(LibraryStore store) {
+  Map<String, int> _fallbackResultCounts(LibraryApplicationFacade store) {
     return {
       for (final tag in store.allTagItems) tag.id: tag.usageCount,
     };
@@ -1240,32 +1255,36 @@ class _LibraryPageState extends State<LibraryPage> {
    *
    * 文件夹从磁盘目录读取；视频只取已入库项目，确保播放、缩略图、收藏和更多操作继续复用现有 VideoItem 管线。
    */
-  List<_LocalLibraryEntry> _localLibraryEntries(LibraryStore store) {
+  Future<List<_LocalLibraryEntry>> _localLibraryEntries(
+    LibraryApplicationFacade store,
+  ) async {
     final currentPath = _localLibraryPath;
     if (currentPath == null || currentPath.isEmpty) {
       return const <_LocalLibraryEntry>[];
     }
-    final directory = Directory(currentPath);
-    if (!directory.existsSync()) {
+    if (!await _fileSystem.directoryExists(currentPath)) {
       return const <_LocalLibraryEntry>[];
     }
     final folders = <_LocalLibraryEntry>[];
     final videos = <VideoItem>[];
-    final children = directory.listSync(followLinks: false);
+    final children = await _fileSystem.listFiles(
+      currentPath,
+      recursive: false,
+    );
     children.sort((a, b) {
-      final aIsDirectory = a is Directory;
-      final bIsDirectory = b is Directory;
+      final aIsDirectory = a.isDirectory;
+      final bIsDirectory = b.isDirectory;
       if (aIsDirectory != bIsDirectory) {
         return aIsDirectory ? -1 : 1;
       }
       return p.basename(a.path).compareTo(p.basename(b.path));
     });
     for (final child in children) {
-      if (child is Directory) {
+      if (child.isDirectory) {
         folders.add(_LocalLibraryEntry.folder(child.path));
         continue;
       }
-      if (child is File && TagRules.isVideoPath(child.path)) {
+      if (TagRules.isVideoPath(child.path)) {
         final video = store.videos[TagRules.pathKey(child.path)];
         if (video != null) {
           videos.add(video);
@@ -1649,7 +1668,7 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
-  List<VideoItem> _sortedRecentVideos(LibraryStore store) {
+  List<VideoItem> _sortedRecentVideos(LibraryApplicationFacade store) {
     final key = (
       'recent',
       _libraryDataRevision,
@@ -1669,7 +1688,7 @@ class _LibraryPageState extends State<LibraryPage> {
     return _recentVideoCache;
   }
 
-  List<VideoItem> _sortedFavoriteVideos(LibraryStore store) {
+  List<VideoItem> _sortedFavoriteVideos(LibraryApplicationFacade store) {
     final key = (
       'favorites',
       _libraryDataRevision,
@@ -1688,7 +1707,9 @@ class _LibraryPageState extends State<LibraryPage> {
     return _favoriteVideoCache;
   }
 
-  List<_LocalLibraryEntry> _cachedLocalLibraryEntries(LibraryStore store) {
+  List<_LocalLibraryEntry> _cachedLocalLibraryEntries(
+    LibraryApplicationFacade store,
+  ) {
     final key = (
       'local',
       _libraryDataRevision,
@@ -1705,13 +1726,38 @@ class _LibraryPageState extends State<LibraryPage> {
       _localEntryCache = cached;
       return cached;
     }
-    _localEntryCacheKey = key;
-    _localEntryCache = _localLibraryEntries(store);
-    _localEntryCacheByKey[key] = _localEntryCache;
-    while (_localEntryCacheByKey.length > 24) {
-      _localEntryCacheByKey.remove(_localEntryCacheByKey.keys.first);
+    if (_localEntryLoads.add(key)) {
+      // 目录枚举放到异步平台边界，build 只消费缓存，避免大目录阻塞 UI 线程。
+      unawaited(() async {
+        try {
+          final entries = await _localLibraryEntries(store);
+          _localEntryCacheByKey[key] = entries;
+          while (_localEntryCacheByKey.length > 24) {
+            _localEntryCacheByKey.remove(_localEntryCacheByKey.keys.first);
+          }
+          if (mounted &&
+              _store == store &&
+              _resultMode == _LibraryResultMode.local) {
+            final currentKey = (
+              'local',
+              _libraryDataRevision,
+              _localLibraryPath,
+              _sortMode,
+              _sortDirection,
+            );
+            if (currentKey == key) {
+              setState(() {
+                _localEntryCacheKey = key;
+                _localEntryCache = entries;
+              });
+            }
+          }
+        } finally {
+          _localEntryLoads.remove(key);
+        }
+      }());
     }
-    return _localEntryCache;
+    return const <_LocalLibraryEntry>[];
   }
 
   void _scheduleFilterRefresh({
@@ -1784,7 +1830,7 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  List<TagGroup> _tagGroupsForSidebar(LibraryStore store) {
+  List<TagGroup> _tagGroupsForSidebar(LibraryApplicationFacade store) {
     final cacheKey = (
       _libraryDataRevision,
       store.tagsById.length,
@@ -1959,7 +2005,10 @@ class _LibraryPageState extends State<LibraryPage> {
     });
   }
 
-  TagItem? _folderPrimaryForChild(LibraryStore store, TagItem child) {
+  TagItem? _folderPrimaryForChild(
+    LibraryApplicationFacade store,
+    TagItem child,
+  ) {
     final parent = child.parentId?.trim();
     if (parent == null || parent.isEmpty) {
       return null;
@@ -2136,7 +2185,7 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  List<TagItem> _selectedGroupTagItems(LibraryStore store) {
+  List<TagItem> _selectedGroupTagItems(LibraryApplicationFacade store) {
     final selectedIds =
         _selectedGroupTagIds.values.expand((ids) => ids).toSet();
     final folderTagsById = {
@@ -2152,7 +2201,7 @@ class _LibraryPageState extends State<LibraryPage> {
     ]..sort((a, b) => _tagLabel(a).compareTo(_tagLabel(b)));
   }
 
-  List<TagItem> _excludedTagItems(LibraryStore store) {
+  List<TagItem> _excludedTagItems(LibraryApplicationFacade store) {
     return [
       for (final id in _excludedTagIds)
         if (store.tagsById[id] != null) store.tagsById[id]!,
@@ -2201,7 +2250,10 @@ class _LibraryPageState extends State<LibraryPage> {
    * 该查找用于把 UI 选中态转换回 `primaryTagId/childTagId`，避免历史 SQLite tag id
    * 与当前文件树 root 不一致时影响筛选结果。
    */
-  TagItem? _folderDiscoveryTagById(LibraryStore store, String tagId) {
+  TagItem? _folderDiscoveryTagById(
+    LibraryApplicationFacade store,
+    String tagId,
+  ) {
     for (final group in _tagGroupsForSidebar(store)) {
       for (final tag in group.items) {
         if (tag.id == tagId) {
@@ -2762,7 +2814,10 @@ class _LibraryPageState extends State<LibraryPage> {
       return;
     }
     final changed = await Navigator.of(context).push<bool>(
-      _smoothRoute<bool>(MissingRelinkPage(store: store)),
+      _smoothRoute<bool>(MissingRelinkPage(
+        store: store,
+        fileSystem: _fileSystem,
+      )),
     );
     if (changed == true && mounted) {
       setState(() {
@@ -3035,6 +3090,10 @@ class _LibraryPageState extends State<LibraryPage> {
             onPlaybackProgressUpdated: _updatePlaybackProgress,
             onMediaDetailsUpdated: _updateMediaDetails,
             disposalCompleter: playerDisposed,
+            fileSystem: _fileSystem,
+            playerBackendFactory: widget.dependencies.playerBackendFactory,
+            mediaProbeBackendFactory:
+                widget.dependencies.mediaProbeBackendFactory,
           ),
         ),
       );
@@ -3072,9 +3131,10 @@ class _LibraryPageState extends State<LibraryPage> {
    */
   Future<MediaDetails> _probeSelectedVideoBeforePlayback(
     VideoItem item,
-    LibraryStore store,
+    LibraryApplicationFacade store,
   ) async {
     final service = MediaDetailsService(
+      probeBackend: widget.dependencies.mediaProbeBackendFactory(),
       onUpdated: (updated, details, fingerprint) async {
         final current = store.videos[TagRules.pathKey(updated.path)];
         if (_store != store ||
@@ -3150,6 +3210,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final changed = await pickAndRelinkMissingVideo(
       context,
       store: store,
+      fileSystem: _fileSystem,
       item: item,
     );
     if (changed) {
@@ -3181,10 +3242,7 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Future<void> _deleteVideoFile(VideoItem item) async {
-    final file = File(item.path);
-    if (await file.exists()) {
-      await file.delete();
-    }
+    await _fileSystem.deleteFile(item.path);
     await _store?.deleteVideo(item.path);
     await _thumbnailService?.deleteThumbnailFor(item);
     if (mounted) {
@@ -3205,10 +3263,7 @@ class _LibraryPageState extends State<LibraryPage> {
     }
     try {
       if (deleteLocalFile) {
-        final file = File(item.path);
-        if (await file.exists()) {
-          await file.delete();
-        }
+        await _fileSystem.deleteFile(item.path);
       }
       await _store?.deleteVideo(item.path);
       await _thumbnailService?.deleteThumbnailFor(item);
@@ -3432,7 +3487,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   /** 获取当前视频已关联的非 manual 一级标签名，防止快速编辑覆盖其它来源。 */
   Set<String> _linkedTopLevelNonManualTagNames(
-    LibraryStore store,
+    LibraryApplicationFacade store,
     VideoItem item,
   ) {
     final linkedIds = store.videoTagIdsByPathKey[TagRules.pathKey(item.path)] ??
@@ -3451,7 +3506,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   /** 获取当前视频真实关联的一级 manual 标签，后续增删优先按 tagId 执行。 */
   List<TagItem> _linkedTopLevelManualTags(
-    LibraryStore store,
+    LibraryApplicationFacade store,
     VideoItem item,
   ) {
     final linkedIds = store.videoTagIdsByPathKey[TagRules.pathKey(item.path)] ??
@@ -3475,7 +3530,7 @@ class _LibraryPageState extends State<LibraryPage> {
    * 避免仅按名称随机修改其它分组。
    */
   Future<TagItem> _resolveQuickManualTag(
-    LibraryStore store,
+    LibraryApplicationFacade store,
     String name,
   ) async {
     final matches = [

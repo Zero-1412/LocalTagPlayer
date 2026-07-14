@@ -13,7 +13,7 @@ extension _LibraryPageDerivedState on _LibraryPageState {
    * 构建用于诊断和播放器队列标题的完整筛选表达式。
    */
   String _filterExpression({
-    required LibraryStore store,
+    required LibraryApplicationFacade store,
     required int resultCount,
     required int totalCount,
   }) {
@@ -59,7 +59,7 @@ extension _LibraryPageDerivedState on _LibraryPageState {
    * 构建面向用户的短筛选摘要。
    */
   String _filterSummary({
-    required LibraryStore store,
+    required LibraryApplicationFacade store,
     required int resultCount,
     required int totalCount,
   }) {
@@ -170,7 +170,7 @@ extension _LibraryPageDerivedState on _LibraryPageState {
    * 播放器过滤队列标题。
    */
   String _queueTitle({
-    required LibraryStore store,
+    required LibraryApplicationFacade store,
     required int playlistLength,
   }) {
     return switch (_resultMode) {

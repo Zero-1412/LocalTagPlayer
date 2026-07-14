@@ -1,6 +1,6 @@
 # CHAT_1_ARCHITECTURE.md
 
-当前版本：`0.5.24`
+当前版本：`0.5.25`
 状态：进行中
 负责人：Chat 1 / 架构与跨平台边界
 
@@ -70,6 +70,8 @@ P0 / P1：
 ```
 
 ## 变更记录
+
+- `0.5.25`：实现并接入 `DesktopFileSystemAdapter`；`LibraryStore` 落地为实际 `LibraryRepository`，页面统一依赖 `LibraryApplicationFacade`；具体 backend/repository 工厂移入 bootstrap composition root。文件系统模块、`LayoutSize`、`MediaDetails` 首批脱离 `part`，其余模块继续按依赖顺序渐进迁移。
 
 - `0.5.24`：Windows 原生依赖使用临时文件下载、固定 SHA256 校验、原子落盘和最多三次重试；mpv/ANGLE 的项目校验副本直接提供给 media_kit 插件，避免 Android Studio/CMake 重复下载与坏缓存连锁失败。
 - `0.5.23`：为文件较多的一级模块增加职责二级目录；`pages` 分为 library/player/tags，`services` 分为 library/media/player/relink/tags/window，`widgets` 的媒体库组件归入 library。继续保留单一 `app.dart` part library，不改变业务或平台边界。

@@ -1,5 +1,3 @@
-part of '../app.dart';
-
 class MediaDetails {
   const MediaDetails({
     this.videoCodec,
@@ -54,5 +52,3 @@ class MediaDetails {
     return value.toUpperCase();
   }
 }
-
-

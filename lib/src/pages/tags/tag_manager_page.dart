@@ -7,7 +7,7 @@ class TagManagerPage extends StatefulWidget {
     required this.currentResults,
   });
 
-  final LibraryStore store;
+  final LibraryApplicationFacade store;
   final List<VideoItem> currentResults;
 
   @override

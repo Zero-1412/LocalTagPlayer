@@ -7,18 +7,16 @@ part of '../../app.dart';
  */
 Future<bool> pickAndRelinkMissingVideo(
   BuildContext context, {
-  required LibraryStore store,
+  required LibraryApplicationFacade store,
+  required FileSystemAdapter fileSystem,
   required VideoItem item,
 }) async {
-  final result = await FilePicker.platform.pickFiles(
+  final path = await fileSystem.pickFile(
     dialogTitle: '选择与 ${item.title} 对应的新文件',
-    type: FileType.custom,
     allowedExtensions: TagRules.videoExtensions
         .map((extension) => extension.substring(1))
         .toList(),
-    allowMultiple: false,
   );
-  final path = result?.files.single.path;
   if (path == null) {
     return false;
   }
@@ -44,10 +42,17 @@ Future<bool> pickAndRelinkMissingVideo(
  * 缺失视频管理页：展示保留的稳定条目，并提供经过 fingerprint 校验的单文件 relink。
  */
 class MissingRelinkPage extends StatefulWidget {
-  const MissingRelinkPage({super.key, required this.store});
+  const MissingRelinkPage({
+    super.key,
+    required this.store,
+    required this.fileSystem,
+  });
 
   /** 当前媒体库；页面只更新被重新关联的单条记录及其 folder 标签索引。 */
-  final LibraryStore store;
+  final LibraryApplicationFacade store;
+
+  /** missing/relink 页面共享的文件选择平台边界。 */
+  final FileSystemAdapter fileSystem;
 
   @override
   State<MissingRelinkPage> createState() => _MissingRelinkPageState();
@@ -71,6 +76,7 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
       final changed = await pickAndRelinkMissingVideo(
         context,
         store: widget.store,
+        fileSystem: widget.fileSystem,
         item: item,
       );
       if (!mounted) {
@@ -111,6 +117,7 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
                       context: context,
                       builder: (_) => _BulkPathRelinkDialog(
                         store: widget.store,
+                        fileSystem: widget.fileSystem,
                       ),
                     );
                     if (count != null && count > 0 && mounted) {
@@ -171,9 +178,13 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
 
 /** 批量路径替换的只读预览与二次确认弹窗。 */
 class _BulkPathRelinkDialog extends StatefulWidget {
-  const _BulkPathRelinkDialog({required this.store});
+  const _BulkPathRelinkDialog({
+    required this.store,
+    required this.fileSystem,
+  });
 
-  final LibraryStore store;
+  final LibraryApplicationFacade store;
+  final FileSystemAdapter fileSystem;
 
   @override
   State<_BulkPathRelinkDialog> createState() => _BulkPathRelinkDialogState();
@@ -201,9 +212,10 @@ class _BulkPathRelinkDialogState extends State<_BulkPathRelinkDialog> {
   }
 
   Future<void> _pickNewPrefix() async {
-    final path = await FilePicker.platform.getDirectoryPath(
+    final paths = await widget.fileSystem.pickDirectories(
       dialogTitle: '选择迁移后的新目录',
     );
+    final path = paths.isEmpty ? null : paths.first;
     if (path != null && mounted) {
       _newPrefixController.text = path;
     }

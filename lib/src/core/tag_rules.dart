@@ -208,4 +208,19 @@ class TagRules {
         .where((segment) => segment.isNotEmpty && segment != '.')
         .toList();
   }
+
+  /**
+   * 生成稳定的规范化 tagId。
+   *
+   * 展示层、标签维护和 Repository 必须共享同一算法，避免页面依赖具体 Store 的
+   * 私有实现；不同父级下同名二级 folder 标签通过 [parentId] 保持隔离。
+   */
+  static String tagIdFor({
+    required String name,
+    required String groupId,
+    String? parentId,
+  }) {
+    final parent = parentId == null ? '' : ':${parentId.trim().toLowerCase()}';
+    return '$groupId$parent:${name.trim().toLowerCase()}';
+  }
 }

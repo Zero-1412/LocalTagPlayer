@@ -131,9 +131,17 @@
 
 ## 架构基线
 
-已完成基线：`Architecture Baseline 0.4.0`
+已完成基线：`Architecture Baseline 0.5.25`
 
-当前目标基线：`Architecture Baseline 0.4.1`
+当前目标基线：`Architecture Baseline 0.5.26`
+
+已完成 `0.5.25` 范围：
+
+- `DesktopFileSystemAdapter` 已替换页面的生产文件操作，并把本地目录枚举移出 Widget build。
+- `LibraryStore` 已实现真实 `LibraryRepository`，页面通过 `LibraryApplicationFacade` 发起用例。
+- 具体文件系统、扫描、媒体探测、播放器和 FFmpeg 实现由 bootstrap composition root 统一选择。
+- 文件系统模块、`LayoutSize`、`MediaDetails` 已迁移为独立 import；剩余 `part` 按依赖方向继续迁移。
+- SQLite、标签筛选、stable identity、用户数据写入继续由 Dart 独占，不迁往 Rust/C++。
 
 已完成 `0.3.0` 范围：
 

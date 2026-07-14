@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-14 · 文件系统边界、Repository 门面与组合根
+
+- 新增独立 import 的 `FileSystemAdapter` 与 `DesktopFileSystemAdapter`；目录选择、本地路径异步枚举、文件 stat、截图写入、删除和文件管理器定位不再由页面直接调用 `dart:io` / `FilePicker`。
+- `LibraryStore` 实现实际 `LibraryRepository` contract，新增 `LibraryApplicationFacade`；媒体库、标签管理和 Missing/Relink 页面不再依赖 `LibraryStore` 具体类型。
+- 播放器、媒体探测、扫描、FFmpeg 与 Repository 具体实现统一在 `bootstrapLocalTagPlayer()` 的 composition root 选择并注入；服务默认构造不再自行选择平台 backend。
+- 首批把文件系统模块、`LayoutSize` 与 `MediaDetails` 从单一 `app.dart` part library 迁移为独立 import。SQLite schema、标签筛选、stable identity、filtered queue、缓存与用户数据语义未改变。
+- 新增桌面文件系统 adapter focused test；88 项 store/media/widget focused tests、`flutter analyze` 与 Windows debug build 通过。真实窗口完成 root、子目录及一/二级标签切换，异步目录浏览和过滤结果加载正常。
+
 ## 2026-07-14 · Windows 原生依赖原子下载
 
 - `native_player/CMakeLists.txt` 不再把网络响应直接写入最终归档；每次下载先写 `.download`，通过固定 SHA256 后再原子改名，失败时删除临时文件并最多重试三次。

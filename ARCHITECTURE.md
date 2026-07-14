@@ -28,16 +28,18 @@ lib/src/pages/library|player|tags
 lib/src/widgets/library
 ```
 
-一级目录表达技术模块，文件较多的模块再按业务职责进入二级目录。当前仍采用 Dart `part` 机制，二级目录只改善代码发现与所有权边界，不改变同库可见性、初始化顺序或业务行为；后续再抽接口并演进为真正独立 import 模块。
+一级目录表达技术模块，文件较多的模块再按业务职责进入二级目录。`FileSystemAdapter`、`DesktopFileSystemAdapter`、`LayoutSize` 与 `MediaDetails` 已迁移为独立 import 模块；其余页面、业务服务和 Repository 仍采用 Dart `part` 机制。后续按“模型与契约 → Repository/平台实现 → 应用服务 → 页面”的方向继续迁移，避免一次性破坏私有符号和初始化顺序。
 
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.24`
+已完成基线：`Architecture Baseline 0.5.25`
 
-当前推进中：保持 Windows 原生依赖可重复构建，并继续在二级职责目录内缩小大文件；不扩大 SQLite 双写边界或改变业务语义。
+当前推进中：让页面只依赖应用门面与平台接口，并继续把剩余 `part` 模块迁移为独立 import；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.25`：落地 `DesktopFileSystemAdapter`，目录选择、异步目录枚举、文件 stat/写入/删除和文件管理器定位统一经过平台边界；`LibraryStore` 成为真实 `LibraryRepository` 实现，页面改依赖 `LibraryApplicationFacade`。播放器、媒体探测、扫描与 FFmpeg 具体实现由 bootstrap 组合根选择。首批把文件系统契约/实现、`LayoutSize`、`MediaDetails` 从 `part` 迁移为独立 import；SQLite、标签筛选、stable identity 和 filtered queue 继续由 Dart 单写与编排。
 
 - `0.1.0`：完成 `main.dart` 第一阶段机械拆分，形成 `src/models`、`src/services`、`src/pages`、`src/widgets`。
 - `0.2.0`：新增 `src/core`，集中 `TagRules`、`AppPaths`、`PlaybackSettings`，作为后续平台接口和独立 import 模块的过渡基建。

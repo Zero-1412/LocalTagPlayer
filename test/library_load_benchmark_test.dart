@@ -32,7 +32,10 @@ void main() {
 
       final diagnostics = LibraryLoadDiagnostics();
       final totalWatch = Stopwatch()..start();
-      final store = await LibraryStore.load(diagnostics: diagnostics);
+      final store = await LibraryStore.load(
+        diagnostics: diagnostics,
+        scanBackend: DartLibraryScanBackend(),
+      );
       addTearDown(store.close);
       final sortPreferences = await LibrarySortPreferences.load();
       final firstScreenVideos = diagnostics.measureSync(

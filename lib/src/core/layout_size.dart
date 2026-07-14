@@ -1,5 +1,3 @@
-part of '../app.dart';
-
 enum LayoutSize { compact, medium, expanded }
 
 /// 主界面 expanded 状态下三块区域的宽度分配。

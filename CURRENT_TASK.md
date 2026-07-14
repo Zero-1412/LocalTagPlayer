@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.22` 已完成。
+架构版本状态：`Architecture Baseline 0.5.25` 已完成。
 
 最近一次验证：
 
@@ -16,6 +16,12 @@ flutter build windows --debug
 结果：通过。
 
 ## 最近完成
+
+- `DesktopFileSystemAdapter` 已接管目录选择、异步目录浏览、文件存在/stat、截图写入、删除和文件管理器定位；媒体库本地路径浏览不再在 Widget build 中同步遍历磁盘。
+- `LibraryStore` 已实现真实 `LibraryRepository` contract，`LibraryApplicationFacade` 成为媒体库、标签管理和 missing/relink 页面的上层依赖；页面不再出现 `LibraryStore` 具体类型。
+- `bootstrapLocalTagPlayer()` 成为 composition root，统一选择 Desktop 文件系统、Rust/Dart 扫描、C++/兼容媒体探测、MediaKit/实验原生播放器与 FFmpeg backend。
+- 首批 `FileSystemAdapter`/桌面实现、`LayoutSize`、`MediaDetails` 已脱离 `part`。下一阶段继续迁移模型/契约、Repository/平台实现、应用服务和页面，不把 SQLite、标签筛选或 stable identity 写入迁往 Rust/C++。
+- 88 项 focused tests、`flutter analyze`、Windows debug build 通过；真实窗口点击 root“原神”、子目录“丽莎”和标签“雷神”，分别正确加载 477 个直接子项、9 个目录视频和 172 条过滤结果，截图未见遮挡、溢出或状态错位。
 
 - Windows CMake 固定依赖改为临时文件下载、SHA256 校验后原子落盘并有限重试；mpv/ANGLE 的已校验归档直接复用给 media_kit 插件，Android Studio 重建不再解压网络中断留下的半成品。
 

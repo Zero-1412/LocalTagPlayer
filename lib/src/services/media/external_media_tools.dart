@@ -1,5 +1,7 @@
 part of '../../app.dart';
 
+// ignore_for_file: slash_for_doc_comments
+
 class ExternalMediaToolsState {
   const ExternalMediaToolsState({
     this.ffmpegPath,
@@ -19,10 +21,22 @@ class ExternalMediaToolsState {
 
 class ExternalMediaTools {
   static Future<ExternalMediaToolsState>? _cached;
-  static final FFmpegBackend backend = DesktopFFmpegBackend();
+  static late FFmpegBackend _backend;
+
+  /**
+   * 由应用组合根安装当前平台实现。
+   *
+   * 运行期间只允许在启动阶段配置；测试可在首次调用前注入兼容实现。
+   */
+  static void configureBackend(FFmpegBackend backend) {
+    _backend = backend;
+    _cached = null;
+  }
+
+  static FFmpegBackend get backend => _backend;
 
   static Future<ExternalMediaToolsState> find() {
-    return _cached ??= backend.locateTools();
+    return _cached ??= _backend.locateTools();
   }
 
   static Future<ExternalMediaToolsState> _find() async {

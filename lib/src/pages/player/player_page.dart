@@ -56,7 +56,9 @@ class PlayerPage extends StatefulWidget {
     required this.onPlaybackProgressUpdated,
     required this.onMediaDetailsUpdated,
     required this.disposalCompleter,
-    this.playerBackendFactory,
+    required this.fileSystem,
+    required this.playerBackendFactory,
+    required this.mediaProbeBackendFactory,
   });
 
   final VideoItem initialItem;
@@ -82,8 +84,14 @@ class PlayerPage extends StatefulWidget {
   /** 页面退出后由播放器原生资源释放流程完成的路由协调信号。 */
   final Completer<void> disposalCompleter;
 
+  /** 文件选择、写入、元数据与文件管理器定位的平台边界。 */
+  final FileSystemAdapter fileSystem;
+
   /** 可选播放器后端工厂，用于测试或原生后端 A/B 切换。 */
-  final PlayerBackendFactory? playerBackendFactory;
+  final PlayerBackendFactory playerBackendFactory;
+
+  /** 由组合根选择的媒体探测后端工厂。 */
+  final MediaProbeBackendFactory mediaProbeBackendFactory;
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -98,7 +106,6 @@ class _PlayerPageState extends State<PlayerPage> {
   late final ScrollController _fullscreenQueueScrollController;
   late final MediaDetailsService _detailsService;
   late final String _requestedHwdec;
-  final _fileLocationService = const DesktopFileLocationService();
   late final PlayerPlaybackController _playback;
   final _openRequests = PlayerOpenRequestController();
   /** 正在等待兼容性确认的路径；避免快速点击叠加多个警告弹窗。 */
@@ -207,8 +214,10 @@ class _PlayerPageState extends State<PlayerPage> {
     _queueSearchController = TextEditingController();
     _queueScrollController = ScrollController();
     _fullscreenQueueScrollController = ScrollController();
-    _detailsService =
-        MediaDetailsService(onUpdated: widget.onMediaDetailsUpdated);
+    _detailsService = MediaDetailsService(
+      onUpdated: widget.onMediaDetailsUpdated,
+      probeBackend: widget.mediaProbeBackendFactory(),
+    );
     _requestedHwdec =
         PlayerHardwareAcceleration.resolve(widget.playbackSettings.hwdec);
     _playback = PlayerPlaybackController(
@@ -219,7 +228,7 @@ class _PlayerPageState extends State<PlayerPage> {
       initialChildTag: widget.activeChildTag,
       initialPath: widget.initialItem.path,
     );
-    _playerBackend = (widget.playerBackendFactory ?? _defaultPlayerBackend)(
+    _playerBackend = widget.playerBackendFactory(
       hwdec: _requestedHwdec,
       enableHardwareAcceleration:
           widget.playbackSettings.hardwareDecodingEnabled,
@@ -256,28 +265,6 @@ class _PlayerPageState extends State<PlayerPage> {
         _ensureQueueIndexVisible(_index, center: true, animated: false);
       }
     });
-  }
-
-  /** 默认创建保持现有播放效果的 media_kit/libmpv 后端。 */
-  static PlayerBackend _defaultPlayerBackend({
-    required String hwdec,
-    required bool enableHardwareAcceleration,
-  }) {
-    // 原生后端仍处于 A/B 验证阶段，只允许显式环境开关启用，避免静默改变生产播放行为。
-    if (Platform.isWindows &&
-        Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
-            'windows-native-mpv') {
-      return WindowsNativePlayerBackend(mode: 'mpv');
-    }
-    if (Platform.isWindows &&
-        Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
-            'windows-native-stub') {
-      return WindowsNativePlayerBackend(mode: 'stub');
-    }
-    return MediaKitPlayerBackend(
-      hwdec: hwdec,
-      enableHardwareAcceleration: enableHardwareAcceleration,
-    );
   }
 
   /**
@@ -637,14 +624,14 @@ class _PlayerPageState extends State<PlayerPage> {
       final safeTitle =
           _currentItem.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final outputPath = await FilePicker.platform.saveFile(
+      final outputPath = await widget.fileSystem.pickSavePath(
         dialogTitle: '保存当前画面',
-        fileName: '${safeTitle.isEmpty ? 'video' : safeTitle}_$timestamp.jpg',
-        type: FileType.custom,
-        allowedExtensions: const ['jpg'],
+        suggestedName:
+            '${safeTitle.isEmpty ? 'video' : safeTitle}_$timestamp.jpg',
+        allowedExtensions: const <String>['jpg'],
       );
       if (outputPath == null || !mounted) return;
-      await File(outputPath).writeAsBytes(bytes, flush: true);
+      await widget.fileSystem.writeBytes(outputPath, bytes, flush: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('截图已保存')),
@@ -1568,7 +1555,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   Future<void> _showVideoInfoDialog() async {
     final item = _currentItem;
-    final stat = await File(item.path).stat();
+    final stat = await widget.fileSystem.statFile(item.path);
     final details = await _detailsService.detailsFor(item);
     if (!mounted) {
       return;
@@ -1599,9 +1586,13 @@ class _PlayerPageState extends State<PlayerPage> {
                       _PlayerDialogInfoRow(label: '路径', value: item.path),
                       _PlayerDialogInfoRow(label: '目录', value: item.folder),
                       _PlayerDialogInfoRow(
-                          label: '大小', value: _formatBytes(stat.size)),
+                        label: '大小',
+                        value: _formatBytes(stat?.size ?? item.fileSize ?? 0),
+                      ),
                       _PlayerDialogInfoRow(
-                          label: '修改时间', value: stat.modified.toString()),
+                        label: '修改时间',
+                        value: stat?.modifiedAt?.toString() ?? '未知',
+                      ),
                     ],
                   ),
                 ),
@@ -1699,7 +1690,7 @@ class _PlayerPageState extends State<PlayerPage> {
   /** 通过平台边界定位当前媒体文件，并稳定展示失败原因。 */
   Future<void> _revealCurrentFile() async {
     try {
-      await _fileLocationService.reveal(_currentItem.path);
+      await widget.fileSystem.revealInFileManager(_currentItem.path);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

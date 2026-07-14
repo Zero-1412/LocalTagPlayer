@@ -93,7 +93,7 @@ class BulkPathRelinkService {
 
   /** 构建仅包含 oldPrefix 下 missing 条目的安全预览。 */
   Future<List<BulkPathRelinkPreview>> preview({
-    required LibraryStore store,
+    required LibraryRepository store,
     required String oldPrefix,
     required String newPrefix,
   }) async {
@@ -142,7 +142,7 @@ class BulkPathRelinkService {
 
   /** 执行预览中仍标记 ready 的条目，并返回成功数量。 */
   Future<BulkRelinkExecutionResult> execute({
-    required LibraryStore store,
+    required LibraryRepository store,
     required Iterable<BulkPathRelinkPreview> previews,
     required String oldPrefix,
     required String newPrefix,

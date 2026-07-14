@@ -995,7 +995,8 @@ class _QueueListItemState extends State<_QueueListItem> {
                           ),
                           builder: (context, snapshot) {
                             final file = snapshot.data;
-                            if (file != null && file.existsSync()) {
+                            // 缓存有效性由 ThumbnailService 负责，Widget 不再同步访问磁盘。
+                            if (file != null) {
                               return Image.file(
                                 file,
                                 fit: BoxFit.cover,

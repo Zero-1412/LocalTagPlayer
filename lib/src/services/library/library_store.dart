@@ -1,8 +1,8 @@
 part of '../../app.dart';
 
-// ignore_for_file: slash_for_doc_comments
+// ignore_for_file: slash_for_doc_comments, annotate_overrides
 
-class LibraryStore {
+class LibraryStore implements LibraryRepository {
   LibraryStore._(
     this._file,
     this._db,
@@ -80,7 +80,7 @@ class LibraryStore {
    */
   static Future<LibraryStore> load({
     LibraryLoadDiagnostics? diagnostics,
-    LibraryScanBackend? scanBackend,
+    required LibraryScanBackend scanBackend,
   }) async {
     final legacyFile = await AppPaths.legacyLibraryFile();
     final databaseFile = await AppPaths.libraryDatabaseFile();
@@ -94,7 +94,7 @@ class LibraryStore {
       legacyFile,
       db,
       diagnostics: diagnostics,
-      scanBackend: scanBackend ?? createLibraryScanBackend(),
+      scanBackend: scanBackend,
     );
     if (store.videos.isEmpty && await legacyFile.exists()) {
       if (diagnostics == null) {
@@ -686,7 +686,7 @@ class LibraryStore {
     if (normalized.isEmpty) {
       throw ArgumentError('tag name is empty');
     }
-    final id = _tagIdFor(name: normalized, groupId: groupId);
+    final id = TagRules.tagIdFor(name: normalized, groupId: groupId);
     final existing = tagsById[id];
     if (existing != null && existing.source != TagSource.manual) {
       throw StateError('manual tag conflicts with an existing non-manual tag');
@@ -757,15 +757,6 @@ class LibraryStore {
   Future<int> batchRemoveManualTag(
       TagItem tag, Iterable<VideoItem> items) async {
     return _tagMaintenance.batchRemoveManualTag(tag, items);
-  }
-
-  static String _tagIdFor({
-    required String name,
-    required String groupId,
-    String? parentId,
-  }) {
-    final parent = parentId == null ? '' : ':${parentId.trim().toLowerCase()}';
-    return '$groupId$parent:${name.trim().toLowerCase()}';
   }
 
   Future<void> save() async {

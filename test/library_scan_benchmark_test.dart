@@ -38,7 +38,9 @@ void main() {
           : null;
 
       final loadWatch = Stopwatch()..start();
-      final store = await LibraryStore.load(scanBackend: rustBackend);
+      final store = await LibraryStore.load(
+        scanBackend: rustBackend ?? DartLibraryScanBackend(),
+      );
       loadWatch.stop();
       addTearDown(store.close);
       expect(store.videos.length, greaterThanOrEqualTo(11000));

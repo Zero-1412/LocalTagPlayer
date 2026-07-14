@@ -3,16 +3,84 @@ part of '../app.dart';
 // ignore_for_file: slash_for_doc_comments
 
 abstract interface class LibraryRepository {
-  Future<List<String>> loadRoots();
+  /** 当前受管理的媒体库根目录；具体集合由 Dart Repository 独占维护。 */
+  List<String> get roots;
 
-  Future<void> saveRoots(List<String> roots);
+  /** 以内存 pathKey 索引保存的稳定视频记录。 */
+  Map<String, VideoItem> get videos;
 
-  Future<List<VideoItem>> loadVideos(
-      {FilterQuery filter = const FilterQuery()});
+  /** 用户固定的常用标签名称。 */
+  List<String> get favoriteTags;
+
+  /** 当前标签组及其展示顺序。 */
+  List<TagGroup> get tagGroups;
+
+  /** tagId 到标签实体的规范化索引。 */
+  Map<String, TagItem> get tagsById;
+
+  /** 视频 pathKey 到 tagId 的兼容查询索引。 */
+  Map<String, Set<String>> get videoTagIdsByPathKey;
+
+  TagQueryContext get tagQueryContext;
+
+  Iterable<TagItem> get allTagItems;
+
+  Set<String> get allTags;
+
+  Map<String, int> resultCounts(FilterQuery query);
+
+  Future<Map<String, TagUsageSummary>> tagUsageSummaries();
+
+  Future<void> replaceManualTags(
+    VideoItem item, {
+    String? parentTag,
+  });
+
+  Future<TagItem> createManualTag({
+    required String name,
+    required String groupId,
+    String? displayName,
+  });
+
+  Future<void> updateTagDetails(
+    TagItem tag, {
+    String? displayName,
+    Iterable<String>? aliases,
+    String? groupId,
+    bool? isHidden,
+    bool? isFavorite,
+    int? sortOrder,
+  });
+
+  Future<int> countTagReferences(TagItem tag);
+
+  Future<int> batchAddManualTag(TagItem tag, Iterable<VideoItem> items);
+
+  Future<int> batchRemoveManualTag(TagItem tag, Iterable<VideoItem> items);
+
+  Future<void> saveMetadata();
 
   Future<void> upsertVideo(VideoItem item);
 
-  Future<void> markMissing(String path);
+  Future<VideoItem?> deleteVideo(String path);
+
+  Future<LibraryScanCommitResult> addRootAndScanWithChanges(String rootPath);
+
+  Future<List<VideoItem>> removeRoot(String rootPath);
+
+  Future<LibraryScanCommitResult> scanWithChanges();
+
+  Future<int> countUntrackedVideos();
+
+  Set<String> childTagsFor(String parentTag);
+
+  Future<void> relinkMissingVideo(VideoItem item, String newPath);
+
+  Future<Set<String>> relinkMissingVideosInBatch(
+    Map<VideoItem, String> targets,
+  );
+
+  Future<void> close();
 }
 
 abstract interface class TagRepository {

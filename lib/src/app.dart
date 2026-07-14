@@ -1,3 +1,5 @@
+// ignore_for_file: slash_for_doc_comments
+
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -6,7 +8,6 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -20,12 +21,20 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'core/layout_size.dart';
+import 'models/media_details.dart';
+import 'platform/desktop_file_system_adapter.dart';
+import 'platform/file_system_adapter.dart';
+
+export 'core/layout_size.dart';
+export 'models/media_details.dart';
+export 'platform/desktop_file_system_adapter.dart';
+export 'platform/file_system_adapter.dart';
+
 part 'core/app_paths.dart';
-part 'core/layout_size.dart';
 part 'core/playback_settings.dart';
 part 'core/tag_rules.dart';
 part 'models/video_item.dart';
-part 'models/media_details.dart';
 part 'models/platform_models.dart';
 part 'repositories/repository_interfaces.dart';
 
@@ -41,6 +50,7 @@ part 'services/library/library_count_refresh_coordinator.dart';
 part 'services/library/library_tag_persistence.dart';
 part 'services/library/library_tag_maintenance.dart';
 part 'services/library/library_video_persistence.dart';
+part 'services/library/library_application_facade.dart';
 part 'services/library/library_store.dart';
 part 'services/library/library_scan_service.dart';
 
@@ -110,6 +120,78 @@ const _thumbnailFfmpegTimeout = Duration(seconds: 10);
 const _thumbnailPlayerTimeout = Duration(seconds: 8);
 const _mediaProbeTimeout = Duration(seconds: 6);
 
+/** 创建媒体库应用门面的组合根工厂。 */
+typedef LibraryApplicationFactory = Future<LibraryApplicationFacade> Function({
+  LibraryLoadDiagnostics? diagnostics,
+});
+
+/** 创建独立媒体探测会话后端的组合根工厂。 */
+typedef MediaProbeBackendFactory = MediaProbeBackend Function();
+
+/**
+ * 应用启动时一次性选择的具体平台依赖。
+ *
+ * 页面只接收稳定接口或工厂；Windows/Rust/C++/media_kit 的选择不得再次散落到
+ * Widget 生命周期中。
+ */
+class LocalTagPlayerDependencies {
+  const LocalTagPlayerDependencies({
+    required this.fileSystem,
+    required this.libraryApplicationFactory,
+    required this.playerBackendFactory,
+    required this.mediaProbeBackendFactory,
+  });
+
+  /** 文件选择、目录枚举、文件写入和删除的平台边界。 */
+  final FileSystemAdapter fileSystem;
+
+  /** Dart Repository 与应用门面的创建入口。 */
+  final LibraryApplicationFactory libraryApplicationFactory;
+
+  /** 每个播放路由独占的播放器后端工厂。 */
+  final PlayerBackendFactory playerBackendFactory;
+
+  /** 每个探测队列独占的媒体探测后端工厂。 */
+  final MediaProbeBackendFactory mediaProbeBackendFactory;
+}
+
+/** 组合根内选择播放器具体实现，页面不再读取环境变量或平台类型。 */
+PlayerBackend _createPlayerBackend({
+  required String hwdec,
+  required bool enableHardwareAcceleration,
+}) {
+  if (Platform.isWindows &&
+      Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
+          'windows-native-mpv') {
+    return WindowsNativePlayerBackend(mode: 'mpv');
+  }
+  if (Platform.isWindows &&
+      Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
+          'windows-native-stub') {
+    return WindowsNativePlayerBackend(mode: 'stub');
+  }
+  return MediaKitPlayerBackend(
+    hwdec: hwdec,
+    enableHardwareAcceleration: enableHardwareAcceleration,
+  );
+}
+
+/** 创建当前平台的完整依赖图，确保具体实现只在组合根出现一次。 */
+LocalTagPlayerDependencies createLocalTagPlayerDependencies() {
+  return LocalTagPlayerDependencies(
+    fileSystem: const DesktopFileSystemAdapter(),
+    libraryApplicationFactory: ({diagnostics}) async {
+      final repository = await LibraryStore.load(
+        diagnostics: diagnostics,
+        scanBackend: createLibraryScanBackend(),
+      );
+      return LibraryApplicationFacade(repository);
+    },
+    playerBackendFactory: _createPlayerBackend,
+    mediaProbeBackendFactory: createMediaProbeBackend,
+  );
+}
+
 Route<T> _smoothRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
     transitionDuration: const Duration(milliseconds: 220),
@@ -137,11 +219,15 @@ Future<void> bootstrapLocalTagPlayer() async {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
   await DesktopWindowStateService.instance.initialize();
-  runApp(const LocalTagPlayerApp());
+  ExternalMediaTools.configureBackend(DesktopFFmpegBackend());
+  runApp(LocalTagPlayerApp(dependencies: createLocalTagPlayerDependencies()));
 }
 
 class LocalTagPlayerApp extends StatelessWidget {
-  const LocalTagPlayerApp({super.key});
+  const LocalTagPlayerApp({super.key, required this.dependencies});
+
+  /** 由 bootstrap 组合根创建的稳定依赖图。 */
+  final LocalTagPlayerDependencies dependencies;
   @override
   Widget build(BuildContext context) {
     final colorScheme = ColorScheme.fromSeed(
@@ -303,7 +389,7 @@ class LocalTagPlayerApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const LibraryPage(),
+      home: LibraryPage(dependencies: dependencies),
     );
   }
 }

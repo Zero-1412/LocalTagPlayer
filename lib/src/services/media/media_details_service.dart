@@ -5,8 +5,8 @@ part of '../../app.dart';
 class MediaDetailsService {
   MediaDetailsService({
     this.onUpdated,
-    MediaProbeBackend? probeBackend,
-  })  : _probeBackend = probeBackend ?? createMediaProbeBackend(),
+    required MediaProbeBackend probeBackend,
+  })  : _probeBackend = probeBackend,
         _generation = _nextGeneration++;
 
   /** 进程内递增代号，避免多个播放器页面取消同一个原生 generation。 */

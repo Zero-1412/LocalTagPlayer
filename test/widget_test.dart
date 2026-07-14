@@ -25,7 +25,10 @@ VideoItem _testVideo({
 
 void main() {
   testWidgets('app mounts', (WidgetTester tester) async {
-    await tester.pumpWidget(const LocalTagPlayerApp());
+    ExternalMediaTools.configureBackend(DesktopFFmpegBackend());
+    await tester.pumpWidget(LocalTagPlayerApp(
+      dependencies: createLocalTagPlayerDependencies(),
+    ));
     await tester.pump();
 
     expect(find.byType(LocalTagPlayerApp), findsOneWidget);
@@ -1636,7 +1639,9 @@ void main() {
       ..mediaDetails = cached;
     final uncachedItem =
         _testVideo(path: 'C:/queue/uncached.mp4', title: 'uncached');
-    final service = MediaDetailsService();
+    final service = MediaDetailsService(
+      probeBackend: CompatibleMediaProbeBackend(),
+    );
 
     expect(service.cachedDetailsFor(cachedItem), same(cached));
     service.dispose();

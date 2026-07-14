@@ -158,14 +158,14 @@ class LibraryTagMaintenance {
     }
     final ids = <String>{};
     for (final tag in TagRules.parentTagsFor(rootPath, item.path)) {
-      ids.add(LibraryStore._tagIdFor(
+      ids.add(TagRules.tagIdFor(
         name: tag,
         groupId: 'folder.primary',
       ));
     }
     for (final entry in TagRules.childTagsFor(rootPath, item.path).entries) {
       for (final child in entry.value) {
-        ids.add(LibraryStore._tagIdFor(
+        ids.add(TagRules.tagIdFor(
           name: child,
           groupId: 'folder.child',
           parentId: entry.key,
@@ -311,8 +311,8 @@ class LibraryTagMaintenance {
     required TagSource source,
     String? parentId,
   }) {
-    final id = LibraryStore._tagIdFor(
-        name: name, groupId: groupId, parentId: parentId);
+    final id =
+        TagRules.tagIdFor(name: name, groupId: groupId, parentId: parentId);
     final existing = _store.tagsById[id];
     if (existing != null) {
       return existing;
