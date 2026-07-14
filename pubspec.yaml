@@ -1,5 +1,5 @@
 name: local_tag_player
-description: A Windows Flutter local video player with tag-based library browsing.
+description: A cross-platform Flutter local video player with tag-based library browsing.
 publish_to: "none"
 version: 0.1.0+1
 
@@ -12,6 +12,8 @@ dependencies:
   file_picker: ^8.1.7
   media_kit: ^1.1.11
   media_kit_video: ^1.2.5
+  media_kit_libs_linux: ^1.2.1
+  media_kit_libs_macos_video: ^1.1.4
   media_kit_libs_windows_video: ^1.0.11
   path: ^1.9.0
   path_provider: ^2.1.5

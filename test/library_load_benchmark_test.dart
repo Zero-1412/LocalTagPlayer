@@ -42,7 +42,7 @@ void main() {
         databaseProvider: databaseProvider,
       );
       addTearDown(store.close);
-      final sortPreferences = await LibrarySortPreferences.load(paths);
+      final sortPreferences = await loadLibrarySortPreferences(paths);
       final firstScreenVideos = diagnostics.measureSync(
         'ui.first_screen_list_sort',
         () => sortedLibraryVideos(

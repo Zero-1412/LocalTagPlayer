@@ -4,18 +4,24 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.27` 已完成。
+架构版本状态：`Architecture Baseline 0.5.28` 已完成。
 
 最近一次验证：
 
 ```powershell
 flutter analyze
+flutter test
 flutter build windows --debug
 ```
 
-结果：通过。
+结果：通过；99 项测试通过，2 项显式基准跳过。
 
 ## 最近完成
+
+- `LibraryPage` 不再接收完整 `LocalTagPlayerDependencies`，改为只接收页面应用服务、文件系统边界及转交播放器所需的两个 backend factory；AppPaths、FFmpeg、Repository loader 与 debug 配置保持在组合根创建的 `LocalLibraryPageApplicationService` 内。
+- 已生成 macOS/Linux Flutter runner，补齐各平台 media_kit 运行库与 macOS 本地文件访问配置；GitHub Actions 分别执行 adapter contract、静态分析、debug build 与启动存活 smoke。
+- 跨平台 contract test 会验证组合根在对应宿主选择 `MacOsFileSystemAdapter` / `LinuxFileSystemAdapter`；SQLite 测试在 Windows 使用仓库 DLL，在 macOS/Linux 使用系统 SQLite，Dart 单写边界不变。
+- Windows 真实窗口回归通过：当前 debug 构建首屏加载 11165 项，展开“原神”并选择“雷神”后显示 173 项；chips、计数、网格与层级面板无重叠、溢出或状态错位。
 
 - 57 个 Dart `part` 已全部迁移为独立 import，Store 私有 persistence/coordinator、播放器/缩略图实现、应用服务、页面与 widgets 均形成真实 library 边界。
 - 新增 `LocalTagPlayerDependencies` 组合根 contract、`LibraryStoreAccess` 私有协作端口与共享集合规则；页面继续依赖 `LibraryApplicationFacade` 和平台接口。

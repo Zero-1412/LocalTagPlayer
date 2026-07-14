@@ -135,9 +135,12 @@ void main() {
 
   test('sqflite provider owns factory and paths while Dart owns schema writes',
       () async {
-    DynamicLibrary.open(
-      File('windows/tools/sqlite/sqlite3.dll').absolute.path,
-    );
+    // Windows 使用仓库内固定 SQLite 动态库；macOS/Linux runner 使用系统 SQLite。
+    if (Platform.isWindows) {
+      DynamicLibrary.open(
+        File('windows/tools/sqlite/sqlite3.dll').absolute.path,
+      );
+    }
     sqfliteFfiInit();
     final directory = await Directory.systemTemp.createTemp('ltp_db_provider_');
     addTearDown(() => directory.delete(recursive: true));
@@ -164,7 +167,28 @@ void main() {
   test('composition root selects concrete adapters without page globals', () {
     final dependencies = createLocalTagPlayerDependencies();
     expect(dependencies.fileSystem, isA<DesktopFileSystemAdapter>());
-    expect(dependencies.ffmpegBackend, isA<DesktopFFmpegBackend>());
+    if (Platform.isMacOS) {
+      expect(dependencies.fileSystem, isA<MacOsFileSystemAdapter>());
+    } else if (Platform.isLinux) {
+      expect(dependencies.fileSystem, isA<LinuxFileSystemAdapter>());
+    }
+    expect(
+      dependencies.libraryPageApplicationService,
+      isA<LocalLibraryPageApplicationService>(),
+    );
     expect(dependencies.paths, isA<AppPaths>());
+  });
+
+  test('LibraryPage depends on page services instead of the composition root',
+      () {
+    final source = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+
+    expect(source, isNot(contains('local_tag_player_dependencies.dart')));
+    expect(source, isNot(contains('LocalTagPlayerDependencies')));
+    expect(source, contains('LibraryPageApplicationService'));
+    expect(source, contains('PlayerBackendFactory'));
+    expect(source, contains('MediaProbeBackendFactory'));
   });
 }

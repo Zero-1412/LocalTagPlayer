@@ -10,11 +10,11 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.27` 已完成全部 Dart `part` 迁移。Store 私有持久化协作、播放器与缩略图实现、应用服务、页面和 widgets 现在都是具有显式 import 的独立 library；组合根依赖图也有单独 contract。
+`Architecture Baseline 0.5.28` 已在全部 Dart `part` 清零后继续收窄页面边界。Store 私有持久化协作、播放器与缩略图实现、应用服务、页面和 widgets 现在都是具有显式 import 的独立 library；`LibraryPage` 只接收页面级应用服务和必要的平台 contract，不再遍历完整组合根依赖图。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
-当前应用是 Flutter Windows 单体桌面应用，入口保留在：
+当前应用是 Flutter 跨平台单体桌面应用，入口保留在：
 
 ```text
 <project-root>\lib\main.dart
@@ -37,11 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.27`
+已完成基线：`Architecture Baseline 0.5.28`
 
-当前推进中：继续缩小 facade 与页面依赖面，并在 macOS/Linux 宿主补齐原生构建验证；不扩大 SQLite 双写边界或改变业务语义。
+当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.28`：新增 `LibraryPageApplicationService`，把 facade 首屏加载、偏好持久化、缩略图/媒体详情创建和 debug 诊断配置移出页面；`LibraryPage` 不再依赖完整 `LocalTagPlayerDependencies`。生成 macOS/Linux runner 并增加跨平台 CI build/start smoke；SQLite、FilterQuery/TagQueryService、stable identity、filtered queue 与缓存队列语义不变。
 
 - `0.5.27`：清零全部 Dart `part` / `part of`；按 Store 私有协作、播放器/缩略图实现、应用服务、页面/widgets 的顺序建立独立 library 边界。新增组合根依赖 contract 与零 `part` 架构测试；schema、FilterQuery/TagQueryService、filtered queue、缓存队列和用户数据语义不变。
 

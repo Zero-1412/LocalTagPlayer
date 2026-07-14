@@ -398,8 +398,8 @@ void main() {
       mode: SortMode.folder,
       direction: SortDirection.ascending,
     );
-    await preferences.save(paths);
-    final loaded = await LibrarySortPreferences.load(paths);
+    await saveLibrarySortPreferences(paths, preferences);
+    final loaded = await loadLibrarySortPreferences(paths);
 
     expect(loaded.mode, SortMode.folder);
     expect(loaded.direction, SortDirection.ascending);

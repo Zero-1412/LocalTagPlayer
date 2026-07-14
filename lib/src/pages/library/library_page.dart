@@ -7,18 +7,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
-import '../../composition/local_tag_player_dependencies.dart';
 import '../../core/layout_size.dart';
 import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
 import '../../models/library_scan_models.dart';
+import '../../models/library_sort.dart';
 import '../../models/media_details.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
+import '../../platform/platform_interfaces.dart';
 import '../../services/library/library_application_facade.dart';
 import '../../services/library/library_count_refresh_coordinator.dart';
 import '../../services/library/library_load_diagnostics.dart';
+import '../../services/library/library_page_application_service.dart';
 import '../../services/library/library_scan_ui_diagnostics.dart';
 import '../../services/library/library_stress_control.dart';
 import '../../services/media/media_details_service.dart';
@@ -29,7 +31,6 @@ import '../../services/player/player_memory_diagnostics.dart';
 import '../../services/tags/tag_query_service.dart';
 import '../../widgets/app_theme_tokens.dart';
 import '../../widgets/library/library_local_view.dart';
-import '../../widgets/library/library_sort_control.dart';
 import '../../widgets/library/library_tag_discovery_panel.dart';
 import '../../widgets/library/library_video_results.dart';
 import '../../widgets/library/library_widgets.dart';
@@ -836,10 +837,25 @@ class _SettingsStatLine extends StatelessWidget {
 }
 
 class LibraryPage extends StatefulWidget {
-  const LibraryPage({super.key, required this.dependencies});
+  const LibraryPage({
+    super.key,
+    required this.applicationService,
+    required this.fileSystem,
+    required this.playerBackendFactory,
+    required this.mediaProbeBackendFactory,
+  });
 
-  /** 由应用组合根注入的 repository/backend/文件系统依赖。 */
-  final LocalTagPlayerDependencies dependencies;
+  /** facade 加载、偏好持久化、缩略图与媒体详情创建的页面应用服务。 */
+  final LibraryPageApplicationService applicationService;
+
+  /** 目录选择、异步枚举、文件检查和删除的平台边界。 */
+  final FileSystemAdapter fileSystem;
+
+  /** 仅转交播放器页面的后端工厂。 */
+  final PlayerBackendFactory playerBackendFactory;
+
+  /** 仅转交播放器页面的媒体探测工厂。 */
+  final MediaProbeBackendFactory mediaProbeBackendFactory;
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
@@ -953,7 +969,7 @@ class _LibraryPageState extends State<LibraryPage> {
   List<TagGroup> _tagGroupsCache = const <TagGroup>[];
 
   /** 当前页面共享的文件系统平台边界。 */
-  FileSystemAdapter get _fileSystem => widget.dependencies.fileSystem;
+  FileSystemAdapter get _fileSystem => widget.fileSystem;
 
   /**
    * 最近播放清理时的临时选择集。
@@ -1076,33 +1092,13 @@ class _LibraryPageState extends State<LibraryPage> {
   Future<void> _load() async {
     final diagnostics = kDebugMode ? LibraryLoadDiagnostics() : null;
     final startupWatch = Stopwatch()..start();
-    final store = await widget.dependencies.libraryApplicationFactory(
+    final startupData = await widget.applicationService.load(
       diagnostics: diagnostics,
     );
-    final thumbnailService = diagnostics == null
-        ? await ThumbnailService.create(
-            widget.dependencies.paths,
-            widget.dependencies.ffmpegBackend,
-          )
-        : await diagnostics.measureAsync(
-            'startup.thumbnail_service_create',
-            () => ThumbnailService.create(
-              widget.dependencies.paths,
-              widget.dependencies.ffmpegBackend,
-            ),
-          );
-    final playbackSettings = diagnostics == null
-        ? await PlaybackSettings.load(widget.dependencies.paths)
-        : await diagnostics.measureAsync(
-            'startup.playback_settings_load',
-            () => PlaybackSettings.load(widget.dependencies.paths),
-          );
-    final sortPreferences = diagnostics == null
-        ? await LibrarySortPreferences.load(widget.dependencies.paths)
-        : await diagnostics.measureAsync(
-            'startup.sort_preferences_load',
-            () => LibrarySortPreferences.load(widget.dependencies.paths),
-          );
+    final store = startupData.store;
+    final thumbnailService = startupData.thumbnailService;
+    final playbackSettings = startupData.playbackSettings;
+    final sortPreferences = startupData.sortPreferences;
     if (!mounted) {
       await store.close();
       return;
@@ -1143,8 +1139,7 @@ class _LibraryPageState extends State<LibraryPage> {
         'ui.hydrated_state_prepare',
         applyHydratedState,
       );
-      unawaited(widget.dependencies.libraryDebugOptions.writeStartupDiagnostics(
-        fileSystem: _fileSystem,
+      unawaited(widget.applicationService.writeStartupDiagnostics(
         diagnostics: diagnostics,
         totalElapsed: startupWatch.elapsed,
         marker: 'hydrated_state_ready',
@@ -1160,9 +1155,7 @@ class _LibraryPageState extends State<LibraryPage> {
       if (diagnostics != null) {
         diagnostics.record(
             'ui.first_frame_build_and_layout', firstFrameWatch.elapsed);
-        unawaited(
-            widget.dependencies.libraryDebugOptions.writeStartupDiagnostics(
-          fileSystem: _fileSystem,
+        unawaited(widget.applicationService.writeStartupDiagnostics(
           diagnostics: diagnostics,
           totalElapsed: startupWatch.elapsed,
           marker: 'first_frame_ready',
@@ -1184,7 +1177,7 @@ class _LibraryPageState extends State<LibraryPage> {
     LibraryApplicationFacade store,
     ThumbnailService thumbnailService,
   ) {
-    final root = widget.dependencies.libraryDebugOptions.stressRoot;
+    final root = widget.applicationService.stressRoot;
     if (!kDebugMode || root == null || root.isEmpty) {
       return;
     }
@@ -1370,8 +1363,7 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null || result.probeCandidates.isEmpty) {
       return;
     }
-    final service = MediaDetailsService(
-      probeBackend: widget.dependencies.mediaProbeBackendFactory(),
+    final service = widget.applicationService.createMediaDetailsService(
       onUpdated: (item, details, fingerprint) async {
         final current = store.videos[TagRules.pathKey(item.path)];
         if (_store != store ||
@@ -1567,7 +1559,7 @@ class _LibraryPageState extends State<LibraryPage> {
         totalCount: currentState.totalCount,
       );
     });
-    unawaited(preferences.save(widget.dependencies.paths));
+    unawaited(widget.applicationService.saveSortPreferences(preferences));
   }
 
   /**
@@ -2899,7 +2891,7 @@ class _LibraryPageState extends State<LibraryPage> {
           thumbnailService: thumbnailService,
           playbackSettings: _playbackSettings,
           onPlaybackSettingsChanged: (settings) async {
-            await settings.save(widget.dependencies.paths);
+            await widget.applicationService.savePlaybackSettings(settings);
             if (mounted) {
               setState(() => _playbackSettings = settings);
             }
@@ -3304,9 +3296,8 @@ class _LibraryPageState extends State<LibraryPage> {
             onMediaDetailsUpdated: _updateMediaDetails,
             disposalCompleter: playerDisposed,
             fileSystem: _fileSystem,
-            playerBackendFactory: widget.dependencies.playerBackendFactory,
-            mediaProbeBackendFactory:
-                widget.dependencies.mediaProbeBackendFactory,
+            playerBackendFactory: widget.playerBackendFactory,
+            mediaProbeBackendFactory: widget.mediaProbeBackendFactory,
           ),
         ),
       );
@@ -3346,8 +3337,7 @@ class _LibraryPageState extends State<LibraryPage> {
     VideoItem item,
     LibraryApplicationFacade store,
   ) async {
-    final service = MediaDetailsService(
-      probeBackend: widget.dependencies.mediaProbeBackendFactory(),
+    final service = widget.applicationService.createMediaDetailsService(
       onUpdated: (updated, details, fingerprint) async {
         final current = store.videos[TagRules.pathKey(updated.path)];
         if (_store != store ||

@@ -1,7 +1,14 @@
 # CHAT_1_ARCHITECTURE.md
 
-当前版本：`0.5.27`
-状态：已完成全部 Dart library 边界迁移
+当前版本：`0.5.28`
+状态：已完成页面依赖收窄并接入 macOS/Linux runner
+
+## 2026-07-14 页面应用服务与跨平台 runner
+
+- `LibraryPage` 不再持有完整 `LocalTagPlayerDependencies`，只消费页面用例服务、文件系统 contract 和转交播放器路由所需 factory。
+- 组合根集中创建 `LocalLibraryPageApplicationService`，拥有 AppPaths、Repository loader、FFmpeg、媒体探测 factory 与 debug 配置。
+- macOS/Linux Flutter runner 与 CI build/start smoke 已接入；平台 adapter 选择在对应宿主 contract test 中验证。
+- SQLite schema/写入、FilterQuery/TagQueryService、stable identity、filtered queue 与缓存队列继续由 Dart 单写和编排。
 
 ## 2026-07-14 全量 library 边界收口
 

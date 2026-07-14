@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/tag_rules.dart';
+import '../../models/library_sort.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import 'library_sort_control.dart';

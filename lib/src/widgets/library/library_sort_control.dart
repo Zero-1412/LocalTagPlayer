@@ -1,93 +1,12 @@
-import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../core/app_paths.dart';
+import '../../models/library_sort.dart';
 import '../app_theme_tokens.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
-
-/**
- * 媒体库顶部排序字段。
- *
- * 只描述 UI 可选字段；真正排序仍由 LibraryPage 根据当前视频集合执行，避免控件复制筛选或排序业务。
- */
-enum SortMode { name, recent, type, size, folder, added }
-
-/**
- * 媒体库顶部排序方向。
- */
-enum SortDirection { descending, ascending }
-
-/**
- * 媒体库排序偏好。
- *
- * 该偏好只影响媒体库、标签筛选、本地收藏和最近播放结果的展示顺序；
- * 不写入 SQLite，也不改变 `FilterQuery` 的筛选语义。
- */
-class LibrarySortPreferences {
-  const LibrarySortPreferences({
-    this.mode = SortMode.recent,
-    this.direction = SortDirection.descending,
-  });
-
-  /** 当前排序字段。 */
-  final SortMode mode;
-
-  /** 当前排序方向。 */
-  final SortDirection direction;
-
-  /** 从 JSON 恢复排序偏好，未知值回退到默认排序。 */
-  factory LibrarySortPreferences.fromJson(Map<String, Object?> json) {
-    final modeName = json['mode']?.toString();
-    final directionName = json['direction']?.toString();
-    return LibrarySortPreferences(
-      mode: SortMode.values.firstWhere(
-        (value) => value.name == modeName,
-        orElse: () => SortMode.recent,
-      ),
-      direction: SortDirection.values.firstWhere(
-        (value) => value.name == directionName,
-        orElse: () => SortDirection.descending,
-      ),
-    );
-  }
-
-  /** 转成可持久化 JSON。 */
-  Map<String, Object?> toJson() => {
-        'mode': mode.name,
-        'direction': direction.name,
-      };
-
-  /** 读取上次媒体库排序偏好。 */
-  static Future<LibrarySortPreferences> load(AppPaths paths) async {
-    try {
-      final file = await paths.librarySortPreferencesFile();
-      if (!await file.exists()) {
-        return const LibrarySortPreferences();
-      }
-      final decoded = jsonDecode(await file.readAsString());
-      if (decoded is Map<String, Object?>) {
-        return LibrarySortPreferences.fromJson(decoded);
-      }
-      if (decoded is Map) {
-        return LibrarySortPreferences.fromJson(decoded.cast<String, Object?>());
-      }
-    } catch (_) {
-      return const LibrarySortPreferences();
-    }
-    return const LibrarySortPreferences();
-  }
-
-  /** 保存当前媒体库排序偏好。 */
-  Future<void> save(AppPaths paths) async {
-    final file = await paths.librarySortPreferencesFile();
-    await file.writeAsString(jsonEncode(toJson()), flush: true);
-  }
-}
 
 /**
  * 顶部排序控件。

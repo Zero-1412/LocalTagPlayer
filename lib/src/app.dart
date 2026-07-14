@@ -15,6 +15,8 @@ import 'platform/desktop_file_system_adapter.dart';
 import 'platform/database_provider.dart';
 import 'platform/platform_interfaces.dart';
 import 'services/library/library_application_facade.dart';
+import 'services/library/library_load_diagnostics.dart';
+import 'services/library/library_page_application_service.dart';
 import 'services/library/library_stress_control.dart';
 import 'services/library/library_scan_backend.dart';
 import 'services/library/library_store.dart';
@@ -34,6 +36,7 @@ export 'core/playback_settings.dart';
 export 'models/external_media_tools_state.dart';
 export 'models/media_details.dart';
 export 'models/library_scan_models.dart';
+export 'models/library_sort.dart';
 export 'models/platform_models.dart';
 export 'models/video_item.dart';
 export 'platform/desktop_file_system_adapter.dart';
@@ -46,6 +49,7 @@ export 'services/library/library_card_ui_diagnostics.dart';
 export 'services/library/library_collection_rules.dart';
 export 'services/library/library_count_refresh_coordinator.dart';
 export 'services/library/library_load_diagnostics.dart';
+export 'services/library/library_page_application_service.dart';
 export 'services/library/library_scan_ui_diagnostics.dart';
 export 'services/library/library_stress_control.dart';
 export 'services/library/library_metadata_persistence.dart';
@@ -129,40 +133,53 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies() {
     factory: databaseFactoryFfi,
   );
   final ffmpegBackend = DesktopFFmpegBackend();
+  final fileSystem = Platform.isMacOS
+      ? const MacOsFileSystemAdapter()
+      : Platform.isLinux
+          ? const LinuxFileSystemAdapter()
+          : const DesktopFileSystemAdapter();
+  MediaProbeBackend mediaProbeBackendFactory() =>
+      createMediaProbeBackend(ffmpegBackend);
+  final libraryDebugOptions = LibraryDebugOptions(
+    stressRoot: kDebugMode
+        ? Platform.environment['LOCAL_TAG_PLAYER_LIBRARY_STRESS_ROOT']?.trim()
+        : null,
+    startupDiagnosticsPath: kDebugMode
+        ? p.join(
+            Directory.systemTemp.path,
+            'local_tag_player_startup_diagnostics.json',
+          )
+        : null,
+  );
+  Future<LibraryApplicationFacade> libraryLoader({
+    LibraryLoadDiagnostics? diagnostics,
+  }) async {
+    final repository = await LibraryStore.load(
+      diagnostics: diagnostics,
+      scanBackend: createLibraryScanBackend(),
+      databaseProvider: databaseProvider,
+    );
+    return LibraryApplicationFacade(
+      libraryRepository: repository,
+      tagRepository: repository,
+      cacheRepository: repository,
+      playbackRepository: repository,
+    );
+  }
+
   return LocalTagPlayerDependencies(
-    fileSystem: Platform.isMacOS
-        ? const MacOsFileSystemAdapter()
-        : Platform.isLinux
-            ? const LinuxFileSystemAdapter()
-            : const DesktopFileSystemAdapter(),
+    fileSystem: fileSystem,
     paths: paths,
-    libraryApplicationFactory: ({diagnostics}) async {
-      final repository = await LibraryStore.load(
-        diagnostics: diagnostics,
-        scanBackend: createLibraryScanBackend(),
-        databaseProvider: databaseProvider,
-      );
-      return LibraryApplicationFacade(
-        libraryRepository: repository,
-        tagRepository: repository,
-        cacheRepository: repository,
-        playbackRepository: repository,
-      );
-    },
-    playerBackendFactory: _createPlayerBackend,
-    mediaProbeBackendFactory: () => createMediaProbeBackend(ffmpegBackend),
-    ffmpegBackend: ffmpegBackend,
-    libraryDebugOptions: LibraryDebugOptions(
-      stressRoot: kDebugMode
-          ? Platform.environment['LOCAL_TAG_PLAYER_LIBRARY_STRESS_ROOT']?.trim()
-          : null,
-      startupDiagnosticsPath: kDebugMode
-          ? p.join(
-              Directory.systemTemp.path,
-              'local_tag_player_startup_diagnostics.json',
-            )
-          : null,
+    libraryPageApplicationService: LocalLibraryPageApplicationService(
+      paths: paths,
+      fileSystem: fileSystem,
+      libraryLoader: libraryLoader,
+      ffmpegBackend: ffmpegBackend,
+      mediaProbeBackendFactory: mediaProbeBackendFactory,
+      debugOptions: libraryDebugOptions,
     ),
+    playerBackendFactory: _createPlayerBackend,
+    mediaProbeBackendFactory: mediaProbeBackendFactory,
   );
 }
 
@@ -341,7 +358,12 @@ class LocalTagPlayerApp extends StatelessWidget {
           ),
         ),
       ),
-      home: LibraryPage(dependencies: dependencies),
+      home: LibraryPage(
+        applicationService: dependencies.libraryPageApplicationService,
+        fileSystem: dependencies.fileSystem,
+        playerBackendFactory: dependencies.playerBackendFactory,
+        mediaProbeBackendFactory: dependencies.mediaProbeBackendFactory,
+      ),
     );
   }
 }

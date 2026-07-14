@@ -52,4 +52,41 @@ void main() {
     // 删除不存在文件必须保持幂等，避免 UI 重复确认触发竞态异常。
     await adapter.deleteFile(sourcePath);
   });
+
+  for (final entry in <(String, FileSystemAdapter)>[
+    ('macOS', const MacOsFileSystemAdapter()),
+    ('Linux', const LinuxFileSystemAdapter()),
+  ]) {
+    test('${entry.$1} adapter preserves the shared file operation contract',
+        () async {
+      final root = await Directory.systemTemp.createTemp(
+        'ltp_${entry.$1.toLowerCase()}_adapter_',
+      );
+      addTearDown(() async {
+        if (await root.exists()) {
+          await root.delete(recursive: true);
+        }
+      });
+      final sourcePath = entry.$2.joinPath(<String>[
+        root.path,
+        'nested',
+        'clip.mp4',
+      ]);
+
+      await entry.$2.writeBytes(
+        sourcePath,
+        Uint8List.fromList(const <int>[1, 2, 3]),
+        flush: true,
+      );
+
+      expect(await entry.$2.fileExists(sourcePath), isTrue);
+      expect((await entry.$2.statFile(sourcePath))?.size, 3);
+      expect(
+        await entry.$2.listFiles(root.path, recursive: true),
+        isNotEmpty,
+      );
+      await entry.$2.deleteFile(sourcePath);
+      expect(await entry.$2.fileExists(sourcePath), isFalse);
+    });
+  }
 }

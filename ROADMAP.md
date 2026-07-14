@@ -1,5 +1,11 @@
 # ROADMAP.md
 
+## 2026-07-14 页面依赖收窄与跨平台 runner
+
+- `LibraryPage` 已从完整组合根依赖图收窄为页面级应用服务、文件系统 contract 和播放器路由所需 factory；路径、FFmpeg、Repository 及 debug 配置不再暴露给页面。
+- macOS/Linux runner、平台 media_kit 库与 GitHub Actions build/start smoke 已接入；对应宿主会执行 adapter contract、debug build 和启动存活检查。
+- SQLite schema/写入、标签筛选、stable identity、filtered queue 与缓存队列继续由 Dart 业务层统一拥有。
+
 ## 2026-07-14 独立 Dart library 迁移完成
 
 - 57 个 `part` / `part of` 已全部清零；Store 私有协作、播放器与缩略图实现、应用服务、页面和 widgets 均使用显式 import。

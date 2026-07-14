@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-14 · 页面级应用服务与 macOS/Linux runner
+
+- 新增 `LibraryPageApplicationService` 与本地实现，统一加载 facade/缩略图/偏好、创建媒体详情服务并承接 debug 诊断；`LibraryPage` 不再接收完整组合根依赖图。
+- 排序偏好拆为独立领域展示模型，实际文件读写由页面应用服务拥有；AppPaths、FFmpeg backend 与 Repository loader 继续只在 bootstrap 组合根选择。
+- 生成 macOS/Linux Flutter runner，接入平台 media_kit 库并关闭 macOS App Sandbox 以允许用户选择并读取本地媒体。
+- 新增跨平台 GitHub Actions：分别运行 adapter/架构 contract、静态分析、debug build 与启动存活 smoke；SQLite 仍由 Dart Repository 单写。
+- 本地 `flutter analyze`、99 项测试和 Windows debug build 通过；真实窗口完成“原神 → 雷神”173 项筛选回归，未发现布局或状态反馈退化。
+
 ## 2026-07-14 · Dart part 全量清零与真实 library 边界
 
 - 按 Store 私有 metadata/tag/scan 协作、播放器/缩略图实现、应用服务、页面/widgets 的顺序迁移剩余 35 个 `part`；项目 57 个 `part` 已全部清零。

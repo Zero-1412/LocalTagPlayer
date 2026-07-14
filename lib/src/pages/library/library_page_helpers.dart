@@ -5,8 +5,8 @@ import 'dart:math' as math;
 import 'package:path/path.dart' as p;
 
 import '../../core/tag_rules.dart';
+import '../../models/library_sort.dart';
 import '../../models/video_item.dart';
-import '../../widgets/library/library_sort_control.dart';
 
 int compareLibraryVideosForSort(
   VideoItem a,
