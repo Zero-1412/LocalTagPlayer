@@ -10,9 +10,9 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.26` 已把路径、DatabaseProvider、平台契约、领域模型和第二批应用服务迁为独立 Dart library。组合根选择文件系统、数据库、FFmpeg、扫描、媒体探测和播放器实现；SQLite schema、标签筛选与 stable identity 继续由 Dart 拥有。
+`Architecture Baseline 0.5.27` 已完成全部 Dart `part` 迁移。Store 私有持久化协作、播放器与缩略图实现、应用服务、页面和 widgets 现在都是具有显式 import 的独立 library；组合根依赖图也有单独 contract。
 
-当前仍有 35 个 `part`，集中在 Store 私有 SQLite 协作、播放器实现和页面组件。必须先公开最小 contract 再迁页面，禁止通过重新导出整个 `app.dart` 伪造边界。
+SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
 当前应用是 Flutter Windows 单体桌面应用，入口保留在：
 
@@ -32,16 +32,18 @@ lib/src/pages/library|player|tags
 lib/src/widgets/library
 ```
 
-一级目录表达技术模块，文件较多的模块再按业务职责进入二级目录。`FileSystemAdapter`、`DesktopFileSystemAdapter`、`LayoutSize` 与 `MediaDetails` 已迁移为独立 import 模块；其余页面、业务服务和 Repository 仍采用 Dart `part` 机制。后续按“模型与契约 → Repository/平台实现 → 应用服务 → 页面”的方向继续迁移，避免一次性破坏私有符号和初始化顺序。
+一级目录表达技术模块，文件较多的模块再按业务职责进入二级目录。所有 Dart 源文件均已使用独立 import/export 边界；跨文件协作只通过公开 contract、facade 或明确的 UI 组合类型完成。
 
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.25`
+已完成基线：`Architecture Baseline 0.5.27`
 
-当前推进中：让页面只依赖应用门面与平台接口，并继续把剩余 `part` 模块迁移为独立 import；不扩大 SQLite 双写边界或改变业务语义。
+当前推进中：继续缩小 facade 与页面依赖面，并在 macOS/Linux 宿主补齐原生构建验证；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.27`：清零全部 Dart `part` / `part of`；按 Store 私有协作、播放器/缩略图实现、应用服务、页面/widgets 的顺序建立独立 library 边界。新增组合根依赖 contract 与零 `part` 架构测试；schema、FilterQuery/TagQueryService、filtered queue、缓存队列和用户数据语义不变。
 
 - `0.5.25`：落地 `DesktopFileSystemAdapter`，目录选择、异步目录枚举、文件 stat/写入/删除和文件管理器定位统一经过平台边界；`LibraryStore` 成为真实 `LibraryRepository` 实现，页面改依赖 `LibraryApplicationFacade`。播放器、媒体探测、扫描与 FFmpeg 具体实现由 bootstrap 组合根选择。首批把文件系统契约/实现、`LayoutSize`、`MediaDetails` 从 `part` 迁移为独立 import；SQLite、标签筛选、stable identity 和 filtered queue 继续由 Dart 单写与编排。
 
@@ -116,7 +118,7 @@ lib/src/widgets/library
 - `platform_interfaces.dart` 定义文件系统、播放器、FFmpeg/FFprobe、数据库 Provider 的跨平台接口边界。
 - `layout_size.dart` 定义 `compact`、`medium`、`expanded` 共享布局语义，避免后续页面各自写死宽度规则。
 
-当前仍使用 Dart `part`，这些 core 类是后续抽平台接口和独立 import 模块的过渡基建。
+core 类已使用独立 Dart library，并作为平台接口、Repository 与页面依赖的稳定基础。
 
 ### 仓储接口
 
@@ -337,9 +339,9 @@ lib/
     widgets/
       library_widgets.dart
 ```
-下一阶段建议从 Dart part 机械拆分继续演进：
+下一阶段建议在现有独立 library 边界上继续演进：
 
-- 继续把 `TagRules` 从 part 过渡为独立 import 模块，并保护目录派生标签与用户手动标签的边界。
+- 继续保护 `TagRules` 的独立 import 边界，以及目录派生标签与用户手动标签的来源隔离。
 - 抽出 `LibraryRepository`，隔离 SQLite schema、查询和写入。
 - 继续收敛 `LibraryStore` 剩余职责，在测试保护下再拆 tag usage 查询、schema/default groups 初始化和 legacy JSON 导入。
 - 抽出 `MediaTools`，隔离 Windows FFmpeg/FFprobe 与移动端实现。

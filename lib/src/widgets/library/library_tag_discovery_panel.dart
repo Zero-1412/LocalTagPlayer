@@ -1,4 +1,12 @@
-part of '../../app.dart';
+import 'package:flutter/material.dart';
+
+import '../../core/tag_rules.dart';
+import '../../models/platform_models.dart';
+import '../app_theme_tokens.dart';
+import 'library_smoke_keys.dart';
+import 'library_widgets.dart';
+
+// ignore_for_file: use_key_in_widget_constructors
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -6,8 +14,8 @@ enum _TagDiscoveryMode { primary, secondary }
 
 enum _PrimaryTagSortMode { countDesc, nameAsc, frequentDesc }
 
-class _TagDiscoveryZone extends StatefulWidget {
-  const _TagDiscoveryZone({
+class TagDiscoveryZone extends StatefulWidget {
+  const TagDiscoveryZone({
     required this.tagGroups,
     required this.resultCounts,
     required this.favoriteTags,
@@ -56,10 +64,10 @@ class _TagDiscoveryZone extends StatefulWidget {
   final double? panelWidth;
 
   @override
-  State<_TagDiscoveryZone> createState() => _TagDiscoveryZoneState();
+  State<TagDiscoveryZone> createState() => TagDiscoveryZoneState();
 }
 
-class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
+class TagDiscoveryZoneState extends State<TagDiscoveryZone> {
   late final TextEditingController _tagSearchController =
       TextEditingController();
 
@@ -122,7 +130,7 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
       margin: EdgeInsets.fromLTRB(widget.dense ? 16 : 20, 16, 24, 24),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: _appPanel,
+        color: appPanel,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xffe6ecf5)),
         boxShadow: [
@@ -139,13 +147,13 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
           Row(
             children: [
               const Icon(Icons.filter_alt_outlined,
-                  color: _appAccentViolet, size: 24),
+                  color: appAccentViolet, size: 24),
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
                   '\u6807\u7b7e\u7b5b\u9009',
                   style: TextStyle(
-                    color: _appText,
+                    color: appText,
                     fontSize: 19,
                     fontWeight: FontWeight.w800,
                   ),
@@ -205,7 +213,7 @@ class _TagDiscoveryZoneState extends State<_TagDiscoveryZone> {
           const SizedBox(height: 18),
           Expanded(
             child: ScrollConfiguration(
-              behavior: const _DesktopDragScrollBehavior(),
+              behavior: const DesktopDragScrollBehavior(),
               child: ListView(
                 controller: _panelScrollController,
                 children: [
@@ -299,7 +307,7 @@ class _TagPanelTabButton extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? _appAccentViolet : _appTextMuted,
+              color: selected ? appAccentViolet : appTextMuted,
               fontSize: 13,
               fontWeight: FontWeight.w800,
             ),
@@ -330,7 +338,7 @@ class _SmartFilterContextCard extends StatelessWidget {
         border: Border.all(color: const Color(0xffc9c2ff)),
         boxShadow: [
           BoxShadow(
-            color: _appAccentViolet.withAlpha(18),
+            color: appAccentViolet.withAlpha(18),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -342,12 +350,12 @@ class _SmartFilterContextCard extends StatelessWidget {
           const Row(
             children: [
               Icon(Icons.account_tree_outlined,
-                  size: 16, color: _appAccentViolet),
+                  size: 16, color: appAccentViolet),
               SizedBox(width: 6),
               Text(
                 '\u5f53\u524d\u7b5b\u9009\uff08\u0041\u004e\u0044\uff09',
                 style: TextStyle(
-                  color: _appAccentViolet,
+                  color: appAccentViolet,
                   fontSize: 13,
                   fontWeight: FontWeight.w900,
                 ),
@@ -365,7 +373,7 @@ class _SmartFilterContextCard extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 104),
                   padding: const EdgeInsets.symmetric(horizontal: 7),
                   decoration: BoxDecoration(
-                    color: _appPanel,
+                    color: appPanel,
                     borderRadius: BorderRadius.circular(7),
                     border: Border.all(color: const Color(0xffd8d4ff)),
                   ),
@@ -373,7 +381,7 @@ class _SmartFilterContextCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(Icons.sell_outlined,
-                          size: 11, color: _appAccentViolet),
+                          size: 11, color: appAccentViolet),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
@@ -381,7 +389,7 @@ class _SmartFilterContextCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: _appText,
+                            color: appText,
                             fontSize: 10.5,
                             fontWeight: FontWeight.w800,
                           ),
@@ -413,23 +421,23 @@ class _ActivePathBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xffeef4f3),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _appBorder),
+        border: Border.all(color: appBorder),
       ),
       child: Wrap(
         spacing: 6,
         runSpacing: 6,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          const Icon(Icons.route_outlined, size: 18, color: _appAccentStrong),
+          const Icon(Icons.route_outlined, size: 18, color: appAccentStrong),
           for (var index = 0; index < effectiveItems.length; index++) ...[
             if (index > 0)
-              const Icon(Icons.chevron_right, size: 16, color: _appTextMuted),
+              const Icon(Icons.chevron_right, size: 16, color: appTextMuted),
             Text(
               effectiveItems[index],
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: index == effectiveItems.length - 1
-                        ? _appAccentStrong
-                        : _appTextMuted,
+                        ? appAccentStrong
+                        : appTextMuted,
                     fontWeight: FontWeight.w800,
                   ),
             ),
@@ -491,7 +499,7 @@ class _PopularTagRail extends StatelessWidget {
         Text(
           '\u5feb\u6377',
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: _appTextMuted,
+                color: appTextMuted,
                 fontWeight: FontWeight.w900,
               ),
         ),
@@ -515,7 +523,7 @@ class _PopularTagRail extends StatelessWidget {
         for (final tag in groupTags)
           _TagFilterChip(
             tag: tag,
-            groupColor: _groupColor(tag.groupId ?? 'manual'),
+            groupColor: libraryGroupColor(tag.groupId ?? 'manual'),
             count: resultCounts[tag.id] ?? 0,
             selected: selectedGroupTagIds[tag.groupId ?? 'manual']
                     ?.contains(tag.id) ??
@@ -615,7 +623,7 @@ class _SecondaryTagPill extends StatelessWidget {
         : selected
             ? const Color(0xffd2caff)
             : const Color(0xffe6ecf5);
-    final textColor = excluded ? const Color(0xffb42318) : _appAccentViolet;
+    final textColor = excluded ? const Color(0xffb42318) : appAccentViolet;
     return Tooltip(
       message:
           '\u70b9\u51fb\u52a0\u5165\u7b5b\u9009\uff0c\u957f\u6309\u8bbe\u4e3a NOT \u6392\u9664',
@@ -742,7 +750,7 @@ class _TagFilterChip extends StatelessWidget {
       button: true,
       selected: selected,
       label: semanticLabel ?? LibrarySmokeSemantics.genericTag(tag),
-      value: _formatCount(count),
+      value: formatCount(count),
       child: GestureDetector(
         onLongPress: onExcludeToggle,
         child: Material(
@@ -784,9 +792,9 @@ class _TagFilterChip extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _formatCount(count),
+                    formatCount(count),
                     style: const TextStyle(
-                      color: _appTextMuted,
+                      color: appTextMuted,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -874,7 +882,7 @@ class _DiscoveryGroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groupColor = _groupColor(group.id);
+    final groupColor = libraryGroupColor(group.id);
     final rankedItems = group.items.toList()
       ..sort((a, b) {
         switch (primarySortMode) {
@@ -962,7 +970,7 @@ class _DiscoveryGroupCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xfffbfcff),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _appBorder),
+        border: Border.all(color: appBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -984,7 +992,7 @@ class _DiscoveryGroupCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: _appText,
+                        color: appText,
                         fontWeight: FontWeight.w900,
                       ),
                 ),
@@ -992,7 +1000,7 @@ class _DiscoveryGroupCard extends StatelessWidget {
               Text(
                 '${group.items.length}',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: _appTextMuted,
+                      color: appTextMuted,
                       fontWeight: FontWeight.w900,
                     ),
               ),
@@ -1097,7 +1105,7 @@ class _PrimaryAccordionRow extends StatelessWidget {
             button: true,
             selected: selected,
             label: LibrarySmokeSemantics.primaryTag(tag),
-            value: _formatCount(count),
+            value: formatCount(count),
             child: GestureDetector(
               key: LibrarySmokeKeys.primaryHeader(tag.id),
               behavior: HitTestBehavior.opaque,
@@ -1107,23 +1115,22 @@ class _PrimaryAccordionRow extends StatelessWidget {
                 child: Row(
                   children: [
                     Icon(Icons.expand_more_rounded,
-                        size: 20,
-                        color: selected ? _appAccentViolet : _appText),
+                        size: 20, color: selected ? appAccentViolet : appText),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         tag.displayName ?? tag.name,
                         style: const TextStyle(
-                          color: _appText,
+                          color: appText,
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
                     Text(
-                      _formatCount(count),
+                      formatCount(count),
                       style: const TextStyle(
-                        color: _appTextMuted,
+                        color: appTextMuted,
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                       ),
@@ -1234,7 +1241,7 @@ class _ExpandAllChildrenButton extends StatelessWidget {
                 ? '\u6536\u8d77\uff08$childTagCount\uff09 \u2303'
                 : '\u5c55\u5f00\u5168\u90e8\uff08$childTagCount\uff09 \u2304',
             style: const TextStyle(
-              color: _appTextMuted,
+              color: appTextMuted,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -1266,7 +1273,7 @@ class _CollapsedPrimaryRow extends StatelessWidget {
         button: true,
         selected: selected,
         label: LibrarySmokeSemantics.primaryTag(tag),
-        value: _formatCount(count),
+        value: formatCount(count),
         child: Material(
           key: LibrarySmokeKeys.primaryRow(tag.id),
           color: selected ? const Color(0xfff5f3ff) : const Color(0xfffbfcff),
@@ -1288,23 +1295,23 @@ class _CollapsedPrimaryRow extends StatelessWidget {
               child: Row(
                 children: [
                   const Icon(Icons.chevron_right_rounded,
-                      size: 20, color: _appText),
+                      size: 20, color: appText),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       tag.displayName ?? tag.name,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: _appText,
+                        color: appText,
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
                   Text(
-                    _formatCount(count),
+                    formatCount(count),
                     style: const TextStyle(
-                      color: _appTextMuted,
+                      color: appTextMuted,
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1350,7 +1357,7 @@ class _ShowMorePrimaryButton extends StatelessWidget {
               : '\u66f4\u591a\u4e00\u7ea7\u6807\u7b7e\uff08$remainingCount\uff09',
         ),
         style: OutlinedButton.styleFrom(
-          foregroundColor: _appAccentViolet,
+          foregroundColor: appAccentViolet,
           side: const BorderSide(color: Color(0xffd8d4ff)),
           backgroundColor: const Color(0xfff8f7ff),
           visualDensity: VisualDensity.compact,
@@ -1361,32 +1368,13 @@ class _ShowMorePrimaryButton extends StatelessWidget {
   }
 }
 
-@visibleForTesting
-bool referenceTopBarShouldCollapseActions(LayoutSize layoutSize) {
-  return layoutSize != LayoutSize.expanded;
-}
-
-@visibleForTesting
-bool referenceTopBarSearchShouldFillRow(
-  LayoutSize layoutSize,
-  double rowWidth,
-) {
-  /**
-   * expanded 主界面顶部栏要把搜索框扩展到按钮左侧剩余空间；
-   * medium / compact 或窄行宽下也继续使用弹性宽度，避免右侧动作按钮溢出。
-   */
-  return layoutSize == LayoutSize.expanded ||
-      layoutSize == LayoutSize.compact ||
-      rowWidth < 1040;
-}
-
 /**
  * 右侧标签筛选面板收起后的恢复入口。
  *
  * 窄条需要保留按钮语义和稳定 key，真实窗口 smoke test 与辅助技术都依赖该入口恢复右侧标签发现闭环。
  */
-class _CollapsedTagDiscoveryRail extends StatelessWidget {
-  const _CollapsedTagDiscoveryRail({required this.onExpand});
+class CollapsedTagDiscoveryRail extends StatelessWidget {
+  const CollapsedTagDiscoveryRail({required this.onExpand});
 
   /**
    * 恢复右侧标签筛选面板的回调。
@@ -1407,10 +1395,10 @@ class _CollapsedTagDiscoveryRail extends StatelessWidget {
           width: 58,
           margin: const EdgeInsets.fromLTRB(10, 16, 24, 24),
           decoration: BoxDecoration(
-            color: _appPanel,
+            color: appPanel,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: const Color(0xffe6ecf5)),
-            boxShadow: _appSoftShadow,
+            boxShadow: appSoftShadow,
           ),
           child: Material(
             color: Colors.transparent,
@@ -1422,14 +1410,14 @@ class _CollapsedTagDiscoveryRail extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.filter_alt_outlined, color: _appAccentViolet),
+                    Icon(Icons.filter_alt_outlined, color: appAccentViolet),
                     SizedBox(height: 10),
                     RotatedBox(
                       quarterTurns: 1,
                       child: Text(
                         '\u6807\u7b7e\u7b5b\u9009',
                         style: TextStyle(
-                          color: _appText,
+                          color: appText,
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
                         ),
@@ -1456,7 +1444,7 @@ Widget collapsedTagDiscoveryRailSmokeHarness({
   return MaterialApp(
     home: Scaffold(
       body: Center(
-        child: _CollapsedTagDiscoveryRail(
+        child: CollapsedTagDiscoveryRail(
           onExpand: onExpand,
         ),
       ),

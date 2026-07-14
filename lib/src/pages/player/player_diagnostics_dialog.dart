@@ -1,14 +1,21 @@
-part of '../../app.dart';
+import 'dart:async';
+import 'dart:math' as math;
 
-// ignore_for_file: slash_for_doc_comments
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'player_dialog_content.dart';
+import 'player_page.dart';
+
+// ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
 
 /**
  * 播放诊断采样结果。
  *
  * 该快照保存一次采样中的 mpv 状态、缓存状态和推断字段，供诊断弹窗比较连续样本。
  */
-class _PlaybackDiagnosticsSnapshot {
-  const _PlaybackDiagnosticsSnapshot({
+class PlaybackDiagnosticsSnapshot {
+  const PlaybackDiagnosticsSnapshot({
     required this.lines,
     required this.sampledAt,
     required this.wasPlaying,
@@ -107,24 +114,24 @@ class _PlaybackDiagnosticsSnapshot {
 /**
  * 播放诊断弹窗。
  *
- * 弹窗只负责定时采样与展示，不修改播放状态；采样能力仍由 `_PlayerPageState`
+ * 弹窗只负责定时采样与展示，不修改播放状态；采样能力仍由 `PlayerPageState`
  * 提供，以便复用当前播放器实例和缓存服务。
  */
-class _PlaybackDiagnosticsDialog extends StatefulWidget {
-  const _PlaybackDiagnosticsDialog({
+class PlaybackDiagnosticsDialog extends StatefulWidget {
+  const PlaybackDiagnosticsDialog({
     required this.playerPage,
     required this.title,
   });
 
   /** 拥有播放器实例的页面状态。 */
-  final _PlayerPageState playerPage;
+  final PlayerPageState playerPage;
 
   /** 弹窗标题。 */
   final String title;
 
   @override
-  State<_PlaybackDiagnosticsDialog> createState() =>
-      _PlaybackDiagnosticsDialogState();
+  State<PlaybackDiagnosticsDialog> createState() =>
+      PlaybackDiagnosticsDialogState();
 }
 
 /**
@@ -132,8 +139,7 @@ class _PlaybackDiagnosticsDialog extends StatefulWidget {
  *
  * 负责在播放中持续刷新采样，暂停时停止定时器，避免弹窗关闭后保留异步回调。
  */
-class _PlaybackDiagnosticsDialogState
-    extends State<_PlaybackDiagnosticsDialog> {
+class PlaybackDiagnosticsDialogState extends State<PlaybackDiagnosticsDialog> {
   /** 下一次刷新定时器，弹窗销毁时必须取消。 */
   Timer? _nextRefreshTimer;
 
@@ -141,10 +147,10 @@ class _PlaybackDiagnosticsDialogState
   StreamSubscription<bool>? _playingSubscription;
 
   /** 当前诊断快照。 */
-  _PlaybackDiagnosticsSnapshot? _snapshot;
+  PlaybackDiagnosticsSnapshot? _snapshot;
 
   /** 上一次诊断快照，用于计算丢帧增量。 */
-  _PlaybackDiagnosticsSnapshot? _previousSnapshot;
+  PlaybackDiagnosticsSnapshot? _previousSnapshot;
 
   /** 当前弹窗生命周期内的连续采样次数。 */
   var _sampleCount = 0;
@@ -162,7 +168,7 @@ class _PlaybackDiagnosticsDialogState
   void initState() {
     super.initState();
     _playingSubscription =
-        widget.playerPage._playerBackend.playingChanges.listen((playing) {
+        widget.playerPage.playerBackend.playingChanges.listen((playing) {
       if (playing && !_isSampling) {
         _scheduleRefresh(Duration.zero);
       } else if (!playing) {
@@ -203,7 +209,7 @@ class _PlaybackDiagnosticsDialogState
       _error = null;
     });
     try {
-      final snapshot = await widget.playerPage._buildDiagnosticsSnapshot();
+      final snapshot = await widget.playerPage.buildDiagnosticsSnapshot();
       if (!mounted) {
         return;
       }
@@ -342,7 +348,7 @@ class _PlaybackDiagnosticsDialogState
   /**
    * 复制当前诊断摘要。
    *
-   * `_buildDiagnosticsSnapshot` 不写入本地路径，按钮文案也明确这一隐私边界；
+   * `buildDiagnosticsSnapshot` 不写入本地路径，按钮文案也明确这一隐私边界；
    * 文件名用于定位当前媒体问题，但不会携带目录结构。
    */
   Future<void> _copySummary(List<String> lines) async {
@@ -384,7 +390,7 @@ class _PlaybackDiagnosticsDialogState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _PlayerDialogSectionCard(
+              PlayerDialogSectionCard(
                 title: '实时状态',
                 icon: Icons.speed_rounded,
                 trailing: _DiagnosticsStatusBadge(
@@ -400,17 +406,17 @@ class _PlaybackDiagnosticsDialogState
                 ),
                 child: Column(
                   children: [
-                    _PlayerDialogInfoRow(
+                    PlayerDialogInfoRow(
                       label: '连续采样',
                       value: '$_sampleCount 次',
                     ),
-                    _PlayerDialogInfoRow(
+                    PlayerDialogInfoRow(
                       label: '播放推进',
                       value: snapshot == null
                           ? '等待首个样本'
                           : '${snapshot.progressMs} ms / 期望 ${snapshot.expectedMs} ms',
                     ),
-                    _PlayerDialogInfoRow(
+                    PlayerDialogInfoRow(
                       label: '缓冲状态',
                       value: snapshot == null
                           ? '读取中'
@@ -418,7 +424,7 @@ class _PlaybackDiagnosticsDialogState
                               ? '正在缓冲'
                               : '正常',
                     ),
-                    _PlayerDialogInfoRow(
+                    PlayerDialogInfoRow(
                       label: '最近采样',
                       value: snapshot == null
                           ? '—'
@@ -428,7 +434,7 @@ class _PlaybackDiagnosticsDialogState
                 ),
               ),
               const SizedBox(height: 12),
-              _PlayerDialogSectionCard(
+              PlayerDialogSectionCard(
                 title: '分析结论',
                 icon: Icons.fact_check_outlined,
                 child: SelectionArea(
@@ -442,7 +448,7 @@ class _PlaybackDiagnosticsDialogState
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                _PlayerDialogSectionCard(
+                PlayerDialogSectionCard(
                   title: '采样错误',
                   icon: Icons.warning_amber_rounded,
                   child: SelectableText(_error!),
@@ -450,7 +456,7 @@ class _PlaybackDiagnosticsDialogState
               ],
               if (_snapshot != null) ...[
                 const SizedBox(height: 12),
-                _PlayerDialogSectionCard(
+                PlayerDialogSectionCard(
                   title: '详细指标',
                   icon: Icons.data_object_rounded,
                   child: SelectionArea(

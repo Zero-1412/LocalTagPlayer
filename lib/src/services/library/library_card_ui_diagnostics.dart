@@ -1,4 +1,10 @@
-part of '../../app.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

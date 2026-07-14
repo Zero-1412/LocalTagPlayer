@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.26` 已完成。
+架构版本状态：`Architecture Baseline 0.5.27` 已完成。
 
 最近一次验证：
 
@@ -17,21 +17,26 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 57 个 Dart `part` 已全部迁移为独立 import，Store 私有 persistence/coordinator、播放器/缩略图实现、应用服务、页面与 widgets 均形成真实 library 边界。
+- 新增 `LocalTagPlayerDependencies` 组合根 contract、`LibraryStoreAccess` 私有协作端口与共享集合规则；页面继续依赖 `LibraryApplicationFacade` 和平台接口。
+- 架构 contract test 新增零 `part` 守卫；96 项完整测试、`flutter analyze` 与 Windows debug build 已通过。
+- 真实窗口回归通过：一级标签“原神”展开后二级标签“雷神”得到 172 条结果；本地 root 显示 477 项，进入“丽莎”显示 9 项并可返回，截图未见遮挡、溢出或状态错位。
+
 - `AppPaths` 已改为组合根注入的实例，`SqfliteDatabaseProvider` 独占 database factory 与数据库路径选择；SQLite schema、stable identity 和写入仍由 Dart `LibraryStore` 单写。
 - `LibraryApplicationFacade` 集合改为只读视图，收藏、root 替换与播放位置改走明确命令；Tag/Cache/Playback repository 已由同一个 Store 实现并注入。
 - 已移除静态媒体工具、窗口单例与旧文件位置 service；debug 环境解析和诊断写入已退出页面。
-- 本轮将 `part` 从 57 个降至 35 个；余下 Store 私有协作与页面组件继续按 Repository/应用服务→页面顺序迁移。
+- `part` 已从 57 个清零；后续不允许通过重新导入单一大 library 恢复隐式私有符号共享。
 - contract/fake tests、analyze、Windows debug build 和真实窗口“原神 / 雷神”172 条筛选通过。macOS/Linux 已有显式 adapter；原生 build 需对应宿主验证。
 
 - `DesktopFileSystemAdapter` 已接管目录选择、异步目录浏览、文件存在/stat、截图写入、删除和文件管理器定位；媒体库本地路径浏览不再在 Widget build 中同步遍历磁盘。
 - `LibraryStore` 已实现真实 `LibraryRepository` contract，`LibraryApplicationFacade` 成为媒体库、标签管理和 missing/relink 页面的上层依赖；页面不再出现 `LibraryStore` 具体类型。
 - `bootstrapLocalTagPlayer()` 成为 composition root，统一选择 Desktop 文件系统、Rust/Dart 扫描、C++/兼容媒体探测、MediaKit/实验原生播放器与 FFmpeg backend。
-- 首批 `FileSystemAdapter`/桌面实现、`LayoutSize`、`MediaDetails` 已脱离 `part`。下一阶段继续迁移模型/契约、Repository/平台实现、应用服务和页面，不把 SQLite、标签筛选或 stable identity 写入迁往 Rust/C++。
+- `FileSystemAdapter`、领域模型、Repository/平台实现、应用服务和页面均已脱离 `part`；SQLite、标签筛选与 stable identity 写入继续留在 Dart。
 - 88 项 focused tests、`flutter analyze`、Windows debug build 通过；真实窗口点击 root“原神”、子目录“丽莎”和标签“雷神”，分别正确加载 477 个直接子项、9 个目录视频和 172 条过滤结果，截图未见遮挡、溢出或状态错位。
 
 - Windows CMake 固定依赖改为临时文件下载、SHA256 校验后原子落盘并有限重试；mpv/ANGLE 的已校验归档直接复用给 media_kit 插件，Android Studio 重建不再解压网络中断留下的半成品。
 
-- `pages`、`services`、`widgets` 已在现有一级模块内按 library/player/tags/media/relink/window 职责增加二级目录；所有 Dart 文件仍属于同一 `app.dart` part library，仅调整文件位置和相对引用。
+- `pages`、`services`、`widgets` 已按 library/player/tags/media/relink/window 职责形成独立 Dart library；`app.dart` 仅保留组合根、应用壳与兼容 export。
 
 - 压力测试产物统一写入带安全标记的 `artifacts` 子目录；每次运行前自动清理超过 7 天的已标记目录，成功后只保留汇总报告与压缩清单，失败时保留完整诊断现场。
 - 媒体库增删与真实播放器 runner 支持 `-KeepRawArtifacts` 和可配置保留天数，避免隔离 profile、缩略图、临时数据库、录像及原始采样再次把仓库扩张到数十 GiB。

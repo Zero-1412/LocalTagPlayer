@@ -1,43 +1,37 @@
-part of '../../app.dart';
+import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
+
+import '../../core/playback_settings.dart';
+import '../../core/tag_rules.dart';
+import '../../models/media_details.dart';
+import '../../models/video_item.dart';
+import '../../platform/file_system_adapter.dart';
+import '../../platform/platform_interfaces.dart';
+import '../../services/media/media_details_service.dart';
+import '../../services/media/thumbnail_service.dart';
+import '../../services/player/player_hardware_acceleration.dart';
+import '../../services/player/player_hardware_compatibility.dart';
+import '../../services/player/player_memory_diagnostics.dart';
+import '../../widgets/app_theme_tokens.dart';
+import 'player_context_panel.dart';
+import 'player_delete_dialog.dart';
+import 'player_diagnostics_dialog.dart';
+import 'player_dialog_content.dart';
+import 'player_hardware_decode_warning_dialog.dart';
+import 'player_open_failure_panel.dart';
+import 'player_open_request_controller.dart';
+import 'player_playback_controller.dart';
+import 'player_playback_mode.dart';
+import 'player_queue_sidebar.dart';
+import 'player_resume_dialog.dart';
 
 // ignore_for_file: slash_for_doc_comments
-
-class _HorizontalWheelScroller extends StatelessWidget {
-  const _HorizontalWheelScroller({
-    required this.children,
-    this.padding = EdgeInsets.zero,
-    this.spacing = 0,
-  });
-
-  /**
-   * 横向滚动内容，主要用于播放器队列中的二级标签筛选条。
-   */
-  final List<Widget> children;
-
-  /**
-   * 列表内边距，保持调用方控制与当前布局对齐。
-   */
-  final EdgeInsetsGeometry padding;
-
-  /**
-   * 子项之间的固定间距。
-   */
-  final double spacing;
-
-  @override
-  Widget build(BuildContext context) {
-    return ScrollConfiguration(
-      behavior: const _DesktopDragScrollBehavior(),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: padding,
-        itemCount: children.length,
-        itemBuilder: (context, index) => children[index],
-        separatorBuilder: (context, index) => SizedBox(width: spacing),
-      ),
-    );
-  }
-}
 
 class PlayerPage extends StatefulWidget {
   const PlayerPage({
@@ -94,11 +88,13 @@ class PlayerPage extends StatefulWidget {
   final MediaProbeBackendFactory mediaProbeBackendFactory;
 
   @override
-  State<PlayerPage> createState() => _PlayerPageState();
+  State<PlayerPage> createState() => PlayerPageState();
 }
 
-class _PlayerPageState extends State<PlayerPage> {
+class PlayerPageState extends State<PlayerPage> {
   late final PlayerBackend _playerBackend;
+  /** 诊断弹窗使用的只读播放器边界。 */
+  PlayerBackend get playerBackend => _playerBackend;
   late final FocusNode _focusNode;
   late final FocusNode _queueSearchFocusNode;
   late final TextEditingController _queueSearchController;
@@ -165,8 +161,6 @@ class _PlayerPageState extends State<PlayerPage> {
   final _random = math.Random();
 
   static const _playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
-
-  static const double _queueItemExtent = 104;
 
   List<VideoItem> get _sourcePlaylist => _playback.sourcePlaylist;
 
@@ -1029,17 +1023,17 @@ class _PlayerPageState extends State<PlayerPage> {
       }
       final position = targetController.position;
       final viewport = position.viewportDimension;
-      final baseOffset = index * _queueItemExtent;
+      final baseOffset = index * playerQueueItemExtent;
       final targetOffset = center
-          ? baseOffset - (viewport - _queueItemExtent) / 2
-          : baseOffset - _queueItemExtent;
+          ? baseOffset - (viewport - playerQueueItemExtent) / 2
+          : baseOffset - playerQueueItemExtent;
       final clampedOffset = targetOffset.clamp(
           position.minScrollExtent, position.maxScrollExtent);
       if (animated) {
         unawaited(targetController.animateTo(
           clampedOffset,
           duration: const Duration(milliseconds: 220),
-          curve: _motionCurve,
+          curve: appMotionCurve,
         ));
       } else {
         targetController.jumpTo(clampedOffset);
@@ -1576,20 +1570,20 @@ class _PlayerPageState extends State<PlayerPage> {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                _PlayerDialogSectionCard(
+                PlayerDialogSectionCard(
                   title: '文件',
                   icon: Icons.insert_drive_file_outlined,
                   child: Column(
                     children: [
-                      _PlayerDialogInfoRow(
+                      PlayerDialogInfoRow(
                           label: '文件名', value: item.title, emphasize: true),
-                      _PlayerDialogInfoRow(label: '路径', value: item.path),
-                      _PlayerDialogInfoRow(label: '目录', value: item.folder),
-                      _PlayerDialogInfoRow(
+                      PlayerDialogInfoRow(label: '路径', value: item.path),
+                      PlayerDialogInfoRow(label: '目录', value: item.folder),
+                      PlayerDialogInfoRow(
                         label: '大小',
                         value: _formatBytes(stat?.size ?? item.fileSize ?? 0),
                       ),
-                      _PlayerDialogInfoRow(
+                      PlayerDialogInfoRow(
                         label: '修改时间',
                         value: stat?.modifiedAt?.toString() ?? '未知',
                       ),
@@ -1597,34 +1591,34 @@ class _PlayerPageState extends State<PlayerPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _PlayerDialogSectionCard(
+                PlayerDialogSectionCard(
                   title: '媒体',
                   icon: Icons.movie_outlined,
                   child: Column(
                     children: [
-                      _PlayerDialogInfoRow(
+                      PlayerDialogInfoRow(
                           label: '视频', value: details.videoLabel),
-                      _PlayerDialogInfoRow(
+                      PlayerDialogInfoRow(
                           label: '音频', value: details.audioLabel),
-                      _PlayerDialogInfoRow(
+                      PlayerDialogInfoRow(
                           label: '媒体指纹', value: item.mediaFingerprint ?? '未读取'),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
-                _PlayerDialogSectionCard(
+                PlayerDialogSectionCard(
                   title: '整理状态',
                   icon: Icons.sell_outlined,
                   child: Column(
                     children: [
-                      _PlayerDialogInfoRow(
+                      PlayerDialogInfoRow(
                           label: '标签',
                           value: item.tags.isEmpty
                               ? '未添加'
                               : (item.tags.toList()..sort()).join('、')),
-                      _PlayerDialogInfoRow(
+                      PlayerDialogInfoRow(
                           label: '二级标签', value: _childTagSummary(item)),
-                      _PlayerDialogInfoRow(
+                      PlayerDialogInfoRow(
                           label: '收藏', value: item.isFavorite ? '是' : '否'),
                     ],
                   ),
@@ -1632,16 +1626,16 @@ class _PlayerPageState extends State<PlayerPage> {
                 if (item.mediaDetailsError != null ||
                     item.thumbnailError != null) ...[
                   const SizedBox(height: 12),
-                  _PlayerDialogSectionCard(
+                  PlayerDialogSectionCard(
                     title: '异常',
                     icon: Icons.warning_amber_rounded,
                     child: Column(
                       children: [
                         if (item.mediaDetailsError != null)
-                          _PlayerDialogInfoRow(
+                          PlayerDialogInfoRow(
                               label: '媒体信息', value: item.mediaDetailsError!),
                         if (item.thumbnailError != null)
-                          _PlayerDialogInfoRow(
+                          PlayerDialogInfoRow(
                               label: '缩略图', value: item.thumbnailError!),
                       ],
                     ),
@@ -1667,7 +1661,7 @@ class _PlayerPageState extends State<PlayerPage> {
     }
     await showDialog<void>(
       context: context,
-      builder: (context) => _PlaybackDiagnosticsDialog(
+      builder: (context) => PlaybackDiagnosticsDialog(
         playerPage: this,
         title: '\u64ad\u653e\u8bca\u65ad',
       ),
@@ -1700,7 +1694,7 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
-  Future<_PlaybackDiagnosticsSnapshot> _buildDiagnosticsSnapshot() async {
+  Future<PlaybackDiagnosticsSnapshot> buildDiagnosticsSnapshot() async {
     final before = _playerBackend.state.position;
     final wasPlaying = _playerBackend.state.playing;
     final wasBuffering = _playerBackend.state.buffering;
@@ -1815,7 +1809,7 @@ class _PlayerPageState extends State<PlayerPage> {
       if (_openRequests.hasFailure)
         '最近打开错误类型: ${_openRequests.failureCode ?? 'unknown'}',
     ];
-    return _PlaybackDiagnosticsSnapshot(
+    return PlaybackDiagnosticsSnapshot(
       lines: lines,
       sampledAt: DateTime.now(),
       wasPlaying: wasPlaying,
@@ -2076,7 +2070,7 @@ class _PlayerPageState extends State<PlayerPage> {
     Key? key,
   }) {
     final controller = scrollController ?? _queueScrollController;
-    return _PlayerQueueSidebar(
+    return PlayerQueueSidebar(
       key: key ?? const ValueKey('player.queue.sidebar'),
       playlist: _queue,
       sourcePlaylist: _sourcePlaylist,
@@ -2202,7 +2196,7 @@ class _PlayerPageState extends State<PlayerPage> {
                                           if (!_openRequests.isOpening &&
                                               _openRequests.hasFailure)
                                             Positioned.fill(
-                                              child: _PlayerOpenFailurePanel(
+                                              child: PlayerOpenFailurePanel(
                                                 failureCode:
                                                     _openRequests.failureCode ??
                                                         'unknown',
@@ -2226,7 +2220,7 @@ class _PlayerPageState extends State<PlayerPage> {
                                     ),
                                   ),
                                   if (!_isWindowFullscreen)
-                                    _PlayerContextPanel(
+                                    PlayerContextPanel(
                                       item: _currentItem,
                                       queueTitle: _filterSummary,
                                       index: _index,
@@ -2254,8 +2248,8 @@ class _PlayerPageState extends State<PlayerPage> {
                               TweenAnimationBuilder<double>(
                                 key: const ValueKey('player.fullscreenQueue'),
                                 tween: Tween<double>(begin: 0, end: 440),
-                                duration: _motionDuration,
-                                curve: _motionCurve,
+                                duration: appMotionDuration,
+                                curve: appMotionCurve,
                                 builder: (context, width, child) {
                                   return SizedBox(
                                     width: width,
@@ -2284,8 +2278,8 @@ class _PlayerPageState extends State<PlayerPage> {
                               ),
                             if (hasWideQueueSidebar && !_isWindowFullscreen)
                               AnimatedSize(
-                                duration: _motionDuration,
-                                curve: _motionCurve,
+                                duration: appMotionDuration,
+                                curve: appMotionCurve,
                                 child: ClipRect(
                                   child: Align(
                                     alignment: Alignment.centerRight,

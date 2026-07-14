@@ -1,4 +1,25 @@
-part of '../../app.dart';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../core/tag_rules.dart';
+import '../../models/library_scan_models.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import '../../platform/database_provider.dart';
+import '../../repositories/repository_interfaces.dart';
+import '../tags/tag_query_service.dart';
+import 'library_collection_rules.dart';
+import 'library_load_diagnostics.dart';
+import 'library_metadata_persistence.dart';
+import 'library_scan_backend.dart';
+import 'library_scan_coordinator.dart';
+import 'library_scan_service.dart';
+import 'library_store_access.dart';
+import 'library_tag_maintenance.dart';
+import 'library_tag_persistence.dart';
+import 'library_video_persistence.dart';
 
 // ignore_for_file: slash_for_doc_comments, annotate_overrides
 
@@ -7,7 +28,8 @@ class LibraryStore
         LibraryRepository,
         TagRepository,
         CacheRepository,
-        PlaybackRepository {
+        PlaybackRepository,
+        LibraryStoreAccess {
   LibraryStore._(
     this._file,
     this._db,
@@ -35,6 +57,13 @@ class LibraryStore
   /** 当前有效扫描代次；旧代次返回后不得提交数据库或回写 UI。 */
   int _scanGeneration = 0;
 
+  @override
+  Database get database => _db;
+  @override
+  LibraryScanBackend get scanBackend => _scanBackend;
+  @override
+  int get scanGeneration => _scanGeneration;
+
   LibraryTagPersistence get _tagPersistence =>
       LibraryTagPersistence(_db, tagsById, videoTagIdsByPathKey);
 
@@ -44,6 +73,13 @@ class LibraryStore
       LibraryMetadataPersistence(_db);
 
   LibraryTagMaintenance get _tagMaintenance => LibraryTagMaintenance(this);
+
+  @override
+  LibraryTagPersistence get tagPersistence => _tagPersistence;
+  @override
+  LibraryVideoPersistence get videoPersistence => _videoPersistence;
+  @override
+  LibraryMetadataPersistence get metadataPersistence => _metadataPersistence;
 
   TagQueryContext get tagQueryContext => TagQueryContext(
         tagsById: tagsById,
@@ -663,7 +699,8 @@ class LibraryStore
         ((jsonDecode(row['aliases_json'] as String? ?? '[]') as List?) ??
                 const [])
             .cast<String>();
-    final mergedAliases = _dedupeTags(<String>[...aliases, ...extraAliases]);
+    final mergedAliases =
+        dedupeLibraryTags(<String>[...aliases, ...extraAliases]);
     return TagItem(
       id: row['id'] as String,
       name: row['name'] as String,
@@ -800,11 +837,11 @@ class LibraryStore
           jsonDecode(await _file.readAsString()) as Map<String, Object?>;
       roots
         ..clear()
-        ..addAll(_dedupeRoots(
+        ..addAll(dedupeLibraryRoots(
             ((decoded['roots'] as List?) ?? const []).cast<String>()));
       favoriteTags
         ..clear()
-        ..addAll(_dedupeTags(
+        ..addAll(dedupeLibraryTags(
             ((decoded['favoriteTags'] as List?) ?? const []).cast<String>()));
       videos.clear();
       for (final raw in (decoded['videos'] as List? ?? const [])) {
@@ -949,7 +986,7 @@ class LibraryStore
         parentId: tag.parentId,
         color: tag.color,
         source: tag.source,
-        aliases: aliases == null ? tag.aliases : _dedupeTags(aliases),
+        aliases: aliases == null ? tag.aliases : dedupeLibraryTags(aliases),
         usageCount: tag.usageCount,
         isFavorite: isFavorite ?? tag.isFavorite,
         isHidden: isHidden ?? tag.isHidden,
@@ -1145,54 +1182,6 @@ class LibraryStore
 
   static Future<String?> mediaFingerprintFor(String path) async {
     return LibraryScanService.mediaFingerprintFor(path);
-  }
-
-  static bool _setEquals(Set<String> a, Set<String> b) {
-    return a.length == b.length && a.containsAll(b);
-  }
-
-  static bool _childTagsEquals(
-      Map<String, Set<String>> a, Map<String, Set<String>> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final entry in a.entries) {
-      final other = b[entry.key];
-      if (other == null || !_setEquals(entry.value, other)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static List<String> _dedupeRoots(Iterable<String> rawRoots) {
-    final seen = <String>{};
-    final roots = <String>[];
-    for (final raw in rawRoots) {
-      final root = TagRules.normalizeRootPath(raw);
-      if (root.isEmpty) {
-        continue;
-      }
-      if (seen.add(TagRules.pathKey(root))) {
-        roots.add(root);
-      }
-    }
-    return roots;
-  }
-
-  static List<String> _dedupeTags(Iterable<String> rawTags) {
-    final seen = <String>{};
-    final tags = <String>[];
-    for (final raw in rawTags) {
-      final tag = TagRules.normalizeTag(raw);
-      if (tag.isEmpty) {
-        continue;
-      }
-      if (seen.add(tag.toLowerCase())) {
-        tags.add(tag);
-      }
-    }
-    return tags;
   }
 
   Future<int> countUntrackedVideos() async {

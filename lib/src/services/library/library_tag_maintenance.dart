@@ -1,4 +1,9 @@
-part of '../../app.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../core/tag_rules.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import 'library_store_access.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -17,7 +22,7 @@ class LibraryTagMaintenance {
   const LibraryTagMaintenance(this._store);
 
   /** 当前媒体库 store。 */
-  final LibraryStore _store;
+  final LibraryStoreAccess _store;
 
   /**
    * 替换单个视频的手动标签作用域。
@@ -28,9 +33,9 @@ class LibraryTagMaintenance {
     VideoItem item, {
     String? parentTag,
   }) async {
-    final batch = _store._db.batch();
+    final batch = _store.database.batch();
     syncManualTagsInBatch(batch, item, parentTag: parentTag);
-    _store._videoPersistence.insertInBatch(batch, item);
+    _store.videoPersistence.insertInBatch(batch, item);
     await batch.commit(noResult: true);
   }
 
@@ -50,11 +55,11 @@ class LibraryTagMaintenance {
     if (videosToUpdate.isEmpty) {
       return 0;
     }
-    final batch = _store._db.batch();
+    final batch = _store.database.batch();
     for (final item in videosToUpdate) {
       _addManualTagToItem(item, tag);
-      _store._videoPersistence.insertInBatch(batch, item);
-      _store._tagPersistence.attachTagInBatch(
+      _store.videoPersistence.insertInBatch(batch, item);
+      _store.tagPersistence.attachTagInBatch(
         batch,
         item,
         tag,
@@ -81,7 +86,7 @@ class LibraryTagMaintenance {
     if (videosToUpdate.isEmpty) {
       return 0;
     }
-    final batch = _store._db.batch();
+    final batch = _store.database.batch();
     var changed = 0;
     for (final item in videosToUpdate) {
       final hadManualLink = _store
@@ -102,7 +107,7 @@ class LibraryTagMaintenance {
       if (hadManualLink || changedCompat) {
         changed++;
       }
-      _store._videoPersistence.insertInBatch(batch, item);
+      _store.videoPersistence.insertInBatch(batch, item);
     }
     await batch.commit(noResult: true);
     return changed;
@@ -114,10 +119,10 @@ class LibraryTagMaintenance {
    * 只移除并重建 folder 来源关联，不会触碰用户维护的 manual 标签。
    */
   void syncFolderTagsInBatch(Batch batch, VideoItem item) {
-    _store._tagPersistence
+    _store.tagPersistence
         .removeVideoTagSourceInBatch(batch, item, TagSource.folder);
     for (final tag in item.tags) {
-      _store._tagPersistence.attachTagInBatch(
+      _store.tagPersistence.attachTagInBatch(
         batch,
         item,
         _tagFor(
@@ -130,7 +135,7 @@ class LibraryTagMaintenance {
     }
     for (final entry in item.childTags.entries) {
       for (final child in entry.value) {
-        _store._tagPersistence.attachTagInBatch(
+        _store.tagPersistence.attachTagInBatch(
           batch,
           item,
           _tagFor(
@@ -185,7 +190,7 @@ class LibraryTagMaintenance {
     VideoItem item, {
     String? parentTag,
   }) {
-    _store._tagPersistence.removeManualTagScopeInBatch(
+    _store.tagPersistence.removeManualTagScopeInBatch(
       batch,
       item,
       parentTag: parentTag,
@@ -196,7 +201,7 @@ class LibraryTagMaintenance {
         if (folderTags.any((folderTag) => TagRules.sameTag(folderTag, tag))) {
           continue;
         }
-        _store._tagPersistence.attachTagInBatch(
+        _store.tagPersistence.attachTagInBatch(
           batch,
           item,
           _tagFor(
@@ -215,7 +220,7 @@ class LibraryTagMaintenance {
           .any((folderTag) => TagRules.sameTag(folderTag, child))) {
         continue;
       }
-      _store._tagPersistence.attachTagInBatch(
+      _store.tagPersistence.attachTagInBatch(
         batch,
         item,
         _tagFor(

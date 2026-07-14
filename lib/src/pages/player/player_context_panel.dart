@@ -1,14 +1,17 @@
-part of '../../app.dart';
+import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
-// ignore_for_file: slash_for_doc_comments
+import '../../models/video_item.dart';
+
+// ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
 
 /**
  * 画面下方的精简视频身份与筛选上下文。
  *
  * 播放控制已经统一进入画面底部，本面板只保留标题、队列位置、标签特色入口和低频更多菜单。
  */
-class _PlayerContextPanel extends StatelessWidget {
-  const _PlayerContextPanel({
+class PlayerContextPanel extends StatelessWidget {
+  const PlayerContextPanel({
     required this.item,
     required this.queueTitle,
     required this.index,

@@ -1,4 +1,253 @@
-part of '../../app.dart';
+import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+
+import '../../composition/local_tag_player_dependencies.dart';
+import '../../core/layout_size.dart';
+import '../../core/playback_settings.dart';
+import '../../core/tag_rules.dart';
+import '../../models/library_scan_models.dart';
+import '../../models/media_details.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import '../../platform/file_system_adapter.dart';
+import '../../services/library/library_application_facade.dart';
+import '../../services/library/library_count_refresh_coordinator.dart';
+import '../../services/library/library_load_diagnostics.dart';
+import '../../services/library/library_scan_ui_diagnostics.dart';
+import '../../services/library/library_stress_control.dart';
+import '../../services/media/media_details_service.dart';
+import '../../services/media/thumbnail_service.dart';
+import '../../services/player/playback_snapshot_write_queue.dart';
+import '../../services/player/player_hardware_compatibility.dart';
+import '../../services/player/player_memory_diagnostics.dart';
+import '../../services/tags/tag_query_service.dart';
+import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/library/library_local_view.dart';
+import '../../widgets/library/library_sort_control.dart';
+import '../../widgets/library/library_tag_discovery_panel.dart';
+import '../../widgets/library/library_video_results.dart';
+import '../../widgets/library/library_widgets.dart';
+import '../player/player_hardware_decode_warning_dialog.dart';
+import '../player/player_open_request_controller.dart';
+import '../player/player_page.dart';
+import '../tags/tag_manager_page.dart';
+import 'library_page_helpers.dart';
+import 'missing_relink_page.dart';
+
+/** 为页面切换提供统一的轻量淡入与横向位移动画。 */
+Route<T> _smoothRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    transitionDuration: const Duration(milliseconds: 220),
+    reverseTransitionDuration: const Duration(milliseconds: 160),
+    pageBuilder: (_, __, ___) => page,
+    transitionsBuilder: (_, animation, __, child) {
+      final curved = CurvedAnimation(parent: animation, curve: appMotionCurve);
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.018, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+/**
+ * LibraryPage 的派生显示和排序逻辑。
+ *
+ * 这里不持有状态、不触发数据库访问，只读取 `_LibraryPageState` 已有状态生成摘要、排序和队列标题，
+ * 让页面主体专注生命周期、交互入口和布局组装。
+ */
+extension _LibraryPageDerivedState on _LibraryPageState {
+  /**
+   * 构建用于诊断和播放器队列标题的完整筛选表达式。
+   */
+  String _filterExpression({
+    required LibraryApplicationFacade store,
+    required int resultCount,
+    required int totalCount,
+  }) {
+    final parts = <String>[];
+    final keyword = _searchController.text.trim();
+    if (keyword.isNotEmpty) {
+      parts.add('keyword:"$keyword"');
+    }
+    final primaryTags = _selectedTags.toList()..sort();
+    parts.addAll(primaryTags.map((tag) => 'legacy:$tag'));
+    final childTags = _selectedChildTags.toList()..sort();
+    if (childTags.isNotEmpty) {
+      parts.add('child:(${childTags.join('|')})');
+    }
+    final groupsById = {
+      for (final group in _tagGroupsForSidebar(store)) group.id: group
+    };
+    final selectedEntries = _selectedGroupTagIds.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    for (final entry in selectedEntries) {
+      final tagLabels = [
+        for (final id in entry.value)
+          if (store.tagsById[id] != null) _tagLabel(store.tagsById[id]!),
+      ]..sort();
+      if (tagLabels.isEmpty) {
+        continue;
+      }
+      final group = groupsById[entry.key];
+      parts.add(
+        '${group == null ? entry.key : _groupLabel(group)}:(${tagLabels.join('|')})',
+      );
+    }
+    parts.addAll(_excludedTagItems(store).map((tag) => '-${_tagLabel(tag)}'));
+    if (_showFavoritesOnly) {
+      parts.add('favorite');
+    }
+    final expression =
+        parts.isEmpty ? '\u5168\u90e8\u89c6\u9891' : parts.join(' AND ');
+    return '$expression  |  $resultCount / $totalCount';
+  }
+
+  /**
+   * 构建面向用户的短筛选摘要。
+   */
+  String _filterSummary({
+    required LibraryApplicationFacade store,
+    required int resultCount,
+    required int totalCount,
+  }) {
+    final parts = <String>[];
+    final hierarchyParts = <String>[];
+    final keyword = _searchController.text.trim();
+    hierarchyParts.addAll(_selectedTags.toList()..sort());
+    hierarchyParts.addAll(_selectedChildTags.toList()..sort());
+    final selectedItems = _selectedGroupTagItems(store);
+    hierarchyParts.addAll([
+      for (final tag in selectedItems)
+        if (tag.groupId == 'folder.primary' || tag.groupId == 'folder.child')
+          tag.displayName ?? tag.name,
+    ]);
+    if (hierarchyParts.isNotEmpty) {
+      parts.add(hierarchyParts.toSet().join(' / '));
+    }
+    final otherLabels = [
+      for (final tag in selectedItems)
+        if (tag.groupId != 'folder.primary' && tag.groupId != 'folder.child')
+          tag.displayName ?? tag.name,
+    ]..sort();
+    parts.addAll(otherLabels);
+    if (keyword.isNotEmpty) {
+      parts.add('关键词 $keyword');
+    }
+    final excludedCount = _excludedTagIds.length;
+    if (excludedCount > 0) {
+      parts.add('NOT $excludedCount');
+    }
+    if (_showFavoritesOnly) {
+      parts.add('favorite');
+    }
+    final label = parts.isEmpty ? '全部视频' : parts.join(' + ');
+    return '$label · $resultCount 个结果';
+  }
+
+  /**
+   * 当前排序控件对应的视频比较器。
+   */
+  int _compareVideos(VideoItem a, VideoItem b) {
+    return compareLibraryVideosForSort(
+      a,
+      b,
+      sortMode: _sortMode,
+      sortDirection: _sortDirection,
+    );
+  }
+
+  /**
+   * 切换排序字段，并只重排当前结果。
+   *
+   * 排序不改变筛选命中集合和标签计数，因此不能复用完整筛选刷新路径；
+   * 否则大媒体库会在每次切换字段时额外触发 resultCounts 重算。
+   */
+  void _setSortMode(SortMode mode) {
+    _applySortChange(sortMode: mode);
+  }
+
+  /**
+   * 切换排序方向，并只重排当前结果。
+   */
+  void _toggleSortDirection() {
+    _applySortChange(
+      sortDirection: _sortDirection == SortDirection.descending
+          ? SortDirection.ascending
+          : SortDirection.descending,
+    );
+  }
+
+  /**
+   * 当前结果来源对应的顶部摘要。
+   */
+  String _displaySummary({
+    required String filterSummary,
+    required int displayResultCount,
+    required int displayTotalCount,
+  }) {
+    return switch (_resultMode) {
+      _LibraryResultMode.recent =>
+        '\u6700\u8fd1\u64ad\u653e  |  $displayResultCount / $displayTotalCount',
+      _LibraryResultMode.favorites =>
+        '\u672c\u5730\u6536\u85cf  |  $displayResultCount / $displayTotalCount',
+      _LibraryResultMode.local =>
+        '\u672c\u5730\u5a92\u4f53\u5e93  |  $displayResultCount \u9879',
+      _LibraryResultMode.library => filterSummary,
+    };
+  }
+
+  /**
+   * 当前结果来源对应的详细表达式。
+   */
+  String _displayExpression({
+    required String filterExpression,
+  }) {
+    return switch (_resultMode) {
+      _LibraryResultMode.recent =>
+        '\u6309\u6700\u8fd1\u64ad\u653e\u65f6\u95f4\u6392\u5e8f',
+      _LibraryResultMode.favorites =>
+        '\u4ec5\u663e\u793a\u672c\u5730\u6536\u85cf\u89c6\u9891',
+      _LibraryResultMode.local =>
+        _localLibraryPath ?? '\u672c\u5730\u5a92\u4f53\u5e93',
+      _LibraryResultMode.library => filterExpression,
+    };
+  }
+
+  /**
+   * 播放器过滤队列标题。
+   */
+  String _queueTitle({
+    required LibraryApplicationFacade store,
+    required int playlistLength,
+  }) {
+    return switch (_resultMode) {
+      _LibraryResultMode.recent =>
+        '\u6700\u8fd1\u64ad\u653e  |  $playlistLength / ${store.videos.length}',
+      _LibraryResultMode.favorites =>
+        '\u672c\u5730\u6536\u85cf  |  $playlistLength / ${store.videos.length}',
+      _LibraryResultMode.local =>
+        '${_localLibraryPath ?? '\u672c\u5730\u5a92\u4f53\u5e93'}  |  $playlistLength / ${store.videos.length}',
+      _LibraryResultMode.library => _filterSummary(
+          store: store,
+          resultCount: playlistLength,
+          totalCount: store.videos.length,
+        ),
+    };
+  }
+}
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -250,13 +499,13 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _appBackground,
+      backgroundColor: appBackground,
       appBar: AppBar(
         title: const Text('\u8bbe\u7f6e'),
         actions: [
           TextButton.icon(
             key: const ValueKey('settings.refreshCacheStats'),
-            style: TextButton.styleFrom(foregroundColor: _appText),
+            style: TextButton.styleFrom(foregroundColor: appText),
             onPressed: _refreshStats,
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('刷新统计'),
@@ -318,7 +567,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                   const SizedBox(height: 6),
                   const Text(
                     '鼠标移到屏幕右侧边缘时展开，离开列表范围后自动隐藏。',
-                    style: TextStyle(color: _appTextMuted),
+                    style: TextStyle(color: appTextMuted),
                   ),
                   const SizedBox(height: 16),
                   Text('边缘热区宽度：${_settings.fullscreenQueueEdgeWidth}px'),
@@ -375,7 +624,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                   fontSize: 18, fontWeight: FontWeight.w800)),
                           SizedBox(height: 6),
                           Text('修改后立即生效；选择已占用按键时会自动交换两个功能。',
-                              style: TextStyle(color: _appTextMuted)),
+                              style: TextStyle(color: appTextMuted)),
                         ],
                       ),
                     ),
@@ -447,7 +696,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                   const SizedBox(height: 6),
                   const Text(
                     '打开有未完成进度的视频时，默认执行以下操作。',
-                    style: TextStyle(color: _appTextMuted),
+                    style: TextStyle(color: appTextMuted),
                   ),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<PlaybackResumeBehavior>(
@@ -502,19 +751,19 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                       else ...[
                         _SettingsStatLine(
                           label: '\u603b\u6570',
-                          value: _formatCount(stats.total),
+                          value: formatCount(stats.total),
                         ),
                         _SettingsStatLine(
                           label: '\u5df2\u7f13\u5b58',
-                          value: _formatCount(stats.cached),
+                          value: formatCount(stats.cached),
                         ),
                         _SettingsStatLine(
                           label: '\u7f3a\u5931',
-                          value: _formatCount(stats.missing),
+                          value: formatCount(stats.missing),
                         ),
                         _SettingsStatLine(
                           label: '失败',
-                          value: _formatCount(stats.errors),
+                          value: formatCount(stats.errors),
                         ),
                         _SettingsStatLine(
                           label: '活动任务',
@@ -522,11 +771,11 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                         ),
                         _SettingsStatLine(
                           label: '排队任务',
-                          value: _formatCount(stats.queued),
+                          value: formatCount(stats.queued),
                         ),
                         _SettingsStatLine(
                           label: '后台请求',
-                          value: _formatCount(stats.pendingBackgroundRequests),
+                          value: formatCount(stats.pendingBackgroundRequests),
                         ),
                         _SettingsStatLine(
                           label: '平均耗时',
@@ -568,7 +817,7 @@ class _SettingsStatLine extends StatelessWidget {
             child: Text(
               label,
               style: const TextStyle(
-                color: _appTextMuted,
+                color: appTextMuted,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -576,7 +825,7 @@ class _SettingsStatLine extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              color: _appText,
+              color: appText,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -613,29 +862,6 @@ enum _LibraryResultMode {
 
   /** 本地媒体库路径浏览，按文件系统层级展示文件夹和视频。 */
   local,
-}
-
-/**
- * 本地媒体库浏览项。
- *
- * 文件夹用于进入下一层路径；视频项复用已入库的 VideoItem，以保持播放、收藏、缩略图和更多操作仍走现有媒体库闭环。
- */
-class _LocalLibraryEntry {
-  const _LocalLibraryEntry.folder(this.path) : video = null;
-
-  _LocalLibraryEntry.video(VideoItem item)
-      : path = item.path,
-        video = item;
-
-  /** 文件夹路径或视频文件路径。 */
-  final String path;
-
-  /** 视频项；为空时表示该条目是文件夹。 */
-  final VideoItem? video;
-
-  bool get isFolder => video == null;
-
-  String get title => isFolder ? p.basename(path) : video!.title;
 }
 
 List<VideoItem> recentPlaybackClearTargets(
@@ -720,8 +946,8 @@ class _LibraryPageState extends State<LibraryPage> {
   Object? _tagGroupsCacheKey;
   List<VideoItem> _recentVideoCache = const <VideoItem>[];
   List<VideoItem> _favoriteVideoCache = const <VideoItem>[];
-  List<_LocalLibraryEntry> _localEntryCache = const <_LocalLibraryEntry>[];
-  final _localEntryCacheByKey = <Object, List<_LocalLibraryEntry>>{};
+  List<LocalLibraryEntry> _localEntryCache = const <LocalLibraryEntry>[];
+  final _localEntryCacheByKey = <Object, List<LocalLibraryEntry>>{};
   /** 正在后台枚举的本地路径缓存键，避免每次 build 重复发起目录读取。 */
   final _localEntryLoads = <Object>{};
   List<TagGroup> _tagGroupsCache = const <TagGroup>[];
@@ -1244,17 +1470,17 @@ class _LibraryPageState extends State<LibraryPage> {
    *
    * 文件夹从磁盘目录读取；视频只取已入库项目，确保播放、缩略图、收藏和更多操作继续复用现有 VideoItem 管线。
    */
-  Future<List<_LocalLibraryEntry>> _localLibraryEntries(
+  Future<List<LocalLibraryEntry>> _localLibraryEntries(
     LibraryApplicationFacade store,
   ) async {
     final currentPath = _localLibraryPath;
     if (currentPath == null || currentPath.isEmpty) {
-      return const <_LocalLibraryEntry>[];
+      return const <LocalLibraryEntry>[];
     }
     if (!await _fileSystem.directoryExists(currentPath)) {
-      return const <_LocalLibraryEntry>[];
+      return const <LocalLibraryEntry>[];
     }
-    final folders = <_LocalLibraryEntry>[];
+    final folders = <LocalLibraryEntry>[];
     final videos = <VideoItem>[];
     final children = await _fileSystem.listFiles(
       currentPath,
@@ -1270,7 +1496,7 @@ class _LibraryPageState extends State<LibraryPage> {
     });
     for (final child in children) {
       if (child.isDirectory) {
-        folders.add(_LocalLibraryEntry.folder(child.path));
+        folders.add(LocalLibraryEntry.folder(child.path));
         continue;
       }
       if (TagRules.isVideoPath(child.path)) {
@@ -1287,7 +1513,7 @@ class _LibraryPageState extends State<LibraryPage> {
         sortMode: _sortMode,
         sortDirection: _sortDirection,
       ))
-        _LocalLibraryEntry.video(video),
+        LocalLibraryEntry.video(video),
     ];
   }
 
@@ -1696,7 +1922,7 @@ class _LibraryPageState extends State<LibraryPage> {
     return _favoriteVideoCache;
   }
 
-  List<_LocalLibraryEntry> _cachedLocalLibraryEntries(
+  List<LocalLibraryEntry> _cachedLocalLibraryEntries(
     LibraryApplicationFacade store,
   ) {
     final key = (
@@ -1746,7 +1972,7 @@ class _LibraryPageState extends State<LibraryPage> {
         }
       }());
     }
-    return const <_LocalLibraryEntry>[];
+    return const <LocalLibraryEntry>[];
   }
 
   void _scheduleFilterRefresh({
@@ -2155,7 +2381,7 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => _SmartListDraftDialog(
+      builder: (dialogContext) => SmartListDraftDialog(
         suggestedName: querySummary,
         querySummary: querySummary,
         queryExpression: queryExpression,
@@ -2273,7 +2499,7 @@ class _LibraryPageState extends State<LibraryPage> {
     };
     final localEntries = _resultMode == _LibraryResultMode.local
         ? _cachedLocalLibraryEntries(store)
-        : const <_LocalLibraryEntry>[];
+        : const <LocalLibraryEntry>[];
     final displayResultCount = switch (_resultMode) {
       _LibraryResultMode.recent => videos.length,
       _LibraryResultMode.favorites => videos.length,
@@ -2336,7 +2562,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final missingCount =
         store.videos.values.where((item) => item.isMissing).length;
     Widget buildSidebar({required bool dense, double? width}) {
-      return _Sidebar(
+      return LibrarySidebar(
         roots: store.roots,
         tags: tags,
         tagGroups: tagGroups,
@@ -2383,7 +2609,7 @@ class _LibraryPageState extends State<LibraryPage> {
     }
 
     Widget buildFilterPanel({required bool dense, double? panelWidth}) {
-      return _TagDiscoveryZone(
+      return TagDiscoveryZone(
         tagGroups: tagGroups,
         resultCounts: stableTagCounts,
         favoriteTags: store.favoriteTags,
@@ -2432,7 +2658,7 @@ class _LibraryPageState extends State<LibraryPage> {
       return Column(
         children: [
           if (topBar != null) topBar,
-          _LibraryHeroArea(
+          LibraryHeroArea(
             selectedTags: _selectedTags.toList()..sort(),
             selectedChildTags: _selectedChildTags.toList()..sort(),
             selectedGroupTags: selectedGroupTags,
@@ -2466,7 +2692,7 @@ class _LibraryPageState extends State<LibraryPage> {
           Expanded(
             child: RepaintBoundary(
               child: switch (_resultMode) {
-                _LibraryResultMode.local => _LocalLibraryView(
+                _LibraryResultMode.local => LocalLibraryView(
                     currentPath: _localLibraryPath,
                     entries: localEntries,
                     thumbnailService: thumbnailService,
@@ -2481,11 +2707,11 @@ class _LibraryPageState extends State<LibraryPage> {
                     onDelete: _requestDeleteVideo,
                   ),
                 _LibraryResultMode.recent => videos.isEmpty
-                    ? _EmptyState(
+                    ? EmptyState(
                         hasLibrary: store.videos.isNotEmpty,
                         message: '当前没有未完成的观看记录',
                       )
-                    : _RecentPlaybackView(
+                    : RecentPlaybackView(
                         videos: videos,
                         selectedPathKeys: _selectedRecentPathKeys,
                         thumbnailService: thumbnailService,
@@ -2511,13 +2737,13 @@ class _LibraryPageState extends State<LibraryPage> {
                             _clearRecentPlayback(selectedOnly: false),
                       ),
                 _ => videos.isEmpty
-                    ? _EmptyState(
+                    ? EmptyState(
                         hasLibrary: store.videos.isNotEmpty,
                         message: _resultMode == _LibraryResultMode.favorites
                             ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u89c6\u9891'
                             : null,
                       )
-                    : _VideoGrid(
+                    : VideoGrid(
                         videos: videos,
                         thumbnailService: thumbnailService,
                         playbackSettings: _playbackSettings,
@@ -2535,7 +2761,7 @@ class _LibraryPageState extends State<LibraryPage> {
     }
 
     Widget buildTopBar(LayoutSize layoutSize) {
-      return _ReferenceTopBar(
+      return ReferenceTopBar(
         controller: _searchController,
         videoCount: displayResultCount,
         totalCount: displayTotalCount,
@@ -2556,7 +2782,7 @@ class _LibraryPageState extends State<LibraryPage> {
           showModalBottomSheet<void>(
             context: context,
             isScrollControlled: true,
-            backgroundColor: _appBackground,
+            backgroundColor: appBackground,
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
             ),
@@ -2582,19 +2808,19 @@ class _LibraryPageState extends State<LibraryPage> {
                   ),
                 ),
                 AnimatedSize(
-                  duration: _motionDuration,
-                  curve: _motionCurve,
+                  duration: appMotionDuration,
+                  curve: appMotionCurve,
                   alignment: Alignment.centerRight,
                   child: AnimatedSwitcher(
-                    duration: _motionDuration,
-                    switchInCurve: _motionCurve,
+                    duration: appMotionDuration,
+                    switchInCurve: appMotionCurve,
                     switchOutCurve: Curves.easeInCubic,
                     child: _isTagDiscoveryPanelOpen
                         ? buildFilterPanel(
                             dense: false,
                             panelWidth: layoutSlots.filterPanelWidth,
                           )
-                        : _CollapsedTagDiscoveryRail(
+                        : CollapsedTagDiscoveryRail(
                             onExpand: () => setState(
                               () => _isTagDiscoveryPanelOpen = true,
                             ),
@@ -2611,11 +2837,11 @@ class _LibraryPageState extends State<LibraryPage> {
     return Shortcuts(
       shortcuts: <ShortcutActivator, Intent>{
         const SingleActivator(LogicalKeyboardKey.keyK, control: true):
-            const _FocusLibrarySearchIntent(),
+            const FocusLibrarySearchIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
-          _FocusLibrarySearchIntent: CallbackAction<_FocusLibrarySearchIntent>(
+          FocusLibrarySearchIntent: CallbackAction<FocusLibrarySearchIntent>(
             onInvoke: (_) {
               _focusSearchField();
               return null;
@@ -2625,7 +2851,7 @@ class _LibraryPageState extends State<LibraryPage> {
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            backgroundColor: _appBackground,
+            backgroundColor: appBackground,
             body: LayoutBuilder(
               builder: (context, constraints) {
                 final layoutSize =
@@ -2902,7 +3128,7 @@ class _LibraryPageState extends State<LibraryPage> {
                               ),
                             )
                           : ScrollConfiguration(
-                              behavior: const _DesktopDragScrollBehavior(),
+                              behavior: const DesktopDragScrollBehavior(),
                               child: SingleChildScrollView(
                                 child: Wrap(
                                   spacing: 8,

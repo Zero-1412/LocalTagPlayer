@@ -1,4 +1,14 @@
-part of '../../app.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
+import 'package:path/path.dart' as p;
+
+import '../../models/library_scan_models.dart';
+import 'library_load_diagnostics.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

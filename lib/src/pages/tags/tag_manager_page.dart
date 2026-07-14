@@ -1,4 +1,11 @@
-part of '../../app.dart';
+import 'package:flutter/material.dart';
+
+import '../../core/layout_size.dart';
+import '../../core/tag_rules.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import '../../services/library/library_application_facade.dart';
+import '../../widgets/app_theme_tokens.dart';
 
 class TagManagerPage extends StatefulWidget {
   const TagManagerPage({
@@ -319,7 +326,7 @@ class _TagManagerPageState extends State<TagManagerPage> {
         LayoutBreakpoints.fromWidth(MediaQuery.sizeOf(context).width);
     final compact = layoutSize == LayoutSize.compact;
     return Scaffold(
-      backgroundColor: _appBackground,
+      backgroundColor: appBackground,
       appBar: AppBar(
         title: const Text('标签管理'),
         actions: [
@@ -358,8 +365,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
                 height: compact ? 320 : null,
                 child: DecoratedBox(
                   decoration: const BoxDecoration(
-                    color: _appSurface,
-                    border: Border(right: BorderSide(color: _appBorder)),
+                    color: appSurface,
+                    border: Border(right: BorderSide(color: appBorder)),
                   ),
                   child: Column(
                     children: [
@@ -628,7 +635,7 @@ class _TagManagerDetail extends StatelessWidget {
                 .headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
-        Text('ID: ${tag.id}', style: const TextStyle(color: _appTextMuted)),
+        Text('ID: ${tag.id}', style: const TextStyle(color: appTextMuted)),
         const SizedBox(height: 18),
         Wrap(
           spacing: 12,
@@ -696,7 +703,7 @@ class _TagManagerDetail extends StatelessWidget {
                 ?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         Text('当前筛选结果：$currentResultCount 个视频',
-            style: const TextStyle(color: _appTextMuted)),
+            style: const TextStyle(color: appTextMuted)),
         const SizedBox(height: 12),
         Wrap(
           spacing: 12,
@@ -721,7 +728,7 @@ class _TagManagerDetail extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             '当前标签不是 manual 来源。批量添加/移除只对 manual 标签开放，folder 标签由路径派生维护。',
-            style: TextStyle(color: _appTextMuted),
+            style: TextStyle(color: appTextMuted),
           ),
         ],
         const SizedBox(height: 24),
@@ -762,7 +769,7 @@ class _TagGroupSummary extends StatelessWidget {
     if (groups.isEmpty) {
       return const Padding(
         padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-        child: Text('暂无标签组', style: TextStyle(color: _appTextMuted)),
+        child: Text('暂无标签组', style: TextStyle(color: appTextMuted)),
       );
     }
     return Padding(
@@ -809,7 +816,7 @@ class _UsagePill extends StatelessWidget {
     return Chip(
       label: Text('$label $value'),
       backgroundColor: const Color(0xffeef4f3),
-      side: const BorderSide(color: _appBorder),
+      side: const BorderSide(color: appBorder),
     );
   }
 }

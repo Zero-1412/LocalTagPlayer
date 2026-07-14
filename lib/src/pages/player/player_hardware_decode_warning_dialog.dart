@@ -1,4 +1,7 @@
-part of '../../app.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../../services/player/player_hardware_compatibility.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

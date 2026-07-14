@@ -1,5 +1,11 @@
 # ROADMAP.md
 
+## 2026-07-14 独立 Dart library 迁移完成
+
+- 57 个 `part` / `part of` 已全部清零；Store 私有协作、播放器与缩略图实现、应用服务、页面和 widgets 均使用显式 import。
+- 组合根依赖图、Repository/facade 和平台 adapter 均有独立 contract/fake 测试；架构测试阻止重新引入 `part`。Windows analyze/build、96 项测试与真实窗口标签/目录 smoke 已通过。
+- 下一步聚焦收窄 `LibraryPage` 对组合根依赖图的使用，并在 macOS/Linux 宿主执行构建与 adapter 验证；SQLite、标签筛选和 stable identity 继续由 Dart 单写拥有。
+
 ## 2026-07-14 独立 Dart library 迁移第二批完成
 
 - `part` 从 57 降至 35；领域模型/契约、DatabaseProvider、扫描与媒体平台边界、播放辅助和窗口服务已独立。

@@ -1,4 +1,11 @@
-part of '../../app.dart';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
+import '../../core/tag_rules.dart';
+import '../../models/video_item.dart';
+import '../../repositories/repository_interfaces.dart';
+import '../library/library_scan_service.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -128,7 +135,7 @@ class BulkPathRelinkService {
         ));
         continue;
       }
-      final fingerprint = await LibraryStore.mediaFingerprintFor(newPath);
+      final fingerprint = await LibraryScanService.mediaFingerprintFor(newPath);
       previews.add(BulkPathRelinkPreview(
         item: item,
         newPath: newPath,

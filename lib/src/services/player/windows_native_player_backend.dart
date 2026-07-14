@@ -1,4 +1,10 @@
-part of '../../app.dart';
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../../platform/platform_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

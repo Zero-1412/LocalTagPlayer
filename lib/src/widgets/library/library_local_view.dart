@@ -1,9 +1,49 @@
-part of '../../app.dart';
+import 'dart:io';
 
-// ignore_for_file: slash_for_doc_comments
+import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
-class _LocalLibraryView extends StatelessWidget {
-  const _LocalLibraryView({
+import '../../core/layout_size.dart';
+import '../../core/playback_settings.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import '../../services/media/external_media_tools.dart';
+import '../../services/media/thumbnail_service.dart';
+import '../app_theme_tokens.dart';
+import 'library_smoke_keys.dart';
+import 'library_tag_discovery_panel.dart';
+import 'library_video_results.dart';
+
+// ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
+
+/**
+ * 本地媒体库浏览项。
+ *
+ * 文件夹项负责进入下一层路径；视频项复用已入库的 [VideoItem]，确保播放、收藏、
+ * 缩略图和更多操作继续走统一的媒体库业务入口。
+ */
+class LocalLibraryEntry {
+  const LocalLibraryEntry.folder(this.path) : video = null;
+
+  LocalLibraryEntry.video(VideoItem item)
+      : path = item.path,
+        video = item;
+
+  /** 文件夹路径或视频文件路径。 */
+  final String path;
+
+  /** 视频项；为空时表示当前条目是文件夹。 */
+  final VideoItem? video;
+
+  /** 当前条目是否为文件夹。 */
+  bool get isFolder => video == null;
+
+  /** 面向用户的文件夹名或视频标题。 */
+  String get title => isFolder ? p.basename(path) : video!.title;
+}
+
+class LocalLibraryView extends StatelessWidget {
+  const LocalLibraryView({
     required this.currentPath,
     required this.entries,
     required this.thumbnailService,
@@ -19,7 +59,7 @@ class _LocalLibraryView extends StatelessWidget {
   });
 
   final String? currentPath;
-  final List<_LocalLibraryEntry> entries;
+  final List<LocalLibraryEntry> entries;
   final ThumbnailService thumbnailService;
   final PlaybackSettings playbackSettings;
   final bool dense;
@@ -58,7 +98,7 @@ class _LocalLibraryView extends StatelessWidget {
                   tooltip: '\u8fd4\u56de\u4e0a\u4e00\u5c42',
                   onPressed: canGoBack ? onBack : null,
                   icon: const Icon(Icons.arrow_back_rounded),
-                  color: _appTextMuted,
+                  color: appTextMuted,
                   visualDensity: VisualDensity.compact,
                 ),
                 const SizedBox(width: 6),
@@ -68,7 +108,7 @@ class _LocalLibraryView extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: _appTextMuted,
+                      color: appTextMuted,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -78,7 +118,7 @@ class _LocalLibraryView extends StatelessWidget {
           ),
           Expanded(
             child: entries.isEmpty
-                ? const _EmptyState(
+                ? const EmptyState(
                     hasLibrary: true,
                     message:
                         '\u5f53\u524d\u76ee\u5f55\u6ca1\u6709\u5df2\u5165\u5e93\u89c6\u9891\u6216\u5b50\u6587\u4ef6\u5939',
@@ -107,7 +147,7 @@ class _LocalLibraryView extends StatelessWidget {
                               );
                             }
                             final video = entry.video!;
-                            return _InteractiveVideoListRow(
+                            return InteractiveVideoListRow(
                               item: video,
                               thumbnailService: thumbnailService,
                               playbackSettings: playbackSettings,
@@ -145,7 +185,7 @@ class _LocalLibraryView extends StatelessWidget {
                             );
                           }
                           final video = entry.video!;
-                          return _InteractiveVideoCard(
+                          return InteractiveVideoCard(
                             item: video,
                             thumbnailService: thumbnailService,
                             playbackSettings: playbackSettings,
@@ -205,8 +245,8 @@ class _LocalLibrarySmokeHarnessState extends State<LocalLibrarySmokeHarness> {
     super.initState();
     _thumbnailDirectory =
         Directory.systemTemp.createTempSync('ltp_local_harness_thumbs_');
-    _thumbnailService =
-        ThumbnailService._(_thumbnailDirectory, DesktopFFmpegBackend());
+    _thumbnailService = ThumbnailService.forDirectory(
+        _thumbnailDirectory, DesktopFFmpegBackend());
   }
 
   @override
@@ -248,11 +288,11 @@ class _LocalLibrarySmokeHarnessState extends State<LocalLibrarySmokeHarness> {
   @override
   Widget build(BuildContext context) {
     final entries = _currentPath == widget.rootPath
-        ? <_LocalLibraryEntry>[_LocalLibraryEntry.folder(widget.childPath)]
-        : const <_LocalLibraryEntry>[];
+        ? <LocalLibraryEntry>[LocalLibraryEntry.folder(widget.childPath)]
+        : const <LocalLibraryEntry>[];
     return MaterialApp(
       home: Scaffold(
-        body: _LocalLibraryView(
+        body: LocalLibraryView(
           currentPath: _currentPath,
           entries: entries,
           thumbnailService: _thumbnailService,
@@ -274,7 +314,7 @@ class _LocalLibrarySmokeHarnessState extends State<LocalLibrarySmokeHarness> {
 /**
  * 列表行操作 smoke test 的最小宿主。
  *
- * 只挂载真实 `_InteractiveVideoListRow` 并统计播放、收藏、更多三个回调，不打开播放器、
+ * 只挂载真实 `InteractiveVideoListRow` 并统计播放、收藏、更多三个回调，不打开播放器、
  * 不写数据库，也不触发真实标签编辑弹窗。
  */
 @visibleForTesting
@@ -299,8 +339,8 @@ class _VideoListRowSmokeHarnessState extends State<VideoListRowSmokeHarness> {
     super.initState();
     _thumbnailDirectory =
         Directory.systemTemp.createTempSync('ltp_list_harness_thumbs_');
-    _thumbnailService =
-        ThumbnailService._(_thumbnailDirectory, DesktopFFmpegBackend());
+    _thumbnailService = ThumbnailService.forDirectory(
+        _thumbnailDirectory, DesktopFFmpegBackend());
     _item = VideoItem(
       path: r'C:\smoke\media\Alpha\clip.mp4',
       title: 'Smoke Clip',
@@ -341,7 +381,7 @@ class _VideoListRowSmokeHarnessState extends State<VideoListRowSmokeHarness> {
             children: [
               Text(_actionState, key: LibrarySmokeKeys.listActionState),
               Expanded(
-                child: _InteractiveVideoListRow(
+                child: InteractiveVideoListRow(
                   item: _item,
                   thumbnailService: _thumbnailService,
                   playbackSettings: PlaybackSettings.defaults,
@@ -488,7 +528,7 @@ class _TagDiscoverySmokeHarnessState extends State<TagDiscoverySmokeHarness> {
                 ),
               ),
               Expanded(
-                child: _TagDiscoveryZone(
+                child: TagDiscoveryZone(
                   tagGroups: groups,
                   resultCounts: {
                     _primary.id: _primary.usageCount,
@@ -535,7 +575,7 @@ class _LocalFolderCard extends StatelessWidget {
       value: path,
       child: Material(
         key: LibrarySmokeKeys.localFolder(path),
-        color: _appPanel,
+        color: appPanel,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
@@ -543,15 +583,15 @@ class _LocalFolderCard extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              border: Border.all(color: _appBorder),
+              border: Border.all(color: appBorder),
               borderRadius: BorderRadius.circular(8),
-              boxShadow: _appSoftShadow,
+              boxShadow: appSoftShadow,
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.folder_rounded,
-                    size: 58, color: _appAccentViolet),
+                    size: 58, color: appAccentViolet),
                 const SizedBox(height: 16),
                 Text(
                   p.basename(path),
@@ -559,7 +599,7 @@ class _LocalFolderCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: _appText,
+                    color: appText,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -586,7 +626,7 @@ class _LocalFolderRow extends StatelessWidget {
       value: path,
       child: Material(
         key: LibrarySmokeKeys.localFolder(path),
-        color: _appPanel,
+        color: appPanel,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
@@ -594,13 +634,13 @@ class _LocalFolderRow extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              border: Border.all(color: _appBorder),
+              border: Border.all(color: appBorder),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
                 const Icon(Icons.folder_rounded,
-                    color: _appAccentViolet, size: 32),
+                    color: appAccentViolet, size: 32),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
@@ -608,12 +648,12 @@ class _LocalFolderRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: _appText,
+                      color: appText,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: _appTextMuted),
+                const Icon(Icons.chevron_right_rounded, color: appTextMuted),
               ],
             ),
           ),

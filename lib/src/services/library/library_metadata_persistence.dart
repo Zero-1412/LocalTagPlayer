@@ -1,4 +1,8 @@
-part of '../../app.dart';
+import 'dart:convert';
+
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'library_collection_rules.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -30,10 +34,10 @@ class LibraryMetadataPersistence {
       metadata[row['key'] as String] = row['value'] as String;
     }
     return LibraryMetadataSnapshot(
-      roots: LibraryStore._dedupeRoots(
+      roots: dedupeLibraryRoots(
           ((jsonDecode(metadata['roots'] ?? '[]') as List?) ?? const [])
               .cast<String>()),
-      favoriteTags: LibraryStore._dedupeTags(
+      favoriteTags: dedupeLibraryTags(
           ((jsonDecode(metadata['favoriteTags'] ?? '[]') as List?) ?? const [])
               .cast<String>()),
     );
@@ -51,14 +55,14 @@ class LibraryMetadataPersistence {
   }) {
     batch.insert(
       'metadata',
-      {'key': 'roots', 'value': jsonEncode(LibraryStore._dedupeRoots(roots))},
+      {'key': 'roots', 'value': jsonEncode(dedupeLibraryRoots(roots))},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     batch.insert(
       'metadata',
       {
         'key': 'favoriteTags',
-        'value': jsonEncode(LibraryStore._dedupeTags(favoriteTags)),
+        'value': jsonEncode(dedupeLibraryTags(favoriteTags)),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );

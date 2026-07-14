@@ -1,9 +1,42 @@
-part of '../../app.dart';
+import 'dart:math' as math;
 
-// ignore_for_file: slash_for_doc_comments
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 
-class _DesktopDragScrollBehavior extends MaterialScrollBehavior {
-  const _DesktopDragScrollBehavior();
+import '../../core/layout_size.dart';
+import '../../core/playback_settings.dart';
+import '../../core/tag_rules.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import '../../pages/player/player_dialog_content.dart';
+import '../../pages/player/player_open_request_controller.dart';
+import '../../services/media/thumbnail_service.dart';
+import '../app_theme_tokens.dart';
+import 'library_smoke_keys.dart';
+import 'library_sort_control.dart';
+import 'library_video_results.dart';
+
+/** 顶栏在非展开布局下收起次要操作，避免高频搜索入口被挤压。 */
+bool referenceTopBarShouldCollapseActions(LayoutSize layoutSize) {
+  return layoutSize != LayoutSize.expanded;
+}
+
+/** 顶栏搜索框在主布局或窄行中占据剩余宽度，防止动作按钮溢出。 */
+bool referenceTopBarSearchShouldFillRow(
+  LayoutSize layoutSize,
+  double rowWidth,
+) {
+  return layoutSize == LayoutSize.expanded ||
+      layoutSize == LayoutSize.compact ||
+      rowWidth < 1040;
+}
+
+// ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
+
+class DesktopDragScrollBehavior extends MaterialScrollBehavior {
+  const DesktopDragScrollBehavior();
 
   @override
   Set<PointerDeviceKind> get dragDevices => {
@@ -13,16 +46,16 @@ class _DesktopDragScrollBehavior extends MaterialScrollBehavior {
       };
 }
 
-Color _groupColor(String groupId) {
+Color libraryGroupColor(String groupId) {
   return switch (groupId) {
-    'folder.primary' => _appAccentViolet,
+    'folder.primary' => appAccentViolet,
     'folder.child' => const Color(0xff6366f1),
     'manual' => const Color(0xff0f766e),
     _ => const Color(0xff64748b),
   };
 }
 
-String _formatCount(int value) {
+String formatCount(int value) {
   final text = value.toString();
   final buffer = StringBuffer();
   for (var index = 0; index < text.length; index += 1) {
@@ -302,8 +335,8 @@ List<TagItem> secondaryTagsForDiscovery(
   return tags;
 }
 
-class _Sidebar extends StatelessWidget {
-  const _Sidebar({
+class LibrarySidebar extends StatelessWidget {
+  const LibrarySidebar({
     required this.roots,
     required this.tags,
     required this.tagGroups,
@@ -382,7 +415,7 @@ class _Sidebar extends StatelessWidget {
       height: MediaQuery.sizeOf(context).height,
       child: DecoratedBox(
         decoration: const BoxDecoration(
-          color: _appShell,
+          color: appShell,
           border: Border(right: BorderSide(color: Color(0xff263244))),
         ),
         child: SafeArea(
@@ -393,19 +426,19 @@ class _Sidebar extends StatelessWidget {
               children: [
                 Expanded(
                   child: ScrollConfiguration(
-                    behavior: const _DesktopDragScrollBehavior(),
+                    behavior: const DesktopDragScrollBehavior(),
                     child: ListView(
                       padding: EdgeInsets.zero,
                       children: [
-                        const _SidebarBrand(),
+                        const LibrarySidebarBrand(),
                         const SizedBox(height: 24),
-                        _SidebarPrimaryButton(
+                        LibrarySidebarPrimaryButton(
                           icon: Icons.add_rounded,
                           label: '\u6dfb\u52a0\u76ee\u5f55',
                           onPressed: isScanning ? null : onPickFolder,
                         ),
                         const SizedBox(height: 24),
-                        _SidebarNavItem(
+                        LibrarySidebarNavItem(
                           icon: Icons.grid_view_rounded,
                           label: '\u5a92\u4f53\u5e93',
                           selected: !recentPlaybackSelected &&
@@ -415,14 +448,14 @@ class _Sidebar extends StatelessWidget {
                               roots.isEmpty ? null : roots.length.toString(),
                           onTap: onShowAllLibrary,
                         ),
-                        _SidebarNavItem(
+                        LibrarySidebarNavItem(
                           icon: Icons.history_rounded,
                           label: '继续观看',
                           selected: recentPlaybackSelected,
                           trailing: null,
                           onTap: onOpenRecentPlayback,
                         ),
-                        _SidebarNavItem(
+                        LibrarySidebarNavItem(
                           icon: Icons.auto_awesome_outlined,
                           label: '\u672c\u5730\u6536\u85cf',
                           selected: favoriteVideosSelected,
@@ -430,10 +463,10 @@ class _Sidebar extends StatelessWidget {
                           onTap: onFavoritesToggle,
                         ),
                         const SizedBox(height: 18),
-                        _SidebarSectionLabel(
+                        LibrarySidebarSectionLabel(
                             label: '\u76ee\u5f55\u4e0e\u670d\u52a1'),
                         const SizedBox(height: 8),
-                        _SidebarNavItem(
+                        LibrarySidebarNavItem(
                           icon: Icons.folder_copy_outlined,
                           label: '\u76ee\u5f55\u7ba1\u7406',
                           selected: false,
@@ -441,7 +474,7 @@ class _Sidebar extends StatelessWidget {
                               roots.isEmpty ? null : roots.length.toString(),
                           onTap: onOpenDirectoryManager,
                         ),
-                        _SidebarNavItem(
+                        LibrarySidebarNavItem(
                           icon: Icons.link_off_rounded,
                           label: '缺失与重新关联',
                           selected: false,
@@ -450,7 +483,7 @@ class _Sidebar extends StatelessWidget {
                               : missingCount.toString(),
                           onTap: onOpenMissingRelink,
                         ),
-                        _SidebarNavItem(
+                        LibrarySidebarNavItem(
                           key: LibrarySmokeKeys.rescanButton,
                           icon: isScanning
                               ? Icons.hourglass_empty_rounded
@@ -465,7 +498,7 @@ class _Sidebar extends StatelessWidget {
                         Row(
                           children: [
                             const Expanded(
-                              child: _SidebarSectionLabel(
+                              child: LibrarySidebarSectionLabel(
                                 label: '\u672c\u5730\u5a92\u4f53\u5e93',
                               ),
                             ),
@@ -498,14 +531,14 @@ class _Sidebar extends StatelessWidget {
                           SizedBox(
                             height: math.min(220, 42.0 * roots.length),
                             child: ScrollConfiguration(
-                              behavior: const _DesktopDragScrollBehavior(),
+                              behavior: const DesktopDragScrollBehavior(),
                               child: ListView.builder(
                                 itemExtent: 42,
                                 padding: EdgeInsets.zero,
                                 itemCount: roots.length,
                                 itemBuilder: (context, index) {
                                   final root = roots[index];
-                                  return _SidebarLocalLibraryItem(
+                                  return LibrarySidebarLocalLibraryItem(
                                     path: root,
                                     selected: selectedLocalLibraryPath !=
                                             null &&
@@ -521,7 +554,8 @@ class _Sidebar extends StatelessWidget {
                             ),
                           ),
                         const SizedBox(height: 18),
-                        _SidebarSectionLabel(label: '\u5b58\u50a8\u4f4d\u7f6e'),
+                        LibrarySidebarSectionLabel(
+                            label: '\u5b58\u50a8\u4f4d\u7f6e'),
                         const SizedBox(height: 8),
                         if (roots.isEmpty)
                           const Text(
@@ -553,7 +587,7 @@ class _Sidebar extends StatelessWidget {
                                     child: const LinearProgressIndicator(
                                       minHeight: 4,
                                       value: 0.58,
-                                      color: _appAccentViolet,
+                                      color: appAccentViolet,
                                       backgroundColor: Color(0xff293548),
                                     ),
                                   ),
@@ -561,12 +595,12 @@ class _Sidebar extends StatelessWidget {
                               ),
                             ),
                         const SizedBox(height: 12),
-                        _SidebarLibraryStat(
+                        LibrarySidebarLibraryStat(
                           label: '\u6807\u7b7e',
                           value: tags.length.toString(),
                         ),
                         const SizedBox(height: 6),
-                        _SidebarLibraryStat(
+                        LibrarySidebarLibraryStat(
                           label: '\u5206\u7ec4',
                           value: tagGroups.length.toString(),
                         ),
@@ -577,7 +611,7 @@ class _Sidebar extends StatelessWidget {
                             child: const LinearProgressIndicator(
                               minHeight: 4,
                               value: 0.58,
-                              color: _appAccentViolet,
+                              color: appAccentViolet,
                               backgroundColor: Color(0xff293548),
                             ),
                           ),
@@ -587,7 +621,7 @@ class _Sidebar extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                _SidebarNavItem(
+                LibrarySidebarNavItem(
                   icon: Icons.settings_outlined,
                   label: '\u8bbe\u7f6e',
                   selected: false,
@@ -602,8 +636,8 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-class _SidebarSectionLabel extends StatelessWidget {
-  const _SidebarSectionLabel({required this.label});
+class LibrarySidebarSectionLabel extends StatelessWidget {
+  const LibrarySidebarSectionLabel({required this.label});
 
   final String label;
 
@@ -621,8 +655,8 @@ class _SidebarSectionLabel extends StatelessWidget {
   }
 }
 
-class _SidebarPrimaryButton extends StatelessWidget {
-  const _SidebarPrimaryButton({
+class LibrarySidebarPrimaryButton extends StatelessWidget {
+  const LibrarySidebarPrimaryButton({
     required this.icon,
     required this.label,
     required this.onPressed,
@@ -642,7 +676,7 @@ class _SidebarPrimaryButton extends StatelessWidget {
         icon: Icon(icon, size: 20),
         label: Text(label),
         style: FilledButton.styleFrom(
-          backgroundColor: _appAccentViolet,
+          backgroundColor: appAccentViolet,
           disabledBackgroundColor: const Color(0xff334155),
           foregroundColor: Colors.white,
           disabledForegroundColor: const Color(0xff94a3b8),
@@ -657,8 +691,8 @@ class _SidebarPrimaryButton extends StatelessWidget {
   }
 }
 
-class _SidebarBrand extends StatelessWidget {
-  const _SidebarBrand();
+class LibrarySidebarBrand extends StatelessWidget {
+  const LibrarySidebarBrand();
 
   @override
   Widget build(BuildContext context) {
@@ -669,11 +703,11 @@ class _SidebarBrand extends StatelessWidget {
           width: 52,
           height: 52,
           decoration: BoxDecoration(
-            color: _appAccentViolet,
+            color: appAccentViolet,
             borderRadius: BorderRadius.circular(8),
             boxShadow: [
               BoxShadow(
-                color: _appAccentViolet.withAlpha(90),
+                color: appAccentViolet.withAlpha(90),
                 blurRadius: 18,
                 offset: const Offset(0, 8),
               ),
@@ -721,8 +755,8 @@ class _SidebarBrand extends StatelessWidget {
   }
 }
 
-class _SidebarLibraryStat extends StatelessWidget {
-  const _SidebarLibraryStat({
+class LibrarySidebarLibraryStat extends StatelessWidget {
+  const LibrarySidebarLibraryStat({
     required this.label,
     required this.value,
   });
@@ -758,8 +792,8 @@ class _SidebarLibraryStat extends StatelessWidget {
   }
 }
 
-class _SidebarLocalLibraryItem extends StatelessWidget {
-  const _SidebarLocalLibraryItem({
+class LibrarySidebarLocalLibraryItem extends StatelessWidget {
+  const LibrarySidebarLocalLibraryItem({
     required this.path,
     required this.selected,
     required this.onTap,
@@ -808,7 +842,7 @@ class _SidebarLocalLibraryItem extends StatelessWidget {
                 Icon(
                   Icons.folder_outlined,
                   size: 17,
-                  color: selected ? _appAccentViolet : const Color(0xff94a3b8),
+                  color: selected ? appAccentViolet : const Color(0xff94a3b8),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -844,8 +878,8 @@ class _SidebarLocalLibraryItem extends StatelessWidget {
   }
 }
 
-class _SidebarNavItem extends StatelessWidget {
-  const _SidebarNavItem({
+class LibrarySidebarNavItem extends StatelessWidget {
+  const LibrarySidebarNavItem({
     super.key,
     required this.icon,
     required this.label,
@@ -918,8 +952,8 @@ class _SidebarNavItem extends StatelessWidget {
   }
 }
 
-class _LibraryHeroArea extends StatelessWidget {
-  const _LibraryHeroArea({
+class LibraryHeroArea extends StatelessWidget {
+  const LibraryHeroArea({
     required this.selectedTags,
     required this.selectedChildTags,
     required this.selectedGroupTags,
@@ -1009,11 +1043,11 @@ class _LibraryHeroArea extends StatelessWidget {
           avatar: Icon(
             Icons.add_circle_outline,
             size: 18,
-            color: _groupColor(tag.groupId ?? 'manual'),
+            color: libraryGroupColor(tag.groupId ?? 'manual'),
           ),
           label: Text(tag.displayName ?? tag.name),
           side: BorderSide(
-            color: _groupColor(tag.groupId ?? 'manual').withAlpha(150),
+            color: libraryGroupColor(tag.groupId ?? 'manual').withAlpha(150),
           ),
           onDeleted: () => onRemoveGroupTag(tag),
         ),
@@ -1040,10 +1074,10 @@ class _LibraryHeroArea extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 64),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         decoration: BoxDecoration(
-          color: _appPanel,
+          color: appPanel,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: _appBorder),
-          boxShadow: _appSoftShadow,
+          border: Border.all(color: appBorder),
+          boxShadow: appSoftShadow,
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -1053,7 +1087,7 @@ class _LibraryHeroArea extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: _appText,
+                    color: appText,
                     fontWeight: FontWeight.w900,
                   ),
             );
@@ -1062,7 +1096,7 @@ class _LibraryHeroArea extends StatelessWidget {
               icon: const Icon(Icons.delete_outline_rounded, size: 18),
               label: const Text('\u6e05\u7a7a\u5168\u90e8'),
               style: TextButton.styleFrom(
-                foregroundColor: _appTextMuted,
+                foregroundColor: appTextMuted,
                 visualDensity: VisualDensity.compact,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -1168,9 +1202,9 @@ class _CurrentFilterChip extends StatelessWidget {
       selectedColor: selectedColor,
       side: side ?? const BorderSide(color: Color(0xffd8d4ff)),
       backgroundColor: const Color(0xfff6f4ff),
-      deleteIconColor: _appAccentViolet,
+      deleteIconColor: appAccentViolet,
       labelStyle: const TextStyle(
-        color: _appAccentViolet,
+        color: appAccentViolet,
         fontSize: 13,
         fontWeight: FontWeight.w800,
       ),
@@ -1205,7 +1239,7 @@ class _FilterResultLine extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: _appAccentViolet,
+              color: appAccentViolet,
               fontSize: 13,
               fontWeight: FontWeight.w900,
             ),
@@ -1223,8 +1257,8 @@ class _FilterResultLine extends StatelessWidget {
   }
 }
 
-class _SmartListDraftDialog extends StatefulWidget {
-  const _SmartListDraftDialog({
+class SmartListDraftDialog extends StatefulWidget {
+  const SmartListDraftDialog({
     required this.suggestedName,
     required this.querySummary,
     required this.queryExpression,
@@ -1241,10 +1275,10 @@ class _SmartListDraftDialog extends StatefulWidget {
   final VoidCallback onConfirmDraft;
 
   @override
-  State<_SmartListDraftDialog> createState() => _SmartListDraftDialogState();
+  State<SmartListDraftDialog> createState() => SmartListDraftDialogState();
 }
 
-class _SmartListDraftDialogState extends State<_SmartListDraftDialog> {
+class SmartListDraftDialogState extends State<SmartListDraftDialog> {
   late final TextEditingController _nameController =
       TextEditingController(text: widget.suggestedName);
   var _autoRefreshPreview = true;
@@ -1277,7 +1311,7 @@ class _SmartListDraftDialogState extends State<_SmartListDraftDialog> {
               border: Border.all(color: const Color(0xffd8d4ff)),
             ),
             child: const Icon(Icons.bookmark_add_outlined,
-                color: _appAccentViolet, size: 20),
+                color: appAccentViolet, size: 20),
           ),
           const SizedBox(width: 12),
           const Expanded(
@@ -1359,7 +1393,7 @@ class _SmartListPreviewPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xfff8fafc),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _appBorder),
+        border: Border.all(color: appBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1367,7 +1401,7 @@ class _SmartListPreviewPanel extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.manage_search_rounded,
-                  size: 18, color: _appAccentViolet),
+                  size: 18, color: appAccentViolet),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1375,7 +1409,7 @@ class _SmartListPreviewPanel extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: _appText,
+                    color: appText,
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
                   ),
@@ -1384,7 +1418,7 @@ class _SmartListPreviewPanel extends StatelessWidget {
               Text(
                 '$resultCount / $totalCount',
                 style: const TextStyle(
-                  color: _appAccentViolet,
+                  color: appAccentViolet,
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
                 ),
@@ -1397,7 +1431,7 @@ class _SmartListPreviewPanel extends StatelessWidget {
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: _appTextMuted,
+              color: appTextMuted,
               fontSize: 12,
               height: 1.35,
               fontWeight: FontWeight.w600,
@@ -1409,8 +1443,8 @@ class _SmartListPreviewPanel extends StatelessWidget {
   }
 }
 
-class _ReferenceTopBar extends StatelessWidget {
-  const _ReferenceTopBar({
+class ReferenceTopBar extends StatelessWidget {
+  const ReferenceTopBar({
     required this.controller,
     required this.searchFocusNode,
     required this.videoCount,
@@ -1474,11 +1508,11 @@ class _ReferenceTopBar extends StatelessWidget {
     return Shortcuts(
       shortcuts: <ShortcutActivator, Intent>{
         const SingleActivator(LogicalKeyboardKey.keyK, control: true):
-            const _FocusLibrarySearchIntent(),
+            const FocusLibrarySearchIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
-          _FocusLibrarySearchIntent: CallbackAction<_FocusLibrarySearchIntent>(
+          FocusLibrarySearchIntent: CallbackAction<FocusLibrarySearchIntent>(
             onInvoke: (_) {
               searchFocusNode.requestFocus();
               controller.selection = TextSelection(
@@ -1526,13 +1560,13 @@ class _ReferenceTopBar extends StatelessWidget {
                     child: Container(
                       height: compact ? 44 : 50,
                       decoration: BoxDecoration(
-                        color: _appPanel,
+                        color: appPanel,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: keywordActive ? _appAccentViolet : _appBorder,
+                          color: keywordActive ? appAccentViolet : appBorder,
                           width: keywordActive ? 1.4 : 1,
                         ),
-                        boxShadow: _appSoftShadow,
+                        boxShadow: appSoftShadow,
                       ),
                       /**
                  * 主搜索框使用 TextField 而不是 Material SearchBar。
@@ -1548,7 +1582,7 @@ class _ReferenceTopBar extends StatelessWidget {
                         onChanged: onSearchChanged,
                         onSubmitted: onSearchChanged,
                         style: const TextStyle(
-                          color: _appText,
+                          color: appText,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1565,7 +1599,7 @@ class _ReferenceTopBar extends StatelessWidget {
                             Icons.search_rounded,
                             size: 23,
                             color: keywordActive
-                                ? _appAccentViolet
+                                ? appAccentViolet
                                 : const Color(0xff566274),
                           ),
                           prefixIconConstraints: const BoxConstraints(
@@ -1630,7 +1664,7 @@ class _ReferenceTopBar extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       if (!compact)
-                        _TopSortControl(
+                        TopSortControl(
                           sortMode: sortMode,
                           sortDirection: sortDirection,
                           onChanged: onSortChanged,
@@ -1659,8 +1693,8 @@ class _ReferenceTopBar extends StatelessWidget {
  *
  * 独立 intent 让快捷键层只负责焦点转移，不复制搜索和筛选逻辑。
  */
-class _FocusLibrarySearchIntent extends Intent {
-  const _FocusLibrarySearchIntent();
+class FocusLibrarySearchIntent extends Intent {
+  const FocusLibrarySearchIntent();
 }
 
 /**
@@ -1679,7 +1713,7 @@ Widget referenceTopBarSearchSmokeHarness({
 }) {
   return MaterialApp(
     home: Scaffold(
-      body: _ReferenceTopBar(
+      body: ReferenceTopBar(
         controller: controller,
         searchFocusNode:
             searchFocusNode ?? FocusNode(debugLabel: 'search-smoke-field'),
@@ -1724,10 +1758,10 @@ class ReferenceTopBarSearchResultSmokeHarness extends StatefulWidget {
 
   @override
   State<ReferenceTopBarSearchResultSmokeHarness> createState() =>
-      _ReferenceTopBarSearchResultSmokeHarnessState();
+      ReferenceTopBarSearchResultSmokeHarnessState();
 }
 
-class _ReferenceTopBarSearchResultSmokeHarnessState
+class ReferenceTopBarSearchResultSmokeHarnessState
     extends State<ReferenceTopBarSearchResultSmokeHarness> {
   /**
    * smoke harness 自己持有 controller，模拟真实页面中的单一输入源。
@@ -1760,7 +1794,7 @@ class _ReferenceTopBarSearchResultSmokeHarnessState
       home: Scaffold(
         body: Column(
           children: [
-            _ReferenceTopBar(
+            ReferenceTopBar(
               controller: _controller,
               searchFocusNode: _focusNode,
               videoCount: filtered.length,
@@ -1814,7 +1848,7 @@ class _ReferenceActionButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: _appPanel,
+        color: appPanel,
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -1825,19 +1859,19 @@ class _ReferenceActionButton extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: _appBorder,
+                color: appBorder,
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 19, color: _appAccentStrong),
+                Icon(icon, size: 19, color: appAccentStrong),
                 if (label != null) ...[
                   const SizedBox(width: 8),
                   Text(
                     label!,
                     style: const TextStyle(
-                      color: _appText,
+                      color: appText,
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1872,10 +1906,10 @@ class _ReferenceIconButton extends StatelessWidget {
       onPressed: onPressed,
       icon: Icon(icon, size: 20),
       style: IconButton.styleFrom(
-        backgroundColor: _appPanel,
-        foregroundColor: _appAccentStrong,
+        backgroundColor: appPanel,
+        foregroundColor: appAccentStrong,
         fixedSize: const Size(38, 38),
-        side: const BorderSide(color: _appBorder),
+        side: const BorderSide(color: appBorder),
       ),
     );
   }
@@ -1898,9 +1932,9 @@ class ResultViewToggle extends StatelessWidget {
       height: 48,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: _appPanel,
+        color: appPanel,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _appBorder),
+        border: Border.all(color: appBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1949,7 +1983,7 @@ class _TopViewButton extends StatelessWidget {
         child: Icon(
           icon,
           size: 18,
-          color: selected ? _appAccentViolet : _appTextMuted,
+          color: selected ? appAccentViolet : appTextMuted,
         ),
       ),
     );
@@ -1962,8 +1996,8 @@ class _TopViewButton extends StatelessWidget {
  * 这里的删除只清理播放记录，不删除视频文件；选择状态由 LibraryPage 保存，
  * 避免滚动重建时丢失用户正在批量清理的选择。
  */
-class _RecentPlaybackView extends StatelessWidget {
-  const _RecentPlaybackView({
+class RecentPlaybackView extends StatelessWidget {
+  const RecentPlaybackView({
     required this.videos,
     required this.selectedPathKeys,
     required this.thumbnailService,
@@ -2009,7 +2043,7 @@ class _RecentPlaybackView extends StatelessWidget {
               Text(
                 '\u5df2\u9009 ${selectedPathKeys.length} / ${videos.length}',
                 style: const TextStyle(
-                  color: _appTextMuted,
+                  color: appTextMuted,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -2140,7 +2174,7 @@ class _RecentPlaybackRow extends StatelessWidget {
           child: Column(
             children: [
               Expanded(
-                child: _InteractiveVideoListRow(
+                child: InteractiveVideoListRow(
                   item: item,
                   thumbnailService: thumbnailService,
                   playbackSettings: playbackSettings,
@@ -2153,8 +2187,8 @@ class _RecentPlaybackRow extends StatelessWidget {
               LinearProgressIndicator(
                 value: videoPlaybackProgressFraction(item),
                 minHeight: 3,
-                color: _appAccentViolet,
-                backgroundColor: _appBorder,
+                color: appAccentViolet,
+                backgroundColor: appBorder,
               ),
             ],
           ),
@@ -2198,7 +2232,7 @@ class _RecentPlaybackCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        _InteractiveVideoCard(
+        InteractiveVideoCard(
           item: item,
           thumbnailService: thumbnailService,
           playbackSettings: playbackSettings,
@@ -2221,7 +2255,7 @@ class _RecentPlaybackCard extends StatelessWidget {
             value: videoPlaybackProgressFraction(item),
             minHeight: 4,
             borderRadius: BorderRadius.circular(99),
-            color: _appAccentViolet,
+            color: appAccentViolet,
             backgroundColor: const Color(0x55000000),
           ),
         ),
@@ -2382,7 +2416,7 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (widget.helperText != null) ...[
-                  _PlayerDialogSectionCard(
+                  PlayerDialogSectionCard(
                     title: '编辑范围',
                     icon: Icons.info_outline_rounded,
                     padding: const EdgeInsets.all(14),
@@ -2406,7 +2440,7 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  child: _PlayerDialogSectionCard(
+                  child: PlayerDialogSectionCard(
                     title: '标签选择',
                     icon: Icons.local_offer_outlined,
                     expandChild: true,

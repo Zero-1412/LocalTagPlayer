@@ -1,4 +1,16 @@
-part of '../../app.dart';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../core/tag_rules.dart';
+import '../../models/library_scan_models.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import 'library_collection_rules.dart';
+import 'library_scan_service.dart';
+import 'library_store_access.dart';
+import 'library_tag_maintenance.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -17,7 +29,7 @@ class LibraryScanCoordinator {
   const LibraryScanCoordinator(this._store);
 
   /** 当前媒体库 store。 */
-  final LibraryStore _store;
+  final LibraryStoreAccess _store;
 
   /**
    * 将用户选择的新文件重新关联到一个 missing 条目。
@@ -47,7 +59,7 @@ class LibraryScanCoordinator {
         missing.mediaFingerprint != scanned.mediaFingerprint) {
       throw StateError('文件指纹不一致，已拒绝重新关联以避免串档');
     }
-    final batch = _store._db.batch();
+    final batch = _store.database.batch();
     _relinkScannedVideo(batch, missing, scanned, newKey);
     await batch.commit(noResult: true);
   }
@@ -105,7 +117,7 @@ class LibraryScanCoordinator {
         entry.key: <String>{...entry.value},
     };
     final tagsSnapshot = Map<String, TagItem>.of(_store.tagsById);
-    final batch = _store._db.batch();
+    final batch = _store.database.batch();
     try {
       for (final target in prepared) {
         _relinkScannedVideo(
@@ -163,15 +175,15 @@ class LibraryScanCoordinator {
           isMissing: item.isMissing,
         ),
     };
-    final scanDelta = await _store._scanBackend.scan(
+    final scanDelta = await _store.scanBackend.scan(
       generationId: generationId,
       roots: List<String>.unmodifiable(_store.roots),
       knownMetadata: knownMetadata,
     );
-    if (scanDelta.cancelled || generationId != _store._scanGeneration) {
+    if (scanDelta.cancelled || generationId != _store.scanGeneration) {
       return LibraryScanCommitResult.cancelled(generationId);
     }
-    final batch = _store._db.batch();
+    final batch = _store.database.batch();
     var added = 0;
     var modified = 0;
     var relinked = 0;
@@ -235,7 +247,7 @@ class LibraryScanCoordinator {
     for (final item in missingVideos) {
       changedById[item.videoId] = item;
     }
-    _store._metadataPersistence.saveInBatch(
+    _store.metadataPersistence.saveInBatch(
       batch,
       roots: _store.roots,
       favoriteTags: _store.favoriteTags,
@@ -274,8 +286,8 @@ class LibraryScanCoordinator {
       addedAt: DateTime.now(),
     );
     _store.videos[videoKey] = item;
-    _store._videoPersistence.insertInBatch(batch, item);
-    _store._tagMaintenance.syncFolderTagsInBatch(batch, item);
+    _store.videoPersistence.insertInBatch(batch, item);
+    LibraryTagMaintenance(_store).syncFolderTagsInBatch(batch, item);
     return item;
   }
 
@@ -289,9 +301,9 @@ class LibraryScanCoordinator {
     VideoItem existing,
     LibraryScannedVideo scanned,
   ) {
-    final tagsChanged = !LibraryStore._setEquals(existing.tags, scanned.tags);
+    final tagsChanged = !libraryTagSetsEqual(existing.tags, scanned.tags);
     final childTagsChanged =
-        !LibraryStore._childTagsEquals(existing.childTags, scanned.childTags);
+        !libraryChildTagsEqual(existing.childTags, scanned.childTags);
     final fingerprintChanged = existing.mediaFingerprint != null &&
         existing.mediaFingerprint != scanned.mediaFingerprint;
     final contentChanged = existing.fileSize != scanned.fileSize ||
@@ -323,9 +335,9 @@ class LibraryScanCoordinator {
       existing.thumbnailError = null;
     }
     if (tagsChanged || childTagsChanged || indexChanged) {
-      _store._videoPersistence.insertInBatch(batch, existing);
+      _store.videoPersistence.insertInBatch(batch, existing);
       if (tagsChanged || childTagsChanged) {
-        _store._tagMaintenance.syncFolderTagsInBatch(batch, existing);
+        LibraryTagMaintenance(_store).syncFolderTagsInBatch(batch, existing);
       }
     }
     return contentChanged;
@@ -363,9 +375,9 @@ class LibraryScanCoordinator {
     if (linkedTagIds != null) {
       _store.videoTagIdsByPathKey[newVideoKey] = linkedTagIds;
     }
-    _store._videoPersistence.relinkInBatch(batch, oldPath, existing);
-    _store._tagPersistence.relinkVideoPathInBatch(batch, existing);
-    _store._tagMaintenance.syncFolderTagsInBatch(batch, existing);
+    _store.videoPersistence.relinkInBatch(batch, oldPath, existing);
+    _store.tagPersistence.relinkVideoPathInBatch(batch, existing);
+    LibraryTagMaintenance(_store).syncFolderTagsInBatch(batch, existing);
   }
 
   /**
@@ -390,7 +402,7 @@ class LibraryScanCoordinator {
         continue;
       }
       item.isMissing = shouldBeMissing;
-      _store._videoPersistence.insertInBatch(batch, item);
+      _store.videoPersistence.insertInBatch(batch, item);
       changed.add(item);
     }
     return changed;

@@ -1,4 +1,11 @@
-part of '../../app.dart';
+import 'dart:convert';
+
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../core/tag_rules.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import 'library_collection_rules.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -40,7 +47,7 @@ class LibraryTagPersistence {
     final batch = _db.batch();
     upsertTagInBatch(batch, tag, replace: true);
     batch.delete('tag_aliases', where: 'tag_id = ?', whereArgs: [tag.id]);
-    for (final alias in LibraryStore._dedupeTags(tag.aliases)) {
+    for (final alias in dedupeLibraryTags(tag.aliases)) {
       batch.insert(
         'tag_aliases',
         {'tag_id': tag.id, 'alias': alias},

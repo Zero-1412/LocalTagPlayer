@@ -1,9 +1,24 @@
-part of '../../app.dart';
+import 'dart:async';
+import 'dart:io';
 
-// ignore_for_file: slash_for_doc_comments
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 
-class _VideoGrid extends StatelessWidget {
-  const _VideoGrid({
+import '../../core/layout_size.dart';
+import '../../core/playback_settings.dart';
+import '../../models/video_item.dart';
+import '../../services/library/library_card_ui_diagnostics.dart';
+import '../../services/media/thumbnail_service.dart';
+import '../app_theme_tokens.dart';
+import 'library_smoke_keys.dart';
+
+// ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
+
+class VideoGrid extends StatelessWidget {
+  const VideoGrid({
     required this.videos,
     required this.thumbnailService,
     required this.playbackSettings,
@@ -52,7 +67,7 @@ class _VideoGrid extends StatelessWidget {
               final item = videos[index];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: _InteractiveVideoListRow(
+                child: InteractiveVideoListRow(
                   item: item,
                   thumbnailService: thumbnailService,
                   playbackSettings: playbackSettings,
@@ -80,7 +95,7 @@ class _VideoGrid extends StatelessWidget {
           scrollCacheExtent: const ScrollCacheExtent.pixels(720),
           itemBuilder: (context, index) {
             final item = videos[index];
-            return _InteractiveVideoCard(
+            return InteractiveVideoCard(
               item: item,
               thumbnailService: thumbnailService,
               playbackSettings: playbackSettings,
@@ -102,8 +117,8 @@ class _VideoGrid extends StatelessWidget {
  * 行内容限制在可读宽度内，避免超宽桌面窗口把“播放 / 收藏 / 更多”
  * 操作区推到视线外，导致入口存在但真实点击和视觉发现都不稳定。
  */
-class _InteractiveVideoListRow extends StatelessWidget {
-  const _InteractiveVideoListRow({
+class InteractiveVideoListRow extends StatelessWidget {
+  const InteractiveVideoListRow({
     required this.item,
     required this.thumbnailService,
     required this.playbackSettings,
@@ -138,9 +153,9 @@ class _InteractiveVideoListRow extends StatelessWidget {
         onDoubleTap: onOpen,
         child: Ink(
           decoration: BoxDecoration(
-            color: _appPanel,
+            color: appPanel,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: _appBorder),
+            border: Border.all(color: appBorder),
           ),
           padding: const EdgeInsets.all(8),
           child: LayoutBuilder(
@@ -174,7 +189,7 @@ class _InteractiveVideoListRow extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    color: _appText,
+                                    color: appText,
                                     fontWeight: FontWeight.w800,
                                     height: 1.2,
                                   ),
@@ -250,7 +265,7 @@ class _ListTagPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xfff4f6fb),
         borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: _appBorder),
+        border: Border.all(color: appBorder),
       ),
       child: Text(
         label,
@@ -308,7 +323,7 @@ class _ListRowActions extends StatelessWidget {
                   onTap: onOpen,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: _appAccentViolet,
+                      color: appAccentViolet,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Row(
@@ -367,8 +382,8 @@ class _ListRowActions extends StatelessWidget {
   }
 }
 
-class _InteractiveVideoCard extends StatefulWidget {
-  const _InteractiveVideoCard({
+class InteractiveVideoCard extends StatefulWidget {
+  const InteractiveVideoCard({
     required this.item,
     required this.thumbnailService,
     required this.playbackSettings,
@@ -387,10 +402,10 @@ class _InteractiveVideoCard extends StatefulWidget {
   final VoidCallback onDelete;
 
   @override
-  State<_InteractiveVideoCard> createState() => _InteractiveVideoCardState();
+  State<InteractiveVideoCard> createState() => InteractiveVideoCardState();
 }
 
-class _InteractiveVideoCardState extends State<_InteractiveVideoCard> {
+class InteractiveVideoCardState extends State<InteractiveVideoCard> {
   var _hovered = false;
   var _pressed = false;
 
@@ -410,23 +425,23 @@ class _InteractiveVideoCardState extends State<_InteractiveVideoCard> {
           onTapCancel: () => setState(() => _pressed = false),
           onTapUp: (_) => setState(() => _pressed = false),
           child: AnimatedScale(
-            duration: _motionDuration,
-            curve: _motionCurve,
+            duration: appMotionDuration,
+            curve: appMotionCurve,
             scale: _pressed ? 0.992 : 1,
             child: AnimatedContainer(
-              duration: _motionDuration,
-              curve: _motionCurve,
+              duration: appMotionDuration,
+              curve: appMotionCurve,
               decoration: BoxDecoration(
-                color: _appPanel,
+                color: appPanel,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: _hovered ? _appAccentViolet : _appBorder,
+                  color: _hovered ? appAccentViolet : appBorder,
                 ),
                 boxShadow: [
-                  ..._appSoftShadow,
+                  ...appSoftShadow,
                   if (_hovered)
                     BoxShadow(
-                      color: _appAccentViolet.withAlpha(45),
+                      color: appAccentViolet.withAlpha(45),
                       blurRadius: 22,
                       offset: const Offset(0, 12),
                     ),
@@ -490,7 +505,7 @@ class _VideoCardMetadata extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: _appText,
+                    color: appText,
                     fontWeight: FontWeight.w700,
                     height: 1.25,
                   ),
@@ -591,7 +606,7 @@ class _VideoCardActions extends StatelessWidget {
                       icon: const Icon(Icons.play_arrow),
                       label: Text(iconOnly ? '' : '\u64ad\u653e'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: _appAccentViolet,
+                        backgroundColor: appAccentViolet,
                         foregroundColor: Colors.white,
                         fixedSize: const Size.fromHeight(34),
                         padding: EdgeInsets.zero,
@@ -865,7 +880,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
                         filterQuality: FilterQuality.medium,
                         gaplessPlayback: false,
                         // 历史 fallback 缓存中仍有 4K JPEG，按卡片尺寸解码避免占用数十 MiB。
-                        cacheWidth: _thumbnailWidth,
+                        cacheWidth: libraryThumbnailWidth,
                       );
                     }
                     return Container(
@@ -942,8 +957,8 @@ class _VideoPreviewState extends State<_VideoPreview> {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.hasLibrary, this.message});
+class EmptyState extends StatelessWidget {
+  const EmptyState({required this.hasLibrary, this.message});
 
   final bool hasLibrary;
 

@@ -1,4 +1,5 @@
-part of '../../app.dart';
+import '../../core/tag_rules.dart';
+import '../../models/video_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

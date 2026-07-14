@@ -1,4 +1,13 @@
-part of '../../app.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../../core/tag_rules.dart';
+import '../../models/video_item.dart';
+import '../../platform/file_system_adapter.dart';
+import '../../services/library/library_application_facade.dart';
+import '../../services/relink/bulk_path_relink_service.dart';
+import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/library/library_video_results.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -99,7 +108,7 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
   Widget build(BuildContext context) {
     final missing = _missingVideos;
     return Scaffold(
-      backgroundColor: _appBackground,
+      backgroundColor: appBackground,
       appBar: AppBar(
         leading: IconButton(
           tooltip: '返回媒体库',
@@ -132,7 +141,7 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
       ),
       body: missing.isEmpty
           ? const Center(
-              child: _EmptyState(
+              child: EmptyState(
                 hasLibrary: true,
                 message: '当前没有缺失视频',
               ),

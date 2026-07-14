@@ -1,6 +1,20 @@
-part of '../../app.dart';
+import 'dart:async';
+import 'dart:collection';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/widgets.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:path/path.dart' as p;
+
+import '../../core/app_paths.dart';
+import '../../models/video_item.dart';
+import '../../platform/platform_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments
+
+const _thumbnailPlayerTimeout = Duration(seconds: 8);
 
 class _ThumbnailJob {
   const _ThumbnailJob({
@@ -61,6 +75,13 @@ class CacheStats {
 
 class ThumbnailService {
   ThumbnailService._(this._directory, this._ffmpegBackend);
+
+  /** 测试或 smoke harness 使用显式缓存目录创建实例。 */
+  factory ThumbnailService.forDirectory(
+    Directory directory,
+    FFmpegBackend ffmpegBackend,
+  ) =>
+      ThumbnailService._(directory, ffmpegBackend);
   static const _maxBackgroundQueuedJobs = 500;
   static const _maxBackgroundRequestsInFlight = 24;
 

@@ -1,10 +1,18 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-14 · Dart part 全量清零与真实 library 边界
+
+- 按 Store 私有 metadata/tag/scan 协作、播放器/缩略图实现、应用服务、页面/widgets 的顺序迁移剩余 35 个 `part`；项目 57 个 `part` 已全部清零。
+- 新增 `LibraryStoreAccess` 私有协作端口、共享集合规则、应用主题 token 和 `LocalTagPlayerDependencies` 组合根 contract；跨文件依赖改为显式 import。
+- `LibraryStore` 仍是 SQLite 单写 Repository，`LibraryApplicationFacade` 仍是页面业务入口；标签筛选、stable identity、filtered queue 与缓存队列没有迁往 Rust/C++。
+- 架构 contract test 增加零 `part` 守卫；96 项完整测试、`flutter analyze` 与 Windows debug build 通过。
+- 真实窗口完成“原神 → 雷神”172 条筛选、本地 root 477 项与“丽莎”9 项目录浏览/返回验证，布局与状态反馈正常。
+
 ## 2026-07-14 · DatabaseProvider、只读 Facade 与第二批 library 迁移
 
 - 新增实例化 `AppPaths` 与 `SqfliteDatabaseProvider`；SQLite schema、标签筛选与 stable identity 继续由 Dart 单写拥有。
 - facade 改为只读视图与明确命令，Tag/Cache/Playback repository 绑定同一 Store；移除静态媒体工具、窗口单例和旧位置 service。
-- 页面不再读取压测环境或直接写启动诊断；57 个 part 已消除 22 个，剩余 35 个。
+- 页面不再读取压测环境或直接写启动诊断；该批次完成时 57 个 part 已消除 22 个，后续批次已全部清零。
 - 新增 macOS/Linux adapter 类型与 contract/fake tests；analyze、Windows build 和真实窗口筛选通过，非 Windows build 待对应宿主验证。
 
 ## 2026-07-14 · 文件系统边界、Repository 门面与组合根

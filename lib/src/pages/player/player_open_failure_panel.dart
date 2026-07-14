@@ -1,6 +1,6 @@
-part of '../../app.dart';
+import 'package:flutter/material.dart';
 
-// ignore_for_file: slash_for_doc_comments
+// ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
 
 /**
  * 播放器视频打开失败后的稳定恢复面板。
@@ -8,8 +8,8 @@ part of '../../app.dart';
  * 面板只展示不包含本地路径的安全错误类型，并把重试、跳过和诊断动作交还页面协调，
  * 避免一次 SnackBar 消失后用户无法继续消费当前筛选队列。
  */
-class _PlayerOpenFailurePanel extends StatelessWidget {
-  const _PlayerOpenFailurePanel({
+class PlayerOpenFailurePanel extends StatelessWidget {
+  const PlayerOpenFailurePanel({
     required this.failureCode,
     required this.canSkip,
     required this.onRetry,

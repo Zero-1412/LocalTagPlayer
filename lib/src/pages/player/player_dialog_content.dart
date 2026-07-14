@@ -1,6 +1,6 @@
-part of '../../app.dart';
+import 'package:flutter/material.dart';
 
-// ignore_for_file: slash_for_doc_comments
+// ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
 
 /**
  * 播放器弹窗内部统一使用的信息卡片。
@@ -8,8 +8,8 @@ part of '../../app.dart';
  * 该组件只约束标题、边框、内边距和内容节奏，不承载业务状态，避免标签、
  * 视频信息与诊断弹窗各自维护一套视觉规则。
  */
-class _PlayerDialogSectionCard extends StatelessWidget {
-  const _PlayerDialogSectionCard({
+class PlayerDialogSectionCard extends StatelessWidget {
+  const PlayerDialogSectionCard({
     required this.title,
     required this.icon,
     required this.child,
@@ -75,8 +75,8 @@ class _PlayerDialogSectionCard extends StatelessWidget {
 }
 
 /** 播放器信息弹窗中统一的“标签－值”信息行。 */
-class _PlayerDialogInfoRow extends StatelessWidget {
-  const _PlayerDialogInfoRow({
+class PlayerDialogInfoRow extends StatelessWidget {
+  const PlayerDialogInfoRow({
     required this.label,
     required this.value,
     this.emphasize = false,

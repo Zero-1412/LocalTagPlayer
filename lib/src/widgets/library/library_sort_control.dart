@@ -1,6 +1,14 @@
-part of '../../app.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
 
-// ignore_for_file: slash_for_doc_comments
+import 'package:flutter/material.dart';
+
+import '../../core/app_paths.dart';
+import '../app_theme_tokens.dart';
+import 'library_smoke_keys.dart';
+
+// ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
 
 /**
  * 媒体库顶部排序字段。
@@ -86,8 +94,8 @@ class LibrarySortPreferences {
  *
  * 字段选择使用贴合按钮底部的抽屉式 overlay，方向切换使用独立按钮，二者只通过回调把用户意图传回页面状态。
  */
-class _TopSortControl extends StatefulWidget {
-  const _TopSortControl({
+class TopSortControl extends StatefulWidget {
+  const TopSortControl({
     required this.sortMode,
     required this.sortDirection,
     required this.onChanged,
@@ -100,10 +108,10 @@ class _TopSortControl extends StatefulWidget {
   final VoidCallback onDirectionToggle;
 
   @override
-  State<_TopSortControl> createState() => _TopSortControlState();
+  State<TopSortControl> createState() => TopSortControlState();
 }
 
-class _TopSortControlState extends State<_TopSortControl>
+class TopSortControlState extends State<TopSortControl>
     with SingleTickerProviderStateMixin {
   final _fieldKey = GlobalKey();
   late final AnimationController _menuController;
@@ -128,7 +136,7 @@ class _TopSortControlState extends State<_TopSortControl>
   }
 
   @override
-  void didUpdateWidget(covariant _TopSortControl oldWidget) {
+  void didUpdateWidget(covariant TopSortControl oldWidget) {
     super.didUpdateWidget(oldWidget);
     _menuEntry?.markNeedsBuild();
   }
@@ -211,14 +219,14 @@ class _TopSortControlState extends State<_TopSortControl>
                   key: LibrarySmokeKeys.topSortMenuPanel,
                   width: menuWidth,
                   decoration: const BoxDecoration(
-                    color: _appPanel,
+                    color: appPanel,
                     borderRadius: BorderRadius.vertical(
                       bottom: Radius.circular(10),
                     ),
                     border: Border(
-                      left: BorderSide(color: _appBorder),
-                      right: BorderSide(color: _appBorder),
-                      bottom: BorderSide(color: _appBorder),
+                      left: BorderSide(color: appBorder),
+                      right: BorderSide(color: appBorder),
+                      bottom: BorderSide(color: appBorder),
                     ),
                     boxShadow: [
                       BoxShadow(
@@ -271,9 +279,9 @@ class _TopSortControlState extends State<_TopSortControl>
     return Container(
       height: 48,
       decoration: BoxDecoration(
-        color: _appPanel,
+        color: appPanel,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _appBorder),
+        border: Border.all(color: appBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -297,19 +305,19 @@ class _TopSortControlState extends State<_TopSortControl>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(Icons.sort_rounded,
-                          size: 18, color: _appAccentStrong),
+                          size: 18, color: appAccentStrong),
                       const SizedBox(width: 7),
                       Text(
                         sortModeLabel(widget.sortMode),
                         style: const TextStyle(
-                          color: _appText,
+                          color: appText,
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(width: 4),
                       const Icon(Icons.expand_more_rounded,
-                          size: 18, color: _appTextMuted),
+                          size: 18, color: appTextMuted),
                     ],
                   ),
                 ),
@@ -318,7 +326,7 @@ class _TopSortControlState extends State<_TopSortControl>
           ),
           const SizedBox(
             height: 26,
-            child: VerticalDivider(width: 1, color: _appBorder),
+            child: VerticalDivider(width: 1, color: appBorder),
           ),
           Semantics(
             key: LibrarySmokeKeys.topSortDirectionButton,
@@ -344,13 +352,13 @@ class _TopSortControlState extends State<_TopSortControl>
                             ? Icons.arrow_upward_rounded
                             : Icons.arrow_downward_rounded,
                         size: 17,
-                        color: _appAccentStrong,
+                        color: appAccentStrong,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         directionAscending ? '\u6b63\u5e8f' : '\u5012\u5e8f',
                         style: const TextStyle(
-                          color: _appText,
+                          color: appText,
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
                         ),
@@ -383,13 +391,13 @@ class _SortMenuItem extends StatelessWidget {
         Icon(
           selected ? Icons.check_rounded : Icons.circle_outlined,
           size: 18,
-          color: selected ? _appAccentViolet : _appTextMuted,
+          color: selected ? appAccentViolet : appTextMuted,
         ),
         const SizedBox(width: 8),
         Text(
           label,
           style: const TextStyle(
-            color: _appText,
+            color: appText,
             fontSize: 13,
             fontWeight: FontWeight.w700,
           ),
@@ -399,7 +407,6 @@ class _SortMenuItem extends StatelessWidget {
   }
 }
 
-@visibleForTesting
 String sortModeLabel(SortMode mode) {
   return switch (mode) {
     SortMode.name => '\u540d\u79f0',

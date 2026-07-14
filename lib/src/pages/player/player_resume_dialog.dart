@@ -1,4 +1,6 @@
-part of '../../app.dart';
+import 'package:flutter/material.dart';
+
+import '../../models/video_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

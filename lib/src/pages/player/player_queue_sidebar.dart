@@ -1,6 +1,54 @@
-part of '../../app.dart';
+import 'dart:io';
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+
+import '../../core/tag_rules.dart';
+import '../../models/media_details.dart';
+import '../../models/video_item.dart';
+import '../../services/media/media_details_service.dart';
+import '../../services/media/thumbnail_service.dart';
+import '../../widgets/app_theme_tokens.dart';
 
 // ignore_for_file: slash_for_doc_comments
+
+const double playerQueueItemExtent = 104;
+
+class _PlayerDesktopDragScrollBehavior extends MaterialScrollBehavior {
+  const _PlayerDesktopDragScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.touch,
+        PointerDeviceKind.trackpad,
+      };
+}
+
+class _HorizontalWheelScroller extends StatelessWidget {
+  const _HorizontalWheelScroller({
+    required this.children,
+    this.padding = EdgeInsets.zero,
+    this.spacing = 0,
+  });
+
+  final List<Widget> children;
+  final EdgeInsetsGeometry padding;
+  final double spacing;
+
+  @override
+  Widget build(BuildContext context) => ScrollConfiguration(
+        behavior: const _PlayerDesktopDragScrollBehavior(),
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: padding,
+          itemCount: children.length,
+          itemBuilder: (context, index) => children[index],
+          separatorBuilder: (context, index) => SizedBox(width: spacing),
+        ),
+      );
+}
 
 /** 只在当前播放器队列内执行轻量关键字定位，不访问媒体库或重新扫描。 */
 int? playerQueueSearchIndex(
@@ -36,8 +84,8 @@ int? playerQueueSearchIndex(
 /**
  * 播放器右侧的筛选结果队列，承接库页传入的 filteredVideos。
  */
-class _PlayerQueueSidebar extends StatelessWidget {
-  const _PlayerQueueSidebar({
+class PlayerQueueSidebar extends StatelessWidget {
+  const PlayerQueueSidebar({
     super.key,
     required this.playlist,
     required this.sourcePlaylist,
@@ -345,7 +393,7 @@ class _PlayerQueueSidebar extends StatelessWidget {
                 ListView.builder(
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-                  itemExtent: _PlayerPageState._queueItemExtent,
+                  itemExtent: playerQueueItemExtent,
                   // 只预建邻近两项，避免大队列滚动时提前触发大量文件校验与 FFprobe。
                   scrollCacheExtent: const ScrollCacheExtent.pixels(208),
                   addAutomaticKeepAlives: false,
@@ -416,7 +464,7 @@ class _PlayerQueueSidebar extends StatelessWidget {
       index: index,
       scrollOffset: top,
       viewportExtent: position.viewportDimension,
-      itemExtent: _PlayerPageState._queueItemExtent,
+      itemExtent: playerQueueItemExtent,
     );
   }
 }
@@ -956,7 +1004,7 @@ class _QueueListItemState extends State<_QueueListItem> {
           onDoubleTap: widget.onDoubleTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
-            curve: _motionCurve,
+            curve: appMotionCurve,
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               color: backgroundColor,

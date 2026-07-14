@@ -1,4 +1,12 @@
-part of '../../app.dart';
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+
+import '../../platform/platform_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

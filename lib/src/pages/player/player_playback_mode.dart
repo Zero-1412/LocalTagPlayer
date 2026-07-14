@@ -1,4 +1,4 @@
-part of '../../app.dart';
+import 'package:flutter/material.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

@@ -1,4 +1,9 @@
-part of '../../app.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import '../../models/library_scan_models.dart';
+import '../../platform/file_system_adapter.dart';
+import 'library_load_diagnostics.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

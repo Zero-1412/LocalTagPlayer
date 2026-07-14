@@ -1,5 +1,15 @@
 # CHAT_1_ARCHITECTURE.md
 
+当前版本：`0.5.27`
+状态：已完成全部 Dart library 边界迁移
+
+## 2026-07-14 全量 library 边界收口
+
+- 57 个 `part` / `part of` 已清零，Store、播放器/缩略图、应用服务与页面/widgets 已按依赖方向迁为独立 import。
+- `LocalTagPlayerDependencies` 独立为组合根 contract，页面业务入口继续是 `LibraryApplicationFacade`，平台能力继续通过 adapter/backend 接口注入。
+- SQLite schema/写入、标签筛选、stable identity、filtered queue 与缓存队列语义保持在 Dart；Rust/C++ 边界未扩大。
+- contract/fake tests 增加零 `part` 守卫；macOS/Linux 构建仍需对应宿主验证。
+
 当前版本：`0.5.26`
 状态：进行中
 负责人：Chat 1 / 架构与跨平台边界

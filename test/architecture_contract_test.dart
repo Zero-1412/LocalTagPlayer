@@ -82,6 +82,21 @@ class _FakePlaybackRepository implements PlaybackRepository {
 }
 
 void main() {
+  test('Dart source uses independent libraries instead of part files', () {
+    final violations = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .where((file) => RegExp(
+              r'^\s*part(?:\s+of)?\s+',
+              multiLine: true,
+            ).hasMatch(file.readAsStringSync()))
+        .map((file) => file.path)
+        .toList();
+
+    expect(violations, isEmpty);
+  });
+
   test('facade exposes read-only views and routes explicit repository commands',
       () async {
     final library = _FakeLibraryRepository();

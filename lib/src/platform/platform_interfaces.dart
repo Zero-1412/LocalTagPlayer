@@ -132,3 +132,6 @@ abstract interface class MediaProbeBackend {
   /** 取消指定代的排队与执行中任务，旧结果不得继续写回。 */
   Future<void> cancelGeneration(int generationId);
 }
+
+/** 创建独立媒体探测会话后端的组合根工厂。 */
+typedef MediaProbeBackendFactory = MediaProbeBackend Function();
