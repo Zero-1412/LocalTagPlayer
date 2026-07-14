@@ -134,6 +134,8 @@ class ThumbnailService {
   var _fallbackCompleted = 0;
   var _totalGenerateMs = 0;
   var _isPaused = false;
+  /** 播放期间只允许一个可视缩略图任务继续执行，后台补全仍保持暂停。 */
+  var _allowPriorityWhilePaused = false;
 
   bool get isPaused => _isPaused;
   int get activeJobs => _activeJobs;
@@ -146,8 +148,15 @@ class ThumbnailService {
   int get activeBackgroundJobs => _activeBackgroundJobs;
   int get maxBackgroundJobs => _maxBackgroundJobs;
 
-  void pause() {
+  /**
+   * 暂停缩略图队列。
+   *
+   * [allowPriorityRequests] 仅供播放器会话使用：后台候选保持冻结，但当前可视队列项
+   * 可以用单并发读取/生成缩略图，避免滚到未预热位置后一直显示占位。
+   */
+  void pause({bool allowPriorityRequests = false}) {
     _isPaused = true;
+    _allowPriorityWhilePaused = allowPriorityRequests;
   }
 
   void resume() {
@@ -155,6 +164,7 @@ class ThumbnailService {
       return;
     }
     _isPaused = false;
+    _allowPriorityWhilePaused = false;
     _drainQueue();
     _pumpBackgroundCandidates(allowPlayerFallback: false);
   }
@@ -425,10 +435,11 @@ class ThumbnailService {
   }
 
   void _drainQueue() {
-    if (_isPaused) {
+    if (_isPaused && !_allowPriorityWhilePaused) {
       return;
     }
-    while (_activeJobs < _maxConcurrentJobs &&
+    final maxActiveJobs = _isPaused ? 1 : _maxConcurrentJobs;
+    while (_activeJobs < maxActiveJobs &&
         (_priorityJobs.isNotEmpty || _backgroundJobs.isNotEmpty)) {
       final job = _nextJob();
       if (job == null) {
@@ -469,6 +480,10 @@ class ThumbnailService {
   _ThumbnailJob? _nextJob() {
     if (_priorityJobs.isNotEmpty) {
       return _priorityJobs.removeFirst();
+    }
+    if (_isPaused) {
+      // 播放期间不启动后台补全；只有实际进入视口的优先项能继续推进。
+      return null;
     }
     if (_backgroundJobs.isNotEmpty &&
         _activeBackgroundJobs < _maxBackgroundJobs) {

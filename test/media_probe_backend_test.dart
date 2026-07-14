@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/app.dart';
+import 'dart:async';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -32,6 +33,50 @@ class _RecordingProbeBackend implements MediaProbeBackend {
         .toList(growable: false);
   }
 }
+
+/** 用阻塞首项确认可视请求能越过尚未执行的扫描后台任务。 */
+class _PriorityProbeBackend implements MediaProbeBackend {
+  final List<String> executionOrder = <String>[];
+  final Completer<void> firstStarted = Completer<void>();
+  final Completer<void> releaseFirst = Completer<void>();
+
+  @override
+  Future<void> cancelGeneration(int generationId) async {}
+
+  @override
+  Future<List<MediaProbeResult>> probeBatch({
+    required int generationId,
+    required List<MediaProbeRequest> requests,
+  }) async {
+    final request = requests.single;
+    executionOrder.add(request.videoId);
+    if (executionOrder.length == 1) {
+      firstStarted.complete();
+      await releaseFirst.future;
+    }
+    return <MediaProbeResult>[
+      MediaProbeResult(
+        videoId: request.videoId,
+        details: const MediaDetails(
+          videoCodec: 'h264',
+          audioCodec: 'aac',
+          width: 1920,
+          height: 1080,
+        ),
+      ),
+    ];
+  }
+}
+
+/** 创建不依赖真实文件的媒体探测测试条目。 */
+VideoItem _probeItem(String id) => VideoItem(
+      videoId: id,
+      path: 'Z:/virtual/$id.mp4',
+      title: id,
+      folder: 'Z:/virtual',
+      tags: const <String>{},
+      addedAt: DateTime.utc(2026, 7, 14),
+    );
 
 void main() {
   test('media details reuses indexed metadata and cancels its generation',
@@ -84,5 +129,28 @@ void main() {
 
     expect(refreshed.resolution, '1920x1080');
     expect(backend.requests.single.videoId, 'incomplete-video-id');
+  });
+
+  test('visible media details jump ahead of queued background probes',
+      () async {
+    final backend = _PriorityProbeBackend();
+    final service = MediaDetailsService(probeBackend: backend);
+
+    final first = service.detailsFor(_probeItem('background-first'));
+    await backend.firstStarted.future;
+    final second = service.detailsFor(_probeItem('background-second'));
+    final visible = service.detailsFor(
+      _probeItem('visible-now'),
+      priority: true,
+    );
+    backend.releaseFirst.complete();
+
+    await Future.wait(<Future<MediaDetails>>[first, second, visible]);
+    service.dispose();
+
+    expect(
+      backend.executionOrder,
+      <String>['background-first', 'visible-now', 'background-second'],
+    );
   });
 }

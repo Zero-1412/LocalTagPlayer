@@ -1009,6 +1009,7 @@ class PlayerPageState extends State<PlayerPage> {
     required bool center,
     bool animated = true,
     ScrollController? controller,
+    int layoutAttempt = 0,
   }) {
     if (index < 0 || index >= _queue.length) {
       return;
@@ -1018,17 +1019,37 @@ class PlayerPageState extends State<PlayerPage> {
             ? _fullscreenQueueScrollController
             : _queueScrollController);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !targetController.hasClients) {
+      if (!mounted) {
+        return;
+      }
+      if (!targetController.hasClients ||
+          !targetController.position.hasContentDimensions) {
+        if (layoutAttempt < 4) {
+          // 首次路由/全屏队列刚挂载时列表尺寸可能晚一帧建立；有限重试确保定位请求不丢失。
+          Future<void>.delayed(const Duration(milliseconds: 16), () {
+            if (mounted) {
+              _ensureQueueIndexVisible(
+                index,
+                center: center,
+                animated: animated,
+                controller: targetController,
+                layoutAttempt: layoutAttempt + 1,
+              );
+            }
+          });
+        }
         return;
       }
       final position = targetController.position;
       final viewport = position.viewportDimension;
-      final baseOffset = index * playerQueueItemExtent;
-      final targetOffset = center
-          ? baseOffset - (viewport - playerQueueItemExtent) / 2
-          : baseOffset - playerQueueItemExtent;
-      final clampedOffset = targetOffset.clamp(
-          position.minScrollExtent, position.maxScrollExtent);
+      final clampedOffset = playerQueueScrollOffsetForIndex(
+        index: index,
+        viewportExtent: viewport,
+        itemExtent: playerQueueItemExtent,
+        minScrollExtent: position.minScrollExtent,
+        maxScrollExtent: position.maxScrollExtent,
+        center: center,
+      );
       if (animated) {
         unawaited(targetController.animateTo(
           clampedOffset,
@@ -1055,7 +1076,7 @@ class PlayerPageState extends State<PlayerPage> {
       }
       if (index == _index) {
         // 播放期间只补齐当前视频详情，避免滚动列表时 FFprobe 与 4K 解码争抢磁盘。
-        unawaited(_detailsService.detailsFor(item));
+        unawaited(_detailsService.detailsFor(item, priority: true));
       }
     }
     // 播放期间不再补建队列缩略图，避免快速滚动与视频解码争抢磁盘和解码器。
@@ -1383,7 +1404,8 @@ class PlayerPageState extends State<PlayerPage> {
       _ignoreQueueSelectionBefore = null;
     }
     setState(() => _playback.select(index));
-    _ensureQueueIndexVisible(index, center: false);
+    // 鼠标单击发生在已经可见的队列项上，只更新选中态；若此处立刻滚动，
+    // 双击的第二击会落到移动后的另一行。离屏选中项由“定位已选中”显式定位。
   }
 
   void _moveQueueSelection(int delta, {bool center = false}) {
@@ -1402,6 +1424,22 @@ class PlayerPageState extends State<PlayerPage> {
     late int nextIndex;
     setState(() => nextIndex = _playback.selectQueueIndex(index));
     _ensureQueueIndexVisible(nextIndex, center: center);
+  }
+
+  /** 定位正在播放项时同步选中态，避免两个高亮指向不同视频造成“定位错误”观感。 */
+  void _locatePlayingQueueItem(ScrollController controller) {
+    if (_queue.isEmpty) {
+      return;
+    }
+    setState(() => _playback.select(_index));
+    _ensureQueueIndexVisible(
+      _index,
+      center: true,
+      // 显式定位需要立即落点；大队列跨段动画会连续重建 Windows 无障碍树，
+      // 不仅浪费可视区域 I/O，还可能让桌面端语义桥接失稳。
+      animated: false,
+      controller: controller,
+    );
   }
 
   /** 搜索当前 filtered queue 并直接定位播放，不访问全媒体库。 */
@@ -2085,14 +2123,12 @@ class PlayerPageState extends State<PlayerPage> {
       onChildTagSelected: _selectChildTag,
       onSelect: _select,
       onPlay: _jumpTo,
-      onLocatePlaying: () => _ensureQueueIndexVisible(
-        _index,
-        center: true,
-        controller: controller,
-      ),
+      onLocatePlaying: () => _locatePlayingQueueItem(controller),
       onLocateSelected: () => _ensureQueueIndexVisible(
         _selectedIndex,
         center: true,
+        // 与“定位当前播放”一致，一次跳转避免大队列动画期间的语义节点风暴。
+        animated: false,
         controller: controller,
       ),
       onSearchQueue: _searchQueue,

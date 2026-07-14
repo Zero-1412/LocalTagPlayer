@@ -1363,7 +1363,19 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null || result.probeCandidates.isEmpty) {
       return;
     }
-    final service = widget.applicationService.createMediaDetailsService(
+    final service = _createLibraryMediaDetailsService(store);
+    _libraryMediaDetailsService = service;
+    for (final item in result.probeCandidates) {
+      // 扫描新增项进入后台队列；真实进入视口时会提升同一路径任务，不重复探测。
+      unawaited(service.detailsFor(item));
+    }
+  }
+
+  /** 创建媒体库详情会话；所有写回继续校验当前 Store、videoId 与 fingerprint。 */
+  MediaDetailsService _createLibraryMediaDetailsService(
+    LibraryApplicationFacade store,
+  ) {
+    return widget.applicationService.createMediaDetailsService(
       onUpdated: (item, details, fingerprint) async {
         final current = store.videos[TagRules.pathKey(item.path)];
         if (_store != store ||
@@ -1378,11 +1390,27 @@ class _LibraryPageState extends State<LibraryPage> {
         await store.upsertVideo(current);
       },
     );
-    _libraryMediaDetailsService = service;
-    for (final item in result.probeCandidates) {
-      // MediaDetailsService 内部串行执行并用 generation 丢弃过期回调，不在 UI 线程等待。
-      unawaited(service.detailsFor(item));
+  }
+
+  /**
+   * 把媒体库当前可视卡片的详情提升到扫描后台队列之前。
+   *
+   * Widget 只报告真实构建项；服务继续串行探测并丢弃过期代次，不在 UI 线程等待。
+   */
+  void _prioritizeVisibleLibraryItem(VideoItem item) {
+    if (item.isMissing) {
+      return;
     }
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    var service = _libraryMediaDetailsService;
+    if (service == null || service.isDisposed) {
+      service = _createLibraryMediaDetailsService(store);
+      _libraryMediaDetailsService = service;
+    }
+    unawaited(service.detailsFor(item, priority: true));
   }
 
   FilterState _computeFilterState(
@@ -2740,6 +2768,7 @@ class _LibraryPageState extends State<LibraryPage> {
                         thumbnailService: thumbnailService,
                         playbackSettings: _playbackSettings,
                         dense: _denseResultGrid,
+                        onVisible: _prioritizeVisibleLibraryItem,
                         onOpen: _openVideo,
                         onEditTags: _editTags,
                         onToggleFavorite: _toggleFavorite,
@@ -3272,7 +3301,10 @@ class _LibraryPageState extends State<LibraryPage> {
       return;
     }
     final wasPaused = thumbnailService.isPaused;
-    thumbnailService.pause();
+    if (!wasPaused) {
+      // 播放期间冻结后台补全，但允许实际可视的播放器队列项以单并发补齐缩略图。
+      thumbnailService.pause(allowPriorityRequests: true);
+    }
     _playerScopedLibraryDataChanged = false;
     _playerScopedNeedsCountRefresh = false;
     final playerDisposed = Completer<void>();

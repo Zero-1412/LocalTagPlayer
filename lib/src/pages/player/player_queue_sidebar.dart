@@ -167,12 +167,12 @@ class PlayerQueueSidebar extends StatelessWidget {
   final ValueChanged<int> onSelect;
 
   /**
-   * 单击或双击队列项时跳转播放。
+   * 双击队列项时跳转播放。
    */
   final ValueChanged<int> onPlay;
 
   /**
-   * 将右侧队列滚动回正在播放项，不改变选择或播放状态。
+   * 将右侧队列滚动回正在播放项，并让选中态同步到该视频。
    */
   final VoidCallback onLocatePlaying;
 
@@ -404,13 +404,14 @@ class PlayerQueueSidebar extends StatelessWidget {
                     return _DeferredQueueListItem(
                       item: item,
                       child: _QueueListItem(
+                        key: ValueKey('player.queue.item.${item.videoId}'),
                         item: item,
                         index: index,
                         playing: index == playingIndex,
                         selected: index == selectedIndex,
                         thumbnailService: thumbnailService,
                         detailsService: detailsService,
-                        onTap: () => onPlay(index),
+                        onTap: () => onSelect(index),
                         onDoubleTap: () => onPlay(index),
                       ),
                     );
@@ -635,6 +636,28 @@ bool playerQueueIndexIsVisible({
   return itemBottom > top + tolerance && itemTop < bottom - tolerance;
 }
 
+/**
+ * 计算队列索引的稳定滚动位置。
+ *
+ * [topPadding] 必须与 ListView 顶部 padding 一致；集中计算可避免大队列定位因忽略
+ * padding 或视口居中偏移而落到相邻视频。
+ */
+double playerQueueScrollOffsetForIndex({
+  required int index,
+  required double viewportExtent,
+  required double itemExtent,
+  required double minScrollExtent,
+  required double maxScrollExtent,
+  required bool center,
+  double topPadding = 6,
+}) {
+  final itemTop = topPadding + index * itemExtent;
+  final target = center
+      ? itemTop - (viewportExtent - itemExtent) / 2
+      : itemTop - itemExtent;
+  return target.clamp(minScrollExtent, maxScrollExtent).toDouble();
+}
+
 class _PlayerChildTagChip extends StatelessWidget {
   const _PlayerChildTagChip({
     required this.label,
@@ -822,6 +845,7 @@ class _QueueLocatorButton extends StatelessWidget {
 
 class _QueueListItem extends StatefulWidget {
   const _QueueListItem({
+    super.key,
     required this.item,
     required this.index,
     required this.playing,
@@ -863,7 +887,7 @@ class _QueueListItem extends StatefulWidget {
   final MediaDetailsService detailsService;
 
   /**
-   * 单击队列项时直接切换实际播放位置。
+   * 单击队列项时只更新选中位置。
    */
   final VoidCallback onTap;
 
@@ -902,15 +926,12 @@ class _QueueListItemState extends State<_QueueListItem> {
       _detailsFuture = Future<MediaDetails>.value(const MediaDetails());
       return;
     }
-    // 播放队列只读取内存中已有缩略图，滚动不得启动磁盘校验或 FFmpeg 任务。
-    _thumbnailFuture = Future<File?>.value(
-      widget.thumbnailService.cachedThumbnailFor(widget.item),
-    );
-    // 播放期间队列只展示已缓存详情，禁止滚动创建新的 FFprobe 任务。
-    _detailsFuture = Future<MediaDetails>.value(
-      widget.detailsService.cachedDetailsFor(widget.item) ??
-          const MediaDetails(),
-    );
+    // 完整队列项只会在滚动负载允许时挂载，因此这里代表真实可视/近可视区域。
+    // 缩略图复用共享缓存；缺失时进入播放期单并发优先队列，不唤醒后台补全。
+    _thumbnailFuture = widget.thumbnailService.ensureThumbnailFor(widget.item);
+    // 已持久化详情立即返回；未命中时把当前可视项提升到扫描后台任务之前。
+    _detailsFuture =
+        widget.detailsService.detailsFor(widget.item, priority: true);
   }
 
   @override
@@ -1081,6 +1102,8 @@ class _QueueListItemState extends State<_QueueListItem> {
                 Expanded(
                   child: FutureBuilder<MediaDetails>(
                     future: _detailsFuture,
+                    initialData:
+                        widget.detailsService.cachedDetailsFor(widget.item),
                     builder: (context, snapshot) {
                       final details = snapshot.data;
                       return Column(
@@ -1144,7 +1167,7 @@ class _QueueListItemState extends State<_QueueListItem> {
                             child: const Padding(
                               padding: EdgeInsets.only(top: 2),
                               child: Text(
-                                '单击播放',
+                                '单击选中 · 双击播放',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(

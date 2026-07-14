@@ -23,6 +23,7 @@ class VideoGrid extends StatelessWidget {
     required this.thumbnailService,
     required this.playbackSettings,
     required this.dense,
+    this.onVisible,
     required this.onOpen,
     required this.onEditTags,
     required this.onToggleFavorite,
@@ -36,6 +37,9 @@ class VideoGrid extends StatelessWidget {
   final PlaybackSettings playbackSettings;
 
   final bool dense;
+
+  /** 实际构建到视口附近时通知页面提升媒体详情任务，不在 build 中做磁盘访问。 */
+  final ValueChanged<VideoItem>? onVisible;
 
   final void Function(VideoItem item, List<VideoItem> playlist) onOpen;
 
@@ -71,6 +75,7 @@ class VideoGrid extends StatelessWidget {
                   item: item,
                   thumbnailService: thumbnailService,
                   playbackSettings: playbackSettings,
+                  onVisible: onVisible,
                   onOpen: () => onOpen(item, videos),
                   onEditTags: () => onEditTags(item),
                   onToggleFavorite: () => onToggleFavorite(item),
@@ -99,6 +104,7 @@ class VideoGrid extends StatelessWidget {
               item: item,
               thumbnailService: thumbnailService,
               playbackSettings: playbackSettings,
+              onVisible: onVisible,
               onOpen: () => onOpen(item, videos),
               onEditTags: () => onEditTags(item),
               onToggleFavorite: () => onToggleFavorite(item),
@@ -122,6 +128,7 @@ class InteractiveVideoListRow extends StatelessWidget {
     required this.item,
     required this.thumbnailService,
     required this.playbackSettings,
+    this.onVisible,
     required this.onOpen,
     required this.onEditTags,
     required this.onToggleFavorite,
@@ -133,6 +140,9 @@ class InteractiveVideoListRow extends StatelessWidget {
   final ThumbnailService thumbnailService;
 
   final PlaybackSettings playbackSettings;
+
+  /** 当前行进入真实构建范围时的轻量优先级通知。 */
+  final ValueChanged<VideoItem>? onVisible;
 
   final VoidCallback onOpen;
 
@@ -174,6 +184,7 @@ class InteractiveVideoListRow extends StatelessWidget {
                       item: item,
                       thumbnailService: thumbnailService,
                       playbackSettings: playbackSettings,
+                      onVisible: onVisible,
                       onOpen: (_) => onOpen(),
                     ),
                   ),
@@ -387,6 +398,7 @@ class InteractiveVideoCard extends StatefulWidget {
     required this.item,
     required this.thumbnailService,
     required this.playbackSettings,
+    this.onVisible,
     required this.onOpen,
     required this.onEditTags,
     required this.onToggleFavorite,
@@ -396,6 +408,8 @@ class InteractiveVideoCard extends StatefulWidget {
   final VideoItem item;
   final ThumbnailService thumbnailService;
   final PlaybackSettings playbackSettings;
+  /** 当前卡片进入真实构建范围时的轻量优先级通知。 */
+  final ValueChanged<VideoItem>? onVisible;
   final VoidCallback onOpen;
   final VoidCallback onEditTags;
   final VoidCallback onToggleFavorite;
@@ -461,6 +475,7 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                           item: item,
                           thumbnailService: widget.thumbnailService,
                           playbackSettings: widget.playbackSettings,
+                          onVisible: widget.onVisible,
                           onOpen: (_) => widget.onOpen(),
                         ),
                         const SizedBox(height: 6),
@@ -720,12 +735,15 @@ class _VideoPreview extends StatefulWidget {
     required this.item,
     required this.thumbnailService,
     required this.playbackSettings,
+    this.onVisible,
     required this.onOpen,
   });
 
   final VideoItem item;
   final ThumbnailService thumbnailService;
   final PlaybackSettings playbackSettings;
+  /** 只通知页面提升媒体详情任务；缩略图仍由共享服务自身的优先队列处理。 */
+  final ValueChanged<VideoItem>? onVisible;
   final ValueChanged<VideoItem> onOpen;
 
   @override
@@ -744,6 +762,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
   void initState() {
     super.initState();
     _future = widget.thumbnailService.ensureThumbnailFor(widget.item);
+    widget.onVisible?.call(widget.item);
   }
 
   @override
@@ -753,6 +772,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
         oldWidget.thumbnailService != widget.thumbnailService) {
       _stopHoverPreview();
       _future = widget.thumbnailService.ensureThumbnailFor(widget.item);
+      widget.onVisible?.call(widget.item);
     }
   }
 

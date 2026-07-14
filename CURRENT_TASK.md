@@ -14,9 +14,14 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：通过；99 项测试通过，2 项显式基准跳过。
+结果：通过；101 项测试通过，2 项显式基准跳过。
 
 ## 最近完成
+
+- 播放器继续消费 `LibraryPage` 传入的当前筛选结果会话快照，不重新查询媒体库；快照保留同一批 `VideoItem`，因此已持久化的媒体详情和缩略图缓存可直接复用。
+- 媒体库与播放器队列都按实际构建的可视/近可视条目提升缩略图和媒体详情优先级；播放期间继续冻结后台缩略图，只允许一个可视优先任务，避免与视频解码争抢。
+- 播放器队列恢复“单击选中、双击播放”；定位当前播放会同步选中态，定位当前/已选中使用居中即时跳转并对首帧未挂载的滚动控制器有限重试。
+- 真实窗口完成“原神 → 雷神”173 条筛选、播放器首屏详情/缩略图、单击选中和双击第 2 条播放验证；Windows 桌面自动化在整体队列定位后的无障碍树刷新中触发 `flutter_windows.dll` 异常，定位落点由纯函数/控制器测试覆盖，仍需无自动化辅助的人工点击复核。
 
 - `LibraryPage` 不再接收完整 `LocalTagPlayerDependencies`，改为只接收页面应用服务、文件系统边界及转交播放器所需的两个 backend factory；AppPaths、FFmpeg、Repository loader 与 debug 配置保持在组合根创建的 `LocalLibraryPageApplicationService` 内。
 - 已生成 macOS/Linux Flutter runner，补齐各平台 media_kit 运行库与 macOS 本地文件访问配置；GitHub Actions 分别执行 adapter contract、静态分析、debug build 与启动存活 smoke。

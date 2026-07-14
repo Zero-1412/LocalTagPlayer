@@ -111,6 +111,18 @@ void main() {
       ),
       isTrue,
     );
+
+    expect(
+      playerQueueScrollOffsetForIndex(
+        index: 500,
+        viewportExtent: itemExtent * 4,
+        itemExtent: itemExtent,
+        minScrollExtent: 0,
+        maxScrollExtent: itemExtent * 1000,
+        center: true,
+      ),
+      closeTo(6 + itemExtent * 500 - itemExtent * 1.5, 0.001),
+    );
   });
 
   test('player queue sidebar follows blueprint proportions on wide windows',
@@ -625,6 +637,15 @@ void main() {
 
     expect(playback.previousIndex, isNull);
     expect(playback.nextIndex, 1);
+
+    // 单击语义只移动选择，不改变正在播放项；双击/Enter 才调用 jumpTo 对齐两者。
+    expect(playback.select(1), isTrue);
+    expect(playback.playingIndex, 0);
+    expect(playback.selectedIndex, 1);
+    expect(playback.jumpTo(playback.selectedIndex), isTrue);
+    expect(playback.playingIndex, 1);
+    expect(playback.selectedIndex, 1);
+    playback.jumpTo(0);
 
     playback.toggleChildTag('AlbumB', preferredPath: alpha.path);
     expect(playback.queue, [beta]);
@@ -1801,6 +1822,41 @@ void main() {
 
     expect(stats.pendingBackgroundRequests, 80);
     expect(stats.queued, 80);
+    expect(stats.active, 0);
+  });
+
+  test('player pause keeps background dormant but serves visible thumbnail',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('ltp_thumbnail_player_priority_');
+    addTearDown(() async {
+      await directory.delete(recursive: true);
+    });
+    final service = (await ThumbnailService.create(
+      AppPaths(dataDirectoryOverride: directory),
+      DesktopFFmpegBackend(),
+    ))
+      ..pause(allowPriorityRequests: true);
+    final background = _testVideo(
+      path: '${directory.path}/background.mp4',
+      title: 'background',
+    )
+      ..fileSize = 1
+      ..modifiedMs = 10;
+    final visible = _testVideo(
+      path: '${directory.path}/visible.mp4',
+      title: 'visible',
+    )
+      ..fileSize = 2
+      ..modifiedMs = 20;
+
+    service.prefetchAll(<VideoItem>[background]);
+    final result = await service.ensureThumbnailFor(visible);
+    final stats = await service.statsFor(const <VideoItem>[]);
+
+    expect(result, isNull);
+    expect(stats.pendingBackgroundRequests, 1);
+    expect(stats.failedThisRun, 1);
     expect(stats.active, 0);
   });
 
