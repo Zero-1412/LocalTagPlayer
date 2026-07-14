@@ -1,12 +1,26 @@
-part of '../app.dart';
+import '../models/library_scan_models.dart';
+import '../models/platform_models.dart';
+import '../models/video_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-abstract interface class LibraryRepository {
+/** 批量 relink 只需要的最小应用契约。 */
+abstract interface class LibraryRelinkRepository {
+  Map<String, VideoItem> get videos;
+  List<String> get roots;
+  Future<Set<String>> relinkMissingVideosInBatch(
+    Map<VideoItem, String> targets,
+  );
+  Future<void> replaceRoot(String oldRoot, String newRoot);
+}
+
+abstract interface class LibraryRepository implements LibraryRelinkRepository {
   /** 当前受管理的媒体库根目录；具体集合由 Dart Repository 独占维护。 */
+  @override
   List<String> get roots;
 
   /** 以内存 pathKey 索引保存的稳定视频记录。 */
+  @override
   Map<String, VideoItem> get videos;
 
   /** 用户固定的常用标签名称。 */
@@ -60,6 +74,12 @@ abstract interface class LibraryRepository {
 
   Future<void> saveMetadata();
 
+  /** 将标签加入用户收藏，并由 repository 负责持久化。 */
+  Future<void> addFavoriteTag(String tag);
+
+  /** 从用户收藏移除标签，并由 repository 负责持久化。 */
+  Future<void> removeFavoriteTag(String tag);
+
   Future<void> upsertVideo(VideoItem item);
 
   Future<VideoItem?> deleteVideo(String path);
@@ -76,9 +96,13 @@ abstract interface class LibraryRepository {
 
   Future<void> relinkMissingVideo(VideoItem item, String newPath);
 
+  @override
   Future<Set<String>> relinkMissingVideosInBatch(
     Map<VideoItem, String> targets,
   );
+
+  @override
+  Future<void> replaceRoot(String oldRoot, String newRoot);
 
   Future<void> close();
 }
@@ -91,27 +115,27 @@ abstract interface class TagRepository {
   Future<void> saveTag(TagItem tag);
 
   Future<void> attachTag({
-    required String videoPath,
+    required String videoId,
     required String tagId,
     required TagSource source,
     bool locked = false,
   });
 
   Future<void> detachTag({
-    required String videoPath,
+    required String videoId,
     required String tagId,
     required TagSource source,
   });
 }
 
 abstract interface class CacheRepository {
-  Future<CacheStatus> thumbnailStatus(String videoPath);
+  Future<CacheStatus> thumbnailStatus(String videoId);
 
-  Future<CacheStatus> mediaDetailsStatus(String videoPath);
+  Future<CacheStatus> mediaDetailsStatus(String videoId);
 
-  Future<void> saveThumbnailStatus(CacheStatus status);
+  Future<void> saveThumbnailStatus(String videoId, CacheStatus status);
 
-  Future<void> saveMediaDetailsStatus(CacheStatus status);
+  Future<void> saveMediaDetailsStatus(String videoId, CacheStatus status);
 }
 
 abstract interface class PlaybackRepository {

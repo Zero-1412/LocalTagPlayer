@@ -2,6 +2,49 @@ part of '../../app.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/**
+ * 由组合根解析的 debug 压测与诊断配置。
+ *
+ * 页面只消费已经解析的值，不读取进程环境，也不直接创建诊断文件。
+ */
+class LibraryDebugOptions {
+  const LibraryDebugOptions({
+    this.stressRoot,
+    this.startupDiagnosticsPath,
+  });
+
+  /** 专项压测唯一允许操作的媒体 root。 */
+  final String? stressRoot;
+
+  /** 不包含用户路径或标签内容的启动诊断输出文件。 */
+  final String? startupDiagnosticsPath;
+
+  /** 通过文件系统边界写入安全启动诊断摘要。 */
+  Future<void> writeStartupDiagnostics({
+    required FileSystemAdapter fileSystem,
+    required LibraryLoadDiagnostics diagnostics,
+    required Duration totalElapsed,
+    required String marker,
+  }) async {
+    final outputPath = startupDiagnosticsPath;
+    if (outputPath == null) return;
+    try {
+      await fileSystem.writeBytes(
+        outputPath,
+        Uint8List.fromList(utf8.encode(jsonEncode(<String, Object?>{
+          'marker': marker,
+          'totalMs': double.parse(
+            (totalElapsed.inMicroseconds / 1000).toStringAsFixed(3),
+          ),
+          ...diagnostics.toJson(),
+        }))),
+      );
+    } catch (_) {
+      // debug 诊断失败不能阻塞媒体库首帧。
+    }
+  }
+}
+
 /** 媒体库专项压测读取的不可变运行快照。 */
 class LibraryStressSnapshot {
   const LibraryStressSnapshot({

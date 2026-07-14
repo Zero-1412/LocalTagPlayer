@@ -1,8 +1,15 @@
 # CHAT_1_ARCHITECTURE.md
 
-当前版本：`0.5.25`
+当前版本：`0.5.26`
 状态：进行中
 负责人：Chat 1 / 架构与跨平台边界
+
+## 2026-07-14 第二批边界迁移
+
+- 实例化 AppPaths 并落地 DatabaseProvider，Store 不再选择 factory 或数据库路径。
+- facade 使用只读集合和明确命令，Tag/Cache/Playback repository 接入同一 Dart SQLite writer。
+- 移除静态媒体工具、窗口单例与旧位置 service，debug 环境和诊断写入退出页面。
+- 57 个 part 已消除 22 个，剩余 35 个按 Repository/平台→应用服务→页面继续。
 
 ## 规划来源
 

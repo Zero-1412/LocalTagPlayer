@@ -1,5 +1,12 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-14 · DatabaseProvider、只读 Facade 与第二批 library 迁移
+
+- 新增实例化 `AppPaths` 与 `SqfliteDatabaseProvider`；SQLite schema、标签筛选与 stable identity 继续由 Dart 单写拥有。
+- facade 改为只读视图与明确命令，Tag/Cache/Playback repository 绑定同一 Store；移除静态媒体工具、窗口单例和旧位置 service。
+- 页面不再读取压测环境或直接写启动诊断；57 个 part 已消除 22 个，剩余 35 个。
+- 新增 macOS/Linux adapter 类型与 contract/fake tests；analyze、Windows build 和真实窗口筛选通过，非 Windows build 待对应宿主验证。
+
 ## 2026-07-14 · 文件系统边界、Repository 门面与组合根
 
 - 新增独立 import 的 `FileSystemAdapter` 与 `DesktopFileSystemAdapter`；目录选择、本地路径异步枚举、文件 stat、截图写入、删除和文件管理器定位不再由页面直接调用 `dart:io` / `FilePicker`。

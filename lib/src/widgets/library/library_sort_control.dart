@@ -55,9 +55,9 @@ class LibrarySortPreferences {
       };
 
   /** 读取上次媒体库排序偏好。 */
-  static Future<LibrarySortPreferences> load() async {
+  static Future<LibrarySortPreferences> load(AppPaths paths) async {
     try {
-      final file = await AppPaths.librarySortPreferencesFile();
+      final file = await paths.librarySortPreferencesFile();
       if (!await file.exists()) {
         return const LibrarySortPreferences();
       }
@@ -75,8 +75,8 @@ class LibrarySortPreferences {
   }
 
   /** 保存当前媒体库排序偏好。 */
-  Future<void> save() async {
-    final file = await AppPaths.librarySortPreferencesFile();
+  Future<void> save(AppPaths paths) async {
+    final file = await paths.librarySortPreferencesFile();
     await file.writeAsString(jsonEncode(toJson()), flush: true);
   }
 }

@@ -1,4 +1,8 @@
-part of '../../app.dart';
+import 'dart:io';
+import 'dart:math' as math;
+
+import '../../core/playback_settings.dart';
+import '../../models/media_details.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

@@ -1,4 +1,12 @@
-part of '../../app.dart';
+import 'dart:io';
+
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+
+import '../../models/media_details.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import '../../platform/platform_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -74,7 +82,9 @@ class WindowsNativeMediaProbeBackend implements MediaProbeBackend {
  * 该实现仍经过现有 `FFmpegBackend`，保证平台路径解析与失败语义不散落到业务层。
  */
 class CompatibleMediaProbeBackend implements MediaProbeBackend {
-  CompatibleMediaProbeBackend();
+  CompatibleMediaProbeBackend(this._ffmpegBackend);
+
+  final FFmpegBackend _ffmpegBackend;
 
   /** 当前兼容实例内已取消的 generation；实例随页面释放，不跨会话累积。 */
   final Set<int> _cancelledGenerations = <int>{};
@@ -104,7 +114,7 @@ class CompatibleMediaProbeBackend implements MediaProbeBackend {
         addedAt: DateTime.fromMillisecondsSinceEpoch(0),
       );
       try {
-        final details = await ExternalMediaTools.probe(item);
+        final details = await _ffmpegBackend.probe(item);
         results.add(MediaProbeResult(
           videoId: request.videoId,
           details: details,
@@ -127,6 +137,7 @@ class CompatibleMediaProbeBackend implements MediaProbeBackend {
 }
 
 /** 根据当前平台选择原生批处理或兼容探测实现。 */
-MediaProbeBackend createMediaProbeBackend() => Platform.isWindows
-    ? const WindowsNativeMediaProbeBackend()
-    : CompatibleMediaProbeBackend();
+MediaProbeBackend createMediaProbeBackend(FFmpegBackend ffmpegBackend) =>
+    Platform.isWindows
+        ? const WindowsNativeMediaProbeBackend()
+        : CompatibleMediaProbeBackend(ffmpegBackend);

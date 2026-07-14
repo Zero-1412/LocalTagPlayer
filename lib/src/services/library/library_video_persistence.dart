@@ -1,4 +1,10 @@
-part of '../../app.dart';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../models/media_details.dart';
+import '../../models/video_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

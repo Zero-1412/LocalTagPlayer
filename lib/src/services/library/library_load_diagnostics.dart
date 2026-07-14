@@ -1,5 +1,3 @@
-part of '../../app.dart';
-
 // ignore_for_file: slash_for_doc_comments
 
 /**

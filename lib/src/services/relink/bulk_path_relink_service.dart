@@ -93,7 +93,7 @@ class BulkPathRelinkService {
 
   /** 构建仅包含 oldPrefix 下 missing 条目的安全预览。 */
   Future<List<BulkPathRelinkPreview>> preview({
-    required LibraryRepository store,
+    required LibraryRelinkRepository store,
     required String oldPrefix,
     required String newPrefix,
   }) async {
@@ -142,7 +142,7 @@ class BulkPathRelinkService {
 
   /** 执行预览中仍标记 ready 的条目，并返回成功数量。 */
   Future<BulkRelinkExecutionResult> execute({
-    required LibraryRepository store,
+    required LibraryRelinkRepository store,
     required Iterable<BulkPathRelinkPreview> previews,
     required String oldPrefix,
     required String newPrefix,
@@ -154,20 +154,13 @@ class BulkPathRelinkService {
       for (final preview in ready) preview.item: preview.newPath,
     });
     final updated = ready.length - failedVideoIds.length;
-    final oldKey = TagRules.pathKey(TagRules.normalizeRootPath(oldPrefix));
     final normalizedNewRoot = TagRules.normalizeRootPath(newPrefix);
-    final rootIndex = store.roots.indexWhere(
-      (root) => TagRules.pathKey(root) == oldKey,
-    );
     var rootUpdateFailed = false;
-    if (updated > 0 && rootIndex >= 0 && normalizedNewRoot.isNotEmpty) {
+    if (updated > 0 && normalizedNewRoot.isNotEmpty) {
       // 仅精确匹配已配置 root 时同步迁移扫描入口；子目录前缀替换不改变 root 配置。
-      final previousRoot = store.roots[rootIndex];
-      store.roots[rootIndex] = normalizedNewRoot;
       try {
-        await store.saveMetadata();
+        await store.replaceRoot(oldPrefix, normalizedNewRoot);
       } catch (_) {
-        store.roots[rootIndex] = previousRoot;
         rootUpdateFailed = true;
       }
     }

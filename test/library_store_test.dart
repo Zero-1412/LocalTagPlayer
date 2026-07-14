@@ -9,6 +9,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 // ignore_for_file: slash_for_doc_comments
 
 var _sqliteConfigured = false;
+late AppPaths _testPaths;
+late DatabaseProvider _testDatabaseProvider;
 
 /**
  * 为 `LibraryStore` focused tests 准备一次性数据目录和 SQLite FFI。
@@ -27,7 +29,11 @@ Future<Directory> _prepareStoreTestDirectory(String name) async {
     _sqliteConfigured = true;
   }
   final directory = await Directory.systemTemp.createTemp('ltp_${name}_');
-  AppPaths.debugUseDataDirectoryForTesting(directory);
+  _testPaths = AppPaths(dataDirectoryOverride: directory);
+  _testDatabaseProvider = SqfliteDatabaseProvider(
+    paths: _testPaths,
+    factory: databaseFactoryFfi,
+  );
   return directory;
 }
 
@@ -61,6 +67,7 @@ VideoItem _videoByPath(LibraryStore store, String path) {
 Future<LibraryStore> _loadTrackedStore(List<LibraryStore> stores) async {
   final store = await LibraryStore.load(
     scanBackend: DartLibraryScanBackend(),
+    databaseProvider: _testDatabaseProvider,
   );
   stores.add(store);
   return store;
@@ -76,10 +83,6 @@ Future<void> _closeTrackedStores(List<LibraryStore> stores) async {
 }
 
 void main() {
-  tearDown(() {
-    AppPaths.debugUseDataDirectoryForTesting(null);
-  });
-
   test('root-level videos do not repeat empty folder-tag coverage writes',
       () async {
     final stores = <LibraryStore>[];
@@ -105,6 +108,7 @@ void main() {
     final reloaded = await LibraryStore.load(
       diagnostics: diagnostics,
       scanBackend: DartLibraryScanBackend(),
+      databaseProvider: _testDatabaseProvider,
     );
     stores.add(reloaded);
     final coverage = diagnostics.stages.singleWhere(
@@ -125,7 +129,7 @@ void main() {
       await _closeTrackedStores(stores);
       await dataDir.delete(recursive: true);
     });
-    final databaseFile = await AppPaths.libraryDatabaseFile();
+    final databaseFile = await _testPaths.libraryDatabaseFile();
     final legacyDb = await databaseFactory.openDatabase(databaseFile.path);
     await legacyDb.execute('''
       CREATE TABLE videos (

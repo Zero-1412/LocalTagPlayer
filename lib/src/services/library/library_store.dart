@@ -2,7 +2,12 @@ part of '../../app.dart';
 
 // ignore_for_file: slash_for_doc_comments, annotate_overrides
 
-class LibraryStore implements LibraryRepository {
+class LibraryStore
+    implements
+        LibraryRepository,
+        TagRepository,
+        CacheRepository,
+        PlaybackRepository {
   LibraryStore._(
     this._file,
     this._db,
@@ -73,6 +78,223 @@ class LibraryStore implements LibraryRepository {
     return summaries;
   }
 
+  @override
+  Future<void> addFavoriteTag(String tag) async {
+    final normalized = TagRules.normalizeTag(tag);
+    if (normalized.isEmpty || favoriteTags.contains(normalized)) return;
+    favoriteTags.add(normalized);
+    await saveMetadata();
+  }
+
+  @override
+  Future<void> removeFavoriteTag(String tag) async {
+    favoriteTags.removeWhere((value) => TagRules.sameTag(value, tag));
+    await saveMetadata();
+  }
+
+  @override
+  Future<void> replaceRoot(String oldRoot, String newRoot) async {
+    final oldKey = TagRules.pathKey(TagRules.normalizeRootPath(oldRoot));
+    final normalizedNewRoot = TagRules.normalizeRootPath(newRoot);
+    final index = roots.indexWhere((root) => TagRules.pathKey(root) == oldKey);
+    if (index < 0 || normalizedNewRoot.isEmpty) return;
+    final previousRoot = roots[index];
+    roots[index] = normalizedNewRoot;
+    try {
+      await saveMetadata();
+    } catch (_) {
+      roots[index] = previousRoot;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<TagGroup>> loadGroups() async =>
+      List<TagGroup>.unmodifiable(tagGroups);
+
+  @override
+  Future<List<TagItem>> loadTags({String? groupId}) async =>
+      List<TagItem>.unmodifiable(
+        tagsById.values.where(
+          (tag) => groupId == null || tag.groupId == groupId,
+        ),
+      );
+
+  @override
+  Future<void> attachTag({
+    required String videoId,
+    required String tagId,
+    required TagSource source,
+    bool locked = false,
+  }) async {
+    final video =
+        videos.values.where((item) => item.videoId == videoId).firstOrNull;
+    final tag = tagsById[tagId];
+    if (video == null || tag == null) {
+      throw StateError('无法为不存在的视频或标签建立关联');
+    }
+    final batch = _db.batch();
+    _tagPersistence.attachTagInBatch(
+      batch,
+      video,
+      tag,
+      source: source,
+      locked: locked,
+    );
+    await batch.commit(noResult: true);
+  }
+
+  @override
+  Future<void> detachTag({
+    required String videoId,
+    required String tagId,
+    required TagSource source,
+  }) async {
+    final video =
+        videos.values.where((item) => item.videoId == videoId).firstOrNull;
+    if (video == null) return;
+    await _db.delete(
+      'video_tags',
+      where: 'video_id = ? AND tag_id = ? AND source = ?',
+      whereArgs: [videoId, tagId, source.name],
+    );
+    final remainingRows = await _db.rawQuery(
+      'SELECT COUNT(*) FROM video_tags WHERE video_id = ? AND tag_id = ?',
+      [videoId, tagId],
+    );
+    final remaining = remainingRows.first.values.first as int?;
+    if ((remaining ?? 0) == 0) {
+      videoTagIdsByPathKey[TagRules.pathKey(video.path)]?.remove(tagId);
+    }
+  }
+
+  @override
+  Future<CacheStatus> thumbnailStatus(String videoId) =>
+      _loadCacheStatus('thumbnail', videoId);
+
+  @override
+  Future<CacheStatus> mediaDetailsStatus(String videoId) =>
+      _loadCacheStatus('media_details', videoId);
+
+  @override
+  Future<void> saveThumbnailStatus(String videoId, CacheStatus status) =>
+      _saveCacheStatus('thumbnail', videoId, status);
+
+  @override
+  Future<void> saveMediaDetailsStatus(String videoId, CacheStatus status) =>
+      _saveCacheStatus('media_details', videoId, status);
+
+  /** 缓存状态只保存诊断字段，不保存媒体路径。 */
+  Future<CacheStatus> _loadCacheStatus(String kind, String videoId) async {
+    final rows = await _db.query(
+      'metadata',
+      columns: const ['value'],
+      where: 'key = ?',
+      whereArgs: ['cache.$kind.$videoId'],
+      limit: 1,
+    );
+    if (rows.isEmpty) return const CacheStatus(kind: CacheStatusKind.unknown);
+    final decoded = jsonDecode(rows.first['value']! as String);
+    if (decoded is! Map) {
+      return const CacheStatus(kind: CacheStatusKind.unknown);
+    }
+    return CacheStatus(
+      kind: CacheStatusKind.values.firstWhere(
+        (value) => value.name == decoded['kind'],
+        orElse: () => CacheStatusKind.unknown,
+      ),
+      message: decoded['message'] as String?,
+      updatedAt: DateTime.tryParse(decoded['updatedAt']?.toString() ?? ''),
+    );
+  }
+
+  Future<void> _saveCacheStatus(
+    String kind,
+    String videoId,
+    CacheStatus status,
+  ) async {
+    await _db.insert(
+      'metadata',
+      {
+        'key': 'cache.$kind.$videoId',
+        'value': jsonEncode({
+          'kind': status.kind.name,
+          'message': status.message,
+          'updatedAt': status.updatedAt?.toIso8601String(),
+        }),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<void> saveSession(PlaybackSession session) async {
+    await _db.insert(
+      'metadata',
+      {
+        'key': 'playback.last_session',
+        'value': jsonEncode({
+          'id': session.id,
+          'currentPath': session.currentPath,
+          'queuePaths': session.queuePaths,
+          'currentVideoId': session.currentVideoId,
+          'createdAt': session.createdAt?.toIso8601String(),
+          'positionMs': session.position.inMilliseconds,
+          'durationMs': session.duration?.inMilliseconds,
+          'isPlaying': session.isPlaying,
+        }),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<PlaybackSession?> loadLastSession() async {
+    final rows = await _db.query(
+      'metadata',
+      columns: const ['value'],
+      where: 'key = ?',
+      whereArgs: const ['playback.last_session'],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final decoded = jsonDecode(rows.first['value']! as String);
+    if (decoded is! Map || decoded['currentPath'] is! String) return null;
+    return PlaybackSession(
+      id: decoded['id'] as String?,
+      currentPath: decoded['currentPath']! as String,
+      queuePaths:
+          ((decoded['queuePaths'] as List?) ?? const <Object>[]).cast<String>(),
+      currentVideoId: decoded['currentVideoId'] as String?,
+      createdAt: DateTime.tryParse(decoded['createdAt']?.toString() ?? ''),
+      position: Duration(milliseconds: decoded['positionMs'] as int? ?? 0),
+      duration: decoded['durationMs'] == null
+          ? null
+          : Duration(milliseconds: decoded['durationMs'] as int),
+      isPlaying: decoded['isPlaying'] == true,
+    );
+  }
+
+  @override
+  Future<void> savePlaybackPosition({
+    required String videoId,
+    required Duration position,
+    required Duration duration,
+    required bool completed,
+    required DateTime updatedAt,
+  }) async {
+    final item =
+        videos.values.where((video) => video.videoId == videoId).firstOrNull;
+    if (item == null) return;
+    item
+      ..playbackPosition = position
+      ..playbackDuration = duration
+      ..playbackCompleted = completed
+      ..playbackPositionUpdatedAt = updatedAt
+      ..lastPlayedAt = updatedAt;
+    await _videoPersistence.upsert(item);
+  }
+
   /**
    * 从 SQLite 恢复媒体库；[diagnostics] 仅供显式性能基准收集阶段耗时。
    *
@@ -81,14 +303,14 @@ class LibraryStore implements LibraryRepository {
   static Future<LibraryStore> load({
     LibraryLoadDiagnostics? diagnostics,
     required LibraryScanBackend scanBackend,
+    required DatabaseProvider databaseProvider,
   }) async {
-    final legacyFile = await AppPaths.legacyLibraryFile();
-    final databaseFile = await AppPaths.libraryDatabaseFile();
+    final legacyFile = await databaseProvider.legacyLibraryFile();
     final db = diagnostics == null
-        ? await _openDatabase(databaseFile)
+        ? await _openDatabase(databaseProvider)
         : await diagnostics.measureAsync(
             'sqlite.open_and_maintenance',
-            () => _openDatabase(databaseFile),
+            () => _openDatabase(databaseProvider),
           );
     final store = await _loadFromDatabase(
       legacyFile,
@@ -110,21 +332,11 @@ class LibraryStore implements LibraryRepository {
     return store;
   }
 
-  static Future<Database> _openDatabase(File databaseFile) {
-    return databaseFactory.openDatabase(
-      databaseFile.path,
-      options: OpenDatabaseOptions(
-        version: 1,
-        onCreate: (db, _) async => _createSchema(db),
-        onOpen: (db) async {
-          await _createSchema(db);
-          await db.execute('PRAGMA foreign_keys=ON');
-          await db.execute('PRAGMA journal_mode=WAL');
-          await db.execute('PRAGMA synchronous=NORMAL');
-          await db.execute('PRAGMA temp_store=MEMORY');
-          await db.execute('PRAGMA cache_size=-20000');
-        },
-      ),
+  static Future<Database> _openDatabase(DatabaseProvider provider) {
+    return provider.openLibraryDatabase(
+      version: 1,
+      createSchema: _createSchema,
+      maintainSchema: _createSchema,
     );
   }
 
@@ -321,7 +533,7 @@ class LibraryStore implements LibraryRepository {
       if (currentId.isNotEmpty && seenIds.add(currentId)) {
         continue;
       }
-      final newId = VideoItem._newVideoId();
+      final newId = VideoItem.newVideoId();
       seenIds.add(newId);
       batch.update(
         'videos',

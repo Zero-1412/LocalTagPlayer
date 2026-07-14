@@ -1,4 +1,8 @@
-part of '../../app.dart';
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../../models/platform_models.dart';
 
 /// 媒体库标签计数刷新协调器。
 ///

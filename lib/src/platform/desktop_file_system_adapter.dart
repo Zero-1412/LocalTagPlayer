@@ -134,6 +134,9 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
   @override
   Future<void> revealInFileManager(String path) async {
     final file = File(path).absolute;
+    if (!await file.exists()) {
+      throw FileSystemException('文件不存在，无法打开所在位置', file.path);
+    }
     if (Platform.isWindows) {
       await Process.start('explorer.exe', <String>['/select,${file.path}']);
       return;
@@ -148,4 +151,14 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
     }
     throw UnsupportedError('当前平台不支持打开文件位置');
   }
+}
+
+/** macOS 文件选择、枚举与 Finder reveal 的显式适配器类型。 */
+class MacOsFileSystemAdapter extends DesktopFileSystemAdapter {
+  const MacOsFileSystemAdapter();
+}
+
+/** Linux 文件选择、枚举与 xdg-open reveal 的显式适配器类型。 */
+class LinuxFileSystemAdapter extends DesktopFileSystemAdapter {
+  const LinuxFileSystemAdapter();
 }

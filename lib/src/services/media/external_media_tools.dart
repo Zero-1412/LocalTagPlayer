@@ -1,45 +1,24 @@
-part of '../../app.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
+import '../../models/external_media_tools_state.dart';
+import '../../models/media_details.dart';
+import '../../models/video_item.dart';
+import '../../platform/platform_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-class ExternalMediaToolsState {
-  const ExternalMediaToolsState({
-    this.ffmpegPath,
-    this.ffprobePath,
-    this.ffmpegVersion,
-    this.ffprobeVersion,
-  });
+const _ffmpegThumbnailWidth = 384;
+const _thumbnailFfmpegTimeout = Duration(seconds: 10);
+const _mediaProbeTimeout = Duration(seconds: 6);
 
-  final String? ffmpegPath;
-  final String? ffprobePath;
-  final String? ffmpegVersion;
-  final String? ffprobeVersion;
+class DesktopFFmpegBackend implements FFmpegBackend {
+  Future<ExternalMediaToolsState>? _cached;
 
-  bool get hasFfmpeg => ffmpegPath != null;
-  bool get hasFfprobe => ffprobePath != null;
-}
-
-class ExternalMediaTools {
-  static Future<ExternalMediaToolsState>? _cached;
-  static late FFmpegBackend _backend;
-
-  /**
-   * 由应用组合根安装当前平台实现。
-   *
-   * 运行期间只允许在启动阶段配置；测试可在首次调用前注入兼容实现。
-   */
-  static void configureBackend(FFmpegBackend backend) {
-    _backend = backend;
-    _cached = null;
-  }
-
-  static FFmpegBackend get backend => _backend;
-
-  static Future<ExternalMediaToolsState> find() {
-    return _cached ??= _backend.locateTools();
-  }
-
-  static Future<ExternalMediaToolsState> _find() async {
+  Future<ExternalMediaToolsState> _find() async {
     final ffmpeg = await _findExecutable(
       'ffmpeg',
       const [
@@ -68,7 +47,7 @@ class ExternalMediaTools {
     );
   }
 
-  static Future<String?> _findExecutable(
+  Future<String?> _findExecutable(
       String command, List<String> localCandidates) async {
     final bases = <String>{
       Directory.current.path,
@@ -98,16 +77,7 @@ class ExternalMediaTools {
     return null;
   }
 
-  static Future<File?> createThumbnail(VideoItem item, File output) async {
-    return backend.createThumbnail(
-        item: item, output: output, allowFallback: false);
-  }
-
-  static Future<MediaDetails?> probe(VideoItem item) async {
-    return backend.probe(item);
-  }
-
-  static Future<String?> _versionFor(String executable) async {
+  Future<String?> _versionFor(String executable) async {
     try {
       final result = await Process.run(executable, ['-version'])
           .timeout(const Duration(seconds: 2));
@@ -124,12 +94,12 @@ class ExternalMediaTools {
     }
   }
 
-  static String? codec(Map<String, Object?>? stream) {
+  String? _codec(Map<String, Object?>? stream) {
     final value = stream?['codec_name']?.toString().trim();
     return value == null || value.isEmpty ? null : value.toUpperCase();
   }
 
-  static int? intValue(Object? value) {
+  int? _intValue(Object? value) {
     if (value is int) {
       return value;
     }
@@ -138,12 +108,10 @@ class ExternalMediaTools {
     }
     return int.tryParse(value?.toString() ?? '');
   }
-}
 
-class DesktopFFmpegBackend implements FFmpegBackend {
   @override
   Future<ExternalMediaToolsState> locateTools() {
-    return ExternalMediaTools._find();
+    return _cached ??= _find();
   }
 
   @override
@@ -166,7 +134,7 @@ class DesktopFFmpegBackend implements FFmpegBackend {
     required File output,
     bool allowFallback = false,
   }) async {
-    final ffmpeg = (await ExternalMediaTools.find()).ffmpegPath;
+    final ffmpeg = (await locateTools()).ffmpegPath;
     if (ffmpeg == null) {
       return null;
     }
@@ -200,7 +168,7 @@ class DesktopFFmpegBackend implements FFmpegBackend {
           '-frames:v',
           '1',
           '-vf',
-          'scale=$_thumbnailWidth:-1:force_original_aspect_ratio=decrease',
+          'scale=$_ffmpegThumbnailWidth:-1:force_original_aspect_ratio=decrease',
           '-q:v',
           '4',
           tempOutput.path,
@@ -234,7 +202,7 @@ class DesktopFFmpegBackend implements FFmpegBackend {
 
   @override
   Future<MediaDetails?> probe(VideoItem item) async {
-    final ffprobe = (await ExternalMediaTools.find()).ffprobePath;
+    final ffprobe = (await locateTools()).ffprobePath;
     if (ffprobe == null) {
       return null;
     }
@@ -292,10 +260,10 @@ class DesktopFFmpegBackend implements FFmpegBackend {
     }
 
     return MediaDetails(
-      videoCodec: ExternalMediaTools.codec(video),
-      audioCodec: ExternalMediaTools.codec(audio),
-      width: ExternalMediaTools.intValue(video?['width']),
-      height: ExternalMediaTools.intValue(video?['height']),
+      videoCodec: _codec(video),
+      audioCodec: _codec(audio),
+      width: _intValue(video?['width']),
+      height: _intValue(video?['height']),
     );
   }
 }

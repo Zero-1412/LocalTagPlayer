@@ -1,4 +1,9 @@
-part of '../../app.dart';
+import 'dart:collection';
+
+import '../../models/library_scan_models.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import '../../repositories/repository_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments, annotate_overrides
 
@@ -9,22 +14,54 @@ part of '../../app.dart';
  * `LibraryStore` 的具体类型。标签筛选、stable identity 与 SQLite 单写仍留在 Dart
  * Repository 内部，不下沉到 Rust/C++。
  */
-class LibraryApplicationFacade implements LibraryRepository {
-  const LibraryApplicationFacade(this._repository);
+class LibraryApplicationFacade implements LibraryRelinkRepository {
+  LibraryApplicationFacade({
+    required LibraryRepository libraryRepository,
+    required TagRepository tagRepository,
+    required CacheRepository cacheRepository,
+    required PlaybackRepository playbackRepository,
+  })  : _repository = libraryRepository,
+        _tagRepository = tagRepository,
+        _cacheRepository = cacheRepository,
+        _playbackRepository = playbackRepository,
+        roots = UnmodifiableListView<String>(libraryRepository.roots),
+        videos =
+            UnmodifiableMapView<String, VideoItem>(libraryRepository.videos),
+        favoriteTags =
+            UnmodifiableListView<String>(libraryRepository.favoriteTags),
+        tagGroups = UnmodifiableListView<TagGroup>(libraryRepository.tagGroups),
+        tagsById =
+            UnmodifiableMapView<String, TagItem>(libraryRepository.tagsById);
 
   /** 由组合根注入的 Dart Repository。 */
   final LibraryRepository _repository;
+  final TagRepository _tagRepository;
+  final CacheRepository _cacheRepository;
+  final PlaybackRepository _playbackRepository;
 
-  List<String> get roots => _repository.roots;
-  Map<String, VideoItem> get videos => _repository.videos;
-  List<String> get favoriteTags => _repository.favoriteTags;
-  List<TagGroup> get tagGroups => _repository.tagGroups;
-  Map<String, TagItem> get tagsById => _repository.tagsById;
-  Map<String, Set<String>> get videoTagIdsByPathKey =>
-      _repository.videoTagIdsByPathKey;
-  TagQueryContext get tagQueryContext => _repository.tagQueryContext;
-  Iterable<TagItem> get allTagItems => _repository.allTagItems;
-  Set<String> get allTags => _repository.allTags;
+  /** 反映 repository 最新内容、但禁止页面增删的 root 视图。 */
+  final List<String> roots;
+  /** 反映 repository 最新索引、但禁止页面替换条目的视频视图。 */
+  final Map<String, VideoItem> videos;
+  /** 只能通过明确命令修改的收藏标签视图。 */
+  final List<String> favoriteTags;
+  /** 禁止页面改写顺序或成员的标签组视图。 */
+  final List<TagGroup> tagGroups;
+  /** 禁止页面替换标签实体的 tagId 索引视图。 */
+  final Map<String, TagItem> tagsById;
+
+  /** 返回同时冻结外层索引和每个 tagId 集合的只读快照。 */
+  Map<String, Set<String>> get videoTagIdsByPathKey => Map.unmodifiable(
+        _repository.videoTagIdsByPathKey.map(
+          (key, value) => MapEntry(key, Set<String>.unmodifiable(value)),
+        ),
+      );
+  TagQueryContext get tagQueryContext => TagQueryContext(
+        tagsById: tagsById,
+        videoTagIdsByPathKey: videoTagIdsByPathKey,
+      );
+  Iterable<TagItem> get allTagItems => tagsById.values;
+  Set<String> get allTags => Set<String>.unmodifiable(_repository.allTags);
 
   Map<String, int> resultCounts(FilterQuery query) =>
       _repository.resultCounts(query);
@@ -78,6 +115,43 @@ class LibraryApplicationFacade implements LibraryRepository {
       _repository.batchRemoveManualTag(tag, items);
 
   Future<void> saveMetadata() => _repository.saveMetadata();
+  Future<void> addFavoriteTag(String tag) => _repository.addFavoriteTag(tag);
+  Future<void> removeFavoriteTag(String tag) =>
+      _repository.removeFavoriteTag(tag);
+  Future<void> replaceRoot(String oldRoot, String newRoot) =>
+      _repository.replaceRoot(oldRoot, newRoot);
+
+  /** 以 stable videoId 建立来源明确的标签关联。 */
+  Future<void> attachTag({
+    required String videoId,
+    required String tagId,
+    required TagSource source,
+    bool locked = false,
+  }) =>
+      _tagRepository.attachTag(
+        videoId: videoId,
+        tagId: tagId,
+        source: source,
+        locked: locked,
+      );
+
+  Future<CacheStatus> thumbnailStatus(String videoId) =>
+      _cacheRepository.thumbnailStatus(videoId);
+
+  Future<void> savePlaybackPosition({
+    required String videoId,
+    required Duration position,
+    required Duration duration,
+    required bool completed,
+    required DateTime updatedAt,
+  }) =>
+      _playbackRepository.savePlaybackPosition(
+        videoId: videoId,
+        position: position,
+        duration: duration,
+        completed: completed,
+        updatedAt: updatedAt,
+      );
   Future<void> upsertVideo(VideoItem item) => _repository.upsertVideo(item);
   Future<VideoItem?> deleteVideo(String path) => _repository.deleteVideo(path);
 

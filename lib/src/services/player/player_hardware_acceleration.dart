@@ -1,4 +1,4 @@
-part of '../../app.dart';
+import 'dart:io';
 
 // ignore_for_file: slash_for_doc_comments
 

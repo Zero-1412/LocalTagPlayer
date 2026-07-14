@@ -1,4 +1,9 @@
-part of '../../app.dart';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:path/path.dart' as p;
+
+import '../../core/tag_rules.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

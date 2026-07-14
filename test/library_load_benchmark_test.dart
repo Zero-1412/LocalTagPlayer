@@ -25,7 +25,11 @@ void main() {
         File('windows/tools/sqlite/sqlite3.dll').absolute.path,
       );
       sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
+      final paths = AppPaths();
+      final databaseProvider = SqfliteDatabaseProvider(
+        paths: paths,
+        factory: databaseFactoryFfi,
+      );
       final outputPath =
           Platform.environment['LOCAL_TAG_PLAYER_LOAD_BENCHMARK_OUTPUT'];
       expect(outputPath, isNotNull);
@@ -35,9 +39,10 @@ void main() {
       final store = await LibraryStore.load(
         diagnostics: diagnostics,
         scanBackend: DartLibraryScanBackend(),
+        databaseProvider: databaseProvider,
       );
       addTearDown(store.close);
-      final sortPreferences = await LibrarySortPreferences.load();
+      final sortPreferences = await LibrarySortPreferences.load(paths);
       final firstScreenVideos = diagnostics.measureSync(
         'ui.first_screen_list_sort',
         () => sortedLibraryVideos(

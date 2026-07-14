@@ -1,4 +1,8 @@
-part of '../../app.dart';
+import 'dart:io';
+
+import 'package:flutter/widgets.dart';
+
+import '../../platform/platform_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

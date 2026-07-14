@@ -1,4 +1,6 @@
-part of '../app.dart';
+import 'dart:math' as math;
+
+import 'media_details.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -26,7 +28,7 @@ class VideoItem {
     this.playbackDuration = Duration.zero,
     this.playbackCompleted = false,
     this.playbackPositionUpdatedAt,
-  })  : videoId = videoId ?? _newVideoId(),
+  })  : videoId = videoId ?? newVideoId(),
         childTags = childTags ?? <String, Set<String>>{};
 
   /** 不依赖路径的稳定数据库身份。 */
@@ -127,7 +129,7 @@ class VideoItem {
   }
 
   /** 生成与路径无关、足以在单机媒体库中保持唯一的身份值。 */
-  static String _newVideoId() {
+  static String newVideoId() {
     final random = math.Random.secure();
     final time = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
     final entropy = List<int>.generate(4, (_) => random.nextInt(1 << 32))

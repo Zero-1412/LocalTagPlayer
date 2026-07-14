@@ -26,7 +26,11 @@ void main() {
         File('windows/tools/sqlite/sqlite3.dll').absolute.path,
       );
       sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
+      final paths = AppPaths();
+      final databaseProvider = SqfliteDatabaseProvider(
+        paths: paths,
+        factory: databaseFactoryFfi,
+      );
       final outputPath =
           Platform.environment['LOCAL_TAG_PLAYER_SCAN_BENCHMARK_OUTPUT'];
       expect(outputPath, isNotNull);
@@ -40,6 +44,7 @@ void main() {
       final loadWatch = Stopwatch()..start();
       final store = await LibraryStore.load(
         scanBackend: rustBackend ?? DartLibraryScanBackend(),
+        databaseProvider: databaseProvider,
       );
       loadWatch.stop();
       addTearDown(store.close);

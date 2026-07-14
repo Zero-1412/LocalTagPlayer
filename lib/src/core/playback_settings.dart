@@ -1,4 +1,6 @@
-part of '../app.dart';
+import 'dart:convert';
+
+import 'app_paths.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -170,9 +172,9 @@ class PlaybackSettings {
     return parsed == null ? fallback : parsed.clamp(min, max);
   }
 
-  static Future<PlaybackSettings> load() async {
+  static Future<PlaybackSettings> load(AppPaths paths) async {
     try {
-      final file = await AppPaths.settingsFile();
+      final file = await paths.settingsFile();
       if (!await file.exists()) {
         return defaults;
       }
@@ -186,8 +188,8 @@ class PlaybackSettings {
     return defaults;
   }
 
-  Future<void> save() async {
-    final file = await AppPaths.settingsFile();
+  Future<void> save(AppPaths paths) async {
+    final file = await paths.settingsFile();
     await file.writeAsString(jsonEncode(toJson()), flush: true);
   }
 

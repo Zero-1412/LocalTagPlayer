@@ -854,22 +854,28 @@ class _LibraryPageState extends State<LibraryPage> {
       diagnostics: diagnostics,
     );
     final thumbnailService = diagnostics == null
-        ? await ThumbnailService.create()
+        ? await ThumbnailService.create(
+            widget.dependencies.paths,
+            widget.dependencies.ffmpegBackend,
+          )
         : await diagnostics.measureAsync(
             'startup.thumbnail_service_create',
-            ThumbnailService.create,
+            () => ThumbnailService.create(
+              widget.dependencies.paths,
+              widget.dependencies.ffmpegBackend,
+            ),
           );
     final playbackSettings = diagnostics == null
-        ? await PlaybackSettings.load()
+        ? await PlaybackSettings.load(widget.dependencies.paths)
         : await diagnostics.measureAsync(
             'startup.playback_settings_load',
-            PlaybackSettings.load,
+            () => PlaybackSettings.load(widget.dependencies.paths),
           );
     final sortPreferences = diagnostics == null
-        ? await LibrarySortPreferences.load()
+        ? await LibrarySortPreferences.load(widget.dependencies.paths)
         : await diagnostics.measureAsync(
             'startup.sort_preferences_load',
-            LibrarySortPreferences.load,
+            () => LibrarySortPreferences.load(widget.dependencies.paths),
           );
     if (!mounted) {
       await store.close();
@@ -883,7 +889,13 @@ class _LibraryPageState extends State<LibraryPage> {
           ..playbackCompleted = snapshot.completed
           ..playbackPositionUpdatedAt = snapshot.updatedAt
           ..lastPlayedAt = snapshot.updatedAt;
-        await store.upsertVideo(snapshot.item);
+        await store.savePlaybackPosition(
+          videoId: snapshot.item.videoId,
+          position: snapshot.position,
+          duration: snapshot.duration,
+          completed: snapshot.completed,
+          updatedAt: snapshot.updatedAt,
+        );
       },
     );
     final firstFrameWatch = Stopwatch()..start();
@@ -905,9 +917,10 @@ class _LibraryPageState extends State<LibraryPage> {
         'ui.hydrated_state_prepare',
         applyHydratedState,
       );
-      unawaited(_writeDebugStartupDiagnostics(
-        diagnostics,
-        startupWatch.elapsed,
+      unawaited(widget.dependencies.libraryDebugOptions.writeStartupDiagnostics(
+        fileSystem: _fileSystem,
+        diagnostics: diagnostics,
+        totalElapsed: startupWatch.elapsed,
         marker: 'hydrated_state_ready',
       ));
     }
@@ -921,9 +934,11 @@ class _LibraryPageState extends State<LibraryPage> {
       if (diagnostics != null) {
         diagnostics.record(
             'ui.first_frame_build_and_layout', firstFrameWatch.elapsed);
-        unawaited(_writeDebugStartupDiagnostics(
-          diagnostics,
-          startupWatch.elapsed,
+        unawaited(
+            widget.dependencies.libraryDebugOptions.writeStartupDiagnostics(
+          fileSystem: _fileSystem,
+          diagnostics: diagnostics,
+          totalElapsed: startupWatch.elapsed,
           marker: 'first_frame_ready',
         ));
       }
@@ -943,8 +958,7 @@ class _LibraryPageState extends State<LibraryPage> {
     LibraryApplicationFacade store,
     ThumbnailService thumbnailService,
   ) {
-    final root =
-        Platform.environment['LOCAL_TAG_PLAYER_LIBRARY_STRESS_ROOT']?.trim();
+    final root = widget.dependencies.libraryDebugOptions.stressRoot;
     if (!kDebugMode || root == null || root.isEmpty) {
       return;
     }
@@ -980,31 +994,6 @@ class _LibraryPageState extends State<LibraryPage> {
         );
       },
     );
-  }
-
-  /**
-   * 把 debug 启动阶段写到系统临时目录；仅包含耗时、数量和完成标记。
-   */
-  Future<void> _writeDebugStartupDiagnostics(
-    LibraryLoadDiagnostics diagnostics,
-    Duration totalElapsed, {
-    required String marker,
-  }) async {
-    try {
-      final file = File(p.join(
-        Directory.systemTemp.path,
-        'local_tag_player_startup_diagnostics.json',
-      ));
-      await file.writeAsString(jsonEncode(<String, Object?>{
-        'marker': marker,
-        'totalMs': double.parse(
-          (totalElapsed.inMicroseconds / 1000).toStringAsFixed(3),
-        ),
-        ...diagnostics.toJson(),
-      }));
-    } catch (_) {
-      // debug 诊断写入失败不能阻塞媒体库首帧。
-    }
   }
 
   /** 在首帧之后的空闲窗口刷新稳定标签计数，过期页面结果会被丢弃。 */
@@ -1352,7 +1341,7 @@ class _LibraryPageState extends State<LibraryPage> {
         totalCount: currentState.totalCount,
       );
     });
-    unawaited(preferences.save());
+    unawaited(preferences.save(widget.dependencies.paths));
   }
 
   /**
@@ -2684,7 +2673,7 @@ class _LibraryPageState extends State<LibraryPage> {
           thumbnailService: thumbnailService,
           playbackSettings: _playbackSettings,
           onPlaybackSettingsChanged: (settings) async {
-            await settings.save();
+            await settings.save(widget.dependencies.paths);
             if (mounted) {
               setState(() => _playbackSettings = settings);
             }
@@ -2964,12 +2953,11 @@ class _LibraryPageState extends State<LibraryPage> {
       }
       if (!_store!.favoriteTags
           .any((existing) => TagRules.sameTag(existing, tag))) {
+        await _store!.addFavoriteTag(tag);
         setState(() {
           _invalidateDerivedCaches();
-          _store!.favoriteTags.add(tag);
           _stableTagCounts = _store!.resultCounts(const FilterQuery());
         });
-        await _store!.saveMetadata();
       }
     } catch (error) {
       if (!mounted) {
@@ -2988,14 +2976,13 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       return;
     }
+    await store.removeFavoriteTag(tag);
     _mutateFilters(() {
       _invalidateDerivedCaches();
-      store.favoriteTags.remove(tag);
       _selectedTags.remove(tag);
       _selectedChildTags.clear();
       _stableTagCounts = store.resultCounts(const FilterQuery());
     });
-    await store.saveMetadata();
   }
 
   Future<void> _openVideo(VideoItem item, List<VideoItem> playlist) async {

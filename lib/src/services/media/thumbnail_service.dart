@@ -60,11 +60,13 @@ class CacheStats {
 }
 
 class ThumbnailService {
-  ThumbnailService._(this._directory);
+  ThumbnailService._(this._directory, this._ffmpegBackend);
   static const _maxBackgroundQueuedJobs = 500;
   static const _maxBackgroundRequestsInFlight = 24;
 
   final Directory _directory;
+  /** 由组合根注入的媒体工具边界，不使用进程级静态后端。 */
+  final FFmpegBackend _ffmpegBackend;
   static int get _maxConcurrentJobs {
     final cores = Platform.numberOfProcessors;
     if (cores >= 12) {
@@ -136,9 +138,12 @@ class ThumbnailService {
     _pumpBackgroundCandidates(allowPlayerFallback: false);
   }
 
-  static Future<ThumbnailService> create() async {
-    final directory = await AppPaths.thumbnailDirectory();
-    return ThumbnailService._(directory);
+  static Future<ThumbnailService> create(
+    AppPaths paths,
+    FFmpegBackend ffmpegBackend,
+  ) async {
+    final directory = await paths.thumbnailDirectory();
+    return ThumbnailService._(directory, ffmpegBackend);
   }
 
   Future<File?> thumbnailFor(VideoItem item) async {
@@ -470,7 +475,11 @@ class ThumbnailService {
     }
 
     try {
-      final file = await ExternalMediaTools.createThumbnail(item, output);
+      final file = await _ffmpegBackend.createThumbnail(
+        item: item,
+        output: output,
+        allowFallback: false,
+      );
       if (file != null) {
         if (await _discardSuppressedOutput(cacheKey, output)) {
           return null;

@@ -205,7 +205,8 @@ class _LocalLibrarySmokeHarnessState extends State<LocalLibrarySmokeHarness> {
     super.initState();
     _thumbnailDirectory =
         Directory.systemTemp.createTempSync('ltp_local_harness_thumbs_');
-    _thumbnailService = ThumbnailService._(_thumbnailDirectory);
+    _thumbnailService =
+        ThumbnailService._(_thumbnailDirectory, DesktopFFmpegBackend());
   }
 
   @override
@@ -298,7 +299,8 @@ class _VideoListRowSmokeHarnessState extends State<VideoListRowSmokeHarness> {
     super.initState();
     _thumbnailDirectory =
         Directory.systemTemp.createTempSync('ltp_list_harness_thumbs_');
-    _thumbnailService = ThumbnailService._(_thumbnailDirectory);
+    _thumbnailService =
+        ThumbnailService._(_thumbnailDirectory, DesktopFFmpegBackend());
     _item = VideoItem(
       path: r'C:\smoke\media\Alpha\clip.mp4',
       title: 'Smoke Clip',

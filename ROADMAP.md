@@ -1,5 +1,11 @@
 # ROADMAP.md
 
+## 2026-07-14 独立 Dart library 迁移第二批完成
+
+- `part` 从 57 降至 35；领域模型/契约、DatabaseProvider、扫描与媒体平台边界、播放辅助和窗口服务已独立。
+- 下一批先拆 Store 的 metadata/tag/scan coordinator 私有协作，再拆播放器实现，最后处理页面与 widgets。
+- macOS/Linux adapter 已接入组合根；对应 build 必须在各自宿主 runner 验证。
+
 ## 2026-07-13 SQLite hydration 与 Rust 扫描边界完成
 
 - 分阶段诊断确认约 40 秒并非普通 SQLite 查询或对象 hydration，而是启动维护中的无条件 NOCASE 相关回填；修复后真实副本加载低于 1 秒，真实窗口首帧约 1.42 秒。

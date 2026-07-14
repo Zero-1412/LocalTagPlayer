@@ -10,6 +10,10 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
+`Architecture Baseline 0.5.26` 已把路径、DatabaseProvider、平台契约、领域模型和第二批应用服务迁为独立 Dart library。组合根选择文件系统、数据库、FFmpeg、扫描、媒体探测和播放器实现；SQLite schema、标签筛选与 stable identity 继续由 Dart 拥有。
+
+当前仍有 35 个 `part`，集中在 Store 私有 SQLite 协作、播放器实现和页面组件。必须先公开最小 contract 再迁页面，禁止通过重新导出整个 `app.dart` 伪造边界。
+
 当前应用是 Flutter Windows 单体桌面应用，入口保留在：
 
 ```text

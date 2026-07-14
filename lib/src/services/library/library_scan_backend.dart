@@ -1,4 +1,11 @@
-part of '../../app.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:path/path.dart' as p;
+
+import '../../core/tag_rules.dart';
+import 'library_scan_service.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

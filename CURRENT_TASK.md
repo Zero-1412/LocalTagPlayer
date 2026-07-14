@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.25` 已完成。
+架构版本状态：`Architecture Baseline 0.5.26` 已完成。
 
 最近一次验证：
 
@@ -16,6 +16,12 @@ flutter build windows --debug
 结果：通过。
 
 ## 最近完成
+
+- `AppPaths` 已改为组合根注入的实例，`SqfliteDatabaseProvider` 独占 database factory 与数据库路径选择；SQLite schema、stable identity 和写入仍由 Dart `LibraryStore` 单写。
+- `LibraryApplicationFacade` 集合改为只读视图，收藏、root 替换与播放位置改走明确命令；Tag/Cache/Playback repository 已由同一个 Store 实现并注入。
+- 已移除静态媒体工具、窗口单例与旧文件位置 service；debug 环境解析和诊断写入已退出页面。
+- 本轮将 `part` 从 57 个降至 35 个；余下 Store 私有协作与页面组件继续按 Repository/应用服务→页面顺序迁移。
+- contract/fake tests、analyze、Windows debug build 和真实窗口“原神 / 雷神”172 条筛选通过。macOS/Linux 已有显式 adapter；原生 build 需对应宿主验证。
 
 - `DesktopFileSystemAdapter` 已接管目录选择、异步目录浏览、文件存在/stat、截图写入、删除和文件管理器定位；媒体库本地路径浏览不再在 Widget build 中同步遍历磁盘。
 - `LibraryStore` 已实现真实 `LibraryRepository` contract，`LibraryApplicationFacade` 成为媒体库、标签管理和 missing/relink 页面的上层依赖；页面不再出现 `LibraryStore` 具体类型。

@@ -1,4 +1,11 @@
-part of '../../app.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/widgets.dart';
+import 'package:window_manager/window_manager.dart';
+
+import '../../core/app_paths.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -47,9 +54,10 @@ class DesktopWindowLayout {
  * 尺寸处理散落到播放器或媒体库 UI。高频 resize 使用延迟合并，避免持续写盘。
  */
 class DesktopWindowStateService with WindowListener {
-  DesktopWindowStateService._();
+  DesktopWindowStateService(this._paths);
 
-  static final instance = DesktopWindowStateService._();
+  /** 由组合根注入的窗口布局文件路径。 */
+  final AppPaths _paths;
 
   Timer? _saveTimer;
   Size? _lastNormalSize;
@@ -80,7 +88,7 @@ class DesktopWindowStateService with WindowListener {
 
   Future<DesktopWindowLayout?> _load() async {
     try {
-      final file = await AppPaths.windowLayoutFile();
+      final file = await _paths.windowLayoutFile();
       if (!await file.exists()) return null;
       return DesktopWindowLayout.fromJson(
           jsonDecode(await file.readAsString()));
@@ -108,7 +116,7 @@ class DesktopWindowStateService with WindowListener {
         height: size.height,
         maximized: maximized,
       );
-      final file = await AppPaths.windowLayoutFile();
+      final file = await _paths.windowLayoutFile();
       await file.writeAsString(jsonEncode(layout.toJson()), flush: true);
     } catch (_) {
       // 窗口状态属于体验增强，保存失败不能阻止应用退出或播放。

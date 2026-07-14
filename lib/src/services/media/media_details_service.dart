@@ -1,4 +1,9 @@
-part of '../../app.dart';
+import 'dart:async';
+
+import '../../models/media_details.dart';
+import '../../models/platform_models.dart';
+import '../../models/video_item.dart';
+import '../../platform/platform_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

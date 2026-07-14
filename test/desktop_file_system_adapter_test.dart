@@ -5,6 +5,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/app.dart';
 
 void main() {
+  test('reveal rejects missing files before launching platform manager',
+      () async {
+    final missing = '${Directory.systemTemp.path}${Platform.pathSeparator}'
+        'ltp_missing_reveal_target.mp4';
+    await expectLater(
+      const DesktopFileSystemAdapter().revealInFileManager(missing),
+      throwsA(isA<FileSystemException>()),
+    );
+  });
+
   test('desktop file system adapter owns list stat write and delete', () async {
     final root = await Directory.systemTemp.createTemp('ltp_fs_adapter_');
     addTearDown(() async {

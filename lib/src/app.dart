@@ -5,7 +5,6 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -17,59 +16,82 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'core/app_paths.dart';
 import 'core/layout_size.dart';
+import 'core/playback_settings.dart';
+import 'core/tag_rules.dart';
+import 'models/library_scan_models.dart';
 import 'models/media_details.dart';
+import 'models/platform_models.dart';
+import 'models/video_item.dart';
 import 'platform/desktop_file_system_adapter.dart';
+import 'platform/database_provider.dart';
 import 'platform/file_system_adapter.dart';
+import 'platform/platform_interfaces.dart';
+import 'repositories/repository_interfaces.dart';
+import 'services/library/library_application_facade.dart';
+import 'services/library/library_count_refresh_coordinator.dart';
+import 'services/library/library_load_diagnostics.dart';
+import 'services/library/library_scan_backend.dart';
+import 'services/library/library_scan_service.dart';
+import 'services/library/library_video_persistence.dart';
+import 'services/media/external_media_tools.dart';
+import 'services/media/media_probe_backend.dart';
+import 'services/media/media_details_service.dart';
+import 'services/player/playback_snapshot_write_queue.dart';
+import 'services/player/player_hardware_acceleration.dart';
+import 'services/player/player_hardware_compatibility.dart';
+import 'services/player/player_memory_diagnostics.dart';
+import 'services/window/desktop_window_state_service.dart';
 
+export 'core/tag_rules.dart';
+export 'core/app_paths.dart';
 export 'core/layout_size.dart';
+export 'core/playback_settings.dart';
+export 'models/external_media_tools_state.dart';
 export 'models/media_details.dart';
+export 'models/library_scan_models.dart';
+export 'models/platform_models.dart';
+export 'models/video_item.dart';
 export 'platform/desktop_file_system_adapter.dart';
+export 'platform/database_provider.dart';
 export 'platform/file_system_adapter.dart';
-
-part 'core/app_paths.dart';
-part 'core/playback_settings.dart';
-part 'core/tag_rules.dart';
-part 'models/video_item.dart';
-part 'models/platform_models.dart';
-part 'repositories/repository_interfaces.dart';
+export 'platform/platform_interfaces.dart';
+export 'repositories/repository_interfaces.dart';
+export 'services/library/library_application_facade.dart';
+export 'services/library/library_count_refresh_coordinator.dart';
+export 'services/library/library_load_diagnostics.dart';
+export 'services/library/library_scan_backend.dart';
+export 'services/library/library_scan_service.dart';
+export 'services/library/library_video_persistence.dart';
+export 'services/media/external_media_tools.dart';
+export 'services/media/media_probe_backend.dart';
+export 'services/media/media_details_service.dart';
+export 'services/player/playback_snapshot_write_queue.dart';
+export 'services/player/player_hardware_acceleration.dart';
+export 'services/player/player_hardware_compatibility.dart';
+export 'services/player/player_memory_diagnostics.dart';
+export 'services/window/desktop_window_state_service.dart';
 
 // 媒体库服务集中管理扫描、持久化、诊断与内存状态协调。
 part 'services/library/library_metadata_persistence.dart';
-part 'services/library/library_load_diagnostics.dart';
 part 'services/library/library_stress_control.dart';
 part 'services/library/library_scan_ui_diagnostics.dart';
 part 'services/library/library_card_ui_diagnostics.dart';
-part 'services/library/library_scan_backend.dart';
 part 'services/library/library_scan_coordinator.dart';
-part 'services/library/library_count_refresh_coordinator.dart';
 part 'services/library/library_tag_persistence.dart';
 part 'services/library/library_tag_maintenance.dart';
-part 'services/library/library_video_persistence.dart';
-part 'services/library/library_application_facade.dart';
 part 'services/library/library_store.dart';
-part 'services/library/library_scan_service.dart';
 
 // 细分服务目录只表达职责归属，不改变现有平台边界或业务调用顺序。
-part 'services/media/external_media_tools.dart';
-part 'services/media/media_probe_backend.dart';
 part 'services/media/thumbnail_service.dart';
-part 'services/media/media_details_service.dart';
-part 'services/player/playback_snapshot_write_queue.dart';
-part 'services/player/player_hardware_acceleration.dart';
-part 'services/player/player_hardware_compatibility.dart';
 part 'services/player/media_kit_player_backend.dart';
 part 'services/player/windows_native_player_backend.dart';
-part 'services/player/player_memory_diagnostics.dart';
 part 'services/relink/bulk_path_relink_service.dart';
 part 'services/tags/tag_query_service.dart';
-part 'services/window/desktop_window_state_service.dart';
-part 'platform/platform_interfaces.dart';
-part 'platform/desktop_file_location_service.dart';
 
 // 页面和组件按用户工作流分组，避免不同功能在一级目录中继续混放。
 part 'pages/library/library_page_helpers.dart';
@@ -116,9 +138,7 @@ const _appSoftShadow = [
 const _motionDuration = Duration(milliseconds: 180);
 const _motionCurve = Curves.easeOutCubic;
 const _thumbnailWidth = 384;
-const _thumbnailFfmpegTimeout = Duration(seconds: 10);
 const _thumbnailPlayerTimeout = Duration(seconds: 8);
-const _mediaProbeTimeout = Duration(seconds: 6);
 
 /** 创建媒体库应用门面的组合根工厂。 */
 typedef LibraryApplicationFactory = Future<LibraryApplicationFacade> Function({
@@ -137,13 +157,19 @@ typedef MediaProbeBackendFactory = MediaProbeBackend Function();
 class LocalTagPlayerDependencies {
   const LocalTagPlayerDependencies({
     required this.fileSystem,
+    required this.paths,
     required this.libraryApplicationFactory,
     required this.playerBackendFactory,
     required this.mediaProbeBackendFactory,
+    required this.ffmpegBackend,
+    required this.libraryDebugOptions,
   });
 
   /** 文件选择、目录枚举、文件写入和删除的平台边界。 */
   final FileSystemAdapter fileSystem;
+
+  /** 应用私有文件路径策略；页面只转交给负责持久化的应用服务。 */
+  final AppPaths paths;
 
   /** Dart Repository 与应用门面的创建入口。 */
   final LibraryApplicationFactory libraryApplicationFactory;
@@ -153,6 +179,12 @@ class LocalTagPlayerDependencies {
 
   /** 每个探测队列独占的媒体探测后端工厂。 */
   final MediaProbeBackendFactory mediaProbeBackendFactory;
+
+  /** 缩略图与兼容媒体探测共享的实例级 FFmpeg 边界。 */
+  final FFmpegBackend ffmpegBackend;
+
+  /** 仅由组合根读取环境后生成的 debug 配置。 */
+  final LibraryDebugOptions libraryDebugOptions;
 }
 
 /** 组合根内选择播放器具体实现，页面不再读取环境变量或平台类型。 */
@@ -178,17 +210,46 @@ PlayerBackend _createPlayerBackend({
 
 /** 创建当前平台的完整依赖图，确保具体实现只在组合根出现一次。 */
 LocalTagPlayerDependencies createLocalTagPlayerDependencies() {
+  final paths = AppPaths();
+  final databaseProvider = SqfliteDatabaseProvider(
+    paths: paths,
+    factory: databaseFactoryFfi,
+  );
+  final ffmpegBackend = DesktopFFmpegBackend();
   return LocalTagPlayerDependencies(
-    fileSystem: const DesktopFileSystemAdapter(),
+    fileSystem: Platform.isMacOS
+        ? const MacOsFileSystemAdapter()
+        : Platform.isLinux
+            ? const LinuxFileSystemAdapter()
+            : const DesktopFileSystemAdapter(),
+    paths: paths,
     libraryApplicationFactory: ({diagnostics}) async {
       final repository = await LibraryStore.load(
         diagnostics: diagnostics,
         scanBackend: createLibraryScanBackend(),
+        databaseProvider: databaseProvider,
       );
-      return LibraryApplicationFacade(repository);
+      return LibraryApplicationFacade(
+        libraryRepository: repository,
+        tagRepository: repository,
+        cacheRepository: repository,
+        playbackRepository: repository,
+      );
     },
     playerBackendFactory: _createPlayerBackend,
-    mediaProbeBackendFactory: createMediaProbeBackend,
+    mediaProbeBackendFactory: () => createMediaProbeBackend(ffmpegBackend),
+    ffmpegBackend: ffmpegBackend,
+    libraryDebugOptions: LibraryDebugOptions(
+      stressRoot: kDebugMode
+          ? Platform.environment['LOCAL_TAG_PLAYER_LIBRARY_STRESS_ROOT']?.trim()
+          : null,
+      startupDiagnosticsPath: kDebugMode
+          ? p.join(
+              Directory.systemTemp.path,
+              'local_tag_player_startup_diagnostics.json',
+            )
+          : null,
+    ),
   );
 }
 
@@ -217,10 +278,9 @@ Future<void> bootstrapLocalTagPlayer() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
-  await DesktopWindowStateService.instance.initialize();
-  ExternalMediaTools.configureBackend(DesktopFFmpegBackend());
-  runApp(LocalTagPlayerApp(dependencies: createLocalTagPlayerDependencies()));
+  final dependencies = createLocalTagPlayerDependencies();
+  await DesktopWindowStateService(dependencies.paths).initialize();
+  runApp(LocalTagPlayerApp(dependencies: dependencies));
 }
 
 class LocalTagPlayerApp extends StatelessWidget {

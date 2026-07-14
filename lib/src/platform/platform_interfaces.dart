@@ -1,4 +1,12 @@
-part of '../app.dart';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import '../models/external_media_tools_state.dart';
+import '../models/media_details.dart';
+import '../models/platform_models.dart';
+import '../models/video_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -123,16 +131,4 @@ abstract interface class MediaProbeBackend {
 
   /** 取消指定代的排队与执行中任务，旧结果不得继续写回。 */
   Future<void> cancelGeneration(int generationId);
-}
-
-abstract interface class DatabaseProvider {
-  Future<File> databaseFile();
-
-  Future<void> open();
-
-  Future<void> close();
-
-  Future<int> get schemaVersion;
-
-  Future<void> migrate({required int fromVersion, required int toVersion});
 }

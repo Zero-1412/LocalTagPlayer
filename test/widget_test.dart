@@ -25,7 +25,6 @@ VideoItem _testVideo({
 
 void main() {
   testWidgets('app mounts', (WidgetTester tester) async {
-    ExternalMediaTools.configureBackend(DesktopFFmpegBackend());
     await tester.pumpWidget(LocalTagPlayerApp(
       dependencies: createLocalTagPlayerDependencies(),
     ));
@@ -391,22 +390,21 @@ void main() {
   test('library sort preferences persist outside playback settings', () async {
     final directory = await Directory.systemTemp.createTemp('ltp_sort_pref_');
     addTearDown(() async {
-      AppPaths.debugUseDataDirectoryForTesting(null);
       await directory.delete(recursive: true);
     });
-    AppPaths.debugUseDataDirectoryForTesting(directory);
+    final paths = AppPaths(dataDirectoryOverride: directory);
 
     const preferences = LibrarySortPreferences(
       mode: SortMode.folder,
       direction: SortDirection.ascending,
     );
-    await preferences.save();
-    final loaded = await LibrarySortPreferences.load();
+    await preferences.save(paths);
+    final loaded = await LibrarySortPreferences.load(paths);
 
     expect(loaded.mode, SortMode.folder);
     expect(loaded.direction, SortDirection.ascending);
-    expect(await AppPaths.settingsFile(),
-        isNot(await AppPaths.librarySortPreferencesFile()));
+    expect(await paths.settingsFile(),
+        isNot(await paths.librarySortPreferencesFile()));
   });
 
   testWidgets('playback decoder dropdown only changes after confirmation',
@@ -966,16 +964,6 @@ void main() {
     expect(result, 49999);
     // 宽松阈值只防止误接全库扫描或明显的超线性退化，不绑定具体开发机性能。
     expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
-  });
-
-  test('file location service rejects missing files before platform launch',
-      () async {
-    final missing = '${Directory.systemTemp.path}${Platform.pathSeparator}'
-        'ltp_missing_reveal_target.mp4';
-    await expectLater(
-      const DesktopFileLocationService().reveal(missing),
-      throwsA(isA<FileSystemException>()),
-    );
   });
 
   testWidgets('manual tag editor locks folder tags', (tester) async {
@@ -1640,7 +1628,7 @@ void main() {
     final uncachedItem =
         _testVideo(path: 'C:/queue/uncached.mp4', title: 'uncached');
     final service = MediaDetailsService(
-      probeBackend: CompatibleMediaProbeBackend(),
+      probeBackend: CompatibleMediaProbeBackend(DesktopFFmpegBackend()),
     );
 
     expect(service.cachedDetailsFor(cachedItem), same(cached));
@@ -1760,11 +1748,13 @@ void main() {
     final directory =
         await Directory.systemTemp.createTemp('ltp_thumbnail_queue_');
     addTearDown(() async {
-      AppPaths.debugUseDataDirectoryForTesting(null);
       await directory.delete(recursive: true);
     });
-    AppPaths.debugUseDataDirectoryForTesting(directory);
-    final service = await ThumbnailService.create();
+    final paths = AppPaths(dataDirectoryOverride: directory);
+    final service = await ThumbnailService.create(
+      paths,
+      DesktopFFmpegBackend(),
+    );
     final item = _testVideo(
       path: '${directory.path}/missing.mp4',
       title: 'missing',
@@ -1788,11 +1778,14 @@ void main() {
     final directory =
         await Directory.systemTemp.createTemp('ltp_thumbnail_candidates_');
     addTearDown(() async {
-      AppPaths.debugUseDataDirectoryForTesting(null);
       await directory.delete(recursive: true);
     });
-    AppPaths.debugUseDataDirectoryForTesting(directory);
-    final service = (await ThumbnailService.create())..pause();
+    final paths = AppPaths(dataDirectoryOverride: directory);
+    final service = (await ThumbnailService.create(
+      paths,
+      DesktopFFmpegBackend(),
+    ))
+      ..pause();
     final items = List<VideoItem>.generate(
       80,
       (index) => _testVideo(
