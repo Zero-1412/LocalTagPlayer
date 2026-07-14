@@ -17,6 +17,9 @@ flutter build windows --debug
 
 ## 最近完成
 
+- 压力测试产物统一写入带安全标记的 `artifacts` 子目录；每次运行前自动清理超过 7 天的已标记目录，成功后只保留汇总报告与压缩清单，失败时保留完整诊断现场。
+- 媒体库增删与真实播放器 runner 支持 `-KeepRawArtifacts` 和可配置保留天数，避免隔离 profile、缩略图、临时数据库、录像及原始采样再次把仓库扩张到数十 GiB。
+
 - debug 压测为媒体库卡片增加 `card_shell`、`preview`、`metadata`、`tags`、`actions` 五个子树边界；直接 builder P95 均低于 0.1 ms，而包含式 layout 的主要热点落在卡片外壳与操作按钮链，不能把后代 Widget build 或重叠子树耗时错误相加。
 - 播放器真实 `released` 后连续采样 60 秒：Private 643.5→591.7 MiB、线程 128→125、GPU committed 144.7→104.6 MiB；Flutter ImageCache 全程固定 19,611,648 bytes，未调用 GC 或清理 ImageCache。剩余约 52 MiB Private 高位应继续在 PlayerBackend/libmpv/驱动边界归因。
 - 三轮真实快速滚动、六次播放与 18 次 seek 通过，卡片无遮挡或溢出；首次添加扫描 106.34 秒为冷存储异常值，卡片探针同期仅记录亚毫秒直接 build，不能据此归因为卡片构建。

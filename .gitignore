@@ -6,6 +6,7 @@
 .pub-cache/
 .pub/
 build/
+/artifacts/
 
 # Generated desktop folders
 windows/flutter/ephemeral/

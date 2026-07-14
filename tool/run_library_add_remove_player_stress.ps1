@@ -6,13 +6,23 @@
   [int]$Cycles = 10,
   [int]$Seed = 20260714,
   [int]$ReleaseTailSeconds = 60,
+  # 自动过期只处理带压力测试标记的目录；0 表示禁用。
+  [ValidateRange(0, 3650)]
+  [int]$ArtifactRetentionDays = 7,
+  # 显式保留隔离 profile、录像和逐项采样，供失败复现或深度分析。
+  [switch]$KeepRawArtifacts,
   [string]$Output = ''
 )
 
 $ErrorActionPreference = 'Stop'
+$artifactsRoot = Join-Path $PSScriptRoot '..\artifacts'
+New-Item -ItemType Directory -Force -Path $artifactsRoot | Out-Null
+& (Join-Path $PSScriptRoot 'manage_stress_artifacts.ps1') `
+  -ArtifactsRoot $artifactsRoot `
+  -RetentionDays $ArtifactRetentionDays
 if (-not $Output) {
   $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-  $Output = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\artifacts')) "library_add_remove_stress_$stamp"
+  $Output = Join-Path $artifactsRoot "library_add_remove_stress_$stamp"
 }
 if (Test-Path -LiteralPath $Output) {
   throw "输出目录已存在，拒绝覆盖：$Output"
@@ -28,6 +38,7 @@ if (-not (Test-Path -LiteralPath $Ffmpeg)) {
 }
 
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
+Set-Content -LiteralPath (Join-Path $Output '.ltp-stress-artifact') -Value ((Get-Date).ToUniversalTime().ToString('o'))
 $profile = Join-Path $Output 'profile'
 New-Item -ItemType Directory -Force -Path $profile | Out-Null
 
@@ -198,4 +209,12 @@ try {
 }
 
 & (Join-Path $PSScriptRoot 'summarize_library_add_remove_stress.ps1') -InputDirectory $Output
+if ($testExitCode -eq 0 -and -not $KeepRawArtifacts) {
+  # 成功运行默认只保留汇总；失败运行保留全部现场，供定位回归原因。
+  & (Join-Path $PSScriptRoot 'manage_stress_artifacts.ps1') `
+    -ArtifactsRoot $artifactsRoot `
+    -RetentionDays $ArtifactRetentionDays `
+    -CompactDirectory $Output `
+    -KeepFileNames @('summary.json')
+}
 exit $testExitCode

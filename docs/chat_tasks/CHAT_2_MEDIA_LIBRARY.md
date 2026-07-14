@@ -175,3 +175,9 @@
 - 修复未入库统计遍历可变 roots 的并发修改；root 移除提交同步提升数据 revision，禁止过滤层复用删除前列表。
 - 移除前取消媒体探测 generation，回写前复核当前 path/videoId/fingerprint，旧回调不再复活已删除视频。
 - SQLite schema、`FilterQuery` / `TagQueryService` 语义、manual 标签和 filtered queue 来源不变；完整性能证据见 `docs/qa/library_add_remove_player_stress_20260714.md`。
+
+## 2026-07-14 压力测试产物生命周期
+
+- 媒体库增删压测输出增加 `.ltp-stress-artifact` 安全标记；启动前仅清理带标记且超过默认 7 天保留期的目录。
+- 成功运行默认只保留 `summary.json` 与 `artifact-manifest.json`，删除隔离 profile、缩略图、临时数据库、录像、截图和原始采样；失败运行保留全部现场。
+- `-KeepRawArtifacts` 可显式保留完整证据，`-ArtifactRetentionDays 0` 可禁用过期清理；本轮不修改媒体库、SQLite、标签或播放器业务语义。

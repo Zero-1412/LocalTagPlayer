@@ -3,12 +3,29 @@ param(
   [int]$DurationSeconds = 1800,
   [int]$Seed = 20260713,
   [string]$MediaPath = '',
-  [string]$Output = "$env:TEMP\ltp_real_library_stress"
+  # 自动过期只处理带压力测试标记的目录；0 表示禁用。
+  [ValidateRange(0, 3650)]
+  [int]$ArtifactRetentionDays = 7,
+  # 显式保留截图、逐秒指标和其它原始证据。
+  [switch]$KeepRawArtifacts,
+  [string]$Output = ''
 )
 
 $ErrorActionPreference = 'Stop'
+$artifactsRoot = Join-Path $PSScriptRoot '..\artifacts'
+New-Item -ItemType Directory -Force -Path $artifactsRoot | Out-Null
+& (Join-Path $PSScriptRoot 'manage_stress_artifacts.ps1') `
+  -ArtifactsRoot $artifactsRoot `
+  -RetentionDays $ArtifactRetentionDays
+if (-not $Output) {
+  $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+  $Output = Join-Path $artifactsRoot "player_real_library_stress_$stamp"
+}
+if (Test-Path -LiteralPath $Output) {
+  throw "输出目录已存在，拒绝覆盖：$Output"
+}
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
-Remove-Item -Force -ErrorAction SilentlyContinue "$Output\*.ready", "$Output\*.png", "$Output\*.csv", "$Output\stress.done"
+Set-Content -LiteralPath (Join-Path $Output '.ltp-stress-artifact') -Value ((Get-Date).ToUniversalTime().ToString('o'))
 Set-Content -LiteralPath "$Output\phase.current" -Value 'test_start|0'
 
 # 只读取进程指标并写入压测目录，不创建 UIA 客户端。
@@ -114,12 +131,30 @@ if ($MediaPath) {
   Remove-Item Env:LOCAL_TAG_PLAYER_STRESS_MEDIA_PATH -ErrorAction SilentlyContinue
 }
 try {
-  & $Flutter test integration_test/player_real_library_stress_test.dart -d windows
+  & $Flutter test integration_test/player_real_library_stress_test.dart -d windows *>&1 |
+    Tee-Object -FilePath (Join-Path $Output 'stress.log')
   $testExitCode = $LASTEXITCODE
 } finally {
   New-Item -ItemType File -Force -Path "$Output\stress.done" | Out-Null
   Wait-Job $monitorJob, $captureJob -Timeout 20 | Out-Null
   Receive-Job $monitorJob, $captureJob
   Remove-Job $monitorJob, $captureJob -Force
+  Remove-Item Env:LOCAL_TAG_PLAYER_STRESS_SECONDS -ErrorAction SilentlyContinue
+  Remove-Item Env:LOCAL_TAG_PLAYER_STRESS_SEED -ErrorAction SilentlyContinue
+  Remove-Item Env:LOCAL_TAG_PLAYER_STRESS_OUTPUT -ErrorAction SilentlyContinue
+  Remove-Item Env:LOCAL_TAG_PLAYER_STRESS_MEDIA_PATH -ErrorAction SilentlyContinue
+}
+if (Test-Path -LiteralPath (Join-Path $Output 'process-metrics.csv')) {
+  & (Join-Path $PSScriptRoot 'summarize_player_stress_metrics.ps1') `
+    -InputDirectory $Output `
+    -LogPath (Join-Path $Output 'stress.log')
+}
+if ($testExitCode -eq 0 -and -not $KeepRawArtifacts) {
+  # 汇总成功后删除逐秒采样、截图等原始证据，避免长期压测持续占用磁盘。
+  & (Join-Path $PSScriptRoot 'manage_stress_artifacts.ps1') `
+    -ArtifactsRoot $artifactsRoot `
+    -RetentionDays $ArtifactRetentionDays `
+    -CompactDirectory $Output `
+    -KeepFileNames @('phase-summary.csv', 'latency-summary.csv')
 }
 exit $testExitCode
