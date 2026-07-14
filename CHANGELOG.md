@@ -7,6 +7,7 @@
 - 生成 macOS/Linux Flutter runner，接入平台 media_kit 库并关闭 macOS App Sandbox 以允许用户选择并读取本地媒体。
 - 新增跨平台 GitHub Actions：分别运行 adapter/架构 contract、静态分析、debug build 与启动存活 smoke；SQLite 仍由 Dart Repository 单写。
 - 本地 `flutter analyze`、99 项测试和 Windows debug build 通过；真实窗口完成“原神 → 雷神”173 项筛选回归，未发现布局或状态反馈退化。
+- GitHub Actions run `29324080724` 中 macOS/Linux 两个 job 均通过 adapter/架构 contract、静态分析、debug build 与 10 秒启动存活 smoke。
 
 ## 2026-07-14 · Dart part 全量清零与真实 library 边界
 

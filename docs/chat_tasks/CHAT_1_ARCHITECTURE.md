@@ -8,6 +8,7 @@
 - `LibraryPage` 不再持有完整 `LocalTagPlayerDependencies`，只消费页面用例服务、文件系统 contract 和转交播放器路由所需 factory。
 - 组合根集中创建 `LocalLibraryPageApplicationService`，拥有 AppPaths、Repository loader、FFmpeg、媒体探测 factory 与 debug 配置。
 - macOS/Linux Flutter runner 与 CI build/start smoke 已接入；平台 adapter 选择在对应宿主 contract test 中验证。
+- GitHub Actions run `29324080724` 已验证 macOS/Linux adapter、静态分析、debug build 与 10 秒启动存活 smoke 全部通过。
 - SQLite schema/写入、FilterQuery/TagQueryService、stable identity、filtered queue 与缓存队列继续由 Dart 单写和编排。
 
 ## 2026-07-14 全量 library 边界收口
