@@ -26,6 +26,23 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
   }
 
   @override
+  Future<List<String>> pickFiles({
+    String? dialogTitle,
+    List<String> allowedExtensions = const <String>[],
+  }) async {
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: dialogTitle,
+      type: allowedExtensions.isEmpty ? FileType.any : FileType.custom,
+      allowedExtensions: allowedExtensions.isEmpty ? null : allowedExtensions,
+      allowMultiple: true,
+    );
+    return <String>[
+      for (final file in result?.files ?? const <PlatformFile>[])
+        if (file.path != null) normalizePath(file.path!),
+    ];
+  }
+
+  @override
   Future<String?> pickFile({
     String? dialogTitle,
     List<String> allowedExtensions = const <String>[],

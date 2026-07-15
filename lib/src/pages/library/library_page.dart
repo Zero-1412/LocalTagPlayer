@@ -1272,6 +1272,73 @@ class _LibraryPageState extends State<LibraryPage> {
     await _scan(() => _store!.addRootAndScanWithChanges(path));
   }
 
+  /**
+   * 打开系统多文件选择器，并把所选视频的父目录交给统一扫描链路。
+   *
+   * 选择器只允许视频扩展名；文件不会被复制或移动，应用仅注册其所在目录并建立索引。
+   */
+  Future<void> _pickVideoFiles() async {
+    final paths = await _fileSystem.pickFiles(
+      dialogTitle: '选择要添加的视频文件',
+      allowedExtensions: TagRules.videoExtensions
+          .map((extension) => extension.substring(1))
+          .toList(),
+    );
+    await _importLibraryPaths(paths);
+  }
+
+  /**
+   * 校验选择器或资源管理器拖入的路径，并以最少 root 数量触发一轮扫描。
+   *
+   * 已受现有 root 管理的文件只触发重新扫描；目录和视频文件之外的项目会被忽略。文件
+   * stat 通过 [FileSystemAdapter] 异步执行，不在 build 或拖动悬停阶段访问磁盘。
+   */
+  Future<void> _importLibraryPaths(Iterable<String> rawPaths) async {
+    final store = _store;
+    if (store == null || _isScanning) {
+      return;
+    }
+    final normalizedPaths = <String>[];
+    final pathKeys = <String>{};
+    for (final rawPath in rawPaths) {
+      final normalized = _fileSystem.normalizePath(rawPath);
+      if (normalized.trim().isNotEmpty &&
+          pathKeys.add(TagRules.pathKey(normalized))) {
+        normalizedPaths.add(normalized);
+      }
+    }
+    final inspected = await Future.wait<LibraryImportPath?>(
+      normalizedPaths.map((path) async {
+        if (await _fileSystem.directoryExists(path)) {
+          return (path: path, isDirectory: true);
+        }
+        if (TagRules.isVideoPath(path) && await _fileSystem.fileExists(path)) {
+          return (path: path, isDirectory: false);
+        }
+        return null;
+      }),
+    );
+    if (!mounted || _store != store) {
+      return;
+    }
+    final imports = inspected.whereType<LibraryImportPath>().toList();
+    if (imports.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未发现可添加的视频文件或目录')),
+      );
+      return;
+    }
+    final newRoots = libraryImportRoots(
+      imports: imports,
+      existingRoots: store.roots,
+    );
+    await _scan(
+      newRoots.isEmpty
+          ? store.scanWithChanges
+          : () => store.addRootsAndScanWithChanges(newRoots),
+    );
+  }
+
   Future<void> _rescan() async {
     if (_store == null) {
       return;
@@ -2710,71 +2777,81 @@ class _LibraryPageState extends State<LibraryPage> {
             onClearAll: _hasActiveFilters ? _clearAllFilters : null,
           ),
           Expanded(
-            child: RepaintBoundary(
-              child: switch (_resultMode) {
-                _LibraryResultMode.local => LocalLibraryView(
-                    currentPath: _localLibraryPath,
-                    entries: localEntries,
-                    thumbnailService: thumbnailService,
-                    playbackSettings: _playbackSettings,
-                    dense: _denseResultGrid,
-                    canGoBack: _localLibraryBackStack.isNotEmpty,
-                    onBack: _goBackLocalLibraryPath,
-                    onOpenFolder: _openLocalLibraryFolder,
-                    onOpenVideo: _openVideo,
-                    onEditTags: _editTags,
-                    onToggleFavorite: _toggleFavorite,
-                    onDelete: _requestDeleteVideo,
-                  ),
-                _LibraryResultMode.recent => videos.isEmpty
-                    ? EmptyState(
-                        hasLibrary: store.videos.isNotEmpty,
-                        message: '当前没有未完成的观看记录',
-                      )
-                    : RecentPlaybackView(
-                        videos: videos,
-                        selectedPathKeys: _selectedRecentPathKeys,
-                        thumbnailService: thumbnailService,
-                        playbackSettings: _playbackSettings,
-                        dense: _denseResultGrid,
-                        onOpen: _openVideo,
-                        onEditTags: _editTags,
-                        onToggleFavorite: _toggleFavorite,
-                        onDeleteVideo: _requestDeleteVideo,
-                        onToggleSelected: _toggleRecentSelection,
-                        onSelectAll: () => setState(() {
-                          _selectedRecentPathKeys
-                            ..clear()
-                            ..addAll(videos
-                                .map((item) => TagRules.pathKey(item.path)));
-                        }),
-                        onClearSelection: () =>
-                            setState(_selectedRecentPathKeys.clear),
-                        onDeleteOne: _clearOneRecentPlayback,
-                        onDeleteSelected: () =>
-                            _clearRecentPlayback(selectedOnly: true),
-                        onDeleteAll: () =>
-                            _clearRecentPlayback(selectedOnly: false),
-                      ),
-                _ => videos.isEmpty
-                    ? EmptyState(
-                        hasLibrary: store.videos.isNotEmpty,
-                        message: _resultMode == _LibraryResultMode.favorites
-                            ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u89c6\u9891'
-                            : null,
-                      )
-                    : VideoGrid(
-                        videos: videos,
-                        thumbnailService: thumbnailService,
-                        playbackSettings: _playbackSettings,
-                        dense: _denseResultGrid,
-                        onVisible: _prioritizeVisibleLibraryItem,
-                        onOpen: _openVideo,
-                        onEditTags: _editTags,
-                        onToggleFavorite: _toggleFavorite,
-                        onDelete: _requestDeleteVideo,
-                      ),
-              },
+            child: LibraryImportDropRegion(
+              enabled:
+                  _resultMode == _LibraryResultMode.library && !_isScanning,
+              onDropPaths: (paths) => unawaited(_importLibraryPaths(paths)),
+              child: RepaintBoundary(
+                child: switch (_resultMode) {
+                  _LibraryResultMode.local => LocalLibraryView(
+                      currentPath: _localLibraryPath,
+                      entries: localEntries,
+                      thumbnailService: thumbnailService,
+                      playbackSettings: _playbackSettings,
+                      dense: _denseResultGrid,
+                      canGoBack: _localLibraryBackStack.isNotEmpty,
+                      onBack: _goBackLocalLibraryPath,
+                      onOpenFolder: _openLocalLibraryFolder,
+                      onOpenVideo: _openVideo,
+                      onEditTags: _editTags,
+                      onToggleFavorite: _toggleFavorite,
+                      onDelete: _requestDeleteVideo,
+                    ),
+                  _LibraryResultMode.recent => videos.isEmpty
+                      ? EmptyState(
+                          hasLibrary: store.videos.isNotEmpty,
+                          message: '当前没有未完成的观看记录',
+                        )
+                      : RecentPlaybackView(
+                          videos: videos,
+                          selectedPathKeys: _selectedRecentPathKeys,
+                          thumbnailService: thumbnailService,
+                          playbackSettings: _playbackSettings,
+                          dense: _denseResultGrid,
+                          onOpen: _openVideo,
+                          onEditTags: _editTags,
+                          onToggleFavorite: _toggleFavorite,
+                          onDeleteVideo: _requestDeleteVideo,
+                          onToggleSelected: _toggleRecentSelection,
+                          onSelectAll: () => setState(() {
+                            _selectedRecentPathKeys
+                              ..clear()
+                              ..addAll(videos
+                                  .map((item) => TagRules.pathKey(item.path)));
+                          }),
+                          onClearSelection: () =>
+                              setState(_selectedRecentPathKeys.clear),
+                          onDeleteOne: _clearOneRecentPlayback,
+                          onDeleteSelected: () =>
+                              _clearRecentPlayback(selectedOnly: true),
+                          onDeleteAll: () =>
+                              _clearRecentPlayback(selectedOnly: false),
+                        ),
+                  _ => videos.isEmpty
+                      ? EmptyState(
+                          hasLibrary: store.videos.isNotEmpty,
+                          message: _resultMode == _LibraryResultMode.favorites
+                              ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u89c6\u9891'
+                              : null,
+                          onAddFiles:
+                              _resultMode == _LibraryResultMode.library &&
+                                      store.videos.isEmpty
+                                  ? _pickVideoFiles
+                                  : null,
+                        )
+                      : VideoGrid(
+                          videos: videos,
+                          thumbnailService: thumbnailService,
+                          playbackSettings: _playbackSettings,
+                          dense: _denseResultGrid,
+                          onVisible: _prioritizeVisibleLibraryItem,
+                          onOpen: _openVideo,
+                          onEditTags: _editTags,
+                          onToggleFavorite: _toggleFavorite,
+                          onDelete: _requestDeleteVideo,
+                        ),
+                },
+              ),
             ),
           ),
         ],
@@ -2990,20 +3067,11 @@ class _LibraryPageState extends State<LibraryPage> {
                           icon: const Icon(Icons.delete_outline_rounded),
                           onPressed: () async {
                             final confirmed = await _confirmRemoveRoot(root);
-                            if (confirmed != true) {
-                              return;
-                            }
-                            final removedVideos = await store.removeRoot(root);
-                            if (!mounted || !dialogContext.mounted) {
+                            if (confirmed != true || !dialogContext.mounted) {
                               return;
                             }
                             Navigator.of(dialogContext).pop();
-                            _markLibraryDataChanged();
-                            final thumbnailService = _thumbnailService;
-                            if (thumbnailService != null) {
-                              unawaited(thumbnailService
-                                  .deleteThumbnailsFor(removedVideos));
-                            }
+                            await _removeLibraryRootData(root);
                           },
                         ),
                       );

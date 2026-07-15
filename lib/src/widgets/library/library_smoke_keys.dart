@@ -34,6 +34,14 @@ class LibrarySmokeKeys {
       ValueKey<String>('smoke.top.sort-direction-button');
   /** 真实窗口扫描帧诊断的稳定入口。 */
   static const rescanButton = ValueKey<String>('smoke.sidebar.rescan');
+  /** 空媒体库中央“添加视频”入口。 */
+  static const emptyAddFiles =
+      ValueKey<String>('smoke.library.empty-add-files');
+  /** 媒体库结果区桌面拖放目标。 */
+  static const importDropRegion = ValueKey<String>('smoke.library.drop-region');
+  /** 文件进入拖放目标后显示的覆盖提示。 */
+  static const importDropOverlay =
+      ValueKey<String>('smoke.library.drop-overlay');
 
   static ValueKey<String> topSortMenuItem(SortMode mode) =>
       ValueKey<String>('smoke.top.sort-menu-item:${mode.name}');

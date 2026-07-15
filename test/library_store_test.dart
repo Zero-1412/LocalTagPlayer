@@ -83,6 +83,32 @@ Future<void> _closeTrackedStores(List<LibraryStore> stores) async {
 }
 
 void main() {
+  test('batch root import persists all roots and scans only after registration',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('batch_roots');
+    final firstRoot = Directory(p.join(dataDir.path, 'first'));
+    final secondRoot = Directory(p.join(dataDir.path, 'second'));
+    final first = await _writeVideoPlaceholder(firstRoot, ['first.mp4']);
+    final second = await _writeVideoPlaceholder(secondRoot, ['second.mkv']);
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+
+    final store = await _loadTrackedStore(stores);
+    final result = await store.addRootsAndScanWithChanges(<String>[
+      firstRoot.path,
+      secondRoot.path,
+      '${firstRoot.path}${Platform.pathSeparator}',
+    ]);
+
+    expect(result.addedCount, 2);
+    expect(store.roots, <String>[firstRoot.path, secondRoot.path]);
+    expect(store.videos, contains(TagRules.pathKey(first.path)));
+    expect(store.videos, contains(TagRules.pathKey(second.path)));
+  });
+
   test('root-level videos do not repeat empty folder-tag coverage writes',
       () async {
     final stores = <LibraryStore>[];

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:local_tag_player/src/app.dart';
+import 'package:path/path.dart' as p;
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -1885,6 +1886,50 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text(rootPath), findsOneWidget);
+  });
+
+  testWidgets('empty library shows a square add-files entry', (tester) async {
+    var addCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EmptyState(
+            hasLibrary: false,
+            onAddFiles: () => addCount += 1,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(LibrarySmokeKeys.emptyAddFiles), findsOneWidget);
+    expect(find.text('添加视频文件'), findsOneWidget);
+    expect(find.textContaining('拖到媒体库区域'), findsOneWidget);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.emptyAddFiles));
+    await tester.pump();
+    expect(addCount, 1);
+  });
+
+  test('file imports collapse to uncovered top-level roots', () {
+    final existingRoot = p.join('library', 'existing');
+    final newRoot = p.join('library', 'new');
+    final selectedParent = p.join('library', 'selected');
+    final roots = libraryImportRoots(
+      existingRoots: <String>[existingRoot],
+      imports: <LibraryImportPath>[
+        (path: p.join(existingRoot, 'known.mp4'), isDirectory: false),
+        (path: p.join(newRoot, 'first.mp4'), isDirectory: false),
+        (path: p.join(newRoot, 'second.mkv'), isDirectory: false),
+        (path: selectedParent, isDirectory: true),
+        (
+          path: p.join(selectedParent, 'child', 'nested.mp4'),
+          isDirectory: false,
+        ),
+        (path: p.join('library', 'ignored.txt'), isDirectory: false),
+      ],
+    );
+
+    expect(roots, <String>[newRoot, selectedParent]);
   });
 
   testWidgets('smoke path opens local folders in dense list mode',

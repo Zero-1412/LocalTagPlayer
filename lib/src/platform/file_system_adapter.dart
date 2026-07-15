@@ -39,6 +39,17 @@ abstract interface class FileSystemAdapter {
   /** 选择一个或多个目录；用户取消时返回空列表。 */
   Future<List<String>> pickDirectories({String? dialogTitle});
 
+  /**
+   * 选择一个或多个文件；[allowedExtensions] 不包含点号。
+   *
+   * 多选能力由平台适配器统一实现，页面不得直接依赖 `FilePicker`，以便 Windows、
+   * macOS 与 Linux 共用同一条导入链路。
+   */
+  Future<List<String>> pickFiles({
+    String? dialogTitle,
+    List<String> allowedExtensions = const <String>[],
+  });
+
   /** 选择单个文件；[allowedExtensions] 不包含点号。 */
   Future<String?> pickFile({
     String? dialogTitle,

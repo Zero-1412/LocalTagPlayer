@@ -1077,14 +1077,45 @@ class LibraryStore
 
   /** 添加 root 并返回可供 UI 与探测队列差量消费的事务提交结果。 */
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(
-      String rootPath) async {
-    final normalizedRoot = TagRules.normalizeRootPath(rootPath);
-    if (normalizedRoot.isEmpty) {
+    String rootPath,
+  ) =>
+      addRootsAndScanWithChanges(<String>[rootPath]);
+
+  /**
+   * 批量注册 root，并在 metadata 只落盘一次后执行一轮扫描。
+   *
+   * 文件选择和拖放可能同时命中多个父目录；先去重再扫描可避免每新增一个目录就重复遍历
+   * 已有大媒体库。SQLite 写入、stable identity 与 folder 标签仍由原扫描协调器统一处理。
+   */
+  @override
+  Future<LibraryScanCommitResult> addRootsAndScanWithChanges(
+    Iterable<String> rootPaths,
+  ) async {
+    final normalizedRoots = <String>[];
+    final pendingKeys = <String>{};
+    for (final rootPath in rootPaths) {
+      final normalizedRoot = TagRules.normalizeRootPath(rootPath);
+      if (normalizedRoot.isEmpty) {
+        continue;
+      }
+      final rootKey = TagRules.pathKey(normalizedRoot);
+      if (pendingKeys.add(rootKey)) {
+        normalizedRoots.add(normalizedRoot);
+      }
+    }
+    if (normalizedRoots.isEmpty) {
       return LibraryScanCommitResult.cancelled(_scanGeneration);
     }
-    final rootKey = TagRules.pathKey(normalizedRoot);
-    if (!roots.any((root) => TagRules.pathKey(root) == rootKey)) {
-      roots.add(normalizedRoot);
+
+    var metadataChanged = false;
+    final existingKeys = roots.map(TagRules.pathKey).toSet();
+    for (final normalizedRoot in normalizedRoots) {
+      if (existingKeys.add(TagRules.pathKey(normalizedRoot))) {
+        roots.add(normalizedRoot);
+        metadataChanged = true;
+      }
+    }
+    if (metadataChanged) {
       await saveMetadata();
     }
     return scanWithChanges();

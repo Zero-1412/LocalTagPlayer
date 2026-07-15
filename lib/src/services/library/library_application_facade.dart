@@ -158,6 +158,12 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(String rootPath) =>
       _repository.addRootAndScanWithChanges(rootPath);
 
+  /** 批量添加文件所在目录或拖入目录，并合并为一次后台扫描。 */
+  Future<LibraryScanCommitResult> addRootsAndScanWithChanges(
+    Iterable<String> rootPaths,
+  ) =>
+      _repository.addRootsAndScanWithChanges(rootPaths);
+
   Future<List<VideoItem>> removeRoot(String rootPath) =>
       _repository.removeRoot(rootPath);
 

@@ -86,6 +86,11 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
 
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(String rootPath);
 
+  /** 批量注册媒体库 root，并在全部配置落盘后只执行一轮扫描。 */
+  Future<LibraryScanCommitResult> addRootsAndScanWithChanges(
+    Iterable<String> rootPaths,
+  );
+
   Future<List<VideoItem>> removeRoot(String rootPath);
 
   Future<LibraryScanCommitResult> scanWithChanges();
