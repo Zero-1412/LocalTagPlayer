@@ -2476,6 +2476,38 @@ void main() {
     await mouse.removePointer();
   });
 
+  test('fullscreen progress thumb scales only on high resolution viewports',
+      () {
+    expect(
+      playerProgressThumbScale(
+        isFullscreen: false,
+        viewportSize: const Size(3840, 2160),
+      ),
+      1,
+    );
+    expect(
+      playerProgressThumbScale(
+        isFullscreen: true,
+        viewportSize: const Size(1280, 720),
+      ),
+      1,
+    );
+    expect(
+      playerProgressThumbScale(
+        isFullscreen: true,
+        viewportSize: const Size(3840, 2160),
+      ),
+      1.25,
+    );
+    expect(
+      playerProgressThumbScale(
+        isFullscreen: true,
+        viewportSize: const Size(7680, 4320),
+      ),
+      1.25,
+    );
+  });
+
   test('hover preview frame is generated once and reused by second bucket',
       () async {
     final directory = await Directory.systemTemp.createTemp('ltp_hover_frame_');

@@ -789,6 +789,7 @@ class PlayerPageState extends State<PlayerPage> {
                             Column(mainAxisSize: MainAxisSize.min, children: [
                           PlayerProgressSlider(
                             sliderKey: const ValueKey('player.progress'),
+                            isFullscreen: _isWindowFullscreen,
                             value: position.inMilliseconds
                                 .clamp(0, maxMs.toInt())
                                 .toDouble(),

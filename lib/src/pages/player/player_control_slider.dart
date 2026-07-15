@@ -17,6 +17,25 @@ double playerProgressFraction(Duration position, Duration duration) {
   return (position.inMicroseconds / total).clamp(0.0, 1.0);
 }
 
+/**
+ * 计算全屏主进度条焦点的视觉倍率。
+ *
+ * 普通窗口始终保持当前尺寸；全屏时按视口短边从 900 到 2160 逻辑像素平滑放大，
+ * 并把上限限制为 1.25，避免高分辨率下过小或超宽屏下过度抢眼。
+ */
+double playerProgressThumbScale({
+  required bool isFullscreen,
+  required Size viewportSize,
+}) {
+  if (!isFullscreen) {
+    return 1;
+  }
+  final shortestSide = math.min(viewportSize.width, viewportSize.height);
+  final progress =
+      ((shortestSide - 900) / (2160 - 900)).clamp(0.0, 1.0).toDouble();
+  return 1 + progress * 0.25;
+}
+
 /** 悬停停止后按目标播放位置异步加载预览帧。 */
 typedef PlayerProgressPreviewLoader = Future<File?> Function(Duration position);
 
@@ -32,6 +51,7 @@ class PlayerProgressSlider extends StatefulWidget {
     required this.onChanged,
     required this.previewIdentity,
     required this.loadPreview,
+    this.isFullscreen = false,
   });
 
   /** 直接挂在内部 Slider 上的定位键。 */
@@ -52,6 +72,9 @@ class PlayerProgressSlider extends StatefulWidget {
   /** 经缩略图服务和 FFmpegBackend 限流的预览加载器。 */
   final PlayerProgressPreviewLoader loadPreview;
 
+  /** 是否处于窗口全屏，用于在高分辨率视口中有限放大猫耳焦点。 */
+  final bool isFullscreen;
+
   @override
   State<PlayerProgressSlider> createState() => _PlayerProgressSliderState();
 }
@@ -60,7 +83,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
   static const _previewDelay = Duration(milliseconds: 350);
   static const _previewWidth = 220.0;
   static const _previewHeight = 124.0;
-  static const _sliderHorizontalInset = 14.0;
+  static const _baseThumbHalfExtent = 13.0;
 
   Timer? _previewTimer;
   var _hovered = false;
@@ -79,16 +102,19 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
   }
 
   /** 根据轨道可用宽度把指针位置映射为目标播放时间。 */
-  double _valueForPointer(double x, double width) {
-    final usableWidth = math.max(1.0, width - _sliderHorizontalInset * 2);
-    final fraction = ((x - _sliderHorizontalInset) / usableWidth).clamp(0, 1);
+  double _valueForPointer(double x, double width, double thumbScale) {
+    // 与 Slider thumb preferred size 使用同一倍率，避免高分辨率全屏两端的预览时间偏移。
+    final horizontalInset = _baseThumbHalfExtent * thumbScale + 1;
+    final usableWidth = math.max(1.0, width - horizontalInset * 2);
+    final fraction = ((x - horizontalInset) / usableWidth).clamp(0, 1);
     return fraction * widget.max;
   }
 
   /** 指针移动只更新轻量位置；停稳后才允许进入 FFmpeg 取帧链路。 */
-  void _handlePointer(PointerEvent event, double width,
+  void _handlePointer(PointerEvent event, double width, double thumbScale,
       {bool entering = false}) {
-    final nextValue = _valueForPointer(event.localPosition.dx, width);
+    final nextValue =
+        _valueForPointer(event.localPosition.dx, width, thumbScale);
     _previewTimer?.cancel();
     _requestGeneration++;
     setState(() {
@@ -149,6 +175,10 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
 
   @override
   Widget build(BuildContext context) {
+    final thumbScale = playerProgressThumbScale(
+      isFullscreen: widget.isFullscreen,
+      viewportSize: MediaQuery.sizeOf(context),
+    );
     return LayoutBuilder(builder: (context, constraints) {
       final width = constraints.maxWidth;
       final popupLeft = (_hoverX - _previewWidth / 2)
@@ -156,8 +186,9 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
           .toDouble();
       return MouseRegion(
         key: const ValueKey('player.progress.hoverRegion'),
-        onEnter: (event) => _handlePointer(event, width, entering: true),
-        onHover: (event) => _handlePointer(event, width),
+        onEnter: (event) =>
+            _handlePointer(event, width, thumbScale, entering: true),
+        onHover: (event) => _handlePointer(event, width, thumbScale),
         onExit: (_) => _cancelPreview(clearHover: true),
         child: SizedBox(
           height: 48,
@@ -181,6 +212,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
                       overlayRadius: 14,
                       thumbVisibility: hoverProgress,
                       useCatSlimeThumb: true,
+                      catSlimeThumbScale: thumbScale,
                     );
                   },
                 ),
@@ -364,6 +396,7 @@ class _PlayerSliderVisual extends StatelessWidget {
     required this.overlayRadius,
     required this.thumbVisibility,
     this.useCatSlimeThumb = false,
+    this.catSlimeThumbScale = 1,
   });
 
   final Key? sliderKey;
@@ -378,6 +411,9 @@ class _PlayerSliderVisual extends StatelessWidget {
   /** 仅主进度条启用猫耳史莱姆焦点，音量条继续使用紧凑圆点。 */
   final bool useCatSlimeThumb;
 
+  /** 高分辨率全屏下猫耳焦点的有限视觉倍率。 */
+  final double catSlimeThumbScale;
+
   @override
   Widget build(BuildContext context) {
     return SliderTheme(
@@ -388,7 +424,10 @@ class _PlayerSliderVisual extends StatelessWidget {
         inactiveTrackColor: const Color(0x8a66718b),
         thumbColor: Colors.white,
         thumbShape: useCatSlimeThumb
-            ? _PlayerCatSlimeThumbShape(visibility: thumbVisibility)
+            ? _PlayerCatSlimeThumbShape(
+                visibility: thumbVisibility,
+                visualScale: catSlimeThumbScale,
+              )
             : _PlayerRingSliderThumbShape(
                 radius: thumbRadius,
                 visibility: thumbVisibility,
@@ -591,14 +630,20 @@ class _PlayerRingSliderThumbShape extends SliderComponentShape {
  * 紫蓝渐变与进度轨道保持同一色系，浅色描边只负责从视频画面中分离焦点。
  */
 class _PlayerCatSlimeThumbShape extends SliderComponentShape {
-  const _PlayerCatSlimeThumbShape({required this.visibility});
+  const _PlayerCatSlimeThumbShape({
+    required this.visibility,
+    required this.visualScale,
+  });
 
   /** 0 时完全隐藏，1 时显示完整焦点，并跟随进度条悬停动画取中间值。 */
   final double visibility;
 
+  /** 仅由全屏视口计算的视觉倍率，调用层已限制在 1 到 1.25。 */
+  final double visualScale;
+
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) {
-    return const Size.square(26);
+    return Size.square(26 * visualScale);
   }
 
   /** 构建带双耳的圆润史莱姆轮廓，坐标围绕滑块中心定义。 */
@@ -646,7 +691,7 @@ class _PlayerCatSlimeThumbShape extends SliderComponentShape {
 
     canvas.save();
     canvas.translate(center.dx, center.dy);
-    canvas.scale(appearScale * pressedScale);
+    canvas.scale(appearScale * pressedScale * visualScale);
 
     // 轻量外光与浅色轮廓让焦点在明暗视频画面上都清晰，但不抢占进度轨道主体。
     canvas.drawPath(
