@@ -180,6 +180,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
                       thumbRadius: 5.5,
                       overlayRadius: 14,
                       thumbVisibility: hoverProgress,
+                      useCatSlimeThumb: true,
                     );
                   },
                 ),
@@ -362,6 +363,7 @@ class _PlayerSliderVisual extends StatelessWidget {
     required this.thumbRadius,
     required this.overlayRadius,
     required this.thumbVisibility,
+    this.useCatSlimeThumb = false,
   });
 
   final Key? sliderKey;
@@ -373,6 +375,9 @@ class _PlayerSliderVisual extends StatelessWidget {
   final double overlayRadius;
   final double thumbVisibility;
 
+  /** 仅主进度条启用猫耳史莱姆焦点，音量条继续使用紧凑圆点。 */
+  final bool useCatSlimeThumb;
+
   @override
   Widget build(BuildContext context) {
     return SliderTheme(
@@ -382,10 +387,12 @@ class _PlayerSliderVisual extends StatelessWidget {
         activeTrackColor: const Color(0xff8060ff),
         inactiveTrackColor: const Color(0x8a66718b),
         thumbColor: Colors.white,
-        thumbShape: _PlayerRingSliderThumbShape(
-          radius: thumbRadius,
-          visibility: thumbVisibility,
-        ),
+        thumbShape: useCatSlimeThumb
+            ? _PlayerCatSlimeThumbShape(visibility: thumbVisibility)
+            : _PlayerRingSliderThumbShape(
+                radius: thumbRadius,
+                visibility: thumbVisibility,
+              ),
         overlayColor: const Color(0x387c5cff),
         overlayShape: RoundSliderOverlayShape(overlayRadius: overlayRadius),
         showValueIndicator: ShowValueIndicator.never,
@@ -574,5 +581,118 @@ class _PlayerRingSliderThumbShape extends SliderComponentShape {
       (radius + pressedGrowth * 0.5) * visibility,
       Paint()..color = sliderTheme.thumbColor ?? Colors.white,
     );
+  }
+}
+
+/**
+ * 绘制主进度条专用的猫耳史莱姆焦点。
+ *
+ * 使用矢量轮廓而不是缩放参考位图，避免十几像素尺寸下出现棋盘底色、锯齿或模糊；
+ * 紫蓝渐变与进度轨道保持同一色系，浅色描边只负责从视频画面中分离焦点。
+ */
+class _PlayerCatSlimeThumbShape extends SliderComponentShape {
+  const _PlayerCatSlimeThumbShape({required this.visibility});
+
+  /** 0 时完全隐藏，1 时显示完整焦点，并跟随进度条悬停动画取中间值。 */
+  final double visibility;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) {
+    return const Size.square(26);
+  }
+
+  /** 构建带双耳的圆润史莱姆轮廓，坐标围绕滑块中心定义。 */
+  Path _buildBodyPath() {
+    return Path()
+      ..moveTo(-9.3, -3)
+      ..lineTo(-7.7, -9.1)
+      ..quadraticBezierTo(-7.3, -10.4, -6.1, -9.3)
+      ..lineTo(-3.1, -6.2)
+      ..quadraticBezierTo(0, -7.3, 3.1, -6.2)
+      ..lineTo(6.1, -9.3)
+      ..quadraticBezierTo(7.3, -10.4, 7.7, -9.1)
+      ..lineTo(9.3, -3)
+      ..cubicTo(10.2, -0.7, 10.1, 4.4, 7.2, 6.8)
+      ..cubicTo(4, 9.2, -4, 9.2, -7.2, 6.8)
+      ..cubicTo(-10.1, 4.4, -10.2, -0.7, -9.3, -3)
+      ..close();
+  }
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    if (visibility <= 0.01) {
+      return;
+    }
+
+    final canvas = context.canvas;
+    final appearScale =
+        Curves.easeOutBack.transform(visibility.clamp(0, 1).toDouble());
+    final pressedScale = 1 + activationAnimation.value * 0.08;
+    final body = _buildBodyPath();
+    final bodyBounds = const Rect.fromLTRB(-10.5, -10.5, 10.5, 9.5);
+
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.scale(appearScale * pressedScale);
+
+    // 轻量外光与浅色轮廓让焦点在明暗视频画面上都清晰，但不抢占进度轨道主体。
+    canvas.drawPath(
+      body,
+      Paint()
+        ..color = const Color(0x52755cff)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.2),
+    );
+    canvas.drawPath(body, Paint()..color = const Color(0xffdcd5ff));
+
+    canvas.save();
+    canvas.scale(0.91, 0.91);
+    canvas.drawPath(
+      body,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xffc8b7ff),
+            Color(0xff8d69f7),
+            Color(0xff5548e7),
+          ],
+        ).createShader(bodyBounds),
+    );
+
+    // 小尺寸仅保留高光、眼睛和短笑线，避免完整参考图细节缩小后形成视觉噪点。
+    canvas.drawOval(
+      const Rect.fromLTWH(-5.8, -4.1, 3.8, 2.3),
+      Paint()..color = const Color(0xd9ffffff),
+    );
+    final facePaint = Paint()..color = const Color(0xff17164f);
+    canvas.drawCircle(const Offset(-3, 1.1), 1.15, facePaint);
+    canvas.drawCircle(const Offset(3, 1.1), 1.15, facePaint);
+    canvas.drawArc(
+      const Rect.fromLTWH(-1.6, 1.3, 3.2, 2.8),
+      0.15,
+      math.pi - 0.3,
+      false,
+      Paint()
+        ..color = const Color(0xff17164f)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.restore();
+    canvas.restore();
   }
 }
