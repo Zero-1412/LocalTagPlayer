@@ -919,7 +919,7 @@ void main() {
     );
   });
 
-  testWidgets('player settings panel exposes real grouped playback controls',
+  testWidgets('advanced player settings expose grouped playback controls',
       (tester) async {
     PlayerPlaybackMode? selectedPlaybackMode;
     PlayerVideoAspectMode? selectedAspectMode;
@@ -973,8 +973,10 @@ void main() {
         closeTo(16 / 9, 0.001));
   });
 
-  testWidgets('player settings button opens a stable desktop dialog',
+  testWidgets('player settings use compact primary and advanced pages',
       (tester) async {
+    bool? mirrorVideo;
+    PlayerPlaybackMode? selectedPlaybackMode;
     PlayerVideoAspectMode? selectedAspectMode;
     await tester.pumpWidget(
       MaterialApp(
@@ -986,11 +988,17 @@ void main() {
                 key: const ValueKey('test.player.settings.open'),
                 onPressed: () => showPlayerSettingsDialog(
                   context,
+                  mirrorVideo: false,
                   playbackMode: PlayerPlaybackMode.sequential,
                   videoAspectMode: PlayerVideoAspectMode.automatic,
                   playbackRate: 1,
                   playbackRates: const <double>[0.5, 1, 1.5],
-                  onPlaybackModeChanged: (_) {},
+                  onMirrorVideoChanged: (enabled) {
+                    mirrorVideo = enabled;
+                  },
+                  onPlaybackModeChanged: (mode) {
+                    selectedPlaybackMode = mode;
+                  },
                   onVideoAspectModeChanged: (mode) {
                     selectedAspectMode = mode;
                   },
@@ -1012,8 +1020,44 @@ void main() {
         find.byKey(const ValueKey('player.settings.dialog')), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const ValueKey('player.settings.shell'))).width,
+      closeTo(300, 0.1),
+    );
+    expect(find.text('镜像画面'), findsOneWidget);
+    expect(find.text('单曲循环'), findsOneWidget);
+    expect(find.text('列表循环'), findsOneWidget);
+    expect(find.text('更多播放设置'), findsOneWidget);
+    expect(find.text('视频比例'), findsNothing);
+    expect(find.text('播放速度'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.mirror')),
+    );
+    await tester.pump();
+    expect(mirrorVideo, isTrue);
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.repeatOne')),
+    );
+    await tester.pump();
+    expect(selectedPlaybackMode, PlayerPlaybackMode.repeatOne);
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.repeatAll')),
+    );
+    await tester.pump();
+    expect(selectedPlaybackMode, PlayerPlaybackMode.repeatAll);
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.advanced.open')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byKey(const ValueKey('player.settings.shell'))).width,
       closeTo(400, 0.1),
     );
+    expect(find.text('更多播放设置'), findsOneWidget);
+    expect(find.text('视频比例'), findsOneWidget);
+    expect(find.text('播放速度'), findsOneWidget);
 
     await tester.tap(
       find.byKey(const ValueKey('player.settings.aspect.cover')),
@@ -1022,6 +1066,11 @@ void main() {
     expect(selectedAspectMode, PlayerVideoAspectMode.cover);
     expect(
         find.byKey(const ValueKey('player.settings.dialog')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('player.settings.back')));
+    await tester.pumpAndSettle();
+    expect(find.text('镜像画面'), findsOneWidget);
+    expect(find.text('视频比例'), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('player.settings.close')));
     await tester.pumpAndSettle();

@@ -13,19 +13,23 @@ import 'player_video_aspect_mode.dart';
  */
 Future<void> showPlayerSettingsDialog(
   BuildContext context, {
+  required bool mirrorVideo,
   required PlayerPlaybackMode playbackMode,
   required PlayerVideoAspectMode videoAspectMode,
   required double playbackRate,
   required List<double> playbackRates,
+  required ValueChanged<bool> onMirrorVideoChanged,
   required ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged,
   required ValueChanged<PlayerVideoAspectMode> onVideoAspectModeChanged,
   required ValueChanged<double> onPlaybackRateChanged,
   required VoidCallback onShowShortcuts,
   required VoidCallback onShowDiagnostics,
 }) async {
+  var localMirrorVideo = mirrorVideo;
   var localPlaybackMode = playbackMode;
   var localVideoAspectMode = videoAspectMode;
   var localPlaybackRate = playbackRate;
+  var showAdvancedSettings = false;
   await showDialog<void>(
     context: context,
     barrierColor: const Color(0x33000000),
@@ -41,9 +45,11 @@ Future<void> showPlayerSettingsDialog(
             borderRadius: BorderRadius.circular(10),
             side: const BorderSide(color: Color(0xff34415a)),
           ),
-          child: SizedBox(
+          child: AnimatedContainer(
             key: const ValueKey('player.settings.shell'),
-            width: 400,
+            width: showAdvancedSettings ? 400 : 300,
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOutCubic,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 560),
               child: SingleChildScrollView(
@@ -51,13 +57,27 @@ Future<void> showPlayerSettingsDialog(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                       child: Row(
                         children: [
-                          const Expanded(
+                          if (showAdvancedSettings)
+                            IconButton(
+                              key: const ValueKey('player.settings.back'),
+                              tooltip: '返回播放设置',
+                              onPressed: () => setDialogState(
+                                () => showAdvancedSettings = false,
+                              ),
+                              icon: const Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                size: 17,
+                              ),
+                            )
+                          else
+                            const SizedBox(width: 8),
+                          Expanded(
                             child: Text(
-                              '播放设置',
-                              style: TextStyle(
+                              showAdvancedSettings ? '更多播放设置' : '播放设置',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w900,
@@ -73,54 +93,103 @@ Future<void> showPlayerSettingsDialog(
                         ],
                       ),
                     ),
-                    PlayerSettingsPanel(
-                      playbackMode: localPlaybackMode,
-                      videoAspectMode: localVideoAspectMode,
-                      playbackRate: localPlaybackRate,
-                      playbackRates: playbackRates,
-                      onPlaybackModeChanged: (mode) {
-                        setDialogState(() => localPlaybackMode = mode);
-                        onPlaybackModeChanged(mode);
-                      },
-                      onVideoAspectModeChanged: (mode) {
-                        setDialogState(() => localVideoAspectMode = mode);
-                        onVideoAspectModeChanged(mode);
-                      },
-                      onPlaybackRateChanged: (rate) {
-                        setDialogState(() => localPlaybackRate = rate);
-                        onPlaybackRateChanged(rate);
-                      },
-                    ),
-                    const Divider(height: 1, color: Color(0xff34415a)),
-                    Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextButton.icon(
-                              onPressed: () {
-                                Navigator.of(dialogContext).pop();
-                                onShowShortcuts();
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 140),
+                      child: showAdvancedSettings
+                          ? Column(
+                              key: const ValueKey(
+                                'player.settings.advanced.page',
+                              ),
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                PlayerSettingsPanel(
+                                  playbackMode: localPlaybackMode,
+                                  videoAspectMode: localVideoAspectMode,
+                                  playbackRate: localPlaybackRate,
+                                  playbackRates: playbackRates,
+                                  onPlaybackModeChanged: (mode) {
+                                    setDialogState(
+                                      () => localPlaybackMode = mode,
+                                    );
+                                    onPlaybackModeChanged(mode);
+                                  },
+                                  onVideoAspectModeChanged: (mode) {
+                                    setDialogState(
+                                      () => localVideoAspectMode = mode,
+                                    );
+                                    onVideoAspectModeChanged(mode);
+                                  },
+                                  onPlaybackRateChanged: (rate) {
+                                    setDialogState(
+                                      () => localPlaybackRate = rate,
+                                    );
+                                    onPlaybackRateChanged(rate);
+                                  },
+                                ),
+                                const Divider(
+                                  height: 1,
+                                  color: Color(0xff34415a),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextButton.icon(
+                                          onPressed: () {
+                                            Navigator.of(dialogContext).pop();
+                                            onShowShortcuts();
+                                          },
+                                          icon: const Icon(
+                                            Icons.keyboard_alt_outlined,
+                                            size: 18,
+                                          ),
+                                          label: const Text('快捷键'),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: TextButton.icon(
+                                          key: const ValueKey(
+                                            'player.diagnostics.open',
+                                          ),
+                                          onPressed: () {
+                                            Navigator.of(dialogContext).pop();
+                                            onShowDiagnostics();
+                                          },
+                                          icon: const Icon(
+                                            Icons.monitor_heart_outlined,
+                                            size: 18,
+                                          ),
+                                          label: const Text('播放诊断'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            )
+                          : PlayerSettingsPrimaryList(
+                              key: const ValueKey(
+                                'player.settings.primary.page',
+                              ),
+                              mirrorVideo: localMirrorVideo,
+                              playbackMode: localPlaybackMode,
+                              onMirrorVideoChanged: (enabled) {
+                                setDialogState(
+                                  () => localMirrorVideo = enabled,
+                                );
+                                onMirrorVideoChanged(enabled);
                               },
-                              icon: const Icon(Icons.keyboard_alt_outlined,
-                                  size: 18),
-                              label: const Text('快捷键'),
-                            ),
-                          ),
-                          Expanded(
-                            child: TextButton.icon(
-                              key: const ValueKey('player.diagnostics.open'),
-                              onPressed: () {
-                                Navigator.of(dialogContext).pop();
-                                onShowDiagnostics();
+                              onPlaybackModeChanged: (mode) {
+                                setDialogState(
+                                  () => localPlaybackMode = mode,
+                                );
+                                onPlaybackModeChanged(mode);
                               },
-                              icon: const Icon(Icons.monitor_heart_outlined,
-                                  size: 18),
-                              label: const Text('播放诊断'),
+                              onShowAdvancedSettings: () => setDialogState(
+                                () => showAdvancedSettings = true,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ),
@@ -131,6 +200,167 @@ Future<void> showPlayerSettingsDialog(
       },
     ),
   );
+}
+
+/**
+ * 播放设置一级列表。
+ *
+ * 高频的镜像与循环开关保持单行可达；比例、倍速和低频入口收进二级页，避免
+ * 打开设置时立即呈现大块按钮网格。循环开关互斥，关闭当前模式会回到顺序播放。
+ */
+class PlayerSettingsPrimaryList extends StatelessWidget {
+  const PlayerSettingsPrimaryList({
+    super.key,
+    required this.mirrorVideo,
+    required this.playbackMode,
+    required this.onMirrorVideoChanged,
+    required this.onPlaybackModeChanged,
+    required this.onShowAdvancedSettings,
+  });
+
+  /** 是否仅水平翻转视频画面。 */
+  final bool mirrorVideo;
+
+  /** 当前队列播放方式，用于计算两个循环开关的互斥状态。 */
+  final PlayerPlaybackMode playbackMode;
+
+  /** 镜像画面开关变化回调。 */
+  final ValueChanged<bool> onMirrorVideoChanged;
+
+  /** 循环方式变化回调。 */
+  final ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged;
+
+  /** 进入二级播放设置的回调。 */
+  final VoidCallback onShowAdvancedSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PlayerSettingsToggleRow(
+            key: const ValueKey('player.settings.mirror'),
+            label: '镜像画面',
+            value: mirrorVideo,
+            onChanged: onMirrorVideoChanged,
+          ),
+          _PlayerSettingsToggleRow(
+            key: const ValueKey('player.settings.repeatOne'),
+            label: '单曲循环',
+            value: playbackMode == PlayerPlaybackMode.repeatOne,
+            onChanged: (enabled) => onPlaybackModeChanged(
+              enabled
+                  ? PlayerPlaybackMode.repeatOne
+                  : PlayerPlaybackMode.sequential,
+            ),
+          ),
+          _PlayerSettingsToggleRow(
+            key: const ValueKey('player.settings.repeatAll'),
+            label: '列表循环',
+            value: playbackMode == PlayerPlaybackMode.repeatAll,
+            onChanged: (enabled) => onPlaybackModeChanged(
+              enabled
+                  ? PlayerPlaybackMode.repeatAll
+                  : PlayerPlaybackMode.sequential,
+            ),
+          ),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: const ValueKey('player.settings.advanced.open'),
+              onTap: onShowAdvancedSettings,
+              borderRadius: BorderRadius.circular(7),
+              child: const SizedBox(
+                height: 44,
+                child: Row(
+                  children: [
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '更多播放设置',
+                        style: TextStyle(
+                          color: Color(0xfff0f3fa),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 21,
+                      color: Color(0xffaeb8cc),
+                    ),
+                    SizedBox(width: 8),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/** 一级列表中的整行开关，整行均可点击以扩大操作范围。 */
+class _PlayerSettingsToggleRow extends StatelessWidget {
+  const _PlayerSettingsToggleRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  /** 设置名称。 */
+  final String label;
+
+  /** 当前开关状态。 */
+  final bool value;
+
+  /** 用户切换后的回调。 */
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.circular(7),
+        child: SizedBox(
+          height: 44,
+          child: Row(
+            children: [
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xfff0f3fa),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IgnorePointer(
+                child: Switch(
+                  value: value,
+                  onChanged: onChanged,
+                  activeThumbColor: Colors.white,
+                  activeTrackColor: const Color(0xff7047dc),
+                  inactiveThumbColor: const Color(0xffeef1f7),
+                  inactiveTrackColor: const Color(0xff596273),
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /**

@@ -222,6 +222,7 @@ class WindowsNativePlayerBackend implements PlayerBackend {
     required Widget controls,
     BoxFit fit = BoxFit.contain,
     double? aspectRatio,
+    bool mirror = false,
   }) {
     final textureSurface = ValueListenableBuilder<int?>(
       valueListenable: _textureId,
@@ -229,20 +230,21 @@ class WindowsNativePlayerBackend implements PlayerBackend {
           ? const ColoredBox(color: Colors.black)
           : Texture(textureId: texture),
     );
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (aspectRatio == null)
-          textureSurface
-        else
-          FittedBox(
+    final videoSurface = aspectRatio == null
+        ? textureSurface
+        : FittedBox(
             fit: fit,
             child: SizedBox(
               width: aspectRatio * 1000,
               height: 1000,
               child: textureSurface,
             ),
-          ),
+          );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 与 MediaKit 后端一致，镜像不翻转上层 Flutter 控制条。
+        Transform.flip(flipX: mirror, child: videoSurface),
         controls,
       ],
     );

@@ -154,6 +154,8 @@ class PlayerPageState extends State<PlayerPage> {
   var _editingManualTags = false;
   var _playbackMode = PlayerPlaybackMode.sequential;
   var _playbackRate = 1.0;
+  /** 是否仅水平翻转当前视频画面，控制条与命中区域保持原方向。 */
+  var _mirrorVideo = false;
   /** 当前会话的画面比例，默认保留媒体自身比例。 */
   var _videoAspectMode = PlayerVideoAspectMode.automatic;
   /** 用户主动折叠宽屏右侧队列时保持当前页面内的显示状态。 */
@@ -399,6 +401,12 @@ class PlayerPageState extends State<PlayerPage> {
       _playbackMode = mode;
       _queueEndReached = false;
     });
+  }
+
+  /** 更新当前会话的镜像画面状态，不改变媒体文件或播放队列。 */
+  void _setMirrorVideo(bool enabled) {
+    if (_mirrorVideo == enabled) return;
+    setState(() => _mirrorVideo = enabled);
   }
 
   /**
@@ -975,10 +983,12 @@ class PlayerPageState extends State<PlayerPage> {
   Future<void> _showControlSettingsDialog() {
     return showPlayerSettingsDialog(
       context,
+      mirrorVideo: _mirrorVideo,
       playbackMode: _playbackMode,
       videoAspectMode: _videoAspectMode,
       playbackRate: _playbackRate,
       playbackRates: _playbackRates,
+      onMirrorVideoChanged: _setMirrorVideo,
       onPlaybackModeChanged: _setPlaybackMode,
       onVideoAspectModeChanged: (mode) {
         unawaited(_setVideoAspectMode(mode));
@@ -2231,6 +2241,7 @@ class PlayerPageState extends State<PlayerPage> {
                                                       .surfaceFit,
                                                   aspectRatio: _videoAspectMode
                                                       .surfaceAspectRatio,
+                                                  mirror: _mirrorVideo,
                                                 ),
                                               ),
                                             ),

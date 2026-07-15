@@ -59,12 +59,14 @@ abstract interface class PlayerBackend {
    * 构建视频纹理表面；具体 Player/纹理控制器不得泄漏给页面。
    *
    * [fit] 控制完整显示或等比裁边，[aspectRatio] 仅在用户显式选择 4:3 / 16:9
-   * 时覆盖媒体宽高比；默认值保持现有自动完整显示行为。
+   * 时覆盖媒体宽高比；[mirror] 只水平翻转视频纹理，不能影响上层控制条。
+   * 默认值保持现有自动完整显示行为。
    */
   Widget buildVideoSurface({
     required Widget controls,
     BoxFit fit = BoxFit.contain,
     double? aspectRatio,
+    bool mirror = false,
   });
 
   Future<void> dispose();

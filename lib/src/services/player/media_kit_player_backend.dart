@@ -142,15 +142,24 @@ class MediaKitPlayerBackend implements PlayerBackend {
     required Widget controls,
     BoxFit fit = BoxFit.contain,
     double? aspectRatio,
+    bool mirror = false,
   }) {
-    return Video(
+    final videoSurface = Video(
       // media_kit 1.3.1 无法通过 copyWith 把非空 aspectRatio 清回 null；
       // 模式变化时重建轻量 Video 视图，底层 Player/解码会话保持不变。
       key: ValueKey('media-kit-video.${fit.name}.${aspectRatio ?? 'auto'}'),
       controller: _controller,
-      controls: (_) => controls,
+      controls: (_) => const SizedBox.shrink(),
       fit: fit,
       aspectRatio: aspectRatio,
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 镜像只作用于视频表面；Flutter 控制条保持原方向与点击坐标。
+        Transform.flip(flipX: mirror, child: videoSurface),
+        controls,
+      ],
     );
   }
 
