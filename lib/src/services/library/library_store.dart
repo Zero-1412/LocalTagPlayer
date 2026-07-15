@@ -1092,10 +1092,12 @@ class LibraryStore
   }
 
   /** 添加 root 并返回可供 UI 与探测队列差量消费的事务提交结果。 */
-  Future<LibraryScanCommitResult> addRootAndScanWithChanges(
-    String rootPath,
-  ) =>
-      addRootsAndScanWithChanges(<String>[rootPath]);
+  Future<LibraryScanCommitResult> addRootAndScanWithChanges(String rootPath,
+          {LibraryScanProgressCallback? onProgress}) =>
+      addRootsAndScanWithChanges(
+        <String>[rootPath],
+        onProgress: onProgress,
+      );
 
   /**
    * 批量注册 root，并在 metadata 只落盘一次后执行一轮扫描。
@@ -1105,8 +1107,8 @@ class LibraryStore
    */
   @override
   Future<LibraryScanCommitResult> addRootsAndScanWithChanges(
-    Iterable<String> rootPaths,
-  ) async {
+      Iterable<String> rootPaths,
+      {LibraryScanProgressCallback? onProgress}) async {
     final normalizedRoots = <String>[];
     final pendingKeys = <String>{};
     for (final rootPath in rootPaths) {
@@ -1134,7 +1136,7 @@ class LibraryStore
     if (metadataChanged) {
       await saveMetadata();
     }
-    return scanWithChanges();
+    return scanWithChanges(onProgress: onProgress);
   }
 
   /**
@@ -1202,14 +1204,22 @@ class LibraryStore
   /**
    * 取消旧代次并执行只读后端扫描；只有当前代次可进入 Application 事务提交。
    */
-  Future<LibraryScanCommitResult> scanWithChanges() async {
+  Future<LibraryScanCommitResult> scanWithChanges({
+    LibraryScanProgressCallback? onProgress,
+  }) async {
     final previousGeneration = _scanGeneration;
     if (previousGeneration > 0) {
       _scanBackend.cancelGeneration(previousGeneration);
     }
     final generation = ++_scanGeneration;
-    return LibraryScanCoordinator(this).scan(generationId: generation);
+    return LibraryScanCoordinator(this).scan(
+      generationId: generation,
+      onProgress: onProgress,
+    );
   }
+
+  @override
+  Future<void> setScanPaused(bool paused) => _scanBackend.setPaused(paused);
 
   /**
    * 通过 fingerprint 校验把一个 missing 条目关联到用户选择的新文件。

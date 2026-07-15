@@ -1269,7 +1269,7 @@ class _FilterResultLine extends StatelessWidget {
                 key: ValueKey(progressPaused
                     ? 'qa.media_import.resume'
                     : 'qa.media_import.pause'),
-                tooltip: progressPaused ? '继续后台解析' : '暂停后台解析',
+                tooltip: progressPaused ? '继续后台任务' : '暂停后台任务',
                 padding: EdgeInsets.zero,
                 iconSize: 18,
                 color: appAccentViolet,

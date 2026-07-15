@@ -7,6 +7,14 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-15 冷扫描阶段进度与可暂停 sidecar
+
+- `LibraryScanBackend` 只读边界新增阶段进度和暂停/恢复；目录发现完成后才公布 fingerprint 总量和百分比，不在未知阶段伪造进度。
+- Rust stderr 只上报阶段/数量，stdout 快照、generation 取消、stable identity 唯一匹配和 Dart SQLite 单 batch 提交语义不变。
+- 播放让盘通过 Repository/facade 协调，页面不接触 sidecar 文件或进程；大差量合并分段让出 UI isolate。
+- `X:\test-media` 11,163 项热态基准为发现 24ms、fingerprint 1,444ms、稳定态端到端 754ms；冷盘数据继续由 `scanPhases` 记录。
+- 隔离真实窗口确认确定型文案、进度条和暂停按钮位于结果摘要行内且无截断；播放返回后 diagnostics 同时包含 discovering、fingerprinting、committing。
+
 ## 2026-07-15 大目录导入分阶段状态与批量字段写入
 
 - 扫描仍由只读 `LibraryScanBackend` 产生差量并由 Dart Application 一次提交；总量未知阶段只显示发现/校验状态，不伪造百分比。

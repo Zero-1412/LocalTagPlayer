@@ -1,5 +1,14 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-15 · 冷扫描确定进度与播放让盘
+
+- `LibraryScanBackend` 增加阶段进度和暂停/恢复契约；Rust/Dart 后端先完成目录候选发现，再在已知总数下执行 stat/fingerprint，当前筛选结果区显示处理数/总数、百分比、速度和 ETA。
+- Rust sidecar 通过不含路径的 stderr 计数协议上报进度，stdout 快照协议不变；暂停标记只在安全文件边界检查，恢复后从原候选位置继续，不重新遍历目录。
+- 播放器进入前自动暂停扫描磁盘读取，退出后恢复；用户已经手动暂停时不自动恢复。大差量 Application 合并每 256 项让出 UI isolate，降低扫描提交撞上播放器路由时的冻结风险。
+- 真实 `X:\test-media` 隔离热缓存强制 fingerprint 基准为 11,163 项：目录发现 24ms、fingerprint 1,444ms、初次历史上下文提交 1,995ms、稳定态端到端 754ms。该轮明确作为热态对照；后续真实冷启动由 debug JSONL 的 `scanPhases` 持续记录。
+- 完整 126 项测试通过、2 项显式基准跳过，`flutter analyze` 与 Windows debug build 通过。隔离真实窗口在扫描 11,163 条期间点击播放，播放器约 0.5 秒进入并连续响应两秒；返回后扫描原位继续并完成三阶段诊断。进度、播放器和恢复后的媒体库截图均无遮挡、溢出或错位。
+- 媒体探测并发未提高；SQLite schema、stable identity、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、标签来源和用户数据均未改变。
+
 ## 2026-07-15 · 媒体解析 ETA、暂停控制与磁盘基准
 
 - `MediaDetailsService` 根据已完成批次的有效运行时长计算平滑处理速度，并用剩余条目估算完成时间；暂停期间不累计 ETA，继续时重置短期采样基线，避免等待时间污染速度。

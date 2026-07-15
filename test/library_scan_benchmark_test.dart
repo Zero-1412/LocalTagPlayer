@@ -34,9 +34,16 @@ void main() {
       final outputPath =
           Platform.environment['LOCAL_TAG_PLAYER_SCAN_BENCHMARK_OUTPUT'];
       expect(outputPath, isNotNull);
-      final rustExecutable = File(
-        'build/windows/x64/runner/Debug/ltp_rust_library_scan.exe',
-      ).absolute;
+      final rustExecutable = <File>[
+        File('build/windows/x64/runner/Debug/ltp_rust_library_scan.exe')
+            .absolute,
+        File(
+          'windows/rust_library_scan/target/release/ltp_rust_library_scan.exe',
+        ).absolute,
+      ].firstWhere(
+        (candidate) => candidate.existsSync(),
+        orElse: () => File('ltp_rust_library_scan.exe').absolute,
+      );
       final rustBackend = Platform.isWindows && rustExecutable.existsSync()
           ? RustProcessLibraryScanBackend(executable: rustExecutable)
           : null;
@@ -89,19 +96,49 @@ void main() {
 
       LibraryScanDelta? rustDelta;
       Duration? rustElapsed;
+      Duration? rustDiscoveryElapsed;
+      Duration? rustFingerprintElapsed;
+      LibraryScanProgress? rustFinalProgress;
       LibraryScanCommitResult? rustInitialCommit;
       Duration? rustInitialCommitElapsed;
       LibraryScanCommitResult? rustSteadyCommit;
       Duration? rustSteadyElapsed;
       if (rustBackend != null) {
+        final forceFingerprint = Platform.environment[
+                'LOCAL_TAG_PLAYER_SCAN_BENCHMARK_FORCE_FINGERPRINT'] ==
+            '1';
+        final progressWatch = Stopwatch()..start();
+        var phaseStartedAt = Duration.zero;
+        LibraryScanPhase? activePhase;
         final rustWatch = Stopwatch()..start();
         rustDelta = await rustBackend.scan(
           generationId: 1,
           roots: store.roots,
-          knownMetadata: knownMetadata,
+          knownMetadata: forceFingerprint
+              ? const <String, LibraryScanKnownMetadata>{}
+              : knownMetadata,
+          onProgress: (progress) {
+            if (activePhase != progress.phase) {
+              final now = progressWatch.elapsed;
+              if (activePhase == LibraryScanPhase.discovering) {
+                rustDiscoveryElapsed = now - phaseStartedAt;
+              } else if (activePhase == LibraryScanPhase.fingerprinting) {
+                rustFingerprintElapsed = now - phaseStartedAt;
+              }
+              activePhase = progress.phase;
+              phaseStartedAt = now;
+            }
+            rustFinalProgress = progress;
+          },
         );
         rustWatch.stop();
         rustElapsed = rustWatch.elapsed;
+        final finishedAt = progressWatch.elapsed;
+        if (activePhase == LibraryScanPhase.discovering) {
+          rustDiscoveryElapsed = finishedAt - phaseStartedAt;
+        } else if (activePhase == LibraryScanPhase.fingerprinting) {
+          rustFingerprintElapsed = finishedAt - phaseStartedAt;
+        }
 
         // 只写隔离数据库副本：首轮提交统一 root 层级，第二轮测量真正稳定态差量。
         final initialCommitWatch = Stopwatch()..start();
@@ -139,6 +176,13 @@ void main() {
         'indexedScanMs': indexedScanWatch.elapsedMilliseconds,
         if (rustDelta != null) ...<String, Object?>{
           'rustScanMs': rustElapsed!.inMilliseconds,
+          'rustDiscoveryMs': rustDiscoveryElapsed?.inMilliseconds,
+          'rustFingerprintMs': rustFingerprintElapsed?.inMilliseconds,
+          'rustFingerprintProcessed': rustFinalProgress?.processed,
+          'rustFingerprintTotal': rustFinalProgress?.total,
+          'rustForcedFingerprint': Platform.environment[
+                  'LOCAL_TAG_PLAYER_SCAN_BENCHMARK_FORCE_FINGERPRINT'] ==
+              '1',
           'rustAdded': rustDelta.added.length,
           'rustModified': rustDelta.modified.length,
           'rustUnchanged': rustDelta.unchangedCount,

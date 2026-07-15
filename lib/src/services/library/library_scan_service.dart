@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:path/path.dart' as p;
 
 import '../../core/tag_rules.dart';
+import '../../models/library_scan_models.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -134,16 +135,27 @@ class LibraryScanService {
    */
   Future<LibraryScanResult> scanRoots(
     List<String> roots, {
+    int generationId = 0,
     Map<String, LibraryScanKnownMetadata> knownMetadata =
         const <String, LibraryScanKnownMetadata>{},
     bool Function()? isCancelled,
+    Future<void> Function()? waitIfPaused,
+    LibraryScanProgressCallback? onProgress,
   }) async {
     final entries = <LibraryScannedVideo>[];
     final seen = <String>{};
     final scannedRootKeys = <String>{};
+    final candidates = <_LibraryScanCandidate>[];
     final orderedRoots = roots.toList()
       ..sort((a, b) => p.split(a).length.compareTo(p.split(b).length));
+    onProgress?.call(LibraryScanProgress(
+      generationId: generationId,
+      phase: LibraryScanPhase.discovering,
+      processed: 0,
+      discovered: 0,
+    ));
     for (final root in orderedRoots) {
+      await waitIfPaused?.call();
       if (isCancelled?.call() ?? false) {
         return LibraryScanResult(
           entries: entries,
@@ -159,6 +171,7 @@ class LibraryScanService {
       try {
         await for (final entity
             in dir.list(recursive: true, followLinks: false)) {
+          await waitIfPaused?.call();
           if (isCancelled?.call() ?? false) {
             return LibraryScanResult(
               entries: entries,
@@ -175,20 +188,81 @@ class LibraryScanService {
           if (!seen.add(videoKey)) {
             continue;
           }
-          final stat = await _fileStat(entity);
-          if (stat == null || stat.type != FileSystemEntityType.file) {
-            continue;
-          }
-          entries.add(await _entryFor(
+          candidates.add(_LibraryScanCandidate(
             root: root,
             file: entity,
-            stat: stat,
-            known: knownMetadata[videoKey],
+            pathKey: videoKey,
           ));
+          if (candidates.length % 128 == 0) {
+            onProgress?.call(LibraryScanProgress(
+              generationId: generationId,
+              phase: LibraryScanPhase.discovering,
+              processed: candidates.length,
+              discovered: candidates.length,
+            ));
+          }
         }
         scannedRootKeys.add(TagRules.pathKey(root));
       } on FileSystemException {
         continue;
+      }
+    }
+    onProgress?.call(LibraryScanProgress(
+      generationId: generationId,
+      phase: LibraryScanPhase.discovering,
+      processed: candidates.length,
+      discovered: candidates.length,
+    ));
+
+    // 目录枚举完成后总数已确定；把 stat/fingerprint 独立成确定型阶段，避免冷盘
+    // 数十秒随机读取期间用户只看到无法判断是否卡死的不确定动画。
+    final fingerprintWatch = Stopwatch()..start();
+    onProgress?.call(LibraryScanProgress(
+      generationId: generationId,
+      phase: LibraryScanPhase.fingerprinting,
+      processed: 0,
+      discovered: candidates.length,
+      total: candidates.length,
+    ));
+    for (var index = 0; index < candidates.length; index += 1) {
+      await waitIfPaused?.call();
+      if (isCancelled?.call() ?? false) {
+        return LibraryScanResult(
+          entries: entries,
+          seenPathKeys: seen,
+          scannedRootKeys: scannedRootKeys,
+          cancelled: true,
+        );
+      }
+      final candidate = candidates[index];
+      final stat = await _fileStat(candidate.file);
+      if (stat != null && stat.type == FileSystemEntityType.file) {
+        entries.add(await _entryFor(
+          root: candidate.root,
+          file: candidate.file,
+          stat: stat,
+          known: knownMetadata[candidate.pathKey],
+        ));
+      }
+      final processed = index + 1;
+      if (processed == candidates.length || processed % 32 == 0) {
+        final seconds = fingerprintWatch.elapsedMicroseconds / 1000000;
+        final speed = seconds <= 0 ? null : processed / seconds;
+        onProgress?.call(LibraryScanProgress(
+          generationId: generationId,
+          phase: LibraryScanPhase.fingerprinting,
+          processed: processed,
+          discovered: candidates.length,
+          total: candidates.length,
+          itemsPerSecond: speed,
+          estimatedRemaining: speed == null || speed <= 0
+              ? null
+              : Duration(
+                  milliseconds:
+                      (((candidates.length - processed) / speed) * 1000)
+                          .round(),
+                ),
+        ));
       }
     }
     return LibraryScanResult(
@@ -337,4 +411,22 @@ class LibraryScanService {
       return null;
     }
   }
+}
+
+/** 目录发现与 fingerprint 阶段之间传递的最小只读候选。 */
+class _LibraryScanCandidate {
+  const _LibraryScanCandidate({
+    required this.root,
+    required this.file,
+    required this.pathKey,
+  });
+
+  /** 负责派生 folder 标签的最上层 root。 */
+  final String root;
+
+  /** 等待 stat/fingerprint 的视频文件。 */
+  final File file;
+
+  /** 已按平台规则归一的路径 key。 */
+  final String pathKey;
 }

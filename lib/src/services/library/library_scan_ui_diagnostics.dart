@@ -41,6 +41,13 @@ class LibraryScanUiDiagnostics {
   /** folder 重算、filter 差量替换等同步阶段。 */
   final List<LibraryLoadStageSample> _stages = <LibraryLoadStageSample>[];
 
+  /** 目录发现、fingerprint 与提交的隐私安全阶段耗时。 */
+  final List<Map<String, Object?>> _scanPhases = <Map<String, Object?>>[];
+
+  LibraryScanPhase? _activeScanPhase;
+  Stopwatch? _scanPhaseWatch;
+  LibraryScanProgress? _latestScanProgress;
+
   String _phase = 'scan';
   Timer? _frameDriver;
   late final TimingsCallback _timingsCallback;
@@ -84,6 +91,27 @@ class LibraryScanUiDiagnostics {
     ));
   }
 
+  /** 接收扫描计数并在阶段切换时落一条不含路径的耗时记录。 */
+  void recordProgress(LibraryScanProgress progress) {
+    if (_finished) {
+      return;
+    }
+    if (_activeScanPhase != progress.phase) {
+      _finishActiveScanPhase();
+      _activeScanPhase = progress.phase;
+      _scanPhaseWatch = Stopwatch()..start();
+    }
+    _latestScanProgress = progress;
+  }
+
+  /** 扫描后端与提交均已结束；在固定帧采样等待前封存真实阶段耗时。 */
+  void markScanComplete() {
+    if (_finished) {
+      return;
+    }
+    _finishActiveScanPhase();
+  }
+
   /**
    * 在固定窗口结束后写入 JSONL，便于连续扫描两次后直接对比。
    */
@@ -96,6 +124,7 @@ class LibraryScanUiDiagnostics {
       return;
     }
     _finished = true;
+    _finishActiveScanPhase();
     _watch.stop();
     _frameDriver?.cancel();
     WidgetsBinding.instance.removeTimingsCallback(_timingsCallback);
@@ -119,6 +148,7 @@ class LibraryScanUiDiagnostics {
           entry.key: _frameSummary(entry.value),
       },
       'stages': _stages.map((stage) => stage.toJson()).toList(),
+      'scanPhases': _scanPhases,
     };
     try {
       final file = File(p.join(
@@ -133,6 +163,27 @@ class LibraryScanUiDiagnostics {
     } catch (_) {
       // debug 诊断文件不得影响扫描事务或用户交互。
     }
+  }
+
+  /** 完成当前阶段采样；数量仅用于区分冷指纹与稳定态复用，不包含用户内容。 */
+  void _finishActiveScanPhase() {
+    final phase = _activeScanPhase;
+    final watch = _scanPhaseWatch;
+    final progress = _latestScanProgress;
+    if (phase == null || watch == null) {
+      return;
+    }
+    watch.stop();
+    _scanPhases.add(<String, Object?>{
+      'phase': phase.name,
+      'elapsedMs': watch.elapsedMilliseconds,
+      'processed': progress?.processed ?? 0,
+      'total': progress?.total,
+      'discovered': progress?.discovered ?? 0,
+    });
+    _activeScanPhase = null;
+    _scanPhaseWatch = null;
+    _latestScanProgress = null;
   }
 
   /** 新扫描覆盖或页面退出时立即解除帧回调。 */

@@ -22,6 +22,7 @@ import '../../services/library/library_count_refresh_coordinator.dart';
 import '../../services/library/library_load_diagnostics.dart';
 import '../../services/library/library_page_application_service.dart';
 import '../../services/library/library_scan_ui_diagnostics.dart';
+import '../../services/library/library_scan_playback_gate.dart';
 import '../../services/library/library_stress_control.dart';
 import '../../services/media/media_details_service.dart';
 import '../../services/media/thumbnail_service.dart';
@@ -81,6 +82,40 @@ String libraryMediaImportProgressLabel(MediaDetailsProgress progress) {
   }
   final remaining = progress.estimatedRemaining;
   if (remaining != null) {
+    parts.add('剩余${_libraryImportDurationLabel(remaining)}');
+  }
+  return parts.join(' · ');
+}
+
+/** 把目录发现、指纹校验和提交进度压缩为结果区短文案。 */
+String libraryScanProgressLabel(LibraryScanProgress? progress) {
+  if (progress == null) {
+    return '正在发现视频…';
+  }
+  if (progress.phase == LibraryScanPhase.discovering) {
+    return progress.discovered == 0
+        ? '正在发现视频…'
+        : '正在发现视频 · 已找到 ${progress.discovered} 个';
+  }
+  final total = progress.total ?? progress.discovered;
+  final percent = ((progress.fraction ?? 0) * 100).floor();
+  final parts = <String>[
+    progress.phase == LibraryScanPhase.fingerprinting
+        ? '校验文件 ${progress.processed}/$total'
+        : '提交索引 ${progress.processed}/$total',
+    '$percent%',
+  ];
+  if (progress.isPaused) {
+    parts.add('播放期间已暂停');
+    return parts.join(' · ');
+  }
+  final speed = progress.itemsPerSecond;
+  if (speed != null && speed > 0) {
+    parts.add(
+        speed >= 10 ? '${speed.round()}个/秒' : '${speed.toStringAsFixed(1)}个/秒');
+  }
+  final remaining = progress.estimatedRemaining;
+  if (remaining != null && remaining > Duration.zero) {
     parts.add('剩余${_libraryImportDurationLabel(remaining)}');
   }
   return parts.join(' · ');
@@ -988,6 +1023,7 @@ class _LibraryPageState extends State<LibraryPage> {
   var _libraryDataRevision = 0;
   var _showFavoritesOnly = false;
   var _isScanning = false;
+  LibraryScanProgress? _scanProgress;
   /**
    * 当前目录导入的后台媒体信息解析进度。
    *
@@ -1231,8 +1267,11 @@ class _LibraryPageState extends State<LibraryPage> {
       owner: this,
       addRoot: () async {
         LibraryScanCommitResult? captured;
-        await _scan(() async {
-          final result = await store.addRootAndScanWithChanges(root);
+        await _scan((onProgress) async {
+          final result = await store.addRootAndScanWithChanges(
+            root,
+            onProgress: onProgress,
+          );
           captured = result;
           return result;
         });
@@ -1315,7 +1354,12 @@ class _LibraryPageState extends State<LibraryPage> {
     if (path == null || _store == null) {
       return;
     }
-    await _scan(() => _store!.addRootAndScanWithChanges(path));
+    await _scan(
+      (onProgress) => _store!.addRootAndScanWithChanges(
+        path,
+        onProgress: onProgress,
+      ),
+    );
   }
 
   /**
@@ -1380,8 +1424,11 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     await _scan(
       newRoots.isEmpty
-          ? store.scanWithChanges
-          : () => store.addRootsAndScanWithChanges(newRoots),
+          ? (onProgress) => store.scanWithChanges(onProgress: onProgress)
+          : (onProgress) => store.addRootsAndScanWithChanges(
+                newRoots,
+                onProgress: onProgress,
+              ),
     );
   }
 
@@ -1389,10 +1436,16 @@ class _LibraryPageState extends State<LibraryPage> {
     if (_store == null) {
       return;
     }
-    await _scan(_store!.scanWithChanges);
+    await _scan(
+      (onProgress) => _store!.scanWithChanges(onProgress: onProgress),
+    );
   }
 
-  Future<void> _scan(Future<LibraryScanCommitResult> Function() action) async {
+  Future<void> _scan(
+    Future<LibraryScanCommitResult> Function(
+      LibraryScanProgressCallback onProgress,
+    ) action,
+  ) async {
     if (_isScanning) {
       return;
     }
@@ -1406,12 +1459,20 @@ class _LibraryPageState extends State<LibraryPage> {
     var diagnosticsWillFinish = false;
     setState(() {
       _isScanning = true;
+      _scanProgress = null;
       _mediaImportProgress = null;
     });
     try {
       final actionWatch = Stopwatch()..start();
-      final result = await action();
+      final result = await action((progress) {
+        if (!mounted || !_isScanning) {
+          return;
+        }
+        diagnostics?.recordProgress(progress);
+        setState(() => _scanProgress = progress);
+      });
       actionWatch.stop();
+      diagnostics?.markScanComplete();
       diagnostics?.recordStage(
         'scan.backend_and_commit',
         actionWatch.elapsed,
@@ -1464,9 +1525,24 @@ class _LibraryPageState extends State<LibraryPage> {
         }
       }
       if (mounted) {
-        setState(() => _isScanning = false);
+        setState(() {
+          _isScanning = false;
+          _scanProgress = null;
+        });
       }
     }
+  }
+
+  /** 用户显式暂停/继续扫描；活动 sidecar 从当前候选位置恢复，不重新遍历目录。 */
+  Future<void> _toggleScanPaused() async {
+    final store = _store;
+    final progress = _scanProgress;
+    if (store == null || !_isScanning || progress == null) {
+      return;
+    }
+    final paused = !progress.isPaused;
+    setState(() => _scanProgress = progress.copyWith(isPaused: paused));
+    await store.setScanPaused(paused);
   }
 
   /**
@@ -2850,23 +2926,27 @@ class _LibraryPageState extends State<LibraryPage> {
             progressLabel: _resultMode != _LibraryResultMode.library
                 ? null
                 : _isScanning
-                    ? '正在发现并校验视频…'
+                    ? libraryScanProgressLabel(_scanProgress)
                     : _mediaImportProgress == null
                         ? null
                         : libraryMediaImportProgressLabel(
                             _mediaImportProgress!,
                           ),
-            progressValue: _resultMode != _LibraryResultMode.library ||
-                    _isScanning ||
-                    _mediaImportProgress == null
+            progressValue: _resultMode != _LibraryResultMode.library
                 ? null
-                : _mediaImportProgress!.fraction,
-            progressPaused: _mediaImportProgress?.isPaused ?? false,
-            onToggleProgressPaused: _resultMode != _LibraryResultMode.library ||
-                    _isScanning ||
-                    _mediaImportProgress == null
+                : _isScanning
+                    ? _scanProgress?.fraction
+                    : _mediaImportProgress?.fraction,
+            progressPaused: _isScanning
+                ? (_scanProgress?.isPaused ?? false)
+                : (_mediaImportProgress?.isPaused ?? false),
+            onToggleProgressPaused: _resultMode != _LibraryResultMode.library
                 ? null
-                : _toggleMediaImportPaused,
+                : _isScanning
+                    ? (_scanProgress == null ? null : _toggleScanPaused)
+                    : _mediaImportProgress == null
+                        ? null
+                        : _toggleMediaImportPaused,
             onRemovePrimaryTag: (tag) => _mutateFilters(() {
               _selectedTags.remove(tag);
               _selectedChildTags.clear();
@@ -3405,6 +3485,33 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Future<void> _openVideo(VideoItem item, List<VideoItem> playlist) async {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    final scanWasActive = _isScanning;
+    final scanWasAlreadyPaused = _scanProgress?.isPaused ?? false;
+    await const LibraryScanPlaybackGate().run<void>(
+      scanActive: scanWasActive,
+      scanAlreadyPaused: scanWasAlreadyPaused,
+      setPaused: store.setScanPaused,
+      onPauseChanged: (paused) {
+        final progress = _scanProgress;
+        if (mounted && _isScanning && progress != null) {
+          setState(() => _scanProgress = progress.copyWith(isPaused: paused));
+        }
+      },
+      // 在预检、缩略图预热和播放器解码开始前先让 sidecar 停在文件边界，避免
+      // 机械盘随机 fingerprint 读取与当前视频顺序读取互相拖死。
+      action: () => _openVideoAfterScanYield(item, playlist),
+    );
+  }
+
+  /** 在扫描已让出磁盘后执行既有预检、队列预热和 filtered queue 播放链路。 */
+  Future<void> _openVideoAfterScanYield(
+    VideoItem item,
+    List<VideoItem> playlist,
+  ) async {
     final store = _store;
     if (store == null) {
       return;

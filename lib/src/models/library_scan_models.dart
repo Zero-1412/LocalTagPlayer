@@ -2,6 +2,87 @@ import 'video_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/** 媒体库扫描在用户可感知路径上的阶段。 */
+enum LibraryScanPhase {
+  /** 递归枚举目录并收集视频候选；总量在阶段结束前未知。 */
+  discovering,
+
+  /** 对已经发现的候选读取 stat，并复用或计算轻量 fingerprint。 */
+  fingerprinting,
+
+  /** Dart Application 合并稳定身份并提交 SQLite 差量。 */
+  committing,
+}
+
+/** 扫描阶段进度回调；实现不得携带路径、标题或标签内容。 */
+typedef LibraryScanProgressCallback = void Function(
+  LibraryScanProgress progress,
+);
+
+/**
+ * 一次只读扫描或应用提交的不可变进度快照。
+ *
+ * 目录发现阶段不伪造百分比；发现结束后 [total] 已确定，指纹与提交阶段才显示
+ * 确定型进度。播放期间 [isPaused] 为 true，扫描保留当前位置但停止继续读取磁盘。
+ */
+class LibraryScanProgress {
+  const LibraryScanProgress({
+    required this.generationId,
+    required this.phase,
+    required this.processed,
+    required this.discovered,
+    this.total,
+    this.itemsPerSecond,
+    this.estimatedRemaining,
+    this.isPaused = false,
+  });
+
+  /** 当前扫描代次，防止旧任务覆盖新 UI。 */
+  final int generationId;
+
+  /** 当前扫描阶段。 */
+  final LibraryScanPhase phase;
+
+  /** 当前阶段已处理数量。 */
+  final int processed;
+
+  /** 本轮截至当前已经发现的视频候选数量。 */
+  final int discovered;
+
+  /** 当前阶段总数；目录发现期间保持 null。 */
+  final int? total;
+
+  /** 当前阶段最近窗口的平滑速度。 */
+  final double? itemsPerSecond;
+
+  /** 当前阶段按平滑速度估算的剩余时间。 */
+  final Duration? estimatedRemaining;
+
+  /** 是否为正在播放的视频主动让出扫描磁盘读取。 */
+  final bool isPaused;
+
+  /** 只有已知总量的阶段才返回确定型进度。 */
+  double? get fraction {
+    final target = total;
+    if (target == null || target <= 0) {
+      return null;
+    }
+    return (processed / target).clamp(0, 1);
+  }
+
+  /** 复制当前快照并更新播放让盘状态。 */
+  LibraryScanProgress copyWith({bool? isPaused}) => LibraryScanProgress(
+        generationId: generationId,
+        phase: phase,
+        processed: processed,
+        discovered: discovered,
+        total: total,
+        itemsPerSecond: itemsPerSecond,
+        estimatedRemaining: estimatedRemaining,
+        isPaused: isPaused ?? this.isPaused,
+      );
+}
+
 /**
  * 应用层提交扫描差量后的不可变结果。
  *

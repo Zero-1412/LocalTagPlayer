@@ -8,13 +8,38 @@ use std::env;
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::thread;
+use std::time::{Duration, UNIX_EPOCH};
+
+#[cfg(windows)]
+extern "system" {
+    fn GetCurrentProcess() -> *mut std::ffi::c_void;
+    fn SetPriorityClass(process: *mut std::ffi::c_void, priority_class: u32) -> i32;
+}
+
+/// Windows 后台扫描使用低于普通应用的 CPU 调度级别，优先保护前台播放与界面响应。
+#[cfg(windows)]
+fn lower_process_priority() {
+    const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+    unsafe {
+        let _ = SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+    }
+}
+
+#[cfg(not(windows))]
+fn lower_process_priority() {}
 
 /// 已知 SQLite 索引提供的文件元数据，仅用于复用 fingerprint。
 struct KnownMetadata {
     size: i64,
     modified_ms: i64,
     fingerprint: String,
+}
+
+/// 目录发现与 stat/fingerprint 阶段之间的最小候选。
+struct ScanCandidate {
+    root_index: u32,
+    path: PathBuf,
 }
 
 /// 扫描进程入口；参数依次为已知元数据协议文件和一个或多个 root。
@@ -34,36 +59,77 @@ fn run() -> io::Result<()> {
             "expected metadata file and at least one root",
         ));
     }
+    lower_process_priority();
     let known = read_known_metadata(Path::new(&args[0]))?;
+    let (control_file, roots_start) = if args.len() >= 4 && args[1].to_string_lossy() == "--control"
+    {
+        (Some(PathBuf::from(&args[2])), 3)
+    } else {
+        (None, 1)
+    };
+    if args.len() <= roots_start {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "expected at least one root",
+        ));
+    }
     let stdout = io::stdout();
     let mut writer = BufWriter::new(stdout.lock());
     writer.write_all(b"LTPS")?;
     write_u32(&mut writer, 1)?;
     let mut seen = HashSet::new();
-    for (root_index, root_arg) in args.iter().skip(1).enumerate() {
+    let mut candidates = Vec::new();
+    let mut completed_roots = Vec::new();
+    emit_progress("discovering", 0, None);
+    for (root_index, root_arg) in args.iter().skip(roots_start).enumerate() {
+        wait_if_paused(control_file.as_deref());
         let root = PathBuf::from(root_arg);
-        if scan_root(root_index as u32, &root, &known, &mut seen, &mut writer)? {
-            writer.write_all(&[2])?;
-            write_u32(&mut writer, root_index as u32)?;
+        if discover_root(
+            root_index as u32,
+            &root,
+            &mut seen,
+            &mut candidates,
+            control_file.as_deref(),
+        )? {
+            completed_roots.push(root_index as u32);
         }
+    }
+    emit_progress("discovering", candidates.len(), None);
+    emit_progress("fingerprinting", 0, Some(candidates.len()));
+    for (index, candidate) in candidates.iter().enumerate() {
+        // 每 8 个文件检查一次暂停标记；冷 HDD 下响应约百毫秒，热扫描则避免
+        // 为每个文件额外访问系统临时盘而拖慢稳定态。
+        if index % 8 == 0 {
+            wait_if_paused(control_file.as_deref());
+        }
+        write_candidate(candidate, &known, &mut writer)?;
+        let processed = index + 1;
+        if processed == candidates.len() || processed % 32 == 0 {
+            emit_progress("fingerprinting", processed, Some(candidates.len()));
+        }
+    }
+    for root_index in completed_roots {
+        writer.write_all(&[2])?;
+        write_u32(&mut writer, root_index)?;
     }
     writer.write_all(&[0])?;
     writer.flush()
 }
 
-/// 深度优先枚举一个 root；任何目录读取失败都会阻止该 root 被标记为完整扫描。
-fn scan_root<W: Write>(
+/// 深度优先枚举一个 root；此阶段只收集路径，不执行机械盘随机 fingerprint 读取。
+fn discover_root(
     root_index: u32,
     root: &Path,
-    known: &HashMap<String, KnownMetadata>,
     seen: &mut HashSet<String>,
-    writer: &mut W,
+    candidates: &mut Vec<ScanCandidate>,
+    control_file: Option<&Path>,
 ) -> io::Result<bool> {
     if !root.is_dir() {
         return Ok(false);
     }
     let mut stack = vec![root.to_path_buf()];
     let mut complete = true;
+    let mut visited_entries = 0_usize;
     while let Some(directory) = stack.pop() {
         let entries = match fs::read_dir(&directory) {
             Ok(entries) => entries,
@@ -73,6 +139,10 @@ fn scan_root<W: Write>(
             }
         };
         for entry in entries {
+            visited_entries += 1;
+            if visited_entries % 1024 == 1 {
+                wait_if_paused(control_file);
+            }
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(_) => {
@@ -100,33 +170,62 @@ fn scan_root<W: Write>(
             if !seen.insert(key.clone()) {
                 continue;
             }
-            let metadata = match entry.metadata() {
-                Ok(metadata) => metadata,
-                Err(_) => continue,
-            };
-            let size = metadata.len() as i64;
-            let modified_ms = metadata
-                .modified()
-                .ok()
-                .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
-                .map(|value| value.as_millis() as i64)
-                .unwrap_or(-1);
-            let reusable = known.get(&key).filter(|item| {
-                item.size == size && item.modified_ms == modified_ms && !item.fingerprint.is_empty()
-            });
-            let fingerprint = match reusable {
-                Some(item) => item.fingerprint.clone(),
-                None => fingerprint_for(&path, size as u64)?,
-            };
-            writer.write_all(&[1])?;
-            write_u32(writer, root_index)?;
-            write_string(writer, &path_text)?;
-            write_i64(writer, size)?;
-            write_i64(writer, modified_ms)?;
-            write_string(writer, &fingerprint)?;
+            candidates.push(ScanCandidate { root_index, path });
+            if candidates.len() % 128 == 0 {
+                emit_progress("discovering", candidates.len(), None);
+            }
         }
     }
     Ok(complete)
+}
+
+/// 对已发现候选读取 stat，并复用或生成与 Dart 一致的 fingerprint 记录。
+fn write_candidate<W: Write>(
+    candidate: &ScanCandidate,
+    known: &HashMap<String, KnownMetadata>,
+    writer: &mut W,
+) -> io::Result<()> {
+    let metadata = match fs::metadata(&candidate.path) {
+        Ok(metadata) if metadata.is_file() => metadata,
+        _ => return Ok(()),
+    };
+    let path_text = candidate.path.to_string_lossy().into_owned();
+    let key = path_text.to_lowercase();
+    let size = metadata.len() as i64;
+    let modified_ms = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|value| value.as_millis() as i64)
+        .unwrap_or(-1);
+    let reusable = known.get(&key).filter(|item| {
+        item.size == size && item.modified_ms == modified_ms && !item.fingerprint.is_empty()
+    });
+    let fingerprint = match reusable {
+        Some(item) => item.fingerprint.clone(),
+        None => fingerprint_for(&candidate.path, size as u64)?,
+    };
+    writer.write_all(&[1])?;
+    write_u32(writer, candidate.root_index)?;
+    write_string(writer, &path_text)?;
+    write_i64(writer, size)?;
+    write_i64(writer, modified_ms)?;
+    write_string(writer, &fingerprint)
+}
+
+/// sidecar 只上报阶段与数量，不在 stderr 暴露本地路径或标题。
+fn emit_progress(phase: &str, processed: usize, total: Option<usize>) {
+    eprintln!(
+        "LTP_SCAN_PROGRESS|{phase}|{processed}|{}",
+        total.map_or(-1_i64, |value| value as i64)
+    );
+}
+
+/// 播放器存在时在安全文件边界等待；删除标记后从原候选位置继续。
+fn wait_if_paused(control_file: Option<&Path>) {
+    while control_file.is_some_and(Path::exists) {
+        thread::sleep(Duration::from_millis(50));
+    }
 }
 
 /// 判断扩展名是否属于当前产品支持的视频集合。

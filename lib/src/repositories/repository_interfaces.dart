@@ -92,16 +92,24 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
 
   Future<VideoItem?> deleteVideo(String path);
 
-  Future<LibraryScanCommitResult> addRootAndScanWithChanges(String rootPath);
+  Future<LibraryScanCommitResult> addRootAndScanWithChanges(
+    String rootPath, {
+    LibraryScanProgressCallback? onProgress,
+  });
 
   /** 批量注册媒体库 root，并在全部配置落盘后只执行一轮扫描。 */
   Future<LibraryScanCommitResult> addRootsAndScanWithChanges(
-    Iterable<String> rootPaths,
-  );
+      Iterable<String> rootPaths,
+      {LibraryScanProgressCallback? onProgress});
 
   Future<List<VideoItem>> removeRoot(String rootPath);
 
-  Future<LibraryScanCommitResult> scanWithChanges();
+  Future<LibraryScanCommitResult> scanWithChanges({
+    LibraryScanProgressCallback? onProgress,
+  });
+
+  /** 播放期间暂停/恢复只读扫描，避免机械盘读取与视频解码争抢。 */
+  Future<void> setScanPaused(bool paused);
 
   Future<int> countUntrackedVideos();
 

@@ -159,20 +159,34 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
       _repository.upsertVideos(items);
   Future<VideoItem?> deleteVideo(String path) => _repository.deleteVideo(path);
 
-  Future<LibraryScanCommitResult> addRootAndScanWithChanges(String rootPath) =>
-      _repository.addRootAndScanWithChanges(rootPath);
+  Future<LibraryScanCommitResult> addRootAndScanWithChanges(
+    String rootPath, {
+    LibraryScanProgressCallback? onProgress,
+  }) =>
+      _repository.addRootAndScanWithChanges(
+        rootPath,
+        onProgress: onProgress,
+      );
 
   /** 批量添加文件所在目录或拖入目录，并合并为一次后台扫描。 */
   Future<LibraryScanCommitResult> addRootsAndScanWithChanges(
-    Iterable<String> rootPaths,
-  ) =>
-      _repository.addRootsAndScanWithChanges(rootPaths);
+          Iterable<String> rootPaths,
+          {LibraryScanProgressCallback? onProgress}) =>
+      _repository.addRootsAndScanWithChanges(
+        rootPaths,
+        onProgress: onProgress,
+      );
 
   Future<List<VideoItem>> removeRoot(String rootPath) =>
       _repository.removeRoot(rootPath);
 
-  Future<LibraryScanCommitResult> scanWithChanges() =>
-      _repository.scanWithChanges();
+  Future<LibraryScanCommitResult> scanWithChanges({
+    LibraryScanProgressCallback? onProgress,
+  }) =>
+      _repository.scanWithChanges(onProgress: onProgress);
+
+  /** 播放器进入/退出时只通过 Repository 协调扫描让盘，不暴露具体 sidecar。 */
+  Future<void> setScanPaused(bool paused) => _repository.setScanPaused(paused);
 
   Future<int> countUntrackedVideos() => _repository.countUntrackedVideos();
 

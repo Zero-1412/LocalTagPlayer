@@ -163,7 +163,10 @@ class LibraryScanCoordinator {
    *
    * 返回新增视频数量；已有视频的索引刷新、缺失文件清理和 metadata 保存会在同一 batch 中提交。
    */
-  Future<LibraryScanCommitResult> scan({required int generationId}) async {
+  Future<LibraryScanCommitResult> scan({
+    required int generationId,
+    LibraryScanProgressCallback? onProgress,
+  }) async {
     final knownMetadata = <String, LibraryScanKnownMetadata>{
       for (final item in _store.videos.values)
         TagRules.pathKey(item.path): LibraryScanKnownMetadata(
@@ -179,6 +182,7 @@ class LibraryScanCoordinator {
       generationId: generationId,
       roots: List<String>.unmodifiable(_store.roots),
       knownMetadata: knownMetadata,
+      onProgress: onProgress,
     );
     if (scanDelta.cancelled || generationId != _store.scanGeneration) {
       return LibraryScanCommitResult.cancelled(generationId);
@@ -208,7 +212,16 @@ class LibraryScanCoordinator {
       (relocationCandidates[fingerprint] ??= <VideoItem>[]).add(item);
     }
 
-    for (final scanned in scanDelta.changedEntries) {
+    final changedEntries = scanDelta.changedEntries.toList(growable: false);
+    onProgress?.call(LibraryScanProgress(
+      generationId: generationId,
+      phase: LibraryScanPhase.committing,
+      processed: 0,
+      discovered: scanDelta.seenPathKeys.length,
+      total: changedEntries.length,
+    ));
+    for (var index = 0; index < changedEntries.length; index += 1) {
+      final scanned = changedEntries[index];
       final videoKey = TagRules.pathKey(scanned.path);
       final existing = _store.videos[videoKey];
       if (existing == null) {
@@ -237,6 +250,21 @@ class LibraryScanCoordinator {
         }
         modified++;
       }
+      final processed = index + 1;
+      if (processed == changedEntries.length || processed % 256 == 0) {
+        onProgress?.call(LibraryScanProgress(
+          generationId: generationId,
+          phase: LibraryScanPhase.committing,
+          processed: processed,
+          discovered: scanDelta.seenPathKeys.length,
+          total: changedEntries.length,
+        ));
+        // 大差量合并不能连续独占 UI isolate；让路由、进度和播放输入获得调度机会。
+        await Future<void>.delayed(Duration.zero);
+        if (generationId != _store.scanGeneration) {
+          return LibraryScanCommitResult.cancelled(generationId);
+        }
+      }
     }
 
     final missingVideos = _markMissingVideos(
@@ -253,6 +281,13 @@ class LibraryScanCoordinator {
       favoriteTags: _store.favoriteTags,
     );
     await batch.commit(noResult: true);
+    onProgress?.call(LibraryScanProgress(
+      generationId: generationId,
+      phase: LibraryScanPhase.committing,
+      processed: changedEntries.length,
+      discovered: scanDelta.seenPathKeys.length,
+      total: changedEntries.length,
+    ));
     return LibraryScanCommitResult(
       generationId: generationId,
       addedCount: added,
