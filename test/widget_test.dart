@@ -2342,4 +2342,53 @@ void main() {
     await tester.pumpAndSettle();
     expect(result, isFalse);
   });
+
+  test('player hidden progress fraction clamps invalid and overflow values',
+      () {
+    expect(playerProgressFraction(Duration.zero, Duration.zero), 0);
+    expect(
+      playerProgressFraction(
+        const Duration(seconds: 25),
+        const Duration(seconds: 100),
+      ),
+      0.25,
+    );
+    expect(
+      playerProgressFraction(
+        const Duration(seconds: -1),
+        const Duration(seconds: 100),
+      ),
+      0,
+    );
+    expect(
+      playerProgressFraction(
+        const Duration(seconds: 120),
+        const Duration(seconds: 100),
+      ),
+      1,
+    );
+  });
+
+  testWidgets('player hidden progress bar keeps a three pixel progress hint',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: PlayerHiddenProgressBar(
+            position: Duration(seconds: 25),
+            duration: Duration(seconds: 100),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.byKey(const ValueKey('player.hiddenProgressBar'))),
+      const Size(800, 3),
+    );
+    final active = tester.widget<FractionallySizedBox>(
+      find.byKey(const ValueKey('player.hiddenProgressBar.active')),
+    );
+    expect(active.widthFactor, 0.25);
+  });
 }

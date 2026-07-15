@@ -75,6 +75,7 @@ export 'services/relink/bulk_path_relink_service.dart';
 export 'services/tags/tag_query_service.dart';
 export 'services/window/desktop_window_state_service.dart';
 export 'pages/player/player_context_panel.dart';
+export 'pages/player/player_control_slider.dart';
 export 'pages/player/player_delete_dialog.dart';
 export 'pages/player/player_diagnostics_dialog.dart';
 export 'pages/player/player_dialog_content.dart';

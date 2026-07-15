@@ -20,6 +20,7 @@ import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import '../../widgets/app_theme_tokens.dart';
 import 'player_context_panel.dart';
+import 'player_control_slider.dart';
 import 'player_delete_dialog.dart';
 import 'player_diagnostics_dialog.dart';
 import 'player_dialog_content.dart';
@@ -739,6 +740,26 @@ class PlayerPageState extends State<PlayerPage> {
             left: 0,
             right: 0,
             bottom: 0,
+            child: StreamBuilder<Duration>(
+              stream: _playerBackend.positionChanges,
+              initialData: _playerBackend.state.position,
+              builder: (context, positionSnapshot) {
+                return AnimatedOpacity(
+                  key: const ValueKey('player.controls.hiddenProgress'),
+                  duration: const Duration(milliseconds: 180),
+                  opacity: _controlsVisible ? 0 : 1,
+                  child: PlayerHiddenProgressBar(
+                    position: positionSnapshot.data ?? Duration.zero,
+                    duration: _playerBackend.state.duration,
+                  ),
+                );
+              },
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
             child: AnimatedOpacity(
               key: const ValueKey('player.controls.opacity'),
               duration: const Duration(milliseconds: 180),
@@ -753,7 +774,6 @@ class PlayerPageState extends State<PlayerPage> {
                     final duration = _playerBackend.state.duration;
                     final maxMs =
                         math.max(1, duration.inMilliseconds).toDouble();
-                    const controlAccent = Color(0xff7457ff);
                     return Container(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                       decoration: const BoxDecoration(
@@ -767,29 +787,15 @@ class PlayerPageState extends State<PlayerPage> {
                         data: const IconThemeData(color: Colors.white),
                         child:
                             Column(mainAxisSize: MainAxisSize.min, children: [
-                          SliderTheme(
-                            data: const SliderThemeData(
-                              trackHeight: 3,
-                              activeTrackColor: controlAccent,
-                              inactiveTrackColor: Color(0xff26314b),
-                              thumbColor: Color(0xffd7deff),
-                              thumbShape: RoundSliderThumbShape(
-                                enabledThumbRadius: 5,
-                              ),
-                              overlayColor: Color(0x337457ff),
-                              overlayShape: RoundSliderOverlayShape(
-                                overlayRadius: 12,
-                              ),
-                            ),
-                            child: Slider(
-                              value: position.inMilliseconds
-                                  .clamp(0, maxMs.toInt())
-                                  .toDouble(),
-                              max: maxMs,
-                              onChanged: (value) => unawaited(
-                                _seekWithDiagnostics(
-                                  Duration(milliseconds: value.round()),
-                                ),
+                          PlayerControlSlider(
+                            sliderKey: const ValueKey('player.progress'),
+                            value: position.inMilliseconds
+                                .clamp(0, maxMs.toInt())
+                                .toDouble(),
+                            max: maxMs,
+                            onChanged: (value) => unawaited(
+                              _seekWithDiagnostics(
+                                Duration(milliseconds: value.round()),
                               ),
                             ),
                           ),
@@ -855,26 +861,17 @@ class PlayerPageState extends State<PlayerPage> {
                                   const Icon(Icons.volume_up_rounded, size: 20),
                                   SizedBox(
                                     width: 130,
-                                    child: SliderTheme(
-                                      data: const SliderThemeData(
-                                        trackHeight: 3,
-                                        activeTrackColor: controlAccent,
-                                        inactiveTrackColor: Color(0xff26314b),
-                                        thumbColor: Color(0xffd7deff),
-                                        thumbShape: RoundSliderThumbShape(
-                                          enabledThumbRadius: 4,
-                                        ),
-                                        overlayShape: RoundSliderOverlayShape(
-                                          overlayRadius: 10,
-                                        ),
-                                      ),
-                                      child: Slider(
-                                        key: const ValueKey('player.volume'),
-                                        value: _playerBackend.state.volume
-                                            .clamp(0, 100),
-                                        max: 100,
-                                        onChanged: (value) => unawaited(
-                                            _playerBackend.setVolume(value)),
+                                    child: PlayerControlSlider(
+                                      sliderKey:
+                                          const ValueKey('player.volume'),
+                                      value: _playerBackend.state.volume
+                                          .clamp(0, 100),
+                                      max: 100,
+                                      trackHeight: 3,
+                                      thumbRadius: 4.5,
+                                      overlayRadius: 11,
+                                      onChanged: (value) => unawaited(
+                                        _playerBackend.setVolume(value),
                                       ),
                                     ),
                                   ),
