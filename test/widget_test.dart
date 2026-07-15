@@ -203,12 +203,44 @@ void main() {
 
     expect(find.text('筛选结果列表测试'), findsOneWidget);
     expect(find.text('当前视频详情'), findsNothing);
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey('player.sidebar.tabs.segment')),
+          )
+          .height,
+      44,
+    );
+    final initialQueueDecoration = tester
+        .widget<AnimatedContainer>(
+          find.byKey(
+            const ValueKey('player.sidebar.tab.queue.surface'),
+          ),
+        )
+        .decoration as BoxDecoration;
+    final initialDetailsDecoration = tester
+        .widget<AnimatedContainer>(
+          find.byKey(
+            const ValueKey('player.sidebar.tab.details.surface'),
+          ),
+        )
+        .decoration as BoxDecoration;
+    expect(initialQueueDecoration.gradient, isA<LinearGradient>());
+    expect(initialDetailsDecoration.gradient, isNull);
 
     await tester.tap(find.byKey(const ValueKey('player.sidebar.tab.details')));
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('筛选结果列表测试'), findsNothing);
     expect(find.text('当前视频详情'), findsOneWidget);
+    final selectedDetailsDecoration = tester
+        .widget<AnimatedContainer>(
+          find.byKey(
+            const ValueKey('player.sidebar.tab.details.surface'),
+          ),
+        )
+        .decoration as BoxDecoration;
+    expect(selectedDetailsDecoration.gradient, isA<LinearGradient>());
     expect(find.text('clip.mp4'), findsOneWidget);
     expect(find.text('1920×1080'), findsOneWidget);
     expect(find.text('H264 / AAC'), findsOneWidget);

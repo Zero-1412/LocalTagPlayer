@@ -133,42 +133,71 @@ class _PlayerSidePanelTabs extends StatelessWidget {
         color: Color(0xff0b1324),
         border: Border(bottom: BorderSide(color: Color(0xff243044))),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _PlayerSidePanelTab(
-              key: const ValueKey('player.sidebar.tab.queue'),
-              label: '列表',
-              icon: Icons.playlist_play_rounded,
-              selected: selected == PlayerSidePanelView.queue,
-              onPressed: () => onSelected(PlayerSidePanelView.queue),
+      child: SizedBox(
+        key: const ValueKey('player.sidebar.tabs.segment'),
+        height: 44,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xff0a1324),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xff2b3853), width: 1.2),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(9),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _PlayerSidePanelTab(
+                    key: const ValueKey('player.sidebar.tab.queue'),
+                    surfaceKey: const ValueKey(
+                      'player.sidebar.tab.queue.surface',
+                    ),
+                    label: '列表',
+                    icon: Icons.playlist_play_rounded,
+                    selected: selected == PlayerSidePanelView.queue,
+                    position: _PlayerSidePanelTabPosition.leading,
+                    onPressed: () => onSelected(PlayerSidePanelView.queue),
+                  ),
+                ),
+                Expanded(
+                  child: _PlayerSidePanelTab(
+                    key: const ValueKey('player.sidebar.tab.details'),
+                    surfaceKey: const ValueKey(
+                      'player.sidebar.tab.details.surface',
+                    ),
+                    label: '详情',
+                    icon: Icons.info_outline_rounded,
+                    selected: selected == PlayerSidePanelView.details,
+                    position: _PlayerSidePanelTabPosition.trailing,
+                    onPressed: () => onSelected(PlayerSidePanelView.details),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _PlayerSidePanelTab(
-              key: const ValueKey('player.sidebar.tab.details'),
-              label: '详情',
-              icon: Icons.info_outline_rounded,
-              selected: selected == PlayerSidePanelView.details,
-              onPressed: () => onSelected(PlayerSidePanelView.details),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
+/** 标识标签位于连续分段控件的左半区或右半区。 */
+enum _PlayerSidePanelTabPosition { leading, trailing }
+
 /** 单个侧栏一级标签，使用稳定按钮输入链路支持鼠标和键盘。 */
 class _PlayerSidePanelTab extends StatelessWidget {
   const _PlayerSidePanelTab({
     super.key,
+    required this.surfaceKey,
     required this.label,
     required this.icon,
     required this.selected,
+    required this.position,
     required this.onPressed,
   });
+
+  /** 供视觉回归测试稳定读取选中背景的表面标识。 */
+  final Key surfaceKey;
 
   /** 标签文字。 */
   final String label;
@@ -179,24 +208,78 @@ class _PlayerSidePanelTab extends StatelessWidget {
   /** 是否为当前一级视图。 */
   final bool selected;
 
+  /** 当前标签在连续分段控件中的位置，用于只保留外侧圆角。 */
+  final _PlayerSidePanelTabPosition position;
+
   /** 切换视图的回调。 */
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return TextButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-      style: TextButton.styleFrom(
-        foregroundColor:
-            selected ? const Color(0xffded9ff) : const Color(0xff8f9bad),
-        backgroundColor:
-            selected ? const Color(0xff25204f) : Colors.transparent,
-        side: BorderSide(
-          color: selected ? const Color(0xff725cff) : const Color(0xff25324a),
+    final outerRadius = position == _PlayerSidePanelTabPosition.leading
+        ? const BorderRadius.horizontal(left: Radius.circular(9))
+        : const BorderRadius.horizontal(right: Radius.circular(9));
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: AnimatedContainer(
+        key: surfaceKey,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: selected ? null : Colors.transparent,
+          gradient: selected
+              ? const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [Color(0xff5c3bb3), Color(0xff7447c8)],
+                )
+              : null,
+          borderRadius: outerRadius,
+          border: selected
+              ? Border.all(color: const Color(0xff8066ff), width: 1.2)
+              : null,
+          boxShadow: selected
+              ? const [
+                  BoxShadow(
+                    color: Color(0x405c45d8),
+                    blurRadius: 12,
+                    offset: Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: outerRadius,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 23,
+                  color: selected
+                      ? const Color(0xfff5f2ff)
+                      : const Color(0xff8793a8),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected
+                        ? const Color(0xfff5f2ff)
+                        : const Color(0xff8793a8),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
