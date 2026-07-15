@@ -7,6 +7,12 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-15 大目录导入分阶段状态与批量字段写入
+
+- 扫描仍由只读 `LibraryScanBackend` 产生差量并由 Dart Application 一次提交；总量未知阶段只显示发现/校验状态，不伪造百分比。
+- 扫描提交后列表立即可用，后台媒体详情按有限批次回写；`LibraryRepository.upsertVideos` 只批量更新视频行字段，不重建标签关系。
+- 媒体解析完成或失败都会推进结果区百分比，全部处理后恢复正常结果数。SQLite schema、stable identity、folder/manual 标签和过滤语义不变。
+
 ## 2026-07-13 目录与视频删除语义
 
 - 移除 root 不再保留脱离管理范围的视频总量：metadata、视频行和标签关系在单 SQLite batch 中提交，磁盘文件不删除。

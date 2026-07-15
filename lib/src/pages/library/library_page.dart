@@ -63,6 +63,12 @@ Route<T> _smoothRoute<T>(Widget page) {
   );
 }
 
+/** 把后台媒体解析快照转换为结果区的稳定短文案。 */
+String libraryMediaImportProgressLabel(MediaDetailsProgress progress) {
+  final percent = (progress.fraction * 100).floor();
+  return '解析媒体信息 ${progress.processed}/${progress.total} 个文件 · $percent%';
+}
+
 /**
  * LibraryPage 的派生显示和排序逻辑。
  *
@@ -949,6 +955,13 @@ class _LibraryPageState extends State<LibraryPage> {
   var _libraryDataRevision = 0;
   var _showFavoritesOnly = false;
   var _isScanning = false;
+  /**
+   * 当前目录导入的后台媒体信息解析进度。
+   *
+   * 扫描提交后视频列表立即可用；该状态只描述仍在后台补齐的媒体详情，不阻塞筛选、
+   * 滚动或播放。全部成功或失败后自动清空并恢复正常结果摘要。
+   */
+  MediaDetailsProgress? _mediaImportProgress;
   /** debug 扫描帧采样器；发布构建始终为 null。 */
   LibraryScanUiDiagnostics? _activeScanUiDiagnostics;
   var _sortMode = SortMode.recent;
@@ -1350,12 +1363,18 @@ class _LibraryPageState extends State<LibraryPage> {
     if (_isScanning) {
       return;
     }
+    // 新扫描优先使用磁盘；取消上一轮后台媒体探测，避免两类顺序读取互相争抢。
+    _libraryMediaDetailsService?.dispose();
+    _libraryMediaDetailsService = null;
     _activeScanUiDiagnostics?.abort();
     final diagnostics = kDebugMode ? LibraryScanUiDiagnostics() : null;
     diagnostics?.start();
     _activeScanUiDiagnostics = diagnostics;
     var diagnosticsWillFinish = false;
-    setState(() => _isScanning = true);
+    setState(() {
+      _isScanning = true;
+      _mediaImportProgress = null;
+    });
     try {
       final actionWatch = Stopwatch()..start();
       final result = await action();
@@ -1430,32 +1449,50 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null || result.probeCandidates.isEmpty) {
       return;
     }
-    final service = _createLibraryMediaDetailsService(store);
+    final service = _createLibraryMediaDetailsService(
+      store,
+      trackImportProgress: true,
+    );
     _libraryMediaDetailsService = service;
-    for (final item in result.probeCandidates) {
-      // 扫描新增项进入后台队列；真实进入视口时会提升同一路径任务，不重复探测。
-      unawaited(service.detailsFor(item));
-    }
+    // 扫描新增项一次登记为有限批次；真实进入视口时仍会提升同一路径任务，不重复探测。
+    service.prefetchAll(result.probeCandidates);
   }
 
   /** 创建媒体库详情会话；所有写回继续校验当前 Store、videoId 与 fingerprint。 */
   MediaDetailsService _createLibraryMediaDetailsService(
-    LibraryApplicationFacade store,
-  ) {
+    LibraryApplicationFacade store, {
+    bool trackImportProgress = false,
+  }) {
     return widget.applicationService.createMediaDetailsService(
-      onUpdated: (item, details, fingerprint) async {
-        final current = store.videos[TagRules.pathKey(item.path)];
-        if (_store != store ||
-            current == null ||
-            current.videoId != item.videoId ||
-            current.mediaFingerprint != fingerprint) {
-          return;
+      onBatchUpdated: (updates) async {
+        final validUpdates = <VideoItem>[];
+        for (final update in updates) {
+          final item = update.item;
+          final current = store.videos[TagRules.pathKey(item.path)];
+          if (_store != store ||
+              current == null ||
+              current.videoId != item.videoId ||
+              current.mediaFingerprint != update.fingerprint) {
+            continue;
+          }
+          // 探测完成可能晚于 root 移除或下一轮扫描；只更新 Store 中仍然有效的当前对象，
+          // 禁止旧回调通过 upsert 把已删除记录重新插回 SQLite 和内存索引。
+          current.mediaDetails = update.details;
+          current.mediaDetailsError = item.mediaDetailsError;
+          validUpdates.add(current);
         }
-        // 探测完成可能晚于 root 移除或下一轮扫描；只更新 Store 中仍然有效的当前对象，
-        // 禁止旧回调通过 upsert 把已删除记录重新插回 SQLite 和内存索引。
-        current.mediaDetails = details;
-        await store.upsertVideo(current);
+        await store.upsertVideos(validUpdates);
       },
+      onProgress: trackImportProgress
+          ? (progress) {
+              if (!mounted || _store != store) {
+                return;
+              }
+              setState(() {
+                _mediaImportProgress = progress.isComplete ? null : progress;
+              });
+            }
+          : null,
     );
   }
 
@@ -2763,6 +2800,20 @@ class _LibraryPageState extends State<LibraryPage> {
             resultCount: displayResultCount,
             totalCount: displayTotalCount,
             refreshing: _isRefreshingVideos || _isRefreshingCounts,
+            progressLabel: _resultMode != _LibraryResultMode.library
+                ? null
+                : _isScanning
+                    ? '正在发现并校验视频…'
+                    : _mediaImportProgress == null
+                        ? null
+                        : libraryMediaImportProgressLabel(
+                            _mediaImportProgress!,
+                          ),
+            progressValue: _resultMode != _LibraryResultMode.library ||
+                    _isScanning ||
+                    _mediaImportProgress == null
+                ? null
+                : _mediaImportProgress!.fraction,
             onRemovePrimaryTag: (tag) => _mutateFilters(() {
               _selectedTags.remove(tag);
               _selectedChildTags.clear();

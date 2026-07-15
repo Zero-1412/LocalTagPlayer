@@ -25,6 +25,11 @@ typedef MediaDetailsUpdatedCallback = Future<void> Function(
   String? fingerprint,
 );
 
+/** 多条媒体详情完成后的 Dart Repository 批量写回回调。 */
+typedef MediaDetailsBatchUpdatedCallback = Future<void> Function(
+  List<MediaDetailsUpdate> updates,
+);
+
 /** 从应用私有路径读取媒体库排序偏好；损坏文件安全回退默认值。 */
 Future<LibrarySortPreferences> loadLibrarySortPreferences(
   AppPaths paths,
@@ -89,7 +94,9 @@ abstract interface class LibraryPageApplicationService {
 
   /** 为单次扫描或播放前预检创建独占 generation 的媒体详情服务。 */
   MediaDetailsService createMediaDetailsService({
-    required MediaDetailsUpdatedCallback onUpdated,
+    MediaDetailsUpdatedCallback? onUpdated,
+    MediaDetailsBatchUpdatedCallback? onBatchUpdated,
+    void Function(MediaDetailsProgress progress)? onProgress,
   });
 
   /** debug 专项压测允许操作的唯一 root；发布构建为 null。 */
@@ -181,11 +188,15 @@ class LocalLibraryPageApplicationService
 
   @override
   MediaDetailsService createMediaDetailsService({
-    required MediaDetailsUpdatedCallback onUpdated,
+    MediaDetailsUpdatedCallback? onUpdated,
+    MediaDetailsBatchUpdatedCallback? onBatchUpdated,
+    void Function(MediaDetailsProgress progress)? onProgress,
   }) {
     return MediaDetailsService(
       probeBackend: _mediaProbeBackendFactory(),
       onUpdated: onUpdated,
+      onBatchUpdated: onBatchUpdated,
+      onProgress: onProgress,
     );
   }
 

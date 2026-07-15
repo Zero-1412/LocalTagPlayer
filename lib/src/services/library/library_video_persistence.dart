@@ -135,6 +135,24 @@ class LibraryVideoPersistence {
   }
 
   /**
+   * 在一个 SQLite batch 中写入多条视频字段更新。
+   *
+   * 媒体探测会连续完成大量条目；批量提交可显著减少平台通道和事务往返，同时继续
+   * 由 Dart Repository 独占数据库写入。
+   */
+  Future<void> upsertAll(Iterable<VideoItem> items) async {
+    final batch = _db.batch();
+    var hasItems = false;
+    for (final item in items) {
+      hasItems = true;
+      insertInBatch(batch, item);
+    }
+    if (hasItems) {
+      await batch.commit(noResult: true);
+    }
+  }
+
+  /**
    * 删除视频行。
    *
    * 关联标签行由 `LibraryTagPersistence.deleteVideoLinks` 先清理，避免旧数据库未启用

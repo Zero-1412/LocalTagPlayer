@@ -8,6 +8,59 @@ import '../../platform/platform_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/** 媒体探测完成后交给 Repository 持久化的单条不可变更新。 */
+class MediaDetailsUpdate {
+  const MediaDetailsUpdate({
+    required this.item,
+    required this.details,
+    required this.fingerprint,
+  });
+
+  /** 当前媒体库中的稳定视频对象。 */
+  final VideoItem item;
+
+  /** 本次探测得到的轻量媒体详情；失败时为空详情。 */
+  final MediaDetails details;
+
+  /** 入队时的视频指纹，用于阻止旧任务覆盖已变化文件。 */
+  final String? fingerprint;
+}
+
+/** 媒体详情后台队列进度快照，供媒体库显示可理解的导入阶段。 */
+class MediaDetailsProgress {
+  const MediaDetailsProgress({
+    required this.total,
+    required this.completed,
+    required this.failed,
+    required this.queued,
+    required this.active,
+  });
+
+  /** 本轮实际需要探测的总文件数，不包含已缓存详情。 */
+  final int total;
+
+  /** 本轮成功探测并完成 Repository 回写的文件数。 */
+  final int completed;
+
+  /** 本轮探测或回写失败的文件数；失败也计入已处理进度。 */
+  final int failed;
+
+  /** 尚未交给原生批次执行的文件数。 */
+  final int queued;
+
+  /** 当前原生批次正在处理的文件数。 */
+  final int active;
+
+  /** 已处理文件数，包含失败项，避免进度因异常文件永久停滞。 */
+  int get processed => completed + failed;
+
+  /** 供确定型进度条使用的安全比例。 */
+  double get fraction => total <= 0 ? 0 : (processed / total).clamp(0, 1);
+
+  /** 本轮全部条目均已得到成功或失败结论。 */
+  bool get isComplete => total > 0 && processed >= total;
+}
+
 /**
  * 单条媒体详情任务。
  *
@@ -48,16 +101,32 @@ class _MediaDetailsJob {
 class MediaDetailsService {
   MediaDetailsService({
     this.onUpdated,
+    this.onBatchUpdated,
+    this.onProgress,
     required MediaProbeBackend probeBackend,
   })  : _probeBackend = probeBackend,
         _generation = _nextGeneration++;
+
+  /**
+   * 单个后台原生批次的最大文件数。
+   *
+   * 小批次减少平台通道和 SQLite 往返，同时限制可见项等待当前后台批次的最长时间。
+   */
+  static const int _maxBackgroundBatchSize = 8;
 
   /** 进程内递增代号，避免多个播放器页面取消同一个原生 generation。 */
   static int _nextGeneration = 1;
 
   final Future<void> Function(
       VideoItem item, MediaDetails details, String? fingerprint)? onUpdated;
-  /** 批量媒体探测平台边界；SQLite 写回仍由 [onUpdated] 所在 Repository 完成。 */
+
+  /** 批量 Repository 回写入口；存在时优先于逐条 [onUpdated]，避免大目录逐条提交。 */
+  final Future<void> Function(List<MediaDetailsUpdate> updates)? onBatchUpdated;
+
+  /** 队列总量或批次完成时报告轻量进度；不得在回调中启动新的媒体探测。 */
+  final void Function(MediaDetailsProgress progress)? onProgress;
+
+  /** 批量媒体探测平台边界；SQLite 写回仍由回调所在 Repository 完成。 */
   final MediaProbeBackend _probeBackend;
   final Map<String, Future<MediaDetails>> _inFlight = {};
   final Map<String, MediaDetails> _cache = {};
@@ -73,9 +142,10 @@ class MediaDetailsService {
   final Map<String, _MediaDetailsJob> _queuedJobs =
       <String, _MediaDetailsJob>{};
 
-  /** 当前唯一运行的原生探测任务。 */
-  _MediaDetailsJob? _activeJob;
+  /** 当前唯一运行的原生探测批次；批次内部仍由平台单工作线程串行读取。 */
+  List<_MediaDetailsJob> _activeJobs = const <_MediaDetailsJob>[];
   var _activeReads = 0;
+  var _scheduledThisRun = 0;
   var _completedThisRun = 0;
   var _failedThisRun = 0;
   int _generation;
@@ -128,6 +198,38 @@ class MediaDetailsService {
       return existing;
     }
 
+    final job = _enqueue(item, cached: cached, priority: priority);
+    _emitProgress();
+    _drainQueue();
+    return job.completer.future;
+  }
+
+  /**
+   * 一次性登记扫描新增项，再启动有限批次后台探测。
+   *
+   * 与逐条调用 [detailsFor] 相比，该入口只报告一次初始总量，并让第一个原生调用直接
+   * 获得完整小批次，避免数千次启动调度和平台通道往返。
+   */
+  void prefetchAll(Iterable<VideoItem> items) {
+    if (_disposed) {
+      return;
+    }
+    for (final item in items) {
+      if (cachedDetailsFor(item) != null || _inFlight.containsKey(item.path)) {
+        continue;
+      }
+      _enqueue(item, cached: null, priority: false);
+    }
+    _emitProgress();
+    _drainQueue();
+  }
+
+  /** 创建共享任务并加入对应优先级队列；调用方负责统一启动 drain。 */
+  _MediaDetailsJob _enqueue(
+    VideoItem item, {
+    required MediaDetails? cached,
+    required bool priority,
+  }) {
     final completer = Completer<MediaDetails>();
     final job = _MediaDetailsJob(
       item: item,
@@ -136,6 +238,7 @@ class MediaDetailsService {
       completer: completer,
       priority: priority,
     );
+    _scheduledThisRun++;
     _inFlight[item.path] = completer.future;
     _queuedJobs[item.path] = job;
     _queuedPaths.add(item.path);
@@ -145,8 +248,7 @@ class MediaDetailsService {
     } else {
       _backgroundJobs.addLast(job);
     }
-    _drainQueue();
-    return completer.future;
+    return job;
   }
 
   /** 把尚未执行的后台任务提升到可视队首，不重复创建原生探测。 */
@@ -160,106 +262,183 @@ class MediaDetailsService {
     _priorityJobs.addFirst(job);
   }
 
-  /** 串行启动下一条任务；可视队列始终优先于扫描后台队列。 */
+  /** 串行启动下一批任务；可见队列始终优先且单独成批，避免被后台条目拖延。 */
   void _drainQueue() {
-    if (_disposed || _activeJob != null) {
+    if (_disposed || _activeJobs.isNotEmpty) {
       return;
     }
-    final job = _priorityJobs.isNotEmpty
-        ? _priorityJobs.removeFirst()
-        : _backgroundJobs.isNotEmpty
-            ? _backgroundJobs.removeFirst()
-            : null;
-    if (job == null) {
+    final jobs = <_MediaDetailsJob>[];
+    if (_priorityJobs.isNotEmpty) {
+      // 可见项独立执行，完成后可以立即刷新卡片，不等待后台批次其余条目。
+      jobs.add(_priorityJobs.removeFirst());
+    } else {
+      while (
+          _backgroundJobs.isNotEmpty && jobs.length < _maxBackgroundBatchSize) {
+        jobs.add(_backgroundJobs.removeFirst());
+      }
+    }
+    if (jobs.isEmpty) {
       return;
     }
-    _queuedJobs.remove(job.item.path);
-    _queuedPaths.remove(job.item.path);
-    _activeJob = job;
-    _activeReads++;
-    unawaited(_runJob(job));
+    for (final job in jobs) {
+      _queuedJobs.remove(job.item.path);
+      _queuedPaths.remove(job.item.path);
+    }
+    _activeJobs = List<_MediaDetailsJob>.unmodifiable(jobs);
+    _activeReads = 1;
+    _emitProgress();
+    unawaited(_runBatch(jobs));
   }
 
-  /** 执行单条原生探测并完成共享 Future，结束后继续推进串行队列。 */
-  Future<void> _runJob(_MediaDetailsJob job) async {
-    var details = job.cached ?? const MediaDetails();
+  /** 执行一个有限原生批次并完成各条共享 Future；结束后继续推进串行队列。 */
+  Future<void> _runBatch(List<_MediaDetailsJob> jobs) async {
+    var detailsByPath = <String, MediaDetails>{
+      for (final job in jobs) job.item.path: job.cached ?? const MediaDetails(),
+    };
     try {
-      if (!_disposed && job.generation == _generation) {
-        details = await _read(job.item, job.generation);
-        if (!_disposed && job.generation == _generation) {
-          if (job.item.mediaDetailsError == null) {
-            _completedThisRun++;
-          } else {
-            _failedThisRun++;
+      if (!_disposed && jobs.every((job) => job.generation == _generation)) {
+        detailsByPath = await _readBatch(jobs, _generation);
+        if (!_disposed && jobs.every((job) => job.generation == _generation)) {
+          for (final job in jobs) {
+            if (job.item.mediaDetailsError == null) {
+              _completedThisRun++;
+            } else {
+              _failedThisRun++;
+            }
           }
         }
       }
     } catch (_) {
-      // Repository 回调失败不能卡死整个串行队列；错误状态由调用方后续重试恢复。
-      job.item.mediaDetailsError ??= 'media details callback failed';
-      _failedThisRun++;
-    } finally {
-      _activeReads--;
-      _activeJob = null;
-      _inFlight.remove(job.item.path);
-      if (!job.completer.isCompleted) {
-        job.completer.complete(details);
+      // Repository 批量回写失败不能卡死队列；本批条目标记失败并允许诊断页后续重试。
+      for (final job in jobs) {
+        job.item.mediaDetailsError ??= 'media details callback failed';
+        _failedThisRun++;
       }
+    } finally {
+      _activeReads = 0;
+      _activeJobs = const <_MediaDetailsJob>[];
+      for (final job in jobs) {
+        _inFlight.remove(job.item.path);
+        if (!job.completer.isCompleted) {
+          job.completer.complete(
+            detailsByPath[job.item.path] ?? const MediaDetails(),
+          );
+        }
+      }
+      _emitProgress();
       _drainQueue();
     }
   }
 
   /**
-   * 读取单条媒体详情；[generation] 用于阻止旧播放器任务回写新页面状态。
+   * 用一次平台调用读取有限批次，并把结果合并交给 Repository。
+   *
+   * 平台返回只按 videoId 映射；路径和 fingerprint 仍留在 Dart 侧验证与持久化。
    */
-  Future<MediaDetails> _read(VideoItem item, int generation) async {
-    final path = item.path;
-    // 扫描阶段已经保存 fingerprint、大小和修改时间，播放器详情不得再次 stat 或读取首尾样本。
-    final fingerprint = item.mediaFingerprint;
-    try {
-      final results = await _probeBackend.probeBatch(
-        generationId: generation,
-        requests: <MediaProbeRequest>[
-          MediaProbeRequest(
-            videoId: item.videoId,
-            path: path,
-            knownSize: item.fileSize,
-            knownModifiedAt: item.modifiedMs,
-          ),
-        ],
-      );
-      final result = results.firstOrNull;
-      if (result?.cancelled == true || _disposed || generation != _generation) {
-        return const MediaDetails();
-      }
-      final details = result?.details;
-      if (details != null && result?.error == null) {
-        item.mediaDetailsError = null;
-        _cache[path] = details;
-        await _notifyUpdated(item, details, fingerprint, generation);
-        return details;
-      }
-      item.mediaDetailsError = result?.error ?? 'media probe unavailable';
-    } catch (error) {
-      item.mediaDetailsError = 'media probe: ${error.runtimeType}';
-    }
-    const details = MediaDetails();
-    _cache[path] = details;
-    await _notifyUpdated(item, details, fingerprint, generation);
-    return details;
-  }
-
-  /** 仅允许当前播放器代际把详情写回媒体库。 */
-  Future<void> _notifyUpdated(
-    VideoItem item,
-    MediaDetails details,
-    String? fingerprint,
+  Future<Map<String, MediaDetails>> _readBatch(
+    List<_MediaDetailsJob> jobs,
     int generation,
   ) async {
+    List<MediaProbeResult> results;
+    try {
+      results = await _probeBackend.probeBatch(
+        generationId: generation,
+        requests: [
+          for (final job in jobs)
+            MediaProbeRequest(
+              videoId: job.item.videoId,
+              path: job.item.path,
+              knownSize: job.item.fileSize,
+              knownModifiedAt: job.item.modifiedMs,
+            ),
+        ],
+      );
+    } catch (error) {
+      // 平台批次异常时仍持久化每条失败状态，使诊断页可以看到并重试这批文件。
+      final failedUpdates = <MediaDetailsUpdate>[];
+      final failedDetails = <String, MediaDetails>{};
+      for (final job in jobs) {
+        job.item.mediaDetailsError = 'media probe: ${error.runtimeType}';
+        const details = MediaDetails();
+        _cache[job.item.path] = details;
+        failedDetails[job.item.path] = details;
+        failedUpdates.add(MediaDetailsUpdate(
+          item: job.item,
+          details: details,
+          fingerprint: job.item.mediaFingerprint,
+        ));
+      }
+      await _notifyUpdatedBatch(failedUpdates, generation);
+      return failedDetails;
+    }
     if (_disposed || generation != _generation) {
+      return const <String, MediaDetails>{};
+    }
+    final resultsByVideoId = <String, MediaProbeResult>{
+      for (final result in results) result.videoId: result,
+    };
+    final updates = <MediaDetailsUpdate>[];
+    final detailsByPath = <String, MediaDetails>{};
+    for (final job in jobs) {
+      final item = job.item;
+      final result = resultsByVideoId[item.videoId];
+      if (result?.cancelled == true) {
+        continue;
+      }
+      final details = result?.details ?? const MediaDetails();
+      if (result?.details != null && result?.error == null) {
+        item.mediaDetailsError = null;
+      } else {
+        item.mediaDetailsError = result?.error ?? 'media probe unavailable';
+      }
+      _cache[item.path] = details;
+      detailsByPath[item.path] = details;
+      updates.add(MediaDetailsUpdate(
+        item: item,
+        details: details,
+        fingerprint: item.mediaFingerprint,
+      ));
+    }
+    await _notifyUpdatedBatch(updates, generation);
+    return detailsByPath;
+  }
+
+  /** 优先批量回写；兼容旧调用方时才逐条执行单项回调。 */
+  Future<void> _notifyUpdatedBatch(
+    List<MediaDetailsUpdate> updates,
+    int generation,
+  ) async {
+    if (_disposed || generation != _generation || updates.isEmpty) {
       return;
     }
-    await onUpdated?.call(item, details, fingerprint);
+    if (onBatchUpdated != null) {
+      await onBatchUpdated!(List<MediaDetailsUpdate>.unmodifiable(updates));
+      return;
+    }
+    for (final update in updates) {
+      if (_disposed || generation != _generation) {
+        return;
+      }
+      await onUpdated?.call(
+        update.item,
+        update.details,
+        update.fingerprint,
+      );
+    }
+  }
+
+  /** 只在队列边界报告快照，避免每个文件入队都触发页面 rebuild。 */
+  void _emitProgress() {
+    if (_disposed || onProgress == null || _scheduledThisRun == 0) {
+      return;
+    }
+    onProgress!(MediaDetailsProgress(
+      total: _scheduledThisRun,
+      completed: _completedThisRun,
+      failed: _failedThisRun,
+      queued: _queuedPaths.length,
+      active: _activeJobs.length,
+    ));
   }
 
   /**
@@ -294,7 +473,8 @@ class MediaDetailsService {
     _queuedJobs.clear();
     _queuedPaths.clear();
     // 活动任务保留到原生取消完成；其 finally 会完成 Future 并清理映射。
-    _inFlight.removeWhere((path, _) => path != _activeJob?.item.path);
+    final activePaths = _activeJobs.map((job) => job.item.path).toSet();
+    _inFlight.removeWhere((path, _) => !activePaths.contains(path));
     _cache.clear();
   }
 }

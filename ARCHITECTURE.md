@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.32` 在既有独立 library 边界上补齐桌面多文件选择与拖放导入。`FileSystemAdapter` 继续独占系统选择器，Dart Repository 批量注册 root 后只执行一轮扫描；页面不直接依赖 `FilePicker` 或平台路径命令。
+`Architecture Baseline 0.5.33` 在既有扫描与媒体探测边界上补齐大目录分阶段进度和媒体详情批处理。扫描仍先提交可用视频列表；`MediaDetailsService` 再以有限批次调用原生探测，并由 Dart Repository 合并 SQLite 写入。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,12 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.32`
+已完成基线：`Architecture Baseline 0.5.33`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.33`：媒体库大目录导入分为“发现并校验视频”和“后台解析媒体信息”两阶段；总量未知时显示不确定进度，扫描提交后立即开放视频列表并显示已处理/总数/百分比。`MediaDetailsService` 保持单原生批次执行和可见项优先，每个后台批次最多 8 条；`MediaProbeBackend.probeBatch` 与新增 Repository 批量 upsert 把平台调用、SQLite 提交从逐文件收敛为有限批次。新扫描会取消旧媒体探测以避免磁盘争抢。SQLite schema、stable identity、标签语义、filtered queue 和缩略图队列不变。
 - `0.5.32`：`FileSystemAdapter` 增加跨平台多文件选择契约，桌面适配器统一返回规范化路径；媒体库把选择/拖入的视频父目录与目录本身归并为最上层 root，并通过新增批量 Repository 命令只触发一轮扫描。`desktop_drop` 只负责传递本地路径和悬停反馈，文件识别、stable identity、folder 标签与 SQLite 写入仍由原 Dart 扫描链路拥有。目录管理删除复用统一页面清理协调；SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/media 队列和磁盘文件删除规则不变。
 - `0.5.31`：`FFmpegBackend` 增加独立 `createFramePreview` 契约，播放器进度条悬停帧通过现有平台工具边界提取，不 seek 主播放器、不在 UI 散落进程路径。悬停连续移动只更新轻量位置，停稳 350ms 后才进入单并发取帧；临时帧按秒复用并以 24 项 LRU 限制。媒体库缩略图主队列、失败状态、`PlayerBackend`、SQLite、FilterQuery/TagQueryService、filtered queue 和用户数据均不变。
 - `0.5.30`：`PlayerBackend.buildVideoSurface` 增加可选 `mirror` 参数；MediaKit 与 Windows 原生后端只水平翻转视频表面，Flutter 控制条保持原方向和命中坐标。播放器设置改为一级紧凑开关列表与二级完整设置，比例、倍速、快捷键和诊断只在二级页挂载。SQLite、FilterQuery/TagQueryService、filtered queue、缓存队列、播放生命周期和用户数据均不变。
@@ -205,9 +206,10 @@ X:\test-media\原神\b.mp4
 
 当前策略：
 
-- 优先使用 FFprobe。
-- 失败时回退 media_kit。
-- 读取队列串行执行，并向诊断页暴露排队、执行中、本轮完成和失败数量。
+- 通过 `MediaProbeBackend` 使用原生探测，失败原因写入可重试状态。
+- 可见项独立优先；后台条目以最多 8 条有限批次执行，原生侧仍保持单工作线程。
+- 同一批结果由 Dart Repository 合并为一次 SQLite batch，避免大目录逐文件提交。
+- 向媒体库和诊断页暴露总量、排队、执行中、本轮完成和失败数量。
 - 缓存视频编码、音频编码、分辨率等。
 
 ### 媒体库页面

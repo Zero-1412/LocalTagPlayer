@@ -82,6 +82,14 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
 
   Future<void> upsertVideo(VideoItem item);
 
+  /**
+   * 批量写入仅视频行字段，供媒体信息等后台任务合并 SQLite 提交。
+   *
+   * 调用方必须保证条目仍属于当前媒体库；该方法不重建标签关系，也不改变
+   * folder/manual 标签来源语义。
+   */
+  Future<void> upsertVideos(Iterable<VideoItem> items);
+
   Future<VideoItem?> deleteVideo(String path);
 
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(String rootPath);

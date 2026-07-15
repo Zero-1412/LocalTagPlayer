@@ -1048,6 +1048,22 @@ class LibraryStore
   }
 
   /**
+   * 合并写入后台媒体详情更新，避免大目录导入时为每个文件单独提交 SQLite。
+   *
+   * 媒体详情只更新现有视频行；标签关系仍由扫描或标签维护流程拥有，不能在这里重建。
+   */
+  Future<void> upsertVideos(Iterable<VideoItem> items) async {
+    final updates = items.toList(growable: false);
+    if (updates.isEmpty) {
+      return;
+    }
+    for (final item in updates) {
+      videos[TagRules.pathKey(item.path)] = item;
+    }
+    await _videoPersistence.upsertAll(updates);
+  }
+
+  /**
    * 在单个 SQLite 事务中删除视频记录及其全部标签关系。
    *
    * 收藏、播放进度、媒体详情和稳定身份字段都存放在 videos 行中；删除该行后不会留下

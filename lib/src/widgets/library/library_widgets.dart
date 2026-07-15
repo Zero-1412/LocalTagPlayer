@@ -967,6 +967,8 @@ class LibraryHeroArea extends StatelessWidget {
     required this.resultCount,
     required this.totalCount,
     required this.refreshing,
+    required this.progressLabel,
+    required this.progressValue,
     required this.onRemovePrimaryTag,
     required this.onRemoveChildTag,
     required this.onRemoveGroupTag,
@@ -999,6 +1001,12 @@ class LibraryHeroArea extends StatelessWidget {
   final int totalCount;
 
   final bool refreshing;
+
+  /** 扫描或媒体解析期间替代普通结果摘要的短状态；null 表示无后台导入任务。 */
+  final String? progressLabel;
+
+  /** 已知总量阶段的确定型进度；null 表示发现文件等总量未知阶段。 */
+  final double? progressValue;
 
   final ValueChanged<String> onRemovePrimaryTag;
 
@@ -1106,6 +1114,8 @@ class LibraryHeroArea extends StatelessWidget {
               resultCount: resultCount,
               querySummary: querySummary,
               refreshing: refreshing,
+              progressLabel: progressLabel,
+              progressValue: progressValue,
             );
 
             if (compact) {
@@ -1221,6 +1231,8 @@ class _FilterResultLine extends StatelessWidget {
     required this.resultCount,
     required this.querySummary,
     required this.refreshing,
+    required this.progressLabel,
+    required this.progressValue,
   });
 
   final int resultCount;
@@ -1229,14 +1241,19 @@ class _FilterResultLine extends StatelessWidget {
 
   final bool refreshing;
 
+  final String? progressLabel;
+
+  final double? progressValue;
+
   @override
   Widget build(BuildContext context) {
+    final operationInProgress = progressLabel != null;
     return Tooltip(
-      message: querySummary,
+      message: progressLabel ?? querySummary,
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Flexible(
           child: Text(
-            querySummary,
+            progressLabel ?? querySummary,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -1246,7 +1263,24 @@ class _FilterResultLine extends StatelessWidget {
             ),
           ),
         ),
-        if (refreshing) ...[
+        if (operationInProgress) ...[
+          const SizedBox(width: 8),
+          if (progressValue == null)
+            const SizedBox.square(
+              dimension: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            SizedBox(
+              width: 64,
+              child: LinearProgressIndicator(
+                value: progressValue!.clamp(0, 1),
+                minHeight: 4,
+                borderRadius: BorderRadius.circular(999),
+                backgroundColor: const Color(0xffe7e4ff),
+              ),
+            ),
+        ] else if (refreshing) ...[
           const SizedBox(width: 8),
           const SizedBox.square(
             dimension: 14,

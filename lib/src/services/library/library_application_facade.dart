@@ -153,6 +153,10 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
         updatedAt: updatedAt,
       );
   Future<void> upsertVideo(VideoItem item) => _repository.upsertVideo(item);
+
+  /** 把后台媒体解析产生的多条视频字段更新合并为一次 Repository 批量写入。 */
+  Future<void> upsertVideos(Iterable<VideoItem> items) =>
+      _repository.upsertVideos(items);
   Future<VideoItem?> deleteVideo(String path) => _repository.deleteVideo(path);
 
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(String rootPath) =>

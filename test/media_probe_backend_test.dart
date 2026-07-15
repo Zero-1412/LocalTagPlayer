@@ -7,6 +7,7 @@ import 'dart:async';
 /** 用于确认媒体详情服务只传数据库已有元数据且会取消旧 generation。 */
 class _RecordingProbeBackend implements MediaProbeBackend {
   final List<MediaProbeRequest> requests = <MediaProbeRequest>[];
+  final List<int> batchSizes = <int>[];
   final List<int> cancelled = <int>[];
 
   @override
@@ -19,6 +20,7 @@ class _RecordingProbeBackend implements MediaProbeBackend {
     required int generationId,
     required List<MediaProbeRequest> requests,
   }) async {
+    batchSizes.add(requests.length);
     this.requests.addAll(requests);
     return requests
         .map((request) => MediaProbeResult(
@@ -151,6 +153,50 @@ void main() {
     expect(
       backend.executionOrder,
       <String>['background-first', 'visible-now', 'background-second'],
+    );
+  });
+
+  test('background media details use bounded batches and report progress',
+      () async {
+    final backend = _RecordingProbeBackend();
+    final completed = Completer<MediaDetailsProgress>();
+    final persistedBatchSizes = <int>[];
+    final progressSnapshots = <MediaDetailsProgress>[];
+    final service = MediaDetailsService(
+      probeBackend: backend,
+      onBatchUpdated: (updates) async {
+        persistedBatchSizes.add(updates.length);
+      },
+      onProgress: (progress) {
+        progressSnapshots.add(progress);
+        if (progress.isComplete && !completed.isCompleted) {
+          completed.complete(progress);
+        }
+      },
+    );
+
+    service.prefetchAll(List<VideoItem>.generate(
+      20,
+      (index) => _probeItem('background-$index'),
+    ));
+    final finalProgress = await completed.future;
+    service.dispose();
+
+    expect(backend.batchSizes, <int>[8, 8, 4]);
+    expect(persistedBatchSizes, <int>[8, 8, 4]);
+    expect(progressSnapshots.first.total, 20);
+    expect(finalProgress.processed, 20);
+    expect(finalProgress.fraction, 1);
+    expect(finalProgress.failed, 0);
+    expect(
+      libraryMediaImportProgressLabel(const MediaDetailsProgress(
+        total: 20,
+        completed: 7,
+        failed: 1,
+        queued: 4,
+        active: 8,
+      )),
+      '解析媒体信息 8/20 个文件 · 40%',
     );
   });
 }

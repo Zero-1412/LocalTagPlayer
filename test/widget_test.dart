@@ -1927,6 +1927,46 @@ void main() {
     expect(addCount, 1);
   });
 
+  testWidgets('library result line shows determinate import progress',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: LibraryHeroArea(
+            selectedTags: const <String>[],
+            selectedChildTags: const <String>[],
+            selectedGroupTags: const <TagItem>[],
+            excludedTags: const <TagItem>[],
+            keyword: '',
+            defaultChipLabel: '全部视频',
+            querySummary: '全部视频 · 11163 个结果',
+            queryExpression: '全部视频 | 11163 / 11163',
+            showFavoritesOnly: false,
+            resultCount: 11163,
+            totalCount: 11163,
+            refreshing: false,
+            progressLabel: '解析媒体信息 3200/6308 个文件 · 50%',
+            progressValue: 3200 / 6308,
+            onRemovePrimaryTag: (_) {},
+            onRemoveChildTag: (_) {},
+            onRemoveGroupTag: (_) {},
+            onRemoveExcludedTag: (_) {},
+            onClearKeyword: () {},
+            onClearFavoritesOnly: () {},
+            onClearAll: null,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('解析媒体信息 3200/6308 个文件 · 50%'), findsOneWidget);
+    final indicator = tester.widget<LinearProgressIndicator>(
+      find.byType(LinearProgressIndicator),
+    );
+    expect(indicator.value, closeTo(3200 / 6308, 0.0001));
+    expect(find.text('全部视频 · 11163 个结果'), findsNothing);
+  });
+
   test('file imports collapse to uncovered top-level roots', () {
     final existingRoot = p.join('library', 'existing');
     final newRoot = p.join('library', 'new');
