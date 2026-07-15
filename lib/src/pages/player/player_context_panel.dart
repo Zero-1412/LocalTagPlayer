@@ -145,6 +145,8 @@ class _PlayerSidePanelTabs extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(9),
             child: Row(
+              // 两个分段必须填满外框高度，避免选中渐变只包住图标和文字。
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
                   child: _PlayerSidePanelTab(

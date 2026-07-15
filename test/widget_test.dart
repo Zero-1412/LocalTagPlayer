@@ -203,14 +203,18 @@ void main() {
 
     expect(find.text('筛选结果列表测试'), findsOneWidget);
     expect(find.text('当前视频详情'), findsNothing);
-    expect(
-      tester
-          .getSize(
-            find.byKey(const ValueKey('player.sidebar.tabs.segment')),
-          )
-          .height,
-      44,
+    final segmentSize = tester.getSize(
+      find.byKey(const ValueKey('player.sidebar.tabs.segment')),
     );
+    final queueSurfaceSize = tester.getSize(
+      find.byKey(const ValueKey('player.sidebar.tab.queue.surface')),
+    );
+    final detailsSurfaceSize = tester.getSize(
+      find.byKey(const ValueKey('player.sidebar.tab.details.surface')),
+    );
+    expect(segmentSize.height, 44);
+    expect(queueSurfaceSize.height, segmentSize.height);
+    expect(detailsSurfaceSize.height, segmentSize.height);
     final initialQueueDecoration = tester
         .widget<AnimatedContainer>(
           find.byKey(
