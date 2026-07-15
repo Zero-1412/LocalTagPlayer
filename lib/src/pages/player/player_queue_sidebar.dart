@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -14,6 +15,19 @@ import '../../widgets/app_theme_tokens.dart';
 // ignore_for_file: slash_for_doc_comments
 
 const double playerQueueItemExtent = 104;
+
+/**
+ * 判断队列项是否应继续显示快速滚动占位。
+ *
+ * Flutter 对大跨度 `jumpTo` 也可能短暂建议延后加载；滚动已经结束时必须优先恢复
+ * 完整卡片，否则程序化定位后的可视条目可能永久停留在轻量占位外观。
+ */
+bool playerQueueShouldDeferItem({
+  required bool scrollSettled,
+  required bool recommendsDeferredLoading,
+}) {
+  return !scrollSettled && recommendsDeferredLoading;
+}
 
 class _PlayerDesktopDragScrollBehavior extends MaterialScrollBehavior {
   const _PlayerDesktopDragScrollBehavior();
@@ -388,30 +402,20 @@ class PlayerQueueSidebar extends StatelessWidget {
         Expanded(
           child: Stack(
             children: [
-              ListView.builder(
+              _QueueListViewport(
                 controller: scrollController,
-                padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-                itemExtent: playerQueueItemExtent,
-                // 只预建邻近两项，避免大队列滚动时提前触发大量文件校验与 FFprobe。
-                scrollCacheExtent: const ScrollCacheExtent.pixels(208),
-                addAutomaticKeepAlives: false,
-                addRepaintBoundaries: true,
-                itemCount: playlist.length,
-                itemBuilder: (context, index) {
-                  final item = playlist[index];
-                  return _DeferredQueueListItem(
+                playlist: playlist,
+                itemBuilder: (context, index, item) {
+                  return _QueueListItem(
+                    key: ValueKey('player.queue.item.${item.videoId}'),
                     item: item,
-                    child: _QueueListItem(
-                      key: ValueKey('player.queue.item.${item.videoId}'),
-                      item: item,
-                      index: index,
-                      playing: index == playingIndex,
-                      selected: index == selectedIndex,
-                      thumbnailService: thumbnailService,
-                      detailsService: detailsService,
-                      onTap: () => onSelect(index),
-                      onDoubleTap: () => onPlay(index),
-                    ),
+                    index: index,
+                    playing: index == playingIndex,
+                    selected: index == selectedIndex,
+                    thumbnailService: thumbnailService,
+                    detailsService: detailsService,
+                    onTap: () => onSelect(index),
+                    onDoubleTap: () => onPlay(index),
                   );
                 },
               ),
@@ -482,21 +486,137 @@ class PlayerQueueSidebar extends StatelessWidget {
   }
 }
 
+/** 为队列可视区域维护“滚动中/已停稳”状态，确保程序化定位后恢复完整卡片。 */
+class _QueueListViewport extends StatefulWidget {
+  const _QueueListViewport({
+    required this.controller,
+    required this.playlist,
+    required this.itemBuilder,
+  });
+
+  /** 当前布局实例独占的滚动控制器。 */
+  final ScrollController controller;
+
+  /** 当前播放器实际消费的 filtered queue。 */
+  final List<VideoItem> playlist;
+
+  /** 滚动负载允许时构建完整队列项的回调。 */
+  final Widget Function(BuildContext context, int index, VideoItem item)
+      itemBuilder;
+
+  @override
+  State<_QueueListViewport> createState() => _QueueListViewportState();
+}
+
+/** 只协调占位生命周期，不持有或修改队列、选择和播放状态。 */
+class _QueueListViewportState extends State<_QueueListViewport> {
+  var _scrollSettled = true;
+
+  /** 某些 Windows 滚轮/程序化跳转不会稳定发送结束通知，使用短防抖兜底。 */
+  Timer? _settleFallbackTimer;
+
+  /**
+   * 记录滚动生命周期；结束通知必须触发重建，修复 `jumpTo` 后占位残留。
+   */
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) {
+      return false;
+    }
+    final settled = notification is ScrollEndNotification ||
+        notification is UserScrollNotification &&
+            notification.direction == ScrollDirection.idle;
+    final active = notification is ScrollStartNotification ||
+        notification is ScrollUpdateNotification ||
+        notification is OverscrollNotification ||
+        notification is UserScrollNotification &&
+            notification.direction != ScrollDirection.idle;
+    if (settled) {
+      _settleFallbackTimer?.cancel();
+      if (!_scrollSettled) {
+        setState(() => _scrollSettled = true);
+      }
+    } else if (active) {
+      if (_scrollSettled) {
+        setState(() => _scrollSettled = false);
+      }
+      _scheduleSettledFallback();
+    }
+    // 通知继续冒泡，保留外层滚动监听和桌面滚轮行为。
+    return false;
+  }
+
+  /**
+   * 最后一个滚动事件后恢复完整卡片，兼容只发送更新通知的 Windows 滚轮链路。
+   */
+  void _scheduleSettledFallback() {
+    _settleFallbackTimer?.cancel();
+    _settleFallbackTimer = Timer(const Duration(milliseconds: 120), () {
+      if (!mounted || _scrollSettled) {
+        return;
+      }
+      setState(() => _scrollSettled = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _settleFallbackTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: _handleScrollNotification,
+      child: ListView.builder(
+        controller: widget.controller,
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+        itemExtent: playerQueueItemExtent,
+        // 只预建邻近两项，避免大队列滚动时提前触发大量文件校验与 FFprobe。
+        scrollCacheExtent: const ScrollCacheExtent.pixels(208),
+        addAutomaticKeepAlives: false,
+        addRepaintBoundaries: true,
+        itemCount: widget.playlist.length,
+        itemBuilder: (context, index) {
+          final item = widget.playlist[index];
+          return _DeferredQueueListItem(
+            item: item,
+            scrollSettled: _scrollSettled,
+            child: widget.itemBuilder(context, index, item),
+          );
+        },
+      ),
+    );
+  }
+}
+
 /**
  * 快速滚动期间用轻量占位保护视频解码线程，滚动减速后再创建会访问磁盘的队列项。
  */
 class _DeferredQueueListItem extends StatelessWidget {
-  const _DeferredQueueListItem({required this.item, required this.child});
+  const _DeferredQueueListItem({
+    required this.item,
+    required this.scrollSettled,
+    required this.child,
+  });
 
   /** 当前队列项，仅用于在占位状态展示稳定标题。 */
   final VideoItem item;
+
+  /** 当前滚动是否已经结束；停稳后必须恢复完整队列项。 */
+  final bool scrollSettled;
 
   /** 滚动负载允许时才创建的完整队列项。 */
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    if (!Scrollable.recommendDeferredLoadingForContext(context)) {
+    final shouldDefer = playerQueueShouldDeferItem(
+      scrollSettled: scrollSettled,
+      recommendsDeferredLoading:
+          Scrollable.recommendDeferredLoadingForContext(context),
+    );
+    if (!shouldDefer) {
       return child;
     }
     // 快速滚动期间不启动缩略图校验或媒体详情读取，只保留可辨认的标题反馈。

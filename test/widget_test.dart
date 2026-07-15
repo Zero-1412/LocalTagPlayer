@@ -125,6 +125,31 @@ void main() {
     );
   });
 
+  test('player queue restores full items after programmatic scroll settles',
+      () {
+    expect(
+      playerQueueShouldDeferItem(
+        scrollSettled: false,
+        recommendsDeferredLoading: true,
+      ),
+      isTrue,
+    );
+    expect(
+      playerQueueShouldDeferItem(
+        scrollSettled: true,
+        recommendsDeferredLoading: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playerQueueShouldDeferItem(
+        scrollSettled: false,
+        recommendsDeferredLoading: false,
+      ),
+      isFalse,
+    );
+  });
+
   test('player queue sidebar follows blueprint proportions on wide windows',
       () {
     expect(playerQueueSidebarWidthForWindow(960), 360);
