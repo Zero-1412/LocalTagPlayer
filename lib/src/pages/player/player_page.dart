@@ -1426,8 +1426,8 @@ class PlayerPageState extends State<PlayerPage> {
     _ensureQueueIndexVisible(nextIndex, center: center);
   }
 
-  /** 定位正在播放项时同步选中态，避免两个高亮指向不同视频造成“定位错误”观感。 */
-  void _locatePlayingQueueItem(ScrollController controller) {
+  /** 从离屏位置回到播放项时同步选中态，避免两个高亮指向不同视频。 */
+  void _returnToPlayingQueueItem(ScrollController controller) {
     if (_queue.isEmpty) {
       return;
     }
@@ -2124,11 +2124,11 @@ class PlayerPageState extends State<PlayerPage> {
       onChildTagSelected: _selectChildTag,
       onSelect: _select,
       onPlay: _jumpTo,
-      onLocatePlaying: () => _locatePlayingQueueItem(controller),
+      onReturnToPlaying: () => _returnToPlayingQueueItem(controller),
       onLocateSelected: () => _ensureQueueIndexVisible(
         _selectedIndex,
         center: true,
-        // 与“定位当前播放”一致，一次跳转避免大队列动画期间的语义节点风暴。
+        // 与“回到播放”一致，一次跳转避免大队列动画期间的语义节点风暴。
         animated: false,
         controller: controller,
       ),

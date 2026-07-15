@@ -115,7 +115,7 @@ class PlayerQueueSidebar extends StatelessWidget {
     required this.onChildTagSelected,
     required this.onSelect,
     required this.onPlay,
-    required this.onLocatePlaying,
+    required this.onReturnToPlaying,
     required this.onLocateSelected,
     required this.onDeleteSelected,
     required this.onSearchQueue,
@@ -150,7 +150,7 @@ class PlayerQueueSidebar extends StatelessWidget {
   final int selectedIndex;
 
   /**
-   * 播放器页持有的队列滚动控制器，用于定位当前播放或选中项。
+   * 播放器页持有的队列滚动控制器，用于回到播放项或定位选中项。
    */
   final ScrollController scrollController;
 
@@ -195,9 +195,9 @@ class PlayerQueueSidebar extends StatelessWidget {
   final ValueChanged<int> onPlay;
 
   /**
-   * 将右侧队列滚动回正在播放项，并让选中态同步到该视频。
+   * 底部“回到播放”将队列滚动回正在播放项，并让选中态同步到该视频。
    */
-  final VoidCallback onLocatePlaying;
+  final VoidCallback onReturnToPlaying;
 
   /**
    * 将右侧队列滚动回当前选中项，不改变选择或播放状态。
@@ -310,13 +310,6 @@ class PlayerQueueSidebar extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ),
-                  IconButton(
-                    tooltip: '定位当前播放',
-                    onPressed: onLocatePlaying,
-                    icon: const Icon(Icons.my_location_rounded, size: 17),
-                    color: Colors.white70,
-                    visualDensity: VisualDensity.compact,
                   ),
                   IconButton(
                     tooltip: '定位已选中',
@@ -435,7 +428,7 @@ class PlayerQueueSidebar extends StatelessWidget {
                     return _QueueFloatingLocator(
                       showPlaying: showPlaying,
                       showSelected: showSelected,
-                      onLocatePlaying: onLocatePlaying,
+                      onReturnToPlaying: onReturnToPlaying,
                       onLocateSelected: onLocateSelected,
                     );
                   },
@@ -888,13 +881,13 @@ class _QueueFloatingLocator extends StatelessWidget {
   const _QueueFloatingLocator({
     required this.showPlaying,
     required this.showSelected,
-    required this.onLocatePlaying,
+    required this.onReturnToPlaying,
     required this.onLocateSelected,
   });
 
   final bool showPlaying;
   final bool showSelected;
-  final VoidCallback onLocatePlaying;
+  final VoidCallback onReturnToPlaying;
   final VoidCallback onLocateSelected;
 
   @override
@@ -926,7 +919,7 @@ class _QueueFloatingLocator extends StatelessWidget {
                 _QueueLocatorButton(
                   icon: Icons.play_arrow_rounded,
                   label: '回到播放',
-                  onPressed: onLocatePlaying,
+                  onPressed: onReturnToPlaying,
                 ),
               if (showSelected)
                 _QueueLocatorButton(
