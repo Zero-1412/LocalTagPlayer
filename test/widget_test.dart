@@ -988,6 +988,7 @@ void main() {
                 key: const ValueKey('test.player.settings.open'),
                 onPressed: () => showPlayerSettingsDialog(
                   context,
+                  anchorRect: const Rect.fromLTWH(720, 520, 40, 40),
                   mirrorVideo: false,
                   playbackMode: PlayerPlaybackMode.sequential,
                   videoAspectMode: PlayerVideoAspectMode.automatic,
@@ -1015,12 +1016,32 @@ void main() {
     );
 
     await tester.tap(find.byKey(const ValueKey('test.player.settings.open')));
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('player.settings.open.fade')),
+      findsOneWidget,
+    );
+    final openingScale = tester.widget<ScaleTransition>(
+      find.byKey(const ValueKey('player.settings.open.scale')),
+    );
+    expect(openingScale.scale.value, closeTo(0.94, 0.01));
+    await tester.pump(const Duration(milliseconds: 90));
+    expect(openingScale.scale.value, greaterThan(0.94));
+    expect(openingScale.scale.value, lessThan(1));
     await tester.pumpAndSettle();
     expect(
         find.byKey(const ValueKey('player.settings.dialog')), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const ValueKey('player.settings.shell'))).width,
       closeTo(300, 0.1),
+    );
+    final primaryRect =
+        tester.getRect(find.byKey(const ValueKey('player.settings.shell')));
+    expect(primaryRect.right, closeTo(760, 0.1));
+    expect(primaryRect.bottom, closeTo(512, 0.1));
+    expect(
+      find.byKey(const ValueKey('player.settings.close')),
+      findsNothing,
     );
     expect(find.text('镜像画面'), findsOneWidget);
     expect(find.text('单曲循环'), findsOneWidget);
@@ -1050,6 +1071,16 @@ void main() {
     await tester.tap(
       find.byKey(const ValueKey('player.settings.advanced.open')),
     );
+    await tester.pump(const Duration(milliseconds: 90));
+    expect(find.byType(SlideTransition), findsWidgets);
+    expect(
+      find.byKey(const ValueKey('player.settings.primary.page')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('player.settings.advanced.page')),
+      findsOneWidget,
+    );
     await tester.pumpAndSettle();
     expect(
       tester.getSize(find.byKey(const ValueKey('player.settings.shell'))).width,
@@ -1072,9 +1103,24 @@ void main() {
     expect(find.text('镜像画面'), findsOneWidget);
     expect(find.text('视频比例'), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('player.settings.close')));
+    await tester.tapAt(const Offset(20, 20));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('player.settings.dialog')), findsNothing);
+  });
+
+  test('player controls stay visible while settings are open', () {
+    expect(
+      playerControlsShouldAutoHide(playing: true, settingsOpen: false),
+      isTrue,
+    );
+    expect(
+      playerControlsShouldAutoHide(playing: true, settingsOpen: true),
+      isFalse,
+    );
+    expect(
+      playerControlsShouldAutoHide(playing: false, settingsOpen: false),
+      isFalse,
+    );
   });
 
   test('player open request controller keeps latest request after failure', () {

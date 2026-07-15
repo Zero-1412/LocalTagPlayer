@@ -35,6 +35,13 @@ import 'player_video_aspect_mode.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/** 设置浮层展开时必须阻止播放控制条的自动隐藏计时。 */
+bool playerControlsShouldAutoHide({
+  required bool playing,
+  required bool settingsOpen,
+}) =>
+    playing && !settingsOpen;
+
 class PlayerPage extends StatefulWidget {
   const PlayerPage({
     super.key,
@@ -106,6 +113,8 @@ class PlayerPageState extends State<PlayerPage> {
   late final String _requestedHwdec;
   late final PlayerPlaybackController _playback;
   final _openRequests = PlayerOpenRequestController();
+  /** 用于把设置浮层右边缘锚定到齿轮按钮，而不是按整个窗口居中。 */
+  final _settingsButtonAnchorKey = GlobalKey();
   /** 正在等待兼容性确认的路径；避免快速点击叠加多个警告弹窗。 */
   String? _compatibilityPromptPath;
   StreamSubscription<bool>? _completedSubscription;
@@ -118,6 +127,8 @@ class PlayerPageState extends State<PlayerPage> {
   Timer? _playbackHealthTimer;
   var _playbackHealthSampling = false;
   var _controlsVisible = true;
+  /** 设置浮层展开期间锁定底部进度与控制区为可见。 */
+  var _settingsDialogOpen = false;
   DateTime? _lastProgressWriteAt;
   Duration _lastPersistedPosition = Duration.zero;
   DateTime? _ignoreQueueSelectionBefore;
@@ -622,9 +633,16 @@ class PlayerPageState extends State<PlayerPage> {
     if (!_controlsVisible && mounted) {
       setState(() => _controlsVisible = true);
     }
-    if (_playerBackend.state.playing) {
+    if (playerControlsShouldAutoHide(
+      playing: _playerBackend.state.playing,
+      settingsOpen: _settingsDialogOpen,
+    )) {
       _controlsHideTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted && _playerBackend.state.playing) {
+        if (mounted &&
+            playerControlsShouldAutoHide(
+              playing: _playerBackend.state.playing,
+              settingsOpen: _settingsDialogOpen,
+            )) {
           setState(() => _controlsVisible = false);
         }
       });
@@ -888,13 +906,18 @@ class PlayerPageState extends State<PlayerPage> {
                               icon: const Icon(Icons.photo_camera_outlined,
                                   size: 21),
                             ),
-                            IconButton(
-                              key: const ValueKey('player.settings'),
-                              tooltip: '播放设置',
-                              onPressed: () =>
-                                  unawaited(_showControlSettingsDialog()),
-                              icon:
-                                  const Icon(Icons.settings_outlined, size: 21),
+                            KeyedSubtree(
+                              key: _settingsButtonAnchorKey,
+                              child: IconButton(
+                                key: const ValueKey('player.settings'),
+                                tooltip: '播放设置',
+                                onPressed: () =>
+                                    unawaited(_showControlSettingsDialog()),
+                                icon: const Icon(
+                                  Icons.settings_outlined,
+                                  size: 21,
+                                ),
+                              ),
                             ),
                             IconButton(
                               key: const ValueKey('player.fullscreen.toggle'),
@@ -979,24 +1002,53 @@ class PlayerPageState extends State<PlayerPage> {
     });
   }
 
-  /** 打开参考图式分组设置浮层，并复用现有播放状态与诊断入口。 */
-  Future<void> _showControlSettingsDialog() {
-    return showPlayerSettingsDialog(
-      context,
-      mirrorVideo: _mirrorVideo,
-      playbackMode: _playbackMode,
-      videoAspectMode: _videoAspectMode,
-      playbackRate: _playbackRate,
-      playbackRates: _playbackRates,
-      onMirrorVideoChanged: _setMirrorVideo,
-      onPlaybackModeChanged: _setPlaybackMode,
-      onVideoAspectModeChanged: (mode) {
-        unawaited(_setVideoAspectMode(mode));
-      },
-      onPlaybackRateChanged: _setPlaybackRate,
-      onShowShortcuts: _showControlShortcutHelp,
-      onShowDiagnostics: () => unawaited(_showDiagnosticsDialog()),
-    );
+  /** 读取齿轮在当前普通/全屏布局中的全局矩形，供浮层实时对齐。 */
+  Rect _settingsButtonRect() {
+    final renderBox = _settingsButtonAnchorKey.currentContext
+        ?.findRenderObject() as RenderBox?;
+    if (renderBox != null && renderBox.hasSize) {
+      return renderBox.localToGlobal(Offset.zero) & renderBox.size;
+    }
+    final size = MediaQuery.sizeOf(context);
+    // 首帧极端竞态下回退到控制条右下区域，避免浮层退回窗口中心。
+    return Rect.fromLTWH(size.width - 72, size.height - 64, 40, 40);
+  }
+
+  /** 打开齿轮锚定的两级设置，并在整个显示期间保持进度控制区可见。 */
+  Future<void> _showControlSettingsDialog() async {
+    if (_settingsDialogOpen) return;
+    final anchorRect = _settingsButtonRect();
+    _controlsHideTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _settingsDialogOpen = true;
+        _controlsVisible = true;
+      });
+    }
+    try {
+      await showPlayerSettingsDialog(
+        context,
+        anchorRect: anchorRect,
+        mirrorVideo: _mirrorVideo,
+        playbackMode: _playbackMode,
+        videoAspectMode: _videoAspectMode,
+        playbackRate: _playbackRate,
+        playbackRates: _playbackRates,
+        onMirrorVideoChanged: _setMirrorVideo,
+        onPlaybackModeChanged: _setPlaybackMode,
+        onVideoAspectModeChanged: (mode) {
+          unawaited(_setVideoAspectMode(mode));
+        },
+        onPlaybackRateChanged: _setPlaybackRate,
+        onShowShortcuts: _showControlShortcutHelp,
+        onShowDiagnostics: () => unawaited(_showDiagnosticsDialog()),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _settingsDialogOpen = false);
+        _showVideoControls();
+      }
+    }
   }
 
   /** 提示当前筛选队列已经播放完毕，避免用户误以为播放器卡住。 */

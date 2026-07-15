@@ -8,11 +8,13 @@ import 'player_video_aspect_mode.dart';
 /**
  * 显示桌面播放器设置浮层。
  *
- * 使用独立 Dialog 而不是把复杂网格塞入系统 Menu，避免 Windows 上菜单获得点击
- * 高亮但自定义内容未挂载。浮层本地维护选中态，同时把每次变更立即回传播放器。
+ * 使用独立路由而不是把复杂网格塞入系统 Menu，避免 Windows 上菜单获得点击
+ * 高亮但自定义内容未挂载。浮层按 [anchorRect] 锚定齿轮并本地维护选中态，
+ * 同时把每次变更立即回传播放器。
  */
 Future<void> showPlayerSettingsDialog(
   BuildContext context, {
+  required Rect anchorRect,
   required bool mirrorVideo,
   required PlayerPlaybackMode playbackMode,
   required PlayerVideoAspectMode videoAspectMode,
@@ -30,175 +32,268 @@ Future<void> showPlayerSettingsDialog(
   var localVideoAspectMode = videoAspectMode;
   var localPlaybackRate = playbackRate;
   var showAdvancedSettings = false;
-  await showDialog<void>(
+  await showGeneralDialog<void>(
     context: context,
+    barrierDismissible: true,
+    barrierLabel: '关闭播放设置',
     barrierColor: const Color(0x33000000),
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setDialogState) {
-        return Dialog(
-          key: const ValueKey('player.settings.dialog'),
-          alignment: Alignment.bottomCenter,
-          insetPadding: const EdgeInsets.fromLTRB(24, 24, 24, 68),
-          backgroundColor: const Color(0xf2161d29),
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: const BorderSide(color: Color(0xff34415a)),
-          ),
-          child: AnimatedContainer(
-            key: const ValueKey('player.settings.shell'),
-            width: showAdvancedSettings ? 400 : 300,
-            duration: const Duration(milliseconds: 160),
-            curve: Curves.easeOutCubic,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 560),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                      child: Row(
-                        children: [
-                          if (showAdvancedSettings)
-                            IconButton(
-                              key: const ValueKey('player.settings.back'),
-                              tooltip: '返回播放设置',
-                              onPressed: () => setDialogState(
-                                () => showAdvancedSettings = false,
-                              ),
-                              icon: const Icon(
-                                Icons.arrow_back_ios_new_rounded,
-                                size: 17,
-                              ),
-                            )
-                          else
-                            const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              showAdvancedSettings ? '更多播放设置' : '播放设置',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w900,
+    transitionDuration: const Duration(milliseconds: 180),
+    pageBuilder: (dialogContext, routeAnimation, secondaryAnimation) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) => LayoutBuilder(
+          builder: (context, constraints) {
+            // 浮层右边缘与齿轮右边缘对齐，并限制高度以兼容超宽矮屏全屏布局。
+            final anchoredRight = constraints.maxWidth - anchorRect.right;
+            final right = anchoredRight.clamp(12.0, constraints.maxWidth - 220);
+            final anchoredBottom = constraints.maxHeight - anchorRect.top + 8;
+            final bottom =
+                anchoredBottom.clamp(12.0, constraints.maxHeight - 220);
+            final maxPanelHeight =
+                (constraints.maxHeight - bottom - 16).clamp(220.0, 560.0);
+            final revealAnimation = CurvedAnimation(
+              parent: routeAnimation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInCubic,
+            );
+            return Stack(
+              children: [
+                Positioned(
+                  right: right,
+                  bottom: bottom,
+                  child: FadeTransition(
+                    key: const ValueKey('player.settings.open.fade'),
+                    opacity: revealAnimation,
+                    child: ScaleTransition(
+                      key: const ValueKey('player.settings.open.scale'),
+                      alignment: Alignment.bottomRight,
+                      scale: Tween<double>(begin: 0.94, end: 1).animate(
+                        revealAnimation,
+                      ),
+                      child: Material(
+                        key: const ValueKey('player.settings.dialog'),
+                        color: const Color(0xf2161d29),
+                        surfaceTintColor: Colors.transparent,
+                        elevation: 24,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: const BorderSide(color: Color(0xff34415a)),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: AnimatedContainer(
+                          key: const ValueKey('player.settings.shell'),
+                          width: showAdvancedSettings ? 400 : 300,
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOutCubic,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: maxPanelHeight,
+                            ),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      8,
+                                      8,
+                                      8,
+                                      0,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        if (showAdvancedSettings)
+                                          IconButton(
+                                            key: const ValueKey(
+                                              'player.settings.back',
+                                            ),
+                                            tooltip: '返回播放设置',
+                                            onPressed: () => setDialogState(
+                                              () =>
+                                                  showAdvancedSettings = false,
+                                            ),
+                                            icon: const Icon(
+                                              Icons.arrow_back_ios_new_rounded,
+                                              size: 17,
+                                            ),
+                                          )
+                                        else
+                                          const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            showAdvancedSettings
+                                                ? '更多播放设置'
+                                                : '播放设置',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                    ),
+                                  ),
+                                  AnimatedSwitcher(
+                                    key: const ValueKey(
+                                      'player.settings.page.switcher',
+                                    ),
+                                    duration: const Duration(milliseconds: 180),
+                                    transitionBuilder: (child, animation) {
+                                      final enteringAdvanced = child.key ==
+                                          const ValueKey(
+                                            'player.settings.advanced.page',
+                                          );
+                                      final offsetAnimation = Tween<Offset>(
+                                        begin: Offset(
+                                          enteringAdvanced ? 0.12 : -0.12,
+                                          0,
+                                        ),
+                                        end: Offset.zero,
+                                      ).animate(
+                                        CurvedAnimation(
+                                          parent: animation,
+                                          curve: Curves.easeOutCubic,
+                                        ),
+                                      );
+                                      return FadeTransition(
+                                        opacity: animation,
+                                        child: SlideTransition(
+                                          position: offsetAnimation,
+                                          child: child,
+                                        ),
+                                      );
+                                    },
+                                    child: showAdvancedSettings
+                                        ? Column(
+                                            key: const ValueKey(
+                                              'player.settings.advanced.page',
+                                            ),
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              PlayerSettingsPanel(
+                                                playbackMode: localPlaybackMode,
+                                                videoAspectMode:
+                                                    localVideoAspectMode,
+                                                playbackRate: localPlaybackRate,
+                                                playbackRates: playbackRates,
+                                                onPlaybackModeChanged: (mode) {
+                                                  setDialogState(
+                                                    () => localPlaybackMode =
+                                                        mode,
+                                                  );
+                                                  onPlaybackModeChanged(mode);
+                                                },
+                                                onVideoAspectModeChanged:
+                                                    (mode) {
+                                                  setDialogState(
+                                                    () => localVideoAspectMode =
+                                                        mode,
+                                                  );
+                                                  onVideoAspectModeChanged(
+                                                      mode);
+                                                },
+                                                onPlaybackRateChanged: (rate) {
+                                                  setDialogState(
+                                                    () => localPlaybackRate =
+                                                        rate,
+                                                  );
+                                                  onPlaybackRateChanged(rate);
+                                                },
+                                              ),
+                                              const Divider(
+                                                height: 1,
+                                                color: Color(0xff34415a),
+                                              ),
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.all(8),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: TextButton.icon(
+                                                        onPressed: () {
+                                                          Navigator.of(
+                                                            dialogContext,
+                                                          ).pop();
+                                                          onShowShortcuts();
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons
+                                                              .keyboard_alt_outlined,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text(
+                                                          '快捷键',
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Expanded(
+                                                      child: TextButton.icon(
+                                                        key: const ValueKey(
+                                                          'player.diagnostics.open',
+                                                        ),
+                                                        onPressed: () {
+                                                          Navigator.of(
+                                                            dialogContext,
+                                                          ).pop();
+                                                          onShowDiagnostics();
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons
+                                                              .monitor_heart_outlined,
+                                                          size: 18,
+                                                        ),
+                                                        label: const Text(
+                                                          '播放诊断',
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        : PlayerSettingsPrimaryList(
+                                            key: const ValueKey(
+                                              'player.settings.primary.page',
+                                            ),
+                                            mirrorVideo: localMirrorVideo,
+                                            playbackMode: localPlaybackMode,
+                                            onMirrorVideoChanged: (enabled) {
+                                              setDialogState(
+                                                () =>
+                                                    localMirrorVideo = enabled,
+                                              );
+                                              onMirrorVideoChanged(enabled);
+                                            },
+                                            onPlaybackModeChanged: (mode) {
+                                              setDialogState(
+                                                () => localPlaybackMode = mode,
+                                              );
+                                              onPlaybackModeChanged(mode);
+                                            },
+                                            onShowAdvancedSettings: () =>
+                                                setDialogState(
+                                              () => showAdvancedSettings = true,
+                                            ),
+                                          ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          IconButton(
-                            key: const ValueKey('player.settings.close'),
-                            tooltip: '关闭',
-                            onPressed: () => Navigator.of(dialogContext).pop(),
-                            icon: const Icon(Icons.close_rounded, size: 19),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 140),
-                      child: showAdvancedSettings
-                          ? Column(
-                              key: const ValueKey(
-                                'player.settings.advanced.page',
-                              ),
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                PlayerSettingsPanel(
-                                  playbackMode: localPlaybackMode,
-                                  videoAspectMode: localVideoAspectMode,
-                                  playbackRate: localPlaybackRate,
-                                  playbackRates: playbackRates,
-                                  onPlaybackModeChanged: (mode) {
-                                    setDialogState(
-                                      () => localPlaybackMode = mode,
-                                    );
-                                    onPlaybackModeChanged(mode);
-                                  },
-                                  onVideoAspectModeChanged: (mode) {
-                                    setDialogState(
-                                      () => localVideoAspectMode = mode,
-                                    );
-                                    onVideoAspectModeChanged(mode);
-                                  },
-                                  onPlaybackRateChanged: (rate) {
-                                    setDialogState(
-                                      () => localPlaybackRate = rate,
-                                    );
-                                    onPlaybackRateChanged(rate);
-                                  },
-                                ),
-                                const Divider(
-                                  height: 1,
-                                  color: Color(0xff34415a),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextButton.icon(
-                                          onPressed: () {
-                                            Navigator.of(dialogContext).pop();
-                                            onShowShortcuts();
-                                          },
-                                          icon: const Icon(
-                                            Icons.keyboard_alt_outlined,
-                                            size: 18,
-                                          ),
-                                          label: const Text('快捷键'),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: TextButton.icon(
-                                          key: const ValueKey(
-                                            'player.diagnostics.open',
-                                          ),
-                                          onPressed: () {
-                                            Navigator.of(dialogContext).pop();
-                                            onShowDiagnostics();
-                                          },
-                                          icon: const Icon(
-                                            Icons.monitor_heart_outlined,
-                                            size: 18,
-                                          ),
-                                          label: const Text('播放诊断'),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            )
-                          : PlayerSettingsPrimaryList(
-                              key: const ValueKey(
-                                'player.settings.primary.page',
-                              ),
-                              mirrorVideo: localMirrorVideo,
-                              playbackMode: localPlaybackMode,
-                              onMirrorVideoChanged: (enabled) {
-                                setDialogState(
-                                  () => localMirrorVideo = enabled,
-                                );
-                                onMirrorVideoChanged(enabled);
-                              },
-                              onPlaybackModeChanged: (mode) {
-                                setDialogState(
-                                  () => localPlaybackMode = mode,
-                                );
-                                onPlaybackModeChanged(mode);
-                              },
-                              onShowAdvancedSettings: () => setDialogState(
-                                () => showAdvancedSettings = true,
-                              ),
-                            ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
-        );
-      },
-    ),
+              ],
+            );
+          },
+        ),
+      );
+    },
   );
 }
 
