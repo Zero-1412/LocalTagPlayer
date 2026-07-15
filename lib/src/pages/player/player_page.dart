@@ -43,6 +43,38 @@ bool playerControlsShouldAutoHide({
 }) =>
     playing && !settingsOpen;
 
+/**
+ * 把持久化的画面比例与倍速重新应用到刚打开的播放后端。
+ *
+ * 播放器在 open 前后都会调用该函数，避免后端重建媒体状态后只保留设置数据或
+ * UI 选中态，却没有把真实参数送入当前播放会话。
+ */
+Future<void> applyPlayerOpenPreferences({
+  required PlayerBackend backend,
+  required PlayerVideoAspectMode videoAspectMode,
+  required double playbackRate,
+}) async {
+  /** 单个可选 mpv 属性失败时继续应用其余偏好，兼容能力较少的后端。 */
+  Future<void> setPropertySafely(String property, String value) async {
+    try {
+      await backend.setProperty(property, value);
+    } catch (_) {
+      // 比例属性属于可选能力，不能因为后端不支持而阻止媒体打开。
+    }
+  }
+
+  await setPropertySafely(
+    'video-aspect-override',
+    videoAspectMode.mpvAspectOverride,
+  );
+  await setPropertySafely('panscan', videoAspectMode.mpvPanscan);
+  // 清除历史缩放和平移，防止它们叠加到新的全局比例模式。
+  await setPropertySafely('video-zoom', '0');
+  await setPropertySafely('video-pan-x', '0');
+  await setPropertySafely('video-pan-y', '0');
+  await backend.setRate(playbackRate);
+}
+
 class PlayerPage extends StatefulWidget {
   const PlayerPage({
     super.key,
@@ -50,6 +82,7 @@ class PlayerPage extends StatefulWidget {
     required this.playlist,
     required this.thumbnailService,
     required this.playbackSettings,
+    required this.onPlaybackSettingsChanged,
     required this.activeTags,
     required this.activeChildTag,
     required this.queueTitle,
@@ -69,6 +102,9 @@ class PlayerPage extends StatefulWidget {
   final List<VideoItem> playlist;
   final ThumbnailService thumbnailService;
   final PlaybackSettings playbackSettings;
+  /** 保存全局播放器设置；调用方必须同步更新应用内存状态与持久化文件。 */
+  final Future<void> Function(PlaybackSettings settings)
+      onPlaybackSettingsChanged;
   final List<String> activeTags;
   final String? activeChildTag;
   final String queueTitle;
@@ -164,12 +200,16 @@ class PlayerPageState extends State<PlayerPage> {
   var _queueEndReached = false;
   /** 标签弹窗打开期间阻止底层播放器重复消费 Escape，避免意外返回媒体库。 */
   var _editingManualTags = false;
-  var _playbackMode = PlayerPlaybackMode.sequential;
-  var _playbackRate = 1.0;
+  late PlayerPlaybackMode _playbackMode;
+  late double _playbackRate;
   /** 是否仅水平翻转当前视频画面，控制条与命中区域保持原方向。 */
-  var _mirrorVideo = false;
-  /** 当前会话的画面比例，默认保留媒体自身比例。 */
-  var _videoAspectMode = PlayerVideoAspectMode.automatic;
+  late bool _mirrorVideo;
+  /** 当前全局画面比例；打开新媒体后会重新应用到后端。 */
+  late PlayerVideoAspectMode _videoAspectMode;
+  /** 当前播放器会话使用的全局配置快照。 */
+  late PlaybackSettings _effectivePlaybackSettings;
+  /** 串行保存设置，避免连续点击时旧写入覆盖最后一次选择。 */
+  Future<void> _playbackSettingsSaveTail = Future<void>.value();
   /** 用户主动折叠宽屏右侧队列时保持当前页面内的显示状态。 */
   var _queueSidebarCollapsed = false;
   /** 是否由播放器页面进入桌面窗口全屏。 */
@@ -178,7 +218,7 @@ class PlayerPageState extends State<PlayerPage> {
   var _fullscreenQueueVisible = false;
   final _random = math.Random();
 
-  static const _playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
+  static const _playbackRates = PlaybackSettings.playbackRates;
 
   List<VideoItem> get _sourcePlaylist => _playback.sourcePlaylist;
 
@@ -221,6 +261,11 @@ class PlayerPageState extends State<PlayerPage> {
   @override
   void initState() {
     super.initState();
+    _effectivePlaybackSettings = widget.playbackSettings;
+    _mirrorVideo = _effectivePlaybackSettings.mirrorVideo;
+    _playbackMode = _effectivePlaybackSettings.playbackMode;
+    _videoAspectMode = _effectivePlaybackSettings.videoAspectMode;
+    _playbackRate = _effectivePlaybackSettings.playbackRate;
     _focusNode = FocusNode(debugLabel: 'player-shortcuts');
     _queueSearchFocusNode = FocusNode(debugLabel: 'player-queue-search');
     _queueSearchController = TextEditingController();
@@ -393,11 +438,14 @@ class PlayerPageState extends State<PlayerPage> {
 
   /** 修改倍速并立即应用到当前播放内核；切换视频时 media_kit 会保留该状态。 */
   void _setPlaybackRate(double rate) {
-    if (!_playbackRates.contains(rate)) {
+    if (!_playbackRates.contains(rate) || _playbackRate == rate) {
       return;
     }
     setState(() => _playbackRate = rate);
     unawaited(_playerBackend.setRate(rate));
+    _saveGlobalPlaybackSettings(
+      _effectivePlaybackSettings.copyWith(playbackRate: rate),
+    );
   }
 
   /** 按固定档位调整倍速，供菜单与键盘快捷键共用同一条状态链路。 */
@@ -409,16 +457,23 @@ class PlayerPageState extends State<PlayerPage> {
 
   /** 更新队列播放方式，不改变 filtered queue 的内容或顺序。 */
   void _setPlaybackMode(PlayerPlaybackMode mode) {
+    if (_playbackMode == mode) return;
     setState(() {
       _playbackMode = mode;
       _queueEndReached = false;
     });
+    _saveGlobalPlaybackSettings(
+      _effectivePlaybackSettings.copyWith(playbackMode: mode),
+    );
   }
 
-  /** 更新当前会话的镜像画面状态，不改变媒体文件或播放队列。 */
+  /** 更新全局镜像状态，不改变媒体文件、控制条方向或播放队列。 */
   void _setMirrorVideo(bool enabled) {
     if (_mirrorVideo == enabled) return;
     setState(() => _mirrorVideo = enabled);
+    _saveGlobalPlaybackSettings(
+      _effectivePlaybackSettings.copyWith(mirrorVideo: enabled),
+    );
   }
 
   /**
@@ -428,10 +483,37 @@ class PlayerPageState extends State<PlayerPage> {
    * 1728×1080 等非 16:9 视频在全屏时消除左右留边和源内黑边的组合效果。
    */
   Future<void> _setVideoAspectMode(PlayerVideoAspectMode mode) async {
-    if (_videoAspectMode != mode && mounted) {
+    final changed = _videoAspectMode != mode;
+    if (changed && mounted) {
       setState(() => _videoAspectMode = mode);
+      _saveGlobalPlaybackSettings(
+        _effectivePlaybackSettings.copyWith(videoAspectMode: mode),
+      );
     }
     await _applyVideoAspectMode();
+  }
+
+  /**
+   * 串行保存当前播放器配置。
+   *
+   * 页面先更新真实播放状态，再把同一个值写回应用级配置；保存失败只提示用户，
+   * 不回滚已经生效的当前会话，以免 UI 与播放内核出现二次跳变。
+   */
+  void _saveGlobalPlaybackSettings(PlaybackSettings settings) {
+    _effectivePlaybackSettings = settings;
+    _playbackSettingsSaveTail = _playbackSettingsSaveTail.then((_) async {
+      try {
+        await widget.onPlaybackSettingsChanged(settings);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(content: Text('播放器设置保存失败，请重试')),
+            );
+        }
+      }
+    });
   }
 
   /** 把页面比例状态映射为后端通用 mpv 属性；后端不支持时允许安全忽略。 */
@@ -514,6 +596,8 @@ class PlayerPageState extends State<PlayerPage> {
       // 即使 pause 超时也继续退出；下方 stop 与 dispose 仍会终止原生播放。
     }
     _exitStopFuture ??= _stopForExitDiagnostics();
+    // 返回媒体库前等待最后一次全局设置写入，避免用户改完立即退出时丢失配置。
+    await _playbackSettingsSaveTail;
     if (mounted) {
       _routePopRequestedAt = DateTime.now();
       Navigator.of(context).maybePop();
@@ -648,20 +732,6 @@ class PlayerPageState extends State<PlayerPage> {
         }
       });
     }
-  }
-
-  /** 在播放器内展示已经实现的快捷键，不引入蓝图中的占位能力。 */
-  void _showControlShortcutHelp() {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Space 播放/暂停 · J/L 快退/快进 · ↑/↓ 选择队列 · '
-            'T 添加标签 · F 全屏 · S 截图 · [/] 调整倍速',
-          ),
-        ),
-      );
   }
 
   /**
@@ -1009,7 +1079,7 @@ class PlayerPageState extends State<PlayerPage> {
     return Rect.fromLTWH(size.width - 72, size.height - 64, 40, 40);
   }
 
-  /** 打开齿轮锚定的两级设置，并在整个显示期间保持进度控制区可见。 */
+  /** 打开齿轮锚定的分级设置，并在整个显示期间保持进度控制区可见。 */
   Future<void> _showControlSettingsDialog() async {
     if (_settingsDialogOpen) return;
     final anchorRect = _settingsButtonRect();
@@ -1035,8 +1105,6 @@ class PlayerPageState extends State<PlayerPage> {
           unawaited(_setVideoAspectMode(mode));
         },
         onPlaybackRateChanged: _setPlaybackRate,
-        onShowShortcuts: _showControlShortcutHelp,
-        onShowDiagnostics: () => unawaited(_showDiagnosticsDialog()),
       );
     } finally {
       if (mounted) {
@@ -1166,8 +1234,12 @@ class PlayerPageState extends State<PlayerPage> {
     for (final entry in options.entries) {
       await _setMpvProperty(entry.key, entry.value);
     }
-    // 部分后端会在打开新媒体时重建渲染参数；每次 open 前后恢复用户当前比例。
-    await _applyVideoAspectMode();
+    // 部分后端会在打开新媒体时重建参数；每次 open 前后恢复全局比例与倍速。
+    await applyPlayerOpenPreferences(
+      backend: _playerBackend,
+      videoAspectMode: _videoAspectMode,
+      playbackRate: _playbackRate,
+    );
   }
 
   Future<void> _setMpvProperty(String property, String value) async {

@@ -7,6 +7,12 @@ import 'app_paths.dart';
 /** 有有效播放进度时的默认起播行为。 */
 enum PlaybackResumeBehavior { continueWatching, restart, ask }
 
+/** 播放完成后的全局队列策略，不改变 filtered queue 的顺序或来源。 */
+enum PlayerPlaybackMode { sequential, shuffle, repeatOne, repeatAll }
+
+/** 全局画面比例模式，只影响视频表面的呈现方式。 */
+enum PlayerVideoAspectMode { automatic, ratio4x3, ratio16x9, cover }
+
 /** 用户可配置的播放器单键快捷功能。 */
 enum PlayerShortcutAction {
   playPause,
@@ -28,6 +34,10 @@ class PlaybackSettings {
     required this.shortcuts,
     required this.fullscreenQueueEdgeWidth,
     required this.fullscreenQueueHideDelayMs,
+    required this.mirrorVideo,
+    required this.playbackMode,
+    required this.videoAspectMode,
+    required this.playbackRate,
   });
 
   static const defaults = PlaybackSettings(
@@ -36,7 +46,13 @@ class PlaybackSettings {
     shortcuts: defaultShortcuts,
     fullscreenQueueEdgeWidth: 12,
     fullscreenQueueHideDelayMs: 180,
+    mirrorVideo: false,
+    playbackMode: PlayerPlaybackMode.sequential,
+    videoAspectMode: PlayerVideoAspectMode.automatic,
+    playbackRate: 1,
   );
+  /** 播放内核已验证并允许持久化的固定倍速档位。 */
+  static const playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
   static const defaultShortcuts = <PlayerShortcutAction, String>{
     PlayerShortcutAction.playPause: 'Space',
     PlayerShortcutAction.seekBackward: 'J',
@@ -90,6 +106,14 @@ class PlaybackSettings {
   final int fullscreenQueueEdgeWidth;
   /** 鼠标离开全屏队列后的自动隐藏延迟，单位为毫秒。 */
   final int fullscreenQueueHideDelayMs;
+  /** 是否全局水平翻转视频画面，不影响控制条和鼠标命中区域。 */
+  final bool mirrorVideo;
+  /** 全局队列播放方式；新播放器会话沿用最后一次选择。 */
+  final PlayerPlaybackMode playbackMode;
+  /** 全局画面比例；每次打开媒体后重新应用到播放后端。 */
+  final PlayerVideoAspectMode videoAspectMode;
+  /** 全局播放倍速；每次打开媒体后重新应用到播放后端。 */
+  final double playbackRate;
 
   bool get hardwareDecodingEnabled => hwdec != 'no';
 
@@ -99,6 +123,10 @@ class PlaybackSettings {
     Map<PlayerShortcutAction, String>? shortcuts,
     int? fullscreenQueueEdgeWidth,
     int? fullscreenQueueHideDelayMs,
+    bool? mirrorVideo,
+    PlayerPlaybackMode? playbackMode,
+    PlayerVideoAspectMode? videoAspectMode,
+    double? playbackRate,
   }) {
     return PlaybackSettings(
       hwdec: hwdec ?? this.hwdec,
@@ -108,6 +136,10 @@ class PlaybackSettings {
           fullscreenQueueEdgeWidth ?? this.fullscreenQueueEdgeWidth,
       fullscreenQueueHideDelayMs:
           fullscreenQueueHideDelayMs ?? this.fullscreenQueueHideDelayMs,
+      mirrorVideo: mirrorVideo ?? this.mirrorVideo,
+      playbackMode: playbackMode ?? this.playbackMode,
+      videoAspectMode: videoAspectMode ?? this.videoAspectMode,
+      playbackRate: playbackRate ?? this.playbackRate,
     );
   }
 
@@ -125,6 +157,10 @@ class PlaybackSettings {
         },
         'fullscreenQueueEdgeWidth': fullscreenQueueEdgeWidth,
         'fullscreenQueueHideDelayMs': fullscreenQueueHideDelayMs,
+        'mirrorVideo': mirrorVideo,
+        'playbackMode': playbackMode.name,
+        'videoAspectMode': videoAspectMode.name,
+        'playbackRate': playbackRate,
       };
 
   static PlaybackSettings fromJson(Map<String, Object?> json) {
@@ -158,7 +194,44 @@ class PlaybackSettings {
         min: 0,
         max: 1000,
       ),
+      mirrorVideo: json['mirrorVideo'] is bool
+          ? json['mirrorVideo']! as bool
+          : defaults.mirrorVideo,
+      playbackMode: _enumByName(
+        PlayerPlaybackMode.values,
+        json['playbackMode'],
+        defaults.playbackMode,
+      ),
+      videoAspectMode: _enumByName(
+        PlayerVideoAspectMode.values,
+        json['videoAspectMode'],
+        defaults.videoAspectMode,
+      ),
+      playbackRate: _supportedPlaybackRate(json['playbackRate']),
     );
+  }
+
+  /** 解析持久化枚举名称；旧文件缺字段或手工写入异常值时使用安全默认值。 */
+  static T _enumByName<T extends Enum>(
+    List<T> values,
+    Object? value,
+    T fallback,
+  ) {
+    final name = value?.toString();
+    for (final candidate in values) {
+      if (candidate.name == name) {
+        return candidate;
+      }
+    }
+    return fallback;
+  }
+
+  /** 只接受播放器公开的固定倍速，避免异常配置把内核置于不可预期状态。 */
+  static double _supportedPlaybackRate(Object? value) {
+    final parsed = double.tryParse(value?.toString() ?? '');
+    return parsed != null && playbackRates.contains(parsed)
+        ? parsed
+        : defaults.playbackRate;
   }
 
   /** 读取旧版或手工编辑的设置值，并约束到播放器可安全使用的范围。 */

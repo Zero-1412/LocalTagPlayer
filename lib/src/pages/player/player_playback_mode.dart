@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
 
-// ignore_for_file: slash_for_doc_comments
+import '../../core/playback_settings.dart';
 
-/** 播放完成后的轻量队列策略，不改变 filtered queue 本身的顺序与来源。 */
-enum PlayerPlaybackMode {
-  sequential,
-  shuffle,
-  repeatOne,
-  repeatAll,
-}
+export '../../core/playback_settings.dart' show PlayerPlaybackMode;
+
+// ignore_for_file: slash_for_doc_comments
 
 extension PlayerPlaybackModePresentation on PlayerPlaybackMode {
   /** 面向播放器菜单的简短中文名称。 */

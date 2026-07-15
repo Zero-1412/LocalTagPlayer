@@ -1,19 +1,10 @@
 import 'package:flutter/material.dart';
 
-// ignore_for_file: slash_for_doc_comments
+import '../../core/playback_settings.dart';
 
-/**
- * 播放器画面比例模式。
- *
- * 这些模式只改变当前播放会话的 mpv 画面呈现，不修改源文件、媒体详情、
- * filtered queue 或缩略图缓存。
- */
-enum PlayerVideoAspectMode {
-  automatic,
-  ratio4x3,
-  ratio16x9,
-  cover,
-}
+export '../../core/playback_settings.dart' show PlayerVideoAspectMode;
+
+// ignore_for_file: slash_for_doc_comments
 
 /** 播放器比例模式的文案、图标与 mpv 参数映射。 */
 extension PlayerVideoAspectModePresentation on PlayerVideoAspectMode {

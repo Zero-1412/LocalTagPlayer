@@ -8,9 +8,9 @@ import 'player_video_aspect_mode.dart';
 /**
  * 显示桌面播放器设置浮层。
  *
- * 使用独立路由而不是把复杂网格塞入系统 Menu，避免 Windows 上菜单获得点击
- * 高亮但自定义内容未挂载。浮层按 [anchorRect] 锚定齿轮并本地维护选中态，
- * 同时把每次变更立即回传播放器。
+ * 使用独立路由而不是把复杂列表塞入系统 Menu，避免 Windows 上菜单获得点击
+ * 高亮但自定义内容未挂载。一级保留镜像与循环开关，二级只承担比例/倍速
+ * 导航，具体选项进入三级列表；每次变更立即回传播放器。
  */
 Future<void> showPlayerSettingsDialog(
   BuildContext context, {
@@ -24,14 +24,12 @@ Future<void> showPlayerSettingsDialog(
   required ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged,
   required ValueChanged<PlayerVideoAspectMode> onVideoAspectModeChanged,
   required ValueChanged<double> onPlaybackRateChanged,
-  required VoidCallback onShowShortcuts,
-  required VoidCallback onShowDiagnostics,
 }) async {
   var localMirrorVideo = mirrorVideo;
   var localPlaybackMode = playbackMode;
   var localVideoAspectMode = videoAspectMode;
   var localPlaybackRate = playbackRate;
-  var showAdvancedSettings = false;
+  var currentPage = _PlayerSettingsPage.primary;
   await showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
@@ -81,7 +79,7 @@ Future<void> showPlayerSettingsDialog(
                         clipBehavior: Clip.antiAlias,
                         child: AnimatedContainer(
                           key: const ValueKey('player.settings.shell'),
-                          width: showAdvancedSettings ? 400 : 300,
+                          width: 300,
                           duration: const Duration(milliseconds: 180),
                           curve: Curves.easeOutCubic,
                           child: ConstrainedBox(
@@ -101,16 +99,17 @@ Future<void> showPlayerSettingsDialog(
                                     ),
                                     child: Row(
                                       children: [
-                                        if (showAdvancedSettings)
+                                        if (currentPage !=
+                                            _PlayerSettingsPage.primary)
                                           IconButton(
                                             key: const ValueKey(
                                               'player.settings.back',
                                             ),
-                                            tooltip: '返回播放设置',
-                                            onPressed: () => setDialogState(
-                                              () =>
-                                                  showAdvancedSettings = false,
-                                            ),
+                                            tooltip: currentPage.parentTitle,
+                                            onPressed: () => setDialogState(() {
+                                              currentPage =
+                                                  currentPage.parentPage;
+                                            }),
                                             icon: const Icon(
                                               Icons.arrow_back_ios_new_rounded,
                                               size: 17,
@@ -120,9 +119,7 @@ Future<void> showPlayerSettingsDialog(
                                           const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            showAdvancedSettings
-                                                ? '更多播放设置'
-                                                : '播放设置',
+                                            currentPage.title,
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 15,
@@ -140,13 +137,13 @@ Future<void> showPlayerSettingsDialog(
                                     ),
                                     duration: const Duration(milliseconds: 180),
                                     transitionBuilder: (child, animation) {
-                                      final enteringAdvanced = child.key ==
+                                      final enteringPrimary = child.key ==
                                           const ValueKey(
-                                            'player.settings.advanced.page',
+                                            'player.settings.primary.page',
                                           );
                                       final offsetAnimation = Tween<Offset>(
                                         begin: Offset(
-                                          enteringAdvanced ? 0.12 : -0.12,
+                                          enteringPrimary ? -0.12 : 0.12,
                                           0,
                                         ),
                                         end: Offset.zero,
@@ -164,120 +161,89 @@ Future<void> showPlayerSettingsDialog(
                                         ),
                                       );
                                     },
-                                    child: showAdvancedSettings
-                                        ? Column(
-                                            key: const ValueKey(
-                                              'player.settings.advanced.page',
-                                            ),
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              PlayerSettingsPanel(
-                                                playbackMode: localPlaybackMode,
-                                                videoAspectMode:
-                                                    localVideoAspectMode,
-                                                playbackRate: localPlaybackRate,
-                                                playbackRates: playbackRates,
-                                                onPlaybackModeChanged: (mode) {
-                                                  setDialogState(
-                                                    () => localPlaybackMode =
-                                                        mode,
-                                                  );
-                                                  onPlaybackModeChanged(mode);
-                                                },
-                                                onVideoAspectModeChanged:
-                                                    (mode) {
-                                                  setDialogState(
-                                                    () => localVideoAspectMode =
-                                                        mode,
-                                                  );
-                                                  onVideoAspectModeChanged(
-                                                      mode);
-                                                },
-                                                onPlaybackRateChanged: (rate) {
-                                                  setDialogState(
-                                                    () => localPlaybackRate =
-                                                        rate,
-                                                  );
-                                                  onPlaybackRateChanged(rate);
-                                                },
-                                              ),
-                                              const Divider(
-                                                height: 1,
-                                                color: Color(0xff34415a),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.all(8),
-                                                child: Row(
-                                                  children: [
-                                                    Expanded(
-                                                      child: TextButton.icon(
-                                                        onPressed: () {
-                                                          Navigator.of(
-                                                            dialogContext,
-                                                          ).pop();
-                                                          onShowShortcuts();
-                                                        },
-                                                        icon: const Icon(
-                                                          Icons
-                                                              .keyboard_alt_outlined,
-                                                          size: 18,
-                                                        ),
-                                                        label: const Text(
-                                                          '快捷键',
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    Expanded(
-                                                      child: TextButton.icon(
-                                                        key: const ValueKey(
-                                                          'player.diagnostics.open',
-                                                        ),
-                                                        onPressed: () {
-                                                          Navigator.of(
-                                                            dialogContext,
-                                                          ).pop();
-                                                          onShowDiagnostics();
-                                                        },
-                                                        icon: const Icon(
-                                                          Icons
-                                                              .monitor_heart_outlined,
-                                                          size: 18,
-                                                        ),
-                                                        label: const Text(
-                                                          '播放诊断',
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        : PlayerSettingsPrimaryList(
-                                            key: const ValueKey(
-                                              'player.settings.primary.page',
-                                            ),
-                                            mirrorVideo: localMirrorVideo,
-                                            playbackMode: localPlaybackMode,
-                                            onMirrorVideoChanged: (enabled) {
-                                              setDialogState(
-                                                () =>
-                                                    localMirrorVideo = enabled,
-                                              );
-                                              onMirrorVideoChanged(enabled);
-                                            },
-                                            onPlaybackModeChanged: (mode) {
-                                              setDialogState(
-                                                () => localPlaybackMode = mode,
-                                              );
-                                              onPlaybackModeChanged(mode);
-                                            },
-                                            onShowAdvancedSettings: () =>
-                                                setDialogState(
-                                              () => showAdvancedSettings = true,
-                                            ),
+                                    child: switch (currentPage) {
+                                      _PlayerSettingsPage.primary =>
+                                        PlayerSettingsPrimaryList(
+                                          key: const ValueKey(
+                                            'player.settings.primary.page',
                                           ),
+                                          mirrorVideo: localMirrorVideo,
+                                          playbackMode: localPlaybackMode,
+                                          onMirrorVideoChanged: (enabled) {
+                                            setDialogState(
+                                              () => localMirrorVideo = enabled,
+                                            );
+                                            onMirrorVideoChanged(enabled);
+                                          },
+                                          onPlaybackModeChanged: (mode) {
+                                            setDialogState(
+                                              () => localPlaybackMode = mode,
+                                            );
+                                            onPlaybackModeChanged(mode);
+                                          },
+                                          onShowAdvancedSettings: () =>
+                                              setDialogState(
+                                            () => currentPage =
+                                                _PlayerSettingsPage.advanced,
+                                          ),
+                                        ),
+                                      _PlayerSettingsPage.advanced =>
+                                        PlayerSettingsAdvancedList(
+                                          key: const ValueKey(
+                                            'player.settings.advanced.page',
+                                          ),
+                                          videoAspectMode: localVideoAspectMode,
+                                          playbackRate: localPlaybackRate,
+                                          onShowVideoAspect: () =>
+                                              setDialogState(
+                                            () => currentPage =
+                                                _PlayerSettingsPage.aspect,
+                                          ),
+                                          onShowPlaybackRate: () =>
+                                              setDialogState(
+                                            () => currentPage =
+                                                _PlayerSettingsPage.rate,
+                                          ),
+                                        ),
+                                      _PlayerSettingsPage.aspect =>
+                                        PlayerSettingsOptionList<
+                                            PlayerVideoAspectMode>(
+                                          key: const ValueKey(
+                                            'player.settings.aspect.page',
+                                          ),
+                                          values: PlayerVideoAspectMode.values,
+                                          selected: localVideoAspectMode,
+                                          labelFor: (mode) => mode.label,
+                                          iconFor: (mode) => mode.icon,
+                                          keyFor: (mode) => ValueKey(
+                                            'player.settings.aspect.${mode.name}',
+                                          ),
+                                          onSelected: (mode) {
+                                            setDialogState(
+                                              () => localVideoAspectMode = mode,
+                                            );
+                                            onVideoAspectModeChanged(mode);
+                                          },
+                                        ),
+                                      _PlayerSettingsPage.rate =>
+                                        PlayerSettingsOptionList<double>(
+                                          key: const ValueKey(
+                                            'player.settings.rate.page',
+                                          ),
+                                          values: playbackRates,
+                                          selected: localPlaybackRate,
+                                          labelFor: (rate) => '${rate}x',
+                                          keyFor: (rate) => ValueKey(
+                                            'player.settings.rate.$rate',
+                                          ),
+                                          onSelected: (rate) {
+                                            setDialogState(
+                                              () => localPlaybackRate = rate,
+                                            );
+                                            onPlaybackRateChanged(rate);
+                                          },
+                                        ),
+                                    },
                                   ),
                                 ],
                               ),
@@ -295,6 +261,33 @@ Future<void> showPlayerSettingsDialog(
       );
     },
   );
+}
+
+/** 播放设置浮层的页级导航状态。 */
+enum _PlayerSettingsPage { primary, advanced, aspect, rate }
+
+/** 播放设置页标题与返回目标，避免各分支复制导航规则。 */
+extension on _PlayerSettingsPage {
+  String get title => switch (this) {
+        _PlayerSettingsPage.primary => '播放设置',
+        _PlayerSettingsPage.advanced => '更多播放设置',
+        _PlayerSettingsPage.aspect => '视频比例',
+        _PlayerSettingsPage.rate => '播放速度',
+      };
+
+  _PlayerSettingsPage get parentPage => switch (this) {
+        _PlayerSettingsPage.primary => _PlayerSettingsPage.primary,
+        _PlayerSettingsPage.advanced => _PlayerSettingsPage.primary,
+        _PlayerSettingsPage.aspect ||
+        _PlayerSettingsPage.rate =>
+          _PlayerSettingsPage.advanced,
+      };
+
+  String get parentTitle => switch (parentPage) {
+        _PlayerSettingsPage.primary => '返回播放设置',
+        _PlayerSettingsPage.advanced => '返回更多播放设置',
+        _ => '返回',
+      };
 }
 
 /**
@@ -459,235 +452,235 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
 }
 
 /**
- * 播放控制条的紧凑设置面板。
+ * 更多播放设置的二级导航列表。
  *
- * 面板只展示已经接通的播放方式、画面比例和速度，避免把未实现的解码策略或
- * 音量均衡按钮做成不可操作占位。所有选择继续由 PlayerPage 持有会话状态。
+ * 播放方式只保留在一级循环开关中；快捷键与播放诊断不再属于该浮层。比例和
+ * 倍速只展示当前值，点击后进入各自独立的三级选择列表。
  */
-class PlayerSettingsPanel extends StatelessWidget {
-  const PlayerSettingsPanel({
+class PlayerSettingsAdvancedList extends StatelessWidget {
+  const PlayerSettingsAdvancedList({
     super.key,
-    required this.playbackMode,
     required this.videoAspectMode,
     required this.playbackRate,
-    required this.playbackRates,
-    required this.onPlaybackModeChanged,
-    required this.onVideoAspectModeChanged,
-    required this.onPlaybackRateChanged,
+    required this.onShowVideoAspect,
+    required this.onShowPlaybackRate,
   });
 
-  /** 当前队列播放方式。 */
-  final PlayerPlaybackMode playbackMode;
-
-  /** 当前画面比例模式。 */
+  /** 当前全局画面比例。 */
   final PlayerVideoAspectMode videoAspectMode;
 
-  /** 当前播放倍速。 */
+  /** 当前全局播放倍速。 */
   final double playbackRate;
 
-  /** 播放器允许选择的稳定倍速档位。 */
-  final List<double> playbackRates;
+  /** 进入画面比例三级列表的回调。 */
+  final VoidCallback onShowVideoAspect;
 
-  /** 用户选择播放方式后的回调。 */
-  final ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged;
-
-  /** 用户选择画面比例后的回调。 */
-  final ValueChanged<PlayerVideoAspectMode> onVideoAspectModeChanged;
-
-  /** 用户选择倍速后的回调。 */
-  final ValueChanged<double> onPlaybackRateChanged;
+  /** 进入播放倍速三级列表的回调。 */
+  final VoidCallback onShowPlaybackRate;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      key: const ValueKey('player.settings.panel'),
-      width: 372,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const _PlayerSettingsSectionLabel('播放方式'),
-            const SizedBox(height: 7),
-            _PlayerSettingsChoiceGrid<PlayerPlaybackMode>(
-              values: PlayerPlaybackMode.values,
-              selected: playbackMode,
-              columns: 2,
-              labelFor: (mode) => mode.label,
-              iconFor: (mode) => mode.icon,
-              keyFor: (mode) => ValueKey('player.settings.mode.${mode.name}'),
-              onSelected: onPlaybackModeChanged,
-            ),
-            const SizedBox(height: 14),
-            const _PlayerSettingsSectionLabel('视频比例'),
-            const SizedBox(height: 7),
-            _PlayerSettingsChoiceGrid<PlayerVideoAspectMode>(
-              values: PlayerVideoAspectMode.values,
-              selected: videoAspectMode,
-              columns: 4,
-              labelFor: (mode) => mode.label,
-              iconFor: (mode) => mode.icon,
-              keyFor: (mode) => ValueKey('player.settings.aspect.${mode.name}'),
-              onSelected: onVideoAspectModeChanged,
-            ),
-            const SizedBox(height: 14),
-            const _PlayerSettingsSectionLabel('播放速度'),
-            const SizedBox(height: 7),
-            _PlayerSettingsChoiceGrid<double>(
-              values: playbackRates,
-              selected: playbackRate,
-              columns: 3,
-              labelFor: (rate) => '${rate}x',
-              keyFor: (rate) => ValueKey('player.settings.rate.$rate'),
-              onSelected: onPlaybackRateChanged,
-            ),
-          ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PlayerSettingsNavigationRow(
+            key: const ValueKey('player.settings.aspect.open'),
+            label: '视频比例',
+            value: videoAspectMode.label,
+            onTap: onShowVideoAspect,
+          ),
+          _PlayerSettingsNavigationRow(
+            key: const ValueKey('player.settings.rate.open'),
+            label: '播放速度',
+            value: '${playbackRate}x',
+            onTap: onShowPlaybackRate,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/** 二级设置中的导航行，右侧同时展示当前已经生效的全局值。 */
+class _PlayerSettingsNavigationRow extends StatelessWidget {
+  const _PlayerSettingsNavigationRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  /** 设置名称。 */
+  final String label;
+
+  /** 当前生效值。 */
+  final String value;
+
+  /** 进入下一层列表的回调。 */
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(7),
+        child: SizedBox(
+          height: 48,
+          child: Row(
+            children: [
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xfff0f3fa),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Color(0xffaeb8cc),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 21,
+                color: Color(0xffaeb8cc),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/** 设置分组标题，保持参考面板的清晰层级。 */
-class _PlayerSettingsSectionLabel extends StatelessWidget {
-  const _PlayerSettingsSectionLabel(this.label);
-
-  /** 分组名称。 */
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        color: Color(0xfff3f5fb),
-        fontSize: 13,
-        fontWeight: FontWeight.w800,
-      ),
-    );
-  }
-}
-
 /**
- * 可复用的设置按钮网格。
+ * 单一设置项的三级选择列表。
  *
- * [columns] 决定每行按钮数；使用 Wrap 而不是滚动列表，保证弹出菜单高度稳定，
- * 并让选中态立即反馈而不触发播放器主体重建以外的昂贵工作。
+ * 选项数量很小，使用固定行高直接构建；选择只重绘浮层与视频表面，不触发
+ * filtered queue、媒体详情或缩略图队列重算。
  */
-class _PlayerSettingsChoiceGrid<T> extends StatelessWidget {
-  const _PlayerSettingsChoiceGrid({
+class PlayerSettingsOptionList<T> extends StatelessWidget {
+  const PlayerSettingsOptionList({
+    super.key,
     required this.values,
     required this.selected,
-    required this.columns,
     required this.labelFor,
     required this.keyFor,
     required this.onSelected,
     this.iconFor,
   });
 
-  /** 当前分组可选择的值。 */
+  /** 当前列表允许选择的稳定值。 */
   final List<T> values;
 
-  /** 当前选中的值。 */
+  /** 当前已经生效的值。 */
   final T selected;
 
-  /** 单行按钮数量。 */
-  final int columns;
-
-  /** 把值转换为按钮文案。 */
+  /** 将设置值转换为用户可读文案。 */
   final String Function(T value) labelFor;
 
-  /** 为自动化与 focused test 提供稳定键。 */
+  /** 为 focused test 和自动化点击提供稳定键。 */
   final Key Function(T value) keyFor;
-
-  /** 可选图标映射；倍速等紧凑值不需要图标。 */
-  final IconData Function(T value)? iconFor;
 
   /** 用户选择新值后的回调。 */
   final ValueChanged<T> onSelected;
 
+  /** 可选的辅助图标映射；倍速列表无需图标。 */
+  final IconData Function(T value)? iconFor;
+
   @override
   Widget build(BuildContext context) {
-    const spacing = 7.0;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width =
-            (constraints.maxWidth - spacing * (columns - 1)) / columns;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            for (final value in values)
-              SizedBox(
-                width: width,
-                height: 36,
-                child: _PlayerSettingsChoiceButton(
-                  key: keyFor(value),
-                  label: labelFor(value),
-                  icon: iconFor?.call(value),
-                  selected: value == selected,
-                  onPressed: () => onSelected(value),
-                ),
-              ),
-          ],
-        );
-      },
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final value in values)
+            _PlayerSettingsOptionRow(
+              key: keyFor(value),
+              label: labelFor(value),
+              icon: iconFor?.call(value),
+              selected: value == selected,
+              onTap: () => onSelected(value),
+            ),
+        ],
+      ),
     );
   }
 }
 
-/** 单个设置选项，使用整块填充表达当前选择。 */
-class _PlayerSettingsChoiceButton extends StatelessWidget {
-  const _PlayerSettingsChoiceButton({
+/** 三级列表的单个选项；勾选标记明确表示当前真实生效状态。 */
+class _PlayerSettingsOptionRow extends StatelessWidget {
+  const _PlayerSettingsOptionRow({
     super.key,
     required this.label,
     required this.selected,
-    required this.onPressed,
+    required this.onTap,
     this.icon,
   });
 
-  /** 按钮文案。 */
+  /** 选项文案。 */
   final String label;
 
-  /** 是否为当前生效值。 */
+  /** 是否为当前全局值。 */
   final bool selected;
 
   /** 点击选择回调。 */
-  final VoidCallback onPressed;
+  final VoidCallback onTap;
 
-  /** 可选的辅助图标。 */
+  /** 可选的比例模式图标。 */
   final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
     final foreground = selected ? Colors.white : const Color(0xffaeb8cc);
     return Material(
-      color: selected ? const Color(0xff7047dc) : const Color(0xff263044),
-      borderRadius: BorderRadius.circular(6),
+      color: selected ? const Color(0xff342767) : Colors.transparent,
+      borderRadius: BorderRadius.circular(7),
       child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(6),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 15, color: foreground),
-              const SizedBox(width: 5),
-            ],
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(7),
+        child: SizedBox(
+          height: 44,
+          child: Row(
+            children: [
+              const SizedBox(width: 12),
+              if (icon != null) ...[
+                Icon(icon, size: 17, color: foreground),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
-          ],
+              if (selected)
+                const Icon(
+                  Icons.check_rounded,
+                  size: 19,
+                  color: Color(0xff9b7cff),
+                ),
+              const SizedBox(width: 12),
+            ],
+          ),
         ),
       ),
     );

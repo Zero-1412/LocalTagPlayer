@@ -48,6 +48,25 @@ class _PreviewFFmpegBackend implements FFmpegBackend {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/** 记录全局播放偏好是否真实送入后端，不启动 media_kit 或桌面纹理。 */
+class _PreferenceRecordingPlayerBackend implements PlayerBackend {
+  final properties = <String, String>{};
+  final rates = <double>[];
+
+  @override
+  Future<void> setProperty(String property, String value) async {
+    properties[property] = value;
+  }
+
+  @override
+  Future<void> setRate(double rate) async {
+    rates.add(rate);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   testWidgets('app mounts', (WidgetTester tester) async {
     await tester.pumpWidget(LocalTagPlayerApp(
@@ -795,6 +814,61 @@ void main() {
     expect(settings.fullscreenQueueHideDelayMs, 180);
   });
 
+  test('playback visual settings persist with safe backward-compatible values',
+      () async {
+    final oldSettings = PlaybackSettings.fromJson({'hwdec': 'auto-safe'});
+    expect(oldSettings.mirrorVideo, isFalse);
+    expect(oldSettings.playbackMode, PlayerPlaybackMode.sequential);
+    expect(oldSettings.videoAspectMode, PlayerVideoAspectMode.automatic);
+    expect(oldSettings.playbackRate, 1);
+
+    final directory = await Directory.systemTemp.createTemp(
+      'local_tag_player_playback_settings_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final paths = AppPaths(dataDirectoryOverride: directory);
+    final changed = oldSettings.copyWith(
+      mirrorVideo: true,
+      playbackMode: PlayerPlaybackMode.repeatAll,
+      videoAspectMode: PlayerVideoAspectMode.cover,
+      playbackRate: 1.5,
+    );
+    await changed.save(paths);
+    final loaded = await PlaybackSettings.load(paths);
+
+    expect(loaded.mirrorVideo, isTrue);
+    expect(loaded.playbackMode, PlayerPlaybackMode.repeatAll);
+    expect(loaded.videoAspectMode, PlayerVideoAspectMode.cover);
+    expect(loaded.playbackRate, 1.5);
+    expect(loaded.toJson()['playbackMode'], 'repeatAll');
+    expect(loaded.toJson()['videoAspectMode'], 'cover');
+
+    final unsafe = PlaybackSettings.fromJson({
+      'playbackMode': 'unknown',
+      'videoAspectMode': 'stretched',
+      'playbackRate': 9,
+    });
+    expect(unsafe.playbackMode, PlayerPlaybackMode.sequential);
+    expect(unsafe.videoAspectMode, PlayerVideoAspectMode.automatic);
+    expect(unsafe.playbackRate, 1);
+  });
+
+  test('persisted visual settings are applied to the playback backend',
+      () async {
+    final backend = _PreferenceRecordingPlayerBackend();
+
+    await applyPlayerOpenPreferences(
+      backend: backend,
+      videoAspectMode: PlayerVideoAspectMode.cover,
+      playbackRate: 1.5,
+    );
+
+    expect(backend.properties['video-aspect-override'], '-1');
+    expect(backend.properties['panscan'], '1.0');
+    expect(backend.properties['video-zoom'], '0');
+    expect(backend.rates, <double>[1.5]);
+  });
+
   test('playback settings clamp fullscreen queue interaction values', () {
     final settings = PlaybackSettings.fromJson({
       'fullscreenQueueEdgeWidth': 99,
@@ -994,48 +1068,41 @@ void main() {
     );
   });
 
-  testWidgets('advanced player settings expose grouped playback controls',
+  testWidgets('advanced player settings only expose aspect and speed routes',
       (tester) async {
-    PlayerPlaybackMode? selectedPlaybackMode;
-    PlayerVideoAspectMode? selectedAspectMode;
-    double? selectedRate;
+    var aspectOpened = false;
+    var rateOpened = false;
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
         home: Scaffold(
           body: Center(
-            child: PlayerSettingsPanel(
-              playbackMode: PlayerPlaybackMode.sequential,
+            child: PlayerSettingsAdvancedList(
               videoAspectMode: PlayerVideoAspectMode.automatic,
               playbackRate: 1,
-              playbackRates: const <double>[0.5, 0.75, 1, 1.25, 1.5, 2],
-              onPlaybackModeChanged: (mode) => selectedPlaybackMode = mode,
-              onVideoAspectModeChanged: (mode) => selectedAspectMode = mode,
-              onPlaybackRateChanged: (rate) => selectedRate = rate,
+              onShowVideoAspect: () => aspectOpened = true,
+              onShowPlaybackRate: () => rateOpened = true,
             ),
           ),
         ),
       ),
     );
 
-    expect(find.byKey(const ValueKey('player.settings.panel')), findsOneWidget);
-    expect(find.text('播放方式'), findsOneWidget);
+    expect(find.text('播放方式'), findsNothing);
     expect(find.text('视频比例'), findsOneWidget);
     expect(find.text('播放速度'), findsOneWidget);
+    expect(find.text('快捷键'), findsNothing);
+    expect(find.text('播放诊断'), findsNothing);
 
     await tester.tap(
-      find.byKey(const ValueKey('player.settings.mode.repeatAll')),
+      find.byKey(const ValueKey('player.settings.aspect.open')),
     );
     await tester.tap(
-      find.byKey(const ValueKey('player.settings.aspect.cover')),
-    );
-    await tester.tap(
-      find.byKey(const ValueKey('player.settings.rate.1.25')),
+      find.byKey(const ValueKey('player.settings.rate.open')),
     );
 
-    expect(selectedPlaybackMode, PlayerPlaybackMode.repeatAll);
-    expect(selectedAspectMode, PlayerVideoAspectMode.cover);
-    expect(selectedRate, 1.25);
+    expect(aspectOpened, isTrue);
+    expect(rateOpened, isTrue);
     expect(PlayerVideoAspectMode.automatic.mpvAspectOverride, '-1');
     expect(PlayerVideoAspectMode.ratio4x3.mpvAspectOverride, '4:3');
     expect(PlayerVideoAspectMode.ratio16x9.mpvAspectOverride, '16:9');
@@ -1053,6 +1120,7 @@ void main() {
     bool? mirrorVideo;
     PlayerPlaybackMode? selectedPlaybackMode;
     PlayerVideoAspectMode? selectedAspectMode;
+    double? selectedRate;
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
@@ -1078,9 +1146,9 @@ void main() {
                   onVideoAspectModeChanged: (mode) {
                     selectedAspectMode = mode;
                   },
-                  onPlaybackRateChanged: (_) {},
-                  onShowShortcuts: () {},
-                  onShowDiagnostics: () {},
+                  onPlaybackRateChanged: (rate) {
+                    selectedRate = rate;
+                  },
                 ),
                 icon: const Icon(Icons.settings_outlined),
               ),
@@ -1159,12 +1227,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester.getSize(find.byKey(const ValueKey('player.settings.shell'))).width,
-      closeTo(400, 0.1),
+      closeTo(300, 0.1),
     );
     expect(find.text('更多播放设置'), findsOneWidget);
     expect(find.text('视频比例'), findsOneWidget);
     expect(find.text('播放速度'), findsOneWidget);
+    expect(find.text('播放方式'), findsNothing);
+    expect(find.text('快捷键'), findsNothing);
+    expect(find.text('播放诊断'), findsNothing);
 
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.aspect.open')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('player.settings.aspect.page')),
+      findsOneWidget,
+    );
+    expect(find.text('视频比例'), findsOneWidget);
     await tester.tap(
       find.byKey(const ValueKey('player.settings.aspect.cover')),
     );
@@ -1173,6 +1253,25 @@ void main() {
     expect(
         find.byKey(const ValueKey('player.settings.dialog')), findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('player.settings.back')));
+    await tester.pumpAndSettle();
+    expect(find.text('更多播放设置'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.rate.open')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('player.settings.rate.page')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.rate.1.5')),
+    );
+    await tester.pump();
+    expect(selectedRate, 1.5);
+
+    await tester.tap(find.byKey(const ValueKey('player.settings.back')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('player.settings.back')));
     await tester.pumpAndSettle();
     expect(find.text('镜像画面'), findsOneWidget);

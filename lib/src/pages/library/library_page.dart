@@ -3596,6 +3596,13 @@ class _LibraryPageState extends State<LibraryPage> {
             playlist: List<VideoItem>.of(playlist),
             thumbnailService: thumbnailService,
             playbackSettings: _playbackSettings,
+            onPlaybackSettingsChanged: (settings) async {
+              // 播放器内先更新应用级快照，使下一次进入立即沿用，再写入持久化文件。
+              if (mounted) {
+                setState(() => _playbackSettings = settings);
+              }
+              await widget.applicationService.savePlaybackSettings(settings);
+            },
             activeTags: _selectedTags.toList()..sort(),
             activeChildTag: activeChildTag,
             queueTitle: queueTitle,

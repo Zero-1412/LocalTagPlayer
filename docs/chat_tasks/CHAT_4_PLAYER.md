@@ -488,3 +488,10 @@
 - `PlayerBackend.buildVideoSurface` 增加可选 `BoxFit` 和显示宽高比；自动模式继续 `contain`，铺满模式使用 media_kit `cover` 并结合 mpv panscan 等比裁边，切换视频时恢复当前会话选择。
 - focused tests 覆盖比例参数映射、设置网格回调、400px Dialog 打开/关闭和原有 filtered queue 播放模式边界；`flutter analyze`、Windows debug build 通过，未执行全量测试。
 - 真实窗口已确认自动模式留边、设置分组与选中反馈，并在迭代中发现和修正 MenuAnchor 不显示、Dialog 过宽以及单独 panscan 无法处理外层纹理留边。最终构建复测时自动化进程意外退出，准确人工路径为：启动 debug exe → 第 5 个 1728×1080 视频 → 暂停 → 齿轮 → 确认 400px 浮层 → 全屏 → 自动/铺满往返。
+
+# 2026-07-15 播放设置全局持久化与三级列表
+
+- 一级继续保留镜像、单曲循环和列表循环；更多播放设置删除重复播放方式、快捷键和播放诊断，仅显示视频比例与播放速度当前值及三级列表入口。
+- `PlaybackSettings` 向后兼容增加镜像、队列播放方式、比例和倍速；页面变更即时应用，写入串行化，并在退出播放器前等待最后一次持久化完成。
+- 每次媒体 open 前后把比例、panscan 和倍速重新应用到 `PlayerBackend`；focused test 明确验证后端收到持久化的 1.5x 与铺满参数，不以 JSON 或 UI 选中态代替真实生效。
+- focused 7 项、完整 128 项测试、`flutter analyze`、Windows debug build 和真实窗口一级/二级/三级点击通过，2 项显式基准跳过；完整重启后“铺满 / 1.5x”仍显示并真实生效，验证后恢复默认。filtered queue、当前索引、SQLite、标签语义和缓存队列均未改变。
