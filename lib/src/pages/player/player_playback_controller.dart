@@ -151,23 +151,40 @@ class PlayerPlaybackController {
   }
 
   /**
-   * 从来源队列和当前队列中移除选中视频，并把播放索引夹紧到可播放范围。
+   * 从来源队列和当前队列中移除指定索引的视频。
+   *
+   * 非播放项位于当前播放项之前时只回退播放索引，保证播放器仍指向同一个视频；
+   * 只有删除正在播放项时，调用方才需要停止后端并打开新的当前项。
+   * 返回值表示被移除项是否正在播放。
    */
-  void removeSelectedItem(VideoItem item) {
-    sourcePlaylist.removeWhere((video) => video.path == item.path);
-    if (selectedIndex >= 0 && selectedIndex < queue.length) {
-      queue.removeAt(selectedIndex);
-    } else {
-      queue.removeWhere((video) => video.path == item.path);
+  bool removeItemAt(int index) {
+    if (index < 0 || index >= queue.length) {
+      return false;
     }
+    final item = queue[index];
+    final removedPlayingItem = index == playingIndex;
+    final removedSelectedItem = index == selectedIndex;
+    sourcePlaylist.removeWhere((video) => video.path == item.path);
+    queue.removeAt(index);
     if (queue.isEmpty) {
       playingIndex = 0;
       selectedIndex = 0;
-      return;
+      return removedPlayingItem;
     }
-    if (selectedIndex >= queue.length) {
+
+    if (index < playingIndex) {
+      playingIndex--;
+    } else if (playingIndex >= queue.length) {
+      playingIndex = queue.length - 1;
+    }
+    if (index < selectedIndex) {
+      selectedIndex--;
+    } else if (selectedIndex >= queue.length) {
       selectedIndex = queue.length - 1;
     }
-    playingIndex = selectedIndex;
+    if (removedPlayingItem || removedSelectedItem) {
+      selectedIndex = playingIndex;
+    }
+    return removedPlayingItem;
   }
 }

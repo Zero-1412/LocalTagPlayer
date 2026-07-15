@@ -3606,7 +3606,7 @@ class _LibraryPageState extends State<LibraryPage> {
             activeTags: _selectedTags.toList()..sort(),
             activeChildTag: activeChildTag,
             queueTitle: queueTitle,
-            onDeleteFile: _deleteVideoFile,
+            onDeleteVideo: _deleteVideoFromPlayer,
             onToggleFavorite: _toggleFavoriteFromPlayer,
             onEditManualTags: _editManualTagsFromPlayer,
             onRelinkMissing: _relinkMissingFromPlayer,
@@ -3762,13 +3762,19 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
-  Future<void> _deleteVideoFile(VideoItem item) async {
-    await _fileSystem.deleteFile(item.path);
+  /** 执行播放器弹窗已经确认的删除选择，真实文件删除始终留在平台边界内。 */
+  Future<void> _deleteVideoFromPlayer(
+    VideoItem item,
+    bool deleteLocalFile,
+  ) async {
+    if (deleteLocalFile) {
+      await _fileSystem.deleteFile(item.path);
+    }
     await _store?.deleteVideo(item.path);
     await _thumbnailService?.deleteThumbnailFor(item);
-    if (mounted) {
-      _markLibraryDataChanged();
-    }
+    // 播放器路由仍在前台时不重建媒体库；返回后统一刷新可见结果和标签计数。
+    _playerScopedLibraryDataChanged = true;
+    _playerScopedNeedsCountRefresh = true;
   }
 
   /**

@@ -305,6 +305,42 @@ void main() {
     expect(find.byKey(searchFieldKey), findsNothing);
   });
 
+  testWidgets('player delete dialog keeps local file deletion explicit',
+      (tester) async {
+    final item = _testVideo(path: r'X:\test-media\clip.mp4', title: 'clip');
+    Object? result = 'pending';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () async {
+              result = await showPlayerDeleteConfirmationDialog(context, item);
+            },
+            child: const Text('打开删除确认'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开删除确认'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+    expect(find.text('仅移出媒体库'), findsOneWidget);
+    await tester.tap(find.text('仅移出媒体库'));
+    await tester.pumpAndSettle();
+    expect(result, isFalse);
+
+    result = 'pending';
+    await tester.tap(find.text('打开删除确认'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('同时删除本地视频文件'));
+    await tester.pump();
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+    await tester.tap(find.text('删除文件和记录'));
+    await tester.pumpAndSettle();
+    expect(result, isTrue);
+  });
+
   testWidgets('player side panel switches between queue and current details',
       (tester) async {
     tester.view.devicePixelRatio = 1;
@@ -359,7 +395,7 @@ void main() {
     final detailsSurfaceSize = tester.getSize(
       find.byKey(const ValueKey('player.sidebar.tab.details.surface')),
     );
-    expect(segmentSize.height, 44);
+    expect(segmentSize.height, 34);
     expect(queueSurfaceSize.height, segmentSize.height);
     expect(detailsSurfaceSize.height, segmentSize.height);
     final initialQueueDecoration = tester
@@ -1023,6 +1059,37 @@ void main() {
     expect(playback.queue, [first, second]);
   });
 
+  test(
+      'player playback controller deletes queue items without changing identity',
+      () {
+    VideoItem item(String name) => VideoItem(
+          path: 'D:\\video\\$name.mp4',
+          title: name,
+          folder: 'D:\\video',
+          tags: const {},
+          addedAt: DateTime.utc(2026, 1, 1),
+        );
+
+    final first = item('first');
+    final second = item('second');
+    final third = item('third');
+    final playback = PlayerPlaybackController(
+      sourcePlaylist: [first, second, third],
+      activeParentTag: null,
+      initialPath: second.path,
+    );
+
+    expect(playback.removeItemAt(0), isFalse);
+    expect(playback.currentItem, second);
+    expect(playback.playingIndex, 0);
+    expect(playback.queue, [second, third]);
+
+    expect(playback.removeItemAt(0), isTrue);
+    expect(playback.currentItem, third);
+    expect(playback.selectedIndex, playback.playingIndex);
+    expect(playback.sourcePlaylist, [third]);
+  });
+
   test('player completion modes preserve filtered queue boundaries', () {
     expect(
       playerCompletionTargetIndex(
@@ -1282,17 +1349,58 @@ void main() {
     expect(find.byKey(const ValueKey('player.settings.dialog')), findsNothing);
   });
 
-  test('player controls stay visible while settings are open', () {
+  test('player controls hide only outside controls and settings', () {
     expect(
-      playerControlsShouldAutoHide(playing: true, settingsOpen: false),
-      isTrue,
-    );
-    expect(
-      playerControlsShouldAutoHide(playing: true, settingsOpen: true),
+      playerPointerInControlBar(localY: 500, surfaceHeight: 700),
       isFalse,
     );
     expect(
-      playerControlsShouldAutoHide(playing: false, settingsOpen: false),
+      playerPointerInControlBar(localY: 600, surfaceHeight: 700),
+      isTrue,
+    );
+    expect(
+      playerControlsShouldAutoHide(
+        settingsOpen: false,
+        pointerInControlBar: false,
+      ),
+      isTrue,
+    );
+    expect(
+      playerControlsShouldAutoHide(
+        settingsOpen: true,
+        pointerInControlBar: false,
+      ),
+      isFalse,
+    );
+    expect(
+      playerControlsShouldAutoHide(
+        settingsOpen: false,
+        pointerInControlBar: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test('player queue swipe actions snap smoothly by distance and velocity', () {
+    expect(
+      playerQueueActionShouldOpen(
+        progress: 0.5,
+        horizontalVelocity: 0,
+      ),
+      isTrue,
+    );
+    expect(
+      playerQueueActionShouldOpen(
+        progress: 0.2,
+        horizontalVelocity: -500,
+      ),
+      isTrue,
+    );
+    expect(
+      playerQueueActionShouldOpen(
+        progress: 0.8,
+        horizontalVelocity: 500,
+      ),
       isFalse,
     );
   });

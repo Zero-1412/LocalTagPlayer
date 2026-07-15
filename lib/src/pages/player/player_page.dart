@@ -36,12 +36,22 @@ import 'player_video_aspect_mode.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-/** 设置浮层展开时必须阻止播放控制条的自动隐藏计时。 */
+/** 设置浮层或控制条鼠标驻留期间必须阻止播放控制条自动隐藏。 */
 bool playerControlsShouldAutoHide({
-  required bool playing,
   required bool settingsOpen,
+  required bool pointerInControlBar,
 }) =>
-    playing && !settingsOpen;
+    !settingsOpen && !pointerInControlBar;
+
+/** 判断画面局部坐标是否落在底部进度与按钮控制区。 */
+@visibleForTesting
+bool playerPointerInControlBar({
+  required double localY,
+  required double surfaceHeight,
+  double controlHeight = 112,
+}) {
+  return localY >= math.max(0, surfaceHeight - controlHeight);
+}
 
 /**
  * 把持久化的画面比例与倍速重新应用到刚打开的播放后端。
@@ -86,7 +96,7 @@ class PlayerPage extends StatefulWidget {
     required this.activeTags,
     required this.activeChildTag,
     required this.queueTitle,
-    required this.onDeleteFile,
+    required this.onDeleteVideo,
     required this.onToggleFavorite,
     required this.onEditManualTags,
     required this.onRelinkMissing,
@@ -108,7 +118,9 @@ class PlayerPage extends StatefulWidget {
   final List<String> activeTags;
   final String? activeChildTag;
   final String queueTitle;
-  final Future<void> Function(VideoItem item) onDeleteFile;
+  /** 删除媒体库记录，并按用户确认结果选择是否同步删除本地文件。 */
+  final Future<void> Function(VideoItem item, bool deleteLocalFile)
+      onDeleteVideo;
   final Future<void> Function(VideoItem item) onToggleFavorite;
   final Future<void> Function(VideoItem item) onEditManualTags;
   final Future<bool> Function(VideoItem item) onRelinkMissing;
@@ -152,6 +164,8 @@ class PlayerPageState extends State<PlayerPage> {
   final _openRequests = PlayerOpenRequestController();
   /** 用于把设置浮层右边缘锚定到齿轮按钮，而不是按整个窗口居中。 */
   final _settingsButtonAnchorKey = GlobalKey();
+  /** 用于把画面内鼠标位置换算到底部控制区，不额外叠加拦截按钮的命中层。 */
+  final _videoControlsRegionKey = GlobalKey();
   /** 正在等待兼容性确认的路径；避免快速点击叠加多个警告弹窗。 */
   String? _compatibilityPromptPath;
   StreamSubscription<bool>? _completedSubscription;
@@ -164,6 +178,8 @@ class PlayerPageState extends State<PlayerPage> {
   Timer? _playbackHealthTimer;
   var _playbackHealthSampling = false;
   var _controlsVisible = true;
+  /** 鼠标停留在底部进度与控制区时暂停自动隐藏计时。 */
+  var _pointerInControlBar = false;
   /** 设置浮层展开期间锁定底部进度与控制区为可见。 */
   var _settingsDialogOpen = false;
   DateTime? _lastProgressWriteAt;
@@ -301,14 +317,11 @@ class PlayerPageState extends State<PlayerPage> {
         _playerBackend.errorChanges.listen(_handlePlayerError);
     _positionSubscription =
         _playerBackend.positionChanges.listen(_handlePosition);
-    _playingSubscription = _playerBackend.playingChanges.listen((playing) {
+    _playingSubscription = _playerBackend.playingChanges.listen((_) {
       if (!mounted) return;
-      if (playing) {
-        _showVideoControls();
-      } else {
-        _controlsHideTimer?.cancel();
-        if (!_controlsVisible) setState(() => _controlsVisible = true);
-      }
+      // 播放状态流可能在控制条已经可见时到达，仍需重建以同步播放/暂停图标。
+      setState(() => _controlsVisible = true);
+      _showVideoControls();
     });
     _requestOpenCurrent();
     // 诊断弹窗关闭时仍持续独立观察视频帧与音频播放头，避免瞬时 AV offset 掩盖单路停滞。
@@ -719,19 +732,48 @@ class PlayerPageState extends State<PlayerPage> {
       setState(() => _controlsVisible = true);
     }
     if (playerControlsShouldAutoHide(
-      playing: _playerBackend.state.playing,
       settingsOpen: _settingsDialogOpen,
+      pointerInControlBar: _pointerInControlBar,
     )) {
       _controlsHideTimer = Timer(const Duration(seconds: 3), () {
         if (mounted &&
             playerControlsShouldAutoHide(
-              playing: _playerBackend.state.playing,
               settingsOpen: _settingsDialogOpen,
+              pointerInControlBar: _pointerInControlBar,
             )) {
           setState(() => _controlsVisible = false);
         }
       });
     }
+  }
+
+  /** 控制条进出状态只协调计时，不触发播放、筛选队列或媒体后台任务。 */
+  void _setPointerInControlBar(bool inside) {
+    if (_pointerInControlBar == inside) {
+      return;
+    }
+    _pointerInControlBar = inside;
+    if (inside) {
+      _controlsHideTimer?.cancel();
+      if (!_controlsVisible && mounted) {
+        setState(() => _controlsVisible = true);
+      }
+      return;
+    }
+    _showVideoControls();
+  }
+
+  /** 根据画面局部坐标识别底部 112px 控制区，并继续刷新 3 秒计时。 */
+  void _handleVideoControlsPointer(PointerEvent event) {
+    final renderBox = _videoControlsRegionKey.currentContext?.findRenderObject()
+        as RenderBox?;
+    final inside = renderBox != null &&
+        playerPointerInControlBar(
+          localY: event.localPosition.dy,
+          surfaceHeight: renderBox.size.height,
+        );
+    _setPointerInControlBar(inside);
+    _showVideoControls();
   }
 
   /**
@@ -776,8 +818,13 @@ class PlayerPageState extends State<PlayerPage> {
   /** 构建画面底部统一控制条，并在全屏顶部保留最小队列语境。 */
   Widget _buildVideoControls() {
     return MouseRegion(
-      onEnter: (_) => _showVideoControls(),
-      onHover: (_) => _showVideoControls(),
+      key: _videoControlsRegionKey,
+      onEnter: _handleVideoControlsPointer,
+      onHover: _handleVideoControlsPointer,
+      onExit: (_) {
+        _setPointerInControlBar(false);
+        _showVideoControls();
+      },
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: _showVideoControls,
@@ -1622,53 +1669,70 @@ class PlayerPageState extends State<PlayerPage> {
     ));
   }
 
-  Future<void> _deleteSelectedFile() async {
-    if (_queue.isEmpty) {
-      return;
-    }
-    if (_selectedIndex != _index) {
+  /** 切换队列项收藏并刷新当前页面，不重算 filtered queue。 */
+  Future<void> _toggleQueueFavorite(VideoItem item) async {
+    try {
+      await widget.onToggleFavorite(item);
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                '\u53ea\u80fd\u5220\u9664\u5f53\u524d\u6b63\u5728\u64ad\u653e\u4e14\u5df2\u9009\u4e2d\u7684\u89c6\u9891')),
+        const SnackBar(content: Text('收藏状态更新失败，请重试')),
       );
+    }
+  }
+
+  /**
+   * 删除任意队列项；非播放项只调整索引，删除当前播放项时才重启播放后端。
+   */
+  Future<void> _deleteQueueItem(int queueIndex) async {
+    if (queueIndex < 0 || queueIndex >= _queue.length) {
       return;
     }
-
-    final item = _queue[_selectedIndex];
-    final confirmed = await showPlayerDeleteConfirmationDialog(context, item);
-    if (!confirmed || !mounted) {
+    final item = _queue[queueIndex];
+    final deleteLocalFile =
+        await showPlayerDeleteConfirmationDialog(context, item);
+    if (deleteLocalFile == null || !mounted) {
       return;
     }
 
     try {
-      await _playerBackend.stop();
-      await widget.onDeleteFile(item);
+      final deletingPlayingItem = queueIndex == _index;
+      if (deletingPlayingItem) {
+        _persistOpenedProgress();
+        await _playerBackend.stop();
+      }
+      await widget.onDeleteVideo(item, deleteLocalFile);
       if (!mounted) {
         return;
       }
       setState(() {
         _queueEndReached = false;
-        _playback.removeSelectedItem(item);
+        _playback.removeItemAt(queueIndex);
       });
       if (_queue.isEmpty) {
         await _exitPlayer();
         return;
       }
       _ensureQueueIndexVisible(_index, center: true);
-      _requestOpenCurrent();
+      if (deletingPlayingItem) {
+        _requestOpenCurrent();
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('\u5df2\u5220\u9664\u89c6\u9891\u6587\u4ef6')),
+        SnackBar(
+          content: Text(
+            deleteLocalFile ? '已删除本地文件和媒体库记录' : '已从媒体库移除视频',
+          ),
+        ),
       );
     } catch (_) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                '\u5220\u9664\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u6587\u4ef6\u6743\u9650')),
+        const SnackBar(content: Text('删除失败，请检查文件权限后重试')),
       );
     }
   }
@@ -2081,8 +2145,7 @@ class PlayerPageState extends State<PlayerPage> {
     }
     if (event.logicalKey == LogicalKeyboardKey.insert &&
         HardwareKeyboard.instance.isAltPressed) {
-      unawaited(widget.onToggleFavorite(_currentItem));
-      setState(() {});
+      unawaited(_toggleQueueFavorite(_currentItem));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(_currentItem.isFavorite
@@ -2094,7 +2157,7 @@ class PlayerPageState extends State<PlayerPage> {
     if (event.logicalKey == LogicalKeyboardKey.delete &&
         HardwareKeyboard.instance.isControlPressed &&
         HardwareKeyboard.instance.isShiftPressed) {
-      unawaited(_deleteSelectedFile());
+      unawaited(_deleteQueueItem(_selectedIndex));
       return KeyEventResult.handled;
     }
     final pressedKey = _playerShortcutKeyId(event.logicalKey);
@@ -2259,17 +2322,18 @@ class PlayerPageState extends State<PlayerPage> {
         controller: controller,
       ),
       onSearchQueue: _searchQueue,
-      onDeleteSelected: _selectedIndex == _index ? _deleteSelectedFile : null,
+      onDeleteSelected: _queue.isEmpty
+          ? null
+          : () => unawaited(_deleteQueueItem(_selectedIndex)),
+      onToggleFavorite: (item) => unawaited(_toggleQueueFavorite(item)),
+      onDeleteItem: (index) => unawaited(_deleteQueueItem(index)),
     );
     return PlayerSidePanel(
       key: key ?? const ValueKey('player.queue.sidebar'),
       queuePanel: queuePanel,
       item: _currentItem,
       queueEndReached: _queueEndReached,
-      onToggleFavorite: () {
-        unawaited(widget.onToggleFavorite(_currentItem));
-        setState(() {});
-      },
+      onToggleFavorite: () => unawaited(_toggleQueueFavorite(_currentItem)),
       onEditManualTags: () => unawaited(_editManualTags()),
       onRevealFile: () => unawaited(_revealCurrentFile()),
       onVideoInfo: () => unawaited(_showVideoInfoDialog()),

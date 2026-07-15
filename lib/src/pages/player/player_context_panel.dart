@@ -128,22 +128,23 @@ class _PlayerSidePanelTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(8),
+      // 侧栏顶部只承担视图切换，压缩高度让队列内容与播放器主体保持同一视觉密度。
+      padding: const EdgeInsets.all(6),
       decoration: const BoxDecoration(
         color: Color(0xff0b1324),
         border: Border(bottom: BorderSide(color: Color(0xff243044))),
       ),
       child: SizedBox(
         key: const ValueKey('player.sidebar.tabs.segment'),
-        height: 44,
+        height: 34,
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: const Color(0xff0a1324),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xff2b3853), width: 1.2),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(7),
             child: Row(
               // 两个分段必须填满外框高度，避免选中渐变只包住图标和文字。
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -219,8 +220,8 @@ class _PlayerSidePanelTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final outerRadius = position == _PlayerSidePanelTabPosition.leading
-        ? const BorderRadius.horizontal(left: Radius.circular(9))
-        : const BorderRadius.horizontal(right: Radius.circular(9));
+        ? const BorderRadius.horizontal(left: Radius.circular(7))
+        : const BorderRadius.horizontal(right: Radius.circular(7));
     return Semantics(
       button: true,
       selected: selected,
@@ -261,19 +262,19 @@ class _PlayerSidePanelTab extends StatelessWidget {
               children: [
                 Icon(
                   icon,
-                  size: 23,
+                  size: 18,
                   color: selected
                       ? const Color(0xfff5f2ff)
                       : const Color(0xff8793a8),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 7),
                 Text(
                   label,
                   style: TextStyle(
                     color: selected
                         ? const Color(0xfff5f2ff)
                         : const Color(0xff8793a8),
-                    fontSize: 17,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                     height: 1,
                   ),

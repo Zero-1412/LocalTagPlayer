@@ -32,6 +32,16 @@ bool playerQueueShouldDeferItem({
   return !scrollSettled && recommendsDeferredLoading;
 }
 
+/** 根据拖动进度与水平速度决定队列项操作区是否吸附到展开状态。 */
+@visibleForTesting
+bool playerQueueActionShouldOpen({
+  required double progress,
+  required double horizontalVelocity,
+}) {
+  return horizontalVelocity < -250 ||
+      (horizontalVelocity <= 250 && progress >= 0.45);
+}
+
 class _PlayerDesktopDragScrollBehavior extends MaterialScrollBehavior {
   const _PlayerDesktopDragScrollBehavior();
 
@@ -120,6 +130,8 @@ class PlayerQueueSidebar extends StatelessWidget {
     required this.onReturnToPlaying,
     required this.onLocateSelected,
     required this.onDeleteSelected,
+    required this.onToggleFavorite,
+    required this.onDeleteItem,
     required this.onSearchQueue,
   });
 
@@ -206,6 +218,12 @@ class PlayerQueueSidebar extends StatelessWidget {
    */
   final VoidCallback? onDeleteSelected;
 
+  /** 切换单个队列项的收藏状态，不改变当前播放或筛选顺序。 */
+  final ValueChanged<VideoItem> onToggleFavorite;
+
+  /** 请求删除指定队列索引，实际文件动作由播放器页确认后执行。 */
+  final ValueChanged<int> onDeleteItem;
+
   /** 在当前队列内搜索并定位，不改变队列内容。 */
   final ValueChanged<String> onSearchQueue;
 
@@ -276,6 +294,8 @@ class PlayerQueueSidebar extends StatelessWidget {
                     detailsService: detailsService,
                     onTap: () => onSelect(index),
                     onDoubleTap: () => onPlay(index),
+                    onToggleFavorite: () => onToggleFavorite(item),
+                    onDelete: () => onDeleteItem(index),
                   );
                 },
               ),
@@ -972,6 +992,8 @@ class _QueueListItem extends StatefulWidget {
     required this.detailsService,
     required this.onTap,
     required this.onDoubleTap,
+    required this.onToggleFavorite,
+    required this.onDelete,
   });
 
   /**
@@ -1014,18 +1036,32 @@ class _QueueListItem extends StatefulWidget {
    */
   final VoidCallback onDoubleTap;
 
+  /** 左滑操作区中的收藏切换动作。 */
+  final VoidCallback onToggleFavorite;
+
+  /** 左滑操作区中的删除动作。 */
+  final VoidCallback onDelete;
+
   @override
   State<_QueueListItem> createState() => _QueueListItemState();
 }
 
-class _QueueListItemState extends State<_QueueListItem> {
+class _QueueListItemState extends State<_QueueListItem>
+    with SingleTickerProviderStateMixin {
+  static const _actionRevealWidth = 96.0;
   late Future<File?> _thumbnailFuture;
   late Future<MediaDetails> _detailsFuture;
+  late final AnimationController _actionController;
   var _hovered = false;
 
   @override
   void initState() {
     super.initState();
+    _actionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+      reverseDuration: const Duration(milliseconds: 180),
+    );
     _loadItemFutures();
   }
 
@@ -1033,8 +1069,41 @@ class _QueueListItemState extends State<_QueueListItem> {
   void didUpdateWidget(covariant _QueueListItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item.path != widget.item.path) {
+      _actionController.value = 0;
       _loadItemFutures();
     }
+  }
+
+  @override
+  void dispose() {
+    _actionController.dispose();
+    super.dispose();
+  }
+
+  /** 把水平拖动距离映射为稳定的 0..1 展开进度。 */
+  void _handleHorizontalDragUpdate(DragUpdateDetails details) {
+    _actionController.value =
+        (_actionController.value - details.delta.dx / _actionRevealWidth)
+            .clamp(0.0, 1.0);
+  }
+
+  /** 根据拖动速度和过半阈值平滑吸附到展开或折叠状态。 */
+  void _handleHorizontalDragEnd(DragEndDetails details) {
+    final velocity = details.velocity.pixelsPerSecond.dx;
+    if (playerQueueActionShouldOpen(
+      progress: _actionController.value,
+      horizontalVelocity: velocity,
+    )) {
+      _actionController.forward();
+    } else {
+      _actionController.reverse();
+    }
+  }
+
+  /** 执行动作前先收回操作区，避免弹窗返回后队列项仍停在半展开状态。 */
+  void _runAction(VoidCallback action) {
+    _actionController.reverse();
+    action();
   }
 
   void _loadItemFutures() {
@@ -1136,174 +1205,283 @@ class _QueueListItemState extends State<_QueueListItem> {
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: InkWell(
+        onExit: (_) {
+          setState(() => _hovered = false);
+          _actionController.reverse();
+        },
+        child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          onTap: widget.onTap,
-          onDoubleTap: widget.onDoubleTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            curve: appMotionCurve,
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: backgroundColor,
+          child: AnimatedBuilder(
+            animation: _actionController,
+            child: InkWell(
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: borderColor),
-              boxShadow: shadow,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  width: 3,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: widget.playing || widget.selected || _hovered
-                        ? accentColor
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+              onTap: widget.onTap,
+              onDoubleTap: widget.onDoubleTap,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                curve: appMotionCurve,
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: borderColor),
+                  boxShadow: shadow,
                 ),
-                const SizedBox(width: 5),
-                SizedBox(
-                  width: 100,
-                  height: 58,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        FutureBuilder<File?>(
-                          future: _thumbnailFuture,
-                          initialData:
-                              widget.thumbnailService.cachedThumbnailFor(
-                            widget.item,
-                          ),
-                          builder: (context, snapshot) {
-                            final file = snapshot.data;
-                            // 缓存有效性由 ThumbnailService 负责，Widget 不再同步访问磁盘。
-                            if (file != null) {
-                              return Image.file(
-                                file,
-                                fit: BoxFit.cover,
-                                filterQuality: FilterQuality.low,
-                                cacheWidth: 160,
-                                gaplessPlayback: true,
-                              );
-                            }
-                            return const ColoredBox(
-                              color: Color(0xff242932),
-                              child: Center(
-                                child: Icon(Icons.movie_outlined,
-                                    color: Color(0xff687282), size: 22),
-                              ),
-                            );
-                          },
-                        ),
-                        AnimatedOpacity(
-                          duration: const Duration(milliseconds: 120),
-                          opacity: showHoverAction ? 1 : 0,
-                          child: const ColoredBox(
-                            color: Color(0x66000000),
-                            child: Center(
-                              child: Icon(Icons.play_arrow_rounded,
-                                  color: Colors.white, size: 24),
-                            ),
-                          ),
-                        ),
-                      ],
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      width: 3,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: widget.playing || widget.selected || _hovered
+                            ? accentColor
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FutureBuilder<MediaDetails>(
-                    future: _detailsFuture,
-                    initialData:
-                        widget.detailsService.cachedDetailsFor(widget.item),
-                    builder: (context, snapshot) {
-                      final details = snapshot.data;
-                      return Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                    const SizedBox(width: 5),
+                    SizedBox(
+                      width: 100,
+                      height: 58,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            FutureBuilder<File?>(
+                              future: _thumbnailFuture,
+                              initialData:
+                                  widget.thumbnailService.cachedThumbnailFor(
+                                widget.item,
+                              ),
+                              builder: (context, snapshot) {
+                                final file = snapshot.data;
+                                // 缓存有效性由 ThumbnailService 负责，Widget 不再同步访问磁盘。
+                                if (file != null) {
+                                  return Image.file(
+                                    file,
+                                    fit: BoxFit.cover,
+                                    filterQuality: FilterQuality.low,
+                                    cacheWidth: 160,
+                                    gaplessPlayback: true,
+                                  );
+                                }
+                                return const ColoredBox(
+                                  color: Color(0xff242932),
+                                  child: Center(
+                                    child: Icon(Icons.movie_outlined,
+                                        color: Color(0xff687282), size: 22),
+                                  ),
+                                );
+                              },
+                            ),
+                            AnimatedOpacity(
+                              duration: const Duration(milliseconds: 120),
+                              opacity: showHoverAction ? 1 : 0,
+                              child: const ColoredBox(
+                                color: Color(0x66000000),
+                                child: Center(
+                                  child: Icon(Icons.play_arrow_rounded,
+                                      color: Colors.white, size: 24),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FutureBuilder<MediaDetails>(
+                        future: _detailsFuture,
+                        initialData:
+                            widget.detailsService.cachedDetailsFor(widget.item),
+                        builder: (context, snapshot) {
+                          final details = snapshot.data;
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SizedBox(
-                                width: 30,
-                                child: Text(
-                                  (widget.index + 1).toString().padLeft(2, '0'),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.clip,
-                                  style: TextStyle(
-                                    color: accentColor,
-                                    fontSize: 12,
-                                    fontWeight: emphasis >= 2
-                                        ? FontWeight.w900
-                                        : FontWeight.w700,
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 30,
+                                    child: Text(
+                                      (widget.index + 1)
+                                          .toString()
+                                          .padLeft(2, '0'),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.clip,
+                                      style: TextStyle(
+                                        color: accentColor,
+                                        fontSize: 12,
+                                        fontWeight: emphasis >= 2
+                                            ? FontWeight.w900
+                                            : FontWeight.w700,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  widget.item.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: titleColor,
-                                    fontSize: 13,
-                                    height: 1.15,
-                                    fontWeight: emphasis >= 2
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
+                                  Expanded(
+                                    child: Text(
+                                      widget.item.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: titleColor,
+                                        fontSize: 13,
+                                        height: 1.15,
+                                        fontWeight: emphasis >= 2
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 5),
+                                  Semantics(
+                                    label:
+                                        widget.item.isFavorite ? '已收藏' : '未收藏',
+                                    child: Icon(
+                                      widget.item.isFavorite
+                                          ? Icons.favorite_rounded
+                                          : Icons.favorite_border_rounded,
+                                      key: ValueKey(
+                                        'player.queue.favoriteIndicator.'
+                                        '${widget.item.videoId}',
+                                      ),
+                                      size: 15,
+                                      color: widget.item.isFavorite
+                                          ? const Color(0xffff6174)
+                                          : const Color(0xff647086),
+                                    ),
+                                  ),
+                                  if (stateBadgeLabel != null &&
+                                      stateBadgeIcon != null) ...[
+                                    const SizedBox(width: 6),
+                                    _QueueStateBadge(
+                                      label: stateBadgeLabel,
+                                      icon: stateBadgeIcon,
+                                      color: stateBadgeColor,
+                                    ),
+                                  ],
+                                ],
                               ),
-                              if (stateBadgeLabel != null &&
-                                  stateBadgeIcon != null) ...[
-                                const SizedBox(width: 6),
-                                _QueueStateBadge(
-                                  label: stateBadgeLabel,
-                                  icon: stateBadgeIcon,
-                                  color: stateBadgeColor,
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _detailsLine(details),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                color: infoColor, fontSize: 11, height: 1.1),
-                          ),
-                          AnimatedOpacity(
-                            duration: const Duration(milliseconds: 120),
-                            opacity: showHoverAction ? 1 : 0,
-                            child: const Padding(
-                              padding: EdgeInsets.only(top: 2),
-                              child: Text(
-                                '单击选中 · 双击播放',
+                              const SizedBox(height: 4),
+                              Text(
+                                _detailsLine(details),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: Color(0xffa7b4ff),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  height: 1,
+                                    color: infoColor,
+                                    fontSize: 11,
+                                    height: 1.1),
+                              ),
+                              AnimatedOpacity(
+                                duration: const Duration(milliseconds: 120),
+                                opacity: showHoverAction ? 1 : 0,
+                                child: const Padding(
+                                  padding: EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    '单击选中 · 双击播放',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Color(0xffa7b4ff),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      height: 1,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            builder: (context, front) => Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildActionBackground(),
+                Transform.translate(
+                  offset: Offset(
+                    -_actionRevealWidth * _actionController.value,
+                    0,
+                  ),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onHorizontalDragStart: (_) => widget.onTap(),
+                    onHorizontalDragUpdate: _handleHorizontalDragUpdate,
+                    onHorizontalDragEnd: _handleHorizontalDragEnd,
+                    onHorizontalDragCancel: _actionController.reverse,
+                    child: front,
                   ),
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /** 构建折叠在卡片后的收藏与删除操作区，颜色沿用播放器深色主题。 */
+  Widget _buildActionBackground() {
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: Color(0xff101827)),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: SizedBox(
+          width: _actionRevealWidth,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Tooltip(
+                  message: widget.item.isFavorite ? '取消收藏' : '收藏',
+                  child: Material(
+                    color: const Color(0xff271c2b),
+                    child: InkWell(
+                      key: ValueKey(
+                        'player.queue.favoriteAction.${widget.item.videoId}',
+                      ),
+                      onTap: () => _runAction(widget.onToggleFavorite),
+                      child: Icon(
+                        widget.item.isFavorite
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        color: const Color(0xffff6174),
+                        size: 21,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Tooltip(
+                  message: '删除',
+                  child: Material(
+                    color: const Color(0xff2b1c25),
+                    child: InkWell(
+                      key: ValueKey(
+                        'player.queue.deleteAction.${widget.item.videoId}',
+                      ),
+                      onTap: () => _runAction(widget.onDelete),
+                      child: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: Color(0xffff7c8b),
+                        size: 21,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
