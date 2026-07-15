@@ -159,6 +159,58 @@ void main() {
     expect(playerQueueSidebarWidthForWindow(1920), 500);
   });
 
+  testWidgets('player queue search expands from the count action',
+      (tester) async {
+    String? submittedQuery;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 384,
+            child: PlayerQueueHeader(
+              playlistLength: 11165,
+              playingIndex: 2,
+              onLocateSelected: () {},
+              onDeleteSelected: () {},
+              onSearch: (query) => submittedQuery = query,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const positionKey = ValueKey('player.queue.position');
+    const searchToggleKey = ValueKey('player.queue.search.toggle');
+    const locateKey = ValueKey('player.queue.locate.selected');
+    const deleteKey = ValueKey('player.queue.delete.selected');
+    const searchFieldKey = ValueKey('player.queueSearch');
+    final position = find.byKey(positionKey);
+    final searchToggle = find.byKey(searchToggleKey);
+    final locate = find.byKey(locateKey);
+    final delete = find.byKey(deleteKey);
+
+    expect(find.byKey(searchFieldKey), findsNothing);
+    expect(tester.getCenter(position).dx,
+        lessThan(tester.getCenter(searchToggle).dx));
+    expect(tester.getCenter(searchToggle).dx,
+        lessThan(tester.getCenter(locate).dx));
+    expect(tester.getCenter(locate).dx, lessThan(tester.getCenter(delete).dx));
+
+    await tester.tap(searchToggle);
+    await tester.pump();
+
+    expect(find.byKey(searchFieldKey), findsOneWidget);
+    expect(
+        tester.widget<TextField>(find.byKey(searchFieldKey)).autofocus, isTrue);
+    await tester.enterText(find.byKey(searchFieldKey), 'clip');
+    await tester.tap(find.byKey(const ValueKey('player.queueSearchSubmit')));
+    expect(submittedQuery, 'clip');
+
+    await tester.tap(searchToggle);
+    await tester.pump();
+    expect(find.byKey(searchFieldKey), findsNothing);
+  });
+
   testWidgets('player side panel switches between queue and current details',
       (tester) async {
     tester.view.devicePixelRatio = 1;

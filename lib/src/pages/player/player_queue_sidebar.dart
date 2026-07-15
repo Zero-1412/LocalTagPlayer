@@ -236,68 +236,12 @@ class PlayerQueueSidebar extends StatelessWidget {
     );
     final content = Column(
       children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          decoration: const BoxDecoration(
-            color: Color(0xff0d1528),
-            border: Border(
-              bottom: BorderSide(color: Color(0xff243044)),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.filter_alt_outlined,
-                    color: Color(0xffa9b8ff),
-                    size: 24,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: const Text(
-                      '筛选结果队列',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '${playingIndex + 1} / ${playlist.length}',
-                    style: const TextStyle(
-                      color: Color(0xffa5b4fc),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  IconButton(
-                    tooltip: '定位已选中',
-                    onPressed: onLocateSelected,
-                    icon:
-                        const Icon(Icons.center_focus_strong_rounded, size: 17),
-                    color: Colors.white70,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  IconButton(
-                    tooltip: '删除当前视频',
-                    onPressed: onDeleteSelected,
-                    icon: const Icon(Icons.delete_outline, size: 17),
-                    color: Colors.white70,
-                    disabledColor: Colors.white24,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _QueueSearchField(onSearch: onSearchQueue),
-            ],
-          ),
+        PlayerQueueHeader(
+          playlistLength: playlist.length,
+          playingIndex: playingIndex,
+          onLocateSelected: onLocateSelected,
+          onDeleteSelected: onDeleteSelected,
+          onSearch: onSearchQueue,
         ),
         if (_activeParentTag != null)
           SizedBox(
@@ -572,10 +516,161 @@ double playerQueueSidebarWidthForWindow(double windowWidth) {
 }
 
 /**
+ * 播放器队列头部，在紧凑操作区内按需展开搜索输入。
+ *
+ * 搜索默认收起，避免持续占用列表高度；播放序号后的操作按钮使用固定尺寸和
+ * 明确间距，保证搜索、定位和删除入口在不同队列数量下仍保持稳定布局。
+ */
+class PlayerQueueHeader extends StatefulWidget {
+  const PlayerQueueHeader({
+    super.key,
+    required this.playlistLength,
+    required this.playingIndex,
+    required this.onLocateSelected,
+    required this.onDeleteSelected,
+    required this.onSearch,
+  });
+
+  /** 当前播放器实际消费的队列数量。 */
+  final int playlistLength;
+
+  /** 正在播放的视频在当前队列中的零基序号。 */
+  final int playingIndex;
+
+  /** 将列表定位到当前选中项，不改变播放状态。 */
+  final VoidCallback onLocateSelected;
+
+  /** 删除当前视频的入口；为 null 时禁用按钮。 */
+  final VoidCallback? onDeleteSelected;
+
+  /** 在当前队列内搜索并定位，不重新查询媒体库。 */
+  final ValueChanged<String> onSearch;
+
+  @override
+  State<PlayerQueueHeader> createState() => _PlayerQueueHeaderState();
+}
+
+/** 维护队列搜索框的临时展开状态，不污染播放器会话状态。 */
+class _PlayerQueueHeaderState extends State<PlayerQueueHeader> {
+  bool _searchVisible = false;
+
+  /** 切换搜索框；重新展开时由输入框自动获得焦点。 */
+  void _toggleSearch() {
+    setState(() {
+      _searchVisible = !_searchVisible;
+    });
+  }
+
+  /** 构建统一尺寸的紧凑操作按钮，避免图标随默认约束产生不规则间距。 */
+  Widget _actionButton({
+    required Key key,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    required IconData icon,
+  }) {
+    return IconButton(
+      key: key,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      padding: EdgeInsets.zero,
+      icon: Icon(icon, size: 17),
+      color: Colors.white70,
+      disabledColor: Colors.white24,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: const BoxDecoration(
+        color: Color(0xff0d1528),
+        border: Border(
+          bottom: BorderSide(color: Color(0xff243044)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.filter_alt_outlined,
+                color: Color(0xffa9b8ff),
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  '筛选结果队列',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                '${widget.playingIndex + 1} / ${widget.playlistLength}',
+                key: const ValueKey('player.queue.position'),
+                style: const TextStyle(
+                  color: Color(0xffa5b4fc),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(width: 8),
+              _actionButton(
+                key: const ValueKey('player.queue.search.toggle'),
+                tooltip: _searchVisible ? '收起搜索' : '搜索队列',
+                onPressed: _toggleSearch,
+                icon:
+                    _searchVisible ? Icons.close_rounded : Icons.search_rounded,
+              ),
+              const SizedBox(width: 4),
+              _actionButton(
+                key: const ValueKey('player.queue.locate.selected'),
+                tooltip: '定位已选中',
+                onPressed: widget.onLocateSelected,
+                icon: Icons.center_focus_strong_rounded,
+              ),
+              const SizedBox(width: 4),
+              _actionButton(
+                key: const ValueKey('player.queue.delete.selected'),
+                tooltip: '删除当前视频',
+                onPressed: widget.onDeleteSelected,
+                icon: Icons.delete_outline,
+              ),
+            ],
+          ),
+          if (_searchVisible) ...[
+            const SizedBox(height: 8),
+            _QueueSearchField(
+              autofocus: true,
+              onSearch: widget.onSearch,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/**
  * 当前播放队列的轻量搜索框，同时支持键盘提交和可见按钮提交。
  */
 class _QueueSearchField extends StatefulWidget {
-  const _QueueSearchField({required this.onSearch});
+  const _QueueSearchField({
+    this.autofocus = false,
+    required this.onSearch,
+  });
+
+  /** 展开后是否立即接管键盘输入焦点。 */
+  final bool autofocus;
 
   /** 仅在播放器已持有的队列中定位，不访问媒体库或触发重新扫描。 */
   final ValueChanged<String> onSearch;
@@ -602,6 +697,7 @@ class _QueueSearchFieldState extends State<_QueueSearchField> {
     return TextField(
       key: const ValueKey('player.queueSearch'),
       controller: _controller,
+      autofocus: widget.autofocus,
       style: const TextStyle(color: Colors.white, fontSize: 12),
       textInputAction: TextInputAction.search,
       decoration: InputDecoration(
