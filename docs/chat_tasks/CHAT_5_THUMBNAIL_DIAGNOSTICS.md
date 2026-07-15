@@ -1,5 +1,11 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
+## 2026-07-15 播放器悬停帧的独立限流缓存
+
+- `FFmpegBackend.createFramePreview` 接收目标时间点，由桌面实现使用单线程、320px 输出提取，不在播放器 UI 直接运行 FFmpeg。
+- 悬停预览与媒体库缩略图主队列、`thumbnailError` 完全分离；同时最多运行 1 项，只保留最新等待项，按秒复用并以 24 项 LRU 清理临时 JPEG。
+- focused cache test 验证同一秒只生成一次；架构 contract、静态分析、Windows debug build 与真实 `03:59` 时间帧截图通过。
+
 ## 2026-07-14 媒体库与播放器可视任务优先
 
 - 媒体库网格/列表和播放器队列按实际构建的可视或近可视条目请求缩略图与媒体详情，不用结果列表前若干项冒充视口。

@@ -9,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:local_tag_player/src/app.dart';
 
+// ignore_for_file: slash_for_doc_comments
+
 VideoItem _testVideo({
   required String path,
   required String title,
@@ -21,6 +23,28 @@ VideoItem _testVideo({
     tags: <String>{...tags},
     addedAt: DateTime.utc(2026, 7, 11),
   );
+}
+
+/** 记录悬停取帧位置并写入最小有效 JPEG，隔离真实 FFmpeg 进程。 */
+class _PreviewFFmpegBackend implements FFmpegBackend {
+  var previewCalls = 0;
+  final previewPositions = <Duration>[];
+
+  @override
+  Future<File?> createFramePreview({
+    required VideoItem item,
+    required File output,
+    required Duration position,
+  }) async {
+    previewCalls++;
+    previewPositions.add(position);
+    await output.parent.create(recursive: true);
+    await output.writeAsBytes(<int>[0xff, 0xd8, 0xff, 0xd9], flush: true);
+    return output;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {
@@ -2390,5 +2414,90 @@ void main() {
       find.byKey(const ValueKey('player.hiddenProgressBar.active')),
     );
     expect(active.widthFactor, 0.25);
+  });
+
+  testWidgets('player progress expands on hover and delays frame preview',
+      (tester) async {
+    final previewRequest = Completer<File?>();
+    Duration? requestedPosition;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              PlayerProgressSlider(
+                sliderKey: const ValueKey('test.progress'),
+                value: 25000,
+                max: 100000,
+                previewIdentity: 'video-1',
+                loadPreview: (position) {
+                  requestedPosition = position;
+                  return previewRequest.future;
+                },
+                onChanged: (_) {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    SliderTheme sliderTheme() => tester.widget<SliderTheme>(
+          find.descendant(
+            of: find.byType(PlayerProgressSlider),
+            matching: find.byType(SliderTheme),
+          ),
+        );
+    expect(sliderTheme().data.trackHeight, 2);
+    expect(find.byKey(const ValueKey('player.progress.preview')), findsNothing);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(-10, -10));
+    await tester.pump();
+    await mouse.moveTo(tester.getCenter(
+      find.byKey(const ValueKey('player.progress.hoverRegion')),
+    ));
+    await tester.pump();
+    final hoverAnimation = tester.widget<TweenAnimationBuilder<double>>(
+      find.byKey(const ValueKey('player.progress.hoverAnimation')),
+    );
+    expect(hoverAnimation.tween.end, 1);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(sliderTheme().data.trackHeight, 5);
+    expect(requestedPosition, isNull);
+    await tester.pump(const Duration(milliseconds: 149));
+    expect(requestedPosition, isNull);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(requestedPosition, const Duration(seconds: 50));
+    expect(
+        find.byKey(const ValueKey('player.progress.preview')), findsOneWidget);
+
+    await mouse.removePointer();
+  });
+
+  test('hover preview frame is generated once and reused by second bucket',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('ltp_hover_frame_');
+    addTearDown(() => directory.delete(recursive: true));
+    final source = File('${directory.path}${Platform.pathSeparator}video.mp4');
+    await source.writeAsBytes(<int>[1, 2, 3]);
+    final backend = _PreviewFFmpegBackend();
+    final service = ThumbnailService.forDirectory(directory, backend);
+    final item = _testVideo(path: source.path, title: 'preview');
+
+    final first = await service.previewFrameFor(
+      item,
+      const Duration(milliseconds: 10200),
+    );
+    final reused = await service.previewFrameFor(
+      item,
+      const Duration(milliseconds: 10400),
+    );
+
+    expect(first, isNotNull);
+    expect(reused?.path, first?.path);
+    expect(backend.previewCalls, 1);
+    expect(backend.previewPositions, <Duration>[const Duration(seconds: 10)]);
   });
 }

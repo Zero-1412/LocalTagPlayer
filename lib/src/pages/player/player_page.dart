@@ -787,12 +787,15 @@ class PlayerPageState extends State<PlayerPage> {
                         data: const IconThemeData(color: Colors.white),
                         child:
                             Column(mainAxisSize: MainAxisSize.min, children: [
-                          PlayerControlSlider(
+                          PlayerProgressSlider(
                             sliderKey: const ValueKey('player.progress'),
                             value: position.inMilliseconds
                                 .clamp(0, maxMs.toInt())
                                 .toDouble(),
                             max: maxMs,
+                            previewIdentity: _currentItem.path,
+                            loadPreview: (target) => widget.thumbnailService
+                                .previewFrameFor(_currentItem, target),
                             onChanged: (value) => unawaited(
                               _seekWithDiagnostics(
                                 Duration(milliseconds: value.round()),

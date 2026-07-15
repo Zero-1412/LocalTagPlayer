@@ -12,6 +12,7 @@ import '../../platform/platform_interfaces.dart';
 // ignore_for_file: slash_for_doc_comments
 
 const _ffmpegThumbnailWidth = 384;
+const _ffmpegFramePreviewWidth = 320;
 const _thumbnailFfmpegTimeout = Duration(seconds: 10);
 const _mediaProbeTimeout = Duration(seconds: 6);
 
@@ -198,6 +199,79 @@ class DesktopFFmpegBackend implements FFmpegBackend {
         : result.stdout.toString().trim();
     throw Exception(
         'ffmpeg exit ${result.exitCode}${message.isEmpty ? '' : ': $message'}');
+  }
+
+  @override
+  Future<File?> createFramePreview({
+    required VideoItem item,
+    required File output,
+    required Duration position,
+  }) async {
+    final ffmpeg = (await locateTools()).ffmpegPath;
+    if (ffmpeg == null) {
+      return null;
+    }
+    await output.parent.create(recursive: true);
+    final tempOutput = File('${output.path}.tmp.jpg');
+    if (await tempOutput.exists()) {
+      await tempOutput.delete();
+    }
+    final safePosition = position < Duration.zero ? Duration.zero : position;
+    ProcessResult result;
+    try {
+      // 输入前 seek 能快速落到临近关键帧，FFmpeg 默认继续解码到目标时间点；单线程和小图降低播放争抢。
+      result = await Process.run(
+        ffmpeg,
+        [
+          '-hide_banner',
+          '-nostdin',
+          '-loglevel',
+          'error',
+          '-y',
+          '-threads',
+          '1',
+          '-ss',
+          (safePosition.inMilliseconds / 1000).toStringAsFixed(3),
+          '-i',
+          item.path,
+          '-map',
+          '0:v:0',
+          '-an',
+          '-sn',
+          '-dn',
+          '-frames:v',
+          '1',
+          '-vf',
+          'scale=$_ffmpegFramePreviewWidth:-1:force_original_aspect_ratio=decrease',
+          '-q:v',
+          '5',
+          tempOutput.path,
+        ],
+      ).timeout(_thumbnailFfmpegTimeout);
+    } on TimeoutException {
+      if (await tempOutput.exists()) {
+        await tempOutput.delete();
+      }
+      throw Exception('ffmpeg preview timeout '
+          '${_thumbnailFfmpegTimeout.inSeconds}s');
+    }
+    if (result.exitCode == 0 &&
+        await tempOutput.exists() &&
+        await tempOutput.length() > 0) {
+      if (await output.exists()) {
+        await output.delete();
+      }
+      await tempOutput.rename(output.path);
+      return output;
+    }
+    if (await tempOutput.exists()) {
+      await tempOutput.delete();
+    }
+    final message = result.stderr.toString().trim().isNotEmpty
+        ? result.stderr.toString().trim()
+        : result.stdout.toString().trim();
+    throw Exception('ffmpeg preview exit ${result.exitCode}'
+        '${message.isEmpty ? '' : ': $message'}');
   }
 
   @override

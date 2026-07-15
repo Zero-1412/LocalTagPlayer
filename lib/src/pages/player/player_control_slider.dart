@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -11,6 +15,289 @@ double playerProgressFraction(Duration position, Duration duration) {
     return 0;
   }
   return (position.inMicroseconds / total).clamp(0.0, 1.0);
+}
+
+/** 悬停停止后按目标播放位置异步加载预览帧。 */
+typedef PlayerProgressPreviewLoader = Future<File?> Function(Duration position);
+
+/**
+ * 优酷式播放器主进度条：静止时保持细轨无焦点，悬停时动画加粗并延迟显示帧预览。
+ */
+class PlayerProgressSlider extends StatefulWidget {
+  const PlayerProgressSlider({
+    super.key,
+    this.sliderKey,
+    required this.value,
+    required this.max,
+    required this.onChanged,
+    required this.previewIdentity,
+    required this.loadPreview,
+  });
+
+  /** 直接挂在内部 Slider 上的定位键。 */
+  final Key? sliderKey;
+
+  /** 当前播放位置，单位与 [max] 一致。 */
+  final double value;
+
+  /** 视频总时长，当前页面使用毫秒。 */
+  final double max;
+
+  /** 拖动后提交真实 seek 的回调。 */
+  final ValueChanged<double> onChanged;
+
+  /** 当前视频稳定标识；切换视频时使迟到预览立即失效。 */
+  final Object previewIdentity;
+
+  /** 经缩略图服务和 FFmpegBackend 限流的预览加载器。 */
+  final PlayerProgressPreviewLoader loadPreview;
+
+  @override
+  State<PlayerProgressSlider> createState() => _PlayerProgressSliderState();
+}
+
+class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
+  static const _previewDelay = Duration(milliseconds: 350);
+  static const _previewWidth = 220.0;
+  static const _previewHeight = 124.0;
+  static const _sliderHorizontalInset = 14.0;
+
+  Timer? _previewTimer;
+  var _hovered = false;
+  var _hoverX = 0.0;
+  var _hoverValue = 0.0;
+  var _requestGeneration = 0;
+  var _previewLoading = false;
+  File? _previewFile;
+
+  @override
+  void didUpdateWidget(covariant PlayerProgressSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.previewIdentity != widget.previewIdentity) {
+      _cancelPreview(clearHover: false);
+    }
+  }
+
+  /** 根据轨道可用宽度把指针位置映射为目标播放时间。 */
+  double _valueForPointer(double x, double width) {
+    final usableWidth = math.max(1.0, width - _sliderHorizontalInset * 2);
+    final fraction = ((x - _sliderHorizontalInset) / usableWidth).clamp(0, 1);
+    return fraction * widget.max;
+  }
+
+  /** 指针移动只更新轻量位置；停稳后才允许进入 FFmpeg 取帧链路。 */
+  void _handlePointer(PointerEvent event, double width,
+      {bool entering = false}) {
+    final nextValue = _valueForPointer(event.localPosition.dx, width);
+    _previewTimer?.cancel();
+    _requestGeneration++;
+    setState(() {
+      if (entering) {
+        _hovered = true;
+      }
+      _hoverX = event.localPosition.dx.clamp(0, width);
+      _hoverValue = nextValue;
+      _previewLoading = false;
+      _previewFile = null;
+    });
+    final generation = _requestGeneration;
+    _previewTimer = Timer(_previewDelay, () {
+      unawaited(_loadPreview(generation, nextValue));
+    });
+  }
+
+  /** 仅接受仍对应当前视频和当前悬停位置的异步结果。 */
+  Future<void> _loadPreview(int generation, double value) async {
+    if (!mounted || generation != _requestGeneration || !_hovered) {
+      return;
+    }
+    setState(() => _previewLoading = true);
+    final file = await widget.loadPreview(
+      Duration(milliseconds: value.round()),
+    );
+    if (!mounted || generation != _requestGeneration || !_hovered) {
+      return;
+    }
+    setState(() {
+      _previewLoading = false;
+      _previewFile = file;
+    });
+  }
+
+  /** 使定时器和迟到异步结果失效；离开轨道时同时收起焦点与预览。 */
+  void _cancelPreview({required bool clearHover}) {
+    _previewTimer?.cancel();
+    _requestGeneration++;
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      if (clearHover) {
+        _hovered = false;
+      }
+      _previewLoading = false;
+      _previewFile = null;
+    });
+  }
+
+  @override
+  void dispose() {
+    _previewTimer?.cancel();
+    _requestGeneration++;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      final popupLeft = (_hoverX - _previewWidth / 2)
+          .clamp(0.0, math.max(0.0, width - _previewWidth))
+          .toDouble();
+      return MouseRegion(
+        key: const ValueKey('player.progress.hoverRegion'),
+        onEnter: (event) => _handlePointer(event, width, entering: true),
+        onHover: (event) => _handlePointer(event, width),
+        onExit: (_) => _cancelPreview(clearHover: true),
+        child: SizedBox(
+          height: 48,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: TweenAnimationBuilder<double>(
+                  key: const ValueKey('player.progress.hoverAnimation'),
+                  tween: Tween<double>(end: _hovered ? 1 : 0),
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, hoverProgress, child) {
+                    return _PlayerSliderVisual(
+                      sliderKey: widget.sliderKey,
+                      value: widget.value,
+                      max: widget.max,
+                      onChanged: widget.onChanged,
+                      trackHeight: 2 + hoverProgress * 3,
+                      thumbRadius: 5.5,
+                      overlayRadius: 14,
+                      thumbVisibility: hoverProgress,
+                    );
+                  },
+                ),
+              ),
+              if (_hovered && (_previewLoading || _previewFile != null))
+                Positioned(
+                  key: const ValueKey('player.progress.preview'),
+                  left: popupLeft,
+                  bottom: 42,
+                  child: IgnorePointer(
+                    child: _PlayerFramePreview(
+                      file: _previewFile,
+                      loading: _previewLoading,
+                      position: Duration(milliseconds: _hoverValue.round()),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+}
+
+/** 悬停帧卡片，加载期间保持稳定尺寸，完成后淡入当前时间点画面。 */
+class _PlayerFramePreview extends StatelessWidget {
+  const _PlayerFramePreview({
+    required this.file,
+    required this.loading,
+    required this.position,
+  });
+
+  final File? file;
+  final bool loading;
+  final Duration position;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: _PlayerProgressSliderState._previewWidth,
+      height: _PlayerProgressSliderState._previewHeight,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xf21a2030),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0x997f68d9)),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x99000000), blurRadius: 16, offset: Offset(0, 6)),
+        ],
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 140),
+            child: file != null
+                ? Image.file(
+                    file!,
+                    key: ValueKey(file!.path),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  )
+                : loading
+                    ? const Center(
+                        child: SizedBox.square(
+                          dimension: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xff9b7cff),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+          ),
+          Positioned(
+            left: 8,
+            bottom: 7,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xb8000000),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  _formatPreviewDuration(position),
+                  key: const ValueKey('player.progress.previewTime'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/** 把悬停位置格式化为播放器预览时间。 */
+String _formatPreviewDuration(Duration value) {
+  final totalSeconds = value.inSeconds.clamp(0, 24 * 60 * 60 - 1);
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return '${hours.toString().padLeft(2, '0')}:'
+        '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
+  }
+  return '${minutes.toString().padLeft(2, '0')}:'
+      '${seconds.toString().padLeft(2, '0')}';
 }
 
 /**
@@ -51,6 +338,43 @@ class PlayerControlSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _PlayerSliderVisual(
+      sliderKey: sliderKey,
+      value: value,
+      max: max,
+      onChanged: onChanged,
+      trackHeight: trackHeight,
+      thumbRadius: thumbRadius,
+      overlayRadius: overlayRadius,
+      thumbVisibility: 1,
+    );
+  }
+}
+
+/** 进度与音量共用的无状态滑条绘制层。 */
+class _PlayerSliderVisual extends StatelessWidget {
+  const _PlayerSliderVisual({
+    required this.sliderKey,
+    required this.value,
+    required this.max,
+    required this.onChanged,
+    required this.trackHeight,
+    required this.thumbRadius,
+    required this.overlayRadius,
+    required this.thumbVisibility,
+  });
+
+  final Key? sliderKey;
+  final double value;
+  final double max;
+  final ValueChanged<double> onChanged;
+  final double trackHeight;
+  final double thumbRadius;
+  final double overlayRadius;
+  final double thumbVisibility;
+
+  @override
+  Widget build(BuildContext context) {
     return SliderTheme(
       data: SliderTheme.of(context).copyWith(
         trackHeight: trackHeight,
@@ -58,7 +382,10 @@ class PlayerControlSlider extends StatelessWidget {
         activeTrackColor: const Color(0xff8060ff),
         inactiveTrackColor: const Color(0x8a66718b),
         thumbColor: Colors.white,
-        thumbShape: _PlayerRingSliderThumbShape(radius: thumbRadius),
+        thumbShape: _PlayerRingSliderThumbShape(
+          radius: thumbRadius,
+          visibility: thumbVisibility,
+        ),
         overlayColor: const Color(0x387c5cff),
         overlayShape: RoundSliderOverlayShape(overlayRadius: overlayRadius),
         showValueIndicator: ShowValueIndicator.never,
@@ -200,10 +527,16 @@ class _PlayerGradientSliderTrackShape extends SliderTrackShape
  * 绘制带紫色外环和轻微按压放大的白色滑块，保证深色画面上的辨识度。
  */
 class _PlayerRingSliderThumbShape extends SliderComponentShape {
-  const _PlayerRingSliderThumbShape({required this.radius});
+  const _PlayerRingSliderThumbShape({
+    required this.radius,
+    this.visibility = 1,
+  });
 
   /** 静止状态下白色滑块的半径。 */
   final double radius;
+
+  /** 0 时完全隐藏，1 时显示完整焦点；主进度条悬停动画使用中间值。 */
+  final double visibility;
 
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) {
@@ -225,8 +558,11 @@ class _PlayerRingSliderThumbShape extends SliderComponentShape {
     required double textScaleFactor,
     required Size sizeWithOverflow,
   }) {
+    if (visibility <= 0.01) {
+      return;
+    }
     final pressedGrowth = activationAnimation.value;
-    final outerRadius = radius + 1.5 + pressedGrowth;
+    final outerRadius = (radius + 1.5 + pressedGrowth) * visibility;
     final canvas = context.canvas;
     canvas.drawCircle(
       center,
@@ -235,7 +571,7 @@ class _PlayerRingSliderThumbShape extends SliderComponentShape {
     );
     canvas.drawCircle(
       center,
-      radius + pressedGrowth * 0.5,
+      (radius + pressedGrowth * 0.5) * visibility,
       Paint()..color = sliderTheme.thumbColor ?? Colors.white,
     );
   }

@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.30` 已完成。
+架构版本状态：`Architecture Baseline 0.5.31` 已完成。
 
 最近一次验证：
 
@@ -17,6 +17,9 @@ flutter build windows --debug
 结果：通过；103 项测试通过，2 项显式基准跳过。
 
 ## 最近完成
+
+- 主进度条改为优酷式悬停交互：未悬停为 2px 且隐藏圆形焦点，进入后 150ms 加粗到 5px 并显示焦点；指针停稳 350ms 后展示对应时间点的 220×124 帧预览和时间标记。
+- 预览帧经新增 `FFmpegBackend.createFramePreview` 平台契约提取，不 seek 主播放器；服务端单并发、只保留最新等待位置、按秒复用并限制 24 个临时帧。2 项定向测试、5 项架构 contract、`flutter analyze`、Windows debug build 与真实窗口悬停截图通过，未运行无关全量测试。
 
 - 播放器主进度条与音量条统一为圆角紫色渐变轨道、柔和底轨和白色描边滑块；控制栏隐藏后在视频底边保留 3px 只读进度提示，不扩大点击区域。
 - 进度比例计算与 3px 隐藏条 2 项 focused tests、`flutter analyze`、Windows debug build 通过，未运行无关全量测试；真实窗口确认控制栏显示与隐藏两态均无遮挡、溢出或错位。全屏自动化复测切换时应用进程意外退出，需后续沿全屏入口单独复核。

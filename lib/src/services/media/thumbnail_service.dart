@@ -29,6 +29,23 @@ class _ThumbnailJob {
   final bool isBackground;
 }
 
+/** 单并发悬停预览任务；等待区只保留鼠标最后停留的位置。 */
+class _PreviewFrameJob {
+  const _PreviewFrameJob({
+    required this.cacheKey,
+    required this.item,
+    required this.output,
+    required this.position,
+    required this.completer,
+  });
+
+  final String cacheKey;
+  final VideoItem item;
+  final File output;
+  final Duration position;
+  final Completer<File?> completer;
+}
+
 /**
  * 缩略图缓存统计快照，供设置/诊断页展示当前缓存队列状态。
  */
@@ -84,6 +101,7 @@ class ThumbnailService {
       ThumbnailService._(directory, ffmpegBackend);
   static const _maxBackgroundQueuedJobs = 500;
   static const _maxBackgroundRequestsInFlight = 24;
+  static const _maxPreviewCacheEntries = 24;
 
   final Directory _directory;
   /** 由组合根注入的媒体工具边界，不使用进程级静态后端。 */
@@ -111,6 +129,12 @@ class ThumbnailService {
    * 避免播放器队列即使命中缓存也必须先绘制一帧占位背景。
    */
   final Map<String, File?> _pathMemoryCache = {};
+  /** 悬停预览独立于媒体库缩略图缓存，按最近使用顺序限制为少量临时帧。 */
+  final LinkedHashMap<String, File> _previewMemoryCache = LinkedHashMap();
+  final Map<String, Completer<File?>> _previewCompletions = {};
+  Future<Directory>? _previewDirectoryFuture;
+  _PreviewFrameJob? _activePreviewJob;
+  _PreviewFrameJob? _pendingPreviewJob;
   final Set<String> _activeCacheKeys = {};
   final Set<String> _backgroundQueued = {};
   final Set<String> _priorityQueued = {};
@@ -320,6 +344,139 @@ class ThumbnailService {
       priority: true,
       allowPlayerFallback: true,
     );
+  }
+
+  /**
+   * 返回指定时间点附近的播放器悬停预览帧。
+   *
+   * 时间按整秒合并，服务端同时最多运行一个 FFmpeg；若用户继续移动，等待区只保留
+   * 最新位置。预览失败不会写入 [VideoItem.thumbnailError]，避免污染媒体库诊断。
+   */
+  Future<File?> previewFrameFor(VideoItem item, Duration position) async {
+    final sourceKey = await _cacheKeyFor(item);
+    if (sourceKey == null) {
+      return null;
+    }
+    final bucketSeconds = position.inMilliseconds <= 0
+        ? 0
+        : (position.inMilliseconds / 1000).round();
+    final safePosition = Duration(seconds: bucketSeconds);
+    final previewKey = '$sourceKey-$bucketSeconds';
+    final remembered = _previewMemoryCache.remove(previewKey);
+    if (remembered != null && await _isValidThumbnailFile(remembered)) {
+      _previewMemoryCache[previewKey] = remembered;
+      return remembered;
+    }
+    final existing = _previewCompletions[previewKey];
+    if (existing != null) {
+      return existing.future;
+    }
+    final directory = await _preparePreviewDirectory();
+    final output = File(p.join(directory.path, '$previewKey.jpg'));
+    if (await _isValidThumbnailFile(output)) {
+      await _rememberPreview(previewKey, output);
+      return output;
+    }
+
+    final completer = Completer<File?>();
+    _previewCompletions[previewKey] = completer;
+    final replaced = _pendingPreviewJob;
+    if (replaced != null && replaced.cacheKey != previewKey) {
+      _previewCompletions.remove(replaced.cacheKey);
+      if (!replaced.completer.isCompleted) {
+        replaced.completer.complete(null);
+      }
+    }
+    _pendingPreviewJob = _PreviewFrameJob(
+      cacheKey: previewKey,
+      item: item,
+      output: output,
+      position: safePosition,
+      completer: completer,
+    );
+    _drainPreviewQueue();
+    return completer.future;
+  }
+
+  /** 首次使用时清理上次会话的临时帧，避免预览目录跨会话无限增长。 */
+  Future<Directory> _preparePreviewDirectory() {
+    return _previewDirectoryFuture ??= () async {
+      final directory = Directory(p.join(_directory.path, 'hover_preview'));
+      if (await directory.exists()) {
+        await for (final entity in directory.list()) {
+          if (entity is File) {
+            try {
+              await entity.delete();
+            } on FileSystemException {
+              // 旧帧仍被图像解码器短暂持有时允许跳过，当前会话 LRU 仍会限制新增数量。
+            }
+          }
+        }
+      } else {
+        await directory.create(recursive: true);
+      }
+      return directory;
+    }();
+  }
+
+  /** 启动单个取帧任务，完成后继续处理鼠标最后停留的位置。 */
+  void _drainPreviewQueue() {
+    if (_activePreviewJob != null || _pendingPreviewJob == null) {
+      return;
+    }
+    final job = _pendingPreviewJob!;
+    _pendingPreviewJob = null;
+    _activePreviewJob = job;
+    unawaited(
+      _generatePreview(job).then<void>((file) {
+        if (!job.completer.isCompleted) {
+          job.completer.complete(file);
+        }
+      }).whenComplete(() {
+        _previewCompletions.remove(job.cacheKey);
+        _activePreviewJob = null;
+        _drainPreviewQueue();
+      }),
+    );
+  }
+
+  /** 经 FFmpegBackend 生成并再次校验 JPEG，失败只影响本次悬停提示。 */
+  Future<File?> _generatePreview(_PreviewFrameJob job) async {
+    try {
+      final file = await _ffmpegBackend.createFramePreview(
+        item: job.item,
+        output: job.output,
+        position: job.position,
+      );
+      if (file == null || !await _isValidThumbnailFile(file)) {
+        return null;
+      }
+      await _rememberPreview(job.cacheKey, file);
+      return file;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /** 记录最近使用帧并清理最旧文件，始终把临时预览限制在固定数量。 */
+  Future<void> _rememberPreview(String cacheKey, File file) async {
+    _previewMemoryCache.remove(cacheKey);
+    _previewMemoryCache[cacheKey] = file;
+    while (_previewMemoryCache.length > _maxPreviewCacheEntries) {
+      final oldestKey = _previewMemoryCache.keys.first;
+      final oldestFile = _previewMemoryCache.remove(oldestKey);
+      if (oldestFile == null) {
+        continue;
+      }
+      PaintingBinding.instance.imageCache.evict(FileImage(oldestFile));
+      try {
+        if (await oldestFile.exists()) {
+          await oldestFile.delete();
+        }
+      } on FileSystemException {
+        // 删除失败只会留下一个临时预览文件，不得打断后续悬停取帧。
+      }
+    }
   }
 
   Future<File?> _queuePrefetch(

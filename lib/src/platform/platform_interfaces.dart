@@ -124,6 +124,17 @@ abstract interface class FFmpegBackend {
     bool allowFallback,
   });
 
+  /**
+   * 在不扰动主播放器位置的前提下提取指定时间点预览帧。
+   *
+   * 实现必须限制自身线程与输出尺寸；失败返回 null 或抛出可诊断异常，UI 不得直连进程。
+   */
+  Future<File?> createFramePreview({
+    required VideoItem item,
+    required File output,
+    required Duration position,
+  });
+
   Future<MediaDetails?> probe(VideoItem item);
 }
 
