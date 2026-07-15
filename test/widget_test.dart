@@ -919,6 +919,115 @@ void main() {
     );
   });
 
+  testWidgets('player settings panel exposes real grouped playback controls',
+      (tester) async {
+    PlayerPlaybackMode? selectedPlaybackMode;
+    PlayerVideoAspectMode? selectedAspectMode;
+    double? selectedRate;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: Scaffold(
+          body: Center(
+            child: PlayerSettingsPanel(
+              playbackMode: PlayerPlaybackMode.sequential,
+              videoAspectMode: PlayerVideoAspectMode.automatic,
+              playbackRate: 1,
+              playbackRates: const <double>[0.5, 0.75, 1, 1.25, 1.5, 2],
+              onPlaybackModeChanged: (mode) => selectedPlaybackMode = mode,
+              onVideoAspectModeChanged: (mode) => selectedAspectMode = mode,
+              onPlaybackRateChanged: (rate) => selectedRate = rate,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('player.settings.panel')), findsOneWidget);
+    expect(find.text('播放方式'), findsOneWidget);
+    expect(find.text('视频比例'), findsOneWidget);
+    expect(find.text('播放速度'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.mode.repeatAll')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.aspect.cover')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.rate.1.25')),
+    );
+
+    expect(selectedPlaybackMode, PlayerPlaybackMode.repeatAll);
+    expect(selectedAspectMode, PlayerVideoAspectMode.cover);
+    expect(selectedRate, 1.25);
+    expect(PlayerVideoAspectMode.automatic.mpvAspectOverride, '-1');
+    expect(PlayerVideoAspectMode.ratio4x3.mpvAspectOverride, '4:3');
+    expect(PlayerVideoAspectMode.ratio16x9.mpvAspectOverride, '16:9');
+    expect(PlayerVideoAspectMode.cover.mpvPanscan, '1.0');
+    expect(PlayerVideoAspectMode.automatic.surfaceFit, BoxFit.contain);
+    expect(PlayerVideoAspectMode.cover.surfaceFit, BoxFit.cover);
+    expect(PlayerVideoAspectMode.ratio4x3.surfaceAspectRatio,
+        closeTo(4 / 3, 0.001));
+    expect(PlayerVideoAspectMode.ratio16x9.surfaceAspectRatio,
+        closeTo(16 / 9, 0.001));
+  });
+
+  testWidgets('player settings button opens a stable desktop dialog',
+      (tester) async {
+    PlayerVideoAspectMode? selectedAspectMode;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: IconButton(
+                key: const ValueKey('test.player.settings.open'),
+                onPressed: () => showPlayerSettingsDialog(
+                  context,
+                  playbackMode: PlayerPlaybackMode.sequential,
+                  videoAspectMode: PlayerVideoAspectMode.automatic,
+                  playbackRate: 1,
+                  playbackRates: const <double>[0.5, 1, 1.5],
+                  onPlaybackModeChanged: (_) {},
+                  onVideoAspectModeChanged: (mode) {
+                    selectedAspectMode = mode;
+                  },
+                  onPlaybackRateChanged: (_) {},
+                  onShowShortcuts: () {},
+                  onShowDiagnostics: () {},
+                ),
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('test.player.settings.open')));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('player.settings.dialog')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('player.settings.shell'))).width,
+      closeTo(400, 0.1),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.aspect.cover')),
+    );
+    await tester.pump();
+    expect(selectedAspectMode, PlayerVideoAspectMode.cover);
+    expect(
+        find.byKey(const ValueKey('player.settings.dialog')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('player.settings.close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('player.settings.dialog')), findsNothing);
+  });
+
   test('player open request controller keeps latest request after failure', () {
     final requests = PlayerOpenRequestController();
 

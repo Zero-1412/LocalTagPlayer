@@ -138,10 +138,19 @@ class MediaKitPlayerBackend implements PlayerBackend {
       _player.screenshot(format: format);
 
   @override
-  Widget buildVideoSurface({required Widget controls}) {
+  Widget buildVideoSurface({
+    required Widget controls,
+    BoxFit fit = BoxFit.contain,
+    double? aspectRatio,
+  }) {
     return Video(
+      // media_kit 1.3.1 无法通过 copyWith 把非空 aspectRatio 清回 null；
+      // 模式变化时重建轻量 Video 视图，底层 Player/解码会话保持不变。
+      key: ValueKey('media-kit-video.${fit.name}.${aspectRatio ?? 'auto'}'),
       controller: _controller,
       controls: (_) => controls,
+      fit: fit,
+      aspectRatio: aspectRatio,
     );
   }
 

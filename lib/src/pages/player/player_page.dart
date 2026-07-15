@@ -30,6 +30,8 @@ import 'player_playback_controller.dart';
 import 'player_playback_mode.dart';
 import 'player_queue_sidebar.dart';
 import 'player_resume_dialog.dart';
+import 'player_settings_panel.dart';
+import 'player_video_aspect_mode.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -152,6 +154,8 @@ class PlayerPageState extends State<PlayerPage> {
   var _editingManualTags = false;
   var _playbackMode = PlayerPlaybackMode.sequential;
   var _playbackRate = 1.0;
+  /** 当前会话的画面比例，默认保留媒体自身比例。 */
+  var _videoAspectMode = PlayerVideoAspectMode.automatic;
   /** 用户主动折叠宽屏右侧队列时保持当前页面内的显示状态。 */
   var _queueSidebarCollapsed = false;
   /** 是否由播放器页面进入桌面窗口全屏。 */
@@ -387,6 +391,40 @@ class PlayerPageState extends State<PlayerPage> {
     final current = _playbackRates.indexOf(_playbackRate);
     final next = (current + delta).clamp(0, _playbackRates.length - 1);
     _setPlaybackRate(_playbackRates[next]);
+  }
+
+  /** 更新队列播放方式，不改变 filtered queue 的内容或顺序。 */
+  void _setPlaybackMode(PlayerPlaybackMode mode) {
+    setState(() {
+      _playbackMode = mode;
+      _queueEndReached = false;
+    });
+  }
+
+  /**
+   * 更新当前会话的画面比例并立即应用到 mpv。
+   *
+   * 自动、4:3 与 16:9 保持完整画面；铺满使用 panscan 等比裁边，主要用于
+   * 1728×1080 等非 16:9 视频在全屏时消除左右留边和源内黑边的组合效果。
+   */
+  Future<void> _setVideoAspectMode(PlayerVideoAspectMode mode) async {
+    if (_videoAspectMode != mode && mounted) {
+      setState(() => _videoAspectMode = mode);
+    }
+    await _applyVideoAspectMode();
+  }
+
+  /** 把页面比例状态映射为后端通用 mpv 属性；后端不支持时允许安全忽略。 */
+  Future<void> _applyVideoAspectMode() async {
+    await _setMpvProperty(
+      'video-aspect-override',
+      _videoAspectMode.mpvAspectOverride,
+    );
+    await _setMpvProperty('panscan', _videoAspectMode.mpvPanscan);
+    // 切换模式时归零历史缩放，避免诊断或外部属性残留叠加到新的比例选择。
+    await _setMpvProperty('video-zoom', '0');
+    await _setMpvProperty('video-pan-x', '0');
+    await _setMpvProperty('video-pan-y', '0');
   }
 
   /** 鼠标进入或移动时显示控制条；播放中空闲三秒后自动淡出。 */
@@ -842,23 +880,13 @@ class PlayerPageState extends State<PlayerPage> {
                               icon: const Icon(Icons.photo_camera_outlined,
                                   size: 21),
                             ),
-                            MenuAnchor(
-                              useRootOverlay: true,
-                              alignmentOffset: const Offset(0, 8),
-                              style: const MenuStyle(
-                                alignment: AlignmentDirectional.topEnd,
-                              ),
-                              menuChildren: _buildControlSettingsMenu(),
-                              builder: (context, controller, child) =>
-                                  IconButton(
-                                key: const ValueKey('player.settings'),
-                                tooltip: '播放设置',
-                                onPressed: () => controller.isOpen
-                                    ? controller.close()
-                                    : controller.open(),
-                                icon: const Icon(Icons.settings_outlined,
-                                    size: 21),
-                              ),
+                            IconButton(
+                              key: const ValueKey('player.settings'),
+                              tooltip: '播放设置',
+                              onPressed: () =>
+                                  unawaited(_showControlSettingsDialog()),
+                              icon:
+                                  const Icon(Icons.settings_outlined, size: 21),
                             ),
                             IconButton(
                               key: const ValueKey('player.fullscreen.toggle'),
@@ -943,54 +971,22 @@ class PlayerPageState extends State<PlayerPage> {
     });
   }
 
-  /** 构建播放设置二级菜单，避免倍速与模式选项占满一级菜单。 */
-  List<Widget> _buildControlSettingsMenu() {
-    return <Widget>[
-      SubmenuButton(
-        menuChildren: [
-          for (final rate in _playbackRates)
-            MenuItemButton(
-              onPressed: () => _setPlaybackRate(rate),
-              trailingIcon: rate == _playbackRate
-                  ? const Icon(Icons.check_rounded, size: 18)
-                  : null,
-              child: Text('${rate}x'),
-            ),
-        ],
-        child: const Text('播放速度'),
-      ),
-      SubmenuButton(
-        menuChildren: [
-          for (final mode in PlayerPlaybackMode.values)
-            MenuItemButton(
-              leadingIcon: Icon(mode.icon, size: 18),
-              trailingIcon: mode == _playbackMode
-                  ? const Icon(Icons.check_rounded, size: 18)
-                  : null,
-              onPressed: () {
-                setState(() {
-                  _playbackMode = mode;
-                  _queueEndReached = false;
-                });
-              },
-              child: Text(mode.label),
-            ),
-        ],
-        child: const Text('播放模式'),
-      ),
-      const Divider(height: 1),
-      MenuItemButton(
-        leadingIcon: const Icon(Icons.keyboard_alt_outlined, size: 18),
-        onPressed: _showControlShortcutHelp,
-        child: const Text('快捷键'),
-      ),
-      MenuItemButton(
-        key: const ValueKey('player.diagnostics.open'),
-        leadingIcon: const Icon(Icons.monitor_heart_outlined, size: 18),
-        onPressed: () => unawaited(_showDiagnosticsDialog()),
-        child: const Text('播放诊断'),
-      ),
-    ];
+  /** 打开参考图式分组设置浮层，并复用现有播放状态与诊断入口。 */
+  Future<void> _showControlSettingsDialog() {
+    return showPlayerSettingsDialog(
+      context,
+      playbackMode: _playbackMode,
+      videoAspectMode: _videoAspectMode,
+      playbackRate: _playbackRate,
+      playbackRates: _playbackRates,
+      onPlaybackModeChanged: _setPlaybackMode,
+      onVideoAspectModeChanged: (mode) {
+        unawaited(_setVideoAspectMode(mode));
+      },
+      onPlaybackRateChanged: _setPlaybackRate,
+      onShowShortcuts: _showControlShortcutHelp,
+      onShowDiagnostics: () => unawaited(_showDiagnosticsDialog()),
+    );
   }
 
   /** 提示当前筛选队列已经播放完毕，避免用户误以为播放器卡住。 */
@@ -1113,6 +1109,8 @@ class PlayerPageState extends State<PlayerPage> {
     for (final entry in options.entries) {
       await _setMpvProperty(entry.key, entry.value);
     }
+    // 部分后端会在打开新媒体时重建渲染参数；每次 open 前后恢复用户当前比例。
+    await _applyVideoAspectMode();
   }
 
   Future<void> _setMpvProperty(String property, String value) async {
@@ -2229,6 +2227,10 @@ class PlayerPageState extends State<PlayerPage> {
                                                     .buildVideoSurface(
                                                   controls:
                                                       _buildVideoControls(),
+                                                  fit: _videoAspectMode
+                                                      .surfaceFit,
+                                                  aspectRatio: _videoAspectMode
+                                                      .surfaceAspectRatio,
                                                 ),
                                               ),
                                             ),

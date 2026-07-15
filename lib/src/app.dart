@@ -83,6 +83,8 @@ export 'pages/player/player_open_failure_panel.dart';
 export 'pages/player/player_open_request_controller.dart';
 export 'pages/player/player_playback_controller.dart';
 export 'pages/player/player_playback_mode.dart';
+export 'pages/player/player_settings_panel.dart';
+export 'pages/player/player_video_aspect_mode.dart';
 export 'pages/player/player_resume_dialog.dart';
 export 'pages/player/player_queue_sidebar.dart';
 export 'pages/player/player_page.dart';

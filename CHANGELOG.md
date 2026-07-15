@@ -1,5 +1,14 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-15 · 播放器画面比例与分组设置浮层
+
+- 对照真实索引确认全屏差异来自视频比例：`1920×1080` 的 16:9 样本可充满全屏，`1728×1080` 的 16:10 样本在默认完整显示下会左右留边，源内上下黑边会进一步形成“被控制条顶起”的观感。
+- 齿轮入口改为参考图式紧凑分组浮层，集中展示播放方式、视频比例、播放速度、快捷键和播放诊断；未实现的播放策略、音量均衡不做占位按钮。
+- 新增 `自动 / 4:3 / 16:9 / 铺满`：前三项保留完整画面或覆盖显示比例，“铺满”同时通过 mpv panscan 和 media_kit `BoxFit.cover` 等比裁边。
+- `PlayerBackend.buildVideoSurface` 向后兼容增加可选 `BoxFit` / `aspectRatio`，默认 `contain` 不变；页面仍不接触具体 Player、VideoController 或纹理对象。
+- 3 项播放器 focused tests、`flutter analyze`、Windows debug build 通过，未执行全量测试。真实窗口迭代中发现并修复设置菜单未显示、浮层过宽和仅裁纹理内部仍留边；最终构建自动化复测时进程退出，截图器返回 `no screenshot targets found`，保留精确人工复测路径。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、播放索引、缩略图/媒体详情队列和用户数据均未改变。
+
 ## 2026-07-15 · 播放器队列搜索按需展开
 
 - 将队列搜索入口移动到 `当前序号 / 总数` 后，默认只显示搜索图标，点击后才挂载搜索框，再次点击可收起。

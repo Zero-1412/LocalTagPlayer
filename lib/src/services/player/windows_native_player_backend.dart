@@ -218,16 +218,31 @@ class WindowsNativePlayerBackend implements PlayerBackend {
   Future<Uint8List?> screenshot({String format = 'image/jpeg'}) async => null;
 
   @override
-  Widget buildVideoSurface({required Widget controls}) {
+  Widget buildVideoSurface({
+    required Widget controls,
+    BoxFit fit = BoxFit.contain,
+    double? aspectRatio,
+  }) {
+    final textureSurface = ValueListenableBuilder<int?>(
+      valueListenable: _textureId,
+      builder: (_, texture, __) => texture == null
+          ? const ColoredBox(color: Colors.black)
+          : Texture(textureId: texture),
+    );
     return Stack(
       fit: StackFit.expand,
       children: [
-        ValueListenableBuilder<int?>(
-          valueListenable: _textureId,
-          builder: (_, texture, __) => texture == null
-              ? const ColoredBox(color: Colors.black)
-              : Texture(textureId: texture),
-        ),
+        if (aspectRatio == null)
+          textureSurface
+        else
+          FittedBox(
+            fit: fit,
+            child: SizedBox(
+              width: aspectRatio * 1000,
+              height: 1000,
+              child: textureSurface,
+            ),
+          ),
         controls,
       ],
     );
