@@ -152,6 +152,7 @@ void main() {
 
   test('player queue sidebar follows blueprint proportions on wide windows',
       () {
+    expect(playerQueueLocatorHeight, 48);
     expect(playerQueueSidebarWidthForWindow(960), 360);
     expect(playerQueueSidebarWidthForWindow(1280), 384);
     expect(playerQueueSidebarWidthForWindow(1600), 480);

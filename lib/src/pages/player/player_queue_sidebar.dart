@@ -16,6 +16,9 @@ import '../../widgets/app_theme_tokens.dart';
 
 const double playerQueueItemExtent = 104;
 
+/** 队列底部返回操作栏高度，保证鼠标命中范围不小于桌面端推荐尺寸。 */
+const double playerQueueLocatorHeight = 48;
+
 /**
  * 判断队列项是否应继续显示快速滚动占位。
  *
@@ -413,9 +416,9 @@ class PlayerQueueSidebar extends StatelessWidget {
                 },
               ),
               Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
+                left: 0,
+                right: 0,
+                bottom: 0,
                 child: AnimatedBuilder(
                   animation: scrollController,
                   builder: (context, _) {
@@ -895,37 +898,45 @@ class _QueueFloatingLocator extends StatelessWidget {
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 140),
       opacity: showPlaying || showSelected ? 1 : 0,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0xee101722),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xff344369)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x66000000),
-              blurRadius: 18,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            alignment: WrapAlignment.center,
+      child: SizedBox(
+        height: playerQueueLocatorHeight,
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            color: Color(0xf2101722),
+            border: Border(top: BorderSide(color: Color(0xff344369))),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x66000000),
+                blurRadius: 18,
+                offset: Offset(0, -6),
+              ),
+            ],
+          ),
+          child: Row(
+            // 操作按钮填满停靠栏，整块可见区域均可点击。
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (showPlaying)
-                _QueueLocatorButton(
-                  icon: Icons.play_arrow_rounded,
-                  label: '回到播放',
-                  onPressed: onReturnToPlaying,
+                Expanded(
+                  child: _QueueLocatorButton(
+                    icon: Icons.play_arrow_rounded,
+                    label: '回到播放',
+                    onPressed: onReturnToPlaying,
+                  ),
+                ),
+              if (showPlaying && showSelected)
+                const VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: Color(0xff344369),
                 ),
               if (showSelected)
-                _QueueLocatorButton(
-                  icon: Icons.center_focus_strong_rounded,
-                  label: '回到选中',
-                  onPressed: onLocateSelected,
+                Expanded(
+                  child: _QueueLocatorButton(
+                    icon: Icons.center_focus_strong_rounded,
+                    label: '回到选中',
+                    onPressed: onLocateSelected,
+                  ),
                 ),
             ],
           ),
@@ -954,12 +965,12 @@ class _QueueLocatorButton extends StatelessWidget {
       label: Text(label),
       style: TextButton.styleFrom(
         foregroundColor: const Color(0xffdbe4ff),
-        minimumSize: const Size(0, 30),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 0),
+        minimumSize: Size.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
+        shape: const RoundedRectangleBorder(),
         textStyle: const TextStyle(
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: FontWeight.w900,
         ),
       ),
