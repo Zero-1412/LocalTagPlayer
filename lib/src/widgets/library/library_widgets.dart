@@ -392,6 +392,7 @@ class LibrarySidebar extends StatelessWidget {
   final Set<String> selectedTags;
   final bool isScanning;
   final bool dense;
+  /** 为“本地媒体库”标题旁的紧凑加号保留目录选择动作。 */
   final VoidCallback onPickFolder;
   final VoidCallback onShowAllLibrary;
   final VoidCallback onRescan;
@@ -432,12 +433,6 @@ class LibrarySidebar extends StatelessWidget {
                       padding: EdgeInsets.zero,
                       children: [
                         const LibrarySidebarBrand(),
-                        const SizedBox(height: 24),
-                        LibrarySidebarPrimaryButton(
-                          icon: Icons.add_rounded,
-                          label: '\u6dfb\u52a0\u76ee\u5f55',
-                          onPressed: isScanning ? null : onPickFolder,
-                        ),
                         const SizedBox(height: 24),
                         LibrarySidebarNavItem(
                           icon: Icons.grid_view_rounded,
@@ -651,42 +646,6 @@ class LibrarySidebarSectionLabel extends StatelessWidget {
         fontSize: 11,
         fontWeight: FontWeight.w900,
         letterSpacing: 0,
-      ),
-    );
-  }
-}
-
-class LibrarySidebarPrimaryButton extends StatelessWidget {
-  const LibrarySidebarPrimaryButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: FilledButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 20),
-        label: Text(label),
-        style: FilledButton.styleFrom(
-          backgroundColor: appAccentViolet,
-          disabledBackgroundColor: const Color(0xff334155),
-          foregroundColor: Colors.white,
-          disabledForegroundColor: const Color(0xff94a3b8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          textStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
       ),
     );
   }

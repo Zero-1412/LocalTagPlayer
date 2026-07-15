@@ -58,6 +58,56 @@ void main() {
     expect(find.byType(LocalTagPlayerApp), findsOneWidget);
   });
 
+  testWidgets('library sidebar omits duplicate primary add button',
+      (WidgetTester tester) async {
+    var pickFolderCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibrarySidebar(
+          roots: const <String>[],
+          tags: const <String>[],
+          tagGroups: const <TagGroup>[],
+          resultCounts: const <String, int>{},
+          selectedLocalLibraryPath: null,
+          childParentTag: null,
+          childTags: const <String>[],
+          selectedChildTags: const <String>{},
+          selectedGroupTagIds: const <String, Set<String>>{},
+          excludedTagIds: const <String>{},
+          favoriteCount: 0,
+          missingCount: 0,
+          favoriteVideosSelected: false,
+          recentPlaybackSelected: false,
+          localLibrarySelected: false,
+          selectedTags: const <String>{},
+          isScanning: false,
+          dense: false,
+          onPickFolder: () => pickFolderCount++,
+          onShowAllLibrary: () {},
+          onRescan: () {},
+          onRemoveLocalLibraryRoot: (_) {},
+          onFavoritesToggle: () {},
+          onOpenRecentPlayback: () {},
+          onOpenLocalLibraryRoot: (_) {},
+          onOpenDirectoryManager: () {},
+          onOpenMissingRelink: () {},
+          onOpenSettings: () {},
+          onChildTagToggle: (_) {},
+          onClearChildTags: () {},
+          onGroupTagToggle: (_) {},
+          onGroupTagExcludeToggle: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.text('媒体库'), findsOneWidget);
+    expect(find.text('添加目录'), findsNothing);
+    expect(find.byTooltip('新增本地库路径'), findsOneWidget);
+    await tester.tap(find.byTooltip('新增本地库路径'));
+    await tester.pump();
+    expect(pickFolderCount, 1);
+  });
+
   test('reference top bar collapses actions below expanded width', () {
     expect(LayoutBreakpoints.fromWidth(699), LayoutSize.compact);
     expect(LayoutBreakpoints.fromWidth(900), LayoutSize.medium);
