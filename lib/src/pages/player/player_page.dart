@@ -731,12 +731,6 @@ class PlayerPageState extends State<PlayerPage> {
                         ),
                       ),
                     ),
-                    IconButton.filledTonal(
-                      key: const ValueKey('player.fullscreenEditTags'),
-                      tooltip: '标签',
-                      onPressed: () => unawaited(_editManualTags()),
-                      icon: const Icon(Icons.sell_outlined, size: 18),
-                    ),
                   ],
                 ),
               ),
