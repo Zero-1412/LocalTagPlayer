@@ -2108,8 +2108,9 @@ class PlayerPageState extends State<PlayerPage> {
     Key? key,
   }) {
     final controller = scrollController ?? _queueScrollController;
-    return PlayerQueueSidebar(
-      key: key ?? const ValueKey('player.queue.sidebar'),
+    final queuePanel = PlayerQueueSidebar(
+      key: const ValueKey('player.queue.sidebar.content'),
+      embedded: true,
       playlist: _queue,
       sourcePlaylist: _sourcePlaylist,
       playingIndex: _index,
@@ -2133,6 +2134,19 @@ class PlayerPageState extends State<PlayerPage> {
       ),
       onSearchQueue: _searchQueue,
       onDeleteSelected: _selectedIndex == _index ? _deleteSelectedFile : null,
+    );
+    return PlayerSidePanel(
+      key: key ?? const ValueKey('player.queue.sidebar'),
+      queuePanel: queuePanel,
+      item: _currentItem,
+      queueEndReached: _queueEndReached,
+      onToggleFavorite: () {
+        unawaited(widget.onToggleFavorite(_currentItem));
+        setState(() {});
+      },
+      onEditManualTags: () => unawaited(_editManualTags()),
+      onRevealFile: () => unawaited(_revealCurrentFile()),
+      onVideoInfo: () => unawaited(_showVideoInfoDialog()),
     );
   }
 
@@ -2255,28 +2269,6 @@ class PlayerPageState extends State<PlayerPage> {
                                       ),
                                     ),
                                   ),
-                                  if (!_isWindowFullscreen)
-                                    PlayerContextPanel(
-                                      item: _currentItem,
-                                      queueTitle: _filterSummary,
-                                      index: _index,
-                                      total: _queue.length,
-                                      queueEndReached: _queueEndReached,
-                                      onToggleFavorite: () {
-                                        unawaited(widget
-                                            .onToggleFavorite(_currentItem));
-                                        setState(() {});
-                                      },
-                                      onEditManualTags: () {
-                                        unawaited(_editManualTags());
-                                      },
-                                      onRevealFile: () {
-                                        unawaited(_revealCurrentFile());
-                                      },
-                                      onVideoInfo: () {
-                                        unawaited(_showVideoInfoDialog());
-                                      },
-                                    ),
                                 ],
                               ),
                             ),

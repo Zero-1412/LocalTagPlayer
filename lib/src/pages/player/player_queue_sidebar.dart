@@ -87,6 +87,7 @@ int? playerQueueSearchIndex(
 class PlayerQueueSidebar extends StatelessWidget {
   const PlayerQueueSidebar({
     super.key,
+    this.embedded = false,
     required this.playlist,
     required this.sourcePlaylist,
     required this.playingIndex,
@@ -105,6 +106,14 @@ class PlayerQueueSidebar extends StatelessWidget {
     required this.onDeleteSelected,
     required this.onSearchQueue,
   });
+
+  /**
+   * 是否嵌入统一播放器侧栏。
+   *
+   * 嵌入时只构建队列内容，由上层统一提供边框、宽度和“列表/详情”切换；独立使用时
+   * 保留原有完整容器，兼容窄窗口和测试入口。
+   */
+  final bool embedded;
 
   /**
    * 当前播放器实际消费的队列。
@@ -221,6 +230,221 @@ class PlayerQueueSidebar extends StatelessWidget {
     final sidebarWidth = playerQueueSidebarWidthForWindow(
       MediaQuery.sizeOf(context).width,
     );
+    final content = Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+          decoration: const BoxDecoration(
+            color: Color(0xff0d1528),
+            border: Border(
+              bottom: BorderSide(color: Color(0xff243044)),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.filter_alt_outlined,
+                    color: Color(0xffa9b8ff),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          const Flexible(
+                            child: Text(
+                              '筛选结果队列',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xff1b2544),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text('${playlist.length}',
+                                style: const TextStyle(
+                                    color: Color(0xffb7c2d8),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800)),
+                          ),
+                        ]),
+                        const SizedBox(height: 2),
+                        const Text(
+                          '当前筛选（AND）',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Color(0xff8f9bad),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '定位当前播放',
+                    onPressed: onLocatePlaying,
+                    icon: const Icon(Icons.my_location_rounded, size: 17),
+                    color: Colors.white70,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    tooltip: '定位已选中',
+                    onPressed: onLocateSelected,
+                    icon:
+                        const Icon(Icons.center_focus_strong_rounded, size: 17),
+                    color: Colors.white70,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    tooltip: '删除当前视频',
+                    onPressed: onDeleteSelected,
+                    icon: const Icon(Icons.delete_outline, size: 17),
+                    color: Colors.white70,
+                    disabledColor: Colors.white24,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Tooltip(
+                message: _filterSummary,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xff121c2b),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xff344369)),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 16,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Row(children: [
+                    const _QueueFilterChip(
+                      label: '全部视频',
+                      emphasized: true,
+                    ),
+                    const SizedBox(width: 6),
+                    const _QueueFilterChip(label: '时长：全部'),
+                    const SizedBox(width: 6),
+                    const _QueueFilterChip(label: '大小：全部'),
+                    const Spacer(),
+                    Text(
+                      '${playingIndex + 1} / ${playlist.length}',
+                      style: const TextStyle(
+                        color: Color(0xffa5b4fc),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _QueueSearchField(onSearch: onSearchQueue),
+            ],
+          ),
+        ),
+        if (_activeParentTag != null)
+          SizedBox(
+            height: 44,
+            child: _HorizontalWheelScroller(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              spacing: 8,
+              children: [
+                for (final tag in _childTags)
+                  _PlayerChildTagChip(
+                    label: tag,
+                    selected: selectedChildTag == tag,
+                    onPressed: () => onChildTagSelected(tag),
+                  ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: Stack(
+            children: [
+              ListView.builder(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+                itemExtent: playerQueueItemExtent,
+                // 只预建邻近两项，避免大队列滚动时提前触发大量文件校验与 FFprobe。
+                scrollCacheExtent: const ScrollCacheExtent.pixels(208),
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: true,
+                itemCount: playlist.length,
+                itemBuilder: (context, index) {
+                  final item = playlist[index];
+                  return _DeferredQueueListItem(
+                    item: item,
+                    child: _QueueListItem(
+                      key: ValueKey('player.queue.item.${item.videoId}'),
+                      item: item,
+                      index: index,
+                      playing: index == playingIndex,
+                      selected: index == selectedIndex,
+                      thumbnailService: thumbnailService,
+                      detailsService: detailsService,
+                      onTap: () => onSelect(index),
+                      onDoubleTap: () => onPlay(index),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: AnimatedBuilder(
+                  animation: scrollController,
+                  builder: (context, _) {
+                    final showPlaying = !_isQueueIndexVisible(playingIndex);
+                    final showSelected = selectedIndex != playingIndex &&
+                        !_isQueueIndexVisible(selectedIndex);
+                    if (!showPlaying && !showSelected) {
+                      return const SizedBox.shrink();
+                    }
+                    return _QueueFloatingLocator(
+                      showPlaying: showPlaying,
+                      showSelected: showSelected,
+                      onLocatePlaying: onLocatePlaying,
+                      onLocateSelected: onLocateSelected,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (embedded) {
+      return content;
+    }
     return Container(
       width: sidebarWidth,
       // 与左侧视频画面的顶边对齐，保持蓝图中的双栏视觉基线。
@@ -231,219 +455,7 @@ class PlayerQueueSidebar extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xff202c46)),
       ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-            decoration: const BoxDecoration(
-              color: Color(0xff0d1528),
-              border: Border(
-                bottom: BorderSide(color: Color(0xff243044)),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.filter_alt_outlined,
-                      color: Color(0xffa9b8ff),
-                      size: 24,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(children: [
-                            const Flexible(
-                              child: Text(
-                                '筛选结果队列',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 7),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xff1b2544),
-                                borderRadius: BorderRadius.circular(5),
-                              ),
-                              child: Text('${playlist.length}',
-                                  style: const TextStyle(
-                                      color: Color(0xffb7c2d8),
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800)),
-                            ),
-                          ]),
-                          const SizedBox(height: 2),
-                          const Text(
-                            '当前筛选（AND）',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Color(0xff8f9bad),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: '定位当前播放',
-                      onPressed: onLocatePlaying,
-                      icon: const Icon(Icons.my_location_rounded, size: 17),
-                      color: Colors.white70,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    IconButton(
-                      tooltip: '定位已选中',
-                      onPressed: onLocateSelected,
-                      icon: const Icon(Icons.center_focus_strong_rounded,
-                          size: 17),
-                      color: Colors.white70,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    IconButton(
-                      tooltip: '删除当前视频',
-                      onPressed: onDeleteSelected,
-                      icon: const Icon(Icons.delete_outline, size: 17),
-                      color: Colors.white70,
-                      disabledColor: Colors.white24,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Tooltip(
-                  message: _filterSummary,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xff121c2b),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xff344369)),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x33000000),
-                          blurRadius: 16,
-                          offset: Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Row(children: [
-                      const _QueueFilterChip(
-                        label: '全部视频',
-                        emphasized: true,
-                      ),
-                      const SizedBox(width: 6),
-                      const _QueueFilterChip(label: '时长：全部'),
-                      const SizedBox(width: 6),
-                      const _QueueFilterChip(label: '大小：全部'),
-                      const Spacer(),
-                      Text(
-                        '${playingIndex + 1} / ${playlist.length}',
-                        style: const TextStyle(
-                          color: Color(0xffa5b4fc),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ]),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _QueueSearchField(onSearch: onSearchQueue),
-              ],
-            ),
-          ),
-          if (_activeParentTag != null)
-            SizedBox(
-              height: 44,
-              child: _HorizontalWheelScroller(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                spacing: 8,
-                children: [
-                  for (final tag in _childTags)
-                    _PlayerChildTagChip(
-                      label: tag,
-                      selected: selectedChildTag == tag,
-                      onPressed: () => onChildTagSelected(tag),
-                    ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: Stack(
-              children: [
-                ListView.builder(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-                  itemExtent: playerQueueItemExtent,
-                  // 只预建邻近两项，避免大队列滚动时提前触发大量文件校验与 FFprobe。
-                  scrollCacheExtent: const ScrollCacheExtent.pixels(208),
-                  addAutomaticKeepAlives: false,
-                  addRepaintBoundaries: true,
-                  itemCount: playlist.length,
-                  itemBuilder: (context, index) {
-                    final item = playlist[index];
-                    return _DeferredQueueListItem(
-                      item: item,
-                      child: _QueueListItem(
-                        key: ValueKey('player.queue.item.${item.videoId}'),
-                        item: item,
-                        index: index,
-                        playing: index == playingIndex,
-                        selected: index == selectedIndex,
-                        thumbnailService: thumbnailService,
-                        detailsService: detailsService,
-                        onTap: () => onSelect(index),
-                        onDoubleTap: () => onPlay(index),
-                      ),
-                    );
-                  },
-                ),
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 12,
-                  child: AnimatedBuilder(
-                    animation: scrollController,
-                    builder: (context, _) {
-                      final showPlaying = !_isQueueIndexVisible(playingIndex);
-                      final showSelected = selectedIndex != playingIndex &&
-                          !_isQueueIndexVisible(selectedIndex);
-                      if (!showPlaying && !showSelected) {
-                        return const SizedBox.shrink();
-                      }
-                      return _QueueFloatingLocator(
-                        showPlaying: showPlaying,
-                        showSelected: showSelected,
-                        onLocatePlaying: onLocatePlaying,
-                        onLocateSelected: onLocateSelected,
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      child: content,
     );
   }
 
@@ -552,7 +564,6 @@ class _QueueFilterChip extends StatelessWidget {
  * 队列栏在宽屏下保持接近蓝图的三成占比，同时通过上下限避免窄窗挤压
  * 播放画面，或在超宽屏上让单行队列信息变得过度松散。
  */
-@visibleForTesting
 double playerQueueSidebarWidthForWindow(double windowWidth) {
   return (windowWidth * 0.30).clamp(360.0, 500.0).toDouble();
 }

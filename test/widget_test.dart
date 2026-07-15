@@ -133,6 +133,75 @@ void main() {
     expect(playerQueueSidebarWidthForWindow(1920), 500);
   });
 
+  testWidgets('player side panel switches between queue and current details',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1280, 720);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var editCount = 0;
+    final item = VideoItem(
+      path: r'X:\test-media\原神\雷神\clip.mp4',
+      title: 'clip',
+      folder: r'X:\test-media\原神\雷神',
+      tags: <String>{'原神', '雷神'},
+      addedAt: DateTime.utc(2026, 7, 14),
+      fileSize: 307 * 1024 * 1024,
+      playbackDuration: const Duration(minutes: 2),
+      mediaDetails: const MediaDetails(
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        width: 1920,
+        height: 1080,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.centerRight,
+            child: PlayerSidePanel(
+              queuePanel: const Center(child: Text('筛选结果列表测试')),
+              item: item,
+              queueEndReached: false,
+              onToggleFavorite: () {},
+              onEditManualTags: () => editCount++,
+              onRevealFile: () {},
+              onVideoInfo: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('筛选结果列表测试'), findsOneWidget);
+    expect(find.text('当前视频详情'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('player.sidebar.tab.details')));
+    await tester.pump();
+
+    expect(find.text('筛选结果列表测试'), findsNothing);
+    expect(find.text('当前视频详情'), findsOneWidget);
+    expect(find.text('clip.mp4'), findsOneWidget);
+    expect(find.text('1920×1080'), findsOneWidget);
+    expect(find.text('H264 / AAC'), findsOneWidget);
+    expect(find.text('原神'), findsOneWidget);
+    expect(find.text('雷神'), findsOneWidget);
+
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('player.editManualTags')));
+    await tester.tap(find.byKey(const ValueKey('player.editManualTags')));
+    await tester.pump();
+    expect(editCount, 1);
+
+    await tester.tap(find.byKey(const ValueKey('player.sidebar.tab.queue')));
+    await tester.pump();
+    expect(find.text('筛选结果列表测试'), findsOneWidget);
+    expect(find.text('当前视频详情'), findsNothing);
+  });
+
   test('tag accordion children are scoped to their parent tag', () {
     const genshin = TagItem(
       id: 'folder.primary:genshin',
