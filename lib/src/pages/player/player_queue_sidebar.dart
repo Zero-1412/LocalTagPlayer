@@ -114,7 +114,6 @@ class PlayerQueueSidebar extends StatelessWidget {
     required this.detailsService,
     required this.activeTags,
     required this.selectedChildTag,
-    required this.queueTitle,
     required this.onChildTagSelected,
     required this.onSelect,
     required this.onPlay,
@@ -178,11 +177,6 @@ class PlayerQueueSidebar extends StatelessWidget {
   final String? selectedChildTag;
 
   /**
-   * 队列顶部显示的筛选摘要。
-   */
-  final String queueTitle;
-
-  /**
    * 切换播放器页内部子标签筛选。
    */
   final ValueChanged<String> onChildTagSelected;
@@ -235,13 +229,6 @@ class PlayerQueueSidebar extends StatelessWidget {
     return TagRules.sortedChildTags(tags);
   }
 
-  String get _filterSummary {
-    if (queueTitle.trim().isEmpty) {
-      return '\u5168\u90e8\u89c6\u9891';
-    }
-    return queueTitle;
-  }
-
   @override
   Widget build(BuildContext context) {
     final sidebarWidth = playerQueueSidebarWidthForWindow(
@@ -250,7 +237,7 @@ class PlayerQueueSidebar extends StatelessWidget {
     final content = Column(
       children: [
         Container(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           decoration: const BoxDecoration(
             color: Color(0xff0d1528),
             border: Border(
@@ -269,51 +256,26 @@ class PlayerQueueSidebar extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          const Flexible(
-                            child: Text(
-                              '筛选结果队列',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 7),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xff1b2544),
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Text('${playlist.length}',
-                                style: const TextStyle(
-                                    color: Color(0xffb7c2d8),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800)),
-                          ),
-                        ]),
-                        const SizedBox(height: 2),
-                        const Text(
-                          '当前筛选（AND）',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Color(0xff8f9bad),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
+                    child: const Text(
+                      '筛选结果队列',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
+                  Text(
+                    '${playingIndex + 1} / ${playlist.length}',
+                    style: const TextStyle(
+                      color: Color(0xffa5b4fc),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
                   IconButton(
                     tooltip: '定位已选中',
                     onPressed: onLocateSelected,
@@ -331,48 +293,6 @@ class PlayerQueueSidebar extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              Tooltip(
-                message: _filterSummary,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xff121c2b),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xff344369)),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x33000000),
-                        blurRadius: 16,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Row(children: [
-                    const _QueueFilterChip(
-                      label: '全部视频',
-                      emphasized: true,
-                    ),
-                    const SizedBox(width: 6),
-                    const _QueueFilterChip(label: '时长：全部'),
-                    const SizedBox(width: 6),
-                    const _QueueFilterChip(label: '大小：全部'),
-                    const Spacer(),
-                    Text(
-                      '${playingIndex + 1} / ${playlist.length}',
-                      style: const TextStyle(
-                        color: Color(0xffa5b4fc),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ]),
-                ),
               ),
               const SizedBox(height: 8),
               _QueueSearchField(onSearch: onSearchQueue),
@@ -635,39 +555,6 @@ class _DeferredQueueListItem extends StatelessWidget {
               style: const TextStyle(color: Color(0xff8f99a8), fontSize: 12),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/** 蓝图队列头部的只读筛选状态，不伪装为尚未实现的交互按钮。 */
-class _QueueFilterChip extends StatelessWidget {
-  const _QueueFilterChip({required this.label, this.emphasized = false});
-
-  /** 当前筛选维度的摘要文本。 */
-  final String label;
-
-  /** 是否为当前主要筛选入口。 */
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: emphasized ? const Color(0xff18254a) : const Color(0xff11192c),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(
-          color: emphasized ? const Color(0xff4f68a8) : const Color(0xff283550),
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: emphasized ? const Color(0xffdbe4ff) : const Color(0xff9ba8c2),
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );

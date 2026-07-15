@@ -2120,7 +2120,6 @@ class PlayerPageState extends State<PlayerPage> {
       detailsService: _detailsService,
       activeTags: widget.activeTags,
       selectedChildTag: _selectedChildTag,
-      queueTitle: widget.queueTitle,
       onChildTagSelected: _selectChildTag,
       onSelect: _select,
       onPlay: _jumpTo,
