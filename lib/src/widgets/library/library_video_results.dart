@@ -1128,20 +1128,30 @@ class EmptyState extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 child: InkWell(
                   onTap: onAddFiles,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(20),
                   child: Container(
-                    width: 112,
-                    height: 112,
+                    width: 108,
+                    height: 108,
                     decoration: BoxDecoration(
-                      color: appPanel,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: appAccentViolet, width: 2),
-                      boxShadow: appSoftShadow,
+                      // 使用接近页面底色的浅紫灰，而不是独立白卡片，降低空状态入口的突兀感。
+                      color: const Color(0xffeef1fa),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0x596d5dfc),
+                        width: 1.25,
+                      ),
+                      boxShadow: const <BoxShadow>[
+                        BoxShadow(
+                          color: Color(0x126d5dfc),
+                          blurRadius: 18,
+                          offset: Offset(0, 6),
+                        ),
+                      ],
                     ),
                     child: const Icon(
                       Icons.add_rounded,
-                      size: 58,
-                      color: appAccentViolet,
+                      size: 48,
+                      color: Color(0xff756ae8),
                     ),
                   ),
                 ),
@@ -1152,8 +1162,8 @@ class EmptyState extends StatelessWidget {
               '添加视频文件',
               style: TextStyle(
                 color: appText,
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 7),

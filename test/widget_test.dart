@@ -1904,6 +1904,23 @@ void main() {
     expect(find.byKey(LibrarySmokeKeys.emptyAddFiles), findsOneWidget);
     expect(find.text('添加视频文件'), findsOneWidget);
     expect(find.textContaining('拖到媒体库区域'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.emptyAddFiles)),
+      const Size(108, 108),
+    );
+    final container = tester.widget<Container>(
+      find
+          .descendant(
+            of: find.byKey(LibrarySmokeKeys.emptyAddFiles),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    final decoration = container.decoration! as BoxDecoration;
+    expect(decoration.color, const Color(0xffeef1fa));
+    final border = decoration.border! as Border;
+    expect(border.top.color, const Color(0x596d5dfc));
+    expect(border.top.width, 1.25);
 
     await tester.tap(find.byKey(LibrarySmokeKeys.emptyAddFiles));
     await tester.pump();
