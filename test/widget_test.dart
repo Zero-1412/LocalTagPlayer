@@ -1929,6 +1929,7 @@ void main() {
 
   testWidgets('library result line shows determinate import progress',
       (tester) async {
+    var pauseCount = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -1945,8 +1946,9 @@ void main() {
             resultCount: 11163,
             totalCount: 11163,
             refreshing: false,
-            progressLabel: '解析媒体信息 3200/6308 个文件 · 50%',
+            progressLabel: '媒体解析 3200/6308 · 50% · 120个/秒 · 剩余26秒',
             progressValue: 3200 / 6308,
+            onToggleProgressPaused: () => pauseCount++,
             onRemovePrimaryTag: (_) {},
             onRemoveChildTag: (_) {},
             onRemoveGroupTag: (_) {},
@@ -1959,12 +1961,19 @@ void main() {
       ),
     );
 
-    expect(find.text('解析媒体信息 3200/6308 个文件 · 50%'), findsOneWidget);
+    expect(
+      find.text('媒体解析 3200/6308 · 50% · 120个/秒 · 剩余26秒'),
+      findsOneWidget,
+    );
     final indicator = tester.widget<LinearProgressIndicator>(
       find.byType(LinearProgressIndicator),
     );
     expect(indicator.value, closeTo(3200 / 6308, 0.0001));
     expect(find.text('全部视频 · 11163 个结果'), findsNothing);
+    expect(find.byKey(const ValueKey('qa.media_import.pause')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('qa.media_import.pause')));
+    await tester.pump();
+    expect(pauseCount, 1);
   });
 
   test('file imports collapse to uncovered top-level roots', () {

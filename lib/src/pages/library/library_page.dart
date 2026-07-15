@@ -66,7 +66,40 @@ Route<T> _smoothRoute<T>(Widget page) {
 /** 把后台媒体解析快照转换为结果区的稳定短文案。 */
 String libraryMediaImportProgressLabel(MediaDetailsProgress progress) {
   final percent = (progress.fraction * 100).floor();
-  return '解析媒体信息 ${progress.processed}/${progress.total} 个文件 · $percent%';
+  final parts = <String>[
+    '媒体解析 ${progress.processed}/${progress.total}',
+    '$percent%',
+  ];
+  if (progress.isPaused) {
+    parts.add('已暂停');
+    return parts.join(' · ');
+  }
+  final speed = progress.itemsPerSecond;
+  if (speed != null && speed > 0) {
+    parts.add(
+        speed >= 10 ? '${speed.round()}个/秒' : '${speed.toStringAsFixed(1)}个/秒');
+  }
+  final remaining = progress.estimatedRemaining;
+  if (remaining != null) {
+    parts.add('剩余${_libraryImportDurationLabel(remaining)}');
+  }
+  return parts.join(' · ');
+}
+
+/** 把 ETA 压缩为适合当前筛选结果行的一到两个时间单位。 */
+String _libraryImportDurationLabel(Duration duration) {
+  final seconds = duration.inSeconds.clamp(1, 359999);
+  if (seconds < 60) {
+    return '$seconds秒';
+  }
+  final minutes = seconds ~/ 60;
+  if (minutes < 60) {
+    final remainder = seconds % 60;
+    return remainder == 0 ? '$minutes分钟' : '$minutes分$remainder秒';
+  }
+  final hours = minutes ~/ 60;
+  final remainder = minutes % 60;
+  return remainder == 0 ? '$hours小时' : '$hours小时$remainder分';
 }
 
 /**
@@ -1496,6 +1529,20 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
+  /** 在不影响已显示列表的前提下暂停或继续当前后台媒体解析队列。 */
+  void _toggleMediaImportPaused() {
+    final service = _libraryMediaDetailsService;
+    final progress = _mediaImportProgress;
+    if (service == null || progress == null) {
+      return;
+    }
+    if (progress.isPaused) {
+      service.resume();
+    } else {
+      service.pause();
+    }
+  }
+
   /**
    * 把媒体库当前可视卡片的详情提升到扫描后台队列之前。
    *
@@ -2814,6 +2861,12 @@ class _LibraryPageState extends State<LibraryPage> {
                     _mediaImportProgress == null
                 ? null
                 : _mediaImportProgress!.fraction,
+            progressPaused: _mediaImportProgress?.isPaused ?? false,
+            onToggleProgressPaused: _resultMode != _LibraryResultMode.library ||
+                    _isScanning ||
+                    _mediaImportProgress == null
+                ? null
+                : _toggleMediaImportPaused,
             onRemovePrimaryTag: (tag) => _mutateFilters(() {
               _selectedTags.remove(tag);
               _selectedChildTags.clear();

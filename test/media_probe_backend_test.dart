@@ -70,6 +70,47 @@ class _PriorityProbeBackend implements MediaProbeBackend {
   }
 }
 
+/** 用可控批次确认暂停只阻止后续任务，活动小批次仍能安全完成。 */
+class _PausableProbeBackend implements MediaProbeBackend {
+  final List<int> batchSizes = <int>[];
+  final List<Completer<void>> _releaseGates = <Completer<void>>[];
+  final Completer<void> firstStarted = Completer<void>();
+  final Completer<void> secondStarted = Completer<void>();
+
+  @override
+  Future<void> cancelGeneration(int generationId) async {}
+
+  @override
+  Future<List<MediaProbeResult>> probeBatch({
+    required int generationId,
+    required List<MediaProbeRequest> requests,
+  }) async {
+    batchSizes.add(requests.length);
+    final gate = Completer<void>();
+    _releaseGates.add(gate);
+    if (batchSizes.length == 1) {
+      firstStarted.complete();
+    } else if (batchSizes.length == 2) {
+      secondStarted.complete();
+    }
+    await gate.future;
+    return requests
+        .map((request) => MediaProbeResult(
+              videoId: request.videoId,
+              details: const MediaDetails(
+                videoCodec: 'h264',
+                audioCodec: 'aac',
+                width: 1920,
+                height: 1080,
+              ),
+            ))
+        .toList(growable: false);
+  }
+
+  /** 释放指定原生批次，模拟该批媒体读取自然完成。 */
+  void releaseBatch(int index) => _releaseGates[index].complete();
+}
+
 /** 创建不依赖真实文件的媒体探测测试条目。 */
 VideoItem _probeItem(String id) => VideoItem(
       videoId: id,
@@ -188,6 +229,8 @@ void main() {
     expect(finalProgress.processed, 20);
     expect(finalProgress.fraction, 1);
     expect(finalProgress.failed, 0);
+    expect(finalProgress.itemsPerSecond, isNotNull);
+    expect(finalProgress.estimatedRemaining, isNull);
     expect(
       libraryMediaImportProgressLabel(const MediaDetailsProgress(
         total: 20,
@@ -196,7 +239,77 @@ void main() {
         queued: 4,
         active: 8,
       )),
-      '解析媒体信息 8/20 个文件 · 40%',
+      '媒体解析 8/20 · 40%',
     );
+    expect(
+      libraryMediaImportProgressLabel(const MediaDetailsProgress(
+        total: 100,
+        completed: 40,
+        failed: 0,
+        queued: 52,
+        active: 8,
+        itemsPerSecond: 25.4,
+        estimatedRemaining: Duration(seconds: 142),
+      )),
+      '媒体解析 40/100 · 40% · 25个/秒 · 剩余2分22秒',
+    );
+    expect(
+      libraryMediaImportProgressLabel(const MediaDetailsProgress(
+        total: 100,
+        completed: 40,
+        failed: 0,
+        queued: 60,
+        active: 0,
+        itemsPerSecond: 25.4,
+        estimatedRemaining: Duration(seconds: 142),
+        isPaused: true,
+      )),
+      '媒体解析 40/100 · 40% · 已暂停',
+    );
+  });
+
+  test('paused media details finish the active batch then resume the queue',
+      () async {
+    final backend = _PausableProbeBackend();
+    final pausedAfterFirstBatch = Completer<MediaDetailsProgress>();
+    final completed = Completer<MediaDetailsProgress>();
+    final service = MediaDetailsService(
+      probeBackend: backend,
+      onBatchUpdated: (_) async {},
+      onProgress: (progress) {
+        if (progress.isPaused &&
+            progress.processed == 8 &&
+            !pausedAfterFirstBatch.isCompleted) {
+          pausedAfterFirstBatch.complete(progress);
+        }
+        if (progress.isComplete && !completed.isCompleted) {
+          completed.complete(progress);
+        }
+      },
+    );
+
+    service.prefetchAll(List<VideoItem>.generate(
+      12,
+      (index) => _probeItem('pausable-$index'),
+    ));
+    await backend.firstStarted.future;
+    service.pause();
+    backend.releaseBatch(0);
+    final paused = await pausedAfterFirstBatch.future;
+
+    expect(service.isPaused, isTrue);
+    expect(paused.active, 0);
+    expect(paused.queued, 4);
+    expect(backend.batchSizes, <int>[8]);
+
+    service.resume();
+    await backend.secondStarted.future;
+    backend.releaseBatch(1);
+    final finished = await completed.future;
+    service.dispose();
+
+    expect(backend.batchSizes, <int>[8, 4]);
+    expect(finished.processed, 12);
+    expect(finished.isPaused, isFalse);
   });
 }

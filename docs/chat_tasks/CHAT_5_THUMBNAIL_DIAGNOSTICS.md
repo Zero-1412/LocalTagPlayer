@@ -1,5 +1,14 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
+## 2026-07-15 媒体解析 ETA、暂停控制与真实磁盘基准
+
+- `MediaDetailsService` 用完成批次的有效运行时间平滑计算条目/秒和预计剩余时间；暂停期间不累计时间，继续后只处理剩余队列。
+- 暂停以批次为边界：正在运行的最多 8 条自然完成，后续批次停止；不强杀原生探测，不重复读取已完成条目。
+- 媒体库结果区紧凑展示已处理/总数、百分比、速度和剩余时间，并提供暂停/继续按钮；完成后恢复正常结果数。
+- Windows 原生基准通过 `LOCAL_TAG_PLAYER_PROBE_BENCH_ROOT` 显式启用，可配置 `LOCAL_TAG_PLAYER_PROBE_BENCH_LIMIT` 与 `LOCAL_TAG_PLAYER_PROBE_BENCH_ROUNDS`，默认测试仍跳过真实磁盘。
+- 相同 256 文件、6.43 GB 样本首次冷读：D 盘 SATA HDD 52.78 条/秒，E 盘 NVMe SSD 101.04 条/秒；热态三轮中位数分别为 220.32 与 218.81 条/秒，说明缓存预热后主要瓶颈转为媒体探测计算。
+- 完整 118 项测试、静态分析、Windows debug build 与真实 `X:\test-media` 暂停/继续截图通过；schema、缩略图队列、filtered queue 和用户数据未改变。
+
 ## 2026-07-15 大目录媒体详情批处理与进度
 
 - 扫描提交后新增项通过 `MediaDetailsService.prefetchAll` 一次登记，后台以最多 8 条有限批次调用 `MediaProbeBackend.probeBatch`；可见项仍单独优先。

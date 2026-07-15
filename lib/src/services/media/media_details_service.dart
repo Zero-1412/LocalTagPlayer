@@ -34,6 +34,9 @@ class MediaDetailsProgress {
     required this.failed,
     required this.queued,
     required this.active,
+    this.itemsPerSecond,
+    this.estimatedRemaining,
+    this.isPaused = false,
   });
 
   /** 本轮实际需要探测的总文件数，不包含已缓存详情。 */
@@ -50,6 +53,15 @@ class MediaDetailsProgress {
 
   /** 当前原生批次正在处理的文件数。 */
   final int active;
+
+  /** 按最近批次平滑后的处理速度；首批完成前为空。 */
+  final double? itemsPerSecond;
+
+  /** 按平滑速度估算的剩余时间；样本不足或已经完成时为空。 */
+  final Duration? estimatedRemaining;
+
+  /** 是否已阻止后续后台批次启动；活动小批次允许自然收尾。 */
+  final bool isPaused;
 
   /** 已处理文件数，包含失败项，避免进度因异常文件永久停滞。 */
   int get processed => completed + failed;
@@ -148,6 +160,12 @@ class MediaDetailsService {
   var _scheduledThisRun = 0;
   var _completedThisRun = 0;
   var _failedThisRun = 0;
+  /** 只累计实际运行时间，用户暂停期间不进入速度与 ETA 估算。 */
+  final Stopwatch _activeElapsed = Stopwatch();
+  Duration _lastRateElapsed = Duration.zero;
+  var _lastRateProcessed = 0;
+  double? _smoothedItemsPerSecond;
+  var _paused = false;
   int _generation;
   var _disposed = false;
 
@@ -155,6 +173,9 @@ class MediaDetailsService {
   int get activeReads => _activeReads;
   int get completedThisRun => _completedThisRun;
   int get failedThisRun => _failedThisRun;
+
+  /** 当前后台媒体解析是否暂停。 */
+  bool get isPaused => _paused;
 
   /** 当前服务是否已经退出播放器生命周期。 */
   bool get isDisposed => _disposed;
@@ -224,6 +245,39 @@ class MediaDetailsService {
     _drainQueue();
   }
 
+  /**
+   * 暂停启动后续媒体详情批次。
+   *
+   * 已进入原生边界的最多 8 条任务允许自然完成，避免取消后重复读取同一文件；完成后
+   * 停止计时并保持队列，筛选、滚动和播放不受影响。
+   */
+  void pause() {
+    if (_disposed || _paused) {
+      return;
+    }
+    _paused = true;
+    if (_activeJobs.isEmpty) {
+      _activeElapsed.stop();
+    }
+    _emitProgress();
+  }
+
+  /** 继续执行暂停保留的后台任务，并从暂停点恢复有效运行时间统计。 */
+  void resume() {
+    if (_disposed || !_paused) {
+      return;
+    }
+    _paused = false;
+    if (_queuedPaths.isNotEmpty && !_activeElapsed.isRunning) {
+      _activeElapsed.start();
+      // 暂停后的首个批次从新基线计算瞬时速度，避免把暂停时间混入 ETA。
+      _lastRateElapsed = _activeElapsed.elapsed;
+      _lastRateProcessed = _completedThisRun + _failedThisRun;
+    }
+    _emitProgress();
+    _drainQueue();
+  }
+
   /** 创建共享任务并加入对应优先级队列；调用方负责统一启动 drain。 */
   _MediaDetailsJob _enqueue(
     VideoItem item, {
@@ -238,6 +292,9 @@ class MediaDetailsService {
       completer: completer,
       priority: priority,
     );
+    if (_scheduledThisRun == 0 && !_paused) {
+      _activeElapsed.start();
+    }
     _scheduledThisRun++;
     _inFlight[item.path] = completer.future;
     _queuedJobs[item.path] = job;
@@ -264,7 +321,7 @@ class MediaDetailsService {
 
   /** 串行启动下一批任务；可见队列始终优先且单独成批，避免被后台条目拖延。 */
   void _drainQueue() {
-    if (_disposed || _activeJobs.isNotEmpty) {
+    if (_disposed || _paused || _activeJobs.isNotEmpty) {
       return;
     }
     final jobs = <_MediaDetailsJob>[];
@@ -306,6 +363,7 @@ class MediaDetailsService {
               _failedThisRun++;
             }
           }
+          _updateRateEstimate();
         }
       }
     } catch (_) {
@@ -317,6 +375,9 @@ class MediaDetailsService {
     } finally {
       _activeReads = 0;
       _activeJobs = const <_MediaDetailsJob>[];
+      if (_paused) {
+        _activeElapsed.stop();
+      }
       for (final job in jobs) {
         _inFlight.remove(job.item.path);
         if (!job.completer.isCompleted) {
@@ -328,6 +389,24 @@ class MediaDetailsService {
       _emitProgress();
       _drainQueue();
     }
+  }
+
+  /** 使用批次增量的指数平滑速度估算剩余时间，避免单个异常文件让文案剧烈跳动。 */
+  void _updateRateEstimate() {
+    final processed = _completedThisRun + _failedThisRun;
+    final elapsed = _activeElapsed.elapsed;
+    final deltaItems = processed - _lastRateProcessed;
+    final deltaMicros =
+        elapsed.inMicroseconds - _lastRateElapsed.inMicroseconds;
+    if (deltaItems <= 0 || deltaMicros <= 0) {
+      return;
+    }
+    final instantaneous = deltaItems / (deltaMicros / 1000000);
+    final previous = _smoothedItemsPerSecond;
+    _smoothedItemsPerSecond =
+        previous == null ? instantaneous : previous * 0.7 + instantaneous * 0.3;
+    _lastRateProcessed = processed;
+    _lastRateElapsed = elapsed;
   }
 
   /**
@@ -432,12 +511,20 @@ class MediaDetailsService {
     if (_disposed || onProgress == null || _scheduledThisRun == 0) {
       return;
     }
+    final processed = _completedThisRun + _failedThisRun;
+    final remaining = _scheduledThisRun - processed;
+    final speed = _smoothedItemsPerSecond;
     onProgress!(MediaDetailsProgress(
       total: _scheduledThisRun,
       completed: _completedThisRun,
       failed: _failedThisRun,
       queued: _queuedPaths.length,
       active: _activeJobs.length,
+      itemsPerSecond: speed,
+      estimatedRemaining: speed == null || speed <= 0 || remaining <= 0
+          ? null
+          : Duration(seconds: (remaining / speed).ceil()),
+      isPaused: _paused,
     ));
   }
 
@@ -452,6 +539,7 @@ class MediaDetailsService {
       return;
     }
     _disposed = true;
+    _activeElapsed.stop();
     // 纯 Dart/widget test 没有 Windows runner 通道；取消仍应 best-effort，不能在 dispose 后抛出异步异常。
     unawaited(
       _probeBackend.cancelGeneration(_generation).then<void>(

@@ -969,6 +969,8 @@ class LibraryHeroArea extends StatelessWidget {
     required this.refreshing,
     required this.progressLabel,
     required this.progressValue,
+    this.progressPaused = false,
+    this.onToggleProgressPaused,
     required this.onRemovePrimaryTag,
     required this.onRemoveChildTag,
     required this.onRemoveGroupTag,
@@ -1007,6 +1009,12 @@ class LibraryHeroArea extends StatelessWidget {
 
   /** 已知总量阶段的确定型进度；null 表示发现文件等总量未知阶段。 */
   final double? progressValue;
+
+  /** true 时暂停按钮切换为继续图标。 */
+  final bool progressPaused;
+
+  /** 后台媒体解析存在时提供暂停/继续入口；扫描阶段保持为空。 */
+  final VoidCallback? onToggleProgressPaused;
 
   final ValueChanged<String> onRemovePrimaryTag;
 
@@ -1116,6 +1124,8 @@ class LibraryHeroArea extends StatelessWidget {
               refreshing: refreshing,
               progressLabel: progressLabel,
               progressValue: progressValue,
+              progressPaused: progressPaused,
+              onToggleProgressPaused: onToggleProgressPaused,
             );
 
             if (compact) {
@@ -1161,7 +1171,13 @@ class LibraryHeroArea extends StatelessWidget {
                     ),
                     clearAction,
                     const SizedBox(width: 12),
-                    resultLine,
+                    Flexible(
+                      flex: 2,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: resultLine,
+                      ),
+                    ),
                   ],
                 ),
                 Tooltip(
@@ -1233,6 +1249,8 @@ class _FilterResultLine extends StatelessWidget {
     required this.refreshing,
     required this.progressLabel,
     required this.progressValue,
+    required this.progressPaused,
+    required this.onToggleProgressPaused,
   });
 
   final int resultCount;
@@ -1244,6 +1262,10 @@ class _FilterResultLine extends StatelessWidget {
   final String? progressLabel;
 
   final double? progressValue;
+
+  final bool progressPaused;
+
+  final VoidCallback? onToggleProgressPaused;
 
   @override
   Widget build(BuildContext context) {
@@ -1280,6 +1302,27 @@ class _FilterResultLine extends StatelessWidget {
                 backgroundColor: const Color(0xffe7e4ff),
               ),
             ),
+          if (onToggleProgressPaused != null) ...[
+            const SizedBox(width: 4),
+            SizedBox.square(
+              dimension: 28,
+              child: IconButton(
+                key: ValueKey(progressPaused
+                    ? 'qa.media_import.resume'
+                    : 'qa.media_import.pause'),
+                tooltip: progressPaused ? '继续后台解析' : '暂停后台解析',
+                padding: EdgeInsets.zero,
+                iconSize: 18,
+                color: appAccentViolet,
+                onPressed: onToggleProgressPaused,
+                icon: Icon(
+                  progressPaused
+                      ? Icons.play_arrow_rounded
+                      : Icons.pause_rounded,
+                ),
+              ),
+            ),
+          ],
         ] else if (refreshing) ...[
           const SizedBox(width: 8),
           const SizedBox.square(
