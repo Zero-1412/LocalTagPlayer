@@ -1003,7 +1003,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('selected chips preserve a usable search input width',
+  testWidgets('search, filter status, and actions keep a 60-30-10 hierarchy',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 260);
     tester.view.devicePixelRatio = 1;
@@ -1026,14 +1026,35 @@ void main() {
 
     expect(find.text('原神'), findsOneWidget);
     expect(find.text('雷神'), findsOneWidget);
+    final searchRect =
+        tester.getRect(find.byKey(LibrarySmokeKeys.searchSurface));
+    final statusRect =
+        tester.getRect(find.byKey(LibrarySmokeKeys.filterStatusArea));
+    final actionsRect =
+        tester.getRect(find.byKey(LibrarySmokeKeys.toolbarActions));
+    expect(searchRect.right, lessThan(statusRect.left));
+    expect(searchRect.width / statusRect.width, closeTo(2, 0.02));
+    expect(statusRect.width / actionsRect.width, closeTo(3, 0.04));
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.searchInputLane)).width,
-      greaterThanOrEqualTo(236),
+      greaterThan(700),
     );
-    expect(
-      tester.getSize(find.byKey(LibrarySmokeKeys.searchFilterLane)).width,
-      lessThanOrEqualTo(220),
+    final chips = tester.widgetList<InputChip>(
+      find.descendant(
+        of: find.byKey(LibrarySmokeKeys.filterStatusArea),
+        matching: find.byType(InputChip),
+      ),
     );
+    expect(chips, hasLength(2));
+    for (final chip in chips) {
+      expect(chip.side, BorderSide.none);
+      expect(chip.labelStyle?.color, libraryText);
+      expect(chip.color?.resolve(<WidgetState>{}), librarySurfaceAlt);
+      expect(
+        chip.color?.resolve(<WidgetState>{WidgetState.hovered}),
+        isNot(librarySurfaceAlt),
+      );
+    }
     expect(tester.takeException(), isNull);
   });
 
@@ -3016,25 +3037,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('收藏筛选'), findsNothing);
-    expect(find.text('倒序'), findsOneWidget);
+    expect(find.byTooltip('切换为正序'), findsOneWidget);
 
-    final sortButtonRect =
-        tester.getRect(find.byKey(LibrarySmokeKeys.topSortFieldButton));
     await tester.tap(find.byKey(LibrarySmokeKeys.topSortFieldButton));
     await tester.pumpAndSettle();
-    final menuPanelRect =
-        tester.getRect(find.byKey(LibrarySmokeKeys.topSortMenuPanel));
-    expect(menuPanelRect.top, closeTo(sortButtonRect.bottom - 1, 1.5));
-    expect(menuPanelRect.left, closeTo(sortButtonRect.left, 1));
-    expect(menuPanelRect.width, greaterThanOrEqualTo(sortButtonRect.width));
-    expect(menuPanelRect.width, greaterThanOrEqualTo(136));
 
     await tester.tap(find.byKey(LibrarySmokeKeys.topSortMenuItem(
       SortMode.recent,
     )));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('倒序'));
+    await tester.tap(find.byTooltip('切换为正序'));
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(directionToggles, 1);
@@ -3209,16 +3222,15 @@ void main() {
 
     expect(find.text('当前筛选（AND）'), findsNothing);
     expect(find.text('原神'), findsOneWidget);
-    expect(find.text('+3'), findsOneWidget);
+    expect(find.text('雷神'), findsOneWidget);
+    expect(find.text('+2'), findsOneWidget);
     expect(find.text('171 个视频'), findsOneWidget);
     expect(find.textContaining('原神 / 雷神'), findsNothing);
+    final searchWidthBeforeSelection =
+        tester.getSize(find.byKey(LibrarySmokeKeys.searchSurface)).width;
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.searchInputLane)).width,
-      greaterThanOrEqualTo(236),
-    );
-    expect(
-      tester.getSize(find.byKey(LibrarySmokeKeys.searchFilterLane)).width,
-      lessThanOrEqualTo(220),
+      greaterThan(700),
     );
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.libraryEnterSelection)).height,
@@ -3232,7 +3244,15 @@ void main() {
     await tester.tap(find.byKey(LibrarySmokeKeys.libraryEnterSelection));
     await tester.pump();
     expect(find.text('原神'), findsNothing);
-    expect(find.text('+3'), findsNothing);
+    expect(find.text('+2'), findsNothing);
+    expect(find.byKey(LibrarySmokeKeys.searchField), findsOneWidget);
+    expect(find.byKey(LibrarySmokeKeys.filterStatusArea), findsNothing);
+    expect(find.byKey(LibrarySmokeKeys.toolbarActions), findsNothing);
+    expect(find.byKey(LibrarySmokeKeys.selectionStatusArea), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.searchSurface)).width,
+      closeTo(searchWidthBeforeSelection, 0.01),
+    );
     expect(find.text('已选择 0 项'), findsOneWidget);
     final disabledDelete = tester.widget<TextButton>(
       find.byKey(LibrarySmokeKeys.libraryDeleteSelected),

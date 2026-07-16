@@ -36,6 +36,16 @@ class LibrarySmokeKeys {
   /** 媒体库筛选/多选双状态工具栏。 */
   static const libraryResultToolbar =
       ValueKey<String>('smoke.library.result-toolbar');
+  /** 独立搜索输入表面，不承载已生效筛选状态。 */
+  static const searchSurface = ValueKey<String>('smoke.top.search-surface');
+  /** 搜索框右侧的透明筛选状态区域。 */
+  static const filterStatusArea =
+      ValueKey<String>('smoke.top.filter-status-area');
+  /** 顶栏末端多选与视图切换操作区域。 */
+  static const toolbarActions = ValueKey<String>('smoke.top.toolbar-actions');
+  /** 多选模式下只替换搜索框右侧的状态区域。 */
+  static const selectionStatusArea =
+      ValueKey<String>('smoke.top.selection-status-area');
   /** 进入媒体库多选模式。 */
   static const libraryEnterSelection =
       ValueKey<String>('smoke.library.selection.enter');
@@ -49,10 +59,10 @@ class LibrarySmokeKeys {
   static const libraryCancelSelection =
       ValueKey<String>('smoke.library.selection.cancel');
   static const searchField = ValueKey<String>('smoke.top.search-field');
-  /** 搜索表面中承载筛选 chips 的限宽区域。 */
+  /** 右侧状态区中承载筛选 chips 的限宽区域。 */
   static const searchFilterLane =
       ValueKey<String>('smoke.top.search-filter-lane');
-  /** 搜索表面中必须保留最小可输入宽度的文本区域。 */
+  /** 独立搜索表面中的真实文本输入区域。 */
   static const searchInputLane =
       ValueKey<String>('smoke.top.search-input-lane');
   static const topSortFieldButton =

@@ -1271,20 +1271,18 @@ class _FilterToolbarEntry {
     required this.label,
     required this.onRemove,
     this.icon,
-    this.color = appAccentViolet,
   });
 
   final String label;
   final VoidCallback onRemove;
   final IconData? icon;
-  final Color color;
 }
 
 /**
- * 搜索、筛选 chips 与结果状态共用的单层输入表面。
+ * 顶栏左侧独立搜索表面。
  *
- * 搜索仍由稳定的 [TextField] / controller 输入链路驱动；标签状态只在输入框前部展示，
- * 不复制或改写 `FilterQuery` 语义。宽屏最大宽度由顶栏限制为约 650px，窄屏才弹性收缩。
+ * 搜索区域只表达“输入查询”的意图，不再混入已生效标签或结果数量；
+ * 真实 [TextField] / controller 输入链路保持不变，标签状态由右侧透明区域单独展示。
  */
 class _LibrarySearchSurface extends StatelessWidget {
   const _LibrarySearchSurface({
@@ -1292,17 +1290,8 @@ class _LibrarySearchSurface extends StatelessWidget {
     required this.searchFocusNode,
     required this.compact,
     required this.keywordActive,
-    required this.defaultLabel,
-    required this.filters,
-    required this.resultCount,
-    required this.refreshing,
-    required this.progressLabel,
-    required this.progressValue,
-    required this.progressPaused,
-    required this.onToggleProgressPaused,
     required this.onSearchChanged,
     required this.onClearKeyword,
-    required this.onClearAll,
   });
 
   /** 页面持有的唯一搜索文本控制器。 */
@@ -1317,10 +1306,123 @@ class _LibrarySearchSurface extends StatelessWidget {
   /** 关键词存在时强调边框，并提供独立清除入口。 */
   final bool keywordActive;
 
-  /** 非全库来源在没有筛选 chips 时展示的上下文名称。 */
+  /** 搜索文本变化统一进入页面已有的筛选刷新链路。 */
+  final ValueChanged<String> onSearchChanged;
+
+  /** 只清除关键词，不改变其它标签条件。 */
+  final VoidCallback onClearKeyword;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: LibrarySmokeKeys.searchSurface,
+      height: compact ? 44 : 50,
+      decoration: BoxDecoration(
+        color: librarySurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: keywordActive ? appAccentViolet : libraryBorder,
+          width: keywordActive ? 1.4 : 1,
+        ),
+        boxShadow: librarySoftShadow,
+      ),
+      child: Row(
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: compact ? 12 : 14, right: 8),
+            child: Icon(
+              Icons.search_rounded,
+              size: compact ? 20 : 22,
+              color: keywordActive ? appAccentViolet : libraryTextMuted,
+            ),
+          ),
+          Expanded(
+            child: SizedBox(
+              key: LibrarySmokeKeys.searchInputLane,
+              /**
+               * 必须保持为 TextField，而不是把输入模拟成 GestureDetector 或 SearchBar；
+               * 真实键盘、自动化输入和 controller 改写因此继续触发同一条 onChanged 链路。
+               */
+              child: TextField(
+                key: LibrarySmokeKeys.searchField,
+                controller: controller,
+                focusNode: searchFocusNode,
+                textInputAction: TextInputAction.search,
+                onChanged: onSearchChanged,
+                onSubmitted: onSearchChanged,
+                style: const TextStyle(
+                  color: libraryText,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+                decoration: InputDecoration(
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    vertical: compact ? 12 : 15,
+                  ),
+                  hintText: compact
+                      ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
+                      : '\u641c\u7d22\u6587\u4ef6\u540d\u002f\u6807\u7b7e\u002f\u8def\u5f84\u002e\u002e\u002e',
+                  hintStyle: const TextStyle(
+                    color: libraryTextMuted,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (keywordActive)
+            SizedBox.square(
+              dimension: 34,
+              child: IconButton(
+                tooltip: '\u6e05\u9664\u641c\u7d22\u5173\u952e\u8bcd',
+                padding: EdgeInsets.zero,
+                iconSize: 17,
+                color: libraryTextMuted,
+                onPressed: onClearKeyword,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            )
+          else
+            const SizedBox(width: 12),
+        ],
+      ),
+    );
+  }
+}
+
+/**
+ * 搜索框右侧的筛选结果状态区域。
+ *
+ * 该区域保持透明，与深色输入表面形成明确边界；筛选标签只表达当前状态，
+ * 空间不足时折叠为数量，不反向压缩搜索框或复制过滤计算。
+ */
+class _LibraryFilterStatusArea extends StatelessWidget {
+  const _LibraryFilterStatusArea({
+    required this.compact,
+    required this.defaultLabel,
+    required this.filters,
+    required this.resultCount,
+    required this.refreshing,
+    required this.progressLabel,
+    required this.progressValue,
+    required this.progressPaused,
+    required this.onToggleProgressPaused,
+    required this.onClearAll,
+  });
+
+  /** 紧凑布局只展示最必要的状态。 */
+  final bool compact;
+
+  /** 非全库来源在没有筛选标签时展示的上下文名称。 */
   final String defaultLabel;
 
-  /** 当前标签、收藏与排除条件；关键词直接保留在输入区，不重复变成 chip。 */
+  /** 当前标签、收藏与排除条件。 */
   final List<_FilterToolbarEntry> filters;
 
   /** 当前筛选结果数量。 */
@@ -1341,77 +1443,47 @@ class _LibrarySearchSurface extends StatelessWidget {
   /** 暂停或继续后台任务。 */
   final VoidCallback? onToggleProgressPaused;
 
-  /** 搜索文本变化统一进入页面已有的筛选刷新链路。 */
-  final ValueChanged<String> onSearchChanged;
-
-  /** 只清除关键词，不改变其它标签条件。 */
-  final VoidCallback onClearKeyword;
-
   /** 一次清除全部筛选；为空时不绘制入口。 */
   final VoidCallback? onClearAll;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: LibrarySmokeKeys.libraryResultToolbar,
+    return SizedBox(
       height: compact ? 44 : 50,
-      decoration: BoxDecoration(
-        color: librarySurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: keywordActive ? appAccentViolet : libraryBorder,
-          width: keywordActive ? 1.4 : 1,
-        ),
-        boxShadow: librarySoftShadow,
-      ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final minimumInputWidth = compact ? 128.0 : 236.0;
-          final fixedTrailingWidth = progressLabel == null ? 104.0 : 210.0;
-          final keywordActionWidth = keywordActive ? 28.0 : 0.0;
-          final clearFilterWidth =
-              onClearAll != null && filters.isNotEmpty ? 28.0 : 0.0;
-          final sourceLabelWidth =
-              filters.isEmpty && defaultLabel != '\u5168\u90e8\u89c6\u9891'
-                  ? 104.0
-                  : 0.0;
+          final trailingWidth =
+              progressLabel == null ? (compact ? 74.0 : 92.0) : 176.0;
+          final showClearAll = onClearAll != null &&
+              filters.isNotEmpty &&
+              constraints.maxWidth >= trailingWidth + 38;
+          final clearWidth = showClearAll ? 30.0 : 0.0;
           final filterBudget = math.max(
             0.0,
             constraints.maxWidth -
-                minimumInputWidth -
-                fixedTrailingWidth -
-                keywordActionWidth -
-                clearFilterWidth -
-                sourceLabelWidth -
-                (compact ? 58.0 : 62.0),
+                trailingWidth -
+                clearWidth -
+                (compact ? 8.0 : 14.0),
           );
-          // chips 只能使用剩余预算；空间不足时优先折叠条件，绝不继续压缩真实输入区域。
-          final maxVisibleFilters = filters.length <= 2 && filterBudget >= 208
+          // 状态区优先保留结果数；标签过多时只在状态区内折叠，不污染搜索输入。
+          final maxVisibleFilters = filterBudget >= 145
               ? 2
-              : filters.length > 2 && filterBudget >= 252
-                  ? 2
-                  : filters.length <= 1 && filterBudget >= 102
-                      ? 1
-                      : filters.length > 1 && filterBudget >= 146
-                          ? 1
-                          : 0;
+              : filterBudget >= 92
+                  ? 1
+                  : 0;
           final visibleFilters = filters.take(maxVisibleFilters).toList();
           final hiddenCount = filters.length - visibleFilters.length;
-          final visibleFilterBudget =
-              math.max(0.0, filterBudget - (hiddenCount > 0 ? 44 : 0));
-          final showSourceLabel = constraints.maxWidth >= 360 &&
-              filters.isEmpty &&
-              defaultLabel != '\u5168\u90e8\u89c6\u9891';
+          final showCollapsedCount =
+              hiddenCount > 0 && filterBudget >= (compact ? 38 : 42);
+          final visibleFilterBudget = math.max(
+            0.0,
+            filterBudget - (showCollapsedCount ? 42 : 0),
+          );
+          final showSourceLabel = filters.isEmpty &&
+              defaultLabel != '\u5168\u90e8\u89c6\u9891' &&
+              filterBudget >= 96;
           return Row(
             children: [
-              Padding(
-                padding: EdgeInsets.only(left: compact ? 12 : 14, right: 8),
-                child: Icon(
-                  Icons.search_rounded,
-                  size: compact ? 20 : 22,
-                  color: keywordActive ? appAccentViolet : libraryTextMuted,
-                ),
-              ),
               if (showSourceLabel) ...[
                 _SourceContextChip(label: defaultLabel),
                 const SizedBox(width: 6),
@@ -1419,10 +1491,7 @@ class _LibrarySearchSurface extends StatelessWidget {
               if (visibleFilters.isNotEmpty)
                 ConstrainedBox(
                   key: LibrarySmokeKeys.searchFilterLane,
-                  constraints: BoxConstraints(
-                    maxWidth:
-                        math.min(visibleFilterBudget, compact ? 168 : 220),
-                  ),
+                  constraints: BoxConstraints(maxWidth: visibleFilterBudget),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     physics: const ClampingScrollPhysics(),
@@ -1437,11 +1506,11 @@ class _LibrarySearchSurface extends StatelessWidget {
                                 : Icon(
                                     visibleFilters[index].icon,
                                     size: 14,
-                                    color: visibleFilters[index].color,
+                                    color: libraryTextMuted,
                                   ),
                             label: ConstrainedBox(
                               constraints: BoxConstraints(
-                                maxWidth: compact ? 72 : 88,
+                                maxWidth: compact ? 68 : 84,
                               ),
                               child: Text(
                                 visibleFilters[index].label,
@@ -1450,9 +1519,6 @@ class _LibrarySearchSurface extends StatelessWidget {
                               ),
                             ),
                             onDeleted: visibleFilters[index].onRemove,
-                            side: BorderSide(
-                              color: visibleFilters[index].color.withAlpha(150),
-                            ),
                           ),
                           if (index != visibleFilters.length - 1)
                             const SizedBox(width: 6),
@@ -1462,66 +1528,13 @@ class _LibrarySearchSurface extends StatelessWidget {
                   ),
                 ),
               if (visibleFilters.isNotEmpty) const SizedBox(width: 6),
-              if (hiddenCount > 0) ...[
+              if (showCollapsedCount) ...[
                 _CollapsedFilterCount(count: hiddenCount),
                 const SizedBox(width: 6),
               ],
-              Expanded(
-                child: ConstrainedBox(
-                  key: LibrarySmokeKeys.searchInputLane,
-                  constraints: BoxConstraints(minWidth: minimumInputWidth),
-                  /**
-                   * 必须保持为 TextField，而不是把输入模拟成 GestureDetector 或 SearchBar；
-                   * 真实键盘、自动化输入和 controller 改写因此继续触发同一条 onChanged 链路。
-                   */
-                  child: TextField(
-                    key: LibrarySmokeKeys.searchField,
-                    controller: controller,
-                    focusNode: searchFocusNode,
-                    textInputAction: TextInputAction.search,
-                    onChanged: onSearchChanged,
-                    onSubmitted: onSearchChanged,
-                    style: const TextStyle(
-                      color: libraryText,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    decoration: InputDecoration(
-                      filled: false,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: compact ? 12 : 15,
-                      ),
-                      hintText: compact
-                          ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
-                          : '\u641c\u7d22\u6587\u4ef6\u540d\u002f\u6807\u7b7e\u002f\u8def\u5f84\u002e\u002e\u002e',
-                      hintStyle: const TextStyle(
-                        color: libraryTextMuted,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (keywordActive)
+              if (showClearAll)
                 SizedBox.square(
-                  dimension: 28,
-                  child: IconButton(
-                    tooltip: '\u6e05\u9664\u641c\u7d22\u5173\u952e\u8bcd',
-                    padding: EdgeInsets.zero,
-                    iconSize: 17,
-                    color: libraryTextMuted,
-                    onPressed: onClearKeyword,
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ),
-              if (onClearAll != null && filters.isNotEmpty)
-                SizedBox.square(
-                  dimension: 28,
+                  dimension: 30,
                   child: IconButton(
                     tooltip: '\u6e05\u7a7a\u5168\u90e8\u7b5b\u9009',
                     padding: EdgeInsets.zero,
@@ -1531,28 +1544,16 @@ class _LibrarySearchSurface extends StatelessWidget {
                     icon: const Icon(Icons.filter_alt_off_outlined),
                   ),
                 ),
-              const SizedBox(
-                height: 24,
-                child: VerticalDivider(width: 1, color: libraryBorder),
-              ),
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: progressLabel == null ? 82 : 120,
-                  maxWidth: progressLabel == null ? 104 : 210,
-                ),
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    left: compact ? 8 : 10,
-                    right: compact ? 10 : 12,
-                  ),
-                  child: _FilterResultLine(
-                    resultCount: resultCount,
-                    refreshing: refreshing,
-                    progressLabel: progressLabel,
-                    progressValue: progressValue,
-                    progressPaused: progressPaused,
-                    onToggleProgressPaused: onToggleProgressPaused,
-                  ),
+              const Spacer(),
+              SizedBox(
+                width: math.min(trailingWidth, constraints.maxWidth),
+                child: _FilterResultLine(
+                  resultCount: resultCount,
+                  refreshing: refreshing,
+                  progressLabel: progressLabel,
+                  progressValue: progressValue,
+                  progressPaused: progressPaused,
+                  onToggleProgressPaused: onToggleProgressPaused,
                 ),
               ),
             ],
@@ -1621,7 +1622,7 @@ class _CollapsedFilterCount extends StatelessWidget {
   }
 }
 
-/** 多选状态替换整条顶部区域，只保留选择状态、删除和取消。 */
+/** 多选状态只替换搜索框右侧区域，搜索输入和关键词保持可见。 */
 class _LibrarySelectionToolbar extends StatelessWidget {
   const _LibrarySelectionToolbar({
     required this.selectedCount,
@@ -1648,17 +1649,10 @@ class _LibrarySelectionToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: LibrarySmokeKeys.libraryResultToolbar,
+    return SizedBox(
+      key: LibrarySmokeKeys.selectionStatusArea,
       width: double.infinity,
       height: 50,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: librarySurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: libraryBorder),
-        boxShadow: librarySoftShadow,
-      ),
       child: Row(
         children: [
           InkWell(
@@ -1742,7 +1736,6 @@ class _CurrentFilterChip extends StatelessWidget {
     required this.label,
     this.avatar,
     this.onDeleted,
-    this.side,
   });
 
   final Widget? avatar;
@@ -1751,8 +1744,6 @@ class _CurrentFilterChip extends StatelessWidget {
 
   final VoidCallback? onDeleted;
 
-  final BorderSide? side;
-
   @override
   Widget build(BuildContext context) {
     return InputChip(
@@ -1760,11 +1751,19 @@ class _CurrentFilterChip extends StatelessWidget {
       label: label,
       onDeleted: onDeleted,
       visualDensity: VisualDensity.compact,
-      side: side ?? const BorderSide(color: libraryBorder),
-      backgroundColor: librarySurfaceAlt,
-      deleteIconColor: appAccentViolet,
+      side: BorderSide.none,
+      color: WidgetStateProperty.resolveWith((states) {
+        // 紫色只表示交互状态变化，常态保持中性灰，避免与数量和选中态争夺注意力。
+        if (states.contains(WidgetState.focused) ||
+            states.contains(WidgetState.hovered) ||
+            states.contains(WidgetState.pressed)) {
+          return appAccentViolet.withValues(alpha: 0.18);
+        }
+        return librarySurfaceAlt;
+      }),
+      deleteIconColor: libraryTextMuted,
       labelStyle: const TextStyle(
-        color: appAccentViolet,
+        color: libraryText,
         fontSize: 12,
         fontWeight: FontWeight.w800,
       ),
@@ -2220,13 +2219,11 @@ class ReferenceTopBar extends StatelessWidget {
       for (final tag in selectedGroupTags)
         _FilterToolbarEntry(
           label: tag.displayName ?? tag.name,
-          color: libraryGroupColor(tag.groupId ?? 'manual'),
           onRemove: () => onRemoveGroupTag(tag),
         ),
       for (final tag in excludedTags)
         _FilterToolbarEntry(
           label: 'NOT ${tag.displayName ?? tag.name}',
-          color: const Color(0xffe26573),
           onRemove: () => onRemoveExcludedTag(tag),
         ),
     ];
@@ -2269,49 +2266,113 @@ class ReferenceTopBar extends StatelessWidget {
               ),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  if (selectionMode) {
-                    return _LibrarySelectionToolbar(
-                      selectedCount: selectedCount,
-                      allSelected: allSelected,
-                      onToggleSelectAll: onToggleSelectAll,
-                      onDeleteSelected: onDeleteSelected,
-                      onCancel: onCancelSelectionMode,
-                    );
-                  }
-                  // 非最大化窗口虽然仍可能处于 expanded 断点，但右侧面板会挤占可用宽度；
-                  // 搜索区只在宽度充足时保持约 650px，避免无限拉长造成横向视觉失焦。
-                  final fitSearchToRemainingWidth =
-                      referenceTopBarSearchShouldFillRow(
-                    layoutSize,
-                    constraints.maxWidth,
-                  );
                   final narrowMedium = layoutSize == LayoutSize.medium &&
                       constraints.maxWidth < 620;
-                  final searchSurface = ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minWidth: 180,
-                      maxWidth:
-                          fitSearchToRemainingWidth ? double.infinity : 650,
-                    ),
-                    child: _LibrarySearchSurface(
-                      controller: controller,
-                      searchFocusNode: searchFocusNode,
-                      compact: compact,
-                      keywordActive: keywordActive,
-                      defaultLabel: defaultChipLabel,
-                      filters: activeFilters,
-                      resultCount: videoCount,
-                      refreshing: refreshing,
-                      progressLabel: progressLabel,
-                      progressValue: progressValue,
-                      progressPaused: progressPaused,
-                      onToggleProgressPaused: onToggleProgressPaused,
-                      onSearchChanged: onSearchChanged,
-                      onClearKeyword: onClearKeyword,
-                      onClearAll: onClearAll,
+                  final proportionalDesktop =
+                      layoutSize == LayoutSize.expanded &&
+                          constraints.maxWidth >= 1180;
+                  final searchSurface = _LibrarySearchSurface(
+                    controller: controller,
+                    searchFocusNode: searchFocusNode,
+                    compact: compact,
+                    keywordActive: keywordActive,
+                    onSearchChanged: onSearchChanged,
+                    onClearKeyword: onClearKeyword,
+                  );
+                  final filterStatus = _LibraryFilterStatusArea(
+                    compact: compact || narrowMedium,
+                    defaultLabel: defaultChipLabel,
+                    filters: activeFilters,
+                    resultCount: videoCount,
+                    refreshing: refreshing,
+                    progressLabel: progressLabel,
+                    progressValue: progressValue,
+                    progressPaused: progressPaused,
+                    onToggleProgressPaused: onToggleProgressPaused,
+                    onClearAll: onClearAll,
+                  );
+                  final selectionStatus = _LibrarySelectionToolbar(
+                    selectedCount: selectedCount,
+                    allSelected: allSelected,
+                    onToggleSelectAll: onToggleSelectAll,
+                    onDeleteSelected: onDeleteSelected,
+                    onCancel: onCancelSelectionMode,
+                  );
+                  final sortControl = _CompactTopSortControl(
+                    sortMode: sortMode,
+                    sortDirection: sortDirection,
+                    onChanged: onSortChanged,
+                    onDirectionToggle: onSortDirectionToggle,
+                  );
+                  final normalActions = SizedBox(
+                    key: LibrarySmokeKeys.toolbarActions,
+                    height: 50,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (onEnterSelectionMode != null)
+                          if (compact || narrowMedium)
+                            _ReferenceIconButton(
+                              key: LibrarySmokeKeys.libraryEnterSelection,
+                              tooltip: '\u591a\u9009',
+                              icon: Icons.checklist_rounded,
+                              onPressed: onEnterSelectionMode!,
+                            )
+                          else
+                            _TopToolbarTextButton(
+                              key: LibrarySmokeKeys.libraryEnterSelection,
+                              onPressed: onEnterSelectionMode!,
+                              label: '\u591a\u9009',
+                            ),
+                        if (onEnterSelectionMode != null &&
+                            !compact &&
+                            !narrowMedium)
+                          const SizedBox(width: 8),
+                        if (!compact && !narrowMedium)
+                          ResultViewToggle(
+                            dense: denseResultGrid,
+                            onChanged: onResultViewChanged,
+                          ),
+                      ],
                     ),
                   );
+                  if (proportionalDesktop) {
+                    return SizedBox(
+                      key: LibrarySmokeKeys.libraryResultToolbar,
+                      height: 50,
+                      child: Row(
+                        children: [
+                          // 桌面宽屏按 60/30/10 分配主视觉权重；排序属于结果状态控制。
+                          Expanded(flex: 6, child: searchSurface),
+                          const SizedBox(width: 12),
+                          if (selectionMode) ...[
+                            Expanded(flex: 4, child: selectionStatus),
+                            // 与常态区域保留相同总间距，进入多选时搜索框宽度不会跳动。
+                            const SizedBox(width: 8),
+                          ] else ...[
+                            Expanded(
+                              flex: 3,
+                              child: KeyedSubtree(
+                                key: LibrarySmokeKeys.filterStatusArea,
+                                child: Row(
+                                  children: [
+                                    Expanded(child: filterStatus),
+                                    const SizedBox(width: 8),
+                                    sortControl,
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(flex: 1, child: normalActions),
+                          ],
+                        ],
+                      ),
+                    );
+                  }
                   return Row(
+                    key: LibrarySmokeKeys.libraryResultToolbar,
                     children: [
                       if (layoutSize != LayoutSize.expanded) ...[
                         _ReferenceIconButton(
@@ -2323,59 +2384,43 @@ class ReferenceTopBar extends StatelessWidget {
                         ),
                         const SizedBox(width: 10),
                       ],
-                      if (fitSearchToRemainingWidth)
-                        Expanded(child: searchSurface)
-                      else
-                        searchSurface,
-                      if (!fitSearchToRemainingWidth) const Spacer(),
-                      if (compact) ...[
-                        const SizedBox(width: 8),
-                        _ReferenceIconButton(
-                          tooltip: '标签中心',
-                          icon: Icons.sell_outlined,
-                          onPressed: onOpenTagManager,
-                        ),
-                      ],
+                      Expanded(child: searchSurface),
                       const SizedBox(width: 8),
-                      if (!compact)
-                        if (narrowMedium)
-                          _CompactTopSortControl(
-                            sortMode: sortMode,
-                            sortDirection: sortDirection,
-                            onChanged: onSortChanged,
-                            onDirectionToggle: onSortDirectionToggle,
-                          )
-                        else
-                          TopSortControl(
-                            sortMode: sortMode,
-                            sortDirection: sortDirection,
-                            onChanged: onSortChanged,
-                            onDirectionToggle: onSortDirectionToggle,
-                          ),
-                      if (!compact) const SizedBox(width: 8),
-                      if (onEnterSelectionMode != null)
-                        if (compact || narrowMedium)
-                          _ReferenceIconButton(
-                            key: LibrarySmokeKeys.libraryEnterSelection,
-                            tooltip: '\u591a\u9009',
-                            icon: Icons.checklist_rounded,
-                            onPressed: onEnterSelectionMode!,
-                          )
-                        else
-                          _TopToolbarTextButton(
-                            key: LibrarySmokeKeys.libraryEnterSelection,
-                            onPressed: onEnterSelectionMode!,
-                            label: '\u591a\u9009',
-                          ),
-                      if (onEnterSelectionMode != null &&
-                          !compact &&
-                          !narrowMedium)
-                        const SizedBox(width: 8),
-                      if (!compact && !narrowMedium)
-                        ResultViewToggle(
-                          dense: denseResultGrid,
-                          onChanged: onResultViewChanged,
+                      if (selectionMode)
+                        SizedBox(width: 280, child: selectionStatus)
+                      else ...[
+                        SizedBox(
+                          key: LibrarySmokeKeys.filterStatusArea,
+                          width: progressLabel != null
+                              ? math.min(
+                                  300,
+                                  math.max(180, constraints.maxWidth * 0.38),
+                                )
+                              : narrowMedium
+                                  ? 82
+                                  : 118,
+                          child: filterStatus,
                         ),
+                        if (!compact &&
+                            !(progressLabel != null &&
+                                constraints.maxWidth < 700)) ...[
+                          const SizedBox(width: 8),
+                          sortControl,
+                        ],
+                        if (compact) ...[
+                          const SizedBox(width: 8),
+                          _ReferenceIconButton(
+                            tooltip: '标签中心',
+                            icon: Icons.sell_outlined,
+                            onPressed: onOpenTagManager,
+                          ),
+                        ],
+                        if (!(progressLabel != null &&
+                            constraints.maxWidth < 700)) ...[
+                          const SizedBox(width: 8),
+                          normalActions,
+                        ],
+                      ],
                     ],
                   );
                 },
@@ -2632,7 +2677,7 @@ class _TopToolbarTextButton extends StatelessWidget {
         child: Container(
           height: 48,
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: libraryBorder),
@@ -2879,7 +2924,7 @@ class _ResultViewToggleState extends State<ResultViewToggle>
             excludeFromSemantics: true,
             onTap: _toggle,
             child: Ink(
-              width: 76,
+              width: 72,
               height: 48,
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
@@ -2895,10 +2940,10 @@ class _ResultViewToggleState extends State<ResultViewToggle>
                     return Stack(
                       children: [
                         Transform.translate(
-                          offset: Offset(36 * progress, 0),
+                          offset: Offset(32 * progress, 0),
                           child: Container(
                             key: LibrarySmokeKeys.resultViewToggleThumb,
-                            width: 32,
+                            width: 30,
                             height: 32,
                             decoration: BoxDecoration(
                               color: librarySurfaceAlt,
@@ -2958,7 +3003,7 @@ class _TopViewIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 32,
+      width: 30,
       height: 32,
       child: Center(
         child: Icon(
