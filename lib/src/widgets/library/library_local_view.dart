@@ -169,9 +169,11 @@ class LocalLibraryView extends StatelessWidget {
                         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                           maxCrossAxisExtent:
                               narrow ? 500 : (compact ? 248 : 286),
-                          // 单列网格会把 16:9 缩略图拉高，卡片高度必须跟着增长；
-                          // 否则普通窗口下标题、标签和底部按钮会挤出可视区域。
-                          mainAxisExtent: narrow ? 430 : (compact ? 300 : 340),
+                          mainAxisExtent: libraryVideoCardMainAxisExtent(
+                            gridWidth: constraints.maxWidth,
+                            narrow: narrow,
+                            compact: compact,
+                          ),
                           mainAxisSpacing: compact ? 14 : 16,
                           crossAxisSpacing: compact ? 10 : 14,
                         ),
@@ -190,9 +192,7 @@ class LocalLibraryView extends StatelessWidget {
                             thumbnailService: thumbnailService,
                             playbackSettings: playbackSettings,
                             onOpen: () => onOpenVideo(video, localVideos),
-                            onEditTags: () => onEditTags(video),
                             onToggleFavorite: () => onToggleFavorite(video),
-                            onDelete: () => onDelete(video),
                           );
                         },
                       );

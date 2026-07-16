@@ -2147,7 +2147,11 @@ class RecentPlaybackView extends StatelessWidget {
                     compact ? 14 : 22, 2, compact ? 14 : 22, 22),
                 gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: narrow ? 500 : (compact ? 248 : 286),
-                  mainAxisExtent: narrow ? 366 : (compact ? 322 : 348),
+                  mainAxisExtent: libraryVideoCardMainAxisExtent(
+                    gridWidth: constraints.maxWidth,
+                    narrow: narrow,
+                    compact: compact,
+                  ),
                   mainAxisSpacing: compact ? 14 : 16,
                   crossAxisSpacing: compact ? 10 : 14,
                 ),
@@ -2161,9 +2165,7 @@ class RecentPlaybackView extends StatelessWidget {
                     thumbnailService: thumbnailService,
                     playbackSettings: playbackSettings,
                     onOpen: () => onOpen(item, videos),
-                    onEditTags: () => onEditTags(item),
                     onToggleFavorite: () => onToggleFavorite(item),
-                    onDeleteVideo: () => onDeleteVideo(item),
                     onToggleSelected: () => onToggleSelected(item),
                     onDelete: () => onDeleteOne(item),
                   );
@@ -2247,9 +2249,7 @@ class _RecentPlaybackCard extends StatelessWidget {
     required this.thumbnailService,
     required this.playbackSettings,
     required this.onOpen,
-    required this.onEditTags,
     required this.onToggleFavorite,
-    required this.onDeleteVideo,
     required this.onToggleSelected,
     required this.onDelete,
   });
@@ -2259,9 +2259,7 @@ class _RecentPlaybackCard extends StatelessWidget {
   final ThumbnailService thumbnailService;
   final PlaybackSettings playbackSettings;
   final VoidCallback onOpen;
-  final VoidCallback onEditTags;
   final VoidCallback onToggleFavorite;
-  final VoidCallback onDeleteVideo;
   final VoidCallback onToggleSelected;
   final VoidCallback onDelete;
 
@@ -2274,13 +2272,11 @@ class _RecentPlaybackCard extends StatelessWidget {
           thumbnailService: thumbnailService,
           playbackSettings: playbackSettings,
           onOpen: onOpen,
-          onEditTags: onEditTags,
           onToggleFavorite: onToggleFavorite,
-          onDelete: onDeleteVideo,
         ),
         Positioned(
           top: 8,
-          left: 8,
+          left: 48,
           child:
               Checkbox(value: selected, onChanged: (_) => onToggleSelected()),
         ),

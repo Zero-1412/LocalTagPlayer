@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-16 · 媒体库紧凑视频卡片与时长角标
+
+- 网格视频卡片移除缩略图中央播放按钮、底部播放/收藏/更多操作区、标签和视频路径；收藏改为缩略图左上角红心，时长改为右下角深色角标，卡片整体成为打开当前筛选队列的入口。
+- 卡片高度由固定桌面值改为按当前网格实际列宽计算，保留 16:9 缩略图和两行标题余量；1268×714 三列窗口下约 168px，明显减少无意义空白。
+- `MediaDetails` 增加可选总时长；Windows 原生批量探测读取 `AVFormatContext::duration`，兼容 FFprobe 追加读取 `format.duration`。旧详情复用现有最多 8 条有限批次补齐并写入 `playback_duration_ms`，不新增 SQLite schema，也不在 UI build 中访问文件。
+- 聚焦媒体探测与 widget 91 项测试、`dart format`、`flutter analyze` 和 Windows debug build 通过。真实窗口完成收藏切换/恢复、卡片进入播放器和返回路径；角标、标题、卡片间距未见遮挡、溢出或错位。
+- `FilterQuery` / `TagQueryService`、filtered queue、缩略图队列、stable identity 和收藏语义未改变。
+
 ## 2026-07-16 · 备份完整性检查、便携导出与启动写入优化
 
 - 设置页“视频数据备份”卡片新增“检查完整性”和“导出备份”。完整性检查只读核对 SQLite、快照 JSON、当前视频缺失/过期快照和重复 fingerprint；未来可恢复快照不作为垃圾删除，发现差异时引导用户显式“立即备份”。

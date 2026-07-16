@@ -30,6 +30,7 @@ class _RecordingProbeBackend implements MediaProbeBackend {
                 audioCodec: 'aac',
                 width: 1920,
                 height: 1080,
+                duration: Duration(minutes: 2),
               ),
             ))
         .toList(growable: false);
@@ -143,6 +144,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(details.resolution, '1920x1080');
+    expect(details.duration, const Duration(minutes: 2));
     expect(backend.requests.single.videoId, 'stable-video-id');
     expect(backend.requests.single.knownSize, 987654321);
     expect(backend.requests.single.knownModifiedAt, 123456789);
@@ -172,6 +174,33 @@ void main() {
 
     expect(refreshed.resolution, '1920x1080');
     expect(backend.requests.single.videoId, 'incomplete-video-id');
+  });
+
+  test('background probe backfills old cached details without duration',
+      () async {
+    final backend = _RecordingProbeBackend();
+    final completed = Completer<void>();
+    final item = _probeItem('legacy-duration')
+      ..mediaDetails = const MediaDetails(
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        width: 1920,
+        height: 1080,
+      );
+    final service = MediaDetailsService(
+      probeBackend: backend,
+      onProgress: (progress) {
+        if (progress.isComplete && !completed.isCompleted) {
+          completed.complete();
+        }
+      },
+    );
+
+    service.prefetchAll(<VideoItem>[item]);
+    await completed.future;
+    service.dispose();
+
+    expect(backend.requests.single.videoId, item.videoId);
   });
 
   test('visible media details jump ahead of queued background probes',

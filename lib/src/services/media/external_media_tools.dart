@@ -288,7 +288,7 @@ class DesktopFFmpegBackend implements FFmpegBackend {
           '-v',
           'error',
           '-show_entries',
-          'stream=codec_type,codec_name,width,height',
+          'format=duration:stream=codec_type,codec_name,width,height',
           '-of',
           'json',
           item.path,
@@ -338,6 +338,20 @@ class DesktopFFmpegBackend implements FFmpegBackend {
       audioCodec: _codec(audio),
       width: _intValue(video?['width']),
       height: _intValue(video?['height']),
+      // FFprobe 的 format.duration 使用秒字符串；只接受正数，避免异常容器把
+      // N/A、负数或零时长写进稳定播放快照。
+      duration: _durationValue(
+        (decoded['format'] as Map?)?.cast<String, Object?>()['duration'],
+      ),
     );
+  }
+
+  /** 将 FFprobe 秒值转换为毫秒精度时长，异常值保持为空。 */
+  static Duration? _durationValue(Object? value) {
+    final seconds = double.tryParse(value?.toString() ?? '');
+    if (seconds == null || !seconds.isFinite || seconds <= 0) {
+      return null;
+    }
+    return Duration(milliseconds: (seconds * 1000).round());
   }
 }

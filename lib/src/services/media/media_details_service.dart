@@ -236,10 +236,14 @@ class MediaDetailsService {
       return;
     }
     for (final item in items) {
-      if (cachedDetailsFor(item) != null || _inFlight.containsKey(item.path)) {
+      final cached = cachedDetailsFor(item);
+      // 旧版详情缓存没有总时长。已有可靠总时长时仍复用缓存；只有详情存在但
+      // 时长缺失的旧记录才进入一次受限后台补齐，不能在卡片 build 中探测文件。
+      if ((cached != null && item.playbackDuration > Duration.zero) ||
+          _inFlight.containsKey(item.path)) {
         continue;
       }
-      _enqueue(item, cached: null, priority: false);
+      _enqueue(item, cached: cached, priority: false);
     }
     _emitProgress();
     _drainQueue();

@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.39` 已完成。
+架构版本状态：`Architecture Baseline 0.5.40` 已完成。
 
 最近一次验证：
 
@@ -14,9 +14,14 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：通过；139 项测试通过，3 项显式烟测/基准跳过，`flutter analyze` 与 Windows debug build 通过。
+结果：本轮媒体库卡片与媒体探测聚焦 91 项测试通过，`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 媒体库网格卡片移除缩略图播放按钮、底部播放/收藏/更多、标签和路径；收藏移到缩略图左上角，视频时长移到右下角，点击卡片本身继续打开当前 filtered queue。
+- 卡片高度按网格实际列宽计算为“16:9 缩略图 + 两行标题余量”，当前 1268×714 三列窗口约 168px，不再为已移除内容保留大块空白。
+- Windows 原生批量媒体探测和兼容 FFprobe 增加容器时长，复用既有 `playback_duration_ms` 持久化；旧详情只走现有最多 8 条后台批次补齐，卡片构建不访问磁盘。
+- 聚焦 91 项测试、`dart format`、`flutter analyze` 和 Windows debug build 通过。真实窗口点击确认收藏反馈并恢复原收藏数量，点击卡片成功进入 `1 / 11163` 当前筛选队列后返回；截图未见角标遮挡、标题溢出或卡片错位。
 
 - 视频数据备份新增只读完整性检查与便携 JSON 导出。检查覆盖 SQLite、JSON、当前视频缺失/过期快照和 fingerprint 歧义；导出不含媒体路径、视频文件或缓存，并通过文件系统平台边界选择保存位置。
 - 桌面窗口关闭会先等待 Store 写入 clean marker 再销毁；正常关闭后的启动不再发起全量校对，只处理持久化增量队列。首次、未完成、异常退出或关闭后重新启用时才全量核对。条件 UPSERT 跳过未变化快照，手动全量也不会刷新其写入时间。

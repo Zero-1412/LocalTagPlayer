@@ -52,6 +52,7 @@ class WindowsNativeMediaProbeBackend implements MediaProbeBackend {
       final error = map['error'] as String?;
       final width = map['width'] as int?;
       final height = map['height'] as int?;
+      final durationMs = map['durationMs'] as int?;
       return MediaProbeResult(
         videoId: map['videoId'] as String? ?? '',
         cancelled: cancelled,
@@ -63,6 +64,9 @@ class WindowsNativeMediaProbeBackend implements MediaProbeBackend {
                 audioCodec: map['audioCodec'] as String?,
                 width: width,
                 height: height,
+                duration: durationMs != null && durationMs > 0
+                    ? Duration(milliseconds: durationMs)
+                    : null,
               ),
       );
     }).toList(growable: false);

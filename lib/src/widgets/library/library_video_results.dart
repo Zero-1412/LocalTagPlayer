@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/gestures.dart';
@@ -17,6 +18,42 @@ import '../app_theme_tokens.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
+
+/**
+ * 计算网格视频卡片高度。
+ *
+ * 卡片只保留 16:9 缩略图与两行标题；收藏和时长位于缩略图叠层，不再为标签、路径或
+ * 底部操作区预留垂直空间。单列仍按更宽缩略图单独留足高度，避免窗口缩小时溢出。
+ */
+double libraryVideoCardMainAxisExtent({
+  required double gridWidth,
+  required bool narrow,
+  required bool compact,
+}) {
+  final horizontalPadding = compact ? 28.0 : 44.0;
+  final spacing = compact ? 10.0 : 14.0;
+  final maxExtent = narrow ? 500.0 : (compact ? 248.0 : 286.0);
+  final usableWidth = math.max(1.0, gridWidth - horizontalPadding);
+  final columnCount = math.max(1, (usableWidth / (maxExtent + spacing)).ceil());
+  final cardWidth = (usableWidth - spacing * (columnCount - 1)) / columnCount;
+  // 66px 覆盖上下内边距、缩略图与标题间距及两行标题；叠层角标不增加高度。
+  return cardWidth * 9 / 16 + 66;
+}
+
+/** 将已知媒体总时长格式化为卡片角标；未知时长不伪装成 `0:00`。 */
+String libraryVideoDurationLabel(Duration duration) {
+  if (duration <= Duration.zero) {
+    return '--:--';
+  }
+  final totalSeconds = duration.inSeconds;
+  final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+  final totalMinutes = totalSeconds ~/ 60;
+  if (totalMinutes < 60) {
+    return '$totalMinutes:$seconds';
+  }
+  final minutes = (totalMinutes % 60).toString().padLeft(2, '0');
+  return '${totalMinutes ~/ 60}:$minutes:$seconds';
+}
 
 class VideoGrid extends StatelessWidget {
   const VideoGrid({
@@ -91,9 +128,11 @@ class VideoGrid extends StatelessWidget {
               EdgeInsets.fromLTRB(compact ? 14 : 22, 2, compact ? 14 : 22, 22),
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: narrow ? 500 : (compact ? 248 : 286),
-            // 单列网格会把 16:9 缩略图拉高，卡片高度必须跟着增长；
-            // 否则普通窗口下标题、标签和底部按钮会挤出可视区域。
-            mainAxisExtent: narrow ? 430 : (compact ? 300 : 340),
+            mainAxisExtent: libraryVideoCardMainAxisExtent(
+              gridWidth: constraints.maxWidth,
+              narrow: narrow,
+              compact: compact,
+            ),
             mainAxisSpacing: compact ? 14 : 16,
             crossAxisSpacing: compact ? 10 : 14,
           ),
@@ -107,9 +146,7 @@ class VideoGrid extends StatelessWidget {
               playbackSettings: playbackSettings,
               onVisible: onVisible,
               onOpen: () => onOpen(item, videos),
-              onEditTags: () => onEditTags(item),
               onToggleFavorite: () => onToggleFavorite(item),
-              onDelete: () => onDelete(item),
             );
           },
         );
@@ -186,7 +223,6 @@ class InteractiveVideoListRow extends StatelessWidget {
                       thumbnailService: thumbnailService,
                       playbackSettings: playbackSettings,
                       onVisible: onVisible,
-                      onOpen: (_) => onOpen(),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -401,9 +437,7 @@ class InteractiveVideoCard extends StatefulWidget {
     required this.playbackSettings,
     this.onVisible,
     required this.onOpen,
-    required this.onEditTags,
     required this.onToggleFavorite,
-    required this.onDelete,
   });
 
   final VideoItem item;
@@ -412,9 +446,7 @@ class InteractiveVideoCard extends StatefulWidget {
   /** 当前卡片进入真实构建范围时的轻量优先级通知。 */
   final ValueChanged<VideoItem>? onVisible;
   final VoidCallback onOpen;
-  final VoidCallback onEditTags;
   final VoidCallback onToggleFavorite;
-  final VoidCallback onDelete;
 
   @override
   State<InteractiveVideoCard> createState() => InteractiveVideoCardState();
@@ -465,8 +497,10 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
+                  key: LibrarySmokeKeys.cardOpen(item.path),
                   borderRadius: BorderRadius.circular(8),
-                  onDoubleTap: widget.onOpen,
+                  // 独立播放按钮移除后，卡片本身成为唯一清晰的打开入口。
+                  onTap: widget.onOpen,
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: Column(
@@ -477,20 +511,10 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                           thumbnailService: widget.thumbnailService,
                           playbackSettings: widget.playbackSettings,
                           onVisible: widget.onVisible,
-                          onOpen: (_) => widget.onOpen(),
+                          onToggleFavorite: widget.onToggleFavorite,
                         ),
                         const SizedBox(height: 6),
                         _VideoCardMetadata(item: item),
-                        const SizedBox(height: 5),
-                        _VideoCardTags(item: item),
-                        const Spacer(),
-                        _VideoCardActions(
-                          item: item,
-                          onOpen: widget.onOpen,
-                          onToggleFavorite: widget.onToggleFavorite,
-                          onEditTags: widget.onEditTags,
-                          onDelete: widget.onDelete,
-                        ),
                       ],
                     ),
                   ),
@@ -504,7 +528,7 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
   }
 }
 
-/** 卡片标题与路径子树；诊断探针不改变原有行高和文本截断规则。 */
+/** 卡片标题子树；路径、标签和操作区已从网格卡片移除以提高浏览密度。 */
 class _VideoCardMetadata extends StatelessWidget {
   const _VideoCardMetadata({required this.item});
 
@@ -526,146 +550,7 @@ class _VideoCardMetadata extends StatelessWidget {
                     height: 1.25,
                   ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              item.folder,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xff718096),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
           ],
-        ),
-      );
-}
-
-/** 卡片标签子树；排序和 Chip 构建都计入 build 样本。 */
-class _VideoCardTags extends StatelessWidget {
-  const _VideoCardTags({required this.item});
-
-  final VideoItem item;
-
-  @override
-  Widget build(BuildContext context) => LibraryCardUiDiagnostics.buildSubtree(
-        'tags',
-        () {
-          final tags = item.tags.toList()..sort();
-          return SizedBox(
-            height: 26,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: tags.isEmpty
-                    ? const [
-                        Text(
-                          '\u672a\u6dfb\u52a0\u6807\u7b7e',
-                          style: TextStyle(color: Colors.black45),
-                        ),
-                      ]
-                    : [
-                        for (final tag in tags)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: Chip(
-                              label: Text(tag),
-                              labelStyle: const TextStyle(fontSize: 12),
-                              visualDensity: const VisualDensity(
-                                horizontal: -3,
-                                vertical: -4,
-                              ),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                            ),
-                          ),
-                      ],
-              ),
-            ),
-          );
-        },
-      );
-}
-
-/** 卡片底部操作子树；保留原有语义、key 与窄卡片图标模式。 */
-class _VideoCardActions extends StatelessWidget {
-  const _VideoCardActions({
-    required this.item,
-    required this.onOpen,
-    required this.onToggleFavorite,
-    required this.onEditTags,
-    required this.onDelete,
-  });
-
-  final VideoItem item;
-  final VoidCallback onOpen;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onEditTags;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) => LibraryCardUiDiagnostics.buildSubtree(
-        'actions',
-        () => LayoutBuilder(
-          builder: (context, constraints) {
-            final iconOnly = constraints.maxWidth < 260;
-            return Row(
-              children: [
-                Expanded(
-                  child: Semantics(
-                    button: true,
-                    label: LibrarySmokeSemantics.videoPlay(item),
-                    child: FilledButton.icon(
-                      key: LibrarySmokeKeys.cardPlay(item.path),
-                      onPressed: onOpen,
-                      icon: const Icon(Icons.play_arrow),
-                      label: Text(iconOnly ? '' : '\u64ad\u653e'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: appAccentViolet,
-                        foregroundColor: Colors.white,
-                        fixedSize: const Size.fromHeight(34),
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Semantics(
-                  button: true,
-                  selected: item.isFavorite,
-                  label: LibrarySmokeSemantics.videoFavorite(item),
-                  child: IconButton.outlined(
-                    key: LibrarySmokeKeys.cardFavorite(item.path),
-                    tooltip: item.isFavorite
-                        ? '\u53d6\u6d88\u6536\u85cf'
-                        : '\u6dfb\u52a0\u6536\u85cf',
-                    onPressed: onToggleFavorite,
-                    icon: Icon(
-                      item.isFavorite ? Icons.favorite : Icons.favorite_border,
-                    ),
-                    style: IconButton.styleFrom(
-                      fixedSize: const Size(34, 34),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Semantics(
-                  button: true,
-                  label: LibrarySmokeSemantics.videoMore(item),
-                  child: _VideoMoreButton(
-                    key: LibrarySmokeKeys.cardMore(item.path),
-                    onEditTags: onEditTags,
-                    onDelete: onDelete,
-                  ),
-                ),
-              ],
-            );
-          },
         ),
       );
 }
@@ -737,7 +622,7 @@ class _VideoPreview extends StatefulWidget {
     required this.thumbnailService,
     required this.playbackSettings,
     this.onVisible,
-    required this.onOpen,
+    this.onToggleFavorite,
   });
 
   final VideoItem item;
@@ -745,7 +630,9 @@ class _VideoPreview extends StatefulWidget {
   final PlaybackSettings playbackSettings;
   /** 只通知页面提升媒体详情任务；缩略图仍由共享服务自身的优先队列处理。 */
   final ValueChanged<VideoItem>? onVisible;
-  final ValueChanged<VideoItem> onOpen;
+
+  /** 网格卡片传入时在缩略图左上角显示收藏入口；列表预览保持原有紧凑动作区。 */
+  final VoidCallback? onToggleFavorite;
 
   @override
   State<_VideoPreview> createState() => _VideoPreviewState();
@@ -939,35 +826,77 @@ class _VideoPreviewState extends State<_VideoPreview> {
                     ),
                   ),
                 ),
-                Center(
-                  child: _isHoverPreviewLoading
-                      ? DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.86),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Padding(
-                            padding: EdgeInsets.all(18),
-                            child: SizedBox.square(
-                              dimension: 24,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2.5),
-                            ),
-                          ),
-                        )
-                      : IconButton.filled(
-                          tooltip: _isHoverPreviewReady
-                              ? '\u6b63\u5728\u9884\u89c8\uff0c\u70b9\u51fb\u64ad\u653e'
-                              : '\u64ad\u653e',
-                          onPressed: () => widget.onOpen(widget.item),
-                          icon: const Icon(Icons.play_arrow_rounded, size: 34),
-                          style: IconButton.styleFrom(
-                            backgroundColor:
-                                Colors.white.withValues(alpha: 0.88),
-                            foregroundColor: const Color(0xff073b3b),
-                            fixedSize: const Size(58, 58),
-                          ),
+                if (_isHoverPreviewLoading)
+                  Center(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.86),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.all(18),
+                        child: SizedBox.square(
+                          dimension: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
                         ),
+                      ),
+                    ),
+                  ),
+                if (widget.onToggleFavorite != null)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Semantics(
+                      button: true,
+                      selected: widget.item.isFavorite,
+                      label: LibrarySmokeSemantics.videoFavorite(widget.item),
+                      child: IconButton.filled(
+                        key: LibrarySmokeKeys.cardFavorite(widget.item.path),
+                        tooltip: widget.item.isFavorite ? '取消收藏' : '添加收藏',
+                        onPressed: widget.onToggleFavorite,
+                        icon: Icon(
+                          widget.item.isFavorite
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          size: 20,
+                        ),
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0x99000000),
+                          foregroundColor: widget.item.isFavorite
+                              ? const Color(0xffff5a6f)
+                              : Colors.white,
+                          fixedSize: const Size(34, 34),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xb3000000),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      child: Text(
+                        libraryVideoDurationLabel(
+                          widget.item.playbackDuration,
+                        ),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),

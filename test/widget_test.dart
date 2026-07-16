@@ -68,6 +68,44 @@ class _PreferenceRecordingPlayerBackend implements PlayerBackend {
 }
 
 void main() {
+  test('library video card uses compact height and stable duration labels', () {
+    expect(
+      libraryVideoCardMainAxisExtent(
+        gridWidth: 880,
+        narrow: false,
+        compact: false,
+      ),
+      217.5,
+    );
+    expect(
+      libraryVideoCardMainAxisExtent(
+        gridWidth: 590,
+        narrow: false,
+        compact: true,
+      ),
+      closeTo(167.63, 0.01),
+    );
+    expect(
+      libraryVideoCardMainAxisExtent(
+        gridWidth: 500,
+        narrow: true,
+        compact: true,
+      ),
+      331.5,
+    );
+    expect(libraryVideoDurationLabel(Duration.zero), '--:--');
+    expect(
+      libraryVideoDurationLabel(const Duration(minutes: 9, seconds: 7)),
+      '9:07',
+    );
+    expect(
+      libraryVideoDurationLabel(
+        const Duration(hours: 1, minutes: 2, seconds: 3),
+      ),
+      '1:02:03',
+    );
+  });
+
   testWidgets('app mounts', (WidgetTester tester) async {
     await tester.pumpWidget(LocalTagPlayerApp(
       dependencies: createLocalTagPlayerDependencies(),

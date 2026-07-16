@@ -242,6 +242,12 @@ flutter::EncodableMap NativeMediaProbeBridge::ProbeOne(
   std::string audio_codec;
   int32_t width = 0;
   int32_t height = 0;
+  // AVFormatContext::duration 以 AV_TIME_BASE 为单位；在释放容器前换算成
+  // Flutter 可直接持久化的毫秒，未知时长继续保持缺省字段。
+  const int64_t duration_millis =
+      format->duration > 0 && format->duration != AV_NOPTS_VALUE
+          ? format->duration / (AV_TIME_BASE / 1000)
+          : 0;
   for (unsigned int index = 0; index < format->nb_streams; ++index) {
     const AVCodecParameters* parameters = format->streams[index]->codecpar;
     if (parameters == nullptr) continue;
@@ -274,6 +280,10 @@ flutter::EncodableMap NativeMediaProbeBridge::ProbeOne(
   if (height > 0) {
     result.emplace(flutter::EncodableValue("height"),
                    flutter::EncodableValue(height));
+  }
+  if (duration_millis > 0) {
+    result.emplace(flutter::EncodableValue("durationMs"),
+                   flutter::EncodableValue(duration_millis));
   }
   return result;
 }

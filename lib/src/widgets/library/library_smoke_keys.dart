@@ -106,26 +106,15 @@ class LibrarySmokeKeys {
   /** 视频更多菜单“删除”动作的稳定测试标识。 */
   static const videoMoreDelete = ValueKey<String>('smoke.video.more.delete');
 
-  /**
-   * 视频网格卡片播放按钮命中标识。
-   *
-   * 真实窗口 QA 主要依赖下方语义标签；key 继续服务 widget smoke，避免脚本退回到
-   * 随窗口尺寸漂移的固定坐标。
-   */
-  static ValueKey<String> cardPlay(String path) =>
-      ValueKey<String>('smoke.card.play:${TagRules.pathKey(path)}');
+  /** 视频网格卡片整体打开入口；卡片不再绘制独立播放按钮。 */
+  static ValueKey<String> cardOpen(String path) =>
+      ValueKey<String>('smoke.card.open:${TagRules.pathKey(path)}');
 
   /**
-   * 视频网格卡片收藏按钮命中标识。
+   * 视频网格缩略图左上角收藏按钮命中标识。
    */
   static ValueKey<String> cardFavorite(String path) =>
       ValueKey<String>('smoke.card.favorite:${TagRules.pathKey(path)}');
-
-  /**
-   * 视频网格卡片更多按钮命中标识。
-   */
-  static ValueKey<String> cardMore(String path) =>
-      ValueKey<String>('smoke.card.more:${TagRules.pathKey(path)}');
 
   /**
    * 右侧标签 chip 命中标识。

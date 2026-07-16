@@ -1856,7 +1856,24 @@ class _LibraryPageState extends State<LibraryPage> {
     _libraryMediaDetailsService?.dispose();
     _libraryMediaDetailsService = null;
     final store = _store;
-    if (store == null || result.probeCandidates.isEmpty) {
+    if (store == null) {
+      return;
+    }
+    final probeCandidatesById = <String, VideoItem>{
+      for (final item in result.probeCandidates) item.videoId: item,
+    };
+    // 旧版媒体详情没有保存总时长。扫描完成后只把仍缺少可靠时长的活动视频
+    // 合并进既有有限批次队列，卡片 build 不访问磁盘，完成后复用现有播放时长列。
+    for (final item in store.videos.values) {
+      if (!item.isMissing &&
+          item.playbackDuration <= Duration.zero &&
+          item.mediaDetails != null &&
+          item.mediaDetailsError == null) {
+        probeCandidatesById[item.videoId] = item;
+      }
+    }
+    final probeCandidates = probeCandidatesById.values.toList(growable: false);
+    if (probeCandidates.isEmpty) {
       return;
     }
     final service = _createLibraryMediaDetailsService(
@@ -1864,8 +1881,9 @@ class _LibraryPageState extends State<LibraryPage> {
       trackImportProgress: true,
     );
     _libraryMediaDetailsService = service;
-    // 扫描新增项一次登记为有限批次；真实进入视口时仍会提升同一路径任务，不重复探测。
-    service.prefetchAll(result.probeCandidates);
+    // 新增项和旧版缺时长项统一登记为有限批次；真实进入视口仍可提升同一路径任务，
+    // 服务通过 videoId/路径去重，不扩大并发。
+    service.prefetchAll(probeCandidates);
   }
 
   /** 创建媒体库详情会话；所有写回继续校验当前 Store、videoId 与 fingerprint。 */
@@ -1889,6 +1907,11 @@ class _LibraryPageState extends State<LibraryPage> {
           // 禁止旧回调通过 upsert 把已删除记录重新插回 SQLite 和内存索引。
           current.mediaDetails = update.details;
           current.mediaDetailsError = item.mediaDetailsError;
+          final duration = update.details.duration;
+          if (duration != null && duration > Duration.zero) {
+            // 总时长复用稳定 videoId 上已有的持久化列，不新增 schema 或路径绑定。
+            current.playbackDuration = duration;
+          }
           validUpdates.add(current);
         }
         await store.upsertVideos(validUpdates);
@@ -2336,12 +2359,11 @@ class _LibraryPageState extends State<LibraryPage> {
     _markLibraryDataChanged();
   }
 
-  /** 清空单条稳定播放快照；videoId 和其它用户维护数据保持不变。 */
+  /** 清空单条播放进度；保留媒体总时长、videoId 和其它用户维护数据。 */
   void _resetContinueWatchingState(VideoItem item) {
     item
       ..lastPlayedAt = null
       ..playbackPosition = Duration.zero
-      ..playbackDuration = Duration.zero
       ..playbackCompleted = false
       ..playbackPositionUpdatedAt = null;
   }
@@ -4005,6 +4027,10 @@ class _LibraryPageState extends State<LibraryPage> {
           return;
         }
         current.mediaDetails = details;
+        final duration = details.duration;
+        if (duration != null && duration > Duration.zero) {
+          current.playbackDuration = duration;
+        }
         await store.upsertVideo(current);
       },
     );
@@ -4095,6 +4121,10 @@ class _LibraryPageState extends State<LibraryPage> {
     String? fingerprint,
   ) async {
     item.mediaDetails = details;
+    final duration = details.duration;
+    if (duration != null && duration > Duration.zero) {
+      item.playbackDuration = duration;
+    }
     item.mediaFingerprint = fingerprint ?? item.mediaFingerprint;
     await _store?.upsertVideo(item);
     if (mounted) {

@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.39` 完成独立视频依赖备份的检查、导出与低写放大启动策略。正常关闭后的启动只消费持久化增量队列；首次、未完成、异常退出或重新开启时才全量核对，且内容未变化的快照不重写。便携导出不包含媒体路径或文件内容。
+`Architecture Baseline 0.5.40` 完成媒体总时长探测与紧凑媒体库卡片。Windows 原生批量探测和兼容 FFprobe 都把容器总时长写入既有稳定播放时长字段；旧详情通过原有限流批次补齐，不在卡片 build 中访问磁盘。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,11 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.39`
+已完成基线：`Architecture Baseline 0.5.40`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.40`：`MediaDetails` 增加可选容器总时长；Windows 原生 `MediaProbeBackend` 从 `AVFormatContext::duration` 返回毫秒，兼容 `DesktopFFmpegBackend` 只追加读取 `format.duration`，仍经过既有平台边界和单批次限流。媒体库扫描后只为旧详情中缺少可靠时长的活动视频补齐，并复用 `videos.playback_duration_ms` 持久化，不新增 SQLite 列或迁移。网格卡片移除缩略图播放按钮、底部操作区、标签和路径，收藏/时长改为缩略图角标，卡片高度按实际列宽计算；卡片本身成为打开当前 filtered queue 的入口。`FilterQuery` / `TagQueryService`、filtered queue、缩略图队列、stable identity 和用户收藏数据语义未改变。
 
 - `0.5.39`：独立备份库以 `session_open` 和 `reconcile_required` 区分正常关闭、异常退出与关闭期间的主库变化；`DesktopWindowStateService` 在桌面窗口销毁前等待 Store 关闭和 clean marker，正常启动跳过全量游标，异常窗口仍保守补做全量。全量和增量统一使用规范快照与条件 UPSERT，指纹和依赖 JSON 均未变化时不更新 `updated_at` 或 SQLite 数据页。设置页新增只读完整性检查和便携 JSON 导出；检查覆盖 SQLite、JSON、当前视频缺失/过期快照及指纹歧义，保留未来可恢复快照且不自动修复。导出通过 `FileSystemAdapter` 选择和写入位置，不包含路径、媒体文件或缓存。主 `library.db` schema、stable identity 恢复保护、标签语义、filtered queue、PlayerBackend 和缓存队列未改变。
 

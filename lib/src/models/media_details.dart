@@ -1,9 +1,12 @@
+// ignore_for_file: slash_for_doc_comments
+
 class MediaDetails {
   const MediaDetails({
     this.videoCodec,
     this.audioCodec,
     this.width,
     this.height,
+    this.duration,
   });
 
   factory MediaDetails.fromJson(Map<String, Object?> json) {
@@ -12,6 +15,9 @@ class MediaDetails {
       audioCodec: json['audioCodec'] as String?,
       width: json['width'] as int?,
       height: json['height'] as int?,
+      duration: json['durationMs'] is int
+          ? Duration(milliseconds: json['durationMs']! as int)
+          : null,
     );
   }
 
@@ -20,11 +26,15 @@ class MediaDetails {
   final int? width;
   final int? height;
 
+  /** 媒体容器报告的总时长；未知或探测失败时保持为空，避免展示伪造的零时长。 */
+  final Duration? duration;
+
   Map<String, Object?> toJson() => {
         'videoCodec': videoCodec,
         'audioCodec': audioCodec,
         'width': width,
         'height': height,
+        'durationMs': duration?.inMilliseconds,
       };
 
   String get resolution {

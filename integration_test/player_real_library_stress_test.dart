@@ -216,7 +216,7 @@ List<Finder> _visibleLibraryPlayButtons() {
   final finder = find.byWidgetPredicate((widget) {
     final key = widget.key;
     return key is ValueKey<String> &&
-        (key.value.startsWith('smoke.card.play:') ||
+        (key.value.startsWith('smoke.card.open:') ||
             key.value.startsWith('smoke.list.play:'));
   }).hitTestable();
   return <Finder>[
@@ -228,7 +228,7 @@ List<Finder> _visibleLibraryPlayButtons() {
 /** 返回指定真实媒体的网格或列表播放入口，不暴露本地路径。 */
 List<Finder> _targetMediaPlayButtons(String targetPath) {
   final candidates = <Finder>[
-    find.byKey(ltp.LibrarySmokeKeys.cardPlay(targetPath)).hitTestable(),
+    find.byKey(ltp.LibrarySmokeKeys.cardOpen(targetPath)).hitTestable(),
     find.byKey(ltp.LibrarySmokeKeys.listPlay(targetPath)).hitTestable(),
   ];
   return [

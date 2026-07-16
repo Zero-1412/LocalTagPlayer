@@ -1,5 +1,11 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
+## 2026-07-16 媒体总时长批量补齐
+
+- Windows 原生媒体探测从 `AVFormatContext::duration` 返回毫秒；兼容 FFprobe 追加读取 `format.duration`，都继续经过 `MediaProbeBackend` / `FFmpegBackend` 平台边界。
+- 旧详情缺少可靠时长时进入既有最多 8 条后台批次，结果复用稳定 videoId 对应的 `playback_duration_ms`，不新增 schema、不在卡片 build 中探测文件。
+- 卡片未知时长显示 `--:--`，探测完成后显示 `M:SS` 或 `H:MM:SS`；媒体探测聚焦测试、analyze、Windows build 与真实角标截图通过。
+
 ## 2026-07-15 媒体解析 ETA、暂停控制与真实磁盘基准
 
 - `MediaDetailsService` 用完成批次的有效运行时间平滑计算条目/秒和预计剩余时间；暂停期间不累计时间，继续后只处理剩余队列。
@@ -67,7 +73,7 @@
 - 右上角刷新入口使用图标加“刷新统计”文字，不再仅依赖用户猜测图标含义。
 - 仅重新编排已有 `CacheStats`，未改变缩略图任务限流、重试、缓存 key 或 FFmpegBackend 边界。
 
-当前版本：`0.2.3`
+当前版本：`0.2.4`
 状态：第一阶段完成
 负责人：Chat 5 / 缩略图 + 诊断 + FFmpegBackend
 
