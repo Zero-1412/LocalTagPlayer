@@ -1389,10 +1389,6 @@ class LibraryHeroArea extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   resultLine,
-                  Tooltip(
-                    message: queryExpression,
-                    child: const SizedBox(height: 1, width: double.infinity),
-                  ),
                 ],
               );
             }
@@ -1427,10 +1423,6 @@ class LibraryHeroArea extends StatelessWidget {
                       ),
                     ),
                   ],
-                ),
-                Tooltip(
-                  message: queryExpression,
-                  child: const SizedBox(height: 1, width: double.infinity),
                 ),
               ],
             );

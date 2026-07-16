@@ -2944,6 +2944,13 @@ void main() {
     );
     expect(indicator.value, closeTo(3200 / 6308, 0.0001));
     expect(find.text('全部视频 · 11163 个结果'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Tooltip && widget.message == '全部视频 | 11163 / 11163',
+      ),
+      findsNothing,
+    );
     expect(find.byKey(const ValueKey('qa.media_import.pause')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('qa.media_import.pause')));
     await tester.pump();
