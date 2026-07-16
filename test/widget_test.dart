@@ -823,6 +823,32 @@ void main() {
     expect(find.text('媒体库'), findsOneWidget);
     expect(find.text('添加目录'), findsNothing);
     expect(find.byTooltip('新增本地库路径'), findsOneWidget);
+    expect(
+      find.byKey(LibrarySmokeKeys.sidebarCollapseToggle),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('折叠功能栏'), findsOneWidget);
+    expect(
+      tester
+          .widget<AnimatedRotation>(
+            find.descendant(
+              of: find.byKey(LibrarySmokeKeys.sidebarCollapseToggle),
+              matching: find.byType(AnimatedRotation),
+            ),
+          )
+          .turns,
+      0,
+    );
+    expect(
+      find.byIcon(Icons.keyboard_double_arrow_left_rounded),
+      findsNothing,
+    );
+    expect(
+      find.byIcon(Icons.keyboard_double_arrow_right_rounded),
+      findsNothing,
+    );
+    expect(find.byType(Scrollbar), findsNothing);
+    expect(find.byType(RawScrollbar), findsNothing);
     await tester.tap(find.byTooltip('新增本地库路径'));
     await tester.pump();
     expect(pickFolderCount, 1);
@@ -833,6 +859,20 @@ void main() {
     expect(find.byTooltip('媒体库'), findsOneWidget);
     expect(
         tester.getSize(find.byKey(LibrarySmokeKeys.sidebarSurface)).width, 76);
+    expect(find.byTooltip('展开功能栏'), findsOneWidget);
+    expect(
+      tester
+          .widget<AnimatedRotation>(
+            find.descendant(
+              of: find.byKey(LibrarySmokeKeys.sidebarCollapseToggle),
+              matching: find.byType(AnimatedRotation),
+            ),
+          )
+          .turns,
+      0.25,
+    );
+    expect(find.byType(Scrollbar), findsNothing);
+    expect(find.byType(RawScrollbar), findsNothing);
 
     await tester.tap(find.byKey(LibrarySmokeKeys.sidebarCollapseToggle));
     await tester.pumpAndSettle();

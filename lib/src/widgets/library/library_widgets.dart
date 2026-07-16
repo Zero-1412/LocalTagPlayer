@@ -47,6 +47,25 @@ class DesktopDragScrollBehavior extends MaterialScrollBehavior {
       };
 }
 
+/**
+ * 主功能栏专用的无可见滚动条行为。
+ *
+ * 侧栏仍保留滚轮、触控板和鼠标拖拽滚动，只隐藏桌面端自动绘制的长滚动条，
+ * 避免计数文字和本地库动作被滚动条轨道遮挡。
+ */
+class _LibrarySidebarScrollBehavior extends DesktopDragScrollBehavior {
+  const _LibrarySidebarScrollBehavior();
+
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
+  }
+}
+
 Color libraryGroupColor(String groupId) {
   return switch (groupId) {
     'folder.primary' => appAccentViolet,
@@ -419,7 +438,7 @@ class LibrarySidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sidebarWidth = collapsed ? 76.0 : width ?? (dense ? 248 : 274);
-    return AnimatedContainer(
+    final sidebar = AnimatedContainer(
       key: LibrarySmokeKeys.sidebarSurface,
       duration: appMotionDuration,
       curve: appMotionCurve,
@@ -465,12 +484,12 @@ class LibrarySidebar extends StatelessWidget {
                           children: [
                             Expanded(
                               child: ScrollConfiguration(
-                                behavior: const DesktopDragScrollBehavior(),
+                                behavior: const _LibrarySidebarScrollBehavior(),
                                 child: ListView(
                                   padding: EdgeInsets.zero,
                                   children: [
                                     LibrarySidebarBrand(
-                                      onCollapse: onToggleCollapsed,
+                                      onToggleCollapsed: onToggleCollapsed,
                                     ),
                                     const SizedBox(height: 24),
                                     LibrarySidebarNavItem(
@@ -577,7 +596,7 @@ class LibrarySidebar extends StatelessWidget {
                                             math.min(220, 42.0 * roots.length),
                                         child: ScrollConfiguration(
                                           behavior:
-                                              const DesktopDragScrollBehavior(),
+                                              const _LibrarySidebarScrollBehavior(),
                                           child: ListView.builder(
                                             itemExtent: 42,
                                             padding: EdgeInsets.zero,
@@ -693,6 +712,11 @@ class LibrarySidebar extends StatelessWidget {
         ),
       ),
     );
+    // 侧栏所有嵌套列表统一继承无滚动条行为，避免展开态与折叠态分别维护。
+    return ScrollConfiguration(
+      behavior: const _LibrarySidebarScrollBehavior(),
+      child: sidebar,
+    );
   }
 }
 
@@ -747,26 +771,10 @@ class _CollapsedLibrarySidebar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(10, 14, 10, 14),
       child: Column(
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: appAccentViolet,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.play_arrow_rounded,
-              color: Colors.white,
-              size: 28,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _CollapsedSidebarItem(
-            key: LibrarySmokeKeys.sidebarCollapseToggle,
-            icon: Icons.keyboard_double_arrow_right_rounded,
-            tooltip: '展开功能栏',
-            selected: false,
-            onTap: onToggleCollapsed,
+          _SidebarBrandToggle(
+            collapsed: true,
+            dimension: 42,
+            onToggleCollapsed: onToggleCollapsed,
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -847,7 +855,6 @@ class _CollapsedLibrarySidebar extends StatelessWidget {
 /** 图标折叠态的单个入口；选中态仅用背景和强调色表达。 */
 class _CollapsedSidebarItem extends StatelessWidget {
   const _CollapsedSidebarItem({
-    super.key,
     required this.icon,
     required this.tooltip,
     required this.selected,
@@ -926,35 +933,20 @@ class LibrarySidebarSectionLabel extends StatelessWidget {
 }
 
 class LibrarySidebarBrand extends StatelessWidget {
-  const LibrarySidebarBrand({this.onCollapse});
+  const LibrarySidebarBrand({this.onToggleCollapsed});
 
-  /** 收起主功能栏；为 null 时保持 smoke harness 的只读品牌头。 */
-  final VoidCallback? onCollapse;
+  /** 通过品牌图标收起主功能栏；为 null 时保持只读品牌头。 */
+  final VoidCallback? onToggleCollapsed;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            color: appAccentViolet,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: appAccentViolet.withAlpha(90),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.play_arrow_rounded,
-            color: Colors.white,
-            size: 29,
-          ),
+        _SidebarBrandToggle(
+          collapsed: false,
+          dimension: 46,
+          onToggleCollapsed: onToggleCollapsed,
         ),
         const SizedBox(width: 10),
         const Expanded(
@@ -987,19 +979,76 @@ class LibrarySidebarBrand extends StatelessWidget {
             ],
           ),
         ),
-        if (onCollapse != null) ...[
-          const SizedBox(width: 6),
-          IconButton(
-            key: LibrarySmokeKeys.sidebarCollapseToggle,
-            tooltip: '折叠功能栏',
-            onPressed: onCollapse,
-            icon: const Icon(Icons.keyboard_double_arrow_left_rounded),
-            color: const Color(0xffa7b4c6),
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints.tightFor(width: 32, height: 36),
-          ),
-        ],
       ],
+    );
+  }
+}
+
+/**
+ * 品牌区与主功能栏折叠状态共用的唯一切换入口。
+ *
+ * 展开态三角向右，折叠态三角向下；按钮始终保留紫色品牌底和原阴影，
+ * 不额外占用侧栏横向空间。
+ */
+class _SidebarBrandToggle extends StatelessWidget {
+  const _SidebarBrandToggle({
+    required this.collapsed,
+    required this.dimension,
+    required this.onToggleCollapsed,
+  });
+
+  /** true 表示当前仅显示图标轨道。 */
+  final bool collapsed;
+
+  /** 展开和折叠布局各自使用的品牌方块尺寸。 */
+  final double dimension;
+
+  /** 切换主功能栏状态；为空时品牌图标保持只读。 */
+  final VoidCallback? onToggleCollapsed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tooltip = collapsed ? '展开功能栏' : '折叠功能栏';
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: onToggleCollapsed != null,
+        label: tooltip,
+        child: Container(
+          key: LibrarySmokeKeys.sidebarCollapseToggle,
+          width: dimension,
+          height: dimension,
+          decoration: BoxDecoration(
+            color: appAccentViolet,
+            borderRadius: BorderRadius.circular(collapsed ? 10 : 8),
+            boxShadow: [
+              BoxShadow(
+                color: appAccentViolet.withAlpha(90),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(collapsed ? 10 : 8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(collapsed ? 10 : 8),
+              onTap: onToggleCollapsed,
+              child: AnimatedRotation(
+                turns: collapsed ? 0.25 : 0,
+                duration: appMotionDuration,
+                curve: appMotionCurve,
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: collapsed ? 28 : 29,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
