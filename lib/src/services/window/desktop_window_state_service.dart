@@ -61,6 +61,13 @@ class DesktopWindowStateService with WindowListener {
 
   Timer? _saveTimer;
   Size? _lastNormalSize;
+  Future<void> Function()? _beforeClose;
+  bool _closing = false;
+
+  /** 注册应用级异步关闭动作；新媒体库实例会替换旧实例回调。 */
+  void registerBeforeClose(Future<void> Function() handler) {
+    _beforeClose = handler;
+  }
 
   /** 初始化插件、恢复上次窗口大小并开始监听后续变化。 */
   Future<void> initialize() async {
@@ -75,6 +82,8 @@ class DesktopWindowStateService with WindowListener {
       center: layout == null,
       title: 'local_tag_player',
     );
+    // 桌面窗口默认会立即结束进程；拦截一次以等待备份 clean marker 和数据库关闭。
+    await windowManager.setPreventClose(true);
     windowManager.addListener(this);
     await windowManager.waitUntilReadyToShow(options, () async {
       await windowManager.show();
@@ -133,5 +142,21 @@ class DesktopWindowStateService with WindowListener {
   void onWindowUnmaximize() => _scheduleSave();
 
   @override
-  void onWindowClose() => unawaited(_save());
+  void onWindowClose() => unawaited(_handleWindowClose());
+
+  /** 保存窗口状态并等待数据服务关闭，再显式销毁桌面窗口。 */
+  Future<void> _handleWindowClose() async {
+    if (_closing) {
+      return;
+    }
+    _closing = true;
+    _saveTimer?.cancel();
+    try {
+      await _save();
+      await _beforeClose?.call();
+    } finally {
+      // clean marker 失败会在下次启动保守全量核对，但不能让窗口永久无法关闭。
+      await windowManager.destroy();
+    }
+  }
 }

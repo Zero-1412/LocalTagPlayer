@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -1333,6 +1334,14 @@ class LibraryStore
 
   @override
   Future<void> runDataBackupNow() => dataBackupService.runNow();
+
+  @override
+  Future<DataBackupIntegrityReport> checkDataBackupIntegrity() =>
+      dataBackupService.checkIntegrity();
+
+  @override
+  Future<Uint8List> createDataBackupExport() =>
+      dataBackupService.createPortableExport();
 
   @override
   Future<void> pauseDataBackupForPlayback() =>

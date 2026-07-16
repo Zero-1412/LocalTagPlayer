@@ -493,6 +493,8 @@ class CacheSettingsPage extends StatefulWidget {
     required this.dataBackupSettings,
     required this.onDataBackupSettingsChanged,
     required this.onRunDataBackupNow,
+    required this.onCheckDataBackupIntegrity,
+    required this.onExportDataBackup,
   });
 
   final LibraryApplicationFacade store;
@@ -514,6 +516,12 @@ class CacheSettingsPage extends StatefulWidget {
   /** 用户显式启动新一轮全量核对。 */
   final Future<void> Function() onRunDataBackupNow;
 
+  /** 用户显式执行只读完整性检查。 */
+  final Future<DataBackupIntegrityReport> Function() onCheckDataBackupIntegrity;
+
+  /** 选择目标并写出便携备份；取消选择时返回 null。 */
+  final Future<String?> Function() onExportDataBackup;
+
   @override
   State<CacheSettingsPage> createState() => _CacheSettingsPageState();
 }
@@ -523,6 +531,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   late DataBackupSettings _dataBackupSettings = widget.dataBackupSettings;
   late DataBackupStatus _dataBackupStatus = widget.store.dataBackupStatus;
   StreamSubscription<DataBackupStatus>? _dataBackupSubscription;
+  bool _backupMaintenanceRunning = false;
 
   late Future<CacheStats> _statsFuture =
       widget.thumbnailService.statsFor(widget.store.videos.values);
@@ -582,6 +591,121 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     String two(int number) => number.toString().padLeft(2, '0');
     return '${local.year}-${two(local.month)}-${two(local.day)} '
         '${two(local.hour)}:${two(local.minute)}';
+  }
+
+  /** 执行只读完整性检查并用主题化弹窗呈现可操作结论。 */
+  Future<void> _checkDataBackupIntegrity() async {
+    if (_backupMaintenanceRunning) {
+      return;
+    }
+    setState(() => _backupMaintenanceRunning = true);
+    try {
+      final report = await widget.onCheckDataBackupIntegrity();
+      if (!mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                report.isHealthy
+                    ? Icons.verified_rounded
+                    : Icons.warning_amber_rounded,
+                color: report.isHealthy ? appAccent : const Color(0xffb26a00),
+              ),
+              const SizedBox(width: 10),
+              Text(report.isHealthy ? '备份完整' : '备份需要同步'),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  report.isHealthy
+                      ? '数据库结构和当前视频依赖快照均通过检查。'
+                      : '没有删除或覆盖任何数据。可关闭弹窗后点击“立即备份”补齐差异。',
+                  style: const TextStyle(color: appTextMuted, height: 1.5),
+                ),
+                const SizedBox(height: 16),
+                _SettingsStatLine(
+                  label: 'SQLite',
+                  value: report.sqliteHealthy ? '正常' : '异常',
+                ),
+                _SettingsStatLine(
+                  label: '备份 / 当前',
+                  value: '${report.backupRecords} / ${report.currentVideos}',
+                ),
+                _SettingsStatLine(
+                  label: '缺失 / 过期',
+                  value: '${report.missingCurrentSnapshots} / '
+                      '${report.staleCurrentSnapshots}',
+                ),
+                _SettingsStatLine(
+                  label: '无效快照',
+                  value:
+                      '${report.invalidPayloads + report.missingFingerprints}',
+                ),
+                _SettingsStatLine(
+                  label: '待未来恢复',
+                  value: formatCount(report.recoverableSnapshots),
+                ),
+                _SettingsStatLine(
+                  label: '指纹歧义',
+                  value: formatCount(report.ambiguousFingerprints),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('备份完整性检查失败：$error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _backupMaintenanceRunning = false);
+      }
+    }
+  }
+
+  /** 导出便携 JSON；文件选择取消不视为错误。 */
+  Future<void> _exportDataBackup() async {
+    if (_backupMaintenanceRunning) {
+      return;
+    }
+    setState(() => _backupMaintenanceRunning = true);
+    try {
+      final path = await widget.onExportDataBackup();
+      if (mounted && path != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('视频依赖备份已导出')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出视频依赖备份失败：$error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _backupMaintenanceRunning = false);
+      }
+    }
   }
 
   void _refreshStats() {
@@ -749,16 +873,38 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                     ),
                   ],
                   const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      key: const ValueKey('settings.dataBackup.runNow'),
-                      onPressed: _dataBackupSettings.enabled
-                          ? widget.onRunDataBackupNow
-                          : null,
-                      icon: const Icon(Icons.backup_rounded),
-                      label: const Text('立即备份'),
-                    ),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      OutlinedButton.icon(
+                        key: const ValueKey('settings.dataBackup.runNow'),
+                        onPressed: _dataBackupSettings.enabled &&
+                                !_backupMaintenanceRunning
+                            ? widget.onRunDataBackupNow
+                            : null,
+                        icon: const Icon(Icons.backup_rounded),
+                        label: const Text('立即备份'),
+                      ),
+                      OutlinedButton.icon(
+                        key: const ValueKey(
+                          'settings.dataBackup.checkIntegrity',
+                        ),
+                        onPressed: _backupMaintenanceRunning
+                            ? null
+                            : _checkDataBackupIntegrity,
+                        icon: const Icon(Icons.verified_user_rounded),
+                        label: const Text('检查完整性'),
+                      ),
+                      OutlinedButton.icon(
+                        key: const ValueKey('settings.dataBackup.export'),
+                        onPressed: _backupMaintenanceRunning
+                            ? null
+                            : _exportDataBackup,
+                        icon: const Icon(Icons.file_download_outlined),
+                        label: const Text('导出备份'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -3354,6 +3500,25 @@ class _LibraryPageState extends State<LibraryPage> {
             }
           },
           onRunDataBackupNow: store.runDataBackupNow,
+          onCheckDataBackupIntegrity: store.checkDataBackupIntegrity,
+          onExportDataBackup: () async {
+            final now = DateTime.now();
+            String two(int value) => value.toString().padLeft(2, '0');
+            final suggestedName = 'LocalTagPlayer-视频数据备份-'
+                '${now.year}${two(now.month)}${two(now.day)}-'
+                '${two(now.hour)}${two(now.minute)}.json';
+            final path = await _fileSystem.pickSavePath(
+              suggestedName: suggestedName,
+              dialogTitle: '导出视频依赖备份',
+              allowedExtensions: const <String>['json'],
+            );
+            if (path == null) {
+              return null;
+            }
+            final bytes = await store.createDataBackupExport();
+            await _fileSystem.writeBytes(path, bytes, flush: true);
+            return path;
+          },
         ),
       ),
     );

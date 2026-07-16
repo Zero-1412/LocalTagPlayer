@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.38` 已完成。
+架构版本状态：`Architecture Baseline 0.5.39` 已完成。
 
 最近一次验证：
 
@@ -14,9 +14,13 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：通过；136 项测试通过，3 项显式烟测/基准跳过，`flutter analyze` 与 Windows debug build 通过。
+结果：通过；139 项测试通过，3 项显式烟测/基准跳过，`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 视频数据备份新增只读完整性检查与便携 JSON 导出。检查覆盖 SQLite、JSON、当前视频缺失/过期快照和 fingerprint 歧义；导出不含媒体路径、视频文件或缓存，并通过文件系统平台边界选择保存位置。
+- 桌面窗口关闭会先等待 Store 写入 clean marker 再销毁；正常关闭后的启动不再发起全量校对，只处理持久化增量队列。首次、未完成、异常退出或关闭后重新启用时才全量核对。条件 UPSERT 跳过未变化快照，手动全量也不会刷新其写入时间。
+- 完整 139 项测试、`flutter analyze` 和 Windows debug build 通过，3 项显式烟测/基准跳过。真实窗口确认三个入口和结果弹窗布局正常；正式库检查 11,163/11,163、缺失/过期 0，导出记录数正确且无 path 字段。连续正常关闭/启动后 marker 恢复为 clean，且没有改写最近全量完成时间。
 
 - 设置页新增默认开启的“视频数据备份”开关与“立即备份”入口；设置使用独立 JSON，备份使用独立 `video_dependency_backup.db`，不复制视频文件。
 - 备份范围限定为稳定 videoId/fingerprint、收藏、播放状态、非 folder 标签及其分组定义。全量核对按 32 条小批次和持久化游标推进，增量修改进入去重队列；异常退出后下次启动从游标继续。

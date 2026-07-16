@@ -1,3 +1,10 @@
+## 2026-07-16 视频依赖备份检查与便携导出
+
+- 完整性检查在 worker 批次边界串行执行，读取独立备份库和主库依赖字段，不读取视频文件、不删除未来可恢复快照，也不改变 folder/manual 标签来源。
+- 便携 JSON 使用固定 format/version，导出稳定 videoId/fingerprint 和非 folder 依赖 payload，不导出 path、视频内容、缩略图或媒体详情缓存；文件保存经过 `FileSystemAdapter`。
+- `session_open` 只在显式关闭成功时清除；桌面窗口边界会在销毁前等待 Store 关闭，异常退出则下次全量补偿。正常启动只消费持久化增量队列，关闭备份期间设置 `reconcile_required`，重新开启时不会遗漏变化。
+- 规范快照按 videoId/tagId/source 稳定排序，条件 UPSERT 只写真实变化。`library.db` schema、双侧 fingerprint 唯一恢复、detached 生命周期、FilterQuery/TagQueryService 与 filtered queue 均未改变。
+
 ## 2026-07-16 视频依赖独立备份与自动恢复
 
 - 默认开启的备份设置独立保存，备份数据进入 `video_dependency_backup.db`，不复制视频文件或依赖主库 identity 行继续存在。

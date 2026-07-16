@@ -127,6 +127,12 @@ abstract interface class LibraryPageApplicationService {
  */
 class LocalLibraryPageApplicationService
     implements LibraryPageApplicationService {
+  /**
+   * 创建桌面媒体库用例服务。
+   *
+   * [registerBeforeWindowClose] 由桌面组合根注入，用于在窗口销毁前等待当前
+   * Repository 关闭；测试或没有桌面窗口生命周期的宿主可省略。
+   */
   const LocalLibraryPageApplicationService({
     required AppPaths paths,
     required FileSystemAdapter fileSystem,
@@ -134,11 +140,13 @@ class LocalLibraryPageApplicationService
     required FFmpegBackend ffmpegBackend,
     required MediaProbeBackendFactory mediaProbeBackendFactory,
     required LibraryDebugOptions debugOptions,
+    void Function(Future<void> Function())? registerBeforeWindowClose,
   })  : _paths = paths,
         _fileSystem = fileSystem,
         _libraryLoader = libraryLoader,
         _ffmpegBackend = ffmpegBackend,
         _mediaProbeBackendFactory = mediaProbeBackendFactory,
+        _registerBeforeWindowClose = registerBeforeWindowClose,
         _debugOptions = debugOptions;
 
   final AppPaths _paths;
@@ -146,6 +154,8 @@ class LocalLibraryPageApplicationService
   final LibraryApplicationLoader _libraryLoader;
   final FFmpegBackend _ffmpegBackend;
   final MediaProbeBackendFactory _mediaProbeBackendFactory;
+  /** 桌面组合根注入的异步关闭注册器；测试和非桌面宿主可为空。 */
+  final void Function(Future<void> Function())? _registerBeforeWindowClose;
   final LibraryDebugOptions _debugOptions;
 
   @override
@@ -181,13 +191,16 @@ class LocalLibraryPageApplicationService
               'startup.sort_preferences_load',
               () => loadLibrarySortPreferences(_paths),
             );
-      return LibraryPageStartupData(
+      final startupData = LibraryPageStartupData(
         store: store,
         thumbnailService: thumbnailService,
         playbackSettings: playbackSettings,
         sortPreferences: sortPreferences,
         dataBackupSettings: dataBackupSettings,
       );
+      // 只在首屏依赖全部成功后接管窗口关闭，避免注册一个初始化失败的 Store。
+      _registerBeforeWindowClose?.call(store.close);
+      return startupData;
     } catch (_) {
       // 首屏任一依赖加载失败时关闭已创建的 facade，避免数据库句柄泄漏。
       await store.close();

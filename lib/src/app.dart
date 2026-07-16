@@ -131,9 +131,17 @@ PlayerBackend _createPlayerBackend({
   );
 }
 
-/** 创建当前平台的完整依赖图，确保具体实现只在组合根出现一次。 */
-LocalTagPlayerDependencies createLocalTagPlayerDependencies() {
-  final paths = AppPaths();
+/**
+ * 创建当前平台的完整依赖图，确保具体实现只在组合根出现一次。
+ *
+ * [appPaths] 允许 bootstrap 与窗口服务共享同一路径策略；
+ * [registerBeforeWindowClose] 把异步 Store 关闭动作交给桌面窗口边界等待。
+ */
+LocalTagPlayerDependencies createLocalTagPlayerDependencies({
+  AppPaths? appPaths,
+  void Function(Future<void> Function())? registerBeforeWindowClose,
+}) {
+  final paths = appPaths ?? AppPaths();
   final databaseProvider = SqfliteDatabaseProvider(
     paths: paths,
     factory: databaseFactoryFfi,
@@ -185,6 +193,7 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies() {
       ffmpegBackend: ffmpegBackend,
       mediaProbeBackendFactory: mediaProbeBackendFactory,
       debugOptions: libraryDebugOptions,
+      registerBeforeWindowClose: registerBeforeWindowClose,
     ),
     playerBackendFactory: _createPlayerBackend,
     mediaProbeBackendFactory: mediaProbeBackendFactory,
@@ -195,8 +204,13 @@ Future<void> bootstrapLocalTagPlayer() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   sqfliteFfiInit();
-  final dependencies = createLocalTagPlayerDependencies();
-  await DesktopWindowStateService(dependencies.paths).initialize();
+  final paths = AppPaths();
+  final windowStateService = DesktopWindowStateService(paths);
+  final dependencies = createLocalTagPlayerDependencies(
+    appPaths: paths,
+    registerBeforeWindowClose: windowStateService.registerBeforeClose,
+  );
+  await windowStateService.initialize();
   runApp(LocalTagPlayerApp(dependencies: dependencies));
 }
 

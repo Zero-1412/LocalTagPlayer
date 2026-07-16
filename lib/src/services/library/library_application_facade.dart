@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'dart:async';
+import 'dart:typed_data';
 
 import '../../models/library_scan_models.dart';
 import '../../models/data_backup_models.dart';
@@ -201,6 +202,12 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
       _repository.setDataBackupEnabled(enabled);
 
   Future<void> runDataBackupNow() => _repository.runDataBackupNow();
+
+  Future<DataBackupIntegrityReport> checkDataBackupIntegrity() =>
+      _repository.checkDataBackupIntegrity();
+
+  Future<Uint8List> createDataBackupExport() =>
+      _repository.createDataBackupExport();
 
   Future<void> pauseDataBackupForPlayback() =>
       _repository.pauseDataBackupForPlayback();

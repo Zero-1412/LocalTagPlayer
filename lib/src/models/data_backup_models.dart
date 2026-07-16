@@ -39,6 +39,60 @@ class DataBackupStatus {
   final String? error;
 }
 
+/** 用户显式执行的视频依赖备份完整性检查结果。 */
+class DataBackupIntegrityReport {
+  const DataBackupIntegrityReport({
+    required this.checkedAt,
+    required this.sqliteHealthy,
+    required this.backupRecords,
+    required this.currentVideos,
+    required this.invalidPayloads,
+    required this.missingFingerprints,
+    required this.missingCurrentSnapshots,
+    required this.staleCurrentSnapshots,
+    required this.ambiguousFingerprints,
+    required this.recoverableSnapshots,
+  });
+
+  /** 检查完成时间。 */
+  final DateTime checkedAt;
+
+  /** SQLite `quick_check` 是否返回 `ok`。 */
+  final bool sqliteHealthy;
+
+  /** 独立备份库中的快照总数。 */
+  final int backupRecords;
+
+  /** 检查时主媒体库中的稳定视频身份总数。 */
+  final int currentVideos;
+
+  /** 无法解析或缺少必要结构的快照 JSON 数量。 */
+  final int invalidPayloads;
+
+  /** 指纹为空、无法参与安全恢复的快照数量。 */
+  final int missingFingerprints;
+
+  /** 当前主库视频尚未形成快照的数量。 */
+  final int missingCurrentSnapshots;
+
+  /** 当前主库依赖内容与快照不一致的数量。 */
+  final int staleCurrentSnapshots;
+
+  /** 同一指纹对应多条快照、因此只能拒绝自动恢复的指纹数量。 */
+  final int ambiguousFingerprints;
+
+  /** 当前主库没有同 videoId，但仍可供未来重建身份恢复的快照数量。 */
+  final int recoverableSnapshots;
+
+  /** 是否不存在影响备份可用性或当前数据覆盖的问题。 */
+  bool get isHealthy =>
+      sqliteHealthy &&
+      invalidPayloads == 0 &&
+      missingFingerprints == 0 &&
+      missingCurrentSnapshots == 0 &&
+      staleCurrentSnapshots == 0;
+}
+
 /** 自动恢复时需要重新建立的非 folder 标签关联。 */
 class DataBackupTagLink {
   const DataBackupTagLink({

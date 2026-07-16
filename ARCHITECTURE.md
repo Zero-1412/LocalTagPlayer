@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.38` 增加独立视频依赖备份边界。`video_dependency_backup.db` 只复制稳定身份、收藏、播放状态和非 folder 标签；主库仍是唯一业务写入源，备份按持久化游标与增量队列分批执行，并在播放期间暂停。
+`Architecture Baseline 0.5.39` 完成独立视频依赖备份的检查、导出与低写放大启动策略。正常关闭后的启动只消费持久化增量队列；首次、未完成、异常退出或重新开启时才全量核对，且内容未变化的快照不重写。便携导出不包含媒体路径或文件内容。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,11 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.38`
+已完成基线：`Architecture Baseline 0.5.39`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.39`：独立备份库以 `session_open` 和 `reconcile_required` 区分正常关闭、异常退出与关闭期间的主库变化；`DesktopWindowStateService` 在桌面窗口销毁前等待 Store 关闭和 clean marker，正常启动跳过全量游标，异常窗口仍保守补做全量。全量和增量统一使用规范快照与条件 UPSERT，指纹和依赖 JSON 均未变化时不更新 `updated_at` 或 SQLite 数据页。设置页新增只读完整性检查和便携 JSON 导出；检查覆盖 SQLite、JSON、当前视频缺失/过期快照及指纹歧义，保留未来可恢复快照且不自动修复。导出通过 `FileSystemAdapter` 选择和写入位置，不包含路径、媒体文件或缓存。主 `library.db` schema、stable identity 恢复保护、标签语义、filtered queue、PlayerBackend 和缓存队列未改变。
 
 - `0.5.38`：`DatabaseProvider` 增加独立备份库打开边界，`AppPaths` 固定使用 `video_dependency_backup.db`，不复制视频文件或复用主库文件。默认开启的 `DataBackupSettings` 独立持久化；全量核对按稳定 videoId 小批次推进并在备份库保存游标，增量修改进入去重队列，应用重启后续跑。恢复仅在扫描侧与备份侧 fingerprint 双侧唯一且主库无 videoId 冲突时发生，恢复收藏、播放状态、非 folder 标签及其分组定义；folder 标签仍按当前 root 派生。root detached 保留快照，显式单视频删除在 worker 批次边界同步删除快照。播放器创建前暂停备份、原生释放后恢复；`FilterQuery` / `TagQueryService`、filtered queue 与 PlayerBackend contract 未改变。
 

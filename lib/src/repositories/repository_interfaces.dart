@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import '../models/library_scan_models.dart';
 import '../models/data_backup_models.dart';
@@ -126,6 +127,12 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
 
   /** 从头启动一轮独立备份核对。 */
   Future<void> runDataBackupNow();
+
+  /** 用户显式检查独立备份的结构和当前数据覆盖情况。 */
+  Future<DataBackupIntegrityReport> checkDataBackupIntegrity();
+
+  /** 创建不含本地路径和媒体文件内容的便携导出。 */
+  Future<Uint8List> createDataBackupExport();
 
   /** 播放前等待当前小批次结束并暂停。 */
   Future<void> pauseDataBackupForPlayback();

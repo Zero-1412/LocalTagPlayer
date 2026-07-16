@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -846,6 +847,176 @@ void main() {
       ))
           .single['value'],
       '0',
+    );
+  });
+
+  test('backup integrity detects stale data and portable export omits paths',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir =
+        await _prepareStoreTestDirectory('dependency_backup_integrity');
+    final mediaRoot = Directory(p.join(dataDir.path, 'media'));
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      <String>['Series', 'integrity.mp4'],
+    );
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+
+    final store = await _loadTrackedStore(
+      stores,
+      dataBackupEnabled: true,
+    );
+    await store.addRootAndScan(mediaRoot.path);
+    await store.dataBackupService.flush();
+
+    final healthy = await store.checkDataBackupIntegrity();
+    expect(healthy.isHealthy, isTrue);
+    expect(healthy.backupRecords, 1);
+    expect(healthy.currentVideos, 1);
+
+    final exportBytes = await store.createDataBackupExport();
+    final exportText = utf8.decode(exportBytes);
+    final exportDocument =
+        (jsonDecode(exportText) as Map).cast<String, Object?>();
+    expect(
+      exportDocument['format'],
+      'local_tag_player_video_dependency_backup',
+    );
+    expect(exportDocument['recordCount'], 1);
+    expect(exportText, isNot(contains(file.path)));
+    expect(exportText, isNot(contains('"path"')));
+
+    final item = _videoByPath(store, file.path);
+    await store.database.update(
+      'videos',
+      <String, Object?>{'is_favorite': 1},
+      where: 'video_id = ?',
+      whereArgs: <Object?>[item.videoId],
+    );
+    final stale = await store.checkDataBackupIntegrity();
+    expect(stale.isHealthy, isFalse);
+    expect(stale.staleCurrentSnapshots, 1);
+
+    await store.runDataBackupNow();
+    await store.dataBackupService.flush();
+    expect((await store.checkDataBackupIntegrity()).isHealthy, isTrue);
+  });
+
+  test('clean restart skips full reconciliation and preserves snapshot writes',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir =
+        await _prepareStoreTestDirectory('dependency_backup_clean_restart');
+    final mediaRoot = Directory(p.join(dataDir.path, 'media'));
+    for (var index = 0; index < 3; index += 1) {
+      await _writeVideoPlaceholder(
+        mediaRoot,
+        <String>['clean', 'video_$index.mp4'],
+      );
+    }
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+
+    final first = await _loadTrackedStore(
+      stores,
+      dataBackupEnabled: true,
+    );
+    await first.addRootAndScan(mediaRoot.path);
+    await first.dataBackupService.flush();
+    final beforeRows = await first.dataBackupService.database.query(
+      'video_dependency_backups',
+      columns: const <String>['video_id', 'updated_at'],
+      orderBy: 'video_id ASC',
+    );
+    final beforeCompleted = (await first.dataBackupService.database.query(
+      'backup_control',
+      columns: const <String>['value'],
+      where: 'key = ?',
+      whereArgs: const <Object?>['last_completed_at'],
+    ))
+        .single['value'];
+    await first.close();
+    stores.remove(first);
+
+    final reopened = await _loadTrackedStore(
+      stores,
+      dataBackupEnabled: true,
+    );
+    await reopened.dataBackupService.flush();
+    final afterRows = await reopened.dataBackupService.database.query(
+      'video_dependency_backups',
+      columns: const <String>['video_id', 'updated_at'],
+      orderBy: 'video_id ASC',
+    );
+    final afterCompleted = (await reopened.dataBackupService.database.query(
+      'backup_control',
+      columns: const <String>['value'],
+      where: 'key = ?',
+      whereArgs: const <Object?>['last_completed_at'],
+    ))
+        .single['value'];
+    expect(afterRows, beforeRows);
+    expect(afterCompleted, beforeCompleted);
+    expect(
+      (await reopened.dataBackupService.database.query(
+        'backup_control',
+        columns: const <String>['value'],
+        where: 'key = ?',
+        whereArgs: const <Object?>['full_sync_in_progress'],
+      ))
+          .single['value'],
+      '0',
+    );
+
+    await reopened.runDataBackupNow();
+    await reopened.dataBackupService.flush();
+    expect(
+      await reopened.dataBackupService.database.query(
+        'video_dependency_backups',
+        columns: const <String>['video_id', 'updated_at'],
+        orderBy: 'video_id ASC',
+      ),
+      beforeRows,
+    );
+  });
+
+  test(
+      'enabling backup after disabled startup performs required reconciliation',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir =
+        await _prepareStoreTestDirectory('dependency_backup_reenable');
+    final mediaRoot = Directory(p.join(dataDir.path, 'media'));
+    await _writeVideoPlaceholder(
+      mediaRoot,
+      <String>['reenable', 'video.mp4'],
+    );
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    expect(
+      await store.dataBackupService.database.query(
+        'video_dependency_backups',
+      ),
+      isEmpty,
+    );
+
+    await store.setDataBackupEnabled(true);
+    await store.dataBackupService.flush();
+    expect(
+      await store.dataBackupService.database.query(
+        'video_dependency_backups',
+      ),
+      hasLength(1),
     );
   });
 
