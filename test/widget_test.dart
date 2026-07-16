@@ -535,6 +535,70 @@ void main() {
     await gesture.removePointer();
   });
 
+  testWidgets('card selection replaces favorite and blocks playback',
+      (tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_select_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final item = _testVideo(
+      path: p.join(directory.path, 'select.mp4'),
+      title: 'select video',
+    );
+    final thumbnailService = ThumbnailService.forDirectory(
+      directory,
+      _PreviewFFmpegBackend(),
+    );
+    var openCount = 0;
+    var selectCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 300,
+            height: 230,
+            child: InteractiveVideoCard(
+              item: item,
+              thumbnailService: thumbnailService,
+              playbackSettings: PlaybackSettings.defaults,
+              onOpen: () => openCount += 1,
+              onEditTags: () {},
+              onToggleFavorite: () {},
+              onDelete: () {},
+              selectionMode: true,
+              selected: false,
+              onToggleSelected: () => selectCount += 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(LibrarySmokeKeys.cardFavorite(item.path)), findsNothing);
+    expect(find.byKey(LibrarySmokeKeys.cardMore(item.path)), findsNothing);
+    expect(
+      find.byKey(LibrarySmokeKeys.cardSelection(item.path)),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(LibrarySmokeKeys.cardSelection(item.path)));
+    await tester.pump();
+    expect(selectCount, 1);
+    expect(openCount, 0);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.cardOpen(item.path)));
+    await tester.pump();
+    expect(selectCount, 2);
+    expect(openCount, 0);
+  });
+
   testWidgets('library scrolling appends ten rows and keeps full play queue',
       (WidgetTester tester) async {
     expect(libraryRowsPerLoad, 10);
@@ -2954,8 +3018,6 @@ void main() {
             excludedTags: const <TagItem>[],
             keyword: '',
             defaultChipLabel: '全部视频',
-            querySummary: '全部视频 · 11163 个结果',
-            queryExpression: '全部视频 | 11163 / 11163',
             showFavoritesOnly: false,
             resultCount: 11163,
             totalCount: 11163,
@@ -2995,6 +3057,93 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('qa.media_import.pause')));
     await tester.pump();
     expect(pauseCount, 1);
+  });
+
+  testWidgets('library toolbar switches between filter and batch modes',
+      (tester) async {
+    var selectionMode = false;
+    var selectedCount = 0;
+    var selectAllCount = 0;
+    var deleteCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 700,
+            child: StatefulBuilder(
+              builder: (context, setState) => LibraryHeroArea(
+                selectedTags: const <String>['原神', '雷神', '稻妻', '八重神子'],
+                selectedChildTags: const <String>[],
+                selectedGroupTags: const <TagItem>[],
+                excludedTags: const <TagItem>[],
+                keyword: '',
+                defaultChipLabel: '全部视频',
+                showFavoritesOnly: false,
+                resultCount: 171,
+                totalCount: 11163,
+                refreshing: false,
+                progressLabel: null,
+                progressValue: null,
+                onRemovePrimaryTag: (_) {},
+                onRemoveChildTag: (_) {},
+                onRemoveGroupTag: (_) {},
+                onRemoveExcludedTag: (_) {},
+                onClearKeyword: () {},
+                onClearFavoritesOnly: () {},
+                onClearAll: () {},
+                selectionMode: selectionMode,
+                selectedCount: selectedCount,
+                allSelected: selectedCount == 171,
+                onEnterSelectionMode: () => setState(() {
+                  selectionMode = true;
+                  selectedCount = 0;
+                }),
+                onToggleSelectAll: () => setState(() {
+                  selectAllCount += 1;
+                  selectedCount = selectedCount == 171 ? 0 : 171;
+                }),
+                onDeleteSelected:
+                    selectedCount == 0 ? null : () => deleteCount += 1,
+                onCancelSelectionMode: () => setState(() {
+                  selectionMode = false;
+                  selectedCount = 0;
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('当前筛选（AND）'), findsNothing);
+    expect(find.text('原神'), findsOneWidget);
+    expect(find.text('雷神'), findsOneWidget);
+    expect(find.text('+2'), findsOneWidget);
+    expect(find.text('171 个视频'), findsOneWidget);
+    expect(find.textContaining('原神 / 雷神'), findsNothing);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.libraryEnterSelection));
+    await tester.pump();
+    expect(find.text('原神'), findsNothing);
+    expect(find.text('+2'), findsNothing);
+    expect(find.text('已选择 0 个 / 共 171 个'), findsOneWidget);
+    final disabledDelete = tester.widget<TextButton>(
+      find.byKey(LibrarySmokeKeys.libraryDeleteSelected),
+    );
+    expect(disabledDelete.onPressed, isNull);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.librarySelectAll));
+    await tester.pump();
+    expect(selectAllCount, 1);
+    expect(find.text('已选择 171 个 / 共 171 个'), findsOneWidget);
+    await tester.tap(find.byKey(LibrarySmokeKeys.libraryDeleteSelected));
+    await tester.pump();
+    expect(deleteCount, 1);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.libraryCancelSelection));
+    await tester.pump();
+    expect(find.text('原神'), findsOneWidget);
+    expect(find.text('171 个视频'), findsOneWidget);
   });
 
   test('file imports collapse to uncovered top-level roots', () {

@@ -1258,8 +1258,6 @@ class LibraryHeroArea extends StatelessWidget {
     required this.excludedTags,
     required this.keyword,
     required this.defaultChipLabel,
-    required this.querySummary,
-    required this.queryExpression,
     required this.showFavoritesOnly,
     required this.resultCount,
     required this.totalCount,
@@ -1275,6 +1273,13 @@ class LibraryHeroArea extends StatelessWidget {
     required this.onClearKeyword,
     required this.onClearFavoritesOnly,
     required this.onClearAll,
+    this.selectionMode = false,
+    this.selectedCount = 0,
+    this.allSelected = false,
+    this.onEnterSelectionMode,
+    this.onToggleSelectAll,
+    this.onDeleteSelected,
+    this.onCancelSelectionMode,
   });
 
   final List<String> selectedTags;
@@ -1288,10 +1293,6 @@ class LibraryHeroArea extends StatelessWidget {
   final String keyword;
 
   final String defaultChipLabel;
-
-  final String querySummary;
-
-  final String queryExpression;
 
   final bool showFavoritesOnly;
 
@@ -1327,157 +1328,393 @@ class LibraryHeroArea extends StatelessWidget {
 
   final VoidCallback? onClearAll;
 
+  /** true 时整条工具栏切换成批量操作模式，不再同时显示筛选信息。 */
+  final bool selectionMode;
+
+  /** 当前完整结果范围内已选择的视频数量。 */
+  final int selectedCount;
+
+  /** 当前完整结果是否已全部选择。 */
+  final bool allSelected;
+
+  /** 进入多选模式；为空时当前结果来源不提供批量删除。 */
+  final VoidCallback? onEnterSelectionMode;
+
+  /** 切换完整当前结果的全选状态。 */
+  final VoidCallback? onToggleSelectAll;
+
+  /** 删除已选视频；没有选择时页面传入 null 以禁用按钮。 */
+  final VoidCallback? onDeleteSelected;
+
+  /** 退出多选并清空临时选择。 */
+  final VoidCallback? onCancelSelectionMode;
+
   @override
   Widget build(BuildContext context) {
-    final activeChips = <Widget>[
+    final activeFilters = <_FilterToolbarEntry>[
       if (keyword.trim().isNotEmpty)
-        _CurrentFilterChip(
-          avatar: const Icon(Icons.search_rounded, size: 18),
-          label: Text(keyword.trim()),
-          onDeleted: onClearKeyword,
+        _FilterToolbarEntry(
+          label: keyword.trim(),
+          icon: Icons.search_rounded,
+          onRemove: onClearKeyword,
         ),
       if (showFavoritesOnly)
-        _CurrentFilterChip(
-          avatar: const Icon(Icons.favorite, size: 18),
-          label: const Text('\u672c\u5730\u6536\u85cf'),
-          onDeleted: onClearFavoritesOnly,
+        _FilterToolbarEntry(
+          label: '\u672c\u5730\u6536\u85cf',
+          icon: Icons.favorite_rounded,
+          onRemove: onClearFavoritesOnly,
         ),
       for (final tag in selectedTags)
-        _CurrentFilterChip(
-          label: Text('\u4e00\u7ea7\u6807\u7b7e\uff1a$tag'),
-          onDeleted: () => onRemovePrimaryTag(tag),
+        _FilterToolbarEntry(
+          label: tag,
+          onRemove: () => onRemovePrimaryTag(tag),
         ),
       for (final tag in selectedChildTags)
-        _CurrentFilterChip(
-          label: Text('\u4e8c\u7ea7\u6807\u7b7e\uff1a$tag'),
-          onDeleted: () => onRemoveChildTag(tag),
+        _FilterToolbarEntry(
+          label: tag,
+          onRemove: () => onRemoveChildTag(tag),
         ),
       for (final tag in selectedGroupTags)
-        _CurrentFilterChip(
-          avatar: Icon(
-            Icons.add_circle_outline,
-            size: 18,
-            color: libraryGroupColor(tag.groupId ?? 'manual'),
-          ),
-          label: Text(tag.displayName ?? tag.name),
-          side: BorderSide(
-            color: libraryGroupColor(tag.groupId ?? 'manual').withAlpha(150),
-          ),
-          onDeleted: () => onRemoveGroupTag(tag),
+        _FilterToolbarEntry(
+          label: tag.displayName ?? tag.name,
+          color: libraryGroupColor(tag.groupId ?? 'manual'),
+          onRemove: () => onRemoveGroupTag(tag),
         ),
       for (final tag in excludedTags)
-        _CurrentFilterChip(
-          avatar: const Icon(Icons.remove_circle_outline, size: 18),
-          label: Text('NOT ${tag.displayName ?? tag.name}'),
-          selected: true,
-          selectedColor: const Color(0xffffe3df),
-          onDeleted: () => onRemoveExcludedTag(tag),
-        ),
-      if (onClearAll == null)
-        _CurrentFilterChip(
-          avatar: const Icon(Icons.video_library_outlined, size: 18),
-          label: Text(defaultChipLabel),
-          visualDensity: VisualDensity.compact,
+        _FilterToolbarEntry(
+          label: 'NOT ${tag.displayName ?? tag.name}',
+          color: const Color(0xffe26573),
+          onRemove: () => onRemoveExcludedTag(tag),
         ),
     ];
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 18, 14),
+      padding: const EdgeInsets.fromLTRB(20, 8, 18, 12),
       child: Container(
+        key: LibrarySmokeKeys.libraryResultToolbar,
         width: double.infinity,
-        constraints: const BoxConstraints(minHeight: 64),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        height: 64,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
           color: librarySurface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: libraryBorder),
-          boxShadow: librarySoftShadow,
+          border: Border.all(
+            color: libraryBorder.withValues(alpha: 0.68),
+          ),
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final compact = constraints.maxWidth < 560;
-            final title = Text(
-              '\u5f53\u524d\u7b5b\u9009\uff08AND\uff09',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: libraryText,
-                    fontWeight: FontWeight.w900,
-                  ),
-            );
-            final clearAction = TextButton.icon(
-              onPressed: onClearAll,
-              icon: const Icon(Icons.delete_outline_rounded, size: 18),
-              label: const Text('\u6e05\u7a7a\u5168\u90e8'),
-              style: TextButton.styleFrom(
-                foregroundColor: libraryTextMuted,
-                visualDensity: VisualDensity.compact,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            );
-            final resultLine = _FilterResultLine(
+            if (selectionMode) {
+              return _LibrarySelectionToolbar(
+                resultCount: resultCount,
+                selectedCount: selectedCount,
+                allSelected: allSelected,
+                onToggleSelectAll: onToggleSelectAll,
+                onDeleteSelected: onDeleteSelected,
+                onCancel: onCancelSelectionMode,
+              );
+            }
+            return _LibraryFilterToolbar(
+              defaultLabel: defaultChipLabel,
+              filters: activeFilters,
+              maxVisibleFilters: constraints.maxWidth < 760 ? 2 : 3,
               resultCount: resultCount,
-              querySummary: querySummary,
               refreshing: refreshing,
               progressLabel: progressLabel,
               progressValue: progressValue,
               progressPaused: progressPaused,
               onToggleProgressPaused: onToggleProgressPaused,
-            );
-
-            if (compact) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  title,
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [...activeChips, clearAction],
-                  ),
-                  const SizedBox(height: 10),
-                  resultLine,
-                ],
-              );
-            }
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    title,
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (final chip in activeChips) ...[
-                              chip,
-                              const SizedBox(width: 8),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    clearAction,
-                    const SizedBox(width: 12),
-                    Flexible(
-                      flex: 2,
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: resultLine,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              onClearAll: onClearAll,
+              onEnterSelectionMode: onEnterSelectionMode,
             );
           },
         ),
       ),
+    );
+  }
+}
+
+/** 单行筛选工具栏中一个可移除筛选项的轻量描述。 */
+class _FilterToolbarEntry {
+  const _FilterToolbarEntry({
+    required this.label,
+    required this.onRemove,
+    this.icon,
+    this.color = appAccentViolet,
+  });
+
+  final String label;
+  final VoidCallback onRemove;
+  final IconData? icon;
+  final Color color;
+}
+
+/** 普通状态只展示筛选、结果数量和进入多选的入口。 */
+class _LibraryFilterToolbar extends StatelessWidget {
+  const _LibraryFilterToolbar({
+    required this.defaultLabel,
+    required this.filters,
+    required this.maxVisibleFilters,
+    required this.resultCount,
+    required this.refreshing,
+    required this.progressLabel,
+    required this.progressValue,
+    required this.progressPaused,
+    required this.onToggleProgressPaused,
+    required this.onClearAll,
+    required this.onEnterSelectionMode,
+  });
+
+  final String defaultLabel;
+  final List<_FilterToolbarEntry> filters;
+  final int maxVisibleFilters;
+  final int resultCount;
+  final bool refreshing;
+  final String? progressLabel;
+  final double? progressValue;
+  final bool progressPaused;
+  final VoidCallback? onToggleProgressPaused;
+  final VoidCallback? onClearAll;
+  final VoidCallback? onEnterSelectionMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleFilters = filters.take(maxVisibleFilters).toList();
+    final hiddenCount = filters.length - visibleFilters.length;
+    return Row(
+      children: [
+        const Icon(
+          Icons.filter_alt_outlined,
+          size: 18,
+          color: libraryTextMuted,
+        ),
+        const SizedBox(width: 6),
+        const Text(
+          '筛选',
+          style: TextStyle(
+            color: libraryText,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                if (visibleFilters.isEmpty)
+                  Text(
+                    defaultLabel,
+                    style: const TextStyle(
+                      color: libraryTextMuted,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                else
+                  for (final filter in visibleFilters) ...[
+                    _CurrentFilterChip(
+                      avatar: filter.icon == null
+                          ? null
+                          : Icon(filter.icon, size: 16, color: filter.color),
+                      label: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 132),
+                        child: Text(
+                          filter.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      onDeleted: filter.onRemove,
+                      side: BorderSide(color: filter.color.withAlpha(150)),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                if (hiddenCount > 0) ...[
+                  _CollapsedFilterCount(count: hiddenCount),
+                  const SizedBox(width: 8),
+                ],
+                if (onClearAll != null)
+                  TextButton(
+                    onPressed: onClearAll,
+                    style: TextButton.styleFrom(
+                      foregroundColor: libraryTextMuted,
+                      minimumSize: const Size(44, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('清空'),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Flexible(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: _FilterResultLine(
+              resultCount: resultCount,
+              refreshing: refreshing,
+              progressLabel: progressLabel,
+              progressValue: progressValue,
+              progressPaused: progressPaused,
+              onToggleProgressPaused: onToggleProgressPaused,
+            ),
+          ),
+        ),
+        if (onEnterSelectionMode != null) ...[
+          const SizedBox(width: 14),
+          OutlinedButton(
+            key: LibrarySmokeKeys.libraryEnterSelection,
+            onPressed: onEnterSelectionMode,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: libraryText,
+              side: const BorderSide(color: libraryBorder),
+              minimumSize: const Size(62, 34),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('多选'),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/** 被折叠的筛选数量，不承担交互，避免与真实筛选 chip 混淆。 */
+class _CollapsedFilterCount extends StatelessWidget {
+  const _CollapsedFilterCount({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 34,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 11),
+      decoration: BoxDecoration(
+        color: librarySurfaceAlt,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: libraryBorder),
+      ),
+      child: Text(
+        '+$count',
+        style: const TextStyle(
+          color: libraryTextMuted,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+/** 多选状态只展示批量选择和删除动作，不同时堆叠筛选信息。 */
+class _LibrarySelectionToolbar extends StatelessWidget {
+  const _LibrarySelectionToolbar({
+    required this.resultCount,
+    required this.selectedCount,
+    required this.allSelected,
+    required this.onToggleSelectAll,
+    required this.onDeleteSelected,
+    required this.onCancel,
+  });
+
+  final int resultCount;
+  final int selectedCount;
+  final bool allSelected;
+  final VoidCallback? onToggleSelectAll;
+  final VoidCallback? onDeleteSelected;
+  final VoidCallback? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        InkWell(
+          key: LibrarySmokeKeys.librarySelectAll,
+          borderRadius: BorderRadius.circular(8),
+          onTap: onToggleSelectAll,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: allSelected,
+                  onChanged: onToggleSelectAll == null
+                      ? null
+                      : (_) => onToggleSelectAll!(),
+                  shape: const CircleBorder(),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                const SizedBox(width: 4),
+                const Text(
+                  '全选',
+                  style: TextStyle(
+                    color: libraryText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Spacer(),
+        Text.rich(
+          TextSpan(
+            style: const TextStyle(
+              color: libraryTextMuted,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+            children: [
+              const TextSpan(text: '已选择 '),
+              TextSpan(
+                text: '$selectedCount',
+                style: const TextStyle(
+                  color: appAccentViolet,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              TextSpan(text: ' 个 / 共 $resultCount 个'),
+            ],
+          ),
+        ),
+        const Spacer(),
+        TextButton.icon(
+          key: LibrarySmokeKeys.libraryDeleteSelected,
+          onPressed: onDeleteSelected,
+          icon: const Icon(Icons.delete_outline_rounded, size: 18),
+          label: const Text('删除'),
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xffe26573),
+            disabledForegroundColor: libraryTextMuted.withValues(alpha: 0.45),
+            backgroundColor: onDeleteSelected == null
+                ? Colors.transparent
+                : const Color(0x24e26573),
+            minimumSize: const Size(68, 34),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        const SizedBox(width: 8),
+        TextButton(
+          key: LibrarySmokeKeys.libraryCancelSelection,
+          onPressed: onCancel,
+          style: TextButton.styleFrom(
+            foregroundColor: libraryTextMuted,
+            minimumSize: const Size(56, 34),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text('取消'),
+        ),
+      ],
     );
   }
 }
@@ -1487,9 +1724,6 @@ class _CurrentFilterChip extends StatelessWidget {
     required this.label,
     this.avatar,
     this.onDeleted,
-    this.visualDensity,
-    this.selected = false,
-    this.selectedColor,
     this.side,
   });
 
@@ -1499,12 +1733,6 @@ class _CurrentFilterChip extends StatelessWidget {
 
   final VoidCallback? onDeleted;
 
-  final VisualDensity? visualDensity;
-
-  final bool selected;
-
-  final Color? selectedColor;
-
   final BorderSide? side;
 
   @override
@@ -1513,9 +1741,7 @@ class _CurrentFilterChip extends StatelessWidget {
       avatar: avatar,
       label: label,
       onDeleted: onDeleted,
-      visualDensity: visualDensity ?? VisualDensity.compact,
-      selected: selected,
-      selectedColor: selectedColor,
+      visualDensity: VisualDensity.compact,
       side: side ?? const BorderSide(color: libraryBorder),
       backgroundColor: librarySurfaceAlt,
       deleteIconColor: appAccentViolet,
@@ -1534,7 +1760,6 @@ class _CurrentFilterChip extends StatelessWidget {
 class _FilterResultLine extends StatelessWidget {
   const _FilterResultLine({
     required this.resultCount,
-    required this.querySummary,
     required this.refreshing,
     required this.progressLabel,
     required this.progressValue,
@@ -1543,8 +1768,6 @@ class _FilterResultLine extends StatelessWidget {
   });
 
   final int resultCount;
-
-  final String querySummary;
 
   final bool refreshing;
 
@@ -1559,68 +1782,63 @@ class _FilterResultLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final operationInProgress = progressLabel != null;
-    return Tooltip(
-      message: progressLabel ?? querySummary,
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Flexible(
-          child: Text(
-            progressLabel ?? querySummary,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: appAccentViolet,
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
-            ),
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Flexible(
+        child: Text(
+          progressLabel ?? '$resultCount 个视频',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: appAccentViolet,
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
           ),
         ),
-        if (operationInProgress) ...[
-          const SizedBox(width: 8),
-          if (progressValue == null)
-            const SizedBox.square(
-              dimension: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            SizedBox(
-              width: 64,
-              child: LinearProgressIndicator(
-                value: progressValue!.clamp(0, 1),
-                minHeight: 4,
-                borderRadius: BorderRadius.circular(999),
-                backgroundColor: const Color(0xffe7e4ff),
-              ),
-            ),
-          if (onToggleProgressPaused != null) ...[
-            const SizedBox(width: 4),
-            SizedBox.square(
-              dimension: 28,
-              child: IconButton(
-                key: ValueKey(progressPaused
-                    ? 'qa.media_import.resume'
-                    : 'qa.media_import.pause'),
-                tooltip: progressPaused ? '继续后台任务' : '暂停后台任务',
-                padding: EdgeInsets.zero,
-                iconSize: 18,
-                color: appAccentViolet,
-                onPressed: onToggleProgressPaused,
-                icon: Icon(
-                  progressPaused
-                      ? Icons.play_arrow_rounded
-                      : Icons.pause_rounded,
-                ),
-              ),
-            ),
-          ],
-        ] else if (refreshing) ...[
-          const SizedBox(width: 8),
+      ),
+      if (operationInProgress) ...[
+        const SizedBox(width: 8),
+        if (progressValue == null)
           const SizedBox.square(
             dimension: 14,
             child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        else
+          SizedBox(
+            width: 64,
+            child: LinearProgressIndicator(
+              value: progressValue!.clamp(0, 1),
+              minHeight: 4,
+              borderRadius: BorderRadius.circular(999),
+              backgroundColor: const Color(0xffe7e4ff),
+            ),
+          ),
+        if (onToggleProgressPaused != null) ...[
+          const SizedBox(width: 4),
+          SizedBox.square(
+            dimension: 28,
+            child: IconButton(
+              key: ValueKey(progressPaused
+                  ? 'qa.media_import.resume'
+                  : 'qa.media_import.pause'),
+              tooltip: progressPaused ? '继续后台任务' : '暂停后台任务',
+              padding: EdgeInsets.zero,
+              iconSize: 18,
+              color: appAccentViolet,
+              onPressed: onToggleProgressPaused,
+              icon: Icon(
+                progressPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+              ),
+            ),
           ),
         ],
-      ]),
-    );
+      ] else if (refreshing) ...[
+        const SizedBox(width: 8),
+        const SizedBox.square(
+          dimension: 14,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ],
+    ]);
   }
 }
 

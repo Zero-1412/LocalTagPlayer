@@ -538,6 +538,9 @@ class VideoGrid extends StatefulWidget {
     required this.onEditTags,
     required this.onToggleFavorite,
     required this.onDelete,
+    this.selectionMode = false,
+    this.selectedVideoIds = const <String>{},
+    this.onToggleSelected,
   });
 
   final List<VideoItem> videos;
@@ -559,6 +562,15 @@ class VideoGrid extends StatefulWidget {
 
   /** 请求删除视频记录；是否同步删除本地文件由 Application 层确认。 */
   final ValueChanged<VideoItem> onDelete;
+
+  /** true 时卡片和列表点击只切换选择，不打开播放器。 */
+  final bool selectionMode;
+
+  /** 当前完整结果中已选择的稳定 videoId。 */
+  final Set<String> selectedVideoIds;
+
+  /** 切换单个视频选择状态；普通模式不调用。 */
+  final ValueChanged<VideoItem>? onToggleSelected;
 
   @override
   State<VideoGrid> createState() => _VideoGridState();
@@ -785,6 +797,11 @@ class _VideoGridState extends State<VideoGrid> {
                   onEditTags: () => widget.onEditTags(item),
                   onToggleFavorite: () => widget.onToggleFavorite(item),
                   onDelete: () => widget.onDelete(item),
+                  selectionMode: widget.selectionMode,
+                  selected: widget.selectedVideoIds.contains(item.videoId),
+                  onToggleSelected: widget.onToggleSelected == null
+                      ? null
+                      : () => widget.onToggleSelected!(item),
                 ),
               );
             },
@@ -840,6 +857,11 @@ class _VideoGridState extends State<VideoGrid> {
                   onEditTags: () => widget.onEditTags(item),
                   onToggleFavorite: () => widget.onToggleFavorite(item),
                   onDelete: () => widget.onDelete(item),
+                  selectionMode: widget.selectionMode,
+                  selected: widget.selectedVideoIds.contains(item.videoId),
+                  onToggleSelected: widget.onToggleSelected == null
+                      ? null
+                      : () => widget.onToggleSelected!(item),
                 ),
               );
             },
@@ -867,6 +889,9 @@ class InteractiveVideoListRow extends StatelessWidget {
     required this.onEditTags,
     required this.onToggleFavorite,
     required this.onDelete,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onToggleSelected,
   });
 
   final VideoItem item;
@@ -886,6 +911,15 @@ class InteractiveVideoListRow extends StatelessWidget {
 
   final VoidCallback onDelete;
 
+  /** 多选模式下整行点击只切换选择。 */
+  final bool selectionMode;
+
+  /** 当前行是否已选择。 */
+  final bool selected;
+
+  /** 多选状态切换回调。 */
+  final VoidCallback? onToggleSelected;
+
   @override
   Widget build(BuildContext context) {
     final tags = item.tags.toList()..sort();
@@ -894,7 +928,8 @@ class InteractiveVideoListRow extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onDoubleTap: onOpen,
+        onTap: selectionMode ? onToggleSelected : null,
+        onDoubleTap: selectionMode ? null : onOpen,
         child: Ink(
           decoration: BoxDecoration(
             color: librarySurface,
@@ -912,6 +947,19 @@ class InteractiveVideoListRow extends StatelessWidget {
               final compactActions = constraints.maxWidth < 700;
               return Row(
                 children: [
+                  if (selectionMode) ...[
+                    Checkbox(
+                      key: LibrarySmokeKeys.cardSelection(item.path),
+                      value: selected,
+                      onChanged: onToggleSelected == null
+                          ? null
+                          : (_) => onToggleSelected!(),
+                      shape: const CircleBorder(),
+                      activeColor: appAccentViolet,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   SizedBox(
                     width: thumbnailWidth,
                     child: _VideoPreview(
@@ -977,14 +1025,15 @@ class InteractiveVideoListRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  _ListRowActions(
-                    item: item,
-                    onOpen: onOpen,
-                    onToggleFavorite: onToggleFavorite,
-                    onEditTags: onEditTags,
-                    onDelete: onDelete,
-                    compact: compactActions,
-                  ),
+                  if (!selectionMode)
+                    _ListRowActions(
+                      item: item,
+                      onOpen: onOpen,
+                      onToggleFavorite: onToggleFavorite,
+                      onEditTags: onEditTags,
+                      onDelete: onDelete,
+                      compact: compactActions,
+                    ),
                 ],
               );
             },
@@ -1136,6 +1185,9 @@ class InteractiveVideoCard extends StatefulWidget {
     this.onEditTags,
     required this.onToggleFavorite,
     this.onDelete,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onToggleSelected,
   });
 
   final VideoItem item;
@@ -1150,6 +1202,15 @@ class InteractiveVideoCard extends StatefulWidget {
   /** 标题更多菜单的删除入口；为空时不显示卡片更多按钮。 */
   final VoidCallback? onDelete;
 
+  /** 多选模式下卡片点击只切换选择，并关闭动态预览和更多菜单。 */
+  final bool selectionMode;
+
+  /** 当前卡片是否已选择。 */
+  final bool selected;
+
+  /** 切换当前卡片选择状态。 */
+  final VoidCallback? onToggleSelected;
+
   @override
   State<InteractiveVideoCard> createState() => InteractiveVideoCardState();
 }
@@ -1163,8 +1224,9 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final supportsMoreActions =
-        widget.onEditTags != null && widget.onDelete != null;
+    final supportsMoreActions = !widget.selectionMode &&
+        widget.onEditTags != null &&
+        widget.onDelete != null;
     // 标题宽度始终为按钮保留固定槽位；显示状态变化不会触发标题重新换行和卡片抖动。
     final showMore =
         supportsMoreActions && (_hovered || _focused || _moreMenuOpen);
@@ -1193,8 +1255,10 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                 focusColor: Colors.transparent,
                 highlightColor: Colors.transparent,
                 onFocusChange: (focused) => setState(() => _focused = focused),
-                // 独立播放按钮移除后，卡片本身成为唯一清晰的打开入口。
-                onTap: widget.onOpen,
+                // 多选期间点击只更新选择；普通状态才打开完整 filtered queue。
+                onTap: widget.selectionMode
+                    ? widget.onToggleSelected
+                    : widget.onOpen,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1204,9 +1268,16 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                         item: item,
                         thumbnailService: widget.thumbnailService,
                         playbackSettings: widget.playbackSettings,
-                        hovered: _hovered,
+                        hovered: _hovered && !widget.selectionMode,
+                        hoverPreviewEnabled: !widget.selectionMode,
                         onVisible: widget.onVisible,
-                        onToggleFavorite: widget.onToggleFavorite,
+                        onToggleFavorite: widget.selectionMode
+                            ? null
+                            : widget.onToggleFavorite,
+                        selected: widget.selectionMode ? widget.selected : null,
+                        onToggleSelected: widget.selectionMode
+                            ? widget.onToggleSelected
+                            : null,
                       ),
                     ),
                     Padding(
@@ -1218,8 +1289,9 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                             setState(() => _moreMenuOpen = true),
                         onMoreClosed: () =>
                             setState(() => _moreMenuOpen = false),
-                        onEditTags: widget.onEditTags,
-                        onDelete: widget.onDelete,
+                        onEditTags:
+                            widget.selectionMode ? null : widget.onEditTags,
+                        onDelete: widget.selectionMode ? null : widget.onDelete,
                       ),
                     ),
                   ],
@@ -1465,8 +1537,11 @@ class _VideoPreview extends StatefulWidget {
     required this.thumbnailService,
     required this.playbackSettings,
     this.hovered = false,
+    this.hoverPreviewEnabled = true,
     this.onVisible,
     this.onToggleFavorite,
+    this.selected,
+    this.onToggleSelected,
   });
 
   final VideoItem item;
@@ -1474,11 +1549,19 @@ class _VideoPreview extends StatefulWidget {
   final PlaybackSettings playbackSettings;
   /** 网格卡片 hover 状态；列表预览保持 false，不引入额外动画。 */
   final bool hovered;
+  /** 多选模式关闭动态预览，避免选择过程中创建原生播放器和画面干扰。 */
+  final bool hoverPreviewEnabled;
   /** 只通知页面提升媒体详情任务；缩略图仍由共享服务自身的优先队列处理。 */
   final ValueChanged<VideoItem>? onVisible;
 
   /** 网格卡片传入时在缩略图左上角显示收藏入口；列表预览保持原有紧凑动作区。 */
   final VoidCallback? onToggleFavorite;
+
+  /** 非 null 表示多选模式，并作为圆形复选框当前值。 */
+  final bool? selected;
+
+  /** 多选模式切换回调；与 [selected] 同时存在时替换收藏红心。 */
+  final VoidCallback? onToggleSelected;
 
   @override
   State<_VideoPreview> createState() => _VideoPreviewState();
@@ -1503,6 +1586,9 @@ class _VideoPreviewState extends State<_VideoPreview> {
   @override
   void didUpdateWidget(covariant _VideoPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.hoverPreviewEnabled && !widget.hoverPreviewEnabled) {
+      _stopHoverPreview();
+    }
     if (oldWidget.item.path != widget.item.path ||
         oldWidget.thumbnailService != widget.thumbnailService) {
       _stopHoverPreview();
@@ -1520,6 +1606,9 @@ class _VideoPreviewState extends State<_VideoPreview> {
 
   /** 重新进入正在淡出的预览时复用现有播放器，避免边缘移动反复初始化。 */
   void _onEnter() {
+    if (!widget.hoverPreviewEnabled) {
+      return;
+    }
     _hoverExitTimer?.cancel();
     _hoverExitTimer = null;
     if (_isHoverPreviewReady && !_isHoverPreviewVisible && mounted) {
@@ -1543,7 +1632,10 @@ class _VideoPreviewState extends State<_VideoPreview> {
 
   /** 创建静音原生播放器，并仅在当前卡片仍持有该播放器时展示首帧。 */
   Future<void> _startHoverPreview() async {
-    if (!mounted || _hoverPlayer != null || _isHoverPreviewLoading) {
+    if (!mounted ||
+        !widget.hoverPreviewEnabled ||
+        _hoverPlayer != null ||
+        _isHoverPreviewLoading) {
       return;
     }
     setState(() => _isHoverPreviewLoading = true);
@@ -1739,7 +1831,36 @@ class _VideoPreviewState extends State<_VideoPreview> {
                           ),
                         ),
                       ),
-                    if (widget.onToggleFavorite != null)
+                    if (widget.selected != null &&
+                        widget.onToggleSelected != null)
+                      Positioned(
+                        top: overlay.edgeInset,
+                        left: overlay.edgeInset,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.28),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Checkbox(
+                            key: LibrarySmokeKeys.cardSelection(
+                              widget.item.path,
+                            ),
+                            value: widget.selected,
+                            onChanged: (_) => widget.onToggleSelected!(),
+                            shape: const CircleBorder(),
+                            activeColor: appAccentViolet,
+                            checkColor: Colors.white,
+                            side: const BorderSide(
+                              color: Colors.white,
+                              width: 1.6,
+                            ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      )
+                    else if (widget.onToggleFavorite != null)
                       Positioned(
                         top: overlay.edgeInset,
                         left: overlay.edgeInset,

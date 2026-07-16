@@ -31,6 +31,21 @@ class LibrarySmokeKeys {
       ValueKey<String>('smoke.sidebar.collapse-toggle');
   /** 主功能栏实际宽度容器。 */
   static const sidebarSurface = ValueKey<String>('smoke.sidebar.surface');
+  /** 媒体库筛选/多选双状态工具栏。 */
+  static const libraryResultToolbar =
+      ValueKey<String>('smoke.library.result-toolbar');
+  /** 进入媒体库多选模式。 */
+  static const libraryEnterSelection =
+      ValueKey<String>('smoke.library.selection.enter');
+  /** 多选模式全选切换。 */
+  static const librarySelectAll =
+      ValueKey<String>('smoke.library.selection.all');
+  /** 多选模式删除已选视频。 */
+  static const libraryDeleteSelected =
+      ValueKey<String>('smoke.library.selection.delete');
+  /** 退出媒体库多选模式。 */
+  static const libraryCancelSelection =
+      ValueKey<String>('smoke.library.selection.cancel');
   static const searchField = ValueKey<String>('smoke.top.search-field');
   static const topSortFieldButton =
       ValueKey<String>('smoke.top.sort-field-button');
@@ -124,6 +139,10 @@ class LibrarySmokeKeys {
    */
   static ValueKey<String> cardFavorite(String path) =>
       ValueKey<String>('smoke.card.favorite:${TagRules.pathKey(path)}');
+
+  /** 多选模式下替换收藏红心的圆形复选框。 */
+  static ValueKey<String> cardSelection(String path) =>
+      ValueKey<String>('smoke.card.selection:${TagRules.pathKey(path)}');
 
   /** 仅缩略图参与 hover 动画的稳定测试入口。 */
   static ValueKey<String> cardThumbnailSurface(String path) => ValueKey<String>(

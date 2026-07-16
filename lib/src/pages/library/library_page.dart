@@ -278,42 +278,6 @@ extension _LibraryPageDerivedState on _LibraryPageState {
   }
 
   /**
-   * 当前结果来源对应的顶部摘要。
-   */
-  String _displaySummary({
-    required String filterSummary,
-    required int displayResultCount,
-    required int displayTotalCount,
-  }) {
-    return switch (_resultMode) {
-      _LibraryResultMode.recent =>
-        '\u6700\u8fd1\u64ad\u653e  |  $displayResultCount / $displayTotalCount',
-      _LibraryResultMode.favorites =>
-        '\u672c\u5730\u6536\u85cf  |  $displayResultCount / $displayTotalCount',
-      _LibraryResultMode.local =>
-        '\u672c\u5730\u5a92\u4f53\u5e93  |  $displayResultCount \u9879',
-      _LibraryResultMode.library => filterSummary,
-    };
-  }
-
-  /**
-   * 当前结果来源对应的详细表达式。
-   */
-  String _displayExpression({
-    required String filterExpression,
-  }) {
-    return switch (_resultMode) {
-      _LibraryResultMode.recent =>
-        '\u6309\u6700\u8fd1\u64ad\u653e\u65f6\u95f4\u6392\u5e8f',
-      _LibraryResultMode.favorites =>
-        '\u4ec5\u663e\u793a\u672c\u5730\u6536\u85cf\u89c6\u9891',
-      _LibraryResultMode.local =>
-        _localLibraryPath ?? '\u672c\u5730\u5a92\u4f53\u5e93',
-      _LibraryResultMode.library => filterExpression,
-    };
-  }
-
-  /**
    * 播放器过滤队列标题。
    */
   String _queueTitle({
@@ -1372,6 +1336,21 @@ class _LibraryPageState extends State<LibraryPage> {
   final _selectedRecentPathKeys = <String>{};
 
   /**
+   * 主媒体结果区是否处于多选模式。
+   *
+   * 该状态只改变工具栏和卡片点击语义，不写入数据库，也不改变当前筛选结果或播放队列。
+   */
+  var _librarySelectionMode = false;
+
+  /**
+   * 主媒体结果区已选择的稳定 videoId。
+   *
+   * 使用 videoId 而不是可变路径，保证同一会话内排序变化不会丢失选择；筛选或切换结果
+   * 来源时统一退出多选，避免保留不可见选择。
+   */
+  final _selectedLibraryVideoIds = <String>{};
+
+  /**
    * 本地媒体库当前浏览路径。
    *
    * 该路径来自已配置 root 或其子目录，只用于文件系统式浏览，不改变扫描和标签规则。
@@ -2112,6 +2091,52 @@ class _LibraryPageState extends State<LibraryPage> {
     ];
   }
 
+  /** 在现有 setState 中退出主媒体多选并清空临时选择。 */
+  void _clearLibrarySelectionState() {
+    _librarySelectionMode = false;
+    _selectedLibraryVideoIds.clear();
+  }
+
+  /** 进入多选模式；首次进入不预选任何视频。 */
+  void _enterLibrarySelectionMode() {
+    setState(() {
+      _librarySelectionMode = true;
+      _selectedLibraryVideoIds.clear();
+    });
+  }
+
+  /** 退出多选模式并恢复普通筛选工具栏和卡片播放语义。 */
+  void _cancelLibrarySelectionMode() {
+    setState(_clearLibrarySelectionState);
+  }
+
+  /** 切换单个视频的多选状态，卡片点击和圆形复选框共用该入口。 */
+  void _toggleLibraryVideoSelection(VideoItem item) {
+    setState(() {
+      if (!_selectedLibraryVideoIds.remove(item.videoId)) {
+        _selectedLibraryVideoIds.add(item.videoId);
+      }
+    });
+  }
+
+  /**
+   * 对完整当前筛选结果执行全选或取消全选。
+   *
+   * 这里只更新稳定 id 集合；Sliver 仍只重建视口附近卡片，不会一次创建全部视频 Widget。
+   */
+  void _toggleAllLibraryVideoSelection(List<VideoItem> videos) {
+    setState(() {
+      if (videos.isNotEmpty &&
+          _selectedLibraryVideoIds.length == videos.length) {
+        _selectedLibraryVideoIds.clear();
+        return;
+      }
+      _selectedLibraryVideoIds
+        ..clear()
+        ..addAll(videos.map((item) => item.videoId));
+    });
+  }
+
   /**
    * 修改筛选条件并刷新当前可见结果。
    *
@@ -2124,6 +2149,7 @@ class _LibraryPageState extends State<LibraryPage> {
     bool collapseTagPanel = false,
   }) {
     setState(() {
+      _clearLibrarySelectionState();
       _resultMode = _LibraryResultMode.library;
       mutation();
       _isTagDiscoveryPanelOpen = libraryTagDiscoveryPanelOpenAfterMutation(
@@ -2179,6 +2205,7 @@ class _LibraryPageState extends State<LibraryPage> {
   void _showAllLibraryVideos() {
     final store = _store;
     setState(() {
+      _clearLibrarySelectionState();
       _resultMode = _LibraryResultMode.library;
       _localLibraryPath = null;
       _localLibraryBackStack.clear();
@@ -2203,6 +2230,7 @@ class _LibraryPageState extends State<LibraryPage> {
    */
   void _showRecentPlaybackVideos() {
     setState(() {
+      _clearLibrarySelectionState();
       _resultMode = _LibraryResultMode.recent;
       _localLibraryPath = null;
       _localLibraryBackStack.clear();
@@ -2224,6 +2252,7 @@ class _LibraryPageState extends State<LibraryPage> {
    */
   void _showFavoriteVideos() {
     setState(() {
+      _clearLibrarySelectionState();
       _resultMode = _LibraryResultMode.favorites;
       _localLibraryPath = null;
       _localLibraryBackStack.clear();
@@ -2244,6 +2273,7 @@ class _LibraryPageState extends State<LibraryPage> {
    */
   void _showLocalLibraryPath(String rootPath) {
     setState(() {
+      _clearLibrarySelectionState();
       _resultMode = _LibraryResultMode.local;
       _localLibraryPath = TagRules.normalizeRootPath(rootPath);
       _localLibraryBackStack.clear();
@@ -3123,24 +3153,12 @@ class _LibraryPageState extends State<LibraryPage> {
     };
     final selectedGroupTags = _selectedGroupTagItems(store);
     final excludedTags = _excludedTagItems(store);
-    final filterExpression = _filterExpression(
-      store: store,
-      resultCount: filterState.resultCount,
-      totalCount: filterState.totalCount,
-    );
-    final filterSummary = _filterSummary(
-      store: store,
-      resultCount: displayResultCount,
-      totalCount: displayTotalCount,
-    );
-    final displaySummary = _displaySummary(
-      filterSummary: filterSummary,
-      displayResultCount: displayResultCount,
-      displayTotalCount: displayTotalCount,
-    );
-    final displayExpression = _displayExpression(
-      filterExpression: filterExpression,
-    );
+    final supportsLibrarySelection =
+        (_resultMode == _LibraryResultMode.library ||
+                _resultMode == _LibraryResultMode.favorites) &&
+            videos.isNotEmpty;
+    final allLibraryVideosSelected =
+        videos.isNotEmpty && _selectedLibraryVideoIds.length == videos.length;
     final childParentTag = _activeChildParentTag;
     final childTags = childParentTag == null
         ? <String>[]
@@ -3272,8 +3290,6 @@ class _LibraryPageState extends State<LibraryPage> {
               _LibraryResultMode.local => '\u672c\u5730\u5a92\u4f53\u5e93',
               _LibraryResultMode.library => '\u5168\u90e8\u89c6\u9891',
             },
-            querySummary: displaySummary,
-            queryExpression: displayExpression,
             showFavoritesOnly: _showFavoritesOnly,
             resultCount: displayResultCount,
             totalCount: displayTotalCount,
@@ -3314,6 +3330,20 @@ class _LibraryPageState extends State<LibraryPage> {
             onClearFavoritesOnly: () =>
                 _mutateFilters(() => _showFavoritesOnly = false),
             onClearAll: _hasActiveFilters ? _clearAllFilters : null,
+            selectionMode: _librarySelectionMode,
+            selectedCount: _selectedLibraryVideoIds.length,
+            allSelected: allLibraryVideosSelected,
+            onEnterSelectionMode:
+                supportsLibrarySelection ? _enterLibrarySelectionMode : null,
+            onToggleSelectAll: _librarySelectionMode
+                ? () => _toggleAllLibraryVideoSelection(videos)
+                : null,
+            onDeleteSelected:
+                _librarySelectionMode && _selectedLibraryVideoIds.isNotEmpty
+                    ? () => _requestDeleteSelectedVideos(videos)
+                    : null,
+            onCancelSelectionMode:
+                _librarySelectionMode ? _cancelLibrarySelectionMode : null,
           ),
           Expanded(
             child: LibraryImportDropRegion(
@@ -3388,6 +3418,9 @@ class _LibraryPageState extends State<LibraryPage> {
                           onEditTags: _editTags,
                           onToggleFavorite: _toggleFavorite,
                           onDelete: _requestDeleteVideo,
+                          selectionMode: _librarySelectionMode,
+                          selectedVideoIds: _selectedLibraryVideoIds,
+                          onToggleSelected: _toggleLibraryVideoSelection,
                         ),
                 },
               ),
@@ -4203,15 +4236,7 @@ class _LibraryPageState extends State<LibraryPage> {
       return;
     }
     try {
-      if (moveLocalFileToTrash) {
-        await _fileSystem.moveFileToTrash(item.path);
-      }
-      await _store?.deleteVideo(item.path);
-      try {
-        await _thumbnailService?.deleteThumbnailFor(item);
-      } catch (_) {
-        // 缩略图是可重建缓存；数据库删除成功后不再因缓存异常误导用户重复删除。
-      }
+      await _deleteConfirmedLibraryVideo(item, moveLocalFileToTrash);
       if (mounted) {
         _markLibraryDataChanged();
       }
@@ -4223,6 +4248,81 @@ class _LibraryPageState extends State<LibraryPage> {
           error is FileSystemException ? error.message : '当前平台暂不支持移入回收站';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('移除失败：$message；媒体库记录未删除')),
+      );
+    }
+  }
+
+  /**
+   * 执行已经由用户确认的单条媒体库删除。
+   *
+   * 该方法不刷新页面，便于批量删除在全部条目处理完后只触发一次筛选和计数更新。
+   */
+  Future<void> _deleteConfirmedLibraryVideo(
+    VideoItem item,
+    bool moveLocalFileToTrash,
+  ) async {
+    if (moveLocalFileToTrash) {
+      await _fileSystem.moveFileToTrash(item.path);
+    }
+    await _store?.deleteVideo(item.path);
+    try {
+      await _thumbnailService?.deleteThumbnailFor(item);
+    } catch (_) {
+      // 缩略图是可重建缓存；数据库删除成功后不再因缓存异常误导用户重复删除。
+    }
+  }
+
+  /**
+   * 删除当前完整筛选结果中已选择的视频。
+   *
+   * 每条记录继续走与单条删除一致的平台边界；成功项立即从选择集移除，失败项保留选择，
+   * 最后只刷新一次筛选和标签计数，避免大媒体库中每删一条都全量重算。
+   */
+  Future<void> _requestDeleteSelectedVideos(
+    List<VideoItem> currentVideos,
+  ) async {
+    final targets = [
+      for (final item in currentVideos)
+        if (_selectedLibraryVideoIds.contains(item.videoId)) item,
+    ];
+    if (targets.isEmpty) {
+      return;
+    }
+    final moveLocalFilesToTrash =
+        await _showBatchVideoDeleteDialog(targets.length);
+    if (moveLocalFilesToTrash == null || !mounted) {
+      return;
+    }
+
+    final deletedIds = <String>{};
+    final failedTitles = <String>[];
+    for (final item in targets) {
+      try {
+        await _deleteConfirmedLibraryVideo(item, moveLocalFilesToTrash);
+        deletedIds.add(item.videoId);
+      } catch (_) {
+        failedTitles.add(item.title);
+      }
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedLibraryVideoIds.removeAll(deletedIds);
+      if (_selectedLibraryVideoIds.isEmpty) {
+        _librarySelectionMode = false;
+      }
+    });
+    if (deletedIds.isNotEmpty) {
+      _markLibraryDataChanged();
+    }
+    if (failedTitles.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '已删除 ${deletedIds.length} 个，${failedTitles.length} 个失败；失败项仍保持选中',
+          ),
+        ),
       );
     }
   }
@@ -4279,6 +4379,59 @@ class _LibraryPageState extends State<LibraryPage> {
                   Navigator.of(dialogContext).pop(moveLocalFileToTrash),
               child: Text(
                 moveLocalFileToTrash ? '移入回收站并移除记录' : '仅移出媒体库',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /** 批量删除确认；本地文件只允许显式移入系统回收站，不提供静默永久删除。 */
+  Future<bool?> _showBatchVideoDeleteDialog(int count) {
+    var moveLocalFilesToTrash = false;
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('删除 $count 个视频'),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '将删除所选视频的数据库记录、标签关系、收藏、播放进度、媒体详情和缩略图缓存。'
+                  '如果保留本地文件，它们在下次扫描时可能重新加入媒体库。',
+                ),
+                const SizedBox(height: 10),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: moveLocalFilesToTrash,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('同时将所选本地视频移入回收站'),
+                  subtitle: const Text('可在 Windows 回收站中恢复'),
+                  onChanged: (value) => setDialogState(
+                    () => moveLocalFilesToTrash = value ?? false,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xffc53b4d),
+              ),
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(moveLocalFilesToTrash),
+              child: Text(
+                moveLocalFilesToTrash ? '移入回收站并移除记录' : '仅移出媒体库',
               ),
             ),
           ],
