@@ -2511,67 +2511,109 @@ class ResultViewToggle extends StatelessWidget {
     required this.onChanged,
   });
 
+  /** true 表示使用紧凑列表，false 表示使用卡片网格。 */
   final bool dense;
+
+  /** 请求切换结果视图；整个滑块每次点击只翻转一次当前状态。 */
   final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: librarySurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: libraryBorder),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _TopViewButton(
-            icon: Icons.grid_view_rounded,
-            selected: !dense,
-            onPressed: () => onChanged(false),
+    final tooltip = dense ? '切换为网格视图' : '切换为列表视图';
+    return Tooltip(
+      message: tooltip,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: LibrarySmokeKeys.resultViewToggle,
+            borderRadius: BorderRadius.circular(12),
+            excludeFromSemantics: true,
+            onTap: () => onChanged(!dense),
+            child: Ink(
+              width: 76,
+              height: 48,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: librarySurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: libraryBorder),
+              ),
+              child: Stack(
+                children: [
+                  AnimatedAlign(
+                    duration: appMotionDuration,
+                    curve: appMotionCurve,
+                    alignment:
+                        dense ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      key: LibrarySmokeKeys.resultViewToggleThumb,
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: librarySurfaceAlt,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                  IgnorePointer(
+                    child: Row(
+                      children: [
+                        _TopViewIcon(
+                          icon: Icons.grid_view_rounded,
+                          selected: !dense,
+                        ),
+                        const SizedBox(width: 2),
+                        _TopViewIcon(
+                          icon: Icons.view_list_rounded,
+                          selected: dense,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(width: 2),
-          _TopViewButton(
-            icon: Icons.view_list_rounded,
-            selected: dense,
-            onPressed: () => onChanged(true),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _TopViewButton extends StatelessWidget {
-  const _TopViewButton({
+/** 滑块内只负责绘制状态的图标，不单独承担点击命中。 */
+class _TopViewIcon extends StatelessWidget {
+  const _TopViewIcon({
     required this.icon,
     required this.selected,
-    required this.onPressed,
   });
 
+  /** 当前布局类型对应的图标。 */
   final IconData icon;
+
+  /** 当前图标是否对应已启用的布局。 */
   final bool selected;
-  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: onPressed,
-      child: Container(
-        width: 32,
-        height: 32,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? librarySurfaceAlt : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          icon,
-          size: 18,
-          color: selected ? appAccentViolet : libraryTextMuted,
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: Center(
+        child: TweenAnimationBuilder<Color?>(
+          duration: appMotionDuration,
+          curve: appMotionCurve,
+          tween: ColorTween(
+            end: selected ? appAccentViolet : libraryTextMuted,
+          ),
+          builder: (context, color, child) => Icon(
+            icon,
+            size: 18,
+            color: color,
+          ),
         ),
       ),
     );

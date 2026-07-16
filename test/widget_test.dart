@@ -2748,23 +2748,41 @@ void main() {
     );
   });
 
-  testWidgets('result view toggle switches to dense list mode', (tester) async {
+  testWidgets('result view slider toggles as one target and animates thumb',
+      (tester) async {
     var dense = false;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ResultViewToggle(
-            dense: dense,
-            onChanged: (value) => dense = value,
+          body: StatefulBuilder(
+            builder: (context, setState) => ResultViewToggle(
+              dense: dense,
+              onChanged: (value) => setState(() => dense = value),
+            ),
           ),
         ),
       ),
     );
 
-    await tester.tap(find.byIcon(Icons.view_list_rounded));
-    await tester.pump();
+    final thumb = find.byKey(LibrarySmokeKeys.resultViewToggleThumb);
+    final initialLeft = tester.getTopLeft(thumb).dx;
 
+    await tester.tap(find.byKey(LibrarySmokeKeys.resultViewToggle));
+    await tester.pump();
+    await tester.pump(appMotionDuration ~/ 2);
+    final movingLeft = tester.getTopLeft(thumb).dx;
+    expect(movingLeft, greaterThan(initialLeft));
     expect(dense, isTrue);
+
+    await tester.pumpAndSettle();
+    final listLeft = tester.getTopLeft(thumb).dx;
+    expect(listLeft, greaterThan(movingLeft));
+
+    // 整个控件只有一个点击语义，再次点击任意位置会切回网格。
+    await tester.tap(find.byKey(LibrarySmokeKeys.resultViewToggle));
+    await tester.pumpAndSettle();
+    expect(dense, isFalse);
+    expect(tester.getTopLeft(thumb).dx, closeTo(initialLeft, 0.01));
   });
 
   testWidgets('collapsed tag rail exposes a stable expand action',

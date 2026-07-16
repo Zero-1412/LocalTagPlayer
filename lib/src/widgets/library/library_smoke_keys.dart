@@ -52,6 +52,12 @@ class LibrarySmokeKeys {
   static const topSortMenuPanel = ValueKey<String>('smoke.top.sort-menu-panel');
   static const topSortDirectionButton =
       ValueKey<String>('smoke.top.sort-direction-button');
+  /** 网格/列表单体滑块的完整点击区域。 */
+  static const resultViewToggle =
+      ValueKey<String>('smoke.top.result-view-toggle');
+  /** 网格/列表滑块中随状态平移的选中底块。 */
+  static const resultViewToggleThumb =
+      ValueKey<String>('smoke.top.result-view-toggle-thumb');
   /** 真实窗口扫描帧诊断的稳定入口。 */
   static const rescanButton = ValueKey<String>('smoke.sidebar.rescan');
   /** 空媒体库中央“添加视频”入口。 */
