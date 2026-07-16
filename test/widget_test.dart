@@ -140,6 +140,22 @@ void main() {
     expect(libraryVideoCardTitleFontSize(320), 15.5);
     expect(libraryVideoCardTitleFontSize(420), 16);
     expect(libraryVideoCardRadius, 8);
+    final compactOverlay = libraryVideoOverlayMetrics(200);
+    expect(compactOverlay.edgeInset, 6);
+    expect(compactOverlay.favoriteButtonSize, 30);
+    expect(compactOverlay.favoriteIconSize, 17.5);
+    expect(compactOverlay.durationFontSize, 10);
+    final standardOverlay = libraryVideoOverlayMetrics(280);
+    expect(standardOverlay.edgeInset, 7);
+    expect(standardOverlay.favoriteButtonSize, 32);
+    expect(standardOverlay.favoriteIconSize, 19);
+    expect(standardOverlay.durationHorizontalPadding, 5.5);
+    final wideOverlay = libraryVideoOverlayMetrics(420);
+    expect(wideOverlay.edgeInset, 9);
+    expect(wideOverlay.favoriteButtonSize, 34);
+    expect(wideOverlay.durationFontSize, 11);
+    expect(libraryFavoriteOverlayOpacity, 0.46);
+    expect(libraryDurationOverlayOpacity, 0.56);
     expect(libraryVideoDurationLabel(Duration.zero), '--:--');
     expect(
       libraryVideoDurationLabel(const Duration(minutes: 9, seconds: 7)),

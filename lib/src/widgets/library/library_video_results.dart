@@ -125,6 +125,78 @@ double libraryVideoCardTitleFontSize(double cardWidth) {
 /** 缩略图与悬停外框共用的小圆角，接近内容平台的紧凑视觉。 */
 const double libraryVideoCardRadius = 8;
 
+/** 收藏与时长叠层的响应式视觉参数。 */
+class LibraryVideoOverlayMetrics {
+  const LibraryVideoOverlayMetrics({
+    required this.edgeInset,
+    required this.favoriteButtonSize,
+    required this.favoriteIconSize,
+    required this.durationFontSize,
+    required this.durationHorizontalPadding,
+    required this.durationVerticalPadding,
+  });
+
+  /** 叠层距离缩略图边缘的距离。 */
+  final double edgeInset;
+
+  /** 收藏按钮的视觉和桌面点击区域尺寸。 */
+  final double favoriteButtonSize;
+
+  /** 红心图标尺寸。 */
+  final double favoriteIconSize;
+
+  /** 时长文字字号。 */
+  final double durationFontSize;
+
+  /** 时长角标左右内边距。 */
+  final double durationHorizontalPadding;
+
+  /** 时长角标上下内边距。 */
+  final double durationVerticalPadding;
+}
+
+/**
+ * 按卡片宽度选择叠层尺寸。
+ *
+ * 点击区域与视觉尺寸一起分档，避免窄卡遮挡画面，同时确保桌面鼠标仍容易命中。
+ */
+LibraryVideoOverlayMetrics libraryVideoOverlayMetrics(double cardWidth) {
+  if (cardWidth < 220) {
+    return const LibraryVideoOverlayMetrics(
+      edgeInset: 6,
+      favoriteButtonSize: 30,
+      favoriteIconSize: 17.5,
+      durationFontSize: 10,
+      durationHorizontalPadding: 5,
+      durationVerticalPadding: 2,
+    );
+  }
+  if (cardWidth < 380) {
+    return const LibraryVideoOverlayMetrics(
+      edgeInset: 7,
+      favoriteButtonSize: 32,
+      favoriteIconSize: 19,
+      durationFontSize: 10.5,
+      durationHorizontalPadding: 5.5,
+      durationVerticalPadding: 2.5,
+    );
+  }
+  return const LibraryVideoOverlayMetrics(
+    edgeInset: 9,
+    favoriteButtonSize: 34,
+    favoriteIconSize: 20,
+    durationFontSize: 11,
+    durationHorizontalPadding: 6,
+    durationVerticalPadding: 3,
+  );
+}
+
+/** 收藏底色保留轻量对比，避免形成覆盖缩略图的大块黑色按钮。 */
+const double libraryFavoriteOverlayOpacity = 0.46;
+
+/** 时长角标使用比旧版更透明的底色，并由文字阴影补足亮色视频上的可读性。 */
+const double libraryDurationOverlayOpacity = 0.56;
+
 /** 计算当前响应式网格列数，增量加载和卡片尺寸必须复用同一结果。 */
 int libraryVideoGridColumnCount({
   required double gridWidth,
@@ -1122,144 +1194,170 @@ class _VideoPreviewState extends State<_VideoPreview> {
       () => MouseRegion(
         onEnter: _onEnter,
         onExit: _onExit,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(libraryVideoCardRadius),
-          child: AspectRatio(
-            aspectRatio: 16 / 9,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                FutureBuilder<File?>(
-                  key: ValueKey(widget.item.path),
-                  future: _future,
-                  // 已在本进程验证过的 JPEG 直接用于首帧；Future 继续负责缓存失效后的
-                  // 异步校验/生成，筛选重排时不再先闪回加载占位。
-                  initialData:
-                      widget.thumbnailService.cachedThumbnailFor(widget.item),
-                  builder: (context, snapshot) {
-                    final file = snapshot.data;
-                    // Future 完成前已验证 JPEG 存在性与完整性，build 阶段不再同步 stat。
-                    if (file != null) {
-                      return Image.file(
-                        file,
-                        key: ValueKey(file.path),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final overlay = libraryVideoOverlayMetrics(constraints.maxWidth);
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(libraryVideoCardRadius),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    FutureBuilder<File?>(
+                      key: ValueKey(widget.item.path),
+                      future: _future,
+                      // 已在本进程验证过的 JPEG 直接用于首帧；Future 继续负责缓存失效后的
+                      // 异步校验/生成，筛选重排时不再先闪回加载占位。
+                      initialData: widget.thumbnailService
+                          .cachedThumbnailFor(widget.item),
+                      builder: (context, snapshot) {
+                        final file = snapshot.data;
+                        // Future 完成前已验证 JPEG 存在性与完整性，build 阶段不再同步 stat。
+                        if (file != null) {
+                          return Image.file(
+                            file,
+                            key: ValueKey(file.path),
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.medium,
+                            gaplessPlayback: true,
+                            // 历史 fallback 缓存中仍有 4K JPEG，按卡片尺寸解码避免占用数十 MiB。
+                            cacheWidth: libraryThumbnailWidth,
+                          );
+                        }
+                        return Container(
+                          color: const Color(0xffd8f0f0),
+                          child: Center(
+                            child: snapshot.connectionState ==
+                                    ConnectionState.waiting
+                                ? const SizedBox.square(
+                                    dimension: 22,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2.4),
+                                  )
+                                : const Icon(Icons.movie_outlined, size: 42),
+                          ),
+                        );
+                      },
+                    ),
+                    if (_isHoverPreviewReady && hoverController != null)
+                      Video(
+                        controller: hoverController,
+                        controls: NoVideoControls,
                         fit: BoxFit.cover,
-                        filterQuality: FilterQuality.medium,
-                        gaplessPlayback: true,
-                        // 历史 fallback 缓存中仍有 4K JPEG，按卡片尺寸解码避免占用数十 MiB。
-                        cacheWidth: libraryThumbnailWidth,
-                      );
-                    }
-                    return Container(
-                      color: const Color(0xffd8f0f0),
-                      child: Center(
-                        child: snapshot.connectionState ==
-                                ConnectionState.waiting
-                            ? const SizedBox.square(
-                                dimension: 22,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2.4),
-                              )
-                            : const Icon(Icons.movie_outlined, size: 42),
                       ),
-                    );
-                  },
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.02),
+                              Colors.black.withValues(alpha: 0.34),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_isHoverPreviewLoading)
+                      Center(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.86),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(18),
+                            child: SizedBox.square(
+                              dimension: 24,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (widget.onToggleFavorite != null)
+                      Positioned(
+                        top: overlay.edgeInset,
+                        left: overlay.edgeInset,
+                        child: Semantics(
+                          button: true,
+                          selected: widget.item.isFavorite,
+                          label:
+                              LibrarySmokeSemantics.videoFavorite(widget.item),
+                          child: IconButton.filled(
+                            key:
+                                LibrarySmokeKeys.cardFavorite(widget.item.path),
+                            tooltip: widget.item.isFavorite ? '取消收藏' : '添加收藏',
+                            onPressed: widget.onToggleFavorite,
+                            icon: Icon(
+                              widget.item.isFavorite
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              size: overlay.favoriteIconSize,
+                              shadows: const <Shadow>[
+                                Shadow(
+                                  color: Color(0x99000000),
+                                  blurRadius: 3,
+                                ),
+                              ],
+                            ),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.black.withValues(
+                                alpha: libraryFavoriteOverlayOpacity,
+                              ),
+                              foregroundColor: widget.item.isFavorite
+                                  ? const Color(0xffff5a6f)
+                                  : Colors.white.withValues(alpha: 0.94),
+                              fixedSize:
+                                  Size.square(overlay.favoriteButtonSize),
+                              padding: EdgeInsets.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      right: overlay.edgeInset,
+                      bottom: overlay.edgeInset,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(
+                            alpha: libraryDurationOverlayOpacity,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: overlay.durationHorizontalPadding,
+                            vertical: overlay.durationVerticalPadding,
+                          ),
+                          child: Text(
+                            libraryVideoDurationLabel(
+                              widget.item.playbackDuration,
+                            ),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: overlay.durationFontSize,
+                              fontWeight: FontWeight.w600,
+                              height: 1,
+                              shadows: const <Shadow>[
+                                Shadow(
+                                  color: Color(0xcc000000),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                if (_isHoverPreviewReady && hoverController != null)
-                  Video(
-                    controller: hoverController,
-                    controls: NoVideoControls,
-                    fit: BoxFit.cover,
-                  ),
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.02),
-                          Colors.black.withValues(alpha: 0.34),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                if (_isHoverPreviewLoading)
-                  Center(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.86),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.all(18),
-                        child: SizedBox.square(
-                          dimension: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        ),
-                      ),
-                    ),
-                  ),
-                if (widget.onToggleFavorite != null)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Semantics(
-                      button: true,
-                      selected: widget.item.isFavorite,
-                      label: LibrarySmokeSemantics.videoFavorite(widget.item),
-                      child: IconButton.filled(
-                        key: LibrarySmokeKeys.cardFavorite(widget.item.path),
-                        tooltip: widget.item.isFavorite ? '取消收藏' : '添加收藏',
-                        onPressed: widget.onToggleFavorite,
-                        icon: Icon(
-                          widget.item.isFavorite
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          size: 20,
-                        ),
-                        style: IconButton.styleFrom(
-                          backgroundColor: const Color(0x99000000),
-                          foregroundColor: widget.item.isFavorite
-                              ? const Color(0xffff5a6f)
-                              : Colors.white,
-                          fixedSize: const Size(34, 34),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  right: 8,
-                  bottom: 8,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: const Color(0xb3000000),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      child: Text(
-                        libraryVideoDurationLabel(
-                          widget.item.playbackDuration,
-                        ),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          height: 1,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
