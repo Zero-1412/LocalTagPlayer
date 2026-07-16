@@ -192,7 +192,9 @@ class LocalLibraryView extends StatelessWidget {
                             thumbnailService: thumbnailService,
                             playbackSettings: playbackSettings,
                             onOpen: () => onOpenVideo(video, localVideos),
+                            onEditTags: () => onEditTags(video),
                             onToggleFavorite: () => onToggleFavorite(video),
+                            onDelete: () => onDelete(video),
                           );
                         },
                       );

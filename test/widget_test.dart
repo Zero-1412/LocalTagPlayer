@@ -432,6 +432,109 @@ void main() {
     await gesture.removePointer();
   });
 
+  testWidgets('card more menu follows hover and keeps open action isolated',
+      (tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_more_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final item = _testVideo(
+      path: p.join(directory.path, 'more.mp4'),
+      title: 'video title with more action',
+    );
+    final thumbnailService = ThumbnailService.forDirectory(
+      directory,
+      _PreviewFFmpegBackend(),
+    );
+    var openCount = 0;
+    var editCount = 0;
+    var deleteCount = 0;
+    await tester.binding.setSurfaceSize(const Size(500, 350));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 300,
+              height: 230,
+              child: InteractiveVideoCard(
+                item: item,
+                thumbnailService: thumbnailService,
+                playbackSettings: PlaybackSettings.defaults,
+                onOpen: () => openCount += 1,
+                onEditTags: () => editCount += 1,
+                onToggleFavorite: () {},
+                onDelete: () => deleteCount += 1,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final titleFinder = find.text('video title with more action');
+    final moreFinder = find.byKey(LibrarySmokeKeys.cardMore(item.path));
+    AnimatedOpacity moreOpacity() => tester.widget<AnimatedOpacity>(
+          find.ancestor(
+            of: moreFinder,
+            matching: find.byType(AnimatedOpacity),
+          ),
+        );
+    final titleSizeBefore = tester.getSize(titleFinder);
+    expect(moreFinder, findsOneWidget);
+    expect(moreOpacity().opacity, 0);
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    await gesture.moveTo(tester.getCenter(titleFinder));
+    await tester.pump();
+    await tester.pump(libraryCardMoreFadeDuration);
+    expect(moreOpacity().opacity, 1);
+    expect(tester.getSize(titleFinder), titleSizeBefore);
+
+    await tester.tap(moreFinder);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(openCount, 0);
+    expect(find.byKey(LibrarySmokeKeys.videoMoreEditTags), findsOneWidget);
+    expect(find.byKey(LibrarySmokeKeys.videoMoreDelete), findsOneWidget);
+    expect(find.text('删除文件'), findsOneWidget);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.videoMoreEditTags));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(openCount, 0);
+    expect(editCount, 1);
+    expect(deleteCount, 0);
+
+    await gesture.moveTo(const Offset(480, 330));
+    await tester.pump();
+    await tester.pump(libraryCardMoreFadeDuration);
+    expect(moreOpacity().opacity, 0);
+
+    await gesture.moveTo(tester.getCenter(titleFinder));
+    await tester.pump();
+    await tester.pump(libraryCardMoreFadeDuration);
+    await tester.tap(moreFinder);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(LibrarySmokeKeys.videoMoreDelete));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(openCount, 0);
+    expect(editCount, 1);
+    expect(deleteCount, 1);
+    await gesture.removePointer();
+  });
+
   testWidgets('library scrolling appends ten rows and keeps full play queue',
       (WidgetTester tester) async {
     expect(libraryRowsPerLoad, 10);

@@ -128,6 +128,9 @@ double libraryVideoCardTitleFontSize(double cardWidth) {
 /** 缩略图与悬停外框共用的小圆角，接近内容平台的紧凑视觉。 */
 const double libraryVideoCardRadius = 8;
 
+/** 标题右侧更多按钮的淡入淡出时长；短过渡避免快速扫过卡片时产生闪烁。 */
+const Duration libraryCardMoreFadeDuration = Duration(milliseconds: 120);
+
 /** 收藏与时长叠层的响应式视觉参数。 */
 class LibraryVideoOverlayMetrics {
   const LibraryVideoOverlayMetrics({
@@ -834,7 +837,9 @@ class _VideoGridState extends State<VideoGrid> {
                   playbackSettings: widget.playbackSettings,
                   onVisible: widget.onVisible,
                   onOpen: () => widget.onOpen(item, widget.videos),
+                  onEditTags: () => widget.onEditTags(item),
                   onToggleFavorite: () => widget.onToggleFavorite(item),
+                  onDelete: () => widget.onDelete(item),
                 ),
               );
             },
@@ -1128,7 +1133,9 @@ class InteractiveVideoCard extends StatefulWidget {
     required this.playbackSettings,
     this.onVisible,
     required this.onOpen,
+    this.onEditTags,
     required this.onToggleFavorite,
+    this.onDelete,
   });
 
   final VideoItem item;
@@ -1137,7 +1144,11 @@ class InteractiveVideoCard extends StatefulWidget {
   /** 当前卡片进入真实构建范围时的轻量优先级通知。 */
   final ValueChanged<VideoItem>? onVisible;
   final VoidCallback onOpen;
+  /** 标题更多菜单的编辑标签入口；为空时不显示卡片更多按钮。 */
+  final VoidCallback? onEditTags;
   final VoidCallback onToggleFavorite;
+  /** 标题更多菜单的删除入口；为空时不显示卡片更多按钮。 */
+  final VoidCallback? onDelete;
 
   @override
   State<InteractiveVideoCard> createState() => InteractiveVideoCardState();
@@ -1145,11 +1156,18 @@ class InteractiveVideoCard extends StatefulWidget {
 
 class InteractiveVideoCardState extends State<InteractiveVideoCard> {
   var _hovered = false;
+  var _focused = false;
   var _pressed = false;
+  var _moreMenuOpen = false;
 
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final supportsMoreActions =
+        widget.onEditTags != null && widget.onDelete != null;
+    // 标题宽度始终为按钮保留固定槽位；显示状态变化不会触发标题重新换行和卡片抖动。
+    final showMore =
+        supportsMoreActions && (_hovered || _focused || _moreMenuOpen);
     return LibraryCardUiDiagnostics.buildSubtree(
       'card_shell',
       () => MouseRegion(
@@ -1174,6 +1192,7 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                 hoverColor: Colors.transparent,
                 focusColor: Colors.transparent,
                 highlightColor: Colors.transparent,
+                onFocusChange: (focused) => setState(() => _focused = focused),
                 // 独立播放按钮移除后，卡片本身成为唯一清晰的打开入口。
                 onTap: widget.onOpen,
                 child: Column(
@@ -1192,7 +1211,16 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(2, 8, 2, 6),
-                      child: _VideoCardMetadata(item: item),
+                      child: _VideoCardMetadata(
+                        item: item,
+                        showMore: showMore,
+                        onMoreOpened: () =>
+                            setState(() => _moreMenuOpen = true),
+                        onMoreClosed: () =>
+                            setState(() => _moreMenuOpen = false),
+                        onEditTags: widget.onEditTags,
+                        onDelete: widget.onDelete,
+                      ),
                     ),
                   ],
                 ),
@@ -1205,30 +1233,169 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
   }
 }
 
-/** 卡片标题子树；路径、标签和操作区已从网格卡片移除以提高浏览密度。 */
+/**
+ * 卡片标题子树。
+ *
+ * 路径和标签已移除以提高浏览密度；标题右侧固定预留更多按钮槽位，按钮仅在卡片
+ * hover、键盘焦点或菜单展开期间可见，避免出现时推动标题换行。
+ */
 class _VideoCardMetadata extends StatelessWidget {
-  const _VideoCardMetadata({required this.item});
+  const _VideoCardMetadata({
+    required this.item,
+    required this.showMore,
+    required this.onMoreOpened,
+    required this.onMoreClosed,
+    required this.onEditTags,
+    required this.onDelete,
+  });
 
   final VideoItem item;
+  final bool showMore;
+  final VoidCallback onMoreOpened;
+  final VoidCallback onMoreClosed;
+  final VoidCallback? onEditTags;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) => LibraryCardUiDiagnostics.buildSubtree(
         'metadata',
         () => LayoutBuilder(
-          builder: (context, constraints) => Text(
-            item.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: libraryText,
-                  fontSize: libraryVideoCardTitleFontSize(constraints.maxWidth),
-                  fontWeight: FontWeight.w600,
-                  height: 1.28,
-                  letterSpacing: 0.05,
+          builder: (context, constraints) => Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: libraryText,
+                        fontSize:
+                            libraryVideoCardTitleFontSize(constraints.maxWidth),
+                        fontWeight: FontWeight.w600,
+                        height: 1.28,
+                        letterSpacing: 0.05,
+                      ),
                 ),
+              ),
+              if (onEditTags != null && onDelete != null) ...[
+                const SizedBox(width: 2),
+                SizedBox(
+                  width: 28,
+                  height: 32,
+                  child: ExcludeFocus(
+                    excluding: !showMore,
+                    child: ExcludeSemantics(
+                      excluding: !showMore,
+                      child: IgnorePointer(
+                        ignoring: !showMore,
+                        child: AnimatedOpacity(
+                          opacity: showMore ? 1 : 0,
+                          duration: libraryCardMoreFadeDuration,
+                          curve: Curves.easeOutCubic,
+                          child: _VideoCardMoreButton(
+                            key: LibrarySmokeKeys.cardMore(item.path),
+                            onOpened: onMoreOpened,
+                            onClosed: onMoreClosed,
+                            onEditTags: onEditTags!,
+                            onDelete: onDelete!,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       );
+}
+
+/**
+ * 网格卡片标题右侧的悬停更多菜单。
+ *
+ * 菜单展开时通过 [onOpened] 保持按钮可见；选择或取消后先通知卡片关闭状态，再把
+ * 业务动作交还页面层，确保删除仍经过确认弹窗、编辑仍复用统一标签编辑器。
+ */
+class _VideoCardMoreButton extends StatelessWidget {
+  const _VideoCardMoreButton({
+    super.key,
+    required this.onOpened,
+    required this.onClosed,
+    required this.onEditTags,
+    required this.onDelete,
+  });
+
+  final VoidCallback onOpened;
+  final VoidCallback onClosed;
+  final VoidCallback onEditTags;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_VideoMoreAction>(
+      tooltip: '更多操作',
+      icon: const Icon(Icons.more_vert_rounded, size: 21),
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, -2),
+      color: librarySurfaceAlt,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        side: const BorderSide(color: libraryBorder),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      onOpened: onOpened,
+      onCanceled: onClosed,
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          key: LibrarySmokeKeys.videoMoreEditTags,
+          value: _VideoMoreAction.editTags,
+          height: 42,
+          child: Row(
+            children: [
+              Icon(Icons.sell_outlined, size: 19),
+              SizedBox(width: 10),
+              Text('编辑标签'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          key: LibrarySmokeKeys.videoMoreDelete,
+          value: _VideoMoreAction.delete,
+          height: 42,
+          child: Row(
+            children: [
+              Icon(
+                Icons.delete_outline_rounded,
+                size: 19,
+                color: Color(0xffe26573),
+              ),
+              SizedBox(width: 10),
+              Text('删除文件', style: TextStyle(color: Color(0xffe26573))),
+            ],
+          ),
+        ),
+      ],
+      onSelected: (value) {
+        onClosed();
+        switch (value) {
+          case _VideoMoreAction.editTags:
+            onEditTags();
+            break;
+          case _VideoMoreAction.delete:
+            onDelete();
+            break;
+        }
+      },
+      style: IconButton.styleFrom(
+        foregroundColor: libraryTextMuted,
+        fixedSize: const Size(28, 28),
+        padding: EdgeInsets.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
 }
 
 class _VideoMoreButton extends StatelessWidget {

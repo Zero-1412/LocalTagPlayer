@@ -115,6 +115,10 @@ class LibrarySmokeKeys {
   static ValueKey<String> cardOpen(String path) =>
       ValueKey<String>('smoke.card.open:${TagRules.pathKey(path)}');
 
+  /** 视频网格卡片标题右侧“更多”按钮命中标识。 */
+  static ValueKey<String> cardMore(String path) =>
+      ValueKey<String>('smoke.card.more:${TagRules.pathKey(path)}');
+
   /**
    * 视频网格缩略图左上角收藏按钮命中标识。
    */
