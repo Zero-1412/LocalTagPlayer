@@ -116,24 +116,9 @@ class LibrarySmokeKeys {
   static ValueKey<String> cardFavorite(String path) =>
       ValueKey<String>('smoke.card.favorite:${TagRules.pathKey(path)}');
 
-  /** 媒体库分页条稳定标识。 */
-  static const paginationBar = ValueKey<String>('library.pagination.bar');
-
-  /** 媒体库分页范围文本稳定标识。 */
-  static const paginationLabel = ValueKey<String>('library.pagination.label');
-
-  /** 媒体库首页按钮稳定标识。 */
-  static const paginationFirst = ValueKey<String>('library.pagination.first');
-
-  /** 媒体库上一页按钮稳定标识。 */
-  static const paginationPrevious =
-      ValueKey<String>('library.pagination.previous');
-
-  /** 媒体库下一页按钮稳定标识。 */
-  static const paginationNext = ValueKey<String>('library.pagination.next');
-
-  /** 媒体库末页按钮稳定标识。 */
-  static const paginationLast = ValueKey<String>('library.pagination.last');
+  /** 媒体库增量滚动结果稳定标识。 */
+  static const incrementalResults =
+      ValueKey<String>('library.incremental.results');
 
   /**
    * 右侧标签 chip 命中标识。

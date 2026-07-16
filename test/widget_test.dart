@@ -116,17 +116,38 @@ void main() {
     );
   });
 
-  testWidgets('library pagination shows 100 items and keeps full play queue',
+  testWidgets('library scrolling appends ten rows and keeps full play queue',
       (WidgetTester tester) async {
-    expect(libraryVideoPageCount(0), 0);
-    expect(libraryVideoPageCount(100), 1);
-    expect(libraryVideoPageCount(101), 2);
-    expect(libraryVideoPageCount(205), 3);
+    expect(libraryRowsPerLoad, 10);
+    expect(
+      libraryVideoGridColumnCount(
+        gridWidth: 900,
+        narrow: false,
+        compact: false,
+      ),
+      3,
+    );
+    expect(
+      libraryIncrementalItemCount(
+        totalCount: 205,
+        currentCount: 0,
+        columnCount: 3,
+      ),
+      30,
+    );
+    expect(
+      libraryIncrementalItemCount(
+        totalCount: 205,
+        currentCount: 30,
+        columnCount: 3,
+      ),
+      60,
+    );
 
     final directory = Directory(
       p.join(
         Directory.systemTemp.path,
-        'local_tag_player_pagination_${DateTime.now().microsecondsSinceEpoch}',
+        'local_tag_player_incremental_${DateTime.now().microsecondsSinceEpoch}',
       ),
     )..createSync(recursive: true);
     addTearDown(() {
@@ -171,27 +192,60 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('第 1 / 3 页'), findsOneWidget);
-    await tester.tap(find.byKey(LibrarySmokeKeys.paginationNext));
-    await tester.pump();
-    expect(find.text('第 2 / 3 页'), findsOneWidget);
+    SliverChildBuilderDelegate resultDelegate() => tester
+        .widget<ListView>(
+          find.byKey(LibrarySmokeKeys.incrementalResults),
+        )
+        .childrenDelegate as SliverChildBuilderDelegate;
 
-    final secondPageFirstPath = videos[100].path;
+    expect(resultDelegate().estimatedChildCount, 10);
+    expect(find.textContaining('第 1 /'), findsNothing);
+    await tester.drag(
+      find.byKey(LibrarySmokeKeys.incrementalResults),
+      const Offset(0, -1000),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(resultDelegate().estimatedChildCount, 20);
+
+    final scrollController = tester
+        .widget<ListView>(find.byKey(LibrarySmokeKeys.incrementalResults))
+        .controller!;
+    scrollController.jumpTo(scrollController.position.maxScrollExtent);
+    final offsetBeforeAppend = scrollController.offset;
+    await tester.pump();
+    await tester.pump();
+    expect(resultDelegate().estimatedChildCount, 30);
+    expect(scrollController.offset, offsetBeforeAppend);
+
+    scrollController.jumpTo(1200);
+    await tester.pump();
+    final appendedFirstPath = videos[10].path;
     await tester.tap(
-      find.byKey(LibrarySmokeKeys.listPlay(secondPageFirstPath)),
+      find.byKey(LibrarySmokeKeys.listPlay(appendedFirstPath)),
     );
     await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
-    expect(openedItem, same(videos[100]));
+    expect(openedItem, same(videos[10]));
     expect(openedQueue, same(videos));
     expect(openedQueue, hasLength(205));
+  });
 
-    await tester.tap(find.byKey(LibrarySmokeKeys.paginationLast));
-    await tester.pump();
-    expect(find.text('第 3 / 3 页'), findsOneWidget);
-    final nextButton = tester.widget<IconButton>(
-      find.byKey(LibrarySmokeKeys.paginationNext),
+  test('tag discovery starts collapsed and tag selection collapses it', () {
+    expect(libraryTagDiscoveryPanelInitiallyOpen, isFalse);
+    expect(
+      libraryTagDiscoveryPanelOpenAfterMutation(
+        currentOpen: true,
+        collapseAfterMutation: true,
+      ),
+      isFalse,
     );
-    expect(nextButton.onPressed, isNull);
+    expect(
+      libraryTagDiscoveryPanelOpenAfterMutation(
+        currentOpen: true,
+        collapseAfterMutation: false,
+      ),
+      isTrue,
+    );
   });
 
   testWidgets('app mounts', (WidgetTester tester) async {

@@ -32,12 +32,28 @@ double libraryVideoCardMainAxisExtent({
 }) {
   final horizontalPadding = compact ? 28.0 : 44.0;
   final spacing = compact ? 10.0 : 14.0;
-  final maxExtent = narrow ? 500.0 : (compact ? 248.0 : 286.0);
   final usableWidth = math.max(1.0, gridWidth - horizontalPadding);
-  final columnCount = math.max(1, (usableWidth / (maxExtent + spacing)).ceil());
+  final columnCount = libraryVideoGridColumnCount(
+    gridWidth: gridWidth,
+    narrow: narrow,
+    compact: compact,
+  );
   final cardWidth = (usableWidth - spacing * (columnCount - 1)) / columnCount;
   // 66px 覆盖上下内边距、缩略图与标题间距及两行标题；叠层角标不增加高度。
   return cardWidth * 9 / 16 + 66;
+}
+
+/** 计算当前响应式网格列数，增量加载和卡片尺寸必须复用同一结果。 */
+int libraryVideoGridColumnCount({
+  required double gridWidth,
+  required bool narrow,
+  required bool compact,
+}) {
+  final horizontalPadding = compact ? 28.0 : 44.0;
+  final spacing = compact ? 10.0 : 14.0;
+  final maxExtent = narrow ? 500.0 : (compact ? 248.0 : 286.0);
+  final usableWidth = math.max(1.0, gridWidth - horizontalPadding);
+  return math.max(1, (usableWidth / (maxExtent + spacing)).ceil()).toInt();
 }
 
 /** 将已知媒体总时长格式化为卡片角标；未知时长不伪装成 `0:00`。 */
@@ -55,19 +71,29 @@ String libraryVideoDurationLabel(Duration duration) {
   return '${totalMinutes ~/ 60}:$minutes:$seconds';
 }
 
-/** 媒体库结果固定每页数量，避免大库一次挂载过多卡片或列表行。 */
-const int libraryVideoPageSize = 100;
+/** 媒体库每次增量挂载的行数；网格条目数由当前响应式列数换算。 */
+const int libraryRowsPerLoad = 10;
 
-/** 计算媒体库分页总页数；空结果不生成分页条。 */
-int libraryVideoPageCount(int itemCount) => itemCount <= 0
-    ? 0
-    : (itemCount + libraryVideoPageSize - 1) ~/ libraryVideoPageSize;
+/** 计算首次或下一批应挂载的条目数，不得超过完整筛选结果。 */
+int libraryIncrementalItemCount({
+  required int totalCount,
+  required int currentCount,
+  required int columnCount,
+}) {
+  if (totalCount <= 0) {
+    return 0;
+  }
+  final batchSize = math.max(1, columnCount).toInt() * libraryRowsPerLoad;
+  return math
+      .min(totalCount, math.max(currentCount, 0).toInt() + batchSize)
+      .toInt();
+}
 
 /**
- * 媒体库分页结果视图。
+ * 媒体库增量滚动结果视图。
  *
- * [videos] 始终保留完整排序/筛选结果，只对展示列表做每页 100 条切片。打开视频时仍把
- * 完整列表传给播放器，保证 filtered queue 不被分页边界截断。
+ * [videos] 始终保留完整排序/筛选结果，首次和每次触底只追加 10 行可见 Widget。打开
+ * 视频时仍把完整列表传给播放器，保证 filtered queue 不被增量挂载边界截断。
  */
 class VideoGrid extends StatefulWidget {
   const VideoGrid({
@@ -107,8 +133,20 @@ class VideoGrid extends StatefulWidget {
 }
 
 class _VideoGridState extends State<VideoGrid> {
-  /** 当前零基页码，只属于展示状态，不进入筛选查询或持久化。 */
-  var _pageIndex = 0;
+  /** 网格和列表共享一个滚动位置；追加批次时不替换控制器，避免画面跳动。 */
+  late final ScrollController _scrollController;
+
+  /** 已明确追加的条目数；首次批次会在 build 中按当前列数计算。 */
+  var _loadedItemCount = 0;
+
+  /** 当前网格列数；列表模式固定为 1，用于把 10 行换算成条目数。 */
+  var _currentColumnCount = 1;
+
+  /** 当前单行高度，用于在距离末尾约两行时提前追加下一批。 */
+  var _currentRowExtent = 120.0;
+
+  /** 合并同一帧内的多个滚动通知，防止一次触底重复追加并引发抖动。 */
+  var _loadMoreScheduled = false;
 
   /**
    * 用结果数量和首尾稳定身份识别筛选/排序结果变化。
@@ -122,28 +160,78 @@ class _VideoGridState extends State<VideoGrid> {
       );
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController()..addListener(_handleScroll);
+  }
+
+  @override
   void didUpdateWidget(covariant VideoGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
     final resultChanged = _resultBoundarySignature(oldWidget.videos) !=
         _resultBoundarySignature(widget.videos);
-    if (resultChanged) {
-      // 新筛选或排序默认回到第一页，避免沿用旧页码后显示空白结果。
-      _pageIndex = 0;
-      return;
+    if (resultChanged || oldWidget.dense != widget.dense) {
+      // 新筛选、排序或视图模式从首批 10 行开始，并在下一帧安全回到顶部。
+      _resetIncrementalResults();
     }
-    final lastPage =
-        math.max(0, libraryVideoPageCount(widget.videos.length) - 1).toInt();
-    _pageIndex = _pageIndex.clamp(0, lastPage).toInt();
   }
 
-  /** 切换展示页；播放器队列和底层结果列表保持不变。 */
-  void _goToPage(int pageIndex) {
-    final lastPage = libraryVideoPageCount(widget.videos.length) - 1;
-    final nextPage = pageIndex.clamp(0, math.max(0, lastPage)).toInt();
-    if (nextPage == _pageIndex) {
+  /** 重置为首批结果；滚动复位延后到布局完成，避免控制器尚未挂载。 */
+  void _resetIncrementalResults() {
+    _loadedItemCount = 0;
+    _loadMoreScheduled = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+      _scrollController.jumpTo(0);
+    });
+  }
+
+  /** 接近当前批次末尾时追加 10 行，同一帧只允许调度一次。 */
+  void _handleScroll() {
+    if (!_scrollController.hasClients ||
+        _loadMoreScheduled ||
+        widget.videos.isEmpty) {
       return;
     }
-    setState(() => _pageIndex = nextPage);
+    final position = _scrollController.position;
+    if (position.extentAfter > _currentRowExtent * 2) {
+      return;
+    }
+    final initialCount = libraryIncrementalItemCount(
+      totalCount: widget.videos.length,
+      currentCount: 0,
+      columnCount: _currentColumnCount,
+    );
+    final currentCount = math.max(_loadedItemCount, initialCount).toInt();
+    if (currentCount >= widget.videos.length) {
+      return;
+    }
+    _loadMoreScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final nextCount = libraryIncrementalItemCount(
+        totalCount: widget.videos.length,
+        currentCount: currentCount,
+        columnCount: _currentColumnCount,
+      );
+      setState(() {
+        // 只扩大尾部范围，已有条目、滚动偏移和缩略图 Future 均保持稳定。
+        _loadedItemCount = math.max(_loadedItemCount, nextCount).toInt();
+        _loadMoreScheduled = false;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    super.dispose();
   }
 
   @override
@@ -153,19 +241,40 @@ class _VideoGridState extends State<VideoGrid> {
         final compact =
             constraints.maxWidth < LayoutBreakpoints.compactMaxWidth;
         final narrow = constraints.maxWidth < 560;
-        final pageCount = libraryVideoPageCount(widget.videos.length);
-        final safePageIndex =
-            _pageIndex.clamp(0, math.max(0, pageCount - 1)).toInt();
-        final startIndex = safePageIndex * libraryVideoPageSize;
-        final endIndex = math.min(
-          startIndex + libraryVideoPageSize,
-          widget.videos.length,
+        final columnCount = widget.dense
+            ? 1
+            : libraryVideoGridColumnCount(
+                gridWidth: constraints.maxWidth,
+                narrow: narrow,
+                compact: compact,
+              );
+        final rowExtent = widget.dense
+            ? (narrow ? 132.0 : 120.0)
+            : libraryVideoCardMainAxisExtent(
+                  gridWidth: constraints.maxWidth,
+                  narrow: narrow,
+                  compact: compact,
+                ) +
+                (compact ? 14 : 16);
+        _currentColumnCount = columnCount;
+        _currentRowExtent = rowExtent;
+        final initialCount = libraryIncrementalItemCount(
+          totalCount: widget.videos.length,
+          currentCount: 0,
+          columnCount: columnCount,
         );
-        final pageVideos = widget.videos.sublist(startIndex, endIndex);
+        // 窗口改变列数时只允许扩大首批范围，不能让已显示卡片倒退消失。
+        final visibleItemCount = math
+            .min(
+              widget.videos.length,
+              math.max(_loadedItemCount, initialCount),
+            )
+            .toInt();
         final Widget results;
         if (widget.dense) {
           results = ListView.builder(
-            key: ValueKey<String>('library.page.list.$safePageIndex'),
+            key: LibrarySmokeKeys.incrementalResults,
+            controller: _scrollController,
             padding: EdgeInsets.fromLTRB(
               compact ? 14 : 22,
               2,
@@ -174,10 +283,11 @@ class _VideoGridState extends State<VideoGrid> {
             ),
             itemExtent: narrow ? 132 : 120,
             scrollCacheExtent: const ScrollCacheExtent.pixels(720),
-            itemCount: pageVideos.length,
+            itemCount: visibleItemCount,
             itemBuilder: (context, index) {
-              final item = pageVideos[index];
+              final item = widget.videos[index];
               return Padding(
+                key: ValueKey<String>('library.list.${item.videoId}'),
                 padding: const EdgeInsets.only(bottom: 8),
                 child: InteractiveVideoListRow(
                   item: item,
@@ -194,7 +304,8 @@ class _VideoGridState extends State<VideoGrid> {
           );
         } else {
           results = GridView.builder(
-            key: ValueKey<String>('library.page.grid.$safePageIndex'),
+            key: LibrarySmokeKeys.incrementalResults,
+            controller: _scrollController,
             padding: EdgeInsets.fromLTRB(
               compact ? 14 : 22,
               2,
@@ -211,125 +322,26 @@ class _VideoGridState extends State<VideoGrid> {
               mainAxisSpacing: compact ? 14 : 16,
               crossAxisSpacing: compact ? 10 : 14,
             ),
-            itemCount: pageVideos.length,
+            itemCount: visibleItemCount,
             scrollCacheExtent: const ScrollCacheExtent.pixels(720),
             itemBuilder: (context, index) {
-              final item = pageVideos[index];
-              return InteractiveVideoCard(
-                item: item,
-                thumbnailService: widget.thumbnailService,
-                playbackSettings: widget.playbackSettings,
-                onVisible: widget.onVisible,
-                onOpen: () => widget.onOpen(item, widget.videos),
-                onToggleFavorite: () => widget.onToggleFavorite(item),
+              final item = widget.videos[index];
+              return KeyedSubtree(
+                key: ValueKey<String>('library.grid.${item.videoId}'),
+                child: InteractiveVideoCard(
+                  item: item,
+                  thumbnailService: widget.thumbnailService,
+                  playbackSettings: widget.playbackSettings,
+                  onVisible: widget.onVisible,
+                  onOpen: () => widget.onOpen(item, widget.videos),
+                  onToggleFavorite: () => widget.onToggleFavorite(item),
+                ),
               );
             },
           );
         }
-        return Column(
-          children: [
-            Expanded(child: results),
-            if (pageCount > 1)
-              LibraryPaginationBar(
-                pageIndex: safePageIndex,
-                pageCount: pageCount,
-                onPageChanged: _goToPage,
-              ),
-          ],
-        );
+        return results;
       },
-    );
-  }
-}
-
-/** 媒体库结果区底部分页条，只修改展示页码，不触发筛选或重新排序。 */
-class LibraryPaginationBar extends StatelessWidget {
-  const LibraryPaginationBar({
-    super.key,
-    required this.pageIndex,
-    required this.pageCount,
-    required this.onPageChanged,
-  });
-
-  /** 当前零基页码。 */
-  final int pageIndex;
-
-  /** 当前结果总页数。 */
-  final int pageCount;
-
-  /** 请求切换到指定零基页码。 */
-  final ValueChanged<int> onPageChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final isFirstPage = pageIndex <= 0;
-    final isLastPage = pageIndex >= pageCount - 1;
-    return Container(
-      key: LibrarySmokeKeys.paginationBar,
-      height: 52,
-      margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: appPanel,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: appBorder),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final showBoundaryButtons = constraints.maxWidth >= 430;
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (showBoundaryButtons)
-                IconButton(
-                  key: LibrarySmokeKeys.paginationFirst,
-                  tooltip: '首页',
-                  onPressed: isFirstPage ? null : () => onPageChanged(0),
-                  icon: const Icon(Icons.first_page_rounded),
-                ),
-              IconButton(
-                key: LibrarySmokeKeys.paginationPrevious,
-                tooltip: '上一页',
-                onPressed:
-                    isFirstPage ? null : () => onPageChanged(pageIndex - 1),
-                icon: const Icon(Icons.chevron_left_rounded),
-              ),
-              Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Text(
-                    '第 ${pageIndex + 1} / $pageCount 页',
-                    key: LibrarySmokeKeys.paginationLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: appText,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-              IconButton(
-                key: LibrarySmokeKeys.paginationNext,
-                tooltip: '下一页',
-                onPressed:
-                    isLastPage ? null : () => onPageChanged(pageIndex + 1),
-                icon: const Icon(Icons.chevron_right_rounded),
-              ),
-              if (showBoundaryButtons)
-                IconButton(
-                  key: LibrarySmokeKeys.paginationLast,
-                  tooltip: '末页',
-                  onPressed:
-                      isLastPage ? null : () => onPageChanged(pageCount - 1),
-                  icon: const Icon(Icons.last_page_rounded),
-                ),
-            ],
-          );
-        },
-      ),
     );
   }
 }

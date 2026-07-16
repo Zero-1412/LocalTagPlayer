@@ -44,6 +44,16 @@ import '../tags/tag_manager_page.dart';
 import 'library_page_helpers.dart';
 import 'missing_relink_page.dart';
 
+/** 标签筛选默认保持折叠，把媒体结果宽度优先留给高频浏览。 */
+const bool libraryTagDiscoveryPanelInitiallyOpen = false;
+
+/** 计算筛选动作后的面板状态；只有真实标签选择要求自动收起。 */
+bool libraryTagDiscoveryPanelOpenAfterMutation({
+  required bool currentOpen,
+  required bool collapseAfterMutation,
+}) =>
+    collapseAfterMutation ? false : currentOpen;
+
 /** 为页面切换提供统一的轻量淡入与横向位移动画。 */
 Route<T> _smoothRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
@@ -1335,7 +1345,7 @@ class _LibraryPageState extends State<LibraryPage> {
   var _sortMode = SortMode.recent;
   var _sortDirection = SortDirection.descending;
   var _denseResultGrid = false;
-  var _isTagDiscoveryPanelOpen = true;
+  var _isTagDiscoveryPanelOpen = libraryTagDiscoveryPanelInitiallyOpen;
   var _resultMode = _LibraryResultMode.library;
   Object? _recentVideoCacheKey;
   Object? _favoriteVideoCacheKey;
@@ -2109,10 +2119,15 @@ class _LibraryPageState extends State<LibraryPage> {
   void _mutateFilters(
     VoidCallback mutation, {
     bool refreshCounts = false,
+    bool collapseTagPanel = false,
   }) {
     setState(() {
       _resultMode = _LibraryResultMode.library;
       mutation();
+      _isTagDiscoveryPanelOpen = libraryTagDiscoveryPanelOpenAfterMutation(
+        currentOpen: _isTagDiscoveryPanelOpen,
+        collapseAfterMutation: collapseTagPanel,
+      );
     });
     _scheduleFilterRefresh(refreshCounts: refreshCounts);
   }
@@ -2768,7 +2783,7 @@ class _LibraryPageState extends State<LibraryPage> {
       } else {
         _selectedGroupTagIds[groupId] = selected;
       }
-    });
+    }, collapseTagPanel: true);
   }
 
   void _toggleFolderChildTag(TagItem child) {
@@ -2796,7 +2811,7 @@ class _LibraryPageState extends State<LibraryPage> {
       } else {
         _selectedGroupTagIds['folder.child'] = <String>{child.id};
       }
-    });
+    }, collapseTagPanel: true);
   }
 
   TagItem? _folderPrimaryForChild(
@@ -2843,7 +2858,7 @@ class _LibraryPageState extends State<LibraryPage> {
       } else {
         _selectedGroupTagIds['folder.child'] = <String>{child.id};
       }
-    });
+    }, collapseTagPanel: true);
   }
 
   void _toggleExcludedTag(TagItem tag) {
@@ -2855,7 +2870,7 @@ class _LibraryPageState extends State<LibraryPage> {
       if (!_excludedTagIds.remove(tag.id)) {
         _excludedTagIds.add(tag.id);
       }
-    });
+    }, collapseTagPanel: true);
   }
 
   void _removeGroupTag(TagItem tag) {
@@ -3179,7 +3194,7 @@ class _LibraryPageState extends State<LibraryPage> {
               parentTag: _activeChildParentTag,
             );
             _toggleSingleSelection(_selectedChildTags, tag);
-          });
+          }, collapseTagPanel: true);
         },
         onClearChildTags: () => _mutateFilters(_selectedChildTags.clear),
         onGroupTagToggle: _toggleGroupTag,
@@ -3203,14 +3218,16 @@ class _LibraryPageState extends State<LibraryPage> {
         showFavoritesOnly: _showFavoritesOnly,
         dense: dense,
         panelWidth: panelWidth,
-        onFavoritesToggle: () =>
-            _mutateFilters(() => _showFavoritesOnly = !_showFavoritesOnly),
+        onFavoritesToggle: () => _mutateFilters(
+          () => _showFavoritesOnly = !_showFavoritesOnly,
+          collapseTagPanel: true,
+        ),
         onTagToggle: (tag) {
           _mutateFilters(() {
             _removeEquivalentGroupSelection(tagName: tag);
             _toggleSingleSelection(_selectedTags, tag);
             _selectedChildTags.clear();
-          });
+          }, collapseTagPanel: true);
         },
         onChildTagToggle: (tag) {
           _mutateFilters(() {
@@ -3219,7 +3236,7 @@ class _LibraryPageState extends State<LibraryPage> {
               parentTag: _activeChildParentTag,
             );
             _toggleSingleSelection(_selectedChildTags, tag);
-          });
+          }, collapseTagPanel: true);
         },
         onGroupTagToggle: _toggleGroupTag,
         onFolderPrimaryChildSelected: _selectFolderPrimaryChild,
