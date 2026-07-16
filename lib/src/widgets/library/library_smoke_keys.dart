@@ -121,6 +121,11 @@ class LibrarySmokeKeys {
   static ValueKey<String> cardFavorite(String path) =>
       ValueKey<String>('smoke.card.favorite:${TagRules.pathKey(path)}');
 
+  /** 仅缩略图参与 hover 浮动的稳定测试入口。 */
+  static ValueKey<String> cardThumbnailSurface(String path) => ValueKey<String>(
+        'smoke.card.thumbnail-surface:${TagRules.pathKey(path)}',
+      );
+
   /** 媒体库增量滚动结果稳定标识。 */
   static const incrementalResults =
       ValueKey<String>('library.incremental.results');

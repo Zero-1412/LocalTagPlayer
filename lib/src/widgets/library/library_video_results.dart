@@ -197,6 +197,84 @@ const double libraryFavoriteOverlayOpacity = 0.46;
 /** 时长角标使用比旧版更透明的底色，并由文字阴影补足亮色视频上的可读性。 */
 const double libraryDurationOverlayOpacity = 0.56;
 
+/** 缩略图占位状态；只描述展示结果，不改变生成服务的失败或重试语义。 */
+enum LibraryThumbnailPlaceholderState { loading, failed, empty }
+
+/** 深色缩略图占位背景的起止色，加载切换时与媒体库表面保持连续。 */
+const Color libraryThumbnailPlaceholderTop = Color(0xff243145);
+const Color libraryThumbnailPlaceholderBottom = Color(0xff182332);
+
+/**
+ * 加载中、生成异常和无可用缩略图共用的深色占位组件。
+ *
+ * 三种状态仅替换中心图标与文案，尺寸和背景保持一致，避免异步完成前后出现浅色闪烁。
+ */
+class LibraryThumbnailPlaceholder extends StatelessWidget {
+  const LibraryThumbnailPlaceholder({super.key, required this.state});
+
+  /** 当前占位原因。 */
+  final LibraryThumbnailPlaceholderState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, label) = switch (state) {
+      LibraryThumbnailPlaceholderState.loading => (null, '正在生成缩略图'),
+      LibraryThumbnailPlaceholderState.failed => (
+          Icons.broken_image_outlined,
+          '缩略图生成失败'
+        ),
+      LibraryThumbnailPlaceholderState.empty => (Icons.movie_outlined, '暂无缩略图'),
+    };
+    return Container(
+      key: ValueKey<String>('library-thumbnail-placeholder-${state.name}'),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            libraryThumbnailPlaceholderTop,
+            libraryThumbnailPlaceholderBottom,
+          ],
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (icon == null)
+              const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  color: appAccentViolet,
+                  backgroundColor: Color(0x334b5d75),
+                ),
+              )
+            else
+              Icon(icon, size: 29, color: libraryTextMuted),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: libraryTextMuted,
+                fontSize: 10.5,
+                height: 1,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 缩略图 hover 上浮距离；Transform 不参与 Column 布局，标题位置保持不变。 */
+const double libraryVideoHoverLift = 3;
+
+/** hover 阴影只属于缩略图，不在整卡周围形成选中框。 */
+const double libraryVideoHoverShadowOpacity = 0.30;
+
 /** 计算当前响应式网格列数，增量加载和卡片尺寸必须复用同一结果。 */
 int libraryVideoGridColumnCount({
   required double gridWidth,
@@ -905,47 +983,57 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
             duration: appMotionDuration,
             curve: appMotionCurve,
             scale: _pressed ? 0.992 : 1,
-            child: AnimatedContainer(
-              duration: appMotionDuration,
-              curve: appMotionCurve,
-              decoration: BoxDecoration(
-                color: _hovered ? librarySurfaceAlt : Colors.transparent,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                key: LibrarySmokeKeys.cardOpen(item.path),
                 borderRadius: BorderRadius.circular(libraryVideoCardRadius),
-                border: Border.all(
-                  color: _hovered ? appAccentViolet : Colors.transparent,
-                ),
-                boxShadow: [
-                  if (_hovered)
-                    BoxShadow(
-                      color: Colors.black.withAlpha(55),
-                      blurRadius: 18,
-                      offset: const Offset(0, 8),
-                    ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  key: LibrarySmokeKeys.cardOpen(item.path),
-                  borderRadius: BorderRadius.circular(libraryVideoCardRadius),
-                  // 独立播放按钮移除后，卡片本身成为唯一清晰的打开入口。
-                  onTap: widget.onOpen,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _VideoPreview(
+                hoverColor: Colors.transparent,
+                focusColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+                // 独立播放按钮移除后，卡片本身成为唯一清晰的打开入口。
+                onTap: widget.onOpen,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AnimatedContainer(
+                      key: LibrarySmokeKeys.cardThumbnailSurface(item.path),
+                      duration: appMotionDuration,
+                      curve: appMotionCurve,
+                      transform: Matrix4.translationValues(
+                        0,
+                        _hovered ? -libraryVideoHoverLift : 0,
+                        0,
+                      ),
+                      transformAlignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(libraryVideoCardRadius),
+                        boxShadow: <BoxShadow>[
+                          if (_hovered)
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: libraryVideoHoverShadowOpacity,
+                              ),
+                              blurRadius: 20,
+                              spreadRadius: 1,
+                              offset: const Offset(0, 9),
+                            ),
+                        ],
+                      ),
+                      child: _VideoPreview(
                         item: item,
                         thumbnailService: widget.thumbnailService,
                         playbackSettings: widget.playbackSettings,
                         onVisible: widget.onVisible,
                         onToggleFavorite: widget.onToggleFavorite,
                       ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(2, 8, 2, 6),
-                        child: _VideoCardMetadata(item: item),
-                      ),
-                    ],
-                  ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(2, 8, 2, 6),
+                      child: _VideoCardMetadata(item: item),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1225,18 +1313,19 @@ class _VideoPreviewState extends State<_VideoPreview> {
                             cacheWidth: libraryThumbnailWidth,
                           );
                         }
-                        return Container(
-                          color: const Color(0xffd8f0f0),
-                          child: Center(
-                            child: snapshot.connectionState ==
-                                    ConnectionState.waiting
-                                ? const SizedBox.square(
-                                    dimension: 22,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2.4),
-                                  )
-                                : const Icon(Icons.movie_outlined, size: 42),
-                          ),
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const LibraryThumbnailPlaceholder(
+                            state: LibraryThumbnailPlaceholderState.loading,
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return const LibraryThumbnailPlaceholder(
+                            state: LibraryThumbnailPlaceholderState.failed,
+                          );
+                        }
+                        return const LibraryThumbnailPlaceholder(
+                          state: LibraryThumbnailPlaceholderState.empty,
                         );
                       },
                     ),
@@ -1264,15 +1353,17 @@ class _VideoPreviewState extends State<_VideoPreview> {
                       Center(
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.86),
+                            color: Colors.black.withValues(alpha: 0.64),
                             shape: BoxShape.circle,
                           ),
                           child: const Padding(
                             padding: EdgeInsets.all(18),
                             child: SizedBox.square(
                               dimension: 24,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2.5),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: appAccentViolet,
+                              ),
                             ),
                           ),
                         ),

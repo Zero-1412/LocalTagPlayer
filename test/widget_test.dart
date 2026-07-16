@@ -169,6 +169,124 @@ void main() {
     );
   });
 
+  testWidgets('thumbnail placeholders share one dark visual system',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Row(
+            children: <Widget>[
+              Expanded(
+                child: LibraryThumbnailPlaceholder(
+                  state: LibraryThumbnailPlaceholderState.loading,
+                ),
+              ),
+              Expanded(
+                child: LibraryThumbnailPlaceholder(
+                  state: LibraryThumbnailPlaceholderState.failed,
+                ),
+              ),
+              Expanded(
+                child: LibraryThumbnailPlaceholder(
+                  state: LibraryThumbnailPlaceholderState.empty,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('正在生成缩略图'), findsOneWidget);
+    expect(find.text('缩略图生成失败'), findsOneWidget);
+    expect(find.text('暂无缩略图'), findsOneWidget);
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.movie_outlined), findsOneWidget);
+    final loading = tester.widget<Container>(
+      find.byKey(
+        const ValueKey<String>('library-thumbnail-placeholder-loading'),
+      ),
+    );
+    final decoration = loading.decoration! as BoxDecoration;
+    final gradient = decoration.gradient! as LinearGradient;
+    expect(
+      gradient.colors,
+      const <Color>[
+        libraryThumbnailPlaceholderTop,
+        libraryThumbnailPlaceholderBottom,
+      ],
+    );
+  });
+
+  testWidgets('card hover lifts only thumbnail and keeps title fixed',
+      (tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_hover_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final item = _testVideo(
+      path: p.join(directory.path, 'hover.mp4'),
+      title: 'hover video',
+    );
+    final thumbnailService = ThumbnailService.forDirectory(
+      directory,
+      _PreviewFFmpegBackend(),
+    );
+    await tester.binding.setSurfaceSize(const Size(500, 350));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 300,
+              height: 230,
+              child: InteractiveVideoCard(
+                item: item,
+                thumbnailService: thumbnailService,
+                playbackSettings: PlaybackSettings.defaults,
+                onOpen: () {},
+                onToggleFavorite: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    // 加载占位的进度环会持续动画；固定推进一帧即可验证卡片布局和 hover 目标。
+    await tester.pump();
+
+    final titleFinder = find.text('hover video');
+    final thumbnailFinder =
+        find.byKey(LibrarySmokeKeys.cardThumbnailSurface(item.path));
+    final titleTopBefore = tester.getTopLeft(titleFinder).dy;
+    final initialThumbnail = tester.widget<AnimatedContainer>(thumbnailFinder);
+    expect(initialThumbnail.transform!.storage[13], 0);
+    final cardInkWell = tester.widget<InkWell>(
+      find.byKey(LibrarySmokeKeys.cardOpen(item.path)),
+    );
+    expect(cardInkWell.hoverColor, Colors.transparent);
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    await gesture.moveTo(tester.getCenter(titleFinder));
+    await tester.pump();
+    final hoveredThumbnail = tester.widget<AnimatedContainer>(thumbnailFinder);
+    expect(hoveredThumbnail.transform!.storage[13], -libraryVideoHoverLift);
+    await tester.pump(appMotionDuration);
+    expect(tester.getTopLeft(titleFinder).dy, titleTopBefore);
+    expect(libraryVideoHoverShadowOpacity, 0.30);
+    await gesture.removePointer();
+  });
+
   testWidgets('library scrolling appends ten rows and keeps full play queue',
       (WidgetTester tester) async {
     expect(libraryRowsPerLoad, 10);
