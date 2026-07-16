@@ -126,6 +126,11 @@ class LibrarySmokeKeys {
         'smoke.card.thumbnail-surface:${TagRules.pathKey(path)}',
       );
 
+  /** 动态预览透明度动画的稳定测试入口。 */
+  static ValueKey<String> cardHoverPreview(String path) => ValueKey<String>(
+        'smoke.card.hover-preview:${TagRules.pathKey(path)}',
+      );
+
   /** 媒体库增量滚动结果稳定标识。 */
   static const incrementalResults =
       ValueKey<String>('library.incremental.results');

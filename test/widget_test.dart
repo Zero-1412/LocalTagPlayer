@@ -218,6 +218,92 @@ void main() {
     );
   });
 
+  testWidgets('hover preview intent ignores fast pointer passes',
+      (tester) async {
+    var enterCount = 0;
+    var intentCount = 0;
+    var exitCount = 0;
+    await tester.binding.setSurfaceSize(const Size(400, 300));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: LibraryHoverIntentRegion(
+                onEnter: () => enterCount++,
+                onIntent: () => intentCount++,
+                onExit: () => exitCount++,
+                child: const SizedBox(width: 120, height: 80),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final region = find.byType(LibraryHoverIntentRegion);
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: const Offset(350, 250));
+    await gesture.moveTo(tester.getCenter(region));
+    await tester.pump(const Duration(milliseconds: 300));
+    await gesture.moveTo(const Offset(350, 250));
+    await tester.pump(libraryHoverPreviewStartDelay);
+    expect(enterCount, 1);
+    expect(exitCount, 1);
+    expect(intentCount, 0);
+
+    await gesture.moveTo(tester.getCenter(region));
+    await tester.pump(
+      libraryHoverPreviewStartDelay - const Duration(milliseconds: 1),
+    );
+    expect(intentCount, 0);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(intentCount, 1);
+    await gesture.removePointer();
+  });
+
+  testWidgets('hover preview uses a short thumbnail crossfade', (tester) async {
+    var visible = true;
+    late StateSetter update;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            update = setState;
+            return LibraryHoverPreviewFade(
+              key: const ValueKey<String>('hover-preview-fade-test'),
+              visible: visible,
+              child: const ColoredBox(
+                key: ValueKey<String>('hover-preview-fade-child'),
+                color: Colors.black,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    update(() => visible = false);
+    await tester.pump();
+    final fade = tester.widget<AnimatedOpacity>(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('hover-preview-fade-test')),
+        matching: find.byType(AnimatedOpacity),
+      ),
+    );
+    expect(fade.opacity, 0);
+    expect(fade.duration, libraryHoverPreviewFadeDuration);
+    expect(fade.curve, Curves.easeOutCubic);
+    expect(
+      find.byKey(const ValueKey<String>('hover-preview-fade-child')),
+      findsOneWidget,
+    );
+    await tester.pump(libraryHoverPreviewFadeDuration);
+  });
+
   testWidgets('card hover lifts only thumbnail and keeps title fixed',
       (tester) async {
     final directory = Directory(

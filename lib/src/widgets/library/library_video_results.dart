@@ -275,6 +275,102 @@ const double libraryVideoHoverLift = 3;
 /** hover 阴影只属于缩略图，不在整卡周围形成选中框。 */
 const double libraryVideoHoverShadowOpacity = 0.30;
 
+/** 用户稳定停留后才启动动态预览，快速掠过不会创建原生播放器。 */
+const Duration libraryHoverPreviewStartDelay = Duration(milliseconds: 650);
+
+/** 鼠标离开后先交叉淡回静态缩略图，再释放动态预览资源。 */
+const Duration libraryHoverPreviewFadeDuration = Duration(milliseconds: 180);
+
+/**
+ * 将鼠标进入意图分为即时反馈和延迟预览两条路径。
+ *
+ * 缩略图浮动可由 [onEnter] 立即响应，原生动态预览只在连续停留达到 [startDelay] 后
+ * 通过 [onIntent] 启动；离开时会取消尚未触发的任务，避免快速扫过卡片创建播放器。
+ */
+class LibraryHoverIntentRegion extends StatefulWidget {
+  const LibraryHoverIntentRegion({
+    super.key,
+    required this.child,
+    required this.onEnter,
+    required this.onIntent,
+    required this.onExit,
+    this.startDelay = libraryHoverPreviewStartDelay,
+  });
+
+  /** 接收鼠标事件的缩略图内容。 */
+  final Widget child;
+
+  /** 鼠标进入时的即时回调，用于恢复正在淡出的已有预览。 */
+  final VoidCallback onEnter;
+
+  /** 连续停留达到延迟后的回调，用于创建动态预览。 */
+  final VoidCallback onIntent;
+
+  /** 鼠标离开时的即时回调，用于启动淡出或取消加载。 */
+  final VoidCallback onExit;
+
+  /** 动态预览启动前必须连续停留的时间。 */
+  final Duration startDelay;
+
+  @override
+  State<LibraryHoverIntentRegion> createState() =>
+      _LibraryHoverIntentRegionState();
+}
+
+class _LibraryHoverIntentRegionState extends State<LibraryHoverIntentRegion> {
+  Timer? _intentTimer;
+
+  /** 立即反馈进入状态，同时重置唯一的延迟启动任务。 */
+  void _handleEnter(PointerEnterEvent _) {
+    widget.onEnter();
+    _intentTimer?.cancel();
+    _intentTimer = Timer(widget.startDelay, widget.onIntent);
+  }
+
+  /** 离开即取消尚未触发的启动任务，防止快速掠过产生加载闪动。 */
+  void _handleExit(PointerExitEvent _) {
+    _intentTimer?.cancel();
+    _intentTimer = null;
+    widget.onExit();
+  }
+
+  @override
+  void dispose() {
+    _intentTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        onEnter: _handleEnter,
+        onExit: _handleExit,
+        child: widget.child,
+      );
+}
+
+/** 让原生动态预览与静态缩略图之间使用统一的短淡入淡出。 */
+class LibraryHoverPreviewFade extends StatelessWidget {
+  const LibraryHoverPreviewFade({
+    super.key,
+    required this.visible,
+    required this.child,
+  });
+
+  /** 是否显示动态预览；为 false 时底层静态缩略图逐渐恢复。 */
+  final bool visible;
+
+  /** 原生动态预览纹理。 */
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: libraryHoverPreviewFadeDuration,
+        curve: Curves.easeOutCubic,
+        child: child,
+      );
+}
+
 /** 计算当前响应式网格列数，增量加载和卡片尺寸必须复用同一结果。 */
 int libraryVideoGridColumnCount({
   required double gridWidth,
@@ -1155,11 +1251,12 @@ class _VideoPreview extends StatefulWidget {
 
 class _VideoPreviewState extends State<_VideoPreview> {
   late Future<File?> _future;
-  Timer? _hoverTimer;
+  Timer? _hoverExitTimer;
   Player? _hoverPlayer;
   VideoController? _hoverController;
   var _isHoverPreviewLoading = false;
   var _isHoverPreviewReady = false;
+  var _isHoverPreviewVisible = false;
 
   @override
   void initState() {
@@ -1181,23 +1278,37 @@ class _VideoPreviewState extends State<_VideoPreview> {
 
   @override
   void dispose() {
-    _hoverTimer?.cancel();
+    _hoverExitTimer?.cancel();
     unawaited(_disposeHoverPlayer());
     super.dispose();
   }
 
-  void _onEnter(PointerEnterEvent _) {
-    _hoverTimer?.cancel();
-    _hoverTimer = Timer(const Duration(milliseconds: 900), _startHoverPreview);
+  /** 重新进入正在淡出的预览时复用现有播放器，避免边缘移动反复初始化。 */
+  void _onEnter() {
+    _hoverExitTimer?.cancel();
+    _hoverExitTimer = null;
+    if (_isHoverPreviewReady && !_isHoverPreviewVisible && mounted) {
+      setState(() => _isHoverPreviewVisible = true);
+    }
   }
 
-  void _onExit(PointerExitEvent _) {
-    _hoverTimer?.cancel();
+  /** 已显示的预览先淡出；尚在加载的预览直接取消，避免离开后才闪出首帧。 */
+  void _onExit() {
+    if (_isHoverPreviewReady && _hoverPlayer != null) {
+      setState(() => _isHoverPreviewVisible = false);
+      _hoverExitTimer?.cancel();
+      _hoverExitTimer = Timer(
+        libraryHoverPreviewFadeDuration,
+        _stopHoverPreview,
+      );
+      return;
+    }
     _stopHoverPreview();
   }
 
+  /** 创建静音原生播放器，并仅在当前卡片仍持有该播放器时展示首帧。 */
   Future<void> _startHoverPreview() async {
-    if (_hoverPlayer != null || _isHoverPreviewLoading) {
+    if (!mounted || _hoverPlayer != null || _isHoverPreviewLoading) {
       return;
     }
     setState(() => _isHoverPreviewLoading = true);
@@ -1234,6 +1345,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
       setState(() {
         _isHoverPreviewLoading = false;
         _isHoverPreviewReady = true;
+        _isHoverPreviewVisible = true;
       });
     } catch (_) {
       if (_hoverPlayer == player) {
@@ -1245,12 +1357,16 @@ class _VideoPreviewState extends State<_VideoPreview> {
         setState(() {
           _isHoverPreviewLoading = false;
           _isHoverPreviewReady = false;
+          _isHoverPreviewVisible = false;
         });
       }
     }
   }
 
+  /** 取消淡出计时并释放当前卡片独占的动态预览资源。 */
   void _stopHoverPreview() {
+    _hoverExitTimer?.cancel();
+    _hoverExitTimer = null;
     final player = _hoverPlayer;
     _hoverPlayer = null;
     _hoverController = null;
@@ -1258,6 +1374,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
       setState(() {
         _isHoverPreviewLoading = false;
         _isHoverPreviewReady = false;
+        _isHoverPreviewVisible = false;
       });
     }
     if (player != null) {
@@ -1279,8 +1396,10 @@ class _VideoPreviewState extends State<_VideoPreview> {
     final hoverController = _hoverController;
     return LibraryCardUiDiagnostics.buildSubtree(
       'preview',
-      () => MouseRegion(
+      () => LibraryHoverIntentRegion(
+        key: ValueKey<String>('hover-intent:${widget.item.path}'),
         onEnter: _onEnter,
+        onIntent: () => unawaited(_startHoverPreview()),
         onExit: _onExit,
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -1330,10 +1449,15 @@ class _VideoPreviewState extends State<_VideoPreview> {
                       },
                     ),
                     if (_isHoverPreviewReady && hoverController != null)
-                      Video(
-                        controller: hoverController,
-                        controls: NoVideoControls,
-                        fit: BoxFit.cover,
+                      LibraryHoverPreviewFade(
+                        key:
+                            LibrarySmokeKeys.cardHoverPreview(widget.item.path),
+                        visible: _isHoverPreviewVisible,
+                        child: Video(
+                          controller: hoverController,
+                          controls: NoVideoControls,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     Positioned.fill(
                       child: DecoratedBox(
