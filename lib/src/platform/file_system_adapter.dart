@@ -85,6 +85,13 @@ abstract interface class FileSystemAdapter {
   /** 删除单个文件；文件不存在时安全返回。 */
   Future<void> deleteFile(String path);
 
+  /**
+   * 把单个文件移入当前系统的回收站或废纸篓；文件不存在时安全返回。
+   *
+   * 实现不能静默回退为永久删除；平台不支持时必须抛出明确异常。
+   */
+  Future<void> moveFileToTrash(String path);
+
   /** 将字节写入用户已选择的文件路径。 */
   Future<void> writeBytes(
     String path,

@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.35` 把镜像、队列播放方式、画面比例和播放倍速纳入向后兼容的全局 `PlaybackSettings`。播放器从应用级快照初始化这些值，每次打开媒体后重新应用比例与倍速，并在退出前等待串行持久化完成。
+`Architecture Baseline 0.5.36` 为 `FileSystemAdapter` 增加不可降级的系统回收站契约。播放器和媒体库只有在 Windows 回收站操作成功后才删除 SQLite 视频记录，避免 UI 声称可恢复而平台层执行永久删除。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,12 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.35`
+已完成基线：`Architecture Baseline 0.5.36`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.36`：`FileSystemAdapter.moveFileToTrash` 明确区分可恢复删除与原永久 `deleteFile`；Windows 桌面适配器通过系统 `SendToRecycleBin` 边界执行，路径不拼接进脚本，失败时抛出异常且上层不删除 SQLite 记录。播放器队列左滑操作区改为主题深色胶囊、细描边和低强调图标，不再使用突兀的大面积红色块。只读数据库审计确认收藏字段一直写入 SQLite；本轮未修改 schema、stable identity、`FilterQuery` / `TagQueryService`、filtered queue 或缓存队列，也未自动改写用户正式库。
 - `0.5.35`：`PlaybackSettings` 向后兼容增加镜像、队列播放方式、画面比例和倍速；旧 `settings.json` 缺字段或包含异常值时恢复安全默认值。播放器设置写入串行化并同步更新应用级快照，重启后的新会话会在媒体 open 前后把比例与倍速重新送入 `PlayerBackend`，避免只保存数据或 UI 选中态。设置浮层保持一级镜像/循环开关，二级只显示比例与倍速导航，各自进入三级选择列表；二级不再重复播放方式、快捷键和播放诊断。SQLite schema、FilterQuery/TagQueryService、filtered queue、缩略图/媒体详情队列和用户数据均未改变。
 - `0.5.34`：`LibraryScanBackend` 增加无路径阶段进度与暂停/恢复契约；Rust sidecar 先发现候选，再对确定总数执行 stat/fingerprint，并用 stderr 计数协议上报，stdout 快照协议与 SQLite 单写边界不变。播放前通过 `LibraryScanPlaybackGate` 自动暂停目录扫描，退出后原位恢复；提交大量差量时每 256 项让出 UI isolate。真实 `X:\test-media` 热缓存强制 fingerprint 对照为 11,163 项：目录发现 24ms、fingerprint 1,444ms、初次历史上下文提交 1,995ms、稳定态端到端 754ms；冷启动继续由阶段 JSONL 记录，不把热缓存结果冒充冷盘数据。SQLite schema、stable identity、标签语义、filtered queue、PlayerBackend 和媒体探测并发均未改变。
 - `0.5.33`：媒体库大目录导入分为“发现并校验视频”和“后台解析媒体信息”两阶段；总量未知时显示不确定进度，扫描提交后立即开放视频列表并显示已处理/总数/百分比。`MediaDetailsService` 保持单原生批次执行和可见项优先，每个后台批次最多 8 条；`MediaProbeBackend.probeBatch` 与新增 Repository 批量 upsert 把平台调用、SQLite 提交从逐文件收敛为有限批次。新扫描会取消旧媒体探测以避免磁盘争抢。SQLite schema、stable identity、标签语义、filtered queue 和缩略图队列不变。

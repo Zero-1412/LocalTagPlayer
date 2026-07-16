@@ -3765,51 +3765,61 @@ class _LibraryPageState extends State<LibraryPage> {
   /** 执行播放器弹窗已经确认的删除选择，真实文件删除始终留在平台边界内。 */
   Future<void> _deleteVideoFromPlayer(
     VideoItem item,
-    bool deleteLocalFile,
+    bool moveLocalFileToTrash,
   ) async {
-    if (deleteLocalFile) {
-      await _fileSystem.deleteFile(item.path);
+    if (moveLocalFileToTrash) {
+      await _fileSystem.moveFileToTrash(item.path);
     }
     await _store?.deleteVideo(item.path);
-    await _thumbnailService?.deleteThumbnailFor(item);
+    try {
+      await _thumbnailService?.deleteThumbnailFor(item);
+    } catch (_) {
+      // 视频记录已经提交删除，缓存清理失败不能把成功的业务动作误报为失败。
+    }
     // 播放器路由仍在前台时不重建媒体库；返回后统一刷新可见结果和标签计数。
     _playerScopedLibraryDataChanged = true;
     _playerScopedNeedsCountRefresh = true;
   }
 
   /**
-   * 处理媒体卡片删除动作，并把磁盘文件删除保持为显式可选项。
+   * 处理媒体卡片删除动作，并把移入系统回收站保持为显式可选项。
    *
    * 数据库事务会一并删除标签关系、收藏、播放进度、媒体详情和稳定身份记录；选择仅移出
    * 媒体库时，仍位于受监控 root 的文件会在下次扫描时作为新条目重新出现。
    */
   Future<void> _requestDeleteVideo(VideoItem item) async {
-    final deleteLocalFile = await _showVideoDeleteDialog(item);
-    if (deleteLocalFile == null || !mounted) {
+    final moveLocalFileToTrash = await _showVideoDeleteDialog(item);
+    if (moveLocalFileToTrash == null || !mounted) {
       return;
     }
     try {
-      if (deleteLocalFile) {
-        await _fileSystem.deleteFile(item.path);
+      if (moveLocalFileToTrash) {
+        await _fileSystem.moveFileToTrash(item.path);
       }
       await _store?.deleteVideo(item.path);
-      await _thumbnailService?.deleteThumbnailFor(item);
+      try {
+        await _thumbnailService?.deleteThumbnailFor(item);
+      } catch (_) {
+        // 缩略图是可重建缓存；数据库删除成功后不再因缓存异常误导用户重复删除。
+      }
       if (mounted) {
         _markLibraryDataChanged();
       }
-    } on FileSystemException catch (error) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
+      final message =
+          error is FileSystemException ? error.message : '当前平台暂不支持移入回收站';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除失败：${error.message}')),
+        SnackBar(content: Text('移除失败：$message；媒体库记录未删除')),
       );
     }
   }
 
-  /** 返回 null 表示取消，false 表示仅删记录，true 表示同时删除本地文件。 */
+  /** 返回 null 表示取消，false 表示仅删记录，true 表示把本地文件移入回收站。 */
   Future<bool?> _showVideoDeleteDialog(VideoItem item) {
-    var deleteLocalFile = false;
+    var moveLocalFileToTrash = false;
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -3835,12 +3845,12 @@ class _LibraryPageState extends State<LibraryPage> {
                 const SizedBox(height: 10),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
-                  value: deleteLocalFile,
+                  value: moveLocalFileToTrash,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('同时删除本地视频文件'),
-                  subtitle: const Text('此操作无法撤销'),
+                  title: const Text('同时将本地视频移入回收站'),
+                  subtitle: const Text('可在 Windows 回收站中恢复'),
                   onChanged: (value) => setDialogState(
-                    () => deleteLocalFile = value ?? false,
+                    () => moveLocalFileToTrash = value ?? false,
                   ),
                 ),
               ],
@@ -3855,8 +3865,11 @@ class _LibraryPageState extends State<LibraryPage> {
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xffc53b4d),
               ),
-              onPressed: () => Navigator.of(dialogContext).pop(deleteLocalFile),
-              child: Text(deleteLocalFile ? '删除文件和记录' : '仅移出媒体库'),
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(moveLocalFileToTrash),
+              child: Text(
+                moveLocalFileToTrash ? '移入回收站并移除记录' : '仅移出媒体库',
+              ),
             ),
           ],
         ),

@@ -15,7 +15,12 @@ import 'file_system_adapter.dart';
  * 只依赖 [FileSystemAdapter]，不会感知 `explorer.exe`、`open` 或 `xdg-open`。
  */
 class DesktopFileSystemAdapter implements FileSystemAdapter {
-  const DesktopFileSystemAdapter();
+  const DesktopFileSystemAdapter({
+    Future<void> Function(String path)? windowsTrashFileOverride,
+  }) : _windowsTrashFileOverride = windowsTrashFileOverride;
+
+  /** 测试注入的回收站边界；生产环境为空并调用 Windows 系统回收站。 */
+  final Future<void> Function(String path)? _windowsTrashFileOverride;
 
   @override
   Future<List<String>> pickDirectories({String? dialogTitle}) async {
@@ -124,6 +129,64 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
     final file = File(path);
     if (await file.exists()) {
       await file.delete();
+    }
+  }
+
+  @override
+  Future<void> moveFileToTrash(String path) async {
+    final file = File(path);
+    if (!await file.exists()) {
+      return;
+    }
+    final absolutePath = normalizePath(file.absolute.path);
+    final override = _windowsTrashFileOverride;
+    if (override != null) {
+      await override(absolutePath);
+      return;
+    }
+    if (!Platform.isWindows) {
+      // 当前只交付并验证 Windows 回收站；其它桌面端不能用永久删除冒充可恢复删除。
+      throw UnsupportedError('当前平台暂不支持移入系统回收站');
+    }
+    await _moveWindowsFileToTrash(absolutePath);
+  }
+
+  /**
+   * 使用 Windows 随系统提供的 .NET 文件接口把完整绝对路径移入回收站。
+   *
+   * 路径通过环境变量传入，避免文件名被 PowerShell 当作脚本执行；命令失败或文件
+   * 仍存在时抛出异常，让上层保留数据库记录，不能静默降级为永久删除。
+   */
+  Future<void> _moveWindowsFileToTrash(String absolutePath) async {
+    const script = r'''
+Add-Type -AssemblyName Microsoft.VisualBasic
+[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile(
+  $env:LTP_RECYCLE_TARGET,
+  [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,
+  [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin,
+  [Microsoft.VisualBasic.FileIO.UICancelOption]::ThrowException
+)
+''';
+    final result = await Process.run(
+      'powershell.exe',
+      const <String>[
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        script,
+      ],
+      environment: <String, String>{
+        ...Platform.environment,
+        'LTP_RECYCLE_TARGET': absolutePath,
+      },
+      runInShell: false,
+    );
+    if (result.exitCode != 0 || await File(absolutePath).exists()) {
+      throw FileSystemException(
+        '移入回收站失败，系统退出码 ${result.exitCode}',
+        absolutePath,
+      );
     }
   }
 

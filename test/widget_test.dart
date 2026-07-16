@@ -305,7 +305,7 @@ void main() {
     expect(find.byKey(searchFieldKey), findsNothing);
   });
 
-  testWidgets('player delete dialog keeps local file deletion explicit',
+  testWidgets('player delete dialog keeps recycle-bin action explicit',
       (tester) async {
     final item = _testVideo(path: r'X:\test-media\clip.mp4', title: 'clip');
     Object? result = 'pending';
@@ -333,10 +333,10 @@ void main() {
     result = 'pending';
     await tester.tap(find.text('打开删除确认'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('同时删除本地视频文件'));
+    await tester.tap(find.text('同时将本地视频移入回收站'));
     await tester.pump();
     expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
-    await tester.tap(find.text('删除文件和记录'));
+    await tester.tap(find.text('移入回收站并移除记录'));
     await tester.pumpAndSettle();
     expect(result, isTrue);
   });

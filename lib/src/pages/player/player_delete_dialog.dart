@@ -7,14 +7,14 @@ import '../../models/video_item.dart';
 /**
  * 展示播放器删除确认弹窗。
  *
- * 返回 `null` 表示取消、`false` 表示仅移出媒体库、`true` 表示同步删除本地文件。
- * 删除真实磁盘文件属于高风险动作，因此默认不勾选并明确提示不可撤销。
+ * 返回 `null` 表示取消、`false` 表示仅移出媒体库、`true` 表示把本地文件移入回收站。
+ * 文件操作默认不勾选，且不能静默降级为绕过回收站的永久删除。
  */
 Future<bool?> showPlayerDeleteConfirmationDialog(
   BuildContext context,
   VideoItem item,
 ) async {
-  var deleteLocalFile = false;
+  var moveLocalFileToTrash = false;
   return showDialog<bool>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
@@ -47,12 +47,12 @@ Future<bool?> showPlayerDeleteConfirmationDialog(
               const SizedBox(height: 10),
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
-                value: deleteLocalFile,
+                value: moveLocalFileToTrash,
                 controlAffinity: ListTileControlAffinity.leading,
-                title: const Text('同时删除本地视频文件'),
-                subtitle: const Text('此操作无法撤销'),
+                title: const Text('同时将本地视频移入回收站'),
+                subtitle: const Text('可在 Windows 回收站中恢复'),
                 onChanged: (value) => setDialogState(
-                  () => deleteLocalFile = value ?? false,
+                  () => moveLocalFileToTrash = value ?? false,
                 ),
               ),
             ],
@@ -67,8 +67,11 @@ Future<bool?> showPlayerDeleteConfirmationDialog(
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xffc53b4d),
             ),
-            onPressed: () => Navigator.of(dialogContext).pop(deleteLocalFile),
-            child: Text(deleteLocalFile ? '删除文件和记录' : '仅移出媒体库'),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(moveLocalFileToTrash),
+            child: Text(
+              moveLocalFileToTrash ? '移入回收站并移除记录' : '仅移出媒体库',
+            ),
           ),
         ],
       ),

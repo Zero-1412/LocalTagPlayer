@@ -1048,7 +1048,7 @@ class _QueueListItem extends StatefulWidget {
 
 class _QueueListItemState extends State<_QueueListItem>
     with SingleTickerProviderStateMixin {
-  static const _actionRevealWidth = 96.0;
+  static const _actionRevealWidth = 106.0;
   late Future<File?> _thumbnailFuture;
   late Future<MediaDetails> _detailsFuture;
   late final AnimationController _actionController;
@@ -1438,50 +1438,85 @@ class _QueueListItemState extends State<_QueueListItem>
         alignment: Alignment.centerRight,
         child: SizedBox(
           width: _actionRevealWidth,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Tooltip(
-                  message: widget.item.isFavorite ? '取消收藏' : '收藏',
-                  child: Material(
-                    color: const Color(0xff271c2b),
-                    child: InkWell(
-                      key: ValueKey(
-                        'player.queue.favoriteAction.${widget.item.videoId}',
-                      ),
-                      onTap: () => _runAction(widget.onToggleFavorite),
-                      child: Icon(
-                        widget.item.isFavorite
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
-                        color: const Color(0xffff6174),
-                        size: 21,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 9, 6, 9),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xff171f30),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xff2c3850)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x33000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Tooltip(
+                        message: widget.item.isFavorite ? '取消收藏' : '收藏',
+                        child: Material(
+                          color: widget.item.isFavorite
+                              ? const Color(0x2eff6174)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            key: ValueKey(
+                              'player.queue.favoriteAction.'
+                              '${widget.item.videoId}',
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => _runAction(widget.onToggleFavorite),
+                            child: Icon(
+                              widget.item.isFavorite
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              color: const Color(0xffff6f83),
+                              size: 20,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Tooltip(
-                  message: '删除',
-                  child: Material(
-                    color: const Color(0xff2b1c25),
-                    child: InkWell(
-                      key: ValueKey(
-                        'player.queue.deleteAction.${widget.item.videoId}',
-                      ),
-                      onTap: () => _runAction(widget.onDelete),
-                      child: const Icon(
-                        Icons.delete_outline_rounded,
-                        color: Color(0xffff7c8b),
-                        size: 21,
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 7),
+                      child: VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        color: Color(0xff344159),
                       ),
                     ),
-                  ),
+                    Expanded(
+                      child: Tooltip(
+                        message: '删除',
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            key: ValueKey(
+                              'player.queue.deleteAction.'
+                              '${widget.item.videoId}',
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => _runAction(widget.onDelete),
+                            child: const Icon(
+                              Icons.delete_outline_rounded,
+                              color: Color(0xffd88998),
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

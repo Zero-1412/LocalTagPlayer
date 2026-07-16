@@ -53,6 +53,56 @@ void main() {
     await adapter.deleteFile(sourcePath);
   });
 
+  test('desktop adapter routes recoverable deletion through trash boundary',
+      () async {
+    final root = await Directory.systemTemp.createTemp('ltp_trash_adapter_');
+    addTearDown(() async {
+      if (await root.exists()) {
+        await root.delete(recursive: true);
+      }
+    });
+    final sourcePath = '${root.path}${Platform.pathSeparator}recoverable.mp4';
+    await File(sourcePath).writeAsBytes(const <int>[1, 2, 3], flush: true);
+    String? routedPath;
+    final adapter = DesktopFileSystemAdapter(
+      windowsTrashFileOverride: (path) async {
+        routedPath = path;
+        await File(path).delete();
+      },
+    );
+
+    await adapter.moveFileToTrash(sourcePath);
+
+    expect(routedPath, adapter.normalizePath(sourcePath));
+    expect(await File(sourcePath).exists(), isFalse);
+    // 不存在文件保持幂等，且不能再次调用平台回收站边界。
+    routedPath = null;
+    await adapter.moveFileToTrash(sourcePath);
+    expect(routedPath, isNull);
+  });
+
+  test(
+    'windows adapter moves a temporary file into the real recycle bin',
+    () async {
+      final root = await Directory.systemTemp.createTemp('ltp_recycle_smoke_');
+      addTearDown(() async {
+        if (await root.exists()) {
+          await root.delete(recursive: true);
+        }
+      });
+      final sourcePath = '${root.path}${Platform.pathSeparator}'
+          'ltp-recycle-smoke-delete-me.tmp';
+      await File(sourcePath).writeAsBytes(const <int>[1, 2, 3], flush: true);
+
+      await const DesktopFileSystemAdapter().moveFileToTrash(sourcePath);
+
+      expect(await File(sourcePath).exists(), isFalse);
+    },
+    // 系统回收站是持久外部状态，只在显式烟测中写入一个可识别的 3 字节临时项。
+    skip: !Platform.isWindows ||
+        Platform.environment['LTP_RUN_RECYCLE_BIN_SMOKE'] != '1',
+  );
+
   for (final entry in <(String, FileSystemAdapter)>[
     ('macOS', const MacOsFileSystemAdapter()),
     ('Linux', const LinuxFileSystemAdapter()),
