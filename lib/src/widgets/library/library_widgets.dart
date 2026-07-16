@@ -457,9 +457,9 @@ class LibrarySidebar extends StatelessWidget {
           child: SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // 宽度动画期间按真实可用空间切换内容，避免展开内容被提前塞进窄轨道而溢出。
-                final showCollapsedContent = constraints.maxWidth < 200;
-                return showCollapsedContent
+                // 内容跟随目标状态切换，并在目标宽度中完成布局；外层只负责连续裁剪，
+                // 避免动画中途跨过固定阈值时整棵侧栏内容突然替换。
+                final content = collapsed
                     ? _CollapsedLibrarySidebar(
                         roots: roots,
                         selectedLocalLibraryPath: selectedLocalLibraryPath,
@@ -718,6 +718,49 @@ class LibrarySidebar extends StatelessWidget {
                           ],
                         ),
                       );
+                return AnimatedSwitcher(
+                  duration: libraryPanelMotionDuration,
+                  switchInCurve: libraryPanelMotionCurve,
+                  switchOutCurve: libraryPanelMotionCurve,
+                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                    alignment: Alignment.topLeft,
+                    clipBehavior: Clip.hardEdge,
+                    children: [
+                      ...previousChildren,
+                      if (currentChild != null) currentChild,
+                    ],
+                  ),
+                  transitionBuilder: (child, animation) {
+                    final enteringCollapsed =
+                        child.key == const ValueKey<bool>(true);
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: Offset(
+                            enteringCollapsed ? -0.12 : -0.05,
+                            0,
+                          ),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: OverflowBox(
+                    key: ValueKey<bool>(collapsed),
+                    alignment: Alignment.topLeft,
+                    minWidth: sidebarWidth,
+                    maxWidth: sidebarWidth,
+                    minHeight: constraints.maxHeight,
+                    maxHeight: constraints.maxHeight,
+                    child: SizedBox(
+                      width: sidebarWidth,
+                      height: constraints.maxHeight,
+                      child: content,
+                    ),
+                  ),
+                );
               },
             ),
           ),

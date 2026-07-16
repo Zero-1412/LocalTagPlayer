@@ -141,6 +141,20 @@ void main() {
     expect(libraryVideoCardTitleFontSize(320), 15.5);
     expect(libraryVideoCardTitleFontSize(420), 16);
     expect(libraryVideoCardMetadataHeight, 42);
+    expect(
+      libraryVideoCardMainAxisExtentForColumnCount(
+        gridWidth: 1200,
+        compact: false,
+        columnCount: 3,
+      ),
+      greaterThan(
+        libraryVideoCardMainAxisExtentForColumnCount(
+          gridWidth: 900,
+          compact: false,
+          columnCount: 3,
+        ),
+      ),
+    );
     expect(libraryVideoCardRadius, 8);
     final compactOverlay = libraryVideoOverlayMetrics(200);
     expect(compactOverlay.edgeInset, 6);
@@ -816,7 +830,7 @@ void main() {
     expect(visibleCalls[retained.videoId], 1);
   });
 
-  testWidgets('library grid buffers sidebar width changes before one reflow',
+  testWidgets('library grid keeps columns stable while sidebar width animates',
       (WidgetTester tester) async {
     final directory = Directory(
       p.join(
@@ -874,15 +888,22 @@ void main() {
     await tester.pump();
     final resultsFinder = find.byKey(LibrarySmokeKeys.incrementalResults);
     expect(tester.getSize(resultsFinder).width, closeTo(900, 0.01));
+    SliverGridDelegateWithFixedCrossAxisCount gridDelegate() =>
+        tester.widget<GridView>(resultsFinder).gridDelegate
+            as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(gridDelegate().crossAxisCount, 3);
 
     width.value = 1200;
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
-    // 侧栏动画期间网格保持旧宽度，不逐帧改变卡片尺寸和列位置。
-    expect(tester.getSize(resultsFinder).width, closeTo(900, 0.01));
+    // 侧栏动画期间结果区连续占满新宽度，但列数保持稳定，卡片只平滑改变尺寸。
+    expect(tester.getSize(resultsFinder).width, closeTo(1200, 0.01));
+    expect(gridDelegate().crossAxisCount, 3);
 
     await tester.pump(const Duration(milliseconds: 60));
     expect(tester.getSize(resultsFinder).width, closeTo(1200, 0.01));
+    // 约束稳定后才跨过断点并单次切换为四列。
+    expect(gridDelegate().crossAxisCount, 4);
     expect(tester.takeException(), isNull);
   });
 

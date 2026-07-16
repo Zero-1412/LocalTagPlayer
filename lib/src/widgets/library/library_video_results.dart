@@ -30,18 +30,41 @@ double libraryVideoCardMainAxisExtent({
   required bool narrow,
   required bool compact,
 }) {
-  final horizontalPadding = libraryVideoGridHorizontalPadding(compact);
-  final spacing = libraryVideoGridCrossAxisSpacing(
-    gridWidth: gridWidth,
-    compact: compact,
-  );
-  final usableWidth = math.max(1.0, gridWidth - horizontalPadding);
   final columnCount = libraryVideoGridColumnCount(
     gridWidth: gridWidth,
     narrow: narrow,
     compact: compact,
   );
-  final cardWidth = (usableWidth - spacing * (columnCount - 1)) / columnCount;
+  return libraryVideoCardMainAxisExtentForColumnCount(
+    gridWidth: gridWidth,
+    compact: compact,
+    columnCount: columnCount,
+  );
+}
+
+/**
+ * 按已锁定的列数计算卡片高度。
+ *
+ * 侧栏动画期间列数保持不变，但结果区宽度连续变化；卡片因此能够平滑改变尺寸，
+ * 不会逐帧跨越列数断点，也不会把旧宽度网格裁切到新的结果区中。[crossAxisSpacing]
+ * 可由调用方传入当前锁定间距，保证高度计算与真实网格代理使用同一组几何参数。
+ */
+double libraryVideoCardMainAxisExtentForColumnCount({
+  required double gridWidth,
+  required bool compact,
+  required int columnCount,
+  double? crossAxisSpacing,
+}) {
+  final safeColumnCount = math.max(1, columnCount);
+  final horizontalPadding = libraryVideoGridHorizontalPadding(compact);
+  final spacing = crossAxisSpacing ??
+      libraryVideoGridCrossAxisSpacing(
+        gridWidth: gridWidth,
+        compact: compact,
+      );
+  final usableWidth = math.max(1.0, gridWidth - horizontalPadding);
+  final cardWidth =
+      (usableWidth - spacing * (safeColumnCount - 1)) / safeColumnCount;
   // 56px 覆盖分档字号的两行标题；卡片不再为已移除的路径和操作区保留空间。
   return cardWidth * 9 / 16 + 56;
 }
@@ -606,10 +629,10 @@ class _VideoGridState extends State<VideoGrid> {
   Map<String, int> _visibleIndexByVideoId = const <String, int>{};
 
   /**
-   * 最近一次已经提交给网格的稳定视口宽度。
+   * 最近一次用于确定响应式断点和列数的稳定视口宽度。
    *
-   * 左右侧栏动画期间真实约束会逐帧变化；网格继续使用该宽度，避免每一帧都重算
-   * 缩略图尺寸、标题字号和列位置。
+   * 左右侧栏动画期间真实约束会逐帧变化；网格继续使用该宽度锁定列数、间距档位和
+   * 字号档位，但卡片几何仍按当前可用宽度连续变化。
    */
   double? _settledViewportWidth;
 
@@ -747,8 +770,8 @@ class _VideoGridState extends State<VideoGrid> {
   /**
    * 记录最新结果区宽度，并在约束稳定后只提交一次重排。
    *
-   * 连续侧栏动画或拖动窗口会反复覆盖目标并重启计时；旧宽度下的卡片整体保持稳定，
-   * 不会在 UI 线程逐帧换列。最终提交不改变视频顺序、滚动控制器或缩略图 Future。
+   * 连续侧栏动画或拖动窗口会反复覆盖目标并重启计时；动画期间卡片连续缩放但不换列，
+   * 最终提交才更新响应式断点。视频顺序、滚动控制器和缩略图 Future 均保持不变。
    */
   double _stableViewportWidth(double measuredWidth) {
     final normalizedWidth =
@@ -790,6 +813,14 @@ class _VideoGridState extends State<VideoGrid> {
         final resizing = (measuredWidth - stableWidth).abs() > 0.5;
         final compact = stableWidth < LayoutBreakpoints.compactMaxWidth;
         final narrow = stableWidth < 560;
+        final crossAxisSpacing = libraryVideoGridCrossAxisSpacing(
+          gridWidth: stableWidth,
+          compact: compact,
+        );
+        final mainAxisSpacing = libraryVideoGridMainAxisSpacing(
+          gridWidth: stableWidth,
+          compact: compact,
+        );
         final columnCount = widget.dense
             ? 1
             : libraryVideoGridColumnCount(
@@ -799,15 +830,13 @@ class _VideoGridState extends State<VideoGrid> {
               );
         final rowExtent = widget.dense
             ? (narrow ? 132.0 : 120.0)
-            : libraryVideoCardMainAxisExtent(
-                  gridWidth: stableWidth,
-                  narrow: narrow,
+            : libraryVideoCardMainAxisExtentForColumnCount(
+                  gridWidth: measuredWidth,
                   compact: compact,
+                  columnCount: columnCount,
+                  crossAxisSpacing: crossAxisSpacing,
                 ) +
-                libraryVideoGridMainAxisSpacing(
-                  gridWidth: stableWidth,
-                  compact: compact,
-                );
+                mainAxisSpacing;
         _currentColumnCount = columnCount;
         _currentRowExtent = rowExtent;
         final initialCount = libraryIncrementalItemCount(
@@ -878,25 +907,16 @@ class _VideoGridState extends State<VideoGrid> {
               compact ? 14 : 22,
               12,
             ),
-            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: libraryVideoGridMaxCrossAxisExtent(
-                gridWidth: stableWidth,
-                narrow: narrow,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columnCount,
+              mainAxisExtent: libraryVideoCardMainAxisExtentForColumnCount(
+                gridWidth: measuredWidth,
                 compact: compact,
+                columnCount: columnCount,
+                crossAxisSpacing: crossAxisSpacing,
               ),
-              mainAxisExtent: libraryVideoCardMainAxisExtent(
-                gridWidth: stableWidth,
-                narrow: narrow,
-                compact: compact,
-              ),
-              mainAxisSpacing: libraryVideoGridMainAxisSpacing(
-                gridWidth: stableWidth,
-                compact: compact,
-              ),
-              crossAxisSpacing: libraryVideoGridCrossAxisSpacing(
-                gridWidth: stableWidth,
-                compact: compact,
-              ),
+              mainAxisSpacing: mainAxisSpacing,
+              crossAxisSpacing: crossAxisSpacing,
             ),
             itemCount: visibleItemCount,
             scrollCacheExtent: const ScrollCacheExtent.pixels(720),
@@ -930,23 +950,10 @@ class _VideoGridState extends State<VideoGrid> {
           );
         }
         return AnimatedOpacity(
-          opacity: resizing ? 0.94 : 1,
+          opacity: resizing ? 0.97 : 1,
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeOutCubic,
-          child: ClipRect(
-            child: OverflowBox(
-              alignment: Alignment.topLeft,
-              minWidth: stableWidth,
-              maxWidth: stableWidth,
-              minHeight: constraints.maxHeight,
-              maxHeight: constraints.maxHeight,
-              child: SizedBox(
-                width: stableWidth,
-                height: constraints.maxHeight,
-                child: results,
-              ),
-            ),
-          ),
+          child: results,
         );
       },
     );
