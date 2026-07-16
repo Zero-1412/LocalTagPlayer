@@ -31,6 +31,16 @@ class _PreviewFFmpegBackend implements FFmpegBackend {
   var previewCalls = 0;
   final previewPositions = <Duration>[];
 
+  /** 分页组件测试不需要生成真实缩略图，返回空结果即可。 */
+  @override
+  Future<File?> createThumbnail({
+    required VideoItem item,
+    required File output,
+    bool allowFallback = false,
+  }) async {
+    return null;
+  }
+
   @override
   Future<File?> createFramePreview({
     required VideoItem item,
@@ -104,6 +114,84 @@ void main() {
       ),
       '1:02:03',
     );
+  });
+
+  testWidgets('library pagination shows 100 items and keeps full play queue',
+      (WidgetTester tester) async {
+    expect(libraryVideoPageCount(0), 0);
+    expect(libraryVideoPageCount(100), 1);
+    expect(libraryVideoPageCount(101), 2);
+    expect(libraryVideoPageCount(205), 3);
+
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_pagination_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final videos = List<VideoItem>.generate(
+      205,
+      (index) => _testVideo(
+        path: p.join(directory.path, 'video_$index.mp4'),
+        title: 'video $index',
+      ),
+    );
+    final thumbnailService = ThumbnailService.forDirectory(
+      directory,
+      _PreviewFFmpegBackend(),
+    );
+    VideoItem? openedItem;
+    List<VideoItem>? openedQueue;
+
+    await tester.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: VideoGrid(
+            videos: videos,
+            thumbnailService: thumbnailService,
+            playbackSettings: PlaybackSettings.defaults,
+            dense: true,
+            onOpen: (item, playlist) {
+              openedItem = item;
+              openedQueue = playlist;
+            },
+            onEditTags: (_) {},
+            onToggleFavorite: (_) {},
+            onDelete: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('第 1 / 3 页 · 1–100 / 205'), findsOneWidget);
+    await tester.tap(find.byKey(LibrarySmokeKeys.paginationNext));
+    await tester.pump();
+    expect(find.text('第 2 / 3 页 · 101–200 / 205'), findsOneWidget);
+
+    final secondPageFirstPath = videos[100].path;
+    await tester.tap(
+      find.byKey(LibrarySmokeKeys.listPlay(secondPageFirstPath)),
+    );
+    await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    expect(openedItem, same(videos[100]));
+    expect(openedQueue, same(videos));
+    expect(openedQueue, hasLength(205));
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.paginationLast));
+    await tester.pump();
+    expect(find.text('第 3 / 3 页 · 201–205 / 205'), findsOneWidget);
+    final nextButton = tester.widget<IconButton>(
+      find.byKey(LibrarySmokeKeys.paginationNext),
+    );
+    expect(nextButton.onPressed, isNull);
   });
 
   testWidgets('app mounts', (WidgetTester tester) async {
