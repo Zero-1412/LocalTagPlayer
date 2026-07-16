@@ -119,6 +119,7 @@ void main() {
   testWidgets('library scrolling appends ten rows and keeps full play queue',
       (WidgetTester tester) async {
     expect(libraryRowsPerLoad, 10);
+    expect(libraryPreloadRowsAhead, 4);
     expect(
       libraryVideoGridColumnCount(
         gridWidth: 900,
@@ -200,17 +201,18 @@ void main() {
 
     expect(resultDelegate().estimatedChildCount, 10);
     expect(find.textContaining('第 1 /'), findsNothing);
-    await tester.drag(
-      find.byKey(LibrarySmokeKeys.incrementalResults),
-      const Offset(0, -1000),
+    final scrollController = tester
+        .widget<ListView>(find.byKey(LibrarySmokeKeys.incrementalResults))
+        .controller!;
+    final firstBatchMaxExtent = scrollController.position.maxScrollExtent;
+    scrollController.jumpTo(
+      math.max(0, firstBatchMaxExtent - 360),
     );
+    expect(scrollController.offset, lessThan(firstBatchMaxExtent));
     await tester.pump();
     await tester.pump();
     expect(resultDelegate().estimatedChildCount, 20);
 
-    final scrollController = tester
-        .widget<ListView>(find.byKey(LibrarySmokeKeys.incrementalResults))
-        .controller!;
     scrollController.jumpTo(scrollController.position.maxScrollExtent);
     final offsetBeforeAppend = scrollController.offset;
     await tester.pump();
@@ -228,6 +230,72 @@ void main() {
     expect(openedItem, same(videos[10]));
     expect(openedQueue, same(videos));
     expect(openedQueue, hasLength(205));
+  });
+
+  testWidgets('library filtering reuses retained card thumbnail state',
+      (WidgetTester tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_filter_reuse_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final videos = List<VideoItem>.generate(
+      10,
+      (index) => _testVideo(
+        path: p.join(directory.path, 'video_$index.mp4'),
+        title: 'video $index',
+      ),
+    );
+    final visibleCalls = <String, int>{};
+    final displayedVideos = ValueNotifier<List<VideoItem>>(videos);
+    final thumbnailService = ThumbnailService.forDirectory(
+      directory,
+      _PreviewFFmpegBackend(),
+    );
+    addTearDown(displayedVideos.dispose);
+
+    await tester.binding.setSurfaceSize(const Size(900, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ValueListenableBuilder<List<VideoItem>>(
+            valueListenable: displayedVideos,
+            builder: (context, currentVideos, _) => VideoGrid(
+              videos: currentVideos,
+              thumbnailService: thumbnailService,
+              playbackSettings: PlaybackSettings.defaults,
+              dense: true,
+              onVisible: (item) => visibleCalls.update(
+                item.videoId,
+                (count) => count + 1,
+                ifAbsent: () => 1,
+              ),
+              onOpen: (_, __) {},
+              onEditTags: (_) {},
+              onToggleFavorite: (_) {},
+              onDelete: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final retained = videos[4];
+    expect(visibleCalls[retained.videoId], 1);
+
+    displayedVideos.value = videos.sublist(4);
+    await tester.pump();
+    await tester.pump();
+
+    // retained 从下标 4 移到 0，但同一 State 不应重新请求缩略图或重复报告可见。
+    expect(visibleCalls[retained.videoId], 1);
   });
 
   test('tag discovery starts collapsed and tag selection collapses it', () {

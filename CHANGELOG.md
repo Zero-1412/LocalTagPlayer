@@ -1,5 +1,14 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-16 · 媒体库提前预加载与筛选缩略图稳定复用
+
+- 增量滚动在当前批次剩余 4 行时提前追加下一批，仍按 10 行一批且只扩大 Sliver 的 `itemCount`；单一滚动控制器、同帧信号合并和完整 filtered queue 保持不变。
+- 网格/列表为已挂载范围缓存 `videoId -> index`，向 Sliver 提供稳定下标回查；标签筛选后仍保留的视频卡片可以移动并复用原 State，不因列表下标变化重复初始化缩略图 Future。
+- 缩略图首帧直接使用 `ThumbnailService` 已在当前进程验证的 JPEG，并用 gapless image replacement 承接异步 Future；未缓存的新视频仍显示正常加载反馈，缓存有效性和生成队列没有改变。
+- 增加独立的 debug 轻量滚动帧统计开关 `LOCAL_TAG_PLAYER_SCROLL_STATS_OUTPUT`：滚动期间只收集 Flutter `FrameTiming`，静止 300ms 后才写一条 JSONL，包含挂载数量、P50/P95/峰值及 16.7/33.3ms 超预算帧数；发布构建零开销。
+- 完整 88 项 widget 测试、`dart format`、`flutter analyze` 和 Windows debug build 通过。真实 11,163 条媒体库连续追加到 450 张卡片（约 150 行），滚动位置连续且无闪白、回顶或卡片错位。首轮与旧重型探针共用开关导致帧样本被诊断开销污染，拆分后的第二轮因检测到用户输入而安全停止，精确复测路径已记录。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列及用户数据均未改变。
+
 ## 2026-07-16 · 十行增量滚动与标签筛选自动折叠
 
 - 删除媒体库页码栏和全部翻页按钮；网格按当前响应式列数把 10 行换算为一批条目，列表模式每批 10 条，接近已挂载内容末尾时继续在同一列表尾部追加。

@@ -74,6 +74,13 @@ String libraryVideoDurationLabel(Duration duration) {
 /** 媒体库每次增量挂载的行数；网格条目数由当前响应式列数换算。 */
 const int libraryRowsPerLoad = 10;
 
+/**
+ * 距离当前批次末尾多少行时预加载下一批。
+ *
+ * 该值小于单批 10 行，保证只提前一批，不会在快速滚动时连续扩张到完整结果集。
+ */
+const int libraryPreloadRowsAhead = 4;
+
 /** 计算首次或下一批应挂载的条目数，不得超过完整筛选结果。 */
 int libraryIncrementalItemCount({
   required int totalCount,
@@ -142,11 +149,16 @@ class _VideoGridState extends State<VideoGrid> {
   /** 当前网格列数；列表模式固定为 1，用于把 10 行换算成条目数。 */
   var _currentColumnCount = 1;
 
-  /** 当前单行高度，用于在距离末尾约两行时提前追加下一批。 */
+  /** 当前单行高度，用于在距离末尾 4 行时提前追加下一批。 */
   var _currentRowExtent = 120.0;
 
   /** 合并同一帧内的多个滚动通知，防止一次触底重复追加并引发抖动。 */
   var _loadMoreScheduled = false;
+
+  /** 当前 Sliver 已挂载范围的稳定身份索引；只在结果引用或挂载数量变化时重建。 */
+  List<VideoItem>? _indexedVideos;
+  var _indexedItemCount = -1;
+  Map<String, int> _visibleIndexByVideoId = const <String, int>{};
 
   /**
    * 用结果数量和首尾稳定身份识别筛选/排序结果变化。
@@ -188,15 +200,45 @@ class _VideoGridState extends State<VideoGrid> {
     });
   }
 
-  /** 接近当前批次末尾时追加 10 行，同一帧只允许调度一次。 */
+  /**
+   * 返回当前已挂载范围的 videoId -> index 映射。
+   *
+   * Sliver 通过该映射在筛选后搬移仍存在的 Element；缓存避免媒体详情等外围 setState
+   * 在连续加载数百行后反复扫描已挂载范围。
+   */
+  Map<String, int> _visibleIndexMap(int visibleItemCount) {
+    if (identical(_indexedVideos, widget.videos) &&
+        _indexedItemCount == visibleItemCount) {
+      return _visibleIndexByVideoId;
+    }
+    _indexedVideos = widget.videos;
+    _indexedItemCount = visibleItemCount;
+    _visibleIndexByVideoId = <String, int>{
+      for (var index = 0; index < visibleItemCount; index++)
+        widget.videos[index].videoId: index,
+    };
+    return _visibleIndexByVideoId;
+  }
+
+  /**
+   * 下滑到当前批次最后 4 行前追加 10 行，同一帧只允许调度一次。
+   *
+   * 追加发生在用户触底前；Sliver 仍只构建视口与 cacheExtent 附近项目，因此连续加载
+   * 数百行只增长轻量 itemCount，不会同时保活数百行 Widget。
+   */
   void _handleScroll() {
     if (!_scrollController.hasClients ||
         _loadMoreScheduled ||
         widget.videos.isEmpty) {
       return;
     }
+    if (LibraryCardUiDiagnostics.scrollStatsEnabled) {
+      LibraryCardUiDiagnostics.recordScrollActivity(
+        loadedItemCount: _loadedItemCount,
+      );
+    }
     final position = _scrollController.position;
-    if (position.extentAfter > _currentRowExtent * 2) {
+    if (position.extentAfter > _currentRowExtent * libraryPreloadRowsAhead) {
       return;
     }
     final initialCount = libraryIncrementalItemCount(
@@ -223,11 +265,19 @@ class _VideoGridState extends State<VideoGrid> {
         _loadedItemCount = math.max(_loadedItemCount, nextCount).toInt();
         _loadMoreScheduled = false;
       });
+      if (LibraryCardUiDiagnostics.scrollStatsEnabled) {
+        LibraryCardUiDiagnostics.recordScrollActivity(
+          loadedItemCount: nextCount,
+        );
+      }
     });
   }
 
   @override
   void dispose() {
+    if (LibraryCardUiDiagnostics.scrollStatsEnabled) {
+      LibraryCardUiDiagnostics.finishScrollSample();
+    }
     _scrollController
       ..removeListener(_handleScroll)
       ..dispose();
@@ -270,6 +320,9 @@ class _VideoGridState extends State<VideoGrid> {
               math.max(_loadedItemCount, initialCount),
             )
             .toInt();
+        // 同步真实首批数量，供预加载阈值和显式压测统计使用；不触发额外 build。
+        _loadedItemCount = visibleItemCount;
+        final visibleIndexByVideoId = _visibleIndexMap(visibleItemCount);
         final Widget results;
         if (widget.dense) {
           results = ListView.builder(
@@ -284,10 +337,16 @@ class _VideoGridState extends State<VideoGrid> {
             itemExtent: narrow ? 132 : 120,
             scrollCacheExtent: const ScrollCacheExtent.pixels(720),
             itemCount: visibleItemCount,
+            findChildIndexCallback: (key) {
+              if (key case ValueKey<String>(value: final value)) {
+                return visibleIndexByVideoId[value];
+              }
+              return null;
+            },
             itemBuilder: (context, index) {
               final item = widget.videos[index];
               return Padding(
-                key: ValueKey<String>('library.list.${item.videoId}'),
+                key: ValueKey<String>(item.videoId),
                 padding: const EdgeInsets.only(bottom: 8),
                 child: InteractiveVideoListRow(
                   item: item,
@@ -324,10 +383,16 @@ class _VideoGridState extends State<VideoGrid> {
             ),
             itemCount: visibleItemCount,
             scrollCacheExtent: const ScrollCacheExtent.pixels(720),
+            findChildIndexCallback: (key) {
+              if (key case ValueKey<String>(value: final value)) {
+                return visibleIndexByVideoId[value];
+              }
+              return null;
+            },
             itemBuilder: (context, index) {
               final item = widget.videos[index];
               return KeyedSubtree(
-                key: ValueKey<String>('library.grid.${item.videoId}'),
+                key: ValueKey<String>(item.videoId),
                 child: InteractiveVideoCard(
                   item: item,
                   thumbnailService: widget.thumbnailService,
@@ -968,6 +1033,10 @@ class _VideoPreviewState extends State<_VideoPreview> {
                 FutureBuilder<File?>(
                   key: ValueKey(widget.item.path),
                   future: _future,
+                  // 已在本进程验证过的 JPEG 直接用于首帧；Future 继续负责缓存失效后的
+                  // 异步校验/生成，筛选重排时不再先闪回加载占位。
+                  initialData:
+                      widget.thumbnailService.cachedThumbnailFor(widget.item),
                   builder: (context, snapshot) {
                     final file = snapshot.data;
                     // Future 完成前已验证 JPEG 存在性与完整性，build 阶段不再同步 stat。
@@ -977,7 +1046,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
                         key: ValueKey(file.path),
                         fit: BoxFit.cover,
                         filterQuality: FilterQuality.medium,
-                        gaplessPlayback: false,
+                        gaplessPlayback: true,
                         // 历史 fallback 缓存中仍有 4K JPEG，按卡片尺寸解码避免占用数十 MiB。
                         cacheWidth: libraryThumbnailWidth,
                       );

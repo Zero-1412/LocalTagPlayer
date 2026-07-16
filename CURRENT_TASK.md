@@ -14,9 +14,14 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 87 项 widget 测试通过，`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 88 项 widget 测试通过，`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 媒体库增量滚动从剩余约 2 行改为剩余 4 行时预加载下一批，仍严格按每批 10 行扩大 `itemCount`；Sliver 只构建视口与缓存范围，连续加载不会同时保活全部已追加卡片。
+- 网格与列表增加已挂载范围的稳定 `videoId -> index` 映射，筛选后仍存在的卡片可跨下标移动复用 State；已验证缩略图作为 `FutureBuilder.initialData` 直接绘制，并启用无缝图片替换，避免同一缩略图闪回占位态。
+- 新增独立 `LOCAL_TAG_PLAYER_SCROLL_STATS_OUTPUT` debug 滚动统计：只在显式启用时监听 Flutter 帧耗时，滚动静止 300ms 后单次写入 P50/P95/峰值和超预算帧数；不再与重型卡片 build/layout 探针绑定，release 无采样和文件 I/O。
+- 88 项 widget、`dart format`、`flutter analyze` 和 Windows debug build 通过。真实 11,163 条媒体库从 30 张连续追加到 450 张（约 150 行），无回顶、闪白或卡片错位；轻量统计拆分后的第二轮真实采样因检测到用户正在操作窗口而停止，保留“设置统计目录 → 启动 debug EXE → 在结果区连续下滑 150 行 → 检查 `scroll-frame-timings.jsonl`”的精确复测路径。
 
 - 媒体库移除页码和翻页按钮，改为同一滚动视图内增量追加；网格按当前响应式列数每次挂载 10 行，列表模式每次挂载 10 条。
 - 触底加载通过单一 `ScrollController` 和每帧合并信号执行，只扩大列表尾部并保留已有卡片 key、缩略图 Future 与滚动偏移；筛选结果和播放器继续使用完整 filtered queue。
