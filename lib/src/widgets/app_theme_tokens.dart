@@ -50,6 +50,25 @@ const librarySoftShadow = <BoxShadow>[
 ];
 const appMotionDuration = Duration(milliseconds: 180);
 const appMotionCurve = Curves.easeOutCubic;
+
+/**
+ * 媒体库左右侧栏的结构动画时长。
+ *
+ * 侧栏会改变中央结果区宽度，使用比按钮反馈更完整的过渡时间，让面板移动和结果区
+ * 稳定缓冲能够衔接；该常量不影响筛选、播放或缩略图后台任务。
+ */
+const libraryPanelMotionDuration = Duration(milliseconds: 260);
+
+/** 侧栏结构动画使用双向平滑曲线，展开和收起都避免末段突然停住。 */
+const libraryPanelMotionCurve = Curves.easeInOutCubic;
+
+/**
+ * 结果区等待侧栏或窗口宽度稳定后再提交卡片重排的时间。
+ *
+ * 连续动画帧会反复重启该短等待；侧栏停止后再留出少量缓冲，避免最后一帧约束抖动
+ * 触发第二次网格换列，同时不让最终布局显得迟滞。
+ */
+const libraryResultsResizeSettleDuration = Duration(milliseconds: 100);
 const libraryThumbnailWidth = 384;
 
 /**

@@ -140,6 +140,7 @@ void main() {
     expect(libraryVideoCardTitleFontSize(260), 14.5);
     expect(libraryVideoCardTitleFontSize(320), 15.5);
     expect(libraryVideoCardTitleFontSize(420), 16);
+    expect(libraryVideoCardMetadataHeight, 42);
     expect(libraryVideoCardRadius, 8);
     final compactOverlay = libraryVideoOverlayMetrics(200);
     expect(compactOverlay.edgeInset, 6);
@@ -372,6 +373,16 @@ void main() {
       find.byKey(LibrarySmokeKeys.cardOpen(item.path)),
     );
     expect(cardInkWell.hoverColor, Colors.transparent);
+    final metadataSlots = tester
+        .widgetList<SizedBox>(
+          find.descendant(
+            of: find.byKey(LibrarySmokeKeys.cardOpen(item.path)),
+            matching: find.byType(SizedBox),
+          ),
+        )
+        .where((box) => box.height == libraryVideoCardMetadataHeight);
+    // 标题无论一行还是两行都必须真实使用同一个固定高度槽位。
+    expect(metadataSlots, hasLength(1));
     final favoriteButton = tester.widget<IconButton>(
       find.byKey(LibrarySmokeKeys.cardFavorite(item.path)),
     );
@@ -805,6 +816,76 @@ void main() {
     expect(visibleCalls[retained.videoId], 1);
   });
 
+  testWidgets('library grid buffers sidebar width changes before one reflow',
+      (WidgetTester tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_resize_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final width = ValueNotifier<double>(900);
+    addTearDown(width.dispose);
+    final thumbnailService = ThumbnailService.forDirectory(
+      directory,
+      _PreviewFFmpegBackend(),
+    );
+    final videos = List<VideoItem>.generate(
+      12,
+      (index) => _testVideo(
+        path: p.join(directory.path, 'video_$index.mp4'),
+        title: index.isEven ? '短标题 $index' : '用于验证固定两行高度的较长标题 $index',
+      ),
+    );
+
+    await tester.binding.setSurfaceSize(const Size(1300, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: ValueListenableBuilder<double>(
+              valueListenable: width,
+              builder: (context, currentWidth, _) => SizedBox(
+                width: currentWidth,
+                height: 700,
+                child: VideoGrid(
+                  videos: videos,
+                  thumbnailService: thumbnailService,
+                  playbackSettings: PlaybackSettings.defaults,
+                  dense: false,
+                  onOpen: (_, __) {},
+                  onEditTags: (_) {},
+                  onToggleFavorite: (_) {},
+                  onDelete: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final resultsFinder = find.byKey(LibrarySmokeKeys.incrementalResults);
+    expect(tester.getSize(resultsFinder).width, closeTo(900, 0.01));
+
+    width.value = 1200;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    // 侧栏动画期间网格保持旧宽度，不逐帧改变卡片尺寸和列位置。
+    expect(tester.getSize(resultsFinder).width, closeTo(900, 0.01));
+
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(tester.getSize(resultsFinder).width, closeTo(1200, 0.01));
+    expect(tester.takeException(), isNull);
+  });
+
   test('tag discovery starts collapsed and tag selection collapses it', () {
     expect(libraryTagDiscoveryPanelInitiallyOpen, isFalse);
     expect(
@@ -1061,6 +1142,12 @@ void main() {
       );
     }
     expect(tester.takeException(), isNull);
+  });
+
+  test('library toolbar keeps clear breathing room above the first card row',
+      () {
+    expect(libraryTopBarBottomSpacing, 18);
+    expect(libraryTopBarBottomSpacing, greaterThan(12));
   });
 
   test('expanded main layout keeps proportional slots while resizing', () {
@@ -2926,8 +3013,7 @@ void main() {
     expect(find.byTooltip('展开标签筛选'), findsOneWidget);
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.collapsedTagRail)).width,
-      collapsedTagDiscoveryRailWidth +
-          collapsedTagDiscoveryRailMargin.horizontal,
+      collapsedTagDiscoveryRailLayoutWidth,
     );
 
     await tester.tap(find.byKey(LibrarySmokeKeys.collapsedTagRail));

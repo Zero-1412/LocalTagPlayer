@@ -3459,6 +3459,7 @@ class _LibraryPageState extends State<LibraryPage> {
     }
 
     Widget buildExpandedContent(MainLibraryLayoutSlots layoutSlots) {
+      final collapsedFilterWidth = collapsedTagDiscoveryRailLayoutWidth;
       return Column(
         children: [
           buildTopBar(LayoutSize.expanded),
@@ -3470,24 +3471,73 @@ class _LibraryPageState extends State<LibraryPage> {
                     LayoutSize.expanded,
                   ),
                 ),
-                AnimatedSize(
-                  duration: appMotionDuration,
-                  curve: appMotionCurve,
-                  alignment: Alignment.centerRight,
-                  child: AnimatedSwitcher(
-                    duration: appMotionDuration,
-                    switchInCurve: appMotionCurve,
-                    switchOutCurve: Curves.easeInCubic,
-                    child: _isTagDiscoveryPanelOpen
-                        ? buildFilterPanel(
-                            dense: false,
-                            panelWidth: layoutSlots.filterPanelWidth,
-                          )
-                        : CollapsedTagDiscoveryRail(
-                            onExpand: () => setState(
-                              () => _isTagDiscoveryPanelOpen = true,
+                AnimatedContainer(
+                  duration: libraryPanelMotionDuration,
+                  curve: libraryPanelMotionCurve,
+                  width: _isTagDiscoveryPanelOpen
+                      ? layoutSlots.filterPanelWidth
+                      : collapsedFilterWidth,
+                  child: ClipRect(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final childWidth = _isTagDiscoveryPanelOpen
+                            ? layoutSlots.filterPanelWidth
+                            : collapsedFilterWidth;
+                        return AnimatedSwitcher(
+                          duration: libraryPanelMotionDuration,
+                          switchInCurve: libraryPanelMotionCurve,
+                          switchOutCurve: libraryPanelMotionCurve,
+                          layoutBuilder: (currentChild, previousChildren) =>
+                              Stack(
+                            alignment: Alignment.centerRight,
+                            clipBehavior: Clip.hardEdge,
+                            children: [
+                              ...previousChildren,
+                              if (currentChild != null) currentChild,
+                            ],
+                          ),
+                          transitionBuilder: (child, animation) {
+                            final enteringPanel =
+                                child.key == const ValueKey<bool>(true);
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: Offset(
+                                    enteringPanel ? 0.06 : 0.32,
+                                    0,
+                                  ),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: OverflowBox(
+                            key: ValueKey<bool>(_isTagDiscoveryPanelOpen),
+                            alignment: Alignment.centerRight,
+                            minWidth: childWidth,
+                            maxWidth: childWidth,
+                            minHeight: constraints.maxHeight,
+                            maxHeight: constraints.maxHeight,
+                            child: SizedBox(
+                              width: childWidth,
+                              height: constraints.maxHeight,
+                              child: _isTagDiscoveryPanelOpen
+                                  ? buildFilterPanel(
+                                      dense: false,
+                                      panelWidth: layoutSlots.filterPanelWidth,
+                                    )
+                                  : CollapsedTagDiscoveryRail(
+                                      onExpand: () => setState(
+                                        () => _isTagDiscoveryPanelOpen = true,
+                                      ),
+                                    ),
                             ),
                           ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],

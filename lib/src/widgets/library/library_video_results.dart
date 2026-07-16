@@ -46,6 +46,14 @@ double libraryVideoCardMainAxisExtent({
   return cardWidth * 9 / 16 + 56;
 }
 
+/**
+ * 卡片标题内容区固定高度。
+ *
+ * 一行和两行标题都占用同一垂直槽位，保证同一网格行的卡片底部、点击区域和下一行
+ * 起点一致；外层 8px 顶部与 6px 底部间距仍由卡片布局单独承担。
+ */
+const double libraryVideoCardMetadataHeight = 42;
+
 /** 桌面结果区略收紧左右留白，把宽度优先分配给缩略图。 */
 double libraryVideoGridHorizontalPadding(bool compact) => compact ? 28 : 36;
 
@@ -598,6 +606,20 @@ class _VideoGridState extends State<VideoGrid> {
   Map<String, int> _visibleIndexByVideoId = const <String, int>{};
 
   /**
+   * 最近一次已经提交给网格的稳定视口宽度。
+   *
+   * 左右侧栏动画期间真实约束会逐帧变化；网格继续使用该宽度，避免每一帧都重算
+   * 缩略图尺寸、标题字号和列位置。
+   */
+  double? _settledViewportWidth;
+
+  /** 侧栏或窗口当前正在趋近的最新结果区宽度。 */
+  double? _pendingViewportWidth;
+
+  /** 宽度停止变化后提交唯一一次网格重排。 */
+  Timer? _viewportResizeTimer;
+
+  /**
    * 用结果数量和首尾稳定身份识别筛选/排序结果变化。
    *
    * 该检查为 O(1)，避免每次收藏或媒体详情更新时扫描 11,000 条结果计算签名。
@@ -712,6 +734,7 @@ class _VideoGridState extends State<VideoGrid> {
 
   @override
   void dispose() {
+    _viewportResizeTimer?.cancel();
     if (LibraryCardUiDiagnostics.scrollStatsEnabled) {
       LibraryCardUiDiagnostics.finishScrollSample();
     }
@@ -721,29 +744,68 @@ class _VideoGridState extends State<VideoGrid> {
     super.dispose();
   }
 
+  /**
+   * 记录最新结果区宽度，并在约束稳定后只提交一次重排。
+   *
+   * 连续侧栏动画或拖动窗口会反复覆盖目标并重启计时；旧宽度下的卡片整体保持稳定，
+   * 不会在 UI 线程逐帧换列。最终提交不改变视频顺序、滚动控制器或缩略图 Future。
+   */
+  double _stableViewportWidth(double measuredWidth) {
+    final normalizedWidth =
+        measuredWidth.isFinite && measuredWidth > 0 ? measuredWidth : 1.0;
+    final settledWidth = _settledViewportWidth;
+    if (settledWidth == null) {
+      _settledViewportWidth = normalizedWidth;
+      return normalizedWidth;
+    }
+    if ((normalizedWidth - settledWidth).abs() <= 0.5) {
+      _pendingViewportWidth = null;
+      _viewportResizeTimer?.cancel();
+      return settledWidth;
+    }
+    if (_pendingViewportWidth == null ||
+        (normalizedWidth - _pendingViewportWidth!).abs() > 0.5) {
+      _pendingViewportWidth = normalizedWidth;
+      _viewportResizeTimer?.cancel();
+      _viewportResizeTimer = Timer(libraryResultsResizeSettleDuration, () {
+        final targetWidth = _pendingViewportWidth;
+        if (!mounted || targetWidth == null) {
+          return;
+        }
+        setState(() {
+          _settledViewportWidth = targetWidth;
+          _pendingViewportWidth = null;
+        });
+      });
+    }
+    return settledWidth;
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact =
-            constraints.maxWidth < LayoutBreakpoints.compactMaxWidth;
-        final narrow = constraints.maxWidth < 560;
+        final measuredWidth = constraints.maxWidth;
+        final stableWidth = _stableViewportWidth(measuredWidth);
+        final resizing = (measuredWidth - stableWidth).abs() > 0.5;
+        final compact = stableWidth < LayoutBreakpoints.compactMaxWidth;
+        final narrow = stableWidth < 560;
         final columnCount = widget.dense
             ? 1
             : libraryVideoGridColumnCount(
-                gridWidth: constraints.maxWidth,
+                gridWidth: stableWidth,
                 narrow: narrow,
                 compact: compact,
               );
         final rowExtent = widget.dense
             ? (narrow ? 132.0 : 120.0)
             : libraryVideoCardMainAxisExtent(
-                  gridWidth: constraints.maxWidth,
+                  gridWidth: stableWidth,
                   narrow: narrow,
                   compact: compact,
                 ) +
                 libraryVideoGridMainAxisSpacing(
-                  gridWidth: constraints.maxWidth,
+                  gridWidth: stableWidth,
                   compact: compact,
                 );
         _currentColumnCount = columnCount;
@@ -818,21 +880,21 @@ class _VideoGridState extends State<VideoGrid> {
             ),
             gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: libraryVideoGridMaxCrossAxisExtent(
-                gridWidth: constraints.maxWidth,
+                gridWidth: stableWidth,
                 narrow: narrow,
                 compact: compact,
               ),
               mainAxisExtent: libraryVideoCardMainAxisExtent(
-                gridWidth: constraints.maxWidth,
+                gridWidth: stableWidth,
                 narrow: narrow,
                 compact: compact,
               ),
               mainAxisSpacing: libraryVideoGridMainAxisSpacing(
-                gridWidth: constraints.maxWidth,
+                gridWidth: stableWidth,
                 compact: compact,
               ),
               crossAxisSpacing: libraryVideoGridCrossAxisSpacing(
-                gridWidth: constraints.maxWidth,
+                gridWidth: stableWidth,
                 compact: compact,
               ),
             ),
@@ -867,7 +929,25 @@ class _VideoGridState extends State<VideoGrid> {
             },
           );
         }
-        return results;
+        return AnimatedOpacity(
+          opacity: resizing ? 0.94 : 1,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          child: ClipRect(
+            child: OverflowBox(
+              alignment: Alignment.topLeft,
+              minWidth: stableWidth,
+              maxWidth: stableWidth,
+              minHeight: constraints.maxHeight,
+              maxHeight: constraints.maxHeight,
+              child: SizedBox(
+                width: stableWidth,
+                height: constraints.maxHeight,
+                child: results,
+              ),
+            ),
+          ),
+        );
       },
     );
   }
@@ -1282,16 +1362,20 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(2, 8, 2, 6),
-                      child: _VideoCardMetadata(
-                        item: item,
-                        showMore: showMore,
-                        onMoreOpened: () =>
-                            setState(() => _moreMenuOpen = true),
-                        onMoreClosed: () =>
-                            setState(() => _moreMenuOpen = false),
-                        onEditTags:
-                            widget.selectionMode ? null : widget.onEditTags,
-                        onDelete: widget.selectionMode ? null : widget.onDelete,
+                      child: SizedBox(
+                        height: libraryVideoCardMetadataHeight,
+                        child: _VideoCardMetadata(
+                          item: item,
+                          showMore: showMore,
+                          onMoreOpened: () =>
+                              setState(() => _moreMenuOpen = true),
+                          onMoreClosed: () =>
+                              setState(() => _moreMenuOpen = false),
+                          onEditTags:
+                              widget.selectionMode ? null : widget.onEditTags,
+                          onDelete:
+                              widget.selectionMode ? null : widget.onDelete,
+                        ),
                       ),
                     ),
                   ],

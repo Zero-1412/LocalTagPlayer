@@ -1384,6 +1384,10 @@ const double collapsedTagDiscoveryRailWidth = 44;
 const EdgeInsets collapsedTagDiscoveryRailMargin =
     EdgeInsets.fromLTRB(8, 12, 12, 18);
 
+/** 右侧折叠条包含外边距后的完整布局宽度。 */
+double get collapsedTagDiscoveryRailLayoutWidth =>
+    collapsedTagDiscoveryRailWidth + collapsedTagDiscoveryRailMargin.horizontal;
+
 class CollapsedTagDiscoveryRail extends StatelessWidget {
   const CollapsedTagDiscoveryRail({required this.onExpand});
 

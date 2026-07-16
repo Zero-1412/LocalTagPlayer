@@ -27,6 +27,14 @@ bool referenceTopBarSearchShouldFillRow(
   return layoutSize != LayoutSize.expanded || rowWidth < 1120;
 }
 
+/**
+ * 顶栏与首行视频卡片之间的垂直留白。
+ *
+ * 搜索、筛选状态和结果卡片属于不同视觉层级，保留明确间距可以避免首行缩略图紧贴
+ * 搜索表面；该值只影响布局，不改变搜索输入或筛选刷新链路。
+ */
+const double libraryTopBarBottomSpacing = 18;
+
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
 
 class DesktopDragScrollBehavior extends MaterialScrollBehavior {
@@ -436,8 +444,8 @@ class LibrarySidebar extends StatelessWidget {
     final sidebarWidth = collapsed ? 76.0 : width ?? (dense ? 248 : 274);
     final sidebar = AnimatedContainer(
       key: LibrarySmokeKeys.sidebarSurface,
-      duration: appMotionDuration,
-      curve: appMotionCurve,
+      duration: libraryPanelMotionDuration,
+      curve: libraryPanelMotionCurve,
       width: sidebarWidth,
       height: MediaQuery.sizeOf(context).height,
       child: ClipRect(
@@ -2271,7 +2279,7 @@ class ReferenceTopBar extends StatelessWidget {
                 layoutSize == LayoutSize.expanded ? 20 : 12,
                 14,
                 layoutSize == LayoutSize.expanded ? 20 : 12,
-                8,
+                libraryTopBarBottomSpacing,
               ),
               child: LayoutBuilder(
                 builder: (context, constraints) {
