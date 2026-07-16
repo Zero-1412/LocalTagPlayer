@@ -233,9 +233,6 @@ class _VideoGridState extends State<VideoGrid> {
               LibraryPaginationBar(
                 pageIndex: safePageIndex,
                 pageCount: pageCount,
-                itemCount: widget.videos.length,
-                pageStartIndex: startIndex,
-                pageEndIndex: endIndex,
                 onPageChanged: _goToPage,
               ),
           ],
@@ -251,9 +248,6 @@ class LibraryPaginationBar extends StatelessWidget {
     super.key,
     required this.pageIndex,
     required this.pageCount,
-    required this.itemCount,
-    required this.pageStartIndex,
-    required this.pageEndIndex,
     required this.onPageChanged,
   });
 
@@ -262,15 +256,6 @@ class LibraryPaginationBar extends StatelessWidget {
 
   /** 当前结果总页数。 */
   final int pageCount;
-
-  /** 未分页的完整结果数量。 */
-  final int itemCount;
-
-  /** 当前页在完整结果中的零基起点。 */
-  final int pageStartIndex;
-
-  /** 当前页在完整结果中的开区间终点。 */
-  final int pageEndIndex;
 
   /** 请求切换到指定零基页码。 */
   final ValueChanged<int> onPageChanged;
@@ -313,8 +298,7 @@ class LibraryPaginationBar extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Text(
-                    '第 ${pageIndex + 1} / $pageCount 页 · '
-                    '${pageStartIndex + 1}–$pageEndIndex / $itemCount',
+                    '第 ${pageIndex + 1} / $pageCount 页',
                     key: LibrarySmokeKeys.paginationLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

@@ -1915,6 +1915,13 @@ class _LibraryPageState extends State<LibraryPage> {
           validUpdates.add(current);
         }
         await store.upsertVideos(validUpdates);
+        if (!trackImportProgress &&
+            validUpdates.isNotEmpty &&
+            mounted &&
+            _store == store) {
+          // 可见项补齐总时长后只刷新现有视图，不提升媒体库 revision，也不重算筛选或标签计数。
+          setState(() {});
+        }
       },
       onProgress: trackImportProgress
           ? (progress) {
@@ -1961,7 +1968,12 @@ class _LibraryPageState extends State<LibraryPage> {
       service = _createLibraryMediaDetailsService(store);
       _libraryMediaDetailsService = service;
     }
-    unawaited(service.detailsFor(item, priority: true));
+    unawaited(service.detailsFor(
+      item,
+      // 正常启动不会全量重扫；旧缓存缺时长时只提升真实可见项，继续复用有限批次队列。
+      refreshIncomplete: item.playbackDuration <= Duration.zero,
+      priority: true,
+    ));
   }
 
   FilterState _computeFilterState(

@@ -171,10 +171,10 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('第 1 / 3 页 · 1–100 / 205'), findsOneWidget);
+    expect(find.text('第 1 / 3 页'), findsOneWidget);
     await tester.tap(find.byKey(LibrarySmokeKeys.paginationNext));
     await tester.pump();
-    expect(find.text('第 2 / 3 页 · 101–200 / 205'), findsOneWidget);
+    expect(find.text('第 2 / 3 页'), findsOneWidget);
 
     final secondPageFirstPath = videos[100].path;
     await tester.tap(
@@ -187,7 +187,7 @@ void main() {
 
     await tester.tap(find.byKey(LibrarySmokeKeys.paginationLast));
     await tester.pump();
-    expect(find.text('第 3 / 3 页 · 201–205 / 205'), findsOneWidget);
+    expect(find.text('第 3 / 3 页'), findsOneWidget);
     final nextButton = tester.widget<IconButton>(
       find.byKey(LibrarySmokeKeys.paginationNext),
     );

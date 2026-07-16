@@ -203,6 +203,33 @@ void main() {
     expect(backend.requests.single.videoId, item.videoId);
   });
 
+  test('visible refresh backfills duration from otherwise complete cache',
+      () async {
+    final backend = _RecordingProbeBackend();
+    final item = _probeItem('visible-legacy-duration')
+      ..mediaDetails = const MediaDetails(
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        width: 1920,
+        height: 1080,
+      );
+    final service = MediaDetailsService(probeBackend: backend);
+
+    final cached = await service.detailsFor(item, priority: true);
+    expect(cached.duration, isNull);
+    expect(backend.requests, isEmpty);
+
+    final refreshed = await service.detailsFor(
+      item,
+      refreshIncomplete: true,
+      priority: true,
+    );
+    service.dispose();
+
+    expect(refreshed.duration, const Duration(minutes: 2));
+    expect(backend.requests.single.videoId, item.videoId);
+  });
+
   test('visible media details jump ahead of queued background probes',
       () async {
     final backend = _PriorityProbeBackend();

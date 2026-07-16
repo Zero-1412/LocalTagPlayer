@@ -188,11 +188,11 @@ class MediaDetailsService {
   }
 
   /**
-   * 返回媒体详情；[refreshIncomplete] 仅供用户点击后的播放前安全预检使用，
+   * 返回媒体详情；[refreshIncomplete] 供播放前安全预检或可见卡片补齐总时长，
    * [priority] 表示请求来自当前可视区域，可以越过尚未开始的后台任务。
    *
-   * 普通列表和播放器队列保持缓存优先，不能因缺少单个字段自动启动探测；播放前预检
-   * 可刷新缺少编码或分辨率的旧记录，防止半成品缓存永久绕过硬解兼容矩阵。
+   * 普通列表和播放器队列保持缓存优先，不能因缺少单个字段自动启动探测；显式刷新会
+   * 补齐编码、分辨率或总时长，防止旧版半成品缓存永久缺少卡片时长或绕过硬解矩阵。
    */
   Future<MediaDetails> detailsFor(
     VideoItem item, {
@@ -202,7 +202,9 @@ class MediaDetailsService {
     final cached = cachedDetailsFor(item);
     final cachedIsComplete = cached?.videoCodec != null &&
         cached?.width != null &&
-        cached?.height != null;
+        cached?.height != null &&
+        (item.playbackDuration > Duration.zero ||
+            (cached?.duration != null && cached!.duration! > Duration.zero));
     if (cached != null && (!refreshIncomplete || cachedIsComplete)) {
       _cache[item.path] = cached;
       return Future.value(cached);

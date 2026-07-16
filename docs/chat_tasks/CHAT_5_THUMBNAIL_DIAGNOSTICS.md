@@ -1,5 +1,11 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
+## 2026-07-16 正常启动后的可见时长补齐
+
+- 正常启动不会为了旧媒体详情做全量重扫；真实进入视口且总时长缺失的卡片通过 `refreshIncomplete + priority` 提升到现有有限探测队列。
+- 缓存完整性现在同时要求编码、分辨率和可靠总时长，避免旧版详情缓存让可见卡片长期停留在 `--:--`。
+- 探测完成后继续写入稳定 videoId 对应的 `playback_duration_ms`，只触发轻量视图刷新；86 项 widget、7 项媒体探测测试、analyze、Windows build 与真实时长截图通过。
+
 ## 2026-07-16 媒体总时长批量补齐
 
 - Windows 原生媒体探测从 `AVFormatContext::duration` 返回毫秒；兼容 FFprobe 追加读取 `format.duration`，都继续经过 `MediaProbeBackend` / `FFmpegBackend` 平台边界。
