@@ -155,8 +155,10 @@ void main() {
     expect(wideOverlay.edgeInset, 9);
     expect(wideOverlay.favoriteButtonSize, 34);
     expect(wideOverlay.durationFontSize, 11);
-    expect(libraryFavoriteOverlayOpacity, 0.46);
+    expect(libraryFavoriteOverlayOpacity, 0);
     expect(libraryDurationOverlayOpacity, 0.56);
+    expect(libraryDurationOpacityForPreview(false), 1);
+    expect(libraryDurationOpacityForPreview(true), 0);
     expect(libraryVideoHoverScale, 1.06);
     expect(libraryVideoDurationLabel(Duration.zero), '--:--');
     expect(
@@ -370,6 +372,28 @@ void main() {
       find.byKey(LibrarySmokeKeys.cardOpen(item.path)),
     );
     expect(cardInkWell.hoverColor, Colors.transparent);
+    final favoriteButton = tester.widget<IconButton>(
+      find.byKey(LibrarySmokeKeys.cardFavorite(item.path)),
+    );
+    expect(
+      favoriteButton.style?.backgroundColor?.resolve(<WidgetState>{}),
+      Colors.transparent,
+    );
+    for (final state in <WidgetState>{
+      WidgetState.hovered,
+      WidgetState.focused,
+      WidgetState.pressed,
+    }) {
+      expect(
+        favoriteButton.style?.overlayColor?.resolve(<WidgetState>{state}),
+        Colors.transparent,
+      );
+    }
+    final durationOverlay = tester.widget<AnimatedOpacity>(
+      find.byKey(LibrarySmokeKeys.cardDuration(item.path)),
+    );
+    expect(durationOverlay.opacity, 1);
+    expect(durationOverlay.duration, libraryHoverPreviewFadeDuration);
 
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);

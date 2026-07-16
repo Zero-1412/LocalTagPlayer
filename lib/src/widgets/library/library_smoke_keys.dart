@@ -121,7 +121,7 @@ class LibrarySmokeKeys {
   static ValueKey<String> cardFavorite(String path) =>
       ValueKey<String>('smoke.card.favorite:${TagRules.pathKey(path)}');
 
-  /** 仅缩略图参与 hover 浮动的稳定测试入口。 */
+  /** 仅缩略图参与 hover 动画的稳定测试入口。 */
   static ValueKey<String> cardThumbnailSurface(String path) => ValueKey<String>(
         'smoke.card.thumbnail-surface:${TagRules.pathKey(path)}',
       );
@@ -134,6 +134,11 @@ class LibrarySmokeKeys {
   /** 动态预览透明度动画的稳定测试入口。 */
   static ValueKey<String> cardHoverPreview(String path) => ValueKey<String>(
         'smoke.card.hover-preview:${TagRules.pathKey(path)}',
+      );
+
+  /** 动态预览期间隐藏时长角标的稳定测试入口。 */
+  static ValueKey<String> cardDuration(String path) => ValueKey<String>(
+        'smoke.card.duration:${TagRules.pathKey(path)}',
       );
 
   /** 媒体库增量滚动结果稳定标识。 */

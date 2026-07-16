@@ -194,11 +194,15 @@ LibraryVideoOverlayMetrics libraryVideoOverlayMetrics(double cardWidth) {
   );
 }
 
-/** 收藏底色保留轻量对比，避免形成覆盖缩略图的大块黑色按钮。 */
-const double libraryFavoriteOverlayOpacity = 0.46;
+/** 收藏按钮底色保持完全透明，仅由红心轮廓和阴影保证亮色视频上的可见性。 */
+const double libraryFavoriteOverlayOpacity = 0;
 
 /** 时长角标使用比旧版更透明的底色，并由文字阴影补足亮色视频上的可读性。 */
 const double libraryDurationOverlayOpacity = 0.56;
+
+/** 动态预览真正显示时隐藏静态视频时长，退出预览后恢复。 */
+double libraryDurationOpacityForPreview(bool previewVisible) =>
+    previewVisible ? 0 : 1;
 
 /** 缩略图占位状态；只描述展示结果，不改变生成服务的失败或重试语义。 */
 enum LibraryThumbnailPlaceholderState { loading, failed, empty }
@@ -1577,7 +1581,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
                           selected: widget.item.isFavorite,
                           label:
                               LibrarySmokeSemantics.videoFavorite(widget.item),
-                          child: IconButton.filled(
+                          child: IconButton(
                             key:
                                 LibrarySmokeKeys.cardFavorite(widget.item.path),
                             tooltip: widget.item.isFavorite ? '取消收藏' : '添加收藏',
@@ -1595,9 +1599,10 @@ class _VideoPreviewState extends State<_VideoPreview> {
                               ],
                             ),
                             style: IconButton.styleFrom(
-                              backgroundColor: Colors.black.withValues(
-                                alpha: libraryFavoriteOverlayOpacity,
-                              ),
+                              backgroundColor: Colors.transparent,
+                              hoverColor: Colors.transparent,
+                              focusColor: Colors.transparent,
+                              highlightColor: Colors.transparent,
                               foregroundColor: widget.item.isFavorite
                                   ? const Color(0xffff5a6f)
                                   : Colors.white.withValues(alpha: 0.94),
@@ -1612,33 +1617,41 @@ class _VideoPreviewState extends State<_VideoPreview> {
                     Positioned(
                       right: overlay.edgeInset,
                       bottom: overlay.edgeInset,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(
-                            alpha: libraryDurationOverlayOpacity,
-                          ),
-                          borderRadius: BorderRadius.circular(4),
+                      child: AnimatedOpacity(
+                        key: LibrarySmokeKeys.cardDuration(widget.item.path),
+                        opacity: libraryDurationOpacityForPreview(
+                          _isHoverPreviewVisible,
                         ),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: overlay.durationHorizontalPadding,
-                            vertical: overlay.durationVerticalPadding,
-                          ),
-                          child: Text(
-                            libraryVideoDurationLabel(
-                              widget.item.playbackDuration,
+                        duration: libraryHoverPreviewFadeDuration,
+                        curve: Curves.easeOutCubic,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(
+                              alpha: libraryDurationOverlayOpacity,
                             ),
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: overlay.durationFontSize,
-                              fontWeight: FontWeight.w600,
-                              height: 1,
-                              shadows: const <Shadow>[
-                                Shadow(
-                                  color: Color(0xcc000000),
-                                  blurRadius: 2,
-                                ),
-                              ],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: overlay.durationHorizontalPadding,
+                              vertical: overlay.durationVerticalPadding,
+                            ),
+                            child: Text(
+                              libraryVideoDurationLabel(
+                                widget.item.playbackDuration,
+                              ),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: overlay.durationFontSize,
+                                fontWeight: FontWeight.w600,
+                                height: 1,
+                                shadows: const <Shadow>[
+                                  Shadow(
+                                    color: Color(0xcc000000),
+                                    blurRadius: 2,
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
