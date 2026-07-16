@@ -100,6 +100,8 @@ class LibraryVideoPersistence {
         'added_at': item.addedAt.toIso8601String(),
         'last_played_at': item.lastPlayedAt?.toIso8601String(),
         'is_missing': item.isMissing ? 1 : 0,
+        // 正常 upsert 都代表视频处于 active root；解除管理只能走显式 detached 方法。
+        'is_detached': 0,
         'playback_position_ms': item.playbackPosition.inMilliseconds,
         'playback_duration_ms': item.playbackDuration.inMilliseconds,
         'playback_completed': item.playbackCompleted ? 1 : 0,
@@ -176,6 +178,21 @@ class LibraryVideoPersistence {
       'videos',
       where: Platform.isWindows ? 'path = ? COLLATE NOCASE' : 'path = ?',
       whereArgs: [path],
+    );
+  }
+
+  /**
+   * 在 root 生命周期事务中切换解除管理状态。
+   *
+   * 这里只修改管理可见性，不删除视频行或标签关系，因此收藏、播放记录和稳定 videoId
+   * 可以在相同 root 重新加入或 fingerprint relink 后继续使用。
+   */
+  void markDetachedInBatch(Batch batch, String videoId, bool detached) {
+    batch.update(
+      'videos',
+      <String, Object?>{'is_detached': detached ? 1 : 0},
+      where: 'video_id = ?',
+      whereArgs: <Object?>[videoId],
     );
   }
 

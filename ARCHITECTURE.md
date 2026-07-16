@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.36` 为 `FileSystemAdapter` 增加不可降级的系统回收站契约。播放器和媒体库只有在 Windows 回收站操作成功后才删除 SQLite 视频记录，避免 UI 声称可恢复而平台层执行永久删除。
+`Architecture Baseline 0.5.37` 为 root 生命周期增加 `is_detached` 归档状态。解除目录管理只让视频退出 active 查询与播放队列，不再删除稳定身份和用户数据；同一路径重新添加按 path 恢复，移动后重新添加按唯一 fingerprint relink。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,12 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.36`
+已完成基线：`Architecture Baseline 0.5.37`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.37`：`videos` 幂等增加 `is_detached`，Store hydration 拆分 active/detached 路径索引。移除 root 在同一 SQLite batch 中保存剩余 roots 并标记仅属于该 root 的视频 detached，保留 videoId、标签关系、收藏、播放记录、媒体详情和缩略图；detached 不进入 `TagQueryService` 或 filtered queue，但标签管理仍保留其引用计数。重新添加相同 root 按 path 激活原行，路径变化时由扫描协调器按两侧唯一 fingerprint relink；过期媒体探测 upsert 不能静默激活 detached。旧库默认迁移为 active，未修改 `FilterQuery` / `TagQueryService` 语义或 `PlayerBackend`。
 - `0.5.36`：`FileSystemAdapter.moveFileToTrash` 明确区分可恢复删除与原永久 `deleteFile`；Windows 桌面适配器通过系统 `SendToRecycleBin` 边界执行，路径不拼接进脚本，失败时抛出异常且上层不删除 SQLite 记录。播放器队列左滑操作区改为主题深色胶囊、细描边和低强调图标，不再使用突兀的大面积红色块。只读数据库审计确认收藏字段一直写入 SQLite；本轮未修改 schema、stable identity、`FilterQuery` / `TagQueryService`、filtered queue 或缓存队列，也未自动改写用户正式库。
 - `0.5.35`：`PlaybackSettings` 向后兼容增加镜像、队列播放方式、画面比例和倍速；旧 `settings.json` 缺字段或包含异常值时恢复安全默认值。播放器设置写入串行化并同步更新应用级快照，重启后的新会话会在媒体 open 前后把比例与倍速重新送入 `PlayerBackend`，避免只保存数据或 UI 选中态。设置浮层保持一级镜像/循环开关，二级只显示比例与倍速导航，各自进入三级选择列表；二级不再重复播放方式、快捷键和播放诊断。SQLite schema、FilterQuery/TagQueryService、filtered queue、缩略图/媒体详情队列和用户数据均未改变。
 - `0.5.34`：`LibraryScanBackend` 增加无路径阶段进度与暂停/恢复契约；Rust sidecar 先发现候选，再对确定总数执行 stat/fingerprint，并用 stderr 计数协议上报，stdout 快照协议与 SQLite 单写边界不变。播放前通过 `LibraryScanPlaybackGate` 自动暂停目录扫描，退出后原位恢复；提交大量差量时每 256 项让出 UI isolate。真实 `X:\test-media` 热缓存强制 fingerprint 对照为 11,163 项：目录发现 24ms、fingerprint 1,444ms、初次历史上下文提交 1,995ms、稳定态端到端 754ms；冷启动继续由阶段 JSONL 记录，不把热缓存结果冒充冷盘数据。SQLite schema、stable identity、标签语义、filtered queue、PlayerBackend 和媒体探测并发均未改变。

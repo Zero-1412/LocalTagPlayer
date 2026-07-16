@@ -102,6 +102,7 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
       Iterable<String> rootPaths,
       {LibraryScanProgressCallback? onProgress});
 
+  /** 解除 root 管理并返回本轮转为 detached 的视频，不删除稳定身份或用户数据。 */
   Future<List<VideoItem>> removeRoot(String rootPath);
 
   Future<LibraryScanCommitResult> scanWithChanges({

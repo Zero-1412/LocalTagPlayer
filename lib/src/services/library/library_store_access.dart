@@ -21,7 +21,10 @@ abstract interface class LibraryStoreAccess {
   int get scanGeneration;
   List<String> get roots;
   List<String> get favoriteTags;
+  /** 当前由 active root 管理、可以进入查询与播放队列的视频。 */
   Map<String, VideoItem> get videos;
+  /** 已解除 root 管理但仍保留稳定身份和用户数据的视频。 */
+  Map<String, VideoItem> get detachedVideos;
   Map<String, TagItem> get tagsById;
   Map<String, Set<String>> get videoTagIdsByPathKey;
   LibraryMetadataPersistence get metadataPersistence;

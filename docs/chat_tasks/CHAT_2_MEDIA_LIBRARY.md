@@ -1,3 +1,11 @@
+## 2026-07-16 root detached 稳定身份归档与收藏恢复
+
+- 正式库恢复前先创建 SQLite 一致性备份；快照 3 条收藏以 path + fingerprint 精确匹配后单事务恢复，恢复前 3 条、恢复后 6 条，前后完整性检查均为 `ok`。
+- `videos.is_detached` 作为 root 管理状态，不复用 missing：文件仍存在但 root 被解除管理时，记录退出 active 媒体库，同时完整保留 videoId、标签关系、收藏、播放进度和缓存字段。
+- 重新添加同一路径按 path 激活原记录；移动到新 root 时按唯一 fingerprint 复用原 relink 链路。过期媒体探测 upsert 不得激活 detached。
+- `TagQueryService` 与播放器只消费 active `videos`；标签管理引用继续包含 detached，保护归档视频依赖的手动标签。root 移除不再清理缩略图缓存。
+- focused tests 覆盖旧 schema 幂等迁移、同 root 恢复、跨 root fingerprint 恢复、重载和过期回调隔离；`FilterQuery`、标签来源语义和 PlayerBackend 未改变。
+
 ## 2026-07-08 Store focused tests 与扫描边界
 
 - 新增 `test/library_store_test.dart`，用临时数据目录和真实小型文件树覆盖 `LibraryStore` 的扫描、folder 标签派生、manual 标签维护和 SQLite 持久化读写。
@@ -23,8 +31,8 @@
 
 ## 2026-07-13 目录与视频删除语义
 
-- 移除 root 不再保留脱离管理范围的视频总量：metadata、视频行和标签关系在单 SQLite batch 中提交，磁盘文件不删除。
-- 父子 root 重叠时，仅删除不再受任何剩余 root 覆盖的条目；focused test 覆盖父 root 移除后子 root 视频保留。
+- 当时实现为移除 root 后删除脱离管理范围的视频行和标签关系；该策略已在 2026-07-16 被 `is_detached` 归档语义取代，保留于此仅作历史记录。
+- 父子 root 重叠时，仅让不再受任何剩余 root 覆盖的条目退出 active 媒体库；focused test 覆盖父 root 移除后子 root 视频继续 active。
 - 卡片删除可选择仅移出媒体库或同步删除本地文件；stable 视频行中的收藏、播放进度和媒体详情随记录删除，标签关系显式清理。
 
 ## 2026-07-13 SQLite hydration 与 Rust ScanDelta

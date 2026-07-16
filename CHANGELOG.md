@@ -1,5 +1,14 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-16 · 收藏恢复与 root detached 稳定身份归档
+
+- 使用 SQLite 在线备份 API 在正式库同目录生成恢复前一致性备份；备份包含 11,163 条视频和恢复前 3 条收藏，`integrity_check=ok`。快照中的 3 条收藏逐条以 path 和 `media_fingerprint` 双重匹配，在一个 `BEGIN IMMEDIATE` 事务中恢复；恢复后正式库共 6 条收藏且完整性仍为 `ok`。
+- `videos` 幂等新增 `is_detached INTEGER NOT NULL DEFAULT 0` 和索引。旧库所有现有行默认 active，不清空或重建用户数据。
+- 移除 root 改为在 metadata 与 detached 状态的同一 batch 中提交；不再删除视频行、标签关系、收藏、播放记录、媒体详情或缩略图。detached 视频退出常规媒体库、筛选和播放队列，标签管理仍保留其引用，避免误删归档数据依赖的标签。
+- 重新添加相同 root 时按 path 激活原 videoId；路径变化时 detached 记录加入唯一 fingerprint 候选并复用既有 relink 事务。root 移除前发出的过期单条/批量 upsert 会被拒绝，不能把 detached 静默改回 active。
+- focused tests 覆盖旧 schema 迁移、同 root 恢复、跨 root 移动恢复、用户数据重载、归档标签保护和过期回调隔离；133 项完整测试通过，3 项显式烟测/基准跳过。
+- `flutter analyze` 与 Windows debug build 通过；最新构建真实窗口确认 root 移除弹窗的主题、对齐、文案和按钮状态正常，取消后媒体库仍为 11,163 条视频和 6 条收藏。正式库只读复核确认 `is_detached` 已迁移、当前 detached 为 0、完整性为 `ok`。
+
 ## 2026-07-16 · 收藏数据审计、回收站删除与队列操作区优化
 
 - 只读检查正式 `library.db`、legacy JSON 和隔离基准快照：收藏字段一直写入 SQLite；正式库当前 11,163 条视频中只有 1 条收藏，旧快照的 11,135 条视频中仍有 3 条收藏。正式索引在同一秒整批创建了新 `videoId`，旧收藏与播放状态没有迁移到新身份，说明问题是索引身份重建而非收藏按钮只改内存。

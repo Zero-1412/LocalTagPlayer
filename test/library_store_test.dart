@@ -219,6 +219,23 @@ void main() {
     expect(item.playbackCompleted, isFalse);
     expect(migrated.videoTagIdsByPathKey[TagRules.pathKey(legacyPath)],
         contains('manual:legacy'));
+    final migratedColumns = await migrated.database.rawQuery(
+      'PRAGMA table_info(videos)',
+    );
+    expect(
+      migratedColumns.map((row) => row['name']),
+      contains('is_detached'),
+    );
+    expect(
+      (await migrated.database.query(
+        'videos',
+        columns: const <String>['is_detached'],
+        where: 'video_id = ?',
+        whereArgs: <Object?>[item.videoId],
+      ))
+          .single['is_detached'],
+      0,
+    );
   });
 
   test('scan derives folder tags and persists scanned videos', () async {
@@ -500,7 +517,7 @@ void main() {
     expect(withoutRoot.favoriteTags, ['alpha', 'beta']);
   });
 
-  test('removing root deletes detached database records but keeps local files',
+  test('removing and readding root preserves detached identity and user data',
       () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('remove_root_records');
@@ -517,7 +534,13 @@ void main() {
 
     final store = await _loadTrackedStore(stores);
     expect(await store.addRootAndScan(mediaRoot.path), 1);
-    final item = _videoByPath(store, file.path)..isFavorite = true;
+    final item = _videoByPath(store, file.path)
+      ..isFavorite = true
+      ..lastPlayedAt = DateTime.utc(2026, 7, 16, 8)
+      ..playbackPosition = const Duration(seconds: 41)
+      ..playbackDuration = const Duration(minutes: 2)
+      ..playbackPositionUpdatedAt = DateTime.utc(2026, 7, 16, 8, 1);
+    final stableVideoId = item.videoId;
     await store.upsertVideo(item);
     final manual =
         await store.createManualTag(name: '保留性测试', groupId: 'manual');
@@ -531,11 +554,54 @@ void main() {
     final reloaded = await _loadTrackedStore(stores);
     expect(reloaded.roots, isEmpty);
     expect(reloaded.videos, isEmpty);
+    final detached = reloaded.detachedVideos[TagRules.pathKey(file.path)];
+    expect(detached?.videoId, stableVideoId);
+    expect(detached?.isFavorite, isTrue);
+    expect(detached?.playbackPosition, const Duration(seconds: 41));
     expect(
       reloaded.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
-      isNull,
+      contains(manual.id),
     );
-    expect((await reloaded.tagUsageSummaries())[manual.id]?.manual ?? 0, 0);
+    // 标签管理器继续显示归档引用，避免用户误删 detached 视频仍依赖的手动标签。
+    expect((await reloaded.tagUsageSummaries())[manual.id]?.manual ?? 0, 1);
+    await reloaded.upsertVideo(detached!);
+    await reloaded.upsertVideos(<VideoItem>[detached]);
+    await reloaded.rebuildTagIndex();
+    expect(reloaded.videos, isEmpty);
+    expect(
+      (await reloaded.database.query(
+        'videos',
+        columns: const <String>['is_detached'],
+        where: 'video_id = ?',
+        whereArgs: <Object?>[stableVideoId],
+      ))
+          .single['is_detached'],
+      1,
+    );
+    expect(
+      reloaded.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
+      contains(manual.id),
+    );
+
+    expect(await reloaded.addRootAndScan(mediaRoot.path), 0);
+    final restored = _videoByPath(reloaded, file.path);
+    expect(restored.videoId, stableVideoId);
+    expect(restored.isFavorite, isTrue);
+    expect(restored.playbackPosition, const Duration(seconds: 41));
+    expect(restored.playbackDuration, const Duration(minutes: 2));
+    expect(
+      reloaded.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
+      contains(manual.id),
+    );
+    expect(reloaded.detachedVideos, isEmpty);
+    expect((await reloaded.tagUsageSummaries())[manual.id]?.manual ?? 0, 1);
+
+    final restoredReload = await _loadTrackedStore(stores);
+    final persisted = _videoByPath(restoredReload, file.path);
+    expect(persisted.videoId, stableVideoId);
+    expect(persisted.isFavorite, isTrue);
+    expect(persisted.playbackPosition, const Duration(seconds: 41));
+    expect(restoredReload.detachedVideos, isEmpty);
   });
 
   test('removing parent root keeps videos covered by a nested root', () async {
@@ -572,6 +638,53 @@ void main() {
     final reloaded = await _loadTrackedStore(stores);
     expect(reloaded.roots, [nestedRoot.path]);
     expect(reloaded.videos[TagRules.pathKey(file.path)]?.videoId, item.videoId);
+  });
+
+  test('adding a moved root relinks detached video by unique fingerprint',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('detached_root_relink');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final sourceRoot = Directory(p.join(dataDir.path, 'source'));
+    final destinationRoot = Directory(p.join(dataDir.path, 'destination'));
+    final original = await _writeVideoPlaceholder(
+      sourceRoot,
+      ['Series', 'moving.mp4'],
+    );
+    final store = await _loadTrackedStore(stores);
+    expect(await store.addRootAndScan(sourceRoot.path), 1);
+    final item = _videoByPath(store, original.path)..isFavorite = true;
+    final stableVideoId = item.videoId;
+    final manual =
+        await store.createManualTag(name: 'detached-move', groupId: 'manual');
+    await store.batchAddManualTag(manual, <VideoItem>[item]);
+    await store.upsertVideo(item);
+
+    await store.removeRoot(sourceRoot.path);
+    final moved = File(p.join(destinationRoot.path, 'Renamed', 'moved.mp4'));
+    await moved.parent.create(recursive: true);
+    await original.rename(moved.path);
+
+    expect(await store.addRootAndScan(destinationRoot.path), 0);
+
+    final relinked = _videoByPath(store, moved.path);
+    expect(relinked.videoId, stableVideoId);
+    expect(relinked.isFavorite, isTrue);
+    expect(store.detachedVideos, isEmpty);
+    expect(
+      store.videoTagIdsByPathKey[TagRules.pathKey(moved.path)],
+      contains(manual.id),
+    );
+    expect(store.videos[TagRules.pathKey(original.path)], isNull);
+
+    final reloaded = await _loadTrackedStore(stores);
+    final persisted = _videoByPath(reloaded, moved.path);
+    expect(persisted.videoId, stableVideoId);
+    expect(persisted.isFavorite, isTrue);
+    expect(reloaded.detachedVideos, isEmpty);
   });
 
   test('scan coordinator marks missing videos and preserves manual tags',

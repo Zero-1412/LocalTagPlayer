@@ -211,6 +211,14 @@ class LibraryScanCoordinator {
       }
       (relocationCandidates[fingerprint] ??= <VideoItem>[]).add(item);
     }
+    for (final item in _store.detachedVideos.values) {
+      final fingerprint = item.mediaFingerprint;
+      if (fingerprint == null) {
+        continue;
+      }
+      // detached 视频不再受旧 root 管理；新 root 中的唯一 fingerprint 可以认领原身份。
+      (relocationCandidates[fingerprint] ??= <VideoItem>[]).add(item);
+    }
 
     final changedEntries = scanDelta.changedEntries.toList(growable: false);
     onProgress?.call(LibraryScanProgress(
@@ -223,7 +231,9 @@ class LibraryScanCoordinator {
     for (var index = 0; index < changedEntries.length; index += 1) {
       final scanned = changedEntries[index];
       final videoKey = TagRules.pathKey(scanned.path);
-      final existing = _store.videos[videoKey];
+      final activeExisting = _store.videos[videoKey];
+      final detachedExisting = _store.detachedVideos[videoKey];
+      final existing = activeExisting ?? detachedExisting;
       if (existing == null) {
         final candidates = relocationCandidates[scanned.mediaFingerprint] ??
             const <VideoItem>[];
@@ -242,8 +252,17 @@ class LibraryScanCoordinator {
           added++;
         }
       } else {
-        final contentChanged =
-            _mergeExistingScannedVideo(batch, existing, scanned);
+        if (detachedExisting != null) {
+          // 同一路径重新加入时直接恢复原 videoId，不要求再次依赖 fingerprint 猜测身份。
+          _store.detachedVideos.remove(videoKey);
+          _store.videos[videoKey] = detachedExisting;
+        }
+        final contentChanged = _mergeExistingScannedVideo(
+          batch,
+          existing,
+          scanned,
+          forcePersist: detachedExisting != null,
+        );
         changedById[existing.videoId] = existing;
         if (contentChanged) {
           probeById[existing.videoId] = existing;
@@ -332,10 +351,8 @@ class LibraryScanCoordinator {
    * 只刷新扫描派生字段；收藏、播放时间、手动标签、媒体详情等用户或缓存数据保持原样。
    */
   bool _mergeExistingScannedVideo(
-    Batch batch,
-    VideoItem existing,
-    LibraryScannedVideo scanned,
-  ) {
+      Batch batch, VideoItem existing, LibraryScannedVideo scanned,
+      {bool forcePersist = false}) {
     final tagsChanged = !libraryTagSetsEqual(existing.tags, scanned.tags);
     final childTagsChanged =
         !libraryChildTagsEqual(existing.childTags, scanned.childTags);
@@ -369,7 +386,7 @@ class LibraryScanCoordinator {
       existing.mediaDetailsError = null;
       existing.thumbnailError = null;
     }
-    if (tagsChanged || childTagsChanged || indexChanged) {
+    if (forcePersist || tagsChanged || childTagsChanged || indexChanged) {
       _store.videoPersistence.insertInBatch(batch, existing);
       if (tagsChanged || childTagsChanged) {
         LibraryTagMaintenance(_store).syncFolderTagsInBatch(batch, existing);
@@ -389,6 +406,7 @@ class LibraryScanCoordinator {
     final oldKey = TagRules.pathKey(oldPath);
     final linkedTagIds = _store.videoTagIdsByPathKey.remove(oldKey);
     _store.videos.remove(oldKey);
+    _store.detachedVideos.remove(oldKey);
     existing
       ..path = scanned.path
       ..title = scanned.title

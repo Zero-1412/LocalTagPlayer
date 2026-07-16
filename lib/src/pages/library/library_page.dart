@@ -1936,9 +1936,10 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   /**
-   * 从侧栏移除 root，并删除仅受该 root 管理的数据库记录与缩略图缓存。
+   * 从侧栏解除一个 root 的媒体库管理状态。
    *
-   * 本地视频文件保持不动；仍被其它重叠 root 覆盖的记录由 Store 保留。
+   * 本地文件、稳定视频身份、用户数据和可复用缓存保持不动；仍被其它重叠 root 覆盖的
+   * 视频继续 active，仅不再受任何 root 覆盖的条目进入 detached 归档。
    */
   Future<void> _removeLocalLibraryRoot(String root) async {
     final store = _store;
@@ -1953,10 +1954,10 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   /**
-   * 提交 root 删除并把结果差量应用到当前媒体库。
+   * 提交 root 解除管理并把 active 结果差量应用到当前媒体库。
    *
-   * 系统确认弹窗和隔离压测共用此方法；这里只删除 SQLite 索引和缓存，绝不删除
-   * root 下的本地媒体文件。
+   * 系统确认弹窗和隔离压测共用此方法；Store 只切换 detached 状态，绝不删除 root
+   * 下的本地媒体文件、稳定身份或用户维护数据。
    */
   Future<int> _removeLibraryRootData(String root) async {
     final store = _store;
@@ -1972,8 +1973,8 @@ class _LibraryPageState extends State<LibraryPage> {
       return removedVideos.length;
     }
     setState(() {
-      // 删除改变了过滤引擎的数据源；必须提升 revision，禁止 FilterStateSource 复用
-      // 删除前的 11k 列表缓存，否则 SQLite 已完成但 UI 总量会长期停留在旧值。
+      // 解除管理改变了 active 数据源；必须提升 revision，禁止 FilterStateSource 复用
+      // 操作前的 11k 列表缓存，否则 SQLite 已完成但 UI 总量会长期停留在旧值。
       _libraryDataRevision += 1;
       _invalidateDerivedCaches();
       if (_localLibraryPath != null &&
@@ -1985,11 +1986,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _stableTagCounts = store.resultCounts(const FilterQuery());
     });
     _scheduleFilterRefresh(refreshCounts: true);
-    // 数据库提交后立即刷新总量；大量 JPEG 清理留在低优先级异步阶段，不能阻塞主界面。
-    final thumbnailService = _thumbnailService;
-    if (thumbnailService != null) {
-      unawaited(thumbnailService.deleteThumbnailsFor(removedVideos));
-    }
+    // 缩略图与媒体详情均可在 root 重新加入时复用，解除管理不能把缓存当作垃圾清除。
     return removedVideos.length;
   }
 
@@ -3322,9 +3319,9 @@ class _LibraryPageState extends State<LibraryPage> {
       builder: (context) => AlertDialog(
         title: const Text('\u79fb\u9664\u76ee\u5f55'),
         content: Text(
-          '将从媒体库移除该目录，并删除仅属于该目录的视频数据库记录、标签关系、'
-          '收藏、播放进度、媒体详情和缩略图缓存。\n\n'
-          '不会删除本地视频文件；仍被其它媒体库目录覆盖的视频会保留。\n\n$root',
+          '将解除该目录的媒体库管理，目录中的视频会从当前结果与播放队列隐藏。\n\n'
+          '本地文件、标签关系、收藏、播放进度、媒体详情和稳定视频身份都会保留；'
+          '以后重新添加同一目录或匹配到相同文件时会自动恢复。\n\n$root',
         ),
         actions: [
           TextButton(

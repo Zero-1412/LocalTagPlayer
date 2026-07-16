@@ -35,6 +35,7 @@ class LibraryStore
     this._db,
     this.roots,
     this.videos,
+    this.detachedVideos,
     this.favoriteTags,
     this.tagGroups,
     this.tagsById,
@@ -45,7 +46,10 @@ class LibraryStore
   final File _file;
   final Database _db;
   final List<String> roots;
+  /** 当前受 root 管理并参与筛选、标签计数和播放队列的视频。 */
   final Map<String, VideoItem> videos;
+  /** 已解除管理但保留稳定身份、标签、收藏和播放数据的视频。 */
+  final Map<String, VideoItem> detachedVideos;
   final List<String> favoriteTags;
   final List<TagGroup> tagGroups;
   final Map<String, TagItem> tagsById;
@@ -354,7 +358,9 @@ class LibraryStore
       diagnostics: diagnostics,
       scanBackend: scanBackend,
     );
-    if (store.videos.isEmpty && await legacyFile.exists()) {
+    if (store.videos.isEmpty &&
+        store.detachedVideos.isEmpty &&
+        await legacyFile.exists()) {
       if (diagnostics == null) {
         await store._importLegacyJson();
       } else {
@@ -403,6 +409,7 @@ class LibraryStore
         added_at TEXT NOT NULL,
         last_played_at TEXT,
         is_missing INTEGER NOT NULL DEFAULT 0,
+        is_detached INTEGER NOT NULL DEFAULT 0,
         playback_position_ms INTEGER NOT NULL DEFAULT 0,
         playback_duration_ms INTEGER NOT NULL DEFAULT 0,
         playback_completed INTEGER NOT NULL DEFAULT 0,
@@ -424,6 +431,8 @@ class LibraryStore
         'CREATE INDEX IF NOT EXISTS idx_videos_added ON videos(added_at)');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_videos_last_played ON videos(last_played_at)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_videos_detached ON videos(is_detached)');
     await db.execute('''
       CREATE TABLE IF NOT EXISTS tag_groups (
         id TEXT PRIMARY KEY,
@@ -534,6 +543,7 @@ class LibraryStore
     await addColumn('modified_ms', 'INTEGER');
     await addColumn('video_id', 'TEXT');
     await addColumn('is_missing', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn('is_detached', 'INTEGER NOT NULL DEFAULT 0');
     await addColumn('playback_position_ms', 'INTEGER NOT NULL DEFAULT 0');
     await addColumn('playback_duration_ms', 'INTEGER NOT NULL DEFAULT 0');
     await addColumn('playback_completed', 'INTEGER NOT NULL DEFAULT 0');
@@ -736,12 +746,12 @@ class LibraryStore
             () => db.query('videos'),
             itemCount: (rows) => rows.length,
           );
-    final videos = diagnostics == null
-        ? _videosFromRows(videoRows)
+    final partitionedVideos = diagnostics == null
+        ? _partitionVideosFromRows(videoRows)
         : diagnostics.measureSync(
             'dart.video_object_build',
-            () => _videosFromRows(videoRows),
-            itemCount: (items) => items.length,
+            () => _partitionVideosFromRows(videoRows),
+            itemCount: (items) => items.active.length + items.detached.length,
           );
     final groupRows = diagnostics == null
         ? await db.query(
@@ -802,7 +812,8 @@ class LibraryStore
       legacyFile,
       db,
       metadata.roots,
-      videos,
+      partitionedVideos.active,
+      partitionedVideos.detached,
       metadata.favoriteTags,
       tagGroups,
       tagsById,
@@ -811,15 +822,23 @@ class LibraryStore
     );
   }
 
-  /** 将视频表行转换为按规范化路径索引的对象集合。 */
-  static Map<String, VideoItem> _videosFromRows(
-      List<Map<String, Object?>> rows) {
-    final videos = <String, VideoItem>{};
+  /**
+   * 将视频表行按 root 管理状态拆为 active 与 detached 两个路径索引。
+   *
+   * detached 行只用于重新添加/重新关联时恢复稳定身份，不能进入常规筛选和播放队列。
+   */
+  static ({
+    Map<String, VideoItem> active,
+    Map<String, VideoItem> detached,
+  }) _partitionVideosFromRows(List<Map<String, Object?>> rows) {
+    final active = <String, VideoItem>{};
+    final detached = <String, VideoItem>{};
     for (final row in rows) {
       final item = LibraryVideoPersistence.videoFromRow(row);
-      videos[TagRules.pathKey(item.path)] = item;
+      final target = (row['is_detached'] as int? ?? 0) == 1 ? detached : active;
+      target[TagRules.pathKey(item.path)] = item;
     }
-    return videos;
+    return (active: active, detached: detached);
   }
 
   /** 一次性读取稳定身份对应的视频标签关系，避免逐视频 N+1 查询。 */
@@ -854,10 +873,13 @@ class LibraryStore
     }
   }
 
+  /**
+   * 重新同步 active 视频的 folder 来源索引。
+   *
+   * 手动来源和 detached 视频关系属于用户数据，不能用全表清空方式“重建”。
+   */
   Future<void> rebuildTagIndex() async {
     final batch = _db.batch();
-    batch.delete('video_tags');
-    videoTagIdsByPathKey.clear();
     for (final item in videos.values) {
       _tagMaintenance.syncFolderTagsInBatch(batch, item);
     }
@@ -1015,7 +1037,8 @@ class LibraryStore
       roots: roots,
       favoriteTags: favoriteTags,
     );
-    batch.delete('videos');
+    // detached 行属于用户数据归档，兼容保存 active 集合时不能被全表删除。
+    batch.delete('videos', where: 'is_detached = 0');
     for (final item in videos.values) {
       _videoPersistence.insertInBatch(batch, item);
       _tagMaintenance.syncFolderTagsInBatch(batch, item);
@@ -1043,7 +1066,12 @@ class LibraryStore
   }
 
   Future<void> upsertVideo(VideoItem item) async {
-    videos[TagRules.pathKey(item.path)] = item;
+    final pathKey = TagRules.pathKey(item.path);
+    if (!videos.containsKey(pathKey) && detachedVideos.containsKey(pathKey)) {
+      // root 移除前发出的异步探测/缓存回调不能把 detached 记录静默恢复为 active。
+      return;
+    }
+    videos[pathKey] = item;
     await _videoPersistence.upsert(item);
   }
 
@@ -1053,12 +1081,18 @@ class LibraryStore
    * 媒体详情只更新现有视频行；标签关系仍由扫描或标签维护流程拥有，不能在这里重建。
    */
   Future<void> upsertVideos(Iterable<VideoItem> items) async {
-    final updates = items.toList(growable: false);
+    final updates = <VideoItem>[
+      for (final item in items)
+        if (videos.containsKey(TagRules.pathKey(item.path)) ||
+            !detachedVideos.containsKey(TagRules.pathKey(item.path)))
+          item,
+    ];
     if (updates.isEmpty) {
       return;
     }
     for (final item in updates) {
-      videos[TagRules.pathKey(item.path)] = item;
+      final pathKey = TagRules.pathKey(item.path);
+      videos[pathKey] = item;
     }
     await _videoPersistence.upsertAll(updates);
   }
@@ -1071,7 +1105,7 @@ class LibraryStore
    */
   Future<VideoItem?> deleteVideo(String path) async {
     final pathKey = TagRules.pathKey(path);
-    final item = videos[pathKey];
+    final item = videos[pathKey] ?? detachedVideos[pathKey];
     final batch = _db.batch();
     if (item != null) {
       _tagPersistence.deleteVideoLinksInBatch(
@@ -1083,6 +1117,7 @@ class LibraryStore
     _videoPersistence.deleteInBatch(batch, path);
     await batch.commit(noResult: true);
     videos.remove(pathKey);
+    detachedVideos.remove(pathKey);
     videoTagIdsByPathKey.remove(pathKey);
     return item;
   }
@@ -1142,8 +1177,9 @@ class LibraryStore
   /**
    * 从媒体库根目录列表移除一个目录。
    *
-   * root 配置、仅受该 root 管理的视频行及其标签关系在同一事务中提交。重叠 root
-   * 仍覆盖的视频会保留，磁盘文件始终不由该操作删除。
+   * root 配置与仅受该 root 管理视频的 detached 状态在同一事务中提交。视频行、标签
+   * 关系、收藏、播放记录和媒体缓存字段全部保留；重叠 root 仍覆盖的视频继续 active，
+   * 磁盘文件始终不由该操作删除。
    */
   Future<List<VideoItem>> removeRoot(String rootPath) async {
     final normalizedRoot = TagRules.normalizeRootPath(rootPath);
@@ -1177,12 +1213,7 @@ class LibraryStore
       favoriteTags: favoriteTags,
     );
     for (final item in removedVideos) {
-      _tagPersistence.deleteVideoLinksInBatch(
-        batch,
-        item,
-        updateMemoryIndex: false,
-      );
-      _videoPersistence.deleteInBatch(batch, item.path);
+      _videoPersistence.markDetachedInBatch(batch, item.videoId, true);
     }
     await batch.commit(noResult: true);
 
@@ -1192,7 +1223,7 @@ class LibraryStore
     for (final item in removedVideos) {
       final pathKey = TagRules.pathKey(item.path);
       videos.remove(pathKey);
-      videoTagIdsByPathKey.remove(pathKey);
+      detachedVideos[pathKey] = item;
     }
     return List<VideoItem>.unmodifiable(removedVideos);
   }
