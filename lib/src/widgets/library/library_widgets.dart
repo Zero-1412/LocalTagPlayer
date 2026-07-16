@@ -370,6 +370,8 @@ class LibrarySidebar extends StatelessWidget {
     required this.onClearChildTags,
     required this.onGroupTagToggle,
     required this.onGroupTagExcludeToggle,
+    this.collapsed = false,
+    this.onToggleCollapsed,
     this.width,
   });
 
@@ -408,228 +410,500 @@ class LibrarySidebar extends StatelessWidget {
   final VoidCallback onClearChildTags;
   final ValueChanged<TagItem> onGroupTagToggle;
   final ValueChanged<TagItem> onGroupTagExcludeToggle;
+  /** 是否只显示图标导航；折叠只影响布局，不改变任何媒体库状态。 */
+  final bool collapsed;
+  /** 在完整侧栏与图标侧栏之间切换。 */
+  final VoidCallback? onToggleCollapsed;
   /** expanded 主界面按窗口比例计算出的侧栏宽度；medium 继续使用默认密度宽度。 */
   final double? width;
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: width ?? (dense ? 248 : 274),
+    final sidebarWidth = collapsed ? 76.0 : width ?? (dense ? 248 : 274);
+    return AnimatedContainer(
+      key: LibrarySmokeKeys.sidebarSurface,
+      duration: appMotionDuration,
+      curve: appMotionCurve,
+      width: sidebarWidth,
       height: MediaQuery.sizeOf(context).height,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: appShell,
-          border: Border(right: BorderSide(color: Color(0xff263244))),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding:
-                EdgeInsets.fromLTRB(dense ? 16 : 22, 18, dense ? 16 : 22, 18),
-            child: Column(
-              children: [
-                Expanded(
-                  child: ScrollConfiguration(
-                    behavior: const DesktopDragScrollBehavior(),
-                    child: ListView(
-                      padding: EdgeInsets.zero,
-                      children: [
-                        const LibrarySidebarBrand(),
-                        const SizedBox(height: 24),
-                        LibrarySidebarNavItem(
-                          icon: Icons.grid_view_rounded,
-                          label: '\u5a92\u4f53\u5e93',
-                          selected: !recentPlaybackSelected &&
-                              !favoriteVideosSelected &&
-                              !localLibrarySelected,
-                          trailing:
-                              roots.isEmpty ? null : roots.length.toString(),
-                          onTap: onShowAllLibrary,
-                        ),
-                        LibrarySidebarNavItem(
-                          icon: Icons.history_rounded,
-                          label: '继续观看',
-                          selected: recentPlaybackSelected,
-                          trailing: null,
-                          onTap: onOpenRecentPlayback,
-                        ),
-                        LibrarySidebarNavItem(
-                          icon: Icons.auto_awesome_outlined,
-                          label: '\u672c\u5730\u6536\u85cf',
-                          selected: favoriteVideosSelected,
-                          trailing: favoriteCount.toString(),
-                          onTap: onFavoritesToggle,
-                        ),
-                        const SizedBox(height: 18),
-                        LibrarySidebarSectionLabel(
-                            label: '\u76ee\u5f55\u4e0e\u670d\u52a1'),
-                        const SizedBox(height: 8),
-                        LibrarySidebarNavItem(
-                          icon: Icons.folder_copy_outlined,
-                          label: '\u76ee\u5f55\u7ba1\u7406',
-                          selected: false,
-                          trailing:
-                              roots.isEmpty ? null : roots.length.toString(),
-                          onTap: onOpenDirectoryManager,
-                        ),
-                        LibrarySidebarNavItem(
-                          icon: Icons.link_off_rounded,
-                          label: '缺失与重新关联',
-                          selected: false,
-                          trailing: missingCount == 0
-                              ? null
-                              : missingCount.toString(),
-                          onTap: onOpenMissingRelink,
-                        ),
-                        LibrarySidebarNavItem(
-                          key: LibrarySmokeKeys.rescanButton,
-                          icon: isScanning
-                              ? Icons.hourglass_empty_rounded
-                              : Icons.sync_rounded,
-                          label: isScanning
-                              ? '\u626b\u63cf\u4e2d'
-                              : '\u91cd\u65b0\u626b\u63cf',
-                          selected: false,
-                          onTap: isScanning || roots.isEmpty ? null : onRescan,
-                        ),
-                        const SizedBox(height: 18),
-                        Row(
+      child: ClipRect(
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            color: appShell,
+            border: Border(right: BorderSide(color: Color(0xff263244))),
+          ),
+          child: SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // 宽度动画期间按真实可用空间切换内容，避免展开内容被提前塞进窄轨道而溢出。
+                final showCollapsedContent = constraints.maxWidth < 200;
+                return showCollapsedContent
+                    ? _CollapsedLibrarySidebar(
+                        roots: roots,
+                        selectedLocalLibraryPath: selectedLocalLibraryPath,
+                        mediaSelected: !recentPlaybackSelected &&
+                            !favoriteVideosSelected &&
+                            !localLibrarySelected,
+                        recentSelected: recentPlaybackSelected,
+                        favoritesSelected: favoriteVideosSelected,
+                        localLibrarySelected: localLibrarySelected,
+                        isScanning: isScanning,
+                        onToggleCollapsed: onToggleCollapsed,
+                        onShowAllLibrary: onShowAllLibrary,
+                        onOpenRecentPlayback: onOpenRecentPlayback,
+                        onFavoritesToggle: onFavoritesToggle,
+                        onOpenDirectoryManager: onOpenDirectoryManager,
+                        onOpenMissingRelink: onOpenMissingRelink,
+                        onRescan: onRescan,
+                        onPickFolder: onPickFolder,
+                        onOpenLocalLibraryRoot: onOpenLocalLibraryRoot,
+                        onOpenSettings: onOpenSettings,
+                      )
+                    : Padding(
+                        padding: EdgeInsets.fromLTRB(
+                            dense ? 16 : 22, 18, dense ? 16 : 22, 18),
+                        child: Column(
                           children: [
-                            const Expanded(
-                              child: LibrarySidebarSectionLabel(
-                                label: '\u672c\u5730\u5a92\u4f53\u5e93',
+                            Expanded(
+                              child: ScrollConfiguration(
+                                behavior: const DesktopDragScrollBehavior(),
+                                child: ListView(
+                                  padding: EdgeInsets.zero,
+                                  children: [
+                                    LibrarySidebarBrand(
+                                      onCollapse: onToggleCollapsed,
+                                    ),
+                                    const SizedBox(height: 24),
+                                    LibrarySidebarNavItem(
+                                      icon: Icons.grid_view_rounded,
+                                      label: '\u5a92\u4f53\u5e93',
+                                      selected: !recentPlaybackSelected &&
+                                          !favoriteVideosSelected &&
+                                          !localLibrarySelected,
+                                      trailing: roots.isEmpty
+                                          ? null
+                                          : roots.length.toString(),
+                                      onTap: onShowAllLibrary,
+                                    ),
+                                    LibrarySidebarNavItem(
+                                      icon: Icons.history_rounded,
+                                      label: '继续观看',
+                                      selected: recentPlaybackSelected,
+                                      trailing: null,
+                                      onTap: onOpenRecentPlayback,
+                                    ),
+                                    LibrarySidebarNavItem(
+                                      icon: Icons.auto_awesome_outlined,
+                                      label: '\u672c\u5730\u6536\u85cf',
+                                      selected: favoriteVideosSelected,
+                                      trailing: favoriteCount.toString(),
+                                      onTap: onFavoritesToggle,
+                                    ),
+                                    const SizedBox(height: 18),
+                                    LibrarySidebarSectionLabel(
+                                        label:
+                                            '\u76ee\u5f55\u4e0e\u670d\u52a1'),
+                                    const SizedBox(height: 8),
+                                    LibrarySidebarNavItem(
+                                      icon: Icons.folder_copy_outlined,
+                                      label: '\u76ee\u5f55\u7ba1\u7406',
+                                      selected: false,
+                                      trailing: roots.isEmpty
+                                          ? null
+                                          : roots.length.toString(),
+                                      onTap: onOpenDirectoryManager,
+                                    ),
+                                    LibrarySidebarNavItem(
+                                      icon: Icons.link_off_rounded,
+                                      label: '缺失与重新关联',
+                                      selected: false,
+                                      trailing: missingCount == 0
+                                          ? null
+                                          : missingCount.toString(),
+                                      onTap: onOpenMissingRelink,
+                                    ),
+                                    LibrarySidebarNavItem(
+                                      key: LibrarySmokeKeys.rescanButton,
+                                      icon: isScanning
+                                          ? Icons.hourglass_empty_rounded
+                                          : Icons.sync_rounded,
+                                      label: isScanning
+                                          ? '\u626b\u63cf\u4e2d'
+                                          : '\u91cd\u65b0\u626b\u63cf',
+                                      selected: false,
+                                      onTap: isScanning || roots.isEmpty
+                                          ? null
+                                          : onRescan,
+                                    ),
+                                    const SizedBox(height: 18),
+                                    Row(
+                                      children: [
+                                        const Expanded(
+                                          child: LibrarySidebarSectionLabel(
+                                            label:
+                                                '\u672c\u5730\u5a92\u4f53\u5e93',
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip:
+                                              '\u65b0\u589e\u672c\u5730\u5e93\u8def\u5f84',
+                                          onPressed:
+                                              isScanning ? null : onPickFolder,
+                                          icon: const Icon(Icons.add_rounded,
+                                              size: 18),
+                                          color: const Color(0xffcbd5e1),
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          constraints:
+                                              const BoxConstraints.tightFor(
+                                            width: 28,
+                                            height: 28,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    if (roots.isEmpty)
+                                      const Text(
+                                        '\u70b9\u51fb + \u6dfb\u52a0\u672c\u5730\u89c6\u9891\u76ee\u5f55',
+                                        style: TextStyle(
+                                          color: Color(0xff718096),
+                                          fontSize: 12,
+                                          height: 1.35,
+                                        ),
+                                      )
+                                    else
+                                      SizedBox(
+                                        height:
+                                            math.min(220, 42.0 * roots.length),
+                                        child: ScrollConfiguration(
+                                          behavior:
+                                              const DesktopDragScrollBehavior(),
+                                          child: ListView.builder(
+                                            itemExtent: 42,
+                                            padding: EdgeInsets.zero,
+                                            itemCount: roots.length,
+                                            itemBuilder: (context, index) {
+                                              final root = roots[index];
+                                              return LibrarySidebarLocalLibraryItem(
+                                                path: root,
+                                                selected:
+                                                    selectedLocalLibraryPath !=
+                                                            null &&
+                                                        TagRules.pathKey(
+                                                                selectedLocalLibraryPath!) ==
+                                                            TagRules.pathKey(
+                                                                root),
+                                                onTap: () =>
+                                                    onOpenLocalLibraryRoot(
+                                                        root),
+                                                onRemove: () =>
+                                                    onRemoveLocalLibraryRoot(
+                                                        root),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    const SizedBox(height: 18),
+                                    LibrarySidebarSectionLabel(
+                                        label: '\u5b58\u50a8\u4f4d\u7f6e'),
+                                    const SizedBox(height: 8),
+                                    if (roots.isEmpty)
+                                      const Text(
+                                        '\u8fd8\u6ca1\u6709\u6dfb\u52a0\u76ee\u5f55',
+                                        style: TextStyle(
+                                            color: Color(0xff718096),
+                                            fontSize: 12),
+                                      )
+                                    else
+                                      for (final root in roots.take(2))
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 10),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                root,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: Color(0xffcbd5e1),
+                                                  fontSize: 11,
+                                                  height: 1.25,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(99),
+                                                child:
+                                                    const LinearProgressIndicator(
+                                                  minHeight: 4,
+                                                  value: 0.58,
+                                                  color: appAccentViolet,
+                                                  backgroundColor:
+                                                      Color(0xff293548),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    const SizedBox(height: 12),
+                                    LibrarySidebarLibraryStat(
+                                      label: '\u6807\u7b7e',
+                                      value: tags.length.toString(),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    LibrarySidebarLibraryStat(
+                                      label: '\u5206\u7ec4',
+                                      value: tagGroups.length.toString(),
+                                    ),
+                                    if (roots.isNotEmpty) ...[
+                                      const SizedBox(height: 12),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(99),
+                                        child: const LinearProgressIndicator(
+                                          minHeight: 4,
+                                          value: 0.58,
+                                          color: appAccentViolet,
+                                          backgroundColor: Color(0xff293548),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
                             ),
-                            IconButton(
-                              tooltip:
-                                  '\u65b0\u589e\u672c\u5730\u5e93\u8def\u5f84',
-                              onPressed: isScanning ? null : onPickFolder,
-                              icon: const Icon(Icons.add_rounded, size: 18),
-                              color: const Color(0xffcbd5e1),
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints.tightFor(
-                                width: 28,
-                                height: 28,
-                              ),
+                            const SizedBox(height: 10),
+                            LibrarySidebarNavItem(
+                              icon: Icons.settings_outlined,
+                              label: '\u8bbe\u7f6e',
+                              selected: false,
+                              onTap: onOpenSettings,
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        if (roots.isEmpty)
-                          const Text(
-                            '\u70b9\u51fb + \u6dfb\u52a0\u672c\u5730\u89c6\u9891\u76ee\u5f55',
-                            style: TextStyle(
-                              color: Color(0xff718096),
-                              fontSize: 12,
-                              height: 1.35,
-                            ),
-                          )
-                        else
-                          SizedBox(
-                            height: math.min(220, 42.0 * roots.length),
-                            child: ScrollConfiguration(
-                              behavior: const DesktopDragScrollBehavior(),
-                              child: ListView.builder(
-                                itemExtent: 42,
-                                padding: EdgeInsets.zero,
-                                itemCount: roots.length,
-                                itemBuilder: (context, index) {
-                                  final root = roots[index];
-                                  return LibrarySidebarLocalLibraryItem(
-                                    path: root,
-                                    selected: selectedLocalLibraryPath !=
-                                            null &&
-                                        TagRules.pathKey(
-                                                selectedLocalLibraryPath!) ==
-                                            TagRules.pathKey(root),
-                                    onTap: () => onOpenLocalLibraryRoot(root),
-                                    onRemove: () =>
-                                        onRemoveLocalLibraryRoot(root),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: 18),
-                        LibrarySidebarSectionLabel(
-                            label: '\u5b58\u50a8\u4f4d\u7f6e'),
-                        const SizedBox(height: 8),
-                        if (roots.isEmpty)
-                          const Text(
-                            '\u8fd8\u6ca1\u6709\u6dfb\u52a0\u76ee\u5f55',
-                            style: TextStyle(
-                                color: Color(0xff718096), fontSize: 12),
-                          )
-                        else
-                          for (final root in roots.take(2))
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    root,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Color(0xffcbd5e1),
-                                      fontSize: 11,
-                                      height: 1.25,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(99),
-                                    child: const LinearProgressIndicator(
-                                      minHeight: 4,
-                                      value: 0.58,
-                                      color: appAccentViolet,
-                                      backgroundColor: Color(0xff293548),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        const SizedBox(height: 12),
-                        LibrarySidebarLibraryStat(
-                          label: '\u6807\u7b7e',
-                          value: tags.length.toString(),
-                        ),
-                        const SizedBox(height: 6),
-                        LibrarySidebarLibraryStat(
-                          label: '\u5206\u7ec4',
-                          value: tagGroups.length.toString(),
-                        ),
-                        if (roots.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(99),
-                            child: const LinearProgressIndicator(
-                              minHeight: 4,
-                              value: 0.58,
-                              color: appAccentViolet,
-                              backgroundColor: Color(0xff293548),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                LibrarySidebarNavItem(
-                  icon: Icons.settings_outlined,
-                  label: '\u8bbe\u7f6e',
-                  selected: false,
-                  onTap: onOpenSettings,
-                ),
-              ],
+                      );
+              },
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/**
+ * 左侧功能栏的图标折叠态。
+ *
+ * 所有主入口仍保留为真实按钮并提供 tooltip；本地 root 以文件夹图标继续可达，移除
+ * 等低频管理动作统一从“目录管理”进入，避免在 76px 宽度内堆叠危险按钮。
+ */
+class _CollapsedLibrarySidebar extends StatelessWidget {
+  const _CollapsedLibrarySidebar({
+    required this.roots,
+    required this.selectedLocalLibraryPath,
+    required this.mediaSelected,
+    required this.recentSelected,
+    required this.favoritesSelected,
+    required this.localLibrarySelected,
+    required this.isScanning,
+    required this.onToggleCollapsed,
+    required this.onShowAllLibrary,
+    required this.onOpenRecentPlayback,
+    required this.onFavoritesToggle,
+    required this.onOpenDirectoryManager,
+    required this.onOpenMissingRelink,
+    required this.onRescan,
+    required this.onPickFolder,
+    required this.onOpenLocalLibraryRoot,
+    required this.onOpenSettings,
+  });
+
+  final List<String> roots;
+  final String? selectedLocalLibraryPath;
+  final bool mediaSelected;
+  final bool recentSelected;
+  final bool favoritesSelected;
+  final bool localLibrarySelected;
+  final bool isScanning;
+  final VoidCallback? onToggleCollapsed;
+  final VoidCallback onShowAllLibrary;
+  final VoidCallback onOpenRecentPlayback;
+  final VoidCallback onFavoritesToggle;
+  final VoidCallback onOpenDirectoryManager;
+  final VoidCallback onOpenMissingRelink;
+  final VoidCallback onRescan;
+  final VoidCallback onPickFolder;
+  final ValueChanged<String> onOpenLocalLibraryRoot;
+  final VoidCallback onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 14, 10, 14),
+      child: Column(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: appAccentViolet,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _CollapsedSidebarItem(
+            key: LibrarySmokeKeys.sidebarCollapseToggle,
+            icon: Icons.keyboard_double_arrow_right_rounded,
+            tooltip: '展开功能栏',
+            selected: false,
+            onTap: onToggleCollapsed,
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                _CollapsedSidebarItem(
+                  icon: Icons.grid_view_rounded,
+                  tooltip: '媒体库',
+                  selected: mediaSelected,
+                  onTap: onShowAllLibrary,
+                ),
+                _CollapsedSidebarItem(
+                  icon: Icons.history_rounded,
+                  tooltip: '继续观看',
+                  selected: recentSelected,
+                  onTap: onOpenRecentPlayback,
+                ),
+                _CollapsedSidebarItem(
+                  icon: Icons.auto_awesome_outlined,
+                  tooltip: '本地收藏',
+                  selected: favoritesSelected,
+                  onTap: onFavoritesToggle,
+                ),
+                const _CollapsedSidebarDivider(),
+                _CollapsedSidebarItem(
+                  icon: Icons.folder_copy_outlined,
+                  tooltip: '目录管理',
+                  selected: false,
+                  onTap: onOpenDirectoryManager,
+                ),
+                _CollapsedSidebarItem(
+                  icon: Icons.link_off_rounded,
+                  tooltip: '缺失与重新关联',
+                  selected: false,
+                  onTap: onOpenMissingRelink,
+                ),
+                _CollapsedSidebarItem(
+                  icon: isScanning
+                      ? Icons.hourglass_empty_rounded
+                      : Icons.sync_rounded,
+                  tooltip: isScanning ? '扫描中' : '重新扫描',
+                  selected: false,
+                  onTap: isScanning || roots.isEmpty ? null : onRescan,
+                ),
+                _CollapsedSidebarItem(
+                  icon: Icons.create_new_folder_outlined,
+                  tooltip: '新增本地库路径',
+                  selected: false,
+                  onTap: isScanning ? null : onPickFolder,
+                ),
+                if (roots.isNotEmpty) const _CollapsedSidebarDivider(),
+                for (final root in roots)
+                  _CollapsedSidebarItem(
+                    icon: Icons.folder_outlined,
+                    tooltip: p.basename(root).isEmpty ? root : p.basename(root),
+                    selected: localLibrarySelected &&
+                        selectedLocalLibraryPath != null &&
+                        TagRules.pathKey(selectedLocalLibraryPath!) ==
+                            TagRules.pathKey(root),
+                    onTap: () => onOpenLocalLibraryRoot(root),
+                  ),
+              ],
+            ),
+          ),
+          _CollapsedSidebarItem(
+            icon: Icons.settings_outlined,
+            tooltip: '设置',
+            selected: false,
+            onTap: onOpenSettings,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/** 图标折叠态的单个入口；选中态仅用背景和强调色表达。 */
+class _CollapsedSidebarItem extends StatelessWidget {
+  const _CollapsedSidebarItem({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Tooltip(
+        message: tooltip,
+        child: Semantics(
+          button: onTap != null,
+          selected: selected,
+          label: tooltip,
+          child: Material(
+            color: selected ? const Color(0xff2b3650) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: onTap,
+              child: SizedBox.square(
+                dimension: 46,
+                child: Icon(
+                  icon,
+                  size: 21,
+                  color: selected
+                      ? appAccentViolet
+                      : onTap == null
+                          ? const Color(0xff526077)
+                          : const Color(0xffa7b4c6),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/** 折叠导航的轻量分组线。 */
+class _CollapsedSidebarDivider extends StatelessWidget {
+  const _CollapsedSidebarDivider();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 6),
+        child: Divider(height: 1, color: Color(0xff2a3548)),
+      );
 }
 
 class LibrarySidebarSectionLabel extends StatelessWidget {
@@ -652,7 +926,10 @@ class LibrarySidebarSectionLabel extends StatelessWidget {
 }
 
 class LibrarySidebarBrand extends StatelessWidget {
-  const LibrarySidebarBrand();
+  const LibrarySidebarBrand({this.onCollapse});
+
+  /** 收起主功能栏；为 null 时保持 smoke harness 的只读品牌头。 */
+  final VoidCallback? onCollapse;
 
   @override
   Widget build(BuildContext context) {
@@ -660,8 +937,8 @@ class LibrarySidebarBrand extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
-          width: 52,
-          height: 52,
+          width: 46,
+          height: 46,
           decoration: BoxDecoration(
             color: appAccentViolet,
             borderRadius: BorderRadius.circular(8),
@@ -676,10 +953,10 @@ class LibrarySidebarBrand extends StatelessWidget {
           child: const Icon(
             Icons.play_arrow_rounded,
             color: Colors.white,
-            size: 32,
+            size: 29,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         const Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -690,7 +967,7 @@ class LibrarySidebarBrand extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 16,
+                  fontSize: 14,
                   height: 1.18,
                   fontWeight: FontWeight.w900,
                 ),
@@ -702,7 +979,7 @@ class LibrarySidebarBrand extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Color(0xff95a3b8),
-                  fontSize: 12,
+                  fontSize: 11,
                   height: 1.2,
                   fontWeight: FontWeight.w600,
                 ),
@@ -710,6 +987,18 @@ class LibrarySidebarBrand extends StatelessWidget {
             ],
           ),
         ),
+        if (onCollapse != null) ...[
+          const SizedBox(width: 6),
+          IconButton(
+            key: LibrarySmokeKeys.sidebarCollapseToggle,
+            tooltip: '折叠功能栏',
+            onPressed: onCollapse,
+            icon: const Icon(Icons.keyboard_double_arrow_left_rounded),
+            color: const Color(0xffa7b4c6),
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints.tightFor(width: 32, height: 36),
+          ),
+        ],
       ],
     );
   }
@@ -1050,10 +1339,10 @@ class LibraryHeroArea extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 64),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         decoration: BoxDecoration(
-          color: appPanel,
+          color: librarySurface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: appBorder),
-          boxShadow: appSoftShadow,
+          border: Border.all(color: libraryBorder),
+          boxShadow: librarySoftShadow,
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -1063,7 +1352,7 @@ class LibraryHeroArea extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: appText,
+                    color: libraryText,
                     fontWeight: FontWeight.w900,
                   ),
             );
@@ -1072,7 +1361,7 @@ class LibraryHeroArea extends StatelessWidget {
               icon: const Icon(Icons.delete_outline_rounded, size: 18),
               label: const Text('\u6e05\u7a7a\u5168\u90e8'),
               style: TextButton.styleFrom(
-                foregroundColor: appTextMuted,
+                foregroundColor: libraryTextMuted,
                 visualDensity: VisualDensity.compact,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -1186,8 +1475,8 @@ class _CurrentFilterChip extends StatelessWidget {
       visualDensity: visualDensity ?? VisualDensity.compact,
       selected: selected,
       selectedColor: selectedColor,
-      side: side ?? const BorderSide(color: Color(0xffd8d4ff)),
-      backgroundColor: const Color(0xfff6f4ff),
+      side: side ?? const BorderSide(color: libraryBorder),
+      backgroundColor: librarySurfaceAlt,
       deleteIconColor: appAccentViolet,
       labelStyle: const TextStyle(
         color: appAccentViolet,
@@ -1428,9 +1717,9 @@ class _SmartListPreviewPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xfff8fafc),
+        color: librarySurfaceAlt,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: appBorder),
+        border: Border.all(color: libraryBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1446,7 +1735,7 @@ class _SmartListPreviewPanel extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: appText,
+                    color: libraryText,
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
                   ),
@@ -1468,7 +1757,7 @@ class _SmartListPreviewPanel extends StatelessWidget {
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: appTextMuted,
+              color: libraryTextMuted,
               fontSize: 12,
               height: 1.35,
               fontWeight: FontWeight.w600,
@@ -1597,13 +1886,14 @@ class ReferenceTopBar extends StatelessWidget {
                     child: Container(
                       height: compact ? 44 : 50,
                       decoration: BoxDecoration(
-                        color: appPanel,
+                        color: librarySurface,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: keywordActive ? appAccentViolet : appBorder,
+                          color:
+                              keywordActive ? appAccentViolet : libraryBorder,
                           width: keywordActive ? 1.4 : 1,
                         ),
-                        boxShadow: appSoftShadow,
+                        boxShadow: librarySoftShadow,
                       ),
                       /**
                  * 主搜索框使用 TextField 而不是 Material SearchBar。
@@ -1619,11 +1909,13 @@ class ReferenceTopBar extends StatelessWidget {
                         onChanged: onSearchChanged,
                         onSubmitted: onSearchChanged,
                         style: const TextStyle(
-                          color: appText,
+                          color: libraryText,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
                         decoration: InputDecoration(
+                          // 显式关闭全局浅色输入框填充，让外层媒体库深色表面保持可见。
+                          filled: false,
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
@@ -1637,7 +1929,7 @@ class ReferenceTopBar extends StatelessWidget {
                             size: 23,
                             color: keywordActive
                                 ? appAccentViolet
-                                : const Color(0xff566274),
+                                : libraryTextMuted,
                           ),
                           prefixIconConstraints: const BoxConstraints(
                             minWidth: 48,
@@ -1647,7 +1939,7 @@ class ReferenceTopBar extends StatelessWidget {
                               ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
                               : '\u641c\u7d22\u6587\u4ef6\u540d\u0020\u002f\u0020\u6807\u7b7e\u0020\u002f\u0020\u8def\u5f84\u002e\u002e\u002e',
                           hintStyle: const TextStyle(
-                            color: Color(0xff566274),
+                            color: libraryTextMuted,
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                           ),
@@ -1660,7 +1952,7 @@ class ReferenceTopBar extends StatelessWidget {
                                     child: Text(
                                       'Ctrl + K',
                                       style: TextStyle(
-                                        color: Color(0xff8a94a6),
+                                        color: libraryTextMuted,
                                         fontSize: 12,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -1885,7 +2177,7 @@ class _ReferenceActionButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: appPanel,
+        color: librarySurface,
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -1896,19 +2188,19 @@ class _ReferenceActionButton extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: appBorder,
+                color: libraryBorder,
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 19, color: appAccentStrong),
+                Icon(icon, size: 19, color: appAccentViolet),
                 if (label != null) ...[
                   const SizedBox(width: 8),
                   Text(
                     label!,
                     style: const TextStyle(
-                      color: appText,
+                      color: libraryText,
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1943,10 +2235,10 @@ class _ReferenceIconButton extends StatelessWidget {
       onPressed: onPressed,
       icon: Icon(icon, size: 20),
       style: IconButton.styleFrom(
-        backgroundColor: appPanel,
-        foregroundColor: appAccentStrong,
+        backgroundColor: librarySurface,
+        foregroundColor: appAccentViolet,
         fixedSize: const Size(38, 38),
-        side: const BorderSide(color: appBorder),
+        side: const BorderSide(color: libraryBorder),
       ),
     );
   }
@@ -1969,9 +2261,9 @@ class ResultViewToggle extends StatelessWidget {
       height: 48,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: appPanel,
+        color: librarySurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: appBorder),
+        border: Border.all(color: libraryBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -2014,13 +2306,13 @@ class _TopViewButton extends StatelessWidget {
         height: 32,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? const Color(0xffeef2ff) : Colors.transparent,
+          color: selected ? librarySurfaceAlt : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
           icon,
           size: 18,
-          color: selected ? appAccentViolet : appTextMuted,
+          color: selected ? appAccentViolet : libraryTextMuted,
         ),
       ),
     );
@@ -2080,7 +2372,7 @@ class RecentPlaybackView extends StatelessWidget {
               Text(
                 '\u5df2\u9009 ${selectedPathKeys.length} / ${videos.length}',
                 style: const TextStyle(
-                  color: appTextMuted,
+                  color: libraryTextMuted,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -2227,7 +2519,7 @@ class _RecentPlaybackRow extends StatelessWidget {
                 value: videoPlaybackProgressFraction(item),
                 minHeight: 3,
                 color: appAccentViolet,
-                backgroundColor: appBorder,
+                backgroundColor: libraryBorder,
               ),
             ],
           ),

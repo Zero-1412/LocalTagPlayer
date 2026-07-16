@@ -1345,6 +1345,8 @@ class _LibraryPageState extends State<LibraryPage> {
   var _sortMode = SortMode.recent;
   var _sortDirection = SortDirection.descending;
   var _denseResultGrid = false;
+  /** 主功能栏折叠态只影响当前页面布局，不写入媒体库数据或筛选状态。 */
+  var _isMainSidebarCollapsed = false;
   var _isTagDiscoveryPanelOpen = libraryTagDiscoveryPanelInitiallyOpen;
   var _resultMode = _LibraryResultMode.library;
   Object? _recentVideoCacheKey;
@@ -3176,7 +3178,11 @@ class _LibraryPageState extends State<LibraryPage> {
         selectedTags: _selectedTags,
         isScanning: _isScanning,
         dense: dense,
+        collapsed: _isMainSidebarCollapsed,
         width: width,
+        onToggleCollapsed: () => setState(
+          () => _isMainSidebarCollapsed = !_isMainSidebarCollapsed,
+        ),
         onPickFolder: _pickFolder,
         onShowAllLibrary: _showAllLibraryVideos,
         onRescan: _rescan,
@@ -3413,7 +3419,7 @@ class _LibraryPageState extends State<LibraryPage> {
           showModalBottomSheet<void>(
             context: context,
             isScrollControlled: true,
-            backgroundColor: appBackground,
+            backgroundColor: librarySurface,
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
             ),
@@ -3481,35 +3487,40 @@ class _LibraryPageState extends State<LibraryPage> {
         },
         child: Focus(
           autofocus: true,
-          child: Scaffold(
-            backgroundColor: appBackground,
-            body: LayoutBuilder(
-              builder: (context, constraints) {
-                final layoutSize =
-                    LayoutBreakpoints.fromWidth(constraints.maxWidth);
-                final showMainSidebar = layoutSize != LayoutSize.compact;
-                final expandedSlots =
-                    mainLibraryLayoutSlotsForWidth(constraints.maxWidth);
-                return Row(
-                  children: [
-                    if (showMainSidebar)
-                      buildSidebar(
-                        dense: layoutSize != LayoutSize.expanded,
-                        width: layoutSize == LayoutSize.expanded
-                            ? expandedSlots.sidebarWidth
-                            : null,
+          child: Theme(
+            data: libraryWorkspaceTheme(Theme.of(context)),
+            child: Scaffold(
+              backgroundColor: libraryBackground,
+              body: LayoutBuilder(
+                builder: (context, constraints) {
+                  final layoutSize =
+                      LayoutBreakpoints.fromWidth(constraints.maxWidth);
+                  final showMainSidebar = layoutSize != LayoutSize.compact;
+                  final expandedSlots =
+                      mainLibraryLayoutSlotsForWidth(constraints.maxWidth);
+                  return Row(
+                    children: [
+                      if (showMainSidebar)
+                        buildSidebar(
+                          dense: layoutSize != LayoutSize.expanded,
+                          width: _isMainSidebarCollapsed
+                              ? 76
+                              : layoutSize == LayoutSize.expanded
+                                  ? expandedSlots.sidebarWidth
+                                  : null,
+                        ),
+                      Expanded(
+                        child: layoutSize == LayoutSize.expanded
+                            ? buildExpandedContent(expandedSlots)
+                            : buildMain(
+                                layoutSize,
+                                topBar: buildTopBar(layoutSize),
+                              ),
                       ),
-                    Expanded(
-                      child: layoutSize == LayoutSize.expanded
-                          ? buildExpandedContent(expandedSlots)
-                          : buildMain(
-                              layoutSize,
-                              topBar: buildTopBar(layoutSize),
-                            ),
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),

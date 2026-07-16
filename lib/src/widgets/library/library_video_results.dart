@@ -39,8 +39,8 @@ double libraryVideoCardMainAxisExtent({
     compact: compact,
   );
   final cardWidth = (usableWidth - spacing * (columnCount - 1)) / columnCount;
-  // 66px 覆盖上下内边距、缩略图与标题间距及两行标题；叠层角标不增加高度。
-  return cardWidth * 9 / 16 + 66;
+  // 54px 覆盖缩略图与两行标题；卡片改为无白色外壳后不再保留整圈 8px 内边距。
+  return cardWidth * 9 / 16 + 54;
 }
 
 /** 计算当前响应式网格列数，增量加载和卡片尺寸必须复用同一结果。 */
@@ -457,9 +457,9 @@ class InteractiveVideoListRow extends StatelessWidget {
         onDoubleTap: onOpen,
         child: Ink(
           decoration: BoxDecoration(
-            color: appPanel,
+            color: librarySurface,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: appBorder),
+            border: Border.all(color: libraryBorder),
           ),
           padding: const EdgeInsets.all(8),
           child: LayoutBuilder(
@@ -493,7 +493,7 @@ class InteractiveVideoListRow extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    color: appText,
+                                    color: libraryText,
                                     fontWeight: FontWeight.w800,
                                     height: 1.2,
                                   ),
@@ -504,7 +504,7 @@ class InteractiveVideoListRow extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Color(0xff718096),
+                            color: libraryTextMuted,
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -567,16 +567,16 @@ class _ListTagPill extends StatelessWidget {
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 9),
       decoration: BoxDecoration(
-        color: const Color(0xfff4f6fb),
+        color: librarySurfaceAlt,
         borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: appBorder),
+        border: Border.all(color: libraryBorder),
       ),
       child: Text(
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
-          color: Color(0xff4b5565),
+          color: libraryTextMuted,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),
@@ -735,18 +735,17 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
               duration: appMotionDuration,
               curve: appMotionCurve,
               decoration: BoxDecoration(
-                color: appPanel,
-                borderRadius: BorderRadius.circular(8),
+                color: _hovered ? librarySurfaceAlt : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: _hovered ? appAccentViolet : appBorder,
+                  color: _hovered ? appAccentViolet : Colors.transparent,
                 ),
                 boxShadow: [
-                  ...appSoftShadow,
                   if (_hovered)
                     BoxShadow(
-                      color: appAccentViolet.withAlpha(45),
-                      blurRadius: 22,
-                      offset: const Offset(0, 12),
+                      color: Colors.black.withAlpha(55),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
                     ),
                 ],
               ),
@@ -754,25 +753,24 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                 color: Colors.transparent,
                 child: InkWell(
                   key: LibrarySmokeKeys.cardOpen(item.path),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   // 独立播放按钮移除后，卡片本身成为唯一清晰的打开入口。
                   onTap: widget.onOpen,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _VideoPreview(
-                          item: item,
-                          thumbnailService: widget.thumbnailService,
-                          playbackSettings: widget.playbackSettings,
-                          onVisible: widget.onVisible,
-                          onToggleFavorite: widget.onToggleFavorite,
-                        ),
-                        const SizedBox(height: 6),
-                        _VideoCardMetadata(item: item),
-                      ],
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _VideoPreview(
+                        item: item,
+                        thumbnailService: widget.thumbnailService,
+                        playbackSettings: widget.playbackSettings,
+                        onVisible: widget.onVisible,
+                        onToggleFavorite: widget.onToggleFavorite,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(2, 7, 2, 6),
+                        child: _VideoCardMetadata(item: item),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -801,9 +799,10 @@ class _VideoCardMetadata extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: appText,
+                    color: libraryText,
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    height: 1.25,
+                    height: 1.3,
                   ),
             ),
           ],
@@ -1251,7 +1250,7 @@ class _LibraryImportDropRegionState extends State<LibraryImportDropRegion> {
                 child: const Center(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: appPanel,
+                      color: librarySurface,
                       borderRadius: BorderRadius.all(Radius.circular(12)),
                       boxShadow: appSoftShadow,
                     ),
@@ -1267,7 +1266,7 @@ class _LibraryImportDropRegionState extends State<LibraryImportDropRegion> {
                           Text(
                             '释放以添加视频或目录',
                             style: TextStyle(
-                              color: appText,
+                              color: libraryText,
                               fontWeight: FontWeight.w800,
                               fontSize: 16,
                             ),
@@ -1322,8 +1321,8 @@ class EmptyState extends StatelessWidget {
                     width: 108,
                     height: 108,
                     decoration: BoxDecoration(
-                      // 使用接近页面底色的浅紫灰，而不是独立白卡片，降低空状态入口的突兀感。
-                      color: const Color(0xffeef1fa),
+                      // 使用媒体库的次级深色表面，避免空状态入口重新形成突兀的浅色孤岛。
+                      color: librarySurfaceAlt,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: const Color(0x596d5dfc),
@@ -1350,7 +1349,7 @@ class EmptyState extends StatelessWidget {
             const Text(
               '添加视频文件',
               style: TextStyle(
-                color: appText,
+                color: libraryText,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
               ),
@@ -1359,7 +1358,7 @@ class EmptyState extends StatelessWidget {
             const Text(
               '选择视频文件，或将文件 / 文件夹拖到媒体库区域',
               textAlign: TextAlign.center,
-              style: TextStyle(color: appTextMuted, height: 1.4),
+              style: TextStyle(color: libraryTextMuted, height: 1.4),
             ),
           ] else ...[
             Icon(

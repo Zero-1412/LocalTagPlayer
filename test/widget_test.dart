@@ -85,7 +85,7 @@ void main() {
         narrow: false,
         compact: false,
       ),
-      217.5,
+      205.5,
     );
     expect(
       libraryVideoCardMainAxisExtent(
@@ -93,7 +93,7 @@ void main() {
         narrow: false,
         compact: true,
       ),
-      closeTo(167.63, 0.01),
+      closeTo(155.63, 0.01),
     );
     expect(
       libraryVideoCardMainAxisExtent(
@@ -101,7 +101,7 @@ void main() {
         narrow: true,
         compact: true,
       ),
-      331.5,
+      319.5,
     );
     expect(libraryVideoDurationLabel(Duration.zero), '--:--');
     expect(
@@ -325,44 +325,54 @@ void main() {
     expect(find.byType(LocalTagPlayerApp), findsOneWidget);
   });
 
-  testWidgets('library sidebar omits duplicate primary add button',
+  testWidgets('library sidebar collapses to icons and keeps actions reachable',
       (WidgetTester tester) async {
     var pickFolderCount = 0;
+    var collapsed = false;
     await tester.pumpWidget(
       MaterialApp(
-        home: LibrarySidebar(
-          roots: const <String>[],
-          tags: const <String>[],
-          tagGroups: const <TagGroup>[],
-          resultCounts: const <String, int>{},
-          selectedLocalLibraryPath: null,
-          childParentTag: null,
-          childTags: const <String>[],
-          selectedChildTags: const <String>{},
-          selectedGroupTagIds: const <String, Set<String>>{},
-          excludedTagIds: const <String>{},
-          favoriteCount: 0,
-          missingCount: 0,
-          favoriteVideosSelected: false,
-          recentPlaybackSelected: false,
-          localLibrarySelected: false,
-          selectedTags: const <String>{},
-          isScanning: false,
-          dense: false,
-          onPickFolder: () => pickFolderCount++,
-          onShowAllLibrary: () {},
-          onRescan: () {},
-          onRemoveLocalLibraryRoot: (_) {},
-          onFavoritesToggle: () {},
-          onOpenRecentPlayback: () {},
-          onOpenLocalLibraryRoot: (_) {},
-          onOpenDirectoryManager: () {},
-          onOpenMissingRelink: () {},
-          onOpenSettings: () {},
-          onChildTagToggle: (_) {},
-          onClearChildTags: () {},
-          onGroupTagToggle: (_) {},
-          onGroupTagExcludeToggle: (_) {},
+        home: StatefulBuilder(
+          builder: (context, setState) => Row(
+            children: <Widget>[
+              LibrarySidebar(
+                roots: const <String>[],
+                tags: const <String>[],
+                tagGroups: const <TagGroup>[],
+                resultCounts: const <String, int>{},
+                selectedLocalLibraryPath: null,
+                childParentTag: null,
+                childTags: const <String>[],
+                selectedChildTags: const <String>{},
+                selectedGroupTagIds: const <String, Set<String>>{},
+                excludedTagIds: const <String>{},
+                favoriteCount: 0,
+                missingCount: 0,
+                favoriteVideosSelected: false,
+                recentPlaybackSelected: false,
+                localLibrarySelected: false,
+                selectedTags: const <String>{},
+                isScanning: false,
+                dense: false,
+                collapsed: collapsed,
+                onToggleCollapsed: () => setState(() => collapsed = !collapsed),
+                onPickFolder: () => pickFolderCount++,
+                onShowAllLibrary: () {},
+                onRescan: () {},
+                onRemoveLocalLibraryRoot: (_) {},
+                onFavoritesToggle: () {},
+                onOpenRecentPlayback: () {},
+                onOpenLocalLibraryRoot: (_) {},
+                onOpenDirectoryManager: () {},
+                onOpenMissingRelink: () {},
+                onOpenSettings: () {},
+                onChildTagToggle: (_) {},
+                onClearChildTags: () {},
+                onGroupTagToggle: (_) {},
+                onGroupTagExcludeToggle: (_) {},
+              ),
+              const Expanded(child: SizedBox()),
+            ],
+          ),
         ),
       ),
     );
@@ -373,6 +383,17 @@ void main() {
     await tester.tap(find.byTooltip('新增本地库路径'));
     await tester.pump();
     expect(pickFolderCount, 1);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.sidebarCollapseToggle));
+    await tester.pumpAndSettle();
+    expect(find.text('媒体库'), findsNothing);
+    expect(find.byTooltip('媒体库'), findsOneWidget);
+    expect(
+        tester.getSize(find.byKey(LibrarySmokeKeys.sidebarSurface)).width, 76);
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.sidebarCollapseToggle));
+    await tester.pumpAndSettle();
+    expect(find.text('媒体库'), findsOneWidget);
   });
 
   test('reference top bar collapses actions below expanded width', () {
@@ -2422,7 +2443,7 @@ void main() {
           .first,
     );
     final decoration = container.decoration! as BoxDecoration;
-    expect(decoration.color, const Color(0xffeef1fa));
+    expect(decoration.color, const Color(0xff243145));
     final border = decoration.border! as Border;
     expect(border.top.color, const Color(0x596d5dfc));
     expect(border.top.width, 1.25);

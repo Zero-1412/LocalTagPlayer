@@ -26,6 +26,11 @@ class LibrarySmokeKeys {
       ValueKey<String>('smoke.tag.more-secondary-tags');
   static const listActionState = ValueKey<String>('smoke.list.action-state');
   static const collapsedTagRail = ValueKey<String>('smoke.tag.collapsed-rail');
+  /** 主功能栏展开/折叠入口。 */
+  static const sidebarCollapseToggle =
+      ValueKey<String>('smoke.sidebar.collapse-toggle');
+  /** 主功能栏实际宽度容器。 */
+  static const sidebarSurface = ValueKey<String>('smoke.sidebar.surface');
   static const searchField = ValueKey<String>('smoke.top.search-field');
   static const topSortFieldButton =
       ValueKey<String>('smoke.top.sort-field-button');

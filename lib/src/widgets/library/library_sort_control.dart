@@ -138,14 +138,14 @@ class TopSortControlState extends State<TopSortControl>
                   key: LibrarySmokeKeys.topSortMenuPanel,
                   width: menuWidth,
                   decoration: const BoxDecoration(
-                    color: appPanel,
+                    color: librarySurface,
                     borderRadius: BorderRadius.vertical(
                       bottom: Radius.circular(10),
                     ),
                     border: Border(
-                      left: BorderSide(color: appBorder),
-                      right: BorderSide(color: appBorder),
-                      bottom: BorderSide(color: appBorder),
+                      left: BorderSide(color: libraryBorder),
+                      right: BorderSide(color: libraryBorder),
+                      bottom: BorderSide(color: libraryBorder),
                     ),
                     boxShadow: [
                       BoxShadow(
@@ -198,9 +198,9 @@ class TopSortControlState extends State<TopSortControl>
     return Container(
       height: 48,
       decoration: BoxDecoration(
-        color: appPanel,
+        color: librarySurface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: appBorder),
+        border: Border.all(color: libraryBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -224,19 +224,19 @@ class TopSortControlState extends State<TopSortControl>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(Icons.sort_rounded,
-                          size: 18, color: appAccentStrong),
+                          size: 18, color: appAccentViolet),
                       const SizedBox(width: 7),
                       Text(
                         sortModeLabel(widget.sortMode),
                         style: const TextStyle(
-                          color: appText,
+                          color: libraryText,
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(width: 4),
                       const Icon(Icons.expand_more_rounded,
-                          size: 18, color: appTextMuted),
+                          size: 18, color: libraryTextMuted),
                     ],
                   ),
                 ),
@@ -245,7 +245,7 @@ class TopSortControlState extends State<TopSortControl>
           ),
           const SizedBox(
             height: 26,
-            child: VerticalDivider(width: 1, color: appBorder),
+            child: VerticalDivider(width: 1, color: libraryBorder),
           ),
           Semantics(
             key: LibrarySmokeKeys.topSortDirectionButton,
@@ -271,13 +271,13 @@ class TopSortControlState extends State<TopSortControl>
                             ? Icons.arrow_upward_rounded
                             : Icons.arrow_downward_rounded,
                         size: 17,
-                        color: appAccentStrong,
+                        color: appAccentViolet,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         directionAscending ? '\u6b63\u5e8f' : '\u5012\u5e8f',
                         style: const TextStyle(
-                          color: appText,
+                          color: libraryText,
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
                         ),
@@ -310,13 +310,13 @@ class _SortMenuItem extends StatelessWidget {
         Icon(
           selected ? Icons.check_rounded : Icons.circle_outlined,
           size: 18,
-          color: selected ? appAccentViolet : appTextMuted,
+          color: selected ? appAccentViolet : libraryTextMuted,
         ),
         const SizedBox(width: 8),
         Text(
           label,
           style: const TextStyle(
-            color: appText,
+            color: libraryText,
             fontSize: 13,
             fontWeight: FontWeight.w700,
           ),
