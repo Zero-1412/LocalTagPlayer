@@ -85,7 +85,7 @@ void main() {
         narrow: false,
         compact: false,
       ),
-      205.5,
+      207.5,
     );
     expect(
       libraryVideoCardMainAxisExtent(
@@ -93,7 +93,7 @@ void main() {
         narrow: false,
         compact: true,
       ),
-      closeTo(155.63, 0.01),
+      closeTo(157.63, 0.01),
     );
     expect(
       libraryVideoCardMainAxisExtent(
@@ -101,8 +101,45 @@ void main() {
         narrow: true,
         compact: true,
       ),
-      319.5,
+      321.5,
     );
+    expect(
+      libraryVideoGridCrossAxisSpacing(gridWidth: 680, compact: true),
+      10,
+    );
+    expect(
+      libraryVideoGridCrossAxisSpacing(gridWidth: 880, compact: false),
+      14,
+    );
+    expect(
+      libraryVideoGridCrossAxisSpacing(gridWidth: 1200, compact: false),
+      18,
+    );
+    expect(
+      libraryVideoGridCrossAxisSpacing(gridWidth: 1600, compact: false),
+      22,
+    );
+    expect(
+      libraryVideoGridMaxCrossAxisExtent(
+        gridWidth: 1600,
+        narrow: false,
+        compact: false,
+      ),
+      360,
+    );
+    expect(
+      libraryVideoGridMaxCrossAxisExtent(
+        gridWidth: 2000,
+        narrow: false,
+        compact: false,
+      ),
+      430,
+    );
+    expect(libraryVideoCardTitleFontSize(200), 13.5);
+    expect(libraryVideoCardTitleFontSize(260), 14.5);
+    expect(libraryVideoCardTitleFontSize(320), 15.5);
+    expect(libraryVideoCardTitleFontSize(420), 16);
+    expect(libraryVideoCardRadius, 8);
     expect(libraryVideoDurationLabel(Duration.zero), '--:--');
     expect(
       libraryVideoDurationLabel(const Duration(minutes: 9, seconds: 7)),
@@ -127,6 +164,14 @@ void main() {
         compact: false,
       ),
       3,
+    );
+    expect(
+      libraryVideoGridColumnCount(
+        gridWidth: 2200,
+        narrow: false,
+        compact: false,
+      ),
+      5,
     );
     expect(
       libraryIncrementalItemCount(

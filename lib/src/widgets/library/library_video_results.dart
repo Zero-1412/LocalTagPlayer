@@ -31,7 +31,10 @@ double libraryVideoCardMainAxisExtent({
   required bool compact,
 }) {
   final horizontalPadding = compact ? 28.0 : 44.0;
-  final spacing = compact ? 10.0 : 14.0;
+  final spacing = libraryVideoGridCrossAxisSpacing(
+    gridWidth: gridWidth,
+    compact: compact,
+  );
   final usableWidth = math.max(1.0, gridWidth - horizontalPadding);
   final columnCount = libraryVideoGridColumnCount(
     gridWidth: gridWidth,
@@ -39,9 +42,88 @@ double libraryVideoCardMainAxisExtent({
     compact: compact,
   );
   final cardWidth = (usableWidth - spacing * (columnCount - 1)) / columnCount;
-  // 54px 覆盖缩略图与两行标题；卡片改为无白色外壳后不再保留整圈 8px 内边距。
-  return cardWidth * 9 / 16 + 54;
+  // 56px 覆盖分档字号的两行标题；卡片不再为已移除的路径和操作区保留空间。
+  return cardWidth * 9 / 16 + 56;
 }
+
+/**
+ * 计算视频网格的横向列间距。
+ *
+ * 窄窗口优先保证卡片宽度，超宽窗口逐步增加留白，避免高分辨率下形成密集小卡片墙。
+ */
+double libraryVideoGridCrossAxisSpacing({
+  required double gridWidth,
+  required bool compact,
+}) {
+  if (compact || gridWidth < 720) {
+    return 10;
+  }
+  if (gridWidth < 1000) {
+    return 14;
+  }
+  if (gridWidth < 1400) {
+    return 18;
+  }
+  return 22;
+}
+
+/** 行间距与卡片标题高度配合，宽窗口增加呼吸感但不降低首屏浏览数量。 */
+double libraryVideoGridMainAxisSpacing({
+  required double gridWidth,
+  required bool compact,
+}) {
+  if (compact || gridWidth < 720) {
+    return 14;
+  }
+  if (gridWidth < 1000) {
+    return 16;
+  }
+  if (gridWidth < 1400) {
+    return 18;
+  }
+  return 22;
+}
+
+/** 超宽结果区适度放大卡片上限，使桌面信息密度接近内容平台而不是文件缩略图墙。 */
+double libraryVideoGridMaxCrossAxisExtent({
+  required double gridWidth,
+  required bool narrow,
+  required bool compact,
+}) {
+  if (narrow) {
+    return 500;
+  }
+  if (compact) {
+    return 260;
+  }
+  if (gridWidth < 1000) {
+    return 286;
+  }
+  if (gridWidth < 1400) {
+    return 320;
+  }
+  if (gridWidth < 1800) {
+    return 360;
+  }
+  return 430;
+}
+
+/** 卡片标题按实际卡片宽度分档，保持窄卡不拥挤、宽卡不显得过小。 */
+double libraryVideoCardTitleFontSize(double cardWidth) {
+  if (cardWidth < 220) {
+    return 13.5;
+  }
+  if (cardWidth < 300) {
+    return 14.5;
+  }
+  if (cardWidth < 380) {
+    return 15.5;
+  }
+  return 16;
+}
+
+/** 缩略图与悬停外框共用的小圆角，接近内容平台的紧凑视觉。 */
+const double libraryVideoCardRadius = 8;
 
 /** 计算当前响应式网格列数，增量加载和卡片尺寸必须复用同一结果。 */
 int libraryVideoGridColumnCount({
@@ -50,8 +132,15 @@ int libraryVideoGridColumnCount({
   required bool compact,
 }) {
   final horizontalPadding = compact ? 28.0 : 44.0;
-  final spacing = compact ? 10.0 : 14.0;
-  final maxExtent = narrow ? 500.0 : (compact ? 248.0 : 286.0);
+  final spacing = libraryVideoGridCrossAxisSpacing(
+    gridWidth: gridWidth,
+    compact: compact,
+  );
+  final maxExtent = libraryVideoGridMaxCrossAxisExtent(
+    gridWidth: gridWidth,
+    narrow: narrow,
+    compact: compact,
+  );
   final usableWidth = math.max(1.0, gridWidth - horizontalPadding);
   return math.max(1, (usableWidth / (maxExtent + spacing)).ceil()).toInt();
 }
@@ -305,7 +394,10 @@ class _VideoGridState extends State<VideoGrid> {
                   narrow: narrow,
                   compact: compact,
                 ) +
-                (compact ? 14 : 16);
+                libraryVideoGridMainAxisSpacing(
+                  gridWidth: constraints.maxWidth,
+                  compact: compact,
+                );
         _currentColumnCount = columnCount;
         _currentRowExtent = rowExtent;
         final initialCount = libraryIncrementalItemCount(
@@ -372,14 +464,24 @@ class _VideoGridState extends State<VideoGrid> {
               12,
             ),
             gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: narrow ? 500 : (compact ? 248 : 286),
+              maxCrossAxisExtent: libraryVideoGridMaxCrossAxisExtent(
+                gridWidth: constraints.maxWidth,
+                narrow: narrow,
+                compact: compact,
+              ),
               mainAxisExtent: libraryVideoCardMainAxisExtent(
                 gridWidth: constraints.maxWidth,
                 narrow: narrow,
                 compact: compact,
               ),
-              mainAxisSpacing: compact ? 14 : 16,
-              crossAxisSpacing: compact ? 10 : 14,
+              mainAxisSpacing: libraryVideoGridMainAxisSpacing(
+                gridWidth: constraints.maxWidth,
+                compact: compact,
+              ),
+              crossAxisSpacing: libraryVideoGridCrossAxisSpacing(
+                gridWidth: constraints.maxWidth,
+                compact: compact,
+              ),
             ),
             itemCount: visibleItemCount,
             scrollCacheExtent: const ScrollCacheExtent.pixels(720),
@@ -736,7 +838,7 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
               curve: appMotionCurve,
               decoration: BoxDecoration(
                 color: _hovered ? librarySurfaceAlt : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(libraryVideoCardRadius),
                 border: Border.all(
                   color: _hovered ? appAccentViolet : Colors.transparent,
                 ),
@@ -753,7 +855,7 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                 color: Colors.transparent,
                 child: InkWell(
                   key: LibrarySmokeKeys.cardOpen(item.path),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(libraryVideoCardRadius),
                   // 独立播放按钮移除后，卡片本身成为唯一清晰的打开入口。
                   onTap: widget.onOpen,
                   child: Column(
@@ -767,7 +869,7 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                         onToggleFavorite: widget.onToggleFavorite,
                       ),
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(2, 7, 2, 6),
+                        padding: const EdgeInsets.fromLTRB(2, 8, 2, 6),
                         child: _VideoCardMetadata(item: item),
                       ),
                     ],
@@ -791,21 +893,19 @@ class _VideoCardMetadata extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LibraryCardUiDiagnostics.buildSubtree(
         'metadata',
-        () => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              item.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: libraryText,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    height: 1.3,
-                  ),
-            ),
-          ],
+        () => LayoutBuilder(
+          builder: (context, constraints) => Text(
+            item.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: libraryText,
+                  fontSize: libraryVideoCardTitleFontSize(constraints.maxWidth),
+                  fontWeight: FontWeight.w600,
+                  height: 1.28,
+                  letterSpacing: 0.05,
+                ),
+          ),
         ),
       );
 }
@@ -1023,7 +1123,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
         onEnter: _onEnter,
         onExit: _onExit,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(libraryVideoCardRadius),
           child: AspectRatio(
             aspectRatio: 16 / 9,
             child: Stack(
