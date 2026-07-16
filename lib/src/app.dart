@@ -31,9 +31,11 @@ import 'widgets/app_theme_tokens.dart';
 export 'core/tag_rules.dart';
 export 'composition/local_tag_player_dependencies.dart';
 export 'core/app_paths.dart';
+export 'core/data_backup_settings.dart';
 export 'core/layout_size.dart';
 export 'core/playback_settings.dart';
 export 'models/external_media_tools_state.dart';
+export 'models/data_backup_models.dart';
 export 'models/media_details.dart';
 export 'models/library_scan_models.dart';
 export 'models/library_sort.dart';
@@ -48,6 +50,7 @@ export 'services/library/library_application_facade.dart';
 export 'services/library/library_card_ui_diagnostics.dart';
 export 'services/library/library_collection_rules.dart';
 export 'services/library/library_count_refresh_coordinator.dart';
+export 'services/library/library_data_backup_service.dart';
 export 'services/library/library_load_diagnostics.dart';
 export 'services/library/library_page_application_service.dart';
 export 'services/library/library_scan_ui_diagnostics.dart';
@@ -156,11 +159,13 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies() {
   );
   Future<LibraryApplicationFacade> libraryLoader({
     LibraryLoadDiagnostics? diagnostics,
+    required bool dataBackupEnabled,
   }) async {
     final repository = await LibraryStore.load(
       diagnostics: diagnostics,
       scanBackend: createLibraryScanBackend(),
       databaseProvider: databaseProvider,
+      dataBackupEnabled: dataBackupEnabled,
     );
     return LibraryApplicationFacade(
       libraryRepository: repository,

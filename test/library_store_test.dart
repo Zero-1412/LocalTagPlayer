@@ -64,10 +64,14 @@ VideoItem _videoByPath(LibraryStore store, String path) {
 /**
  * 加载并登记待关闭的媒体库实例，避免 SQLite 句柄阻塞临时目录清理。
  */
-Future<LibraryStore> _loadTrackedStore(List<LibraryStore> stores) async {
+Future<LibraryStore> _loadTrackedStore(
+  List<LibraryStore> stores, {
+  bool dataBackupEnabled = false,
+}) async {
   final store = await LibraryStore.load(
     scanBackend: DartLibraryScanBackend(),
     databaseProvider: _testDatabaseProvider,
+    dataBackupEnabled: dataBackupEnabled,
   );
   stores.add(store);
   return store;
@@ -83,6 +87,16 @@ Future<void> _closeTrackedStores(List<LibraryStore> stores) async {
 }
 
 void main() {
+  test('data backup settings default on and persist explicit opt-out',
+      () async {
+    final dataDir = await _prepareStoreTestDirectory('backup_settings');
+    addTearDown(() => dataDir.delete(recursive: true));
+
+    expect((await DataBackupSettings.load(_testPaths)).enabled, isTrue);
+    await const DataBackupSettings(enabled: false).save(_testPaths);
+    expect((await DataBackupSettings.load(_testPaths)).enabled, isFalse);
+  });
+
   test('batch root import persists all roots and scans only after registration',
       () async {
     final stores = <LibraryStore>[];
@@ -685,6 +699,154 @@ void main() {
     expect(persisted.videoId, stableVideoId);
     expect(persisted.isFavorite, isTrue);
     expect(reloaded.detachedVideos, isEmpty);
+  });
+
+  test(
+      'independent backup restores favorite and manual tags after identity loss',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir =
+        await _prepareStoreTestDirectory('dependency_backup_restore');
+    final mediaRoot = Directory(p.join(dataDir.path, 'media'));
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      <String>['Series', 'backup.mp4'],
+    );
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+
+    final store = await _loadTrackedStore(
+      stores,
+      dataBackupEnabled: true,
+    );
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, file.path)
+      ..isFavorite = true
+      ..playbackPosition = const Duration(seconds: 37)
+      ..playbackDuration = const Duration(minutes: 3)
+      ..lastPlayedAt = DateTime.utc(2026, 7, 16, 10);
+    final originalVideoId = item.videoId;
+    final tag = await store.createManualTag(
+      name: '备份恢复标签',
+      groupId: 'manual',
+    );
+    await store.batchAddManualTag(tag, <VideoItem>[item]);
+    await store.upsertVideo(item);
+    await store.dataBackupService.flush();
+    expect(
+      (await store.dataBackupService.database.query(
+        'video_dependency_backups',
+      )),
+      hasLength(1),
+    );
+
+    await store.close();
+    stores.remove(store);
+    final libraryFile = await _testPaths.libraryDatabaseFile();
+    final database = await databaseFactoryFfi.openDatabase(libraryFile.path);
+    await database.delete('video_tags',
+        where: 'video_id = ?', whereArgs: [originalVideoId]);
+    await database
+        .delete('videos', where: 'video_id = ?', whereArgs: [originalVideoId]);
+    await database.close();
+
+    final rebuilt = await _loadTrackedStore(
+      stores,
+      dataBackupEnabled: true,
+    );
+    await rebuilt.scanWithChanges();
+    final restored = _videoByPath(rebuilt, file.path);
+    expect(restored.videoId, originalVideoId);
+    expect(restored.isFavorite, isTrue);
+    expect(restored.playbackPosition, const Duration(seconds: 37));
+    expect(
+      rebuilt.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
+      contains(tag.id),
+    );
+
+    await rebuilt.deleteVideo(file.path);
+    expect(
+      await rebuilt.dataBackupService.database.query(
+        'video_dependency_backups',
+        where: 'video_id = ?',
+        whereArgs: <Object?>[originalVideoId],
+      ),
+      isEmpty,
+    );
+  });
+
+  test('backup pauses for playback and resumes unfinished cursor after restart',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir =
+        await _prepareStoreTestDirectory('dependency_backup_resume');
+    final mediaRoot = Directory(p.join(dataDir.path, 'media'));
+    for (var index = 0; index < 70; index += 1) {
+      await _writeVideoPlaceholder(
+        mediaRoot,
+        <String>['batch', 'video_$index.mp4'],
+      );
+    }
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+
+    final source = await _loadTrackedStore(stores);
+    await source.addRootAndScan(mediaRoot.path);
+    await source.close();
+    stores.remove(source);
+
+    final firstRun = await _loadTrackedStore(
+      stores,
+      dataBackupEnabled: true,
+    );
+    await firstRun.dataBackupService.pauseForPlayback();
+    expect(
+      firstRun.dataBackupStatus.phase,
+      DataBackupPhase.pausedForPlayback,
+    );
+    final pausedCount = (await firstRun.dataBackupService.database.rawQuery(
+      'SELECT COUNT(*) AS count FROM video_dependency_backups',
+    ))
+        .single['count'];
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    expect(
+      (await firstRun.dataBackupService.database.rawQuery(
+        'SELECT COUNT(*) AS count FROM video_dependency_backups',
+      ))
+          .single['count'],
+      pausedCount,
+    );
+    await firstRun.close();
+    stores.remove(firstRun);
+
+    final resumed = await _loadTrackedStore(
+      stores,
+      dataBackupEnabled: true,
+    );
+    await resumed.dataBackupService.flush();
+    expect(
+      (await resumed.dataBackupService.database.rawQuery(
+        'SELECT COUNT(*) AS count FROM video_dependency_backups',
+      ))
+          .single['count'],
+      70,
+    );
+    await resumed.dataBackupService.runNow();
+    await resumed.dataBackupService.flush();
+    expect(
+      (await resumed.dataBackupService.database.query(
+        'backup_control',
+        columns: const <String>['value'],
+        where: 'key = ?',
+        whereArgs: const <Object?>['full_sync_in_progress'],
+      ))
+          .single['value'],
+      '0',
+    );
   });
 
   test('scan coordinator marks missing videos and preserves manual tags',

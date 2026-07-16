@@ -8,9 +8,11 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/layout_size.dart';
+import '../../core/data_backup_settings.dart';
 import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
 import '../../models/library_scan_models.dart';
+import '../../models/data_backup_models.dart';
 import '../../models/library_sort.dart';
 import '../../models/media_details.dart';
 import '../../models/platform_models.dart';
@@ -488,6 +490,9 @@ class CacheSettingsPage extends StatefulWidget {
     required this.thumbnailService,
     required this.playbackSettings,
     required this.onPlaybackSettingsChanged,
+    required this.dataBackupSettings,
+    required this.onDataBackupSettingsChanged,
+    required this.onRunDataBackupNow,
   });
 
   final LibraryApplicationFacade store;
@@ -499,15 +504,85 @@ class CacheSettingsPage extends StatefulWidget {
   final Future<void> Function(PlaybackSettings settings)
       onPlaybackSettingsChanged;
 
+  /** 当前视频依赖备份开关。 */
+  final DataBackupSettings dataBackupSettings;
+
+  /** 保存开关并同步后台服务。 */
+  final Future<void> Function(DataBackupSettings settings)
+      onDataBackupSettingsChanged;
+
+  /** 用户显式启动新一轮全量核对。 */
+  final Future<void> Function() onRunDataBackupNow;
+
   @override
   State<CacheSettingsPage> createState() => _CacheSettingsPageState();
 }
 
 class _CacheSettingsPageState extends State<CacheSettingsPage> {
   late PlaybackSettings _settings = widget.playbackSettings;
+  late DataBackupSettings _dataBackupSettings = widget.dataBackupSettings;
+  late DataBackupStatus _dataBackupStatus = widget.store.dataBackupStatus;
+  StreamSubscription<DataBackupStatus>? _dataBackupSubscription;
 
   late Future<CacheStats> _statsFuture =
       widget.thumbnailService.statsFor(widget.store.videos.values);
+
+  @override
+  void initState() {
+    super.initState();
+    _dataBackupSubscription = widget.store.dataBackupStatusStream.listen(
+      (status) {
+        if (mounted) {
+          setState(() => _dataBackupStatus = status);
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_dataBackupSubscription?.cancel());
+    super.dispose();
+  }
+
+  /** 切换备份开关并立即持久化；失败时恢复界面旧值。 */
+  Future<void> _changeDataBackupEnabled(bool enabled) async {
+    final previous = _dataBackupSettings;
+    final next = previous.copyWith(enabled: enabled);
+    setState(() => _dataBackupSettings = next);
+    try {
+      await widget.onDataBackupSettingsChanged(next);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _dataBackupSettings = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('保存数据备份设置失败：$error')),
+      );
+    }
+  }
+
+  /** 设置页阶段文案不展示路径或标签内容。 */
+  String _dataBackupPhaseLabel(DataBackupStatus status) =>
+      switch (status.phase) {
+        DataBackupPhase.disabled => '已关闭',
+        DataBackupPhase.idle => '已完成',
+        DataBackupPhase.running => '后台备份中',
+        DataBackupPhase.pausedForPlayback => '播放期间已暂停',
+        DataBackupPhase.failed => '上次执行失败',
+      };
+
+  /** 使用固定本地时间格式展示最近完成时间。 */
+  String _backupTimeLabel(DateTime? value) {
+    if (value == null) {
+      return '尚未完成';
+    }
+    final local = value.toLocal();
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${local.year}-${two(local.month)}-${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
 
   void _refreshStats() {
     setState(() {
@@ -607,6 +682,83 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                       setState(() => _settings = settings);
                       await widget.onPlaybackSettingsChanged(settings);
                     },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            key: const ValueKey('settings.dataBackup.card'),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SwitchListTile(
+                    key: const ValueKey('settings.dataBackup.toggle'),
+                    contentPadding: EdgeInsets.zero,
+                    value: _dataBackupSettings.enabled,
+                    onChanged: _changeDataBackupEnabled,
+                    title: const Text(
+                      '视频数据备份',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    subtitle: const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text(
+                        '独立备份稳定身份、收藏、播放状态和非文件夹标签，不复制视频文件。',
+                        style: TextStyle(color: appTextMuted),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '移除媒体库目录时保留备份，重新添加可自动恢复；明确删除单个视频时会同步删除对应备份。应用重启后会继续未完成任务，播放期间自动暂停。',
+                    style: TextStyle(color: appTextMuted, height: 1.5),
+                  ),
+                  const SizedBox(height: 14),
+                  _SettingsStatLine(
+                    label: '状态',
+                    value: _dataBackupPhaseLabel(_dataBackupStatus),
+                  ),
+                  _SettingsStatLine(
+                    label: '本轮进度',
+                    value: _dataBackupStatus.total == 0
+                        ? '0'
+                        : '${_dataBackupStatus.processed} / ${_dataBackupStatus.total}',
+                  ),
+                  _SettingsStatLine(
+                    label: '等待同步',
+                    value: formatCount(_dataBackupStatus.pending),
+                  ),
+                  _SettingsStatLine(
+                    label: '最近完成',
+                    value: _backupTimeLabel(_dataBackupStatus.lastCompletedAt),
+                  ),
+                  if (_dataBackupStatus.phase == DataBackupPhase.running &&
+                      _dataBackupStatus.total > 0) ...[
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: (_dataBackupStatus.processed /
+                              _dataBackupStatus.total)
+                          .clamp(0, 1),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('settings.dataBackup.runNow'),
+                      onPressed: _dataBackupSettings.enabled
+                          ? widget.onRunDataBackupNow
+                          : null,
+                      icon: const Icon(Icons.backup_rounded),
+                      label: const Text('立即备份'),
+                    ),
                   ),
                 ],
               ),
@@ -974,6 +1126,7 @@ class _LibraryPageState extends State<LibraryPage> {
   ThumbnailService? _thumbnailService;
   MediaDetailsService? _libraryMediaDetailsService;
   PlaybackSettings _playbackSettings = PlaybackSettings.defaults;
+  DataBackupSettings _dataBackupSettings = DataBackupSettings.defaults;
   final _filterStateSource = FilterStateSource();
   final _countRefreshCoordinator = LibraryCountRefreshCoordinator();
   final _searchController = TextEditingController();
@@ -1180,6 +1333,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final store = startupData.store;
     final thumbnailService = startupData.thumbnailService;
     final playbackSettings = startupData.playbackSettings;
+    final dataBackupSettings = startupData.dataBackupSettings;
     final sortPreferences = startupData.sortPreferences;
     if (!mounted) {
       await store.close();
@@ -1209,6 +1363,7 @@ class _LibraryPageState extends State<LibraryPage> {
           _store = store;
           _thumbnailService = thumbnailService;
           _playbackSettings = playbackSettings;
+          _dataBackupSettings = dataBackupSettings;
           _lastObservedSearchText = _searchController.text;
           _filterState = _buildImmediateFilterState(store);
           _visibleResultCounts = _fallbackResultCounts(store);
@@ -3177,12 +3332,28 @@ class _LibraryPageState extends State<LibraryPage> {
           store: store,
           thumbnailService: thumbnailService,
           playbackSettings: _playbackSettings,
+          dataBackupSettings: _dataBackupSettings,
           onPlaybackSettingsChanged: (settings) async {
             await widget.applicationService.savePlaybackSettings(settings);
             if (mounted) {
               setState(() => _playbackSettings = settings);
             }
           },
+          onDataBackupSettingsChanged: (settings) async {
+            final previous = _dataBackupSettings;
+            await store.setDataBackupEnabled(settings.enabled);
+            try {
+              await widget.applicationService.saveDataBackupSettings(settings);
+            } catch (_) {
+              // 设置文件失败时恢复运行态，避免界面、当前服务与下次启动值分叉。
+              await store.setDataBackupEnabled(previous.enabled);
+              rethrow;
+            }
+            if (mounted) {
+              setState(() => _dataBackupSettings = settings);
+            }
+          },
+          onRunDataBackupNow: store.runDataBackupNow,
         ),
       ),
     );
@@ -3585,6 +3756,12 @@ class _LibraryPageState extends State<LibraryPage> {
     _playerScopedNeedsCountRefresh = false;
     final playerDisposed = Completer<void>();
     _latestPlayerRelease = playerDisposed.future;
+    // 备份只做 SQLite 小批次，但播放器仍优先；等待当前批次结束后再创建解码会话。
+    await store.pauseDataBackupForPlayback();
+    if (!mounted) {
+      store.resumeDataBackupAfterPlayback();
+      return;
+    }
     try {
       await Navigator.of(context).push(
         _smoothRoute<void>(
@@ -3633,6 +3810,7 @@ class _LibraryPageState extends State<LibraryPage> {
       if (!wasPaused) {
         thumbnailService.resume();
       }
+      store.resumeDataBackupAfterPlayback();
     }
     if (mounted && _playerScopedLibraryDataChanged) {
       _invalidateDerivedCaches();

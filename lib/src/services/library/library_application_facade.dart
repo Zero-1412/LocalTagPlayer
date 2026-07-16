@@ -1,6 +1,8 @@
 import 'dart:collection';
+import 'dart:async';
 
 import '../../models/library_scan_models.dart';
+import '../../models/data_backup_models.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import '../../repositories/repository_interfaces.dart';
@@ -187,6 +189,24 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
 
   /** 播放器进入/退出时只通过 Repository 协调扫描让盘，不暴露具体 sidecar。 */
   Future<void> setScanPaused(bool paused) => _repository.setScanPaused(paused);
+
+  /** 当前独立备份状态快照。 */
+  DataBackupStatus get dataBackupStatus => _repository.dataBackupStatus;
+
+  /** 设置页订阅的独立备份状态流。 */
+  Stream<DataBackupStatus> get dataBackupStatusStream =>
+      _repository.dataBackupStatusStream;
+
+  Future<void> setDataBackupEnabled(bool enabled) =>
+      _repository.setDataBackupEnabled(enabled);
+
+  Future<void> runDataBackupNow() => _repository.runDataBackupNow();
+
+  Future<void> pauseDataBackupForPlayback() =>
+      _repository.pauseDataBackupForPlayback();
+
+  void resumeDataBackupAfterPlayback() =>
+      _repository.resumeDataBackupAfterPlayback();
 
   Future<int> countUntrackedVideos() => _repository.countUntrackedVideos();
 

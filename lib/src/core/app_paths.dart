@@ -50,12 +50,18 @@ class AppPaths {
 
   Future<File> settingsFile() => _file('settings.json');
 
+  /** 视频依赖备份开关独立保存，避免与播放器解码设置互相覆盖。 */
+  Future<File> dataBackupSettingsFile() => _file('data_backup_settings.json');
+
   /** 媒体库排序偏好独立于播放设置保存。 */
   Future<File> librarySortPreferencesFile() => _file('library_sort.json');
 
   Future<File> legacyLibraryFile() => _file('library.json');
 
   Future<File> libraryDatabaseFile() => _file('library.db');
+
+  /** 独立于主媒体库的用户依赖备份数据库。 */
+  Future<File> dataBackupDatabaseFile() => _file('video_dependency_backup.db');
 
   /** 桌面窗口布局独立保存，避免覆盖其它设置。 */
   Future<File> windowLayoutFile() => _file('window_layout.json');

@@ -25,6 +25,13 @@ abstract interface class DatabaseProvider {
     required DatabaseSchemaCallback createSchema,
     required DatabaseSchemaCallback maintainSchema,
   });
+
+  /** 打开独立视频依赖备份库；不得与主媒体库复用同一文件。 */
+  Future<Database> openDataBackupDatabase({
+    required int version,
+    required DatabaseSchemaCallback createSchema,
+    required DatabaseSchemaCallback maintainSchema,
+  });
 }
 
 /** 使用 sqflite factory 的桌面数据库实现。 */
@@ -50,6 +57,40 @@ class SqfliteDatabaseProvider implements DatabaseProvider {
     required DatabaseSchemaCallback maintainSchema,
   }) async {
     final file = await paths.libraryDatabaseFile();
+    return _openDatabase(
+      file,
+      version: version,
+      createSchema: createSchema,
+      maintainSchema: maintainSchema,
+      cacheSize: -20000,
+    );
+  }
+
+  @override
+  Future<Database> openDataBackupDatabase({
+    required int version,
+    required DatabaseSchemaCallback createSchema,
+    required DatabaseSchemaCallback maintainSchema,
+  }) async {
+    final file = await paths.dataBackupDatabaseFile();
+    return _openDatabase(
+      file,
+      version: version,
+      createSchema: createSchema,
+      maintainSchema: maintainSchema,
+      // 备份任务按小批次执行，不占用主媒体库同等规模的 page cache。
+      cacheSize: -4000,
+    );
+  }
+
+  /** 统一 SQLite 打开参数；文件选择仍由 AppPaths 平台边界负责。 */
+  Future<Database> _openDatabase(
+    File file, {
+    required int version,
+    required DatabaseSchemaCallback createSchema,
+    required DatabaseSchemaCallback maintainSchema,
+    required int cacheSize,
+  }) {
     return factory.openDatabase(
       file.path,
       options: OpenDatabaseOptions(
@@ -61,7 +102,7 @@ class SqfliteDatabaseProvider implements DatabaseProvider {
           await database.execute('PRAGMA journal_mode=WAL');
           await database.execute('PRAGMA synchronous=NORMAL');
           await database.execute('PRAGMA temp_store=MEMORY');
-          await database.execute('PRAGMA cache_size=-20000');
+          await database.execute('PRAGMA cache_size=$cacheSize');
         },
       ),
     );

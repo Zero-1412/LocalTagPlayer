@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../core/tag_rules.dart';
+import '../../models/data_backup_models.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
@@ -245,8 +246,23 @@ class LibraryScanCoordinator {
           relinked++;
           relocationCandidates.remove(scanned.mediaFingerprint);
         } else {
-          // 指纹任一侧不唯一时拒绝自动认领，防止相同大小/时间戳文件串档。
-          final newItem = _insertNewScannedVideo(batch, scanned, videoKey);
+          DataBackupRestoreRecord? backup;
+          if (candidates.isEmpty &&
+              scannedFingerprintCounts[scanned.mediaFingerprint] == 1) {
+            final candidate = await _store.dataBackupService
+                .findUniqueRestore(scanned.mediaFingerprint);
+            if (candidate != null && !_containsVideoId(candidate.videoId)) {
+              // 主库、扫描侧和备份侧同时唯一时才允许恢复，避免重复文件串档。
+              backup = candidate;
+            }
+          }
+          // 指纹任一侧不唯一时只建立新身份，不猜测恢复用户数据。
+          final newItem = _insertNewScannedVideo(
+            batch,
+            scanned,
+            videoKey,
+            backup: backup,
+          );
           changedById[newItem.videoId] = newItem;
           probeById[newItem.videoId] = newItem;
           added++;
@@ -300,6 +316,7 @@ class LibraryScanCoordinator {
       favoriteTags: _store.favoriteTags,
     );
     await batch.commit(noResult: true);
+    await _store.dataBackupService.enqueueVideos(changedById.keys);
     onProgress?.call(LibraryScanProgress(
       generationId: generationId,
       phase: LibraryScanPhase.committing,
@@ -324,9 +341,11 @@ class LibraryScanCoordinator {
   VideoItem _insertNewScannedVideo(
     Batch batch,
     LibraryScannedVideo scanned,
-    String videoKey,
-  ) {
+    String videoKey, {
+    DataBackupRestoreRecord? backup,
+  }) {
     final item = VideoItem(
+      videoId: backup?.videoId,
       path: scanned.path,
       title: scanned.title,
       folder: scanned.folder,
@@ -338,11 +357,61 @@ class LibraryScanCoordinator {
       modifiedMs: scanned.modifiedMs,
       mediaFingerprint: scanned.mediaFingerprint,
       addedAt: DateTime.now(),
+      isFavorite: backup?.isFavorite ?? false,
+      lastPlayedAt: backup?.lastPlayedAt,
+      playbackPosition: backup?.playbackPosition ?? Duration.zero,
+      playbackDuration: backup?.playbackDuration ?? Duration.zero,
+      playbackCompleted: backup?.playbackCompleted ?? false,
+      playbackPositionUpdatedAt: backup?.playbackPositionUpdatedAt,
     );
     _store.videos[videoKey] = item;
     _store.videoPersistence.insertInBatch(batch, item);
     LibraryTagMaintenance(_store).syncFolderTagsInBatch(batch, item);
+    if (backup != null) {
+      _restoreBackedUpTagLinks(batch, item, backup.links);
+    }
     return item;
+  }
+
+  /** 主库已有同 videoId 时拒绝备份恢复，避免覆盖另一个稳定身份。 */
+  bool _containsVideoId(String videoId) =>
+      _store.videos.values.any((item) => item.videoId == videoId) ||
+      _store.detachedVideos.values.any((item) => item.videoId == videoId);
+
+  /** 在扫描事务内恢复非 folder 标签定义、分组和关联。 */
+  void _restoreBackedUpTagLinks(
+    Batch batch,
+    VideoItem item,
+    Iterable<DataBackupTagLink> links,
+  ) {
+    for (final link in links) {
+      final group = link.group;
+      if (group != null &&
+          !_store.tagGroups.any((existing) => existing.id == group.id)) {
+        batch.insert(
+          'tag_groups',
+          <String, Object?>{
+            'id': group.id,
+            'name': group.name,
+            'display_name': group.displayName,
+            'sort_order': group.sortOrder,
+            'allow_multi_select': group.allowMultiSelect ? 1 : 0,
+            'default_logic': group.defaultLogic.name,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        _store.tagGroups.add(group);
+      }
+      final tag = _store.tagsById[link.tag.id] ?? link.tag;
+      _store.tagsById.putIfAbsent(tag.id, () => tag);
+      _store.tagPersistence.attachTagInBatch(
+        batch,
+        item,
+        tag,
+        source: link.source,
+        locked: link.locked,
+      );
+    }
   }
 
   /**

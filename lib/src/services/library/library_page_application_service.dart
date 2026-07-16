@@ -1,4 +1,5 @@
 import '../../core/app_paths.dart';
+import '../../core/data_backup_settings.dart';
 import '../../core/playback_settings.dart';
 import '../../models/library_sort.dart';
 import '../../models/media_details.dart';
@@ -16,6 +17,7 @@ import 'library_stress_control.dart';
 /** 组合根提供的媒体库 facade 加载入口。 */
 typedef LibraryApplicationLoader = Future<LibraryApplicationFacade> Function({
   LibraryLoadDiagnostics? diagnostics,
+  required bool dataBackupEnabled,
 });
 
 /** 媒体详情完成后的 Dart Repository 写回回调。 */
@@ -61,6 +63,7 @@ class LibraryPageStartupData {
     required this.thumbnailService,
     required this.playbackSettings,
     required this.sortPreferences,
+    required this.dataBackupSettings,
   });
 
   /** 页面唯一业务入口。 */
@@ -74,6 +77,9 @@ class LibraryPageStartupData {
 
   /** 已从应用私有路径恢复的排序偏好。 */
   final LibrarySortPreferences sortPreferences;
+
+  /** 独立视频依赖备份设置。 */
+  final DataBackupSettings dataBackupSettings;
 }
 
 /**
@@ -88,6 +94,9 @@ abstract interface class LibraryPageApplicationService {
 
   /** 保存播放设置，不向页面暴露实际文件路径。 */
   Future<void> savePlaybackSettings(PlaybackSettings settings);
+
+  /** 保存视频依赖备份开关，不向页面暴露实际文件路径。 */
+  Future<void> saveDataBackupSettings(DataBackupSettings settings);
 
   /** 保存排序偏好，不向页面暴露实际文件路径。 */
   Future<void> saveSortPreferences(LibrarySortPreferences preferences);
@@ -143,7 +152,16 @@ class LocalLibraryPageApplicationService
   Future<LibraryPageStartupData> load({
     LibraryLoadDiagnostics? diagnostics,
   }) async {
-    final store = await _libraryLoader(diagnostics: diagnostics);
+    final dataBackupSettings = diagnostics == null
+        ? await DataBackupSettings.load(_paths)
+        : await diagnostics.measureAsync(
+            'startup.data_backup_settings_load',
+            () => DataBackupSettings.load(_paths),
+          );
+    final store = await _libraryLoader(
+      diagnostics: diagnostics,
+      dataBackupEnabled: dataBackupSettings.enabled,
+    );
     try {
       final thumbnailService = diagnostics == null
           ? await ThumbnailService.create(_paths, _ffmpegBackend)
@@ -168,6 +186,7 @@ class LocalLibraryPageApplicationService
         thumbnailService: thumbnailService,
         playbackSettings: playbackSettings,
         sortPreferences: sortPreferences,
+        dataBackupSettings: dataBackupSettings,
       );
     } catch (_) {
       // 首屏任一依赖加载失败时关闭已创建的 facade，避免数据库句柄泄漏。
@@ -178,6 +197,10 @@ class LocalLibraryPageApplicationService
 
   @override
   Future<void> savePlaybackSettings(PlaybackSettings settings) =>
+      settings.save(_paths);
+
+  @override
+  Future<void> saveDataBackupSettings(DataBackupSettings settings) =>
       settings.save(_paths);
 
   @override

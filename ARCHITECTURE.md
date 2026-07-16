@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.37` 为 root 生命周期增加 `is_detached` 归档状态。解除目录管理只让视频退出 active 查询与播放队列，不再删除稳定身份和用户数据；同一路径重新添加按 path 恢复，移动后重新添加按唯一 fingerprint relink。
+`Architecture Baseline 0.5.38` 增加独立视频依赖备份边界。`video_dependency_backup.db` 只复制稳定身份、收藏、播放状态和非 folder 标签；主库仍是唯一业务写入源，备份按持久化游标与增量队列分批执行，并在播放期间暂停。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,11 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.37`
+已完成基线：`Architecture Baseline 0.5.38`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.38`：`DatabaseProvider` 增加独立备份库打开边界，`AppPaths` 固定使用 `video_dependency_backup.db`，不复制视频文件或复用主库文件。默认开启的 `DataBackupSettings` 独立持久化；全量核对按稳定 videoId 小批次推进并在备份库保存游标，增量修改进入去重队列，应用重启后续跑。恢复仅在扫描侧与备份侧 fingerprint 双侧唯一且主库无 videoId 冲突时发生，恢复收藏、播放状态、非 folder 标签及其分组定义；folder 标签仍按当前 root 派生。root detached 保留快照，显式单视频删除在 worker 批次边界同步删除快照。播放器创建前暂停备份、原生释放后恢复；`FilterQuery` / `TagQueryService`、filtered queue 与 PlayerBackend contract 未改变。
 
 - `0.5.37`：`videos` 幂等增加 `is_detached`，Store hydration 拆分 active/detached 路径索引。移除 root 在同一 SQLite batch 中保存剩余 roots 并标记仅属于该 root 的视频 detached，保留 videoId、标签关系、收藏、播放记录、媒体详情和缩略图；detached 不进入 `TagQueryService` 或 filtered queue，但标签管理仍保留其引用计数。重新添加相同 root 按 path 激活原行，路径变化时由扫描协调器按两侧唯一 fingerprint relink；过期媒体探测 upsert 不能静默激活 detached。旧库默认迁移为 active，未修改 `FilterQuery` / `TagQueryService` 语义或 `PlayerBackend`。
 - `0.5.36`：`FileSystemAdapter.moveFileToTrash` 明确区分可恢复删除与原永久 `deleteFile`；Windows 桌面适配器通过系统 `SendToRecycleBin` 边界执行，路径不拼接进脚本，失败时抛出异常且上层不删除 SQLite 记录。播放器队列左滑操作区改为主题深色胶囊、细描边和低强调图标，不再使用突兀的大面积红色块。只读数据库审计确认收藏字段一直写入 SQLite；本轮未修改 schema、stable identity、`FilterQuery` / `TagQueryService`、filtered queue 或缓存队列，也未自动改写用户正式库。

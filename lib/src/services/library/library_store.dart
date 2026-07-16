@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../core/tag_rules.dart';
+import '../../models/data_backup_models.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
@@ -11,6 +13,7 @@ import '../../platform/database_provider.dart';
 import '../../repositories/repository_interfaces.dart';
 import '../tags/tag_query_service.dart';
 import 'library_collection_rules.dart';
+import 'library_data_backup_service.dart';
 import 'library_load_diagnostics.dart';
 import 'library_metadata_persistence.dart';
 import 'library_scan_backend.dart';
@@ -41,6 +44,7 @@ class LibraryStore
     this.tagsById,
     this.videoTagIdsByPathKey,
     this._scanBackend,
+    this.dataBackupService,
   );
 
   final File _file;
@@ -58,6 +62,9 @@ class LibraryStore
   /** 只读文件系统扫描边界；不拥有 SQLite 连接。 */
   final LibraryScanBackend _scanBackend;
 
+  /** 独立视频依赖备份服务；主库仍是唯一业务写入源。 */
+  final LibraryDataBackupService dataBackupService;
+
   /** 当前有效扫描代次；旧代次返回后不得提交数据库或回写 UI。 */
   int _scanGeneration = 0;
 
@@ -67,6 +74,13 @@ class LibraryStore
   LibraryScanBackend get scanBackend => _scanBackend;
   @override
   int get scanGeneration => _scanGeneration;
+
+  @override
+  DataBackupStatus get dataBackupStatus => dataBackupService.status;
+
+  @override
+  Stream<DataBackupStatus> get dataBackupStatusStream =>
+      dataBackupService.statusStream;
 
   LibraryTagPersistence get _tagPersistence =>
       LibraryTagPersistence(_db, tagsById, videoTagIdsByPathKey);
@@ -182,6 +196,7 @@ class LibraryStore
       locked: locked,
     );
     await batch.commit(noResult: true);
+    await dataBackupService.enqueueVideo(video.videoId);
   }
 
   @override
@@ -206,6 +221,7 @@ class LibraryStore
     if ((remaining ?? 0) == 0) {
       videoTagIdsByPathKey[TagRules.pathKey(video.path)]?.remove(tagId);
     }
+    await dataBackupService.enqueueVideo(videoId);
   }
 
   @override
@@ -333,6 +349,7 @@ class LibraryStore
       ..playbackPositionUpdatedAt = updatedAt
       ..lastPlayedAt = updatedAt;
     await _videoPersistence.upsert(item);
+    await dataBackupService.enqueueVideo(videoId);
   }
 
   /**
@@ -344,6 +361,7 @@ class LibraryStore
     LibraryLoadDiagnostics? diagnostics,
     required LibraryScanBackend scanBackend,
     required DatabaseProvider databaseProvider,
+    bool dataBackupEnabled = false,
   }) async {
     final legacyFile = await databaseProvider.legacyLibraryFile();
     final db = diagnostics == null
@@ -352,26 +370,45 @@ class LibraryStore
             'sqlite.open_and_maintenance',
             () => _openDatabase(databaseProvider),
           );
-    final store = await _loadFromDatabase(
-      legacyFile,
-      db,
-      diagnostics: diagnostics,
-      scanBackend: scanBackend,
+    final backupDb = await databaseProvider.openDataBackupDatabase(
+      version: 1,
+      createSchema: (_) async {},
+      maintainSchema: (_) async {},
     );
-    if (store.videos.isEmpty &&
-        store.detachedVideos.isEmpty &&
-        await legacyFile.exists()) {
-      if (diagnostics == null) {
-        await store._importLegacyJson();
-      } else {
-        await diagnostics.measureAsync(
-          'legacy.import',
-          store._importLegacyJson,
-        );
+    final dataBackupService = await LibraryDataBackupService.create(
+      sourceDatabase: db,
+      backupDatabase: backupDb,
+      enabled: dataBackupEnabled,
+    );
+    try {
+      final store = await _loadFromDatabase(
+        legacyFile,
+        db,
+        diagnostics: diagnostics,
+        scanBackend: scanBackend,
+        dataBackupService: dataBackupService,
+      );
+      if (store.videos.isEmpty &&
+          store.detachedVideos.isEmpty &&
+          await legacyFile.exists()) {
+        if (diagnostics == null) {
+          await store._importLegacyJson();
+        } else {
+          await diagnostics.measureAsync(
+            'legacy.import',
+            store._importLegacyJson,
+          );
+        }
       }
+      await store.ensureTagIndexCoverage(diagnostics: diagnostics);
+      await store.dataBackupService.startOrResume();
+      return store;
+    } catch (_) {
+      // 任一 hydration/迁移阶段失败都必须同时释放主库与独立备份库句柄。
+      await dataBackupService.close();
+      await db.close();
+      rethrow;
     }
-    await store.ensureTagIndexCoverage(diagnostics: diagnostics);
-    return store;
   }
 
   static Future<Database> _openDatabase(DatabaseProvider provider) {
@@ -732,6 +769,7 @@ class LibraryStore
     Database db, {
     LibraryLoadDiagnostics? diagnostics,
     required LibraryScanBackend scanBackend,
+    required LibraryDataBackupService dataBackupService,
   }) async {
     final metadata = diagnostics == null
         ? await LibraryMetadataPersistence(db).load()
@@ -819,6 +857,7 @@ class LibraryStore
       tagsById,
       videoTagIdsByPathKey,
       scanBackend,
+      dataBackupService,
     );
   }
 
@@ -942,10 +981,12 @@ class LibraryStore
     String? parentTag,
   }) async {
     await _tagMaintenance.replaceManualTags(item, parentTag: parentTag);
+    await dataBackupService.enqueueVideo(item.videoId);
   }
 
   Future<void> saveTag(TagItem tag) async {
     await _tagPersistence.saveTag(tag);
+    await dataBackupService.enqueueTagDependents(tag.id);
   }
 
   Future<TagItem> createManualTag({
@@ -1022,12 +1063,24 @@ class LibraryStore
   }
 
   Future<int> batchAddManualTag(TagItem tag, Iterable<VideoItem> items) async {
-    return _tagMaintenance.batchAddManualTag(tag, items);
+    final targets = items.toList(growable: false);
+    final changed = await _tagMaintenance.batchAddManualTag(tag, targets);
+    if (changed > 0) {
+      await dataBackupService
+          .enqueueVideos(targets.map((item) => item.videoId));
+    }
+    return changed;
   }
 
   Future<int> batchRemoveManualTag(
       TagItem tag, Iterable<VideoItem> items) async {
-    return _tagMaintenance.batchRemoveManualTag(tag, items);
+    final targets = items.toList(growable: false);
+    final changed = await _tagMaintenance.batchRemoveManualTag(tag, targets);
+    if (changed > 0) {
+      await dataBackupService
+          .enqueueVideos(targets.map((item) => item.videoId));
+    }
+    return changed;
   }
 
   Future<void> save() async {
@@ -1062,6 +1115,7 @@ class LibraryStore
     if (_scanGeneration > 0) {
       _scanBackend.cancelGeneration(_scanGeneration);
     }
+    await dataBackupService.close();
     await _db.close();
   }
 
@@ -1073,6 +1127,7 @@ class LibraryStore
     }
     videos[pathKey] = item;
     await _videoPersistence.upsert(item);
+    await dataBackupService.enqueueVideo(item.videoId);
   }
 
   /**
@@ -1106,20 +1161,40 @@ class LibraryStore
   Future<VideoItem?> deleteVideo(String path) async {
     final pathKey = TagRules.pathKey(path);
     final item = videos[pathKey] ?? detachedVideos[pathKey];
-    final batch = _db.batch();
     if (item != null) {
-      _tagPersistence.deleteVideoLinksInBatch(
-        batch,
-        item,
-        updateMemoryIndex: false,
-      );
+      // 等待当前小批次结束，避免全量 worker 在主库删除提交前把已清快照重新写回。
+      await dataBackupService.pauseForPlayback();
     }
-    _videoPersistence.deleteInBatch(batch, path);
-    await batch.commit(noResult: true);
-    videos.remove(pathKey);
-    detachedVideos.remove(pathKey);
-    videoTagIdsByPathKey.remove(pathKey);
-    return item;
+    try {
+      if (item != null) {
+        // 显式删除不等同 root 解除管理；独立快照必须和主库记录一起退出。
+        await dataBackupService.deleteSnapshot(item.videoId);
+      }
+      final batch = _db.batch();
+      if (item != null) {
+        _tagPersistence.deleteVideoLinksInBatch(
+          batch,
+          item,
+          updateMemoryIndex: false,
+        );
+      }
+      _videoPersistence.deleteInBatch(batch, path);
+      await batch.commit(noResult: true);
+      videos.remove(pathKey);
+      detachedVideos.remove(pathKey);
+      videoTagIdsByPathKey.remove(pathKey);
+      return item;
+    } catch (_) {
+      if (item != null) {
+        // 主库删除失败时重新排入快照，不能因为预清理备份而制造新的数据缺口。
+        await dataBackupService.enqueueVideo(item.videoId);
+      }
+      rethrow;
+    } finally {
+      if (item != null) {
+        dataBackupService.resumeAfterPlayback();
+      }
+    }
   }
 
   Future<int> addRootAndScan(String rootPath) async {
@@ -1251,6 +1326,21 @@ class LibraryStore
 
   @override
   Future<void> setScanPaused(bool paused) => _scanBackend.setPaused(paused);
+
+  @override
+  Future<void> setDataBackupEnabled(bool enabled) =>
+      dataBackupService.setEnabled(enabled);
+
+  @override
+  Future<void> runDataBackupNow() => dataBackupService.runNow();
+
+  @override
+  Future<void> pauseDataBackupForPlayback() =>
+      dataBackupService.pauseForPlayback();
+
+  @override
+  void resumeDataBackupAfterPlayback() =>
+      dataBackupService.resumeAfterPlayback();
 
   /**
    * 通过 fingerprint 校验把一个 missing 条目关联到用户选择的新文件。

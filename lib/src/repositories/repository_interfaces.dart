@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import '../models/library_scan_models.dart';
+import '../models/data_backup_models.dart';
 import '../models/platform_models.dart';
 import '../models/video_item.dart';
 
@@ -111,6 +114,24 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
 
   /** 播放期间暂停/恢复只读扫描，避免机械盘读取与视频解码争抢。 */
   Future<void> setScanPaused(bool paused);
+
+  /** 当前视频依赖备份状态。 */
+  DataBackupStatus get dataBackupStatus;
+
+  /** 设置页订阅的无隐私进度流。 */
+  Stream<DataBackupStatus> get dataBackupStatusStream;
+
+  /** 切换后台备份；关闭时保留既有快照。 */
+  Future<void> setDataBackupEnabled(bool enabled);
+
+  /** 从头启动一轮独立备份核对。 */
+  Future<void> runDataBackupNow();
+
+  /** 播放前等待当前小批次结束并暂停。 */
+  Future<void> pauseDataBackupForPlayback();
+
+  /** 播放器释放后恢复未完成任务。 */
+  void resumeDataBackupAfterPlayback();
 
   Future<int> countUntrackedVideos();
 

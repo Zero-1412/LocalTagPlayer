@@ -6,6 +6,7 @@ import 'library_metadata_persistence.dart';
 import 'library_scan_backend.dart';
 import 'library_tag_persistence.dart';
 import 'library_video_persistence.dart';
+import 'library_data_backup_service.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -18,6 +19,9 @@ import 'library_video_persistence.dart';
 abstract interface class LibraryStoreAccess {
   Database get database;
   LibraryScanBackend get scanBackend;
+
+  /** 扫描提交前查询恢复快照、提交后排入增量备份的独立服务。 */
+  LibraryDataBackupService get dataBackupService;
   int get scanGeneration;
   List<String> get roots;
   List<String> get favoriteTags;
@@ -25,6 +29,8 @@ abstract interface class LibraryStoreAccess {
   Map<String, VideoItem> get videos;
   /** 已解除 root 管理但仍保留稳定身份和用户数据的视频。 */
   Map<String, VideoItem> get detachedVideos;
+  /** 标签分组定义；备份恢复自定义标签时需要在同一事务中补齐。 */
+  List<TagGroup> get tagGroups;
   Map<String, TagItem> get tagsById;
   Map<String, Set<String>> get videoTagIdsByPathKey;
   LibraryMetadataPersistence get metadataPersistence;
