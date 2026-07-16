@@ -30,7 +30,7 @@ double libraryVideoCardMainAxisExtent({
   required bool narrow,
   required bool compact,
 }) {
-  final horizontalPadding = compact ? 28.0 : 44.0;
+  final horizontalPadding = libraryVideoGridHorizontalPadding(compact);
   final spacing = libraryVideoGridCrossAxisSpacing(
     gridWidth: gridWidth,
     compact: compact,
@@ -46,6 +46,9 @@ double libraryVideoCardMainAxisExtent({
   return cardWidth * 9 / 16 + 56;
 }
 
+/** 桌面结果区略收紧左右留白，把宽度优先分配给缩略图。 */
+double libraryVideoGridHorizontalPadding(bool compact) => compact ? 28 : 36;
+
 /**
  * 计算视频网格的横向列间距。
  *
@@ -59,12 +62,12 @@ double libraryVideoGridCrossAxisSpacing({
     return 10;
   }
   if (gridWidth < 1000) {
-    return 14;
+    return 12;
   }
   if (gridWidth < 1400) {
-    return 18;
+    return 16;
   }
-  return 22;
+  return 20;
 }
 
 /** 行间距与卡片标题高度配合，宽窗口增加呼吸感但不降低首屏浏览数量。 */
@@ -97,15 +100,15 @@ double libraryVideoGridMaxCrossAxisExtent({
     return 260;
   }
   if (gridWidth < 1000) {
-    return 286;
+    return 310;
   }
   if (gridWidth < 1400) {
-    return 320;
+    return 340;
   }
   if (gridWidth < 1800) {
-    return 360;
+    return 430;
   }
-  return 430;
+  return 500;
 }
 
 /** 卡片标题按实际卡片宽度分档，保持窄卡不拥挤、宽卡不显得过小。 */
@@ -269,11 +272,91 @@ class LibraryThumbnailPlaceholder extends StatelessWidget {
   }
 }
 
-/** 缩略图 hover 上浮距离；Transform 不参与 Column 布局，标题位置保持不变。 */
-const double libraryVideoHoverLift = 3;
+/** 缩略图内部放大比例；外框尺寸不变，接近内容平台的动态聚焦效果。 */
+const double libraryVideoHoverScale = 1.06;
 
-/** hover 阴影只属于缩略图，不在整卡周围形成选中框。 */
-const double libraryVideoHoverShadowOpacity = 0.30;
+/** hover 放大使用稍长的进入动画，快速扫过时不会出现突兀跳帧。 */
+const Duration libraryVideoHoverScaleDuration = Duration(milliseconds: 220);
+
+/** 退出略快于进入，连续跨卡片时前后动画可自然衔接。 */
+const Duration libraryVideoHoverScaleReverseDuration =
+    Duration(milliseconds: 170);
+
+/**
+ * 在固定裁剪框内连续缩放缩略图内容。
+ *
+ * AnimationController 从当前进度正向或反向运行，鼠标快速进出时不会把比例重置到动画端点；
+ * 因此标题、卡片间距和 Sliver 布局完全不参与 hover 动画。
+ */
+class LibraryThumbnailHoverScale extends StatefulWidget {
+  const LibraryThumbnailHoverScale({
+    super.key,
+    required this.hovered,
+    required this.child,
+  });
+
+  /** 当前卡片是否处于鼠标悬停状态。 */
+  final bool hovered;
+
+  /** 只缩放静态缩略图和动态预览画面，不缩放收藏与时长角标。 */
+  final Widget child;
+
+  @override
+  State<LibraryThumbnailHoverScale> createState() =>
+      _LibraryThumbnailHoverScaleState();
+}
+
+class _LibraryThumbnailHoverScaleState extends State<LibraryThumbnailHoverScale>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: libraryVideoHoverScaleDuration,
+      reverseDuration: libraryVideoHoverScaleReverseDuration,
+      value: widget.hovered ? 1 : 0,
+    );
+    _scale = Tween<double>(
+      begin: 1,
+      end: libraryVideoHoverScale,
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeOutCubic,
+      ),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant LibraryThumbnailHoverScale oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hovered == widget.hovered) {
+      return;
+    }
+    if (widget.hovered) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ScaleTransition(
+        scale: _scale,
+        child: widget.child,
+      );
+}
 
 /** 用户稳定停留后才启动动态预览，快速掠过不会创建原生播放器。 */
 const Duration libraryHoverPreviewStartDelay = Duration(milliseconds: 650);
@@ -377,7 +460,7 @@ int libraryVideoGridColumnCount({
   required bool narrow,
   required bool compact,
 }) {
-  final horizontalPadding = compact ? 28.0 : 44.0;
+  final horizontalPadding = libraryVideoGridHorizontalPadding(compact);
   final spacing = libraryVideoGridCrossAxisSpacing(
     gridWidth: gridWidth,
     compact: compact,
@@ -1092,35 +1175,13 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    AnimatedContainer(
+                    KeyedSubtree(
                       key: LibrarySmokeKeys.cardThumbnailSurface(item.path),
-                      duration: appMotionDuration,
-                      curve: appMotionCurve,
-                      transform: Matrix4.translationValues(
-                        0,
-                        _hovered ? -libraryVideoHoverLift : 0,
-                        0,
-                      ),
-                      transformAlignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        borderRadius:
-                            BorderRadius.circular(libraryVideoCardRadius),
-                        boxShadow: <BoxShadow>[
-                          if (_hovered)
-                            BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: libraryVideoHoverShadowOpacity,
-                              ),
-                              blurRadius: 20,
-                              spreadRadius: 1,
-                              offset: const Offset(0, 9),
-                            ),
-                        ],
-                      ),
                       child: _VideoPreview(
                         item: item,
                         thumbnailService: widget.thumbnailService,
                         playbackSettings: widget.playbackSettings,
+                        hovered: _hovered,
                         onVisible: widget.onVisible,
                         onToggleFavorite: widget.onToggleFavorite,
                       ),
@@ -1232,6 +1293,7 @@ class _VideoPreview extends StatefulWidget {
     required this.item,
     required this.thumbnailService,
     required this.playbackSettings,
+    this.hovered = false,
     this.onVisible,
     this.onToggleFavorite,
   });
@@ -1239,6 +1301,8 @@ class _VideoPreview extends StatefulWidget {
   final VideoItem item;
   final ThumbnailService thumbnailService;
   final PlaybackSettings playbackSettings;
+  /** 网格卡片 hover 状态；列表预览保持 false，不引入额外动画。 */
+  final bool hovered;
   /** 只通知页面提升媒体详情任务；缩略图仍由共享服务自身的优先队列处理。 */
   final ValueChanged<VideoItem>? onVisible;
 
@@ -1411,54 +1475,66 @@ class _VideoPreviewState extends State<_VideoPreview> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    FutureBuilder<File?>(
-                      key: ValueKey(widget.item.path),
-                      future: _future,
-                      // 已在本进程验证过的 JPEG 直接用于首帧；Future 继续负责缓存失效后的
-                      // 异步校验/生成，筛选重排时不再先闪回加载占位。
-                      initialData: widget.thumbnailService
-                          .cachedThumbnailFor(widget.item),
-                      builder: (context, snapshot) {
-                        final file = snapshot.data;
-                        // Future 完成前已验证 JPEG 存在性与完整性，build 阶段不再同步 stat。
-                        if (file != null) {
-                          return Image.file(
-                            file,
-                            key: ValueKey(file.path),
-                            fit: BoxFit.cover,
-                            filterQuality: FilterQuality.medium,
-                            gaplessPlayback: true,
-                            // 历史 fallback 缓存中仍有 4K JPEG，按卡片尺寸解码避免占用数十 MiB。
-                            cacheWidth: libraryThumbnailWidth,
-                          );
-                        }
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const LibraryThumbnailPlaceholder(
-                            state: LibraryThumbnailPlaceholderState.loading,
-                          );
-                        }
-                        if (snapshot.hasError) {
-                          return const LibraryThumbnailPlaceholder(
-                            state: LibraryThumbnailPlaceholderState.failed,
-                          );
-                        }
-                        return const LibraryThumbnailPlaceholder(
-                          state: LibraryThumbnailPlaceholderState.empty,
-                        );
-                      },
-                    ),
-                    if (_isHoverPreviewReady && hoverController != null)
-                      LibraryHoverPreviewFade(
-                        key:
-                            LibrarySmokeKeys.cardHoverPreview(widget.item.path),
-                        visible: _isHoverPreviewVisible,
-                        child: Video(
-                          controller: hoverController,
-                          controls: NoVideoControls,
-                          fit: BoxFit.cover,
-                        ),
+                    LibraryThumbnailHoverScale(
+                      key: LibrarySmokeKeys.cardThumbnailZoom(widget.item.path),
+                      hovered: widget.hovered,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: <Widget>[
+                          FutureBuilder<File?>(
+                            key: ValueKey(widget.item.path),
+                            future: _future,
+                            // 已在本进程验证过的 JPEG 直接用于首帧；Future 继续负责缓存失效后的
+                            // 异步校验/生成，筛选重排时不再先闪回加载占位。
+                            initialData: widget.thumbnailService
+                                .cachedThumbnailFor(widget.item),
+                            builder: (context, snapshot) {
+                              final file = snapshot.data;
+                              // Future 完成前已验证 JPEG 存在性与完整性，build 阶段不再同步 stat。
+                              if (file != null) {
+                                return Image.file(
+                                  file,
+                                  key: ValueKey(file.path),
+                                  fit: BoxFit.cover,
+                                  filterQuality: FilterQuality.medium,
+                                  gaplessPlayback: true,
+                                  // 历史 fallback 缓存中仍有 4K JPEG，按卡片尺寸解码避免占用数十 MiB。
+                                  cacheWidth: libraryThumbnailWidth,
+                                );
+                              }
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return const LibraryThumbnailPlaceholder(
+                                  state:
+                                      LibraryThumbnailPlaceholderState.loading,
+                                );
+                              }
+                              if (snapshot.hasError) {
+                                return const LibraryThumbnailPlaceholder(
+                                  state:
+                                      LibraryThumbnailPlaceholderState.failed,
+                                );
+                              }
+                              return const LibraryThumbnailPlaceholder(
+                                state: LibraryThumbnailPlaceholderState.empty,
+                              );
+                            },
+                          ),
+                          if (_isHoverPreviewReady && hoverController != null)
+                            LibraryHoverPreviewFade(
+                              key: LibrarySmokeKeys.cardHoverPreview(
+                                widget.item.path,
+                              ),
+                              visible: _isHoverPreviewVisible,
+                              child: Video(
+                                controller: hoverController,
+                                controls: NoVideoControls,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                        ],
                       ),
+                    ),
                     Positioned.fill(
                       child: DecoratedBox(
                         decoration: BoxDecoration(

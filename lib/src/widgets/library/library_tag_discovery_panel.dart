@@ -1378,6 +1378,12 @@ class _ShowMorePrimaryButton extends StatelessWidget {
  *
  * 窄条需要保留按钮语义和稳定 key，真实窗口 smoke test 与辅助技术都依赖该入口恢复右侧标签发现闭环。
  */
+const double collapsedTagDiscoveryRailWidth = 44;
+
+/** 折叠条减少横向占用，把释放空间还给默认视频网格。 */
+const EdgeInsets collapsedTagDiscoveryRailMargin =
+    EdgeInsets.fromLTRB(8, 12, 12, 18);
+
 class CollapsedTagDiscoveryRail extends StatelessWidget {
   const CollapsedTagDiscoveryRail({required this.onExpand});
 
@@ -1397,33 +1403,37 @@ class CollapsedTagDiscoveryRail extends StatelessWidget {
       child: Tooltip(
         message: '\u5c55\u5f00\u6807\u7b7e\u7b5b\u9009',
         child: Container(
-          width: 58,
-          margin: const EdgeInsets.fromLTRB(10, 16, 24, 24),
+          width: collapsedTagDiscoveryRailWidth,
+          margin: collapsedTagDiscoveryRailMargin,
           decoration: BoxDecoration(
             color: librarySurface,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: libraryBorder),
             boxShadow: librarySoftShadow,
           ),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             child: InkWell(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
               onTap: onExpand,
               child: const ExcludeSemantics(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.filter_alt_outlined, color: appAccentViolet),
-                    SizedBox(height: 10),
+                    Icon(
+                      Icons.filter_alt_outlined,
+                      color: appAccentViolet,
+                      size: 22,
+                    ),
+                    SizedBox(height: 8),
                     RotatedBox(
                       quarterTurns: 1,
                       child: Text(
                         '\u6807\u7b7e\u7b5b\u9009',
                         style: TextStyle(
                           color: libraryText,
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: FontWeight.w800,
                         ),
                       ),

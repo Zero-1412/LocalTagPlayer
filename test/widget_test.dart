@@ -85,7 +85,7 @@ void main() {
         narrow: false,
         compact: false,
       ),
-      207.5,
+      closeTo(209.75, 0.01),
     );
     expect(
       libraryVideoCardMainAxisExtent(
@@ -109,23 +109,24 @@ void main() {
     );
     expect(
       libraryVideoGridCrossAxisSpacing(gridWidth: 880, compact: false),
-      14,
+      12,
     );
     expect(
       libraryVideoGridCrossAxisSpacing(gridWidth: 1200, compact: false),
-      18,
+      16,
     );
     expect(
       libraryVideoGridCrossAxisSpacing(gridWidth: 1600, compact: false),
-      22,
+      20,
     );
+    expect(libraryVideoGridHorizontalPadding(false), 36);
     expect(
       libraryVideoGridMaxCrossAxisExtent(
         gridWidth: 1600,
         narrow: false,
         compact: false,
       ),
-      360,
+      430,
     );
     expect(
       libraryVideoGridMaxCrossAxisExtent(
@@ -133,7 +134,7 @@ void main() {
         narrow: false,
         compact: false,
       ),
-      430,
+      500,
     );
     expect(libraryVideoCardTitleFontSize(200), 13.5);
     expect(libraryVideoCardTitleFontSize(260), 14.5);
@@ -156,6 +157,7 @@ void main() {
     expect(wideOverlay.durationFontSize, 11);
     expect(libraryFavoriteOverlayOpacity, 0.46);
     expect(libraryDurationOverlayOpacity, 0.56);
+    expect(libraryVideoHoverScale, 1.06);
     expect(libraryVideoDurationLabel(Duration.zero), '--:--');
     expect(
       libraryVideoDurationLabel(const Duration(minutes: 9, seconds: 7)),
@@ -304,7 +306,7 @@ void main() {
     await tester.pump(libraryHoverPreviewFadeDuration);
   });
 
-  testWidgets('card hover lifts only thumbnail and keeps title fixed',
+  testWidgets('card hover zooms only thumbnail and keeps title fixed',
       (tester) async {
     final directory = Directory(
       p.join(
@@ -353,9 +355,17 @@ void main() {
     final titleFinder = find.text('hover video');
     final thumbnailFinder =
         find.byKey(LibrarySmokeKeys.cardThumbnailSurface(item.path));
+    final zoomFinder =
+        find.byKey(LibrarySmokeKeys.cardThumbnailZoom(item.path));
     final titleTopBefore = tester.getTopLeft(titleFinder).dy;
-    final initialThumbnail = tester.widget<AnimatedContainer>(thumbnailFinder);
-    expect(initialThumbnail.transform!.storage[13], 0);
+    expect(thumbnailFinder, findsOneWidget);
+    ScaleTransition scaleTransition() => tester.widget<ScaleTransition>(
+          find.descendant(
+            of: zoomFinder,
+            matching: find.byType(ScaleTransition),
+          ),
+        );
+    expect(scaleTransition().scale.value, 1);
     final cardInkWell = tester.widget<InkWell>(
       find.byKey(LibrarySmokeKeys.cardOpen(item.path)),
     );
@@ -365,11 +375,36 @@ void main() {
     await gesture.addPointer(location: Offset.zero);
     await gesture.moveTo(tester.getCenter(titleFinder));
     await tester.pump();
-    final hoveredThumbnail = tester.widget<AnimatedContainer>(thumbnailFinder);
-    expect(hoveredThumbnail.transform!.storage[13], -libraryVideoHoverLift);
-    await tester.pump(appMotionDuration);
+    await tester.pump(
+      Duration(
+        milliseconds: libraryVideoHoverScaleDuration.inMilliseconds ~/ 2,
+      ),
+    );
+    final enteringScale = scaleTransition().scale.value;
+    expect(enteringScale, greaterThan(1));
+    expect(enteringScale, lessThan(libraryVideoHoverScale));
+    await tester.pump(libraryVideoHoverScaleDuration);
+    expect(
+      scaleTransition().scale.value,
+      closeTo(libraryVideoHoverScale, 0.001),
+    );
     expect(tester.getTopLeft(titleFinder).dy, titleTopBefore);
-    expect(libraryVideoHoverShadowOpacity, 0.30);
+
+    // 快速移出后再移入应从当前动画进度反向衔接，不重置为 1 或 1.06。
+    await gesture.moveTo(const Offset(480, 330));
+    await tester.pump();
+    await tester.pump(
+      Duration(
+        milliseconds: libraryVideoHoverScaleReverseDuration.inMilliseconds ~/ 2,
+      ),
+    );
+    final reversingScale = scaleTransition().scale.value;
+    expect(reversingScale, greaterThan(1));
+    expect(reversingScale, lessThan(libraryVideoHoverScale));
+    await gesture.moveTo(tester.getCenter(titleFinder));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(scaleTransition().scale.value, greaterThan(reversingScale));
     await gesture.removePointer();
   });
 
@@ -384,6 +419,22 @@ void main() {
         compact: false,
       ),
       3,
+    );
+    expect(
+      libraryVideoGridColumnCount(
+        gridWidth: 1600,
+        narrow: false,
+        compact: false,
+      ),
+      4,
+    );
+    expect(
+      libraryVideoGridColumnCount(
+        gridWidth: 2000,
+        narrow: false,
+        compact: false,
+      ),
+      4,
     );
     expect(
       libraryVideoGridColumnCount(
@@ -2497,6 +2548,11 @@ void main() {
 
     expect(find.byKey(LibrarySmokeKeys.collapsedTagRail), findsOneWidget);
     expect(find.byTooltip('展开标签筛选'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.collapsedTagRail)).width,
+      collapsedTagDiscoveryRailWidth +
+          collapsedTagDiscoveryRailMargin.horizontal,
+    );
 
     await tester.tap(find.byKey(LibrarySmokeKeys.collapsedTagRail));
     await tester.pump(const Duration(milliseconds: 100));

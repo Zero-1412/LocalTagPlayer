@@ -126,6 +126,11 @@ class LibrarySmokeKeys {
         'smoke.card.thumbnail-surface:${TagRules.pathKey(path)}',
       );
 
+  /** 缩略图内部 hover 缩放动画的稳定测试入口。 */
+  static ValueKey<String> cardThumbnailZoom(String path) => ValueKey<String>(
+        'smoke.card.thumbnail-zoom:${TagRules.pathKey(path)}',
+      );
+
   /** 动态预览透明度动画的稳定测试入口。 */
   static ValueKey<String> cardHoverPreview(String path) => ValueKey<String>(
         'smoke.card.hover-preview:${TagRules.pathKey(path)}',
