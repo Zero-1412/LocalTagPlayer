@@ -835,6 +835,7 @@ void main() {
   testWidgets('library sidebar collapses to icons and keeps actions reachable',
       (WidgetTester tester) async {
     var pickFolderCount = 0;
+    var tagCenterCount = 0;
     var collapsed = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -871,6 +872,7 @@ void main() {
                 onOpenLocalLibraryRoot: (_) {},
                 onOpenDirectoryManager: () {},
                 onOpenMissingRelink: () {},
+                onOpenTagManager: () => tagCenterCount++,
                 onOpenSettings: () {},
                 onChildTagToggle: (_) {},
                 onClearChildTags: () {},
@@ -885,6 +887,10 @@ void main() {
     );
 
     expect(find.text('媒体库'), findsOneWidget);
+    expect(find.text('标签中心'), findsOneWidget);
+    await tester.tap(find.byKey(LibrarySmokeKeys.sidebarTagCenter));
+    await tester.pump();
+    expect(tagCenterCount, 1);
     expect(find.text('添加目录'), findsNothing);
     expect(find.byTooltip('新增本地库路径'), findsOneWidget);
     expect(
@@ -920,7 +926,12 @@ void main() {
     await tester.tap(find.byKey(LibrarySmokeKeys.sidebarCollapseToggle));
     await tester.pumpAndSettle();
     expect(find.text('媒体库'), findsNothing);
+    expect(find.text('标签中心'), findsNothing);
     expect(find.byTooltip('媒体库'), findsOneWidget);
+    expect(find.byTooltip('标签中心'), findsOneWidget);
+    await tester.tap(find.byKey(LibrarySmokeKeys.sidebarTagCenter));
+    await tester.pump();
+    expect(tagCenterCount, 2);
     expect(
         tester.getSize(find.byKey(LibrarySmokeKeys.sidebarSurface)).width, 76);
     expect(find.byTooltip('展开功能栏'), findsOneWidget);
@@ -948,13 +959,9 @@ void main() {
     expect(LayoutBreakpoints.fromWidth(900), LayoutSize.medium);
     expect(LayoutBreakpoints.fromWidth(1280), LayoutSize.expanded);
 
-    expect(referenceTopBarShouldCollapseActions(LayoutSize.compact), isTrue);
-    expect(referenceTopBarShouldCollapseActions(LayoutSize.medium), isTrue);
-    expect(referenceTopBarShouldCollapseActions(LayoutSize.expanded), isFalse);
-
     expect(
       referenceTopBarSearchShouldFillRow(LayoutSize.expanded, 1600),
-      isTrue,
+      isFalse,
     );
     expect(
       referenceTopBarSearchShouldFillRow(LayoutSize.medium, 900),
@@ -967,6 +974,33 @@ void main() {
     expect(sortModeLabel(SortMode.size), '大小');
     expect(sortModeLabel(SortMode.folder), '目录');
     expect(sortModeLabel(SortMode.added), '添加时间');
+  });
+
+  testWidgets('medium top bar keeps search and actions on one line',
+      (tester) async {
+    tester.view.physicalSize = const Size(452, 180);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        layoutSize: LayoutSize.medium,
+        videoCount: 171,
+        selectedTags: const <String>['原神', '雷神'],
+        onEnterSelectionMode: () {},
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(LibrarySmokeKeys.searchField), findsOneWidget);
+    expect(find.byTooltip('排序字段：日期'), findsOneWidget);
+    expect(find.byTooltip('多选'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   test('expanded main layout keeps proportional slots while resizing', () {
@@ -3026,32 +3060,16 @@ void main() {
   testWidgets('library result line shows determinate import progress',
       (tester) async {
     var pauseCount = 0;
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: LibraryHeroArea(
-            selectedTags: const <String>[],
-            selectedChildTags: const <String>[],
-            selectedGroupTags: const <TagItem>[],
-            excludedTags: const <TagItem>[],
-            keyword: '',
-            defaultChipLabel: '全部视频',
-            showFavoritesOnly: false,
-            resultCount: 11163,
-            totalCount: 11163,
-            refreshing: false,
-            progressLabel: '媒体解析 3200/6308 · 50% · 120个/秒 · 剩余26秒',
-            progressValue: 3200 / 6308,
-            onToggleProgressPaused: () => pauseCount++,
-            onRemovePrimaryTag: (_) {},
-            onRemoveChildTag: (_) {},
-            onRemoveGroupTag: (_) {},
-            onRemoveExcludedTag: (_) {},
-            onClearKeyword: () {},
-            onClearFavoritesOnly: () {},
-            onClearAll: null,
-          ),
-        ),
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        videoCount: 11163,
+        progressLabel: '媒体解析 3200/6308 · 50% · 120个/秒 · 剩余26秒',
+        progressValue: 3200 / 6308,
+        onToggleProgressPaused: () => pauseCount++,
       ),
     );
 
@@ -3079,56 +3097,45 @@ void main() {
 
   testWidgets('library toolbar switches between filter and batch modes',
       (tester) async {
+    tester.view.physicalSize = const Size(1400, 360);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     var selectionMode = false;
     var selectedCount = 0;
     var selectAllCount = 0;
     var deleteCount = 0;
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 700,
-            child: StatefulBuilder(
-              builder: (context, setState) => LibraryHeroArea(
-                selectedTags: const <String>['原神', '雷神', '稻妻', '八重神子'],
-                selectedChildTags: const <String>[],
-                selectedGroupTags: const <TagItem>[],
-                excludedTags: const <TagItem>[],
-                keyword: '',
-                defaultChipLabel: '全部视频',
-                showFavoritesOnly: false,
-                resultCount: 171,
-                totalCount: 11163,
-                refreshing: false,
-                progressLabel: null,
-                progressValue: null,
-                onRemovePrimaryTag: (_) {},
-                onRemoveChildTag: (_) {},
-                onRemoveGroupTag: (_) {},
-                onRemoveExcludedTag: (_) {},
-                onClearKeyword: () {},
-                onClearFavoritesOnly: () {},
-                onClearAll: () {},
-                selectionMode: selectionMode,
-                selectedCount: selectedCount,
-                allSelected: selectedCount == 171,
-                onEnterSelectionMode: () => setState(() {
-                  selectionMode = true;
-                  selectedCount = 0;
-                }),
-                onToggleSelectAll: () => setState(() {
-                  selectAllCount += 1;
-                  selectedCount = selectedCount == 171 ? 0 : 171;
-                }),
-                onDeleteSelected:
-                    selectedCount == 0 ? null : () => deleteCount += 1,
-                onCancelSelectionMode: () => setState(() {
-                  selectionMode = false;
-                  selectedCount = 0;
-                }),
-              ),
-            ),
-          ),
+      StatefulBuilder(
+        builder: (context, setState) => referenceTopBarSearchSmokeHarness(
+          controller: controller,
+          onSearchChanged: (_) {},
+          videoCount: 171,
+          selectedTags: const <String>[
+            '原神',
+            '雷神',
+            '稻妻',
+            '八重神子',
+          ],
+          onClearAll: () {},
+          selectionMode: selectionMode,
+          selectedCount: selectedCount,
+          allSelected: selectedCount == 171,
+          onEnterSelectionMode: () => setState(() {
+            selectionMode = true;
+            selectedCount = 0;
+          }),
+          onToggleSelectAll: () => setState(() {
+            selectAllCount += 1;
+            selectedCount = selectedCount == 171 ? 0 : 171;
+          }),
+          onDeleteSelected: selectedCount == 0 ? null : () => deleteCount += 1,
+          onCancelSelectionMode: () => setState(() {
+            selectionMode = false;
+            selectedCount = 0;
+          }),
         ),
       ),
     );
@@ -3144,7 +3151,7 @@ void main() {
     await tester.pump();
     expect(find.text('原神'), findsNothing);
     expect(find.text('+2'), findsNothing);
-    expect(find.text('已选择 0 个 / 共 171 个'), findsOneWidget);
+    expect(find.text('已选择 0 项'), findsOneWidget);
     final disabledDelete = tester.widget<TextButton>(
       find.byKey(LibrarySmokeKeys.libraryDeleteSelected),
     );
@@ -3153,7 +3160,7 @@ void main() {
     await tester.tap(find.byKey(LibrarySmokeKeys.librarySelectAll));
     await tester.pump();
     expect(selectAllCount, 1);
-    expect(find.text('已选择 171 个 / 共 171 个'), findsOneWidget);
+    expect(find.text('已选择 171 项'), findsOneWidget);
     await tester.tap(find.byKey(LibrarySmokeKeys.libraryDeleteSelected));
     await tester.pump();
     expect(deleteCount, 1);

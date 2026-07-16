@@ -19,19 +19,12 @@ import 'library_smoke_keys.dart';
 import 'library_sort_control.dart';
 import 'library_video_results.dart';
 
-/** 顶栏在非展开布局下收起次要操作，避免高频搜索入口被挤压。 */
-bool referenceTopBarShouldCollapseActions(LayoutSize layoutSize) {
-  return layoutSize != LayoutSize.expanded;
-}
-
 /** 顶栏搜索框在主布局或窄行中占据剩余宽度，防止动作按钮溢出。 */
 bool referenceTopBarSearchShouldFillRow(
   LayoutSize layoutSize,
   double rowWidth,
 ) {
-  return layoutSize == LayoutSize.expanded ||
-      layoutSize == LayoutSize.compact ||
-      rowWidth < 1040;
+  return layoutSize != LayoutSize.expanded || rowWidth < 1120;
 }
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -384,6 +377,7 @@ class LibrarySidebar extends StatelessWidget {
     required this.onOpenLocalLibraryRoot,
     required this.onOpenDirectoryManager,
     required this.onOpenMissingRelink,
+    required this.onOpenTagManager,
     required this.onOpenSettings,
     required this.onChildTagToggle,
     required this.onClearChildTags,
@@ -424,6 +418,8 @@ class LibrarySidebar extends StatelessWidget {
   final VoidCallback onOpenDirectoryManager;
   /** 打开缺失视频与重新关联管理页。 */
   final VoidCallback onOpenMissingRelink;
+  /** 打开标签中心；只移动导航入口，不改变标签管理业务。 */
+  final VoidCallback onOpenTagManager;
   final VoidCallback onOpenSettings;
   final ValueChanged<String> onChildTagToggle;
   final VoidCallback onClearChildTags;
@@ -472,6 +468,7 @@ class LibrarySidebar extends StatelessWidget {
                         onFavoritesToggle: onFavoritesToggle,
                         onOpenDirectoryManager: onOpenDirectoryManager,
                         onOpenMissingRelink: onOpenMissingRelink,
+                        onOpenTagManager: onOpenTagManager,
                         onRescan: onRescan,
                         onPickFolder: onPickFolder,
                         onOpenLocalLibraryRoot: onOpenLocalLibraryRoot,
@@ -516,6 +513,13 @@ class LibrarySidebar extends StatelessWidget {
                                       selected: favoriteVideosSelected,
                                       trailing: favoriteCount.toString(),
                                       onTap: onFavoritesToggle,
+                                    ),
+                                    LibrarySidebarNavItem(
+                                      key: LibrarySmokeKeys.sidebarTagCenter,
+                                      icon: Icons.sell_outlined,
+                                      label: '标签中心',
+                                      selected: false,
+                                      onTap: onOpenTagManager,
                                     ),
                                     const SizedBox(height: 18),
                                     LibrarySidebarSectionLabel(
@@ -741,6 +745,7 @@ class _CollapsedLibrarySidebar extends StatelessWidget {
     required this.onFavoritesToggle,
     required this.onOpenDirectoryManager,
     required this.onOpenMissingRelink,
+    required this.onOpenTagManager,
     required this.onRescan,
     required this.onPickFolder,
     required this.onOpenLocalLibraryRoot,
@@ -760,6 +765,8 @@ class _CollapsedLibrarySidebar extends StatelessWidget {
   final VoidCallback onFavoritesToggle;
   final VoidCallback onOpenDirectoryManager;
   final VoidCallback onOpenMissingRelink;
+  /** 折叠状态下仍可打开标签中心。 */
+  final VoidCallback onOpenTagManager;
   final VoidCallback onRescan;
   final VoidCallback onPickFolder;
   final ValueChanged<String> onOpenLocalLibraryRoot;
@@ -798,6 +805,13 @@ class _CollapsedLibrarySidebar extends StatelessWidget {
                   tooltip: '本地收藏',
                   selected: favoritesSelected,
                   onTap: onFavoritesToggle,
+                ),
+                _CollapsedSidebarItem(
+                  key: LibrarySmokeKeys.sidebarTagCenter,
+                  icon: Icons.sell_outlined,
+                  tooltip: '标签中心',
+                  selected: false,
+                  onTap: onOpenTagManager,
                 ),
                 const _CollapsedSidebarDivider(),
                 _CollapsedSidebarItem(
@@ -855,6 +869,7 @@ class _CollapsedLibrarySidebar extends StatelessWidget {
 /** 图标折叠态的单个入口；选中态仅用背景和强调色表达。 */
 class _CollapsedSidebarItem extends StatelessWidget {
   const _CollapsedSidebarItem({
+    super.key,
     required this.icon,
     required this.tooltip,
     required this.selected,
@@ -1250,190 +1265,6 @@ class LibrarySidebarNavItem extends StatelessWidget {
   }
 }
 
-class LibraryHeroArea extends StatelessWidget {
-  const LibraryHeroArea({
-    required this.selectedTags,
-    required this.selectedChildTags,
-    required this.selectedGroupTags,
-    required this.excludedTags,
-    required this.keyword,
-    required this.defaultChipLabel,
-    required this.showFavoritesOnly,
-    required this.resultCount,
-    required this.totalCount,
-    required this.refreshing,
-    required this.progressLabel,
-    required this.progressValue,
-    this.progressPaused = false,
-    this.onToggleProgressPaused,
-    required this.onRemovePrimaryTag,
-    required this.onRemoveChildTag,
-    required this.onRemoveGroupTag,
-    required this.onRemoveExcludedTag,
-    required this.onClearKeyword,
-    required this.onClearFavoritesOnly,
-    required this.onClearAll,
-    this.selectionMode = false,
-    this.selectedCount = 0,
-    this.allSelected = false,
-    this.onEnterSelectionMode,
-    this.onToggleSelectAll,
-    this.onDeleteSelected,
-    this.onCancelSelectionMode,
-  });
-
-  final List<String> selectedTags;
-
-  final List<String> selectedChildTags;
-
-  final List<TagItem> selectedGroupTags;
-
-  final List<TagItem> excludedTags;
-
-  final String keyword;
-
-  final String defaultChipLabel;
-
-  final bool showFavoritesOnly;
-
-  final int resultCount;
-
-  final int totalCount;
-
-  final bool refreshing;
-
-  /** 扫描或媒体解析期间替代普通结果摘要的短状态；null 表示无后台导入任务。 */
-  final String? progressLabel;
-
-  /** 已知总量阶段的确定型进度；null 表示发现文件等总量未知阶段。 */
-  final double? progressValue;
-
-  /** true 时暂停按钮切换为继续图标。 */
-  final bool progressPaused;
-
-  /** 后台媒体解析存在时提供暂停/继续入口；扫描阶段保持为空。 */
-  final VoidCallback? onToggleProgressPaused;
-
-  final ValueChanged<String> onRemovePrimaryTag;
-
-  final ValueChanged<String> onRemoveChildTag;
-
-  final ValueChanged<TagItem> onRemoveGroupTag;
-
-  final ValueChanged<TagItem> onRemoveExcludedTag;
-
-  final VoidCallback onClearKeyword;
-
-  final VoidCallback onClearFavoritesOnly;
-
-  final VoidCallback? onClearAll;
-
-  /** true 时整条工具栏切换成批量操作模式，不再同时显示筛选信息。 */
-  final bool selectionMode;
-
-  /** 当前完整结果范围内已选择的视频数量。 */
-  final int selectedCount;
-
-  /** 当前完整结果是否已全部选择。 */
-  final bool allSelected;
-
-  /** 进入多选模式；为空时当前结果来源不提供批量删除。 */
-  final VoidCallback? onEnterSelectionMode;
-
-  /** 切换完整当前结果的全选状态。 */
-  final VoidCallback? onToggleSelectAll;
-
-  /** 删除已选视频；没有选择时页面传入 null 以禁用按钮。 */
-  final VoidCallback? onDeleteSelected;
-
-  /** 退出多选并清空临时选择。 */
-  final VoidCallback? onCancelSelectionMode;
-
-  @override
-  Widget build(BuildContext context) {
-    final activeFilters = <_FilterToolbarEntry>[
-      if (keyword.trim().isNotEmpty)
-        _FilterToolbarEntry(
-          label: keyword.trim(),
-          icon: Icons.search_rounded,
-          onRemove: onClearKeyword,
-        ),
-      if (showFavoritesOnly)
-        _FilterToolbarEntry(
-          label: '\u672c\u5730\u6536\u85cf',
-          icon: Icons.favorite_rounded,
-          onRemove: onClearFavoritesOnly,
-        ),
-      for (final tag in selectedTags)
-        _FilterToolbarEntry(
-          label: tag,
-          onRemove: () => onRemovePrimaryTag(tag),
-        ),
-      for (final tag in selectedChildTags)
-        _FilterToolbarEntry(
-          label: tag,
-          onRemove: () => onRemoveChildTag(tag),
-        ),
-      for (final tag in selectedGroupTags)
-        _FilterToolbarEntry(
-          label: tag.displayName ?? tag.name,
-          color: libraryGroupColor(tag.groupId ?? 'manual'),
-          onRemove: () => onRemoveGroupTag(tag),
-        ),
-      for (final tag in excludedTags)
-        _FilterToolbarEntry(
-          label: 'NOT ${tag.displayName ?? tag.name}',
-          color: const Color(0xffe26573),
-          onRemove: () => onRemoveExcludedTag(tag),
-        ),
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 18, 12),
-      child: Container(
-        key: LibrarySmokeKeys.libraryResultToolbar,
-        width: double.infinity,
-        height: 64,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        decoration: BoxDecoration(
-          color: librarySurface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: libraryBorder.withValues(alpha: 0.68),
-          ),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (selectionMode) {
-              return _LibrarySelectionToolbar(
-                resultCount: resultCount,
-                selectedCount: selectedCount,
-                allSelected: allSelected,
-                onToggleSelectAll: onToggleSelectAll,
-                onDeleteSelected: onDeleteSelected,
-                onCancel: onCancelSelectionMode,
-              );
-            }
-            return _LibraryFilterToolbar(
-              defaultLabel: defaultChipLabel,
-              filters: activeFilters,
-              maxVisibleFilters: constraints.maxWidth < 760 ? 2 : 3,
-              resultCount: resultCount,
-              refreshing: refreshing,
-              progressLabel: progressLabel,
-              progressValue: progressValue,
-              progressPaused: progressPaused,
-              onToggleProgressPaused: onToggleProgressPaused,
-              onClearAll: onClearAll,
-              onEnterSelectionMode: onEnterSelectionMode,
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
 /** 单行筛选工具栏中一个可移除筛选项的轻量描述。 */
 class _FilterToolbarEntry {
   const _FilterToolbarEntry({
@@ -1449,137 +1280,259 @@ class _FilterToolbarEntry {
   final Color color;
 }
 
-/** 普通状态只展示筛选、结果数量和进入多选的入口。 */
-class _LibraryFilterToolbar extends StatelessWidget {
-  const _LibraryFilterToolbar({
+/**
+ * 搜索、筛选 chips 与结果状态共用的单层输入表面。
+ *
+ * 搜索仍由稳定的 [TextField] / controller 输入链路驱动；标签状态只在输入框前部展示，
+ * 不复制或改写 `FilterQuery` 语义。宽屏最大宽度由顶栏限制为约 650px，窄屏才弹性收缩。
+ */
+class _LibrarySearchSurface extends StatelessWidget {
+  const _LibrarySearchSurface({
+    required this.controller,
+    required this.searchFocusNode,
+    required this.compact,
+    required this.keywordActive,
     required this.defaultLabel,
     required this.filters,
-    required this.maxVisibleFilters,
     required this.resultCount,
     required this.refreshing,
     required this.progressLabel,
     required this.progressValue,
     required this.progressPaused,
     required this.onToggleProgressPaused,
+    required this.onSearchChanged,
+    required this.onClearKeyword,
     required this.onClearAll,
-    required this.onEnterSelectionMode,
   });
 
+  /** 页面持有的唯一搜索文本控制器。 */
+  final TextEditingController controller;
+
+  /** 与 `Ctrl+K`、真实键盘和自动化输入共享的焦点节点。 */
+  final FocusNode searchFocusNode;
+
+  /** 紧凑布局使用更短提示并降低内部留白。 */
+  final bool compact;
+
+  /** 关键词存在时强调边框，并提供独立清除入口。 */
+  final bool keywordActive;
+
+  /** 非全库来源在没有筛选 chips 时展示的上下文名称。 */
   final String defaultLabel;
+
+  /** 当前标签、收藏与排除条件；关键词直接保留在输入区，不重复变成 chip。 */
   final List<_FilterToolbarEntry> filters;
-  final int maxVisibleFilters;
+
+  /** 当前筛选结果数量。 */
   final int resultCount;
+
+  /** 结果或旁路计数正在后台刷新。 */
   final bool refreshing;
+
+  /** 扫描或媒体解析期间替代普通数量的状态。 */
   final String? progressLabel;
+
+  /** 后台任务的确定型进度；null 表示未知总量。 */
   final double? progressValue;
+
+  /** 后台任务是否暂停。 */
   final bool progressPaused;
+
+  /** 暂停或继续后台任务。 */
   final VoidCallback? onToggleProgressPaused;
+
+  /** 搜索文本变化统一进入页面已有的筛选刷新链路。 */
+  final ValueChanged<String> onSearchChanged;
+
+  /** 只清除关键词，不改变其它标签条件。 */
+  final VoidCallback onClearKeyword;
+
+  /** 一次清除全部筛选；为空时不绘制入口。 */
   final VoidCallback? onClearAll;
-  final VoidCallback? onEnterSelectionMode;
 
   @override
   Widget build(BuildContext context) {
-    final visibleFilters = filters.take(maxVisibleFilters).toList();
-    final hiddenCount = filters.length - visibleFilters.length;
-    return Row(
-      children: [
-        const Icon(
-          Icons.filter_alt_outlined,
-          size: 18,
-          color: libraryTextMuted,
+    return Container(
+      key: LibrarySmokeKeys.libraryResultToolbar,
+      height: compact ? 44 : 50,
+      decoration: BoxDecoration(
+        color: librarySurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: keywordActive ? appAccentViolet : libraryBorder,
+          width: keywordActive ? 1.4 : 1,
         ),
-        const SizedBox(width: 6),
-        const Text(
-          '筛选',
-          style: TextStyle(
-            color: libraryText,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                if (visibleFilters.isEmpty)
-                  Text(
-                    defaultLabel,
-                    style: const TextStyle(
+        boxShadow: librarySoftShadow,
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // 始终为真实文本输入和结果数量预留空间；条件过多时只折叠展示数量。
+          final maxVisibleFilters = constraints.maxWidth >= 590
+              ? 2
+              : constraints.maxWidth >= 470
+                  ? 1
+                  : 0;
+          final visibleFilters = filters.take(maxVisibleFilters).toList();
+          final hiddenCount = filters.length - visibleFilters.length;
+          final showSourceLabel = constraints.maxWidth >= 360 &&
+              filters.isEmpty &&
+              defaultLabel != '\u5168\u90e8\u89c6\u9891';
+          return Row(
+            children: [
+              Padding(
+                padding: EdgeInsets.only(left: compact ? 12 : 14, right: 8),
+                child: Icon(
+                  Icons.search_rounded,
+                  size: compact ? 20 : 22,
+                  color: keywordActive ? appAccentViolet : libraryTextMuted,
+                ),
+              ),
+              if (showSourceLabel) ...[
+                _SourceContextChip(label: defaultLabel),
+                const SizedBox(width: 6),
+              ],
+              for (final filter in visibleFilters) ...[
+                _CurrentFilterChip(
+                  avatar: filter.icon == null
+                      ? null
+                      : Icon(filter.icon, size: 14, color: filter.color),
+                  label: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: compact ? 76 : 96,
+                    ),
+                    child: Text(
+                      filter.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  onDeleted: filter.onRemove,
+                  side: BorderSide(color: filter.color.withAlpha(150)),
+                ),
+                const SizedBox(width: 6),
+              ],
+              if (hiddenCount > 0) ...[
+                _CollapsedFilterCount(count: hiddenCount),
+                const SizedBox(width: 6),
+              ],
+              Expanded(
+                /**
+                 * 必须保持为 TextField，而不是把输入模拟成 GestureDetector 或 SearchBar；
+                 * 真实键盘、自动化输入和 controller 改写因此继续触发同一条 onChanged 链路。
+                 */
+                child: TextField(
+                  key: LibrarySmokeKeys.searchField,
+                  controller: controller,
+                  focusNode: searchFocusNode,
+                  textInputAction: TextInputAction.search,
+                  onChanged: onSearchChanged,
+                  onSubmitted: onSearchChanged,
+                  style: const TextStyle(
+                    color: libraryText,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: InputDecoration(
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: compact ? 12 : 15,
+                    ),
+                    hintText: compact
+                        ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
+                        : '\u641c\u7d22\u6587\u4ef6\u540d\u002f\u6807\u7b7e\u002f\u8def\u5f84\u002e\u002e\u002e',
+                    hintStyle: const TextStyle(
                       color: libraryTextMuted,
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
-                  )
-                else
-                  for (final filter in visibleFilters) ...[
-                    _CurrentFilterChip(
-                      avatar: filter.icon == null
-                          ? null
-                          : Icon(filter.icon, size: 16, color: filter.color),
-                      label: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 132),
-                        child: Text(
-                          filter.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      onDeleted: filter.onRemove,
-                      side: BorderSide(color: filter.color.withAlpha(150)),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                if (hiddenCount > 0) ...[
-                  _CollapsedFilterCount(count: hiddenCount),
-                  const SizedBox(width: 8),
-                ],
-                if (onClearAll != null)
-                  TextButton(
-                    onPressed: onClearAll,
-                    style: TextButton.styleFrom(
-                      foregroundColor: libraryTextMuted,
-                      minimumSize: const Size(44, 32),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text('清空'),
                   ),
-              ],
-            ),
-          ),
+                ),
+              ),
+              if (keywordActive)
+                SizedBox.square(
+                  dimension: 28,
+                  child: IconButton(
+                    tooltip: '\u6e05\u9664\u641c\u7d22\u5173\u952e\u8bcd',
+                    padding: EdgeInsets.zero,
+                    iconSize: 17,
+                    color: libraryTextMuted,
+                    onPressed: onClearKeyword,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ),
+              if (onClearAll != null && filters.isNotEmpty)
+                SizedBox.square(
+                  dimension: 28,
+                  child: IconButton(
+                    tooltip: '\u6e05\u7a7a\u5168\u90e8\u7b5b\u9009',
+                    padding: EdgeInsets.zero,
+                    iconSize: 17,
+                    color: libraryTextMuted,
+                    onPressed: onClearAll,
+                    icon: const Icon(Icons.filter_alt_off_outlined),
+                  ),
+                ),
+              const SizedBox(
+                height: 24,
+                child: VerticalDivider(width: 1, color: libraryBorder),
+              ),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: progressLabel == null ? 82 : 120,
+                  maxWidth: progressLabel == null ? 104 : 210,
+                ),
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: compact ? 8 : 10,
+                    right: compact ? 10 : 12,
+                  ),
+                  child: _FilterResultLine(
+                    resultCount: resultCount,
+                    refreshing: refreshing,
+                    progressLabel: progressLabel,
+                    progressValue: progressValue,
+                    progressPaused: progressPaused,
+                    onToggleProgressPaused: onToggleProgressPaused,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/** 非全库来源的只读上下文 chip，不伪装成可删除筛选条件。 */
+class _SourceContextChip extends StatelessWidget {
+  const _SourceContextChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 30,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      decoration: BoxDecoration(
+        color: librarySurfaceAlt,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: libraryBorder),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: libraryTextMuted,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
         ),
-        const SizedBox(width: 16),
-        Flexible(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: _FilterResultLine(
-              resultCount: resultCount,
-              refreshing: refreshing,
-              progressLabel: progressLabel,
-              progressValue: progressValue,
-              progressPaused: progressPaused,
-              onToggleProgressPaused: onToggleProgressPaused,
-            ),
-          ),
-        ),
-        if (onEnterSelectionMode != null) ...[
-          const SizedBox(width: 14),
-          OutlinedButton(
-            key: LibrarySmokeKeys.libraryEnterSelection,
-            onPressed: onEnterSelectionMode,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: libraryText,
-              side: const BorderSide(color: libraryBorder),
-              minimumSize: const Size(62, 34),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text('多选'),
-          ),
-        ],
-      ],
+      ),
     );
   }
 }
@@ -1593,9 +1546,9 @@ class _CollapsedFilterCount extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 34,
+      height: 30,
       alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: librarySurfaceAlt,
         borderRadius: BorderRadius.circular(8),
@@ -1605,7 +1558,7 @@ class _CollapsedFilterCount extends StatelessWidget {
         '+$count',
         style: const TextStyle(
           color: libraryTextMuted,
-          fontSize: 13,
+          fontSize: 12,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -1613,10 +1566,9 @@ class _CollapsedFilterCount extends StatelessWidget {
   }
 }
 
-/** 多选状态只展示批量选择和删除动作，不同时堆叠筛选信息。 */
+/** 多选状态替换整条顶部区域，只保留选择状态、删除和取消。 */
 class _LibrarySelectionToolbar extends StatelessWidget {
   const _LibrarySelectionToolbar({
-    required this.resultCount,
     required this.selectedCount,
     required this.allSelected,
     required this.onToggleSelectAll,
@@ -1624,97 +1576,108 @@ class _LibrarySelectionToolbar extends StatelessWidget {
     required this.onCancel,
   });
 
-  final int resultCount;
+  /** 当前完整结果范围内已选择的视频数量。 */
   final int selectedCount;
+
+  /** 当前完整结果是否已全部选择。 */
   final bool allSelected;
+
+  /** 圆形复选框承担全选/取消全选入口。 */
   final VoidCallback? onToggleSelectAll;
+
+  /** 删除已选视频；未选择时由页面传入 null。 */
   final VoidCallback? onDeleteSelected;
+
+  /** 退出多选并清空临时选择。 */
   final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        InkWell(
-          key: LibrarySmokeKeys.librarySelectAll,
-          borderRadius: BorderRadius.circular(8),
-          onTap: onToggleSelectAll,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-            child: Row(
-              children: [
-                Checkbox(
-                  value: allSelected,
-                  onChanged: onToggleSelectAll == null
-                      ? null
-                      : (_) => onToggleSelectAll!(),
-                  shape: const CircleBorder(),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                const SizedBox(width: 4),
-                const Text(
-                  '全选',
-                  style: TextStyle(
-                    color: libraryText,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
+    return Container(
+      key: LibrarySmokeKeys.libraryResultToolbar,
+      width: double.infinity,
+      height: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: librarySurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: libraryBorder),
+        boxShadow: librarySoftShadow,
+      ),
+      child: Row(
+        children: [
+          InkWell(
+            key: LibrarySmokeKeys.librarySelectAll,
+            borderRadius: BorderRadius.circular(8),
+            onTap: onToggleSelectAll,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: allSelected,
+                    onChanged: onToggleSelectAll == null
+                        ? null
+                        : (_) => onToggleSelectAll!(),
+                    shape: const CircleBorder(),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const Spacer(),
-        Text.rich(
-          TextSpan(
-            style: const TextStyle(
-              color: libraryTextMuted,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-            children: [
-              const TextSpan(text: '已选择 '),
-              TextSpan(
-                text: '$selectedCount',
-                style: const TextStyle(
-                  color: appAccentViolet,
-                  fontWeight: FontWeight.w900,
-                ),
+                  const SizedBox(width: 6),
+                  Text.rich(
+                    TextSpan(
+                      style: const TextStyle(
+                        color: libraryText,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      children: [
+                        const TextSpan(text: '\u5df2\u9009\u62e9 '),
+                        TextSpan(
+                          text: '$selectedCount',
+                          style: const TextStyle(
+                            color: appAccentViolet,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const TextSpan(text: ' \u9879'),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              TextSpan(text: ' 个 / 共 $resultCount 个'),
-            ],
+            ),
           ),
-        ),
-        const Spacer(),
-        TextButton.icon(
-          key: LibrarySmokeKeys.libraryDeleteSelected,
-          onPressed: onDeleteSelected,
-          icon: const Icon(Icons.delete_outline_rounded, size: 18),
-          label: const Text('删除'),
-          style: TextButton.styleFrom(
-            foregroundColor: const Color(0xffe26573),
-            disabledForegroundColor: libraryTextMuted.withValues(alpha: 0.45),
-            backgroundColor: onDeleteSelected == null
-                ? Colors.transparent
-                : const Color(0x24e26573),
-            minimumSize: const Size(68, 34),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          const Spacer(),
+          TextButton.icon(
+            key: LibrarySmokeKeys.libraryDeleteSelected,
+            onPressed: onDeleteSelected,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            label: const Text('\u5220\u9664'),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xffe26573),
+              disabledForegroundColor: libraryTextMuted.withValues(alpha: 0.45),
+              backgroundColor: onDeleteSelected == null
+                  ? Colors.transparent
+                  : const Color(0x24e26573),
+              minimumSize: const Size(68, 34),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        TextButton(
-          key: LibrarySmokeKeys.libraryCancelSelection,
-          onPressed: onCancel,
-          style: TextButton.styleFrom(
-            foregroundColor: libraryTextMuted,
-            minimumSize: const Size(56, 34),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          const SizedBox(width: 8),
+          TextButton(
+            key: LibrarySmokeKeys.libraryCancelSelection,
+            onPressed: onCancel,
+            style: TextButton.styleFrom(
+              foregroundColor: libraryTextMuted,
+              minimumSize: const Size(56, 34),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('\u53d6\u6d88'),
           ),
-          child: const Text('取消'),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1747,11 +1710,11 @@ class _CurrentFilterChip extends StatelessWidget {
       deleteIconColor: appAccentViolet,
       labelStyle: const TextStyle(
         color: appAccentViolet,
-        fontSize: 13,
+        fontSize: 12,
         fontWeight: FontWeight.w800,
       ),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     );
   }
@@ -2033,8 +1996,16 @@ class ReferenceTopBar extends StatelessWidget {
     required this.controller,
     required this.searchFocusNode,
     required this.videoCount,
-    required this.totalCount,
     required this.keyword,
+    required this.selectedTags,
+    required this.selectedChildTags,
+    required this.selectedGroupTags,
+    required this.excludedTags,
+    required this.defaultChipLabel,
+    required this.showFavoritesOnly,
+    required this.refreshing,
+    required this.progressLabel,
+    required this.progressValue,
     required this.sortMode,
     required this.sortDirection,
     required this.layoutSize,
@@ -2046,6 +2017,22 @@ class ReferenceTopBar extends StatelessWidget {
     required this.onResultViewChanged,
     required this.onOpenTagManager,
     required this.onOpenFilters,
+    required this.onRemovePrimaryTag,
+    required this.onRemoveChildTag,
+    required this.onRemoveGroupTag,
+    required this.onRemoveExcludedTag,
+    required this.onClearKeyword,
+    required this.onClearFavoritesOnly,
+    required this.onClearAll,
+    this.progressPaused = false,
+    this.onToggleProgressPaused,
+    this.selectionMode = false,
+    this.selectedCount = 0,
+    this.allSelected = false,
+    this.onEnterSelectionMode,
+    this.onToggleSelectAll,
+    this.onDeleteSelected,
+    this.onCancelSelectionMode,
   });
 
   final TextEditingController controller;
@@ -2058,11 +2045,38 @@ class ReferenceTopBar extends StatelessWidget {
    */
   final FocusNode searchFocusNode;
 
+  /** 当前可见结果数量；与搜索和 chips 同处一个结果状态区域。 */
   final int videoCount;
 
-  final int totalCount;
-
+  /** 当前关键词只保留在真实输入框中，不重复渲染为 chip。 */
   final String keyword;
+
+  /** 当前一级 folder 标签筛选。 */
+  final List<String> selectedTags;
+
+  /** 当前二级 folder 标签筛选。 */
+  final List<String> selectedChildTags;
+
+  /** 当前分组标签筛选。 */
+  final List<TagItem> selectedGroupTags;
+
+  /** 当前排除标签筛选。 */
+  final List<TagItem> excludedTags;
+
+  /** 最近播放、本地收藏或本地目录等非全库结果来源名称。 */
+  final String defaultChipLabel;
+
+  /** 是否启用收藏筛选。 */
+  final bool showFavoritesOnly;
+
+  /** 当前结果或标签计数是否正在后台刷新。 */
+  final bool refreshing;
+
+  /** 扫描或媒体解析时替代普通结果数量的状态。 */
+  final String? progressLabel;
+
+  /** 已知总量任务的进度值。 */
+  final double? progressValue;
 
   final SortMode sortMode;
 
@@ -2086,10 +2100,81 @@ class ReferenceTopBar extends StatelessWidget {
 
   final VoidCallback onOpenFilters;
 
+  final ValueChanged<String> onRemovePrimaryTag;
+
+  final ValueChanged<String> onRemoveChildTag;
+
+  final ValueChanged<TagItem> onRemoveGroupTag;
+
+  final ValueChanged<TagItem> onRemoveExcludedTag;
+
+  final VoidCallback onClearKeyword;
+
+  final VoidCallback onClearFavoritesOnly;
+
+  final VoidCallback? onClearAll;
+
+  /** true 时暂停按钮切换为继续图标。 */
+  final bool progressPaused;
+
+  /** 后台媒体解析存在时提供暂停/继续入口。 */
+  final VoidCallback? onToggleProgressPaused;
+
+  /** true 时整条顶栏替换为批量选择状态。 */
+  final bool selectionMode;
+
+  /** 当前完整结果范围内已选择的视频数量。 */
+  final int selectedCount;
+
+  /** 当前完整结果是否已全部选择。 */
+  final bool allSelected;
+
+  /** 进入多选模式；为空时当前结果来源不支持批量删除。 */
+  final VoidCallback? onEnterSelectionMode;
+
+  /** 切换完整当前结果的全选状态。 */
+  final VoidCallback? onToggleSelectAll;
+
+  /** 删除已选视频；未选择时页面传入 null。 */
+  final VoidCallback? onDeleteSelected;
+
+  /** 退出多选并清空临时选择。 */
+  final VoidCallback? onCancelSelectionMode;
+
   @override
   Widget build(BuildContext context) {
     final compact = layoutSize == LayoutSize.compact;
     final keywordActive = keyword.trim().isNotEmpty;
+    final activeFilters = <_FilterToolbarEntry>[
+      if (showFavoritesOnly)
+        _FilterToolbarEntry(
+          label: '\u672c\u5730\u6536\u85cf',
+          icon: Icons.favorite_rounded,
+          onRemove: onClearFavoritesOnly,
+        ),
+      for (final tag in selectedTags)
+        _FilterToolbarEntry(
+          label: tag,
+          onRemove: () => onRemovePrimaryTag(tag),
+        ),
+      for (final tag in selectedChildTags)
+        _FilterToolbarEntry(
+          label: tag,
+          onRemove: () => onRemoveChildTag(tag),
+        ),
+      for (final tag in selectedGroupTags)
+        _FilterToolbarEntry(
+          label: tag.displayName ?? tag.name,
+          color: libraryGroupColor(tag.groupId ?? 'manual'),
+          onRemove: () => onRemoveGroupTag(tag),
+        ),
+      for (final tag in excludedTags)
+        _FilterToolbarEntry(
+          label: 'NOT ${tag.displayName ?? tag.name}',
+          color: const Color(0xffe26573),
+          onRemove: () => onRemoveExcludedTag(tag),
+        ),
+    ];
     return Shortcuts(
       shortcuts: <ShortcutActivator, Intent>{
         const SingleActivator(LogicalKeyboardKey.keyK, control: true):
@@ -2122,108 +2207,53 @@ class ReferenceTopBar extends StatelessWidget {
             bottom: false,
             child: Padding(
               padding: EdgeInsets.fromLTRB(
-                  compact ? 12 : 20, 14, compact ? 12 : 20, 8),
+                layoutSize == LayoutSize.expanded ? 20 : 12,
+                14,
+                layoutSize == LayoutSize.expanded ? 20 : 12,
+                8,
+              ),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final constrained = constraints.maxWidth < 760;
-                  final collapseActions =
-                      referenceTopBarShouldCollapseActions(layoutSize) ||
-                          constrained;
+                  if (selectionMode) {
+                    return _LibrarySelectionToolbar(
+                      selectedCount: selectedCount,
+                      allSelected: allSelected,
+                      onToggleSelectAll: onToggleSelectAll,
+                      onDeleteSelected: onDeleteSelected,
+                      onCancel: onCancelSelectionMode,
+                    );
+                  }
                   // 非最大化窗口虽然仍可能处于 expanded 断点，但右侧面板会挤占可用宽度；
-                  // 搜索框必须在真实行宽不足时让出空间，避免工具条右侧按钮越界。
+                  // 搜索区只在宽度充足时保持约 650px，避免无限拉长造成横向视觉失焦。
                   final fitSearchToRemainingWidth =
                       referenceTopBarSearchShouldFillRow(
                     layoutSize,
                     constraints.maxWidth,
                   );
-                  final searchField = ConstrainedBox(
+                  final narrowMedium = layoutSize == LayoutSize.medium &&
+                      constraints.maxWidth < 620;
+                  final searchSurface = ConstrainedBox(
                     constraints: BoxConstraints(
                       minWidth: 180,
                       maxWidth:
-                          fitSearchToRemainingWidth ? double.infinity : 760,
+                          fitSearchToRemainingWidth ? double.infinity : 650,
                     ),
-                    child: Container(
-                      height: compact ? 44 : 50,
-                      decoration: BoxDecoration(
-                        color: librarySurface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color:
-                              keywordActive ? appAccentViolet : libraryBorder,
-                          width: keywordActive ? 1.4 : 1,
-                        ),
-                        boxShadow: librarySoftShadow,
-                      ),
-                      /**
-                 * 主搜索框使用 TextField 而不是 Material SearchBar。
-                 *
-                 * Windows 桌面自动化和真实键盘输入都需要稳定触发 EditableText 的输入链路；
-                 * SearchBar 在 smoke test 中出现过可聚焦但 type_text 不写入的问题。
-                 */
-                      child: TextField(
-                        key: LibrarySmokeKeys.searchField,
-                        controller: controller,
-                        focusNode: searchFocusNode,
-                        textInputAction: TextInputAction.search,
-                        onChanged: onSearchChanged,
-                        onSubmitted: onSearchChanged,
-                        style: const TextStyle(
-                          color: libraryText,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        decoration: InputDecoration(
-                          // 显式关闭全局浅色输入框填充，让外层媒体库深色表面保持可见。
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 0,
-                            vertical: 15,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.search_rounded,
-                            size: 23,
-                            color: keywordActive
-                                ? appAccentViolet
-                                : libraryTextMuted,
-                          ),
-                          prefixIconConstraints: const BoxConstraints(
-                            minWidth: 48,
-                            minHeight: 44,
-                          ),
-                          hintText: compact
-                              ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
-                              : '\u641c\u7d22\u6587\u4ef6\u540d\u0020\u002f\u0020\u6807\u7b7e\u0020\u002f\u0020\u8def\u5f84\u002e\u002e\u002e',
-                          hintStyle: const TextStyle(
-                            color: libraryTextMuted,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          suffixIcon: constrained
-                              ? null
-                              : const Padding(
-                                  padding: EdgeInsets.only(right: 14),
-                                  child: Center(
-                                    widthFactor: 1,
-                                    child: Text(
-                                      'Ctrl + K',
-                                      style: TextStyle(
-                                        color: libraryTextMuted,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                          suffixIconConstraints: const BoxConstraints(
-                            minWidth: 68,
-                            minHeight: 44,
-                          ),
-                        ),
-                      ),
+                    child: _LibrarySearchSurface(
+                      controller: controller,
+                      searchFocusNode: searchFocusNode,
+                      compact: compact,
+                      keywordActive: keywordActive,
+                      defaultLabel: defaultChipLabel,
+                      filters: activeFilters,
+                      resultCount: videoCount,
+                      refreshing: refreshing,
+                      progressLabel: progressLabel,
+                      progressValue: progressValue,
+                      progressPaused: progressPaused,
+                      onToggleProgressPaused: onToggleProgressPaused,
+                      onSearchChanged: onSearchChanged,
+                      onClearKeyword: onClearKeyword,
+                      onClearAll: onClearAll,
                     ),
                   );
                   return Row(
@@ -2239,27 +2269,62 @@ class ReferenceTopBar extends StatelessWidget {
                         const SizedBox(width: 10),
                       ],
                       if (fitSearchToRemainingWidth)
-                        Expanded(child: searchField)
+                        Expanded(child: searchSurface)
                       else
-                        searchField,
-                      SizedBox(width: collapseActions ? 8 : 12),
-                      _ReferenceActionButton(
-                        tooltip: '\u6807\u7b7e\u4e2d\u5fc3',
-                        icon: Icons.sell_outlined,
-                        label:
-                            collapseActions ? null : '\u6807\u7b7e\u4e2d\u5fc3',
-                        onPressed: onOpenTagManager,
-                      ),
-                      const SizedBox(width: 12),
-                      if (!compact)
-                        TopSortControl(
-                          sortMode: sortMode,
-                          sortDirection: sortDirection,
-                          onChanged: onSortChanged,
-                          onDirectionToggle: onSortDirectionToggle,
+                        searchSurface,
+                      if (!fitSearchToRemainingWidth) const Spacer(),
+                      if (compact) ...[
+                        const SizedBox(width: 8),
+                        _ReferenceIconButton(
+                          tooltip: '标签中心',
+                          icon: Icons.sell_outlined,
+                          onPressed: onOpenTagManager,
                         ),
-                      if (!compact) const SizedBox(width: 8),
+                      ],
+                      const SizedBox(width: 8),
                       if (!compact)
+                        if (narrowMedium)
+                          _CompactTopSortControl(
+                            sortMode: sortMode,
+                            sortDirection: sortDirection,
+                            onChanged: onSortChanged,
+                            onDirectionToggle: onSortDirectionToggle,
+                          )
+                        else
+                          TopSortControl(
+                            sortMode: sortMode,
+                            sortDirection: sortDirection,
+                            onChanged: onSortChanged,
+                            onDirectionToggle: onSortDirectionToggle,
+                          ),
+                      if (!compact) const SizedBox(width: 8),
+                      if (onEnterSelectionMode != null)
+                        if (compact || narrowMedium)
+                          _ReferenceIconButton(
+                            key: LibrarySmokeKeys.libraryEnterSelection,
+                            tooltip: '\u591a\u9009',
+                            icon: Icons.checklist_rounded,
+                            onPressed: onEnterSelectionMode!,
+                          )
+                        else
+                          OutlinedButton(
+                            key: LibrarySmokeKeys.libraryEnterSelection,
+                            onPressed: onEnterSelectionMode,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: libraryText,
+                              side: const BorderSide(color: libraryBorder),
+                              minimumSize: const Size(62, 48),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 14),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text('\u591a\u9009'),
+                          ),
+                      if (onEnterSelectionMode != null &&
+                          !compact &&
+                          !narrowMedium)
+                        const SizedBox(width: 8),
+                      if (!compact && !narrowMedium)
                         ResultViewToggle(
                           dense: denseResultGrid,
                           onChanged: onResultViewChanged,
@@ -2295,9 +2360,37 @@ Widget referenceTopBarSearchSmokeHarness({
   required TextEditingController controller,
   required ValueChanged<String> onSearchChanged,
   FocusNode? searchFocusNode,
+  int videoCount = 0,
+  String? keyword,
+  List<String> selectedTags = const <String>[],
+  List<String> selectedChildTags = const <String>[],
+  List<TagItem> selectedGroupTags = const <TagItem>[],
+  List<TagItem> excludedTags = const <TagItem>[],
+  String defaultChipLabel = '\u5168\u90e8\u89c6\u9891',
+  bool showFavoritesOnly = false,
+  bool refreshing = false,
+  String? progressLabel,
+  double? progressValue,
+  bool progressPaused = false,
+  VoidCallback? onToggleProgressPaused,
+  LayoutSize layoutSize = LayoutSize.expanded,
   SortDirection sortDirection = SortDirection.descending,
   ValueChanged<SortMode>? onSortChanged,
   VoidCallback? onSortDirectionToggle,
+  ValueChanged<String>? onRemovePrimaryTag,
+  ValueChanged<String>? onRemoveChildTag,
+  ValueChanged<TagItem>? onRemoveGroupTag,
+  ValueChanged<TagItem>? onRemoveExcludedTag,
+  VoidCallback? onClearKeyword,
+  VoidCallback? onClearFavoritesOnly,
+  VoidCallback? onClearAll,
+  bool selectionMode = false,
+  int selectedCount = 0,
+  bool allSelected = false,
+  VoidCallback? onEnterSelectionMode,
+  VoidCallback? onToggleSelectAll,
+  VoidCallback? onDeleteSelected,
+  VoidCallback? onCancelSelectionMode,
 }) {
   return MaterialApp(
     home: Scaffold(
@@ -2305,13 +2398,28 @@ Widget referenceTopBarSearchSmokeHarness({
         controller: controller,
         searchFocusNode:
             searchFocusNode ?? FocusNode(debugLabel: 'search-smoke-field'),
-        videoCount: 0,
-        totalCount: 0,
-        keyword: controller.text,
+        videoCount: videoCount,
+        keyword: keyword ?? controller.text,
+        selectedTags: selectedTags,
+        selectedChildTags: selectedChildTags,
+        selectedGroupTags: selectedGroupTags,
+        excludedTags: excludedTags,
+        defaultChipLabel: defaultChipLabel,
+        showFavoritesOnly: showFavoritesOnly,
+        refreshing: refreshing,
+        progressLabel: progressLabel,
+        progressValue: progressValue,
+        progressPaused: progressPaused,
+        onToggleProgressPaused: onToggleProgressPaused,
         sortMode: SortMode.recent,
         sortDirection: sortDirection,
-        layoutSize: LayoutSize.expanded,
-        hasActiveFilters: false,
+        layoutSize: layoutSize,
+        hasActiveFilters: (keyword ?? controller.text).trim().isNotEmpty ||
+            showFavoritesOnly ||
+            selectedTags.isNotEmpty ||
+            selectedChildTags.isNotEmpty ||
+            selectedGroupTags.isNotEmpty ||
+            excludedTags.isNotEmpty,
         onSearchChanged: onSearchChanged,
         onSortChanged: onSortChanged ?? (_) {},
         onSortDirectionToggle: onSortDirectionToggle ?? () {},
@@ -2319,6 +2427,20 @@ Widget referenceTopBarSearchSmokeHarness({
         onResultViewChanged: (_) {},
         onOpenTagManager: () {},
         onOpenFilters: () {},
+        onRemovePrimaryTag: onRemovePrimaryTag ?? (_) {},
+        onRemoveChildTag: onRemoveChildTag ?? (_) {},
+        onRemoveGroupTag: onRemoveGroupTag ?? (_) {},
+        onRemoveExcludedTag: onRemoveExcludedTag ?? (_) {},
+        onClearKeyword: onClearKeyword ?? () {},
+        onClearFavoritesOnly: onClearFavoritesOnly ?? () {},
+        onClearAll: onClearAll,
+        selectionMode: selectionMode,
+        selectedCount: selectedCount,
+        allSelected: allSelected,
+        onEnterSelectionMode: onEnterSelectionMode,
+        onToggleSelectAll: onToggleSelectAll,
+        onDeleteSelected: onDeleteSelected,
+        onCancelSelectionMode: onCancelSelectionMode,
       ),
     ),
   );
@@ -2386,8 +2508,16 @@ class ReferenceTopBarSearchResultSmokeHarnessState
               controller: _controller,
               searchFocusNode: _focusNode,
               videoCount: filtered.length,
-              totalCount: widget.items.length,
               keyword: _keyword,
+              selectedTags: const <String>[],
+              selectedChildTags: const <String>[],
+              selectedGroupTags: const <TagItem>[],
+              excludedTags: const <TagItem>[],
+              defaultChipLabel: '\u5168\u90e8\u89c6\u9891',
+              showFavoritesOnly: false,
+              refreshing: false,
+              progressLabel: null,
+              progressValue: null,
               sortMode: SortMode.recent,
               sortDirection: SortDirection.descending,
               layoutSize: LayoutSize.expanded,
@@ -2399,6 +2529,16 @@ class ReferenceTopBarSearchResultSmokeHarnessState
               onResultViewChanged: (_) {},
               onOpenTagManager: () {},
               onOpenFilters: () {},
+              onRemovePrimaryTag: (_) {},
+              onRemoveChildTag: (_) {},
+              onRemoveGroupTag: (_) {},
+              onRemoveExcludedTag: (_) {},
+              onClearKeyword: () {
+                _controller.clear();
+                setState(() => _keyword = '');
+              },
+              onClearFavoritesOnly: () {},
+              onClearAll: null,
             ),
             Text('结果 ${filtered.length}/${widget.items.length}'),
             Expanded(
@@ -2415,67 +2555,91 @@ class ReferenceTopBarSearchResultSmokeHarnessState
   }
 }
 
-class _ReferenceActionButton extends StatelessWidget {
-  const _ReferenceActionButton({
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-    this.label,
+/**
+ * 中等窗口被侧栏压窄时使用的排序控件。
+ *
+ * 字段菜单和方向按钮仍分别回调页面已有排序状态，只把常驻文字压缩成图标，
+ * 避免为了保留完整桌面控件而挤掉搜索输入或造成横向 overflow。
+ */
+class _CompactTopSortControl extends StatelessWidget {
+  const _CompactTopSortControl({
+    required this.sortMode,
+    required this.sortDirection,
+    required this.onChanged,
+    required this.onDirectionToggle,
   });
 
-  final String tooltip;
+  /** 当前排序字段。 */
+  final SortMode sortMode;
 
-  final IconData icon;
+  /** 当前排序方向。 */
+  final SortDirection sortDirection;
 
-  final VoidCallback onPressed;
+  /** 选择排序字段后交给页面已有轻量重排入口。 */
+  final ValueChanged<SortMode> onChanged;
 
-  final String? label;
+  /** 切换排序方向。 */
+  final VoidCallback onDirectionToggle;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: librarySurface,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: onPressed,
-          child: Container(
-            height: 48,
-            padding: EdgeInsets.symmetric(horizontal: label == null ? 9 : 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: libraryBorder,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 19, color: appAccentViolet),
-                if (label != null) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    label!,
-                    style: const TextStyle(
-                      color: libraryText,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
+    final ascending = sortDirection == SortDirection.ascending;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PopupMenuButton<SortMode>(
+          key: LibrarySmokeKeys.topSortFieldButton,
+          tooltip: '\u6392\u5e8f\u5b57\u6bb5\uff1a${sortModeLabel(sortMode)}',
+          onSelected: onChanged,
+          color: librarySurface,
+          initialValue: sortMode,
+          itemBuilder: (context) => [
+            for (final mode in SortMode.values)
+              PopupMenuItem<SortMode>(
+                key: LibrarySmokeKeys.topSortMenuItem(mode),
+                value: mode,
+                child: Row(
+                  children: [
+                    Icon(
+                      mode == sortMode
+                          ? Icons.check_rounded
+                          : Icons.circle_outlined,
+                      size: 17,
+                      color:
+                          mode == sortMode ? appAccentViolet : libraryTextMuted,
                     ),
-                  ),
-                ],
-              ],
-            ),
+                    const SizedBox(width: 8),
+                    Text(sortModeLabel(mode)),
+                  ],
+                ),
+              ),
+          ],
+          icon: const Icon(Icons.sort_rounded, size: 20),
+          style: IconButton.styleFrom(
+            backgroundColor: librarySurface,
+            foregroundColor: appAccentViolet,
+            fixedSize: const Size(38, 38),
+            side: const BorderSide(color: libraryBorder),
           ),
         ),
-      ),
+        const SizedBox(width: 6),
+        _ReferenceIconButton(
+          tooltip: ascending
+              ? '\u5207\u6362\u4e3a\u5012\u5e8f'
+              : '\u5207\u6362\u4e3a\u6b63\u5e8f',
+          icon: ascending
+              ? Icons.arrow_upward_rounded
+              : Icons.arrow_downward_rounded,
+          onPressed: onDirectionToggle,
+        ),
+      ],
     );
   }
 }
 
 class _ReferenceIconButton extends StatelessWidget {
   const _ReferenceIconButton({
+    super.key,
     required this.tooltip,
     required this.icon,
     required this.onPressed,

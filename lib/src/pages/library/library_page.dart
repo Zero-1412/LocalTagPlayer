@@ -3132,9 +3132,12 @@ class _LibraryPageState extends State<LibraryPage> {
       _LibraryResultMode.local => localEntries.length,
       _LibraryResultMode.library => filterState.resultCount,
     };
-    final displayTotalCount = _resultMode == _LibraryResultMode.library
-        ? filterState.totalCount
-        : store.videos.length;
+    final defaultResultLabel = switch (_resultMode) {
+      _LibraryResultMode.recent => '继续观看',
+      _LibraryResultMode.favorites => '\u672c\u5730\u6536\u85cf',
+      _LibraryResultMode.local => '\u672c\u5730\u5a92\u4f53\u5e93',
+      _LibraryResultMode.library => '\u5168\u90e8\u89c6\u9891',
+    };
     final tags = store.allTags.toList()..sort();
     final tagGroups = _tagGroupsForSidebar(store);
     final resultCounts = _visibleResultCounts.isEmpty
@@ -3210,6 +3213,7 @@ class _LibraryPageState extends State<LibraryPage> {
         onOpenLocalLibraryRoot: _showLocalLibraryPath,
         onOpenDirectoryManager: _openDirectoryManager,
         onOpenMissingRelink: _openMissingRelink,
+        onOpenTagManager: () => _openTagManager(videos),
         onOpenSettings: _openSettings,
         onChildTagToggle: (tag) {
           _mutateFilters(() {
@@ -3278,73 +3282,6 @@ class _LibraryPageState extends State<LibraryPage> {
       return Column(
         children: [
           if (topBar != null) topBar,
-          LibraryHeroArea(
-            selectedTags: _selectedTags.toList()..sort(),
-            selectedChildTags: _selectedChildTags.toList()..sort(),
-            selectedGroupTags: selectedGroupTags,
-            excludedTags: excludedTags,
-            keyword: _searchController.text,
-            defaultChipLabel: switch (_resultMode) {
-              _LibraryResultMode.recent => '继续观看',
-              _LibraryResultMode.favorites => '\u672c\u5730\u6536\u85cf',
-              _LibraryResultMode.local => '\u672c\u5730\u5a92\u4f53\u5e93',
-              _LibraryResultMode.library => '\u5168\u90e8\u89c6\u9891',
-            },
-            showFavoritesOnly: _showFavoritesOnly,
-            resultCount: displayResultCount,
-            totalCount: displayTotalCount,
-            refreshing: _isRefreshingVideos || _isRefreshingCounts,
-            progressLabel: _resultMode != _LibraryResultMode.library
-                ? null
-                : _isScanning
-                    ? libraryScanProgressLabel(_scanProgress)
-                    : _mediaImportProgress == null
-                        ? null
-                        : libraryMediaImportProgressLabel(
-                            _mediaImportProgress!,
-                          ),
-            progressValue: _resultMode != _LibraryResultMode.library
-                ? null
-                : _isScanning
-                    ? _scanProgress?.fraction
-                    : _mediaImportProgress?.fraction,
-            progressPaused: _isScanning
-                ? (_scanProgress?.isPaused ?? false)
-                : (_mediaImportProgress?.isPaused ?? false),
-            onToggleProgressPaused: _resultMode != _LibraryResultMode.library
-                ? null
-                : _isScanning
-                    ? (_scanProgress == null ? null : _toggleScanPaused)
-                    : _mediaImportProgress == null
-                        ? null
-                        : _toggleMediaImportPaused,
-            onRemovePrimaryTag: (tag) => _mutateFilters(() {
-              _selectedTags.remove(tag);
-              _selectedChildTags.clear();
-            }),
-            onRemoveChildTag: (tag) =>
-                _mutateFilters(() => _selectedChildTags.remove(tag)),
-            onRemoveGroupTag: _removeGroupTag,
-            onRemoveExcludedTag: _removeExcludedTag,
-            onClearKeyword: () => _mutateFilters(_clearSearchSilently),
-            onClearFavoritesOnly: () =>
-                _mutateFilters(() => _showFavoritesOnly = false),
-            onClearAll: _hasActiveFilters ? _clearAllFilters : null,
-            selectionMode: _librarySelectionMode,
-            selectedCount: _selectedLibraryVideoIds.length,
-            allSelected: allLibraryVideosSelected,
-            onEnterSelectionMode:
-                supportsLibrarySelection ? _enterLibrarySelectionMode : null,
-            onToggleSelectAll: _librarySelectionMode
-                ? () => _toggleAllLibraryVideoSelection(videos)
-                : null,
-            onDeleteSelected:
-                _librarySelectionMode && _selectedLibraryVideoIds.isNotEmpty
-                    ? () => _requestDeleteSelectedVideos(videos)
-                    : null,
-            onCancelSelectionMode:
-                _librarySelectionMode ? _cancelLibrarySelectionMode : null,
-          ),
           Expanded(
             child: LibraryImportDropRegion(
               enabled:
@@ -3434,9 +3371,39 @@ class _LibraryPageState extends State<LibraryPage> {
       return ReferenceTopBar(
         controller: _searchController,
         videoCount: displayResultCount,
-        totalCount: displayTotalCount,
         keyword: _searchController.text,
         searchFocusNode: _searchFocusNode,
+        selectedTags: _selectedTags.toList()..sort(),
+        selectedChildTags: _selectedChildTags.toList()..sort(),
+        selectedGroupTags: selectedGroupTags,
+        excludedTags: excludedTags,
+        defaultChipLabel: defaultResultLabel,
+        showFavoritesOnly: _showFavoritesOnly,
+        refreshing: _isRefreshingVideos || _isRefreshingCounts,
+        progressLabel: _resultMode != _LibraryResultMode.library
+            ? null
+            : _isScanning
+                ? libraryScanProgressLabel(_scanProgress)
+                : _mediaImportProgress == null
+                    ? null
+                    : libraryMediaImportProgressLabel(
+                        _mediaImportProgress!,
+                      ),
+        progressValue: _resultMode != _LibraryResultMode.library
+            ? null
+            : _isScanning
+                ? _scanProgress?.fraction
+                : _mediaImportProgress?.fraction,
+        progressPaused: _isScanning
+            ? (_scanProgress?.isPaused ?? false)
+            : (_mediaImportProgress?.isPaused ?? false),
+        onToggleProgressPaused: _resultMode != _LibraryResultMode.library
+            ? null
+            : _isScanning
+                ? (_scanProgress == null ? null : _toggleScanPaused)
+                : _mediaImportProgress == null
+                    ? null
+                    : _toggleMediaImportPaused,
         sortMode: _sortMode,
         sortDirection: _sortDirection,
         layoutSize: layoutSize,
@@ -3448,6 +3415,32 @@ class _LibraryPageState extends State<LibraryPage> {
         onResultViewChanged: (dense) =>
             setState(() => _denseResultGrid = dense),
         onOpenTagManager: () => _openTagManager(videos),
+        onRemovePrimaryTag: (tag) => _mutateFilters(() {
+          _selectedTags.remove(tag);
+          _selectedChildTags.clear();
+        }),
+        onRemoveChildTag: (tag) =>
+            _mutateFilters(() => _selectedChildTags.remove(tag)),
+        onRemoveGroupTag: _removeGroupTag,
+        onRemoveExcludedTag: _removeExcludedTag,
+        onClearKeyword: () => _mutateFilters(_clearSearchSilently),
+        onClearFavoritesOnly: () =>
+            _mutateFilters(() => _showFavoritesOnly = false),
+        onClearAll: _hasActiveFilters ? _clearAllFilters : null,
+        selectionMode: _librarySelectionMode,
+        selectedCount: _selectedLibraryVideoIds.length,
+        allSelected: allLibraryVideosSelected,
+        onEnterSelectionMode:
+            supportsLibrarySelection ? _enterLibrarySelectionMode : null,
+        onToggleSelectAll: _librarySelectionMode
+            ? () => _toggleAllLibraryVideoSelection(videos)
+            : null,
+        onDeleteSelected:
+            _librarySelectionMode && _selectedLibraryVideoIds.isNotEmpty
+                ? () => _requestDeleteSelectedVideos(videos)
+                : null,
+        onCancelSelectionMode:
+            _librarySelectionMode ? _cancelLibrarySelectionMode : null,
         onOpenFilters: () {
           showModalBottomSheet<void>(
             context: context,

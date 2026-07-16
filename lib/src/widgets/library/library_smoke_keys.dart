@@ -31,6 +31,8 @@ class LibrarySmokeKeys {
       ValueKey<String>('smoke.sidebar.collapse-toggle');
   /** 主功能栏实际宽度容器。 */
   static const sidebarSurface = ValueKey<String>('smoke.sidebar.surface');
+  /** 左侧功能栏中的标签中心入口。 */
+  static const sidebarTagCenter = ValueKey<String>('smoke.sidebar.tag-center');
   /** 媒体库筛选/多选双状态工具栏。 */
   static const libraryResultToolbar =
       ValueKey<String>('smoke.library.result-toolbar');
