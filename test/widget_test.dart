@@ -1003,7 +1003,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('search, filter status, and actions keep a 60-30-10 hierarchy',
+  testWidgets('search, library status, and actions keep a 50-40-10 hierarchy',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 260);
     tester.view.devicePixelRatio = 1;
@@ -1032,12 +1032,17 @@ void main() {
         tester.getRect(find.byKey(LibrarySmokeKeys.filterStatusArea));
     final actionsRect =
         tester.getRect(find.byKey(LibrarySmokeKeys.toolbarActions));
+    final sortRect =
+        tester.getRect(find.byKey(LibrarySmokeKeys.topSortFieldButton));
+    final resultRect =
+        tester.getRect(find.byKey(LibrarySmokeKeys.toolbarResultStatus));
     expect(searchRect.right, lessThan(statusRect.left));
-    expect(searchRect.width / statusRect.width, closeTo(2, 0.02));
-    expect(statusRect.width / actionsRect.width, closeTo(3, 0.04));
+    expect(searchRect.width / statusRect.width, closeTo(1.25, 0.02));
+    expect(statusRect.width / actionsRect.width, closeTo(4, 0.05));
+    expect(sortRect.right, lessThan(resultRect.left));
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.searchInputLane)).width,
-      greaterThan(700),
+      greaterThan(600),
     );
     final chips = tester.widgetList<InputChip>(
       find.descendant(
@@ -3230,11 +3235,25 @@ void main() {
         tester.getSize(find.byKey(LibrarySmokeKeys.searchSurface)).width;
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.searchInputLane)).width,
-      greaterThan(700),
+      greaterThan(600),
     );
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.libraryEnterSelection)).height,
       48,
+    );
+    final weakMultiButton = tester.widget<TextButton>(
+      find.descendant(
+        of: find.byKey(LibrarySmokeKeys.libraryEnterSelection),
+        matching: find.byType(TextButton),
+      ),
+    );
+    expect(
+      weakMultiButton.style?.backgroundColor?.resolve(<WidgetState>{}),
+      Colors.transparent,
+    );
+    expect(
+      weakMultiButton.style?.side?.resolve(<WidgetState>{}),
+      BorderSide.none,
     );
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.resultViewToggle)).height,

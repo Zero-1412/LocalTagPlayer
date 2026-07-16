@@ -43,6 +43,9 @@ class LibrarySmokeKeys {
       ValueKey<String>('smoke.top.filter-status-area');
   /** 顶栏末端多选与视图切换操作区域。 */
   static const toolbarActions = ValueKey<String>('smoke.top.toolbar-actions');
+  /** 排序控件之后展示的媒体库结果数量或后台进度状态。 */
+  static const toolbarResultStatus =
+      ValueKey<String>('smoke.top.toolbar-result-status');
   /** 多选模式下只替换搜索框右侧的状态区域。 */
   static const selectionStatusArea =
       ValueKey<String>('smoke.top.selection-status-area');

@@ -1414,6 +1414,7 @@ class _LibraryFilterStatusArea extends StatelessWidget {
     required this.progressPaused,
     required this.onToggleProgressPaused,
     required this.onClearAll,
+    this.showResultStatus = true,
   });
 
   /** 紧凑布局只展示最必要的状态。 */
@@ -1446,14 +1447,20 @@ class _LibraryFilterStatusArea extends StatelessWidget {
   /** 一次清除全部筛选；为空时不绘制入口。 */
   final VoidCallback? onClearAll;
 
+  /** 是否在本区域末端绘制结果数量；宽屏由排序控件之后的独立状态承担。 */
+  final bool showResultStatus;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: compact ? 44 : 50,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final trailingWidth =
-              progressLabel == null ? (compact ? 74.0 : 92.0) : 176.0;
+          final trailingWidth = !showResultStatus
+              ? 0.0
+              : progressLabel == null
+                  ? (compact ? 74.0 : 92.0)
+                  : 176.0;
           final showClearAll = onClearAll != null &&
               filters.isNotEmpty &&
               constraints.maxWidth >= trailingWidth + 38;
@@ -1544,18 +1551,20 @@ class _LibraryFilterStatusArea extends StatelessWidget {
                     icon: const Icon(Icons.filter_alt_off_outlined),
                   ),
                 ),
-              const Spacer(),
-              SizedBox(
-                width: math.min(trailingWidth, constraints.maxWidth),
-                child: _FilterResultLine(
-                  resultCount: resultCount,
-                  refreshing: refreshing,
-                  progressLabel: progressLabel,
-                  progressValue: progressValue,
-                  progressPaused: progressPaused,
-                  onToggleProgressPaused: onToggleProgressPaused,
+              if (showResultStatus) ...[
+                const Spacer(),
+                SizedBox(
+                  width: math.min(trailingWidth, constraints.maxWidth),
+                  child: _FilterResultLine(
+                    resultCount: resultCount,
+                    refreshing: refreshing,
+                    progressLabel: progressLabel,
+                    progressValue: progressValue,
+                    progressPaused: progressPaused,
+                    onToggleProgressPaused: onToggleProgressPaused,
+                  ),
                 ),
-              ),
+              ],
             ],
           );
         },
@@ -2290,6 +2299,19 @@ class ReferenceTopBar extends StatelessWidget {
                     progressPaused: progressPaused,
                     onToggleProgressPaused: onToggleProgressPaused,
                     onClearAll: onClearAll,
+                    showResultStatus: !proportionalDesktop,
+                  );
+                  final resultStatus = SizedBox(
+                    key: LibrarySmokeKeys.toolbarResultStatus,
+                    width: progressLabel == null ? 92 : 176,
+                    child: _FilterResultLine(
+                      resultCount: videoCount,
+                      refreshing: refreshing,
+                      progressLabel: progressLabel,
+                      progressValue: progressValue,
+                      progressPaused: progressPaused,
+                      onToggleProgressPaused: onToggleProgressPaused,
+                    ),
                   );
                   final selectionStatus = _LibrarySelectionToolbar(
                     selectedCount: selectedCount,
@@ -2343,16 +2365,16 @@ class ReferenceTopBar extends StatelessWidget {
                       height: 50,
                       child: Row(
                         children: [
-                          // 桌面宽屏按 60/30/10 分配主视觉权重；排序属于结果状态控制。
-                          Expanded(flex: 6, child: searchSurface),
+                          // 搜索从 60% 收敛到 50%，把标签浏览和媒体库状态提升为同级主场景。
+                          Expanded(flex: 5, child: searchSurface),
                           const SizedBox(width: 12),
                           if (selectionMode) ...[
-                            Expanded(flex: 4, child: selectionStatus),
+                            Expanded(flex: 5, child: selectionStatus),
                             // 与常态区域保留相同总间距，进入多选时搜索框宽度不会跳动。
                             const SizedBox(width: 8),
                           ] else ...[
                             Expanded(
-                              flex: 3,
+                              flex: 4,
                               child: KeyedSubtree(
                                 key: LibrarySmokeKeys.filterStatusArea,
                                 child: Row(
@@ -2360,6 +2382,8 @@ class ReferenceTopBar extends StatelessWidget {
                                     Expanded(child: filterStatus),
                                     const SizedBox(width: 8),
                                     sortControl,
+                                    const SizedBox(width: 10),
+                                    resultStatus,
                                   ],
                                 ),
                               ),
@@ -2648,10 +2672,10 @@ class ReferenceTopBarSearchResultSmokeHarnessState
 }
 
 /**
- * 顶栏文字动作按钮。
+ * 顶栏低频文字动作。
  *
- * 高度、圆角、底色和描边与排序及视图切换控件共用同一视觉规格，
- * 避免 Material 默认按钮的内部留白让“多选”看起来比相邻工具更矮。
+ * 保留 48px 命中高度与相邻控件对齐，但使用透明背景和无边框文字视觉，
+ * 让低频“多选”入口不再与高频排序、视图切换争夺同等权重。
  */
 class _TopToolbarTextButton extends StatelessWidget {
   const _TopToolbarTextButton({
@@ -2668,29 +2692,32 @@ class _TopToolbarTextButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: librarySurface,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          height: 48,
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: libraryBorder),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: libraryText,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
+    return TextButton(
+      onPressed: onPressed,
+      style: ButtonStyle(
+        minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 10),
         ),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.hovered) ||
+                  states.contains(WidgetState.focused)
+              ? libraryText
+              : libraryTextMuted;
+        }),
+        overlayColor: WidgetStatePropertyAll(
+          appAccentViolet.withValues(alpha: 0.10),
+        ),
+        side: const WidgetStatePropertyAll(BorderSide.none),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
       ),
     );
   }
