@@ -1003,6 +1003,40 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('selected chips preserve a usable search input width',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 260);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        videoCount: 171,
+        selectedTags: const <String>['原神', '雷神'],
+        onClearAll: () {},
+        onEnterSelectionMode: () {},
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('原神'), findsOneWidget);
+    expect(find.text('雷神'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.searchInputLane)).width,
+      greaterThanOrEqualTo(236),
+    );
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.searchFilterLane)).width,
+      lessThanOrEqualTo(220),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   test('expanded main layout keeps proportional slots while resizing', () {
     final narrow = mainLibraryLayoutSlotsForWidth(1280);
     final regular = mainLibraryLayoutSlotsForWidth(1600);
@@ -2785,14 +2819,22 @@ void main() {
   testWidgets('result view slider toggles as one target and animates thumb',
       (tester) async {
     var dense = false;
+    final committed = <bool>[];
+    late StateSetter rebuildHost;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: StatefulBuilder(
-            builder: (context, setState) => ResultViewToggle(
-              dense: dense,
-              onChanged: (value) => setState(() => dense = value),
-            ),
+            builder: (context, setState) {
+              rebuildHost = setState;
+              return ResultViewToggle(
+                dense: dense,
+                onChanged: (value) => setState(() {
+                  committed.add(value);
+                  dense = value;
+                }),
+              );
+            },
           ),
         ),
       ),
@@ -2806,16 +2848,41 @@ void main() {
     await tester.pump(appMotionDuration ~/ 2);
     final movingLeft = tester.getTopLeft(thumb).dx;
     expect(movingLeft, greaterThan(initialLeft));
-    expect(dense, isTrue);
+    // 重型结果视图切换延后到滑块稳定后，避免阻塞动画首帧。
+    expect(dense, isFalse);
+    expect(committed, isEmpty);
+
+    // 无关父级重建不能把尚未提交的视觉目标拉回旧状态。
+    rebuildHost(() {});
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(tester.getTopLeft(thumb).dx, greaterThan(movingLeft));
 
     await tester.pumpAndSettle();
     final listLeft = tester.getTopLeft(thumb).dx;
     expect(listLeft, greaterThan(movingLeft));
+    expect(dense, isTrue);
+    expect(committed, <bool>[true]);
 
-    // 整个控件只有一个点击语义，再次点击任意位置会切回网格。
+    // 动画中再次点击会从当前位置反向，不提交已经过期的中间目标。
+    await tester.tap(find.byKey(LibrarySmokeKeys.resultViewToggle));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    final reversingLeft = tester.getTopLeft(thumb).dx;
+    expect(reversingLeft, lessThan(listLeft));
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.resultViewToggle));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(tester.getTopLeft(thumb).dx, greaterThan(reversingLeft));
+    await tester.pumpAndSettle();
+    expect(dense, isTrue);
+    expect(committed, <bool>[true]);
+
+    // 整个控件只有一个点击语义，稳定点击一次会切回网格。
     await tester.tap(find.byKey(LibrarySmokeKeys.resultViewToggle));
     await tester.pumpAndSettle();
     expect(dense, isFalse);
+    expect(committed, <bool>[true, false]);
     expect(tester.getTopLeft(thumb).dx, closeTo(initialLeft, 0.01));
   });
 
@@ -3142,15 +3209,30 @@ void main() {
 
     expect(find.text('当前筛选（AND）'), findsNothing);
     expect(find.text('原神'), findsOneWidget);
-    expect(find.text('雷神'), findsOneWidget);
-    expect(find.text('+2'), findsOneWidget);
+    expect(find.text('+3'), findsOneWidget);
     expect(find.text('171 个视频'), findsOneWidget);
     expect(find.textContaining('原神 / 雷神'), findsNothing);
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.searchInputLane)).width,
+      greaterThanOrEqualTo(236),
+    );
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.searchFilterLane)).width,
+      lessThanOrEqualTo(220),
+    );
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.libraryEnterSelection)).height,
+      48,
+    );
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.resultViewToggle)).height,
+      48,
+    );
 
     await tester.tap(find.byKey(LibrarySmokeKeys.libraryEnterSelection));
     await tester.pump();
     expect(find.text('原神'), findsNothing);
-    expect(find.text('+2'), findsNothing);
+    expect(find.text('+3'), findsNothing);
     expect(find.text('已选择 0 项'), findsOneWidget);
     final disabledDelete = tester.widget<TextButton>(
       find.byKey(LibrarySmokeKeys.libraryDeleteSelected),

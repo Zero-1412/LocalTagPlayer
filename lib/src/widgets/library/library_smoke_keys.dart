@@ -49,6 +49,12 @@ class LibrarySmokeKeys {
   static const libraryCancelSelection =
       ValueKey<String>('smoke.library.selection.cancel');
   static const searchField = ValueKey<String>('smoke.top.search-field');
+  /** 搜索表面中承载筛选 chips 的限宽区域。 */
+  static const searchFilterLane =
+      ValueKey<String>('smoke.top.search-filter-lane');
+  /** 搜索表面中必须保留最小可输入宽度的文本区域。 */
+  static const searchInputLane =
+      ValueKey<String>('smoke.top.search-input-lane');
   static const topSortFieldButton =
       ValueKey<String>('smoke.top.sort-field-button');
   static const topSortMenuPanel = ValueKey<String>('smoke.top.sort-menu-panel');

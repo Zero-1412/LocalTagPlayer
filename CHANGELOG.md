@@ -1,5 +1,14 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-16 · 顶栏输入保护与连续视图滑块
+
+- 搜索表面按可用宽度为 chips 分配独立预算，expanded 输入区至少保留 236px；两个常用标签同时可见，标签更多时优先折叠为数量，不再继续挤压真实 `TextField`。
+- 多选入口改用与排序和视图切换一致的 48px 工具栏表面、10px 圆角、深色底和描边，移除默认 `OutlinedButton` 带来的视觉高度和风格差异。
+- 网格/列表滑块使用单一 `AnimationController` 同步底块位置与图标颜色；结果区网格/列表重布局延后到滑块稳定后提交，快速重复点击从当前进度反向，父级无关重建不会中断动画。
+- 新增双标签输入宽度、按钮高度、动画延后提交、快速反向和父级重建稳定性测试。完整 154 项测试通过，3 项显式 benchmark 跳过；`dart format`、`flutter analyze` 和 Windows debug build 通过，新 Debug EXE 已启动且响应正常。
+- 当前运行时未暴露已安装 `computer-use` 所需的 Windows 控制调用通道，因此无法执行合规真实点击与截图；保留“选择原神/雷神 → 比较多选高度 → 快速连续切换网格/列表”的人工复测路径。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列和用户数据均未改变。
+
 ## 2026-07-16 · 单层搜索筛选工具栏
 
 - 删除媒体库视频区上方独立筛选栏，将 folder、manual、收藏和排除条件以可移除 chip 融入真实 `TextField` 搜索表面；关键词继续使用同一 controller / `onChanged` 链路，不复制 `FilterQuery` 语义。

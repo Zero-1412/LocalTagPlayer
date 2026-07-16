@@ -1366,14 +1366,39 @@ class _LibrarySearchSurface extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // 始终为真实文本输入和结果数量预留空间；条件过多时只折叠展示数量。
-          final maxVisibleFilters = constraints.maxWidth >= 590
+          final minimumInputWidth = compact ? 128.0 : 236.0;
+          final fixedTrailingWidth = progressLabel == null ? 104.0 : 210.0;
+          final keywordActionWidth = keywordActive ? 28.0 : 0.0;
+          final clearFilterWidth =
+              onClearAll != null && filters.isNotEmpty ? 28.0 : 0.0;
+          final sourceLabelWidth =
+              filters.isEmpty && defaultLabel != '\u5168\u90e8\u89c6\u9891'
+                  ? 104.0
+                  : 0.0;
+          final filterBudget = math.max(
+            0.0,
+            constraints.maxWidth -
+                minimumInputWidth -
+                fixedTrailingWidth -
+                keywordActionWidth -
+                clearFilterWidth -
+                sourceLabelWidth -
+                (compact ? 58.0 : 62.0),
+          );
+          // chips 只能使用剩余预算；空间不足时优先折叠条件，绝不继续压缩真实输入区域。
+          final maxVisibleFilters = filters.length <= 2 && filterBudget >= 208
               ? 2
-              : constraints.maxWidth >= 470
-                  ? 1
-                  : 0;
+              : filters.length > 2 && filterBudget >= 252
+                  ? 2
+                  : filters.length <= 1 && filterBudget >= 102
+                      ? 1
+                      : filters.length > 1 && filterBudget >= 146
+                          ? 1
+                          : 0;
           final visibleFilters = filters.take(maxVisibleFilters).toList();
           final hiddenCount = filters.length - visibleFilters.length;
+          final visibleFilterBudget =
+              math.max(0.0, filterBudget - (hiddenCount > 0 ? 44 : 0));
           final showSourceLabel = constraints.maxWidth >= 360 &&
               filters.isEmpty &&
               defaultLabel != '\u5168\u90e8\u89c6\u9891';
@@ -1391,63 +1416,93 @@ class _LibrarySearchSurface extends StatelessWidget {
                 _SourceContextChip(label: defaultLabel),
                 const SizedBox(width: 6),
               ],
-              for (final filter in visibleFilters) ...[
-                _CurrentFilterChip(
-                  avatar: filter.icon == null
-                      ? null
-                      : Icon(filter.icon, size: 14, color: filter.color),
-                  label: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: compact ? 76 : 96,
-                    ),
-                    child: Text(
-                      filter.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+              if (visibleFilters.isNotEmpty)
+                ConstrainedBox(
+                  key: LibrarySmokeKeys.searchFilterLane,
+                  constraints: BoxConstraints(
+                    maxWidth:
+                        math.min(visibleFilterBudget, compact ? 168 : 220),
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const ClampingScrollPhysics(),
+                    child: Row(
+                      children: [
+                        for (var index = 0;
+                            index < visibleFilters.length;
+                            index++) ...[
+                          _CurrentFilterChip(
+                            avatar: visibleFilters[index].icon == null
+                                ? null
+                                : Icon(
+                                    visibleFilters[index].icon,
+                                    size: 14,
+                                    color: visibleFilters[index].color,
+                                  ),
+                            label: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: compact ? 72 : 88,
+                              ),
+                              child: Text(
+                                visibleFilters[index].label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            onDeleted: visibleFilters[index].onRemove,
+                            side: BorderSide(
+                              color: visibleFilters[index].color.withAlpha(150),
+                            ),
+                          ),
+                          if (index != visibleFilters.length - 1)
+                            const SizedBox(width: 6),
+                        ],
+                      ],
                     ),
                   ),
-                  onDeleted: filter.onRemove,
-                  side: BorderSide(color: filter.color.withAlpha(150)),
                 ),
-                const SizedBox(width: 6),
-              ],
+              if (visibleFilters.isNotEmpty) const SizedBox(width: 6),
               if (hiddenCount > 0) ...[
                 _CollapsedFilterCount(count: hiddenCount),
                 const SizedBox(width: 6),
               ],
               Expanded(
-                /**
-                 * 必须保持为 TextField，而不是把输入模拟成 GestureDetector 或 SearchBar；
-                 * 真实键盘、自动化输入和 controller 改写因此继续触发同一条 onChanged 链路。
-                 */
-                child: TextField(
-                  key: LibrarySmokeKeys.searchField,
-                  controller: controller,
-                  focusNode: searchFocusNode,
-                  textInputAction: TextInputAction.search,
-                  onChanged: onSearchChanged,
-                  onSubmitted: onSearchChanged,
-                  style: const TextStyle(
-                    color: libraryText,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  decoration: InputDecoration(
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      vertical: compact ? 12 : 15,
-                    ),
-                    hintText: compact
-                        ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
-                        : '\u641c\u7d22\u6587\u4ef6\u540d\u002f\u6807\u7b7e\u002f\u8def\u5f84\u002e\u002e\u002e',
-                    hintStyle: const TextStyle(
-                      color: libraryTextMuted,
+                child: ConstrainedBox(
+                  key: LibrarySmokeKeys.searchInputLane,
+                  constraints: BoxConstraints(minWidth: minimumInputWidth),
+                  /**
+                   * 必须保持为 TextField，而不是把输入模拟成 GestureDetector 或 SearchBar；
+                   * 真实键盘、自动化输入和 controller 改写因此继续触发同一条 onChanged 链路。
+                   */
+                  child: TextField(
+                    key: LibrarySmokeKeys.searchField,
+                    controller: controller,
+                    focusNode: searchFocusNode,
+                    textInputAction: TextInputAction.search,
+                    onChanged: onSearchChanged,
+                    onSubmitted: onSearchChanged,
+                    style: const TextStyle(
+                      color: libraryText,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
+                    ),
+                    decoration: InputDecoration(
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: compact ? 12 : 15,
+                      ),
+                      hintText: compact
+                          ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
+                          : '\u641c\u7d22\u6587\u4ef6\u540d\u002f\u6807\u7b7e\u002f\u8def\u5f84\u002e\u002e\u002e',
+                      hintStyle: const TextStyle(
+                        color: libraryTextMuted,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -2307,18 +2362,10 @@ class ReferenceTopBar extends StatelessWidget {
                             onPressed: onEnterSelectionMode!,
                           )
                         else
-                          OutlinedButton(
+                          _TopToolbarTextButton(
                             key: LibrarySmokeKeys.libraryEnterSelection,
-                            onPressed: onEnterSelectionMode,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: libraryText,
-                              side: const BorderSide(color: libraryBorder),
-                              minimumSize: const Size(62, 48),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 14),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: const Text('\u591a\u9009'),
+                            onPressed: onEnterSelectionMode!,
+                            label: '\u591a\u9009',
                           ),
                       if (onEnterSelectionMode != null &&
                           !compact &&
@@ -2556,6 +2603,55 @@ class ReferenceTopBarSearchResultSmokeHarnessState
 }
 
 /**
+ * 顶栏文字动作按钮。
+ *
+ * 高度、圆角、底色和描边与排序及视图切换控件共用同一视觉规格，
+ * 避免 Material 默认按钮的内部留白让“多选”看起来比相邻工具更矮。
+ */
+class _TopToolbarTextButton extends StatelessWidget {
+  const _TopToolbarTextButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+
+  /** 按钮短文案。 */
+  final String label;
+
+  /** 点击动作。 */
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: librarySurface,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          height: 48,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: libraryBorder),
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: libraryText,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/**
  * 中等窗口被侧栏压窄时使用的排序控件。
  *
  * 字段菜单和方向按钮仍分别回调页面已有排序状态，只把常驻文字压缩成图标，
@@ -2668,7 +2764,7 @@ class _ReferenceIconButton extends StatelessWidget {
 }
 
 @visibleForTesting
-class ResultViewToggle extends StatelessWidget {
+class ResultViewToggle extends StatefulWidget {
   const ResultViewToggle({
     super.key,
     required this.dense,
@@ -2682,8 +2778,93 @@ class ResultViewToggle extends StatelessWidget {
   final ValueChanged<bool> onChanged;
 
   @override
+  State<ResultViewToggle> createState() => _ResultViewToggleState();
+}
+
+/**
+ * 网格/列表滑块状态。
+ *
+ * 滑块先在独立动画控制器中完成连续位移，再提交会触发结果区重布局的视图状态；
+ * 快速重复点击会从当前进度反向运行，避免重型网格/列表切换阻塞滑块首帧。
+ */
+class _ResultViewToggleState extends State<ResultViewToggle>
+    with SingleTickerProviderStateMixin {
+  static const _slideDuration = Duration(milliseconds: 180);
+
+  late final AnimationController _controller;
+  late bool _visualDense;
+  var _transitionVersion = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _visualDense = widget.dense;
+    _controller = AnimationController(
+      vsync: this,
+      value: widget.dense ? 1 : 0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant ResultViewToggle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dense == widget.dense || widget.dense == _visualDense) {
+      return;
+    }
+    // 外部状态变化时同步视觉目标，但不反向触发页面回调。
+    _transitionVersion += 1;
+    setState(() => _visualDense = widget.dense);
+    _animateTo(widget.dense);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /** 根据剩余距离计算时长，让快速反向保持与正向一致的移动速度。 */
+  Duration _remainingDuration(double target) {
+    final distance = (_controller.value - target).abs();
+    return Duration(
+      milliseconds:
+          math.max(1, (_slideDuration.inMilliseconds * distance).round()),
+    );
+  }
+
+  /** 从当前进度平滑移动到目标，不重置动画端点。 */
+  TickerFuture _animateTo(bool dense) {
+    final target = dense ? 1.0 : 0.0;
+    return _controller.animateTo(
+      target,
+      duration: _remainingDuration(target),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  /** 响应整块控件点击；动画稳定后才提交较重的结果视图切换。 */
+  Future<void> _toggle() async {
+    final targetDense = !_visualDense;
+    final version = ++_transitionVersion;
+    setState(() => _visualDense = targetDense);
+    try {
+      await _animateTo(targetDense).orCancel;
+    } on TickerCanceled {
+      return;
+    }
+    if (!mounted ||
+        version != _transitionVersion ||
+        _visualDense != targetDense) {
+      return;
+    }
+    if (widget.dense != targetDense) {
+      widget.onChanged(targetDense);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final tooltip = dense ? '切换为网格视图' : '切换为列表视图';
+    final tooltip = _visualDense ? '切换为网格视图' : '切换为列表视图';
     return Tooltip(
       message: tooltip,
       excludeFromSemantics: true,
@@ -2694,51 +2875,64 @@ class ResultViewToggle extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             key: LibrarySmokeKeys.resultViewToggle,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             excludeFromSemantics: true,
-            onTap: () => onChanged(!dense),
+            onTap: _toggle,
             child: Ink(
               width: 76,
               height: 48,
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: librarySurface,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: libraryBorder),
               ),
-              child: Stack(
-                children: [
-                  AnimatedAlign(
-                    duration: appMotionDuration,
-                    curve: appMotionCurve,
-                    alignment:
-                        dense ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      key: LibrarySmokeKeys.resultViewToggleThumb,
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: librarySurfaceAlt,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  IgnorePointer(
-                    child: Row(
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, child) {
+                    final progress = _controller.value;
+                    return Stack(
                       children: [
-                        _TopViewIcon(
-                          icon: Icons.grid_view_rounded,
-                          selected: !dense,
+                        Transform.translate(
+                          offset: Offset(36 * progress, 0),
+                          child: Container(
+                            key: LibrarySmokeKeys.resultViewToggleThumb,
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: librarySurfaceAlt,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 2),
-                        _TopViewIcon(
-                          icon: Icons.view_list_rounded,
-                          selected: dense,
+                        IgnorePointer(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _TopViewIcon(
+                                icon: Icons.grid_view_rounded,
+                                color: Color.lerp(
+                                  appAccentViolet,
+                                  libraryTextMuted,
+                                  progress,
+                                )!,
+                              ),
+                              _TopViewIcon(
+                                icon: Icons.view_list_rounded,
+                                color: Color.lerp(
+                                  libraryTextMuted,
+                                  appAccentViolet,
+                                  progress,
+                                )!,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
-                    ),
-                  ),
-                ],
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -2752,14 +2946,14 @@ class ResultViewToggle extends StatelessWidget {
 class _TopViewIcon extends StatelessWidget {
   const _TopViewIcon({
     required this.icon,
-    required this.selected,
+    required this.color,
   });
 
   /** 当前布局类型对应的图标。 */
   final IconData icon;
 
-  /** 当前图标是否对应已启用的布局。 */
-  final bool selected;
+  /** 颜色直接跟随滑块控制器插值，避免额外隐式动画相互抢帧。 */
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -2767,17 +2961,10 @@ class _TopViewIcon extends StatelessWidget {
       width: 32,
       height: 32,
       child: Center(
-        child: TweenAnimationBuilder<Color?>(
-          duration: appMotionDuration,
-          curve: appMotionCurve,
-          tween: ColorTween(
-            end: selected ? appAccentViolet : libraryTextMuted,
-          ),
-          builder: (context, color, child) => Icon(
-            icon,
-            size: 18,
-            color: color,
-          ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: color,
         ),
       ),
     );
