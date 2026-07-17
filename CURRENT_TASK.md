@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.42` 已完成。
+架构版本状态：`Architecture Baseline 0.5.43` 已完成。
 
 最近一次验证：
 
@@ -14,9 +14,13 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 158 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 159 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 播放器底部控制条在音量图标前新增弹出式“打开文件位置”按钮；点击复用既有 `FileSystemAdapter.revealInFileManager` 平台边界，不在页面中增加 Windows 命令。
+- focused widget 覆盖 `eject` 图标、tooltip 和点击回调；真实 Debug 窗口确认按钮顺序、间距和对齐正常，点击后文件资源管理器打开当前目录并选中正在播放的视频。
+- 完整 159 项测试通过，3 项显式 benchmark 跳过；`dart format`、`flutter analyze` 和 Windows debug build 通过。
 
 - 播放器队列左滑操作面板改为占满前景卡片的完整高度，不再由图标内容和上下内边距形成更矮的独立胶囊；收藏按钮去除半透明粉色底与操作面板投影，只保留红色心形状态。
 - focused widget 直接断言卡片与操作面板实际像素高度一致，并验证收藏按钮表面透明；真实 Debug 窗口完成进入播放器、选中收藏队列项与基础布局截图，自动化拖拽未能让隐藏层保持展开，展开态由像素断言覆盖并保留人工左滑复核路径。

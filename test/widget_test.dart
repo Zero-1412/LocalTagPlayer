@@ -2415,6 +2415,29 @@ void main() {
     );
   });
 
+  testWidgets('player reveal file button uses eject icon and invokes callback',
+      (tester) async {
+    var revealRequests = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: Scaffold(
+          body: PlayerRevealFileButton(
+            onPressed: () => revealRequests++,
+          ),
+        ),
+      ),
+    );
+
+    final button = find.byKey(const ValueKey('player.revealFile'));
+    expect(button, findsOneWidget);
+    expect(find.byIcon(Icons.eject_rounded), findsOneWidget);
+    expect(find.byTooltip('打开文件位置'), findsOneWidget);
+
+    await tester.tap(button);
+    expect(revealRequests, 1);
+  });
+
   test('player queue swipe actions snap smoothly by distance and velocity', () {
     expect(
       playerQueueActionShouldOpen(

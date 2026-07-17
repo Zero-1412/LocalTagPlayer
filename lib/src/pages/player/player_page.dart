@@ -43,6 +43,31 @@ bool playerControlsShouldAutoHide({
 }) =>
     !settingsOpen && !pointerInControlBar;
 
+/**
+ * 播放控制条中的“打开文件位置”按钮。
+ *
+ * 图标沿用用户指定的弹出式样式；实际文件管理器调用由页面传入的平台边界回调负责。
+ */
+class PlayerRevealFileButton extends StatelessWidget {
+  const PlayerRevealFileButton({
+    super.key,
+    required this.onPressed,
+  });
+
+  /** 请求在系统文件管理器中定位当前播放文件。 */
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      key: const ValueKey('player.revealFile'),
+      tooltip: '打开文件位置',
+      onPressed: onPressed,
+      icon: const Icon(Icons.eject_rounded, size: 20),
+    );
+  }
+}
+
 /** 判断画面局部坐标是否落在底部进度与按钮控制区。 */
 @visibleForTesting
 bool playerPointerInControlBar({
@@ -963,6 +988,10 @@ class PlayerPageState extends State<PlayerPage> {
                               icon: const Icon(Icons.skip_next_rounded),
                             ),
                             const SizedBox(width: 16),
+                            PlayerRevealFileButton(
+                              onPressed: () => unawaited(_revealCurrentFile()),
+                            ),
+                            const SizedBox(width: 4),
                             Listener(
                               onPointerSignal: (event) {
                                 if (event is PointerScrollEvent) {

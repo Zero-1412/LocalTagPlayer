@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-17 · 播放控制条打开文件位置入口
+
+- 在播放器底部控制条的音量图标前新增弹出式 `eject` 图标按钮，tooltip 为“打开文件位置”。
+- 点击入口复用播放器已有的文件定位回调和 `FileSystemAdapter.revealInFileManager` 平台边界；路径失效时继续显示原有稳定失败提示。
+- 新增 focused widget 覆盖图标、tooltip 与点击回调；真实 Debug 窗口确认按钮位置、对齐和间距正常，点击后 Windows 文件资源管理器打开当前目录并选中正在播放的视频。
+- 完整 159 项测试通过，3 项显式 benchmark 跳过；`dart format`、`flutter analyze` 和 Windows debug build 通过。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、播放/音量逻辑、缩略图/媒体详情队列和用户数据均未改变。
+
 ## 2026-07-17 · 队列左滑操作区等高与红心去阴影
 
 - 队列左滑操作区显式占满条目 Stack 的完整高度，并只保留横向间距，使操作面板与前景列表卡片上下边缘统一。
