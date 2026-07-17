@@ -2448,10 +2448,7 @@ class PlayerPageState extends State<PlayerPage> {
       queuePanel: queuePanel,
       item: _currentItem,
       queueEndReached: _queueEndReached,
-      onToggleFavorite: () => unawaited(_toggleQueueFavorite(_currentItem)),
       onEditManualTags: () => unawaited(_editManualTags()),
-      onRevealFile: () => unawaited(_revealCurrentFile()),
-      onVideoInfo: () => unawaited(_showVideoInfoDialog()),
     );
   }
 

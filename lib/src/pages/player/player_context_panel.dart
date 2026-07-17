@@ -19,7 +19,7 @@ enum PlayerSidePanelView {
  * 播放器右侧统一侧栏。
  *
  * “列表”和“详情”处于同一层级，切换只替换右侧内容，不重建播放会话、filtered
- * queue 或视频画面。原画面下方的信息与操作全部迁入详情视图。
+ * queue 或视频画面。详情视图只保留媒体信息和就近标签维护入口，避免重复堆叠底部操作。
  */
 class PlayerSidePanel extends StatefulWidget {
   const PlayerSidePanel({
@@ -27,10 +27,7 @@ class PlayerSidePanel extends StatefulWidget {
     required this.queuePanel,
     required this.item,
     required this.queueEndReached,
-    required this.onToggleFavorite,
     required this.onEditManualTags,
-    required this.onRevealFile,
-    required this.onVideoInfo,
   });
 
   /** 原有 filtered queue 内容；隐藏详情时才挂载，避免离屏列表继续构建。 */
@@ -42,17 +39,8 @@ class PlayerSidePanel extends StatefulWidget {
   /** 当前筛选队列是否已经顺序播放到末尾。 */
   final bool queueEndReached;
 
-  /** 收藏或取消收藏当前视频。 */
-  final VoidCallback onToggleFavorite;
-
   /** 打开当前视频的手动标签编辑器。 */
   final VoidCallback onEditManualTags;
-
-  /** 通过平台文件系统边界打开当前文件位置。 */
-  final VoidCallback onRevealFile;
-
-  /** 打开保留的完整视频信息弹窗。 */
-  final VoidCallback onVideoInfo;
 
   @override
   State<PlayerSidePanel> createState() => _PlayerSidePanelState();
@@ -100,10 +88,7 @@ class _PlayerSidePanelState extends State<PlayerSidePanel> {
                     key: const ValueKey('player.sidebar.details'),
                     item: widget.item,
                     queueEndReached: widget.queueEndReached,
-                    onToggleFavorite: widget.onToggleFavorite,
                     onEditManualTags: widget.onEditManualTags,
-                    onRevealFile: widget.onRevealFile,
-                    onVideoInfo: widget.onVideoInfo,
                   ),
           ),
         ],
@@ -298,10 +283,7 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
     super.key,
     required this.item,
     required this.queueEndReached,
-    required this.onToggleFavorite,
     required this.onEditManualTags,
-    required this.onRevealFile,
-    required this.onVideoInfo,
   });
 
   /** 当前实际正在播放的视频。 */
@@ -310,17 +292,8 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
   /** 当前 filtered queue 是否已经播放到末尾。 */
   final bool queueEndReached;
 
-  /** 收藏或取消收藏当前视频。 */
-  final VoidCallback onToggleFavorite;
-
   /** 编辑当前视频手动标签。 */
   final VoidCallback onEditManualTags;
-
-  /** 打开当前文件位置。 */
-  final VoidCallback onRevealFile;
-
-  /** 打开完整视频信息弹窗。 */
-  final VoidCallback onVideoInfo;
 
   @override
   Widget build(BuildContext context) {
@@ -452,63 +425,6 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
               color: Color(0xffaab6d0),
               fontSize: 12,
               height: 1.45,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                key: const ValueKey('player.editManualTags'),
-                onPressed: onEditManualTags,
-                icon: const Icon(Icons.sell_outlined, size: 17),
-                label: const Text('编辑标签'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onRevealFile,
-                icon: const Icon(Icons.folder_open_outlined, size: 17),
-                label: const Text('打开位置'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        PopupMenuButton<String>(
-          key: const ValueKey('player.more'),
-          tooltip: '更多操作',
-          color: const Color(0xff17202c),
-          position: PopupMenuPosition.under,
-          onSelected: (value) {
-            if (value == 'favorite') {
-              onToggleFavorite();
-            } else if (value == 'info') {
-              onVideoInfo();
-            }
-          },
-          itemBuilder: (_) => [
-            PopupMenuItem(
-              value: 'favorite',
-              child: Text(item.isFavorite ? '取消收藏' : '收藏'),
-            ),
-            const PopupMenuItem(value: 'info', child: Text('完整视频信息')),
-          ],
-          child: Container(
-            height: 40,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xff2b3856)),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.more_horiz_rounded, size: 18),
-                SizedBox(width: 8),
-                Text('更多操作'),
-              ],
             ),
           ),
         ),

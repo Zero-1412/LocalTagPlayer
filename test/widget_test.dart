@@ -1408,10 +1408,7 @@ void main() {
               queuePanel: const Center(child: Text('筛选结果列表测试')),
               item: item,
               queueEndReached: false,
-              onToggleFavorite: () {},
               onEditManualTags: () => editCount++,
-              onRevealFile: () {},
-              onVideoInfo: () {},
             ),
           ),
         ),
@@ -1467,10 +1464,13 @@ void main() {
     expect(find.text('H264 / AAC'), findsOneWidget);
     expect(find.text('原神'), findsOneWidget);
     expect(find.text('雷神'), findsOneWidget);
+    expect(find.text('编辑标签'), findsNothing);
+    expect(find.text('打开位置'), findsNothing);
+    expect(find.text('更多操作'), findsNothing);
+    expect(find.byKey(const ValueKey('player.more')), findsNothing);
 
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('player.editManualTags')));
-    await tester.tap(find.byKey(const ValueKey('player.editManualTags')));
+    await tester.ensureVisible(find.widgetWithText(ActionChip, '继续添加'));
+    await tester.tap(find.widgetWithText(ActionChip, '继续添加'));
     await tester.pump();
     expect(editCount, 1);
 
