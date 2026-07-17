@@ -991,7 +991,7 @@ class PlayerPageState extends State<PlayerPage> {
                             PlayerRevealFileButton(
                               onPressed: () => unawaited(_revealCurrentFile()),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 12),
                             Listener(
                               onPointerSignal: (event) {
                                 if (event is PointerScrollEvent) {
@@ -1008,7 +1008,16 @@ class PlayerPageState extends State<PlayerPage> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.volume_up_rounded, size: 20),
+                                  // 音量图标使用与 IconButton 相同的 48px 槽位，统一按钮中心节奏。
+                                  const SizedBox(
+                                    width: 48,
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.volume_up_rounded,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
                                   SizedBox(
                                     width: 130,
                                     child: PlayerControlSlider(
