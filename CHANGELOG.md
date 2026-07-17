@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-17 · 播放器顶部显示当前文件名
+
+- 删除播放器顶部重复的队列搜索栏，标题由固定 `local_tag_player` 改为当前实际播放视频的完整文件名，并随播放项切换即时更新。
+- 文件名使用跨平台路径 basename，保持单行省略并提供完整 tooltip；返回按钮、播放标识和紧凑窗口队列入口保持原位置与行为。
+- 移除只服务顶部搜索的 controller、FocusNode 和 `Ctrl+K` 聚焦分支；右侧队列按需搜索及其 filtered queue 定位逻辑继续保留。
+- 新增 focused widget；完整 162 项测试、`dart format`、`flutter analyze` 和 Windows debug build 通过。最新 Debug 窗口确认首个视频标题正确，双击第二项后标题同步更新，未见遮挡、错位或溢出。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 内容与顺序、播放索引、`PlayerBackend`、缓存队列和用户数据均未改变。
+
 ## 2026-07-17 · 精简播放器详情底部操作
 
 - 移除播放器右侧详情面板底部“编辑标签 / 打开位置 / 更多操作”操作区，详情内容现在以文件路径卡片结束。

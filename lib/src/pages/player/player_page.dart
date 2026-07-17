@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/playback_settings.dart';
@@ -52,6 +53,9 @@ double playerVolumeDeltaForScroll(double scrollDy) {
   if (scrollDy == 0) return 0;
   return scrollDy < 0 ? 5 : -5;
 }
+
+/** 从当前视频路径提取播放器顶栏文件名，避免标题继续显示固定应用名称。 */
+String playerTopBarFileName(String path) => p.basename(path);
 
 /** 静音时归零，恢复时回到最近一次有效的非零音量。 */
 double playerVolumeAfterMuteToggle({
@@ -228,8 +232,6 @@ class PlayerPageState extends State<PlayerPage> {
   /** 诊断弹窗使用的只读播放器边界。 */
   PlayerBackend get playerBackend => _playerBackend;
   late final FocusNode _focusNode;
-  late final FocusNode _queueSearchFocusNode;
-  late final TextEditingController _queueSearchController;
   late final ScrollController _queueScrollController;
   late final ScrollController _fullscreenQueueScrollController;
   late final MediaDetailsService _detailsService;
@@ -361,8 +363,6 @@ class PlayerPageState extends State<PlayerPage> {
     _videoAspectMode = _effectivePlaybackSettings.videoAspectMode;
     _playbackRate = _effectivePlaybackSettings.playbackRate;
     _focusNode = FocusNode(debugLabel: 'player-shortcuts');
-    _queueSearchFocusNode = FocusNode(debugLabel: 'player-queue-search');
-    _queueSearchController = TextEditingController();
     _queueScrollController = ScrollController();
     _fullscreenQueueScrollController = ScrollController();
     _detailsService = MediaDetailsService(
@@ -611,7 +611,7 @@ class PlayerPageState extends State<PlayerPage> {
 
   /** 仅处理视频画面内的垂直滚轮，右侧队列继续拥有自己的滚动行为。 */
   void _handleVideoPointerSignal(PointerSignalEvent event) {
-    if (event is! PointerScrollEvent || _queueSearchFocusNode.hasFocus) return;
+    if (event is! PointerScrollEvent) return;
     final delta = playerVolumeDeltaForScroll(event.scrollDelta.dy);
     if (delta != 0) {
       _stepPlayerVolume(delta);
@@ -2242,16 +2242,6 @@ class PlayerPageState extends State<PlayerPage> {
       unawaited(_toggleWindowFullscreen());
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.keyK &&
-        HardwareKeyboard.instance.isControlPressed) {
-      // 顶部搜索与右侧队列搜索共用定位逻辑，Ctrl+K 仅负责聚焦而不重建队列。
-      _queueSearchFocusNode.requestFocus();
-      _queueSearchController.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: _queueSearchController.text.length,
-      );
-      return KeyEventResult.handled;
-    }
     if (event.logicalKey == LogicalKeyboardKey.insert &&
         HardwareKeyboard.instance.isAltPressed) {
       unawaited(_toggleQueueFavorite(_currentItem));
@@ -2317,15 +2307,9 @@ class PlayerPageState extends State<PlayerPage> {
     }
     switch (event.logicalKey) {
       case LogicalKeyboardKey.arrowUp:
-        if (_queueSearchFocusNode.hasFocus) {
-          return KeyEventResult.ignored;
-        }
         _stepPlayerVolume(5);
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowDown:
-        if (_queueSearchFocusNode.hasFocus) {
-          return KeyEventResult.ignored;
-        }
         _stepPlayerVolume(-5);
         return KeyEventResult.handled;
       case LogicalKeyboardKey.home:
@@ -2363,8 +2347,6 @@ class PlayerPageState extends State<PlayerPage> {
     _persistOpenedProgress();
     _queueScrollController.dispose();
     _fullscreenQueueScrollController.dispose();
-    _queueSearchFocusNode.dispose();
-    _queueSearchController.dispose();
     _focusNode.dispose();
     unawaited(_releaseAsyncResources());
     super.dispose();
@@ -2473,11 +2455,10 @@ class PlayerPageState extends State<PlayerPage> {
                   child: Column(
                     children: [
                       if (!_isWindowFullscreen)
-                        _PlayerTopBar(
-                          searchController: _queueSearchController,
-                          searchFocusNode: _queueSearchFocusNode,
+                        PlayerTopBar(
+                          currentFileName:
+                              playerTopBarFileName(_currentItem.path),
                           onBack: () => unawaited(_exitPlayer()),
-                          onSearch: _searchQueue,
                           onOpenQueue: hasWideQueueSidebar
                               ? null
                               : () {
@@ -2727,20 +2708,27 @@ String? _playerShortcutKeyId(LogicalKeyboardKey key) {
   return null;
 }
 
-/** 蓝图风格的播放器顶栏；刻意不提供“打开文件”，避免绕过媒体库与筛选队列。 */
-class _PlayerTopBar extends StatelessWidget {
-  const _PlayerTopBar({
-    required this.searchController,
-    required this.searchFocusNode,
+/**
+ * 蓝图风格的播放器顶栏。
+ *
+ * 顶栏只展示当前播放文件名和导航动作；队列搜索保留在右侧列表内部，避免同一功能
+ * 重复占用视频上方空间，也不提供绕过媒体库与 filtered queue 的“打开文件”。
+ */
+class PlayerTopBar extends StatelessWidget {
+  const PlayerTopBar({
+    super.key,
+    required this.currentFileName,
     required this.onBack,
-    required this.onSearch,
     required this.onOpenQueue,
   });
 
-  final TextEditingController searchController;
-  final FocusNode searchFocusNode;
+  /** 当前实际播放视频的完整文件名，包含扩展名。 */
+  final String currentFileName;
+
+  /** 返回媒体库并释放当前播放器会话。 */
   final VoidCallback onBack;
-  final ValueChanged<String> onSearch;
+
+  /** 紧凑窗口打开队列的入口；宽屏常驻队列时为空。 */
   final VoidCallback? onOpenQueue;
 
   @override
@@ -2760,52 +2748,22 @@ class _PlayerTopBar extends StatelessWidget {
           const Icon(Icons.play_arrow_rounded,
               color: Color(0xff7c5cff), size: 30),
           const SizedBox(width: 8),
-          const Text(
-            'local_tag_player',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const Spacer(),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 396),
-            child: TextField(
-              controller: searchController,
-              focusNode: searchFocusNode,
-              onSubmitted: onSearch,
-              textInputAction: TextInputAction.search,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Ctrl + K   搜索当前队列',
-                hintStyle: const TextStyle(color: Color(0xff77839a)),
-                prefixIcon: const Icon(Icons.search_rounded, size: 19),
-                suffixIcon: searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: '清除搜索',
-                        onPressed: () {
-                          searchController.clear();
-                          onSearch('');
-                        },
-                        icon: const Icon(Icons.close_rounded, size: 17),
-                      ),
-                filled: true,
-                fillColor: const Color(0xff0b1326),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(9),
-                  borderSide: const BorderSide(color: Color(0xff202c46)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(9),
-                  borderSide: const BorderSide(color: Color(0xff202c46)),
+          Expanded(
+            child: Tooltip(
+              message: currentFileName,
+              child: Text(
+                currentFileName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 12),
           if (onOpenQueue != null)
             IconButton(
               tooltip: '播放队列',

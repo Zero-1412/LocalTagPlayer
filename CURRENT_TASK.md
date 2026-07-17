@@ -14,9 +14,13 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 161 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 162 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 播放器顶部删除重复的当前队列搜索栏，标题从固定应用名改为当前实际播放视频的完整文件名，并随队列切换即时更新；超长名称单行省略且保留完整 tooltip。
+- 清理只服务顶部搜索的 controller、FocusNode 与 `Ctrl+K` 聚焦分支；右侧队列自身的按需搜索按钮、搜索定位和 filtered queue 行为不变。
+- 新增顶栏 focused widget，覆盖文件名、搜索缺失、返回与紧凑窗口队列动作；完整 162 项测试通过，3 项显式 benchmark 跳过，`dart format`、`flutter analyze` 和 Windows debug build 通过。最新 Debug 窗口完成首个视频与双击切换第二个视频的标题截图验证。
 
 - 播放器右侧详情面板移除底部“编辑标签 / 打开位置 / 更多操作”操作区，并同步删除只服务这些入口的侧栏回调；文件路径卡片现在作为详情结尾。
 - 标签卡片内的“继续添加”和文件名右侧编辑图标继续保留，底部控制条的打开文件位置入口及其它页面操作不受影响。

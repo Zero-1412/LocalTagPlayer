@@ -2461,6 +2461,36 @@ void main() {
     );
   });
 
+  testWidgets('player top bar shows current file name without search field',
+      (tester) async {
+    var backCount = 0;
+    var queueCount = 0;
+    const currentPath = r'X:\test-media\原神\雷神\当前播放.mp4';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: Scaffold(
+          body: PlayerTopBar(
+            currentFileName: playerTopBarFileName(currentPath),
+            onBack: () => backCount++,
+            onOpenQueue: () => queueCount++,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('当前播放.mp4'), findsOneWidget);
+    expect(find.text('local_tag_player'), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.textContaining('搜索当前队列'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('player.back')));
+    await tester.tap(find.byTooltip('播放队列'));
+    expect(backCount, 1);
+    expect(queueCount, 1);
+  });
+
   testWidgets('player volume button toggles icon tooltip and callback',
       (tester) async {
     var toggleRequests = 0;
