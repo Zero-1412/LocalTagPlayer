@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.44` 已完成。
+架构版本状态：`Architecture Baseline 0.5.45` 已完成。
 
 最近一次验证：
 
@@ -14,9 +14,13 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 164 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 165 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 设置首页按“播放设置 / 数据与维护”分组，只显示播放与解码、播放器交互、视频数据备份、缩略图缓存四个功能入口；所有开关、滑杆、下拉框和统计信息移入各自二级页。
+- 二级页使用独立标题和返回入口，系统返回键优先回到设置首页；缩略图统计刷新只在缓存二级页显示。原设置状态、保存回调、解码确认、备份维护和播放器行为均未改变。
+- 新增首页 focused widget，确认四个入口可达且首页不渲染实际设置控件；完整 165 项测试通过，3 项显式 benchmark 跳过，`dart format`、`flutter analyze` 和 Windows debug build 通过。真实窗口处于用户全屏播放画面，未抢占或重启，保留“媒体库 → 设置 → 依次打开四个二级页 → 返回列表”的人工截图路径。
 
 - 视频卡片与播放器详情的标签编辑改为复用同一入口：两处现在使用相同的当前父级、初始选中、folder 锁定、候选集合与 `replaceManualTags` 保存路径。
 - 候选集合改从规范化 `TagItem` 索引读取当前层级全部未隐藏标签名称，包含尚未出现在视频兼容字段中的标签；选择 folder 等已有名称时仍建立独立 manual 关系，不改变原来源。候选区移除 24 项截断并更名为“全部可用标签”。

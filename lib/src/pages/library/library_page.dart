@@ -479,6 +479,9 @@ class _PlaybackDecoderDropdownState extends State<PlaybackDecoderDropdown> {
   }
 }
 
+/**
+ * 应用设置页，首页按功能类型导航，二级页承载对应的实际设置控件。
+ */
 class CacheSettingsPage extends StatefulWidget {
   const CacheSettingsPage({
     super.key,
@@ -522,7 +525,165 @@ class CacheSettingsPage extends StatefulWidget {
   State<CacheSettingsPage> createState() => _CacheSettingsPageState();
 }
 
+/** 设置页可进入的功能分区。 */
+enum _SettingsSection {
+  home,
+  playback,
+  playerInteraction,
+  dataBackup,
+  cache,
+}
+
+/**
+ * 设置首页的分组功能列表。
+ *
+ * 首页只负责导航，不承载开关、滑杆或下拉框，避免用户进入设置时面对过多控件。
+ */
+class SettingsLandingList extends StatelessWidget {
+  const SettingsLandingList({
+    super.key,
+    required this.onOpenPlayback,
+    required this.onOpenPlayerInteraction,
+    required this.onOpenDataBackup,
+    required this.onOpenCache,
+  });
+
+  /** 打开播放与解码二级页。 */
+  final VoidCallback onOpenPlayback;
+
+  /** 打开播放器交互二级页。 */
+  final VoidCallback onOpenPlayerInteraction;
+
+  /** 打开视频数据备份二级页。 */
+  final VoidCallback onOpenDataBackup;
+
+  /** 打开缩略图缓存二级页。 */
+  final VoidCallback onOpenCache;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      key: const ValueKey('settings.home'),
+      padding: const EdgeInsets.all(24),
+      children: [
+        const _SettingsGroupTitle(title: '播放设置'),
+        const SizedBox(height: 8),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          margin: EdgeInsets.zero,
+          child: Column(
+            children: [
+              _SettingsNavigationTile(
+                key: const ValueKey('settings.category.playback'),
+                icon: Icons.play_circle_outline_rounded,
+                title: '播放与解码',
+                subtitle: '解码策略、继续观看行为',
+                onTap: onOpenPlayback,
+              ),
+              const Divider(height: 1),
+              _SettingsNavigationTile(
+                key: const ValueKey('settings.category.playerInteraction'),
+                icon: Icons.tune_rounded,
+                title: '播放器交互',
+                subtitle: '全屏播放列表、播放器快捷键',
+                onTap: onOpenPlayerInteraction,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        const _SettingsGroupTitle(title: '数据与维护'),
+        const SizedBox(height: 8),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          margin: EdgeInsets.zero,
+          child: Column(
+            children: [
+              _SettingsNavigationTile(
+                key: const ValueKey('settings.category.dataBackup'),
+                icon: Icons.backup_outlined,
+                title: '视频数据备份',
+                subtitle: '备份开关、同步状态、检查与导出',
+                onTap: onOpenDataBackup,
+              ),
+              const Divider(height: 1),
+              _SettingsNavigationTile(
+                key: const ValueKey('settings.category.cache'),
+                icon: Icons.image_outlined,
+                title: '缩略图缓存',
+                subtitle: '缓存状态与后台任务统计',
+                onTap: onOpenCache,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/** 设置首页的功能分组标题。 */
+class _SettingsGroupTitle extends StatelessWidget {
+  const _SettingsGroupTitle({required this.title});
+
+  /** 分组名称。 */
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        color: appTextMuted,
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+}
+
+/** 设置首页中打开二级页的单个功能入口。 */
+class _SettingsNavigationTile extends StatelessWidget {
+  const _SettingsNavigationTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  /** 功能类型图标。 */
+  final IconData icon;
+
+  /** 功能名称。 */
+  final String title;
+
+  /** 功能范围摘要。 */
+  final String subtitle;
+
+  /** 点击后进入对应二级页。 */
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      minVerticalPadding: 14,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+      leading: Icon(icon, color: appAccent),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(subtitle, style: const TextStyle(color: appTextMuted)),
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded, color: appTextMuted),
+      onTap: onTap,
+    );
+  }
+}
+
 class _CacheSettingsPageState extends State<CacheSettingsPage> {
+  /** 当前显示的设置首页或功能二级页。 */
+  _SettingsSection _section = _SettingsSection.home;
   late PlaybackSettings _settings = widget.playbackSettings;
   late DataBackupSettings _dataBackupSettings = widget.dataBackupSettings;
   late DataBackupStatus _dataBackupStatus = widget.store.dataBackupStatus;
@@ -766,398 +927,502 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     await widget.onPlaybackSettingsChanged(next);
   }
 
+  /** 当前层级的页面标题。 */
+  String get _sectionTitle => switch (_section) {
+        _SettingsSection.home => '设置',
+        _SettingsSection.playback => '播放与解码',
+        _SettingsSection.playerInteraction => '播放器交互',
+        _SettingsSection.dataBackup => '视频数据备份',
+        _SettingsSection.cache => '缩略图缓存',
+      };
+
+  /** 从设置首页进入指定功能二级页。 */
+  void _openSection(_SettingsSection section) {
+    setState(() => _section = section);
+  }
+
+  /** 二级页返回设置功能列表。 */
+  void _returnToSettingsHome() {
+    setState(() => _section = _SettingsSection.home);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: appBackground,
-      appBar: AppBar(
-        title: const Text('\u8bbe\u7f6e'),
-        actions: [
-          TextButton.icon(
-            key: const ValueKey('settings.refreshCacheStats'),
-            style: TextButton.styleFrom(foregroundColor: appText),
-            onPressed: _refreshStats,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('刷新统计'),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    '\u64ad\u653e\u89e3\u7801',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 14),
-                  PlaybackDecoderDropdown(
-                    settings: _settings,
-                    onChanged: (settings) async {
-                      setState(() => _settings = settings);
-                      await widget.onPlaybackSettingsChanged(settings);
-                    },
-                  ),
-                ],
+    return PopScope<void>(
+      canPop: _section == _SettingsSection.home,
+      onPopInvokedWithResult: (didPop, result) {
+        // 系统返回键在二级页优先返回设置首页，不直接退出整个设置路由。
+        if (!didPop && _section != _SettingsSection.home) {
+          _returnToSettingsHome();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: appBackground,
+        appBar: AppBar(
+          leading: _section == _SettingsSection.home
+              ? null
+              : BackButton(
+                  key: const ValueKey('settings.section.back'),
+                  onPressed: _returnToSettingsHome,
+                ),
+          title: Text(_sectionTitle),
+          actions: [
+            if (_section == _SettingsSection.cache)
+              TextButton.icon(
+                key: const ValueKey('settings.refreshCacheStats'),
+                style: TextButton.styleFrom(foregroundColor: appText),
+                onPressed: _refreshStats,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('刷新统计'),
               ),
+          ],
+        ),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: _section == _SettingsSection.home ? 760 : 920,
             ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            key: const ValueKey('settings.dataBackup.card'),
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SwitchListTile(
-                    key: const ValueKey('settings.dataBackup.toggle'),
-                    contentPadding: EdgeInsets.zero,
-                    value: _dataBackupSettings.enabled,
-                    onChanged: _changeDataBackupEnabled,
-                    title: const Text(
-                      '视频数据备份',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    subtitle: const Padding(
-                      padding: EdgeInsets.only(top: 6),
-                      child: Text(
-                        '独立备份稳定身份、收藏、播放状态和非文件夹标签，不复制视频文件。',
-                        style: TextStyle(color: appTextMuted),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '移除媒体库目录时保留备份，重新添加可自动恢复；明确删除单个视频时会同步删除对应备份。应用重启后会继续未完成任务，播放期间自动暂停。',
-                    style: TextStyle(color: appTextMuted, height: 1.5),
-                  ),
-                  const SizedBox(height: 14),
-                  _SettingsStatLine(
-                    label: '状态',
-                    value: _dataBackupPhaseLabel(_dataBackupStatus),
-                  ),
-                  _SettingsStatLine(
-                    label: '本轮进度',
-                    value: _dataBackupStatus.total == 0
-                        ? '0'
-                        : '${_dataBackupStatus.processed} / ${_dataBackupStatus.total}',
-                  ),
-                  _SettingsStatLine(
-                    label: '等待同步',
-                    value: formatCount(_dataBackupStatus.pending),
-                  ),
-                  _SettingsStatLine(
-                    label: '最近完成',
-                    value: _backupTimeLabel(_dataBackupStatus.lastCompletedAt),
-                  ),
-                  if (_dataBackupStatus.phase == DataBackupPhase.running &&
-                      _dataBackupStatus.total > 0) ...[
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: (_dataBackupStatus.processed /
-                              _dataBackupStatus.total)
-                          .clamp(0, 1),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
+            child: _section == _SettingsSection.home
+                ? SettingsLandingList(
+                    onOpenPlayback: () =>
+                        _openSection(_SettingsSection.playback),
+                    onOpenPlayerInteraction: () =>
+                        _openSection(_SettingsSection.playerInteraction),
+                    onOpenDataBackup: () =>
+                        _openSection(_SettingsSection.dataBackup),
+                    onOpenCache: () => _openSection(_SettingsSection.cache),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.all(24),
                     children: [
-                      OutlinedButton.icon(
-                        key: const ValueKey('settings.dataBackup.runNow'),
-                        onPressed: _dataBackupSettings.enabled &&
-                                !_backupMaintenanceRunning
-                            ? widget.onRunDataBackupNow
-                            : null,
-                        icon: const Icon(Icons.backup_rounded),
-                        label: const Text('立即备份'),
-                      ),
-                      OutlinedButton.icon(
-                        key: const ValueKey(
-                          'settings.dataBackup.checkIntegrity',
-                        ),
-                        onPressed: _backupMaintenanceRunning
-                            ? null
-                            : _checkDataBackupIntegrity,
-                        icon: const Icon(Icons.verified_user_rounded),
-                        label: const Text('检查完整性'),
-                      ),
-                      OutlinedButton.icon(
-                        key: const ValueKey('settings.dataBackup.export'),
-                        onPressed: _backupMaintenanceRunning
-                            ? null
-                            : _exportDataBackup,
-                        icon: const Icon(Icons.file_download_outlined),
-                        label: const Text('导出备份'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            key: const ValueKey('settings.fullscreenQueue.card'),
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          '全屏播放列表',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
+                      if (_section == _SettingsSection.playback) ...[
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const Text(
+                                  '\u64ad\u653e\u89e3\u7801',
+                                  style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 14),
+                                PlaybackDecoderDropdown(
+                                  settings: _settings,
+                                  onChanged: (settings) async {
+                                    setState(() => _settings = settings);
+                                    await widget
+                                        .onPlaybackSettingsChanged(settings);
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      TextButton.icon(
-                        key: const ValueKey('settings.fullscreenQueue.reset'),
-                        onPressed: _resetFullscreenQueueSettings,
-                        icon: const Icon(Icons.restart_alt_rounded),
-                        label: const Text('恢复默认'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    '鼠标移到屏幕右侧边缘时展开，离开列表范围后自动隐藏。',
-                    style: TextStyle(color: appTextMuted),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('边缘热区宽度：${_settings.fullscreenQueueEdgeWidth}px'),
-                  Slider(
-                    key: const ValueKey('settings.fullscreenQueue.edgeWidth'),
-                    min: 4,
-                    max: 40,
-                    divisions: 18,
-                    value: _settings.fullscreenQueueEdgeWidth.toDouble(),
-                    label: '${_settings.fullscreenQueueEdgeWidth}px',
-                    onChanged: (value) => _previewFullscreenQueueSettings(
-                      edgeWidth: value.round(),
-                    ),
-                    onChangeEnd: (_) {
-                      unawaited(_saveFullscreenQueueSettings());
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '自动隐藏延迟：${_settings.fullscreenQueueHideDelayMs}ms',
-                  ),
-                  Slider(
-                    key: const ValueKey('settings.fullscreenQueue.hideDelay'),
-                    min: 0,
-                    max: 1000,
-                    divisions: 20,
-                    value: _settings.fullscreenQueueHideDelayMs.toDouble(),
-                    label: '${_settings.fullscreenQueueHideDelayMs}ms',
-                    onChanged: (value) => _previewFullscreenQueueSettings(
-                      hideDelayMs: value.round(),
-                    ),
-                    onChangeEnd: (_) {
-                      unawaited(_saveFullscreenQueueSettings());
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('播放器快捷键',
-                              style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.w800)),
-                          SizedBox(height: 6),
-                          Text('修改后立即生效；选择已占用按键时会自动交换两个功能。',
-                              style: TextStyle(color: appTextMuted)),
-                        ],
-                      ),
-                    ),
-                    TextButton.icon(
-                      key: const ValueKey('settings.shortcuts.reset'),
-                      onPressed: _resetShortcuts,
-                      icon: const Icon(Icons.restart_alt_rounded),
-                      label: const Text('恢复默认'),
-                    ),
-                  ]),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 14,
-                    runSpacing: 12,
-                    children: [
-                      for (final action in PlayerShortcutAction.values)
-                        SizedBox(
-                          width: 310,
-                          child: DropdownButtonFormField<String>(
-                            key: ValueKey(
-                              'settings.shortcut.${action.name}.'
-                              '${_settings.shortcuts[action]}',
-                            ),
-                            initialValue: _settings.shortcuts[action],
-                            decoration: InputDecoration(
-                              labelText:
-                                  PlaybackSettings.shortcutActionLabel(action),
-                            ),
-                            items: [
-                              for (final key
-                                  in PlaybackSettings.shortcutKeyOptions)
-                                DropdownMenuItem(
-                                  value: key,
-                                  child: Text(
-                                    PlaybackSettings.shortcutKeyLabel(key),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_section == _SettingsSection.dataBackup) ...[
+                        Card(
+                          key: const ValueKey('settings.dataBackup.card'),
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SwitchListTile(
+                                  key: const ValueKey(
+                                      'settings.dataBackup.toggle'),
+                                  contentPadding: EdgeInsets.zero,
+                                  value: _dataBackupSettings.enabled,
+                                  onChanged: _changeDataBackupEnabled,
+                                  title: const Text(
+                                    '视频数据备份',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  subtitle: const Padding(
+                                    padding: EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      '独立备份稳定身份、收藏、播放状态和非文件夹标签，不复制视频文件。',
+                                      style: TextStyle(color: appTextMuted),
+                                    ),
                                   ),
                                 ),
-                            ],
-                            onChanged: (key) {
-                              if (key != null) _changeShortcut(action, key);
-                            },
+                                const SizedBox(height: 8),
+                                const Text(
+                                  '移除媒体库目录时保留备份，重新添加可自动恢复；明确删除单个视频时会同步删除对应备份。应用重启后会继续未完成任务，播放期间自动暂停。',
+                                  style: TextStyle(
+                                      color: appTextMuted, height: 1.5),
+                                ),
+                                const SizedBox(height: 14),
+                                _SettingsStatLine(
+                                  label: '状态',
+                                  value:
+                                      _dataBackupPhaseLabel(_dataBackupStatus),
+                                ),
+                                _SettingsStatLine(
+                                  label: '本轮进度',
+                                  value: _dataBackupStatus.total == 0
+                                      ? '0'
+                                      : '${_dataBackupStatus.processed} / ${_dataBackupStatus.total}',
+                                ),
+                                _SettingsStatLine(
+                                  label: '等待同步',
+                                  value: formatCount(_dataBackupStatus.pending),
+                                ),
+                                _SettingsStatLine(
+                                  label: '最近完成',
+                                  value: _backupTimeLabel(
+                                      _dataBackupStatus.lastCompletedAt),
+                                ),
+                                if (_dataBackupStatus.phase ==
+                                        DataBackupPhase.running &&
+                                    _dataBackupStatus.total > 0) ...[
+                                  const SizedBox(height: 8),
+                                  LinearProgressIndicator(
+                                    value: (_dataBackupStatus.processed /
+                                            _dataBackupStatus.total)
+                                        .clamp(0, 1),
+                                  ),
+                                ],
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      key: const ValueKey(
+                                          'settings.dataBackup.runNow'),
+                                      onPressed: _dataBackupSettings.enabled &&
+                                              !_backupMaintenanceRunning
+                                          ? widget.onRunDataBackupNow
+                                          : null,
+                                      icon: const Icon(Icons.backup_rounded),
+                                      label: const Text('立即备份'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      key: const ValueKey(
+                                        'settings.dataBackup.checkIntegrity',
+                                      ),
+                                      onPressed: _backupMaintenanceRunning
+                                          ? null
+                                          : _checkDataBackupIntegrity,
+                                      icon: const Icon(
+                                          Icons.verified_user_rounded),
+                                      label: const Text('检查完整性'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      key: const ValueKey(
+                                          'settings.dataBackup.export'),
+                                      onPressed: _backupMaintenanceRunning
+                                          ? null
+                                          : _exportDataBackup,
+                                      icon: const Icon(
+                                          Icons.file_download_outlined),
+                                      label: const Text('导出备份'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.fullscreen_exit_rounded),
-                    title: Text('退出全屏'),
-                    subtitle: Text('固定安全快捷键，不可修改'),
-                    trailing: Chip(label: Text('Esc')),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    '继续观看',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    '打开有未完成进度的视频时，默认执行以下操作。',
-                    style: TextStyle(color: appTextMuted),
-                  ),
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<PlaybackResumeBehavior>(
-                    key: const ValueKey('settings.resumeBehavior'),
-                    initialValue: _settings.resumeBehavior,
-                    decoration: const InputDecoration(
-                      labelText: '默认打开行为',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      for (final behavior in PlaybackResumeBehavior.values)
-                        DropdownMenuItem(
-                          value: behavior,
-                          child:
-                              Text(PlaybackSettings.resumeLabelFor(behavior)),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_section == _SettingsSection.playerInteraction) ...[
+                        Card(
+                          key: const ValueKey('settings.fullscreenQueue.card'),
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        '全屏播放列表',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton.icon(
+                                      key: const ValueKey(
+                                          'settings.fullscreenQueue.reset'),
+                                      onPressed: _resetFullscreenQueueSettings,
+                                      icon:
+                                          const Icon(Icons.restart_alt_rounded),
+                                      label: const Text('恢复默认'),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  '鼠标移到屏幕右侧边缘时展开，离开列表范围后自动隐藏。',
+                                  style: TextStyle(color: appTextMuted),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                    '边缘热区宽度：${_settings.fullscreenQueueEdgeWidth}px'),
+                                Slider(
+                                  key: const ValueKey(
+                                      'settings.fullscreenQueue.edgeWidth'),
+                                  min: 4,
+                                  max: 40,
+                                  divisions: 18,
+                                  value: _settings.fullscreenQueueEdgeWidth
+                                      .toDouble(),
+                                  label:
+                                      '${_settings.fullscreenQueueEdgeWidth}px',
+                                  onChanged: (value) =>
+                                      _previewFullscreenQueueSettings(
+                                    edgeWidth: value.round(),
+                                  ),
+                                  onChangeEnd: (_) {
+                                    unawaited(_saveFullscreenQueueSettings());
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '自动隐藏延迟：${_settings.fullscreenQueueHideDelayMs}ms',
+                                ),
+                                Slider(
+                                  key: const ValueKey(
+                                      'settings.fullscreenQueue.hideDelay'),
+                                  min: 0,
+                                  max: 1000,
+                                  divisions: 20,
+                                  value: _settings.fullscreenQueueHideDelayMs
+                                      .toDouble(),
+                                  label:
+                                      '${_settings.fullscreenQueueHideDelayMs}ms',
+                                  onChanged: (value) =>
+                                      _previewFullscreenQueueSettings(
+                                    hideDelayMs: value.round(),
+                                  ),
+                                  onChangeEnd: (_) {
+                                    unawaited(_saveFullscreenQueueSettings());
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                    ],
-                    onChanged: (behavior) async {
-                      if (behavior == null) {
-                        return;
-                      }
-                      final next = _settings.copyWith(resumeBehavior: behavior);
-                      setState(() => _settings = next);
-                      await widget.onPlaybackSettingsChanged(next);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: FutureBuilder<CacheStats>(
-                future: _statsFuture,
-                builder: (context, snapshot) {
-                  final stats = snapshot.data;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        '\u7f29\u7565\u56fe\u7f13\u5b58',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
+                        const SizedBox(height: 16),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(children: [
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text('播放器快捷键',
+                                            style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.w800)),
+                                        SizedBox(height: 6),
+                                        Text('修改后立即生效；选择已占用按键时会自动交换两个功能。',
+                                            style:
+                                                TextStyle(color: appTextMuted)),
+                                      ],
+                                    ),
+                                  ),
+                                  TextButton.icon(
+                                    key: const ValueKey(
+                                        'settings.shortcuts.reset'),
+                                    onPressed: _resetShortcuts,
+                                    icon: const Icon(Icons.restart_alt_rounded),
+                                    label: const Text('恢复默认'),
+                                  ),
+                                ]),
+                                const SizedBox(height: 16),
+                                Wrap(
+                                  spacing: 14,
+                                  runSpacing: 12,
+                                  children: [
+                                    for (final action
+                                        in PlayerShortcutAction.values)
+                                      SizedBox(
+                                        width: 310,
+                                        child: DropdownButtonFormField<String>(
+                                          key: ValueKey(
+                                            'settings.shortcut.${action.name}.'
+                                            '${_settings.shortcuts[action]}',
+                                          ),
+                                          initialValue:
+                                              _settings.shortcuts[action],
+                                          decoration: InputDecoration(
+                                            labelText: PlaybackSettings
+                                                .shortcutActionLabel(action),
+                                          ),
+                                          items: [
+                                            for (final key in PlaybackSettings
+                                                .shortcutKeyOptions)
+                                              DropdownMenuItem(
+                                                value: key,
+                                                child: Text(
+                                                  PlaybackSettings
+                                                      .shortcutKeyLabel(key),
+                                                ),
+                                              ),
+                                          ],
+                                          onChanged: (key) {
+                                            if (key != null) {
+                                              _changeShortcut(action, key);
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                const ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.fullscreen_exit_rounded),
+                                  title: Text('退出全屏'),
+                                  subtitle: Text('固定安全快捷键，不可修改'),
+                                  trailing: Chip(label: Text('Esc')),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (stats == null)
-                        const LinearProgressIndicator()
-                      else ...[
-                        _SettingsStatLine(
-                          label: '\u603b\u6570',
-                          value: formatCount(stats.total),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_section == _SettingsSection.playback) ...[
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const Text(
+                                  '继续观看',
+                                  style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  '打开有未完成进度的视频时，默认执行以下操作。',
+                                  style: TextStyle(color: appTextMuted),
+                                ),
+                                const SizedBox(height: 14),
+                                DropdownButtonFormField<PlaybackResumeBehavior>(
+                                  key:
+                                      const ValueKey('settings.resumeBehavior'),
+                                  initialValue: _settings.resumeBehavior,
+                                  decoration: const InputDecoration(
+                                    labelText: '默认打开行为',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: [
+                                    for (final behavior
+                                        in PlaybackResumeBehavior.values)
+                                      DropdownMenuItem(
+                                        value: behavior,
+                                        child: Text(
+                                            PlaybackSettings.resumeLabelFor(
+                                                behavior)),
+                                      ),
+                                  ],
+                                  onChanged: (behavior) async {
+                                    if (behavior == null) {
+                                      return;
+                                    }
+                                    final next = _settings.copyWith(
+                                        resumeBehavior: behavior);
+                                    setState(() => _settings = next);
+                                    await widget
+                                        .onPlaybackSettingsChanged(next);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                        _SettingsStatLine(
-                          label: '\u5df2\u7f13\u5b58',
-                          value: formatCount(stats.cached),
-                        ),
-                        _SettingsStatLine(
-                          label: '\u7f3a\u5931',
-                          value: formatCount(stats.missing),
-                        ),
-                        _SettingsStatLine(
-                          label: '失败',
-                          value: formatCount(stats.errors),
-                        ),
-                        _SettingsStatLine(
-                          label: '活动任务',
-                          value: '${stats.active} / ${stats.maxConcurrent}',
-                        ),
-                        _SettingsStatLine(
-                          label: '排队任务',
-                          value: formatCount(stats.queued),
-                        ),
-                        _SettingsStatLine(
-                          label: '后台请求',
-                          value: formatCount(stats.pendingBackgroundRequests),
-                        ),
-                        _SettingsStatLine(
-                          label: '平均耗时',
-                          value: '${stats.averageMs} ms',
+                        const SizedBox(height: 16),
+                      ],
+                      if (_section == _SettingsSection.cache) ...[
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: FutureBuilder<CacheStats>(
+                              future: _statsFuture,
+                              builder: (context, snapshot) {
+                                final stats = snapshot.data;
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    const Text(
+                                      '\u7f29\u7565\u56fe\u7f13\u5b58',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    if (stats == null)
+                                      const LinearProgressIndicator()
+                                    else ...[
+                                      _SettingsStatLine(
+                                        label: '\u603b\u6570',
+                                        value: formatCount(stats.total),
+                                      ),
+                                      _SettingsStatLine(
+                                        label: '\u5df2\u7f13\u5b58',
+                                        value: formatCount(stats.cached),
+                                      ),
+                                      _SettingsStatLine(
+                                        label: '\u7f3a\u5931',
+                                        value: formatCount(stats.missing),
+                                      ),
+                                      _SettingsStatLine(
+                                        label: '失败',
+                                        value: formatCount(stats.errors),
+                                      ),
+                                      _SettingsStatLine(
+                                        label: '活动任务',
+                                        value:
+                                            '${stats.active} / ${stats.maxConcurrent}',
+                                      ),
+                                      _SettingsStatLine(
+                                        label: '排队任务',
+                                        value: formatCount(stats.queued),
+                                      ),
+                                      _SettingsStatLine(
+                                        label: '后台请求',
+                                        value: formatCount(
+                                            stats.pendingBackgroundRequests),
+                                      ),
+                                      _SettingsStatLine(
+                                        label: '平均耗时',
+                                        value: '${stats.averageMs} ms',
+                                      ),
+                                    ],
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
                         ),
                       ],
                     ],
-                  );
-                },
-              ),
-            ),
+                  ),
           ),
-        ],
+        ),
       ),
     );
   }

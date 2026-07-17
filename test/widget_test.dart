@@ -1766,6 +1766,41 @@ void main() {
         isNot(await paths.librarySortPreferencesFile()));
   });
 
+  testWidgets('settings landing page only shows grouped feature entries',
+      (tester) async {
+    final openedSections = <String>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsLandingList(
+            onOpenPlayback: () => openedSections.add('playback'),
+            onOpenPlayerInteraction: () => openedSections.add('interaction'),
+            onOpenDataBackup: () => openedSections.add('backup'),
+            onOpenCache: () => openedSections.add('cache'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('播放设置'), findsOneWidget);
+    expect(find.text('数据与维护'), findsOneWidget);
+    expect(find.byType(Switch), findsNothing);
+    expect(find.byType(Slider), findsNothing);
+    expect(find.byType(DropdownButtonFormField<dynamic>), findsNothing);
+
+    for (final entry in <(String, String)>[
+      ('settings.category.playback', 'playback'),
+      ('settings.category.playerInteraction', 'interaction'),
+      ('settings.category.dataBackup', 'backup'),
+      ('settings.category.cache', 'cache'),
+    ]) {
+      await tester.tap(find.byKey(ValueKey(entry.$1)));
+      await tester.pump();
+      expect(openedSections.last, entry.$2);
+    }
+  });
+
   testWidgets('playback decoder dropdown only changes after confirmation',
       (tester) async {
     PlaybackSettings? savedSettings;
