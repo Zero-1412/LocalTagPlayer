@@ -1127,6 +1127,38 @@ void main() {
     expect(find.text('媒体库'), findsOneWidget);
   });
 
+  testWidgets('compact sort menu opens below its trigger without covering it',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(452, 500);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        layoutSize: LayoutSize.medium,
+        videoCount: 171,
+        selectedTags: const <String>['原神'],
+        onEnterSelectionMode: () {},
+      ),
+    );
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.topSortFieldButton));
+    await tester.pumpAndSettle();
+
+    final buttonRect =
+        tester.getRect(find.byKey(LibrarySmokeKeys.topSortFieldButton));
+    final firstItemRect = tester.getRect(
+      find.byKey(LibrarySmokeKeys.topSortMenuItem(SortMode.name)),
+    );
+    expect(firstItemRect.top, greaterThanOrEqualTo(buttonRect.bottom + 6));
+    expect(tester.takeException(), isNull);
+  });
+
   test('reference top bar collapses actions below expanded width', () {
     expect(LayoutBreakpoints.fromWidth(699), LayoutSize.compact);
     expect(LayoutBreakpoints.fromWidth(900), LayoutSize.medium);

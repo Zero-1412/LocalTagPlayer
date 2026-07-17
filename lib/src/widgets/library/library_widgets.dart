@@ -2871,6 +2871,9 @@ class _CompactTopSortControl extends StatelessWidget {
           onSelected: onChanged,
           color: librarySurface,
           initialValue: sortMode,
+          // 强制从按钮下方展开，避免默认行为把当前选中项对齐到按钮并遮挡触发入口。
+          position: PopupMenuPosition.under,
+          offset: const Offset(0, 6),
           itemBuilder: (context) => [
             for (final mode in SortMode.values)
               PopupMenuItem<SortMode>(
