@@ -3767,6 +3767,29 @@ class _LibraryPageState extends State<LibraryPage> {
                   width: _isTagDiscoveryPanelOpen
                       ? layoutSlots.filterPanelWidth
                       : collapsedFilterWidth,
+                  // 折叠轨道用强调描边标识可展开状态，边缘阴影随宽度动画连续过渡。
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: _isTagDiscoveryPanelOpen
+                            ? libraryBorder
+                            : appAccentViolet.withAlpha(150),
+                        width: _isTagDiscoveryPanelOpen ? 1 : 2,
+                      ),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(
+                          _isTagDiscoveryPanelOpen ? 72 : 34,
+                        ),
+                        blurRadius: _isTagDiscoveryPanelOpen ? 22 : 10,
+                        offset: Offset(
+                          _isTagDiscoveryPanelOpen ? -7 : -3,
+                          0,
+                        ),
+                      ),
+                    ],
+                  ),
                   child: ClipRect(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
@@ -3789,18 +3812,11 @@ class _LibraryPageState extends State<LibraryPage> {
                           transitionBuilder: (child, animation) {
                             final enteringPanel =
                                 child.key == const ValueKey<bool>(true);
-                            return FadeTransition(
-                              opacity: animation,
-                              child: SlideTransition(
-                                position: Tween<Offset>(
-                                  begin: Offset(
-                                    enteringPanel ? 0.06 : 0.32,
-                                    0,
-                                  ),
-                                  end: Offset.zero,
-                                ).animate(animation),
-                                child: child,
-                              ),
+                            return LibraryPanelContentTransition(
+                              animation: animation,
+                              horizontalOffset: enteringPanel ? 0.14 : 0.55,
+                              alignment: Alignment.centerRight,
+                              child: child,
                             );
                           },
                           child: OverflowBox(

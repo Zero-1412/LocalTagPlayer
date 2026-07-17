@@ -356,6 +356,55 @@ List<TagItem> secondaryTagsForDiscovery(
   return tags;
 }
 
+/**
+ * 左右侧栏共用的内容进入与离开动画。
+ *
+ * 宽度变化由外层布局负责；这里只组合淡入、横向位移和轻微缩放，让面板状态切换
+ * 更容易被感知，同时保持子树身份和业务状态不变。
+ */
+class LibraryPanelContentTransition extends StatelessWidget {
+  const LibraryPanelContentTransition({
+    super.key,
+    required this.animation,
+    required this.horizontalOffset,
+    required this.alignment,
+    required this.child,
+  });
+
+  /** AnimatedSwitcher 提供的进入或离开进度。 */
+  final Animation<double> animation;
+
+  /** 内容起始位置相对自身宽度的横向偏移。 */
+  final double horizontalOffset;
+
+  /** 缩放锚点；左栏固定左侧，右栏固定右侧。 */
+  final Alignment alignment;
+
+  /** 不参与额外重建的侧栏内容。 */
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final motion = animation.drive(
+      CurveTween(curve: Curves.easeOutCubic),
+    );
+    return FadeTransition(
+      opacity: motion,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: Offset(horizontalOffset, 0),
+          end: Offset.zero,
+        ).animate(motion),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.965, end: 1).animate(motion),
+          alignment: alignment,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 class LibrarySidebar extends StatelessWidget {
   const LibrarySidebar({
     required this.roots,
@@ -448,11 +497,28 @@ class LibrarySidebar extends StatelessWidget {
       curve: libraryPanelMotionCurve,
       width: sidebarWidth,
       height: MediaQuery.sizeOf(context).height,
+      // 描边留在侧栏自身范围内，阴影只在低频开合动画中增强移动边缘，不触发内容重建。
+      decoration: BoxDecoration(
+        border: Border(
+          right: BorderSide(
+            color: collapsed
+                ? appAccentViolet.withAlpha(150)
+                : const Color(0xff263244),
+            width: collapsed ? 2 : 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(collapsed ? 34 : 72),
+            blurRadius: collapsed ? 10 : 22,
+            offset: Offset(collapsed ? 3 : 7, 0),
+          ),
+        ],
+      ),
       child: ClipRect(
         child: DecoratedBox(
           decoration: const BoxDecoration(
             color: appShell,
-            border: Border(right: BorderSide(color: Color(0xff263244))),
           ),
           child: SafeArea(
             child: LayoutBuilder(
@@ -733,18 +799,11 @@ class LibrarySidebar extends StatelessWidget {
                   transitionBuilder: (child, animation) {
                     final enteringCollapsed =
                         child.key == const ValueKey<bool>(true);
-                    return FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: Offset(
-                            enteringCollapsed ? -0.12 : -0.05,
-                            0,
-                          ),
-                          end: Offset.zero,
-                        ).animate(animation),
-                        child: child,
-                      ),
+                    return LibraryPanelContentTransition(
+                      animation: animation,
+                      horizontalOffset: enteringCollapsed ? -0.28 : -0.14,
+                      alignment: Alignment.centerLeft,
+                      child: child,
                     );
                   },
                   child: OverflowBox(

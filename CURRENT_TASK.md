@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.45` 已完成。
+架构版本状态：`Architecture Baseline 0.5.46` 已完成。
 
 最近一次验证：
 
@@ -14,9 +14,13 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 165 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 166 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 主界面左右侧栏结构动画由 260ms 增强为 320ms，内容统一组合更明显的横向位移、淡入和轻微缩放；移动边缘同步过渡描边与阴影，展开/折叠的层次感更清晰。
+- 动画仍复用现有 `AnimatedContainer` / `AnimatedSwitcher`，没有新增 Controller 或业务重算；窗口大小不变时网格继续保持三列，筛选、滚动、缩略图和播放队列均不受影响。
+- 新增侧栏组合动画 focused widget；完整 166 项测试通过，3 项显式 benchmark 跳过，`dart format`、`flutter analyze` 和 Windows debug build 通过。最新 Debug 窗口完成左右栏往返开合及左栏动画中快速反向截图，未见裁切、闪白、溢出或状态跳变。
 
 - 设置首页按“播放设置 / 数据与维护”分组，只显示播放与解码、播放器交互、视频数据备份、缩略图缓存四个功能入口；所有开关、滑杆、下拉框和统计信息移入各自二级页。
 - 二级页使用独立标题和返回入口，系统返回键优先回到设置首页；缩略图统计刷新只在缓存二级页显示。原设置状态、保存回调、解码确认、备份维护和播放器行为均未改变。

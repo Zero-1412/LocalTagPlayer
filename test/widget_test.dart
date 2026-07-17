@@ -950,6 +950,53 @@ void main() {
     expect(find.byType(LocalTagPlayerApp), findsOneWidget);
   });
 
+  testWidgets('library panel motion combines visible slide fade and scale',
+      (WidgetTester tester) async {
+    const motionKey = ValueKey('test.libraryPanelMotion');
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: LibraryPanelContentTransition(
+          key: motionKey,
+          animation: AlwaysStoppedAnimation<double>(0),
+          horizontalOffset: 0.28,
+          alignment: Alignment.centerRight,
+          child: SizedBox(width: 200, height: 300),
+        ),
+      ),
+    );
+
+    final motion = find.byKey(motionKey);
+    expect(
+      tester
+          .widget<SlideTransition>(
+            find.descendant(of: motion, matching: find.byType(SlideTransition)),
+          )
+          .position
+          .value,
+      const Offset(0.28, 0),
+    );
+    expect(
+      tester
+          .widget<ScaleTransition>(
+            find.descendant(of: motion, matching: find.byType(ScaleTransition)),
+          )
+          .scale
+          .value,
+      closeTo(0.965, 0.0001),
+    );
+    expect(
+      tester
+          .widget<FadeTransition>(
+            find.descendant(of: motion, matching: find.byType(FadeTransition)),
+          )
+          .opacity
+          .value,
+      0,
+    );
+    expect(libraryPanelMotionDuration, const Duration(milliseconds: 320));
+  });
+
   testWidgets('library sidebar collapses to icons and keeps actions reachable',
       (WidgetTester tester) async {
     var pickFolderCount = 0;
@@ -1042,6 +1089,14 @@ void main() {
     expect(pickFolderCount, 1);
 
     await tester.tap(find.byKey(LibrarySmokeKeys.sidebarCollapseToggle));
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(
+      find.descendant(
+        of: find.byKey(LibrarySmokeKeys.sidebarSurface),
+        matching: find.byType(LibraryPanelContentTransition),
+      ),
+      findsWidgets,
+    );
     await tester.pumpAndSettle();
     expect(find.text('媒体库'), findsNothing);
     expect(find.text('标签中心'), findsNothing);

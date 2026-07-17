@@ -54,10 +54,10 @@ const appMotionCurve = Curves.easeOutCubic;
 /**
  * 媒体库左右侧栏的结构动画时长。
  *
- * 侧栏会改变中央结果区宽度，使用比按钮反馈更完整的过渡时间，让面板移动和结果区
- * 稳定缓冲能够衔接；该常量不影响筛选、播放或缩略图后台任务。
+ * 侧栏会改变中央结果区宽度，使用比按钮反馈更完整的过渡时间，让宽度、内容位移和
+ * 边缘阴影形成可感知的结构变化；该常量不影响筛选、播放或缩略图后台任务。
  */
-const libraryPanelMotionDuration = Duration(milliseconds: 260);
+const libraryPanelMotionDuration = Duration(milliseconds: 320);
 
 /** 侧栏结构动画使用双向平滑曲线，展开和收起都避免末段突然停住。 */
 const libraryPanelMotionCurve = Curves.easeInOutCubic;
