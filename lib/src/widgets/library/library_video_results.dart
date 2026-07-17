@@ -564,6 +564,7 @@ class VideoGrid extends StatefulWidget {
     required this.thumbnailService,
     required this.playbackSettings,
     required this.dense,
+    this.columnReferenceWidth,
     this.onVisible,
     required this.onOpen,
     required this.onEditTags,
@@ -581,6 +582,14 @@ class VideoGrid extends StatefulWidget {
   final PlaybackSettings playbackSettings;
 
   final bool dense;
+
+  /**
+   * 只用于确定响应式列数的稳定宽度。
+   *
+   * 页面传入扣除默认侧栏占位后的窗口基准宽度，使窗口尺寸不变时左右侧栏开合只改变
+   * 卡片尺寸，不增加或减少列数；为空时独立测试和复用场景继续使用结果区实际宽度。
+   */
+  final double? columnReferenceWidth;
 
   /** 实际构建到视口附近时通知页面提升媒体详情任务，不在 build 中做磁盘访问。 */
   final ValueChanged<VideoItem>? onVisible;
@@ -628,18 +637,13 @@ class _VideoGridState extends State<VideoGrid> {
   var _indexedItemCount = -1;
   Map<String, int> _visibleIndexByVideoId = const <String, int>{};
 
-  /**
-   * 最近一次用于确定响应式断点和列数的稳定视口宽度。
-   *
-   * 左右侧栏动画期间真实约束会逐帧变化；网格继续使用该宽度锁定列数、间距档位和
-   * 字号档位，但卡片几何仍按当前可用宽度连续变化。
-   */
+  /** 最近一次用于确定响应式断点和列数的稳定窗口基准宽度。 */
   double? _settledViewportWidth;
 
-  /** 侧栏或窗口当前正在趋近的最新结果区宽度。 */
+  /** 拖动窗口时当前正在趋近的最新列数基准宽度。 */
   double? _pendingViewportWidth;
 
-  /** 宽度停止变化后提交唯一一次网格重排。 */
+  /** 窗口宽度停止变化后提交唯一一次网格重排。 */
   Timer? _viewportResizeTimer;
 
   /**
@@ -768,10 +772,10 @@ class _VideoGridState extends State<VideoGrid> {
   }
 
   /**
-   * 记录最新结果区宽度，并在约束稳定后只提交一次重排。
+   * 记录最新窗口基准宽度，并在约束稳定后只提交一次重排。
    *
-   * 连续侧栏动画或拖动窗口会反复覆盖目标并重启计时；动画期间卡片连续缩放但不换列，
-   * 最终提交才更新响应式断点。视频顺序、滚动控制器和缩略图 Future 均保持不变。
+   * 拖动窗口会反复覆盖目标并重启计时，最终提交才更新响应式断点。侧栏动画不会改变
+   * 该基准，因此只缩放卡片而不换列；视频顺序、滚动控制器和缩略图 Future 均保持不变。
    */
   double _stableViewportWidth(double measuredWidth) {
     final normalizedWidth =
@@ -809,8 +813,9 @@ class _VideoGridState extends State<VideoGrid> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final measuredWidth = constraints.maxWidth;
-        final stableWidth = _stableViewportWidth(measuredWidth);
-        final resizing = (measuredWidth - stableWidth).abs() > 0.5;
+        final referenceWidth = widget.columnReferenceWidth ?? measuredWidth;
+        final stableWidth = _stableViewportWidth(referenceWidth);
+        final resizing = (referenceWidth - stableWidth).abs() > 0.5;
         final compact = stableWidth < LayoutBreakpoints.compactMaxWidth;
         final narrow = stableWidth < 560;
         final crossAxisSpacing = libraryVideoGridCrossAxisSpacing(

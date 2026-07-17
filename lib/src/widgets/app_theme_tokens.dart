@@ -63,10 +63,9 @@ const libraryPanelMotionDuration = Duration(milliseconds: 260);
 const libraryPanelMotionCurve = Curves.easeInOutCubic;
 
 /**
- * 结果区等待侧栏或窗口宽度稳定后再提交卡片重排的时间。
+ * 结果区等待窗口宽度稳定后再提交卡片重排的时间。
  *
- * 连续动画帧会反复重启该短等待；侧栏停止后再留出少量缓冲，避免最后一帧约束抖动
- * 触发第二次网格换列，同时不让最终布局显得迟滞。
+ * 连续窗口缩放帧会反复重启该短等待；侧栏使用独立的列数基准，不会触发换列。
  */
 const libraryResultsResizeSettleDuration = Duration(milliseconds: 100);
 const libraryThumbnailWidth = 384;

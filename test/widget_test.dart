@@ -830,7 +830,7 @@ void main() {
     expect(visibleCalls[retained.videoId], 1);
   });
 
-  testWidgets('library grid keeps columns stable while sidebar width animates',
+  testWidgets('library grid keeps columns stable after sidebar width settles',
       (WidgetTester tester) async {
     final directory = Directory(
       p.join(
@@ -874,6 +874,7 @@ void main() {
                   thumbnailService: thumbnailService,
                   playbackSettings: PlaybackSettings.defaults,
                   dense: false,
+                  columnReferenceWidth: 900,
                   onOpen: (_, __) {},
                   onEditTags: (_) {},
                   onToggleFavorite: (_) {},
@@ -902,8 +903,8 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 60));
     expect(tester.getSize(resultsFinder).width, closeTo(1200, 0.01));
-    // 约束稳定后才跨过断点并单次切换为四列。
-    expect(gridDelegate().crossAxisCount, 4);
+    // 窗口基准宽度没有变化时，侧栏动画结束后也不能跨断点增加列数。
+    expect(gridDelegate().crossAxisCount, 3);
     expect(tester.takeException(), isNull);
   });
 

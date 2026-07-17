@@ -3278,6 +3278,7 @@ class _LibraryPageState extends State<LibraryPage> {
     Widget buildMain(
       LayoutSize layoutSize, {
       Widget? topBar,
+      required double gridColumnReferenceWidth,
     }) {
       return Column(
         children: [
@@ -3350,6 +3351,7 @@ class _LibraryPageState extends State<LibraryPage> {
                           thumbnailService: thumbnailService,
                           playbackSettings: _playbackSettings,
                           dense: _denseResultGrid,
+                          columnReferenceWidth: gridColumnReferenceWidth,
                           onVisible: _prioritizeVisibleLibraryItem,
                           onOpen: _openVideo,
                           onEditTags: _editTags,
@@ -3458,7 +3460,10 @@ class _LibraryPageState extends State<LibraryPage> {
       );
     }
 
-    Widget buildExpandedContent(MainLibraryLayoutSlots layoutSlots) {
+    Widget buildExpandedContent(
+      MainLibraryLayoutSlots layoutSlots, {
+      required double gridColumnReferenceWidth,
+    }) {
       final collapsedFilterWidth = collapsedTagDiscoveryRailLayoutWidth;
       return Column(
         children: [
@@ -3469,6 +3474,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 Expanded(
                   child: buildMain(
                     LayoutSize.expanded,
+                    gridColumnReferenceWidth: gridColumnReferenceWidth,
                   ),
                 ),
                 AnimatedContainer(
@@ -3574,6 +3580,20 @@ class _LibraryPageState extends State<LibraryPage> {
                   final showMainSidebar = layoutSize != LayoutSize.compact;
                   final expandedSlots =
                       mainLibraryLayoutSlotsForWidth(constraints.maxWidth);
+                  // 列数使用默认侧栏占位后的窗口基准宽度。左右侧栏开合不会改变该值，
+                  // 因此只会让结果区里的卡片缩放；只有窗口尺寸改变才可能跨越列数断点。
+                  final gridColumnReferenceWidth = math
+                      .max(
+                        1.0,
+                        switch (layoutSize) {
+                          LayoutSize.compact => constraints.maxWidth,
+                          LayoutSize.medium => constraints.maxWidth - 248,
+                          LayoutSize.expanded => constraints.maxWidth -
+                              expandedSlots.sidebarWidth -
+                              collapsedTagDiscoveryRailLayoutWidth,
+                        },
+                      )
+                      .toDouble();
                   return Row(
                     children: [
                       if (showMainSidebar)
@@ -3587,10 +3607,16 @@ class _LibraryPageState extends State<LibraryPage> {
                         ),
                       Expanded(
                         child: layoutSize == LayoutSize.expanded
-                            ? buildExpandedContent(expandedSlots)
+                            ? buildExpandedContent(
+                                expandedSlots,
+                                gridColumnReferenceWidth:
+                                    gridColumnReferenceWidth,
+                              )
                             : buildMain(
                                 layoutSize,
                                 topBar: buildTopBar(layoutSize),
+                                gridColumnReferenceWidth:
+                                    gridColumnReferenceWidth,
                               ),
                       ),
                     ],
