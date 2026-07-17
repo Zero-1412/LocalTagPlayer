@@ -14,9 +14,13 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 156 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 157 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 右侧标签筛选面板移除标题栏末端的独立收起箭头；展开状态改为点击“筛选图标 + 标签筛选”标题区域收起，折叠窄条继续承担展开动作，统一为标题语义入口。
+- 标题入口保留 48px 命中高度、tooltip、键盘焦点和辅助技术按钮语义；focused widget 覆盖标题回调与箭头不存在，1249×714 真实窗口完成“窄条展开 → 标题收起 → 窄条再次展开”点击截图。
+- 完整 157 项测试通过，3 项显式 benchmark 跳过；`dart format`、`flutter analyze` 和 Windows debug build 通过，新 Debug EXE 已通过 `computer-use` 真实点击验证。
 
 - 媒体库网格列数改为使用“窗口宽度扣除默认侧栏占位”的稳定基准：窗口大小不变时，左右侧栏展开/折叠只让现有视频卡片随结果区宽度缩放，不再在动画结束后增加或减少列数；拖动窗口仍可在稳定后跨越响应式断点。
 - focused widget 覆盖侧栏宽度变化结束后仍保持三列；1268×714 真实窗口完成“左展开/右收起、左收起/右收起、左收起/右展开、左展开/右展开”四种组合点击与截图，均保持三列且无横向溢出或遮挡。

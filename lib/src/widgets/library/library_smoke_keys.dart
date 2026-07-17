@@ -26,6 +26,9 @@ class LibrarySmokeKeys {
       ValueKey<String>('smoke.tag.more-secondary-tags');
   static const listActionState = ValueKey<String>('smoke.list.action-state');
   static const collapsedTagRail = ValueKey<String>('smoke.tag.collapsed-rail');
+  /** 展开状态下通过“标签筛选”标题收起右侧面板的入口。 */
+  static const tagPanelCollapseHeader =
+      ValueKey<String>('smoke.tag.panel-collapse-header');
   /** 主功能栏展开/折叠入口。 */
   static const sidebarCollapseToggle =
       ValueKey<String>('smoke.sidebar.collapse-toggle');

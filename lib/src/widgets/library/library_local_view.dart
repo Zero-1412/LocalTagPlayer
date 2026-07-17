@@ -411,6 +411,7 @@ class TagDiscoverySmokeHarness extends StatefulWidget {
   const TagDiscoverySmokeHarness({
     super.key,
     required this.childCount,
+    this.onCollapse,
   });
 
   /**
@@ -419,6 +420,9 @@ class TagDiscoverySmokeHarness extends StatefulWidget {
    * 数量大于 9 时可覆盖右侧面板的“展开全部 / 收起”交互路径。
    */
   final int childCount;
+
+  /** 测试展开面板标题的收起动作；为空时保持原纯内容 smoke。 */
+  final VoidCallback? onCollapse;
 
   @override
   State<TagDiscoverySmokeHarness> createState() =>
@@ -553,6 +557,7 @@ class _TagDiscoverySmokeHarnessState extends State<TagDiscoverySmokeHarness> {
                   onGroupTagToggle: _toggleSecondaryTag,
                   onFolderPrimaryChildSelected: _selectPrimaryChild,
                   onGroupTagExcludeToggle: (_) {},
+                  onCollapse: widget.onCollapse,
                 ),
               ),
             ],

@@ -3043,6 +3043,27 @@ void main() {
     expect(expanded, isTrue);
   });
 
+  testWidgets('expanded tag panel collapses from its title without an arrow',
+      (tester) async {
+    var collapsed = false;
+    await tester.pumpWidget(
+      TagDiscoverySmokeHarness(
+        childCount: 12,
+        onCollapse: () => collapsed = true,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final titleAction = find.byKey(LibrarySmokeKeys.tagPanelCollapseHeader);
+    expect(titleAction, findsOneWidget);
+    expect(find.byTooltip('收起标签筛选'), findsOneWidget);
+    expect(find.byIcon(Icons.keyboard_arrow_up_rounded), findsNothing);
+
+    await tester.tap(titleAction);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(collapsed, isTrue);
+  });
+
   testWidgets('top search field accepts keyboard input', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);

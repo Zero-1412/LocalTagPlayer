@@ -14,6 +14,75 @@ enum _TagDiscoveryMode { primary, secondary }
 
 enum _PrimaryTagSortMode { countDesc, nameAsc, frequentDesc }
 
+/**
+ * 右侧标签面板标题。
+ *
+ * expanded 布局传入 [onCollapse] 后，筛选图标和标题文字共同承担收起动作；不再额外
+ * 放置容易误解的独立箭头。dense 弹层不传回调时保持纯标题展示。
+ */
+class _TagDiscoveryPanelHeader extends StatelessWidget {
+  const _TagDiscoveryPanelHeader({this.onCollapse});
+
+  /** 收起右侧标签面板；为空时标题不创建点击语义。 */
+  final VoidCallback? onCollapse;
+
+  @override
+  Widget build(BuildContext context) {
+    const headerContent = Padding(
+      // 48px 高命中区域替代原箭头按钮，桌面鼠标和键盘焦点都容易定位。
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.filter_alt_outlined,
+            color: appAccentViolet,
+            size: 24,
+          ),
+          SizedBox(width: 12),
+          Text(
+            '\u6807\u7b7e\u7b5b\u9009',
+            style: TextStyle(
+              color: libraryText,
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+    final collapse = onCollapse;
+    if (collapse == null) {
+      return const Align(
+        alignment: Alignment.centerLeft,
+        child: headerContent,
+      );
+    }
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Tooltip(
+        message: '\u6536\u8d77\u6807\u7b7e\u7b5b\u9009',
+        excludeFromSemantics: true,
+        child: Semantics(
+          button: true,
+          label: '\u6536\u8d77\u6807\u7b7e\u7b5b\u9009',
+          excludeSemantics: true,
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              key: LibrarySmokeKeys.tagPanelCollapseHeader,
+              borderRadius: BorderRadius.circular(10),
+              onTap: collapse,
+              child: headerContent,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class TagDiscoveryZone extends StatefulWidget {
   const TagDiscoveryZone({
     required this.tagGroups,
@@ -144,29 +213,7 @@ class TagDiscoveryZoneState extends State<TagDiscoveryZone> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.filter_alt_outlined,
-                  color: appAccentViolet, size: 24),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  '\u6807\u7b7e\u7b5b\u9009',
-                  style: TextStyle(
-                    color: libraryText,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              if (widget.onCollapse != null)
-                IconButton(
-                  tooltip: '\u6536\u8d77\u6807\u7b7e\u7b5b\u9009',
-                  onPressed: widget.onCollapse,
-                  icon: const Icon(Icons.keyboard_arrow_up_rounded),
-                ),
-            ],
-          ),
+          _TagDiscoveryPanelHeader(onCollapse: widget.onCollapse),
           const SizedBox(height: 18),
           Container(
             height: 44,
