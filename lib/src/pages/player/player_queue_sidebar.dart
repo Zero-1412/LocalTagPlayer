@@ -1218,6 +1218,9 @@ class _QueueListItemState extends State<_QueueListItem>
               onTap: widget.onTap,
               onDoubleTap: widget.onDoubleTap,
               child: AnimatedContainer(
+                key: ValueKey(
+                  'player.queue.card.${widget.item.videoId}',
+                ),
                 duration: const Duration(milliseconds: 120),
                 curve: appMotionCurve,
                 padding: const EdgeInsets.all(7),
@@ -1438,20 +1441,18 @@ class _QueueListItemState extends State<_QueueListItem>
         alignment: Alignment.centerRight,
         child: SizedBox(
           width: _actionRevealWidth,
+          height: double.infinity,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 9, 6, 9),
+            // 操作面板与前景卡片共享 Stack 的完整高度，只保留横向呼吸空间。
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             child: DecoratedBox(
+              key: ValueKey(
+                'player.queue.actionPanel.${widget.item.videoId}',
+              ),
               decoration: BoxDecoration(
                 color: const Color(0xff171f30),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xff2c3850)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x33000000),
-                    blurRadius: 10,
-                    offset: Offset(0, 3),
-                  ),
-                ],
               ),
               child: Padding(
                 padding: const EdgeInsets.all(4),
@@ -1461,9 +1462,12 @@ class _QueueListItemState extends State<_QueueListItem>
                       child: Tooltip(
                         message: widget.item.isFavorite ? '取消收藏' : '收藏',
                         child: Material(
-                          color: widget.item.isFavorite
-                              ? const Color(0x2eff6174)
-                              : Colors.transparent,
+                          key: ValueKey(
+                            'player.queue.favoriteActionSurface.'
+                            '${widget.item.videoId}',
+                          ),
+                          // 红心本身已明确表达收藏状态，不再叠加发光式色块。
+                          color: Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                           child: InkWell(
                             key: ValueKey(

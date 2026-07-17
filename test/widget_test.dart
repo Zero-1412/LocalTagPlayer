@@ -58,6 +58,21 @@ class _PreviewFFmpegBackend implements FFmpegBackend {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/** 队列布局测试不执行媒体探测，只提供可安全释放的平台边界。 */
+class _NoopMediaProbeBackend implements MediaProbeBackend {
+  /** 测试结束时接受代次取消，不保留任何后台状态。 */
+  @override
+  Future<void> cancelGeneration(int generationId) async {}
+
+  /** 缺失队列项不会发起探测；若误调用也返回安全空结果。 */
+  @override
+  Future<List<MediaProbeResult>> probeBatch({
+    required int generationId,
+    required List<MediaProbeRequest> requests,
+  }) async =>
+      const <MediaProbeResult>[];
+}
+
 /** 记录全局播放偏好是否真实送入后端，不启动 media_kit 或桌面纹理。 */
 class _PreferenceRecordingPlayerBackend implements PlayerBackend {
   final properties = <String, String>{};
@@ -2422,6 +2437,95 @@ void main() {
       ),
       isFalse,
     );
+  });
+
+  testWidgets(
+      'player queue action panel matches card height without heart glow',
+      (tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_queue_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    final item = VideoItem(
+      videoId: 'queue-layout-item',
+      path: p.join(directory.path, 'missing.mp4'),
+      title: 'queue layout item',
+      folder: directory.path,
+      tags: const <String>{},
+      addedAt: DateTime.utc(2026, 7, 17),
+      isFavorite: true,
+      isMissing: true,
+    );
+    final scrollController = ScrollController();
+    final detailsService = MediaDetailsService(
+      probeBackend: _NoopMediaProbeBackend(),
+    );
+    addTearDown(() {
+      scrollController.dispose();
+      detailsService.dispose();
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+
+    await tester.binding.setSurfaceSize(const Size(460, 360));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            child: PlayerQueueSidebar(
+              playlist: <VideoItem>[item],
+              sourcePlaylist: <VideoItem>[item],
+              playingIndex: 0,
+              selectedIndex: 0,
+              scrollController: scrollController,
+              thumbnailService: ThumbnailService.forDirectory(
+                directory,
+                _PreviewFFmpegBackend(),
+              ),
+              detailsService: detailsService,
+              activeTags: const <String>[],
+              selectedChildTag: null,
+              onChildTagSelected: (_) {},
+              onSelect: (_) {},
+              onPlay: (_) {},
+              onReturnToPlaying: () {},
+              onLocateSelected: () {},
+              onDeleteSelected: null,
+              onToggleFavorite: (_) {},
+              onDeleteItem: (_) {},
+              onSearchQueue: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final card =
+        find.byKey(const ValueKey('player.queue.card.queue-layout-item'));
+    final actionPanel = find.byKey(
+      const ValueKey('player.queue.actionPanel.queue-layout-item'),
+    );
+    final favoriteSurface = tester.widget<Material>(
+      find.byKey(
+        const ValueKey(
+          'player.queue.favoriteActionSurface.queue-layout-item',
+        ),
+      ),
+    );
+    final actionDecoration =
+        tester.widget<DecoratedBox>(actionPanel).decoration as BoxDecoration;
+    expect(card, findsOneWidget);
+    expect(actionPanel, findsOneWidget);
+    expect(tester.getSize(actionPanel).height, tester.getSize(card).height);
+    expect(actionDecoration.boxShadow, isNull);
+    expect(favoriteSurface.color, Colors.transparent);
   });
 
   test('player open request controller keeps latest request after failure', () {

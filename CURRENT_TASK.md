@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.41` 已完成。
+架构版本状态：`Architecture Baseline 0.5.42` 已完成。
 
 最近一次验证：
 
@@ -14,9 +14,13 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 157 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 158 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 播放器队列左滑操作面板改为占满前景卡片的完整高度，不再由图标内容和上下内边距形成更矮的独立胶囊；收藏按钮去除半透明粉色底与操作面板投影，只保留红色心形状态。
+- focused widget 直接断言卡片与操作面板实际像素高度一致，并验证收藏按钮表面透明；真实 Debug 窗口完成进入播放器、选中收藏队列项与基础布局截图，自动化拖拽未能让隐藏层保持展开，展开态由像素断言覆盖并保留人工左滑复核路径。
+- 完整 158 项测试通过，3 项显式 benchmark 跳过；`dart format`、`flutter analyze` 和 Windows debug build 通过。
 
 - 右侧标签筛选面板移除标题栏末端的独立收起箭头；展开状态改为点击“筛选图标 + 标签筛选”标题区域收起，折叠窄条继续承担展开动作，统一为标题语义入口。
 - 标题入口保留 48px 命中高度、tooltip、键盘焦点和辅助技术按钮语义；focused widget 覆盖标题回调与箭头不存在，1249×714 真实窗口完成“窄条展开 → 标题收起 → 窄条再次展开”点击截图。
