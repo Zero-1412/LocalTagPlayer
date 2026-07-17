@@ -32,7 +32,7 @@ typedef MediaDetailsBatchUpdatedCallback = Future<void> Function(
   List<MediaDetailsUpdate> updates,
 );
 
-/** 从应用私有路径读取媒体库排序偏好；损坏文件安全回退默认值。 */
+/** 从应用私有路径读取媒体库排序与视图偏好；损坏文件安全回退默认值。 */
 Future<LibrarySortPreferences> loadLibrarySortPreferences(
   AppPaths paths,
 ) async {
@@ -47,7 +47,7 @@ Future<LibrarySortPreferences> loadLibrarySortPreferences(
   }
 }
 
-/** 把媒体库排序偏好保存到独立设置文件，不写入 SQLite。 */
+/** 把媒体库排序与视图偏好保存到独立设置文件，不写入 SQLite。 */
 Future<void> saveLibrarySortPreferences(
   AppPaths paths,
   LibrarySortPreferences preferences,
@@ -75,7 +75,7 @@ class LibraryPageStartupData {
   /** 已从应用私有路径恢复的播放设置。 */
   final PlaybackSettings playbackSettings;
 
-  /** 已从应用私有路径恢复的排序偏好。 */
+  /** 已从应用私有路径恢复的排序与网格/列表偏好。 */
   final LibrarySortPreferences sortPreferences;
 
   /** 独立视频依赖备份设置。 */
@@ -98,7 +98,7 @@ abstract interface class LibraryPageApplicationService {
   /** 保存视频依赖备份开关，不向页面暴露实际文件路径。 */
   Future<void> saveDataBackupSettings(DataBackupSettings settings);
 
-  /** 保存排序偏好，不向页面暴露实际文件路径。 */
+  /** 保存排序与网格/列表偏好，不向页面暴露实际文件路径。 */
   Future<void> saveSortPreferences(LibrarySortPreferences preferences);
 
   /** 为单次扫描或播放前预检创建独占 generation 的媒体详情服务。 */

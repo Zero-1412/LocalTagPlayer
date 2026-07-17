@@ -570,11 +570,15 @@ enum _SettingsSection {
 class SettingsLandingList extends StatelessWidget {
   const SettingsLandingList({
     super.key,
+    required this.resumeBehavior,
     required this.onOpenPlayback,
     required this.onOpenPlayerInteraction,
     required this.onOpenDataBackup,
     required this.onOpenCache,
   });
+
+  /** 首页直接展示的继续观看策略，避免用户必须先进入二级页才能发现当前行为。 */
+  final PlaybackResumeBehavior resumeBehavior;
 
   /** 打开播放与解码二级页。 */
   final VoidCallback onOpenPlayback;
@@ -604,8 +608,10 @@ class SettingsLandingList extends StatelessWidget {
               _SettingsNavigationTile(
                 key: const ValueKey('settings.category.playback'),
                 icon: Icons.play_circle_outline_rounded,
-                title: '播放与解码',
-                subtitle: '解码策略、继续观看行为',
+                title: '播放与继续观看',
+                subtitle:
+                    '当前策略：${PlaybackSettings.resumeLabelFor(resumeBehavior)} · 解码设置',
+                statusLabel: PlaybackSettings.resumeLabelFor(resumeBehavior),
                 onTap: onOpenPlayback,
               ),
               const Divider(height: 1),
@@ -662,7 +668,7 @@ class _SettingsGroupTitle extends StatelessWidget {
     return Text(
       title,
       style: const TextStyle(
-        color: appTextMuted,
+        color: libraryTextMuted,
         fontSize: 13,
         fontWeight: FontWeight.w700,
       ),
@@ -678,6 +684,7 @@ class _SettingsNavigationTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.statusLabel,
   });
 
   /** 功能类型图标。 */
@@ -689,6 +696,9 @@ class _SettingsNavigationTile extends StatelessWidget {
   /** 功能范围摘要。 */
   final String subtitle;
 
+  /** 需要在设置首屏直接暴露的关键当前状态；普通入口保持为空。 */
+  final String? statusLabel;
+
   /** 点击后进入对应二级页。 */
   final VoidCallback onTap;
 
@@ -697,13 +707,26 @@ class _SettingsNavigationTile extends StatelessWidget {
     return ListTile(
       minVerticalPadding: 14,
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-      leading: Icon(icon, color: appAccent),
+      leading: Icon(icon, color: appAccentViolet),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 4),
-        child: Text(subtitle, style: const TextStyle(color: appTextMuted)),
+        child: Text(subtitle, style: const TextStyle(color: libraryTextMuted)),
       ),
-      trailing: const Icon(Icons.chevron_right_rounded, color: appTextMuted),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (statusLabel != null) ...[
+            Chip(
+              key: const ValueKey('settings.resumeBehavior.summary'),
+              label: Text(statusLabel!),
+              visualDensity: VisualDensity.compact,
+            ),
+            const SizedBox(width: 6),
+          ],
+          const Icon(Icons.chevron_right_rounded, color: libraryTextMuted),
+        ],
+      ),
       onTap: onTap,
     );
   }
@@ -717,6 +740,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   late DataBackupStatus _dataBackupStatus = widget.store.dataBackupStatus;
   StreamSubscription<DataBackupStatus>? _dataBackupSubscription;
   bool _backupMaintenanceRunning = false;
+  /** 缓存诊断动作串行执行，避免重试、清理与统计刷新互相覆盖。 */
+  bool _cacheActionRunning = false;
 
   late Future<CacheStats> _statsFuture =
       widget.thumbnailService.statsFor(widget.store.videos.values);
@@ -812,7 +837,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
               children: [
                 Text(
                   dataBackupIntegritySafetySummary(report),
-                  style: const TextStyle(color: appTextMuted, height: 1.5),
+                  style: const TextStyle(color: libraryTextMuted, height: 1.5),
                 ),
                 const SizedBox(height: 16),
                 _SettingsStatLine(
@@ -910,6 +935,88 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     });
   }
 
+  /** 定向重试当前统计快照中的失败项，并持久化已清理的旧失败标记。 */
+  Future<void> _retryFailedThumbnails(CacheStats stats) async {
+    if (_cacheActionRunning || stats.failures.isEmpty) {
+      return;
+    }
+    final items = stats.failures.map((failure) => failure.item).toList();
+    setState(() => _cacheActionRunning = true);
+    try {
+      final retried = await widget.thumbnailService.retryFailed(items);
+      final updated = items
+          .where((item) => item.thumbnailError == null)
+          .toList(growable: false);
+      if (updated.isNotEmpty) {
+        await widget.store.upsertVideos(updated);
+      }
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            retried == items.length
+                ? '已重新排队 $retried 个失败缩略图'
+                : '已重新排队 $retried 个；另有 ${items.length - retried} 个仍待处理',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('重试失败项时出错：$error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cacheActionRunning = false;
+          _statsFuture = widget.thumbnailService.statsFor(
+            widget.store.videos.values,
+          );
+        });
+      }
+    }
+  }
+
+  /** 清除当前失败标记但不删除视频或缓存文件，并通过 Repository 保存结果。 */
+  Future<void> _clearThumbnailFailureMarkers(CacheStats stats) async {
+    if (_cacheActionRunning || stats.failures.isEmpty) {
+      return;
+    }
+    final items = stats.failures.map((failure) => failure.item).toList();
+    setState(() => _cacheActionRunning = true);
+    try {
+      final cleared = widget.thumbnailService.clearFailures(items);
+      await widget.store.upsertVideos(items);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已清除 $cleared 条失败标记；视频和缓存文件未删除')),
+        );
+      }
+    } catch (error) {
+      // Repository 写入失败时恢复内存诊断原因，避免 UI 与持久化状态分裂。
+      for (final failure in stats.failures) {
+        failure.item.thumbnailError = failure.reason;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('清除失败标记时出错：$error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cacheActionRunning = false;
+          _statsFuture = widget.thumbnailService.statsFor(
+            widget.store.videos.values,
+          );
+        });
+      }
+    }
+  }
+
   /** 更新单个快捷键；发生冲突时交换两个功能的按键，保证绑定始终唯一。 */
   Future<void> _changeShortcut(
     PlayerShortcutAction action,
@@ -968,7 +1075,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   /** 当前层级的页面标题。 */
   String get _sectionTitle => switch (_section) {
         _SettingsSection.home => '设置',
-        _SettingsSection.playback => '播放与解码',
+        _SettingsSection.playback => '播放与继续观看',
         _SettingsSection.playerInteraction => '播放器交互',
         _SettingsSection.dataBackup => '视频数据备份',
         _SettingsSection.cache => '缩略图缓存',
@@ -986,6 +1093,14 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    return Theme(
+      data: maintenanceWorkspaceTheme(Theme.of(context)),
+      child: _buildSettingsWorkspace(context),
+    );
+  }
+
+  /** 构建已由深色维护主题包裹的设置内容，避免额外嵌套导致大范围无意义缩进。 */
+  Widget _buildSettingsWorkspace(BuildContext context) {
     return PopScope<void>(
       canPop: _section == _SettingsSection.home,
       onPopInvokedWithResult: (didPop, result) {
@@ -995,7 +1110,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
         }
       },
       child: Scaffold(
-        backgroundColor: appBackground,
+        backgroundColor: libraryBackground,
         appBar: AppBar(
           leading: _section == _SettingsSection.home
               ? null
@@ -1008,7 +1123,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
             if (_section == _SettingsSection.cache)
               TextButton.icon(
                 key: const ValueKey('settings.refreshCacheStats'),
-                style: TextButton.styleFrom(foregroundColor: appText),
+                style: TextButton.styleFrom(foregroundColor: libraryText),
                 onPressed: _refreshStats,
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('刷新统计'),
@@ -1022,6 +1137,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
             ),
             child: _section == _SettingsSection.home
                 ? SettingsLandingList(
+                    resumeBehavior: _settings.resumeBehavior,
                     onOpenPlayback: () =>
                         _openSection(_SettingsSection.playback),
                     onOpenPlayerInteraction: () =>
@@ -1041,10 +1157,57 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 const Text(
-                                  '\u64ad\u653e\u89e3\u7801',
+                                  '继续观看',
                                   style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  '打开有未完成进度的视频时，默认执行以下操作。',
+                                  style: TextStyle(color: libraryTextMuted),
+                                ),
+                                const SizedBox(height: 14),
+                                DropdownButtonFormField<PlaybackResumeBehavior>(
+                                  key:
+                                      const ValueKey('settings.resumeBehavior'),
+                                  initialValue: _settings.resumeBehavior,
+                                  decoration: const InputDecoration(
+                                    labelText: '默认打开行为',
+                                  ),
+                                  items: [
+                                    for (final behavior
+                                        in PlaybackResumeBehavior.values)
+                                      DropdownMenuItem(
+                                        value: behavior,
+                                        child: Text(
+                                          PlaybackSettings.resumeLabelFor(
+                                            behavior,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: (behavior) async {
+                                    if (behavior == null) {
+                                      return;
+                                    }
+                                    final next = _settings.copyWith(
+                                      resumeBehavior: behavior,
+                                    );
+                                    setState(() => _settings = next);
+                                    await widget
+                                        .onPlaybackSettingsChanged(next);
+                                  },
+                                ),
+                                const SizedBox(height: 22),
+                                const Divider(height: 1),
+                                const SizedBox(height: 20),
+                                const Text(
+                                  '播放解码',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                                 const SizedBox(height: 14),
                                 PlaybackDecoderDropdown(
@@ -1086,7 +1249,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                     padding: EdgeInsets.only(top: 6),
                                     child: Text(
                                       '独立备份稳定身份、收藏、播放状态和非文件夹标签，不复制视频文件。',
-                                      style: TextStyle(color: appTextMuted),
+                                      style: TextStyle(color: libraryTextMuted),
                                     ),
                                   ),
                                 ),
@@ -1094,7 +1257,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                 const Text(
                                   '移除媒体库目录时保留备份，重新添加可自动恢复；明确删除单个视频时会同步删除对应备份。应用重启后会继续未完成任务，播放期间自动暂停。',
                                   style: TextStyle(
-                                      color: appTextMuted, height: 1.5),
+                                      color: libraryTextMuted, height: 1.5),
                                 ),
                                 const SizedBox(height: 14),
                                 _SettingsStatLine(
@@ -1203,7 +1366,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                 const SizedBox(height: 6),
                                 const Text(
                                   '鼠标移到屏幕右侧边缘时展开，离开列表范围后自动隐藏。',
-                                  style: TextStyle(color: appTextMuted),
+                                  style: TextStyle(color: libraryTextMuted),
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
@@ -1271,8 +1434,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                                 fontWeight: FontWeight.w800)),
                                         SizedBox(height: 6),
                                         Text('修改后立即生效；选择已占用按键时会自动交换两个功能。',
-                                            style:
-                                                TextStyle(color: appTextMuted)),
+                                            style: TextStyle(
+                                                color: libraryTextMuted)),
                                       ],
                                     ),
                                   ),
@@ -1338,60 +1501,6 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                         ),
                         const SizedBox(height: 16),
                       ],
-                      if (_section == _SettingsSection.playback) ...[
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                const Text(
-                                  '继续观看',
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800),
-                                ),
-                                const SizedBox(height: 6),
-                                const Text(
-                                  '打开有未完成进度的视频时，默认执行以下操作。',
-                                  style: TextStyle(color: appTextMuted),
-                                ),
-                                const SizedBox(height: 14),
-                                DropdownButtonFormField<PlaybackResumeBehavior>(
-                                  key:
-                                      const ValueKey('settings.resumeBehavior'),
-                                  initialValue: _settings.resumeBehavior,
-                                  decoration: const InputDecoration(
-                                    labelText: '默认打开行为',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  items: [
-                                    for (final behavior
-                                        in PlaybackResumeBehavior.values)
-                                      DropdownMenuItem(
-                                        value: behavior,
-                                        child: Text(
-                                            PlaybackSettings.resumeLabelFor(
-                                                behavior)),
-                                      ),
-                                  ],
-                                  onChanged: (behavior) async {
-                                    if (behavior == null) {
-                                      return;
-                                    }
-                                    final next = _settings.copyWith(
-                                        resumeBehavior: behavior);
-                                    setState(() => _settings = next);
-                                    await widget
-                                        .onPlaybackSettingsChanged(next);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
                       if (_section == _SettingsSection.cache) ...[
                         Card(
                           child: Padding(
@@ -1400,6 +1509,10 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                               future: _statsFuture,
                               builder: (context, snapshot) {
                                 final stats = snapshot.data;
+                                final cacheBusy = _cacheActionRunning ||
+                                    (stats?.active ?? 0) > 0 ||
+                                    (stats?.queued ?? 0) > 0 ||
+                                    (stats?.pendingBackgroundRequests ?? 0) > 0;
                                 return Column(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
@@ -1449,6 +1562,109 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                         label: '平均耗时',
                                         value: '${stats.averageMs} ms',
                                       ),
+                                      const SizedBox(height: 12),
+                                      const Text(
+                                        '失败是“缺失”的可诊断子集：失败项当前没有有效 JPEG，'
+                                        '因此会同时计入缺失；普通缺失则可能只是尚未生成。',
+                                        style: TextStyle(
+                                          color: libraryTextMuted,
+                                          height: 1.45,
+                                        ),
+                                      ),
+                                      if (stats.failures.isNotEmpty) ...[
+                                        const SizedBox(height: 10),
+                                        ExpansionTile(
+                                          key: const ValueKey(
+                                            'settings.cache.failureDetails',
+                                          ),
+                                          tilePadding: EdgeInsets.zero,
+                                          childrenPadding: EdgeInsets.zero,
+                                          title: Text(
+                                            '失败详情 · ${stats.failures.length}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                          subtitle: const Text(
+                                            '显示视频标题和最近一次缩略图失败原因',
+                                          ),
+                                          children: [
+                                            for (final failure
+                                                in stats.failures.take(50))
+                                              ListTile(
+                                                dense: true,
+                                                contentPadding: EdgeInsets.zero,
+                                                leading: const Icon(
+                                                  Icons.error_outline_rounded,
+                                                  color: Colors.orangeAccent,
+                                                ),
+                                                title: Text(
+                                                  failure.item.title,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                subtitle: Text(
+                                                  failure.reason,
+                                                  maxLines: 3,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            if (stats.failures.length > 50)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  bottom: 8,
+                                                ),
+                                                child: Text(
+                                                  '另有 ${stats.failures.length - 50} 条，'
+                                                  '请处理当前失败项后刷新统计。',
+                                                  style: const TextStyle(
+                                                    color: libraryTextMuted,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                      const SizedBox(height: 12),
+                                      Wrap(
+                                        spacing: 10,
+                                        runSpacing: 10,
+                                        children: [
+                                          FilledButton.icon(
+                                            key: const ValueKey(
+                                              'settings.cache.retryFailures',
+                                            ),
+                                            onPressed: stats.failures.isEmpty ||
+                                                    cacheBusy
+                                                ? null
+                                                : () => _retryFailedThumbnails(
+                                                      stats,
+                                                    ),
+                                            icon: const Icon(
+                                              Icons.refresh_rounded,
+                                            ),
+                                            label: const Text('重试失败项'),
+                                          ),
+                                          OutlinedButton.icon(
+                                            key: const ValueKey(
+                                              'settings.cache.clearFailures',
+                                            ),
+                                            onPressed: stats.failures.isEmpty ||
+                                                    cacheBusy
+                                                ? null
+                                                : () =>
+                                                    _clearThumbnailFailureMarkers(
+                                                      stats,
+                                                    ),
+                                            icon: const Icon(
+                                              Icons.cleaning_services_outlined,
+                                            ),
+                                            label: const Text('清除失败标记'),
+                                          ),
+                                        ],
+                                      ),
                                     ],
                                   ],
                                 );
@@ -1489,7 +1705,7 @@ class _SettingsStatLine extends StatelessWidget {
             child: Text(
               label,
               style: const TextStyle(
-                color: appTextMuted,
+                color: libraryTextMuted,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1497,7 +1713,7 @@ class _SettingsStatLine extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              color: appText,
+              color: libraryText,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -1549,6 +1765,24 @@ enum _LibraryResultMode {
 
   /** 本地媒体库路径浏览，按文件系统层级展示文件夹和视频。 */
   local,
+}
+
+/**
+ * 选择添加目录或文件时使用的媒体上下文起点。
+ *
+ * 当前正在浏览的本地目录优先，其次使用首个已管理 root；两者都不存在时返回 null，
+ * 由平台选择器决定默认位置，避免回到与视频无关的系统“图片”目录。
+ */
+@visibleForTesting
+String? preferredLibraryPickerDirectory({
+  required String? currentPath,
+  required List<String> roots,
+}) {
+  final current = currentPath?.trim();
+  if (current != null && current.isNotEmpty) {
+    return current;
+  }
+  return roots.isEmpty ? null : roots.first;
 }
 
 List<VideoItem> recentPlaybackClearTargets(
@@ -1921,6 +2155,7 @@ class _LibraryPageState extends State<LibraryPage> {
     void applyHydratedState() => setState(() {
           _sortMode = sortPreferences.mode;
           _sortDirection = sortPreferences.direction;
+          _denseResultGrid = sortPreferences.denseResultGrid;
           _store = store;
           _thumbnailService = thumbnailService;
           _playbackSettings = playbackSettings;
@@ -2063,8 +2298,13 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Future<void> _pickFolder() async {
+    final store = _store;
     final paths = await _fileSystem.pickDirectories(
       dialogTitle: '\u9009\u62e9\u89c6\u9891\u76ee\u5f55',
+      initialDirectory: preferredLibraryPickerDirectory(
+        currentPath: _localLibraryPath,
+        roots: store?.roots ?? const <String>[],
+      ),
     );
     final path = paths.isEmpty ? null : paths.first;
     if (path == null || _store == null) {
@@ -2084,8 +2324,13 @@ class _LibraryPageState extends State<LibraryPage> {
    * 选择器只允许视频扩展名；文件不会被复制或移动，应用仅注册其所在目录并建立索引。
    */
   Future<void> _pickVideoFiles() async {
+    final store = _store;
     final paths = await _fileSystem.pickFiles(
       dialogTitle: '选择要添加的视频文件',
+      initialDirectory: preferredLibraryPickerDirectory(
+        currentPath: _localLibraryPath,
+        roots: store?.roots ?? const <String>[],
+      ),
       allowedExtensions: TagRules.videoExtensions
           .map((extension) => extension.substring(1))
           .toList(),
@@ -2627,6 +2872,7 @@ class _LibraryPageState extends State<LibraryPage> {
       preferences = LibrarySortPreferences(
         mode: _sortMode,
         direction: _sortDirection,
+        denseResultGrid: _denseResultGrid,
       );
       if (_resultMode != _LibraryResultMode.library || _filterState == null) {
         return;
@@ -2644,6 +2890,23 @@ class _LibraryPageState extends State<LibraryPage> {
       );
     });
     unawaited(widget.applicationService.saveSortPreferences(preferences));
+  }
+
+  /**
+   * 切换网格/列表并复用展示偏好文件持久化，不触发过滤、计数或缩略图全量刷新。
+   */
+  void _setResultView(bool dense) {
+    if (_denseResultGrid == dense) {
+      return;
+    }
+    setState(() => _denseResultGrid = dense);
+    unawaited(widget.applicationService.saveSortPreferences(
+      LibrarySortPreferences(
+        mode: _sortMode,
+        direction: _sortDirection,
+        denseResultGrid: dense,
+      ),
+    ));
   }
 
   /**
@@ -3975,8 +4238,7 @@ class _LibraryPageState extends State<LibraryPage> {
         onSortChanged: _setSortMode,
         onSortDirectionToggle: _toggleSortDirection,
         denseResultGrid: _denseResultGrid,
-        onResultViewChanged: (dense) =>
-            setState(() => _denseResultGrid = dense),
+        onResultViewChanged: _setResultView,
         onOpenTagManager: () => _openTagManager(videos),
         onRemovePrimaryTag: (tag) => _mutateFilters(() {
           _selectedTags.remove(tag);

@@ -23,9 +23,13 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
   final Future<void> Function(String path)? _windowsTrashFileOverride;
 
   @override
-  Future<List<String>> pickDirectories({String? dialogTitle}) async {
+  Future<List<String>> pickDirectories({
+    String? dialogTitle,
+    String? initialDirectory,
+  }) async {
     final path = await FilePicker.platform.getDirectoryPath(
       dialogTitle: dialogTitle,
+      initialDirectory: initialDirectory,
     );
     return path == null ? const <String>[] : <String>[normalizePath(path)];
   }
@@ -33,6 +37,7 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
   @override
   Future<List<String>> pickFiles({
     String? dialogTitle,
+    String? initialDirectory,
     List<String> allowedExtensions = const <String>[],
   }) async {
     final result = await FilePicker.platform.pickFiles(
@@ -40,6 +45,7 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
       type: allowedExtensions.isEmpty ? FileType.any : FileType.custom,
       allowedExtensions: allowedExtensions.isEmpty ? null : allowedExtensions,
       allowMultiple: true,
+      initialDirectory: initialDirectory,
     );
     return <String>[
       for (final file in result?.files ?? const <PlatformFile>[])
@@ -50,6 +56,7 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
   @override
   Future<String?> pickFile({
     String? dialogTitle,
+    String? initialDirectory,
     List<String> allowedExtensions = const <String>[],
   }) async {
     final result = await FilePicker.platform.pickFiles(
@@ -57,6 +64,7 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
       type: allowedExtensions.isEmpty ? FileType.any : FileType.custom,
       allowedExtensions: allowedExtensions.isEmpty ? null : allowedExtensions,
       allowMultiple: false,
+      initialDirectory: initialDirectory,
     );
     final path = result?.files.single.path;
     return path == null ? null : normalizePath(path);
@@ -206,6 +214,9 @@ Add-Type -AssemblyName Microsoft.VisualBasic
 
   @override
   String joinPath(List<String> parts) => p.joinAll(parts);
+
+  @override
+  String parentPath(String path) => p.dirname(normalizePath(path));
 
   @override
   String relativePath({required String rootPath, required String path}) =>

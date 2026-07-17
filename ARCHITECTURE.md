@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.47` 完成用户播放状态的精确撤销、扫描 generation 取消和播放器输入门禁。播放状态继续绑定 stable videoId，扫描取消只使旧结果失效，不扩大 SQLite、播放器或缓存写入边界。
+`Architecture Baseline 0.5.48` 完成维护页面视觉收口、文件选择初始目录边界、缓存失败可解释操作和媒体浏览偏好持久化。SQLite、stable identity、标签查询、filtered queue 与 PlayerBackend 语义不变。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,11 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.47`
+已完成基线：`Architecture Baseline 0.5.48`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.48`：`FileSystemAdapter` 的目录/文件选择增加可选初始目录，并提供跨平台父目录解析；媒体库和 Relink 页面只决定业务候选位置，桌面适配器继续独占原生选择器实现。`LibrarySortPreferences` 向后兼容保存网格/列表偏好，旧 JSON 缺字段时保持网格默认；超宽列表只消费内存中的标签、媒体详情和文件大小。缩略图失败统计统一为“无有效缓存且存在错误”的缺失子集，页面可查看原因、重试或仅清除失败标记，活动队列期间禁用操作。SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存 key/JPEG 有效性和 stable identity/relink 校验均未改变。
 
 - `0.5.47`：`LibraryRepository` 增加批量 `upsertPlaybackStates` 与 `cancelActiveScan` 契约；前者支持“继续观看”按 stable videoId 保存并精确撤销完整播放快照，且不会覆盖撤销后重播生成的新进度，后者取消当前扫描 backend generation、解除暂停并阻止旧差量提交。备份规范快照不再持久化全局派生的标签 `usage_count`，避免把一致的 video-tag 关系误判为过期；fingerprint 歧义仍只阻止不安全自动恢复。播放器页面统一暂停 EditableText、PopupRoute、菜单、弹窗和原生文件对话框期间的单键快捷键，并持续跟踪全屏队列热区。SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缩略图/媒体详情队列和 stable identity 语义未改变。
 

@@ -56,15 +56,24 @@ class _MissingRelinkTestRepository
 /** 模拟用户取消原生文件选择器，不执行任何磁盘操作。 */
 class _CancellingFileSystemAdapter implements FileSystemAdapter {
   var pickFileCalls = 0;
+  String? lastInitialDirectory;
 
   @override
   Future<String?> pickFile({
     String? dialogTitle,
+    String? initialDirectory,
     List<String> allowedExtensions = const <String>[],
   }) async {
     pickFileCalls++;
+    lastInitialDirectory = initialDirectory;
     return null;
   }
+
+  @override
+  String parentPath(String path) => p.dirname(path);
+
+  @override
+  Future<bool> directoryExists(String path) async => true;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -1965,14 +1974,84 @@ void main() {
     const preferences = LibrarySortPreferences(
       mode: SortMode.folder,
       direction: SortDirection.ascending,
+      denseResultGrid: true,
     );
     await saveLibrarySortPreferences(paths, preferences);
     final loaded = await loadLibrarySortPreferences(paths);
 
     expect(loaded.mode, SortMode.folder);
     expect(loaded.direction, SortDirection.ascending);
+    expect(loaded.denseResultGrid, isTrue);
     expect(await paths.settingsFile(),
         isNot(await paths.librarySortPreferencesFile()));
+  });
+
+  test('library picker prefers current path then managed root', () {
+    expect(
+      preferredLibraryPickerDirectory(
+        currentPath: r'X:\test-media\album',
+        roots: const <String>[r'X:\test-media'],
+      ),
+      r'X:\test-media\album',
+    );
+    expect(
+      preferredLibraryPickerDirectory(
+        currentPath: null,
+        roots: const <String>[r'X:\test-media', r'E:\archive'],
+      ),
+      r'X:\test-media',
+    );
+    expect(
+      preferredLibraryPickerDirectory(
+        currentPath: null,
+        roots: const <String>[],
+      ),
+      isNull,
+    );
+  });
+
+  test('cache failures are an explained subset of missing items', () async {
+    final directory = await Directory.systemTemp.createTemp('ltp_cache_p2_');
+    addTearDown(() async {
+      await directory.delete(recursive: true);
+    });
+    final service = ThumbnailService.forDirectory(
+      directory,
+      _PreviewFFmpegBackend(),
+    );
+    final item = _testVideo(
+      path: p.join(directory.path, 'missing.mp4'),
+      title: 'broken thumbnail',
+    )..thumbnailError = 'ffmpeg: test failure';
+
+    final stats = await service.statsFor(<VideoItem>[item]);
+
+    expect(stats.total, 1);
+    expect(stats.missing, 1);
+    expect(stats.errors, 1);
+    expect(stats.failures.single.item.videoId, item.videoId);
+    expect(stats.failures.single.reason, 'ffmpeg: test failure');
+    expect(service.clearFailures(<VideoItem>[item]), 1);
+    expect(item.thumbnailError, isNull);
+  });
+
+  test('ultrawide list file size labels stay compact', () {
+    expect(libraryVideoFileSizeLabel(null), '大小读取中');
+    expect(libraryVideoFileSizeLabel(512), '512 B');
+    expect(libraryVideoFileSizeLabel(1536), '1.5 KB');
+    expect(libraryVideoFileSizeLabel(3 * 1024 * 1024 * 1024), '3.0 GB');
+  });
+
+  test('maintenance workspaces reuse the media library dark surfaces', () {
+    final theme = maintenanceWorkspaceTheme(ThemeData(useMaterial3: true));
+
+    expect(theme.scaffoldBackgroundColor, libraryBackground);
+    expect(theme.cardTheme.color, librarySurface);
+    expect(theme.dialogTheme.backgroundColor, librarySurface);
+    expect(
+      theme.inputDecorationTheme.fillColor,
+      librarySurfaceAlt,
+    );
   });
 
   testWidgets('settings landing page only shows grouped feature entries',
@@ -1983,6 +2062,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SettingsLandingList(
+            resumeBehavior: PlaybackResumeBehavior.ask,
             onOpenPlayback: () => openedSections.add('playback'),
             onOpenPlayerInteraction: () => openedSections.add('interaction'),
             onOpenDataBackup: () => openedSections.add('backup'),
@@ -1994,6 +2074,11 @@ void main() {
 
     expect(find.text('播放设置'), findsOneWidget);
     expect(find.text('数据与维护'), findsOneWidget);
+    expect(find.text('当前策略：每次询问 · 解码设置'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings.resumeBehavior.summary')),
+      findsOneWidget,
+    );
     expect(find.byType(Switch), findsNothing);
     expect(find.byType(Slider), findsNothing);
     expect(find.byType(DropdownButtonFormField<dynamic>), findsNothing);
@@ -2008,6 +2093,44 @@ void main() {
       await tester.pump();
       expect(openedSections.last, entry.$2);
     }
+  });
+
+  testWidgets('tag manager group chips expose selected feedback',
+      (tester) async {
+    const groups = <TagGroup>[
+      TagGroup(id: 'genre', name: 'genre', displayName: '类型', items: []),
+      TagGroup(id: 'actor', name: 'actor', displayName: '人物', items: []),
+    ];
+    await tester.pumpWidget(tagManagerGroupSummarySmokeHarness(groups));
+
+    expect(
+      tester
+          .widget<ChoiceChip>(
+            find.byKey(const ValueKey('tagManager.group.all')),
+          )
+          .selected,
+      isTrue,
+    );
+    await tester.tap(find.byKey(const ValueKey('tagManager.group.genre')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<ChoiceChip>(
+            find.byKey(const ValueKey('tagManager.group.genre')),
+          )
+          .selected,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<ChoiceChip>(
+            find.byKey(const ValueKey('tagManager.group.all')),
+          )
+          .selected,
+      isFalse,
+    );
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
   });
 
   testWidgets('playback decoder dropdown only changes after confirmation',
@@ -3151,6 +3274,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fileSystem.pickFileCalls, 1);
+    expect(fileSystem.lastInitialDirectory, r'D:\missing');
+    expect(
+      Theme.of(tester.element(relinkButton)).cardTheme.color,
+      librarySurface,
+    );
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(tester.widget<FilledButton>(relinkButton).onPressed, isNotNull);
   });

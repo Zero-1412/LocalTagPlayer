@@ -103,3 +103,84 @@ ThemeData libraryWorkspaceTheme(ThemeData base) {
     ),
   );
 }
+
+/**
+ * 为标签、设置、缓存和重关联等维护页面创建统一深色工作区主题。
+ *
+ * 这些页面与媒体库属于同一条标签发现和数据维护闭环，复用同一组 surface、边框和
+ * 文字 token，避免路由切换时退回全局浅色卡片。该主题只由目标路由显式包裹，
+ * 不改变应用其它浅色弹窗或尚未迁移的页面。
+ */
+ThemeData maintenanceWorkspaceTheme(ThemeData base) {
+  final workspace = libraryWorkspaceTheme(base);
+  const inputBorder = OutlineInputBorder(
+    borderSide: BorderSide(color: libraryBorder),
+    borderRadius: BorderRadius.all(Radius.circular(8)),
+  );
+  return workspace.copyWith(
+    appBarTheme: const AppBarTheme(
+      backgroundColor: libraryBackground,
+      foregroundColor: libraryText,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+    ),
+    cardTheme: CardThemeData(
+      color: librarySurface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: libraryBorder),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: librarySurface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: libraryBorder),
+      ),
+    ),
+    inputDecorationTheme: const InputDecorationTheme(
+      filled: true,
+      fillColor: librarySurfaceAlt,
+      labelStyle: TextStyle(color: libraryTextMuted),
+      hintStyle: TextStyle(color: libraryTextMuted),
+      enabledBorder: inputBorder,
+      focusedBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: appAccentViolet, width: 1.5),
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+      ),
+      border: inputBorder,
+    ),
+    searchBarTheme: const SearchBarThemeData(
+      backgroundColor: WidgetStatePropertyAll(librarySurfaceAlt),
+      textStyle: WidgetStatePropertyAll(TextStyle(color: libraryText)),
+      hintStyle: WidgetStatePropertyAll(
+        TextStyle(color: libraryTextMuted),
+      ),
+      elevation: WidgetStatePropertyAll(0),
+      side: WidgetStatePropertyAll(BorderSide(color: libraryBorder)),
+    ),
+    chipTheme: const ChipThemeData(
+      backgroundColor: librarySurfaceAlt,
+      selectedColor: Color(0x506d5dfc),
+      disabledColor: librarySurface,
+      labelStyle: TextStyle(color: libraryText),
+      secondaryLabelStyle: TextStyle(
+        color: libraryText,
+        fontWeight: FontWeight.w800,
+      ),
+      side: BorderSide(color: libraryBorder),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+      ),
+    ),
+    listTileTheme: const ListTileThemeData(
+      textColor: libraryText,
+      iconColor: libraryTextMuted,
+      selectedColor: libraryText,
+      selectedTileColor: Color(0x386d5dfc),
+    ),
+  );
+}

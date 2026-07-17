@@ -68,6 +68,7 @@ class CacheStats {
     required this.ffmpegCompleted,
     required this.fallbackCompleted,
     required this.averageMs,
+    required this.failures,
   });
 
   final int total;
@@ -88,6 +89,20 @@ class CacheStats {
   final int ffmpegCompleted;
   final int fallbackCompleted;
   final int averageMs;
+
+  /** 当前既缺少有效 JPEG 又保留失败原因的条目；用于诊断详情与定向操作。 */
+  final List<CacheFailureDetail> failures;
+}
+
+/** 缩略图失败详情；保留稳定视频对象，重试与清理不得只按可变路径匹配。 */
+class CacheFailureDetail {
+  const CacheFailureDetail({required this.item, required this.reason});
+
+  /** 发生失败的稳定视频对象。 */
+  final VideoItem item;
+
+  /** 当前可见失败原因。 */
+  final String reason;
 }
 
 class ThumbnailService {
@@ -812,15 +827,19 @@ class ThumbnailService {
     var cached = 0;
     var missing = 0;
     var errors = 0;
+    final failures = <CacheFailureDetail>[];
     for (final item in items) {
       final file = await thumbnailFor(item);
       if (file != null && await file.exists()) {
         cached++;
       } else {
         missing++;
-      }
-      if (item.thumbnailError != null) {
-        errors++;
+        final reason = item.thumbnailError;
+        if (reason != null) {
+          // “失败”定义为“缺失”的可诊断子集，UI 可直接解释两者关系而不重复猜测。
+          errors++;
+          failures.add(CacheFailureDetail(item: item, reason: reason));
+        }
       }
     }
     return CacheStats(
@@ -844,10 +863,13 @@ class ThumbnailService {
       averageMs: _completed + _failed == 0
           ? 0
           : (_totalGenerateMs / (_completed + _failed)).round(),
+      failures: List<CacheFailureDetail>.unmodifiable(failures),
     );
   }
 
-  Future<void> retryFailed(Iterable<VideoItem> items) async {
+  /** 重新登记失败缩略图，并返回受队列容量限制后实际进入候选队列的数量。 */
+  Future<int> retryFailed(Iterable<VideoItem> items) async {
+    var retried = 0;
     for (final item in items.where((item) => item.thumbnailError != null)) {
       if (_backgroundCandidates.length + _backgroundRequestsInFlight >=
           _maxBackgroundQueuedJobs) {
@@ -860,9 +882,28 @@ class ThumbnailService {
       item.thumbnailError = null;
       if (_backgroundCandidatePaths.add(item.path)) {
         _backgroundCandidates.add(item);
+        retried++;
       }
     }
     _pumpBackgroundCandidates(allowPlayerFallback: false);
+    return retried;
+  }
+
+  /**
+   * 清除失败诊断标记，不删除视频、现有 JPEG 或媒体详情。
+   *
+   * 返回实际清理数量，页面随后负责通过 Repository 持久化这些活动视频行。
+   */
+  int clearFailures(Iterable<VideoItem> items) {
+    var cleared = 0;
+    for (final item in items) {
+      if (item.thumbnailError == null) {
+        continue;
+      }
+      item.thumbnailError = null;
+      cleared++;
+    }
+    return cleared;
   }
 
   Future<bool> _isValidThumbnailFile(File file) async {

@@ -30,6 +30,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
   final _sortOrderController = TextEditingController();
   late Future<Map<String, TagUsageSummary>> _usageFuture;
   String? _selectedTagId;
+  /** 左侧列表当前选中的标签组；null 表示显示全部分组。 */
+  String? _selectedGroupId;
   String? _editingGroupId;
   bool _editingHidden = false;
   bool _editingFavorite = false;
@@ -76,10 +78,13 @@ class _TagManagerPageState extends State<TagManagerPage> {
       }
       return _tagLabel(a.tag).compareTo(_tagLabel(b.tag));
     });
-    if (token.isEmpty) {
-      return rows;
-    }
-    return rows.where((row) => row.matches(token)).toList();
+    return rows.where((row) {
+      // 分组 chip 是显示层过滤器，不修改 TagItem、FilterQuery 或媒体库当前筛选。
+      if (_selectedGroupId != null && row.tag.groupId != _selectedGroupId) {
+        return false;
+      }
+      return token.isEmpty || row.matches(token);
+    }).toList();
   }
 
   String _tagDedupeKey(TagItem tag) {
@@ -327,8 +332,19 @@ class _TagManagerPageState extends State<TagManagerPage> {
     final layoutSize =
         LayoutBreakpoints.fromWidth(MediaQuery.sizeOf(context).width);
     final compact = layoutSize == LayoutSize.compact;
+    return Theme(
+      data: maintenanceWorkspaceTheme(Theme.of(context)),
+      child: _buildWorkspace(layoutSize: layoutSize, compact: compact),
+    );
+  }
+
+  /** 构建标签维护工作区；主题包装与页面内容分离，保持布局 diff 集中可审查。 */
+  Widget _buildWorkspace({
+    required LayoutSize layoutSize,
+    required bool compact,
+  }) {
     return Scaffold(
-      backgroundColor: appBackground,
+      backgroundColor: libraryBackground,
       appBar: AppBar(
         title: const Text('标签管理'),
         actions: [
@@ -367,8 +383,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
                 height: compact ? 320 : null,
                 child: DecoratedBox(
                   decoration: const BoxDecoration(
-                    color: appSurface,
-                    border: Border(right: BorderSide(color: appBorder)),
+                    color: librarySurface,
+                    border: Border(right: BorderSide(color: libraryBorder)),
                   ),
                   child: Column(
                     children: [
@@ -382,7 +398,20 @@ class _TagManagerPageState extends State<TagManagerPage> {
                           elevation: const WidgetStatePropertyAll(0),
                         ),
                       ),
-                      _TagGroupSummary(groups: widget.store.tagGroups),
+                      _TagGroupSummary(
+                        groups: widget.store.tagGroups,
+                        selectedGroupId: _selectedGroupId,
+                        onSelected: (groupId) {
+                          setState(() {
+                            _selectedGroupId = groupId;
+                            // 当前详情可能已不在左侧结果中，清空可避免“筛选 A、编辑 B”的错觉。
+                            if (groupId != null &&
+                                _selectedTag?.groupId != groupId) {
+                              _selectedTagId = null;
+                            }
+                          });
+                        },
+                      ),
                       const Divider(height: 1),
                       Expanded(
                         child: ListView.builder(
@@ -637,7 +666,7 @@ class _TagManagerDetail extends StatelessWidget {
                 .headlineSmall
                 ?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
-        Text('ID: ${tag.id}', style: const TextStyle(color: appTextMuted)),
+        Text('ID: ${tag.id}', style: const TextStyle(color: libraryTextMuted)),
         const SizedBox(height: 18),
         Wrap(
           spacing: 12,
@@ -705,7 +734,7 @@ class _TagManagerDetail extends StatelessWidget {
                 ?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         Text('当前筛选结果：$currentResultCount 个视频',
-            style: const TextStyle(color: appTextMuted)),
+            style: const TextStyle(color: libraryTextMuted)),
         const SizedBox(height: 12),
         Wrap(
           spacing: 12,
@@ -730,7 +759,7 @@ class _TagManagerDetail extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             '当前标签不是 manual 来源。批量添加/移除只对 manual 标签开放，folder 标签由路径派生维护。',
-            style: TextStyle(color: appTextMuted),
+            style: TextStyle(color: libraryTextMuted),
           ),
         ],
         const SizedBox(height: 24),
@@ -762,16 +791,26 @@ class _TagManagerDetail extends StatelessWidget {
 }
 
 class _TagGroupSummary extends StatelessWidget {
-  const _TagGroupSummary({required this.groups});
+  const _TagGroupSummary({
+    required this.groups,
+    required this.selectedGroupId,
+    required this.onSelected,
+  });
 
   final List<TagGroup> groups;
+
+  /** 当前用于过滤左侧标签列表的分组；null 表示全部。 */
+  final String? selectedGroupId;
+
+  /** 选择或取消分组过滤；只影响 Tag Manager 当前列表。 */
+  final ValueChanged<String?> onSelected;
 
   @override
   Widget build(BuildContext context) {
     if (groups.isEmpty) {
       return const Padding(
         padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-        child: Text('暂无标签组', style: TextStyle(color: appTextMuted)),
+        child: Text('暂无标签组', style: TextStyle(color: libraryTextMuted)),
       );
     }
     return Padding(
@@ -791,11 +830,29 @@ class _TagGroupSummary extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
+              ChoiceChip(
+                key: const ValueKey('tagManager.group.all'),
+                label: const Text('全部'),
+                selected: selectedGroupId == null,
+                showCheckmark: false,
+                avatar: selectedGroupId == null
+                    ? const Icon(Icons.check_rounded, size: 16)
+                    : null,
+                onSelected: (_) => onSelected(null),
+              ),
               for (final group in groups)
                 Tooltip(
                   message: '${group.id} · sort ${group.sortOrder}',
-                  child: Chip(
+                  child: ChoiceChip(
+                    key: ValueKey('tagManager.group.${group.id}'),
                     label: Text(group.displayName ?? group.name),
+                    selected: selectedGroupId == group.id,
+                    showCheckmark: false,
+                    avatar: selectedGroupId == group.id
+                        ? const Icon(Icons.check_rounded, size: 16)
+                        : null,
+                    onSelected: (selected) =>
+                        onSelected(selected ? group.id : null),
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
@@ -805,6 +862,24 @@ class _TagGroupSummary extends StatelessWidget {
       ),
     );
   }
+}
+
+/** 标签分组选择反馈的 focused widget 测试宿主。 */
+@visibleForTesting
+Widget tagManagerGroupSummarySmokeHarness(List<TagGroup> groups) {
+  String? selectedGroupId;
+  return MaterialApp(
+    theme: maintenanceWorkspaceTheme(ThemeData(useMaterial3: true)),
+    home: Scaffold(
+      body: StatefulBuilder(
+        builder: (context, setState) => _TagGroupSummary(
+          groups: groups,
+          selectedGroupId: selectedGroupId,
+          onSelected: (value) => setState(() => selectedGroupId = value),
+        ),
+      ),
+    ),
+  );
 }
 
 class _UsagePill extends StatelessWidget {
@@ -817,8 +892,8 @@ class _UsagePill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Chip(
       label: Text('$label $value'),
-      backgroundColor: const Color(0xffeef4f3),
-      side: const BorderSide(color: appBorder),
+      backgroundColor: librarySurfaceAlt,
+      side: const BorderSide(color: libraryBorder),
     );
   }
 }

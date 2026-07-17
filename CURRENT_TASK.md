@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.47` 已完成。
+架构版本状态：`Architecture Baseline 0.5.48` 已完成。
 
 最近一次验证：
 
@@ -14,9 +14,15 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 180 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 185 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 标签中心、设置、缩略图缓存和缺失重关联页面统一使用媒体库深色维护主题；标签中心分组改为带选中勾选与强调色的真实列表筛选，并提供“全部”复位入口。
+- 添加目录/视频从当前媒体路径或首个 root 打开，单条 Relink 从原文件父目录、原 root 或媒体 root 逐级回退；路径选择规则继续收口在 `FileSystemAdapter` 平台边界。
+- 缓存统计明确“失败是缺失的子集”，显示失败条目与原因，并提供受队列活动状态保护的重试和清除失败标记入口；清除标记不删除视频或有效缓存。
+- “播放与继续观看”首页直接显示当前继续策略，二级页把策略下拉提升为首项；网格/列表偏好写入既有 JSON，进程重启后恢复。超宽列表增加标签与已缓存媒体信息列，不在 build 阶段访问磁盘。
+- 完整 185 项测试、`dart format`、`flutter analyze` 和 Windows debug build 通过。真实最大化窗口完成深色维护页、标签筛选、文件选择起点、缓存语义、继续策略、列表偏好重启恢复及超宽信息密度截图验证。
 
 - “继续观看”删除改为精确保存稳定播放快照并提供 10 秒 Snackbar 撤销；重播已生成新进度时撤销不会覆盖新状态。“清空全部”增加二次确认，并明确只清除进度、不删除视频文件、标签或收藏。
 - 播放器单键快捷键统一增加输入门禁：`EditableText`、菜单、弹窗、其它路由和原生文件对话框期间全部暂停；队列搜索关闭后恢复播放器焦点。真实窗口逐键输入 `chamosan`，`s` 未触发截图，关闭搜索后 PageUp 正常切换 filtered queue。

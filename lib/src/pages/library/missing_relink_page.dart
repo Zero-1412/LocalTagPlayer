@@ -17,9 +17,25 @@ import '../../widgets/library/library_video_results.dart';
 Future<String?> pickMissingVideoReplacementFile({
   required FileSystemAdapter fileSystem,
   required VideoItem item,
-}) {
+  String? fallbackDirectory,
+}) async {
+  final candidates = <String>{
+    fileSystem.parentPath(item.path),
+    if (item.rootPath != null) item.rootPath!,
+    if (fallbackDirectory != null) fallbackDirectory,
+  };
+  String? initialDirectory;
+  for (final candidate in candidates) {
+    if (candidate.trim().isNotEmpty &&
+        await fileSystem.directoryExists(candidate)) {
+      initialDirectory = candidate;
+      break;
+    }
+  }
   return fileSystem.pickFile(
     dialogTitle: '选择与 ${item.title} 对应的新文件',
+    // 优先使用仍存在的原父目录，再回退记录 root 或当前媒体 root。
+    initialDirectory: initialDirectory,
     allowedExtensions: TagRules.videoExtensions
         .map((extension) => extension.substring(1))
         .toList(),
@@ -65,6 +81,7 @@ Future<bool> pickAndRelinkMissingVideo(
   final path = await pickMissingVideoReplacementFile(
     fileSystem: fileSystem,
     item: item,
+    fallbackDirectory: store.roots.isEmpty ? null : store.roots.first,
   );
   if (path == null) {
     return false;
@@ -116,6 +133,8 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
     final path = await pickMissingVideoReplacementFile(
       fileSystem: widget.fileSystem,
       item: item,
+      fallbackDirectory:
+          widget.store.roots.isEmpty ? null : widget.store.roots.first,
     );
     if (!mounted || path == null) {
       return;
@@ -148,8 +167,16 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
   @override
   Widget build(BuildContext context) {
     final missing = _missingVideos;
+    return Theme(
+      data: maintenanceWorkspaceTheme(Theme.of(context)),
+      child: _buildWorkspace(missing),
+    );
+  }
+
+  /** 构建缺失视频维护工作区；只更换页面 surface，不改变 relink 稳定身份流程。 */
+  Widget _buildWorkspace(List<VideoItem> missing) {
     return Scaffold(
-      backgroundColor: appBackground,
+      backgroundColor: libraryBackground,
       appBar: AppBar(
         leading: IconButton(
           tooltip: '返回媒体库',
@@ -264,6 +291,8 @@ class _BulkPathRelinkDialogState extends State<_BulkPathRelinkDialog> {
   Future<void> _pickNewPrefix() async {
     final paths = await widget.fileSystem.pickDirectories(
       dialogTitle: '选择迁移后的新目录',
+      initialDirectory:
+          widget.store.roots.isEmpty ? null : widget.store.roots.first,
     );
     final path = paths.isEmpty ? null : paths.first;
     if (path != null && mounted) {

@@ -1,3 +1,9 @@
+## 2026-07-17 文件选择初始目录与视图偏好
+
+- 添加目录/视频优先从当前媒体路径打开，缺少当前路径时回退首个媒体 root；单条 Relink 优先原文件父目录，再回退原 root 或媒体 root。
+- 页面只选择业务相关候选路径，原生选择器参数和父目录解析继续经过 `FileSystemAdapter`，不在 UI 拼接 Windows 路径。
+- 网格/列表作为显示偏好写入既有 JSON，旧文件缺字段时使用网格默认；不修改 SQLite schema、stable identity、relink fingerprint 校验、FilterQuery 或 filtered queue。
+
 ## 2026-07-16 视频依赖备份检查与便携导出
 
 - 完整性检查在 worker 批次边界串行执行，读取独立备份库和主库依赖字段，不读取视频文件、不删除未来可恢复快照，也不改变 folder/manual 标签来源。
@@ -93,7 +99,7 @@
 - 可访问 root 中消失的记录改为 missing，不再删除；自动 relink 保留 videoId、manual 标签、收藏、播放记录、媒体缓存字段和进度，并重新计算 folder 标签。
 - focused tests 覆盖旧 schema 回填、missing 保留、唯一移动认领、歧义拒绝合并与重载持久化。
 
-当前版本：`0.4.3`
+当前版本：`0.4.4`
 状态：进行中
 负责人：Chat 2 / 标签模型 + 筛选引擎 + 媒体库
 

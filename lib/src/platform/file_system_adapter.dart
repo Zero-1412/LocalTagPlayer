@@ -36,8 +36,16 @@ class FileSystemEntitySnapshot {
  * 文件写入与删除。业务层不得依赖具体平台命令或 `dart:io` 实体。
  */
 abstract interface class FileSystemAdapter {
-  /** 选择一个或多个目录；用户取消时返回空列表。 */
-  Future<List<String>> pickDirectories({String? dialogTitle});
+  /**
+   * 选择一个或多个目录；用户取消时返回空列表。
+   *
+   * [initialDirectory] 是当前媒体上下文建议的起点；平台不支持或目录失效时可回退
+   * 系统默认位置，页面不得自行拼接平台命令。
+   */
+  Future<List<String>> pickDirectories({
+    String? dialogTitle,
+    String? initialDirectory,
+  });
 
   /**
    * 选择一个或多个文件；[allowedExtensions] 不包含点号。
@@ -47,12 +55,14 @@ abstract interface class FileSystemAdapter {
    */
   Future<List<String>> pickFiles({
     String? dialogTitle,
+    String? initialDirectory,
     List<String> allowedExtensions = const <String>[],
   });
 
   /** 选择单个文件；[allowedExtensions] 不包含点号。 */
   Future<String?> pickFile({
     String? dialogTitle,
+    String? initialDirectory,
     List<String> allowedExtensions = const <String>[],
   });
 
@@ -104,6 +114,9 @@ abstract interface class FileSystemAdapter {
 
   /** 按当前平台规则拼接路径片段。 */
   String joinPath(List<String> parts);
+
+  /** 返回文件或目录路径的父目录，不让页面依赖具体平台路径库。 */
+  String parentPath(String path);
 
   /** 计算 [path] 相对 [rootPath] 的路径。 */
   String relativePath({required String rootPath, required String path});
