@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.43` 已完成。
+架构版本状态：`Architecture Baseline 0.5.44` 已完成。
 
 最近一次验证：
 
@@ -14,9 +14,14 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 159 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 161 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 播放器音量图标支持点击一键静音，再次点击恢复静音前最近一次非零音量；图标、tooltip 与滑条使用页面即时音量同步更新。
+- 播放器焦点下，上下方向键和视频画面滚轮按 5 点步长动态调节音量；队列搜索获得焦点时不拦截输入，右侧队列滚轮继续只滚动列表。
+- 新增音量钳制、滚轮方向、静音恢复及按钮状态 focused tests；真实 Debug 窗口完成静音/恢复、连续方向键、视频滚轮和队列滚轮截图验证。
+- 完整 161 项测试通过，3 项显式 benchmark 跳过；`dart format`、`flutter analyze` 和 Windows debug build 通过。
 
 - 播放器底部控制条在音量图标前新增弹出式“打开文件位置”按钮；点击复用既有 `FileSystemAdapter.revealInFileManager` 平台边界，不在页面中增加 Windows 命令。
 - focused widget 覆盖 `eject` 图标、tooltip 和点击回调；真实 Debug 窗口确认按钮顺序、间距和对齐正常，点击后文件资源管理器打开当前目录并选中正在播放的视频。

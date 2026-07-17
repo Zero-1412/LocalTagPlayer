@@ -43,6 +43,26 @@ bool playerControlsShouldAutoHide({
 }) =>
     !settingsOpen && !pointerInControlBar;
 
+/** 按固定步长调整播放器音量，并把结果限制在后端接受的 0..100。 */
+double playerVolumeAfterStep(double currentVolume, double delta) =>
+    (currentVolume + delta).clamp(0, 100).toDouble();
+
+/** 把滚轮的垂直方向映射为音量步长；纯水平滚动不得误改音量。 */
+double playerVolumeDeltaForScroll(double scrollDy) {
+  if (scrollDy == 0) return 0;
+  return scrollDy < 0 ? 5 : -5;
+}
+
+/** 静音时归零，恢复时回到最近一次有效的非零音量。 */
+double playerVolumeAfterMuteToggle({
+  required double currentVolume,
+  required double lastAudibleVolume,
+}) {
+  if (currentVolume > 0) return 0;
+  final restored = lastAudibleVolume.clamp(1, 100).toDouble();
+  return restored > 0 ? restored : 100;
+}
+
 /**
  * 播放控制条中的“打开文件位置”按钮。
  *
@@ -64,6 +84,35 @@ class PlayerRevealFileButton extends StatelessWidget {
       tooltip: '打开文件位置',
       onPressed: onPressed,
       icon: const Icon(Icons.eject_rounded, size: 20),
+    );
+  }
+}
+
+/** 播放控制条中的音量按钮，点击时在静音与最近音量之间切换。 */
+class PlayerVolumeButton extends StatelessWidget {
+  const PlayerVolumeButton({
+    super.key,
+    required this.volume,
+    required this.onPressed,
+  });
+
+  /** 当前页面即时音量，用于同步图标与 tooltip。 */
+  final double volume;
+
+  /** 请求切换静音状态。 */
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = volume <= 0;
+    return IconButton(
+      key: const ValueKey('player.volume.toggleMute'),
+      tooltip: muted ? '恢复音量' : '静音',
+      onPressed: onPressed,
+      icon: Icon(
+        muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+        size: 20,
+      ),
     );
   }
 }
@@ -249,6 +298,10 @@ class PlayerPageState extends State<PlayerPage> {
   late PlayerVideoAspectMode _videoAspectMode;
   /** 当前播放器会话使用的全局配置快照。 */
   late PlaybackSettings _effectivePlaybackSettings;
+  /** 页面即时音量；避免异步后端快照让滑条、图标和键盘反馈不同步。 */
+  late double _volume;
+  /** 一键静音前最近一次非零音量，用于准确恢复用户原值。 */
+  double _lastAudibleVolume = 100;
   /** 串行保存设置，避免连续点击时旧写入覆盖最后一次选择。 */
   Future<void> _playbackSettingsSaveTail = Future<void>.value();
   /** 用户主动折叠宽屏右侧队列时保持当前页面内的显示状态。 */
@@ -331,6 +384,10 @@ class PlayerPageState extends State<PlayerPage> {
       enableHardwareAcceleration:
           widget.playbackSettings.hardwareDecodingEnabled,
     );
+    _volume = _playerBackend.state.volume.clamp(0, 100).toDouble();
+    if (_volume > 0) {
+      _lastAudibleVolume = _volume;
+    }
     _playerBackend.textureId.addListener(_handleTextureReadyForDiagnostics);
     unawaited(PlayerMemoryDiagnostics.logStage(
       'player_constructed',
@@ -512,6 +569,53 @@ class PlayerPageState extends State<PlayerPage> {
     _saveGlobalPlaybackSettings(
       _effectivePlaybackSettings.copyWith(mirrorVideo: enabled),
     );
+  }
+
+  /**
+   * 更新页面即时音量并异步送入播放后端。
+   *
+   * 所有按钮、键盘、滚轮和滑条入口都经过这里，保证图标与滑条即时同步，同时避免
+   * 多处各自维护静音恢复值。
+   */
+  void _setPlayerVolume(double value) {
+    final volume = value.clamp(0, 100).toDouble();
+    if (_volume == volume) {
+      _showVideoControls();
+      return;
+    }
+    if (volume > 0) {
+      _lastAudibleVolume = volume;
+    }
+    setState(() => _volume = volume);
+    unawaited(_playerBackend.setVolume(volume));
+    _showVideoControls();
+  }
+
+  /** 按 5 点步长调整音量，供方向键和鼠标滚轮共用。 */
+  void _stepPlayerVolume(double delta) {
+    _setPlayerVolume(playerVolumeAfterStep(_volume, delta));
+  }
+
+  /** 在静音与最近一次非零音量之间切换，不改变全局播放配置。 */
+  void _togglePlayerMute() {
+    if (_volume > 0) {
+      _lastAudibleVolume = _volume;
+    }
+    _setPlayerVolume(
+      playerVolumeAfterMuteToggle(
+        currentVolume: _volume,
+        lastAudibleVolume: _lastAudibleVolume,
+      ),
+    );
+  }
+
+  /** 仅处理视频画面内的垂直滚轮，右侧队列继续拥有自己的滚动行为。 */
+  void _handleVideoPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || _queueSearchFocusNode.hasFocus) return;
+    final delta = playerVolumeDeltaForScroll(event.scrollDelta.dy);
+    if (delta != 0) {
+      _stepPlayerVolume(delta);
+    }
   }
 
   /**
@@ -992,50 +1096,26 @@ class PlayerPageState extends State<PlayerPage> {
                               onPressed: () => unawaited(_revealCurrentFile()),
                             ),
                             const SizedBox(width: 4),
-                            Listener(
-                              onPointerSignal: (event) {
-                                if (event is PointerScrollEvent) {
-                                  final delta =
-                                      event.scrollDelta.dy < 0 ? 5 : -5;
-                                  final volume =
-                                      (_playerBackend.state.volume + delta)
-                                          .clamp(0, 100)
-                                          .toDouble();
-                                  unawaited(_playerBackend.setVolume(volume));
-                                  _showVideoControls();
-                                }
-                              },
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // 音量图标使用与 IconButton 相同的 48px 槽位，统一紧凑的按钮中心节奏。
-                                  const SizedBox(
-                                    width: 48,
-                                    child: Center(
-                                      child: Icon(
-                                        Icons.volume_up_rounded,
-                                        size: 20,
-                                      ),
-                                    ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                PlayerVolumeButton(
+                                  volume: _volume,
+                                  onPressed: _togglePlayerMute,
+                                ),
+                                SizedBox(
+                                  width: 130,
+                                  child: PlayerControlSlider(
+                                    sliderKey: const ValueKey('player.volume'),
+                                    value: _volume,
+                                    max: 100,
+                                    trackHeight: 3,
+                                    thumbRadius: 4.5,
+                                    overlayRadius: 11,
+                                    onChanged: _setPlayerVolume,
                                   ),
-                                  SizedBox(
-                                    width: 130,
-                                    child: PlayerControlSlider(
-                                      sliderKey:
-                                          const ValueKey('player.volume'),
-                                      value: _playerBackend.state.volume
-                                          .clamp(0, 100),
-                                      max: 100,
-                                      trackHeight: 3,
-                                      thumbRadius: 4.5,
-                                      overlayRadius: 11,
-                                      onChanged: (value) => unawaited(
-                                        _playerBackend.setVolume(value),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                             const SizedBox(width: 24),
                             Text(
@@ -1618,15 +1698,6 @@ class PlayerPageState extends State<PlayerPage> {
     setState(() => _playback.select(index));
     // 鼠标单击发生在已经可见的队列项上，只更新选中态；若此处立刻滚动，
     // 双击的第二击会落到移动后的另一行。离屏选中项由“定位已选中”显式定位。
-  }
-
-  void _moveQueueSelection(int delta, {bool center = false}) {
-    if (_queue.isEmpty) {
-      return;
-    }
-    late int nextIndex;
-    setState(() => nextIndex = _playback.moveSelection(delta));
-    _ensureQueueIndexVisible(nextIndex, center: center);
   }
 
   void _selectQueueIndex(int index, {bool center = false}) {
@@ -2246,10 +2317,16 @@ class PlayerPageState extends State<PlayerPage> {
     }
     switch (event.logicalKey) {
       case LogicalKeyboardKey.arrowUp:
-        _moveQueueSelection(-1);
+        if (_queueSearchFocusNode.hasFocus) {
+          return KeyEventResult.ignored;
+        }
+        _stepPlayerVolume(5);
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowDown:
-        _moveQueueSelection(1);
+        if (_queueSearchFocusNode.hasFocus) {
+          return KeyEventResult.ignored;
+        }
+        _stepPlayerVolume(-5);
         return KeyEventResult.handled;
       case LogicalKeyboardKey.home:
         _selectQueueIndex(0, center: true);
@@ -2449,20 +2526,28 @@ class PlayerPageState extends State<PlayerPage> {
                                       child: Stack(
                                         children: [
                                           Positioned.fill(
-                                            child: GestureDetector(
-                                              behavior: HitTestBehavior.opaque,
-                                              onSecondaryTapDown:
-                                                  _showPlayerContextMenu,
-                                              child: Center(
-                                                child: _playerBackend
-                                                    .buildVideoSurface(
-                                                  controls:
-                                                      _buildVideoControls(),
-                                                  fit: _videoAspectMode
-                                                      .surfaceFit,
-                                                  aspectRatio: _videoAspectMode
-                                                      .surfaceAspectRatio,
-                                                  mirror: _mirrorVideo,
+                                            child: Listener(
+                                              onPointerSignal:
+                                                  _handleVideoPointerSignal,
+                                              child: GestureDetector(
+                                                behavior:
+                                                    HitTestBehavior.opaque,
+                                                onTapDown: (_) =>
+                                                    _focusNode.requestFocus(),
+                                                onSecondaryTapDown:
+                                                    _showPlayerContextMenu,
+                                                child: Center(
+                                                  child: _playerBackend
+                                                      .buildVideoSurface(
+                                                    controls:
+                                                        _buildVideoControls(),
+                                                    fit: _videoAspectMode
+                                                        .surfaceFit,
+                                                    aspectRatio:
+                                                        _videoAspectMode
+                                                            .surfaceAspectRatio,
+                                                    mirror: _mirrorVideo,
+                                                  ),
                                                 ),
                                               ),
                                             ),

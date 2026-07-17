@@ -2438,6 +2438,57 @@ void main() {
     expect(revealRequests, 1);
   });
 
+  test('player volume steps clamp and mute restores the last audible value',
+      () {
+    expect(playerVolumeAfterStep(98, 5), 100);
+    expect(playerVolumeAfterStep(2, -5), 0);
+    expect(playerVolumeDeltaForScroll(-120), 5);
+    expect(playerVolumeDeltaForScroll(120), -5);
+    expect(playerVolumeDeltaForScroll(0), 0);
+    expect(
+      playerVolumeAfterMuteToggle(
+        currentVolume: 65,
+        lastAudibleVolume: 65,
+      ),
+      0,
+    );
+    expect(
+      playerVolumeAfterMuteToggle(
+        currentVolume: 0,
+        lastAudibleVolume: 65,
+      ),
+      65,
+    );
+  });
+
+  testWidgets('player volume button toggles icon tooltip and callback',
+      (tester) async {
+    var toggleRequests = 0;
+
+    Future<void> pumpVolume(double volume) => tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: Scaffold(
+              body: PlayerVolumeButton(
+                volume: volume,
+                onPressed: () => toggleRequests++,
+              ),
+            ),
+          ),
+        );
+
+    await pumpVolume(65);
+    final button = find.byKey(const ValueKey('player.volume.toggleMute'));
+    expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
+    expect(find.byTooltip('静音'), findsOneWidget);
+    await tester.tap(button);
+    expect(toggleRequests, 1);
+
+    await pumpVolume(0);
+    expect(find.byIcon(Icons.volume_off_rounded), findsOneWidget);
+    expect(find.byTooltip('恢复音量'), findsOneWidget);
+  });
+
   test('player queue swipe actions snap smoothly by distance and velocity', () {
     expect(
       playerQueueActionShouldOpen(
