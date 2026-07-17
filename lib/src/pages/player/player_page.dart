@@ -958,7 +958,7 @@ class PlayerPageState extends State<PlayerPage> {
                                       ),
                               icon: const Icon(Icons.skip_previous_rounded),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 4),
                             IconButton(
                               tooltip:
                                   _playerBackend.state.playing ? '暂停' : '播放',
@@ -974,7 +974,7 @@ class PlayerPageState extends State<PlayerPage> {
                                 size: 30,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 4),
                             IconButton(
                               tooltip: '下一条',
                               color: Colors.white,
@@ -987,11 +987,11 @@ class PlayerPageState extends State<PlayerPage> {
                                       ),
                               icon: const Icon(Icons.skip_next_rounded),
                             ),
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 4),
                             PlayerRevealFileButton(
                               onPressed: () => unawaited(_revealCurrentFile()),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 4),
                             Listener(
                               onPointerSignal: (event) {
                                 if (event is PointerScrollEvent) {
@@ -1008,7 +1008,7 @@ class PlayerPageState extends State<PlayerPage> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  // 音量图标使用与 IconButton 相同的 48px 槽位，统一按钮中心节奏。
+                                  // 音量图标使用与 IconButton 相同的 48px 槽位，统一紧凑的按钮中心节奏。
                                   const SizedBox(
                                     width: 48,
                                     child: Center(
