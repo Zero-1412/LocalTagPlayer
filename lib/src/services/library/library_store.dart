@@ -1154,6 +1154,30 @@ class LibraryStore
   }
 
   /**
+   * 批量写入继续观看等用户播放状态，并同步更新独立备份。
+   *
+   * 媒体详情批量写入不包含在这里；只有用户依赖字段的显式操作才应进入备份队列。
+   */
+  @override
+  Future<void> upsertPlaybackStates(Iterable<VideoItem> items) async {
+    final updates = <VideoItem>[
+      for (final item in items)
+        // 继续观看只消费 active 视频；删除或解除管理后到达的异步清理/撤销不能复活数据库行。
+        if (videos.containsKey(TagRules.pathKey(item.path))) item,
+    ];
+    if (updates.isEmpty) {
+      return;
+    }
+    for (final item in updates) {
+      videos[TagRules.pathKey(item.path)] = item;
+    }
+    await _videoPersistence.upsertAll(updates);
+    await dataBackupService.enqueueVideos(
+      updates.map((item) => item.videoId),
+    );
+  }
+
+  /**
    * 在单个 SQLite 事务中删除视频记录及其全部标签关系。
    *
    * 收藏、播放进度、媒体详情和稳定身份字段都存放在 videos 行中；删除该行后不会留下
@@ -1327,6 +1351,22 @@ class LibraryStore
 
   @override
   Future<void> setScanPaused(bool paused) => _scanBackend.setPaused(paused);
+
+  /**
+   * 取消当前只读扫描，并推进代次阻止已经离开后端的旧结果进入事务提交。
+   *
+   * 先登记取消、再解除暂停，保证正在等待播放让盘的扫描也能及时观察取消信号。
+   */
+  @override
+  Future<void> cancelActiveScan() async {
+    final generation = _scanGeneration;
+    if (generation <= 0) {
+      return;
+    }
+    _scanBackend.cancelGeneration(generation);
+    _scanGeneration++;
+    await _scanBackend.setPaused(false);
+  }
 
   @override
   Future<void> setDataBackupEnabled(bool enabled) =>

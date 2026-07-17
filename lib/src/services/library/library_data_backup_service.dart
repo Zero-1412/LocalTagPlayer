@@ -513,12 +513,14 @@ class LibraryDataBackupService {
       FROM videos
       WHERE video_id IN ($placeholders)
     ''', videoIds);
+    // usage_count 是可由关系表重新统计的全局派生值；若写入每条视频快照，一次引用数变化
+    // 会把同标签的数千条快照误报为 stale。规范快照固定为 0，恢复时再由标签索引维护。
     final linkRows = await _sourceDatabase.rawQuery('''
       SELECT vt.video_id, vt.source AS link_source, vt.locked,
              t.id AS tag_id, t.name AS tag_name, t.display_name AS tag_display_name,
              t.group_id AS tag_group_id, t.parent_id AS tag_parent_id,
              t.color AS tag_color, t.source AS tag_source,
-             t.aliases_json, t.usage_count, t.is_favorite AS tag_is_favorite,
+             t.aliases_json, 0 AS usage_count, t.is_favorite AS tag_is_favorite,
              t.is_hidden AS tag_is_hidden, t.sort_order AS tag_sort_order,
              g.id AS group_id, g.name AS group_name,
              g.display_name AS group_display_name, g.sort_order AS group_sort_order,

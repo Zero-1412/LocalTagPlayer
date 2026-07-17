@@ -7,6 +7,8 @@ import '../../models/video_item.dart';
 import '../../services/library/library_application_facade.dart';
 import '../../widgets/app_theme_tokens.dart';
 
+// ignore_for_file: slash_for_doc_comments
+
 class TagManagerPage extends StatefulWidget {
   const TagManagerPage({
     super.key,
@@ -821,6 +823,33 @@ class _UsagePill extends StatelessWidget {
   }
 }
 
+/** 新建 manual 标签的本地输入校验；空白名称必须留在弹窗内提示。 */
+@visibleForTesting
+String? manualTagNameValidationError(String value) =>
+    TagRules.normalizeTag(value).isEmpty ? '请输入标签名' : null;
+
+/**
+ * 新建标签弹窗的 focused widget 测试宿主。
+ *
+ * 宿主复用真实弹窗，确保空名称不会关闭对话框或泄露 Store 的英文参数异常。
+ */
+@visibleForTesting
+Widget createTagDialogSmokeHarness() {
+  return MaterialApp(
+    home: Scaffold(
+      body: Builder(
+        builder: (context) => FilledButton(
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) => const _CreateTagDialog(groups: <TagGroup>[]),
+          ),
+          child: const Text('打开新建标签'),
+        ),
+      ),
+    ),
+  );
+}
+
 class _CreateTagDialog extends StatefulWidget {
   const _CreateTagDialog({required this.groups});
 
@@ -833,6 +862,7 @@ class _CreateTagDialog extends StatefulWidget {
 class _CreateTagDialogState extends State<_CreateTagDialog> {
   final _nameController = TextEditingController();
   final _displayNameController = TextEditingController();
+  String? _nameError;
   late String _groupId = widget.groups.any((group) => group.id == 'manual')
       ? 'manual'
       : (widget.groups.isEmpty ? 'manual' : widget.groups.first.id);
@@ -842,6 +872,22 @@ class _CreateTagDialogState extends State<_CreateTagDialog> {
     _nameController.dispose();
     _displayNameController.dispose();
     super.dispose();
+  }
+
+  /** 校验后提交；无效输入只显示中文字段错误，不关闭弹窗或触发 Store 异常。 */
+  void _submit() {
+    final error = manualTagNameValidationError(_nameController.text);
+    if (error != null) {
+      setState(() => _nameError = error);
+      return;
+    }
+    Navigator.of(context).pop(
+      _CreateTagResult(
+        name: TagRules.normalizeTag(_nameController.text),
+        displayName: TagRules.normalizeTag(_displayNameController.text),
+        groupId: _groupId,
+      ),
+    );
   }
 
   @override
@@ -856,7 +902,16 @@ class _CreateTagDialogState extends State<_CreateTagDialog> {
             TextField(
               controller: _nameController,
               autofocus: true,
-              decoration: const InputDecoration(labelText: '标签名'),
+              textInputAction: TextInputAction.next,
+              onChanged: (_) {
+                if (_nameError != null) {
+                  setState(() => _nameError = null);
+                }
+              },
+              decoration: InputDecoration(
+                labelText: '标签名',
+                errorText: _nameError,
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -891,13 +946,7 @@ class _CreateTagDialogState extends State<_CreateTagDialog> {
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(
-            _CreateTagResult(
-              name: _nameController.text,
-              displayName: _displayNameController.text,
-              groupId: _groupId,
-            ),
-          ),
+          onPressed: _submit,
           child: const Text('创建'),
         ),
       ],

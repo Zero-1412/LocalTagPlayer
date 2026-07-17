@@ -155,6 +155,34 @@ String libraryScanProgressLabel(LibraryScanProgress? progress) {
   return parts.join(' · ');
 }
 
+/**
+ * 把备份检查指标翻译为普通用户可执行的安全结论。
+ *
+ * 记录总数相同只代表数量一致；stale 表示当前用户依赖尚未同步，重复 fingerprint
+ * 则只会让自动恢复保守跳过歧义文件，不能把两者混成同一种“损坏”。
+ */
+@visibleForTesting
+String dataBackupIntegritySafetySummary(DataBackupIntegrityReport report) {
+  if (!report.sqliteHealthy) {
+    return '备份数据库检查异常，暂时不要依赖它执行恢复；请保留现有文件并重新备份。';
+  }
+  final invalid = report.invalidPayloads + report.missingFingerprints;
+  if (invalid > 0) {
+    return '有 $invalid 条快照无法安全恢复。现有数据未被修改，请重新备份后再次检查。';
+  }
+  final pending = report.missingCurrentSnapshots + report.staleCurrentSnapshots;
+  if (pending > 0) {
+    return '当前备份尚未覆盖最新用户数据（共 $pending 条）。请先执行“立即备份”，完成后重新检查。';
+  }
+  if (report.ambiguousFingerprints > 0) {
+    return '当前用户数据已覆盖；另有 ${report.ambiguousFingerprints} 组重复指纹。自动恢复会安全跳过这些歧义文件，需要人工确认，不会静默合并。';
+  }
+  if (report.recoverableSnapshots > 0) {
+    return '当前用户数据已覆盖，另保留 ${report.recoverableSnapshots} 条供未来重新扫描时恢复的归档快照。';
+  }
+  return '当前用户数据已完整覆盖，可作为稳定身份、收藏、播放状态和非文件夹标签的恢复来源。';
+}
+
 /** 把 ETA 压缩为适合当前筛选结果行的一到两个时间单位。 */
 String _libraryImportDurationLabel(Duration duration) {
   final seconds = duration.inSeconds.clamp(1, 359999);
@@ -733,7 +761,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   String _dataBackupPhaseLabel(DataBackupStatus status) =>
       switch (status.phase) {
         DataBackupPhase.disabled => '已关闭',
-        DataBackupPhase.idle => '已完成',
+        DataBackupPhase.idle => '后台任务空闲',
         DataBackupPhase.running => '后台备份中',
         DataBackupPhase.pausedForPlayback => '播放期间已暂停',
         DataBackupPhase.failed => '上次执行失败',
@@ -773,7 +801,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                 color: report.isHealthy ? appAccent : const Color(0xffb26a00),
               ),
               const SizedBox(width: 10),
-              Text(report.isHealthy ? '备份完整' : '备份需要同步'),
+              Text(report.isHealthy ? '备份检查通过' : '备份检查发现差异'),
             ],
           ),
           content: ConstrainedBox(
@@ -783,9 +811,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  report.isHealthy
-                      ? '数据库结构和当前视频依赖快照均通过检查。'
-                      : '没有删除或覆盖任何数据。可关闭弹窗后点击“立即备份”补齐差异。',
+                  dataBackupIntegritySafetySummary(report),
                   style: const TextStyle(color: appTextMuted, height: 1.5),
                 ),
                 const SizedBox(height: 16),
@@ -794,31 +820,43 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                   value: report.sqliteHealthy ? '正常' : '异常',
                 ),
                 _SettingsStatLine(
-                  label: '备份 / 当前',
+                  label: '备份记录 / 主库视频',
                   value: '${report.backupRecords} / ${report.currentVideos}',
                 ),
                 _SettingsStatLine(
-                  label: '缺失 / 过期',
-                  value: '${report.missingCurrentSnapshots} / '
-                      '${report.staleCurrentSnapshots}',
+                  label: '未覆盖当前视频',
+                  value: formatCount(report.missingCurrentSnapshots),
                 ),
                 _SettingsStatLine(
-                  label: '无效快照',
+                  label: '内容待更新',
+                  value: formatCount(report.staleCurrentSnapshots),
+                ),
+                _SettingsStatLine(
+                  label: '损坏 / 缺失指纹',
                   value:
                       '${report.invalidPayloads + report.missingFingerprints}',
                 ),
                 _SettingsStatLine(
-                  label: '待未来恢复',
+                  label: '保留供未来恢复',
                   value: formatCount(report.recoverableSnapshots),
                 ),
                 _SettingsStatLine(
-                  label: '指纹歧义',
+                  label: '重复指纹组（自动跳过）',
                   value: formatCount(report.ambiguousFingerprints),
                 ),
               ],
             ),
           ),
           actions: [
+            if (!report.isHealthy && _dataBackupSettings.enabled)
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  unawaited(widget.onRunDataBackupNow());
+                },
+                icon: const Icon(Icons.backup_rounded),
+                label: const Text('立即备份'),
+              ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('知道了'),
@@ -1527,6 +1565,106 @@ List<VideoItem> recentPlaybackClearTargets(
   }).toList();
 }
 
+/**
+ * 二次确认清空全部继续观看进度。
+ *
+ * 文案明确只清进度、不删除视频，并提前说明可撤销窗口，避免“清空全部”被理解为
+ * 删除媒体文件或永久破坏标签、收藏。
+ */
+@visibleForTesting
+Future<bool?> showClearAllRecentPlaybackConfirmation(
+  BuildContext context, {
+  required int count,
+}) {
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('清空全部观看进度？'),
+      content: Text(
+        '将清除 $count 条继续观看进度，不会删除视频文件、标签或收藏。清除后可在 10 秒内撤销。',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('只清除进度'),
+        ),
+      ],
+    ),
+  );
+}
+
+/**
+ * 清理继续观看前保存的完整播放状态。
+ *
+ * Undo 必须恢复原来的最近播放时间、精确位置、完成态和位置更新时间，不能依赖重新播放
+ * 生成近似记录；[videoId] 只用于诊断和稳定识别，不以可变路径作为恢复身份。
+ */
+@visibleForTesting
+class ContinueWatchingClearSnapshot {
+  const ContinueWatchingClearSnapshot._({
+    required this.item,
+    required this.videoId,
+    required this.lastPlayedAt,
+    required this.playbackPosition,
+    required this.playbackCompleted,
+    required this.playbackPositionUpdatedAt,
+  });
+
+  /** 捕获一次清理动作之前的用户播放状态。 */
+  factory ContinueWatchingClearSnapshot.capture(VideoItem item) =>
+      ContinueWatchingClearSnapshot._(
+        item: item,
+        videoId: item.videoId,
+        lastPlayedAt: item.lastPlayedAt,
+        playbackPosition: item.playbackPosition,
+        playbackCompleted: item.playbackCompleted,
+        playbackPositionUpdatedAt: item.playbackPositionUpdatedAt,
+      );
+
+  /** 当前内存中的稳定视频对象；恢复时不替换对象，避免列表和播放器持有旧引用。 */
+  final VideoItem item;
+
+  /** 清理时的视频稳定身份。 */
+  final String videoId;
+
+  /** 清理前用于继续观看排序的最近播放时间。 */
+  final DateTime? lastPlayedAt;
+
+  /** 清理前的精确播放位置。 */
+  final Duration playbackPosition;
+
+  /** 清理前的播放完成态。 */
+  final bool playbackCompleted;
+
+  /** 清理前用于解决异步写入先后顺序的位置更新时间。 */
+  final DateTime? playbackPositionUpdatedAt;
+
+  /**
+   * 仅当记录仍保持本次清理后的空状态时允许 Undo。
+   *
+   * 如果用户在 10 秒窗口内重新播放了视频，旧快照不得覆盖刚产生的新进度。
+   */
+  bool get canRestoreWithoutOverwritingNewPlayback =>
+      item.videoId == videoId &&
+      item.lastPlayedAt == null &&
+      item.playbackPosition == Duration.zero &&
+      !item.playbackCompleted &&
+      item.playbackPositionUpdatedAt == null;
+
+  /** 把捕获的精确播放状态恢复到原稳定视频对象。 */
+  void restore() {
+    item
+      ..lastPlayedAt = lastPlayedAt
+      ..playbackPosition = playbackPosition
+      ..playbackCompleted = playbackCompleted
+      ..playbackPositionUpdatedAt = playbackPositionUpdatedAt;
+  }
+}
+
 class _LibraryPageState extends State<LibraryPage> {
   LibraryApplicationFacade? _store;
   PlaybackSnapshotWriteQueue? _playbackSnapshotQueue;
@@ -1580,6 +1718,8 @@ class _LibraryPageState extends State<LibraryPage> {
   var _libraryDataRevision = 0;
   var _showFavoritesOnly = false;
   var _isScanning = false;
+  /** 用户已请求取消扫描，但后端仍在退出当前系统调用。 */
+  var _isCancellingScan = false;
   LibraryScanProgress? _scanProgress;
   /**
    * 当前目录导入的后台媒体信息解析进度。
@@ -2035,6 +2175,7 @@ class _LibraryPageState extends State<LibraryPage> {
     var diagnosticsWillFinish = false;
     setState(() {
       _isScanning = true;
+      _isCancellingScan = false;
       _scanProgress = null;
       _mediaImportProgress = null;
     });
@@ -2103,6 +2244,7 @@ class _LibraryPageState extends State<LibraryPage> {
       if (mounted) {
         setState(() {
           _isScanning = false;
+          _isCancellingScan = false;
           _scanProgress = null;
         });
       }
@@ -2119,6 +2261,30 @@ class _LibraryPageState extends State<LibraryPage> {
     final paused = !progress.isPaused;
     setState(() => _scanProgress = progress.copyWith(isPaused: paused));
     await store.setScanPaused(paused);
+  }
+
+  /**
+   * 请求取消当前扫描，并保留取消前已经存在的媒体库数据。
+   *
+   * UI 保持“正在取消”直到扫描 Future 真正退出，避免用户重复启动并发扫描。
+   */
+  Future<void> _cancelScan() async {
+    final store = _store;
+    if (store == null || !_isScanning || _isCancellingScan) {
+      return;
+    }
+    setState(() => _isCancellingScan = true);
+    try {
+      await store.cancelActiveScan();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isCancellingScan = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('取消扫描失败：$error')),
+      );
+    }
   }
 
   /**
@@ -2672,15 +2838,71 @@ class _LibraryPageState extends State<LibraryPage> {
       selectedPathKeys: _selectedRecentPathKeys,
       selectedOnly: selectedOnly,
     );
+    if (targets.isEmpty) {
+      return;
+    }
+
+    if (!selectedOnly) {
+      final confirmed = await showClearAllRecentPlaybackConfirmation(
+        context,
+        count: targets.length,
+      );
+      if (confirmed != true || !mounted) {
+        return;
+      }
+    }
+    await _clearRecentPlaybackTargets(targets);
+  }
+
+  /**
+   * 批量清理播放状态并提供 10 秒精确 Undo。
+   *
+   * SQLite 使用既有批量视频行写入，避免逐条 await 放大交互等待；失败时先恢复内存
+   * 快照，保证界面不会宣称已清理但数据库仍保留旧状态。
+   */
+  Future<void> _clearRecentPlaybackTargets(List<VideoItem> targets) async {
+    final store = _store;
+    if (store == null || targets.isEmpty) {
+      return;
+    }
+    final snapshots = targets
+        .map(ContinueWatchingClearSnapshot.capture)
+        .toList(growable: false);
     for (final item in targets) {
       _resetContinueWatchingState(item);
-      await store.upsertVideo(item);
+    }
+    try {
+      await store.upsertPlaybackStates(targets);
+    } catch (_) {
+      for (final snapshot in snapshots) {
+        snapshot.restore();
+      }
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('清除观看进度失败，原记录已保留')),
+        );
+      }
+      return;
     }
     if (!mounted) {
       return;
     }
     setState(_selectedRecentPathKeys.clear);
     _markLibraryDataChanged();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 10),
+          content: Text('已清除 ${targets.length} 条观看进度，视频文件未删除'),
+          action: SnackBarAction(
+            label: '撤销',
+            onPressed: () => unawaited(_undoRecentPlaybackClear(snapshots)),
+          ),
+        ),
+      );
   }
 
   /**
@@ -2689,17 +2911,57 @@ class _LibraryPageState extends State<LibraryPage> {
    * 单条删除不能依赖“先选中再批量删除”的状态刷新顺序，否则真实鼠标快速点击时会出现命中但未删除。
    */
   Future<void> _clearOneRecentPlayback(VideoItem item) async {
+    await _clearRecentPlaybackTargets(<VideoItem>[item]);
+  }
+
+  /**
+   * 恢复仍处于本次清理空状态的记录；已产生新播放进度的条目保持新值。
+   */
+  Future<void> _undoRecentPlaybackClear(
+    List<ContinueWatchingClearSnapshot> snapshots,
+  ) async {
     final store = _store;
     if (store == null) {
       return;
     }
-    _resetContinueWatchingState(item);
-    await store.upsertVideo(item);
+    final restorable = snapshots
+        .where((snapshot) => snapshot.canRestoreWithoutOverwritingNewPlayback)
+        .toList(growable: false);
+    if (restorable.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('记录已产生新的播放进度，未覆盖新状态')),
+        );
+      }
+      return;
+    }
+    for (final snapshot in restorable) {
+      snapshot.restore();
+    }
+    try {
+      await store.upsertPlaybackStates(
+        restorable.map((snapshot) => snapshot.item),
+      );
+    } catch (_) {
+      // 数据库仍保持已清理状态时，内存必须同步回到相同状态，避免重启前后显示分裂。
+      for (final snapshot in restorable) {
+        _resetContinueWatchingState(snapshot.item);
+      }
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('撤销失败，请重试播放以重新生成进度')),
+        );
+      }
+      return;
+    }
     if (!mounted) {
       return;
     }
-    setState(() => _selectedRecentPathKeys.remove(TagRules.pathKey(item.path)));
     _markLibraryDataChanged();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已恢复 ${restorable.length} 条观看进度')),
+    );
   }
 
   /** 清空单条播放进度；保留媒体总时长、videoId 和其它用户维护数据。 */
@@ -3410,12 +3672,17 @@ class _LibraryPageState extends State<LibraryPage> {
     final localEntries = _resultMode == _LibraryResultMode.local
         ? _cachedLocalLibraryEntries(store)
         : const <LocalLibraryEntry>[];
+    final localVideoCount =
+        localEntries.where((entry) => !entry.isFolder).length;
     final displayResultCount = switch (_resultMode) {
       _LibraryResultMode.recent => videos.length,
       _LibraryResultMode.favorites => videos.length,
-      _LibraryResultMode.local => localEntries.length,
+      _LibraryResultMode.local => localVideoCount,
       _LibraryResultMode.library => filterState.resultCount,
     };
+    final resultCountLabel = _resultMode == _LibraryResultMode.local
+        ? localLibraryEntrySummary(localEntries)
+        : null;
     final defaultResultLabel = switch (_resultMode) {
       _LibraryResultMode.recent => '继续观看',
       _LibraryResultMode.favorites => '\u672c\u5730\u6536\u85cf',
@@ -3585,6 +3852,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       onOpenFolder: _openLocalLibraryFolder,
                       onOpenVideo: _openVideo,
                       onEditTags: _editTags,
+                      onRevealLocation: _revealVideoLocation,
                       onToggleFavorite: _toggleFavorite,
                       onDelete: _requestDeleteVideo,
                     ),
@@ -3639,6 +3907,7 @@ class _LibraryPageState extends State<LibraryPage> {
                           onVisible: _prioritizeVisibleLibraryItem,
                           onOpen: _openVideo,
                           onEditTags: _editTags,
+                          onRevealLocation: _revealVideoLocation,
                           onToggleFavorite: _toggleFavorite,
                           onDelete: _requestDeleteVideo,
                           selectionMode: _librarySelectionMode,
@@ -3657,6 +3926,7 @@ class _LibraryPageState extends State<LibraryPage> {
       return ReferenceTopBar(
         controller: _searchController,
         videoCount: displayResultCount,
+        resultCountLabel: resultCountLabel,
         keyword: _searchController.text,
         searchFocusNode: _searchFocusNode,
         selectedTags: _selectedTags.toList()..sort(),
@@ -3669,7 +3939,9 @@ class _LibraryPageState extends State<LibraryPage> {
         progressLabel: _resultMode != _LibraryResultMode.library
             ? null
             : _isScanning
-                ? libraryScanProgressLabel(_scanProgress)
+                ? _isCancellingScan
+                    ? '正在取消扫描…'
+                    : libraryScanProgressLabel(_scanProgress)
                 : _mediaImportProgress == null
                     ? null
                     : libraryMediaImportProgressLabel(
@@ -3690,6 +3962,11 @@ class _LibraryPageState extends State<LibraryPage> {
                 : _mediaImportProgress == null
                     ? null
                     : _toggleMediaImportPaused,
+        onCancelProgress: _resultMode == _LibraryResultMode.library &&
+                _isScanning &&
+                !_isCancellingScan
+            ? _cancelScan
+            : null,
         sortMode: _sortMode,
         sortDirection: _sortDirection,
         layoutSize: layoutSize,
@@ -4554,6 +4831,19 @@ class _LibraryPageState extends State<LibraryPage> {
     await _store?.upsertVideo(item);
     if (mounted) {
       _markLibraryDataChanged();
+    }
+  }
+
+  /** 通过共享文件系统平台边界定位视频；页面不拼接 Windows 或其它平台命令。 */
+  Future<void> _revealVideoLocation(VideoItem item) async {
+    try {
+      await _fileSystem.revealInFileManager(item.path);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法打开文件位置，请确认文件仍然存在')),
+        );
+      }
     }
   }
 

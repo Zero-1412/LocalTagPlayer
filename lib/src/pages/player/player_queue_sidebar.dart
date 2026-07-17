@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/tag_rules.dart';
 import '../../models/media_details.dart';
@@ -133,6 +134,7 @@ class PlayerQueueSidebar extends StatelessWidget {
     required this.onToggleFavorite,
     required this.onDeleteItem,
     required this.onSearchQueue,
+    this.onSearchVisibilityChanged,
   });
 
   /**
@@ -227,6 +229,13 @@ class PlayerQueueSidebar extends StatelessWidget {
   /** 在当前队列内搜索并定位，不改变队列内容。 */
   final ValueChanged<String> onSearchQueue;
 
+  /**
+   * 队列搜索展开/收起通知。
+   *
+   * 播放器页只在收起后恢复全局快捷键焦点；输入期间仍由真实 EditableText 独占键盘。
+   */
+  final ValueChanged<bool>? onSearchVisibilityChanged;
+
   String? get _activeParentTag {
     if (activeTags.length != 1) {
       return null;
@@ -260,6 +269,7 @@ class PlayerQueueSidebar extends StatelessWidget {
           onLocateSelected: onLocateSelected,
           onDeleteSelected: onDeleteSelected,
           onSearch: onSearchQueue,
+          onSearchVisibilityChanged: onSearchVisibilityChanged,
         ),
         if (_activeParentTag != null)
           SizedBox(
@@ -549,6 +559,7 @@ class PlayerQueueHeader extends StatefulWidget {
     required this.onLocateSelected,
     required this.onDeleteSelected,
     required this.onSearch,
+    this.onSearchVisibilityChanged,
   });
 
   /** 当前播放器实际消费的队列数量。 */
@@ -566,6 +577,9 @@ class PlayerQueueHeader extends StatefulWidget {
   /** 在当前队列内搜索并定位，不重新查询媒体库。 */
   final ValueChanged<String> onSearch;
 
+  /** 搜索输入展开/收起通知，供播放器恢复快捷键焦点。 */
+  final ValueChanged<bool>? onSearchVisibilityChanged;
+
   @override
   State<PlayerQueueHeader> createState() => _PlayerQueueHeaderState();
 }
@@ -576,9 +590,18 @@ class _PlayerQueueHeaderState extends State<PlayerQueueHeader> {
 
   /** 切换搜索框；重新展开时由输入框自动获得焦点。 */
   void _toggleSearch() {
-    setState(() {
-      _searchVisible = !_searchVisible;
-    });
+    final visible = !_searchVisible;
+    setState(() => _searchVisible = visible);
+    widget.onSearchVisibilityChanged?.call(visible);
+  }
+
+  @override
+  void dispose() {
+    if (_searchVisible) {
+      // 全屏队列自动隐藏会直接卸载头部；仍需通知播放器恢复稳定焦点。
+      widget.onSearchVisibilityChanged?.call(false);
+    }
+    super.dispose();
   }
 
   /** 构建统一尺寸的紧凑操作按钮，避免图标随默认约束产生不规则间距。 */
@@ -672,6 +695,7 @@ class _PlayerQueueHeaderState extends State<PlayerQueueHeader> {
             _QueueSearchField(
               autofocus: true,
               onSearch: widget.onSearch,
+              onClose: _toggleSearch,
             ),
           ],
         ],
@@ -687,6 +711,7 @@ class _QueueSearchField extends StatefulWidget {
   const _QueueSearchField({
     this.autofocus = false,
     required this.onSearch,
+    required this.onClose,
   });
 
   /** 展开后是否立即接管键盘输入焦点。 */
@@ -694,6 +719,9 @@ class _QueueSearchField extends StatefulWidget {
 
   /** 仅在播放器已持有的队列中定位，不访问媒体库或触发重新扫描。 */
   final ValueChanged<String> onSearch;
+
+  /** Escape 或关闭动作只收起搜索，不让同一按键继续冒泡成播放器退出。 */
+  final VoidCallback onClose;
 
   @override
   State<_QueueSearchField> createState() => _QueueSearchFieldState();
@@ -714,36 +742,41 @@ class _QueueSearchFieldState extends State<_QueueSearchField> {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      key: const ValueKey('player.queueSearch'),
-      controller: _controller,
-      autofocus: widget.autofocus,
-      style: const TextStyle(color: Colors.white, fontSize: 12),
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: '搜索当前队列并定位',
-        hintStyle: const TextStyle(color: Color(0xff6f7d99)),
-        prefixIcon: const Icon(Icons.search_rounded,
-            size: 18, color: Color(0xff8fa0c5)),
-        filled: true,
-        fillColor: const Color(0xff0a1122),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xff253251)),
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.escape): widget.onClose,
+      },
+      child: TextField(
+        key: const ValueKey('player.queueSearch'),
+        controller: _controller,
+        autofocus: widget.autofocus,
+        style: const TextStyle(color: Colors.white, fontSize: 12),
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: '搜索当前队列并定位',
+          hintStyle: const TextStyle(color: Color(0xff6f7d99)),
+          prefixIcon: const Icon(Icons.search_rounded,
+              size: 18, color: Color(0xff8fa0c5)),
+          filled: true,
+          fillColor: const Color(0xff0a1122),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xff253251)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xff7457ff)),
+          ),
+          suffixIcon: IconButton(
+            key: const ValueKey('player.queueSearchSubmit'),
+            tooltip: '定位下一条匹配视频',
+            onPressed: _submit,
+            icon: const Icon(Icons.my_location_rounded, size: 17),
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xff7457ff)),
-        ),
-        suffixIcon: IconButton(
-          key: const ValueKey('player.queueSearchSubmit'),
-          tooltip: '定位下一条匹配视频',
-          onPressed: _submit,
-          icon: const Icon(Icons.my_location_rounded, size: 17),
-        ),
+        onSubmitted: (_) => _submit(),
       ),
-      onSubmitted: (_) => _submit(),
     );
   }
 }

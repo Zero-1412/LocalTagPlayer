@@ -1518,11 +1518,13 @@ class _LibraryFilterStatusArea extends StatelessWidget {
     required this.defaultLabel,
     required this.filters,
     required this.resultCount,
+    this.resultCountLabel,
     required this.refreshing,
     required this.progressLabel,
     required this.progressValue,
     required this.progressPaused,
     required this.onToggleProgressPaused,
+    required this.onCancelProgress,
     required this.onClearAll,
     this.showResultStatus = true,
   });
@@ -1539,6 +1541,9 @@ class _LibraryFilterStatusArea extends StatelessWidget {
   /** 当前筛选结果数量。 */
   final int resultCount;
 
+  /** 非纯视频来源的精确统计文案，例如“40 个文件夹 · 0 个视频”。 */
+  final String? resultCountLabel;
+
   /** 结果或旁路计数正在后台刷新。 */
   final bool refreshing;
 
@@ -1554,6 +1559,9 @@ class _LibraryFilterStatusArea extends StatelessWidget {
   /** 暂停或继续后台任务。 */
   final VoidCallback? onToggleProgressPaused;
 
+  /** 取消当前可取消的扫描任务；媒体解析等不可取消任务传 null。 */
+  final VoidCallback? onCancelProgress;
+
   /** 一次清除全部筛选；为空时不绘制入口。 */
   final VoidCallback? onClearAll;
 
@@ -1566,14 +1574,21 @@ class _LibraryFilterStatusArea extends StatelessWidget {
       height: compact ? 44 : 50,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final trailingWidth = !showResultStatus
+          final hasFilters = filters.isNotEmpty;
+          // 活动筛选及其清除入口是结果语义的一部分；窄空间下先让位普通数量，
+          // 避免用户只能从结果变化猜测筛选是否仍然生效。扫描进度仍保持可见。
+          final showInlineResultStatus = showResultStatus &&
+              (progressLabel != null ||
+                  !hasFilters ||
+                  constraints.maxWidth >= 230);
+          final trailingWidth = !showInlineResultStatus
               ? 0.0
               : progressLabel == null
-                  ? (compact ? 74.0 : 92.0)
-                  : 176.0;
-          final showClearAll = onClearAll != null &&
-              filters.isNotEmpty &&
-              constraints.maxWidth >= trailingWidth + 38;
+                  ? resultCountLabel != null
+                      ? 200.0
+                      : (compact ? 74.0 : 92.0)
+                  : 224.0;
+          final showClearAll = onClearAll != null && hasFilters;
           final clearWidth = showClearAll ? 30.0 : 0.0;
           final filterBudget = math.max(
             0.0,
@@ -1582,7 +1597,7 @@ class _LibraryFilterStatusArea extends StatelessWidget {
                 clearWidth -
                 (compact ? 8.0 : 14.0),
           );
-          // 状态区优先保留结果数；标签过多时只在状态区内折叠，不污染搜索输入。
+          // 标签过多时只在状态区内折叠，不污染搜索输入。
           final maxVisibleFilters = filterBudget >= 145
               ? 2
               : filterBudget >= 92
@@ -1590,11 +1605,12 @@ class _LibraryFilterStatusArea extends StatelessWidget {
                   : 0;
           final visibleFilters = filters.take(maxVisibleFilters).toList();
           final hiddenCount = filters.length - visibleFilters.length;
-          final showCollapsedCount =
-              hiddenCount > 0 && filterBudget >= (compact ? 38 : 42);
+          final showCollapsedCount = hiddenCount > 0 &&
+              filterBudget >= (visibleFilters.isEmpty ? 56 : 42);
           final visibleFilterBudget = math.max(
             0.0,
-            filterBudget - (showCollapsedCount ? 42 : 0),
+            filterBudget -
+                (showCollapsedCount ? (visibleFilters.isEmpty ? 56 : 42) : 0),
           );
           final showSourceLabel = filters.isEmpty &&
               defaultLabel != '\u5168\u90e8\u89c6\u9891' &&
@@ -1646,7 +1662,10 @@ class _LibraryFilterStatusArea extends StatelessWidget {
                 ),
               if (visibleFilters.isNotEmpty) const SizedBox(width: 6),
               if (showCollapsedCount) ...[
-                _CollapsedFilterCount(count: hiddenCount),
+                _CollapsedFilterCount(
+                  count: hiddenCount,
+                  showFilterPrefix: visibleFilters.isEmpty,
+                ),
                 const SizedBox(width: 6),
               ],
               if (showClearAll)
@@ -1661,17 +1680,19 @@ class _LibraryFilterStatusArea extends StatelessWidget {
                     icon: const Icon(Icons.filter_alt_off_outlined),
                   ),
                 ),
-              if (showResultStatus) ...[
+              if (showInlineResultStatus) ...[
                 const Spacer(),
                 SizedBox(
                   width: math.min(trailingWidth, constraints.maxWidth),
                   child: _FilterResultLine(
                     resultCount: resultCount,
+                    resultCountLabel: resultCountLabel,
                     refreshing: refreshing,
                     progressLabel: progressLabel,
                     progressValue: progressValue,
                     progressPaused: progressPaused,
                     onToggleProgressPaused: onToggleProgressPaused,
+                    onCancelProgress: onCancelProgress,
                   ),
                 ),
               ],
@@ -1714,9 +1735,16 @@ class _SourceContextChip extends StatelessWidget {
 
 /** 被折叠的筛选数量，不承担交互，避免与真实筛选 chip 混淆。 */
 class _CollapsedFilterCount extends StatelessWidget {
-  const _CollapsedFilterCount({required this.count});
+  const _CollapsedFilterCount({
+    required this.count,
+    required this.showFilterPrefix,
+  });
 
+  /** 当前未单独展示的活动筛选数量。 */
   final int count;
+
+  /** 没有可见 chip 时用“筛选 N”明确表达当前状态，而不是只显示含糊的“+N”。 */
+  final bool showFilterPrefix;
 
   @override
   Widget build(BuildContext context) {
@@ -1730,7 +1758,7 @@ class _CollapsedFilterCount extends StatelessWidget {
         border: Border.all(color: libraryBorder),
       ),
       child: Text(
-        '+$count',
+        showFilterPrefix ? '筛选 $count' : '+$count',
         style: const TextStyle(
           color: libraryTextMuted,
           fontSize: 12,
@@ -1896,14 +1924,19 @@ class _CurrentFilterChip extends StatelessWidget {
 class _FilterResultLine extends StatelessWidget {
   const _FilterResultLine({
     required this.resultCount,
+    this.resultCountLabel,
     required this.refreshing,
     required this.progressLabel,
     required this.progressValue,
     required this.progressPaused,
     required this.onToggleProgressPaused,
+    required this.onCancelProgress,
   });
 
   final int resultCount;
+
+  /** 自定义结果统计；为空时沿用“视频”语义。 */
+  final String? resultCountLabel;
 
   final bool refreshing;
 
@@ -1915,13 +1948,16 @@ class _FilterResultLine extends StatelessWidget {
 
   final VoidCallback? onToggleProgressPaused;
 
+  /** 当前扫描的取消入口；为空时不占用进度行空间。 */
+  final VoidCallback? onCancelProgress;
+
   @override
   Widget build(BuildContext context) {
     final operationInProgress = progressLabel != null;
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Flexible(
         child: Text(
-          progressLabel ?? '$resultCount 个视频',
+          progressLabel ?? resultCountLabel ?? '$resultCount 个视频',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
@@ -1964,6 +2000,21 @@ class _FilterResultLine extends StatelessWidget {
               icon: Icon(
                 progressPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
               ),
+            ),
+          ),
+        ],
+        if (onCancelProgress != null) ...[
+          const SizedBox(width: 2),
+          SizedBox.square(
+            dimension: 28,
+            child: IconButton(
+              key: const ValueKey('qa.library_scan.cancel'),
+              tooltip: '取消扫描',
+              padding: EdgeInsets.zero,
+              iconSize: 17,
+              color: libraryTextMuted,
+              onPressed: onCancelProgress,
+              icon: const Icon(Icons.close_rounded),
             ),
           ),
         ],
@@ -2169,6 +2220,7 @@ class ReferenceTopBar extends StatelessWidget {
     required this.controller,
     required this.searchFocusNode,
     required this.videoCount,
+    this.resultCountLabel,
     required this.keyword,
     required this.selectedTags,
     required this.selectedChildTags,
@@ -2199,6 +2251,7 @@ class ReferenceTopBar extends StatelessWidget {
     required this.onClearAll,
     this.progressPaused = false,
     this.onToggleProgressPaused,
+    this.onCancelProgress,
     this.selectionMode = false,
     this.selectedCount = 0,
     this.allSelected = false,
@@ -2220,6 +2273,9 @@ class ReferenceTopBar extends StatelessWidget {
 
   /** 当前可见结果数量；与搜索和 chips 同处一个结果状态区域。 */
   final int videoCount;
+
+  /** 本地目录等混合来源的精确统计文案。 */
+  final String? resultCountLabel;
 
   /** 当前关键词只保留在真实输入框中，不重复渲染为 chip。 */
   final String keyword;
@@ -2292,6 +2348,9 @@ class ReferenceTopBar extends StatelessWidget {
 
   /** 后台媒体解析存在时提供暂停/继续入口。 */
   final VoidCallback? onToggleProgressPaused;
+
+  /** 扫描期间提供取消入口；其它后台任务保持为空。 */
+  final VoidCallback? onCancelProgress;
 
   /** true 时整条顶栏替换为批量选择状态。 */
   final bool selectionMode;
@@ -2403,24 +2462,30 @@ class ReferenceTopBar extends StatelessWidget {
                     defaultLabel: defaultChipLabel,
                     filters: activeFilters,
                     resultCount: videoCount,
+                    resultCountLabel: resultCountLabel,
                     refreshing: refreshing,
                     progressLabel: progressLabel,
                     progressValue: progressValue,
                     progressPaused: progressPaused,
                     onToggleProgressPaused: onToggleProgressPaused,
+                    onCancelProgress: onCancelProgress,
                     onClearAll: onClearAll,
                     showResultStatus: !proportionalDesktop,
                   );
                   final resultStatus = SizedBox(
                     key: LibrarySmokeKeys.toolbarResultStatus,
-                    width: progressLabel == null ? 92 : 176,
+                    width: progressLabel == null
+                        ? (resultCountLabel == null ? 92 : 200)
+                        : 224,
                     child: _FilterResultLine(
                       resultCount: videoCount,
+                      resultCountLabel: resultCountLabel,
                       refreshing: refreshing,
                       progressLabel: progressLabel,
                       progressValue: progressValue,
                       progressPaused: progressPaused,
                       onToggleProgressPaused: onToggleProgressPaused,
+                      onCancelProgress: onCancelProgress,
                     ),
                   );
                   final selectionStatus = _LibrarySelectionToolbar(
@@ -2527,12 +2592,24 @@ class ReferenceTopBar extends StatelessWidget {
                           key: LibrarySmokeKeys.filterStatusArea,
                           width: progressLabel != null
                               ? math.min(
-                                  300,
-                                  math.max(180, constraints.maxWidth * 0.38),
+                                  360,
+                                  math.max(224, constraints.maxWidth * 0.42),
                                 )
-                              : narrowMedium
-                                  ? 82
-                                  : 118,
+                              : activeFilters.isNotEmpty
+                                  ? narrowMedium
+                                      ? 82
+                                      : math.min(
+                                          220,
+                                          math.max(
+                                            142,
+                                            constraints.maxWidth * 0.24,
+                                          ),
+                                        )
+                                  : narrowMedium
+                                      ? 82
+                                      : resultCountLabel != null
+                                          ? 200
+                                          : 118,
                           child: filterStatus,
                         ),
                         if (!compact &&
@@ -2587,6 +2664,7 @@ Widget referenceTopBarSearchSmokeHarness({
   required ValueChanged<String> onSearchChanged,
   FocusNode? searchFocusNode,
   int videoCount = 0,
+  String? resultCountLabel,
   String? keyword,
   List<String> selectedTags = const <String>[],
   List<String> selectedChildTags = const <String>[],
@@ -2599,6 +2677,7 @@ Widget referenceTopBarSearchSmokeHarness({
   double? progressValue,
   bool progressPaused = false,
   VoidCallback? onToggleProgressPaused,
+  VoidCallback? onCancelProgress,
   LayoutSize layoutSize = LayoutSize.expanded,
   SortDirection sortDirection = SortDirection.descending,
   ValueChanged<SortMode>? onSortChanged,
@@ -2625,6 +2704,7 @@ Widget referenceTopBarSearchSmokeHarness({
         searchFocusNode:
             searchFocusNode ?? FocusNode(debugLabel: 'search-smoke-field'),
         videoCount: videoCount,
+        resultCountLabel: resultCountLabel,
         keyword: keyword ?? controller.text,
         selectedTags: selectedTags,
         selectedChildTags: selectedChildTags,
@@ -2637,6 +2717,7 @@ Widget referenceTopBarSearchSmokeHarness({
         progressValue: progressValue,
         progressPaused: progressPaused,
         onToggleProgressPaused: onToggleProgressPaused,
+        onCancelProgress: onCancelProgress,
         sortMode: SortMode.recent,
         sortDirection: sortDirection,
         layoutSize: layoutSize,

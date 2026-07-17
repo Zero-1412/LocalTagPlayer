@@ -42,6 +42,25 @@ class LocalLibraryEntry {
   String get title => isFolder ? p.basename(path) : video!.title;
 }
 
+/**
+ * 汇总当前本地目录中的文件夹和视频数量。
+ *
+ * 本地目录条目是混合来源，不能再把子文件夹误称为视频；固定同时展示两个维度，
+ * 让 root 首页只有子目录时也能准确表达“40 个文件夹 · 0 个视频”。
+ */
+String localLibraryEntrySummary(Iterable<LocalLibraryEntry> entries) {
+  var folderCount = 0;
+  var videoCount = 0;
+  for (final entry in entries) {
+    if (entry.isFolder) {
+      folderCount++;
+    } else {
+      videoCount++;
+    }
+  }
+  return '$folderCount 个文件夹 · $videoCount 个视频';
+}
+
 class LocalLibraryView extends StatelessWidget {
   const LocalLibraryView({
     required this.currentPath,
@@ -54,6 +73,7 @@ class LocalLibraryView extends StatelessWidget {
     required this.onOpenFolder,
     required this.onOpenVideo,
     required this.onEditTags,
+    this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDelete,
   });
@@ -68,6 +88,8 @@ class LocalLibraryView extends StatelessWidget {
   final ValueChanged<String> onOpenFolder;
   final void Function(VideoItem item, List<VideoItem> playlist) onOpenVideo;
   final ValueChanged<VideoItem> onEditTags;
+  /** 请求页面通过文件系统平台边界定位视频。 */
+  final ValueChanged<VideoItem>? onRevealLocation;
   final ValueChanged<VideoItem> onToggleFavorite;
   final ValueChanged<VideoItem> onDelete;
 
@@ -153,6 +175,9 @@ class LocalLibraryView extends StatelessWidget {
                               playbackSettings: playbackSettings,
                               onOpen: () => onOpenVideo(video, localVideos),
                               onEditTags: () => onEditTags(video),
+                              onRevealLocation: onRevealLocation == null
+                                  ? null
+                                  : () => onRevealLocation!(video),
                               onToggleFavorite: () => onToggleFavorite(video),
                               onDelete: () => onDelete(video),
                             );
@@ -193,6 +218,9 @@ class LocalLibraryView extends StatelessWidget {
                             playbackSettings: playbackSettings,
                             onOpen: () => onOpenVideo(video, localVideos),
                             onEditTags: () => onEditTags(video),
+                            onRevealLocation: onRevealLocation == null
+                                ? null
+                                : () => onRevealLocation!(video),
                             onToggleFavorite: () => onToggleFavorite(video),
                             onDelete: () => onDelete(video),
                           );

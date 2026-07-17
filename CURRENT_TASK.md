@@ -4,7 +4,7 @@
 
 项目已能运行并构建 Windows debug 版本。
 
-架构版本状态：`Architecture Baseline 0.5.46` 已完成。
+架构版本状态：`Architecture Baseline 0.5.47` 已完成。
 
 最近一次验证：
 
@@ -14,9 +14,16 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 166 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 180 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- “继续观看”删除改为精确保存稳定播放快照并提供 10 秒 Snackbar 撤销；重播已生成新进度时撤销不会覆盖新状态。“清空全部”增加二次确认，并明确只清除进度、不删除视频文件、标签或收藏。
+- 播放器单键快捷键统一增加输入门禁：`EditableText`、菜单、弹窗、其它路由和原生文件对话框期间全部暂停；队列搜索关闭后恢复播放器焦点。真实窗口逐键输入 `chamosan`，`s` 未触发截图，关闭搜索后 PageUp 正常切换 filtered queue。
+- 媒体库活动筛选与清除入口在当前宽度下保持可见；扫描展示阶段、进度、ETA 和取消入口，取消会让旧 generation 失效；Relink 取消文件选择不再留下行级旋转状态。
+- 备份完整性不再把全局派生的标签使用次数误判为快照过期，并区分当前数据差异与 fingerprint 歧义；新建空标签保留弹窗并显示中文字段错误；视频“更多”补齐“打开位置”；本地 root 统计明确区分文件夹和视频。
+- 全屏右侧队列持续跟踪右侧热区，离开后按 180ms 设置触发隐藏；Esc 优先退出全屏。真实窗口完成队列显示、离开热区自动隐藏和 Esc 返回窗口模式截图验证。
+- 新增播放状态撤销、删除竞态保护、扫描取消、快捷键门禁、Relink 取消、备份摘要、空标签、打开位置、活动筛选、本地混合统计和全屏热区 focused tests；完整 180 项测试、`dart format`、`flutter analyze` 和 Windows debug build 通过。
 
 - 主界面左右侧栏结构动画由 260ms 增强为 320ms，内容统一组合更明显的横向位移、淡入和轻微缩放；移动边缘同步过渡描边与阴影，展开/折叠的层次感更清晰。
 - 动画仍复用现有 `AnimatedContainer` / `AnimatedSwitcher`，没有新增 Controller 或业务重算；窗口大小不变时网格继续保持三列，筛选、滚动、缩略图和播放队列均不受影响。

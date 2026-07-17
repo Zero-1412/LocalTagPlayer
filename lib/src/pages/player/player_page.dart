@@ -132,6 +132,72 @@ bool playerPointerInControlBar({
 }
 
 /**
+ * 判断全屏指针是否仍位于队列激活区域。
+ *
+ * 队列隐藏时仅保留用户设置的右缘热区；队列展开后以完整侧栏宽度为边界，
+ * 指针真正离开后才启动短延迟隐藏，避免依赖子组件偶发的 enter/exit 事件。
+ */
+@visibleForTesting
+bool playerPointerInFullscreenQueueActivationZone({
+  required double localX,
+  required double surfaceWidth,
+  required bool queueVisible,
+  required double edgeWidth,
+  double queueWidth = 440,
+}) {
+  final distanceFromRight = surfaceWidth - localX;
+  if (distanceFromRight < 0) {
+    return false;
+  }
+  return distanceFromRight <= (queueVisible ? queueWidth : edgeWidth);
+}
+
+/**
+ * 判断当前焦点是否属于可编辑文本。
+ *
+ * 播放器单键快捷键位于页面祖先 Focus；EditableText 未消费的字母仍可能继续冒泡，
+ * 因此必须在页面入口统一门禁，而不能依赖每个搜索框单独拦截某几个按键。
+ */
+@visibleForTesting
+bool playerFocusIsEditable(FocusNode? focus) {
+  final focusContext = focus?.context;
+  if (focusContext == null) {
+    return false;
+  }
+  return focusContext.widget is EditableText ||
+      focusContext.findAncestorWidgetOfExactType<EditableText>() != null;
+}
+
+/** 弹窗、菜单或 BottomSheet 位于不同 ModalRoute 时暂停底层播放器快捷键。 */
+@visibleForTesting
+bool playerFocusIsOnDifferentRoute({
+  required BuildContext playerContext,
+  required FocusNode? focus,
+}) {
+  final focusContext = focus?.context;
+  if (focusContext == null) {
+    return false;
+  }
+  final playerRoute = ModalRoute.of(playerContext);
+  final focusedRoute = ModalRoute.of(focusContext);
+  return playerRoute != null &&
+      focusedRoute != null &&
+      !identical(playerRoute, focusedRoute);
+}
+
+/**
+ * 判断播放器路由上方是否存在弹窗、菜单或 BottomSheet。
+ *
+ * 某些 PopupRoute 不会把焦点从播放器 FocusScope 移走，因此不能只检查 primaryFocus；
+ * 只要播放器路由不再位于最上层，就暂停其全局单键快捷键。
+ */
+@visibleForTesting
+bool playerRouteHasBlockingOverlay(BuildContext playerContext) {
+  final route = ModalRoute.of(playerContext);
+  return route != null && !route.isCurrent;
+}
+
+/**
  * 把持久化的画面比例与倍速重新应用到刚打开的播放后端。
  *
  * 播放器在 open 前后都会调用该函数，避免后端重建媒体状态后只保留设置数据或
@@ -292,6 +358,8 @@ class PlayerPageState extends State<PlayerPage> {
   var _queueEndReached = false;
   /** 标签弹窗打开期间阻止底层播放器重复消费 Escape，避免意外返回媒体库。 */
   var _editingManualTags = false;
+  /** 原生文件对话框无法可靠暴露 Flutter Focus，使用显式深度暂停全部播放器快捷键。 */
+  var _shortcutSuspensionDepth = 0;
   late PlayerPlaybackMode _playbackMode;
   late double _playbackRate;
   /** 是否仅水平翻转当前视频画面，控制条与命中区域保持原方向。 */
@@ -924,11 +992,13 @@ class PlayerPageState extends State<PlayerPage> {
       final safeTitle =
           _currentItem.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final outputPath = await widget.fileSystem.pickSavePath(
-        dialogTitle: '保存当前画面',
-        suggestedName:
-            '${safeTitle.isEmpty ? 'video' : safeTitle}_$timestamp.jpg',
-        allowedExtensions: const <String>['jpg'],
+      final outputPath = await _withPlayerShortcutsSuspended(
+        () => widget.fileSystem.pickSavePath(
+          dialogTitle: '保存当前画面',
+          suggestedName:
+              '${safeTitle.isEmpty ? 'video' : safeTitle}_$timestamp.jpg',
+          allowedExtensions: const <String>['jpg'],
+        ),
       );
       if (outputPath == null || !mounted) return;
       await widget.fileSystem.writeBytes(outputPath, bytes, flush: true);
@@ -1169,6 +1239,7 @@ class PlayerPageState extends State<PlayerPage> {
                                 if (_isWindowFullscreen) {
                                   if (_fullscreenQueueVisible) {
                                     _fullscreenQueueHideTimer?.cancel();
+                                    _fullscreenQueueHideTimer = null;
                                     setState(
                                         () => _fullscreenQueueVisible = false);
                                   } else {
@@ -1200,6 +1271,8 @@ class PlayerPageState extends State<PlayerPage> {
   /** 切换桌面窗口全屏，并让页面布局与窗口状态同步更新。 */
   Future<void> _toggleWindowFullscreen() async {
     final target = !_isWindowFullscreen;
+    _fullscreenQueueHideTimer?.cancel();
+    _fullscreenQueueHideTimer = null;
     await windowManager.setFullScreen(target);
     if (!mounted) {
       return;
@@ -1214,6 +1287,7 @@ class PlayerPageState extends State<PlayerPage> {
   /** 鼠标进入右侧热区或队列时展示全屏侧栏，并取消待执行的自动隐藏。 */
   void _showFullscreenQueueSidebar() {
     _fullscreenQueueHideTimer?.cancel();
+    _fullscreenQueueHideTimer = null;
     if (mounted && !_fullscreenQueueVisible) {
       setState(() => _fullscreenQueueVisible = true);
     }
@@ -1221,15 +1295,38 @@ class PlayerPageState extends State<PlayerPage> {
 
   /** 鼠标离开队列宽度后短延迟收回侧栏，避免边缘抖动导致反复闪烁。 */
   void _scheduleFullscreenQueueHide() {
-    _fullscreenQueueHideTimer?.cancel();
+    if (_fullscreenQueueHideTimer?.isActive ?? false) {
+      return;
+    }
     _fullscreenQueueHideTimer = Timer(
         Duration(
           milliseconds: widget.playbackSettings.fullscreenQueueHideDelayMs,
         ), () {
+      _fullscreenQueueHideTimer = null;
       if (mounted && _fullscreenQueueVisible) {
         setState(() => _fullscreenQueueVisible = false);
       }
     });
+  }
+
+  /**
+   * 在全屏根表面持续判断右侧激活区，补齐子 MouseRegion 丢失 exit 的窗口边界场景。
+   */
+  void _handleFullscreenQueuePointerHover(PointerHoverEvent event) {
+    if (!_isWindowFullscreen) {
+      return;
+    }
+    final inActivationZone = playerPointerInFullscreenQueueActivationZone(
+      localX: event.localPosition.dx,
+      surfaceWidth: MediaQuery.sizeOf(context).width,
+      queueVisible: _fullscreenQueueVisible,
+      edgeWidth: widget.playbackSettings.fullscreenQueueEdgeWidth.toDouble(),
+    );
+    if (inActivationZone) {
+      _showFullscreenQueueSidebar();
+    } else if (_fullscreenQueueVisible) {
+      _scheduleFullscreenQueueHide();
+    }
   }
 
   /** 读取齿轮在当前普通/全屏布局中的全局矩形，供浮层实时对齐。 */
@@ -1275,6 +1372,7 @@ class PlayerPageState extends State<PlayerPage> {
       if (mounted) {
         setState(() => _settingsDialogOpen = false);
         _showVideoControls();
+        _restorePlayerShortcutFocus();
       }
     }
   }
@@ -1654,7 +1752,9 @@ class PlayerPageState extends State<PlayerPage> {
   /** 从失败面板重新关联 missing 文件，成功后原地打开同一稳定 videoId。 */
   Future<void> _relinkCurrentMissing() async {
     final item = _currentItem;
-    final relinked = await widget.onRelinkMissing(item);
+    final relinked = await _withPlayerShortcutsSuspended(
+      () => widget.onRelinkMissing(item),
+    );
     if (!mounted || !relinked) {
       return;
     }
@@ -2016,6 +2116,48 @@ class PlayerPageState extends State<PlayerPage> {
       }
     } finally {
       _editingManualTags = false;
+      _restorePlayerShortcutFocus();
+    }
+  }
+
+  /**
+   * 在原生文件对话框或其它不参与 Flutter Focus 树的操作期间暂停全部播放器快捷键。
+   */
+  Future<T> _withPlayerShortcutsSuspended<T>(
+      Future<T> Function() action) async {
+    _shortcutSuspensionDepth += 1;
+    try {
+      return await action();
+    } finally {
+      _shortcutSuspensionDepth = math.max(0, _shortcutSuspensionDepth - 1);
+      _restorePlayerShortcutFocus();
+    }
+  }
+
+  /** 搜索/弹窗收起后在下一帧把 PageDown、Escape 等键盘导航交还播放器。 */
+  void _restorePlayerShortcutFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _shortcutSuspensionDepth > 0 ||
+          _editingManualTags ||
+          _settingsDialogOpen) {
+        return;
+      }
+      final primaryFocus = FocusManager.instance.primaryFocus;
+      if (playerFocusIsOnDifferentRoute(
+        playerContext: context,
+        focus: primaryFocus,
+      )) {
+        return;
+      }
+      _focusNode.requestFocus();
+    });
+  }
+
+  /** 队列搜索只在收起时恢复页面焦点，展开时由 EditableText 的 autofocus 接管。 */
+  void _handleQueueSearchVisibilityChanged(bool visible) {
+    if (!visible) {
+      _restorePlayerShortcutFocus();
     }
   }
 
@@ -2233,8 +2375,17 @@ class PlayerPageState extends State<PlayerPage> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    if (_editingManualTags && event.logicalKey == LogicalKeyboardKey.escape) {
-      // 弹窗自己的 Escape 只负责取消编辑；播放器页面不能再对同一按键执行返回。
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (_shortcutSuspensionDepth > 0 ||
+        _editingManualTags ||
+        _settingsDialogOpen ||
+        playerFocusIsEditable(primaryFocus) ||
+        playerFocusIsOnDifferentRoute(
+          playerContext: context,
+          focus: primaryFocus,
+        ) ||
+        playerRouteHasBlockingOverlay(context)) {
+      // 输入框、弹窗、菜单和原生文件对话框统一暂停所有单键及组合播放器动作。
       return KeyEventResult.ignored;
     }
     if (_isWindowFullscreen && event.logicalKey == LogicalKeyboardKey.escape) {
@@ -2419,6 +2570,7 @@ class PlayerPageState extends State<PlayerPage> {
         controller: controller,
       ),
       onSearchQueue: _searchQueue,
+      onSearchVisibilityChanged: _handleQueueSearchVisibilityChanged,
       onDeleteSelected: _queue.isEmpty
           ? null
           : () => unawaited(_deleteQueueItem(_selectedIndex)),
@@ -2449,193 +2601,207 @@ class PlayerPageState extends State<PlayerPage> {
           onPointerDown: _handlePointerDown,
           child: Scaffold(
             backgroundColor: const Color(0xff070d1d),
-            body: Stack(
-              children: [
-                Positioned.fill(
-                  child: Column(
-                    children: [
-                      if (!_isWindowFullscreen)
-                        PlayerTopBar(
-                          currentFileName:
-                              playerTopBarFileName(_currentItem.path),
-                          onBack: () => unawaited(_exitPlayer()),
-                          onOpenQueue: hasWideQueueSidebar
-                              ? null
-                              : () {
-                                  showModalBottomSheet<void>(
-                                    context: context,
-                                    isScrollControlled: true,
-                                    backgroundColor: const Color(0xff0d1528),
-                                    builder: (_) => FractionallySizedBox(
-                                      heightFactor: 0.82,
-                                      child: queueSidebar,
-                                    ),
-                                  );
-                                },
-                        ),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      key: const ValueKey(
-                                          'player.video.surface'),
-                                      margin: _isWindowFullscreen
-                                          ? EdgeInsets.zero
-                                          : const EdgeInsets.fromLTRB(
-                                              18, 18, 18, 12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                            color: const Color(0xff1f2937)),
-                                        boxShadow: const [
-                                          BoxShadow(
-                                            color: Color(0x66000000),
-                                            blurRadius: 26,
-                                            offset: Offset(0, 14),
-                                          ),
-                                        ],
+            body: MouseRegion(
+              onHover: _handleFullscreenQueuePointerHover,
+              onExit: (_) {
+                if (_isWindowFullscreen && _fullscreenQueueVisible) {
+                  _scheduleFullscreenQueueHide();
+                }
+              },
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Column(
+                      children: [
+                        if (!_isWindowFullscreen)
+                          PlayerTopBar(
+                            currentFileName:
+                                playerTopBarFileName(_currentItem.path),
+                            onBack: () => unawaited(_exitPlayer()),
+                            onOpenQueue: hasWideQueueSidebar
+                                ? null
+                                : () {
+                                    showModalBottomSheet<void>(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      backgroundColor: const Color(0xff0d1528),
+                                      builder: (_) => FractionallySizedBox(
+                                        heightFactor: 0.82,
+                                        child: queueSidebar,
                                       ),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: Stack(
-                                        children: [
-                                          Positioned.fill(
-                                            child: Listener(
-                                              onPointerSignal:
-                                                  _handleVideoPointerSignal,
-                                              child: GestureDetector(
-                                                behavior:
-                                                    HitTestBehavior.opaque,
-                                                onTapDown: (_) =>
-                                                    _focusNode.requestFocus(),
-                                                onSecondaryTapDown:
-                                                    _showPlayerContextMenu,
-                                                child: Center(
-                                                  child: _playerBackend
-                                                      .buildVideoSurface(
-                                                    controls:
-                                                        _buildVideoControls(),
-                                                    fit: _videoAspectMode
-                                                        .surfaceFit,
-                                                    aspectRatio:
-                                                        _videoAspectMode
-                                                            .surfaceAspectRatio,
-                                                    mirror: _mirrorVideo,
+                                    );
+                                  },
+                          ),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        key: const ValueKey(
+                                            'player.video.surface'),
+                                        margin: _isWindowFullscreen
+                                            ? EdgeInsets.zero
+                                            : const EdgeInsets.fromLTRB(
+                                                18, 18, 18, 12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                              color: const Color(0xff1f2937)),
+                                          boxShadow: const [
+                                            BoxShadow(
+                                              color: Color(0x66000000),
+                                              blurRadius: 26,
+                                              offset: Offset(0, 14),
+                                            ),
+                                          ],
+                                        ),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: Stack(
+                                          children: [
+                                            Positioned.fill(
+                                              child: Listener(
+                                                onPointerSignal:
+                                                    _handleVideoPointerSignal,
+                                                child: GestureDetector(
+                                                  behavior:
+                                                      HitTestBehavior.opaque,
+                                                  onTapDown: (_) =>
+                                                      _focusNode.requestFocus(),
+                                                  onSecondaryTapDown:
+                                                      _showPlayerContextMenu,
+                                                  child: Center(
+                                                    child: _playerBackend
+                                                        .buildVideoSurface(
+                                                      controls:
+                                                          _buildVideoControls(),
+                                                      fit: _videoAspectMode
+                                                          .surfaceFit,
+                                                      aspectRatio:
+                                                          _videoAspectMode
+                                                              .surfaceAspectRatio,
+                                                      mirror: _mirrorVideo,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                          if (_openRequests.isOpening)
-                                            const Positioned.fill(
-                                              child: ColoredBox(
-                                                color: Color(0x66000000),
-                                                child: Center(
-                                                    child:
-                                                        CircularProgressIndicator()),
+                                            if (_openRequests.isOpening)
+                                              const Positioned.fill(
+                                                child: ColoredBox(
+                                                  color: Color(0x66000000),
+                                                  child: Center(
+                                                      child:
+                                                          CircularProgressIndicator()),
+                                                ),
                                               ),
-                                            ),
-                                          if (!_openRequests.isOpening &&
-                                              _openRequests.hasFailure)
-                                            Positioned.fill(
-                                              child: PlayerOpenFailurePanel(
-                                                failureCode:
-                                                    _openRequests.failureCode ??
-                                                        'unknown',
-                                                canSkip: _playback.hasNext,
-                                                onRetry: _retryFailedOpen,
-                                                onSkip: _skipFailedOpen,
-                                                onDiagnostics: () {
-                                                  unawaited(
-                                                      _showDiagnosticsDialog());
-                                                },
-                                                onRelink: _currentItem.isMissing
-                                                    ? () {
-                                                        unawaited(
-                                                            _relinkCurrentMissing());
-                                                      }
-                                                    : null,
+                                            if (!_openRequests.isOpening &&
+                                                _openRequests.hasFailure)
+                                              Positioned.fill(
+                                                child: PlayerOpenFailurePanel(
+                                                  failureCode: _openRequests
+                                                          .failureCode ??
+                                                      'unknown',
+                                                  canSkip: _playback.hasNext,
+                                                  onRetry: _retryFailedOpen,
+                                                  onSkip: _skipFailedOpen,
+                                                  onDiagnostics: () {
+                                                    unawaited(
+                                                        _showDiagnosticsDialog());
+                                                  },
+                                                  onRelink:
+                                                      _currentItem.isMissing
+                                                          ? () {
+                                                              unawaited(
+                                                                  _relinkCurrentMissing());
+                                                            }
+                                                          : null,
+                                                ),
                                               ),
-                                            ),
-                                        ],
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (_isWindowFullscreen &&
+                                  _fullscreenQueueVisible)
+                                TweenAnimationBuilder<double>(
+                                  key: const ValueKey('player.fullscreenQueue'),
+                                  tween: Tween<double>(begin: 0, end: 440),
+                                  duration: appMotionDuration,
+                                  curve: appMotionCurve,
+                                  builder: (context, width, child) {
+                                    return SizedBox(
+                                      width: width,
+                                      child: ClipRect(
+                                        child: OverflowBox(
+                                          alignment: Alignment.centerRight,
+                                          minWidth: 440,
+                                          maxWidth: 440,
+                                          child: child,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: MouseRegion(
+                                    onEnter: (_) =>
+                                        _showFullscreenQueueSidebar(),
+                                    onExit: (_) =>
+                                        _scheduleFullscreenQueueHide(),
+                                    child: SafeArea(
+                                      child: _buildQueueSidebar(
+                                        key: const ValueKey(
+                                            'player.fullscreenQueue.sidebar'),
+                                        scrollController:
+                                            _fullscreenQueueScrollController,
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                            if (_isWindowFullscreen && _fullscreenQueueVisible)
-                              TweenAnimationBuilder<double>(
-                                key: const ValueKey('player.fullscreenQueue'),
-                                tween: Tween<double>(begin: 0, end: 440),
-                                duration: appMotionDuration,
-                                curve: appMotionCurve,
-                                builder: (context, width, child) {
-                                  return SizedBox(
-                                    width: width,
-                                    child: ClipRect(
-                                      child: OverflowBox(
-                                        alignment: Alignment.centerRight,
-                                        minWidth: 440,
-                                        maxWidth: 440,
-                                        child: child,
+                                ),
+                              if (hasWideQueueSidebar && !_isWindowFullscreen)
+                                AnimatedSize(
+                                  duration: appMotionDuration,
+                                  curve: appMotionCurve,
+                                  child: ClipRect(
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      widthFactor:
+                                          _queueSidebarCollapsed ? 0 : 1,
+                                      child: IgnorePointer(
+                                        ignoring: _queueSidebarCollapsed,
+                                        child: queueSidebar,
                                       ),
                                     ),
-                                  );
-                                },
-                                child: MouseRegion(
-                                  onEnter: (_) => _showFullscreenQueueSidebar(),
-                                  onExit: (_) => _scheduleFullscreenQueueHide(),
-                                  child: SafeArea(
-                                    child: _buildQueueSidebar(
-                                      key: const ValueKey(
-                                          'player.fullscreenQueue.sidebar'),
-                                      scrollController:
-                                          _fullscreenQueueScrollController,
-                                    ),
                                   ),
                                 ),
-                              ),
-                            if (hasWideQueueSidebar && !_isWindowFullscreen)
-                              AnimatedSize(
-                                duration: appMotionDuration,
-                                curve: appMotionCurve,
-                                child: ClipRect(
-                                  child: Align(
-                                    alignment: Alignment.centerRight,
-                                    widthFactor: _queueSidebarCollapsed ? 0 : 1,
-                                    child: IgnorePointer(
-                                      ignoring: _queueSidebarCollapsed,
-                                      child: queueSidebar,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_isWindowFullscreen)
-                  Positioned(
-                    key: const ValueKey('player.fullscreenQueue.edge'),
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    width: widget.playbackSettings.fullscreenQueueEdgeWidth
-                        .toDouble(),
-                    child: MouseRegion(
-                      opaque: true,
-                      onEnter: (_) => _showFullscreenQueueSidebar(),
-                      child: const SizedBox.expand(),
+                      ],
                     ),
                   ),
-              ],
+                  if (_isWindowFullscreen)
+                    Positioned(
+                      key: const ValueKey('player.fullscreenQueue.edge'),
+                      top: 0,
+                      right: 0,
+                      bottom: 0,
+                      width: widget.playbackSettings.fullscreenQueueEdgeWidth
+                          .toDouble(),
+                      child: MouseRegion(
+                        opaque: true,
+                        onEnter: (_) => _showFullscreenQueueSidebar(),
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

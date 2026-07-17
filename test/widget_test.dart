@@ -26,6 +26,50 @@ VideoItem _testVideo({
   );
 }
 
+/** Missing/Relink widget 测试只暴露页面读取的视频索引。 */
+class _MissingRelinkTestRepository
+    implements
+        LibraryRepository,
+        TagRepository,
+        CacheRepository,
+        PlaybackRepository {
+  @override
+  final List<String> roots = <String>[];
+  @override
+  final Map<String, VideoItem> videos = <String, VideoItem>{};
+  @override
+  final List<String> favoriteTags = <String>[];
+  @override
+  final List<TagGroup> tagGroups = <TagGroup>[];
+  @override
+  final Map<String, TagItem> tagsById = <String, TagItem>{};
+  @override
+  final Map<String, Set<String>> videoTagIdsByPathKey = <String, Set<String>>{};
+
+  @override
+  Set<String> get allTags => const <String>{};
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/** 模拟用户取消原生文件选择器，不执行任何磁盘操作。 */
+class _CancellingFileSystemAdapter implements FileSystemAdapter {
+  var pickFileCalls = 0;
+
+  @override
+  Future<String?> pickFile({
+    String? dialogTitle,
+    List<String> allowedExtensions = const <String>[],
+  }) async {
+    pickFileCalls++;
+    return null;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 /** 记录悬停取帧位置并写入最小有效 JPEG，隔离真实 FFmpeg 进程。 */
 class _PreviewFFmpegBackend implements FFmpegBackend {
   var previewCalls = 0;
@@ -572,6 +616,76 @@ void main() {
     expect(openCount, 0);
     expect(editCount, 1);
     expect(deleteCount, 1);
+    await gesture.removePointer();
+  });
+
+  testWidgets('video more menu exposes open location through platform callback',
+      (tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_reveal_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final item = _testVideo(
+      path: p.join(directory.path, 'reveal.mp4'),
+      title: 'reveal location',
+    );
+    final thumbnailService = ThumbnailService.forDirectory(
+      directory,
+      _PreviewFFmpegBackend(),
+    );
+    var revealCount = 0;
+    await tester.binding.setSurfaceSize(const Size(500, 500));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 300,
+              height: 230,
+              child: InteractiveVideoCard(
+                item: item,
+                thumbnailService: thumbnailService,
+                playbackSettings: PlaybackSettings.defaults,
+                onOpen: () {},
+                onEditTags: () {},
+                onRevealLocation: () => revealCount++,
+                onToggleFavorite: () {},
+                onDelete: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    await gesture.moveTo(tester.getCenter(find.text('reveal location')));
+    await tester.pump();
+    await tester.pump(libraryCardMoreFadeDuration);
+    await tester.tap(find.byKey(LibrarySmokeKeys.cardMore(item.path)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.byKey(LibrarySmokeKeys.videoMoreRevealLocation),
+      findsOneWidget,
+    );
+    expect(find.text('打开位置'), findsOneWidget);
+    await tester.tap(
+      find.byKey(LibrarySmokeKeys.videoMoreRevealLocation),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(revealCount, 1);
     await gesture.removePointer();
   });
 
@@ -1377,6 +1491,7 @@ void main() {
   testWidgets('player queue search expands from the count action',
       (tester) async {
     String? submittedQuery;
+    final searchVisibility = <bool>[];
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -1388,6 +1503,7 @@ void main() {
               onLocateSelected: () {},
               onDeleteSelected: () {},
               onSearch: (query) => submittedQuery = query,
+              onSearchVisibilityChanged: searchVisibility.add,
             ),
           ),
         ),
@@ -1417,13 +1533,19 @@ void main() {
     expect(find.byKey(searchFieldKey), findsOneWidget);
     expect(
         tester.widget<TextField>(find.byKey(searchFieldKey)).autofocus, isTrue);
-    await tester.enterText(find.byKey(searchFieldKey), 'clip');
+    expect(searchVisibility, <bool>[true]);
+    expect(
+      playerFocusIsEditable(FocusManager.instance.primaryFocus),
+      isTrue,
+    );
+    await tester.enterText(find.byKey(searchFieldKey), 'chamosan');
     await tester.tap(find.byKey(const ValueKey('player.queueSearchSubmit')));
-    expect(submittedQuery, 'clip');
+    expect(submittedQuery, 'chamosan');
 
-    await tester.tap(searchToggle);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(find.byKey(searchFieldKey), findsNothing);
+    expect(searchVisibility, <bool>[true, false]);
   });
 
   testWidgets('player delete dialog keeps recycle-bin action explicit',
@@ -2535,6 +2657,63 @@ void main() {
       ),
       isFalse,
     );
+    expect(
+      playerPointerInFullscreenQueueActivationZone(
+        localX: 995,
+        surfaceWidth: 1000,
+        queueVisible: false,
+        edgeWidth: 12,
+      ),
+      isTrue,
+    );
+    expect(
+      playerPointerInFullscreenQueueActivationZone(
+        localX: 700,
+        surfaceWidth: 1000,
+        queueVisible: true,
+        edgeWidth: 12,
+      ),
+      isTrue,
+    );
+    expect(
+      playerPointerInFullscreenQueueActivationZone(
+        localX: 500,
+        surfaceWidth: 1000,
+        queueVisible: true,
+        edgeWidth: 12,
+      ),
+      isFalse,
+    );
+  });
+
+  testWidgets('player shortcut gate detects a blocking overlay route',
+      (tester) async {
+    late BuildContext playerContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              playerContext = context;
+              return FilledButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => const AlertDialog(
+                    content: Text('播放器弹窗'),
+                  ),
+                ),
+                child: const Text('打开弹窗'),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    expect(playerRouteHasBlockingOverlay(playerContext), isFalse);
+
+    await tester.tap(find.text('打开弹窗'));
+    await tester.pumpAndSettle();
+    expect(playerRouteHasBlockingOverlay(playerContext), isTrue);
   });
 
   testWidgets('player reveal file button uses eject icon and invokes callback',
@@ -2939,6 +3118,41 @@ void main() {
     expect(summary, contains('执行成功: 1'));
     expect(summary, isNot(contains(r'C:\private')));
     expect(summary, isNot(contains('Private Alpha')));
+  });
+
+  testWidgets('cancelling single relink picker keeps the row enabled',
+      (tester) async {
+    final repository = _MissingRelinkTestRepository();
+    final item = _testVideo(
+      path: r'D:\missing\cancel.mp4',
+      title: 'cancel relink',
+    )..isMissing = true;
+    repository.videos[TagRules.pathKey(item.path)] = item;
+    final store = LibraryApplicationFacade(
+      libraryRepository: repository,
+      tagRepository: repository,
+      cacheRepository: repository,
+      playbackRepository: repository,
+    );
+    final fileSystem = _CancellingFileSystemAdapter();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MissingRelinkPage(
+          store: store,
+          fileSystem: fileSystem,
+        ),
+      ),
+    );
+    final relinkButton = find.byKey(ValueKey('missingRelink.${item.videoId}'));
+    expect(relinkButton, findsOneWidget);
+
+    await tester.tap(relinkButton);
+    await tester.pumpAndSettle();
+
+    expect(fileSystem.pickFileCalls, 1);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(tester.widget<FilledButton>(relinkButton).onPressed, isNotNull);
   });
 
   testWidgets('resume dialog offers continue and restart choices',
@@ -3362,6 +3576,112 @@ void main() {
     );
   });
 
+  testWidgets('clear all watching progress confirms data scope explicitly',
+      (tester) async {
+    bool? confirmed;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () async {
+                confirmed = await showClearAllRecentPlaybackConfirmation(
+                  context,
+                  count: 11,
+                );
+              },
+              child: const Text('测试清空'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('测试清空'));
+    await tester.pumpAndSettle();
+    expect(find.text('清空全部观看进度？'), findsOneWidget);
+    expect(find.textContaining('不会删除视频文件、标签或收藏'), findsOneWidget);
+    expect(find.textContaining('10 秒内撤销'), findsOneWidget);
+    expect(find.text('只清除进度'), findsOneWidget);
+
+    await tester.tap(find.text('只清除进度'));
+    await tester.pumpAndSettle();
+    expect(confirmed, isTrue);
+  });
+
+  test(
+      'continue watching undo restores exact state but never overwrites replay',
+      () {
+    final playedAt = DateTime.utc(2026, 7, 17, 10);
+    final updatedAt = DateTime.utc(2026, 7, 17, 10, 1);
+    final item = _testVideo(path: 'D:/video/undo.mp4', title: 'undo')
+      ..lastPlayedAt = playedAt
+      ..playbackPosition = const Duration(seconds: 137)
+      ..playbackCompleted = false
+      ..playbackPositionUpdatedAt = updatedAt;
+    final snapshot = ContinueWatchingClearSnapshot.capture(item);
+
+    item
+      ..lastPlayedAt = null
+      ..playbackPosition = Duration.zero
+      ..playbackCompleted = false
+      ..playbackPositionUpdatedAt = null;
+    expect(snapshot.canRestoreWithoutOverwritingNewPlayback, isTrue);
+    snapshot.restore();
+    expect(item.lastPlayedAt, playedAt);
+    expect(item.playbackPosition, const Duration(seconds: 137));
+    expect(item.playbackPositionUpdatedAt, updatedAt);
+
+    final replayGuard = ContinueWatchingClearSnapshot.capture(item);
+    item
+      ..lastPlayedAt = null
+      ..playbackPosition = Duration.zero
+      ..playbackPositionUpdatedAt = null;
+    item
+      ..lastPlayedAt = DateTime.utc(2026, 7, 17, 10, 2)
+      ..playbackPosition = const Duration(seconds: 2);
+    expect(replayGuard.canRestoreWithoutOverwritingNewPlayback, isFalse);
+  });
+
+  test('backup integrity summary separates stale data from duplicate identity',
+      () {
+    final checkedAt = DateTime.utc(2026, 7, 17);
+    expect(
+      dataBackupIntegritySafetySummary(
+        DataBackupIntegrityReport(
+          checkedAt: checkedAt,
+          sqliteHealthy: true,
+          backupRecords: 11163,
+          currentVideos: 11163,
+          invalidPayloads: 0,
+          missingFingerprints: 0,
+          missingCurrentSnapshots: 0,
+          staleCurrentSnapshots: 6719,
+          ambiguousFingerprints: 88,
+          recoverableSnapshots: 0,
+        ),
+      ),
+      contains('立即备份'),
+    );
+    expect(
+      dataBackupIntegritySafetySummary(
+        DataBackupIntegrityReport(
+          checkedAt: checkedAt,
+          sqliteHealthy: true,
+          backupRecords: 11163,
+          currentVideos: 11163,
+          invalidPayloads: 0,
+          missingFingerprints: 0,
+          missingCurrentSnapshots: 0,
+          staleCurrentSnapshots: 0,
+          ambiguousFingerprints: 88,
+          recoverableSnapshots: 0,
+        ),
+      ),
+      allOf(contains('当前用户数据已覆盖'), contains('自动恢复会安全跳过')),
+    );
+  });
+
   testWidgets('result view slider toggles as one target and animates thumb',
       (tester) async {
     var dense = false;
@@ -3492,6 +3812,62 @@ void main() {
 
     expect(controller.text, 'lupa');
     expect(latestKeyword, 'lupa');
+  });
+
+  testWidgets('narrow top bar keeps active filter and clear entry visible',
+      (tester) async {
+    tester.view.physicalSize = const Size(780, 180);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    var clearCount = 0;
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        selectedTags: const <String>['171 条筛选'],
+        layoutSize: LayoutSize.medium,
+        onClearAll: () => clearCount++,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('171 条筛选'), findsOneWidget);
+    expect(find.byTooltip('清空全部筛选'), findsOneWidget);
+    await tester.tap(find.byTooltip('清空全部筛选'));
+    expect(clearCount, 1);
+  });
+
+  testWidgets('scan progress exposes a dedicated cancel action',
+      (tester) async {
+    tester.view.physicalSize = const Size(1100, 180);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    var cancelCount = 0;
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        progressLabel: '校验文件 20/100 · 20% · 剩余10秒',
+        progressValue: 0.2,
+        onToggleProgressPaused: () {},
+        onCancelProgress: () => cancelCount++,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final cancel = find.byKey(const ValueKey('qa.library_scan.cancel'));
+    expect(cancel, findsOneWidget);
+    expect(find.byTooltip('取消扫描'), findsOneWidget);
+    await tester.tap(cancel);
+    expect(cancelCount, 1);
   });
 
   testWidgets('Ctrl+K search input updates result count and visible list',
@@ -3641,6 +4017,64 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text(rootPath), findsOneWidget);
+  });
+
+  test('local library summary distinguishes folders from videos', () {
+    final video = _testVideo(
+      path: r'C:\smoke\media\clip.mp4',
+      title: 'clip',
+    );
+    expect(
+      localLibraryEntrySummary(<LocalLibraryEntry>[
+        const LocalLibraryEntry.folder(r'C:\smoke\media\Alpha'),
+        const LocalLibraryEntry.folder(r'C:\smoke\media\Beta'),
+        LocalLibraryEntry.video(video),
+      ]),
+      '2 个文件夹 · 1 个视频',
+    );
+  });
+
+  testWidgets('mixed local result summary keeps enough desktop width',
+      (tester) async {
+    tester.view.physicalSize = const Size(1268, 180);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        resultCountLabel: '40 个文件夹 · 0 个视频',
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('40 个文件夹 · 0 个视频'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.toolbarResultStatus)).width,
+      200,
+    );
+  });
+
+  testWidgets('empty manual tag stays in dialog with a Chinese field error',
+      (tester) async {
+    await tester.pumpWidget(createTagDialogSmokeHarness());
+    await tester.tap(find.text('打开新建标签'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('创建'));
+    await tester.pump();
+    expect(find.text('新建标签'), findsOneWidget);
+    expect(find.text('请输入标签名'), findsOneWidget);
+    expect(find.textContaining('Invalid argument'), findsNothing);
+
+    await tester.enterText(find.byType(TextField).first, '  新标签  ');
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
+    expect(find.text('新建标签'), findsNothing);
   });
 
   testWidgets('empty library shows a square add-files entry', (tester) async {

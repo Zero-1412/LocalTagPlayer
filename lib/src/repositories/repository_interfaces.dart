@@ -94,6 +94,14 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
    */
   Future<void> upsertVideos(Iterable<VideoItem> items);
 
+  /**
+   * 批量持久化用户播放状态，并把对应稳定 videoId 加入独立备份队列。
+   *
+   * 该入口与只写媒体详情的 [upsertVideos] 分离，避免 FFprobe 缓存更新误触发大量
+   * 用户依赖备份，同时保证继续观看清理/撤销不会漏掉备份同步。
+   */
+  Future<void> upsertPlaybackStates(Iterable<VideoItem> items);
+
   Future<VideoItem?> deleteVideo(String path);
 
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(
@@ -115,6 +123,13 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
 
   /** 播放期间暂停/恢复只读扫描，避免机械盘读取与视频解码争抢。 */
   Future<void> setScanPaused(bool paused);
+
+  /**
+   * 取消当前扫描代次，并唤醒可能处于暂停状态的后端使其尽快退出。
+   *
+   * 取消只放弃尚未提交的扫描结果，不删除现有视频、标签或播放记录。
+   */
+  Future<void> cancelActiveScan();
 
   /** 当前视频依赖备份状态。 */
   DataBackupStatus get dataBackupStatus;

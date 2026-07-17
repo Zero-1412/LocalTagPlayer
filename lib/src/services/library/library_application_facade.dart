@@ -160,6 +160,10 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
   /** 把后台媒体解析产生的多条视频字段更新合并为一次 Repository 批量写入。 */
   Future<void> upsertVideos(Iterable<VideoItem> items) =>
       _repository.upsertVideos(items);
+
+  /** 批量保存用户播放状态，并同步排入稳定身份备份。 */
+  Future<void> upsertPlaybackStates(Iterable<VideoItem> items) =>
+      _repository.upsertPlaybackStates(items);
   Future<VideoItem?> deleteVideo(String path) => _repository.deleteVideo(path);
 
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(
@@ -190,6 +194,9 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
 
   /** 播放器进入/退出时只通过 Repository 协调扫描让盘，不暴露具体 sidecar。 */
   Future<void> setScanPaused(bool paused) => _repository.setScanPaused(paused);
+
+  /** 用户从进度区取消当前扫描；已持久化的媒体库数据保持不变。 */
+  Future<void> cancelActiveScan() => _repository.cancelActiveScan();
 
   /** 当前独立备份状态快照。 */
   DataBackupStatus get dataBackupStatus => _repository.dataBackupStatus;

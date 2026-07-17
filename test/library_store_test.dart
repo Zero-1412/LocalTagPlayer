@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:convert';
 import 'dart:io';
@@ -12,6 +13,50 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 var _sqliteConfigured = false;
 late AppPaths _testPaths;
 late DatabaseProvider _testDatabaseProvider;
+
+/** 可控扫描后端，用于验证页面取消会推进代次并解除暂停。 */
+class _BlockingLibraryScanBackend implements LibraryScanBackend {
+  final Completer<void> started = Completer<void>();
+  final Completer<LibraryScanDelta> _result = Completer<LibraryScanDelta>();
+  final List<bool> pausedStates = <bool>[];
+  int? cancelledGeneration;
+
+  @override
+  Future<LibraryScanDelta> scan({
+    required int generationId,
+    required List<String> roots,
+    required Map<String, LibraryScanKnownMetadata> knownMetadata,
+    LibraryScanProgressCallback? onProgress,
+  }) {
+    if (!started.isCompleted) {
+      started.complete();
+    }
+    return _result.future;
+  }
+
+  @override
+  void cancelGeneration(int generationId) {
+    cancelledGeneration = generationId;
+    if (!_result.isCompleted) {
+      _result.complete(
+        LibraryScanDelta(
+          generationId: generationId,
+          added: const <LibraryScannedVideo>[],
+          modified: const <LibraryScannedVideo>[],
+          seenPathKeys: const <String>{},
+          scannedRootKeys: const <String>{},
+          unchangedCount: 0,
+          cancelled: true,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<void> setPaused(bool paused) async {
+    pausedStates.add(paused);
+  }
+}
 
 /**
  * 为 `LibraryStore` focused tests 准备一次性数据目录和 SQLite FFI。
@@ -68,9 +113,10 @@ VideoItem _videoByPath(LibraryStore store, String path) {
 Future<LibraryStore> _loadTrackedStore(
   List<LibraryStore> stores, {
   bool dataBackupEnabled = false,
+  LibraryScanBackend? scanBackend,
 }) async {
   final store = await LibraryStore.load(
-    scanBackend: DartLibraryScanBackend(),
+    scanBackend: scanBackend ?? DartLibraryScanBackend(),
     databaseProvider: _testDatabaseProvider,
     dataBackupEnabled: dataBackupEnabled,
   );
@@ -96,6 +142,69 @@ void main() {
     expect((await DataBackupSettings.load(_testPaths)).enabled, isTrue);
     await const DataBackupSettings(enabled: false).save(_testPaths);
     expect((await DataBackupSettings.load(_testPaths)).enabled, isFalse);
+  });
+
+  test(
+      'active scan cancellation advances generation and resumes paused backend',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('cancel_active_scan');
+    final backend = _BlockingLibraryScanBackend();
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final store = await _loadTrackedStore(
+      stores,
+      scanBackend: backend,
+    );
+
+    final scan = store.scanWithChanges();
+    await backend.started.future;
+    await store.setScanPaused(true);
+    await store.cancelActiveScan();
+    final result = await scan;
+
+    expect(result.cancelled, isTrue);
+    expect(backend.cancelledGeneration, 1);
+    expect(store.scanGeneration, 2);
+    expect(backend.pausedStates, <bool>[true, false]);
+  });
+
+  test('late playback state write cannot resurrect a deleted video row',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('playback_delete_race');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final store = await _loadTrackedStore(stores);
+    final item = VideoItem(
+      path: p.join(dataDir.path, 'deleted.mp4'),
+      title: 'deleted',
+      folder: dataDir.path,
+      tags: const <String>{},
+      addedAt: DateTime.utc(2026, 7, 17),
+      lastPlayedAt: DateTime.utc(2026, 7, 17, 12),
+      playbackPosition: const Duration(seconds: 42),
+    );
+    await store.upsertVideo(item);
+    await store.deleteVideo(item.path);
+
+    // 删除提交之后到达的继续观看异步写入必须被丢弃，不能重新创建同一稳定身份行。
+    item.playbackPosition = const Duration(seconds: 43);
+    await store.upsertPlaybackStates(<VideoItem>[item]);
+
+    expect(store.videos[TagRules.pathKey(item.path)], isNull);
+    expect(
+      await store.database.query(
+        'videos',
+        where: 'video_id = ?',
+        whereArgs: <Object?>[item.videoId],
+      ),
+      isEmpty,
+    );
   });
 
   test('batch root import persists all roots and scans only after registration',
@@ -876,6 +985,15 @@ void main() {
     expect(healthy.isHealthy, isTrue);
     expect(healthy.backupRecords, 1);
     expect(healthy.currentVideos, 1);
+
+    // usage_count 是全库派生统计，不属于单视频用户依赖；改变它不能让所有引用视频误报 stale。
+    await store.database.update(
+      'tags',
+      <String, Object?>{'usage_count': 999999},
+    );
+    final usageCountOnlyChanged = await store.checkDataBackupIntegrity();
+    expect(usageCountOnlyChanged.isHealthy, isTrue);
+    expect(usageCountOnlyChanged.staleCurrentSnapshots, 0);
 
     final exportBytes = await store.createDataBackupExport();
     final exportText = utf8.decode(exportBytes);

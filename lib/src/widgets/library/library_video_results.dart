@@ -568,6 +568,7 @@ class VideoGrid extends StatefulWidget {
     this.onVisible,
     required this.onOpen,
     required this.onEditTags,
+    this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDelete,
     this.selectionMode = false,
@@ -597,6 +598,9 @@ class VideoGrid extends StatefulWidget {
   final void Function(VideoItem item, List<VideoItem> playlist) onOpen;
 
   final ValueChanged<VideoItem> onEditTags;
+
+  /** 请求页面通过 FileSystemAdapter 定位视频；为空时兼容隔离测试宿主。 */
+  final ValueChanged<VideoItem>? onRevealLocation;
 
   final ValueChanged<VideoItem> onToggleFavorite;
 
@@ -891,6 +895,9 @@ class _VideoGridState extends State<VideoGrid> {
                   onVisible: widget.onVisible,
                   onOpen: () => widget.onOpen(item, widget.videos),
                   onEditTags: () => widget.onEditTags(item),
+                  onRevealLocation: widget.onRevealLocation == null
+                      ? null
+                      : () => widget.onRevealLocation!(item),
                   onToggleFavorite: () => widget.onToggleFavorite(item),
                   onDelete: () => widget.onDelete(item),
                   selectionMode: widget.selectionMode,
@@ -942,6 +949,9 @@ class _VideoGridState extends State<VideoGrid> {
                   onVisible: widget.onVisible,
                   onOpen: () => widget.onOpen(item, widget.videos),
                   onEditTags: () => widget.onEditTags(item),
+                  onRevealLocation: widget.onRevealLocation == null
+                      ? null
+                      : () => widget.onRevealLocation!(item),
                   onToggleFavorite: () => widget.onToggleFavorite(item),
                   onDelete: () => widget.onDelete(item),
                   selectionMode: widget.selectionMode,
@@ -979,6 +989,7 @@ class InteractiveVideoListRow extends StatelessWidget {
     this.onVisible,
     required this.onOpen,
     required this.onEditTags,
+    this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDelete,
     this.selectionMode = false,
@@ -998,6 +1009,9 @@ class InteractiveVideoListRow extends StatelessWidget {
   final VoidCallback onOpen;
 
   final VoidCallback onEditTags;
+
+  /** 通过页面注入的平台边界在文件管理器中定位当前视频。 */
+  final VoidCallback? onRevealLocation;
 
   final VoidCallback onToggleFavorite;
 
@@ -1123,6 +1137,7 @@ class InteractiveVideoListRow extends StatelessWidget {
                       onOpen: onOpen,
                       onToggleFavorite: onToggleFavorite,
                       onEditTags: onEditTags,
+                      onRevealLocation: onRevealLocation,
                       onDelete: onDelete,
                       compact: compactActions,
                     ),
@@ -1172,6 +1187,7 @@ class _ListRowActions extends StatelessWidget {
     required this.onOpen,
     required this.onToggleFavorite,
     required this.onEditTags,
+    required this.onRevealLocation,
     required this.onDelete,
     required this.compact,
   });
@@ -1183,6 +1199,8 @@ class _ListRowActions extends StatelessWidget {
   final VoidCallback onToggleFavorite;
 
   final VoidCallback onEditTags;
+
+  final VoidCallback? onRevealLocation;
 
   final VoidCallback onDelete;
 
@@ -1258,6 +1276,7 @@ class _ListRowActions extends StatelessWidget {
             child: _VideoMoreButton(
               key: LibrarySmokeKeys.listMore(item.path),
               onEditTags: onEditTags,
+              onRevealLocation: onRevealLocation,
               onDelete: onDelete,
             ),
           ),
@@ -1275,6 +1294,7 @@ class InteractiveVideoCard extends StatefulWidget {
     this.onVisible,
     required this.onOpen,
     this.onEditTags,
+    this.onRevealLocation,
     required this.onToggleFavorite,
     this.onDelete,
     this.selectionMode = false,
@@ -1290,6 +1310,8 @@ class InteractiveVideoCard extends StatefulWidget {
   final VoidCallback onOpen;
   /** 标题更多菜单的编辑标签入口；为空时不显示卡片更多按钮。 */
   final VoidCallback? onEditTags;
+  /** 标题更多菜单的打开位置入口；平台调用仍由页面层负责。 */
+  final VoidCallback? onRevealLocation;
   final VoidCallback onToggleFavorite;
   /** 标题更多菜单的删除入口；为空时不显示卡片更多按钮。 */
   final VoidCallback? onDelete;
@@ -1385,6 +1407,9 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                               setState(() => _moreMenuOpen = false),
                           onEditTags:
                               widget.selectionMode ? null : widget.onEditTags,
+                          onRevealLocation: widget.selectionMode
+                              ? null
+                              : widget.onRevealLocation,
                           onDelete:
                               widget.selectionMode ? null : widget.onDelete,
                         ),
@@ -1414,6 +1439,7 @@ class _VideoCardMetadata extends StatelessWidget {
     required this.onMoreOpened,
     required this.onMoreClosed,
     required this.onEditTags,
+    required this.onRevealLocation,
     required this.onDelete,
   });
 
@@ -1422,6 +1448,7 @@ class _VideoCardMetadata extends StatelessWidget {
   final VoidCallback onMoreOpened;
   final VoidCallback onMoreClosed;
   final VoidCallback? onEditTags;
+  final VoidCallback? onRevealLocation;
   final VoidCallback? onDelete;
 
   @override
@@ -1466,6 +1493,7 @@ class _VideoCardMetadata extends StatelessWidget {
                             onOpened: onMoreOpened,
                             onClosed: onMoreClosed,
                             onEditTags: onEditTags!,
+                            onRevealLocation: onRevealLocation,
                             onDelete: onDelete!,
                           ),
                         ),
@@ -1492,12 +1520,14 @@ class _VideoCardMoreButton extends StatelessWidget {
     required this.onOpened,
     required this.onClosed,
     required this.onEditTags,
+    required this.onRevealLocation,
     required this.onDelete,
   });
 
   final VoidCallback onOpened;
   final VoidCallback onClosed;
   final VoidCallback onEditTags;
+  final VoidCallback? onRevealLocation;
   final VoidCallback onDelete;
 
   @override
@@ -1515,8 +1545,8 @@ class _VideoCardMoreButton extends StatelessWidget {
       ),
       onOpened: onOpened,
       onCanceled: onClosed,
-      itemBuilder: (context) => const [
-        PopupMenuItem(
+      itemBuilder: (context) => [
+        const PopupMenuItem(
           key: LibrarySmokeKeys.videoMoreEditTags,
           value: _VideoMoreAction.editTags,
           height: 42,
@@ -1528,7 +1558,20 @@ class _VideoCardMoreButton extends StatelessWidget {
             ],
           ),
         ),
-        PopupMenuItem(
+        if (onRevealLocation != null)
+          const PopupMenuItem(
+            key: LibrarySmokeKeys.videoMoreRevealLocation,
+            value: _VideoMoreAction.revealLocation,
+            height: 42,
+            child: Row(
+              children: [
+                Icon(Icons.folder_open_rounded, size: 19),
+                SizedBox(width: 10),
+                Text('打开位置'),
+              ],
+            ),
+          ),
+        const PopupMenuItem(
           key: LibrarySmokeKeys.videoMoreDelete,
           value: _VideoMoreAction.delete,
           height: 42,
@@ -1551,6 +1594,9 @@ class _VideoCardMoreButton extends StatelessWidget {
           case _VideoMoreAction.editTags:
             onEditTags();
             break;
+          case _VideoMoreAction.revealLocation:
+            onRevealLocation?.call();
+            break;
           case _VideoMoreAction.delete:
             onDelete();
             break;
@@ -1570,10 +1616,13 @@ class _VideoMoreButton extends StatelessWidget {
   const _VideoMoreButton({
     super.key,
     required this.onEditTags,
+    required this.onRevealLocation,
     required this.onDelete,
   });
 
   final VoidCallback onEditTags;
+
+  final VoidCallback? onRevealLocation;
 
   final VoidCallback onDelete;
 
@@ -1583,8 +1632,8 @@ class _VideoMoreButton extends StatelessWidget {
       tooltip: '更多操作',
       icon: const Icon(Icons.more_horiz_rounded),
       position: PopupMenuPosition.under,
-      itemBuilder: (context) => const [
-        PopupMenuItem(
+      itemBuilder: (context) => [
+        const PopupMenuItem(
           key: LibrarySmokeKeys.videoMoreEditTags,
           value: _VideoMoreAction.editTags,
           child: Row(
@@ -1595,7 +1644,19 @@ class _VideoMoreButton extends StatelessWidget {
             ],
           ),
         ),
-        PopupMenuItem(
+        if (onRevealLocation != null)
+          const PopupMenuItem(
+            key: LibrarySmokeKeys.videoMoreRevealLocation,
+            value: _VideoMoreAction.revealLocation,
+            child: Row(
+              children: [
+                Icon(Icons.folder_open_rounded),
+                SizedBox(width: 10),
+                Text('打开位置'),
+              ],
+            ),
+          ),
+        const PopupMenuItem(
           key: LibrarySmokeKeys.videoMoreDelete,
           value: _VideoMoreAction.delete,
           child: Row(
@@ -1612,6 +1673,9 @@ class _VideoMoreButton extends StatelessWidget {
           case _VideoMoreAction.editTags:
             onEditTags();
             break;
+          case _VideoMoreAction.revealLocation:
+            onRevealLocation?.call();
+            break;
           case _VideoMoreAction.delete:
             onDelete();
             break;
@@ -1625,7 +1689,7 @@ class _VideoMoreButton extends StatelessWidget {
   }
 }
 
-enum _VideoMoreAction { editTags, delete }
+enum _VideoMoreAction { editTags, revealLocation, delete }
 
 class _VideoPreview extends StatefulWidget {
   const _VideoPreview({

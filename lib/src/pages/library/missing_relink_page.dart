@@ -12,23 +12,27 @@ import '../../widgets/library/library_video_results.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * 选择并安全重新关联单个 missing 视频；播放器和管理页共用同一文件类型与校验入口。
+ * 选择单个 missing 视频的候选文件；取消时返回 null，不进入校验忙碌态。
  */
-Future<bool> pickAndRelinkMissingVideo(
-  BuildContext context, {
-  required LibraryApplicationFacade store,
+Future<String?> pickMissingVideoReplacementFile({
   required FileSystemAdapter fileSystem,
   required VideoItem item,
-}) async {
-  final path = await fileSystem.pickFile(
+}) {
+  return fileSystem.pickFile(
     dialogTitle: '选择与 ${item.title} 对应的新文件',
     allowedExtensions: TagRules.videoExtensions
         .map((extension) => extension.substring(1))
         .toList(),
   );
-  if (path == null) {
-    return false;
-  }
+}
+
+/** 对已选择路径执行稳定身份和 fingerprint 校验，并统一展示结果。 */
+Future<bool> relinkMissingVideoToPath(
+  BuildContext context, {
+  required LibraryApplicationFacade store,
+  required VideoItem item,
+  required String path,
+}) async {
   try {
     await store.relinkMissingVideo(item, path);
     if (context.mounted) {
@@ -45,6 +49,35 @@ Future<bool> pickAndRelinkMissingVideo(
     }
     return false;
   }
+}
+
+/**
+ * 选择并安全重新关联单个 missing 视频；播放器复用该组合入口。
+ *
+ * missing 管理页会拆开“选择”和“校验”两步，只在已经选中文件后显示行级忙碌态。
+ */
+Future<bool> pickAndRelinkMissingVideo(
+  BuildContext context, {
+  required LibraryApplicationFacade store,
+  required FileSystemAdapter fileSystem,
+  required VideoItem item,
+}) async {
+  final path = await pickMissingVideoReplacementFile(
+    fileSystem: fileSystem,
+    item: item,
+  );
+  if (path == null) {
+    return false;
+  }
+  if (!context.mounted) {
+    return false;
+  }
+  return relinkMissingVideoToPath(
+    context,
+    store: store,
+    item: item,
+    path: path,
+  );
 }
 
 /**
@@ -80,13 +113,21 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
   /** 选择新文件并请求 store 做稳定身份与 fingerprint 校验。 */
   Future<void> _relink(VideoItem item) async {
     final videoId = item.videoId;
+    final path = await pickMissingVideoReplacementFile(
+      fileSystem: widget.fileSystem,
+      item: item,
+    );
+    if (!mounted || path == null) {
+      return;
+    }
+    // 原生文件选择器打开期间不显示行级 spinner；只有选中候选后才锁定该行进入校验。
     setState(() => _relinkingVideoIds.add(videoId));
     try {
-      final changed = await pickAndRelinkMissingVideo(
+      final changed = await relinkMissingVideoToPath(
         context,
         store: widget.store,
-        fileSystem: widget.fileSystem,
         item: item,
+        path: path,
       );
       if (!mounted) {
         return;
