@@ -3590,9 +3590,8 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                                 setState(() => _addNormalizedTag(tag)),
                           ),
                           _TagSuggestionSection(
-                            title:
-                                _query.trim().isEmpty ? '全部 manual 标签' : '搜索结果',
-                            tags: suggestions.take(24).toList(),
+                            title: _query.trim().isEmpty ? '全部可用标签' : '搜索结果',
+                            tags: suggestions,
                             icon: Icons.sell_outlined,
                             onSelected: (tag) =>
                                 setState(() => _addNormalizedTag(tag)),

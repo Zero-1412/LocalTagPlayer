@@ -2883,6 +2883,63 @@ void main() {
     expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
   });
 
+  test('tag editor candidates include every normalized name in scope', () {
+    const tags = <TagItem>[
+      TagItem(
+        id: 'manual:top',
+        name: '顶级标签',
+        source: TagSource.manual,
+        groupId: 'manual',
+      ),
+      TagItem(
+        id: 'manual:used',
+        name: '已使用标签',
+        source: TagSource.manual,
+        groupId: 'manual',
+        parentId: '原神',
+        usageCount: 8,
+      ),
+      TagItem(
+        id: 'manual:unused',
+        name: '未使用标签',
+        source: TagSource.manual,
+        groupId: 'manual',
+        parentId: '原神',
+      ),
+      TagItem(
+        id: 'manual:hidden',
+        name: '隐藏标签',
+        source: TagSource.manual,
+        groupId: 'manual',
+        parentId: '原神',
+        isHidden: true,
+      ),
+      TagItem(
+        id: 'folder:child',
+        name: '文件夹标签',
+        source: TagSource.folder,
+        groupId: 'folder.child',
+        parentId: '原神',
+      ),
+      TagItem(
+        id: 'manual:other-parent',
+        name: '其它父级标签',
+        source: TagSource.manual,
+        groupId: 'manual',
+        parentId: '崩坏三',
+      ),
+    ];
+
+    expect(
+      tagEditorCandidates(tags, parentTag: '原神'),
+      <String>{'已使用标签', '未使用标签', '文件夹标签'},
+    );
+    expect(
+      tagEditorCandidates(tags),
+      <String>{'顶级标签'},
+    );
+  });
+
   testWidgets('manual tag editor locks folder tags', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -2922,6 +2979,30 @@ void main() {
     expect(find.text('搜索结果'), findsOneWidget);
     expect(find.text('SuggestedTag'), findsOneWidget);
     expect(find.text('RecentTag'), findsNothing);
+  });
+
+  testWidgets('manual tag editor shows every available candidate',
+      (tester) async {
+    final candidates = <String>{
+      for (var index = 1; index <= 30; index++) '候选标签 $index',
+    };
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TagEditorDialog(
+            title: '完整候选标签',
+            initialTags: const <String>{},
+            existingTags: candidates,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('全部可用标签'), findsOneWidget);
+    expect(find.byType(ActionChip), findsNWidgets(30));
+    expect(find.text('候选标签 1'), findsOneWidget);
+    expect(find.text('候选标签 30'), findsOneWidget);
   });
 
   testWidgets('manual tag editor supports keyboard save', (tester) async {

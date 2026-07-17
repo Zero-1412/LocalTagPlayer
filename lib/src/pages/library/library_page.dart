@@ -54,6 +54,28 @@ bool libraryTagDiscoveryPanelOpenAfterMutation({
 }) =>
     collapseAfterMutation ? false : currentOpen;
 
+/**
+ * 返回标签编辑器在指定层级应展示的完整名称候选。
+ *
+ * 候选直接来自规范化 `TagItem` 索引，因此包含尚未出现在兼容视频字段中的标签。候选可以
+ * 来自 folder 等已有来源，但用户选中后仍由保存层建立独立 manual 关系；隐藏标签不展示，
+ * 二级候选仍严格限制在 [parentTag] 下。
+ */
+Set<String> tagEditorCandidates(
+  Iterable<TagItem> tags, {
+  String? parentTag,
+}) {
+  return <String>{
+    for (final tag in tags)
+      if (!tag.isHidden &&
+          (parentTag == null
+              ? tag.parentId == null
+              : tag.parentId != null &&
+                  TagRules.sameTag(tag.parentId!, parentTag)))
+        tag.name,
+  };
+}
+
 /** 为页面切换提供统一的轻量淡入与横向位移动画。 */
 Route<T> _smoothRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
@@ -1278,9 +1300,6 @@ class _LibraryPageState extends State<LibraryPage> {
   var _suppressSearchControllerChange = false;
   var _searchControllerChangeQueued = false;
   var _lastObservedSearchText = '';
-
-  /** 播放器会话内最近使用的 manual 标签，只保留轻量内存顺序。 */
-  final List<String> _recentPlayerManualTags = <String>[];
 
   /** 播放器内单条修改延后到返回媒体库时刷新可见结果，不刷新全库计数。 */
   var _playerScopedLibraryDataChanged = false;
@@ -4509,7 +4528,16 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  Future<void> _editTags(VideoItem item) async {
+  /**
+   * 使用统一弹窗编辑视频在当前标签层级下的 manual 标签。
+   *
+   * [deferLibraryRefresh] 仅供播放器前台路由使用，保存后延迟到返回媒体库再刷新结果，
+   * 避免隐藏页面在播放期间执行标签计数重算。
+   */
+  Future<void> _editTags(
+    VideoItem item, {
+    bool deferLibraryRefresh = false,
+  }) async {
     final childParentTag = _activeChildParentTag;
     final editingChildTags = childParentTag != null;
     final updated = await showDialog<Set<String>>(
@@ -4520,9 +4548,10 @@ class _LibraryPageState extends State<LibraryPage> {
         initialTags: editingChildTags
             ? (item.childTags[childParentTag] ?? const <String>{})
             : item.tags,
-        existingTags: editingChildTags
-            ? (_store?.childTagsFor(childParentTag) ?? const {})
-            : (_store?.allTags ?? const {}),
+        existingTags: tagEditorCandidates(
+          _store?.allTagItems ?? const <TagItem>[],
+          parentTag: editingChildTags ? childParentTag : null,
+        ),
         lockedTags: editingChildTags
             ? _folderChildTagsForItem(item, childParentTag)
             : _folderTagsForItem(item),
@@ -4549,179 +4578,21 @@ class _LibraryPageState extends State<LibraryPage> {
     });
     await _store?.replaceManualTags(item,
         parentTag: editingChildTags ? childParentTag : null);
-    if (mounted) {
+    if (mounted && deferLibraryRefresh) {
+      _playerScopedLibraryDataChanged = true;
+    } else if (mounted) {
       _markLibraryDataChanged();
     }
   }
 
   /**
-   * 从播放器快速编辑单个视频的一级 manual 标签。
+   * 播放器与视频卡片复用同一标签编辑入口。
    *
-   * folder 标签以锁定 chip 展示并在保存时重新合并；建议列表只包含未隐藏的一级 manual
-   * 标签，避免把 folder/rule/filename/import/auto 来源误写成手动数据。
+   * 当前一级标签、folder 锁定项、manual 候选集合和保存语义全部由 [_editTags] 统一决定，
+   * 防止两个入口随时间演化成不同的数据视图。
    */
-  Future<void> _editManualTagsFromPlayer(VideoItem item) async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final folderTags = _folderTagsForItem(item);
-    final linkedManualTags = _linkedTopLevelManualTags(store, item);
-    final manualSuggestions = <String>{
-      for (final tag in store.allTagItems)
-        if (tag.source == TagSource.manual &&
-            tag.parentId == null &&
-            !tag.isHidden)
-          tag.name,
-    };
-    final favoriteManualTags = <String>{
-      for (final tag in store.allTagItems)
-        if (tag.source == TagSource.manual &&
-            tag.parentId == null &&
-            tag.isFavorite &&
-            !tag.isHidden)
-          tag.name,
-    };
-    final initialManualTags = <String>{
-      for (final tag in linkedManualTags) tag.name,
-      // 兼容旧数据：只接受能解析到已知 manual 来源的兼容字段，不能把其它来源提升为 manual。
-      for (final name in item.tags)
-        if (manualSuggestions.any(
-          (manualName) => TagRules.sameTag(manualName, name),
-        ))
-          name,
-    };
-    final updated = await showDialog<Set<String>>(
-      context: context,
-      builder: (_) => TagEditorDialog(
-        title: '${item.title} / 手动标签',
-        helperText: '只修改手动标签；文件夹标签由目录结构维护。',
-        initialTags: <String>{...folderTags, ...initialManualTags},
-        existingTags: manualSuggestions,
-        lockedTags: folderTags,
-        recentTags: _recentPlayerManualTags,
-        favoriteTags: favoriteManualTags,
-      ),
-    );
-    if (updated == null) {
-      return;
-    }
-    final selectedManualNames = _normalizeTagSet(updated)
-        .where(
-          (tag) => !folderTags.any(
-            (folderTag) => TagRules.sameTag(folderTag, tag),
-          ),
-        )
-        .toSet();
-    final protectedTagNames = _linkedTopLevelNonManualTagNames(store, item)
-      ..addAll(folderTags);
-    try {
-      for (final tag in linkedManualTags) {
-        if (!selectedManualNames.any(
-          (selected) => TagRules.sameTag(selected, tag.name),
-        )) {
-          await store.batchRemoveManualTag(tag, [item]);
-        }
-      }
-      for (final name in selectedManualNames) {
-        if (linkedManualTags.any(
-          (tag) => TagRules.sameTag(tag.name, name),
-        )) {
-          continue;
-        }
-        final tag = await _resolveQuickManualTag(store, name);
-        await store.batchAddManualTag(tag, [item]);
-      }
-      // 兼容字段只重建“受保护的非 manual 来源 + 用户本次选择的 manual 标签”。
-      item.tags
-        ..clear()
-        ..addAll(protectedTagNames)
-        ..addAll(selectedManualNames);
-      await store.upsertVideo(item);
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('更新手动标签失败：$error')),
-        );
-      }
-      return;
-    }
-    for (final name in selectedManualNames) {
-      _recentPlayerManualTags
-          .removeWhere((recent) => TagRules.sameTag(recent, name));
-      _recentPlayerManualTags.insert(0, name);
-    }
-    if (_recentPlayerManualTags.length > 12) {
-      _recentPlayerManualTags.removeRange(12, _recentPlayerManualTags.length);
-    }
-    _playerScopedLibraryDataChanged = true;
-  }
-
-  /** 获取当前视频已关联的非 manual 一级标签名，防止快速编辑覆盖其它来源。 */
-  Set<String> _linkedTopLevelNonManualTagNames(
-    LibraryApplicationFacade store,
-    VideoItem item,
-  ) {
-    final linkedIds = store.videoTagIdsByPathKey[TagRules.pathKey(item.path)] ??
-        const <String>{};
-    final tagNames = <String>{};
-    for (final id in linkedIds) {
-      final tag = store.tagsById[id];
-      if (tag != null &&
-          tag.source != TagSource.manual &&
-          tag.parentId == null) {
-        tagNames.add(tag.name);
-      }
-    }
-    return tagNames;
-  }
-
-  /** 获取当前视频真实关联的一级 manual 标签，后续增删优先按 tagId 执行。 */
-  List<TagItem> _linkedTopLevelManualTags(
-    LibraryApplicationFacade store,
-    VideoItem item,
-  ) {
-    final linkedIds = store.videoTagIdsByPathKey[TagRules.pathKey(item.path)] ??
-        const <String>{};
-    final result = <TagItem>[];
-    for (final id in linkedIds) {
-      final tag = store.tagsById[id];
-      if (tag != null &&
-          tag.source == TagSource.manual &&
-          tag.parentId == null) {
-        result.add(tag);
-      }
-    }
-    return result;
-  }
-
-  /**
-   * 将新输入名称解析到稳定 manual tagId。
-   *
-   * 优先复用 `manual` 默认组；只有一个同名候选时复用该候选；多组同名且无默认组时创建默认组标签，
-   * 避免仅按名称随机修改其它分组。
-   */
-  Future<TagItem> _resolveQuickManualTag(
-    LibraryApplicationFacade store,
-    String name,
-  ) async {
-    final matches = [
-      for (final tag in store.allTagItems)
-        if (tag.source == TagSource.manual &&
-            tag.parentId == null &&
-            TagRules.sameTag(tag.name, name))
-          tag,
-    ];
-    for (final tag in matches) {
-      if ((tag.groupId ?? 'manual') == 'manual') {
-        return tag;
-      }
-    }
-    if (matches.length == 1) {
-      return matches.single;
-    }
-    return store.createManualTag(name: name, groupId: 'manual');
-  }
+  Future<void> _editManualTagsFromPlayer(VideoItem item) =>
+      _editTags(item, deferLibraryRefresh: true);
 
   Set<String> _folderTagsForItem(VideoItem item) {
     final rootPath = item.rootPath;

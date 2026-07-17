@@ -14,9 +14,13 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 162 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 164 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
+
+- 视频卡片与播放器详情的标签编辑改为复用同一入口：两处现在使用相同的当前父级、初始选中、folder 锁定、候选集合与 `replaceManualTags` 保存路径。
+- 候选集合改从规范化 `TagItem` 索引读取当前层级全部未隐藏标签名称，包含尚未出现在视频兼容字段中的标签；选择 folder 等已有名称时仍建立独立 manual 关系，不改变原来源。候选区移除 24 项截断并更名为“全部可用标签”。
+- 新增“规范化候选包含未使用项/隔离其它父级”和“30 项全部渲染”focused tests；完整 164 项测试通过，3 项显式 benchmark 跳过，`dart format`、`flutter analyze` 和 Windows debug build 通过。中间构建真实窗口复现 24 项不足并确认根因；最新构建因目标窗口处于用户全屏播放且持续输入，未继续抢占点击，保留人工复测路径。
 
 - 播放器顶部删除重复的当前队列搜索栏，标题从固定应用名改为当前实际播放视频的完整文件名，并随队列切换即时更新；超长名称单行省略且保留完整 tooltip。
 - 清理只服务顶部搜索的 controller、FocusNode 与 `Ctrl+K` 聚焦分支；右侧队列自身的按需搜索按钮、搜索定位和 filtered queue 行为不变。
