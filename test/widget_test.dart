@@ -1508,6 +1508,10 @@ void main() {
     expect(sortRect.left - searchRect.right, lessThanOrEqualTo(24));
     expect(searchRect.bottom, lessThan(statusRect.top));
     expect(sortRect.right, lessThanOrEqualTo(actionsRect.left));
+    // 桌面排序字段应承接动作带剩余宽度，不能在方向按钮与多选之间留下大块空洞。
+    expect(sortRect.width, greaterThan(100));
+    expect(actionsRect.left - sortRect.right, lessThanOrEqualTo(68));
+    expect(find.text(sortModeLabel(SortMode.recent)), findsOneWidget);
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.searchInputLane)).width,
       greaterThan(600),

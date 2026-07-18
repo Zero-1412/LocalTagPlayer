@@ -2634,6 +2634,7 @@ class ReferenceTopBar extends StatelessWidget {
                       final sortControl = _CompactTopSortControl(
                         sortMode: sortMode,
                         sortDirection: sortDirection,
+                        showCurrentField: layoutSize == LayoutSize.expanded,
                         onChanged: onSortChanged,
                         onDirectionToggle: onSortDirectionToggle,
                       );
@@ -2760,10 +2761,11 @@ class ReferenceTopBar extends StatelessWidget {
                                     child: selectionMode
                                         ? selectionStatus
                                         : Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
                                             children: [
-                                              sortControl,
+                                              // 桌面动作带保留固定宽度以避免进入多选时搜索框跳动；
+                                              // 正常态由排序字段弹性承接剩余空间，不再留下无语义空洞。
+                                              Expanded(child: sortControl),
+                                              const SizedBox(width: 12),
                                               normalActions,
                                             ],
                                           ),
@@ -3282,15 +3284,16 @@ class _TagDiscoveryHeaderButton extends StatelessWidget {
 }
 
 /**
- * 中等窗口被侧栏压窄时使用的排序控件。
+ * 媒体库顶部的响应式排序控件。
  *
- * 字段菜单和方向按钮仍分别回调页面已有排序状态，只把常驻文字压缩成图标，
- * 避免为了保留完整桌面控件而挤掉搜索输入或造成横向 overflow。
+ * 宽桌面显示当前字段并弹性吸收动作带剩余宽度；中等窗口压缩成图标，
+ * 两种形态仍分别回调页面已有排序状态，不复制排序逻辑。
  */
 class _CompactTopSortControl extends StatelessWidget {
   const _CompactTopSortControl({
     required this.sortMode,
     required this.sortDirection,
+    required this.showCurrentField,
     required this.onChanged,
     required this.onDirectionToggle,
   });
@@ -3301,6 +3304,9 @@ class _CompactTopSortControl extends StatelessWidget {
   /** 当前排序方向。 */
   final SortDirection sortDirection;
 
+  /** 是否在宽桌面布局中展示当前排序字段，并让字段入口承接动作带剩余宽度。 */
+  final bool showCurrentField;
+
   /** 选择排序字段后交给页面已有轻量重排入口。 */
   final ValueChanged<SortMode> onChanged;
 
@@ -3310,47 +3316,91 @@ class _CompactTopSortControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ascending = sortDirection == SortDirection.ascending;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        PopupMenuButton<SortMode>(
-          key: LibrarySmokeKeys.topSortFieldButton,
-          tooltip: '\u6392\u5e8f\u5b57\u6bb5\uff1a${sortModeLabel(sortMode)}',
-          onSelected: onChanged,
-          color: librarySurface,
-          initialValue: sortMode,
-          // 强制从按钮下方展开，避免默认行为把当前选中项对齐到按钮并遮挡触发入口。
-          position: PopupMenuPosition.under,
-          offset: const Offset(0, 6),
-          itemBuilder: (context) => [
-            for (final mode in SortMode.values)
-              PopupMenuItem<SortMode>(
-                key: LibrarySmokeKeys.topSortMenuItem(mode),
-                value: mode,
-                child: Row(
-                  children: [
-                    Icon(
-                      mode == sortMode
-                          ? Icons.check_rounded
-                          : Icons.circle_outlined,
-                      size: 17,
-                      color:
-                          mode == sortMode ? appAccentViolet : libraryTextMuted,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(sortModeLabel(mode)),
-                  ],
+    final fieldButton = PopupMenuButton<SortMode>(
+      key: LibrarySmokeKeys.topSortFieldButton,
+      tooltip: '\u6392\u5e8f\u5b57\u6bb5\uff1a${sortModeLabel(sortMode)}',
+      onSelected: onChanged,
+      color: librarySurface,
+      initialValue: sortMode,
+      // 强制从按钮下方展开，避免默认行为把当前选中项对齐到按钮并遮挡触发入口。
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 6),
+      itemBuilder: (context) => [
+        for (final mode in SortMode.values)
+          PopupMenuItem<SortMode>(
+            key: LibrarySmokeKeys.topSortMenuItem(mode),
+            value: mode,
+            child: Row(
+              children: [
+                Icon(
+                  mode == sortMode
+                      ? Icons.check_rounded
+                      : Icons.circle_outlined,
+                  size: 17,
+                  color: mode == sortMode ? appAccentViolet : libraryTextMuted,
                 ),
-              ),
-          ],
-          icon: const Icon(Icons.sort_rounded, size: 20),
-          style: IconButton.styleFrom(
-            backgroundColor: librarySurface,
-            foregroundColor: libraryTextMuted,
-            fixedSize: const Size(38, 38),
-            side: const BorderSide(color: libraryBorder),
+                const SizedBox(width: 8),
+                Text(sortModeLabel(mode)),
+              ],
+            ),
           ),
-        ),
+      ],
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      style: showCurrentField
+          ? IconButton.styleFrom(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            )
+          : IconButton.styleFrom(
+              backgroundColor: librarySurface,
+              foregroundColor: libraryTextMuted,
+              fixedSize: const Size(38, 38),
+              side: const BorderSide(color: libraryBorder),
+            ),
+      icon: showCurrentField ? null : const Icon(Icons.sort_rounded, size: 20),
+      child: showCurrentField
+          ? Container(
+              height: 38,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: librarySurface,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                border: Border.all(color: libraryBorder),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.sort_rounded,
+                    size: 19,
+                    color: appAccentViolet,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      sortModeLabel(sortMode),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: libraryText,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.expand_more_rounded,
+                    size: 18,
+                    color: libraryTextMuted,
+                  ),
+                ],
+              ),
+            )
+          : null,
+    );
+    return Row(
+      mainAxisSize: showCurrentField ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        if (showCurrentField) Expanded(child: fieldButton) else fieldButton,
         const SizedBox(width: 6),
         _ReferenceIconButton(
           tooltip: ascending

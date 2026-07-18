@@ -1,5 +1,12 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
+## 2026-07-18 Apple UI Phase 1 排序动作带补齐
+
+- 固定 360px 动作带继续保护普通/多选切换时的搜索宽度，但移除由 `spaceBetween` 产生的大块裸空白；expanded 当前排序字段弹性铺开，后接方向、多选和视图切换。
+- 排序字段直接显示当前状态并保留原菜单项、方向、回调、tooltip、键盘和 Semantics；中小布局仍为紧凑图标，过滤与排序语义不变。
+- 动作间距、150% 文字缩放和多选宽度 focused tests、完整 205 项测试、analyze、Windows debug build 与 1248×714 实窗截图通过；用户输入检测后未继续抢占菜单点击。
+- `FilterQuery`、`TagQueryService`、filtered queue、排序结果、缩略图队列和用户数据未改变。
+
 ## 2026-07-18 Apple UI Phase 1 顶部信息区复修
 
 - expanded 顶部不再用大圆角结构表面包裹已经带 surface 的搜索、排序和视图控件，避免双重边框和后台工具台感；中小布局保持原紧凑容器策略。

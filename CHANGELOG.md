@@ -1,5 +1,12 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-18 · Apple UI Phase 1 排序动作带补齐
+
+- expanded 媒体库把固定动作带中的大块无语义留白改为弹性当前排序字段，形成“字段、方向、多选、视图”的连续操作序列；多选切换时搜索宽度仍保持稳定。
+- 当前字段显示真实排序状态并复用原菜单与回调，medium/compact 图标形态不变；没有新增排序计算、列表 rebuild 或装饰动画。
+- 完整 205 项测试、`flutter analyze`、Windows debug build 和 1248×714 真实窗口截图通过，3 项 benchmark 跳过；自动展开菜单因检测到用户输入而停止，菜单行为由 widget 回归覆盖。
+- 未修改 SQLite schema、过滤语义、filtered queue、播放器/缓存队列或用户数据。
+
 ## 2026-07-18 · Apple UI Phase 1 媒体库顶部信息区复修
 
 - expanded 媒体库移除搜索与动作外层的大圆角工具容器，收紧标题排版和垂直留白，让首排视频成为更明确的视觉中心。

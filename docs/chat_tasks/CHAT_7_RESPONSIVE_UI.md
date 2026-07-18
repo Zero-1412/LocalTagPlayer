@@ -1,5 +1,11 @@
 # CHAT_7_RESPONSIVE_UI.md
 
+## 2026-07-18 Apple UI Phase 1 排序动作带补齐
+
+- expanded 动作带用弹性当前排序字段吸收原无语义空白，固定总宽继续保证多选切换不推动搜索框；medium/compact 保持图标入口。
+- 150% 文字缩放下当前字段、方向、多选和视图切换无横向溢出；完整 205 项测试、静态分析、Windows debug build 与 1248×714 真实截图通过。
+- 真实窗口检测到用户输入后只做截图、不再自动点菜单；菜单展开和排序回调由 widget 测试覆盖。
+
 当前版本：`0.3.0`
 状态：第一阶段验收完成；Apple UI Phase 0–2 已完成，Phase 3 标签中心、设置、缓存诊断、目录管理与 Missing/Relink 已完成真实窗口验证
 负责人：Chat 7 / 响应式 UI + 平台 polish

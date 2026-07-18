@@ -1,5 +1,13 @@
 ﻿# CURRENT_TASK.md
 
+## 2026-07-18 Apple UI Phase 1 排序动作带补齐
+
+- 根据真实窗口红框反馈，确认顶部空洞来自固定 360px 动作带中的 `spaceBetween`：该宽度用于保证进入多选时搜索框不跳动，但剩余空间不应以无语义留白呈现。
+- expanded 布局改为“弹性当前排序字段 + 排序方向 + 多选 + 视图切换”；当前字段显示“日期/名称/类型/大小/目录/添加时间”，既有排序菜单、方向回调、tooltip、键盘和 Semantics 保持。medium/compact 继续使用原图标形态。
+- focused tests 覆盖排序字段宽度、动作间距、150% 文字缩放及普通/多选模式宽度稳定；完整 205 项测试、`flutter analyze` 和 Windows debug build 通过，3 项 benchmark 跳过。
+- 1248×714 最新 Debug 实窗只读截图确认原空洞已由“日期”字段自然承接，方向、多选和视图入口连续排列，无遮挡、裁切或溢出。检测到用户正在目标窗口输入后停止自动点击，排序菜单展开行为由 widget 回归覆盖。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、排序语义、缩略图/媒体详情队列、`PlayerBackend` 或用户数据。
+
 ## 2026-07-18 Apple UI Phase 1 媒体库顶部信息区复修
 
 - 根据真实截图中“红框区域像后台工具台”的反馈，expanded 媒体库移除包裹搜索、排序、多选和视图切换的第二层大圆角容器；搜索与动作直接落在画布上，由各自 surface 表达可交互性。
