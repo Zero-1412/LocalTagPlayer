@@ -85,7 +85,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
   static const _previewDelay = Duration(milliseconds: 350);
   static const _previewWidth = 220.0;
   static const _previewHeight = 124.0;
-  static const _baseThumbHalfExtent = 13.0;
+  static const _baseThumbHalfExtent = 14.0;
 
   Timer? _previewTimer;
   var _hovered = false;
@@ -647,9 +647,12 @@ class _PlayerCatSlimeThumbShape extends SliderComponentShape {
   /** 仅由全屏视口计算的视觉倍率，调用层已限制在 1 到 1.25。 */
   final double visualScale;
 
+  /** 28px 目标尺寸相对原始 26px 矢量稿的绘制倍率。 */
+  static const _artworkScale = 28 / 26;
+
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) {
-    return Size.square(26 * visualScale);
+    return Size.square(28 * visualScale);
   }
 
   /** 构建带双耳的圆润猫咪轮廓，坐标围绕滑块中心定义。 */
@@ -696,7 +699,9 @@ class _PlayerCatSlimeThumbShape extends SliderComponentShape {
 
     canvas.save();
     canvas.translate(center.dx, center.dy);
-    canvas.scale(appearScale * pressedScale * visualScale);
+    canvas.scale(
+      appearScale * pressedScale * visualScale * _artworkScale,
+    );
 
     // 小范围柔光只负责把焦点从明暗视频画面中分离，不扩大到整条进度轨道。
     canvas.drawPath(

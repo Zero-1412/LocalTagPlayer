@@ -2488,6 +2488,31 @@ void main() {
 
     expect(shape.borderRadius, BorderRadius.circular(AppRadius.card));
     expect(shape.side.color, libraryBorder);
+    expect(theme.canvasColor, librarySurfaceAlt);
+    expect(theme.hoverColor, appAccentViolet.withValues(alpha: 0.10));
+    expect(theme.focusColor, appAccentViolet.withValues(alpha: 0.16));
+  });
+
+  testWidgets('player chrome keeps non-primary button surface clear at rest',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlayerChromeButton(
+            tooltip: '测试按钮',
+            icon: Icons.settings_rounded,
+            onPressed: () {},
+          ),
+        ),
+      ),
+    );
+
+    final surface = tester.widget<AppInteractionSurface>(
+      find.byType(AppInteractionSurface),
+    );
+    expect(surface.backgroundColor, Colors.transparent);
+    expect(surface.material, AppSurfaceMaterial.solid);
+    expect(surface.showBorder, isFalse);
   });
 
   testWidgets('settings landing page only shows grouped feature entries',
@@ -5985,6 +6010,10 @@ void main() {
         );
     expect(sliderTheme().data.trackHeight, 2);
     expect(playerProgressThumbIsCat(sliderTheme().data), isTrue);
+    expect(
+      sliderTheme().data.thumbShape!.getPreferredSize(true, false),
+      const Size.square(28),
+    );
     expect(find.byKey(const ValueKey('player.progress.preview')), findsNothing);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);

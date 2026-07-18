@@ -1,5 +1,13 @@
 ﻿# CURRENT_TASK.md
 
+## 2026-07-19 Apple UI 播放设置浮层与播放器控制条收口
+
+- 播放设置路由补齐深色 `canvasColor` 及紫色 hover/focus/highlight token，继续观看、常用解码和高级解码 `DropdownButtonFormField` 的浮层统一使用深色次级表面，修复浅底叠浅色文字与突兀青绿色选中态；选项、确认和持久化语义不变。
+- 播放器普通 chrome 按钮从 translucent 透明材质改为真正透明的 solid 基底，静止时不再生成半透明黑色方块；hover、press、focus 反馈及紫色主播放按钮保持。
+- 主进度条猫咪从 26px 调整为实际绘制和命中几何一致的 28px，端点预览 inset 同步到 14px；轨道布局、seek、hover 预览、reduced motion 和全屏有限缩放链路未改。
+- focused tests、完整 214 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。1249×714 实窗确认两组下拉菜单文字清晰、普通按钮无常驻黑底、28px 猫咪可辨且无遮挡；QA seek 已恢复到 0:00 并保持暂停。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 内容/顺序、`PlayerBackend`、缩略图/媒体详情队列、解码值或用户标签/收藏数据。
+
 ## 2026-07-19 播放器猫咪进度焦点与当前文件定位
 
 - 主进度条恢复历史 `742dbb1` / `1e057a1` 中的矢量猫耳史莱姆焦点，继续使用当前 Apple 主题轨道、悬停时序和 reduced-motion 策略；音量条仍保持紧凑圆点，全屏猫咪焦点沿用 1–1.25 倍有限缩放。

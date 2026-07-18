@@ -518,6 +518,13 @@ class _PlaybackDecoderDropdownState extends State<PlaybackDecoderDropdown> {
 ThemeData settingsWorkspaceTheme(ThemeData base) {
   final workspace = maintenanceWorkspaceTheme(base);
   return workspace.copyWith(
+    // DropdownButton 的弹出路由读取 canvasColor；显式保持深色抬升表面，
+    // 避免深色文字主题落到默认浅色菜单上而失去可读性。
+    canvasColor: librarySurfaceAlt,
+    hoverColor: appAccentViolet.withValues(alpha: 0.10),
+    focusColor: appAccentViolet.withValues(alpha: 0.16),
+    highlightColor: appAccentViolet.withValues(alpha: 0.12),
+    splashColor: appAccentViolet.withValues(alpha: 0.08),
     cardTheme: workspace.cardTheme.copyWith(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),

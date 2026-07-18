@@ -194,7 +194,9 @@ class PlayerChromeButton extends StatelessWidget {
         padding: EdgeInsets.zero,
         borderRadius: primary ? AppRadius.capsule : AppRadius.control,
         backgroundColor: primary ? appAccentViolet : Colors.transparent,
-        material: AppSurfaceMaterial.translucent,
+        // 透明按钮保持真正的无底色静止态；交互表面仍会在 hover、press
+        // 与 focus 时叠加强调色反馈，主播放按钮则继续保留紫色实心表面。
+        material: AppSurfaceMaterial.solid,
         showBorder: false,
         child: SizedBox.square(
           dimension: size,
