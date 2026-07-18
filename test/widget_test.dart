@@ -1965,13 +1965,18 @@ void main() {
   testWidgets('player delete dialog keeps recycle-bin action explicit',
       (tester) async {
     final item = _testVideo(path: r'X:\test-media\clip.mp4', title: 'clip');
-    Object? result = 'pending';
+    VideoDeleteDecision? result;
+    var initialMoveToTrash = false;
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
           builder: (context) => FilledButton(
             onPressed: () async {
-              result = await showPlayerDeleteConfirmationDialog(context, item);
+              result = await showPlayerDeleteConfirmationDialog(
+                context,
+                item,
+                initialMoveLocalFileToTrash: initialMoveToTrash,
+              );
             },
             child: const Text('打开删除确认'),
           ),
@@ -1981,21 +1986,48 @@ void main() {
 
     await tester.tap(find.text('打开删除确认'));
     await tester.pumpAndSettle();
-    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+    final dialogTheme = Theme.of(tester.element(find.byType(AlertDialog)));
+    expect(dialogTheme.colorScheme.brightness, Brightness.dark);
+    expect(dialogTheme.dialogTheme.backgroundColor, librarySurface);
+    expect(
+      tester
+          .widget<Checkbox>(
+            find.descendant(
+              of: find.byKey(const ValueKey('deleteDialog.moveToTrash')),
+              matching: find.byType(Checkbox),
+            ),
+          )
+          .value,
+      isFalse,
+    );
+    expect(find.text('不再提示'), findsOneWidget);
     expect(find.text('仅移出媒体库'), findsOneWidget);
     await tester.tap(find.text('仅移出媒体库'));
     await tester.pumpAndSettle();
-    expect(result, isFalse);
+    expect(result?.moveLocalFileToTrash, isFalse);
+    expect(result?.dontAskAgain, isFalse);
 
-    result = 'pending';
+    result = null;
+    initialMoveToTrash = true;
     await tester.tap(find.text('打开删除确认'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('同时将本地视频移入回收站'));
+    expect(
+      tester
+          .widget<Checkbox>(
+            find.descendant(
+              of: find.byKey(const ValueKey('deleteDialog.moveToTrash')),
+              matching: find.byType(Checkbox),
+            ),
+          )
+          .value,
+      isTrue,
+    );
+    await tester.tap(find.text('不再提示'));
     await tester.pump();
-    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
     await tester.tap(find.text('移入回收站并移除记录'));
     await tester.pumpAndSettle();
-    expect(result, isTrue);
+    expect(result?.moveLocalFileToTrash, isTrue);
+    expect(result?.dontAskAgain, isTrue);
   });
 
   testWidgets('player side panel switches between queue and current details',
@@ -2524,8 +2556,11 @@ void main() {
         home: Scaffold(
           body: SettingsLandingList(
             resumeBehavior: PlaybackResumeBehavior.ask,
+            confirmBeforeDeletingVideo: true,
+            moveDeletedFileToTrash: false,
             onOpenPlayback: () => openedSections.add('playback'),
             onOpenPlayerInteraction: () => openedSections.add('interaction'),
+            onOpenFileDeletion: () => openedSections.add('deletion'),
             onOpenDataBackup: () => openedSections.add('backup'),
             onOpenCache: () => openedSections.add('cache'),
           ),
@@ -2543,11 +2578,12 @@ void main() {
     expect(find.byType(Switch), findsNothing);
     expect(find.byType(Slider), findsNothing);
     expect(find.byType(DropdownButtonFormField<dynamic>), findsNothing);
-    expect(find.byType(AppInteractionSurface), findsNWidgets(4));
+    expect(find.byType(AppInteractionSurface), findsNWidgets(5));
 
     for (final entry in <(String, String)>[
       ('settings.category.playback', 'playback'),
       ('settings.category.playerInteraction', 'interaction'),
+      ('settings.category.fileDeletion', 'deletion'),
       ('settings.category.dataBackup', 'backup'),
       ('settings.category.cache', 'cache'),
     ]) {
@@ -2555,6 +2591,204 @@ void main() {
       await tester.pump();
       expect(openedSections.last, entry.$2);
     }
+  });
+
+  testWidgets('delete file settings remain readable at 150 percent',
+      (tester) async {
+    bool? confirmChanged;
+    bool? trashChanged;
+    await tester.pumpWidget(
+      deleteFileSettingsSmokeHarness(
+        confirmBeforeDeletingVideo: false,
+        moveDeletedFileToTrash: true,
+        textScaler: TextScaler.linear(1.5),
+        onConfirmChanged: (value) => confirmChanged = value,
+        onMoveToTrashChanged: (value) => trashChanged = value,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('删除前显示提示框'), findsOneWidget);
+    expect(find.text('同步将本地文件移入回收站'), findsOneWidget);
+    expect(find.textContaining('直接把本地文件移入回收站'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings.fileDeletion.confirm')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings.fileDeletion.moveToTrash')),
+    );
+    expect(confirmChanged, isTrue);
+    expect(trashChanged, isFalse);
+  });
+
+  testWidgets('shortcut recorder captures keys and keeps conflicts visible',
+      (tester) async {
+    String? captured;
+    String? error;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: settingsWorkspaceTheme(ThemeData(useMaterial3: true)),
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(720, 600),
+            textScaler: TextScaler.linear(1.5),
+          ),
+          child: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => SizedBox(
+                width: 360,
+                child: PlayerShortcutRecorder(
+                  action: PlayerShortcutAction.playPause,
+                  shortcut: 'Space',
+                  errorText: error,
+                  onCaptured: (shortcut) {
+                    captured = shortcut;
+                    setState(
+                      () => error = '与“全屏 / 退出全屏”冲突，请按其它按键',
+                    );
+                    return false;
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings.shortcut.playPause')),
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(captured, 'Control+F');
+    final errorText = tester.widget<Text>(
+      find.byKey(const ValueKey('settings.shortcut.playPause.error')),
+    );
+    expect(errorText.style?.color, playerDanger);
+    expect(find.text('请按键…'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('non-main route accepts keyboard and mouse back input',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (homeContext) => FilledButton(
+            onPressed: () {
+              Navigator.of(homeContext).push(
+                MaterialPageRoute<void>(
+                  builder: (pageContext) => AppRouteBackInputRegion(
+                    shortcutProvider: () => 'Escape',
+                    onBack: () {
+                      Navigator.of(pageContext).maybePop();
+                    },
+                    child: const Scaffold(body: Text('二级页面')),
+                  ),
+                ),
+              );
+            },
+            child: const Text('打开二级页'),
+          ),
+        ),
+      ),
+    );
+
+    Future<void> openPage() async {
+      await tester.tap(find.text('打开二级页'));
+      await tester.pumpAndSettle();
+      expect(find.text('二级页面'), findsOneWidget);
+    }
+
+    await openPage();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('打开二级页'), findsOneWidget);
+
+    await openPage();
+    final target = tester.getCenter(find.text('二级页面'));
+    tester.binding.handlePointerEvent(
+      PointerDownEvent(
+        position: target,
+        kind: PointerDeviceKind.mouse,
+        buttons: kBackMouseButton,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('打开二级页'), findsOneWidget);
+  });
+
+  testWidgets('route back survives shortcut recorder focus release',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (homeContext) => FilledButton(
+            onPressed: () {
+              Navigator.of(homeContext).push(
+                MaterialPageRoute<void>(
+                  builder: (pageContext) => AppRouteBackInputRegion(
+                    shortcutProvider: () => 'Escape',
+                    onBack: () => Navigator.of(pageContext).maybePop(),
+                    child: Scaffold(
+                      body: PlayerShortcutRecorder(
+                        action: PlayerShortcutAction.navigateBack,
+                        shortcut: 'Escape',
+                        onCaptured: (shortcut) => true,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+            child: const Text('打开录制页'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开录制页'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('settings.shortcut.navigateBack')),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.text('打开录制页'), findsNothing);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('打开录制页'), findsOneWidget);
+  });
+
+  test('shortcut conflicts are rejected without swapping bindings', () {
+    final bindings = Map<PlayerShortcutAction, String>.of(
+      PlaybackSettings.defaultShortcuts,
+    );
+    expect(
+      playerShortcutConflictMessage(
+        action: PlayerShortcutAction.playPause,
+        shortcut: 'F',
+        bindings: bindings,
+      ),
+      contains('全屏 / 退出全屏'),
+    );
+    expect(
+      playerShortcutConflictMessage(
+        action: PlayerShortcutAction.playPause,
+        shortcut: 'Control+Shift+Delete',
+        bindings: bindings,
+      ),
+      contains('系统保留操作'),
+    );
+    expect(bindings, PlaybackSettings.defaultShortcuts);
   });
 
   testWidgets(
@@ -2886,14 +3120,57 @@ void main() {
     final settings = PlaybackSettings.fromJson({
       'hwdec': 'auto-safe',
       'resumeBehavior': 'continueWatching',
-      'shortcuts': {'playPause': 'F', 'fullscreen': 'Space'},
+      'shortcuts': {
+        'navigateBack': 'Control+B',
+        'playPause': 'Control+F',
+        'fullscreen': 'Space',
+      },
+      'confirmBeforeDeletingVideo': false,
+      'moveDeletedFileToTrash': true,
     });
-    expect(settings.shortcuts[PlayerShortcutAction.playPause], 'F');
+    expect(settings.shortcuts[PlayerShortcutAction.navigateBack], 'Control+B');
+    expect(settings.shortcuts[PlayerShortcutAction.playPause], 'Control+F');
     expect(settings.shortcuts[PlayerShortcutAction.fullscreen], 'Space');
     expect(settings.shortcuts[PlayerShortcutAction.screenshot], 'S');
+    expect(settings.confirmBeforeDeletingVideo, isFalse);
+    expect(settings.moveDeletedFileToTrash, isTrue);
     expect(settings.toJson()['shortcuts'], isA<Map>());
+    expect(settings.toJson()['confirmBeforeDeletingVideo'], isFalse);
+    expect(settings.toJson()['moveDeletedFileToTrash'], isTrue);
     expect(settings.fullscreenQueueEdgeWidth, 12);
     expect(settings.fullscreenQueueHideDelayMs, 180);
+  });
+
+  test('old settings keep safe delete defaults and reject invalid shortcuts',
+      () {
+    final settings = PlaybackSettings.fromJson({
+      'shortcuts': {
+        'navigateBack': 'Control+Alt+Shift+Meta+B',
+        'playPause': 'Control+K',
+      },
+    });
+    expect(settings.confirmBeforeDeletingVideo, isTrue);
+    expect(settings.moveDeletedFileToTrash, isFalse);
+    expect(settings.shortcuts[PlayerShortcutAction.navigateBack], 'Escape');
+    expect(settings.shortcuts[PlayerShortcutAction.playPause], 'Control+K');
+    expect(PlaybackSettings.isSupportedShortcut('Alt+K'), isTrue);
+    expect(PlaybackSettings.isSupportedShortcut('Shift+Alt+K'), isFalse);
+    expect(PlaybackSettings.shortcutKeyLabel('Control+K'), 'Ctrl + K');
+  });
+
+  test('disabled delete prompt executes the persisted final choice', () {
+    expect(
+      videoDeleteDecisionWithoutPrompt(PlaybackSettings.defaults),
+      isNull,
+    );
+    final decision = videoDeleteDecisionWithoutPrompt(
+      PlaybackSettings.defaults.copyWith(
+        confirmBeforeDeletingVideo: false,
+        moveDeletedFileToTrash: true,
+      ),
+    );
+    expect(decision?.moveLocalFileToTrash, isTrue);
+    expect(decision?.dontAskAgain, isTrue);
   });
 
   test('playback visual settings persist with safe backward-compatible values',
@@ -2914,6 +3191,8 @@ void main() {
       playbackMode: PlayerPlaybackMode.repeatAll,
       videoAspectMode: PlayerVideoAspectMode.cover,
       playbackRate: 1.5,
+      confirmBeforeDeletingVideo: false,
+      moveDeletedFileToTrash: true,
     );
     await changed.save(paths);
     final loaded = await PlaybackSettings.load(paths);
@@ -2922,6 +3201,8 @@ void main() {
     expect(loaded.playbackMode, PlayerPlaybackMode.repeatAll);
     expect(loaded.videoAspectMode, PlayerVideoAspectMode.cover);
     expect(loaded.playbackRate, 1.5);
+    expect(loaded.confirmBeforeDeletingVideo, isFalse);
+    expect(loaded.moveDeletedFileToTrash, isTrue);
     expect(loaded.toJson()['playbackMode'], 'repeatAll');
     expect(loaded.toJson()['videoAspectMode'], 'cover');
 

@@ -13,8 +13,9 @@ enum PlayerPlaybackMode { sequential, shuffle, repeatOne, repeatAll }
 /** 全局画面比例模式，只影响视频表面的呈现方式。 */
 enum PlayerVideoAspectMode { automatic, ratio4x3, ratio16x9, cover }
 
-/** 用户可配置的播放器单键快捷功能。 */
+/** 用户可配置的播放器快捷功能，绑定可包含 Control、Alt 与 Shift 修饰键。 */
 enum PlayerShortcutAction {
+  navigateBack,
   playPause,
   seekBackward,
   seekForward,
@@ -38,6 +39,8 @@ class PlaybackSettings {
     required this.playbackMode,
     required this.videoAspectMode,
     required this.playbackRate,
+    required this.confirmBeforeDeletingVideo,
+    required this.moveDeletedFileToTrash,
   });
 
   static const defaults = PlaybackSettings(
@@ -50,10 +53,13 @@ class PlaybackSettings {
     playbackMode: PlayerPlaybackMode.sequential,
     videoAspectMode: PlayerVideoAspectMode.automatic,
     playbackRate: 1,
+    confirmBeforeDeletingVideo: true,
+    moveDeletedFileToTrash: false,
   );
   /** 播放内核已验证并允许持久化的固定倍速档位。 */
   static const playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
   static const defaultShortcuts = <PlayerShortcutAction, String>{
+    PlayerShortcutAction.navigateBack: 'Escape',
     PlayerShortcutAction.playPause: 'Space',
     PlayerShortcutAction.seekBackward: 'J',
     PlayerShortcutAction.seekForward: 'L',
@@ -67,18 +73,90 @@ class PlaybackSettings {
   };
   static const shortcutKeyOptions = <String>[
     'Space',
-    'J',
-    'L',
-    'T',
-    'F',
-    'S',
+    'Escape',
+    'Enter',
+    'Tab',
+    'Backspace',
+    'Delete',
+    'Insert',
+    'Home',
+    'End',
     'PageUp',
     'PageDown',
     'ArrowLeft',
     'ArrowRight',
+    'ArrowUp',
+    'ArrowDown',
     'BracketLeft',
     'BracketRight',
+    'Minus',
+    'Equal',
+    'Comma',
+    'Period',
+    'Slash',
+    'Semicolon',
+    'Quote',
+    'Backquote',
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'H',
+    'I',
+    'J',
+    'K',
+    'L',
+    'M',
+    'N',
+    'O',
+    'P',
+    'Q',
+    'R',
+    'S',
+    'T',
+    'U',
+    'V',
+    'W',
+    'X',
+    'Y',
+    'Z',
+    '0',
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    'F1',
+    'F2',
+    'F3',
+    'F4',
+    'F5',
+    'F6',
+    'F7',
+    'F8',
+    'F9',
+    'F10',
+    'F11',
+    'F12',
   ];
+
+  /** 仍由播放器固定消费、不能覆盖的组合键及其动作说明。 */
+  static const reservedShortcuts = <String, String>{
+    'Alt+Insert': '切换收藏',
+    'Control+Shift+Delete': '删除视频',
+    'ArrowUp': '提高音量',
+    'ArrowDown': '降低音量',
+    'Home': '定位队列首项',
+    'End': '定位队列末项',
+    'Enter': '播放所选队列项',
+  };
   static const commonDecoderOptions = <String>['auto-safe', 'auto', 'no'];
   static const decoderOptions = <String>[
     'auto',
@@ -100,7 +178,7 @@ class PlaybackSettings {
   final String hwdec;
   /** 用户在设置页选择的继续观看默认策略。 */
   final PlaybackResumeBehavior resumeBehavior;
-  /** 播放器功能到单键标识的持久化绑定。 */
+  /** 播放器功能到规范化快捷键标识的持久化绑定。 */
   final Map<PlayerShortcutAction, String> shortcuts;
   /** 全屏时用于唤出播放队列的右侧鼠标热区宽度，单位为逻辑像素。 */
   final int fullscreenQueueEdgeWidth;
@@ -114,6 +192,10 @@ class PlaybackSettings {
   final PlayerVideoAspectMode videoAspectMode;
   /** 全局播放倍速；每次打开媒体后重新应用到播放后端。 */
   final double playbackRate;
+  /** 删除视频前是否显示影响范围与回收站选择确认。 */
+  final bool confirmBeforeDeletingVideo;
+  /** 删除确认或无提示删除时，是否先把本地文件移入系统回收站。 */
+  final bool moveDeletedFileToTrash;
 
   bool get hardwareDecodingEnabled => hwdec != 'no';
 
@@ -127,6 +209,8 @@ class PlaybackSettings {
     PlayerPlaybackMode? playbackMode,
     PlayerVideoAspectMode? videoAspectMode,
     double? playbackRate,
+    bool? confirmBeforeDeletingVideo,
+    bool? moveDeletedFileToTrash,
   }) {
     return PlaybackSettings(
       hwdec: hwdec ?? this.hwdec,
@@ -140,6 +224,10 @@ class PlaybackSettings {
       playbackMode: playbackMode ?? this.playbackMode,
       videoAspectMode: videoAspectMode ?? this.videoAspectMode,
       playbackRate: playbackRate ?? this.playbackRate,
+      confirmBeforeDeletingVideo:
+          confirmBeforeDeletingVideo ?? this.confirmBeforeDeletingVideo,
+      moveDeletedFileToTrash:
+          moveDeletedFileToTrash ?? this.moveDeletedFileToTrash,
     );
   }
 
@@ -161,6 +249,8 @@ class PlaybackSettings {
         'playbackMode': playbackMode.name,
         'videoAspectMode': videoAspectMode.name,
         'playbackRate': playbackRate,
+        'confirmBeforeDeletingVideo': confirmBeforeDeletingVideo,
+        'moveDeletedFileToTrash': moveDeletedFileToTrash,
       };
 
   static PlaybackSettings fromJson(Map<String, Object?> json) {
@@ -170,7 +260,7 @@ class PlaybackSettings {
     if (shortcutJson is Map) {
       for (final action in PlayerShortcutAction.values) {
         final key = shortcutJson[action.name]?.toString();
-        if (key != null && shortcutKeyOptions.contains(key)) {
+        if (key != null && isSupportedShortcut(key)) {
           shortcuts[action] = key;
         }
       }
@@ -208,6 +298,12 @@ class PlaybackSettings {
         defaults.videoAspectMode,
       ),
       playbackRate: _supportedPlaybackRate(json['playbackRate']),
+      confirmBeforeDeletingVideo: json['confirmBeforeDeletingVideo'] is bool
+          ? json['confirmBeforeDeletingVideo']! as bool
+          : defaults.confirmBeforeDeletingVideo,
+      moveDeletedFileToTrash: json['moveDeletedFileToTrash'] is bool
+          ? json['moveDeletedFileToTrash']! as bool
+          : defaults.moveDeletedFileToTrash,
     );
   }
 
@@ -306,6 +402,7 @@ class PlaybackSettings {
 
   static String shortcutActionLabel(PlayerShortcutAction action) =>
       switch (action) {
+        PlayerShortcutAction.navigateBack => '返回上一页',
         PlayerShortcutAction.playPause => '播放 / 暂停',
         PlayerShortcutAction.seekBackward => '快退 5 秒',
         PlayerShortcutAction.seekForward => '快进 5 秒',
@@ -318,14 +415,56 @@ class PlaybackSettings {
         PlayerShortcutAction.speedUp => '提高倍速',
       };
 
-  static String shortcutKeyLabel(String key) => switch (key) {
+  /** 验证持久化快捷键；支持零到三个修饰键加一个基础键。 */
+  static bool isSupportedShortcut(String shortcut) {
+    final parts = shortcut.split('+');
+    if (parts.isEmpty || parts.length > 4) {
+      return false;
+    }
+    final base = parts.last;
+    if (!shortcutKeyOptions.contains(base)) {
+      return false;
+    }
+    const modifierOrder = <String>['Control', 'Alt', 'Shift'];
+    final modifiers = parts.take(parts.length - 1).toList();
+    if (modifiers.toSet().length != modifiers.length) {
+      return false;
+    }
+    final ordered = [
+      for (final value in modifierOrder)
+        if (modifiers.contains(value)) value
+    ];
+    return ordered.length == modifiers.length &&
+        List.generate(
+                modifiers.length, (index) => modifiers[index] == ordered[index])
+            .every((matches) => matches);
+  }
+
+  /** 把稳定快捷键标识转换为设置页与 tooltip 使用的紧凑文本。 */
+  static String shortcutKeyLabel(String key) {
+    final parts = key.split('+');
+    return parts.map(_shortcutPartLabel).join(' + ');
+  }
+
+  static String _shortcutPartLabel(String key) => switch (key) {
+        'Control' => 'Ctrl',
         'Space' => '空格',
+        'Escape' => 'Esc',
+        'Enter' => 'Enter',
         'PageUp' => 'PageUp',
         'PageDown' => 'PageDown',
         'ArrowLeft' => '←',
         'ArrowRight' => '→',
         'BracketLeft' => '[',
         'BracketRight' => ']',
+        'Minus' => '-',
+        'Equal' => '=',
+        'Comma' => ',',
+        'Period' => '.',
+        'Slash' => '/',
+        'Semicolon' => ';',
+        'Quote' => "'",
+        'Backquote' => '`',
         _ => key,
       };
 }

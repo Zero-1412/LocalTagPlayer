@@ -39,6 +39,8 @@ import '../../widgets/library/library_smoke_keys.dart';
 import '../../widgets/library/library_tag_discovery_panel.dart';
 import '../../widgets/library/library_video_results.dart';
 import '../../widgets/library/library_widgets.dart';
+import '../../widgets/player_shortcut_input.dart';
+import '../player/player_delete_dialog.dart';
 import '../player/player_hardware_decode_warning_dialog.dart';
 import '../player/player_open_request_controller.dart';
 import '../player/player_page.dart';
@@ -80,11 +82,22 @@ Set<String> tagEditorCandidates(
 }
 
 /** 为页面切换提供统一的轻量淡入与横向位移动画。 */
-Route<T> _smoothRoute<T>(Widget page) {
+Route<T> _smoothRoute<T>(
+  Widget page, {
+  String Function()? backShortcutProvider,
+}) {
   return PageRouteBuilder<T>(
     transitionDuration: const Duration(milliseconds: 220),
     reverseTransitionDuration: const Duration(milliseconds: 160),
-    pageBuilder: (_, __, ___) => page,
+    pageBuilder: (routeContext, __, ___) => backShortcutProvider == null
+        ? page
+        : AppRouteBackInputRegion(
+            shortcutProvider: backShortcutProvider,
+            onBack: () {
+              unawaited(Navigator.of(routeContext).maybePop());
+            },
+            child: page,
+          ),
     transitionsBuilder: (_, animation, __, child) {
       final curved = CurvedAnimation(parent: animation, curve: appMotionCurve);
       return FadeTransition(
@@ -99,6 +112,25 @@ Route<T> _smoothRoute<T>(Widget page) {
       );
     },
   );
+}
+
+/** 返回快捷键冲突说明；null 表示可安全保存且不会覆盖其它动作。 */
+@visibleForTesting
+String? playerShortcutConflictMessage({
+  required PlayerShortcutAction action,
+  required String shortcut,
+  required Map<PlayerShortcutAction, String> bindings,
+}) {
+  final reservedAction = PlaybackSettings.reservedShortcuts[shortcut];
+  if (reservedAction != null) {
+    return '与系统保留操作“$reservedAction”冲突，请按其它按键';
+  }
+  for (final entry in bindings.entries) {
+    if (entry.key != action && entry.value == shortcut) {
+      return '与“${PlaybackSettings.shortcutActionLabel(entry.key)}”冲突，请按其它按键';
+    }
+  }
+  return null;
 }
 
 /** 把后台媒体解析快照转换为结果区的稳定短文案。 */
@@ -617,6 +649,7 @@ enum _SettingsSection {
   home,
   playback,
   playerInteraction,
+  fileDeletion,
   dataBackup,
   cache,
 }
@@ -630,8 +663,11 @@ class SettingsLandingList extends StatelessWidget {
   const SettingsLandingList({
     super.key,
     required this.resumeBehavior,
+    required this.confirmBeforeDeletingVideo,
+    required this.moveDeletedFileToTrash,
     required this.onOpenPlayback,
     required this.onOpenPlayerInteraction,
+    required this.onOpenFileDeletion,
     required this.onOpenDataBackup,
     required this.onOpenCache,
   });
@@ -639,11 +675,20 @@ class SettingsLandingList extends StatelessWidget {
   /** 首页直接展示的继续观看策略，避免用户必须先进入二级页才能发现当前行为。 */
   final PlaybackResumeBehavior resumeBehavior;
 
+  /** 删除动作当前是否保留确认层。 */
+  final bool confirmBeforeDeletingVideo;
+
+  /** 删除动作当前是否同步把本地文件移入回收站。 */
+  final bool moveDeletedFileToTrash;
+
   /** 打开播放与解码二级页。 */
   final VoidCallback onOpenPlayback;
 
   /** 打开播放器交互二级页。 */
   final VoidCallback onOpenPlayerInteraction;
+
+  /** 打开删除文件与回收站二级页。 */
+  final VoidCallback onOpenFileDeletion;
 
   /** 打开视频数据备份二级页。 */
   final VoidCallback onOpenDataBackup;
@@ -692,6 +737,15 @@ class SettingsLandingList extends StatelessWidget {
         _SettingsNavigationGroup(
           children: [
             _SettingsNavigationTile(
+              key: const ValueKey('settings.category.fileDeletion'),
+              icon: Icons.delete_outline_rounded,
+              title: '删除文件',
+              subtitle: confirmBeforeDeletingVideo
+                  ? '删除前提示 · ${moveDeletedFileToTrash ? '移入回收站' : '仅移出媒体库'}'
+                  : '不再提示 · ${moveDeletedFileToTrash ? '直接移入回收站' : '直接移出媒体库'}',
+              onTap: onOpenFileDeletion,
+            ),
+            _SettingsNavigationTile(
               key: const ValueKey('settings.category.dataBackup'),
               icon: Icons.backup_outlined,
               title: '视频数据备份',
@@ -708,6 +762,108 @@ class SettingsLandingList extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/**
+ * 删除文件二级设置页。
+ *
+ * 两个开关只修改确认与回收站偏好，不执行删除、扫描或数据库写入；真实删除仍由
+ * 页面动作、稳定身份清理事务和 FileSystemAdapter 共同完成。
+ */
+class _DeleteFileSettingsPanel extends StatelessWidget {
+  const _DeleteFileSettingsPanel({
+    required this.confirmBeforeDeletingVideo,
+    required this.moveDeletedFileToTrash,
+    required this.onConfirmChanged,
+    required this.onMoveToTrashChanged,
+  });
+
+  /** 是否在删除前展示影响范围确认。 */
+  final bool confirmBeforeDeletingVideo;
+
+  /** 是否在删除记录前把本地文件移入回收站。 */
+  final bool moveDeletedFileToTrash;
+
+  /** 确认层显示偏好回调。 */
+  final ValueChanged<bool> onConfirmChanged;
+
+  /** 回收站默认行为回调。 */
+  final ValueChanged<bool> onMoveToTrashChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      key: const ValueKey('settings.fileDeletion.card'),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '删除文件',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '统一控制媒体卡片、批量选择和播放器队列中的删除动作。',
+              style: TextStyle(color: libraryTextMuted, height: 1.45),
+            ),
+            const SizedBox(height: 16),
+            SwitchListTile.adaptive(
+              key: const ValueKey('settings.fileDeletion.confirm'),
+              contentPadding: EdgeInsets.zero,
+              value: confirmBeforeDeletingVideo,
+              title: const Text('删除前显示提示框'),
+              subtitle: const Text('显示删除影响范围，并允许本次临时修改回收站选择'),
+              onChanged: onConfirmChanged,
+            ),
+            const Divider(height: 20),
+            SwitchListTile.adaptive(
+              key: const ValueKey('settings.fileDeletion.moveToTrash'),
+              contentPadding: EdgeInsets.zero,
+              value: moveDeletedFileToTrash,
+              title: const Text('同步将本地文件移入回收站'),
+              subtitle: const Text('关闭时只移除媒体库记录，本地文件可能在下次扫描时重新加入'),
+              onChanged: onMoveToTrashChanged,
+            ),
+            if (!confirmBeforeDeletingVideo) ...[
+              const SizedBox(height: 14),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: playerDanger.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  border: Border.all(
+                    color: playerDanger.withValues(alpha: 0.34),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: playerDanger,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          moveDeletedFileToTrash
+                              ? '后续删除将不再提示，直接把本地文件移入回收站并移除媒体库记录。'
+                              : '后续删除将不再提示，直接移除媒体库记录；本地文件会保留。',
+                          style: const TextStyle(height: 1.45),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -856,6 +1012,9 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   bool _backupMaintenanceRunning = false;
   /** 缓存诊断动作串行执行，避免重试、清理与统计刷新互相覆盖。 */
   bool _cacheActionRunning = false;
+
+  /** 快捷键录制冲突按动作就地展示，成功保存或恢复默认后清除。 */
+  final Map<PlayerShortcutAction, String> _shortcutErrors = {};
 
   late Future<CacheStats> _statsFuture =
       widget.thumbnailService.statsFor(widget.store.videos.values);
@@ -1131,25 +1290,60 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     }
   }
 
-  /** 更新单个快捷键；发生冲突时交换两个功能的按键，保证绑定始终唯一。 */
-  Future<void> _changeShortcut(
+  /**
+   * 校验并保存录制到的快捷键。
+   *
+   * 冲突时不交换、不覆盖任何现有绑定，返回 false 让录制框保持焦点继续等待输入。
+   */
+  bool _captureShortcut(
     PlayerShortcutAction action,
     String key,
-  ) async {
+  ) {
+    final previous = _settings;
     final shortcuts = Map<PlayerShortcutAction, String>.of(_settings.shortcuts);
-    final oldKey = shortcuts[action]!;
-    PlayerShortcutAction? conflict;
-    for (final entry in shortcuts.entries) {
-      if (entry.key != action && entry.value == key) {
-        conflict = entry.key;
-        break;
-      }
+    final conflictMessage = playerShortcutConflictMessage(
+      action: action,
+      shortcut: key,
+      bindings: shortcuts,
+    );
+    if (conflictMessage != null) {
+      setState(() {
+        _shortcutErrors[action] = conflictMessage;
+      });
+      return false;
     }
     shortcuts[action] = key;
-    if (conflict != null) shortcuts[conflict] = oldKey;
     final next = _settings.copyWith(shortcuts: Map.unmodifiable(shortcuts));
-    setState(() => _settings = next);
-    await widget.onPlaybackSettingsChanged(next);
+    setState(() {
+      _settings = next;
+      _shortcutErrors.remove(action);
+    });
+    unawaited(_saveCapturedShortcut(action, previous, next));
+    return true;
+  }
+
+  /** 异步保存录制结果；写入失败且期间没有新改动时恢复旧绑定。 */
+  Future<void> _saveCapturedShortcut(
+    PlayerShortcutAction action,
+    PlaybackSettings previous,
+    PlaybackSettings next,
+  ) async {
+    try {
+      await widget.onPlaybackSettingsChanged(next);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (identical(_settings, next)) {
+        setState(() {
+          _settings = previous;
+          _shortcutErrors[action] = '保存失败，请重新录入';
+        });
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('保存快捷键失败：$error')),
+      );
+    }
   }
 
   /** 恢复项目默认快捷键，并立即持久化。 */
@@ -1157,8 +1351,37 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     final next = _settings.copyWith(
       shortcuts: PlaybackSettings.defaultShortcuts,
     );
-    setState(() => _settings = next);
+    setState(() {
+      _settings = next;
+      _shortcutErrors.clear();
+    });
     await widget.onPlaybackSettingsChanged(next);
+  }
+
+  /** 更新删除确认与回收站偏好，并立即写入现有设置文件。 */
+  Future<void> _changeDeletePreferences({
+    bool? confirmBeforeDeletingVideo,
+    bool? moveDeletedFileToTrash,
+  }) async {
+    final previous = _settings;
+    final next = previous.copyWith(
+      confirmBeforeDeletingVideo: confirmBeforeDeletingVideo,
+      moveDeletedFileToTrash: moveDeletedFileToTrash,
+    );
+    setState(() => _settings = next);
+    try {
+      await widget.onPlaybackSettingsChanged(next);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (identical(_settings, next)) {
+        setState(() => _settings = previous);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('保存删除设置失败：$error')),
+      );
+    }
   }
 
   /** 预览全屏队列交互参数；滑杆松开时由调用方统一持久化。 */
@@ -1191,6 +1414,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
         _SettingsSection.home => '设置',
         _SettingsSection.playback => '播放与继续观看',
         _SettingsSection.playerInteraction => '播放器交互',
+        _SettingsSection.fileDeletion => '删除文件',
         _SettingsSection.dataBackup => '视频数据备份',
         _SettingsSection.cache => '缩略图缓存',
       };
@@ -1252,10 +1476,15 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
             child: _section == _SettingsSection.home
                 ? SettingsLandingList(
                     resumeBehavior: _settings.resumeBehavior,
+                    confirmBeforeDeletingVideo:
+                        _settings.confirmBeforeDeletingVideo,
+                    moveDeletedFileToTrash: _settings.moveDeletedFileToTrash,
                     onOpenPlayback: () =>
                         _openSection(_SettingsSection.playback),
                     onOpenPlayerInteraction: () =>
                         _openSection(_SettingsSection.playerInteraction),
+                    onOpenFileDeletion: () =>
+                        _openSection(_SettingsSection.fileDeletion),
                     onOpenDataBackup: () =>
                         _openSection(_SettingsSection.dataBackup),
                     onOpenCache: () => _openSection(_SettingsSection.cache),
@@ -1364,6 +1593,25 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                         ),
                         const SizedBox(height: 16),
                       ],
+                      if (_section == _SettingsSection.fileDeletion) ...[
+                        _DeleteFileSettingsPanel(
+                          confirmBeforeDeletingVideo:
+                              _settings.confirmBeforeDeletingVideo,
+                          moveDeletedFileToTrash:
+                              _settings.moveDeletedFileToTrash,
+                          onConfirmChanged: (value) {
+                            unawaited(_changeDeletePreferences(
+                              confirmBeforeDeletingVideo: value,
+                            ));
+                          },
+                          onMoveToTrashChanged: (value) {
+                            unawaited(_changeDeletePreferences(
+                              moveDeletedFileToTrash: value,
+                            ));
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       if (_section == _SettingsSection.playerInteraction) ...[
                         Card(
                           key: const ValueKey('settings.fullscreenQueue.card'),
@@ -1463,7 +1711,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.w800)),
                                         SizedBox(height: 6),
-                                        Text('修改后立即生效；选择已占用按键时会自动交换两个功能。',
+                                        Text('点击动作后直接按键；冲突时会就地提示，不会自动交换或覆盖。',
                                             style: TextStyle(
                                                 color: libraryTextMuted)),
                                       ],
@@ -1478,52 +1726,42 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                   ),
                                 ]),
                                 const SizedBox(height: 16),
-                                Wrap(
-                                  spacing: 14,
-                                  runSpacing: 12,
-                                  children: [
-                                    for (final action
-                                        in PlayerShortcutAction.values)
-                                      SizedBox(
-                                        width: 310,
-                                        child: DropdownButtonFormField<String>(
-                                          key: ValueKey(
-                                            'settings.shortcut.${action.name}.'
-                                            '${_settings.shortcuts[action]}',
+                                LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    const spacing = 14.0;
+                                    final fieldWidth = constraints.maxWidth >=
+                                            680
+                                        ? (constraints.maxWidth - spacing) / 2
+                                        : constraints.maxWidth;
+                                    return Wrap(
+                                      spacing: spacing,
+                                      runSpacing: 12,
+                                      children: [
+                                        for (final action
+                                            in PlayerShortcutAction.values)
+                                          SizedBox(
+                                            width: fieldWidth,
+                                            child: PlayerShortcutRecorder(
+                                              action: action,
+                                              shortcut:
+                                                  _settings.shortcuts[action]!,
+                                              errorText:
+                                                  _shortcutErrors[action],
+                                              onCaptured: (key) =>
+                                                  _captureShortcut(action, key),
+                                            ),
                                           ),
-                                          initialValue:
-                                              _settings.shortcuts[action],
-                                          decoration: InputDecoration(
-                                            labelText: PlaybackSettings
-                                                .shortcutActionLabel(action),
-                                          ),
-                                          items: [
-                                            for (final key in PlaybackSettings
-                                                .shortcutKeyOptions)
-                                              DropdownMenuItem(
-                                                value: key,
-                                                child: Text(
-                                                  PlaybackSettings
-                                                      .shortcutKeyLabel(key),
-                                                ),
-                                              ),
-                                          ],
-                                          onChanged: (key) {
-                                            if (key != null) {
-                                              _changeShortcut(action, key);
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                  ],
+                                      ],
+                                    );
+                                  },
                                 ),
-                                const SizedBox(height: 12),
-                                const ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Icon(Icons.fullscreen_exit_rounded),
-                                  title: Text('退出全屏'),
-                                  subtitle: Text('固定安全快捷键，不可修改'),
-                                  trailing: Chip(label: Text('Esc')),
+                                const SizedBox(height: 14),
+                                const Text(
+                                  '支持常用单键及 Ctrl / Alt / Shift 组合键。Esc 在全屏时始终优先退出全屏，避免失去安全出口。',
+                                  style: TextStyle(
+                                    color: libraryTextMuted,
+                                    height: 1.45,
+                                  ),
                                 ),
                               ],
                             ),
@@ -1565,6 +1803,37 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       ),
     );
   }
+}
+
+/** 构建删除文件设置的 focused test 容器，不触发真实删除或文件系统调用。 */
+@visibleForTesting
+Widget deleteFileSettingsSmokeHarness({
+  bool confirmBeforeDeletingVideo = true,
+  bool moveDeletedFileToTrash = false,
+  TextScaler textScaler = TextScaler.noScaling,
+  ValueChanged<bool>? onConfirmChanged,
+  ValueChanged<bool>? onMoveToTrashChanged,
+}) {
+  return MaterialApp(
+    theme: settingsWorkspaceTheme(ThemeData(useMaterial3: true)),
+    home: MediaQuery(
+      data: MediaQueryData(
+        size: const Size(900, 720),
+        textScaler: textScaler,
+      ),
+      child: Scaffold(
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: _DeleteFileSettingsPanel(
+            confirmBeforeDeletingVideo: confirmBeforeDeletingVideo,
+            moveDeletedFileToTrash: moveDeletedFileToTrash,
+            onConfirmChanged: onConfirmChanged ?? (_) {},
+            onMoveToTrashChanged: onMoveToTrashChanged ?? (_) {},
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /**
@@ -5464,6 +5733,8 @@ class _LibraryPageState extends State<LibraryPage> {
             return path;
           },
         ),
+        backShortcutProvider: () =>
+            _playbackSettings.shortcuts[PlayerShortcutAction.navigateBack]!,
       ),
     );
     if (mounted) {
@@ -5482,6 +5753,8 @@ class _LibraryPageState extends State<LibraryPage> {
           store: store,
           currentResults: List<VideoItem>.of(currentResults),
         ),
+        backShortcutProvider: () =>
+            _playbackSettings.shortcuts[PlayerShortcutAction.navigateBack]!,
       ),
     );
     if (mounted) {
@@ -5507,6 +5780,8 @@ class _LibraryPageState extends State<LibraryPage> {
           onRescan: _rescan,
           onRemoveRoot: _removeLibraryRootData,
         ),
+        backShortcutProvider: () =>
+            _playbackSettings.shortcuts[PlayerShortcutAction.navigateBack]!,
       ),
     );
   }
@@ -5520,10 +5795,14 @@ class _LibraryPageState extends State<LibraryPage> {
       return;
     }
     final changed = await Navigator.of(context).push<bool>(
-      _smoothRoute<bool>(MissingRelinkPage(
-        store: store,
-        fileSystem: _fileSystem,
-      )),
+      _smoothRoute<bool>(
+        MissingRelinkPage(
+          store: store,
+          fileSystem: _fileSystem,
+        ),
+        backShortcutProvider: () =>
+            _playbackSettings.shortcuts[PlayerShortcutAction.navigateBack]!,
+      ),
     );
     if (changed == true && mounted) {
       setState(() {
@@ -6041,12 +6320,15 @@ class _LibraryPageState extends State<LibraryPage> {
    * 媒体库时，仍位于受监控 root 的文件会在下次扫描时作为新条目重新出现。
    */
   Future<void> _requestDeleteVideo(VideoItem item) async {
-    final moveLocalFileToTrash = await _showVideoDeleteDialog(item);
-    if (moveLocalFileToTrash == null || !mounted) {
+    final decision = await _resolveSingleVideoDeleteDecision(item);
+    if (decision == null || !mounted) {
       return;
     }
     try {
-      await _deleteConfirmedLibraryVideo(item, moveLocalFileToTrash);
+      await _deleteConfirmedLibraryVideo(
+        item,
+        decision.moveLocalFileToTrash,
+      );
       if (mounted) {
         _markLibraryDataChanged();
       }
@@ -6098,9 +6380,8 @@ class _LibraryPageState extends State<LibraryPage> {
     if (targets.isEmpty) {
       return;
     }
-    final moveLocalFilesToTrash =
-        await _showBatchVideoDeleteDialog(targets.length);
-    if (moveLocalFilesToTrash == null || !mounted) {
+    final decision = await _resolveBatchVideoDeleteDecision(targets.length);
+    if (decision == null || !mounted) {
       return;
     }
 
@@ -6108,7 +6389,10 @@ class _LibraryPageState extends State<LibraryPage> {
     final failedTitles = <String>[];
     for (final item in targets) {
       try {
-        await _deleteConfirmedLibraryVideo(item, moveLocalFilesToTrash);
+        await _deleteConfirmedLibraryVideo(
+          item,
+          decision.moveLocalFileToTrash,
+        );
         deletedIds.add(item.videoId);
       } catch (_) {
         failedTitles.add(item.title);
@@ -6137,117 +6421,68 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
-  /** 返回 null 表示取消，false 表示仅删记录，true 表示把本地文件移入回收站。 */
-  Future<bool?> _showVideoDeleteDialog(VideoItem item) {
-    var moveLocalFileToTrash = false;
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('删除视频'),
-          content: SizedBox(
-            width: 480,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  '将删除数据库记录、标签关系、收藏、播放进度、媒体详情和缩略图缓存。'
-                  '如果保留本地文件，它在下次扫描时可能重新加入媒体库。',
-                ),
-                const SizedBox(height: 10),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: moveLocalFileToTrash,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('同时将本地视频移入回收站'),
-                  subtitle: const Text('可在 Windows 回收站中恢复'),
-                  onChanged: (value) => setDialogState(
-                    () => moveLocalFileToTrash = value ?? false,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xffc53b4d),
-              ),
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(moveLocalFileToTrash),
-              child: Text(
-                moveLocalFileToTrash ? '移入回收站并移除记录' : '仅移出媒体库',
-              ),
-            ),
-          ],
-        ),
-      ),
+  /** 单条删除按当前偏好决定直接执行或展示统一确认层。 */
+  Future<VideoDeleteDecision?> _resolveSingleVideoDeleteDecision(
+    VideoItem item,
+  ) async {
+    final settings = _playbackSettings;
+    final immediate = videoDeleteDecisionWithoutPrompt(settings);
+    if (immediate != null) {
+      return immediate;
+    }
+    final decision = await showPlayerDeleteConfirmationDialog(
+      context,
+      item,
+      initialMoveLocalFileToTrash: settings.moveDeletedFileToTrash,
     );
+    return _rememberDeleteDecision(decision);
   }
 
-  /** 批量删除确认；本地文件只允许显式移入系统回收站，不提供静默永久删除。 */
-  Future<bool?> _showBatchVideoDeleteDialog(int count) {
-    var moveLocalFilesToTrash = false;
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('删除 $count 个视频'),
-          content: SizedBox(
-            width: 480,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '将删除所选视频的数据库记录、标签关系、收藏、播放进度、媒体详情和缩略图缓存。'
-                  '如果保留本地文件，它们在下次扫描时可能重新加入媒体库。',
-                ),
-                const SizedBox(height: 10),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: moveLocalFilesToTrash,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('同时将所选本地视频移入回收站'),
-                  subtitle: const Text('可在 Windows 回收站中恢复'),
-                  onChanged: (value) => setDialogState(
-                    () => moveLocalFilesToTrash = value ?? false,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xffc53b4d),
-              ),
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(moveLocalFilesToTrash),
-              child: Text(
-                moveLocalFilesToTrash ? '移入回收站并移除记录' : '仅移出媒体库',
-              ),
-            ),
-          ],
-        ),
-      ),
+  /** 批量删除与单条删除共享确认显示和回收站默认值。 */
+  Future<VideoDeleteDecision?> _resolveBatchVideoDeleteDecision(
+    int count,
+  ) async {
+    final settings = _playbackSettings;
+    final immediate = videoDeleteDecisionWithoutPrompt(settings);
+    if (immediate != null) {
+      return immediate;
+    }
+    final decision = await showBatchVideoDeleteConfirmationDialog(
+      context,
+      count: count,
+      initialMoveLocalFilesToTrash: settings.moveDeletedFileToTrash,
     );
+    return _rememberDeleteDecision(decision);
+  }
+
+  /**
+   * 只在用户确认删除后保存弹窗选择；设置写入失败时中止删除，避免界面记忆与
+   * 后续真实文件动作分叉。
+   */
+  Future<VideoDeleteDecision?> _rememberDeleteDecision(
+    VideoDeleteDecision? decision,
+  ) async {
+    if (decision == null || !mounted) {
+      return null;
+    }
+    final next = _playbackSettings.copyWith(
+      moveDeletedFileToTrash: decision.moveLocalFileToTrash,
+      confirmBeforeDeletingVideo: !decision.dontAskAgain,
+    );
+    try {
+      await widget.applicationService.savePlaybackSettings(next);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('保存删除偏好失败：$error；本次未执行删除')),
+        );
+      }
+      return null;
+    }
+    if (mounted) {
+      setState(() => _playbackSettings = next);
+    }
+    return decision;
   }
 
   /**

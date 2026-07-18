@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.48` 完成维护页面视觉收口、文件选择初始目录边界、缓存失败可解释操作和媒体浏览偏好持久化。SQLite、stable identity、标签查询、filtered queue 与 PlayerBackend 语义不变。
+`Architecture Baseline 0.5.49` 完成删除偏好统一持久化、非主路由返回输入层和键盘快捷键录制。SQLite、stable identity、标签查询、filtered queue 与 PlayerBackend 语义不变。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,11 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.48`
+已完成基线：`Architecture Baseline 0.5.49`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.49`：`PlaybackSettings` 向后兼容增加删除确认、回收站最终状态和“返回上一页”绑定；设置写入失败时恢复旧状态或中止删除。单条、批量和播放器队列共用 `VideoDeleteDecision`，跳过确认仍只通过现有 stable identity 清理与 `FileSystemAdapter.moveFileToTrash` 边界执行。非主路由用仅当前 Route 生效的键盘处理器和鼠标返回侧键统一返回，EditableText、PopupRoute 与快捷键录制焦点拥有门禁；播放器全屏 Esc 保持固定安全出口。快捷键录制支持常用基础键及 Control / Alt / Shift 组合，冲突不交换绑定。未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存队列或用户标签/收藏数据。
 
 - `0.5.48`：`FileSystemAdapter` 的目录/文件选择增加可选初始目录，并提供跨平台父目录解析；媒体库和 Relink 页面只决定业务候选位置，桌面适配器继续独占原生选择器实现。`LibrarySortPreferences` 向后兼容保存网格/列表偏好，旧 JSON 缺字段时保持网格默认；超宽列表只消费内存中的标签、媒体详情和文件大小。缩略图失败统计统一为“无有效缓存且存在错误”的缺失子集，页面可查看原因、重试或仅清除失败标记，活动队列期间禁用操作。SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存 key/JPEG 有效性和 stable identity/relink 校验均未改变。
 

@@ -99,6 +99,7 @@ export 'pages/library/missing_relink_page.dart';
 export 'pages/tags/tag_manager_page.dart';
 export 'widgets/app_theme_tokens.dart';
 export 'widgets/design_system/app_interaction_surface.dart';
+export 'widgets/player_shortcut_input.dart';
 export 'widgets/library/library_smoke_keys.dart';
 export 'widgets/library/library_sort_control.dart';
 export 'widgets/library/library_local_view.dart';

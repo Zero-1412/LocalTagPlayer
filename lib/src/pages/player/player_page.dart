@@ -21,6 +21,7 @@ import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import '../../widgets/app_theme_tokens.dart';
 import '../../widgets/design_system/app_interaction_surface.dart';
+import '../../widgets/player_shortcut_input.dart';
 import 'player_context_panel.dart';
 import 'player_control_slider.dart';
 import 'player_delete_dialog.dart';
@@ -284,7 +285,7 @@ bool playerWindowTopBarShouldShow({
 /**
  * 判断当前焦点是否属于可编辑文本。
  *
- * 播放器单键快捷键位于页面祖先 Focus；EditableText 未消费的字母仍可能继续冒泡，
+ * 播放器快捷键位于页面祖先 Focus；EditableText 未消费的字母仍可能继续冒泡，
  * 因此必须在页面入口统一门禁，而不能依赖每个搜索框单独拦截某几个按键。
  */
 @visibleForTesting
@@ -318,7 +319,7 @@ bool playerFocusIsOnDifferentRoute({
  * 判断播放器路由上方是否存在弹窗、菜单或 BottomSheet。
  *
  * 某些 PopupRoute 不会把焦点从播放器 FocusScope 移走，因此不能只检查 primaryFocus；
- * 只要播放器路由不再位于最上层，就暂停其全局单键快捷键。
+ * 只要播放器路由不再位于最上层，就暂停其全局快捷键。
  */
 @visibleForTesting
 bool playerRouteHasBlockingOverlay(BuildContext playerContext) {
@@ -2199,10 +2200,28 @@ class PlayerPageState extends State<PlayerPage> {
       return;
     }
     final item = _queue[queueIndex];
-    final moveLocalFileToTrash =
-        await showPlayerDeleteConfirmationDialog(context, item);
-    if (moveLocalFileToTrash == null || !mounted) {
+    final settings = _effectivePlaybackSettings;
+    final decision = videoDeleteDecisionWithoutPrompt(settings) ??
+        await showPlayerDeleteConfirmationDialog(
+          context,
+          item,
+          initialMoveLocalFileToTrash: settings.moveDeletedFileToTrash,
+        );
+    if (decision == null || !mounted) {
       return;
+    }
+
+    if (settings.confirmBeforeDeletingVideo) {
+      // 只有确认提交才记忆弹窗选择；取消不会改写后续删除行为。
+      final saved = await _saveDeletePreferencesBeforeAction(
+        settings.copyWith(
+          moveDeletedFileToTrash: decision.moveLocalFileToTrash,
+          confirmBeforeDeletingVideo: !decision.dontAskAgain,
+        ),
+      );
+      if (!saved || !mounted) {
+        return;
+      }
     }
 
     try {
@@ -2211,7 +2230,7 @@ class PlayerPageState extends State<PlayerPage> {
         _persistOpenedProgress();
         await _playerBackend.stop();
       }
-      await widget.onDeleteVideo(item, moveLocalFileToTrash);
+      await widget.onDeleteVideo(item, decision.moveLocalFileToTrash);
       if (!mounted) {
         return;
       }
@@ -2230,7 +2249,7 @@ class PlayerPageState extends State<PlayerPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            moveLocalFileToTrash ? '已移入回收站并移除媒体库记录' : '已从媒体库移除视频',
+            decision.moveLocalFileToTrash ? '已移入回收站并移除媒体库记录' : '已从媒体库移除视频',
           ),
         ),
       );
@@ -2241,6 +2260,32 @@ class PlayerPageState extends State<PlayerPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('移除失败，本地文件或媒体库记录未完成，请重试')),
       );
+    }
+  }
+
+  /**
+   * 删除动作使用比普通播放偏好更严格的持久化门禁。
+   *
+   * 先等待既有设置写入，再保存本次最终删除状态；失败时中止删除，避免后续无提示
+   * 删除行为与磁盘上的设置文件分叉。
+   */
+  Future<bool> _saveDeletePreferencesBeforeAction(
+    PlaybackSettings settings,
+  ) async {
+    await _playbackSettingsSaveTail;
+    try {
+      await widget.onPlaybackSettingsChanged(settings);
+      _effectivePlaybackSettings = settings;
+      return true;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(content: Text('保存删除偏好失败：$error；本次未执行删除')),
+          );
+      }
+      return false;
     }
   }
 
@@ -2710,10 +2755,18 @@ class PlayerPageState extends State<PlayerPage> {
       unawaited(_deleteQueueItem(_selectedIndex));
       return KeyEventResult.handled;
     }
-    final pressedKey = _playerShortcutKeyId(event.logicalKey);
-    final shortcuts = widget.playbackSettings.shortcuts;
+    final pressedKey = playerShortcutIdFromEvent(event);
+    final shortcuts = _effectivePlaybackSettings.shortcuts;
     bool matches(PlayerShortcutAction action) =>
         pressedKey != null && shortcuts[action] == pressedKey;
+    if (matches(PlayerShortcutAction.navigateBack)) {
+      if (_isWindowFullscreen) {
+        unawaited(_toggleWindowFullscreen());
+      } else {
+        unawaited(_exitPlayer());
+      }
+      return KeyEventResult.handled;
+    }
     if (matches(PlayerShortcutAction.playPause)) {
       unawaited(_playerBackend.playOrPause());
       return KeyEventResult.handled;
@@ -2772,9 +2825,6 @@ class PlayerPageState extends State<PlayerPage> {
       case LogicalKeyboardKey.enter:
       case LogicalKeyboardKey.numpadEnter:
         _jumpTo(_selectedIndex, ignoreFollowUpSelection: true);
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.escape:
-        unawaited(_exitPlayer());
         return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -3176,23 +3226,6 @@ class PlayerPageState extends State<PlayerPage> {
       ),
     );
   }
-}
-
-/** 将 Flutter 逻辑键归一为设置 JSON 使用的稳定标识。 */
-String? _playerShortcutKeyId(LogicalKeyboardKey key) {
-  if (key == LogicalKeyboardKey.space) return 'Space';
-  if (key == LogicalKeyboardKey.keyJ) return 'J';
-  if (key == LogicalKeyboardKey.keyL) return 'L';
-  if (key == LogicalKeyboardKey.keyT) return 'T';
-  if (key == LogicalKeyboardKey.keyF) return 'F';
-  if (key == LogicalKeyboardKey.keyS) return 'S';
-  if (key == LogicalKeyboardKey.pageUp) return 'PageUp';
-  if (key == LogicalKeyboardKey.pageDown) return 'PageDown';
-  if (key == LogicalKeyboardKey.arrowLeft) return 'ArrowLeft';
-  if (key == LogicalKeyboardKey.arrowRight) return 'ArrowRight';
-  if (key == LogicalKeyboardKey.bracketLeft) return 'BracketLeft';
-  if (key == LogicalKeyboardKey.bracketRight) return 'BracketRight';
-  return null;
 }
 
 /**
