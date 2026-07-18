@@ -214,6 +214,8 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
                       thumbRadius: 5.5 * thumbScale,
                       overlayRadius: 14,
                       thumbVisibility: hoverProgress,
+                      useCatSlimeThumb: true,
+                      catSlimeThumbScale: thumbScale,
                     );
                   },
                 ),
@@ -393,6 +395,8 @@ class _PlayerSliderVisual extends StatelessWidget {
     required this.thumbRadius,
     required this.overlayRadius,
     required this.thumbVisibility,
+    this.useCatSlimeThumb = false,
+    this.catSlimeThumbScale = 1,
   });
 
   final Key? sliderKey;
@@ -404,6 +408,12 @@ class _PlayerSliderVisual extends StatelessWidget {
   final double overlayRadius;
   final double thumbVisibility;
 
+  /** 仅主进度条启用猫耳史莱姆焦点，音量条继续使用紧凑圆点。 */
+  final bool useCatSlimeThumb;
+
+  /** 高分辨率全屏下猫耳焦点的有限视觉倍率。 */
+  final double catSlimeThumbScale;
+
   @override
   Widget build(BuildContext context) {
     return SliderTheme(
@@ -413,10 +423,15 @@ class _PlayerSliderVisual extends StatelessWidget {
         activeTrackColor: appAccentViolet,
         inactiveTrackColor: playerTextMuted.withValues(alpha: 0.38),
         thumbColor: playerText,
-        thumbShape: _PlayerRingSliderThumbShape(
-          radius: thumbRadius,
-          visibility: thumbVisibility,
-        ),
+        thumbShape: useCatSlimeThumb
+            ? _PlayerCatSlimeThumbShape(
+                visibility: thumbVisibility,
+                visualScale: catSlimeThumbScale,
+              )
+            : _PlayerRingSliderThumbShape(
+                radius: thumbRadius,
+                visibility: thumbVisibility,
+              ),
         overlayColor: appAccentViolet.withValues(alpha: 0.22),
         overlayShape: RoundSliderOverlayShape(overlayRadius: overlayRadius),
         showValueIndicator: ShowValueIndicator.never,
@@ -602,5 +617,135 @@ class _PlayerRingSliderThumbShape extends SliderComponentShape {
       (radius + pressedGrowth * 0.5) * visibility,
       Paint()..color = sliderTheme.thumbColor ?? Colors.white,
     );
+  }
+}
+
+/**
+ * 判断 Slider 主题是否使用播放器主进度条专属的猫咪焦点。
+ *
+ * 该只读入口用于防止后续视觉统一时再次把猫咪方案静默替换成通用圆点。
+ */
+@visibleForTesting
+bool playerProgressThumbIsCat(SliderThemeData sliderTheme) =>
+    sliderTheme.thumbShape is _PlayerCatSlimeThumbShape;
+
+/**
+ * 绘制主进度条专用的猫耳史莱姆焦点。
+ *
+ * 使用矢量轮廓而不是位图资源，保证普通窗口与高分辨率全屏下都保持锐利；
+ * 紫色渐变沿用播放器强调色系，脸部只保留小尺寸仍能辨认的眼睛、笑线和高光。
+ */
+class _PlayerCatSlimeThumbShape extends SliderComponentShape {
+  const _PlayerCatSlimeThumbShape({
+    required this.visibility,
+    required this.visualScale,
+  });
+
+  /** 0 时完全隐藏，1 时显示完整焦点，并跟随进度条悬停动画取中间值。 */
+  final double visibility;
+
+  /** 仅由全屏视口计算的视觉倍率，调用层已限制在 1 到 1.25。 */
+  final double visualScale;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) {
+    return Size.square(26 * visualScale);
+  }
+
+  /** 构建带双耳的圆润猫咪轮廓，坐标围绕滑块中心定义。 */
+  Path _buildBodyPath() {
+    return Path()
+      ..moveTo(-9.3, -3)
+      ..lineTo(-7.7, -9.1)
+      ..quadraticBezierTo(-7.3, -10.4, -6.1, -9.3)
+      ..lineTo(-3.1, -6.2)
+      ..quadraticBezierTo(0, -7.3, 3.1, -6.2)
+      ..lineTo(6.1, -9.3)
+      ..quadraticBezierTo(7.3, -10.4, 7.7, -9.1)
+      ..lineTo(9.3, -3)
+      ..cubicTo(10.2, -0.7, 10.1, 4.4, 7.2, 6.8)
+      ..cubicTo(4, 9.2, -4, 9.2, -7.2, 6.8)
+      ..cubicTo(-10.1, 4.4, -10.2, -0.7, -9.3, -3)
+      ..close();
+  }
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    if (visibility <= 0.01) {
+      return;
+    }
+
+    final canvas = context.canvas;
+    final appearScale = visibility.clamp(0.0, 1.0);
+    final pressedScale = 1 + activationAnimation.value * 0.06;
+    final body = _buildBodyPath();
+    final bodyBounds = const Rect.fromLTRB(-10.5, -10.5, 10.5, 9.5);
+
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.scale(appearScale * pressedScale * visualScale);
+
+    // 小范围柔光只负责把焦点从明暗视频画面中分离，不扩大到整条进度轨道。
+    canvas.drawPath(
+      body,
+      Paint()
+        ..color = appAccentViolet.withValues(alpha: 0.30)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0),
+    );
+    canvas.drawPath(
+      body,
+      Paint()..color = playerText.withValues(alpha: 0.92),
+    );
+
+    canvas.save();
+    canvas.scale(0.91, 0.91);
+    canvas.drawPath(
+      body,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            Color(0xffc8b7ff),
+            Color(0xff8d69f7),
+            Color(0xff5548e7),
+          ],
+        ).createShader(bodyBounds),
+    );
+
+    // 小尺寸不堆叠复杂纹理，保留能快速识别卡通形象的最少面部细节。
+    canvas.drawOval(
+      const Rect.fromLTWH(-5.8, -4.1, 3.8, 2.3),
+      Paint()..color = const Color(0xd9ffffff),
+    );
+    final facePaint = Paint()..color = const Color(0xff17164f);
+    canvas.drawCircle(const Offset(-3, 1.1), 1.15, facePaint);
+    canvas.drawCircle(const Offset(3, 1.1), 1.15, facePaint);
+    canvas.drawArc(
+      const Rect.fromLTWH(-1.6, 1.3, 3.2, 2.8),
+      0.15,
+      math.pi - 0.3,
+      false,
+      Paint()
+        ..color = const Color(0xff17164f)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.restore();
+    canvas.restore();
   }
 }

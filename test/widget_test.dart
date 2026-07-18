@@ -3536,7 +3536,8 @@ void main() {
     expect(playerRouteHasBlockingOverlay(playerContext), isTrue);
   });
 
-  testWidgets('player reveal file button uses eject icon and invokes callback',
+  testWidgets(
+      'player reveal file button identifies current video and invokes callback',
       (tester) async {
     var revealRequests = 0;
     await tester.pumpWidget(
@@ -3553,10 +3554,32 @@ void main() {
     final button = find.byKey(const ValueKey('player.revealFile'));
     expect(button, findsOneWidget);
     expect(find.byIcon(Icons.eject_rounded), findsOneWidget);
-    expect(find.byTooltip('打开文件位置'), findsOneWidget);
+    expect(find.byTooltip('在文件管理器中显示当前视频'), findsOneWidget);
 
     await tester.tap(button);
     expect(revealRequests, 1);
+  });
+
+  test('player reveal path follows playing item instead of queue selection',
+      () {
+    final playing = _testVideo(
+      path: r'X:\test-media\playing.mp4',
+      title: 'playing',
+    );
+    final selected = _testVideo(
+      path: r'X:\test-media\selected.mp4',
+      title: 'selected',
+    );
+    final playback = PlayerPlaybackController(
+      sourcePlaylist: <VideoItem>[playing, selected],
+      activeParentTag: null,
+      initialPath: playing.path,
+    );
+
+    expect(playback.select(1), isTrue);
+    expect(playback.selectedIndex, 1);
+    expect(playback.playingIndex, 0);
+    expect(playerCurrentRevealPath(playback), playing.path);
   });
 
   test('player volume steps clamp and mute restores the last audible value',
@@ -5961,6 +5984,7 @@ void main() {
           ),
         );
     expect(sliderTheme().data.trackHeight, 2);
+    expect(playerProgressThumbIsCat(sliderTheme().data), isTrue);
     expect(find.byKey(const ValueKey('player.progress.preview')), findsNothing);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);

@@ -73,6 +73,16 @@ bool playerControlsShowTime({
 /** 从当前视频路径提取播放器顶栏文件名，避免标题继续显示固定应用名称。 */
 String playerTopBarFileName(String path) => p.basename(path);
 
+/**
+ * 返回“打开当前视频位置”动作应交给文件系统边界的路径。
+ *
+ * 即使键盘或鼠标把队列选择移到其它条目，也始终读取 [playingIndex] 对应的
+ * [PlayerPlaybackController.currentItem]，避免定位尚未开始播放的视频。
+ */
+@visibleForTesting
+String playerCurrentRevealPath(PlayerPlaybackController playback) =>
+    playback.currentItem.path;
+
 /** 静音时归零，恢复时回到最近一次有效的非零音量。 */
 double playerVolumeAfterMuteToggle({
   required double currentVolume,
@@ -84,7 +94,7 @@ double playerVolumeAfterMuteToggle({
 }
 
 /**
- * 播放控制条中的“打开文件位置”按钮。
+ * 播放控制条中的“打开当前视频位置”按钮。
  *
  * 图标沿用用户指定的弹出式样式；实际文件管理器调用由页面传入的平台边界回调负责。
  */
@@ -94,14 +104,14 @@ class PlayerRevealFileButton extends StatelessWidget {
     required this.onPressed,
   });
 
-  /** 请求在系统文件管理器中定位当前播放文件。 */
+  /** 请求在系统文件管理器中定位当前播放视频文件。 */
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     return PlayerChromeButton(
       key: const ValueKey('player.revealFile'),
-      tooltip: '打开文件位置',
+      tooltip: '在文件管理器中显示当前视频',
       onPressed: onPressed,
       icon: Icons.eject_rounded,
     );
@@ -2450,7 +2460,9 @@ class PlayerPageState extends State<PlayerPage> {
   /** 通过平台边界定位当前媒体文件，并稳定展示失败原因。 */
   Future<void> _revealCurrentFile() async {
     try {
-      await widget.fileSystem.revealInFileManager(_currentItem.path);
+      await widget.fileSystem.revealInFileManager(
+        playerCurrentRevealPath(_playback),
+      );
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

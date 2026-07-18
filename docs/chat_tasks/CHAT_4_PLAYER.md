@@ -1,3 +1,10 @@
+## 2026-07-19 猫咪进度焦点与当前文件定位
+
+- 主进度条恢复历史猫耳史莱姆矢量焦点，并继续复用现有 Apple 主题轨道、可访问动效时长和高分辨率全屏缩放；音量滑块不受影响。
+- `PlayerRevealFileButton` 文案明确为显示当前视频，页面通过 `PlayerPlaybackController.currentItem.path` 调用既有 `FileSystemAdapter.revealInFileManager`，没有新增或修改平台边界。
+- 测试覆盖猫咪焦点视觉契约、按钮 tooltip/回调，以及 `selectedIndex != playingIndex` 时仍定位播放项；真实 Windows 资源管理器确认选中当前播放文件。
+- 未修改 `PlayerBackend`、filtered queue 来源/顺序、播放索引、SQLite、标签语义或缩略图/media 队列。
+
 ## 2026-07-18 播放器返回复验与三档文字缩放
 
 - 受控 `flutter run -d windows` 连续复现媒体库进入播放器和左上返回，11,163 条来源 filtered queue、媒体库筛选状态、应用窗口与进程全部保持；上一轮进程消失为调试会话/句柄丢失，不修改导航或队列语义。
