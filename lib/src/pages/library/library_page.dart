@@ -525,6 +525,41 @@ ThemeData settingsWorkspaceTheme(ThemeData base) {
   );
 }
 
+/**
+ * 构建缓存诊断面板的 focused widget test 容器。
+ *
+ * 测试只注入不可变统计快照和动作回调，不创建真实缓存队列或后台任务。
+ */
+@visibleForTesting
+Widget cacheDiagnosticsSmokeHarness({
+  required CacheStats stats,
+  bool cacheBusy = false,
+  VoidCallback? onRetry,
+  VoidCallback? onClear,
+  TextScaler textScaler = TextScaler.noScaling,
+}) {
+  return MaterialApp(
+    theme: settingsWorkspaceTheme(ThemeData(useMaterial3: true)),
+    home: MediaQuery(
+      data: MediaQueryData(
+        size: const Size(1000, 900),
+        textScaler: textScaler,
+      ),
+      child: Scaffold(
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: _CacheDiagnosticsPanel(
+            stats: stats,
+            cacheBusy: cacheBusy,
+            onRetry: onRetry ?? () {},
+            onClear: onClear ?? () {},
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class CacheSettingsPage extends StatefulWidget {
   const CacheSettingsPage({
     super.key,
@@ -1583,160 +1618,15 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                     (stats?.active ?? 0) > 0 ||
                                     (stats?.queued ?? 0) > 0 ||
                                     (stats?.pendingBackgroundRequests ?? 0) > 0;
-                                return Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    const Text(
-                                      '\u7f29\u7565\u56fe\u7f13\u5b58',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    if (stats == null)
-                                      const LinearProgressIndicator()
-                                    else ...[
-                                      _SettingsStatLine(
-                                        label: '\u603b\u6570',
-                                        value: formatCount(stats.total),
-                                      ),
-                                      _SettingsStatLine(
-                                        label: '\u5df2\u7f13\u5b58',
-                                        value: formatCount(stats.cached),
-                                      ),
-                                      _SettingsStatLine(
-                                        label: '\u7f3a\u5931',
-                                        value: formatCount(stats.missing),
-                                      ),
-                                      _SettingsStatLine(
-                                        label: '失败',
-                                        value: formatCount(stats.errors),
-                                      ),
-                                      _SettingsStatLine(
-                                        label: '活动任务',
-                                        value:
-                                            '${stats.active} / ${stats.maxConcurrent}',
-                                      ),
-                                      _SettingsStatLine(
-                                        label: '排队任务',
-                                        value: formatCount(stats.queued),
-                                      ),
-                                      _SettingsStatLine(
-                                        label: '后台请求',
-                                        value: formatCount(
-                                            stats.pendingBackgroundRequests),
-                                      ),
-                                      _SettingsStatLine(
-                                        label: '平均耗时',
-                                        value: '${stats.averageMs} ms',
-                                      ),
-                                      const SizedBox(height: 12),
-                                      const Text(
-                                        '失败是“缺失”的可诊断子集：失败项当前没有有效 JPEG，'
-                                        '因此会同时计入缺失；普通缺失则可能只是尚未生成。',
-                                        style: TextStyle(
-                                          color: libraryTextMuted,
-                                          height: 1.45,
-                                        ),
-                                      ),
-                                      if (stats.failures.isNotEmpty) ...[
-                                        const SizedBox(height: 10),
-                                        ExpansionTile(
-                                          key: const ValueKey(
-                                            'settings.cache.failureDetails',
-                                          ),
-                                          tilePadding: EdgeInsets.zero,
-                                          childrenPadding: EdgeInsets.zero,
-                                          title: Text(
-                                            '失败详情 · ${stats.failures.length}',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                          subtitle: const Text(
-                                            '显示视频标题和最近一次缩略图失败原因',
-                                          ),
-                                          children: [
-                                            for (final failure
-                                                in stats.failures.take(50))
-                                              ListTile(
-                                                dense: true,
-                                                contentPadding: EdgeInsets.zero,
-                                                leading: const Icon(
-                                                  Icons.error_outline_rounded,
-                                                  color: Colors.orangeAccent,
-                                                ),
-                                                title: Text(
-                                                  failure.item.title,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                                subtitle: Text(
-                                                  failure.reason,
-                                                  maxLines: 3,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            if (stats.failures.length > 50)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  bottom: 8,
-                                                ),
-                                                child: Text(
-                                                  '另有 ${stats.failures.length - 50} 条，'
-                                                  '请处理当前失败项后刷新统计。',
-                                                  style: const TextStyle(
-                                                    color: libraryTextMuted,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ],
-                                      const SizedBox(height: 12),
-                                      Wrap(
-                                        spacing: 10,
-                                        runSpacing: 10,
-                                        children: [
-                                          FilledButton.icon(
-                                            key: const ValueKey(
-                                              'settings.cache.retryFailures',
-                                            ),
-                                            onPressed: stats.failures.isEmpty ||
-                                                    cacheBusy
-                                                ? null
-                                                : () => _retryFailedThumbnails(
-                                                      stats,
-                                                    ),
-                                            icon: const Icon(
-                                              Icons.refresh_rounded,
-                                            ),
-                                            label: const Text('重试失败项'),
-                                          ),
-                                          OutlinedButton.icon(
-                                            key: const ValueKey(
-                                              'settings.cache.clearFailures',
-                                            ),
-                                            onPressed: stats.failures.isEmpty ||
-                                                    cacheBusy
-                                                ? null
-                                                : () =>
-                                                    _clearThumbnailFailureMarkers(
-                                                      stats,
-                                                    ),
-                                            icon: const Icon(
-                                              Icons.cleaning_services_outlined,
-                                            ),
-                                            label: const Text('清除失败标记'),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ],
+                                if (stats == null) {
+                                  return const _CacheDiagnosticsLoading();
+                                }
+                                return _CacheDiagnosticsPanel(
+                                  stats: stats,
+                                  cacheBusy: cacheBusy,
+                                  onRetry: () => _retryFailedThumbnails(stats),
+                                  onClear: () =>
+                                      _clearThumbnailFailureMarkers(stats),
                                 );
                               },
                             ),
@@ -1788,6 +1678,721 @@ class _SettingsStatLine extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/** 缓存统计读取期间保持与终态一致的结构占位，避免页面加载完成后整体跳位。 */
+class _CacheDiagnosticsLoading extends StatelessWidget {
+  const _CacheDiagnosticsLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      label: '正在读取缩略图缓存统计',
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _CacheDiagnosticsHeader(
+            statusLabel: '读取统计中',
+            statusColor: appAccentViolet,
+          ),
+          SizedBox(height: 18),
+          Text(
+            '正在校验有效 JPEG 与后台任务状态…',
+            style: TextStyle(color: libraryTextMuted),
+          ),
+          SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.all(Radius.circular(AppRadius.control)),
+            child: LinearProgressIndicator(minHeight: 4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/**
+ * 缩略图缓存诊断终态面板。
+ *
+ * 面板只解释 [CacheStats] 并转发既有失败处理动作，不创建任务、不读磁盘，
+ * 也不改变失败属于缺失子集的缓存语义。
+ */
+class _CacheDiagnosticsPanel extends StatelessWidget {
+  const _CacheDiagnosticsPanel({
+    required this.stats,
+    required this.cacheBusy,
+    required this.onRetry,
+    required this.onClear,
+  });
+
+  /** 当前不可变缓存统计快照。 */
+  final CacheStats stats;
+
+  /** 缓存动作或既有后台队列正在运行时禁止重复提交。 */
+  final bool cacheBusy;
+
+  /** 定向重试当前失败项的既有回调。 */
+  final VoidCallback onRetry;
+
+  /** 只清除失败标记的既有回调。 */
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasFailures = stats.failures.isNotEmpty;
+    final cachedRatio = stats.total == 0 ? 0.0 : stats.cached / stats.total;
+    final statusLabel = hasFailures
+        ? '${formatCount(stats.errors)} 个失败项'
+        : stats.paused
+            ? '后台任务已暂停'
+            : cacheBusy
+                ? '后台任务运行中'
+                : '缓存服务空闲';
+    final statusColor = hasFailures
+        ? Colors.orangeAccent
+        : cacheBusy || stats.paused
+            ? appAccentViolet
+            : const Color(0xff42d3a6);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _CacheDiagnosticsHeader(
+          statusLabel: statusLabel,
+          statusColor: statusColor,
+        ),
+        const SizedBox(height: 18),
+        _CacheCoverageSummary(
+          cached: stats.cached,
+          total: stats.total,
+          ratio: cachedRatio.clamp(0.0, 1.0).toDouble(),
+        ),
+        const SizedBox(height: 14),
+        _CacheMetricGrid(stats: stats),
+        const SizedBox(height: 14),
+        _CacheTaskSummary(stats: stats),
+        const SizedBox(height: 14),
+        const _CacheFailureSemanticsNote(),
+        if (hasFailures) ...[
+          const SizedBox(height: 14),
+          _CacheFailureDetails(failures: stats.failures),
+        ],
+        const SizedBox(height: 14),
+        _CacheFailureActions(
+          hasFailures: hasFailures,
+          cacheBusy: cacheBusy,
+          onRetry: onRetry,
+          onClear: onClear,
+        ),
+      ],
+    );
+  }
+}
+
+/** 缓存页标题、用途说明与当前健康状态。 */
+class _CacheDiagnosticsHeader extends StatelessWidget {
+  const _CacheDiagnosticsHeader({
+    required this.statusLabel,
+    required this.statusColor,
+  });
+
+  /** 当前服务状态的简短文字。 */
+  final String statusLabel;
+
+  /** 状态图标与角标的非唯一颜色编码。 */
+  final Color statusColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: statusColor.withValues(alpha: 0.13),
+            borderRadius: BorderRadius.circular(AppRadius.control),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(Icons.image_outlined, color: statusColor, size: 22),
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '缩略图缓存',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+              SizedBox(height: 4),
+              Text(
+                '查看有效缓存覆盖、后台任务和可恢复失败，不会主动启动生成。',
+                style: TextStyle(color: libraryTextMuted, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final badge = _CacheStatusBadge(
+      label: statusLabel,
+      color: statusColor,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 窄窗或大文字下把状态移到下一行，避免压缩标题说明。
+        if (constraints.maxWidth < 700) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              title,
+              const SizedBox(height: 10),
+              Align(alignment: Alignment.centerLeft, child: badge),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: title),
+            const SizedBox(width: 12),
+            badge,
+          ],
+        );
+      },
+    );
+  }
+}
+
+/** 同时使用图标和文字表达缓存状态，避免只依赖颜色。 */
+class _CacheStatusBadge extends StatelessWidget {
+  const _CacheStatusBadge({required this.label, required this.color});
+
+  /** 状态文字。 */
+  final String label;
+
+  /** 状态强调色。 */
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.11),
+        borderRadius: BorderRadius.circular(AppRadius.capsule),
+        border: Border.all(color: color.withValues(alpha: 0.34)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.circle, size: 8, color: color),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: TextStyle(color: color, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 有效 JPEG 覆盖率摘要；进度只来源于当前快照，不触发缓存扫描。 */
+class _CacheCoverageSummary extends StatelessWidget {
+  const _CacheCoverageSummary({
+    required this.cached,
+    required this.total,
+    required this.ratio,
+  });
+
+  /** 已验证有效的缓存数量。 */
+  final int cached;
+
+  /** 当前媒体库视频总数。 */
+  final int total;
+
+  /** 归一化后的有效缓存比例。 */
+  final double ratio;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      key: const ValueKey('settings.cache.coverage'),
+      decoration: BoxDecoration(
+        color: librarySurfaceAlt,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: libraryBorder),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '有效缓存覆盖',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                Text(
+                  '${formatCount(cached)} / ${formatCount(total)}',
+                  style: const TextStyle(
+                    color: libraryText,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.all(Radius.circular(AppRadius.capsule)),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 6,
+                color: appAccentViolet,
+                backgroundColor: libraryBorder,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 总量、有效缓存、缺失和失败的响应式统计网格。 */
+class _CacheMetricGrid extends StatelessWidget {
+  const _CacheMetricGrid({required this.stats});
+
+  /** 当前统计快照。 */
+  final CacheStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = <({
+      String keyName,
+      String label,
+      String value,
+      IconData icon,
+      Color color
+    })>[
+      (
+        keyName: 'total',
+        label: '总数',
+        value: formatCount(stats.total),
+        icon: Icons.video_library_outlined,
+        color: libraryTextMuted,
+      ),
+      (
+        keyName: 'cached',
+        label: '已缓存',
+        value: formatCount(stats.cached),
+        icon: Icons.check_circle_outline_rounded,
+        color: const Color(0xff42d3a6),
+      ),
+      (
+        keyName: 'missing',
+        label: '缺失',
+        value: formatCount(stats.missing),
+        icon: Icons.image_not_supported_outlined,
+        color: appAccentViolet,
+      ),
+      (
+        keyName: 'errors',
+        label: '失败',
+        value: formatCount(stats.errors),
+        icon: Icons.error_outline_rounded,
+        color: stats.errors == 0 ? libraryTextMuted : Colors.orangeAccent,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 720
+            ? 4
+            : constraints.maxWidth >= 420
+                ? 2
+                : 1;
+        const spacing = 10.0;
+        final itemWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final metric in metrics)
+              SizedBox(
+                width: itemWidth,
+                child: _CacheMetricCard(
+                  key: ValueKey('settings.cache.metric.${metric.keyName}'),
+                  label: metric.label,
+                  value: metric.value,
+                  icon: metric.icon,
+                  color: metric.color,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/** 单个缓存指标卡片，保持文字缩放时的自然高度。 */
+class _CacheMetricCard extends StatelessWidget {
+  const _CacheMetricCard({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  /** 指标名称。 */
+  final String label;
+
+  /** 已格式化的指标值。 */
+  final String value;
+
+  /** 指标语义图标。 */
+  final IconData icon;
+
+  /** 指标强调色，不作为唯一状态编码。 */
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: librarySurfaceAlt,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: libraryBorder),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 21),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: libraryTextMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      color: libraryText,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 后台并发、排队、请求和耗时保持在独立结构表面中。 */
+class _CacheTaskSummary extends StatelessWidget {
+  const _CacheTaskSummary({required this.stats});
+
+  /** 当前任务统计快照。 */
+  final CacheStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      key: const ValueKey('settings.cache.taskSummary'),
+      decoration: BoxDecoration(
+        color: librarySurfaceAlt.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: libraryBorder),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('后台任务', style: TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 20,
+              runSpacing: 10,
+              children: [
+                _CacheTaskValue(
+                  label: '活动',
+                  value: '${stats.active} / ${stats.maxConcurrent}',
+                ),
+                _CacheTaskValue(
+                  label: '排队',
+                  value: formatCount(stats.queued),
+                ),
+                _CacheTaskValue(
+                  label: '后台请求',
+                  value: formatCount(stats.pendingBackgroundRequests),
+                ),
+                _CacheTaskValue(
+                  label: '平均耗时',
+                  value: '${stats.averageMs} ms',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 后台任务摘要中的单个键值。 */
+class _CacheTaskValue extends StatelessWidget {
+  const _CacheTaskValue({required this.label, required this.value});
+
+  /** 字段名称。 */
+  final String label;
+
+  /** 已格式化字段值。 */
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 132),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label  ',
+            style: const TextStyle(
+              color: libraryTextMuted,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
+}
+
+/** 明确失败与缺失的包含关系，避免用户误解统计口径。 */
+class _CacheFailureSemanticsNote extends StatelessWidget {
+  const _CacheFailureSemanticsNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      key: const ValueKey('settings.cache.failureSemantics'),
+      decoration: BoxDecoration(
+        color: appAccentViolet.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: appAccentViolet.withValues(alpha: 0.24)),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(13),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline_rounded, color: appAccentViolet, size: 20),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '失败属于缺失的可诊断子集：失败项当前没有有效 JPEG，因此会同时计入缺失；普通缺失可能只是尚未生成。',
+                style: TextStyle(color: libraryTextMuted, height: 1.45),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 可展开的失败文件与最近原因列表，最多展示现有的前 50 项。 */
+class _CacheFailureDetails extends StatelessWidget {
+  const _CacheFailureDetails({required this.failures});
+
+  /** 当前缺少有效 JPEG 且保留失败原因的条目。 */
+  final List<CacheFailureDetail> failures;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: librarySurfaceAlt.withValues(alpha: 0.48),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: libraryBorder),
+      ),
+      child: ExpansionTile(
+        key: const ValueKey('settings.cache.failureDetails'),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        title: Text(
+          '失败详情 · ${failures.length}',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        subtitle: const Text('显示视频标题和最近一次缩略图失败原因'),
+        children: [
+          for (final failure in failures.take(50))
+            ListTile(
+              dense: true,
+              leading: const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.orangeAccent,
+              ),
+              title: Text(
+                failure.item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                failure.reason,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          if (failures.length > 50)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Text(
+                '另有 ${failures.length - 50} 条，请处理当前失败项后刷新统计。',
+                style: const TextStyle(color: libraryTextMuted),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/** 失败处理区保留既有动作，并在没有失败时给出明确完成反馈。 */
+class _CacheFailureActions extends StatelessWidget {
+  const _CacheFailureActions({
+    required this.hasFailures,
+    required this.cacheBusy,
+    required this.onRetry,
+    required this.onClear,
+  });
+
+  /** 当前是否存在可定向处理的失败条目。 */
+  final bool hasFailures;
+
+  /** 既有队列忙碌时禁止重复提交。 */
+  final bool cacheBusy;
+
+  /** 重试回调。 */
+  final VoidCallback onRetry;
+
+  /** 清除失败标记回调。 */
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final actionsEnabled = hasFailures && !cacheBusy;
+    final status = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(
+          hasFailures
+              ? Icons.build_circle_outlined
+              : Icons.check_circle_outline_rounded,
+          color: hasFailures ? Colors.orangeAccent : const Color(0xff42d3a6),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                hasFailures ? '失败处理' : '当前没有失败项',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                hasFailures
+                    ? cacheBusy
+                        ? '后台任务结束后可重试或清除诊断标记。'
+                        : '重试复用现有优先队列；清除标记不会删除视频或有效缓存。'
+                    : '无需重试或清理；普通缺失会在既有队列需要时生成。',
+                style: const TextStyle(color: libraryTextMuted, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final actions = Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        FilledButton.icon(
+          key: const ValueKey('settings.cache.retryFailures'),
+          onPressed: actionsEnabled ? onRetry : null,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('重试失败项'),
+        ),
+        OutlinedButton.icon(
+          key: const ValueKey('settings.cache.clearFailures'),
+          onPressed: actionsEnabled ? onClear : null,
+          icon: const Icon(Icons.cleaning_services_outlined),
+          label: const Text('清除失败标记'),
+        ),
+      ],
+    );
+    return DecoratedBox(
+      key: const ValueKey('settings.cache.failureActions'),
+      decoration: BoxDecoration(
+        color: librarySurfaceAlt.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: libraryBorder),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // 动作区优先保证说明可读，窄窗时按钮自然换到下一行。
+            if (constraints.maxWidth < 780) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  status,
+                  const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerLeft, child: actions),
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: status),
+                const SizedBox(width: 14),
+                actions,
+              ],
+            );
+          },
+        ),
       ),
     );
   }

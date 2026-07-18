@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-18 · Apple UI Phase 3 缓存诊断
+
+- 缩略图缓存设置页改为响应式诊断面板，统一展示服务状态、有效缓存覆盖、四项关键指标、后台任务、失败语义与失败处理；加载态与终态保持相同结构锚点。
+- `CacheStats`、失败属于缺失子集、失败详情上限、队列忙碌禁用、重试与清除失败标记回调全部保持；没有新增磁盘读取、缓存任务或 FFmpeg 调用。
+- 新增 150% 文字缩放和失败动作 focused tests；完整 202 项测试通过，3 项显式 benchmark 跳过，`flutter analyze` 与 Windows debug build 通过。
+- 1248×714 真实 Debug 窗口完成缓存加载、终态和返回截图；标签中心搜索/清除/详情、设置四入口与二级返回也已补齐，无明显遮挡、错位或横向溢出。
+- 未修改 SQLite schema、缓存有效性、`ThumbnailService` 调度、FFmpeg/FFprobe 边界、filtered queue、稳定身份或用户数据。
+
 ## 2026-07-18 · Apple UI Phase 3 标签中心与设置入口
 
 - 标签中心改为圆角双栏维护工作区，搜索使用稳定 `TextField` 链路；详情按使用情况、标签属性、批量 manual 与高风险操作分组，folder/manual、引用检查和全部原回调保持。

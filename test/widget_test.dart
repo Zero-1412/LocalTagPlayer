@@ -2251,6 +2251,119 @@ void main() {
     }
   });
 
+  testWidgets('cache diagnostics groups stats at 150 percent text scale',
+      (tester) async {
+    const stats = CacheStats(
+      total: 11163,
+      cached: 1682,
+      missing: 9481,
+      errors: 0,
+      queued: 0,
+      pendingBackgroundRequests: 0,
+      active: 0,
+      activeBackground: 0,
+      maxConcurrent: 4,
+      maxBackground: 2,
+      maxBackgroundQueued: 500,
+      paused: false,
+      completedThisRun: 0,
+      failedThisRun: 0,
+      ffmpegCompleted: 0,
+      fallbackCompleted: 0,
+      averageMs: 0,
+      failures: <CacheFailureDetail>[],
+    );
+
+    await tester.pumpWidget(
+      cacheDiagnosticsSmokeHarness(
+        stats: stats,
+        textScaler: const TextScaler.linear(1.5),
+      ),
+    );
+
+    expect(
+        find.byKey(const ValueKey('settings.cache.coverage')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings.cache.metric.total')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('settings.cache.metric.cached')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('settings.cache.metric.missing')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('settings.cache.metric.errors')),
+        findsOneWidget);
+    expect(find.text('当前没有失败项'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('settings.cache.retryFailures')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cache diagnostics preserves failure actions', (tester) async {
+    final item = _testVideo(
+      path: r'C:\cache\broken.mp4',
+      title: 'broken thumbnail',
+    );
+    final stats = CacheStats(
+      total: 1,
+      cached: 0,
+      missing: 1,
+      errors: 1,
+      queued: 0,
+      pendingBackgroundRequests: 0,
+      active: 0,
+      activeBackground: 0,
+      maxConcurrent: 4,
+      maxBackground: 2,
+      maxBackgroundQueued: 500,
+      paused: false,
+      completedThisRun: 0,
+      failedThisRun: 1,
+      ffmpegCompleted: 0,
+      fallbackCompleted: 0,
+      averageMs: 12,
+      failures: <CacheFailureDetail>[
+        CacheFailureDetail(item: item, reason: 'ffmpeg: test failure'),
+      ],
+    );
+    var retryCount = 0;
+    var clearCount = 0;
+
+    await tester.pumpWidget(
+      cacheDiagnosticsSmokeHarness(
+        stats: stats,
+        onRetry: () => retryCount++,
+        onClear: () => clearCount++,
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('settings.cache.failureSemantics')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.cache.failureDetails')),
+      findsOneWidget,
+    );
+    final retryButton =
+        find.byKey(const ValueKey('settings.cache.retryFailures'));
+    await tester.ensureVisible(retryButton);
+    await tester.tap(retryButton);
+    await tester.pump();
+    final clearButton =
+        find.byKey(const ValueKey('settings.cache.clearFailures'));
+    await tester.ensureVisible(clearButton);
+    await tester.tap(clearButton);
+    await tester.pump();
+
+    expect(retryCount, 1);
+    expect(clearCount, 1);
+  });
+
   testWidgets('tag manager search uses one stable TextField chain',
       (tester) async {
     final controller = TextEditingController();

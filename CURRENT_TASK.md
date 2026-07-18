@@ -1,12 +1,20 @@
 ﻿# CURRENT_TASK.md
 
+## 2026-07-18 Apple UI Phase 3 缓存诊断
+
+- 缩略图缓存页由稀疏单列统计重排为“状态摘要 / 有效缓存覆盖 / 关键指标 / 后台任务 / 失败语义 / 失败处理”的响应式诊断面板；加载态复用同一结构位置，不增加 shimmer、blur、定时器或后台请求。
+- 缓存总数、有效、缺失、失败、活动/排队/后台请求与平均耗时继续直接消费同一份 `CacheStats`；失败详情仍最多展示 50 项，重试与清除失败标记继续复用原回调和队列忙碌门禁。
+- 无失败时明确显示“当前没有失败项”，但保留两个禁用动作；150% 文字缩放 focused test 覆盖响应式统计与操作区，失败测试确认详情和两个回调仍可触达。
+- 完整 202 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。最新 1248×714 Debug 窗口完成加载态、终态和返回设置首页截图，无裁切、重叠或横向溢出。
+- 本轮未修改 SQLite schema、缓存有效性、`ThumbnailService` 调度、FFmpeg/FFprobe 边界、filtered queue、稳定身份或用户数据。
+
 ## 2026-07-18 Apple UI Phase 3 标签中心与设置入口
 
 - 标签中心由硬分割维护页改为带 18px 结构圆角的双栏工作区；标签列表保留来源、分组、收藏、隐藏与选择语义，搜索从 `SearchBar` 收敛为唯一稳定 `TextField`、controller 和统一刷新回调，并提供明确清除入口。
 - 标签详情按“使用情况 / 标签属性 / 批量打标签 / 高风险操作”分组；folder/manual 边界、引用检查、批量 manual 限制及保存/合并/删除回调均保持，高风险区使用明确影响说明而非动画弱化风险。
 - 设置首页继续只承担导航，但改为实色分组面板和四个 `AppInteractionSurface` 入口；图标、当前继续观看状态、hover/focus/press、reduced motion 与 high contrast 复用共享 Apple token，二级设置卡片统一为 14px 内容圆角。
-- 新增标签搜索真实输入/清除、设置交互表面与设置卡片圆角 focused tests；完整 200 项测试通过，3 项显式 benchmark 跳过，`flutter analyze` 与 Windows debug build 通过。
-- 最新 Debug EXE 已启动，但窗口捕获返回用户正在操作的前台游戏而非 Local Tag Player；已停止置前和键鼠控制，真实“标签中心搜索/选择详情 → 设置四入口/二级返回”截图待窗口再次空闲后补验。
+- 新增标签搜索真实输入/清除、设置交互表面与设置卡片圆角 focused tests；后续缓存诊断改造后的完整 202 项测试通过，3 项显式 benchmark 跳过，`flutter analyze` 与 Windows debug build 通过。
+- 真实窗口已完成标签中心 `miku` 搜索、清除、详情上下半区，以及设置四入口、四个二级页和返回的连续截图；各静止态无明显位置、遮挡、对齐或溢出问题。中文 IME 自动注入未生效，改用物理键事件验证同一 `TextField` 链路。
 - 本轮未修改 SQLite schema、标签删除/合并实现、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存队列、稳定身份或用户数据。
 
 ## 2026-07-18 Apple UI Phase 1 媒体库主工作区
