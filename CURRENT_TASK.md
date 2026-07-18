@@ -1,5 +1,13 @@
 ﻿# CURRENT_TASK.md
 
+## 2026-07-18 Apple UI Phase 1 排序入口与菜单宽度统一
+
+- expanded 媒体库把会随动作带伸长的排序字段收敛为 168px，名称、日期、类型、大小、目录和添加时间菜单同步使用 168px；触发入口与弹层左边缘、宽度和 6px 下方展开关系一致。
+- 排序方向继续保留 48px 命中区，固定动作带从 360px 调整为 380px，以容纳紧凑排序、方向、多选和视图切换；少量响应式余量只落在动作分组之间，普通/多选切换时搜索框宽度仍稳定。
+- 新增宽度和弹层几何 focused test，并复验 expanded 信息层与 150% 文字缩放；完整 211 项测试通过，3 项显式 benchmark 跳过，`flutter analyze` 与 Windows debug build 通过。
+- 本轮未抢占前台窗口。真实触控板验收继续按“滑过首屏并停在中段 → 惯性结束后回复已空闲 → 补拍中途保持隐藏、回顶、备份页和标签编辑器”执行。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、排序结果与回调、filtered queue、缩略图/媒体详情队列、`PlayerBackend` 或用户数据。
+
 ## 2026-07-18 Apple UI Phase 1 媒体库顶部边界与回顶终态修正
 
 - expanded 媒体库只在结果绝对顶部显示标题与搜索动作区；一旦离开 offset 0 就以 160ms 淡出、上移和高度折叠收起，中途停止或向上反向都不再恢复，只有回到顶部并稳定 140ms 后才以 220ms `easeOutCubic` 显示。

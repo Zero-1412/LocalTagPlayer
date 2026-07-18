@@ -1,5 +1,12 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
+## 2026-07-18 Apple UI Phase 1 排序入口与菜单几何统一
+
+- expanded 排序字段固定为 168px，六项 `PopupMenuButton` 弹层使用同一紧约束，入口与菜单左边缘和宽度一致；medium/compact 图标形态不变。
+- 排序方向维持 48px 命中区，动作带调整为 380px 并把少量余量放在排序与多选/视图分组之间，搜索与排序仍保持 12px 紧邻关系，多选切换不改变搜索宽度。
+- focused tests 覆盖入口/菜单宽度、展开位置、动作间距和 150% 文字缩放；完整 211 项测试、analyze 和 Windows debug build 通过，3 项 benchmark 跳过。
+- `FilterQuery`、`TagQueryService`、排序结果、filtered queue、缩略图队列和用户数据未改变；真实触控板连续截图等用户完成惯性滚动并回复“已空闲”后补拍。
+
 ## 2026-07-18 Apple UI Phase 1 媒体库顶部边界与回顶终态修正
 
 - expanded 结果离开 offset 0 后收起完整顶部信息区，中途停留和向上反向均保持隐藏；只有返回绝对顶部并稳定 140ms 才恢复。160/220ms 结构动画仍可中断，避免边界快速反向闪跳。

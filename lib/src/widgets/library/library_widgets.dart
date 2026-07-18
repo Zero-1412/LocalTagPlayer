@@ -2888,15 +2888,21 @@ class ReferenceTopBar extends StatelessWidget {
                                   Expanded(child: searchSurface),
                                   const SizedBox(width: 12),
                                   SizedBox(
-                                    width: 360,
+                                    width: 380,
                                     child: selectionMode
                                         ? selectionStatus
                                         : Row(
                                             children: [
                                               // 桌面动作带保留固定宽度以避免进入多选时搜索框跳动；
-                                              // 正常态由排序字段弹性承接剩余空间，不再留下无语义空洞。
-                                              Expanded(child: sortControl),
+                                              // 排序字段使用紧凑稳定宽度，余量只作为方向与低频动作的分组间距。
+                                              SizedBox(
+                                                width:
+                                                    _expandedSortControlWidth,
+                                                child: sortControl,
+                                              ),
                                               const SizedBox(width: 12),
+                                              // 把少量响应式余量留在动作分组之间，保持视图切换与右边界对齐。
+                                              const Spacer(),
                                               normalActions,
                                             ],
                                           ),
@@ -3414,10 +3420,16 @@ class _TagDiscoveryHeaderButton extends StatelessWidget {
   }
 }
 
+/** 宽桌面排序字段的视觉宽度，同时约束触发入口与弹层。 */
+const double _expandedSortFieldWidth = 168;
+
+/** 排序字段、6px 间距和 48px 方向命中区组成的稳定动作宽度。 */
+const double _expandedSortControlWidth = _expandedSortFieldWidth + 6 + 48;
+
 /**
  * 媒体库顶部的响应式排序控件。
  *
- * 宽桌面显示当前字段并弹性吸收动作带剩余宽度；中等窗口压缩成图标，
+ * 宽桌面以紧凑固定宽度显示当前字段；中等窗口压缩成图标，
  * 两种形态仍分别回调页面已有排序状态，不复制排序逻辑。
  */
 class _CompactTopSortControl extends StatelessWidget {
@@ -3435,7 +3447,7 @@ class _CompactTopSortControl extends StatelessWidget {
   /** 当前排序方向。 */
   final SortDirection sortDirection;
 
-  /** 是否在宽桌面布局中展示当前排序字段，并让字段入口承接动作带剩余宽度。 */
+  /** 是否在宽桌面布局中展示当前排序字段。 */
   final bool showCurrentField;
 
   /** 选择排序字段后交给页面已有轻量重排入口。 */
@@ -3456,6 +3468,10 @@ class _CompactTopSortControl extends StatelessWidget {
       // 强制从按钮下方展开，避免默认行为把当前选中项对齐到按钮并遮挡触发入口。
       position: PopupMenuPosition.under,
       offset: const Offset(0, 6),
+      // 宽桌面入口与弹层共享同一几何宽度，避免触发按钮和菜单各自伸缩造成割裂。
+      constraints: showCurrentField
+          ? const BoxConstraints.tightFor(width: _expandedSortFieldWidth)
+          : null,
       itemBuilder: (context) => [
         for (final mode in SortMode.values)
           PopupMenuItem<SortMode>(
@@ -3489,49 +3505,52 @@ class _CompactTopSortControl extends StatelessWidget {
             ),
       icon: showCurrentField ? null : const Icon(Icons.sort_rounded, size: 20),
       child: showCurrentField
-          ? Container(
-              height: 38,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: librarySurface,
-                borderRadius: BorderRadius.circular(AppRadius.control),
-                border: Border.all(color: libraryBorder),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.sort_rounded,
-                    size: 19,
-                    color: appAccentViolet,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      sortModeLabel(sortMode),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: libraryText,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+          ? SizedBox(
+              width: _expandedSortFieldWidth,
+              child: Container(
+                height: 38,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: librarySurface,
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  border: Border.all(color: libraryBorder),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.sort_rounded,
+                      size: 19,
+                      color: appAccentViolet,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        sortModeLabel(sortMode),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: libraryText,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(
-                    Icons.expand_more_rounded,
-                    size: 18,
-                    color: libraryTextMuted,
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.expand_more_rounded,
+                      size: 18,
+                      color: libraryTextMuted,
+                    ),
+                  ],
+                ),
               ),
             )
           : null,
     );
     return Row(
-      mainAxisSize: showCurrentField ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        if (showCurrentField) Expanded(child: fieldButton) else fieldButton,
+        fieldButton,
         const SizedBox(width: 6),
         _ReferenceIconButton(
           tooltip: ascending

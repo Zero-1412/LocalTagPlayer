@@ -1605,6 +1605,40 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('expanded sort field and menu share a compact width',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1400, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        videoCount: 171,
+        onEnterSelectionMode: () {},
+      ),
+    );
+
+    final buttonFinder = find.byKey(LibrarySmokeKeys.topSortFieldButton);
+    final buttonRect = tester.getRect(buttonFinder);
+    expect(buttonRect.width, closeTo(168, 0.01));
+
+    await tester.tap(buttonFinder);
+    await tester.pumpAndSettle();
+
+    final firstItemRect = tester.getRect(
+      find.byKey(LibrarySmokeKeys.topSortMenuItem(SortMode.name)),
+    );
+    expect(firstItemRect.width, closeTo(buttonRect.width, 0.01));
+    expect(firstItemRect.left, closeTo(buttonRect.left, 0.01));
+    expect(firstItemRect.top, greaterThanOrEqualTo(buttonRect.bottom + 6));
+    expect(tester.takeException(), isNull);
+  });
+
   test('reference top bar collapses actions below expanded width', () {
     expect(LayoutBreakpoints.fromWidth(699), LayoutSize.compact);
     expect(LayoutBreakpoints.fromWidth(900), LayoutSize.medium);
@@ -1685,6 +1719,8 @@ void main() {
         tester.getRect(find.byKey(LibrarySmokeKeys.toolbarActions));
     final sortRect =
         tester.getRect(find.byKey(LibrarySmokeKeys.topSortFieldButton));
+    final directionRect =
+        tester.getRect(find.byTooltip('\u5207\u6362\u4e3a\u6b63\u5e8f'));
     final resultRect =
         tester.getRect(find.byKey(LibrarySmokeKeys.toolbarResultStatus));
     expect(resultRect.bottom, lessThan(searchRect.top));
@@ -1692,9 +1728,16 @@ void main() {
     expect(sortRect.left - searchRect.right, lessThanOrEqualTo(24));
     expect(searchRect.bottom, lessThan(statusRect.top));
     expect(sortRect.right, lessThanOrEqualTo(actionsRect.left));
-    // 桌面排序字段应承接动作带剩余宽度，不能在方向按钮与多选之间留下大块空洞。
-    expect(sortRect.width, greaterThan(100));
-    expect(actionsRect.left - sortRect.right, lessThanOrEqualTo(68));
+    // 桌面排序字段保持紧凑稳定，少量响应式余量只留在动作分组之间。
+    expect(sortRect.width, closeTo(168, 0.01));
+    expect(
+      directionRect.left - sortRect.right,
+      inInclusiveRange(6, 10),
+    );
+    expect(
+      actionsRect.left - directionRect.right,
+      inInclusiveRange(12, 40),
+    );
     expect(find.text(sortModeLabel(SortMode.recent)), findsOneWidget);
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.searchInputLane)).width,
