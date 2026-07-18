@@ -2201,6 +2201,14 @@ void main() {
     );
   });
 
+  test('settings workspace uses the shared Apple card radius', () {
+    final theme = settingsWorkspaceTheme(ThemeData(useMaterial3: true));
+    final shape = theme.cardTheme.shape! as RoundedRectangleBorder;
+
+    expect(shape.borderRadius, BorderRadius.circular(AppRadius.card));
+    expect(shape.side.color, libraryBorder);
+  });
+
   testWidgets('settings landing page only shows grouped feature entries',
       (tester) async {
     final openedSections = <String>[];
@@ -2229,6 +2237,7 @@ void main() {
     expect(find.byType(Switch), findsNothing);
     expect(find.byType(Slider), findsNothing);
     expect(find.byType(DropdownButtonFormField<dynamic>), findsNothing);
+    expect(find.byType(AppInteractionSurface), findsNWidgets(4));
 
     for (final entry in <(String, String)>[
       ('settings.category.playback', 'playback'),
@@ -2240,6 +2249,32 @@ void main() {
       await tester.pump();
       expect(openedSections.last, entry.$2);
     }
+  });
+
+  testWidgets('tag manager search uses one stable TextField chain',
+      (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    var changeCount = 0;
+
+    await tester.pumpWidget(
+      tagManagerSearchSmokeHarness(
+        controller: controller,
+        onChanged: () => changeCount++,
+      ),
+    );
+
+    expect(find.byType(SearchBar), findsNothing);
+    final field = find.byKey(const ValueKey('tagManager.search'));
+    expect(field, findsOneWidget);
+    await tester.enterText(field, '雷神');
+    await tester.pump();
+    expect(controller.text, '雷神');
+    expect(changeCount, 1);
+    await tester.tap(find.byTooltip('清除标签搜索'));
+    await tester.pump();
+    expect(controller.text, isEmpty);
+    expect(changeCount, 2);
   });
 
   testWidgets('tag manager group chips expose selected feedback',

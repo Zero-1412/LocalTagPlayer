@@ -33,6 +33,7 @@ import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import '../../services/tags/tag_query_service.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/design_system/app_interaction_surface.dart';
 import '../../widgets/library/library_local_view.dart';
 import '../../widgets/library/library_tag_discovery_panel.dart';
 import '../../widgets/library/library_video_results.dart';
@@ -510,6 +511,20 @@ class _PlaybackDecoderDropdownState extends State<PlaybackDecoderDropdown> {
 /**
  * 应用设置页，首页按功能类型导航，二级页承载对应的实际设置控件。
  */
+/** 设置路由在维护页基线上收敛内容卡片几何，不影响其它维护页面。 */
+@visibleForTesting
+ThemeData settingsWorkspaceTheme(ThemeData base) {
+  final workspace = maintenanceWorkspaceTheme(base);
+  return workspace.copyWith(
+    cardTheme: workspace.cardTheme.copyWith(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        side: const BorderSide(color: libraryBorder),
+      ),
+    ),
+  );
+}
+
 class CacheSettingsPage extends StatefulWidget {
   const CacheSettingsPage({
     super.key,
@@ -598,60 +613,87 @@ class SettingsLandingList extends StatelessWidget {
       key: const ValueKey('settings.home'),
       padding: const EdgeInsets.all(24),
       children: [
+        Text(
+          '按功能进入设置，当前播放与数据状态会保留在对应入口。',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: libraryTextMuted,
+              ),
+        ),
+        const SizedBox(height: 22),
         const _SettingsGroupTitle(title: '播放设置'),
         const SizedBox(height: 8),
-        Card(
-          clipBehavior: Clip.antiAlias,
-          margin: EdgeInsets.zero,
-          child: Column(
-            children: [
-              _SettingsNavigationTile(
-                key: const ValueKey('settings.category.playback'),
-                icon: Icons.play_circle_outline_rounded,
-                title: '播放与继续观看',
-                subtitle:
-                    '当前策略：${PlaybackSettings.resumeLabelFor(resumeBehavior)} · 解码设置',
-                statusLabel: PlaybackSettings.resumeLabelFor(resumeBehavior),
-                onTap: onOpenPlayback,
-              ),
-              const Divider(height: 1),
-              _SettingsNavigationTile(
-                key: const ValueKey('settings.category.playerInteraction'),
-                icon: Icons.tune_rounded,
-                title: '播放器交互',
-                subtitle: '全屏播放列表、播放器快捷键',
-                onTap: onOpenPlayerInteraction,
-              ),
-            ],
-          ),
+        _SettingsNavigationGroup(
+          children: [
+            _SettingsNavigationTile(
+              key: const ValueKey('settings.category.playback'),
+              icon: Icons.play_circle_outline_rounded,
+              title: '播放与继续观看',
+              subtitle:
+                  '当前策略：${PlaybackSettings.resumeLabelFor(resumeBehavior)} · 解码设置',
+              statusLabel: PlaybackSettings.resumeLabelFor(resumeBehavior),
+              onTap: onOpenPlayback,
+            ),
+            _SettingsNavigationTile(
+              key: const ValueKey('settings.category.playerInteraction'),
+              icon: Icons.tune_rounded,
+              title: '播放器交互',
+              subtitle: '全屏播放列表、播放器快捷键',
+              onTap: onOpenPlayerInteraction,
+            ),
+          ],
         ),
         const SizedBox(height: 24),
         const _SettingsGroupTitle(title: '数据与维护'),
         const SizedBox(height: 8),
-        Card(
-          clipBehavior: Clip.antiAlias,
-          margin: EdgeInsets.zero,
-          child: Column(
-            children: [
-              _SettingsNavigationTile(
-                key: const ValueKey('settings.category.dataBackup'),
-                icon: Icons.backup_outlined,
-                title: '视频数据备份',
-                subtitle: '备份开关、同步状态、检查与导出',
-                onTap: onOpenDataBackup,
-              ),
-              const Divider(height: 1),
-              _SettingsNavigationTile(
-                key: const ValueKey('settings.category.cache'),
-                icon: Icons.image_outlined,
-                title: '缩略图缓存',
-                subtitle: '缓存状态与后台任务统计',
-                onTap: onOpenCache,
-              ),
-            ],
-          ),
+        _SettingsNavigationGroup(
+          children: [
+            _SettingsNavigationTile(
+              key: const ValueKey('settings.category.dataBackup'),
+              icon: Icons.backup_outlined,
+              title: '视频数据备份',
+              subtitle: '备份开关、同步状态、检查与导出',
+              onTap: onOpenDataBackup,
+            ),
+            _SettingsNavigationTile(
+              key: const ValueKey('settings.category.cache'),
+              icon: Icons.image_outlined,
+              title: '缩略图缓存',
+              subtitle: '缓存状态与后台任务统计',
+              onTap: onOpenCache,
+            ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+/** 设置首页同一语义分组中的导航入口容器。 */
+class _SettingsNavigationGroup extends StatelessWidget {
+  const _SettingsNavigationGroup({required this.children});
+
+  /** 分组内按视觉阅读顺序排列的入口。 */
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: librarySurface,
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
+        border: Border.fromBorderSide(BorderSide(color: libraryBorder)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          children: [
+            for (var index = 0; index < children.length; index++) ...[
+              children[index],
+              if (index != children.length - 1) const SizedBox(height: 6),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -704,30 +746,58 @@ class _SettingsNavigationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      minVerticalPadding: 14,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-      leading: Icon(icon, color: appAccentViolet),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(subtitle, style: const TextStyle(color: libraryTextMuted)),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (statusLabel != null) ...[
-            Chip(
-              key: const ValueKey('settings.resumeBehavior.summary'),
-              label: Text(statusLabel!),
-              visualDensity: VisualDensity.compact,
-            ),
-            const SizedBox(width: 6),
-          ],
-          const Icon(Icons.chevron_right_rounded, color: libraryTextMuted),
-        ],
-      ),
+    return AppInteractionSurface(
       onTap: onTap,
+      semanticLabel: '打开$title',
+      backgroundColor: librarySurface,
+      borderRadius: AppRadius.card,
+      showBorder: false,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 460;
+          return Row(
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: appAccentViolet.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+                child: SizedBox.square(
+                  dimension: 42,
+                  child: Icon(icon, color: appAccentViolet),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: libraryTextMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              if (statusLabel != null && !compact) ...[
+                Chip(
+                  key: const ValueKey('settings.resumeBehavior.summary'),
+                  label: Text(statusLabel!),
+                  visualDensity: VisualDensity.compact,
+                  side: BorderSide.none,
+                ),
+                const SizedBox(width: 6),
+              ],
+              const Icon(Icons.chevron_right_rounded, color: libraryTextMuted),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -1094,7 +1164,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: maintenanceWorkspaceTheme(Theme.of(context)),
+      data: settingsWorkspaceTheme(Theme.of(context)),
       child: _buildSettingsWorkspace(context),
     );
   }

@@ -368,114 +368,220 @@ class _TagManagerPageState extends State<TagManagerPage> {
           const SizedBox(width: 12),
         ],
       ),
-      body: FutureBuilder<Map<String, TagUsageSummary>>(
-        future: _usageFuture,
-        builder: (context, snapshot) {
-          final usage = snapshot.data ?? const <String, TagUsageSummary>{};
-          final rows = _filteredTagRows(usage);
-          return Flex(
-            direction: compact ? Axis.vertical : Axis.horizontal,
-            children: [
-              SizedBox(
-                width: compact
-                    ? double.infinity
-                    : (layoutSize == LayoutSize.medium ? 316 : 360),
-                height: compact ? 320 : null,
-                child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    color: librarySurface,
-                    border: Border(right: BorderSide(color: libraryBorder)),
-                  ),
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: SearchBar(
-                          controller: _searchController,
-                          leading: const Icon(Icons.search),
-                          hintText: '搜索标签 / 别名',
-                          onChanged: (_) => setState(() {}),
-                          elevation: const WidgetStatePropertyAll(0),
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: FutureBuilder<Map<String, TagUsageSummary>>(
+          future: _usageFuture,
+          builder: (context, snapshot) {
+            final usage = snapshot.data ?? const <String, TagUsageSummary>{};
+            final rows = _filteredTagRows(usage);
+            return Flex(
+              direction: compact ? Axis.vertical : Axis.horizontal,
+              children: [
+                SizedBox(
+                  width: compact
+                      ? double.infinity
+                      : (layoutSize == LayoutSize.medium ? 316 : 360),
+                  height: compact ? 320 : null,
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: librarySurface,
+                      borderRadius:
+                          BorderRadius.all(Radius.circular(AppRadius.panel)),
+                      border: Border.fromBorderSide(
+                        BorderSide(color: libraryBorder),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: _TagManagerSearchField(
+                            controller: _searchController,
+                            onChanged: () => setState(() {}),
+                          ),
                         ),
-                      ),
-                      _TagGroupSummary(
-                        groups: widget.store.tagGroups,
-                        selectedGroupId: _selectedGroupId,
-                        onSelected: (groupId) {
-                          setState(() {
-                            _selectedGroupId = groupId;
-                            // 当前详情可能已不在左侧结果中，清空可避免“筛选 A、编辑 B”的错觉。
-                            if (groupId != null &&
-                                _selectedTag?.groupId != groupId) {
-                              _selectedTagId = null;
-                            }
-                          });
-                        },
-                      ),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: rows.length,
-                          itemBuilder: (context, index) {
-                            final row = rows[index];
-                            final tag = row.tag;
-                            return ListTile(
-                              selected: tag.id == _selectedTagId,
-                              leading: Icon(tag.source == TagSource.folder
-                                  ? Icons.folder_outlined
-                                  : Icons.sell_outlined),
-                              title: Text(row.displayLabel,
-                                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                              subtitle:
-                                  Text(row.subtitle(_groupLabel(tag.groupId))),
-                              trailing: tag.isHidden
-                                  ? const Icon(Icons.visibility_off_outlined,
-                                      size: 18)
-                                  : tag.isFavorite
-                                      ? const Icon(Icons.star, size: 18)
-                                      : null,
-                              onTap: () => _selectTag(tag),
-                            );
+                        _TagGroupSummary(
+                          groups: widget.store.tagGroups,
+                          selectedGroupId: _selectedGroupId,
+                          onSelected: (groupId) {
+                            setState(() {
+                              _selectedGroupId = groupId;
+                              // 当前详情可能已不在左侧结果中，清空可避免“筛选 A、编辑 B”的错觉。
+                              if (groupId != null &&
+                                  _selectedTag?.groupId != groupId) {
+                                _selectedTagId = null;
+                              }
+                            });
                           },
                         ),
-                      ),
-                    ],
+                        const Divider(height: 1),
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: rows.length,
+                            itemBuilder: (context, index) {
+                              final row = rows[index];
+                              final tag = row.tag;
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(8, 2, 8, 2),
+                                child: ListTile(
+                                  selected: tag.id == _selectedTagId,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        AppRadius.control),
+                                  ),
+                                  leading: Icon(tag.source == TagSource.folder
+                                      ? Icons.folder_outlined
+                                      : Icons.sell_outlined),
+                                  title: Text(row.displayLabel,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(
+                                      row.subtitle(_groupLabel(tag.groupId))),
+                                  trailing: tag.isHidden
+                                      ? const Icon(
+                                          Icons.visibility_off_outlined,
+                                          size: 18)
+                                      : tag.isFavorite
+                                          ? const Icon(Icons.star_rounded,
+                                              size: 18)
+                                          : null,
+                                  onTap: () => _selectTag(tag),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              Expanded(
-                child: _selectedTag == null
-                    ? const Center(child: Text('选择一个标签查看和维护详情'))
-                    : _TagManagerDetail(
-                        tag: _selectedTag!,
-                        usage: _rowFor(_selectedTag!, usage).usage,
-                        groups: widget.store.tagGroups,
-                        currentResultCount: widget.currentResults.length,
-                        displayNameController: _displayNameController,
-                        aliasesController: _aliasesController,
-                        sortOrderController: _sortOrderController,
-                        groupId: _editingGroupId,
-                        isHidden: _editingHidden,
-                        isFavorite: _editingFavorite,
-                        onGroupChanged: (value) =>
-                            setState(() => _editingGroupId = value),
-                        onHiddenChanged: (value) =>
-                            setState(() => _editingHidden = value),
-                        onFavoriteChanged: (value) =>
-                            setState(() => _editingFavorite = value),
-                        onSave: _saveSelectedTag,
-                        onBatchAdd: () => _batchAdd(_selectedTag!),
-                        onBatchRemove: () => _batchRemove(_selectedTag!),
-                        onDelete: () => _showDeleteBlocked(_selectedTag!),
-                        onMerge: () => _showMergeBlocked(_selectedTag!),
-                      ),
-              ),
-            ],
-          );
-        },
+                SizedBox(width: compact ? 0 : 16, height: compact ? 16 : 0),
+                Expanded(
+                  child: _selectedTag == null
+                      ? const _TagManagerEmptyDetail()
+                      : _TagManagerDetail(
+                          tag: _selectedTag!,
+                          usage: _rowFor(_selectedTag!, usage).usage,
+                          groups: widget.store.tagGroups,
+                          currentResultCount: widget.currentResults.length,
+                          displayNameController: _displayNameController,
+                          aliasesController: _aliasesController,
+                          sortOrderController: _sortOrderController,
+                          groupId: _editingGroupId,
+                          isHidden: _editingHidden,
+                          isFavorite: _editingFavorite,
+                          onGroupChanged: (value) =>
+                              setState(() => _editingGroupId = value),
+                          onHiddenChanged: (value) =>
+                              setState(() => _editingHidden = value),
+                          onFavoriteChanged: (value) =>
+                              setState(() => _editingFavorite = value),
+                          onSave: _saveSelectedTag,
+                          onBatchAdd: () => _batchAdd(_selectedTag!),
+                          onBatchRemove: () => _batchRemove(_selectedTag!),
+                          onDelete: () => _showDeleteBlocked(_selectedTag!),
+                          onMerge: () => _showMergeBlocked(_selectedTag!),
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
+}
+
+/** 标签中心未选择项目时的稳定空详情表面。 */
+class _TagManagerEmptyDetail extends StatelessWidget {
+  const _TagManagerEmptyDetail();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: librarySurface,
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
+        border: Border.fromBorderSide(BorderSide(color: libraryBorder)),
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.sell_outlined, size: 34, color: libraryTextMuted),
+            SizedBox(height: 12),
+            Text(
+              '选择一个标签查看和维护详情',
+              style: TextStyle(color: libraryTextMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 标签中心唯一的稳定搜索输入，键盘输入与 controller 变更共享刷新回调。 */
+class _TagManagerSearchField extends StatelessWidget {
+  const _TagManagerSearchField({
+    required this.controller,
+    required this.onChanged,
+  });
+
+  /** 持有当前搜索关键词的唯一 controller。 */
+  final TextEditingController controller;
+
+  /** 输入或清除后通知页面刷新当前可见标签。 */
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      key: const ValueKey('tagManager.search'),
+      controller: controller,
+      decoration: InputDecoration(
+        hintText: '搜索标签 / 别名',
+        prefixIcon: const Icon(Icons.search_rounded),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: '清除标签搜索',
+                onPressed: () {
+                  controller.clear();
+                  onChanged();
+                },
+                icon: const Icon(Icons.close_rounded),
+              ),
+      ),
+      onChanged: (_) => onChanged(),
+    );
+  }
+}
+
+/** 标签中心搜索链路的 focused widget 测试宿主。 */
+@visibleForTesting
+Widget tagManagerSearchSmokeHarness({
+  required TextEditingController controller,
+  required VoidCallback onChanged,
+}) {
+  return MaterialApp(
+    theme: maintenanceWorkspaceTheme(ThemeData(useMaterial3: true)),
+    home: Scaffold(
+      body: StatefulBuilder(
+        builder: (context, setState) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: _TagManagerSearchField(
+            controller: controller,
+            onChanged: () {
+              onChanged();
+              setState(() {});
+            },
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _TagManagerTagRow {
@@ -668,124 +774,200 @@ class _TagManagerDetail extends StatelessWidget {
         const SizedBox(height: 4),
         Text('ID: ${tag.id}', style: const TextStyle(color: libraryTextMuted)),
         const SizedBox(height: 18),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _UsagePill(label: '总使用', value: usage.total),
-            _UsagePill(label: 'folder', value: usage.folder),
-            _UsagePill(label: 'manual', value: usage.manual),
-            _UsagePill(label: 'rule', value: usage.rule),
-            _UsagePill(label: 'filename', value: usage.filename),
-            _UsagePill(label: 'import', value: usage.imported),
-            _UsagePill(label: 'auto', value: usage.auto),
-          ],
-        ),
-        const SizedBox(height: 18),
-        TextField(
-          controller: displayNameController,
-          decoration: const InputDecoration(labelText: '显示名称'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: aliasesController,
-          minLines: 2,
-          maxLines: 4,
-          decoration:
-              const InputDecoration(labelText: '别名', hintText: '用逗号或换行分隔'),
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          initialValue: groupId,
-          items: groupItems,
-          decoration: const InputDecoration(labelText: '标签组'),
-          onChanged: onGroupChanged,
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: sortOrderController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: '排序值'),
-        ),
-        const SizedBox(height: 12),
-        SwitchListTile(
-          value: isFavorite,
-          onChanged: onFavoriteChanged,
-          title: const Text('收藏标签'),
-          contentPadding: EdgeInsets.zero,
-        ),
-        SwitchListTile(
-          value: isHidden,
-          onChanged: onHiddenChanged,
-          title: const Text('隐藏标签'),
-          contentPadding: EdgeInsets.zero,
-        ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: onSave,
-          icon: const Icon(Icons.save_outlined),
-          label: const Text('保存标签'),
-        ),
-        const SizedBox(height: 24),
-        Text('批量打标签',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        Text('当前筛选结果：$currentResultCount 个视频',
-            style: const TextStyle(color: libraryTextMuted)),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            FilledButton.icon(
-              onPressed:
-                  currentResultCount == 0 || !canBatchEdit ? null : onBatchAdd,
-              icon: const Icon(Icons.playlist_add),
-              label: const Text('批量添加 manual'),
-            ),
-            OutlinedButton.icon(
-              onPressed: currentResultCount == 0 || !canBatchEdit
-                  ? null
-                  : onBatchRemove,
-              icon: const Icon(Icons.playlist_remove),
-              label: const Text('批量移除 manual'),
-            ),
-          ],
-        ),
-        if (!canBatchEdit) ...[
-          const SizedBox(height: 8),
-          const Text(
-            '当前标签不是 manual 来源。批量添加/移除只对 manual 标签开放，folder 标签由路径派生维护。',
-            style: TextStyle(color: libraryTextMuted),
+        _TagManagerSection(
+          title: '使用情况',
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _UsagePill(label: '总使用', value: usage.total),
+              _UsagePill(label: 'folder', value: usage.folder),
+              _UsagePill(label: 'manual', value: usage.manual),
+              _UsagePill(label: 'rule', value: usage.rule),
+              _UsagePill(label: 'filename', value: usage.filename),
+              _UsagePill(label: 'import', value: usage.imported),
+              _UsagePill(label: 'auto', value: usage.auto),
+            ],
           ),
-        ],
-        const SizedBox(height: 24),
-        Text('高风险操作',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            OutlinedButton.icon(
-              onPressed: onMerge,
-              icon: const Icon(Icons.call_merge),
-              label: const Text('合并'),
-            ),
-            OutlinedButton.icon(
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('删除'),
-            ),
-          ],
+        ),
+        const SizedBox(height: 14),
+        _TagManagerSection(
+          title: '标签属性',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: displayNameController,
+                decoration: const InputDecoration(labelText: '显示名称'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: aliasesController,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                    labelText: '别名', hintText: '用逗号或换行分隔'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: groupId,
+                items: groupItems,
+                decoration: const InputDecoration(labelText: '标签组'),
+                onChanged: onGroupChanged,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: sortOrderController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '排序值'),
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                value: isFavorite,
+                onChanged: onFavoriteChanged,
+                title: const Text('收藏标签'),
+                subtitle: const Text('在标签发现入口优先展示'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              SwitchListTile(
+                value: isHidden,
+                onChanged: onHiddenChanged,
+                title: const Text('隐藏标签'),
+                subtitle: const Text('从常规发现列表隐藏，不删除数据'),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: onSave,
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('保存标签'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _TagManagerSection(
+          title: '批量打标签',
+          subtitle: '当前筛选结果：$currentResultCount 个视频',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  FilledButton.icon(
+                    onPressed: currentResultCount == 0 || !canBatchEdit
+                        ? null
+                        : onBatchAdd,
+                    icon: const Icon(Icons.playlist_add),
+                    label: const Text('批量添加 manual'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: currentResultCount == 0 || !canBatchEdit
+                        ? null
+                        : onBatchRemove,
+                    icon: const Icon(Icons.playlist_remove),
+                    label: const Text('批量移除 manual'),
+                  ),
+                ],
+              ),
+              if (!canBatchEdit) ...[
+                const SizedBox(height: 10),
+                const Text(
+                  '当前标签不是 manual 来源。批量添加/移除只对 manual 标签开放，folder 标签由路径派生维护。',
+                  style: TextStyle(color: libraryTextMuted),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _TagManagerSection(
+          title: '高风险操作',
+          subtitle: '合并或删除前会先检查引用关系，不会静默改变 folder 标签。',
+          danger: true,
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              OutlinedButton.icon(
+                onPressed: onMerge,
+                icon: const Icon(Icons.call_merge),
+                label: const Text('合并'),
+              ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                ),
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('删除'),
+              ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+/** 标签详情中的单个维护分组，统一标题、说明与内容表面。 */
+class _TagManagerSection extends StatelessWidget {
+  const _TagManagerSection({
+    required this.title,
+    required this.child,
+    this.subtitle,
+    this.danger = false,
+  });
+
+  /** 分组标题。 */
+  final String title;
+
+  /** 可选的影响范围或当前状态说明。 */
+  final String? subtitle;
+
+  /** 分组的真实输入、状态或动作内容。 */
+  final Widget child;
+
+  /** 是否为需要清晰风险边界的操作分组。 */
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final dangerColor = Theme.of(context).colorScheme.error;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: librarySurface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: danger ? dangerColor.withValues(alpha: 0.55) : libraryBorder,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: danger ? dangerColor : libraryText,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 5),
+              Text(subtitle!, style: const TextStyle(color: libraryTextMuted)),
+            ],
+            const SizedBox(height: 14),
+            child,
+          ],
+        ),
+      ),
     );
   }
 }

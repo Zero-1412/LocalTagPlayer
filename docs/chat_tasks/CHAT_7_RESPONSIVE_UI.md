@@ -1,8 +1,14 @@
 # CHAT_7_RESPONSIVE_UI.md
 
 当前版本：`0.3.0`
-状态：第一阶段验收完成；Apple 式全应用 UI Phase 0 已完成，Phase 1 尚未开始
+状态：第一阶段验收完成；Apple UI Phase 0–2 已完成，Phase 3 标签中心与设置入口已完成代码验证
 负责人：Chat 7 / 响应式 UI + 平台 polish
+
+## 2026-07-18 Apple UI Phase 3 设置入口
+
+- 设置首页继续只负责导航，播放与数据两组改为稳定实色面板；四个入口复用 `AppInteractionSurface` 的 hover/focus/press、reduced motion 与 high contrast 反馈，当前继续观看策略仍直接可见。
+- 设置二级内容卡片收敛为共享 14px 内容圆角，不改变开关、滑杆、下拉确认、快捷键交换、备份、缓存统计或返回语义。
+- focused tests 覆盖四入口可达、共享交互表面和卡片圆角；完整 200 项测试、静态分析和 Windows debug build 通过。真实窗口待用户前台空闲后补验。
 
 ## 2026-07-18 Apple UI Phase 0
 
