@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-18 · Apple UI Phase 2 播放器空间与动效精修
+
+- 顶栏标题改为对称居中布局；底部控制改为左右信息/工具与中央传输三段结构，46px 主播放动作使用短淡入缩放，控制层显示结合淡入与克制短位移。
+- 全屏队列从逐帧压缩视频宽度改为根 Stack 内的固定覆盖层；右侧滑入/淡入期间视频纹理尺寸保持不变，原右缘热区、隐藏计时、队列滚动和功能入口全部保留。
+- 列表/详情增加方向连续过渡并在结束后卸载旧列表；队列左滑按剩余距离 ease-out 吸附且可被下一次拖动中断，不增加整列 stagger 或后台媒体读取。
+- 共享交互表面支持可选无描边 chrome，普通态更克制，键盘焦点与高对比度轮廓不降级；reduced motion 移除位移/缩放并保留短淡入。
+- focused widget 126 项、完整 194 项测试、`flutter analyze` 和 Windows debug build 通过，3 项显式 benchmark 跳过；50,000 条队列搜索约 29ms。
+- 最新 Debug EXE 已启动且唯一定位，但窗口激活时检测到用户正在目标窗口输入，自动 QA 按规则停止，真实点击与截图路径记录在 `CURRENT_TASK.md`。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缩略图/媒体详情队列、稳定身份和用户数据均未改变。
+
 ## 2026-07-18 · Apple UI Phase 2 播放器全布局
 
 - 新增播放器共享深色 token 与 `playerWorkspaceTheme`，统一画布、结构/抬升表面、描边、文字、状态、阴影、弹窗、菜单和输入，删除页面私有主题分支。

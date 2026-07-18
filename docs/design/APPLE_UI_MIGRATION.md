@@ -135,6 +135,16 @@ Phase 2 交付记录（2026-07-18）：
 - Windows 自动化两次无法激活已启动的唯一 Debug 窗口，均返回 `failed to activate captured window`。真实点击、截图、全屏资源状态和 100%/125%/150% 文字缩放仍需按 `CURRENT_TASK.md` 路径补验后，才能把 Phase 2 标记为完整验收。
 - `FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存队列、稳定身份与用户数据未改变。
 
+Phase 2 空间与动效精修（2026-07-18）：
+
+- 顶栏使用对称安全区保持文件名真正居中；底部 chrome 以左侧音量语境、中央传输控制和右侧工具动作建立稳定主次，所有既有入口继续直接可达。
+- 全屏队列改为根 Stack 内固定覆盖层，以短距离右侧滑入和淡入替代视频区域宽度动画，避免播放纹理逐帧重排；没有引入大面积 blur、弹跳或整列 stagger。
+- 列表/详情在 160ms 内完成方向连续切换，旧队列随后卸载；队列左滑保持 1:1 跟手，并按剩余距离 ease-out 吸附，支持快速反向中断。
+- 播放器 chrome 复用无描边交互表面，普通态保持克制，focus/high contrast 强制轮廓；reduced motion 取消位移与缩放，只保留 80ms 淡入。
+- focused widget 126 项、完整 194 项测试、analyze 与 Windows debug build 通过，3 项显式 benchmark 跳过；50,000 条队列搜索约 29ms。
+- 最新 Debug EXE 已启动并唯一定位，但窗口激活时检测到用户输入，自动化已停止抢占；Phase 2 的真实点击、截图和 100%/125%/150% 文字缩放仍待空闲窗口补验。
+- 未修改 `FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存队列、稳定身份或用户数据。
+
 ### Phase 3：标签与数据维护页面
 
 目标：复杂维护任务保持轻、稳、可预期。

@@ -27,6 +27,7 @@ class AppInteractionSurface extends StatefulWidget {
     this.backgroundColor,
     this.material = AppSurfaceMaterial.solid,
     this.autofocus = false,
+    this.showBorder = true,
   });
 
   /** 表面承载的内容。 */
@@ -52,6 +53,9 @@ class AppInteractionSurface extends StatefulWidget {
 
   /** 是否在首次显示时请求键盘焦点。 */
   final bool autofocus;
+
+  /** 是否在普通状态绘制结构描边；焦点与高对比度轮廓不受此开关影响。 */
+  final bool showBorder;
 
   @override
   State<AppInteractionSurface> createState() => _AppInteractionSurfaceState();
@@ -112,10 +116,12 @@ class _AppInteractionSurfaceState extends State<AppInteractionSurface> {
           decoration: BoxDecoration(
             color: _surfaceColor(context, accessibility),
             borderRadius: radius,
-            border: Border.all(
-              color: outline,
-              width: accessibility.highContrast || _focused ? 1.5 : 1,
-            ),
+            border: widget.showBorder || accessibility.highContrast || _focused
+                ? Border.all(
+                    color: outline,
+                    width: accessibility.highContrast || _focused ? 1.5 : 1,
+                  )
+                : null,
           ),
           child: Material(
             color: Colors.transparent,

@@ -123,6 +123,7 @@ void main() {
         child: AppInteractionSurface(
           semanticLabel: '测试动作',
           material: AppSurfaceMaterial.translucent,
+          showBorder: false,
           onTap: () => taps++,
           child: const Text('执行'),
         ),
@@ -142,9 +143,31 @@ void main() {
     expect(scale.scale, 1);
     expect(scale.duration, Duration.zero);
     expect(decoration.color?.a, 1);
+    expect(decoration.border, isNotNull);
 
     await gesture.up();
     await tester.pump();
     expect(taps, 1);
+  });
+
+  testWidgets('borderless interaction surface keeps normal chrome clean',
+      (tester) async {
+    await tester.pumpWidget(
+      _surfaceHarness(
+        mediaQuery: const MediaQueryData(),
+        child: AppInteractionSurface(
+          semanticLabel: '无描边动作',
+          showBorder: false,
+          onTap: () {},
+          child: const Text('无描边'),
+        ),
+      ),
+    );
+
+    final container = tester.widget<AnimatedContainer>(
+      find.byType(AnimatedContainer),
+    );
+    final decoration = container.decoration! as BoxDecoration;
+    expect(decoration.border, isNull);
   });
 }

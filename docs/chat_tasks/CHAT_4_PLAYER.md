@@ -1,3 +1,13 @@
+## 2026-07-18 Apple UI Phase 2 播放器空间与动效精修
+
+- 顶栏使用左右固定动作与真正居中的文件语境；底部 chrome 重排为左侧音量信息、中央传输控制和右侧工具动作，播放/暂停以 46px 主操作和短淡入缩放表达。
+- 全屏队列从主 Row 的宽度动画迁到根 Stack 固定覆盖层，短距离滑入/淡入不再逐帧改变视频纹理尺寸；右缘热区、自动隐藏与独立滚动状态保持。
+- 列表/详情以 160ms 方向过渡建立空间连续性，旧队列过渡完成即卸载；队列左滑按剩余距离吸附且可被新拖动打断，不引入全列表动画或新 I/O。
+- `AppInteractionSurface` 的可选无描边模式用于播放器 chrome，focus/high contrast 仍强制轮廓；reduced motion 取消位移/缩放并保留短淡入。
+- focused widget 126 项、完整 194 项、静态分析和 Windows debug build 通过，3 项显式 benchmark 跳过；50,000 条 filtered queue 搜索约 29ms。
+- 最新 Debug EXE 已启动并唯一定位；检测到目标窗口正在接收用户输入后停止自动控制，真实点击与截图待按 `CURRENT_TASK.md` 路径补验。
+- filtered queue 来源、内容、顺序与当前 index、`PlayerBackend`、SQLite schema、标签语义、缓存队列和用户数据均未改变。
+
 ## 2026-07-18 Apple UI Phase 2 播放器全布局
 
 - 播放器视觉层迁入共享 `playerWorkspaceTheme`：顶栏、视频结构表面、浮动控制、右侧列表/详情、设置浮层、恢复面板和删除确认使用同一组 Apple 式深色 token。

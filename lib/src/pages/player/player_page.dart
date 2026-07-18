@@ -84,11 +84,11 @@ class PlayerRevealFileButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    return PlayerChromeButton(
       key: const ValueKey('player.revealFile'),
       tooltip: '打开文件位置',
       onPressed: onPressed,
-      icon: const Icon(Icons.eject_rounded, size: 20),
+      icon: Icons.eject_rounded,
     );
   }
 }
@@ -110,13 +110,81 @@ class PlayerVolumeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muted = volume <= 0;
-    return IconButton(
+    return PlayerChromeButton(
       key: const ValueKey('player.volume.toggleMute'),
       tooltip: muted ? '恢复音量' : '静音',
       onPressed: onPressed,
-      icon: Icon(
-        muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-        size: 20,
+      icon: muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+    );
+  }
+}
+
+/**
+ * 播放器 chrome 的统一图标动作。
+ *
+ * 普通状态不绘制沉重边框，依靠 hover、press 与 focus 给出直接反馈；主播放动作可
+ * 使用强调色圆形表面。组件只负责视觉与输入，不持有任何播放或队列状态。
+ */
+class PlayerChromeButton extends StatelessWidget {
+  const PlayerChromeButton({
+    super.key,
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.primary = false,
+    this.size = 38,
+    this.iconSize = 20,
+    this.iconChild,
+  });
+
+  /** 鼠标提示与辅助技术动作名称。 */
+  final String tooltip;
+
+  /** 默认静态图标；[iconChild] 非空时只作为语义回退。 */
+  final IconData icon;
+
+  /** 激活动作；为 null 时保留位置并进入禁用状态。 */
+  final VoidCallback? onPressed;
+
+  /** 是否使用强调色圆形主操作表面。 */
+  final bool primary;
+
+  /** 正方形点击区域边长。 */
+  final double size;
+
+  /** 默认图标尺寸。 */
+  final double iconSize;
+
+  /** 需要动效切换时传入的自定义图标内容。 */
+  final Widget? iconChild;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return Tooltip(
+      message: tooltip,
+      child: AppInteractionSurface(
+        onTap: onPressed,
+        semanticLabel: tooltip,
+        padding: EdgeInsets.zero,
+        borderRadius: primary ? AppRadius.capsule : AppRadius.control,
+        backgroundColor: primary ? appAccentViolet : Colors.transparent,
+        material: AppSurfaceMaterial.translucent,
+        showBorder: false,
+        child: SizedBox.square(
+          dimension: size,
+          child: Center(
+            child: IconTheme(
+              data: IconThemeData(
+                color: enabled
+                    ? playerText
+                    : playerTextMuted.withValues(alpha: 0.42),
+                size: iconSize,
+              ),
+              child: iconChild ?? Icon(icon),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1019,6 +1087,10 @@ class PlayerPageState extends State<PlayerPage> {
   Widget _buildVideoControls() {
     final accessibility = AppAccessibilityScope.of(context);
     final fadeDuration = accessibility.fadeDuration(AppMotion.hover);
+    final motionDuration = accessibility.motionDuration(AppMotion.popover);
+    final controlsOffset = accessibility.reduceMotion || _controlsVisible
+        ? Offset.zero
+        : const Offset(0, 0.025);
     return MouseRegion(
       key: _videoControlsRegionKey,
       onEnter: _handleVideoControlsPointer,
@@ -1037,21 +1109,41 @@ class PlayerPageState extends State<PlayerPage> {
               right: 20,
               top: 18,
               child: SafeArea(
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${_index + 1} / ${_queue.length} · $_filterSummary',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          shadows: [Shadow(color: Colors.black, blurRadius: 8)],
+                child: AnimatedOpacity(
+                  duration: fadeDuration,
+                  opacity: _controlsVisible ? 1 : 0,
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: DecoratedBox(
+                      key: const ValueKey('player.fullscreen.context'),
+                      decoration: BoxDecoration(
+                        color: playerSurface.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(AppRadius.capsule),
+                        border: Border.all(color: playerBorder),
+                        boxShadow: playerSoftShadow,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 620),
+                          child: Text(
+                            '${_index + 1} / ${_queue.length} · $_filterSummary',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: playerText,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -1079,221 +1171,213 @@ class PlayerPageState extends State<PlayerPage> {
             left: 0,
             right: 0,
             bottom: 0,
-            child: AnimatedOpacity(
-              key: const ValueKey('player.controls.opacity'),
-              duration: fadeDuration,
-              opacity: _controlsVisible ? 1 : 0,
-              child: IgnorePointer(
-                ignoring: !_controlsVisible,
-                child: StreamBuilder<Duration>(
-                  stream: _playerBackend.positionChanges,
-                  initialData: _playerBackend.state.position,
-                  builder: (context, positionSnapshot) {
-                    final position = positionSnapshot.data ?? Duration.zero;
-                    final duration = _playerBackend.state.duration;
-                    final maxMs =
-                        math.max(1, duration.inMilliseconds).toDouble();
-                    return Container(
-                      padding: EdgeInsets.fromLTRB(
-                        _isWindowFullscreen ? 24 : 14,
-                        32,
-                        _isWindowFullscreen ? 24 : 14,
-                        _isWindowFullscreen ? 18 : 12,
-                      ),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Color(0xb8000000)],
+            child: AnimatedSlide(
+              duration: motionDuration,
+              curve: AppMotion.standardCurve,
+              offset: controlsOffset,
+              child: AnimatedOpacity(
+                key: const ValueKey('player.controls.opacity'),
+                duration: fadeDuration,
+                opacity: _controlsVisible ? 1 : 0,
+                child: IgnorePointer(
+                  ignoring: !_controlsVisible,
+                  child: StreamBuilder<Duration>(
+                    stream: _playerBackend.positionChanges,
+                    initialData: _playerBackend.state.position,
+                    builder: (context, positionSnapshot) {
+                      final position = positionSnapshot.data ?? Duration.zero;
+                      final duration = _playerBackend.state.duration;
+                      final maxMs =
+                          math.max(1, duration.inMilliseconds).toDouble();
+                      return Container(
+                        padding: EdgeInsets.fromLTRB(
+                          _isWindowFullscreen ? 24 : 14,
+                          32,
+                          _isWindowFullscreen ? 24 : 14,
+                          _isWindowFullscreen ? 18 : 12,
                         ),
-                      ),
-                      child: DecoratedBox(
-                        key: const ValueKey('player.controls.chrome'),
-                        decoration: BoxDecoration(
-                          color: playerSurface.withValues(alpha: 0.96),
-                          borderRadius: BorderRadius.circular(AppRadius.card),
-                          border: Border.all(color: playerBorder),
-                          boxShadow: playerSoftShadow,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
-                          child: IconTheme(
-                            data: const IconThemeData(color: playerText),
-                            child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  PlayerProgressSlider(
-                                    sliderKey:
-                                        const ValueKey('player.progress'),
-                                    isFullscreen: _isWindowFullscreen,
-                                    value: position.inMilliseconds
-                                        .clamp(0, maxMs.toInt())
-                                        .toDouble(),
-                                    max: maxMs,
-                                    previewIdentity: _currentItem.path,
-                                    loadPreview: (target) => widget
-                                        .thumbnailService
-                                        .previewFrameFor(_currentItem, target),
-                                    onChanged: (value) => unawaited(
-                                      _seekWithDiagnostics(
-                                        Duration(milliseconds: value.round()),
-                                      ),
-                                    ),
-                                  ),
-                                  Row(children: [
-                                    IconButton(
-                                      tooltip: '上一条',
-                                      color: Colors.white,
-                                      disabledColor: playerTextMuted.withValues(
-                                          alpha: 0.4),
-                                      onPressed: _playback.previousIndex == null
-                                          ? null
-                                          : () => _jumpTo(
-                                                _playback.previousIndex!,
-                                                ignoreFollowUpSelection: true,
-                                              ),
-                                      icon: const Icon(
-                                          Icons.skip_previous_rounded),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    IconButton(
-                                      tooltip: _playerBackend.state.playing
-                                          ? '暂停'
-                                          : '播放',
-                                      color: Colors.white,
-                                      onPressed: () {
-                                        unawaited(_playerBackend.playOrPause());
-                                        _showVideoControls();
-                                      },
-                                      icon: Icon(
-                                        _playerBackend.state.playing
-                                            ? Icons.pause_rounded
-                                            : Icons.play_arrow_rounded,
-                                        size: 30,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    IconButton(
-                                      tooltip: '下一条',
-                                      color: Colors.white,
-                                      disabledColor: playerTextMuted.withValues(
-                                          alpha: 0.4),
-                                      onPressed: _playback.nextIndex == null
-                                          ? null
-                                          : () => _jumpTo(
-                                                _playback.nextIndex!,
-                                                ignoreFollowUpSelection: true,
-                                              ),
-                                      icon: const Icon(Icons.skip_next_rounded),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    PlayerRevealFileButton(
-                                      onPressed: () =>
-                                          unawaited(_revealCurrentFile()),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        PlayerVolumeButton(
-                                          volume: _volume,
-                                          onPressed: _togglePlayerMute,
-                                        ),
-                                        SizedBox(
-                                          width: 130,
-                                          child: PlayerControlSlider(
-                                            sliderKey:
-                                                const ValueKey('player.volume'),
-                                            value: _volume,
-                                            max: 100,
-                                            trackHeight: 3,
-                                            thumbRadius: 4.5,
-                                            overlayRadius: 11,
-                                            onChanged: _setPlayerVolume,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(width: 24),
-                                    Text(
-                                      '${_formatControlDuration(position)} / '
-                                      '${_formatControlDuration(duration)}',
-                                      style: const TextStyle(
-                                        color: playerText,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    IconButton(
-                                      key: const ValueKey('player.screenshot'),
-                                      tooltip: '当前帧截图',
-                                      onPressed: () => unawaited(
-                                          _saveCurrentFrameScreenshot()),
-                                      icon: const Icon(
-                                          Icons.photo_camera_outlined,
-                                          size: 21),
-                                    ),
-                                    KeyedSubtree(
-                                      key: _settingsButtonAnchorKey,
-                                      child: IconButton(
-                                        key: const ValueKey('player.settings'),
-                                        tooltip: '播放设置',
-                                        onPressed: () => unawaited(
-                                            _showControlSettingsDialog()),
-                                        icon: const Icon(
-                                          Icons.settings_outlined,
-                                          size: 21,
-                                        ),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      key: const ValueKey(
-                                          'player.fullscreen.toggle'),
-                                      tooltip:
-                                          _isWindowFullscreen ? '退出全屏' : '全屏',
-                                      onPressed: () =>
-                                          unawaited(_toggleWindowFullscreen()),
-                                      icon: Icon(_isWindowFullscreen
-                                          ? Icons.fullscreen_exit_rounded
-                                          : Icons.fullscreen_rounded),
-                                    ),
-                                    IconButton(
-                                      key:
-                                          const ValueKey('player.queue.toggle'),
-                                      tooltip: _isWindowFullscreen
-                                          ? '播放列表'
-                                          : _queueSidebarCollapsed
-                                              ? '展开筛选结果队列'
-                                              : '折叠筛选结果队列',
-                                      onPressed: () {
-                                        if (_isWindowFullscreen) {
-                                          if (_fullscreenQueueVisible) {
-                                            _fullscreenQueueHideTimer?.cancel();
-                                            _fullscreenQueueHideTimer = null;
-                                            setState(() =>
-                                                _fullscreenQueueVisible =
-                                                    false);
-                                          } else {
-                                            _showFullscreenQueueSidebar();
-                                          }
-                                        } else {
-                                          setState(() {
-                                            _queueSidebarCollapsed =
-                                                !_queueSidebarCollapsed;
-                                          });
-                                        }
-                                      },
-                                      icon: const Icon(
-                                          Icons.playlist_play_rounded),
-                                    ),
-                                  ]),
-                                ]),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.transparent, Color(0xb8000000)],
                           ),
                         ),
-                      ),
-                    );
-                  },
+                        child: DecoratedBox(
+                          key: const ValueKey('player.controls.chrome'),
+                          decoration: BoxDecoration(
+                            color: playerSurface.withValues(alpha: 0.96),
+                            borderRadius: BorderRadius.circular(AppRadius.card),
+                            border: Border.all(color: playerBorder),
+                            boxShadow: playerSoftShadow,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+                            child: IconTheme(
+                              data: const IconThemeData(color: playerText),
+                              child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    PlayerProgressSlider(
+                                      sliderKey:
+                                          const ValueKey('player.progress'),
+                                      isFullscreen: _isWindowFullscreen,
+                                      value: position.inMilliseconds
+                                          .clamp(0, maxMs.toInt())
+                                          .toDouble(),
+                                      max: maxMs,
+                                      previewIdentity: _currentItem.path,
+                                      loadPreview: (target) => widget
+                                          .thumbnailService
+                                          .previewFrameFor(
+                                              _currentItem, target),
+                                      onChanged: (value) => unawaited(
+                                        _seekWithDiagnostics(
+                                          Duration(milliseconds: value.round()),
+                                        ),
+                                      ),
+                                    ),
+                                    LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final showTime =
+                                            constraints.maxWidth >= 780;
+                                        final volumeWidth =
+                                            constraints.maxWidth >= 780
+                                                ? 112.0
+                                                : 76.0;
+                                        return Row(
+                                          children: [
+                                            Expanded(
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    PlayerRevealFileButton(
+                                                      onPressed: () => unawaited(
+                                                          _revealCurrentFile()),
+                                                    ),
+                                                    const SizedBox(width: 2),
+                                                    PlayerVolumeButton(
+                                                      volume: _volume,
+                                                      onPressed:
+                                                          _togglePlayerMute,
+                                                    ),
+                                                    SizedBox(
+                                                      width: volumeWidth,
+                                                      child:
+                                                          PlayerControlSlider(
+                                                        sliderKey:
+                                                            const ValueKey(
+                                                                'player.volume'),
+                                                        value: _volume,
+                                                        max: 100,
+                                                        trackHeight: 3,
+                                                        thumbRadius: 4.5,
+                                                        overlayRadius: 11,
+                                                        onChanged:
+                                                            _setPlayerVolume,
+                                                      ),
+                                                    ),
+                                                    if (showTime) ...[
+                                                      const SizedBox(width: 14),
+                                                      Text(
+                                                        '${_formatControlDuration(position)} / '
+                                                        '${_formatControlDuration(duration)}',
+                                                        style: const TextStyle(
+                                                          color:
+                                                              playerTextMuted,
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          fontFeatures: [
+                                                            FontFeature
+                                                                .tabularFigures(),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            _buildTransportControls(
+                                              accessibility,
+                                            ),
+                                            Expanded(
+                                              child: Align(
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    PlayerChromeButton(
+                                                      key: const ValueKey(
+                                                          'player.screenshot'),
+                                                      tooltip: '当前帧截图',
+                                                      icon: Icons
+                                                          .photo_camera_outlined,
+                                                      onPressed: () => unawaited(
+                                                          _saveCurrentFrameScreenshot()),
+                                                    ),
+                                                    KeyedSubtree(
+                                                      key:
+                                                          _settingsButtonAnchorKey,
+                                                      child: PlayerChromeButton(
+                                                        key: const ValueKey(
+                                                            'player.settings'),
+                                                        tooltip: '播放设置',
+                                                        icon: Icons
+                                                            .settings_outlined,
+                                                        onPressed: () => unawaited(
+                                                            _showControlSettingsDialog()),
+                                                      ),
+                                                    ),
+                                                    PlayerChromeButton(
+                                                      key: const ValueKey(
+                                                          'player.fullscreen.toggle'),
+                                                      tooltip:
+                                                          _isWindowFullscreen
+                                                              ? '退出全屏'
+                                                              : '全屏',
+                                                      icon: _isWindowFullscreen
+                                                          ? Icons
+                                                              .fullscreen_exit_rounded
+                                                          : Icons
+                                                              .fullscreen_rounded,
+                                                      onPressed: () => unawaited(
+                                                          _toggleWindowFullscreen()),
+                                                    ),
+                                                    PlayerChromeButton(
+                                                      key: const ValueKey(
+                                                          'player.queue.toggle'),
+                                                      tooltip: _isWindowFullscreen
+                                                          ? '播放列表'
+                                                          : _queueSidebarCollapsed
+                                                              ? '展开筛选结果队列'
+                                                              : '折叠筛选结果队列',
+                                                      icon: Icons
+                                                          .playlist_play_rounded,
+                                                      onPressed:
+                                                          _toggleQueueVisibility,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ]),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
@@ -1301,6 +1385,80 @@ class PlayerPageState extends State<PlayerPage> {
         ]),
       ),
     );
+  }
+
+  /** 构建视觉上始终居中的上一条、播放/暂停与下一条传输控制。 */
+  Widget _buildTransportControls(AppAccessibilityData accessibility) {
+    final playing = _playerBackend.state.playing;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PlayerChromeButton(
+          tooltip: '上一条',
+          icon: Icons.skip_previous_rounded,
+          onPressed: _playback.previousIndex == null
+              ? null
+              : () => _jumpTo(
+                    _playback.previousIndex!,
+                    ignoreFollowUpSelection: true,
+                  ),
+        ),
+        const SizedBox(width: 6),
+        PlayerChromeButton(
+          tooltip: playing ? '暂停' : '播放',
+          icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          primary: true,
+          size: 46,
+          iconSize: 27,
+          onPressed: () {
+            unawaited(_playerBackend.playOrPause());
+            _showVideoControls();
+          },
+          iconChild: AnimatedSwitcher(
+            duration: accessibility.fadeDuration(AppMotion.press),
+            transitionBuilder: (child, animation) {
+              final scale = accessibility.reduceMotion
+                  ? animation
+                  : Tween<double>(begin: 0.92, end: 1).animate(animation);
+              return FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(scale: scale, child: child),
+              );
+            },
+            child: Icon(
+              playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              key: ValueKey(playing),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        PlayerChromeButton(
+          tooltip: '下一条',
+          icon: Icons.skip_next_rounded,
+          onPressed: _playback.nextIndex == null
+              ? null
+              : () => _jumpTo(
+                    _playback.nextIndex!,
+                    ignoreFollowUpSelection: true,
+                  ),
+        ),
+      ],
+    );
+  }
+
+  /** 切换常规侧栏或全屏覆盖队列，不改变 filtered queue 与当前播放索引。 */
+  void _toggleQueueVisibility() {
+    if (_isWindowFullscreen) {
+      if (_fullscreenQueueVisible) {
+        _fullscreenQueueHideTimer?.cancel();
+        _fullscreenQueueHideTimer = null;
+        setState(() => _fullscreenQueueVisible = false);
+      } else {
+        _showFullscreenQueueSidebar();
+      }
+      return;
+    }
+    setState(() => _queueSidebarCollapsed = !_queueSidebarCollapsed);
   }
 
   /** 切换桌面窗口全屏，并让页面布局与窗口状态同步更新。 */
@@ -2767,43 +2925,6 @@ class PlayerPageState extends State<PlayerPage> {
                                   ],
                                 ),
                               ),
-                              if (_isWindowFullscreen &&
-                                  _fullscreenQueueVisible)
-                                TweenAnimationBuilder<double>(
-                                  key: const ValueKey('player.fullscreenQueue'),
-                                  tween: Tween<double>(begin: 0, end: 440),
-                                  duration: accessibility.motionDuration(
-                                    AppMotion.panel,
-                                  ),
-                                  curve: appMotionCurve,
-                                  builder: (context, width, child) {
-                                    return SizedBox(
-                                      width: width,
-                                      child: ClipRect(
-                                        child: OverflowBox(
-                                          alignment: Alignment.centerRight,
-                                          minWidth: 440,
-                                          maxWidth: 440,
-                                          child: child,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: MouseRegion(
-                                    onEnter: (_) =>
-                                        _showFullscreenQueueSidebar(),
-                                    onExit: (_) =>
-                                        _scheduleFullscreenQueueHide(),
-                                    child: SafeArea(
-                                      child: _buildQueueSidebar(
-                                        key: const ValueKey(
-                                            'player.fullscreenQueue.sidebar'),
-                                        scrollController:
-                                            _fullscreenQueueScrollController,
-                                      ),
-                                    ),
-                                  ),
-                                ),
                               if (hasWideQueueSidebar && !_isWindowFullscreen)
                                 AnimatedSize(
                                   duration: accessibility.motionDuration(
@@ -2828,6 +2949,72 @@ class PlayerPageState extends State<PlayerPage> {
                       ],
                     ),
                   ),
+                  if (_isWindowFullscreen)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        ignoring: !_fullscreenQueueVisible,
+                        child: AnimatedSwitcher(
+                          duration: accessibility.fadeDuration(
+                            AppMotion.popover,
+                          ),
+                          reverseDuration: accessibility.fadeDuration(
+                            AppMotion.hover,
+                          ),
+                          switchInCurve: AppMotion.standardCurve,
+                          switchOutCurve: AppMotion.standardCurve,
+                          layoutBuilder: (currentChild, previousChildren) {
+                            return Stack(
+                              alignment: Alignment.centerRight,
+                              children: [
+                                ...previousChildren,
+                                if (currentChild != null) currentChild,
+                              ],
+                            );
+                          },
+                          transitionBuilder: (child, animation) {
+                            final begin = accessibility.reduceMotion
+                                ? Offset.zero
+                                : const Offset(0.045, 0);
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: begin,
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: _fullscreenQueueVisible
+                              ? Align(
+                                  key: const ValueKey('player.fullscreenQueue'),
+                                  alignment: Alignment.centerRight,
+                                  child: SizedBox(
+                                    width: 476,
+                                    child: MouseRegion(
+                                      onEnter: (_) =>
+                                          _showFullscreenQueueSidebar(),
+                                      onExit: (_) =>
+                                          _scheduleFullscreenQueueHide(),
+                                      child: SafeArea(
+                                        child: _buildQueueSidebar(
+                                          key: const ValueKey(
+                                              'player.fullscreenQueue.sidebar'),
+                                          scrollController:
+                                              _fullscreenQueueScrollController,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : const SizedBox.shrink(
+                                  key:
+                                      ValueKey('player.fullscreenQueue.hidden'),
+                                ),
+                        ),
+                      ),
+                    ),
                   if (_isWindowFullscreen)
                     Positioned(
                       key: const ValueKey('player.fullscreenQueue.edge'),
@@ -2905,63 +3092,75 @@ class PlayerTopBar extends StatelessWidget {
         color: playerSurface,
         border: Border(bottom: BorderSide(color: playerBorder)),
       ),
-      child: Row(children: [
-        _PlayerTopBarAction(
-          key: const ValueKey('player.back'),
-          tooltip: '返回媒体库',
-          semanticLabel: '返回媒体库',
-          onPressed: onBack,
-          icon: Icons.arrow_back_ios_new_rounded,
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Tooltip(
-            message: currentFileName,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  currentFileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: playerText,
-                    fontSize: AppTypography.bodyLarge,
-                    fontWeight: AppTypography.strong,
-                    height: 1.15,
-                  ),
-                ),
-                if (contextLabel != null) ...[
-                  const SizedBox(height: AppSpacing.xxs),
-                  Text(
-                    contextLabel!,
-                    key: const ValueKey('player.topbar.context'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: playerTextMuted,
-                      fontSize: AppTypography.caption,
-                      fontWeight: AppTypography.medium,
-                      height: 1,
-                    ),
-                  ),
-                ],
-              ],
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _PlayerTopBarAction(
+              key: const ValueKey('player.back'),
+              tooltip: '返回媒体库',
+              semanticLabel: '返回媒体库',
+              onPressed: onBack,
+              icon: Icons.arrow_back_ios_new_rounded,
             ),
           ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        if (onOpenQueue != null)
-          _PlayerTopBarAction(
-            tooltip: '播放队列',
-            semanticLabel: '打开播放队列',
-            onPressed: onOpenQueue!,
-            icon: Icons.playlist_play_rounded,
-          )
-        else
-          const SizedBox(width: 40),
-      ]),
+          Padding(
+            // 两侧保留对称安全区，使标题不受队列按钮显隐影响而偏移。
+            padding: const EdgeInsets.symmetric(horizontal: 64),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: Tooltip(
+                message: currentFileName,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      currentFileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: playerText,
+                        fontSize: AppTypography.bodyLarge,
+                        fontWeight: AppTypography.strong,
+                        height: 1.15,
+                      ),
+                    ),
+                    if (contextLabel != null) ...[
+                      const SizedBox(height: AppSpacing.xxs),
+                      Text(
+                        contextLabel!,
+                        key: const ValueKey('player.topbar.context'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: playerTextMuted,
+                          fontSize: AppTypography.caption,
+                          fontWeight: AppTypography.medium,
+                          height: 1,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (onOpenQueue != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: _PlayerTopBarAction(
+                tooltip: '播放队列',
+                semanticLabel: '打开播放队列',
+                onPressed: onOpenQueue!,
+                icon: Icons.playlist_play_rounded,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -1667,7 +1667,12 @@ void main() {
     expect(initialDetailsDecoration.color, Colors.transparent);
 
     await tester.tap(find.byKey(const ValueKey('player.sidebar.tab.details')));
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 60));
+
+    // 切换期间短暂保留两侧内容建立空间连续性，完成后旧队列必须卸载。
+    expect(find.text('筛选结果列表测试'), findsOneWidget);
+    expect(find.text('当前视频详情'), findsOneWidget);
+    await tester.pumpAndSettle();
 
     expect(find.text('筛选结果列表测试'), findsNothing);
     expect(find.text('当前视频详情'), findsOneWidget);
@@ -1696,7 +1701,7 @@ void main() {
     expect(editCount, 1);
 
     await tester.tap(find.byKey(const ValueKey('player.sidebar.tab.queue')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('筛选结果列表测试'), findsOneWidget);
     expect(find.text('当前视频详情'), findsNothing);
   });
@@ -2917,6 +2922,11 @@ void main() {
     expect(find.text('local_tag_player'), findsNothing);
     expect(find.byType(TextField), findsNothing);
     expect(find.textContaining('搜索当前队列'), findsNothing);
+    expect(
+      tester.getCenter(find.text('当前播放.mp4')).dx,
+      closeTo(tester.view.physicalSize.width / tester.view.devicePixelRatio / 2,
+          0.5),
+    );
 
     await tester.tap(find.byKey(const ValueKey('player.back')));
     await tester.tap(find.byTooltip('播放队列'));

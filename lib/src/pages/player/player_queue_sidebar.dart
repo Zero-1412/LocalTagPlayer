@@ -1134,19 +1134,33 @@ class _QueueListItemState extends State<_QueueListItem>
   /** 根据拖动速度和过半阈值平滑吸附到展开或折叠状态。 */
   void _handleHorizontalDragEnd(DragEndDetails details) {
     final velocity = details.velocity.pixelsPerSecond.dx;
-    if (playerQueueActionShouldOpen(
+    final shouldOpen = playerQueueActionShouldOpen(
       progress: _actionController.value,
       horizontalVelocity: velocity,
-    )) {
-      _actionController.forward();
-    } else {
-      _actionController.reverse();
+    );
+    _settleActionPanel(shouldOpen);
+  }
+
+  /** 按剩余距离计算吸附时长；下一次拖动可直接改写 controller 进度。 */
+  void _settleActionPanel(bool open) {
+    final accessibility = AppAccessibilityScope.of(context);
+    final target = open ? 1.0 : 0.0;
+    final remaining = (target - _actionController.value).abs();
+    if (accessibility.reduceMotion) {
+      _actionController.value = target;
+      return;
     }
+    final milliseconds = (60 + 160 * remaining).round();
+    _actionController.animateTo(
+      target,
+      duration: Duration(milliseconds: milliseconds),
+      curve: AppMotion.standardCurve,
+    );
   }
 
   /** 执行动作前先收回操作区，避免弹窗返回后队列项仍停在半展开状态。 */
   void _runAction(VoidCallback action) {
-    _actionController.reverse();
+    _settleActionPanel(false);
     action();
   }
 
@@ -1462,7 +1476,7 @@ class _QueueListItemState extends State<_QueueListItem>
                     onHorizontalDragStart: (_) => widget.onTap(),
                     onHorizontalDragUpdate: _handleHorizontalDragUpdate,
                     onHorizontalDragEnd: _handleHorizontalDragEnd,
-                    onHorizontalDragCancel: _actionController.reverse,
+                    onHorizontalDragCancel: () => _settleActionPanel(false),
                     child: front,
                   ),
                 ),

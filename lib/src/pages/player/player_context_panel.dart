@@ -51,16 +51,23 @@ class PlayerSidePanel extends StatefulWidget {
 class _PlayerSidePanelState extends State<PlayerSidePanel> {
   PlayerSidePanelView _view = PlayerSidePanelView.queue;
 
+  /** 最近一次切换方向；正值向详情推进，负值返回队列。 */
+  var _transitionDirection = 1;
+
   /** 切换一级侧栏视图，不触发媒体读取或队列重算。 */
   void _selectView(PlayerSidePanelView view) {
     if (_view == view) {
       return;
     }
-    setState(() => _view = view);
+    setState(() {
+      _transitionDirection = view == PlayerSidePanelView.details ? 1 : -1;
+      _view = view;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final accessibility = AppAccessibilityScope.of(context);
     final sidebarWidth = playerQueueSidebarWidthForWindow(
       MediaQuery.sizeOf(context).width,
     );
@@ -81,17 +88,44 @@ class _PlayerSidePanelState extends State<PlayerSidePanel> {
             onSelected: _selectView,
           ),
           Expanded(
-            child: _view == PlayerSidePanelView.queue
-                ? KeyedSubtree(
-                    key: const ValueKey('player.sidebar.queue'),
-                    child: widget.queuePanel,
-                  )
-                : PlayerVideoDetailsPanel(
-                    key: const ValueKey('player.sidebar.details'),
-                    item: widget.item,
-                    queueEndReached: widget.queueEndReached,
-                    onEditManualTags: widget.onEditManualTags,
+            child: AnimatedSwitcher(
+              duration: accessibility.fadeDuration(AppMotion.hover),
+              switchInCurve: AppMotion.standardCurve,
+              switchOutCurve: AppMotion.standardCurve,
+              layoutBuilder: (currentChild, previousChildren) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  ...previousChildren,
+                  if (currentChild != null) currentChild,
+                ],
+              ),
+              transitionBuilder: (child, animation) {
+                final begin = accessibility.reduceMotion
+                    ? Offset.zero
+                    : Offset(0.025 * _transitionDirection, 0);
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: begin,
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
                   ),
+                );
+              },
+              child: _view == PlayerSidePanelView.queue
+                  ? KeyedSubtree(
+                      key: const ValueKey('player.sidebar.queue'),
+                      child: widget.queuePanel,
+                    )
+                  : PlayerVideoDetailsPanel(
+                      key: const ValueKey('player.sidebar.details'),
+                      item: widget.item,
+                      queueEndReached: widget.queueEndReached,
+                      onEditManualTags: widget.onEditManualTags,
+                    ),
+            ),
           ),
         ],
       ),
