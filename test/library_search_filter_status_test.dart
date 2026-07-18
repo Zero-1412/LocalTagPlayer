@@ -147,4 +147,36 @@ void main() {
     expect(find.byTooltip('清空全部筛选'), findsOneWidget);
     expect(find.text('171 个视频'), findsOneWidget);
   });
+
+  testWidgets('150% desktop keeps the complete five-digit result count',
+      (tester) async {
+    tester.view.physicalSize = const Size(980, 240);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    const accessibility = AppAccessibilityData(
+      disableAnimations: false,
+      accessibleNavigation: false,
+      highContrast: false,
+      textScaler: TextScaler.linear(1.5),
+    );
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        videoCount: 11163,
+        accessibility: accessibility,
+        onSearchChanged: (_) {},
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('11163 个视频'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.filterStatusArea)).width,
+      198,
+    );
+  });
 }

@@ -1684,6 +1684,11 @@ class _LibraryFilterStatusArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accessibility = AppAccessibilityScope.of(context);
+    // 结果数量是高频导航反馈。桌面文字放大时预留最多 80px，避免五位数媒体库数量
+    // 在仍有充足搜索空间的窗口里被省略；紧凑布局继续优先保护搜索与清除操作。
+    final resultTextScaleAllowance = compact
+        ? 0.0
+        : (accessibility.textScaler.scale(1).clamp(1.0, 1.5) - 1) * 160;
     final resultLabel =
         progressLabel ?? resultCountLabel ?? '$resultCount \u4e2a\u89c6\u9891';
     return Semantics(
@@ -1718,8 +1723,8 @@ class _LibraryFilterStatusArea extends StatelessWidget {
                 ? 0.0
                 : progressLabel == null
                     ? resultCountLabel != null
-                        ? 200.0
-                        : (compact ? 74.0 : 92.0)
+                        ? 200.0 + resultTextScaleAllowance
+                        : (compact ? 74.0 : 92.0 + resultTextScaleAllowance)
                     : 224.0;
             final showClearAll = onClearAll != null && hasFilters;
             final clearWidth = showClearAll ? 40.0 : 0.0;
@@ -2512,6 +2517,12 @@ class ReferenceTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final compact = layoutSize == LayoutSize.compact;
+    final accessibility = AppAccessibilityScope.of(context);
+    // 只在非紧凑桌面工具栏扩展结果状态宽度；125%/150% 下完整保留
+    // “11163 个视频”这类关键反馈，同时不改变筛选、排序或搜索语义。
+    final resultTextScaleAllowance = compact
+        ? 0.0
+        : (accessibility.textScaler.scale(1).clamp(1.0, 1.5) - 1) * 160;
     final keywordActive = keyword.trim().isNotEmpty;
     final activeFilters = <_FilterToolbarEntry>[
       if (showFavoritesOnly)
@@ -2623,7 +2634,8 @@ class ReferenceTopBar extends StatelessWidget {
                       final resultStatus = SizedBox(
                         key: LibrarySmokeKeys.toolbarResultStatus,
                         width: progressLabel == null
-                            ? (resultCountLabel == null ? 92 : 200)
+                            ? (resultCountLabel == null ? 92 : 200) +
+                                resultTextScaleAllowance
                             : 224,
                         child: _FilterResultLine(
                           resultCount: videoCount,
@@ -2682,9 +2694,9 @@ class ReferenceTopBar extends StatelessWidget {
                           ],
                         ),
                       );
-                  if (proportionalDesktop) {
-                    return SizedBox(
-                      height: 50,
+                      if (proportionalDesktop) {
+                        return SizedBox(
+                          height: 50,
                           child: Row(
                             children: [
                               // 搜索从 60% 收敛到 50%，把标签浏览和媒体库状态提升为同级主场景。
@@ -2716,9 +2728,9 @@ class ReferenceTopBar extends StatelessWidget {
                             ],
                           ),
                         );
-                  }
-                  return Row(
-                    children: [
+                      }
+                      return Row(
+                        children: [
                           if (layoutSize != LayoutSize.expanded) ...[
                             _ReferenceIconButton(
                               tooltip: '\u6253\u5f00\u667a\u80fd\u7b5b\u9009',
@@ -2755,8 +2767,8 @@ class ReferenceTopBar extends StatelessWidget {
                                       : narrowMedium
                                           ? 82
                                           : resultCountLabel != null
-                                              ? 200
-                                              : 118,
+                                              ? 200 + resultTextScaleAllowance
+                                              : 118 + resultTextScaleAllowance,
                               child: filterStatus,
                             ),
                             if (!compact &&
