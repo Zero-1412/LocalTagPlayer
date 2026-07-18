@@ -23,8 +23,7 @@
     },
     "selected_skills": {
       "type": "array",
-      "items": { "type": "string" },
-      "uniqueItems": true
+      "items": { "type": "string" }
     },
     "summary": {
       "type": "string",
@@ -32,8 +31,7 @@
     },
     "changed_files": {
       "type": "array",
-      "items": { "type": "string" },
-      "uniqueItems": true
+      "items": { "type": "string" }
     },
     "validation": {
       "type": "array",

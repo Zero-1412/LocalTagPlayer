@@ -480,11 +480,12 @@ def _run_codex(
     ]
     if model:
         command.extend(["--model", model])
-    command.append(prompt)
+    command.append("-")
     started = time.monotonic()
     completed = subprocess.run(
         command,
         cwd=repo,
+        input=prompt,
         capture_output=True,
         text=True,
         encoding="utf-8",

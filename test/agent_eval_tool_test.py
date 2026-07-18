@@ -31,6 +31,13 @@ class AgentEvalToolTest(unittest.TestCase):
             self.assertGreaterEqual(coverage["positive"], 2)
             self.assertGreaterEqual(coverage["negative"], 2)
 
+    def test_agent_result_schema_uses_supported_subset(self) -> None:
+        """Codex Structured Outputs Schema 不得包含服务端拒绝的 uniqueItems。"""
+
+        schema_path = agent_eval.EVAL_ROOT / "schemas" / "agent_result.schema.json"
+        schema_text = schema_path.read_text(encoding="utf-8")
+        self.assertNotIn('"uniqueItems"', schema_text)
+
     def test_missing_required_skill_fails(self) -> None:
         """没有触发必需 Skill 时必须低于 80 分通过线。"""
 

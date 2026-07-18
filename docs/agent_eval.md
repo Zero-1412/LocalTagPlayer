@@ -89,6 +89,16 @@ summary.json           N 次稳定性和 suite 汇总
 
 如果所有 trial 都失败，先检查用例、baseline、Schema 和 scorer，不要立即扩大 Agent prompt 或业务改动。
 
+## 2026-07-18 运行时基线
+
+- Codex CLI：`0.144.5`；模型：`gpt-5.6-sol`；workspace snapshot：启用。
+- `router-pos-1`：1/1，100 分，0 文件改动。
+- `reg-filter-semantics`：5/5，平均 100 分，`stable=true`。
+- `reg-player-source-queue`：5/5，平均 80 分，`stable=true`；五轮都因期望 Level 3、实际 Level 2 扣 20 分，总输入约 695 万 token。该结果按当前 80 分阈值通过，但保留为 router 分级与读取预算缺陷。
+- `reg-cache-zero-byte`：5/5，平均 100 分，`stable=true`。
+- `reg-identity-preserve-data`：5/5，平均 100 分，`stable=true`。
+- 四组关键回归均无基础设施错误和文件改动；产物位于被 Git 忽略的 `artifacts/agent_eval/20260718-*`，不提交包含真实本地 Trace 的运行目录。
+
 ## 命令
 
 先执行零模型成本的目录与评分器验证：

@@ -97,6 +97,7 @@ export 'pages/library/library_page_helpers.dart';
 export 'pages/library/missing_relink_page.dart';
 export 'pages/tags/tag_manager_page.dart';
 export 'widgets/app_theme_tokens.dart';
+export 'widgets/design_system/app_interaction_surface.dart';
 export 'widgets/library/library_smoke_keys.dart';
 export 'widgets/library/library_sort_control.dart';
 export 'widgets/library/library_local_view.dart';
@@ -221,165 +222,24 @@ class LocalTagPlayerApp extends StatelessWidget {
   final LocalTagPlayerDependencies dependencies;
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xff2f6f73),
-      brightness: Brightness.light,
-    );
-
     return MaterialApp(
       title: '\u672c\u5730\u6807\u7b7e\u64ad\u653e\u5668',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: colorScheme,
-        fontFamilyFallback: const [
-          'Microsoft YaHei',
-          'Microsoft YaHei UI',
-          'SimHei',
-          'Segoe UI',
-        ],
-        useMaterial3: true,
-        scaffoldBackgroundColor: appBackground,
-        cardTheme: const CardThemeData(
-          elevation: 0,
-          color: appSurface,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(8)),
-            side: BorderSide(color: appBorder),
-          ),
-        ),
-        appBarTheme: const AppBarTheme(
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          backgroundColor: appSurface,
-          foregroundColor: Color(0xff1d2725),
-          centerTitle: false,
-        ),
-        dialogTheme: DialogThemeData(
-          backgroundColor: appSurface,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: appBorder),
-          ),
-          titleTextStyle: const TextStyle(
-            color: Color(0xff1d2725),
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-        ),
-        popupMenuTheme: PopupMenuThemeData(
-          color: appSurface,
-          surfaceTintColor: Colors.transparent,
-          textStyle: const TextStyle(color: appText, fontSize: 13),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: appBorder),
-          ),
-        ),
-        menuTheme: MenuThemeData(
-          style: MenuStyle(
-            backgroundColor: const WidgetStatePropertyAll(appSurface),
-            surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-            shape: WidgetStatePropertyAll(
-              RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: appBorder),
-              ),
+      theme: buildLocalTagPlayerTheme(),
+      builder: (context, child) {
+        final accessibility = AppAccessibilityData.fromMediaQuery(
+          MediaQuery.of(context),
+        );
+        return AppAccessibilityScope(
+          data: accessibility,
+          child: Theme(
+            data: buildLocalTagPlayerTheme(
+              highContrast: accessibility.highContrast,
             ),
+            child: child ?? const SizedBox.shrink(),
           ),
-        ),
-        bottomSheetTheme: const BottomSheetThemeData(
-          backgroundColor: appSurface,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-          ),
-        ),
-        snackBarTheme: SnackBarThemeData(
-          backgroundColor: appShell,
-          contentTextStyle: const TextStyle(color: Colors.white),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          behavior: SnackBarBehavior.floating,
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            backgroundColor: appAccent,
-            foregroundColor: Colors.white,
-            textStyle: const TextStyle(fontWeight: FontWeight.w700),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            minimumSize: const Size(0, 40),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: appAccentStrong,
-            side: const BorderSide(color: appBorder),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            minimumSize: const Size(0, 40),
-          ),
-        ),
-        iconButtonTheme: IconButtonThemeData(
-          style: IconButton.styleFrom(
-            foregroundColor: appAccentStrong,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
-        chipTheme: ChipThemeData(
-          backgroundColor: appSurfaceAlt,
-          selectedColor: const Color(0xffd7eeea),
-          disabledColor: const Color(0xffe7ecea),
-          side: const BorderSide(color: appBorder),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          labelStyle: const TextStyle(
-              color: Color(0xff20302d), fontWeight: FontWeight.w600),
-          secondaryLabelStyle: const TextStyle(
-              color: appAccentStrong, fontWeight: FontWeight.w700),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          showCheckmark: false,
-        ),
-        inputDecorationTheme: const InputDecorationTheme(
-          filled: true,
-          fillColor: appSurface,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(8)),
-            borderSide: BorderSide(color: appBorder),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(8)),
-            borderSide: BorderSide(color: appBorder),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(8)),
-            borderSide: BorderSide(color: appAccent, width: 1.4),
-          ),
-        ),
-        segmentedButtonTheme: SegmentedButtonThemeData(
-          style: ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            side: const WidgetStatePropertyAll(BorderSide(color: appBorder)),
-            shape: WidgetStatePropertyAll(
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            backgroundColor: WidgetStateProperty.resolveWith((states) {
-              return states.contains(WidgetState.selected)
-                  ? const Color(0xffd7eeea)
-                  : appSurface;
-            }),
-            foregroundColor: WidgetStateProperty.resolveWith((states) {
-              return states.contains(WidgetState.selected)
-                  ? appAccentStrong
-                  : appTextMuted;
-            }),
-          ),
-        ),
-      ),
+        );
+      },
       home: LibraryPage(
         applicationService: dependencies.libraryPageApplicationService,
         fileSystem: dependencies.fileSystem,

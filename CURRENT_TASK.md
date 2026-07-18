@@ -6,8 +6,10 @@
 - 建立 58 个逻辑用例：11 个 repo Skill 各 2 个正触发和 2 个负触发，共 44 个 trigger；另有 6 个 capability 与 8 个 regression。Stable Identity、标签过滤、播放队列、缓存和用户数据回归默认 N=5，要求 5/5。
 - Apple UI Rubric 覆盖内容层级、交互反馈、Windows 桌面适配、动效克制、无障碍和 Flutter 实现精度；业务边界、文件变化和工具使用仍由确定性 scorer 判定。
 - `AGENTS.md` 不再保存易漂移的验证状态和阶段优先级，Skill 注册表已加入 `$ltp-apple-ui-design`；明确 task router、领域 Skill 与 Apple UI 设计覆盖层的组合关系。两个 Bootstrap 文件收敛为根入口和兼容链接。
-- 本地目录验证确认 58 个用例、44/6/8 suite 分布和 11 个 Skill 的 2 正 2 负覆盖；7 项 Python 单元测试、全部 11 个 Skill 的 `quick_validate.py`、`flutter analyze` 和 Windows debug build 通过。
-- 隔离运行 smoke 已真实生成 Trace 并正确暴露执行设施问题：当前 Codex CLI 无法运行默认 `gpt-5.6-sol`，服务端要求升级到更新版本。该 trial 标记为 `infrastructure_error`，没有计入 Agent 分数；升级 CLI 后应先重跑 `router-pos-1`，再运行关键 N=5 回归。
+- Codex CLI 已从 `0.121.0` 升级到 `0.144.5`，并登记官方 `openaiDeveloperDocs` MCP；运行器改用 `codex exec -` 的 stdin 输入方式，并移除新版 CLI 不接受的 JSON Schema `uniqueItems`。
+- `router-pos-1` 以 100 分通过；过滤、播放队列、缓存、稳定身份四组关键回归均达到 5/5、`stable=true` 且无基础设施错误。平均分依次为 100 / 80 / 100 / 100。
+- 播放队列五轮都正确选择领域 Skill、保持零文件改动和业务边界，但把期望 Level 3 稳定判断为 Level 2，因此平均仅 80 分；五轮总输入约 695 万 token，后续需收紧 router 分级说明与诊断读取预算。
+- 本地目录验证确认 58 个用例、44/6/8 suite 分布和 11 个 Skill 的 2 正 2 负覆盖；8 项 Python 单元测试和全部 11 个 Skill 的 `quick_validate.py` 通过。
 - 本轮没有修改 Flutter 业务 UI、SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缩略图/媒体详情队列或用户数据。
 
 ## 2026-07-18 Apple 式全应用 UI 设计基线
@@ -15,7 +17,10 @@
 - 新增 repo-scoped `$ltp-apple-ui-design`，把 `emilkowalski/skills` 中适合本项目的 Apple 设计基础、动效决策、严格审查、机会筛选和术语规范转译为 Flutter/Windows 规则。
 - 详细设计知识按需拆为视觉基础、动效审查和动效术语 references，并保留上游 MIT 许可；未复制 Web 专属 CSS、Pointer Events、Framer Motion 或全局毛玻璃实现。
 - 新增 `docs/design/APPLE_UI_MIGRATION.md`，把全应用迁移拆为共享 token、媒体库、播放器、维护页、全局细节组件和跨平台 polish 六阶段。
-- 本轮只建立 skill 与迁移蓝图，尚未修改业务 UI；下一步从 Phase 0 的共享 token、reduced motion 和 high contrast 基线开始。
+- Phase 0 已完成：共享颜色、材质、圆角、间距、排版、阴影和语义动效 token 集中在 `app_theme_tokens.dart`；`MaterialApp` 接入系统文字缩放、`disableAnimations`、`accessibleNavigation` 与 `highContrast` 策略。
+- 新增 `AppInteractionSurface`，保留 `InkWell`、键盘、焦点与 Semantics；reduced motion 下移除按压缩放，高对比度下可选透明浮层自动回退实色，不启用大面积 blur。
+- 4 项 Phase 0 focused tests、完整 189 项测试、`flutter analyze` 和 Windows debug build 通过；真实最大化窗口完成“媒体库 → 设置 → 返回媒体库”点击和截图，11,163 条媒体库状态保持。
+- 下一步为 Phase 1 媒体库发现页；先迁移一个可验证组件族，不批量替换页面或混入过滤/队列业务改动。
 
 ## 当前状态
 
@@ -31,7 +36,7 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 185 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 189 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
 

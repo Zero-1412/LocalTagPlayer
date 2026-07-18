@@ -1,6 +1,6 @@
 # Local Tag Player Apple 式全应用 UI 迁移蓝图
 
-状态：设计基线已建立，业务 UI 尚未开始迁移。
+状态：Phase 0 已完成，Phase 1 尚未开始。
 
 ## 目标
 
@@ -80,6 +80,14 @@ test/widget_test.dart 或对应 focused tests
 ```
 
 完成门槛：没有业务行为变更；全部现有页面仍可运行；analyze、完整测试和 Windows build 通过。
+
+Phase 0 交付记录（2026-07-18）：
+
+- 共享 token 已覆盖颜色、材质、圆角、间距、排版、阴影和语义动效；全局主题构建从组合根移到可测试函数。
+- `AppAccessibilityData/Scope` 已接入 `disableAnimations`、`accessibleNavigation`、`highContrast` 与系统文字缩放。
+- `AppInteractionSurface` 保留 `InkWell`、键盘、焦点和 Semantics；透明材质需要显式请求，高对比度自动回退实色。
+- focused tests、完整 189 项测试、analyze 与 Windows debug build 通过；11,163 条真实媒体库完成最大化主界面、设置页和返回路径截图。
+- 未修改页面信息架构、过滤语义、filtered queue、播放器/缓存后端、稳定身份或用户数据。Phase 1 应复用本基线，不另建平行 token。
 
 ### Phase 1：媒体库发现页
 

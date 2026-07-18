@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-18 · 完成关键 Agent 回归与 Apple UI Phase 0
+
+- Codex CLI 从 `0.121.0` 升级到 `0.144.5`，登记官方 `openaiDeveloperDocs` MCP；Agent Eval 兼容新版输出 Schema，并改用 `codex exec -` 的 stdin 输入链路，修复 Windows 下任务提示未传入的问题。
+- `router-pos-1` 以 100 分通过；过滤、播放队列、缓存、稳定身份四组回归均达到 5/5、`stable=true` 且无基础设施错误，平均分依次为 100 / 80 / 100 / 100。
+- 播放队列五轮都保持正确 Skill、零文件改动和业务约束，但稳定误判为 Level 2 并过度读取上下文；记录为后续 router 分级和 token 预算回归项，不修改现行 scorer 阈值掩盖问题。
+- Apple UI Phase 0 建立共享颜色、材质、圆角、间距、排版、阴影和语义动效 token；全局接入文字缩放、reduced motion 与 high contrast 策略。
+- 新增保留 `InkWell`、键盘、焦点和 Semantics 的 `AppInteractionSurface`；可选透明材质默认关闭，高对比度下回退实色，未引入全窗口 blur。
+- 4 项 focused tests、完整 189 项测试、`dart format`、`flutter analyze` 和 Windows debug build 通过；真实最大化窗口完成“媒体库 → 设置 → 返回媒体库”点击与截图，11,163 条媒体库状态保持。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缩略图/媒体详情队列、稳定身份和用户数据均未改变。
+
 ## 2026-07-18 · 建立 Agent / Skill 自动化 Eval 基线
 
 - 新增隔离 Agent Eval 运行器，捕获 Codex 原始 JSONL、规范化 Trace、结构化结果、实际 Git 变化、确定性评分、Rubric judge、延迟、token 和 N 次稳定性；CLI、网络和模型兼容错误独立标记为基础设施故障，不污染 Agent 分数。

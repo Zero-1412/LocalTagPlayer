@@ -1,15 +1,24 @@
 # CHAT_7_RESPONSIVE_UI.md
 
-当前版本：`0.3.0-plan`
-状态：第一阶段验收完成；Apple 式全应用 UI 第二阶段规划完成，尚未开始业务 UI 迁移
+当前版本：`0.3.0`
+状态：第一阶段验收完成；Apple 式全应用 UI Phase 0 已完成，Phase 1 尚未开始
 负责人：Chat 7 / 响应式 UI + 平台 polish
+
+## 2026-07-18 Apple UI Phase 0
+
+- `app_theme_tokens.dart` 增加颜色、材质、圆角、间距、排版、阴影和语义动效层级，并把全局浅色 `ThemeData` 收口为可测试构建函数。
+- `MaterialApp` 从 `MediaQuery` 派生 `disableAnimations`、`accessibleNavigation`、`highContrast` 与系统文字缩放策略，不覆盖用户的 text scaler。
+- 新增 `AppInteractionSurface`，统一 press、hover、focus 和键盘激活反馈；保留 `InkWell` 与 Semantics，reduced motion 下停用缩放，高对比度下透明材质回退实色。
+- 本阶段没有批量替换页面组件，没有启用大面积 blur，也没有修改页面信息架构或任何过滤、队列、缓存、稳定身份语义。
+- 4 项 focused tests、完整 189 项测试、`flutter analyze` 和 Windows debug build 通过；真实最大化窗口完成“媒体库 → 设置 → 返回媒体库”点击与截图，11,163 条媒体库状态保持。
+- 下一步从 Phase 1 的一个媒体库组件族开始，先统一搜索/筛选状态或卡片交互表面，再做整页视觉迁移。
 
 ## 2026-07-18 Apple 式全应用 UI 第二阶段规划
 
 - 新增 `$ltp-apple-ui-design`，收敛视觉基础、动效决策、审查、机会筛选和术语，并转译为 Flutter/Windows 与大媒体库性能规则。
 - 新增 `docs/design/APPLE_UI_MIGRATION.md`，按 Phase 0-5 分阶段迁移共享 token、媒体库、播放器、维护页、全局细节组件和跨平台体验。
 - 第二阶段坚持内容优先、克制材质、即时反馈、空间连续和无障碍降级；不复制 macOS、不全局堆叠 blur、不把标签筛选或播放关键路径交给装饰动画。
-- 本轮只建立 skill 与蓝图；下一步从 Phase 0 的共享 token、reduced motion、high contrast 和文字缩放测试开始。
+- 该规划已由 Phase 0 落地；Phase 1 继续遵守同一 token、无障碍和大媒体库性能门槛。
 
 ## 规划来源
 
@@ -211,7 +220,8 @@
 
 ## 变更记录
 
-- `0.3.0-plan`：建立 Apple 式全应用 UI skill 与六阶段迁移蓝图，尚未修改业务 UI。
+- `0.3.0`：完成 Apple UI Phase 0，共享 token、无障碍策略与基础交互表面通过测试和真实窗口验证。
+- `0.3.0-plan`：建立 Apple 式全应用 UI skill 与六阶段迁移蓝图。
 - `0.2.16`：增强左右侧栏的位移、缩放、淡入和移动边缘层次，保持网格列数与业务状态稳定。
 - `0.2.15`：设置首页按功能类型分组，实际控件进入四个可返回的二级页。
 - `0.2.14`：修正侧栏动画期间旧宽度网格裁切和左栏中途内容突变，改为锁列数连续缩放与稳定后单次换列。
