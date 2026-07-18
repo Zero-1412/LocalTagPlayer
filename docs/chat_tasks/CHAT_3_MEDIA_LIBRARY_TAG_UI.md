@@ -1,5 +1,14 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
+## 2026-07-18 Apple UI Phase 1 媒体库主工作区
+
+- 左侧导航以稳定实色侧栏、窄选中指示条和 40px 行高重建浏览层级；右侧标签发现移除紫色硬边、双重阴影和外浮卡感，所有标签层级、排除和父子筛选入口保持。
+- 顶部搜索、筛选状态、排序、多选与视图切换进入同一 18px 圆角工具栏；真实 `TextField` 与既有过滤刷新链路不变，内部横向 8px 留白继续保护桌面搜索主层级。
+- 视频卡片统一使用 `AppRadius.card` 内容表面，hover / focus / selected / press 反馈遵守 reduced motion 与 high contrast；卡片 State、滚动位置、增量加载、缩略图 Future 和 filtered queue 均不重建。
+- 文字缩放进入卡片可见几何：100%/125%/150% 的标题槽位分别为 42/50/58px，并增加高 DPI 舍入余量；新增 150% 双行标题实体测试。
+- 完整 197 项测试通过，3 项 benchmark 跳过；analyze 和 Windows debug build 通过。真实窗口捕获到构建前旧进程，准备重启时检测到用户操作而停止控制；最新 EXE 的三档截图和搜索/标签/播放返回连续路径待窗口空闲后补齐。
+- SQLite、过滤语义、filtered queue、PlayerBackend、缓存队列、稳定身份和用户数据未改变。
+
 ## 2026-07-18 Apple UI Phase 1 搜索与筛选状态组件族
 
 - 顶部继续使用唯一真实 `TextField`、controller、FocusNode 与统一 `onChanged` 链路；搜索表面新增真实 hover/focus 轮廓、reduced motion 与 high contrast 降级，不改变筛选刷新时序。

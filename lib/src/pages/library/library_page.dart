@@ -4288,6 +4288,9 @@ class _LibraryPageState extends State<LibraryPage> {
       required double gridColumnReferenceWidth,
     }) {
       final collapsedFilterWidth = collapsedTagDiscoveryRailLayoutWidth;
+      final accessibility = AppAccessibilityScope.of(context);
+      final panelDuration =
+          accessibility.motionDuration(libraryPanelMotionDuration);
       return Column(
         children: [
           buildTopBar(LayoutSize.expanded),
@@ -4301,33 +4304,18 @@ class _LibraryPageState extends State<LibraryPage> {
                   ),
                 ),
                 AnimatedContainer(
-                  duration: libraryPanelMotionDuration,
+                  duration: panelDuration,
                   curve: libraryPanelMotionCurve,
                   width: _isTagDiscoveryPanelOpen
                       ? layoutSlots.filterPanelWidth
                       : collapsedFilterWidth,
-                  // 折叠轨道用强调描边标识可展开状态，边缘阴影随宽度动画连续过渡。
+                  // 外框只承担稳定分隔；面板和折叠入口各自表达层级，避免出现双重阴影。
                   decoration: BoxDecoration(
                     border: Border(
                       left: BorderSide(
-                        color: _isTagDiscoveryPanelOpen
-                            ? libraryBorder
-                            : appAccentViolet.withAlpha(150),
-                        width: _isTagDiscoveryPanelOpen ? 1 : 2,
+                        color: libraryBorder.withValues(alpha: 0.72),
                       ),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(
-                          _isTagDiscoveryPanelOpen ? 72 : 34,
-                        ),
-                        blurRadius: _isTagDiscoveryPanelOpen ? 22 : 10,
-                        offset: Offset(
-                          _isTagDiscoveryPanelOpen ? -7 : -3,
-                          0,
-                        ),
-                      ),
-                    ],
                   ),
                   child: ClipRect(
                     child: LayoutBuilder(
@@ -4336,7 +4324,7 @@ class _LibraryPageState extends State<LibraryPage> {
                             ? layoutSlots.filterPanelWidth
                             : collapsedFilterWidth;
                         return AnimatedSwitcher(
-                          duration: libraryPanelMotionDuration,
+                          duration: panelDuration,
                           switchInCurve: libraryPanelMotionCurve,
                           switchOutCurve: libraryPanelMotionCurve,
                           layoutBuilder: (currentChild, previousChildren) =>

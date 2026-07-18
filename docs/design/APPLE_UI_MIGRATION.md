@@ -1,6 +1,6 @@
 # Local Tag Player Apple 式全应用 UI 迁移蓝图
 
-状态：Phase 0 已完成；Phase 1 搜索与筛选状态组件族已完成；Phase 2 播放器代码、自动化、返回路径及 100%/125%/150% 文字缩放已验收，左滑快速反向终态截图待人工闭环。
+状态：Phase 0 已完成；Phase 1 搜索/筛选状态与媒体库主工作区代码、测试和构建已完成，最新 EXE 的真实窗口连续截图待空闲窗口补验；Phase 2 播放器代码、自动化、返回路径及 100%/125%/150% 文字缩放已验收，左滑快速反向终态截图待人工闭环。
 
 ## 目标
 
@@ -111,6 +111,14 @@ Phase 1 首批交付记录（2026-07-18）：
 - 4 项 focused tests 覆盖焦点、命中区、筛选语义、150% 文字缩放、reduced motion 和 high contrast；完整 193 项测试、analyze 与 Windows debug build 通过。
 - 真实 1249×714、11,163 条媒体窗口确认搜索焦点、结果状态和列表首屏无位置、遮挡、对齐或溢出问题。继续输入时检测到用户操作目标窗口，自动 QA 已停止；下一空闲窗口补“输入 → 清除 → 标签选择 → 清空”连续截图。
 - 未改变 `FilterQuery` / `TagQueryService`、filtered queue、结果排序、缩略图 Future、滚动状态或用户数据。
+
+Phase 1 主工作区交付记录（2026-07-18）：
+
+- 左导航、顶部工具栏、右侧标签发现与视频卡片统一实色层级，删除旧式强描边、双重投影和分散控件外观；所有现有动作和 Semantics 保留。
+- 卡片使用 `AppRadius.card` 完整内容表面和短 hover/focus/press 反馈；侧栏与卡片动效遵守 reduced motion，未增加列表 stagger、blur 或后台媒体读取。
+- 网格保留稳定列数、增量加载、卡片 identity、滚动控制器与缩略图 Future；125%/150% 只增加标题行高，150% 长标题实体测试无 RenderFlex 溢出。
+- 完整 197 项测试、analyze 和 Windows debug build 通过；捕获到的真实窗口仍是构建前驻留的旧进程，准备重启时检测到用户操作并停止自动控制，三档截图和连续点击待窗口空闲后补齐。
+- 未改变 `FilterQuery` / `TagQueryService`、filtered queue、播放器/缓存后端、稳定身份或用户数据。
 
 ### Phase 2：播放器
 

@@ -492,29 +492,22 @@ class LibrarySidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sidebarWidth = collapsed ? 76.0 : width ?? (dense ? 248 : 274);
+    final accessibility = AppAccessibilityScope.of(context);
     final sidebar = AnimatedContainer(
       key: LibrarySmokeKeys.sidebarSurface,
-      duration: libraryPanelMotionDuration,
+      duration: accessibility.motionDuration(libraryPanelMotionDuration),
       curve: libraryPanelMotionCurve,
       width: sidebarWidth,
       height: MediaQuery.sizeOf(context).height,
-      // 描边留在侧栏自身范围内，阴影只在低频开合动画中增强移动边缘，不触发内容重建。
+      // 侧栏使用稳定结构描边；开合不叠加强阴影，避免主界面左右两侧争夺内容焦点。
       decoration: BoxDecoration(
         border: Border(
           right: BorderSide(
-            color: collapsed
-                ? appAccentViolet.withAlpha(150)
-                : const Color(0xff263244),
-            width: collapsed ? 2 : 1,
+            color: accessibility.highContrast
+                ? libraryTextMuted
+                : libraryBorder.withValues(alpha: 0.82),
           ),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(collapsed ? 34 : 72),
-            blurRadius: collapsed ? 10 : 22,
-            offset: Offset(collapsed ? 3 : 7, 0),
-          ),
-        ],
       ),
       child: ClipRect(
         child: DecoratedBox(
@@ -551,7 +544,7 @@ class LibrarySidebar extends StatelessWidget {
                       )
                     : Padding(
                         padding: EdgeInsets.fromLTRB(
-                            dense ? 16 : 22, 18, dense ? 16 : 22, 18),
+                            dense ? 14 : 18, 16, dense ? 14 : 18, 16),
                         child: Column(
                           children: [
                             Expanded(
@@ -563,7 +556,7 @@ class LibrarySidebar extends StatelessWidget {
                                     LibrarySidebarBrand(
                                       onToggleCollapsed: onToggleCollapsed,
                                     ),
-                                    const SizedBox(height: 24),
+                                    const SizedBox(height: 20),
                                     LibrarySidebarNavItem(
                                       icon: Icons.grid_view_rounded,
                                       label: '\u5a92\u4f53\u5e93',
@@ -1071,10 +1064,10 @@ class LibrarySidebarBrand extends StatelessWidget {
       children: [
         _SidebarBrandToggle(
           collapsed: false,
-          dimension: 46,
+          dimension: 40,
           onToggleCollapsed: onToggleCollapsed,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         const Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1087,7 +1080,7 @@ class LibrarySidebarBrand extends StatelessWidget {
                   color: Colors.white,
                   fontSize: 14,
                   height: 1.18,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               SizedBox(height: 4),
@@ -1099,7 +1092,7 @@ class LibrarySidebarBrand extends StatelessWidget {
                   color: Color(0xff95a3b8),
                   fontSize: 11,
                   height: 1.2,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -1113,8 +1106,8 @@ class LibrarySidebarBrand extends StatelessWidget {
 /**
  * 品牌区与主功能栏折叠状态共用的唯一切换入口。
  *
- * 展开态三角向右，折叠态三角向下；按钮始终保留紫色品牌底和原阴影，
- * 不额外占用侧栏横向空间。
+ * 展开态三角向右，折叠态三角向下；按钮使用克制的紫色品牌底，
+ * 不依赖发光阴影表达可点击性，也不额外占用侧栏横向空间。
  */
 class _SidebarBrandToggle extends StatelessWidget {
   const _SidebarBrandToggle({
@@ -1146,20 +1139,13 @@ class _SidebarBrandToggle extends StatelessWidget {
           height: dimension,
           decoration: BoxDecoration(
             color: appAccentViolet,
-            borderRadius: BorderRadius.circular(collapsed ? 10 : 8),
-            boxShadow: [
-              BoxShadow(
-                color: appAccentViolet.withAlpha(90),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(AppRadius.control),
           ),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(collapsed ? 10 : 8),
+            borderRadius: BorderRadius.circular(AppRadius.control),
             child: InkWell(
-              borderRadius: BorderRadius.circular(collapsed ? 10 : 8),
+              borderRadius: BorderRadius.circular(AppRadius.control),
               onTap: onToggleCollapsed,
               child: AnimatedRotation(
                 turns: collapsed ? 0.25 : 0,
@@ -1321,39 +1307,49 @@ class LibrarySidebarNavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Semantics(
         button: onTap != null,
         selected: selected,
         label: label,
         child: Material(
-          color: selected ? const Color(0xff283449) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          color: selected ? librarySurfaceAlt : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.control),
           child: InkWell(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.control),
             onTap: onTap,
             child: Container(
-              height: 38,
-              padding: const EdgeInsets.symmetric(horizontal: 11),
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 9),
               child: Row(
                 children: [
+                  AnimatedContainer(
+                    duration: AppAccessibilityScope.of(context)
+                        .fadeDuration(appMotionDuration),
+                    width: 3,
+                    height: selected ? 18 : 0,
+                    decoration: BoxDecoration(
+                      color: appAccentViolet,
+                      borderRadius: BorderRadius.circular(AppRadius.capsule),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Icon(
                     icon,
-                    size: 17,
-                    color: selected ? Colors.white : const Color(0xff94a3b8),
+                    size: 18,
+                    color: selected ? libraryText : libraryTextMuted,
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 9),
                   Expanded(
                     child: Text(
                       label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color:
-                            selected ? Colors.white : const Color(0xffcbd5e1),
+                        color: selected ? libraryText : const Color(0xffcbd5e1),
                         fontSize: 13,
                         fontWeight:
-                            selected ? FontWeight.w800 : FontWeight.w600,
+                            selected ? FontWeight.w700 : FontWeight.w600,
                       ),
                     ),
                   ),
@@ -2578,203 +2574,216 @@ class ReferenceTopBar extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 layoutSize == LayoutSize.expanded ? 20 : 12,
-                14,
+                12,
                 layoutSize == LayoutSize.expanded ? 20 : 12,
                 libraryTopBarBottomSpacing,
               ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final narrowMedium = layoutSize == LayoutSize.medium &&
-                      constraints.maxWidth < 620;
-                  final proportionalDesktop =
-                      layoutSize == LayoutSize.expanded &&
-                          constraints.maxWidth >= 1180;
-                  final searchSurface = _LibrarySearchSurface(
-                    controller: controller,
-                    searchFocusNode: searchFocusNode,
-                    compact: compact,
-                    keywordActive: keywordActive,
-                    onSearchChanged: onSearchChanged,
-                    onClearKeyword: onClearKeyword,
-                  );
-                  final filterStatus = _LibraryFilterStatusArea(
-                    compact: compact || narrowMedium,
-                    defaultLabel: defaultChipLabel,
-                    filters: activeFilters,
-                    resultCount: videoCount,
-                    resultCountLabel: resultCountLabel,
-                    refreshing: refreshing,
-                    progressLabel: progressLabel,
-                    progressValue: progressValue,
-                    progressPaused: progressPaused,
-                    onToggleProgressPaused: onToggleProgressPaused,
-                    onCancelProgress: onCancelProgress,
-                    onClearAll: onClearAll,
-                    showResultStatus: !proportionalDesktop,
-                  );
-                  final resultStatus = SizedBox(
-                    key: LibrarySmokeKeys.toolbarResultStatus,
-                    width: progressLabel == null
-                        ? (resultCountLabel == null ? 92 : 200)
-                        : 224,
-                    child: _FilterResultLine(
-                      resultCount: videoCount,
-                      resultCountLabel: resultCountLabel,
-                      refreshing: refreshing,
-                      progressLabel: progressLabel,
-                      progressValue: progressValue,
-                      progressPaused: progressPaused,
-                      onToggleProgressPaused: onToggleProgressPaused,
-                      onCancelProgress: onCancelProgress,
-                    ),
-                  );
-                  final selectionStatus = _LibrarySelectionToolbar(
-                    selectedCount: selectedCount,
-                    allSelected: allSelected,
-                    onToggleSelectAll: onToggleSelectAll,
-                    onDeleteSelected: onDeleteSelected,
-                    onCancel: onCancelSelectionMode,
-                  );
-                  final sortControl = _CompactTopSortControl(
-                    sortMode: sortMode,
-                    sortDirection: sortDirection,
-                    onChanged: onSortChanged,
-                    onDirectionToggle: onSortDirectionToggle,
-                  );
-                  final normalActions = SizedBox(
-                    key: LibrarySmokeKeys.toolbarActions,
-                    height: 50,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (onEnterSelectionMode != null)
-                          if (compact || narrowMedium)
-                            _ReferenceIconButton(
-                              key: LibrarySmokeKeys.libraryEnterSelection,
-                              tooltip: '\u591a\u9009',
-                              icon: Icons.checklist_rounded,
-                              onPressed: onEnterSelectionMode!,
-                            )
-                          else
-                            _TopToolbarTextButton(
-                              key: LibrarySmokeKeys.libraryEnterSelection,
-                              onPressed: onEnterSelectionMode!,
-                              label: '\u591a\u9009',
-                            ),
-                        if (onEnterSelectionMode != null &&
-                            !compact &&
-                            !narrowMedium)
-                          const SizedBox(width: 8),
-                        if (!compact && !narrowMedium)
-                          ResultViewToggle(
-                            dense: denseResultGrid,
-                            onChanged: onResultViewChanged,
-                          ),
-                      ],
-                    ),
-                  );
+              child: DecoratedBox(
+                key: LibrarySmokeKeys.libraryResultToolbar,
+                decoration: BoxDecoration(
+                  color: librarySurface,
+                  borderRadius: BorderRadius.circular(AppRadius.panel),
+                  border: Border.all(color: libraryBorder),
+                ),
+                child: Padding(
+                  // 横向保持 8px，让搜索在 1400px 桌面宽度仍达到主操作层级；
+                  // 纵向 10px 则维持工具栏与 50px 控件的稳定呼吸空间。
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final narrowMedium = layoutSize == LayoutSize.medium &&
+                          constraints.maxWidth < 620;
+                      final proportionalDesktop =
+                          layoutSize == LayoutSize.expanded &&
+                              constraints.maxWidth >= 1180;
+                      final searchSurface = _LibrarySearchSurface(
+                        controller: controller,
+                        searchFocusNode: searchFocusNode,
+                        compact: compact,
+                        keywordActive: keywordActive,
+                        onSearchChanged: onSearchChanged,
+                        onClearKeyword: onClearKeyword,
+                      );
+                      final filterStatus = _LibraryFilterStatusArea(
+                        compact: compact || narrowMedium,
+                        defaultLabel: defaultChipLabel,
+                        filters: activeFilters,
+                        resultCount: videoCount,
+                        resultCountLabel: resultCountLabel,
+                        refreshing: refreshing,
+                        progressLabel: progressLabel,
+                        progressValue: progressValue,
+                        progressPaused: progressPaused,
+                        onToggleProgressPaused: onToggleProgressPaused,
+                        onCancelProgress: onCancelProgress,
+                        onClearAll: onClearAll,
+                        showResultStatus: !proportionalDesktop,
+                      );
+                      final resultStatus = SizedBox(
+                        key: LibrarySmokeKeys.toolbarResultStatus,
+                        width: progressLabel == null
+                            ? (resultCountLabel == null ? 92 : 200)
+                            : 224,
+                        child: _FilterResultLine(
+                          resultCount: videoCount,
+                          resultCountLabel: resultCountLabel,
+                          refreshing: refreshing,
+                          progressLabel: progressLabel,
+                          progressValue: progressValue,
+                          progressPaused: progressPaused,
+                          onToggleProgressPaused: onToggleProgressPaused,
+                          onCancelProgress: onCancelProgress,
+                        ),
+                      );
+                      final selectionStatus = _LibrarySelectionToolbar(
+                        selectedCount: selectedCount,
+                        allSelected: allSelected,
+                        onToggleSelectAll: onToggleSelectAll,
+                        onDeleteSelected: onDeleteSelected,
+                        onCancel: onCancelSelectionMode,
+                      );
+                      final sortControl = _CompactTopSortControl(
+                        sortMode: sortMode,
+                        sortDirection: sortDirection,
+                        onChanged: onSortChanged,
+                        onDirectionToggle: onSortDirectionToggle,
+                      );
+                      final normalActions = SizedBox(
+                        key: LibrarySmokeKeys.toolbarActions,
+                        height: 50,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (onEnterSelectionMode != null)
+                              if (compact || narrowMedium)
+                                _ReferenceIconButton(
+                                  key: LibrarySmokeKeys.libraryEnterSelection,
+                                  tooltip: '\u591a\u9009',
+                                  icon: Icons.checklist_rounded,
+                                  onPressed: onEnterSelectionMode!,
+                                )
+                              else
+                                _TopToolbarTextButton(
+                                  key: LibrarySmokeKeys.libraryEnterSelection,
+                                  onPressed: onEnterSelectionMode!,
+                                  label: '\u591a\u9009',
+                                ),
+                            if (onEnterSelectionMode != null &&
+                                !compact &&
+                                !narrowMedium)
+                              const SizedBox(width: 8),
+                            if (!compact && !narrowMedium)
+                              ResultViewToggle(
+                                dense: denseResultGrid,
+                                onChanged: onResultViewChanged,
+                              ),
+                          ],
+                        ),
+                      );
                   if (proportionalDesktop) {
                     return SizedBox(
-                      key: LibrarySmokeKeys.libraryResultToolbar,
                       height: 50,
-                      child: Row(
-                        children: [
-                          // 搜索从 60% 收敛到 50%，把标签浏览和媒体库状态提升为同级主场景。
-                          Expanded(flex: 5, child: searchSurface),
-                          const SizedBox(width: 12),
-                          if (selectionMode) ...[
-                            Expanded(flex: 5, child: selectionStatus),
-                            // 与常态区域保留相同总间距，进入多选时搜索框宽度不会跳动。
-                            const SizedBox(width: 8),
-                          ] else ...[
-                            Expanded(
-                              flex: 4,
-                              child: KeyedSubtree(
-                                key: LibrarySmokeKeys.filterStatusArea,
-                                child: Row(
-                                  children: [
-                                    Expanded(child: filterStatus),
-                                    const SizedBox(width: 8),
-                                    sortControl,
-                                    const SizedBox(width: 10),
-                                    resultStatus,
-                                  ],
+                          child: Row(
+                            children: [
+                              // 搜索从 60% 收敛到 50%，把标签浏览和媒体库状态提升为同级主场景。
+                              Expanded(flex: 5, child: searchSurface),
+                              const SizedBox(width: 12),
+                              if (selectionMode) ...[
+                                Expanded(flex: 5, child: selectionStatus),
+                                // 与常态区域保留相同总间距，进入多选时搜索框宽度不会跳动。
+                                const SizedBox(width: 8),
+                              ] else ...[
+                                Expanded(
+                                  flex: 4,
+                                  child: KeyedSubtree(
+                                    key: LibrarySmokeKeys.filterStatusArea,
+                                    child: Row(
+                                      children: [
+                                        Expanded(child: filterStatus),
+                                        const SizedBox(width: 8),
+                                        sortControl,
+                                        const SizedBox(width: 10),
+                                        resultStatus,
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(flex: 1, child: normalActions),
-                          ],
-                        ],
-                      ),
-                    );
+                                const SizedBox(width: 8),
+                                Expanded(flex: 1, child: normalActions),
+                              ],
+                            ],
+                          ),
+                        );
                   }
                   return Row(
-                    key: LibrarySmokeKeys.libraryResultToolbar,
                     children: [
-                      if (layoutSize != LayoutSize.expanded) ...[
-                        _ReferenceIconButton(
-                          tooltip: '\u6253\u5f00\u667a\u80fd\u7b5b\u9009',
-                          icon: hasActiveFilters
-                              ? Icons.filter_alt_rounded
-                              : Icons.filter_alt_outlined,
-                          onPressed: onOpenFilters,
-                        ),
-                        const SizedBox(width: 10),
-                      ],
-                      Expanded(child: searchSurface),
-                      const SizedBox(width: 8),
-                      if (selectionMode)
-                        SizedBox(width: 280, child: selectionStatus)
-                      else ...[
-                        SizedBox(
-                          key: LibrarySmokeKeys.filterStatusArea,
-                          width: progressLabel != null
-                              ? math.min(
-                                  360,
-                                  math.max(224, constraints.maxWidth * 0.42),
-                                )
-                              : activeFilters.isNotEmpty
-                                  ? narrowMedium
-                                      ? 82
-                                      : math.min(
-                                          220,
-                                          math.max(
-                                            142,
-                                            constraints.maxWidth * 0.24,
-                                          ),
-                                        )
-                                  : narrowMedium
-                                      ? 82
-                                      : resultCountLabel != null
-                                          ? 200
-                                          : 118,
-                          child: filterStatus,
-                        ),
-                        if (!compact &&
-                            !(progressLabel != null &&
+                          if (layoutSize != LayoutSize.expanded) ...[
+                            _ReferenceIconButton(
+                              tooltip: '\u6253\u5f00\u667a\u80fd\u7b5b\u9009',
+                              icon: hasActiveFilters
+                                  ? Icons.filter_alt_rounded
+                                  : Icons.filter_alt_outlined,
+                              onPressed: onOpenFilters,
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                          Expanded(child: searchSurface),
+                          const SizedBox(width: 8),
+                          if (selectionMode)
+                            SizedBox(width: 280, child: selectionStatus)
+                          else ...[
+                            SizedBox(
+                              key: LibrarySmokeKeys.filterStatusArea,
+                              width: progressLabel != null
+                                  ? math.min(
+                                      360,
+                                      math.max(
+                                          224, constraints.maxWidth * 0.42),
+                                    )
+                                  : activeFilters.isNotEmpty
+                                      ? narrowMedium
+                                          ? 82
+                                          : math.min(
+                                              220,
+                                              math.max(
+                                                142,
+                                                constraints.maxWidth * 0.24,
+                                              ),
+                                            )
+                                      : narrowMedium
+                                          ? 82
+                                          : resultCountLabel != null
+                                              ? 200
+                                              : 118,
+                              child: filterStatus,
+                            ),
+                            if (!compact &&
+                                !(progressLabel != null &&
+                                    constraints.maxWidth < 700)) ...[
+                              const SizedBox(width: 8),
+                              sortControl,
+                            ],
+                            if (compact) ...[
+                              const SizedBox(width: 8),
+                              _ReferenceIconButton(
+                                tooltip: '标签中心',
+                                icon: Icons.sell_outlined,
+                                onPressed: onOpenTagManager,
+                              ),
+                            ],
+                            if (!(progressLabel != null &&
                                 constraints.maxWidth < 700)) ...[
-                          const SizedBox(width: 8),
-                          sortControl,
+                              const SizedBox(width: 8),
+                              normalActions,
+                            ],
+                          ],
                         ],
-                        if (compact) ...[
-                          const SizedBox(width: 8),
-                          _ReferenceIconButton(
-                            tooltip: '标签中心',
-                            icon: Icons.sell_outlined,
-                            onPressed: onOpenTagManager,
-                          ),
-                        ],
-                        if (!(progressLabel != null &&
-                            constraints.maxWidth < 700)) ...[
-                          const SizedBox(width: 8),
-                          normalActions,
-                        ],
-                      ],
-                    ],
-                  );
-                },
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ),

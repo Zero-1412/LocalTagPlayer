@@ -29,6 +29,7 @@ double libraryVideoCardMainAxisExtent({
   required double gridWidth,
   required bool narrow,
   required bool compact,
+  double textScaleFactor = 1,
 }) {
   final columnCount = libraryVideoGridColumnCount(
     gridWidth: gridWidth,
@@ -39,6 +40,7 @@ double libraryVideoCardMainAxisExtent({
     gridWidth: gridWidth,
     compact: compact,
     columnCount: columnCount,
+    textScaleFactor: textScaleFactor,
   );
 }
 
@@ -54,6 +56,7 @@ double libraryVideoCardMainAxisExtentForColumnCount({
   required bool compact,
   required int columnCount,
   double? crossAxisSpacing,
+  double textScaleFactor = 1,
 }) {
   final safeColumnCount = math.max(1, columnCount);
   final horizontalPadding = libraryVideoGridHorizontalPadding(compact);
@@ -65,8 +68,11 @@ double libraryVideoCardMainAxisExtentForColumnCount({
   final usableWidth = math.max(1.0, gridWidth - horizontalPadding);
   final cardWidth =
       (usableWidth - spacing * (safeColumnCount - 1)) / safeColumnCount;
-  // 56px 覆盖分档字号的两行标题；卡片不再为已移除的路径和操作区保留空间。
-  return cardWidth * 9 / 16 + 56;
+  // 标题槽位跟随系统文字缩放增长；只改变可见卡片几何，不参与网格列数或数据加载计算。
+  final metadataHeight =
+      libraryVideoCardMetadataHeightForTextScale(textScaleFactor);
+  // 额外 2px 吸收高 DPI 下 AspectRatio 与网格像素舍入误差，避免 150% 出现亚像素溢出。
+  return cardWidth * 9 / 16 + metadataHeight + 16;
 }
 
 /**
@@ -77,8 +83,21 @@ double libraryVideoCardMainAxisExtentForColumnCount({
  */
 const double libraryVideoCardMetadataHeight = 42;
 
+/**
+ * 按系统文字缩放计算两行标题槽位高度。
+ *
+ * 100% 继续使用原始密度；125% 和 150% 只增加标题容器，不压缩缩略图，也不截断
+ * 系统放大后的第二行文字。上限用于防止异常缩放把虚拟网格行高无限放大。
+ */
+double libraryVideoCardMetadataHeightForTextScale(double textScaleFactor) {
+  final safeScale = textScaleFactor.isFinite
+      ? textScaleFactor.clamp(1.0, 2.0).toDouble()
+      : 1.0;
+  return libraryVideoCardMetadataHeight + (safeScale - 1) * 32;
+}
+
 /** 桌面结果区略收紧左右留白，把宽度优先分配给缩略图。 */
-double libraryVideoGridHorizontalPadding(bool compact) => compact ? 28 : 36;
+double libraryVideoGridHorizontalPadding(bool compact) => compact ? 28 : 44;
 
 /**
  * 计算视频网格的横向列间距。
@@ -157,7 +176,7 @@ double libraryVideoCardTitleFontSize(double cardWidth) {
 }
 
 /** 缩略图与悬停外框共用的小圆角，接近内容平台的紧凑视觉。 */
-const double libraryVideoCardRadius = 8;
+const double libraryVideoCardRadius = AppRadius.card;
 
 /** 标题右侧更多按钮的淡入淡出时长；短过渡避免快速扫过卡片时产生闪烁。 */
 const Duration libraryCardMoreFadeDuration = Duration(milliseconds: 120);
@@ -830,6 +849,7 @@ class _VideoGridState extends State<VideoGrid> {
           gridWidth: stableWidth,
           compact: compact,
         );
+        final textScaleFactor = MediaQuery.textScalerOf(context).scale(1);
         final columnCount = widget.dense
             ? 1
             : libraryVideoGridColumnCount(
@@ -844,6 +864,7 @@ class _VideoGridState extends State<VideoGrid> {
                   compact: compact,
                   columnCount: columnCount,
                   crossAxisSpacing: crossAxisSpacing,
+                  textScaleFactor: textScaleFactor,
                 ) +
                 mainAxisSpacing;
         _currentColumnCount = columnCount;
@@ -926,6 +947,7 @@ class _VideoGridState extends State<VideoGrid> {
                 compact: compact,
                 columnCount: columnCount,
                 crossAxisSpacing: crossAxisSpacing,
+                textScaleFactor: textScaleFactor,
               ),
               mainAxisSpacing: mainAxisSpacing,
               crossAxisSpacing: crossAxisSpacing,
@@ -1464,6 +1486,8 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final accessibility = AppAccessibilityScope.of(context);
+    final textScaleFactor = MediaQuery.textScalerOf(context).scale(1);
     final supportsMoreActions = !widget.selectionMode &&
         widget.onEditTags != null &&
         widget.onDelete != null;
@@ -1483,65 +1507,98 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
           onTapCancel: () => setState(() => _pressed = false),
           onTapUp: (_) => setState(() => _pressed = false),
           child: AnimatedScale(
-            duration: appMotionDuration,
+            duration: accessibility.motionDuration(appMotionDuration),
             curve: appMotionCurve,
             scale: _pressed ? 0.992 : 1,
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                key: LibrarySmokeKeys.cardOpen(item.path),
+            child: AnimatedContainer(
+              duration: accessibility.fadeDuration(appMotionDuration),
+              curve: appMotionCurve,
+              decoration: BoxDecoration(
+                color: librarySurface,
                 borderRadius: BorderRadius.circular(libraryVideoCardRadius),
-                hoverColor: Colors.transparent,
-                focusColor: Colors.transparent,
-                highlightColor: Colors.transparent,
-                onFocusChange: (focused) => setState(() => _focused = focused),
-                // 多选期间点击只更新选择；普通状态才打开完整 filtered queue。
-                onTap: widget.selectionMode
-                    ? widget.onToggleSelected
-                    : widget.onOpen,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    KeyedSubtree(
-                      key: LibrarySmokeKeys.cardThumbnailSurface(item.path),
-                      child: _VideoPreview(
-                        item: item,
-                        thumbnailService: widget.thumbnailService,
-                        playbackSettings: widget.playbackSettings,
-                        hovered: _hovered && !widget.selectionMode,
-                        hoverPreviewEnabled: !widget.selectionMode,
-                        onVisible: widget.onVisible,
-                        onToggleFavorite: widget.selectionMode
-                            ? null
-                            : widget.onToggleFavorite,
-                        selected: widget.selectionMode ? widget.selected : null,
-                        onToggleSelected: widget.selectionMode
-                            ? widget.onToggleSelected
-                            : null,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(2, 8, 2, 6),
-                      child: SizedBox(
-                        height: libraryVideoCardMetadataHeight,
-                        child: _VideoCardMetadata(
+                border: Border.all(
+                  color: widget.selected
+                      ? appAccentViolet
+                      : _focused
+                          ? appAccentViolet.withValues(alpha: 0.78)
+                          : _hovered
+                              ? libraryTextMuted.withValues(alpha: 0.42)
+                              : libraryBorder.withValues(alpha: 0.72),
+                  width: widget.selected || _focused ? 1.5 : 1,
+                ),
+                boxShadow: _hovered && !accessibility.highContrast
+                    ? const <BoxShadow>[
+                        BoxShadow(
+                          color: Color(0x30000000),
+                          blurRadius: 18,
+                          offset: Offset(0, 8),
+                        ),
+                      ]
+                    : const <BoxShadow>[],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(libraryVideoCardRadius),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  key: LibrarySmokeKeys.cardOpen(item.path),
+                  borderRadius: BorderRadius.circular(libraryVideoCardRadius),
+                  hoverColor: Colors.transparent,
+                  focusColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                  onFocusChange: (focused) =>
+                      setState(() => _focused = focused),
+                  // 多选期间点击只更新选择；普通状态才打开完整 filtered queue。
+                  onTap: widget.selectionMode
+                      ? widget.onToggleSelected
+                      : widget.onOpen,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      KeyedSubtree(
+                        key: LibrarySmokeKeys.cardThumbnailSurface(item.path),
+                        child: _VideoPreview(
                           item: item,
-                          showMore: showMore,
-                          onMoreOpened: () =>
-                              setState(() => _moreMenuOpen = true),
-                          onMoreClosed: () =>
-                              setState(() => _moreMenuOpen = false),
-                          onEditTags:
-                              widget.selectionMode ? null : widget.onEditTags,
-                          onRevealLocation: widget.selectionMode
+                          thumbnailService: widget.thumbnailService,
+                          playbackSettings: widget.playbackSettings,
+                          hovered: _hovered && !widget.selectionMode,
+                          hoverPreviewEnabled: !widget.selectionMode,
+                          onVisible: widget.onVisible,
+                          onToggleFavorite: widget.selectionMode
                               ? null
-                              : widget.onRevealLocation,
-                          onDelete:
-                              widget.selectionMode ? null : widget.onDelete,
+                              : widget.onToggleFavorite,
+                          selected:
+                              widget.selectionMode ? widget.selected : null,
+                          onToggleSelected: widget.selectionMode
+                              ? widget.onToggleSelected
+                              : null,
                         ),
                       ),
-                    ),
-                  ],
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 8, 8, 6),
+                        child: SizedBox(
+                          height: libraryVideoCardMetadataHeightForTextScale(
+                            textScaleFactor,
+                          ),
+                          child: _VideoCardMetadata(
+                            item: item,
+                            showMore: showMore,
+                            onMoreOpened: () =>
+                                setState(() => _moreMenuOpen = true),
+                            onMoreClosed: () =>
+                                setState(() => _moreMenuOpen = false),
+                            onEditTags:
+                                widget.selectionMode ? null : widget.onEditTags,
+                            onRevealLocation: widget.selectionMode
+                                ? null
+                                : widget.onRevealLocation,
+                            onDelete:
+                                widget.selectionMode ? null : widget.onDelete,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

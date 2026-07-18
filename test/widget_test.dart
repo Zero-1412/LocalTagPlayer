@@ -153,7 +153,7 @@ void main() {
         narrow: false,
         compact: false,
       ),
-      closeTo(209.75, 0.01),
+      closeTo(210.25, 0.01),
     );
     expect(
       libraryVideoCardMainAxisExtent(
@@ -161,7 +161,7 @@ void main() {
         narrow: false,
         compact: true,
       ),
-      closeTo(157.63, 0.01),
+      closeTo(159.63, 0.01),
     );
     expect(
       libraryVideoCardMainAxisExtent(
@@ -169,7 +169,7 @@ void main() {
         narrow: true,
         compact: true,
       ),
-      321.5,
+      323.5,
     );
     expect(
       libraryVideoGridCrossAxisSpacing(gridWidth: 680, compact: true),
@@ -187,7 +187,7 @@ void main() {
       libraryVideoGridCrossAxisSpacing(gridWidth: 1600, compact: false),
       20,
     );
-    expect(libraryVideoGridHorizontalPadding(false), 36);
+    expect(libraryVideoGridHorizontalPadding(false), 44);
     expect(
       libraryVideoGridMaxCrossAxisExtent(
         gridWidth: 1600,
@@ -209,6 +209,24 @@ void main() {
     expect(libraryVideoCardTitleFontSize(320), 15.5);
     expect(libraryVideoCardTitleFontSize(420), 16);
     expect(libraryVideoCardMetadataHeight, 42);
+    expect(libraryVideoCardMetadataHeightForTextScale(1), 42);
+    expect(libraryVideoCardMetadataHeightForTextScale(1.25), 50);
+    expect(libraryVideoCardMetadataHeightForTextScale(1.5), 58);
+    expect(
+      libraryVideoCardMainAxisExtent(
+        gridWidth: 880,
+        narrow: false,
+        compact: false,
+        textScaleFactor: 1.5,
+      ),
+      greaterThan(
+        libraryVideoCardMainAxisExtent(
+          gridWidth: 880,
+          narrow: false,
+          compact: false,
+        ),
+      ),
+    );
     expect(
       libraryVideoCardMainAxisExtentForColumnCount(
         gridWidth: 1200,
@@ -223,7 +241,7 @@ void main() {
         ),
       ),
     );
-    expect(libraryVideoCardRadius, 8);
+    expect(libraryVideoCardRadius, AppRadius.card);
     final compactOverlay = libraryVideoOverlayMetrics(200);
     expect(compactOverlay.edgeInset, 6);
     expect(compactOverlay.favoriteButtonSize, 30);
@@ -523,6 +541,79 @@ void main() {
     await tester.pump(const Duration(milliseconds: 20));
     expect(scaleTransition().scale.value, greaterThan(reversingScale));
     await gesture.removePointer();
+  });
+
+  testWidgets('library card keeps two-line title visible at 150% text',
+      (tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_text_scale_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final item = _testVideo(
+      path: p.join(directory.path, 'scaled-title.mp4'),
+      title: '这是用于验证百分之一百五十文字缩放的双行视频标题',
+    );
+    final thumbnailService = ThumbnailService.forDirectory(
+      directory,
+      _PreviewFFmpegBackend(),
+    );
+    const cardWidth = 300.0;
+    final cardHeight = libraryVideoCardMainAxisExtentForColumnCount(
+      // 真实网格宽度包含左右 22px 内容留白；扣除后卡片宽度才是 300px。
+      gridWidth: cardWidth + 44,
+      compact: false,
+      columnCount: 1,
+      textScaleFactor: 1.5,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(500, 420),
+            textScaler: TextScaler.linear(1.5),
+          ),
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: cardWidth,
+                height: cardHeight,
+                child: InteractiveVideoCard(
+                  item: item,
+                  thumbnailService: thumbnailService,
+                  playbackSettings: PlaybackSettings.defaults,
+                  onOpen: () {},
+                  onEditTags: () {},
+                  onToggleFavorite: () {},
+                  onDelete: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final scaledMetadataSlots = tester
+        .widgetList<SizedBox>(
+          find.descendant(
+            of: find.byKey(LibrarySmokeKeys.cardOpen(item.path)),
+            matching: find.byType(SizedBox),
+          ),
+        )
+        .where((box) => box.height == 58);
+    expect(scaledMetadataSlots, hasLength(1));
+    expect(find.text(item.title), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('card more menu follows hover and keeps open action isolated',

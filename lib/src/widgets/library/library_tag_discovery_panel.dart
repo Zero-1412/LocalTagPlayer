@@ -193,22 +193,15 @@ class TagDiscoveryZoneState extends State<TagDiscoveryZone> {
     ).where((tag) => _matchesSearch(tag.displayName ?? tag.name)).toList();
     final outerPanelWidth = widget.panelWidth ?? 482.0;
     final innerPanelWidth =
-        (outerPanelWidth - 44).clamp(276.0, 576.0).toDouble();
+        (outerPanelWidth - 28).clamp(276.0, 592.0).toDouble();
     final panel = Container(
       width: widget.dense ? double.infinity : innerPanelWidth,
-      margin: EdgeInsets.fromLTRB(widget.dense ? 16 : 20, 16, 24, 24),
-      padding: const EdgeInsets.all(24),
+      margin: EdgeInsets.fromLTRB(widget.dense ? 12 : 12, 12, 16, 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: librarySurface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.panel),
         border: Border.all(color: libraryBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(50),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1429,7 +1422,7 @@ const double collapsedTagDiscoveryRailWidth = 44;
 
 /** 折叠条减少横向占用，把释放空间还给默认视频网格。 */
 const EdgeInsets collapsedTagDiscoveryRailMargin =
-    EdgeInsets.fromLTRB(8, 12, 12, 18);
+    EdgeInsets.fromLTRB(8, 12, 12, 16);
 
 /** 右侧折叠条包含外边距后的完整布局宽度。 */
 double get collapsedTagDiscoveryRailLayoutWidth =>
@@ -1458,15 +1451,14 @@ class CollapsedTagDiscoveryRail extends StatelessWidget {
           margin: collapsedTagDiscoveryRailMargin,
           decoration: BoxDecoration(
             color: librarySurface,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppRadius.card),
             border: Border.all(color: libraryBorder),
-            boxShadow: librarySoftShadow,
           ),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppRadius.card),
             child: InkWell(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.card),
               onTap: onExpand,
               child: const ExcludeSemantics(
                 child: Column(

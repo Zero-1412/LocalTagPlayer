@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-18 · Apple UI Phase 1 媒体库主工作区
+
+- 左侧主导航、顶部搜索/筛选工具栏、右侧标签发现和视频结果卡片统一为 Apple 式实色结构层级，移除旧式强边线、双重投影和分散控件外观；所有现有入口、筛选语义和 filtered queue 保留。
+- 视频卡片增加 14px 圆角内容表面，以及克制的 hover、焦点、多选、按压反馈；reduced motion 停用结构缩放和侧栏位移，高对比度继续使用清晰描边。
+- 125%/150% 文字缩放动态增加两行标题槽位，并对高 DPI 亚像素舍入留出安全余量；150% 实体卡片测试确认长中文标题无 RenderFlex 溢出。
+- 完整 197 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 和 Windows debug build 通过。真实窗口仍为构建前旧进程，关闭重启时检测到用户操作而停止自动输入，最新 EXE 的三档截图和连续点击留待窗口空闲后补验。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存队列、稳定身份或用户数据。
+
 ## 2026-07-18 · 播放器返回复验与三档文字缩放
 
 - 受控 `flutter run -d windows` 中复现“媒体库 → 播放器 → 左上返回”，11,163 条来源 filtered queue 正常回到媒体库，窗口、进程与筛选状态保持；此前进程消失归因于调试会话/窗口句柄丢失，不修改正确的导航语义。
