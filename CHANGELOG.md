@@ -1,5 +1,12 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-18 · 建立 Apple 式全应用 UI skill 与迁移蓝图
+
+- 新增 `.agents/skills/ltp-apple-ui-design`，将上游 `emilkowalski/skills` 的设计基础、动效审查、动效机会筛选和术语能力收敛为一个 Local Tag Player 专用 skill。
+- 将 Web/CSS 专属建议替换为 Flutter/Windows 实现边界：保护真实 `TextField`、标签层级、筛选性能、filtered queue、播放器与缓存队列；限制大面积 blur，并要求 reduced motion、high contrast、键盘和 Semantics 验证。
+- 新增 `docs/design/APPLE_UI_MIGRATION.md`，按共享 token、媒体库、播放器、维护页、全局细节组件和跨平台 polish 六阶段规划全应用迁移，禁止一次性机械换皮或混入业务重构。
+- 本轮未修改业务代码、SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缩略图/媒体详情队列或用户数据。
+
 ## 2026-07-17 · 统一维护页面与浏览偏好
 
 - 标签中心、设置、缩略图缓存和缺失重关联页面统一为媒体库深色维护主题；标签分组 chip 增加明确选中勾选、强调色和列表筛选反馈。

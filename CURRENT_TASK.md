@@ -1,5 +1,12 @@
 ﻿# CURRENT_TASK.md
 
+## 2026-07-18 Apple 式全应用 UI 设计基线
+
+- 新增 repo-scoped `$ltp-apple-ui-design`，把 `emilkowalski/skills` 中适合本项目的 Apple 设计基础、动效决策、严格审查、机会筛选和术语规范转译为 Flutter/Windows 规则。
+- 详细设计知识按需拆为视觉基础、动效审查和动效术语 references，并保留上游 MIT 许可；未复制 Web 专属 CSS、Pointer Events、Framer Motion 或全局毛玻璃实现。
+- 新增 `docs/design/APPLE_UI_MIGRATION.md`，把全应用迁移拆为共享 token、媒体库、播放器、维护页、全局细节组件和跨平台 polish 六阶段。
+- 本轮只建立 skill 与迁移蓝图，尚未修改业务 UI；下一步从 Phase 0 的共享 token、reduced motion 和 high contrast 基线开始。
+
 ## 当前状态
 
 项目已能运行并构建 Windows debug 版本。

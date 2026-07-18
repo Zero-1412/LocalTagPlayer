@@ -1,5 +1,12 @@
 # ROADMAP.md
 
+## 2026-07-18 Apple 式全应用 UI 第二阶段启动
+
+- 采用 Apple 的目的、控制、熟悉、灵活、简洁、工艺和愉悦原则，把全应用统一为平静、精确、内容优先的桌面媒体体验；不复制 macOS，不把全窗口毛玻璃当成目标。
+- 新增 `$ltp-apple-ui-design` 和 `docs/design/APPLE_UI_MIGRATION.md`，先统一 token、无障碍与基础组件，再按媒体库、播放器、维护页、全局细节和跨平台逐阶段迁移。
+- UI 迁移不得改变标签层级、查询语义、filtered queue、播放器/缓存队列或用户数据；每个阶段都必须通过 focused tests、完整 analyze/build、真实点击截图和大媒体库性能检查。
+- 下一步只执行 Phase 0：共享颜色/材质/排版/圆角/动效 token，以及 reduced motion、high contrast 和文字缩放基线；不同时重写页面信息架构。
+
 ## 2026-07-16 备份检查、导出与低写放大启动完成
 
 - 设置页可显式检查 SQLite、快照结构和当前视频覆盖差异，并导出不含路径或媒体文件的版本化 JSON。
