@@ -993,6 +993,186 @@ void main() {
     expect(openedQueue, hasLength(205));
   });
 
+  testWidgets(
+      'library scroll header hides and restores with interruptible motion',
+      (WidgetTester tester) async {
+    final visible = ValueNotifier<bool>(true);
+    addTearDown(visible.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppAccessibilityScope(
+          data: const AppAccessibilityData(
+            disableAnimations: false,
+            accessibleNavigation: false,
+            highContrast: false,
+            textScaler: TextScaler.noScaling,
+          ),
+          child: Scaffold(
+            body: Column(
+              children: [
+                LibraryScrollResponsiveHeader(
+                  key: LibrarySmokeKeys.scrollResponsiveHeader,
+                  visibleListenable: visible,
+                  child: const SizedBox(height: 100),
+                ),
+                const Expanded(child: SizedBox()),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final header = find.byKey(LibrarySmokeKeys.scrollResponsiveHeader);
+    expect(tester.getSize(header).height, 100);
+
+    visible.value = false;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.getSize(header).height, inExclusiveRange(0, 100));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(header).height, closeTo(0, 0.01));
+
+    visible.value = true;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.getSize(header).height, inExclusiveRange(0, 100));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(header).height, closeTo(100, 0.01));
+  });
+
+  testWidgets('library scroll chrome reports direction and returns to top',
+      (WidgetTester tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_scroll_chrome_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final videos = List<VideoItem>.generate(
+      90,
+      (index) => _testVideo(
+        path: p.join(directory.path, 'video_$index.mp4'),
+        title: 'video $index',
+      ),
+    );
+    final headerEvents = <bool>[];
+
+    await tester.binding.setSurfaceSize(const Size(900, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppAccessibilityScope(
+          data: const AppAccessibilityData(
+            disableAnimations: false,
+            accessibleNavigation: false,
+            highContrast: false,
+            textScaler: TextScaler.noScaling,
+          ),
+          child: Scaffold(
+            body: VideoGrid(
+              videos: videos,
+              thumbnailService: ThumbnailService.forDirectory(
+                directory,
+                _PreviewFFmpegBackend(),
+              ),
+              playbackSettings: PlaybackSettings.defaults,
+              dense: false,
+              scrollChromeEnabled: true,
+              onHeaderVisibilityChanged: headerEvents.add,
+              onOpen: (_, __) {},
+              onEditTags: (_) {},
+              onToggleFavorite: (_) {},
+              onDelete: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final results = find.byKey(LibrarySmokeKeys.incrementalResults);
+    final button = find.byKey(LibrarySmokeKeys.returnToTopButton);
+    AnimatedOpacity buttonOpacity() => tester.widget<AnimatedOpacity>(
+          find
+              .ancestor(of: button, matching: find.byType(AnimatedOpacity))
+              .first,
+        );
+    expect(buttonOpacity().opacity, 0);
+
+    final controller = tester.widget<GridView>(results).controller!;
+    final gesture = await tester.startGesture(tester.getCenter(results));
+    // 先越过滚动手势阈值，再继续向下浏览，避免单次位移仍处于手势竞争阶段。
+    await gesture.moveBy(const Offset(0, -24));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, -216));
+    await tester.pump();
+    expect(controller.offset, greaterThan(0));
+    expect(headerEvents, contains(false));
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(headerEvents.last, isTrue);
+
+    final firstViewport = controller.position.viewportDimension;
+    controller.jumpTo(firstViewport - 1);
+    await tester.pump();
+    expect(buttonOpacity().opacity, 0);
+
+    controller.jumpTo(firstViewport + 1);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(buttonOpacity().opacity, 1);
+
+    expect(button.hitTestable(), findsOneWidget);
+    await tester.tap(button.hitTestable());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(controller.offset, closeTo(0, 0.01));
+    expect(buttonOpacity().opacity, 0);
+  });
+
+  testWidgets('library scroll header removes structural motion when requested',
+      (WidgetTester tester) async {
+    final visible = ValueNotifier<bool>(true);
+    addTearDown(visible.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppAccessibilityScope(
+          data: const AppAccessibilityData(
+            disableAnimations: true,
+            accessibleNavigation: false,
+            highContrast: false,
+            textScaler: TextScaler.noScaling,
+          ),
+          child: Scaffold(
+            body: LibraryScrollResponsiveHeader(
+              key: LibrarySmokeKeys.scrollResponsiveHeader,
+              visibleListenable: visible,
+              child: const SizedBox(height: 100),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final header = find.byKey(LibrarySmokeKeys.scrollResponsiveHeader);
+    visible.value = false;
+    await tester.pump();
+    expect(tester.getSize(header).height, closeTo(0, 0.01));
+    visible.value = true;
+    await tester.pump();
+    expect(tester.getSize(header).height, closeTo(100, 0.01));
+  });
+
   testWidgets('library filtering reuses retained card thumbnail state',
       (WidgetTester tester) async {
     final directory = Directory(

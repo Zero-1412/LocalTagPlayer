@@ -39,6 +39,12 @@ class LibrarySmokeKeys {
   /** 媒体库筛选/多选双状态工具栏。 */
   static const libraryResultToolbar =
       ValueKey<String>('smoke.library.result-toolbar');
+  /** 滚动浏览时负责收起和恢复媒体库顶部信息区的动画边界。 */
+  static const scrollResponsiveHeader =
+      ValueKey<String>('smoke.library.scroll-responsive-header');
+  /** 越过首个结果视口后出现的回到顶部入口。 */
+  static const returnToTopButton =
+      ValueKey<String>('smoke.library.return-to-top');
   /** 独立搜索输入表面，不承载已生效筛选状态。 */
   static const searchSurface = ValueKey<String>('smoke.top.search-surface');
   /** 搜索框右侧的低对比度筛选状态区域。 */

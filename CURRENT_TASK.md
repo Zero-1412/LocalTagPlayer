@@ -1,5 +1,14 @@
 ﻿# CURRENT_TASK.md
 
+## 2026-07-18 Apple UI Phase 1 媒体库滚动聚焦与回顶
+
+- expanded 媒体库向下滚动时收起完整标题与搜索动作区，连续滚轮结束 140ms 后再恢复；收起使用 160ms 淡出、上移与高度折叠，恢复使用 220ms `easeOutCubic`，方向反转时可从当前进度中断续播。
+- 回顶入口仅在滚动距离越过首次结果视口高度后出现，固定在结果区右下角并提供 48px 命中区、tooltip、键盘焦点和 Semantics；点击时按距离使用 220–520ms 平滑回顶，完成后自动隐藏。
+- 滚动位置只在阈值、方向或显示状态改变时更新布尔值；页面通过 `ValueNotifier` 驱动顶部结构动画，不按像素重建 11,163 项结果，也不改变增量加载与缩略图调度。medium/compact 布局保持原行为。
+- reduced motion 下取消结构位移与滚动动画并直接提交终态；focused tests 覆盖隐藏/恢复中间帧、方向通知、首屏阈值、真实点击回顶和无动态效果降级。
+- 完整 208 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。1249×714 最新 Debug 实窗确认越过首屏后回顶入口出现、停止滚动后顶部恢复、点击后返回首屏且入口消失；滚动中短暂隐藏由逐帧 widget 回归验证。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、排序/筛选语义、缩略图/媒体详情队列、`PlayerBackend` 或用户数据。
+
 ## 2026-07-18 Apple UI Phase 1 排序动作带补齐
 
 - 根据真实窗口红框反馈，确认顶部空洞来自固定 360px 动作带中的 `spaceBetween`：该宽度用于保证进入多选时搜索框不跳动，但剩余空间不应以无语义留白呈现。

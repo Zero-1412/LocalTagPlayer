@@ -1,5 +1,13 @@
 # Local Tag Player Apple 式全应用 UI 迁移蓝图
 
+## 2026-07-18 Phase 1 媒体库滚动聚焦补充
+
+- expanded 媒体库在向下浏览内容时用可中断的淡出、轻微上移和高度折叠暂时移除顶部信息区，停止后短延迟恢复；向上反向滚动立即恢复，保持空间连续与用户方向感。
+- 当滚动距离越过首次结果视口后，右下角出现内容区回顶入口；48px 命中区、tooltip、键盘焦点和 Semantics 保持 Windows 桌面可达性，点击后按距离平滑回顶并退出。
+- 动效预算为收起 160ms、恢复 220ms、入口 180ms、回顶 220–520ms；reduced motion 下直接提交结构与滚动终态，不使用 spring、bounce、blur 或逐卡片动画。
+- 实现只观察滚动方向和单一首屏阈值，状态未改变时不触发页面 rebuild；不触碰标签查询、排序、增量结果、缩略图队列、filtered queue 或用户数据。
+- focused tests、完整 208 项测试、`flutter analyze`、Windows debug build 与 1249×714 真实窗口终态验收通过。
+
 状态：Phase 0、Phase 1 已完成；Phase 2 播放器及左滑快速反向真实终态已验收；Phase 3 标签中心、设置、缓存诊断、目录管理与 Missing/Relink 已完成代码、测试、构建与真实窗口连续点击。
 
 ## 目标

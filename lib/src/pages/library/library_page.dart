@@ -35,6 +35,7 @@ import '../../services/tags/tag_query_service.dart';
 import '../../widgets/app_theme_tokens.dart';
 import '../../widgets/design_system/app_interaction_surface.dart';
 import '../../widgets/library/library_local_view.dart';
+import '../../widgets/library/library_smoke_keys.dart';
 import '../../widgets/library/library_tag_discovery_panel.dart';
 import '../../widgets/library/library_video_results.dart';
 import '../../widgets/library/library_widgets.dart';
@@ -2646,6 +2647,12 @@ class _LibraryPageState extends State<LibraryPage> {
   /** 主功能栏折叠态只影响当前页面布局，不写入媒体库数据或筛选状态。 */
   var _isMainSidebarCollapsed = false;
   var _isTagDiscoveryPanelOpen = libraryTagDiscoveryPanelInitiallyOpen;
+  /**
+   * expanded 结果滚动时的顶部信息区目标状态。
+   *
+   * 使用独立 notifier 只重建顶部动效边界，不让滚动方向变化触发整个媒体库页面重建。
+   */
+  final _libraryHeaderVisible = ValueNotifier<bool>(true);
   var _resultMode = _LibraryResultMode.library;
   Object? _recentVideoCacheKey;
   Object? _favoriteVideoCacheKey;
@@ -2716,6 +2723,7 @@ class _LibraryPageState extends State<LibraryPage> {
     _searchController.removeListener(_handleSearchControllerChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _libraryHeaderVisible.dispose();
     _countRefreshCoordinator.dispose();
     super.dispose();
   }
@@ -4852,6 +4860,13 @@ class _LibraryPageState extends State<LibraryPage> {
                           selectionMode: _librarySelectionMode,
                           selectedVideoIds: _selectedLibraryVideoIds,
                           onToggleSelected: _toggleLibraryVideoSelection,
+                          scrollChromeEnabled:
+                              layoutSize == LayoutSize.expanded,
+                          onHeaderVisibilityChanged: (visible) {
+                            if (_libraryHeaderVisible.value != visible) {
+                              _libraryHeaderVisible.value = visible;
+                            }
+                          },
                         ),
                 },
               ),
@@ -4976,7 +4991,11 @@ class _LibraryPageState extends State<LibraryPage> {
           accessibility.motionDuration(libraryPanelMotionDuration);
       return Column(
         children: [
-          buildTopBar(LayoutSize.expanded),
+          LibraryScrollResponsiveHeader(
+            key: LibrarySmokeKeys.scrollResponsiveHeader,
+            visibleListenable: _libraryHeaderVisible,
+            child: buildTopBar(LayoutSize.expanded),
+          ),
           Expanded(
             child: Row(
               children: [

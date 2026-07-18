@@ -15,6 +15,7 @@ import '../../models/video_item.dart';
 import '../../services/library/library_card_ui_diagnostics.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../app_theme_tokens.dart';
+import '../design_system/app_interaction_surface.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -593,6 +594,8 @@ class VideoGrid extends StatefulWidget {
     this.selectionMode = false,
     this.selectedVideoIds = const <String>{},
     this.onToggleSelected,
+    this.scrollChromeEnabled = false,
+    this.onHeaderVisibilityChanged,
   });
 
   final List<VideoItem> videos;
@@ -635,6 +638,12 @@ class VideoGrid extends StatefulWidget {
   /** 切换单个视频选择状态；普通模式不调用。 */
   final ValueChanged<VideoItem>? onToggleSelected;
 
+  /** 是否启用宽桌面结果区的滚动顶部收起和回到顶部入口。 */
+  final bool scrollChromeEnabled;
+
+  /** 用户滚动方向或空闲状态改变时，请求页面收起或恢复顶部信息区。 */
+  final ValueChanged<bool>? onHeaderVisibilityChanged;
+
   @override
   State<VideoGrid> createState() => _VideoGridState();
 }
@@ -669,6 +678,18 @@ class _VideoGridState extends State<VideoGrid> {
   /** 窗口宽度停止变化后提交唯一一次网格重排。 */
   Timer? _viewportResizeTimer;
 
+  /** 合并连续滚轮事件之间的短暂 idle，避免顶部信息区反复闪回。 */
+  Timer? _headerRestoreTimer;
+
+  /** 首次开始滚动时的结果视口高度，用于判定首屏视频是否已经全部划过。 */
+  double? _initialViewportExtent;
+
+  /** 是否已经越过首个结果视口并显示回到顶部入口。 */
+  var _showReturnToTop = false;
+
+  /** 最近一次上报给页面的顶部可见性，避免滚动像素更新重复触发父级状态。 */
+  var _reportedHeaderVisible = true;
+
   /**
    * 用结果数量和首尾稳定身份识别筛选/排序结果变化。
    *
@@ -684,6 +705,12 @@ class _VideoGridState extends State<VideoGrid> {
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_handleScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.scrollChromeEnabled) {
+        // 新进入 expanded 布局时主动恢复顶部，避免窗口尺寸切换继承旧隐藏态。
+        widget.onHeaderVisibilityChanged?.call(true);
+      }
+    });
   }
 
   @override
@@ -695,12 +722,27 @@ class _VideoGridState extends State<VideoGrid> {
       // 新筛选、排序或视图模式从首批 10 行开始，并在下一帧安全回到顶部。
       _resetIncrementalResults();
     }
+    if (oldWidget.scrollChromeEnabled && !widget.scrollChromeEnabled) {
+      _reportHeaderVisibility(true);
+      if (_showReturnToTop) {
+        _showReturnToTop = false;
+      }
+    } else if (!oldWidget.scrollChromeEnabled && widget.scrollChromeEnabled) {
+      _reportedHeaderVisible = true;
+      widget.onHeaderVisibilityChanged?.call(true);
+    }
   }
 
   /** 重置为首批结果；滚动复位延后到布局完成，避免控制器尚未挂载。 */
   void _resetIncrementalResults() {
     _loadedItemCount = 0;
     _loadMoreScheduled = false;
+    _initialViewportExtent = null;
+    _headerRestoreTimer?.cancel();
+    _reportHeaderVisibility(true);
+    if (_showReturnToTop) {
+      _showReturnToTop = false;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) {
         return;
@@ -736,6 +778,7 @@ class _VideoGridState extends State<VideoGrid> {
    * 数百行只增长轻量 itemCount，不会同时保活数百行 Widget。
    */
   void _handleScroll() {
+    _syncScrollChrome();
     if (!_scrollController.hasClients ||
         _loadMoreScheduled ||
         widget.videos.isEmpty) {
@@ -782,9 +825,158 @@ class _VideoGridState extends State<VideoGrid> {
     });
   }
 
+  /**
+   * 只在跨越首屏阈值时更新回到顶部入口。
+   *
+   * 该方法虽然挂在滚动监听器上，但不会逐像素调用 setState；首次视口高度固定后，
+   * 只有布尔结果变化才重建当前结果组件，避免把 11,000 条列表拖入高频页面刷新。
+   */
+  void _syncScrollChrome() {
+    if (!widget.scrollChromeEnabled || !_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    final measuredViewport = position.viewportDimension;
+    if (_initialViewportExtent == null && measuredViewport > 0) {
+      _initialViewportExtent = measuredViewport;
+    }
+    final threshold = _initialViewportExtent;
+    if (threshold == null) {
+      return;
+    }
+    final shouldShow = position.pixels >= threshold;
+    if (shouldShow != _showReturnToTop && mounted) {
+      setState(() => _showReturnToTop = shouldShow);
+    }
+  }
+
+  /** 向页面上报顶部信息区目标状态，同一状态不会重复触发。 */
+  void _reportHeaderVisibility(bool visible) {
+    if (_reportedHeaderVisible == visible) {
+      return;
+    }
+    _reportedHeaderVisible = visible;
+    widget.onHeaderVisibilityChanged?.call(visible);
+  }
+
+  /**
+   * 处理真实用户滚动方向：向下时收起，向上或停止时恢复。
+   *
+   * 程序化回到顶部不会伪装成用户滚动方向；它会直接恢复顶部并由控制器完成位移。
+   */
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (!widget.scrollChromeEnabled || notification.depth != 0) {
+      return false;
+    }
+    if (notification is UserScrollNotification) {
+      switch (notification.direction) {
+        case ScrollDirection.reverse:
+          _headerRestoreTimer?.cancel();
+          _reportHeaderVisibility(false);
+        case ScrollDirection.forward:
+          _headerRestoreTimer?.cancel();
+          _reportHeaderVisibility(true);
+        case ScrollDirection.idle:
+          _scheduleHeaderRestore();
+      }
+    } else if (notification is ScrollEndNotification) {
+      _scheduleHeaderRestore();
+    }
+    return false;
+  }
+
+  /** 连续滚轮停止 140ms 后恢复顶部，短暂事件间隙不会造成闪烁。 */
+  void _scheduleHeaderRestore() {
+    _headerRestoreTimer?.cancel();
+    _headerRestoreTimer = Timer(const Duration(milliseconds: 140), () {
+      if (mounted) {
+        _reportHeaderVisibility(true);
+      }
+    });
+  }
+
+  /** 点击浮动入口后以有上限的短动画回到结果顶部。 */
+  Future<void> _scrollToTop() async {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    _headerRestoreTimer?.cancel();
+    _reportHeaderVisibility(true);
+    final accessibility = AppAccessibilityScope.of(context);
+    if (accessibility.reduceMotion) {
+      _scrollController.jumpTo(0);
+      return;
+    }
+    final distance = _scrollController.position.pixels.abs();
+    final milliseconds = (220 + distance / 6).clamp(220, 520).round();
+    await _scrollController.animateTo(
+      0,
+      duration: Duration(milliseconds: milliseconds),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  /** 构建不遮挡滚动条的右下角回到顶部浮动入口。 */
+  Widget _buildReturnToTopButton(BuildContext context) {
+    final accessibility = AppAccessibilityScope.of(context);
+    final motionDuration =
+        accessibility.motionDuration(const Duration(milliseconds: 180));
+    final fadeDuration =
+        accessibility.fadeDuration(const Duration(milliseconds: 160));
+    return Positioned(
+      right: 24,
+      bottom: 24,
+      child: ExcludeFocus(
+        excluding: !_showReturnToTop,
+        child: ExcludeSemantics(
+          excluding: !_showReturnToTop,
+          child: IgnorePointer(
+            ignoring: !_showReturnToTop,
+            child: AnimatedSlide(
+              offset: _showReturnToTop ? Offset.zero : const Offset(0, 0.28),
+              duration: motionDuration,
+              curve: Curves.easeOutCubic,
+              child: AnimatedOpacity(
+                opacity: _showReturnToTop ? 1 : 0,
+                duration: fadeDuration,
+                curve: Curves.easeOutCubic,
+                child: Tooltip(
+                  message: '回到顶部',
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: librarySoftShadow,
+                    ),
+                    child: AppInteractionSurface(
+                      key: LibrarySmokeKeys.returnToTopButton,
+                      onTap: _scrollToTop,
+                      semanticLabel: '回到媒体库顶部',
+                      padding: EdgeInsets.zero,
+                      borderRadius: 24,
+                      backgroundColor: librarySurfaceAlt,
+                      child: const SizedBox.square(
+                        dimension: 48,
+                        child: Icon(
+                          Icons.arrow_upward_rounded,
+                          size: 22,
+                          color: libraryText,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _viewportResizeTimer?.cancel();
+    _headerRestoreTimer?.cancel();
     if (LibraryCardUiDiagnostics.scrollStatsEnabled) {
       LibraryCardUiDiagnostics.finishScrollSample();
     }
@@ -986,11 +1178,21 @@ class _VideoGridState extends State<VideoGrid> {
             },
           );
         }
-        return AnimatedOpacity(
-          opacity: resizing ? 0.97 : 1,
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOutCubic,
-          child: results,
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: _handleScrollNotification,
+                child: AnimatedOpacity(
+                  opacity: resizing ? 0.97 : 1,
+                  duration: const Duration(milliseconds: 120),
+                  curve: Curves.easeOutCubic,
+                  child: results,
+                ),
+              ),
+            ),
+            if (widget.scrollChromeEnabled) _buildReturnToTopButton(context),
+          ],
         );
       },
     );
