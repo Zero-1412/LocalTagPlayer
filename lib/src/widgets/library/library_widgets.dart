@@ -2639,7 +2639,7 @@ class ReferenceTopBar extends StatelessWidget {
                       );
                       final normalActions = SizedBox(
                         key: LibrarySmokeKeys.toolbarActions,
-                        height: 50,
+                        height: 48,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           mainAxisSize: MainAxisSize.min,
@@ -2698,13 +2698,12 @@ class ReferenceTopBar extends StatelessWidget {
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(
                                             color: libraryText,
-                                            fontSize: 28,
-                                            height: 1.05,
+                                            fontSize: 24,
+                                            height: 1.12,
                                             fontWeight: FontWeight.w800,
-                                            letterSpacing: -0.7,
                                           ),
                                         ),
-                                        const SizedBox(height: 5),
+                                        const SizedBox(height: 4),
                                         Text(
                                           defaultChipLabel == '全部视频'
                                               ? '全部视频 · 浏览、搜索并整理你的本地视频'
@@ -2713,8 +2712,8 @@ class ReferenceTopBar extends StatelessWidget {
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(
                                             color: libraryTextMuted,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ],
@@ -2746,40 +2745,30 @@ class ReferenceTopBar extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 10),
-                            DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: librarySurface,
-                                borderRadius:
-                                    BorderRadius.circular(AppRadius.panel),
-                                border: Border.all(color: libraryBorder),
-                                boxShadow: librarySoftShadow,
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: SizedBox(
-                                  height: 50,
-                                  child: Row(
-                                    children: [
-                                      Expanded(child: searchSurface),
-                                      const SizedBox(width: 12),
-                                      SizedBox(
-                                        width: 360,
-                                        child: selectionMode
-                                            ? selectionStatus
-                                            : Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.end,
-                                                children: [
-                                                  sortControl,
-                                                  const SizedBox(width: 10),
-                                                  normalActions,
-                                                ],
-                                              ),
-                                      ),
-                                    ],
+                            const SizedBox(height: 12),
+                            // 搜索和动作直接落在画布上，各自用自身 surface 表达可交互性；
+                            // 不再用大圆角容器包裹一组已经带边框的控件，避免“容器套容器”。
+                            SizedBox(
+                              key: LibrarySmokeKeys.headerActionLane,
+                              height: 50,
+                              child: Row(
+                                children: [
+                                  Expanded(child: searchSurface),
+                                  const SizedBox(width: 12),
+                                  SizedBox(
+                                    width: 360,
+                                    child: selectionMode
+                                        ? selectionStatus
+                                        : Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              sortControl,
+                                              normalActions,
+                                            ],
+                                          ),
                                   ),
-                                ),
+                                ],
                               ),
                             ),
                             if (!selectionMode && activeFilters.isNotEmpty) ...[
@@ -2975,6 +2964,17 @@ Widget referenceTopBarSearchSmokeHarness({
   VoidCallback? onToggleTagPanel,
 }) {
   final app = MaterialApp(
+    builder: accessibility == null
+        ? null
+        : (context, child) {
+            // focused test 必须让文字缩放同时进入 MediaQuery 和设计策略作用域，
+            // 避免只扩大宽度预算却没有真实放大文字的假验收。
+            final mediaQuery = MediaQuery.of(context);
+            return MediaQuery(
+              data: mediaQuery.copyWith(textScaler: accessibility.textScaler),
+              child: child!,
+            );
+          },
     home: Scaffold(
       body: ReferenceTopBar(
         controller: controller,
@@ -3262,15 +3262,15 @@ class _TagDiscoveryHeaderButton extends StatelessWidget {
             ],
           ),
           style: OutlinedButton.styleFrom(
-            foregroundColor: expanded ? libraryText : appAccentViolet,
-            backgroundColor: expanded ? librarySurfaceAlt : librarySurface,
+            foregroundColor: expanded ? libraryText : libraryTextMuted,
+            backgroundColor: expanded ? librarySurfaceAlt : Colors.transparent,
             side: BorderSide(
               color: expanded
                   ? appAccentViolet.withValues(alpha: 0.44)
                   : libraryBorder,
             ),
-            minimumSize: const Size(96, 42),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            minimumSize: const Size(88, 40),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.control),
             ),
@@ -3346,7 +3346,7 @@ class _CompactTopSortControl extends StatelessWidget {
           icon: const Icon(Icons.sort_rounded, size: 20),
           style: IconButton.styleFrom(
             backgroundColor: librarySurface,
-            foregroundColor: appAccentViolet,
+            foregroundColor: libraryTextMuted,
             fixedSize: const Size(38, 38),
             side: const BorderSide(color: libraryBorder),
           ),
@@ -3388,7 +3388,7 @@ class _ReferenceIconButton extends StatelessWidget {
       icon: Icon(icon, size: 20),
       style: IconButton.styleFrom(
         backgroundColor: librarySurface,
-        foregroundColor: appAccentViolet,
+        foregroundColor: libraryTextMuted,
         fixedSize: const Size(38, 38),
         side: const BorderSide(color: libraryBorder),
       ),

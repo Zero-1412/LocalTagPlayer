@@ -1505,6 +1505,7 @@ void main() {
         tester.getRect(find.byKey(LibrarySmokeKeys.toolbarResultStatus));
     expect(resultRect.bottom, lessThan(searchRect.top));
     expect(searchRect.right, lessThan(actionsRect.left));
+    expect(sortRect.left - searchRect.right, lessThanOrEqualTo(24));
     expect(searchRect.bottom, lessThan(statusRect.top));
     expect(sortRect.right, lessThanOrEqualTo(actionsRect.left));
     expect(
@@ -1527,6 +1528,40 @@ void main() {
         isNot(librarySurfaceAlt),
       );
     }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('expanded library header stays compact at 150 percent text',
+      (tester) async {
+    tester.view.physicalSize = const Size(1870, 320);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        videoCount: 11163,
+        onEnterSelectionMode: () {},
+        onToggleTagPanel: () {},
+        accessibility: const AppAccessibilityData(
+          disableAnimations: false,
+          accessibleNavigation: false,
+          highContrast: false,
+          textScaler: TextScaler.linear(1.5),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('11163 个视频'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.libraryResultToolbar)).height,
+      lessThan(170),
+    );
     expect(tester.takeException(), isNull);
   });
 
