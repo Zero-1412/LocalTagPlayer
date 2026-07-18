@@ -1470,7 +1470,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('search, library status, and actions keep a 50-40-10 hierarchy',
+  testWidgets('expanded library header separates title, actions, and filters',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 260);
     tester.view.devicePixelRatio = 1;
@@ -1503,10 +1503,10 @@ void main() {
         tester.getRect(find.byKey(LibrarySmokeKeys.topSortFieldButton));
     final resultRect =
         tester.getRect(find.byKey(LibrarySmokeKeys.toolbarResultStatus));
-    expect(searchRect.right, lessThan(statusRect.left));
-    expect(searchRect.width / statusRect.width, closeTo(1.25, 0.02));
-    expect(statusRect.width / actionsRect.width, closeTo(4, 0.05));
-    expect(sortRect.right, lessThan(resultRect.left));
+    expect(resultRect.bottom, lessThan(searchRect.top));
+    expect(searchRect.right, lessThan(actionsRect.left));
+    expect(searchRect.bottom, lessThan(statusRect.top));
+    expect(sortRect.right, lessThanOrEqualTo(actionsRect.left));
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.searchInputLane)).width,
       greaterThan(600),
@@ -4186,22 +4186,24 @@ void main() {
     expect(tester.getTopLeft(thumb).dx, closeTo(initialLeft, 0.01));
   });
 
-  testWidgets('collapsed tag rail exposes a stable expand action',
+  testWidgets('library header exposes a stable tag panel toggle',
       (tester) async {
     var expanded = false;
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
     await tester.pumpWidget(
-      collapsedTagDiscoveryRailSmokeHarness(
-        onExpand: () => expanded = true,
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        onSearchChanged: (_) {},
+        onToggleTagPanel: () => expanded = true,
       ),
     );
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byKey(LibrarySmokeKeys.collapsedTagRail), findsOneWidget);
     expect(find.byTooltip('展开标签筛选'), findsOneWidget);
-    expect(
-      tester.getSize(find.byKey(LibrarySmokeKeys.collapsedTagRail)).width,
-      collapsedTagDiscoveryRailLayoutWidth,
-    );
+    expect(find.text('标签'), findsOneWidget);
+    expect(find.byType(RotatedBox), findsNothing);
 
     await tester.tap(find.byKey(LibrarySmokeKeys.collapsedTagRail));
     await tester.pump(const Duration(milliseconds: 100));

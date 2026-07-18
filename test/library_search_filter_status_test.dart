@@ -112,7 +112,7 @@ void main() {
       ),
     );
 
-    expect(find.text('全部视频'), findsOneWidget);
+    expect(find.textContaining('全部视频'), findsOneWidget);
     final searchSurface = tester.widget<AnimatedContainer>(
       find.byKey(LibrarySmokeKeys.searchSurface),
     );
@@ -175,8 +175,8 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('11163 个视频'), findsOneWidget);
     expect(
-      tester.getSize(find.byKey(LibrarySmokeKeys.filterStatusArea)).width,
-      198,
+      tester.getSize(find.byKey(LibrarySmokeKeys.toolbarResultStatus)).width,
+      greaterThanOrEqualTo(180),
     );
   });
 }

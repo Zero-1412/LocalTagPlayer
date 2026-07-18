@@ -4915,6 +4915,12 @@ class _LibraryPageState extends State<LibraryPage> {
         denseResultGrid: _denseResultGrid,
         onResultViewChanged: _setResultView,
         onOpenTagManager: () => _openTagManager(videos),
+        tagPanelOpen: _isTagDiscoveryPanelOpen,
+        onToggleTagPanel: layoutSize == LayoutSize.expanded
+            ? () => setState(
+                  () => _isTagDiscoveryPanelOpen = !_isTagDiscoveryPanelOpen,
+                )
+            : null,
         onRemovePrimaryTag: (tag) => _mutateFilters(() {
           _selectedTags.remove(tag);
           _selectedChildTags.clear();
@@ -4962,7 +4968,8 @@ class _LibraryPageState extends State<LibraryPage> {
       MainLibraryLayoutSlots layoutSlots, {
       required double gridColumnReferenceWidth,
     }) {
-      final collapsedFilterWidth = collapsedTagDiscoveryRailLayoutWidth;
+      // 收起后完全释放右侧空间；恢复入口已经提升到页面标题区，避免保留突兀的竖排窄条。
+      const collapsedFilterWidth = 0.0;
       final accessibility = AppAccessibilityScope.of(context);
       final panelDuration =
           accessibility.motionDuration(libraryPanelMotionDuration);
@@ -4985,13 +4992,15 @@ class _LibraryPageState extends State<LibraryPage> {
                       ? layoutSlots.filterPanelWidth
                       : collapsedFilterWidth,
                   // 外框只承担稳定分隔；面板和折叠入口各自表达层级，避免出现双重阴影。
-                  decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: libraryBorder.withValues(alpha: 0.72),
-                      ),
-                    ),
-                  ),
+                  decoration: _isTagDiscoveryPanelOpen
+                      ? BoxDecoration(
+                          border: Border(
+                            left: BorderSide(
+                              color: libraryBorder.withValues(alpha: 0.72),
+                            ),
+                          ),
+                        )
+                      : null,
                   child: ClipRect(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
@@ -5036,11 +5045,7 @@ class _LibraryPageState extends State<LibraryPage> {
                                       dense: false,
                                       panelWidth: layoutSlots.filterPanelWidth,
                                     )
-                                  : CollapsedTagDiscoveryRail(
-                                      onExpand: () => setState(
-                                        () => _isTagDiscoveryPanelOpen = true,
-                                      ),
-                                    ),
+                                  : const SizedBox.shrink(),
                             ),
                           ),
                         );
@@ -5090,9 +5095,8 @@ class _LibraryPageState extends State<LibraryPage> {
                         switch (layoutSize) {
                           LayoutSize.compact => constraints.maxWidth,
                           LayoutSize.medium => constraints.maxWidth - 248,
-                          LayoutSize.expanded => constraints.maxWidth -
-                              expandedSlots.sidebarWidth -
-                              collapsedTagDiscoveryRailLayoutWidth,
+                          LayoutSize.expanded =>
+                            constraints.maxWidth - expandedSlots.sidebarWidth,
                         },
                       )
                       .toDouble();

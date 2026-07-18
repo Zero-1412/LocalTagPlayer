@@ -556,7 +556,11 @@ class LibrarySidebar extends StatelessWidget {
                                     LibrarySidebarBrand(
                                       onToggleCollapsed: onToggleCollapsed,
                                     ),
-                                    const SizedBox(height: 20),
+                                    const SizedBox(height: 22),
+                                    const LibrarySidebarSectionLabel(
+                                      label: '浏览',
+                                    ),
+                                    const SizedBox(height: 8),
                                     LibrarySidebarNavItem(
                                       icon: Icons.grid_view_rounded,
                                       label: '\u5a92\u4f53\u5e93',
@@ -590,9 +594,9 @@ class LibrarySidebar extends StatelessWidget {
                                       onTap: onOpenTagManager,
                                     ),
                                     const SizedBox(height: 18),
-                                    LibrarySidebarSectionLabel(
-                                        label:
-                                            '\u76ee\u5f55\u4e0e\u670d\u52a1'),
+                                    const LibrarySidebarSectionLabel(
+                                      label: '资料库',
+                                    ),
                                     const SizedBox(height: 8),
                                     LibrarySidebarNavItem(
                                       icon: Icons.folder_copy_outlined,
@@ -695,75 +699,39 @@ class LibrarySidebar extends StatelessWidget {
                                           ),
                                         ),
                                       ),
-                                    const SizedBox(height: 18),
-                                    LibrarySidebarSectionLabel(
-                                        label: '\u5b58\u50a8\u4f4d\u7f6e'),
-                                    const SizedBox(height: 8),
-                                    if (roots.isEmpty)
-                                      const Text(
-                                        '\u8fd8\u6ca1\u6709\u6dfb\u52a0\u76ee\u5f55',
-                                        style: TextStyle(
-                                            color: Color(0xff718096),
-                                            fontSize: 12),
-                                      )
-                                    else
-                                      for (final root in roots.take(2))
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(bottom: 10),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                root,
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  color: Color(0xffcbd5e1),
-                                                  fontSize: 11,
-                                                  height: 1.25,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 6),
-                                              ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(99),
-                                                child:
-                                                    const LinearProgressIndicator(
-                                                  minHeight: 4,
-                                                  value: 0.58,
-                                                  color: appAccentViolet,
-                                                  backgroundColor:
-                                                      Color(0xff293548),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                    const SizedBox(height: 16),
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.035),
+                                        borderRadius: BorderRadius.circular(
+                                          AppRadius.panel,
                                         ),
-                                    const SizedBox(height: 12),
-                                    LibrarySidebarLibraryStat(
-                                      label: '\u6807\u7b7e',
-                                      value: tags.length.toString(),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    LibrarySidebarLibraryStat(
-                                      label: '\u5206\u7ec4',
-                                      value: tagGroups.length.toString(),
-                                    ),
-                                    if (roots.isNotEmpty) ...[
-                                      const SizedBox(height: 12),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(99),
-                                        child: const LinearProgressIndicator(
-                                          minHeight: 4,
-                                          value: 0.58,
-                                          color: appAccentViolet,
-                                          backgroundColor: Color(0xff293548),
+                                        border: Border.all(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.055),
                                         ),
                                       ),
-                                    ],
+                                      child: Column(
+                                        children: [
+                                          LibrarySidebarLibraryStat(
+                                            label: '资料库',
+                                            value: roots.length.toString(),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          LibrarySidebarLibraryStat(
+                                            label: '\u6807\u7b7e',
+                                            value: tags.length.toString(),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          LibrarySidebarLibraryStat(
+                                            label: '\u5206\u7ec4',
+                                            value: tagGroups.length.toString(),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1042,10 +1010,10 @@ class LibrarySidebarSectionLabel extends StatelessWidget {
     return Text(
       label,
       style: const TextStyle(
-        color: Color(0xff718096),
-        fontSize: 11,
-        fontWeight: FontWeight.w900,
-        letterSpacing: 0,
+        color: Color(0xff7f8ca1),
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.45,
       ),
     );
   }
@@ -1064,7 +1032,7 @@ class LibrarySidebarBrand extends StatelessWidget {
       children: [
         _SidebarBrandToggle(
           collapsed: false,
-          dimension: 40,
+          dimension: 36,
           onToggleCollapsed: onToggleCollapsed,
         ),
         const SizedBox(width: 12),
@@ -1078,21 +1046,22 @@ class LibrarySidebarBrand extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: 13,
                   height: 1.18,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               SizedBox(height: 4),
               Text(
-                '\u672c\u5730\u89c6\u9891\u7ba1\u7406\u5de5\u4f5c\u53f0',
+                'LOCAL LIBRARY',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Color(0xff95a3b8),
-                  fontSize: 11,
+                  fontSize: 9,
                   height: 1.2,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
                 ),
               ),
             ],
@@ -1313,40 +1282,31 @@ class LibrarySidebarNavItem extends StatelessWidget {
         selected: selected,
         label: label,
         child: Material(
-          color: selected ? librarySurfaceAlt : Colors.transparent,
+          color: selected
+              ? appAccentViolet.withValues(alpha: 0.14)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.control),
           child: InkWell(
             borderRadius: BorderRadius.circular(AppRadius.control),
             onTap: onTap,
             child: Container(
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 9),
+              height: 38,
+              padding: const EdgeInsets.symmetric(horizontal: 11),
               child: Row(
                 children: [
-                  AnimatedContainer(
-                    duration: AppAccessibilityScope.of(context)
-                        .fadeDuration(appMotionDuration),
-                    width: 3,
-                    height: selected ? 18 : 0,
-                    decoration: BoxDecoration(
-                      color: appAccentViolet,
-                      borderRadius: BorderRadius.circular(AppRadius.capsule),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   Icon(
                     icon,
                     size: 18,
-                    color: selected ? libraryText : libraryTextMuted,
+                    color: selected ? appAccentViolet : libraryTextMuted,
                   ),
-                  const SizedBox(width: 9),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: selected ? libraryText : const Color(0xffcbd5e1),
+                        color: selected ? libraryText : const Color(0xffb8c3d3),
                         fontSize: 13,
                         fontWeight:
                             selected ? FontWeight.w700 : FontWeight.w600,
@@ -2383,6 +2343,8 @@ class ReferenceTopBar extends StatelessWidget {
     required this.onResultViewChanged,
     required this.onOpenTagManager,
     required this.onOpenFilters,
+    this.tagPanelOpen = false,
+    this.onToggleTagPanel,
     required this.onRemovePrimaryTag,
     required this.onRemoveChildTag,
     required this.onRemoveGroupTag,
@@ -2469,6 +2431,12 @@ class ReferenceTopBar extends StatelessWidget {
   final VoidCallback onOpenTagManager;
 
   final VoidCallback onOpenFilters;
+
+  /** expanded 桌面布局中的标签浏览面板是否已经展开。 */
+  final bool tagPanelOpen;
+
+  /** 从页面标题区展开或收起标签浏览面板；中小布局继续使用底部筛选面板。 */
+  final VoidCallback? onToggleTagPanel;
 
   final ValueChanged<String> onRemovePrimaryTag;
 
@@ -2592,15 +2560,23 @@ class ReferenceTopBar extends StatelessWidget {
               child: DecoratedBox(
                 key: LibrarySmokeKeys.libraryResultToolbar,
                 decoration: BoxDecoration(
-                  color: librarySurface,
+                  color: layoutSize == LayoutSize.expanded
+                      ? Colors.transparent
+                      : librarySurface,
                   borderRadius: BorderRadius.circular(AppRadius.panel),
-                  border: Border.all(color: libraryBorder),
+                  border: layoutSize == LayoutSize.expanded
+                      ? null
+                      : Border.all(color: libraryBorder),
                 ),
                 child: Padding(
-                  // 横向保持 8px，让搜索在 1400px 桌面宽度仍达到主操作层级；
-                  // 纵向 10px 则维持工具栏与 50px 控件的稳定呼吸空间。
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                  // expanded 主界面改用“标题 + 操作 + 状态”的分层结构，不再把所有功能
+                  // 塞进一个后台工具条式容器；中小布局仍保留紧凑单行，避免占用结果空间。
+                  padding: layoutSize == LayoutSize.expanded
+                      ? EdgeInsets.zero
+                      : const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 10,
+                        ),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final narrowMedium = layoutSize == LayoutSize.medium &&
@@ -2694,6 +2670,143 @@ class ReferenceTopBar extends StatelessWidget {
                           ],
                         ),
                       );
+                      if (layoutSize == LayoutSize.expanded) {
+                        final pageTitle = defaultChipLabel == '全部视频'
+                            ? '媒体库'
+                            : defaultChipLabel;
+                        final resultStatusWidth = progressLabel == null
+                            ? (resultCountLabel == null ? 104.0 : 200.0) +
+                                resultTextScaleAllowance
+                            : 224.0;
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          pageTitle,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: libraryText,
+                                            fontSize: 28,
+                                            height: 1.05,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: -0.7,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Text(
+                                          defaultChipLabel == '全部视频'
+                                              ? '全部视频 · 浏览、搜索并整理你的本地视频'
+                                              : '当前资料库视图',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: libraryTextMuted,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    key: LibrarySmokeKeys.toolbarResultStatus,
+                                    width: resultStatusWidth,
+                                    child: _FilterResultLine(
+                                      resultCount: videoCount,
+                                      resultCountLabel: resultCountLabel,
+                                      refreshing: refreshing,
+                                      progressLabel: progressLabel,
+                                      progressValue: progressValue,
+                                      progressPaused: progressPaused,
+                                      onToggleProgressPaused:
+                                          onToggleProgressPaused,
+                                      onCancelProgress: onCancelProgress,
+                                    ),
+                                  ),
+                                  if (onToggleTagPanel != null) ...[
+                                    const SizedBox(width: 12),
+                                    _TagDiscoveryHeaderButton(
+                                      expanded: tagPanelOpen,
+                                      activeFilterCount: activeFilters.length,
+                                      onPressed: onToggleTagPanel!,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: librarySurface,
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.panel),
+                                border: Border.all(color: libraryBorder),
+                                boxShadow: librarySoftShadow,
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: SizedBox(
+                                  height: 50,
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: searchSurface),
+                                      const SizedBox(width: 12),
+                                      SizedBox(
+                                        width: 360,
+                                        child: selectionMode
+                                            ? selectionStatus
+                                            : Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.end,
+                                                children: [
+                                                  sortControl,
+                                                  const SizedBox(width: 10),
+                                                  normalActions,
+                                                ],
+                                              ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (!selectionMode && activeFilters.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              KeyedSubtree(
+                                key: LibrarySmokeKeys.filterStatusArea,
+                                child: _LibraryFilterStatusArea(
+                                  compact: false,
+                                  defaultLabel: defaultChipLabel,
+                                  filters: activeFilters,
+                                  resultCount: videoCount,
+                                  resultCountLabel: resultCountLabel,
+                                  refreshing: refreshing,
+                                  progressLabel: progressLabel,
+                                  progressValue: progressValue,
+                                  progressPaused: progressPaused,
+                                  onToggleProgressPaused:
+                                      onToggleProgressPaused,
+                                  onCancelProgress: onCancelProgress,
+                                  onClearAll: onClearAll,
+                                  showResultStatus: false,
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      }
                       if (proportionalDesktop) {
                         return SizedBox(
                           height: 50,
@@ -2858,6 +2971,8 @@ Widget referenceTopBarSearchSmokeHarness({
   VoidCallback? onToggleSelectAll,
   VoidCallback? onDeleteSelected,
   VoidCallback? onCancelSelectionMode,
+  bool tagPanelOpen = false,
+  VoidCallback? onToggleTagPanel,
 }) {
   final app = MaterialApp(
     home: Scaffold(
@@ -2896,6 +3011,8 @@ Widget referenceTopBarSearchSmokeHarness({
         onResultViewChanged: (_) {},
         onOpenTagManager: () {},
         onOpenFilters: () {},
+        tagPanelOpen: tagPanelOpen,
+        onToggleTagPanel: onToggleTagPanel,
         onRemovePrimaryTag: onRemovePrimaryTag ?? (_) {},
         onRemoveChildTag: onRemoveChildTag ?? (_) {},
         onRemoveGroupTag: onRemoveGroupTag ?? (_) {},
@@ -3075,6 +3192,90 @@ class _TopToolbarTextButton extends StatelessWidget {
       child: Text(
         label,
         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+/**
+ * expanded 主界面标题区里的标签浏览入口。
+ *
+ * 横向按钮取代右侧竖排窄条，并用同一个入口承担展开与收起，避免内容区边缘出现
+ * 与视频卡片无关的强视觉噪声；筛选数量只作状态提示，不复制过滤计算。
+ */
+class _TagDiscoveryHeaderButton extends StatelessWidget {
+  const _TagDiscoveryHeaderButton({
+    required this.expanded,
+    required this.activeFilterCount,
+    required this.onPressed,
+  });
+
+  /** 右侧标签发现面板当前是否展开。 */
+  final bool expanded;
+
+  /** 当前已生效标签条件数量，用于入口上的轻量状态提示。 */
+  final int activeFilterCount;
+
+  /** 切换右侧标签发现面板。 */
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tooltip = expanded ? '折叠标签筛选' : '展开标签筛选';
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        key: LibrarySmokeKeys.collapsedTagRail,
+        button: true,
+        label: tooltip,
+        child: OutlinedButton.icon(
+          onPressed: onPressed,
+          icon: Icon(
+            expanded ? Icons.view_sidebar_rounded : Icons.sell_outlined,
+            size: 18,
+          ),
+          label: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('标签'),
+              if (activeFilterCount > 0) ...[
+                const SizedBox(width: 7),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 20),
+                  height: 20,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  decoration: BoxDecoration(
+                    color: appAccentViolet.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(AppRadius.capsule),
+                  ),
+                  child: Text(
+                    '$activeFilterCount',
+                    style: const TextStyle(
+                      color: appAccentViolet,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: expanded ? libraryText : appAccentViolet,
+            backgroundColor: expanded ? librarySurfaceAlt : librarySurface,
+            side: BorderSide(
+              color: expanded
+                  ? appAccentViolet.withValues(alpha: 0.44)
+                  : libraryBorder,
+            ),
+            minimumSize: const Size(96, 42),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.control),
+            ),
+          ),
+        ),
       ),
     );
   }
