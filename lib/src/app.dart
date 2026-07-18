@@ -212,14 +212,47 @@ Future<void> bootstrapLocalTagPlayer() async {
     registerBeforeWindowClose: windowStateService.registerBeforeClose,
   );
   await windowStateService.initialize();
-  runApp(LocalTagPlayerApp(dependencies: dependencies));
+  runApp(LocalTagPlayerApp(
+    dependencies: dependencies,
+    debugTextScaleFactor: debugTextScaleFactorFromEnvironment(),
+  ));
+}
+
+/**
+ * 读取真实窗口无障碍验收使用的文字缩放倍率。
+ *
+ * 该入口只在 Debug 构建生效，并仅接受设计基线要求的 100%/125%/150%，
+ * 避免 QA 为截图修改 Windows 全局设置，也防止任意倍率进入正式用户路径。
+ */
+double? debugTextScaleFactorFromEnvironment({
+  Map<String, String>? environment,
+}) {
+  if (!kDebugMode) {
+    return null;
+  }
+  final raw =
+      (environment ?? Platform.environment)['LOCAL_TAG_PLAYER_QA_TEXT_SCALE']
+          ?.trim();
+  final parsed = double.tryParse(raw ?? '');
+  if (parsed == 1 || parsed == 1.25 || parsed == 1.5) {
+    return parsed;
+  }
+  return null;
 }
 
 class LocalTagPlayerApp extends StatelessWidget {
-  const LocalTagPlayerApp({super.key, required this.dependencies});
+  const LocalTagPlayerApp({
+    super.key,
+    required this.dependencies,
+    this.debugTextScaleFactor,
+  });
 
   /** 由 bootstrap 组合根创建的稳定依赖图。 */
   final LocalTagPlayerDependencies dependencies;
+
+  /** Debug 真实窗口验收专用文字缩放倍率；Release 启动链路始终传入空值。 */
+  final double? debugTextScaleFactor;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -227,16 +260,25 @@ class LocalTagPlayerApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: buildLocalTagPlayerTheme(),
       builder: (context, child) {
+        final systemMediaQuery = MediaQuery.of(context);
+        final effectiveMediaQuery = debugTextScaleFactor == null
+            ? systemMediaQuery
+            : systemMediaQuery.copyWith(
+                textScaler: TextScaler.linear(debugTextScaleFactor!),
+              );
         final accessibility = AppAccessibilityData.fromMediaQuery(
-          MediaQuery.of(context),
+          effectiveMediaQuery,
         );
-        return AppAccessibilityScope(
-          data: accessibility,
-          child: Theme(
-            data: buildLocalTagPlayerTheme(
-              highContrast: accessibility.highContrast,
+        return MediaQuery(
+          data: effectiveMediaQuery,
+          child: AppAccessibilityScope(
+            data: accessibility,
+            child: Theme(
+              data: buildLocalTagPlayerTheme(
+                highContrast: accessibility.highContrast,
+              ),
+              child: child ?? const SizedBox.shrink(),
             ),
-            child: child ?? const SizedBox.shrink(),
           ),
         );
       },

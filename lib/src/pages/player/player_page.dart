@@ -55,6 +55,21 @@ double playerVolumeDeltaForScroll(double scrollDy) {
   return scrollDy < 0 ? 5 : -5;
 }
 
+/**
+ * 判断底部控制条是否有足够空间显示完整时间文本。
+ *
+ * 三段式控制条必须优先保持中央传输控制不位移；文字放大后，时间文本占用会同时挤压
+ * 左侧和中央区域，因此按倍率提高显示门槛，空间不足时只隐藏这项辅助信息。
+ */
+bool playerControlsShowTime({
+  required double availableWidth,
+  required double textScaleFactor,
+}) {
+  final safeScale = math.max(1, textScaleFactor);
+  final scaledThreshold = 780 + (safeScale - 1) * 240;
+  return availableWidth >= scaledThreshold;
+}
+
 /** 从当前视频路径提取播放器顶栏文件名，避免标题继续显示固定应用名称。 */
 String playerTopBarFileName(String path) => p.basename(path);
 
@@ -1239,8 +1254,14 @@ class PlayerPageState extends State<PlayerPage> {
                                     ),
                                     LayoutBuilder(
                                       builder: (context, constraints) {
-                                        final showTime =
-                                            constraints.maxWidth >= 780;
+                                        final textScaler =
+                                            MediaQuery.textScalerOf(context);
+                                        final textScaleFactor =
+                                            textScaler.scale(12) / 12;
+                                        final showTime = playerControlsShowTime(
+                                          availableWidth: constraints.maxWidth,
+                                          textScaleFactor: textScaleFactor,
+                                        );
                                         final volumeWidth =
                                             constraints.maxWidth >= 780
                                                 ? 112.0

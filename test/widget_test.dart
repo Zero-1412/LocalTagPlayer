@@ -1067,10 +1067,58 @@ void main() {
   testWidgets('app mounts', (WidgetTester tester) async {
     await tester.pumpWidget(LocalTagPlayerApp(
       dependencies: createLocalTagPlayerDependencies(),
+      debugTextScaleFactor: 1.5,
     ));
     await tester.pump();
 
     expect(find.byType(LocalTagPlayerApp), findsOneWidget);
+    final accessibility = tester.widget<AppAccessibilityScope>(
+      find.byType(AppAccessibilityScope),
+    );
+    expect(accessibility.data.textScaler.scale(20), 30);
+  });
+
+  test('debug text scale environment accepts only QA baselines', () {
+    expect(
+      debugTextScaleFactorFromEnvironment(
+        environment: const {'LOCAL_TAG_PLAYER_QA_TEXT_SCALE': '1.25'},
+      ),
+      1.25,
+    );
+    expect(
+      debugTextScaleFactorFromEnvironment(
+        environment: const {'LOCAL_TAG_PLAYER_QA_TEXT_SCALE': '1.75'},
+      ),
+      isNull,
+    );
+    expect(
+      debugTextScaleFactorFromEnvironment(environment: const {}),
+      isNull,
+    );
+  });
+
+  test('player time label yields space to centered transport at large text',
+      () {
+    expect(
+      playerControlsShowTime(availableWidth: 780, textScaleFactor: 1),
+      isTrue,
+    );
+    expect(
+      playerControlsShowTime(availableWidth: 780, textScaleFactor: 1.25),
+      isFalse,
+    );
+    expect(
+      playerControlsShowTime(availableWidth: 840, textScaleFactor: 1.25),
+      isTrue,
+    );
+    expect(
+      playerControlsShowTime(availableWidth: 899, textScaleFactor: 1.5),
+      isFalse,
+    );
+    expect(
+      playerControlsShowTime(availableWidth: 900, textScaleFactor: 1.5),
+      isTrue,
+    );
   });
 
   testWidgets('library panel motion combines visible slide fade and scale',
