@@ -1,5 +1,16 @@
 ﻿# CURRENT_TASK.md
 
+## 2026-07-18 Agent Eval 成本门槛与 Apple UI Phase 1 搜索/筛选状态
+
+- Agent Eval 为 trigger、capability、regression 增加默认工具调用、输入 token、输出 token 硬门槛；单用例可通过 `budgets` 显式覆盖。超限由确定性 scorer 直接判为 0 分，并在报告中同时保存生效预算和实际 usage。
+- 规范化 Trace 按 Codex `item.id` 合并同一工具调用的 `started/completed` 事件，避免重复计费；11 项 scorer 单元测试覆盖工具/token 超限和调用去重。
+- 来源 filtered queue、队列回退和 player/cache queue 统一按 Level 3 路由；`reg-player-source-queue` 使用 12 次工具调用、600,000 输入、8,000 输出 token 的单轮预算重新执行 N=5，5/5、平均 100 分、`stable=true`，累计输入 2,557,003 token，较旧基线下降约 63%。
+- Apple UI Phase 1 首个组件族完成：媒体库继续使用唯一真实 `TextField` 与原 controller/onChanged 链路；搜索表面接入真实 hover/focus、reduced motion 和 high contrast，关键词清除与清空筛选统一使用 40px `AppInteractionSurface` 动作。
+- 筛选状态改为低对比度实色层级，空筛选明确显示“全部视频”，活动 chip 继续中性显示、交互时才使用紫色；结果数改为“强调点 + 主要文字”，并加入 live-region 状态语义。452px 窄窗与 150% 文字缩放无溢出。
+- 4 项 Phase 1 focused tests、完整 193 项测试通过，3 项 benchmark 跳过；58 个 Eval 目录用例、11 项 scorer tests、`flutter analyze` 和 Windows debug build 通过。
+- 真实 1249×714 窗口在 11,163 条媒体下确认顶部层级、搜索焦点、结果状态和列表首屏无遮挡/错位/溢出；继续输入时 Windows 控制检测到用户正在操作目标窗口，已停止抢占。关键词输入、清除和标签状态由 focused/widget smoke 覆盖，仍保留一次空闲窗口下的“输入关键词 → 清除 → 展开标签面板 → 选择标签 → 清空筛选”连续截图复核。
+- 本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 内容与顺序、`PlayerBackend`、缩略图/媒体详情队列、稳定身份或用户数据。
+
 ## 2026-07-18 Agent / Skill Eval 基线
 
 - 新增 `tool/agent_eval.py`，以临时本地克隆和 Codex `--json --ephemeral` 执行被测任务，归档原始 JSONL、规范化 Trace、结构化结果、实际 Git 文件变化、确定性评分、可选 Rubric judge 和 N 次稳定性汇总；基础设施错误不会被计为 Agent 失败。
@@ -7,9 +18,9 @@
 - Apple UI Rubric 覆盖内容层级、交互反馈、Windows 桌面适配、动效克制、无障碍和 Flutter 实现精度；业务边界、文件变化和工具使用仍由确定性 scorer 判定。
 - `AGENTS.md` 不再保存易漂移的验证状态和阶段优先级，Skill 注册表已加入 `$ltp-apple-ui-design`；明确 task router、领域 Skill 与 Apple UI 设计覆盖层的组合关系。两个 Bootstrap 文件收敛为根入口和兼容链接。
 - Codex CLI 已从 `0.121.0` 升级到 `0.144.5`，并登记官方 `openaiDeveloperDocs` MCP；运行器改用 `codex exec -` 的 stdin 输入方式，并移除新版 CLI 不接受的 JSON Schema `uniqueItems`。
-- `router-pos-1` 以 100 分通过；过滤、播放队列、缓存、稳定身份四组关键回归均达到 5/5、`stable=true` 且无基础设施错误。平均分依次为 100 / 80 / 100 / 100。
-- 播放队列五轮都正确选择领域 Skill、保持零文件改动和业务边界，但把期望 Level 3 稳定判断为 Level 2，因此平均仅 80 分；五轮总输入约 695 万 token，后续需收紧 router 分级说明与诊断读取预算。
-- 本地目录验证确认 58 个用例、44/6/8 suite 分布和 11 个 Skill 的 2 正 2 负覆盖；8 项 Python 单元测试和全部 11 个 Skill 的 `quick_validate.py` 通过。
+- `router-pos-1` 与新增的队列分级 `router-pos-2` 均以 100 分通过；过滤、播放队列、缓存、稳定身份四组关键回归均达到 5/5、`stable=true` 且无基础设施错误，当前平均分均为 100。
+- 播放队列旧基线曾稳定误判 Level 2 且五轮输入约 695 万 token；修正 Level 3 规则和只读诊断预算后，五轮累计输入降至 2,557,003 token，缺陷已转为确定性预算回归。
+- 本地目录验证确认 58 个用例、44/6/8 suite 分布和 11 个 Skill 的 2 正 2 负覆盖；11 项 Python 单元测试和全部 11 个 Skill 的 `quick_validate.py` 通过。
 - 本轮没有修改 Flutter 业务 UI、SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缩略图/媒体详情队列或用户数据。
 
 ## 2026-07-18 Apple 式全应用 UI 设计基线
@@ -36,7 +47,7 @@ flutter test
 flutter build windows --debug
 ```
 
-结果：本轮完整 189 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
+结果：本轮完整 193 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。
 
 ## 最近完成
 

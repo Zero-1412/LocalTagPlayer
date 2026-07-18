@@ -22,6 +22,23 @@ EVAL_ROOT = REPO_ROOT / "evals" / "agent"
 RESULT_SCHEMA = EVAL_ROOT / "schemas" / "agent_result.schema.json"
 JUDGE_SCHEMA = EVAL_ROOT / "schemas" / "judge_result.schema.json"
 PASS_THRESHOLD = 80
+DEFAULT_BUDGETS = {
+    "trigger": {
+        "max_tool_calls": 12,
+        "max_input_tokens": 250_000,
+        "max_output_tokens": 8_000,
+    },
+    "capability": {
+        "max_tool_calls": 32,
+        "max_input_tokens": 1_500_000,
+        "max_output_tokens": 20_000,
+    },
+    "regression": {
+        "max_tool_calls": 64,
+        "max_input_tokens": 1_800_000,
+        "max_output_tokens": 20_000,
+    },
+}
 
 
 class EvalError(RuntimeError):
@@ -138,7 +155,33 @@ def _register_case(
     trials = case.get("trials", 1)
     if not isinstance(trials, int) or trials < 1:
         raise EvalError(f"Eval 用例 trials 必须是正整数：{case_id}")
+    budgets = case.get("budgets", {})
+    if not isinstance(budgets, dict):
+        raise EvalError(f"Eval 用例 budgets 必须是对象：{case_id}")
+    allowed_budget_keys = {
+        "max_tool_calls",
+        "max_input_tokens",
+        "max_output_tokens",
+    }
+    unknown_budget_keys = set(budgets) - allowed_budget_keys
+    if unknown_budget_keys:
+        raise EvalError(
+            f"Eval 用例存在未知预算字段：{case_id}: "
+            + ", ".join(sorted(unknown_budget_keys))
+        )
+    if any(not isinstance(value, int) or value < 1 for value in budgets.values()):
+        raise EvalError(f"Eval 用例预算必须是正整数：{case_id}")
     cases[case_id] = case
+
+
+def _effective_budgets(case: dict[str, Any]) -> dict[str, int]:
+    """合并 suite 默认预算与单用例收紧值，保证每次运行都有成本上限。"""
+
+    suite = str(case["suite"])
+    defaults = DEFAULT_BUDGETS.get(suite)
+    if defaults is None:
+        raise EvalError(f"未知 suite，无法确定预算：{suite}")
+    return {**defaults, **case.get("budgets", {})}
 
 
 def validate_catalog(eval_root: Path = EVAL_ROOT) -> dict[str, Any]:
@@ -253,6 +296,42 @@ def score_result(
     if required_order and not _is_subsequence(required_order, tool_names):
         deduct(15, "tool_order", "工具调用顺序不满足用例要求")
 
+    budgets = _effective_budgets(case)
+    usage = next(
+        (
+            {
+                "input_tokens": int(event.get("input_tokens", 0)),
+                "cached_input_tokens": int(event.get("cached_input_tokens", 0)),
+                "output_tokens": int(event.get("output_tokens", 0)),
+            }
+            for event in reversed(trace_events)
+            if event.get("event") == "usage"
+        ),
+        {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0,
+        },
+    )
+    if len(tool_names) > budgets["max_tool_calls"]:
+        deduct(
+            100,
+            "tool_call_budget_exceeded",
+            f"工具调用 {len(tool_names)} 次，超过预算 {budgets['max_tool_calls']} 次",
+        )
+    if usage["input_tokens"] > budgets["max_input_tokens"]:
+        deduct(
+            100,
+            "input_token_budget_exceeded",
+            f"输入 token {usage['input_tokens']}，超过预算 {budgets['max_input_tokens']}",
+        )
+    if usage["output_tokens"] > budgets["max_output_tokens"]:
+        deduct(
+            100,
+            "output_token_budget_exceeded",
+            f"输出 token {usage['output_tokens']}，超过预算 {budgets['max_output_tokens']}",
+        )
+
     rubric_name = expected.get("rubric")
     if rubric_name:
         if judge_result is None:
@@ -279,6 +358,8 @@ def score_result(
             "selected_skills": sorted(selected),
             "changed_files": observed_changed_files,
             "tool_calls": tool_names,
+            "budgets": budgets,
+            "usage": usage,
             "rubric_score": None if judge_result is None else judge_result.get("total_score"),
         },
     }
@@ -316,6 +397,7 @@ def _normalize_raw_trace(raw_path: Path, trace_path: Path) -> list[dict[str, Any
     """保留原始事件并抽取工具调用和 token，用稳定事件结构支持评分。"""
 
     normalized: list[dict[str, Any]] = []
+    seen_tool_call_ids: set[str] = set()
     for index, line in enumerate(raw_path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():
             continue
@@ -333,11 +415,18 @@ def _normalize_raw_trace(raw_path: Path, trace_path: Path) -> list[dict[str, Any
         if isinstance(item, dict):
             item_type = item.get("type")
             if item_type in {"command_execution", "mcp_tool_call", "tool_call"}:
+                call_id = item.get("id")
+                if isinstance(call_id, str) and call_id:
+                    # Codex 会为同一调用输出 started/completed；预算只能计算真实调用一次。
+                    if call_id in seen_tool_call_ids:
+                        continue
+                    seen_tool_call_ids.add(call_id)
                 tool = item.get("name") or item.get("tool") or item_type
                 normalized.append(
                     {
                         "event": "tool_call",
                         "sequence": index,
+                        "call_id": call_id,
                         "tool": tool,
                         "arguments": item.get("arguments") or item.get("command"),
                     }
@@ -442,10 +531,17 @@ def _overlay_workspace_snapshot(source: Path, target: Path) -> None:
 def _build_agent_prompt(case: dict[str, Any]) -> str:
     """包装被测任务，要求输出可评分字段但不泄漏期望答案。"""
 
+    budgets = _effective_budgets(case)
+
     return (
         "你正在接受 Local Tag Player Agent Eval。按仓库 AGENTS.md 和 repo skills 正常处理下列任务。"
         "不要猜测评分标准，不要读取 evals/agent 中的期望结果。最终必须按 output schema 返回；"
-        "selected_skills 填写本次实际采用的 repo skill，task_level 填写实际等级。\n\n"
+        "selected_skills 填写本次实际采用的 repo skill，task_level 填写实际等级。\n"
+        "本次执行必须遵守确定性成本预算："
+        f"工具调用不超过 {budgets['max_tool_calls']} 次，"
+        f"累计输入 token 不超过 {budgets['max_input_tokens']}，"
+        f"输出 token 不超过 {budgets['max_output_tokens']}。"
+        "先用精确搜索定位，只读取必要片段；不要读取完整大文件或重复读取同一上下文。\n\n"
         f"用户任务：\n{case['prompt']}"
     )
 
@@ -602,6 +698,12 @@ def run_case(
                         "selected_skills": [],
                         "changed_files": observed_changes,
                         "tool_calls": [],
+                        "budgets": _effective_budgets(case),
+                        "usage": {
+                            "input_tokens": 0,
+                            "cached_input_tokens": 0,
+                            "output_tokens": 0,
+                        },
                         "rubric_score": None,
                     },
                 }

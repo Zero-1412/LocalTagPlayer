@@ -19,8 +19,13 @@
     {
       "id": "reg-player-source-queue",
       "category": "core_logic",
-      "prompt": "诊断播放器右侧队列回退到全局媒体库的问题，只给最小调查范围，不修改文件。",
+      "prompt": "诊断播放器右侧来源 filtered queue 在二级标签无结果时回退到全局媒体库的问题；调查进入 PlayerPage 的来源队列与队列切换边界，只给最小调查范围，不修改文件。",
       "trials": 5,
+      "budgets": {
+        "max_tool_calls": 12,
+        "max_input_tokens": 600000,
+        "max_output_tokens": 8000
+      },
       "expected": {
         "task_level": "3",
         "required_skills": ["ltp-player-filter-queue"],

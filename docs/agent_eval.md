@@ -79,6 +79,24 @@ summary.json           N 次稳定性和 suite 汇总
 
 确定性 scorer 负责事实、文件、工具、状态和结构；LLM Rubric 只负责 Apple 观感、层级、清晰度等不能稳定脚本化的判断。
 
+## 工具调用与 token 预算
+
+每个 suite 都有默认成本门槛，用例可通过 `budgets` 收紧或按基线显式覆盖：
+
+| Suite | 工具调用 | 输入 token | 输出 token |
+| --- | ---: | ---: | ---: |
+| Trigger | 12 | 250,000 | 8,000 |
+| Capability | 32 | 1,500,000 | 20,000 |
+| Regression | 64 | 1,800,000 | 20,000 |
+
+- 任一预算超限都是确定性硬失败，直接扣 100；不能用最终答案正确掩盖无界读取。
+- 输入 token 使用 Codex Trace 报告的累计输入，缓存输入单独记录但不从总量中扣除，便于跨运行比较真实上下文成本。
+- `item.started` 与 `item.completed` 使用同一 `item.id` 时只计一次真实工具调用，避免事件生命周期重复消耗预算。
+- scorer 把生效预算和实际 usage 写入 `report.json`；基础设施错误报告也保留同样结构。
+- 被测 prompt 会声明本次门槛，并要求精确搜索、只读必要片段、停止重复读取；具体领域 Skill 仍负责定义安全的最小证据链。
+
+`reg-player-source-queue` 是关键共享队列诊断，单独收紧为 12 次工具调用、600,000 输入 token 和 8,000 输出 token。60 万门槛按 challenger 的 487,159 输入 token 校准，仍相对旧五轮平均约 139 万输入 token 保留超过 50% 的压缩要求；工具门槛没有放宽。
+
 ## 稳定性门槛
 
 - `stable identity`、标签过滤、播放队列、缓存和用户数据：默认 N=5，要求 5/5。
@@ -94,10 +112,12 @@ summary.json           N 次稳定性和 suite 汇总
 - Codex CLI：`0.144.5`；模型：`gpt-5.6-sol`；workspace snapshot：启用。
 - `router-pos-1`：1/1，100 分，0 文件改动。
 - `reg-filter-semantics`：5/5，平均 100 分，`stable=true`。
-- `reg-player-source-queue`：5/5，平均 80 分，`stable=true`；五轮都因期望 Level 3、实际 Level 2 扣 20 分，总输入约 695 万 token。该结果按当前 80 分阈值通过，但保留为 router 分级与读取预算缺陷。
+- `router-pos-2`：1/1，100 分，实际 Level 3；2 次工具调用，输入 45,292、输出 984 token。
+- `reg-player-source-queue`：修正为来源 filtered queue 共享边界 Level 3 后重新执行 5/5，平均 100 分，`stable=true`；每轮 10/12/10/10/10 次工具调用，累计输入 2,557,003、缓存输入 2,228,736、输出 22,363 token，平均耗时 232.991 秒。相对旧基线累计输入 6,950,585 token 下降约 63%，五轮均满足单轮预算且保持零文件改动。
 - `reg-cache-zero-byte`：5/5，平均 100 分，`stable=true`。
 - `reg-identity-preserve-data`：5/5，平均 100 分，`stable=true`。
 - 四组关键回归均无基础设施错误和文件改动；产物位于被 Git 忽略的 `artifacts/agent_eval/20260718-*`，不提交包含真实本地 Trace 的运行目录。
+- 本轮零模型成本验证确认 58 个用例、44/6/8 suite 分布、11 个 Skill 的 2 正 2 负覆盖；11 项 scorer 单元测试全部通过。
 
 ## 命令
 

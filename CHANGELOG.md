@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-18 · Agent Eval 成本门槛与 Apple UI Phase 1 搜索状态
+
+- Agent Eval 增加 suite 默认工具调用、输入 token 和输出 token 预算；超限成为确定性硬失败，报告保存生效门槛与实际 usage。同一 Codex 工具调用的 started/completed 事件按 `item.id` 去重。
+- 来源 filtered queue 与播放器队列回退明确升级为 Level 3；`reg-player-source-queue` 在 12 次工具、600,000 输入和 8,000 输出 token 单轮门槛内重新执行 N=5，5/5、平均 100 分、`stable=true`，累计输入较旧基线下降约 63%。
+- Apple UI Phase 1 首个组件族迁移媒体库搜索与筛选状态：保留唯一真实 `TextField` 输入链路，搜索表面改用真实 hover/focus 反馈，筛选状态建立低对比度实色层级并显式展示“全部视频”上下文。
+- 关键词清除和清空筛选使用 40px 共享交互表面；活动 chip 保持中性、结果数以强调点和主要文字表达，状态区增加 live-region 语义并遵守 reduced motion、high contrast 与 150% 文字缩放。
+- 4 项 focused tests、完整 193 项测试通过，3 项 benchmark 跳过；58 个 Eval 用例目录验证、11 项 scorer tests、`flutter analyze` 和 Windows debug build 通过。
+- 真实 1249×714、11,163 条媒体窗口确认顶部控件对齐、焦点轮廓和结果首屏无溢出；后续连续输入/标签点击因检测到用户正在操作窗口而停止抢占，精确人工复测路径已记录。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存队列、稳定身份和用户数据均未改变。
+
 ## 2026-07-18 · 完成关键 Agent 回归与 Apple UI Phase 0
 
 - Codex CLI 从 `0.121.0` 升级到 `0.144.5`，登记官方 `openaiDeveloperDocs` MCP；Agent Eval 兼容新版输出 Schema，并改用 `codex exec -` 的 stdin 输入链路，修复 Windows 下任务提示未传入的问题。

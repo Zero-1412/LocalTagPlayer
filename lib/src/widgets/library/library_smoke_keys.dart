@@ -41,7 +41,7 @@ class LibrarySmokeKeys {
       ValueKey<String>('smoke.library.result-toolbar');
   /** 独立搜索输入表面，不承载已生效筛选状态。 */
   static const searchSurface = ValueKey<String>('smoke.top.search-surface');
-  /** 搜索框右侧的透明筛选状态区域。 */
+  /** 搜索框右侧的低对比度筛选状态区域。 */
   static const filterStatusArea =
       ValueKey<String>('smoke.top.filter-status-area');
   /** 顶栏末端多选与视图切换操作区域。 */

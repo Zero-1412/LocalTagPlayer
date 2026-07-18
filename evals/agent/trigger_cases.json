@@ -7,7 +7,7 @@
       "name": "ltp-task-router",
       "positive": [
         {"id": "router-pos-1", "prompt": "判断“只调整媒体库 grouped filter sidebar 的布局，不修改 FilterQuery”属于 Level 1、2 还是 3，并限制要读取的文件。"},
-        {"id": "router-pos-2", "prompt": "开始一个新的 Local Tag Player 任务，先给出最小上下文范围。"}
+        {"id": "router-pos-2", "prompt": "开始调查播放器来源 filtered queue 回退问题，先判断 Level 并给出最小上下文范围。"}
       ],
       "negative": [
         {"id": "router-neg-1", "prompt": "修复已经明确定位在 player_page.dart 第 210 行的缺失分号。"},
@@ -72,7 +72,7 @@
     {
       "name": "ltp-player-filter-queue",
       "positive": [
-        {"id": "player-pos-1", "prompt": "修复 PlayerPage 右侧队列错误回退到全局媒体库的问题。"},
+        {"id": "player-pos-1", "prompt": "修复 PlayerPage 右侧来源 filtered queue 错误回退到全局媒体库的问题。"},
         {"id": "player-pos-2", "prompt": "检查 PlaybackSession 当前 index 和返回后筛选状态。"}
       ],
       "negative": [

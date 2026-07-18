@@ -1,5 +1,13 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
+## 2026-07-18 Apple UI Phase 1 搜索与筛选状态组件族
+
+- 顶部继续使用唯一真实 `TextField`、controller、FocusNode 与统一 `onChanged` 链路；搜索表面新增真实 hover/focus 轮廓、reduced motion 与 high contrast 降级，不改变筛选刷新时序。
+- 搜索和筛选状态复用 Phase 0 的圆角、间距、排版、动效与 `AppInteractionSurface`；关键词清除和清空筛选拥有 40px 命中区、tooltip、键盘焦点和 Semantics。
+- 筛选状态建立低对比度实色层级，空筛选显示“全部视频”，活动 chip 常态保持中性；结果数使用强调点与主要文字，并为后台刷新提供 live-region 语义。
+- 4 项 focused tests、完整 193 项测试通过，3 项 benchmark 跳过；`flutter analyze` 和 Windows debug build 通过。真实 1249×714、11,163 条媒体窗口确认顶部对齐、焦点轮廓和首屏结果无遮挡/溢出；连续输入/标签点击因检测到用户操作窗口而停止抢占并保留精确复测路径。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、排序、缩略图/media 队列或用户数据。
+
 ## 2026-07-17 增强左右侧栏结构动画
 
 - 左右侧栏开合时长从 260ms 调整为 320ms，内容统一组合更明显的横向位移、淡入和轻微缩放，移动边缘同步过渡描边与阴影。

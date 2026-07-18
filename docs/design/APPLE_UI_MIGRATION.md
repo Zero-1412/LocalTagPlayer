@@ -1,6 +1,6 @@
 # Local Tag Player Apple 式全应用 UI 迁移蓝图
 
-状态：Phase 0 已完成，Phase 1 尚未开始。
+状态：Phase 0 已完成；Phase 1 已启动，搜索与筛选状态组件族已完成。
 
 ## 目标
 
@@ -101,6 +101,16 @@ Phase 0 交付记录（2026-07-18）：
 - 保持网格列数、卡片身份、滚动位置和缩略图 Future 稳定。
 
 验收路径：搜索、一级/二级标签、分组 OR/AND、排除、排序、网格/列表、多选、打开播放器、返回后保持筛选。
+
+Phase 1 首批交付记录（2026-07-18）：
+
+- 保留页面唯一真实 `TextField`、`TextEditingController`、`FocusNode` 和统一 `onChanged` 链路；视觉状态不介入过滤计算。
+- 搜索表面复用 Phase 0 的圆角、间距、排版和语义动效 token，以真实 hover/focus 反馈取代只依赖关键词的边框状态；reduced motion 与 high contrast 有确定性降级。
+- 筛选状态使用低对比度实色表面，空状态明确显示“全部视频”；活动 chip 维持中性，结果数量改为强调点加主要文字，避免整段紫色争夺注意力。
+- 关键词清除和清空筛选复用 40px `AppInteractionSurface`，保留 tooltip、键盘焦点、按压和 Semantics；状态变化提供 live-region 描述。
+- 4 项 focused tests 覆盖焦点、命中区、筛选语义、150% 文字缩放、reduced motion 和 high contrast；完整 193 项测试、analyze 与 Windows debug build 通过。
+- 真实 1249×714、11,163 条媒体窗口确认搜索焦点、结果状态和列表首屏无位置、遮挡、对齐或溢出问题。继续输入时检测到用户操作目标窗口，自动 QA 已停止；下一空闲窗口补“输入 → 清除 → 标签选择 → 清空”连续截图。
+- 未改变 `FilterQuery` / `TagQueryService`、filtered queue、结果排序、缩略图 Future、滚动状态或用户数据。
 
 ### Phase 2：播放器
 

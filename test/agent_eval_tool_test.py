@@ -79,6 +79,73 @@ class AgentEvalToolTest(unittest.TestCase):
         self.assertFalse(report["passed"])
         self.assertEqual(0, report["score"])
 
+    def test_tool_call_budget_is_a_hard_gate(self) -> None:
+        """工具调用超过单用例预算时必须直接失败并记录实际使用量。"""
+
+        case = {
+            "id": "fixture-tool-budget",
+            "suite": "regression",
+            "category": "efficiency",
+            "budgets": {"max_tool_calls": 2},
+            "expected": {"status": "completed"},
+        }
+        result = {"status": "completed", "selected_skills": []}
+        trace = [
+            {"event": "tool_call", "tool": "command_execution"},
+            {"event": "tool_call", "tool": "command_execution"},
+            {"event": "tool_call", "tool": "command_execution"},
+            {
+                "event": "usage",
+                "input_tokens": 100,
+                "cached_input_tokens": 40,
+                "output_tokens": 20,
+            },
+        ]
+
+        report = agent_eval.score_result(case, result, [], trace)
+
+        self.assertFalse(report["passed"])
+        self.assertEqual(0, report["score"])
+        self.assertEqual(
+            "tool_call_budget_exceeded",
+            report["deductions"][0]["code"],
+        )
+        self.assertEqual(3, len(report["observed"]["tool_calls"]))
+
+    def test_token_budget_is_a_hard_gate(self) -> None:
+        """累计输入或输出 token 超限时必须成为可比较的确定性失败。"""
+
+        case = {
+            "id": "fixture-token-budget",
+            "suite": "regression",
+            "category": "efficiency",
+            "budgets": {
+                "max_input_tokens": 100,
+                "max_output_tokens": 50,
+            },
+            "expected": {"status": "completed"},
+        }
+        result = {"status": "completed", "selected_skills": []}
+        trace = [
+            {
+                "event": "usage",
+                "input_tokens": 101,
+                "cached_input_tokens": 80,
+                "output_tokens": 51,
+            }
+        ]
+
+        report = agent_eval.score_result(case, result, [], trace)
+        codes = {item["code"] for item in report["deductions"]}
+
+        self.assertFalse(report["passed"])
+        self.assertEqual(0, report["score"])
+        self.assertEqual(
+            {"input_token_budget_exceeded", "output_token_budget_exceeded"},
+            codes,
+        )
+        self.assertEqual(101, report["observed"]["usage"]["input_tokens"])
+
     def test_trace_normalization_extracts_tool_call(self) -> None:
         """Codex command_execution 事件必须进入规范化 tool_call Trace。"""
 
@@ -103,6 +170,42 @@ class AgentEvalToolTest(unittest.TestCase):
             tool_events = [event for event in events if event["event"] == "tool_call"]
             self.assertEqual("command_execution", tool_events[0]["tool"])
             self.assertTrue(normalized.exists())
+
+    def test_trace_counts_started_and_completed_as_one_tool_call(self) -> None:
+        """同一 Codex item 的 started/completed 事件不得重复消耗工具预算。"""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            raw = root / "raw.jsonl"
+            normalized = root / "trace.jsonl"
+            events = [
+                {
+                    "type": "item.started",
+                    "item": {
+                        "id": "item-1",
+                        "type": "command_execution",
+                        "command": "rg sourcePlaylist lib/src",
+                    },
+                },
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "id": "item-1",
+                        "type": "command_execution",
+                        "command": "rg sourcePlaylist lib/src",
+                    },
+                },
+            ]
+            raw.write_text(
+                "".join(json.dumps(event) + "\n" for event in events),
+                encoding="utf-8",
+            )
+
+            result = agent_eval._normalize_raw_trace(raw, normalized)
+            tool_events = [event for event in result if event["event"] == "tool_call"]
+
+            self.assertEqual(1, len(tool_events))
+            self.assertEqual("item-1", tool_events[0]["call_id"])
 
     def test_trace_redacts_local_paths(self) -> None:
         """Trace 写入前必须遮盖用户目录、真实仓库和隔离克隆路径。"""

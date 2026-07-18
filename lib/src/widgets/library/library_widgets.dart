@@ -15,6 +15,7 @@ import '../../pages/player/player_dialog_content.dart';
 import '../../pages/player/player_open_request_controller.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../app_theme_tokens.dart';
+import '../design_system/app_interaction_surface.dart';
 import 'library_smoke_keys.dart';
 import 'library_sort_control.dart';
 import 'library_video_results.dart';
@@ -1392,9 +1393,9 @@ class _FilterToolbarEntry {
  * 顶栏左侧独立搜索表面。
  *
  * 搜索区域只表达“输入查询”的意图，不再混入已生效标签或结果数量；
- * 真实 [TextField] / controller 输入链路保持不变，标签状态由右侧透明区域单独展示。
+ * 真实 [TextField] / controller 输入链路保持不变，标签状态由右侧低对比度区域单独展示。
  */
-class _LibrarySearchSurface extends StatelessWidget {
+class _LibrarySearchSurface extends StatefulWidget {
   const _LibrarySearchSurface({
     required this.controller,
     required this.searchFocusNode,
@@ -1423,84 +1424,200 @@ class _LibrarySearchSurface extends StatelessWidget {
   final VoidCallback onClearKeyword;
 
   @override
+  State<_LibrarySearchSurface> createState() => _LibrarySearchSurfaceState();
+}
+
+/** 只保存搜索表面的 hover/focus 视觉状态，不介入关键词和筛选业务状态。 */
+class _LibrarySearchSurfaceState extends State<_LibrarySearchSurface> {
+  /** 鼠标是否停留在搜索表面；只用于轻量颜色反馈。 */
+  var _hovered = false;
+
+  /** 真实搜索输入是否持有键盘焦点。 */
+  var _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focused = widget.searchFocusNode.hasFocus;
+    widget.searchFocusNode.addListener(_handleFocusChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LibrarySearchSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.searchFocusNode == widget.searchFocusNode) {
+      return;
+    }
+    oldWidget.searchFocusNode.removeListener(_handleFocusChanged);
+    _focused = widget.searchFocusNode.hasFocus;
+    widget.searchFocusNode.addListener(_handleFocusChanged);
+  }
+
+  /** 同步真实 TextField 焦点，让边框反馈与键盘焦点保持一致。 */
+  void _handleFocusChanged() {
+    if (mounted && _focused != widget.searchFocusNode.hasFocus) {
+      setState(() => _focused = widget.searchFocusNode.hasFocus);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.searchFocusNode.removeListener(_handleFocusChanged);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      key: LibrarySmokeKeys.searchSurface,
-      height: compact ? 44 : 50,
-      decoration: BoxDecoration(
-        color: librarySurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: keywordActive ? appAccentViolet : libraryBorder,
-          width: keywordActive ? 1.4 : 1,
-        ),
-        boxShadow: librarySoftShadow,
-      ),
-      child: Row(
-        children: [
-          Padding(
-            padding: EdgeInsets.only(left: compact ? 12 : 14, right: 8),
-            child: Icon(
-              Icons.search_rounded,
-              size: compact ? 20 : 22,
-              color: keywordActive ? appAccentViolet : libraryTextMuted,
-            ),
+    final accessibility = AppAccessibilityScope.of(context);
+    final compact = widget.compact;
+    final keywordActive = widget.keywordActive;
+    final outline = accessibility.highContrast
+        ? appAccentViolet
+        : _focused
+            ? appAccentViolet
+            : keywordActive
+                ? appAccentViolet.withValues(alpha: 0.62)
+                : _hovered
+                    ? libraryTextMuted.withValues(alpha: 0.64)
+                    : libraryBorder;
+    final surface = _hovered && !_focused
+        ? Color.alphaBlend(
+            appAccentViolet.withValues(alpha: 0.045),
+            librarySurface,
+          )
+        : librarySurface;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        key: LibrarySmokeKeys.searchSurface,
+        height: compact ? 44 : 50,
+        duration: accessibility.fadeDuration(AppMotion.hover),
+        curve: AppMotion.standardCurve,
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: outline,
+            width: accessibility.highContrast || _focused ? 1.5 : 1,
           ),
-          Expanded(
-            child: SizedBox(
-              key: LibrarySmokeKeys.searchInputLane,
-              /**
+          boxShadow: _focused
+              ? <BoxShadow>[
+                  BoxShadow(
+                    color: appAccentViolet.withValues(alpha: 0.14),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ]
+              : librarySoftShadow,
+        ),
+        child: Row(
+          children: [
+            Padding(
+              padding: EdgeInsets.only(
+                left: compact ? AppSpacing.sm : AppSpacing.md,
+                right: AppSpacing.xs,
+              ),
+              child: Icon(
+                Icons.search_rounded,
+                size: compact ? 20 : 22,
+                color: _focused || keywordActive
+                    ? appAccentViolet
+                    : libraryTextMuted,
+              ),
+            ),
+            Expanded(
+              child: SizedBox(
+                key: LibrarySmokeKeys.searchInputLane,
+                /**
                * 必须保持为 TextField，而不是把输入模拟成 GestureDetector 或 SearchBar；
                * 真实键盘、自动化输入和 controller 改写因此继续触发同一条 onChanged 链路。
                */
-              child: TextField(
-                key: LibrarySmokeKeys.searchField,
-                controller: controller,
-                focusNode: searchFocusNode,
-                textInputAction: TextInputAction.search,
-                onChanged: onSearchChanged,
-                onSubmitted: onSearchChanged,
-                style: const TextStyle(
-                  color: libraryText,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-                decoration: InputDecoration(
-                  filled: false,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(
-                    vertical: compact ? 12 : 15,
+                child: TextField(
+                  key: LibrarySmokeKeys.searchField,
+                  controller: widget.controller,
+                  focusNode: widget.searchFocusNode,
+                  textInputAction: TextInputAction.search,
+                  onChanged: widget.onSearchChanged,
+                  onSubmitted: widget.onSearchChanged,
+                  cursorColor: appAccentViolet,
+                  style: const TextStyle(
+                    color: libraryText,
+                    fontSize: AppTypography.body,
+                    fontWeight: AppTypography.medium,
                   ),
-                  hintText: compact
-                      ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
-                      : '\u641c\u7d22\u6587\u4ef6\u540d\u002f\u6807\u7b7e\u002f\u8def\u5f84\u002e\u002e\u002e',
-                  hintStyle: const TextStyle(
-                    color: libraryTextMuted,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                  decoration: InputDecoration(
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: compact ? 12 : 15,
+                    ),
+                    hintText: compact
+                        ? '\u641c\u7d22\u6587\u4ef6\u0020\u002f\u0020\u6807\u7b7e'
+                        : '\u641c\u7d22\u6587\u4ef6\u540d\u002f\u6807\u7b7e\u002f\u8def\u5f84\u002e\u002e\u002e',
+                    hintStyle: const TextStyle(
+                      color: libraryTextMuted,
+                      fontSize: AppTypography.body,
+                      fontWeight: AppTypography.medium,
+                    ),
                   ),
                 ),
               ),
             ),
+            if (keywordActive)
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.xxs),
+                child: _LibraryStatusIconAction(
+                  tooltip: '\u6e05\u9664\u641c\u7d22\u5173\u952e\u8bcd',
+                  icon: Icons.close_rounded,
+                  onPressed: widget.onClearKeyword,
+                ),
+              )
+            else
+              const SizedBox(width: AppSpacing.sm),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 搜索与筛选状态共用的 40 像素图标动作，保留 tooltip、焦点和按压反馈。 */
+class _LibraryStatusIconAction extends StatelessWidget {
+  const _LibraryStatusIconAction({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  /** 鼠标悬停和辅助技术读取的动作名称。 */
+  final String tooltip;
+
+  /** 与动作语义对应的 Material 图标。 */
+  final IconData icon;
+
+  /** 点击或键盘激活回调。 */
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: 40,
+      child: Tooltip(
+        message: tooltip,
+        child: AppInteractionSurface(
+          semanticLabel: tooltip,
+          onTap: onPressed,
+          padding: EdgeInsets.zero,
+          borderRadius: AppRadius.control,
+          backgroundColor: Colors.transparent,
+          child: Center(
+            child: Icon(icon, size: 17, color: libraryTextMuted),
           ),
-          if (keywordActive)
-            SizedBox.square(
-              dimension: 34,
-              child: IconButton(
-                tooltip: '\u6e05\u9664\u641c\u7d22\u5173\u952e\u8bcd',
-                padding: EdgeInsets.zero,
-                iconSize: 17,
-                color: libraryTextMuted,
-                onPressed: onClearKeyword,
-                icon: const Icon(Icons.close_rounded),
-              ),
-            )
-          else
-            const SizedBox(width: 12),
-        ],
+        ),
       ),
     );
   }
@@ -1509,7 +1626,7 @@ class _LibrarySearchSurface extends StatelessWidget {
 /**
  * 搜索框右侧的筛选结果状态区域。
  *
- * 该区域保持透明，与深色输入表面形成明确边界；筛选标签只表达当前状态，
+ * 该区域使用低对比度实色表面，与更高权重的搜索输入形成明确层级；筛选标签只表达当前状态，
  * 空间不足时折叠为数量，不反向压缩搜索框或复制过滤计算。
  */
 class _LibraryFilterStatusArea extends StatelessWidget {
@@ -1570,135 +1687,150 @@ class _LibraryFilterStatusArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: compact ? 44 : 50,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final hasFilters = filters.isNotEmpty;
-          // 活动筛选及其清除入口是结果语义的一部分；窄空间下先让位普通数量，
-          // 避免用户只能从结果变化猜测筛选是否仍然生效。扫描进度仍保持可见。
-          final showInlineResultStatus = showResultStatus &&
-              (progressLabel != null ||
-                  !hasFilters ||
-                  constraints.maxWidth >= 230);
-          final trailingWidth = !showInlineResultStatus
-              ? 0.0
-              : progressLabel == null
-                  ? resultCountLabel != null
-                      ? 200.0
-                      : (compact ? 74.0 : 92.0)
-                  : 224.0;
-          final showClearAll = onClearAll != null && hasFilters;
-          final clearWidth = showClearAll ? 30.0 : 0.0;
-          final filterBudget = math.max(
-            0.0,
-            constraints.maxWidth -
-                trailingWidth -
-                clearWidth -
-                (compact ? 8.0 : 14.0),
-          );
-          // 标签过多时只在状态区内折叠，不污染搜索输入。
-          final maxVisibleFilters = filterBudget >= 145
-              ? 2
-              : filterBudget >= 92
-                  ? 1
-                  : 0;
-          final visibleFilters = filters.take(maxVisibleFilters).toList();
-          final hiddenCount = filters.length - visibleFilters.length;
-          final showCollapsedCount = hiddenCount > 0 &&
-              filterBudget >= (visibleFilters.isEmpty ? 56 : 42);
-          final visibleFilterBudget = math.max(
-            0.0,
-            filterBudget -
-                (showCollapsedCount ? (visibleFilters.isEmpty ? 56 : 42) : 0),
-          );
-          final showSourceLabel = filters.isEmpty &&
-              defaultLabel != '\u5168\u90e8\u89c6\u9891' &&
-              filterBudget >= 96;
-          return Row(
-            children: [
-              if (showSourceLabel) ...[
-                _SourceContextChip(label: defaultLabel),
-                const SizedBox(width: 6),
-              ],
-              if (visibleFilters.isNotEmpty)
-                ConstrainedBox(
-                  key: LibrarySmokeKeys.searchFilterLane,
-                  constraints: BoxConstraints(maxWidth: visibleFilterBudget),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const ClampingScrollPhysics(),
-                    child: Row(
-                      children: [
-                        for (var index = 0;
-                            index < visibleFilters.length;
-                            index++) ...[
-                          _CurrentFilterChip(
-                            avatar: visibleFilters[index].icon == null
-                                ? null
-                                : Icon(
-                                    visibleFilters[index].icon,
-                                    size: 14,
-                                    color: libraryTextMuted,
-                                  ),
-                            label: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: compact ? 68 : 84,
+    final accessibility = AppAccessibilityScope.of(context);
+    final resultLabel =
+        progressLabel ?? resultCountLabel ?? '$resultCount \u4e2a\u89c6\u9891';
+    return Semantics(
+      container: true,
+      liveRegion: refreshing || progressLabel != null,
+      label: '\u5f53\u524d\u7b5b\u9009\u72b6\u6001\uff0c$resultLabel',
+      child: Container(
+        height: compact ? 44 : 50,
+        padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 10),
+        decoration: BoxDecoration(
+          color: accessibility.highContrast
+              ? librarySurface
+              : librarySurface.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: accessibility.highContrast
+                ? libraryTextMuted
+                : libraryBorder.withValues(alpha: 0.82),
+            width: accessibility.highContrast ? 1.5 : 1,
+          ),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final hasFilters = filters.isNotEmpty;
+            // 活动筛选及其清除入口是结果语义的一部分；窄空间下先让位普通数量，
+            // 避免用户只能从结果变化猜测筛选是否仍然生效。扫描进度仍保持可见。
+            final showInlineResultStatus = showResultStatus &&
+                (progressLabel != null ||
+                    !hasFilters ||
+                    constraints.maxWidth >= 230);
+            final trailingWidth = !showInlineResultStatus
+                ? 0.0
+                : progressLabel == null
+                    ? resultCountLabel != null
+                        ? 200.0
+                        : (compact ? 74.0 : 92.0)
+                    : 224.0;
+            final showClearAll = onClearAll != null && hasFilters;
+            final clearWidth = showClearAll ? 40.0 : 0.0;
+            final filterBudget = math.max(
+              0.0,
+              constraints.maxWidth -
+                  trailingWidth -
+                  clearWidth -
+                  (compact ? 8.0 : 14.0),
+            );
+            // 标签过多时只在状态区内折叠，不污染搜索输入。
+            final maxVisibleFilters = filterBudget >= 145
+                ? 2
+                : filterBudget >= 92
+                    ? 1
+                    : 0;
+            final visibleFilters = filters.take(maxVisibleFilters).toList();
+            final hiddenCount = filters.length - visibleFilters.length;
+            final showCollapsedCount = hiddenCount > 0 &&
+                filterBudget >= (visibleFilters.isEmpty ? 56 : 42);
+            final visibleFilterBudget = math.max(
+              0.0,
+              filterBudget -
+                  (showCollapsedCount ? (visibleFilters.isEmpty ? 56 : 42) : 0),
+            );
+            final showSourceLabel = filters.isEmpty && filterBudget >= 96;
+            return Row(
+              children: [
+                if (showSourceLabel) ...[
+                  _SourceContextChip(label: defaultLabel),
+                  const SizedBox(width: 6),
+                ],
+                if (visibleFilters.isNotEmpty)
+                  ConstrainedBox(
+                    key: LibrarySmokeKeys.searchFilterLane,
+                    constraints: BoxConstraints(maxWidth: visibleFilterBudget),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const ClampingScrollPhysics(),
+                      child: Row(
+                        children: [
+                          for (var index = 0;
+                              index < visibleFilters.length;
+                              index++) ...[
+                            _CurrentFilterChip(
+                              avatar: visibleFilters[index].icon == null
+                                  ? null
+                                  : Icon(
+                                      visibleFilters[index].icon,
+                                      size: 14,
+                                      color: libraryTextMuted,
+                                    ),
+                              label: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: compact ? 68 : 84,
+                                ),
+                                child: Text(
+                                  visibleFilters[index].label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                              child: Text(
-                                visibleFilters[index].label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                              onDeleted: visibleFilters[index].onRemove,
                             ),
-                            onDeleted: visibleFilters[index].onRemove,
-                          ),
-                          if (index != visibleFilters.length - 1)
-                            const SizedBox(width: 6),
+                            if (index != visibleFilters.length - 1)
+                              const SizedBox(width: 6),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              if (visibleFilters.isNotEmpty) const SizedBox(width: 6),
-              if (showCollapsedCount) ...[
-                _CollapsedFilterCount(
-                  count: hiddenCount,
-                  showFilterPrefix: visibleFilters.isEmpty,
-                ),
-                const SizedBox(width: 6),
-              ],
-              if (showClearAll)
-                SizedBox.square(
-                  dimension: 30,
-                  child: IconButton(
+                if (visibleFilters.isNotEmpty) const SizedBox(width: 6),
+                if (showCollapsedCount) ...[
+                  _CollapsedFilterCount(
+                    count: hiddenCount,
+                    showFilterPrefix: visibleFilters.isEmpty,
+                  ),
+                  // 折叠数量已是窄宽最后一项时不保留无意义尾间距，避免 452px 桌面窗口溢出。
+                  if (showClearAll || showInlineResultStatus)
+                    const SizedBox(width: 6),
+                ],
+                if (showClearAll)
+                  _LibraryStatusIconAction(
                     tooltip: '\u6e05\u7a7a\u5168\u90e8\u7b5b\u9009',
-                    padding: EdgeInsets.zero,
-                    iconSize: 17,
-                    color: libraryTextMuted,
-                    onPressed: onClearAll,
-                    icon: const Icon(Icons.filter_alt_off_outlined),
+                    icon: Icons.filter_alt_off_outlined,
+                    onPressed: onClearAll!,
                   ),
-                ),
-              if (showInlineResultStatus) ...[
-                const Spacer(),
-                SizedBox(
-                  width: math.min(trailingWidth, constraints.maxWidth),
-                  child: _FilterResultLine(
-                    resultCount: resultCount,
-                    resultCountLabel: resultCountLabel,
-                    refreshing: refreshing,
-                    progressLabel: progressLabel,
-                    progressValue: progressValue,
-                    progressPaused: progressPaused,
-                    onToggleProgressPaused: onToggleProgressPaused,
-                    onCancelProgress: onCancelProgress,
+                if (showInlineResultStatus) ...[
+                  const Spacer(),
+                  SizedBox(
+                    width: math.min(trailingWidth, constraints.maxWidth),
+                    child: _FilterResultLine(
+                      resultCount: resultCount,
+                      resultCountLabel: resultCountLabel,
+                      refreshing: refreshing,
+                      progressLabel: progressLabel,
+                      progressValue: progressValue,
+                      progressPaused: progressPaused,
+                      onToggleProgressPaused: onToggleProgressPaused,
+                      onCancelProgress: onCancelProgress,
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -1713,20 +1845,20 @@ class _SourceContextChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 30,
+      height: 32,
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 9),
       decoration: BoxDecoration(
         color: librarySurfaceAlt,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         border: Border.all(color: libraryBorder),
       ),
       child: Text(
         label,
         style: const TextStyle(
           color: libraryTextMuted,
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
+          fontSize: AppTypography.caption,
+          fontWeight: AppTypography.strong,
         ),
       ),
     );
@@ -1749,20 +1881,20 @@ class _CollapsedFilterCount extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 30,
+      height: 32,
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: librarySurfaceAlt,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         border: Border.all(color: libraryBorder),
       ),
       child: Text(
         showFilterPrefix ? '筛选 $count' : '+$count',
         style: const TextStyle(
           color: libraryTextMuted,
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
+          fontSize: AppTypography.caption,
+          fontWeight: AppTypography.strong,
         ),
       ),
     );
@@ -1909,14 +2041,18 @@ class _CurrentFilterChip extends StatelessWidget {
         return librarySurfaceAlt;
       }),
       deleteIconColor: libraryTextMuted,
+      deleteIcon: const Icon(Icons.close_rounded, size: 15),
+      deleteButtonTooltipMessage: '\u79fb\u9664\u8be5\u7b5b\u9009',
       labelStyle: const TextStyle(
         color: libraryText,
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
+        fontSize: AppTypography.caption,
+        fontWeight: AppTypography.strong,
       ),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       padding: const EdgeInsets.symmetric(horizontal: 4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
     );
   }
 }
@@ -1955,15 +2091,19 @@ class _FilterResultLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final operationInProgress = progressLabel != null;
     return Row(mainAxisSize: MainAxisSize.min, children: [
+      if (!operationInProgress) ...[
+        const Icon(Icons.circle, size: 7, color: appAccentViolet),
+        const SizedBox(width: AppSpacing.xs),
+      ],
       Flexible(
         child: Text(
           progressLabel ?? resultCountLabel ?? '$resultCount 个视频',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: appAccentViolet,
+            color: libraryText,
             fontSize: 13,
-            fontWeight: FontWeight.w900,
+            fontWeight: AppTypography.strong,
           ),
         ),
       ),
@@ -2692,12 +2832,13 @@ Widget referenceTopBarSearchSmokeHarness({
   bool selectionMode = false,
   int selectedCount = 0,
   bool allSelected = false,
+  AppAccessibilityData? accessibility,
   VoidCallback? onEnterSelectionMode,
   VoidCallback? onToggleSelectAll,
   VoidCallback? onDeleteSelected,
   VoidCallback? onCancelSelectionMode,
 }) {
-  return MaterialApp(
+  final app = MaterialApp(
     home: Scaffold(
       body: ReferenceTopBar(
         controller: controller,
@@ -2751,6 +2892,10 @@ Widget referenceTopBarSearchSmokeHarness({
       ),
     ),
   );
+  if (accessibility == null) {
+    return app;
+  }
+  return AppAccessibilityScope(data: accessibility, child: app);
 }
 
 /**
