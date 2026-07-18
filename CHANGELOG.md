@@ -1,12 +1,12 @@
 ﻿# CHANGELOG.md
 
-## 2026-07-18 · Apple UI Phase 1 媒体库滚动聚焦与回顶
+## 2026-07-18 · Apple UI 媒体库顶部边界与 Phase 3 维护页补齐
 
-- expanded 媒体库在向下滚动期间以可中断的淡出、上移和高度折叠收起标题与搜索动作区，滚动停止后短延迟恢复；向上反向滚动会立即恢复顶部上下文。
-- 越过首次结果视口后，结果区右下角显示 48px 回顶入口；点击按距离平滑返回首屏并自动隐藏，reduced motion 下直接提交终态。
-- 显示状态由滚动方向和单一阈值驱动，不按像素重建页面；保留增量加载、真实 `TextField`、筛选/排序、多选、网格/列表和完整 filtered queue 行为。
-- focused tests 覆盖中间动画帧、方向、阈值、点击回顶与无动态效果降级；完整 208 项测试、`flutter analyze`、Windows debug build 和 1249×714 真实窗口终态截图通过，3 项 benchmark 跳过。
-- 未修改 SQLite schema、过滤语义、filtered queue、播放器/缓存队列或用户数据。
+- expanded 媒体库顶部信息区改为只在结果绝对顶部显示；离开顶部后即使中途停止或反向滚动也保持收起，回到 offset 0 并稳定 140ms 后才恢复。
+- 回顶入口保留越过首次视口的显示条件和距离型平滑回顶，视觉改为 44px 深色无亮环表面与紫色 `chevron.up`，继续支持 tooltip、键盘、Semantics 和 reduced motion。
+- 视频数据备份页重排为保护范围、响应式同步状态和维护动作；标签编辑器统一维护页深色材质、标题上下文、搜索清除与当前/候选标签分区。所有备份、导出、标签来源和保存回调保持。
+- focused tests 与完整 210 项测试通过，3 项 benchmark 跳过；`flutter analyze`、Windows debug build 通过。1249×714 实窗补齐“日期”六项菜单终态，后续滚动和 Phase 3 点击因检测到用户输入而停止并保留精确复测路径。
+- 未修改 SQLite schema、过滤语义、filtered queue、播放器/缓存队列、备份后端、标签来源或用户数据。
 
 ## 2026-07-18 · Apple UI Phase 1 排序动作带补齐
 

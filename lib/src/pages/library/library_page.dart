@@ -1332,112 +1332,28 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                         const SizedBox(height: 16),
                       ],
                       if (_section == _SettingsSection.dataBackup) ...[
-                        Card(
-                          key: const ValueKey('settings.dataBackup.card'),
-                          child: Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                SwitchListTile(
-                                  key: const ValueKey(
-                                      'settings.dataBackup.toggle'),
-                                  contentPadding: EdgeInsets.zero,
-                                  value: _dataBackupSettings.enabled,
-                                  onChanged: _changeDataBackupEnabled,
-                                  title: const Text(
-                                    '视频数据备份',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  subtitle: const Padding(
-                                    padding: EdgeInsets.only(top: 6),
-                                    child: Text(
-                                      '独立备份稳定身份、收藏、播放状态和非文件夹标签，不复制视频文件。',
-                                      style: TextStyle(color: libraryTextMuted),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  '移除媒体库目录时保留备份，重新添加可自动恢复；明确删除单个视频时会同步删除对应备份。应用重启后会继续未完成任务，播放期间自动暂停。',
-                                  style: TextStyle(
-                                      color: libraryTextMuted, height: 1.5),
-                                ),
-                                const SizedBox(height: 14),
-                                _SettingsStatLine(
-                                  label: '状态',
-                                  value:
-                                      _dataBackupPhaseLabel(_dataBackupStatus),
-                                ),
-                                _SettingsStatLine(
-                                  label: '本轮进度',
-                                  value: _dataBackupStatus.total == 0
-                                      ? '0'
-                                      : '${_dataBackupStatus.processed} / ${_dataBackupStatus.total}',
-                                ),
-                                _SettingsStatLine(
-                                  label: '等待同步',
-                                  value: formatCount(_dataBackupStatus.pending),
-                                ),
-                                _SettingsStatLine(
-                                  label: '最近完成',
-                                  value: _backupTimeLabel(
-                                      _dataBackupStatus.lastCompletedAt),
-                                ),
-                                if (_dataBackupStatus.phase ==
-                                        DataBackupPhase.running &&
-                                    _dataBackupStatus.total > 0) ...[
-                                  const SizedBox(height: 8),
-                                  LinearProgressIndicator(
-                                    value: (_dataBackupStatus.processed /
-                                            _dataBackupStatus.total)
-                                        .clamp(0, 1),
-                                  ),
-                                ],
-                                const SizedBox(height: 12),
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 10,
-                                  children: [
-                                    OutlinedButton.icon(
-                                      key: const ValueKey(
-                                          'settings.dataBackup.runNow'),
-                                      onPressed: _dataBackupSettings.enabled &&
-                                              !_backupMaintenanceRunning
-                                          ? widget.onRunDataBackupNow
-                                          : null,
-                                      icon: const Icon(Icons.backup_rounded),
-                                      label: const Text('立即备份'),
-                                    ),
-                                    OutlinedButton.icon(
-                                      key: const ValueKey(
-                                        'settings.dataBackup.checkIntegrity',
-                                      ),
-                                      onPressed: _backupMaintenanceRunning
-                                          ? null
-                                          : _checkDataBackupIntegrity,
-                                      icon: const Icon(
-                                          Icons.verified_user_rounded),
-                                      label: const Text('检查完整性'),
-                                    ),
-                                    OutlinedButton.icon(
-                                      key: const ValueKey(
-                                          'settings.dataBackup.export'),
-                                      onPressed: _backupMaintenanceRunning
-                                          ? null
-                                          : _exportDataBackup,
-                                      icon: const Icon(
-                                          Icons.file_download_outlined),
-                                      label: const Text('导出备份'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                        _DataBackupSettingsPanel(
+                          enabled: _dataBackupSettings.enabled,
+                          maintenanceRunning: _backupMaintenanceRunning,
+                          statusLabel: _dataBackupPhaseLabel(_dataBackupStatus),
+                          progressLabel: _dataBackupStatus.total == 0
+                              ? '0'
+                              : '${_dataBackupStatus.processed} / ${_dataBackupStatus.total}',
+                          pendingLabel: formatCount(_dataBackupStatus.pending),
+                          lastCompletedLabel: _backupTimeLabel(
+                            _dataBackupStatus.lastCompletedAt,
                           ),
+                          progress: _dataBackupStatus.phase ==
+                                      DataBackupPhase.running &&
+                                  _dataBackupStatus.total > 0
+                              ? (_dataBackupStatus.processed /
+                                      _dataBackupStatus.total)
+                                  .clamp(0, 1)
+                              : null,
+                          onEnabledChanged: _changeDataBackupEnabled,
+                          onRunNow: widget.onRunDataBackupNow,
+                          onCheckIntegrity: _checkDataBackupIntegrity,
+                          onExport: _exportDataBackup,
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -1638,6 +1554,337 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                     ],
                   ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/**
+ * 构建视频数据备份面板的 focused widget test 容器。
+ *
+ * 测试只注入可见状态和既有动作回调，不打开备份数据库、不选择导出路径。
+ */
+@visibleForTesting
+Widget dataBackupSettingsSmokeHarness({
+  bool enabled = true,
+  bool maintenanceRunning = false,
+  String statusLabel = '后台备份空闲',
+  String progressLabel = '11163 / 11163',
+  String pendingLabel = '0',
+  String lastCompletedLabel = '刚刚',
+  double? progress,
+  TextScaler textScaler = TextScaler.noScaling,
+  ValueChanged<bool>? onEnabledChanged,
+  VoidCallback? onRunNow,
+  VoidCallback? onCheckIntegrity,
+  VoidCallback? onExport,
+}) {
+  return MaterialApp(
+    theme: settingsWorkspaceTheme(ThemeData(useMaterial3: true)),
+    home: MediaQuery(
+      data: MediaQueryData(
+        size: const Size(1000, 900),
+        textScaler: textScaler,
+      ),
+      child: Scaffold(
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: _DataBackupSettingsPanel(
+            enabled: enabled,
+            maintenanceRunning: maintenanceRunning,
+            statusLabel: statusLabel,
+            progressLabel: progressLabel,
+            pendingLabel: pendingLabel,
+            lastCompletedLabel: lastCompletedLabel,
+            progress: progress,
+            onEnabledChanged: onEnabledChanged ?? (_) {},
+            onRunNow: onRunNow ?? () {},
+            onCheckIntegrity: onCheckIntegrity ?? () {},
+            onExport: onExport ?? () {},
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * 视频数据备份维护面板。
+ *
+ * 面板只重排已有开关、状态和动作，不读取数据库、不改变备份策略，也不在 build
+ * 阶段触发检查或导出；所有业务仍通过调用方回调串行执行。
+ */
+class _DataBackupSettingsPanel extends StatelessWidget {
+  const _DataBackupSettingsPanel({
+    required this.enabled,
+    required this.maintenanceRunning,
+    required this.statusLabel,
+    required this.progressLabel,
+    required this.pendingLabel,
+    required this.lastCompletedLabel,
+    required this.progress,
+    required this.onEnabledChanged,
+    required this.onRunNow,
+    required this.onCheckIntegrity,
+    required this.onExport,
+  });
+
+  /** 是否允许后台备份与扫描恢复。 */
+  final bool enabled;
+
+  /** 检查或导出运行期间禁止重复提交维护动作。 */
+  final bool maintenanceRunning;
+
+  /** 当前备份阶段的用户可读描述。 */
+  final String statusLabel;
+
+  /** 当前全量核对进度。 */
+  final String progressLabel;
+
+  /** 等待写入独立备份库的数量。 */
+  final String pendingLabel;
+
+  /** 最近完整核对时间。 */
+  final String lastCompletedLabel;
+
+  /** 运行中才显示的 0–1 进度。 */
+  final double? progress;
+
+  /** 保存备份开关。 */
+  final ValueChanged<bool> onEnabledChanged;
+
+  /** 启动已有全量备份任务。 */
+  final VoidCallback onRunNow;
+
+  /** 执行已有只读完整性检查。 */
+  final VoidCallback onCheckIntegrity;
+
+  /** 执行已有便携备份导出。 */
+  final VoidCallback onExport;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      key: const ValueKey('settings.dataBackup.card'),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SwitchListTile(
+              key: const ValueKey('settings.dataBackup.toggle'),
+              contentPadding: EdgeInsets.zero,
+              value: enabled,
+              onChanged: onEnabledChanged,
+              secondary: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: appAccentViolet.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+                child: const SizedBox.square(
+                  dimension: 42,
+                  child: Icon(Icons.shield_outlined, color: libraryAccent),
+                ),
+              ),
+              title: const Text(
+                '视频数据备份',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+              subtitle: const Padding(
+                padding: EdgeInsets.only(top: 5),
+                child: Text(
+                  '独立保存视频身份与用户维护数据，主媒体库仍是唯一业务写入源。',
+                  style: TextStyle(color: libraryTextMuted, height: 1.4),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const _DataBackupScopeSummary(),
+            const SizedBox(height: 20),
+            const _SettingsGroupTitle(title: '同步状态'),
+            const SizedBox(height: 10),
+            _DataBackupMetricGrid(
+              statusLabel: statusLabel,
+              progressLabel: progressLabel,
+              pendingLabel: pendingLabel,
+              lastCompletedLabel: lastCompletedLabel,
+            ),
+            if (progress != null) ...[
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.capsule),
+                child: LinearProgressIndicator(
+                  minHeight: 5,
+                  value: progress,
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+            const Text(
+              '维护动作',
+              style: TextStyle(
+                color: libraryText,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              '完整性检查只读取并报告差异；导出不包含本地路径或视频文件。',
+              style: TextStyle(color: libraryTextMuted, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  key: const ValueKey('settings.dataBackup.runNow'),
+                  onPressed: enabled && !maintenanceRunning ? onRunNow : null,
+                  icon: const Icon(Icons.backup_rounded),
+                  label: const Text('立即备份'),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey('settings.dataBackup.checkIntegrity'),
+                  onPressed: maintenanceRunning ? null : onCheckIntegrity,
+                  icon: const Icon(Icons.verified_user_rounded),
+                  label: const Text('检查完整性'),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey('settings.dataBackup.export'),
+                  onPressed: maintenanceRunning ? null : onExport,
+                  icon: const Icon(Icons.file_download_outlined),
+                  label: const Text('导出备份'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 明确备份覆盖范围与不包含项，避免用户把它误认为媒体文件副本。 */
+class _DataBackupScopeSummary extends StatelessWidget {
+  const _DataBackupScopeSummary();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: librarySurfaceAlt.withValues(alpha: 0.68),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: libraryBorder),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.lock_reset_rounded, color: libraryAccent, size: 20),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '保留稳定身份、收藏、播放状态及非文件夹标签。移除目录后仍可恢复；明确删除单个视频时会同步清理对应备份。\n不复制视频文件，也不改变 folder 标签来源。',
+                style: TextStyle(color: libraryTextMuted, height: 1.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 按可用宽度在 4/2/1 列间重排备份状态，不压缩文字。 */
+class _DataBackupMetricGrid extends StatelessWidget {
+  const _DataBackupMetricGrid({
+    required this.statusLabel,
+    required this.progressLabel,
+    required this.pendingLabel,
+    required this.lastCompletedLabel,
+  });
+
+  final String statusLabel;
+  final String progressLabel;
+  final String pendingLabel;
+  final String lastCompletedLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = <(String, String)>[
+      ('状态', statusLabel),
+      ('本轮进度', progressLabel),
+      ('等待同步', pendingLabel),
+      ('最近完成', lastCompletedLabel),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 760
+            ? 4
+            : constraints.maxWidth >= 460
+                ? 2
+                : 1;
+        const gap = 10.0;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final metric in metrics)
+              SizedBox(
+                width: width,
+                child: _DataBackupMetric(
+                  label: metric.$1,
+                  value: metric.$2,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/** 单个备份状态指标；纵向排版允许 150% 文字自然换行。 */
+class _DataBackupMetric extends StatelessWidget {
+  const _DataBackupMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: libraryBackground.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: libraryTextMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              value,
+              style: const TextStyle(
+                color: libraryText,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
       ),
     );

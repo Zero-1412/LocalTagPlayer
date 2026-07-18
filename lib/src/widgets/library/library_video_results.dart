@@ -641,7 +641,7 @@ class VideoGrid extends StatefulWidget {
   /** 是否启用宽桌面结果区的滚动顶部收起和回到顶部入口。 */
   final bool scrollChromeEnabled;
 
-  /** 用户滚动方向或空闲状态改变时，请求页面收起或恢复顶部信息区。 */
+  /** 结果离开或回到绝对顶部时，请求页面收起或恢复顶部信息区。 */
   final ValueChanged<bool>? onHeaderVisibilityChanged;
 
   @override
@@ -678,7 +678,7 @@ class _VideoGridState extends State<VideoGrid> {
   /** 窗口宽度停止变化后提交唯一一次网格重排。 */
   Timer? _viewportResizeTimer;
 
-  /** 合并连续滚轮事件之间的短暂 idle，避免顶部信息区反复闪回。 */
+  /** 回到结果绝对顶部后的短暂稳定计时，避免惯性边界轻微抖动造成闪回。 */
   Timer? _headerRestoreTimer;
 
   /** 首次开始滚动时的结果视口高度，用于判定首屏视频是否已经全部划过。 */
@@ -779,6 +779,7 @@ class _VideoGridState extends State<VideoGrid> {
    */
   void _handleScroll() {
     _syncScrollChrome();
+    _hideHeaderAwayFromTop();
     if (!_scrollController.hasClients ||
         _loadMoreScheduled ||
         widget.videos.isEmpty) {
@@ -859,25 +860,40 @@ class _VideoGridState extends State<VideoGrid> {
     widget.onHeaderVisibilityChanged?.call(visible);
   }
 
+  /** 当前结果是否位于允许显示顶部信息区的绝对起点。 */
+  bool get _isAtScrollTop =>
+      _scrollController.hasClients &&
+      _scrollController.position.pixels <=
+          _scrollController.position.minScrollExtent + 0.5;
+
+  /** 一旦离开绝对顶部就保持收起；同一状态由上报去重保护。 */
+  void _hideHeaderAwayFromTop() {
+    if (!widget.scrollChromeEnabled || _isAtScrollTop) {
+      return;
+    }
+    _headerRestoreTimer?.cancel();
+    _reportHeaderVisibility(false);
+  }
+
   /**
-   * 处理真实用户滚动方向：向下时收起，向上或停止时恢复。
+   * 处理真实用户滚动：离开顶部后始终收起，仅在回到绝对顶部并稳定后恢复。
    *
-   * 程序化回到顶部不会伪装成用户滚动方向；它会直接恢复顶部并由控制器完成位移。
+   * 140ms 只合并触控板惯性在顶部边界的短暂 idle，不再让中途停留恢复 chrome。
    */
   bool _handleScrollNotification(ScrollNotification notification) {
     if (!widget.scrollChromeEnabled || notification.depth != 0) {
       return false;
     }
     if (notification is UserScrollNotification) {
-      switch (notification.direction) {
-        case ScrollDirection.reverse:
-          _headerRestoreTimer?.cancel();
+      if (notification.direction == ScrollDirection.idle) {
+        _scheduleHeaderRestore();
+      } else {
+        _headerRestoreTimer?.cancel();
+        // 从顶部开始向下或在中途反向时都保持收起，直到真实回到起点。
+        if (notification.direction == ScrollDirection.reverse ||
+            !_isAtScrollTop) {
           _reportHeaderVisibility(false);
-        case ScrollDirection.forward:
-          _headerRestoreTimer?.cancel();
-          _reportHeaderVisibility(true);
-        case ScrollDirection.idle:
-          _scheduleHeaderRestore();
+        }
       }
     } else if (notification is ScrollEndNotification) {
       _scheduleHeaderRestore();
@@ -885,11 +901,15 @@ class _VideoGridState extends State<VideoGrid> {
     return false;
   }
 
-  /** 连续滚轮停止 140ms 后恢复顶部，短暂事件间隙不会造成闪烁。 */
+  /** 只在结果绝对顶部稳定 140ms 后恢复，惯性滚动停在中途不会显示。 */
   void _scheduleHeaderRestore() {
     _headerRestoreTimer?.cancel();
+    if (!_isAtScrollTop) {
+      _reportHeaderVisibility(false);
+      return;
+    }
     _headerRestoreTimer = Timer(const Duration(milliseconds: 140), () {
-      if (mounted) {
+      if (mounted && _isAtScrollTop) {
         _reportHeaderVisibility(true);
       }
     });
@@ -901,10 +921,10 @@ class _VideoGridState extends State<VideoGrid> {
       return;
     }
     _headerRestoreTimer?.cancel();
-    _reportHeaderVisibility(true);
     final accessibility = AppAccessibilityScope.of(context);
     if (accessibility.reduceMotion) {
       _scrollController.jumpTo(0);
+      _scheduleHeaderRestore();
       return;
     }
     final distance = _scrollController.position.pixels.abs();
@@ -914,6 +934,7 @@ class _VideoGridState extends State<VideoGrid> {
       duration: Duration(milliseconds: milliseconds),
       curve: Curves.easeOutCubic,
     );
+    _scheduleHeaderRestore();
   }
 
   /** 构建不遮挡滚动条的右下角回到顶部浮动入口。 */
@@ -924,8 +945,8 @@ class _VideoGridState extends State<VideoGrid> {
     final fadeDuration =
         accessibility.fadeDuration(const Duration(milliseconds: 160));
     return Positioned(
-      right: 24,
-      bottom: 24,
+      right: 20,
+      bottom: 20,
       child: ExcludeFocus(
         excluding: !_showReturnToTop,
         child: ExcludeSemantics(
@@ -952,14 +973,15 @@ class _VideoGridState extends State<VideoGrid> {
                       onTap: _scrollToTop,
                       semanticLabel: '回到媒体库顶部',
                       padding: EdgeInsets.zero,
-                      borderRadius: 24,
-                      backgroundColor: librarySurfaceAlt,
+                      borderRadius: 22,
+                      backgroundColor: librarySurface,
+                      showBorder: false,
                       child: const SizedBox.square(
-                        dimension: 48,
+                        dimension: 44,
                         child: Icon(
-                          Icons.arrow_upward_rounded,
-                          size: 22,
-                          color: libraryText,
+                          Icons.keyboard_arrow_up_rounded,
+                          size: 28,
+                          color: libraryAccent,
                         ),
                       ),
                     ),

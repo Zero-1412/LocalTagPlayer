@@ -1043,7 +1043,7 @@ void main() {
     expect(tester.getSize(header).height, closeTo(100, 0.01));
   });
 
-  testWidgets('library scroll chrome reports direction and returns to top',
+  testWidgets('library scroll chrome stays hidden until returning to top',
       (WidgetTester tester) async {
     final directory = Directory(
       p.join(
@@ -1118,7 +1118,7 @@ void main() {
     expect(headerEvents, contains(false));
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 600));
-    expect(headerEvents.last, isTrue);
+    expect(headerEvents.last, isFalse);
 
     final firstViewport = controller.position.viewportDimension;
     controller.jumpTo(firstViewport - 1);
@@ -1136,6 +1136,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(controller.offset, closeTo(0, 0.01));
     expect(buttonOpacity().opacity, 0);
+    await tester.pump(const Duration(milliseconds: 160));
+    expect(headerEvents.last, isTrue);
+    expect(find.byIcon(Icons.keyboard_arrow_up_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_upward_rounded), findsNothing);
   });
 
   testWidgets('library scroll header removes structural motion when requested',
@@ -2482,6 +2486,50 @@ void main() {
       await tester.tap(find.byKey(ValueKey(entry.$1)));
       await tester.pump();
       expect(openedSections.last, entry.$2);
+    }
+  });
+
+  testWidgets(
+      'data backup panel groups scope status and actions at 150 percent',
+      (tester) async {
+    final actions = <String>[];
+    bool? enabled;
+
+    await tester.pumpWidget(
+      dataBackupSettingsSmokeHarness(
+        progress: 0.72,
+        textScaler: TextScaler.linear(1.5),
+        onEnabledChanged: (value) => enabled = value,
+        onRunNow: () => actions.add('run'),
+        onCheckIntegrity: () => actions.add('check'),
+        onExport: () => actions.add('export'),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('同步状态'), findsOneWidget);
+    expect(
+      find.textContaining('不复制视频文件，也不改变 folder 标签来源'),
+      findsOneWidget,
+    );
+    expect(find.text('维护动作'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    expect(enabled, isFalse);
+
+    for (final entry in <(String, String)>[
+      ('settings.dataBackup.runNow', 'run'),
+      ('settings.dataBackup.checkIntegrity', 'check'),
+      ('settings.dataBackup.export', 'export'),
+    ]) {
+      final action = find.byKey(ValueKey(entry.$1));
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pump();
+      expect(actions.last, entry.$2);
     }
   });
 
@@ -4107,6 +4155,49 @@ void main() {
     expect(find.text('搜索结果'), findsOneWidget);
     expect(find.text('SuggestedTag'), findsOneWidget);
     expect(find.text('RecentTag'), findsNothing);
+
+    expect(
+      Theme.of(tester.element(find.byKey(const ValueKey('tagEditor.dialog'))))
+          .dialogTheme
+          .backgroundColor,
+      librarySurface,
+    );
+    await tester.tap(find.byKey(const ValueKey('tagEditor.clearSearch')));
+    await tester.pump();
+    expect(find.text('RecentTag'), findsOneWidget);
+    expect(find.byKey(const ValueKey('tagEditor.clearSearch')), findsNothing);
+  });
+
+  testWidgets('manual tag editor remains usable at 150 percent text scale',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(
+            size: Size(900, 720),
+            textScaler: TextScaler.linear(1.5),
+          ),
+          child: Scaffold(
+            body: TagEditorDialog(
+              title: '一段很长的媒体标题用于验证标签编辑器',
+              helperText: '只修改手动标签；文件夹标签由目录结构维护。',
+              initialTags: {'FolderTag', 'ManualTag'},
+              existingTags: {'SuggestedTag', 'AnotherTag'},
+              lockedTags: {'FolderTag'},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('管理当前视频关联的标签'), findsOneWidget);
+    expect(find.byKey(const ValueKey('tagEditor.save')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tagEditor.cancel')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('manual tag editor shows every available candidate',
