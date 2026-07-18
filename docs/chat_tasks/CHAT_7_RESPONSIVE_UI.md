@@ -1,8 +1,15 @@
 # CHAT_7_RESPONSIVE_UI.md
 
 当前版本：`0.3.0`
-状态：第一阶段验收完成；Apple UI Phase 0–2 已完成，Phase 3 标签中心、设置入口与缓存诊断已完成真实窗口验证
+状态：第一阶段验收完成；Apple UI Phase 0–2 已完成，Phase 3 标签中心、设置、缓存诊断、目录管理与 Missing/Relink 已完成真实窗口验证
 负责人：Chat 7 / 响应式 UI + 平台 polish
+
+## 2026-07-18 Apple UI Phase 3 目录管理与 Missing/Relink
+
+- 目录管理使用页面级摘要和响应式 root 卡片，Missing 使用摘要、数据提示和结构化列表；批量预览在窄宽度下把路径字段与动作区自然换行，不缩小真实输入或危险动作说明。
+- 维护工作区统一深色 dialog、紫色主动作、浅色 outlined 动作和高对比次级文字；reduced motion 下没有新增位移，列表未引入逐项动画或动态 blur。
+- 两项 150% 文字缩放 focused tests、弹窗/按钮主题回归、完整 204 项测试、静态分析和 Windows debug build 通过。
+- 1248×714 真实窗口完成目录终态、解除管理确认/取消、Missing 列表和批量预览截图，未发现遮挡、错位、横向溢出或低对比度终态。
 
 ## 2026-07-18 主界面三档文字缩放复修
 

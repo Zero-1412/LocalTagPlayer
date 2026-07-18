@@ -94,6 +94,7 @@ export 'pages/player/player_queue_sidebar.dart';
 export 'pages/player/player_page.dart';
 export 'pages/library/library_page.dart';
 export 'pages/library/library_page_helpers.dart';
+export 'pages/library/directory_manager_page.dart';
 export 'pages/library/missing_relink_page.dart';
 export 'pages/tags/tag_manager_page.dart';
 export 'widgets/app_theme_tokens.dart';

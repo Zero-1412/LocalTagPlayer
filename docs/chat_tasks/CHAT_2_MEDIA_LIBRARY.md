@@ -1,3 +1,10 @@
+## 2026-07-18 Apple UI Phase 3 目录管理与 Missing/Relink
+
+- 目录管理改为独立维护工作区，但添加、扫描和解除 root 仍只委托既有 application facade 与页面回调；UI 不直接访问磁盘、SQLite 或平台命令。
+- 解除管理继续使用 detached 语义，不删除磁盘文件，并保留 videoId、fingerprint、manual 标签、收藏、播放记录、进度和媒体详情；真实窗口确认层仅打开后取消。
+- Missing 列表与批量路径替换只重排信息层级和响应式布局；单条/批量 relink 的路径占用、fingerprint、只读预览、二次确认、失败重试、root 更新和审计语义均未改变。
+- 150% 文字缩放 focused tests、完整 204 项测试、静态分析、Windows debug build 与 1248×714 真实窗口连续截图通过。
+
 ## 2026-07-17 文件选择初始目录与视图偏好
 
 - 添加目录/视频优先从当前媒体路径打开，缺少当前路径时回退首个媒体 root；单条 Relink 优先原文件父目录，再回退原 root 或媒体 root。

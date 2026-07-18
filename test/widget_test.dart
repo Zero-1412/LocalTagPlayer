@@ -2199,6 +2199,21 @@ void main() {
       theme.inputDecorationTheme.fillColor,
       librarySurfaceAlt,
     );
+    expect(
+      theme.outlinedButtonTheme.style?.foregroundColor
+          ?.resolve(const <WidgetState>{}),
+      libraryText,
+    );
+    expect(
+      theme.textButtonTheme.style?.foregroundColor
+          ?.resolve(const <WidgetState>{}),
+      libraryAccent,
+    );
+    expect(
+      theme.filledButtonTheme.style?.backgroundColor
+          ?.resolve(const <WidgetState>{}),
+      appAccentViolet,
+    );
   });
 
   test('settings workspace uses the shared Apple card radius', () {
@@ -3587,6 +3602,130 @@ void main() {
     );
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(tester.widget<FilledButton>(relinkButton).onPressed, isNotNull);
+  });
+
+  testWidgets('directory manager preserves data policy and scales to 150%',
+      (tester) async {
+    tester.view.physicalSize = const Size(1248, 714);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository = _MissingRelinkTestRepository()
+      ..roots.addAll(<String>[r'X:\test-media', r'E:\archive\media']);
+    final store = LibraryApplicationFacade(
+      libraryRepository: repository,
+      tagRepository: repository,
+      cacheRepository: repository,
+      playbackRepository: repository,
+    );
+    String? removedRoot;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          child: DirectoryManagerPage(
+            store: store,
+            scanning: false,
+            onAddDirectory: () async {},
+            onRescan: () async {},
+            onRemoveRoot: (root) async {
+              removedRoot = root;
+              repository.roots.remove(root);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('2 个受管理目录'), findsOneWidget);
+    expect(find.textContaining('不会删除磁盘文件'), findsOneWidget);
+    expect(find.byKey(const ValueKey('directoryManager.add')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('directoryManager.rescan')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(
+      find.byKey(const ValueKey(r'directoryManager.remove.X:\test-media')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(find.byType(AlertDialog)))
+          .dialogTheme
+          .backgroundColor,
+      librarySurface,
+    );
+    expect(find.text('解除目录管理'), findsOneWidget);
+    expect(find.textContaining('稳定视频身份'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('directoryManager.confirmRemove')),
+    );
+    await tester.pumpAndSettle();
+    expect(removedRoot, r'X:\test-media');
+    expect(find.text('1 个受管理目录'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('missing relink workspace and bulk preview scale to 150%',
+      (tester) async {
+    tester.view.physicalSize = const Size(1248, 714);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository = _MissingRelinkTestRepository();
+    for (final item in <VideoItem>[
+      _testVideo(
+        path: r'D:\missing\alpha-long-name.mp4',
+        title: '一个很长但仍需完整可达的缺失视频标题 Alpha',
+      )..isMissing = true,
+      _testVideo(
+        path: r'E:\missing\beta.mp4',
+        title: 'Beta',
+      )..isMissing = true,
+    ]) {
+      repository.videos[TagRules.pathKey(item.path)] = item;
+    }
+    final store = LibraryApplicationFacade(
+      libraryRepository: repository,
+      tagRepository: repository,
+      cacheRepository: repository,
+      playbackRepository: repository,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          child: MissingRelinkPage(
+            store: store,
+            fileSystem: _CancellingFileSystemAdapter(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('2 个视频路径失效'), findsOneWidget);
+    expect(find.text('标签与播放记录已保留'), findsOneWidget);
+    expect(find.byKey(const ValueKey('missingRelink.list')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const ValueKey('missingRelink.bulkPreview')));
+    await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(find.byType(AlertDialog)))
+          .dialogTheme
+          .backgroundColor,
+      librarySurface,
+    );
+    expect(find.text('批量路径替换'), findsWidgets);
+    expect(
+        find.byKey(const ValueKey('missingRelink.oldPrefix')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('missingRelink.newPrefix')), findsOneWidget);
+    expect(find.textContaining('不会移动或删除文件'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('resume dialog offers continue and restart choices',

@@ -43,6 +43,7 @@ import '../player/player_open_request_controller.dart';
 import '../player/player_page.dart';
 import '../tags/tag_manager_page.dart';
 import 'library_page_helpers.dart';
+import 'directory_manager_page.dart';
 import 'missing_relink_page.dart';
 
 /** 标签筛选默认保持折叠，把媒体结果宽度优先留给高频浏览。 */
@@ -5224,74 +5225,15 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       return;
     }
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('\u76ee\u5f55\u7ba1\u7406'),
-        content: SizedBox(
-          width: 520,
-          child: store.roots.isEmpty
-              ? const Text(
-                  '\u8fd8\u6ca1\u6709\u6dfb\u52a0\u89c6\u9891\u76ee\u5f55\u3002')
-              : ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 320),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: store.roots.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, index) {
-                      final root = store.roots[index];
-                      return ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.folder_outlined),
-                        title: Text(
-                          root,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: IconButton(
-                          tooltip: '\u79fb\u9664\u76ee\u5f55',
-                          icon: const Icon(Icons.delete_outline_rounded),
-                          onPressed: () async {
-                            final confirmed = await _confirmRemoveRoot(root);
-                            if (confirmed != true || !dialogContext.mounted) {
-                              return;
-                            }
-                            Navigator.of(dialogContext).pop();
-                            await _removeLibraryRootData(root);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
+    await Navigator.of(context).push<void>(
+      _smoothRoute<void>(
+        DirectoryManagerPage(
+          store: store,
+          scanning: _isScanning,
+          onAddDirectory: _pickFolder,
+          onRescan: _rescan,
+          onRemoveRoot: _removeLibraryRootData,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('\u5173\u95ed'),
-          ),
-          OutlinedButton.icon(
-            onPressed: _isScanning
-                ? null
-                : () {
-                    Navigator.of(dialogContext).pop();
-                    unawaited(_pickFolder());
-                  },
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('\u6dfb\u52a0\u76ee\u5f55'),
-          ),
-          FilledButton.icon(
-            onPressed: _isScanning || store.roots.isEmpty
-                ? null
-                : () {
-                    Navigator.of(dialogContext).pop();
-                    unawaited(_rescan());
-                  },
-            icon: const Icon(Icons.sync_rounded),
-            label: const Text('\u91cd\u65b0\u626b\u63cf'),
-          ),
-        ],
       ),
     );
   }
@@ -5319,26 +5261,33 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
+  /** 左侧 root 快捷移除继续复用原确认语义；目录管理页使用同等说明。 */
   Future<bool?> _confirmRemoveRoot(String root) {
     return showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('\u79fb\u9664\u76ee\u5f55'),
-        content: Text(
-          '将解除该目录的媒体库管理，目录中的视频会从当前结果与播放队列隐藏。\n\n'
-          '本地文件、标签关系、收藏、播放进度、媒体详情和稳定视频身份都会保留；'
-          '以后重新添加同一目录或匹配到相同文件时会自动恢复。\n\n$root',
+      builder: (dialogContext) => maintenanceDialogSurface(
+        context: context,
+        child: AlertDialog(
+          title: const Text('解除目录管理'),
+          content: Text(
+            '目录中的视频会从当前媒体库与播放队列隐藏，但不会删除本地文件。\n\n'
+            '标签关系、收藏、播放进度、媒体详情和稳定视频身份都会保留；'
+            '以后重新添加同一目录或匹配到相同文件时会自动恢复。\n\n$root',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xffb84d5f),
+              ),
+              child: const Text('解除管理'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('\u53d6\u6d88'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('\u79fb\u9664'),
-          ),
-        ],
       ),
     );
   }

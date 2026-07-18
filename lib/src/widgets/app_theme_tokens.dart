@@ -181,6 +181,9 @@ const libraryText = Color(0xfff1f5f9);
 /** 深色工作区的次要文字。 */
 const libraryTextMuted = Color(0xff9baabd);
 
+/** 深色工作区用于次级文字动作和键盘焦点的高对比紫色。 */
+const libraryAccent = Color(0xffb4adff);
+
 /** 播放器画布；接近纯黑但保留与视频黑边的可辨层级。 */
 const playerCanvas = Color(0xff090b0f);
 
@@ -621,6 +624,40 @@ ThemeData maintenanceWorkspaceTheme(ThemeData base) {
         side: const BorderSide(color: libraryBorder),
       ),
     ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: appAccentViolet,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: libraryBorder,
+        disabledForegroundColor: libraryTextMuted,
+        minimumSize: const Size(0, 40),
+        textStyle: const TextStyle(fontWeight: AppTypography.strong),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: libraryText,
+        disabledForegroundColor: libraryTextMuted,
+        side: const BorderSide(color: libraryBorder),
+        minimumSize: const Size(0, 40),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: libraryAccent,
+        disabledForegroundColor: libraryTextMuted,
+        minimumSize: const Size(0, 40),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+      ),
+    ),
     inputDecorationTheme: const InputDecorationTheme(
       filled: true,
       fillColor: librarySurfaceAlt,
@@ -662,5 +699,21 @@ ThemeData maintenanceWorkspaceTheme(ThemeData base) {
       selectedColor: libraryText,
       selectedTileColor: Color(0x386d5dfc),
     ),
+  );
+}
+
+/**
+ * 将维护页面从页面级 [Theme] 之外发起的弹窗重新包裹为同一深色材质。
+ *
+ * `State.context` 位于页面返回的局部 [Theme] 上方时，`showDialog` 不会自动继承
+ * 工作区配色；统一通过此入口避免确认层退回全局浅色主题和低对比度正文。
+ */
+Widget maintenanceDialogSurface({
+  required BuildContext context,
+  required Widget child,
+}) {
+  return Theme(
+    data: maintenanceWorkspaceTheme(Theme.of(context)),
+    child: child,
   );
 }

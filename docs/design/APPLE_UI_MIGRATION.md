@@ -1,6 +1,6 @@
 # Local Tag Player Apple 式全应用 UI 迁移蓝图
 
-状态：Phase 0、Phase 1 已完成；Phase 2 播放器及左滑快速反向真实终态已验收；Phase 3 标签中心、设置入口和缓存诊断已完成代码、测试、构建与真实窗口连续点击。
+状态：Phase 0、Phase 1 已完成；Phase 2 播放器及左滑快速反向真实终态已验收；Phase 3 标签中心、设置、缓存诊断、目录管理与 Missing/Relink 已完成代码、测试、构建与真实窗口连续点击。
 
 ## 目标
 
@@ -188,6 +188,14 @@ Phase 3 首个组件族交付记录（2026-07-18）：
 - 缓存诊断采用状态摘要、覆盖率、响应式关键指标、后台任务和失败处理分区；加载态保持结构锚点，`CacheStats`、队列门禁和动作回调不变。
 - focused tests、完整 202 项测试、analyze 与 Windows debug build 通过，3 项显式 benchmark 跳过。
 - 真实 1248×714 窗口已补齐标签搜索/清除/详情、设置四入口/四个二级页/返回，以及缓存加载/终态/返回截图；各静止态无明显遮挡、错位或横向溢出。
+
+Phase 3 目录与重关联组件族交付记录（2026-07-18）：
+
+- 目录管理升级为页面级维护工作区，按状态摘要、目录集合和 root 卡片建立层级；添加、扫描与 detached 解除管理继续复用原业务回调。
+- Missing/Relink 采用状态摘要、稳定身份说明和响应式待处理列表；批量路径替换按映射、摘要、搜索、预览状态和动作分区，原只读预览与二次确认边界不变。
+- 深色维护主题统一 Dialog、FilledButton、OutlinedButton 与 TextButton；确认层不再退回全局浅色主题，危险动作仍保留独立红色语义。
+- 150% 文字缩放 focused tests、完整 204 项测试、analyze、Windows debug build 与 1248×714 真实窗口连续截图通过；未增加列表重算、文件读取、blur 或装饰动画。
+- SQLite schema、过滤语义、filtered queue、缓存队列、relink 服务、稳定身份和用户数据未改变。
 
 ### Phase 4：全局细节组件
 
