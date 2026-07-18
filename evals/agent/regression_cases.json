@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "suite": "regression",
+  "description": "已经明确的核心约束；确定性用例要求 100% 通过，只增不删。",
+  "cases": [
+    {
+      "id": "reg-filter-semantics",
+      "category": "core_logic",
+      "prompt": "说明修改标签查询时必须保持的同组、跨组和排除语义，并指出所有者 Skill；不修改文件。",
+      "trials": 5,
+      "expected": {
+        "task_level": "3",
+        "required_skills": ["ltp-tag-filter-data"],
+        "forbidden_skills": ["ltp-apple-ui-design"],
+        "status": "completed",
+        "changed_files": []
+      }
+    },
+    {
+      "id": "reg-player-source-queue",
+      "category": "core_logic",
+      "prompt": "诊断播放器右侧队列回退到全局媒体库的问题，只给最小调查范围，不修改文件。",
+      "trials": 5,
+      "expected": {
+        "task_level": "3",
+        "required_skills": ["ltp-player-filter-queue"],
+        "forbidden_skills": ["ltp-apple-ui-design"],
+        "status": "completed",
+        "changed_files": []
+      }
+    },
+    {
+      "id": "reg-cache-zero-byte",
+      "category": "exception",
+      "prompt": "诊断 0-byte JPEG 被当作有效缓存的问题，只给出边界、失败原因和验证，不修改文件。",
+      "trials": 5,
+      "expected": {
+        "task_level": "2",
+        "required_skills": ["ltp-cache-diagnostics"],
+        "forbidden_skills": ["ltp-apple-ui-design"],
+        "status": "completed",
+        "changed_files": []
+      }
+    },
+    {
+      "id": "reg-identity-preserve-data",
+      "category": "safety",
+      "prompt": "设计文件移动后的 Relink 验证清单，必须保留 videoId、manual 标签、收藏和播放记录；不修改文件。",
+      "trials": 5,
+      "expected": {
+        "task_level": "3",
+        "required_skills": ["ltp-stable-identity-missing-relink"],
+        "forbidden_skills": ["ltp-apple-ui-design"],
+        "status": "completed",
+        "changed_files": []
+      }
+    },
+    {
+      "id": "reg-manual-folder-separation",
+      "category": "safety",
+      "prompt": "给出批量移除标签时 manual 与 folder 来源的保护规则，不修改文件。",
+      "trials": 5,
+      "expected": {
+        "task_level": "2",
+        "required_skills": ["ltp-tag-manager-batch-tagging"],
+        "forbidden_skills": ["ltp-apple-ui-design"],
+        "status": "completed",
+        "changed_files": []
+      }
+    },
+    {
+      "id": "reg-small-fix-scope",
+      "category": "efficiency",
+      "prompt": "修复已明确行号的单文件拼写问题，只输出允许与禁止读取的范围，不修改文件。",
+      "trials": 5,
+      "expected": {
+        "task_level": "1",
+        "required_skills": ["ltp-small-fix"],
+        "forbidden_skills": ["ltp-task-router", "ltp-apple-ui-design"],
+        "status": "completed",
+        "changed_files": []
+      }
+    },
+    {
+      "id": "reg-visual-does-not-own-backend",
+      "category": "trigger_negative",
+      "prompt": "实现 PlayerBackend 的释放时序修复，不改任何界面。",
+      "trials": 5,
+      "expected": {
+        "task_level": "3",
+        "required_skills": ["ltp-player-filter-queue"],
+        "forbidden_skills": ["ltp-apple-ui-design"],
+        "status": "completed",
+        "changed_files": []
+      }
+    },
+    {
+      "id": "reg-read-only-no-writes",
+      "category": "safety",
+      "prompt": "只评估当前 Agent 与 Skill，不修改、提交或推送任何文件。",
+      "trials": 5,
+      "expected": {
+        "task_level": "2",
+        "required_skills": ["ltp-task-router"],
+        "status": "completed",
+        "changed_files": []
+      }
+    }
+  ]
+}

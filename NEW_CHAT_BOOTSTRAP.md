@@ -1,112 +1,29 @@
-﻿# NEW_CHAT_BOOTSTRAP.md
+# NEW_CHAT_BOOTSTRAP.md
 
-Local Tag Player 是一个 Flutter Windows 本地标签视频播放器。
+Local Tag Player 是标签驱动的本地视频发现播放器，不是通用专业播放器。
 
-项目定位：
+## 新会话入口
 
-```text
-Tag-driven local video discovery player
-not a general professional video player
-```
+1. 完整读取 `AGENTS.md`，它是产品边界、安全、验证和 Git 规则的唯一权威来源。
+2. 根据任务判断 Level 1 / 2 / 3，只读取该 Level 允许的最小上下文。
+3. Level 2 / 3 再读取 `PROJECT.md`、`CURRENT_TASK.md` 和一个直接相关的 Chat 文档；只有触及共享 contract、schema、平台边界或优先级时才读架构与路线图。
+4. 需要专门流程时只加载最小相关 repo Skill，不要把所有 Skill 和项目历史一起放入上下文。
+5. 较大功能、Level 3 或真实媒体 QA 读取 `docs/agent_harness.md`。
+6. 修改 Agent、Skill、prompt 或 trigger 时读取 `docs/agent_eval.md`，更新受影响用例并运行 Eval 验证。
 
-新对话不要依赖历史聊天记录，请以项目文件为准。
-
-开始任何代码任务前，先判断任务等级，并按最小安全上下文读取文件。不要每个小任务都读取完整项目历史。
-
-```text
-Level 1: Small Fix
-- 用于 analyzer/build 报错、单文件编译错误、缺失符号、小 UI 溢出、拼写修复。
-- 只读 AGENTS.md、具体报错、直接相关源码文件；必要时只查直接引用。
-- 不读完整 ROADMAP / CHANGELOG / 全部 CHAT 文档 / 完整未来规划。
-
-Level 2: Bounded Feature / UI Task
-- 用于一个页面、组件、服务的小功能或当前 Chat 的有限阶段。
-- 读 AGENTS.md、PROJECT.md、CURRENT_TASK.md、一个相关 docs/chat_tasks/CHAT_*.md、直接相关源码。
-- 只有涉及 shared contracts / src/core / 平台边界时才读 ARCHITECTURE.md。
-
-Level 3: Architecture / Schema / Boundary Task
-- 用于 SQLite schema、src/core、平台接口、FilterQuery、TagQueryService、PlayerBackend、FFmpegBackend、stable identity、missing/relink、ROADMAP/ARCHITECTURE 修改。
-- 这类任务才读完整 PROJECT / ARCHITECTURE / CURRENT_TASK / ROADMAP / CHANGELOG / 相关 CHAT 文档 / local_tag_player_flutter_cross_platform_plan_v2.md。
-```
-
-核心原则：
+## Skill 组合
 
 ```text
-1. 从第一性原理出发。
-2. 以对抗式审查结束。
-3. 不要把项目当普通专业播放器。
-4. 不要重做已经完成的 Chat 1-7 第一阶段。
-5. 不要重复粘贴完整项目历史，优先读取项目文件。
-6. 不要做无关清理、无关格式化或大范围重构。
-7. 优先小步、可回滚修改。
-8. 以最少的安全 token 完成当前任务；不要为小任务引入完整项目历史、无关文件读取或长输出。
-9. 如果任务调查中发现需要改 schema / FilterQuery / TagQueryService / 平台边界 / stable identity / player-cache queue，必须升级为 Level 3。
-10. 除代码本身、第三方 API、协议、命令、路径、固定术语和外部错误信息外，文档、代码注释、Git 提交信息、任务记录和交接摘要都以中文为第一语言。
+ltp-task-router：只分级，完成后退出
+领域 Skill：拥有业务语义和不可破坏项
+ltp-apple-ui-design：仅在明确视觉任务中作为设计覆盖层
 ```
 
-`.agents/skills` 是本项目的 repo-scoped Codex skill 目录。需要专门流程时，优先使用最小相关 skill，例如 `$ltp-small-fix`、`$ltp-tag-filter-data`、`$ltp-player-filter-queue`。
+视觉任务最多组合一个领域 Skill 与 Apple UI 覆盖层。纯 SQLite、过滤、队列、缓存后端和 stable identity 任务不得触发 Apple UI Skill。
 
-当前必须保护的核心闭环：
+## 开始与结束
 
-```text
-scan local folders
--> derive initial folder tags
--> add / edit manual tags
--> grouped tag filtering
--> keyword / alias search
--> current filter chips + result count
--> filtered playback queue
--> player consumes current queue
--> tag manager fixes tags
--> cache / diagnostics stay stable
-```
-
-禁止随意破坏：
-
-```text
-SQLite schema
-FilterQuery
-TagQueryService
-folder / manual / rule / filename / import / auto tag source rules
-player filtered queue
-FFmpeg / FFprobe backend boundary
-thumbnail / media details queue
-```
-
-代码修改后至少运行：
-
-```powershell
-flutter analyze
-flutter build windows --debug
-```
-
-Git 规则：
-
-```text
-验证通过后只提交本次任务相关文件。
-提交成功后自动执行 git push 到当前分支的远程跟踪分支。
-如果远程不存在、认证失败、网络失败或用户明确要求暂不推送，记录原因并保留本地提交。
-```
-
-已知本机注意事项：
-
-```text
-flutter run CLI may timeout even when debug exe can run.
-dart format may timeout locally.
-Do not claim they succeeded unless they actually completed.
-```
-
-任务输出保持简短，通常不超过 80 行，不输出完整 diff 或完整日志：
-
-```text
-changed files
-key behavior changes
-validation result
-adversarial review
-next step
-```
-
-低 token 版第一性原理：
+开始时使用最短第一性原理确认：
 
 ```text
 Product goal protected:
@@ -116,14 +33,4 @@ Smallest safe change:
 Fewest safe tokens:
 ```
 
-低 token 版对抗式审查：
-
-```text
-schema: unchanged / changed with migration notes
-FilterQuery / TagQueryService: unchanged / changed intentionally
-filtered queue: unchanged / changed intentionally
-thumbnail/media queue: unchanged / changed intentionally
-user data: preserved / risk noted
-prompt impact: satisfies first principles / adds unnecessary scope or context
-validation: analyze/build result
-```
+结束时按 `AGENTS.md` 完成对抗式审查、对应验证、任务记录、提交和推送。不要在本文件复制当前验证状态、阶段优先级、完整核心规则或命令清单，避免与权威文件漂移。

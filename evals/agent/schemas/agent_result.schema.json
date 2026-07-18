@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local Tag Player Agent Eval Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "task_level",
+    "selected_skills",
+    "summary",
+    "changed_files",
+    "validation",
+    "safety"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["completed", "blocked", "failed"]
+    },
+    "task_level": {
+      "type": "string",
+      "enum": ["1", "2", "3", "none"]
+    },
+    "selected_skills": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "changed_files": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "validation": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "filter_query", "filtered_queue", "cache_queue", "user_data"],
+      "properties": {
+        "schema": { "type": "string" },
+        "filter_query": { "type": "string" },
+        "filtered_queue": { "type": "string" },
+        "cache_queue": { "type": "string" },
+        "user_data": { "type": "string" }
+      }
+    }
+  }
+}

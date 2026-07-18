@@ -1,0 +1,44 @@
+{
+  "name": "apple-ui-quality",
+  "version": 1,
+  "pass_threshold": 80,
+  "criteria": [
+    {
+      "id": "content_hierarchy",
+      "weight": 25,
+      "description": "内容、当前任务和状态层级清楚，装饰没有抢占注意力。"
+    },
+    {
+      "id": "interaction_feedback",
+      "weight": 20,
+      "description": "选择、焦点、加载、成功和失败反馈直接且可解释。"
+    },
+    {
+      "id": "desktop_fitness",
+      "weight": 20,
+      "description": "保留 Windows 桌面的鼠标、键盘、tooltip、信息密度和更多菜单能力。"
+    },
+    {
+      "id": "motion_restraint",
+      "weight": 15,
+      "description": "动效服务于反馈或空间连续性，不延迟搜索、筛选、播放和文字输入。"
+    },
+    {
+      "id": "accessibility",
+      "weight": 10,
+      "description": "覆盖 reduced motion、高对比度、文字缩放、键盘焦点和语义。"
+    },
+    {
+      "id": "implementation_specificity",
+      "weight": 10,
+      "description": "建议能映射到当前 Flutter 组件、token、验证路径和性能风险。"
+    }
+  ],
+  "hard_failures": [
+    "改变 FilterQuery 或 TagQueryService 语义",
+    "改变 filtered playback queue 内容或顺序",
+    "用装饰动画阻塞搜索、筛选、播放或文字输入",
+    "修改稳定身份或用户维护数据",
+    "把全应用机械替换为大面积毛玻璃"
+  ]
+}

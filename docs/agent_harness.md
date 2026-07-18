@@ -33,6 +33,27 @@ not a general professional video player
 - 长程任务持久化记录：较大功能、Level 3 任务和真实媒体目录 QA 必须在 `CURRENT_TASK.md` 或对应 `docs/chat_tasks/CHAT_*.md` 留下目标、baseline、patch、验证和剩余阻塞。
 - 验证结果决定是否晋级：本轮 `challenger` 只有在必要验证通过、核心闭环未退化、用户数据无新增风险时，才成为新的 `champion`。
 
+## Agent Eval 门禁
+
+Champion / Challenger 是开发迭代模型，不等于 Agent 已经通过测评。修改 Agent 规则、Skill、description、trigger、prompt 或本 Harness 时，还必须执行 [`docs/agent_eval.md`](agent_eval.md) 定义的自动化闭环：
+
+```text
+input
+-> isolated Codex execution
+-> raw JSONL + normalized Trace + artifacts
+-> deterministic scorer / optional Rubric judge
+-> comparable score + N-trial stability
+```
+
+门禁规则：
+
+- 每个 Skill 至少有两个正触发和两个负触发用例。
+- 确定性事实、工具、文件范围、状态和产物结构由脚本评分；Apple 观感等主观质量才交给 Rubric judge。
+- capability 用例允许迭代；达到稳定门槛后复制到 regression。
+- regression 只增不删；生产 badcase、真实窗口误操作和越界修改必须转成回归用例。
+- stable identity、标签过滤、filtered queue、缓存和用户数据相关用例默认 N=5，要求 5/5。
+- 被测 Agent 只在临时隔离克隆中运行；真实工作树仅保存用例、脚本和已确认的基线报告。
+
 优先保护的产品闭环：
 
 ```text

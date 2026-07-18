@@ -7,6 +7,8 @@
 .pub/
 build/
 /artifacts/
+__pycache__/
+*.pyc
 
 # Generated desktop folders
 windows/flutter/ephemeral/

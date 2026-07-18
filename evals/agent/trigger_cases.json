@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "suite": "trigger",
+  "description": "每个 repo skill 至少两个正触发和两个负触发，共 44 个逻辑用例。",
+  "skills": [
+    {
+      "name": "ltp-task-router",
+      "positive": [
+        {"id": "router-pos-1", "prompt": "判断这个播放器任务属于 Level 1、2 还是 3，并限制要读取的文件。"},
+        {"id": "router-pos-2", "prompt": "开始一个新的 Local Tag Player 任务，先给出最小上下文范围。"}
+      ],
+      "negative": [
+        {"id": "router-neg-1", "prompt": "修复已经明确定位在 player_page.dart 第 210 行的缺失分号。"},
+        {"id": "router-neg-2", "prompt": "总结这段用户已经提供的普通中文文本。"}
+      ]
+    },
+    {
+      "name": "ltp-small-fix",
+      "positive": [
+        {"id": "small-pos-1", "prompt": "修复 analyzer 报出的一个 undefined getter，错误文件和行号已经给出。"},
+        {"id": "small-pos-2", "prompt": "修复设置页一个 6 像素的 RenderFlex overflow，不改变设计。"}
+      ],
+      "negative": [
+        {"id": "small-neg-1", "prompt": "设计并实现 Stable Video Identity 的 SQLite 迁移。"},
+        {"id": "small-neg-2", "prompt": "把整个播放器界面重构成 Apple 风格。"}
+      ]
+    },
+    {
+      "name": "ltp-log-triage",
+      "positive": [
+        {"id": "log-pos-1", "prompt": "从这个 20MB Flutter build 日志中定位首个根因，只读错误附近内容。"},
+        {"id": "log-pos-2", "prompt": "分析 CI transcript 里的 exit code 和 undefined symbol，不要输出完整日志。"}
+      ],
+      "negative": [
+        {"id": "log-neg-1", "prompt": "修复已经定位清楚的一个按钮拼写。"},
+        {"id": "log-neg-2", "prompt": "设计媒体库标签筛选侧栏。"}
+      ]
+    },
+    {
+      "name": "ltp-session-handoff",
+      "positive": [
+        {"id": "handoff-pos-1", "prompt": "上下文快满了，请把当前 Local Tag Player 工作交接给新会话。"},
+        {"id": "handoff-pos-2", "prompt": "compact 后恢复任务，只保留继续开发需要的最小摘要。"}
+      ],
+      "negative": [
+        {"id": "handoff-neg-1", "prompt": "继续修复刚才同一个 widget test。"},
+        {"id": "handoff-neg-2", "prompt": "解释 FilterQuery 的 AND/OR/NOT 语义。"}
+      ]
+    },
+    {
+      "name": "ltp-tag-filter-data",
+      "positive": [
+        {"id": "filter-pos-1", "prompt": "修改 TagQueryService 的同组 OR、跨组 AND 查询逻辑。"},
+        {"id": "filter-pos-2", "prompt": "为 aliases 和 folder/manual 来源设计 SQLite 标签索引。"}
+      ],
+      "negative": [
+        {"id": "filter-neg-1", "prompt": "只调整标签 chip 的圆角和 hover 颜色。"},
+        {"id": "filter-neg-2", "prompt": "排查 FFprobe 获取时长失败。"}
+      ]
+    },
+    {
+      "name": "ltp-media-library-tag-ui",
+      "positive": [
+        {"id": "library-ui-pos-1", "prompt": "优化媒体库 grouped filter sidebar、筛选 chips 和结果数量布局。"},
+        {"id": "library-ui-pos-2", "prompt": "规划紧凑窗口下标签筛选 Drawer 的交互，不改查询语义。"}
+      ],
+      "negative": [
+        {"id": "library-ui-neg-1", "prompt": "修改 FilterQuery 的排除标签 SQL。"},
+        {"id": "library-ui-neg-2", "prompt": "修复播放器右侧队列当前 index。"}
+      ]
+    },
+    {
+      "name": "ltp-player-filter-queue",
+      "positive": [
+        {"id": "player-pos-1", "prompt": "修复 PlayerPage 右侧队列错误回退到全局媒体库的问题。"},
+        {"id": "player-pos-2", "prompt": "检查 PlaybackSession 当前 index 和返回后筛选状态。"}
+      ],
+      "negative": [
+        {"id": "player-neg-1", "prompt": "只调整播放器按钮的阴影、间距和淡入动效。"},
+        {"id": "player-neg-2", "prompt": "清理损坏的缩略图缓存记录。"}
+      ]
+    },
+    {
+      "name": "ltp-cache-diagnostics",
+      "positive": [
+        {"id": "cache-pos-1", "prompt": "排查 ThumbnailService 生成 0-byte JPEG 并增加失败重试。"},
+        {"id": "cache-pos-2", "prompt": "修复 diagnostics UI dispose 后仍有 timer 回调。"}
+      ],
+      "negative": [
+        {"id": "cache-neg-1", "prompt": "只重新设计诊断页卡片的材质、排版和 hover。"},
+        {"id": "cache-neg-2", "prompt": "修改标签管理器的 merge 迁移。"}
+      ]
+    },
+    {
+      "name": "ltp-stable-identity-missing-relink",
+      "positive": [
+        {"id": "identity-pos-1", "prompt": "实现 missing 视频的 fingerprint 校验与 Relink，并保留 videoId。"},
+        {"id": "identity-pos-2", "prompt": "设计批量路径替换迁移，保留收藏、标签和播放记录。"}
+      ],
+      "negative": [
+        {"id": "identity-neg-1", "prompt": "只调整 Missing 页面空状态的图标和文案层级。"},
+        {"id": "identity-neg-2", "prompt": "修复长日志中的 undefined symbol。"}
+      ]
+    },
+    {
+      "name": "ltp-tag-manager-batch-tagging",
+      "positive": [
+        {"id": "manager-pos-1", "prompt": "实现 Tag Manager 批量添加和移除 manual 标签。"},
+        {"id": "manager-pos-2", "prompt": "设计标签 merge/delete 前的引用检查和迁移。"}
+      ],
+      "negative": [
+        {"id": "manager-neg-1", "prompt": "调整 Tag Manager 列表选中态的 Apple 风格视觉。"},
+        {"id": "manager-neg-2", "prompt": "修复播放器 filtered queue 的来源丢失。"}
+      ]
+    },
+    {
+      "name": "ltp-apple-ui-design",
+      "positive": [
+        {"id": "apple-pos-1", "prompt": "把播放器控制层做成克制的 Apple 风格，并检查动效、键盘和 reduced motion。"},
+        {"id": "apple-pos-2", "prompt": "审查媒体库 UI diff 的层级、材质、排版、hover 和性能风险。"}
+      ],
+      "negative": [
+        {"id": "apple-neg-1", "prompt": "修复 filtered queue 顺序错误，不改变任何视觉。"},
+        {"id": "apple-neg-2", "prompt": "实现 SQLite missing/relink 数据迁移，不改界面。"}
+      ]
+    }
+  ]
+}

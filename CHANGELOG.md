@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-18 · 建立 Agent / Skill 自动化 Eval 基线
+
+- 新增隔离 Agent Eval 运行器，捕获 Codex 原始 JSONL、规范化 Trace、结构化结果、实际 Git 变化、确定性评分、Rubric judge、延迟、token 和 N 次稳定性；CLI、网络和模型兼容错误独立标记为基础设施故障，不污染 Agent 分数。
+- 建立 58 个逻辑用例：11 个 Skill 各两个正触发和两个负触发，另含 capability 与 regression；关键数据、过滤、队列和缓存回归默认执行 N=5 并要求全部通过。
+- 移除 `AGENTS.md` 中易漂移的当前验证和阶段优先级，补充 Apple UI Skill 注册及 Skill 组合规则；Bootstrap 收敛为单一入口，Agent Harness 增加自动化 Eval 门禁。
+- 收窄 `$ltp-apple-ui-design`：只在明确视觉、动效、交互或无障碍任务中作为设计覆盖层，纯 SQLite、过滤、队列、缓存后端和稳定身份任务不得触发。
+- 本地目录验证、7 项评分器单元测试、全部 11 个 Skill 结构校验、`flutter analyze` 和 Windows debug build 通过。真实隔离 smoke 因当前 Codex CLI 不支持默认 `gpt-5.6-sol` 被标记为 `infrastructure_error`，升级 CLI 后需要重跑运行时基线。
+
 ## 2026-07-18 · 建立 Apple 式全应用 UI skill 与迁移蓝图
 
 - 新增 `.agents/skills/ltp-apple-ui-design`，将上游 `emilkowalski/skills` 的设计基础、动效审查、动效机会筛选和术语能力收敛为一个 Local Tag Player 专用 skill。

@@ -1,6 +1,6 @@
 ---
 name: ltp-apple-ui-design
-description: Local Tag Player 的 Apple 式全应用 UI 设计与审查技能。用于媒体库、播放器、标签中心、设置、缓存诊断、Missing/Relink、弹窗、菜单、空状态的视觉重构、动效设计、交互精修、响应式适配、无障碍降级或 UI diff 审查；把 Apple 的克制、层级、直接反馈和流体动效转译为 Flutter Windows 实现，同时保护标签筛选性能、filtered queue 和用户数据。
+description: Local Tag Player 的 Apple 式 UI 设计覆盖层。仅在用户明确要求 Apple 风格、视觉重构、动效、交互精修、响应式、无障碍降级或 UI diff 审查时使用；可覆盖媒体库、播放器、标签中心、设置、诊断和 Missing/Relink 的视觉呈现，但不拥有 SQLite、过滤语义、播放队列、PlayerBackend、缓存后端或稳定身份等纯业务任务。把 Apple 的克制、层级、直接反馈和流体动效转译为 Flutter Windows 实现，同时保护标签筛选性能、filtered queue 和用户数据。
 ---
 
 # Local Tag Player Apple UI Design
@@ -13,6 +13,14 @@ description: Local Tag Player 的 Apple 式全应用 UI 设计与审查技能。
 - 涉及动画、hover、拖拽、侧栏、sheet、route transition 或动效审查时，再读 [references/motion-craft.md](references/motion-craft.md)。
 - 用户只会描述“弹一下”“像 iOS 回弹”等模糊感受时，读 [references/motion-vocabulary.md](references/motion-vocabulary.md)。
 - 全应用迁移或跨页面任务还要读 `docs/design/APPLE_UI_MIGRATION.md`，一次只执行其中一个阶段。
+
+## Skill 组合边界
+
+- `$ltp-task-router` 只负责 Level 与上下文分级，完成路由后退出，不继续拥有实现。
+- 视觉任务涉及具体领域时，由对应领域 Skill 保护业务语义，本 Skill 只覆盖视觉、动效、交互和无障碍决策。
+- 纯 SQLite、`FilterQuery`、`TagQueryService`、filtered queue、`PlayerBackend`、缓存后端、stable identity 或迁移任务不得触发本 Skill。
+- 只调整播放器队列语义、缓存失败重试、标签查询或 Relink 数据时，分别使用对应领域 Skill，不叠加本 Skill。
+- 同一轮只有用户明确要求视觉变化时才允许“一个领域 Skill + 本设计覆盖层”；不要同时加载多个重叠领域 Skill。
 
 ## 开始任务
 

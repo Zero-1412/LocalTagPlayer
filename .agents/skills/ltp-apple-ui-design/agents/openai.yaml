@@ -1,4 +1,4 @@
 interface:
   display_name: "Local Tag Player Apple UI"
-  short_description: "统一全应用 Apple 式视觉、动效、交互与无障碍体验"
-  default_prompt: "Use $ltp-apple-ui-design to redesign this Local Tag Player interface with restrained Apple-style craft."
+  short_description: "为明确视觉任务提供克制、流畅且可验证的 Apple 式设计覆盖层"
+  default_prompt: "使用 $ltp-apple-ui-design 作为设计覆盖层，审查并精修这个明确的 Local Tag Player UI 任务。"

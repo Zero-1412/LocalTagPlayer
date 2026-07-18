@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local Tag Player Rubric Judge Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rubric", "total_score", "criteria", "hard_failures", "summary"],
+  "properties": {
+    "rubric": { "type": "string" },
+    "total_score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "score", "reason"],
+        "properties": {
+          "id": { "type": "string" },
+          "score": { "type": "number", "minimum": 0, "maximum": 100 },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "hard_failures": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "summary": { "type": "string" }
+  }
+}

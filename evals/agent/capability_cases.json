@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "suite": "capability",
+  "description": "尚在探索和迭代的能力用例；通过后才能晋级回归集。",
+  "cases": [
+    {
+      "id": "cap-apple-review-1",
+      "category": "artifact_quality",
+      "prompt": "只审查播放器控制层 UI diff，给出 Before/After/Why、性能和无障碍结论，不修改文件。",
+      "trials": 3,
+      "expected": {
+        "task_level": "2",
+        "required_skills": ["ltp-apple-ui-design"],
+        "forbidden_skills": ["ltp-player-filter-queue"],
+        "status": "completed",
+        "changed_files": [],
+        "rubric": "apple-ui-quality"
+      }
+    },
+    {
+      "id": "cap-apple-phase-0",
+      "category": "core_logic",
+      "prompt": "规划 Apple UI Phase 0 的共享 token、reduced motion 和 high contrast 基线，只输出最小文件范围与验证计划。",
+      "trials": 3,
+      "expected": {
+        "task_level": "2",
+        "required_skills": ["ltp-apple-ui-design"],
+        "forbidden_changed_globs": ["lib/**", "windows/**", "linux/**", "macos/**"],
+        "status": "completed",
+        "rubric": "apple-ui-quality"
+      }
+    },
+    {
+      "id": "cap-router-ambiguous-ui",
+      "category": "core_logic",
+      "prompt": "播放器看起来不够精致。先判断任务级别、所有者和最小上下文，不修改文件。",
+      "trials": 3,
+      "expected": {
+        "task_level": "2",
+        "required_skills": ["ltp-task-router"],
+        "status": "completed",
+        "changed_files": []
+      }
+    },
+    {
+      "id": "cap-router-escalation",
+      "category": "exception",
+      "prompt": "原本只改 Missing 页面，但调查发现必须新增 SQLite 字段。说明是否升级任务并停止在安全边界，不修改文件。",
+      "trials": 5,
+      "expected": {
+        "task_level": "3",
+        "required_skills": ["ltp-task-router", "ltp-stable-identity-missing-relink"],
+        "status": "completed",
+        "changed_files": []
+      }
+    },
+    {
+      "id": "cap-log-large-input",
+      "category": "exception",
+      "prompt": "日志文件很大且没有 ERROR 字样，先搜索 Exception、failed、exit code、undefined symbol，仅报告附近片段。",
+      "trials": 3,
+      "expected": {
+        "task_level": "1",
+        "required_skills": ["ltp-log-triage"],
+        "status": "completed",
+        "changed_files": []
+      }
+    },
+    {
+      "id": "cap-ui-no-forced-advice",
+      "category": "artifact_quality",
+      "prompt": "审查一个已经符合 Apple UI 基线且无明显问题的空状态；不要为凑数量制造建议。",
+      "trials": 3,
+      "expected": {
+        "task_level": "2",
+        "required_skills": ["ltp-apple-ui-design"],
+        "status": "completed",
+        "changed_files": [],
+        "rubric": "apple-ui-quality"
+      }
+    }
+  ]
+}

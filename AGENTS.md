@@ -40,29 +40,7 @@ Chat 6: 标签管理器与批量打标
 Chat 7: 响应式 UI 与平台 polish
 ```
 
-当前验证状态：
-
-```text
-flutter analyze: passed
-flutter build windows --debug: passed
-debug exe can start
-flutter run may hang / timeout in CLI
-dart format may timeout locally
-manual real-window QA with large media library is still needed
-```
-
-下一阶段优先级：
-
-```text
-1. 稳定开发基线：Git / backup、flutter run、dart format
-2. 使用真实媒体目录做手动 smoke test
-3. Stable Video Identity + Missing / Relink 设计
-4. videoId + fingerprint + mutable path 迁移
-5. Smart List 持久化
-6. 标签删除 / 合并的真实实现
-7. 自动标签规则
-8. macOS / Linux 桌面准备
-```
+当前验证状态、最近完成内容和下一阶段优先级只记录在 `CURRENT_TASK.md`，不得复制到 `AGENTS.md`。开始任务时读取当前文件中的长期规则，再按任务 Level 读取 `CURRENT_TASK.md`；不要用本文件保存容易过期的阶段快照。
 
 不要在没有明确要求时重做 Chat 1-7 的一阶段工作。
 不要把本项目当成通用专业播放器。
@@ -564,7 +542,20 @@ $ltp-player-filter-queue
 $ltp-cache-diagnostics
 $ltp-stable-identity-missing-relink
 $ltp-tag-manager-batch-tagging
+$ltp-apple-ui-design
 ```
 
-稳定规则放在 `AGENTS.md`、`NEW_CHAT_BOOTSTRAP.md` 和 `.agents/skills`。
+Skill 组合规则：
+
+```text
+1. ltp-task-router 只负责 Level 与上下文分级，完成路由后退出。
+2. 领域 Skill 负责业务语义、数据和平台边界。
+3. ltp-apple-ui-design 只在明确的 Apple 风格、视觉、动效、交互或无障碍任务中作为设计覆盖层。
+4. 纯 SQLite、FilterQuery、TagQueryService、filtered queue、PlayerBackend、缓存后端或 stable identity 任务不得触发 ltp-apple-ui-design。
+5. 视觉任务最多组合一个领域 Skill 与一个设计覆盖层，不得同时加载多个重叠领域 Skill。
+```
+
+修改 `AGENTS.md`、`NEW_CHAT_BOOTSTRAP.md`、`docs/agent_harness.md`、Skill 的 `SKILL.md`、Skill description、trigger 或 Agent prompt 时，必须按 `docs/agent_eval.md` 更新受影响用例，并至少运行零模型成本的目录验证与评分器单元测试。关键 Skill 的运行时回归使用隔离临时克隆和 N=5；不得在真实工作树直接试验被测 Agent。
+
+长期硬规则只放在 `AGENTS.md`；`NEW_CHAT_BOOTSTRAP.md` 只负责路由入口，`.agents/skills` 只保存领域专属流程。
 临时任务材料放在用户提示末尾或独立文件中。

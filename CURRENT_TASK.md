@@ -1,5 +1,15 @@
 ﻿# CURRENT_TASK.md
 
+## 2026-07-18 Agent / Skill Eval 基线
+
+- 新增 `tool/agent_eval.py`，以临时本地克隆和 Codex `--json --ephemeral` 执行被测任务，归档原始 JSONL、规范化 Trace、结构化结果、实际 Git 文件变化、确定性评分、可选 Rubric judge 和 N 次稳定性汇总；基础设施错误不会被计为 Agent 失败。
+- 建立 58 个逻辑用例：11 个 repo Skill 各 2 个正触发和 2 个负触发，共 44 个 trigger；另有 6 个 capability 与 8 个 regression。Stable Identity、标签过滤、播放队列、缓存和用户数据回归默认 N=5，要求 5/5。
+- Apple UI Rubric 覆盖内容层级、交互反馈、Windows 桌面适配、动效克制、无障碍和 Flutter 实现精度；业务边界、文件变化和工具使用仍由确定性 scorer 判定。
+- `AGENTS.md` 不再保存易漂移的验证状态和阶段优先级，Skill 注册表已加入 `$ltp-apple-ui-design`；明确 task router、领域 Skill 与 Apple UI 设计覆盖层的组合关系。两个 Bootstrap 文件收敛为根入口和兼容链接。
+- 本地目录验证确认 58 个用例、44/6/8 suite 分布和 11 个 Skill 的 2 正 2 负覆盖；7 项 Python 单元测试、全部 11 个 Skill 的 `quick_validate.py`、`flutter analyze` 和 Windows debug build 通过。
+- 隔离运行 smoke 已真实生成 Trace 并正确暴露执行设施问题：当前 Codex CLI 无法运行默认 `gpt-5.6-sol`，服务端要求升级到更新版本。该 trial 标记为 `infrastructure_error`，没有计入 Agent 分数；升级 CLI 后应先重跑 `router-pos-1`，再运行关键 N=5 回归。
+- 本轮没有修改 Flutter 业务 UI、SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缩略图/媒体详情队列或用户数据。
+
 ## 2026-07-18 Apple 式全应用 UI 设计基线
 
 - 新增 repo-scoped `$ltp-apple-ui-design`，把 `emilkowalski/skills` 中适合本项目的 Apple 设计基础、动效决策、严格审查、机会筛选和术语规范转译为 Flutter/Windows 规则。
