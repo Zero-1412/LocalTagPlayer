@@ -236,6 +236,39 @@ bool playerPointerInFullscreenQueueActivationZone({
   return distanceFromRight <= (queueVisible ? queueWidth : edgeWidth);
 }
 
+/** 判断指针是否进入折叠宽屏队列对应的非全屏标题栏热区。 */
+@visibleForTesting
+bool playerPointerInWindowTopBarActivationZone({
+  required double localY,
+  required bool hasWideQueueSidebar,
+  required bool queueCollapsed,
+  double topBarHeight = 64,
+}) {
+  return hasWideQueueSidebar &&
+      queueCollapsed &&
+      localY >= 0 &&
+      localY <= topBarHeight;
+}
+
+/**
+ * 判断非全屏播放器顶栏是否应显示。
+ *
+ * 宽屏队列展开时顶栏常驻；队列折叠后只在顶部热区悬停时临时显示。
+ * 全屏继续使用原无顶栏画布，辅助导航开启时则保留返回入口可达。
+ */
+@visibleForTesting
+bool playerWindowTopBarShouldShow({
+  required bool isFullscreen,
+  required bool queueCollapsed,
+  required bool pointerInTopBarRegion,
+  required bool accessibleNavigation,
+}) {
+  if (isFullscreen) {
+    return false;
+  }
+  return !queueCollapsed || pointerInTopBarRegion || accessibleNavigation;
+}
+
 /**
  * 判断当前焦点是否属于可编辑文本。
  *
@@ -464,6 +497,8 @@ class PlayerPageState extends State<PlayerPage> {
   var _isWindowFullscreen = false;
   /** 全屏时是否在画面右侧显示当前筛选队列浮层。 */
   var _fullscreenQueueVisible = false;
+  /** 宽屏队列折叠时，指针是否进入非全屏顶部标题栏热区。 */
+  var _pointerInWindowTopBarRegion = false;
   final _random = math.Random();
 
   static const _playbackRates = PlaybackSettings.playbackRates;
@@ -1479,7 +1514,13 @@ class PlayerPageState extends State<PlayerPage> {
       }
       return;
     }
-    setState(() => _queueSidebarCollapsed = !_queueSidebarCollapsed);
+    setState(() {
+      _queueSidebarCollapsed = !_queueSidebarCollapsed;
+      // 队列重新展开后顶栏改为常驻，不再保留临时 hover 状态。
+      if (!_queueSidebarCollapsed) {
+        _pointerInWindowTopBarRegion = false;
+      }
+    });
   }
 
   /** 切换桌面窗口全屏，并让页面布局与窗口状态同步更新。 */
@@ -1494,6 +1535,7 @@ class PlayerPageState extends State<PlayerPage> {
     setState(() {
       _isWindowFullscreen = target;
       _fullscreenQueueVisible = false;
+      _pointerInWindowTopBarRegion = false;
     });
     _showVideoControls();
   }
@@ -1524,10 +1566,22 @@ class PlayerPageState extends State<PlayerPage> {
   }
 
   /**
-   * 在全屏根表面持续判断右侧激活区，补齐子 MouseRegion 丢失 exit 的窗口边界场景。
+   * 在播放器根表面持续判断全屏队列右缘或非全屏顶栏热区。
+   *
+   * 根级坐标避免标题栏处于展开中间帧时丢失 MouseRegion exit；只有跨越热区边界才更新状态。
    */
-  void _handleFullscreenQueuePointerHover(PointerHoverEvent event) {
+  void _handlePlayerPointerHover(PointerHoverEvent event) {
     if (!_isWindowFullscreen) {
+      final inTopBarZone = playerPointerInWindowTopBarActivationZone(
+        localY: event.localPosition.dy,
+        hasWideQueueSidebar: MediaQuery.sizeOf(context).width >= 1100,
+        queueCollapsed: _queueSidebarCollapsed,
+      );
+      if (inTopBarZone) {
+        _showWindowTopBarFromPointer();
+      } else {
+        _hideWindowTopBarFromPointer();
+      }
       return;
     }
     final inActivationZone = playerPointerInFullscreenQueueActivationZone(
@@ -1541,6 +1595,24 @@ class PlayerPageState extends State<PlayerPage> {
     } else if (_fullscreenQueueVisible) {
       _scheduleFullscreenQueueHide();
     }
+  }
+
+  /** 指针进入非全屏顶部热区时临时展示已随队列收起的标题栏。 */
+  void _showWindowTopBarFromPointer() {
+    if (_isWindowFullscreen ||
+        !_queueSidebarCollapsed ||
+        _pointerInWindowTopBarRegion) {
+      return;
+    }
+    setState(() => _pointerInWindowTopBarRegion = true);
+  }
+
+  /** 指针离开标题栏后收回临时层；队列展开时标题栏仍保持常驻。 */
+  void _hideWindowTopBarFromPointer() {
+    if (!_queueSidebarCollapsed || !_pointerInWindowTopBarRegion) {
+      return;
+    }
+    setState(() => _pointerInWindowTopBarRegion = false);
   }
 
   /** 读取齿轮在当前普通/全屏布局中的全局矩形，供浮层实时对齐。 */
@@ -2806,6 +2878,13 @@ class PlayerPageState extends State<PlayerPage> {
     final hasWideQueueSidebar = MediaQuery.sizeOf(context).width >= 1100;
     final accessibility = AppAccessibilityScope.of(context);
     final queueSidebar = _buildQueueSidebar();
+    final windowQueueCollapsed = hasWideQueueSidebar && _queueSidebarCollapsed;
+    final windowTopBarVisible = playerWindowTopBarShouldShow(
+      isFullscreen: _isWindowFullscreen,
+      queueCollapsed: windowQueueCollapsed,
+      pointerInTopBarRegion: _pointerInWindowTopBarRegion,
+      accessibleNavigation: accessibility.accessibleNavigation,
+    );
     return Theme(
       data: playerWorkspaceTheme(
         Theme.of(context),
@@ -2820,10 +2899,12 @@ class PlayerPageState extends State<PlayerPage> {
           child: Scaffold(
             backgroundColor: playerCanvas,
             body: MouseRegion(
-              onHover: _handleFullscreenQueuePointerHover,
+              onHover: _handlePlayerPointerHover,
               onExit: (_) {
                 if (_isWindowFullscreen && _fullscreenQueueVisible) {
                   _scheduleFullscreenQueueHide();
+                } else if (!_isWindowFullscreen) {
+                  _hideWindowTopBarFromPointer();
                 }
               },
               child: Stack(
@@ -2832,26 +2913,49 @@ class PlayerPageState extends State<PlayerPage> {
                     child: Column(
                       children: [
                         if (!_isWindowFullscreen)
-                          PlayerTopBar(
-                            currentFileName:
-                                playerTopBarFileName(_currentItem.path),
-                            contextLabel:
-                                '${_index + 1} / ${_queue.length} · $_filterSummary',
-                            onBack: () => unawaited(_exitPlayer()),
-                            onOpenQueue: hasWideQueueSidebar
-                                ? null
-                                : () {
-                                    showModalBottomSheet<void>(
-                                      context: context,
-                                      isScrollControlled: true,
-                                      backgroundColor: playerSurface,
-                                      showDragHandle: true,
-                                      builder: (_) => FractionallySizedBox(
-                                        heightFactor: 0.82,
-                                        child: queueSidebar,
-                                      ),
-                                    );
-                                  },
+                          AnimatedSize(
+                            key: const ValueKey(
+                              'player.windowTopBar.visibility',
+                            ),
+                            alignment: Alignment.topCenter,
+                            duration: accessibility.motionDuration(
+                              AppMotion.popover,
+                            ),
+                            curve: appMotionCurve,
+                            child: ClipRect(
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                heightFactor: windowTopBarVisible ? 1 : 0,
+                                child: MouseRegion(
+                                  onEnter: (_) =>
+                                      _showWindowTopBarFromPointer(),
+                                  onExit: (_) => _hideWindowTopBarFromPointer(),
+                                  child: PlayerTopBar(
+                                    currentFileName: playerTopBarFileName(
+                                      _currentItem.path,
+                                    ),
+                                    contextLabel:
+                                        '${_index + 1} / ${_queue.length} · $_filterSummary',
+                                    onBack: () => unawaited(_exitPlayer()),
+                                    onOpenQueue: hasWideQueueSidebar
+                                        ? null
+                                        : () {
+                                            showModalBottomSheet<void>(
+                                              context: context,
+                                              isScrollControlled: true,
+                                              backgroundColor: playerSurface,
+                                              showDragHandle: true,
+                                              builder: (_) =>
+                                                  FractionallySizedBox(
+                                                heightFactor: 0.82,
+                                                child: queueSidebar,
+                                              ),
+                                            );
+                                          },
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         Expanded(
                           child: Row(

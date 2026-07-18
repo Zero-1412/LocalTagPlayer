@@ -1115,6 +1115,12 @@ class _QueueListItemState extends State<_QueueListItem>
     if (oldWidget.item.path != widget.item.path) {
       _actionController.value = 0;
       _loadItemFutures();
+      return;
+    }
+    if (!oldWidget.playing && widget.playing) {
+      // 条目成为当前播放项时必须清除之前保留的左滑进度；否则隐藏操作层会与播放徽标重叠。
+      // 这里只复位视觉状态，用户随后仍可主动左滑当前项执行收藏或删除。
+      _actionController.value = 0;
     }
   }
 
@@ -1462,26 +1468,31 @@ class _QueueListItemState extends State<_QueueListItem>
                 ),
               ),
             ),
-            builder: (context, front) => Stack(
-              fit: StackFit.expand,
-              children: [
-                _buildActionBackground(),
-                Transform.translate(
-                  offset: Offset(
-                    -_actionRevealWidth * _actionController.value,
-                    0,
+            builder: (context, front) {
+              final revealProgress = _actionController.value;
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (revealProgress > 0.001)
+                    // 完全收起时卸载隐藏操作层，避免真实窗口的像素舍入让图标从卡片右缘泄出。
+                    _buildActionBackground(),
+                  Transform.translate(
+                    offset: Offset(
+                      -_actionRevealWidth * revealProgress,
+                      0,
+                    ),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onHorizontalDragStart: (_) => widget.onTap(),
+                      onHorizontalDragUpdate: _handleHorizontalDragUpdate,
+                      onHorizontalDragEnd: _handleHorizontalDragEnd,
+                      onHorizontalDragCancel: () => _settleActionPanel(false),
+                      child: front,
+                    ),
                   ),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onHorizontalDragStart: (_) => widget.onTap(),
-                    onHorizontalDragUpdate: _handleHorizontalDragUpdate,
-                    onHorizontalDragEnd: _handleHorizontalDragEnd,
-                    onHorizontalDragCancel: () => _settleActionPanel(false),
-                    child: front,
-                  ),
-                ),
-              ],
-            ),
+                ],
+              );
+            },
           ),
         ),
       ),

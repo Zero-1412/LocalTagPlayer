@@ -3427,6 +3427,83 @@ void main() {
       ),
       isFalse,
     );
+    expect(
+      playerWindowTopBarShouldShow(
+        isFullscreen: false,
+        queueCollapsed: false,
+        pointerInTopBarRegion: false,
+        accessibleNavigation: false,
+      ),
+      isTrue,
+    );
+    expect(
+      playerWindowTopBarShouldShow(
+        isFullscreen: false,
+        queueCollapsed: true,
+        pointerInTopBarRegion: false,
+        accessibleNavigation: false,
+      ),
+      isFalse,
+    );
+    expect(
+      playerWindowTopBarShouldShow(
+        isFullscreen: false,
+        queueCollapsed: true,
+        pointerInTopBarRegion: true,
+        accessibleNavigation: false,
+      ),
+      isTrue,
+    );
+    expect(
+      playerWindowTopBarShouldShow(
+        isFullscreen: false,
+        queueCollapsed: true,
+        pointerInTopBarRegion: false,
+        accessibleNavigation: true,
+      ),
+      isTrue,
+    );
+    expect(
+      playerWindowTopBarShouldShow(
+        isFullscreen: true,
+        queueCollapsed: false,
+        pointerInTopBarRegion: true,
+        accessibleNavigation: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playerPointerInWindowTopBarActivationZone(
+        localY: 32,
+        hasWideQueueSidebar: true,
+        queueCollapsed: true,
+      ),
+      isTrue,
+    );
+    expect(
+      playerPointerInWindowTopBarActivationZone(
+        localY: 80,
+        hasWideQueueSidebar: true,
+        queueCollapsed: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playerPointerInWindowTopBarActivationZone(
+        localY: 32,
+        hasWideQueueSidebar: true,
+        queueCollapsed: false,
+      ),
+      isFalse,
+    );
+    expect(
+      playerPointerInWindowTopBarActivationZone(
+        localY: 32,
+        hasWideQueueSidebar: false,
+        queueCollapsed: true,
+      ),
+      isFalse,
+    );
   });
 
   testWidgets('player shortcut gate detects a blocking overlay route',
@@ -3668,6 +3745,12 @@ void main() {
 
     final card =
         find.byKey(const ValueKey('player.queue.card.queue-layout-item'));
+    final hiddenActionPanel = find.byKey(
+      const ValueKey('player.queue.actionPanel.queue-layout-item'),
+    );
+    expect(hiddenActionPanel, findsNothing);
+    await tester.drag(card, const Offset(-96, 0));
+    await tester.pumpAndSettle();
     final actionPanel = find.byKey(
       const ValueKey('player.queue.actionPanel.queue-layout-item'),
     );
@@ -3685,6 +3768,105 @@ void main() {
     expect(tester.getSize(actionPanel).height, tester.getSize(card).height);
     expect(actionDecoration.boxShadow, isNull);
     expect(favoriteSurface.color, Colors.transparent);
+  });
+
+  testWidgets('playing queue item closes a retained swipe action panel',
+      (tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_queue_playing_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    final items = <VideoItem>[
+      VideoItem(
+        videoId: 'queue-transition-first',
+        path: p.join(directory.path, 'first.mp4'),
+        title: 'first item',
+        folder: directory.path,
+        tags: const <String>{},
+        addedAt: DateTime.utc(2026, 7, 18),
+        isMissing: true,
+      ),
+      VideoItem(
+        videoId: 'queue-transition-second',
+        path: p.join(directory.path, 'second.mp4'),
+        title: 'second item',
+        folder: directory.path,
+        tags: const <String>{},
+        addedAt: DateTime.utc(2026, 7, 18),
+        isMissing: true,
+      ),
+    ];
+    final scrollController = ScrollController();
+    final detailsService = MediaDetailsService(
+      probeBackend: _NoopMediaProbeBackend(),
+    );
+    final thumbnailService = ThumbnailService.forDirectory(
+      directory,
+      _PreviewFFmpegBackend(),
+    );
+    addTearDown(() {
+      scrollController.dispose();
+      detailsService.dispose();
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+
+    await tester.binding.setSurfaceSize(const Size(460, 520));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var playingIndex = 1;
+    late StateSetter updateHarness;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              updateHarness = setState;
+              return SizedBox(
+                width: 360,
+                child: PlayerQueueSidebar(
+                  playlist: items,
+                  sourcePlaylist: items,
+                  playingIndex: playingIndex,
+                  selectedIndex: 0,
+                  scrollController: scrollController,
+                  thumbnailService: thumbnailService,
+                  detailsService: detailsService,
+                  activeTags: const <String>[],
+                  selectedChildTag: null,
+                  onChildTagSelected: (_) {},
+                  onSelect: (_) {},
+                  onPlay: (_) {},
+                  onReturnToPlaying: () {},
+                  onLocateSelected: () {},
+                  onDeleteSelected: null,
+                  onToggleFavorite: (_) {},
+                  onDeleteItem: (_) {},
+                  onSearchQueue: (_) {},
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final card = find.byKey(
+      const ValueKey('player.queue.card.queue-transition-first'),
+    );
+    final closedLeft = tester.getTopLeft(card).dx;
+    await tester.drag(card, const Offset(-96, 0));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(card).dx, lessThan(closedLeft - 70));
+
+    updateHarness(() => playingIndex = 0);
+    await tester.pump();
+    expect(tester.getTopLeft(card).dx, closeTo(closedLeft, 0.01));
+    expect(tester.takeException(), isNull);
   });
 
   test('player open request controller keeps latest request after failure', () {
