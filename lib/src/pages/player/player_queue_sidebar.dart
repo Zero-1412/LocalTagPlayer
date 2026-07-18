@@ -341,13 +341,14 @@ class PlayerQueueSidebar extends StatelessWidget {
     }
     return Container(
       width: sidebarWidth,
-      // 与左侧视频画面的顶边对齐，保持蓝图中的双栏视觉基线。
-      margin: const EdgeInsets.fromLTRB(0, 18, 14, 12),
+      // 与视频画面共享 Apple 式结构表面的外边距和底部基线。
+      margin: const EdgeInsets.fromLTRB(0, 12, 16, 16),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: const Color(0xff0d1528),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xff202c46)),
+        color: playerSurface,
+        borderRadius: BorderRadius.circular(AppRadius.panel),
+        border: Border.all(color: playerBorder),
+        boxShadow: playerSoftShadow,
       ),
       child: content,
     );
@@ -514,9 +515,9 @@ class _DeferredQueueListItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xff151a21),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xff222936)),
+          color: playerSurfaceAlt,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          border: Border.all(color: playerBorder),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -526,7 +527,7 @@ class _DeferredQueueListItem extends StatelessWidget {
               item.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xff8f99a8), fontSize: 12),
+              style: const TextStyle(color: playerTextMuted, fontSize: 12),
             ),
           ),
         ),
@@ -542,7 +543,7 @@ class _DeferredQueueListItem extends StatelessWidget {
  * 播放画面，或在超宽屏上让单行队列信息变得过度松散。
  */
 double playerQueueSidebarWidthForWindow(double windowWidth) {
-  return (windowWidth * 0.30).clamp(360.0, 500.0).toDouble();
+  return (windowWidth * 0.28).clamp(360.0, 460.0).toDouble();
 }
 
 /**
@@ -611,27 +612,34 @@ class _PlayerQueueHeaderState extends State<PlayerQueueHeader> {
     required VoidCallback? onPressed,
     required IconData icon,
   }) {
-    return IconButton(
-      key: key,
-      tooltip: tooltip,
-      onPressed: onPressed,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-      padding: EdgeInsets.zero,
-      icon: Icon(icon, size: 17),
-      color: Colors.white70,
-      disabledColor: Colors.white24,
-      visualDensity: VisualDensity.compact,
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        enabled: onPressed != null,
+        label: tooltip,
+        child: IconButton(
+          key: key,
+          onPressed: onPressed,
+          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+          padding: EdgeInsets.zero,
+          icon: Icon(icon, size: 18),
+          color: playerTextMuted,
+          disabledColor: playerTextMuted.withValues(alpha: 0.32),
+          visualDensity: VisualDensity.compact,
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       decoration: const BoxDecoration(
-        color: Color(0xff0d1528),
+        color: playerSurface,
         border: Border(
-          bottom: BorderSide(color: Color(0xff243044)),
+          bottom: BorderSide(color: playerBorder),
         ),
       ),
       child: Column(
@@ -641,8 +649,8 @@ class _PlayerQueueHeaderState extends State<PlayerQueueHeader> {
             children: [
               const Icon(
                 Icons.filter_alt_outlined,
-                color: Color(0xffa9b8ff),
-                size: 24,
+                color: appAccentViolet,
+                size: 21,
               ),
               const SizedBox(width: 8),
               const Expanded(
@@ -651,9 +659,9 @@ class _PlayerQueueHeaderState extends State<PlayerQueueHeader> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: playerText,
                     fontSize: 14,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: AppTypography.strong,
                   ),
                 ),
               ),
@@ -661,9 +669,9 @@ class _PlayerQueueHeaderState extends State<PlayerQueueHeader> {
                 '${widget.playingIndex + 1} / ${widget.playlistLength}',
                 key: const ValueKey('player.queue.position'),
                 style: const TextStyle(
-                  color: Color(0xffa5b4fc),
+                  color: playerTextMuted,
                   fontSize: 12,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: AppTypography.strong,
                 ),
               ),
               const SizedBox(width: 8),
@@ -750,23 +758,26 @@ class _QueueSearchFieldState extends State<_QueueSearchField> {
         key: const ValueKey('player.queueSearch'),
         controller: _controller,
         autofocus: widget.autofocus,
-        style: const TextStyle(color: Colors.white, fontSize: 12),
+        style: const TextStyle(color: playerText, fontSize: 12),
         textInputAction: TextInputAction.search,
         decoration: InputDecoration(
           isDense: true,
           hintText: '搜索当前队列并定位',
-          hintStyle: const TextStyle(color: Color(0xff6f7d99)),
-          prefixIcon: const Icon(Icons.search_rounded,
-              size: 18, color: Color(0xff8fa0c5)),
+          hintStyle: const TextStyle(color: playerTextMuted),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            size: 18,
+            color: playerTextMuted,
+          ),
           filled: true,
-          fillColor: const Color(0xff0a1122),
+          fillColor: playerSurfaceAlt,
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xff253251)),
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            borderSide: const BorderSide(color: playerBorder),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xff7457ff)),
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            borderSide: const BorderSide(color: appAccentViolet, width: 1.5),
           ),
           suffixIcon: IconButton(
             key: const ValueKey('player.queueSearchSubmit'),
@@ -835,16 +846,14 @@ class _PlayerChildTagChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final backgroundColor =
-        selected ? const Color(0xff254d7d) : const Color(0xff242832);
-    final borderColor =
-        selected ? const Color(0xff5d9cec) : const Color(0xff38404d);
-    final textColor =
-        selected ? const Color(0xffffffff) : const Color(0xffb7c0cc);
+        selected ? appAccentViolet.withValues(alpha: 0.20) : playerSurfaceAlt;
+    final borderColor = selected ? appAccentViolet : playerBorder;
+    final textColor = selected ? playerText : playerTextMuted;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         onTap: onPressed,
         child: Container(
           height: 28,
@@ -852,7 +861,7 @@ class _PlayerChildTagChip extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: backgroundColor,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(AppRadius.control),
             border: Border.all(color: borderColor),
           ),
           child: Text(
@@ -863,7 +872,8 @@ class _PlayerChildTagChip extends StatelessWidget {
             style: TextStyle(
               color: textColor,
               fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontWeight:
+                  selected ? AppTypography.strong : AppTypography.medium,
               height: 1,
             ),
           ),
@@ -891,7 +901,7 @@ class _QueueStateBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.capsule),
         border: Border.all(color: color.withValues(alpha: 0.72)),
       ),
       child: Row(
@@ -931,15 +941,16 @@ class _QueueFloatingLocator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accessibility = AppAccessibilityScope.of(context);
     return AnimatedOpacity(
-      duration: const Duration(milliseconds: 140),
+      duration: accessibility.fadeDuration(AppMotion.hover),
       opacity: showPlaying || showSelected ? 1 : 0,
       child: SizedBox(
         height: playerQueueLocatorHeight,
         child: DecoratedBox(
           decoration: const BoxDecoration(
-            color: Color(0xf2101722),
-            border: Border(top: BorderSide(color: Color(0xff344369))),
+            color: playerSurfaceRaised,
+            border: Border(top: BorderSide(color: playerBorder)),
             boxShadow: [
               BoxShadow(
                 color: Color(0x66000000),
@@ -964,7 +975,7 @@ class _QueueFloatingLocator extends StatelessWidget {
                 const VerticalDivider(
                   width: 1,
                   thickness: 1,
-                  color: Color(0xff344369),
+                  color: playerBorder,
                 ),
               if (showSelected)
                 Expanded(
@@ -1000,7 +1011,7 @@ class _QueueLocatorButton extends StatelessWidget {
       icon: Icon(icon, size: 14),
       label: Text(label),
       style: TextButton.styleFrom(
-        foregroundColor: const Color(0xffdbe4ff),
+        foregroundColor: playerText,
         minimumSize: Size.zero,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1156,6 +1167,7 @@ class _QueueListItemState extends State<_QueueListItem>
 
   @override
   Widget build(BuildContext context) {
+    final accessibility = AppAccessibilityScope.of(context);
     final emphasis = widget.playing
         ? 3
         : widget.selected
@@ -1164,38 +1176,38 @@ class _QueueListItemState extends State<_QueueListItem>
                 ? 1
                 : 0;
     final infoColor = emphasis >= 2
-        ? const Color(0xffb7d3ff)
+        ? playerTextMuted
         : _hovered
-            ? const Color(0xffa0aabb)
-            : const Color(0xff7a8493);
+            ? playerTextMuted
+            : playerTextMuted.withValues(alpha: 0.72);
     final titleColor = widget.playing
-        ? const Color(0xffffffff)
+        ? playerText
         : widget.selected
-            ? const Color(0xffeef2f6)
+            ? playerText
             : _hovered
-                ? const Color(0xffdde4ed)
-                : const Color(0xffb9c1cc);
+                ? playerText
+                : playerText.withValues(alpha: 0.76);
     final backgroundColor = widget.playing
-        ? const Color(0xff20204d)
+        ? appAccentViolet.withValues(alpha: 0.18)
         : widget.selected
-            ? const Color(0xff242d3a)
+            ? playerSurfaceRaised
             : _hovered
-                ? const Color(0xff1d2530)
-                : const Color(0xff151a21);
+                ? playerSurfaceRaised.withValues(alpha: 0.82)
+                : playerSurfaceAlt;
     final borderColor = widget.playing
-        ? const Color(0xff7457ff)
+        ? appAccentViolet
         : widget.selected
-            ? const Color(0xff52647d)
+            ? playerTextMuted.withValues(alpha: 0.55)
             : _hovered
-                ? const Color(0xff3a4658)
-                : const Color(0xff222936);
+                ? playerTextMuted.withValues(alpha: 0.38)
+                : playerBorder;
     final accentColor = widget.playing
-        ? const Color(0xff8b73ff)
+        ? appAccentViolet
         : widget.selected
-            ? const Color(0xffa7b4ff)
+            ? playerText
             : _hovered
-                ? const Color(0xff7f8da3)
-                : const Color(0xff566171);
+                ? playerTextMuted
+                : playerTextMuted.withValues(alpha: 0.44);
     final showHoverAction = _hovered && !widget.playing;
     final stateBadgeLabel = widget.item.isMissing
         ? '缺失'
@@ -1212,27 +1224,19 @@ class _QueueListItemState extends State<_QueueListItem>
                 ? Icons.center_focus_strong_rounded
                 : null;
     final stateBadgeColor = widget.item.isMissing
-        ? const Color(0xffffb4a9)
+        ? playerDanger
         : widget.playing
-            ? const Color(0xff8b73ff)
-            : const Color(0xffa7b4ff);
-    final shadow = widget.playing
+            ? appAccentViolet
+            : playerTextMuted;
+    final shadow = widget.selected || _hovered
         ? const [
             BoxShadow(
-              color: Color(0x557457ff),
-              blurRadius: 18,
-              offset: Offset(0, 8),
+              color: Color(0x2e000000),
+              blurRadius: 10,
+              offset: Offset(0, 4),
             ),
           ]
-        : widget.selected || _hovered
-            ? const [
-                BoxShadow(
-                  color: Color(0x22000000),
-                  blurRadius: 12,
-                  offset: Offset(0, 6),
-                ),
-              ]
-            : null;
+        : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -1243,23 +1247,23 @@ class _QueueListItemState extends State<_QueueListItem>
           _actionController.reverse();
         },
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           child: AnimatedBuilder(
             animation: _actionController,
             child: InkWell(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.card),
               onTap: widget.onTap,
               onDoubleTap: widget.onDoubleTap,
               child: AnimatedContainer(
                 key: ValueKey(
                   'player.queue.card.${widget.item.videoId}',
                 ),
-                duration: const Duration(milliseconds: 120),
-                curve: appMotionCurve,
+                duration: accessibility.fadeDuration(AppMotion.hover),
+                curve: AppMotion.standardCurve,
                 padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: backgroundColor,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.card),
                   border: Border.all(color: borderColor),
                   boxShadow: shadow,
                 ),
@@ -1267,14 +1271,14 @@ class _QueueListItemState extends State<_QueueListItem>
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     AnimatedContainer(
-                      duration: const Duration(milliseconds: 120),
+                      duration: accessibility.fadeDuration(AppMotion.hover),
                       width: 3,
                       height: 60,
                       decoration: BoxDecoration(
                         color: widget.playing || widget.selected || _hovered
                             ? accentColor
                             : Colors.transparent,
-                        borderRadius: BorderRadius.circular(999),
+                        borderRadius: BorderRadius.circular(AppRadius.capsule),
                       ),
                     ),
                     const SizedBox(width: 5),
@@ -1282,7 +1286,7 @@ class _QueueListItemState extends State<_QueueListItem>
                       width: 100,
                       height: 58,
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(AppRadius.control),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
@@ -1305,16 +1309,17 @@ class _QueueListItemState extends State<_QueueListItem>
                                   );
                                 }
                                 return const ColoredBox(
-                                  color: Color(0xff242932),
+                                  color: playerSurfaceRaised,
                                   child: Center(
                                     child: Icon(Icons.movie_outlined,
-                                        color: Color(0xff687282), size: 22),
+                                        color: playerTextMuted, size: 22),
                                   ),
                                 );
                               },
                             ),
                             AnimatedOpacity(
-                              duration: const Duration(milliseconds: 120),
+                              duration:
+                                  accessibility.fadeDuration(AppMotion.hover),
                               opacity: showHoverAction ? 1 : 0,
                               child: const ColoredBox(
                                 color: Color(0x66000000),
@@ -1388,8 +1393,10 @@ class _QueueListItemState extends State<_QueueListItem>
                                       ),
                                       size: 15,
                                       color: widget.item.isFavorite
-                                          ? const Color(0xffff6174)
-                                          : const Color(0xff647086),
+                                          ? playerDanger
+                                          : playerTextMuted.withValues(
+                                              alpha: 0.52,
+                                            ),
                                     ),
                                   ),
                                   if (stateBadgeLabel != null &&
@@ -1414,7 +1421,8 @@ class _QueueListItemState extends State<_QueueListItem>
                                     height: 1.1),
                               ),
                               AnimatedOpacity(
-                                duration: const Duration(milliseconds: 120),
+                                duration:
+                                    accessibility.fadeDuration(AppMotion.hover),
                                 opacity: showHoverAction ? 1 : 0,
                                 child: const Padding(
                                   padding: EdgeInsets.only(top: 2),
@@ -1423,7 +1431,7 @@ class _QueueListItemState extends State<_QueueListItem>
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      color: Color(0xffa7b4ff),
+                                      color: playerTextMuted,
                                       fontSize: 10,
                                       fontWeight: FontWeight.w800,
                                       height: 1,
@@ -1469,7 +1477,7 @@ class _QueueListItemState extends State<_QueueListItem>
   /** 构建折叠在卡片后的收藏与删除操作区，颜色沿用播放器深色主题。 */
   Widget _buildActionBackground() {
     return DecoratedBox(
-      decoration: const BoxDecoration(color: Color(0xff101827)),
+      decoration: const BoxDecoration(color: playerSurface),
       child: Align(
         alignment: Alignment.centerRight,
         child: SizedBox(
@@ -1483,9 +1491,9 @@ class _QueueListItemState extends State<_QueueListItem>
                 'player.queue.actionPanel.${widget.item.videoId}',
               ),
               decoration: BoxDecoration(
-                color: const Color(0xff171f30),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xff2c3850)),
+                color: playerSurfaceRaised,
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                border: Border.all(color: playerBorder),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(4),
@@ -1501,19 +1509,21 @@ class _QueueListItemState extends State<_QueueListItem>
                           ),
                           // 红心本身已明确表达收藏状态，不再叠加发光式色块。
                           color: Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.control),
                           child: InkWell(
                             key: ValueKey(
                               'player.queue.favoriteAction.'
                               '${widget.item.videoId}',
                             ),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.control),
                             onTap: () => _runAction(widget.onToggleFavorite),
                             child: Icon(
                               widget.item.isFavorite
                                   ? Icons.favorite_rounded
                                   : Icons.favorite_border_rounded,
-                              color: const Color(0xffff6f83),
+                              color: playerDanger,
                               size: 20,
                             ),
                           ),
@@ -1525,7 +1535,7 @@ class _QueueListItemState extends State<_QueueListItem>
                       child: VerticalDivider(
                         width: 1,
                         thickness: 1,
-                        color: Color(0xff344159),
+                        color: playerBorder,
                       ),
                     ),
                     Expanded(
@@ -1533,17 +1543,19 @@ class _QueueListItemState extends State<_QueueListItem>
                         message: '删除',
                         child: Material(
                           color: Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.control),
                           child: InkWell(
                             key: ValueKey(
                               'player.queue.deleteAction.'
                               '${widget.item.videoId}',
                             ),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.control),
                             onTap: () => _runAction(widget.onDelete),
                             child: const Icon(
                               Icons.delete_outline_rounded,
-                              color: Color(0xffd88998),
+                              color: playerDanger,
                               size: 20,
                             ),
                           ),

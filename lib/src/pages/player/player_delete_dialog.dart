@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/video_item.dart';
+import '../../widgets/app_theme_tokens.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -37,7 +38,7 @@ Future<bool?> showPlayerDeleteConfirmationDialog(
                 item.path,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Color(0xff8f99a8)),
+                style: const TextStyle(color: playerTextMuted),
               ),
               const SizedBox(height: 12),
               const Text(
@@ -65,7 +66,7 @@ Future<bool?> showPlayerDeleteConfirmationDialog(
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xffc53b4d),
+              backgroundColor: playerDanger,
             ),
             onPressed: () =>
                 Navigator.of(dialogContext).pop(moveLocalFileToTrash),

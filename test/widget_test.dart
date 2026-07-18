@@ -1488,13 +1488,13 @@ void main() {
     );
   });
 
-  test('player queue sidebar follows blueprint proportions on wide windows',
+  test('player queue sidebar preserves Apple-style video-first proportions',
       () {
     expect(playerQueueLocatorHeight, 48);
     expect(playerQueueSidebarWidthForWindow(960), 360);
-    expect(playerQueueSidebarWidthForWindow(1280), 384);
-    expect(playerQueueSidebarWidthForWindow(1600), 480);
-    expect(playerQueueSidebarWidthForWindow(1920), 500);
+    expect(playerQueueSidebarWidthForWindow(1280), 360);
+    expect(playerQueueSidebarWidthForWindow(1600), closeTo(448, 0.001));
+    expect(playerQueueSidebarWidthForWindow(1920), 460);
   });
 
   testWidgets('player queue search expands from the count action',
@@ -1644,7 +1644,7 @@ void main() {
     final detailsSurfaceSize = tester.getSize(
       find.byKey(const ValueKey('player.sidebar.tab.details.surface')),
     );
-    expect(segmentSize.height, 34);
+    expect(segmentSize.height, 36);
     expect(queueSurfaceSize.height, segmentSize.height);
     expect(detailsSurfaceSize.height, segmentSize.height);
     final initialQueueDecoration = tester
@@ -1661,8 +1661,10 @@ void main() {
           ),
         )
         .decoration as BoxDecoration;
-    expect(initialQueueDecoration.gradient, isA<LinearGradient>());
+    expect(initialQueueDecoration.gradient, isNull);
+    expect(initialQueueDecoration.color, isNot(Colors.transparent));
     expect(initialDetailsDecoration.gradient, isNull);
+    expect(initialDetailsDecoration.color, Colors.transparent);
 
     await tester.tap(find.byKey(const ValueKey('player.sidebar.tab.details')));
     await tester.pump(const Duration(milliseconds: 200));
@@ -1676,7 +1678,8 @@ void main() {
           ),
         )
         .decoration as BoxDecoration;
-    expect(selectedDetailsDecoration.gradient, isA<LinearGradient>());
+    expect(selectedDetailsDecoration.gradient, isNull);
+    expect(selectedDetailsDecoration.color, isNot(Colors.transparent));
     expect(find.text('clip.mp4'), findsOneWidget);
     expect(find.text('1920×1080'), findsOneWidget);
     expect(find.text('H264 / AAC'), findsOneWidget);
@@ -2635,9 +2638,9 @@ void main() {
     final openingScale = tester.widget<ScaleTransition>(
       find.byKey(const ValueKey('player.settings.open.scale')),
     );
-    expect(openingScale.scale.value, closeTo(0.94, 0.01));
+    expect(openingScale.scale.value, closeTo(0.97, 0.01));
     await tester.pump(const Duration(milliseconds: 90));
-    expect(openingScale.scale.value, greaterThan(0.94));
+    expect(openingScale.scale.value, greaterThan(0.97));
     expect(openingScale.scale.value, lessThan(1));
     await tester.pumpAndSettle();
     expect(
@@ -2897,6 +2900,7 @@ void main() {
         home: Scaffold(
           body: PlayerTopBar(
             currentFileName: playerTopBarFileName(currentPath),
+            contextLabel: '3 / 120 · 原神 / 雷神',
             onBack: () => backCount++,
             onOpenQueue: () => queueCount++,
           ),
@@ -2905,6 +2909,11 @@ void main() {
     );
 
     expect(find.text('当前播放.mp4'), findsOneWidget);
+    expect(find.text('3 / 120 · 原神 / 雷神'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(PlayerTopBar)).height,
+      64,
+    );
     expect(find.text('local_tag_player'), findsNothing);
     expect(find.byType(TextField), findsNothing);
     expect(find.textContaining('搜索当前队列'), findsNothing);

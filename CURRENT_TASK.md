@@ -1,5 +1,15 @@
 ﻿# CURRENT_TASK.md
 
+## 2026-07-18 Apple UI Phase 2 播放器全布局
+
+- 播放器新增共享深色画布、结构表面、抬升表面、描边、文字、状态和阴影 token，并使用独立 `playerWorkspaceTheme` 统一顶栏、视频容器、侧栏、弹窗、输入和菜单；不再维护页面私有深蓝主题。
+- 顶栏改为 40px Apple 式交互动作与“当前文件名 / filtered queue 序号和筛选摘要”双层信息；视频成为视觉中心，窗口模式使用 18px 结构圆角，底部控制收进小范围实色浮动表面，没有引入全窗口 blur。
+- 右侧列表/详情统一为实色结构侧栏，中性分段仅以紫色表达当前选择；队列宽度收敛为窗口约 28% 且限制在 360–460px，40px 搜索/定位/删除动作、队列搜索、二级标签、左滑收藏/删除和离屏定位入口全部保留。
+- 详情卡片、设置三级浮层、失败恢复和删除确认统一材质；设置浮层改为 `0.97 → 1` 短过渡并遵守 reduced motion。主进度条移除装饰性猫耳焦点，改为简洁圆点与单色紫色轨道，seek、帧预览和全屏缩放计算保持不变。
+- 播放器相关 30 项 widget tests、完整 193 项测试通过，3 项显式 benchmark 跳过；50,000 条队列搜索约 25–34ms，`flutter analyze` 和 Windows debug build 通过。
+- Debug EXE 已由 Windows 自动化启动并唯一定位，但两次窗口激活都返回 `failed to activate captured window`，未安全执行真实点击或截图。仍需人工复测：媒体库打开视频 → 播放/暂停与 seek → 队列搜索/切换 → 列表/详情 → 设置一/二/三级 → 全屏与 Esc → 返回媒体库，并检查位置、遮挡、对齐、溢出、对比度和状态反馈。
+- 本轮未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 内容与顺序、`PlayerBackend`、缩略图/媒体详情队列、稳定身份或用户数据。
+
 ## 2026-07-18 Agent Eval 成本门槛与 Apple UI Phase 1 搜索/筛选状态
 
 - Agent Eval 为 trigger、capability、regression 增加默认工具调用、输入 token、输出 token 硬门槛；单用例可通过 `budgets` 显式覆盖。超限由确定性 scorer 直接判为 0 分，并在报告中同时保存生效预算和实际 usage。

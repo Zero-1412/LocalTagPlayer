@@ -20,6 +20,7 @@ import '../../services/player/player_hardware_acceleration.dart';
 import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/design_system/app_interaction_surface.dart';
 import 'player_context_panel.dart';
 import 'player_control_slider.dart';
 import 'player_delete_dialog.dart';
@@ -1016,6 +1017,8 @@ class PlayerPageState extends State<PlayerPage> {
 
   /** 构建画面底部统一控制条，并在全屏顶部保留最小队列语境。 */
   Widget _buildVideoControls() {
+    final accessibility = AppAccessibilityScope.of(context);
+    final fadeDuration = accessibility.fadeDuration(AppMotion.hover);
     return MouseRegion(
       key: _videoControlsRegionKey,
       onEnter: _handleVideoControlsPointer,
@@ -1062,7 +1065,7 @@ class PlayerPageState extends State<PlayerPage> {
               builder: (context, positionSnapshot) {
                 return AnimatedOpacity(
                   key: const ValueKey('player.controls.hiddenProgress'),
-                  duration: const Duration(milliseconds: 180),
+                  duration: fadeDuration,
                   opacity: _controlsVisible ? 0 : 1,
                   child: PlayerHiddenProgressBar(
                     position: positionSnapshot.data ?? Duration.zero,
@@ -1078,7 +1081,7 @@ class PlayerPageState extends State<PlayerPage> {
             bottom: 0,
             child: AnimatedOpacity(
               key: const ValueKey('player.controls.opacity'),
-              duration: const Duration(milliseconds: 180),
+              duration: fadeDuration,
               opacity: _controlsVisible ? 1 : 0,
               child: IgnorePointer(
                 ignoring: !_controlsVisible,
@@ -1091,171 +1094,203 @@ class PlayerPageState extends State<PlayerPage> {
                     final maxMs =
                         math.max(1, duration.inMilliseconds).toDouble();
                     return Container(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                      padding: EdgeInsets.fromLTRB(
+                        _isWindowFullscreen ? 24 : 14,
+                        32,
+                        _isWindowFullscreen ? 24 : 14,
+                        _isWindowFullscreen ? 18 : 12,
+                      ),
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Color(0xe6000000)],
+                          colors: [Colors.transparent, Color(0xb8000000)],
                         ),
                       ),
-                      child: IconTheme(
-                        data: const IconThemeData(color: Colors.white),
-                        child:
-                            Column(mainAxisSize: MainAxisSize.min, children: [
-                          PlayerProgressSlider(
-                            sliderKey: const ValueKey('player.progress'),
-                            isFullscreen: _isWindowFullscreen,
-                            value: position.inMilliseconds
-                                .clamp(0, maxMs.toInt())
-                                .toDouble(),
-                            max: maxMs,
-                            previewIdentity: _currentItem.path,
-                            loadPreview: (target) => widget.thumbnailService
-                                .previewFrameFor(_currentItem, target),
-                            onChanged: (value) => unawaited(
-                              _seekWithDiagnostics(
-                                Duration(milliseconds: value.round()),
-                              ),
-                            ),
-                          ),
-                          Row(children: [
-                            IconButton(
-                              tooltip: '上一条',
-                              color: Colors.white,
-                              disabledColor: const Color(0xff5e6a82),
-                              onPressed: _playback.previousIndex == null
-                                  ? null
-                                  : () => _jumpTo(
-                                        _playback.previousIndex!,
-                                        ignoreFollowUpSelection: true,
+                      child: DecoratedBox(
+                        key: const ValueKey('player.controls.chrome'),
+                        decoration: BoxDecoration(
+                          color: playerSurface.withValues(alpha: 0.96),
+                          borderRadius: BorderRadius.circular(AppRadius.card),
+                          border: Border.all(color: playerBorder),
+                          boxShadow: playerSoftShadow,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+                          child: IconTheme(
+                            data: const IconThemeData(color: playerText),
+                            child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  PlayerProgressSlider(
+                                    sliderKey:
+                                        const ValueKey('player.progress'),
+                                    isFullscreen: _isWindowFullscreen,
+                                    value: position.inMilliseconds
+                                        .clamp(0, maxMs.toInt())
+                                        .toDouble(),
+                                    max: maxMs,
+                                    previewIdentity: _currentItem.path,
+                                    loadPreview: (target) => widget
+                                        .thumbnailService
+                                        .previewFrameFor(_currentItem, target),
+                                    onChanged: (value) => unawaited(
+                                      _seekWithDiagnostics(
+                                        Duration(milliseconds: value.round()),
                                       ),
-                              icon: const Icon(Icons.skip_previous_rounded),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              tooltip:
-                                  _playerBackend.state.playing ? '暂停' : '播放',
-                              color: Colors.white,
-                              onPressed: () {
-                                unawaited(_playerBackend.playOrPause());
-                                _showVideoControls();
-                              },
-                              icon: Icon(
-                                _playerBackend.state.playing
-                                    ? Icons.pause_rounded
-                                    : Icons.play_arrow_rounded,
-                                size: 30,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              tooltip: '下一条',
-                              color: Colors.white,
-                              disabledColor: const Color(0xff5e6a82),
-                              onPressed: _playback.nextIndex == null
-                                  ? null
-                                  : () => _jumpTo(
-                                        _playback.nextIndex!,
-                                        ignoreFollowUpSelection: true,
-                                      ),
-                              icon: const Icon(Icons.skip_next_rounded),
-                            ),
-                            const SizedBox(width: 4),
-                            PlayerRevealFileButton(
-                              onPressed: () => unawaited(_revealCurrentFile()),
-                            ),
-                            const SizedBox(width: 4),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                PlayerVolumeButton(
-                                  volume: _volume,
-                                  onPressed: _togglePlayerMute,
-                                ),
-                                SizedBox(
-                                  width: 130,
-                                  child: PlayerControlSlider(
-                                    sliderKey: const ValueKey('player.volume'),
-                                    value: _volume,
-                                    max: 100,
-                                    trackHeight: 3,
-                                    thumbRadius: 4.5,
-                                    overlayRadius: 11,
-                                    onChanged: _setPlayerVolume,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 24),
-                            Text(
-                              '${_formatControlDuration(position)} / '
-                              '${_formatControlDuration(duration)}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              key: const ValueKey('player.screenshot'),
-                              tooltip: '当前帧截图',
-                              onPressed: () =>
-                                  unawaited(_saveCurrentFrameScreenshot()),
-                              icon: const Icon(Icons.photo_camera_outlined,
-                                  size: 21),
-                            ),
-                            KeyedSubtree(
-                              key: _settingsButtonAnchorKey,
-                              child: IconButton(
-                                key: const ValueKey('player.settings'),
-                                tooltip: '播放设置',
-                                onPressed: () =>
-                                    unawaited(_showControlSettingsDialog()),
-                                icon: const Icon(
-                                  Icons.settings_outlined,
-                                  size: 21,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              key: const ValueKey('player.fullscreen.toggle'),
-                              tooltip: _isWindowFullscreen ? '退出全屏' : '全屏',
-                              onPressed: () =>
-                                  unawaited(_toggleWindowFullscreen()),
-                              icon: Icon(_isWindowFullscreen
-                                  ? Icons.fullscreen_exit_rounded
-                                  : Icons.fullscreen_rounded),
-                            ),
-                            IconButton(
-                              key: const ValueKey('player.queue.toggle'),
-                              tooltip: _isWindowFullscreen
-                                  ? '播放列表'
-                                  : _queueSidebarCollapsed
-                                      ? '展开筛选结果队列'
-                                      : '折叠筛选结果队列',
-                              onPressed: () {
-                                if (_isWindowFullscreen) {
-                                  if (_fullscreenQueueVisible) {
-                                    _fullscreenQueueHideTimer?.cancel();
-                                    _fullscreenQueueHideTimer = null;
-                                    setState(
-                                        () => _fullscreenQueueVisible = false);
-                                  } else {
-                                    _showFullscreenQueueSidebar();
-                                  }
-                                } else {
-                                  setState(() {
-                                    _queueSidebarCollapsed =
-                                        !_queueSidebarCollapsed;
-                                  });
-                                }
-                              },
-                              icon: const Icon(Icons.playlist_play_rounded),
-                            ),
-                          ]),
-                        ]),
+                                  Row(children: [
+                                    IconButton(
+                                      tooltip: '上一条',
+                                      color: Colors.white,
+                                      disabledColor: playerTextMuted.withValues(
+                                          alpha: 0.4),
+                                      onPressed: _playback.previousIndex == null
+                                          ? null
+                                          : () => _jumpTo(
+                                                _playback.previousIndex!,
+                                                ignoreFollowUpSelection: true,
+                                              ),
+                                      icon: const Icon(
+                                          Icons.skip_previous_rounded),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      tooltip: _playerBackend.state.playing
+                                          ? '暂停'
+                                          : '播放',
+                                      color: Colors.white,
+                                      onPressed: () {
+                                        unawaited(_playerBackend.playOrPause());
+                                        _showVideoControls();
+                                      },
+                                      icon: Icon(
+                                        _playerBackend.state.playing
+                                            ? Icons.pause_rounded
+                                            : Icons.play_arrow_rounded,
+                                        size: 30,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      tooltip: '下一条',
+                                      color: Colors.white,
+                                      disabledColor: playerTextMuted.withValues(
+                                          alpha: 0.4),
+                                      onPressed: _playback.nextIndex == null
+                                          ? null
+                                          : () => _jumpTo(
+                                                _playback.nextIndex!,
+                                                ignoreFollowUpSelection: true,
+                                              ),
+                                      icon: const Icon(Icons.skip_next_rounded),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    PlayerRevealFileButton(
+                                      onPressed: () =>
+                                          unawaited(_revealCurrentFile()),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        PlayerVolumeButton(
+                                          volume: _volume,
+                                          onPressed: _togglePlayerMute,
+                                        ),
+                                        SizedBox(
+                                          width: 130,
+                                          child: PlayerControlSlider(
+                                            sliderKey:
+                                                const ValueKey('player.volume'),
+                                            value: _volume,
+                                            max: 100,
+                                            trackHeight: 3,
+                                            thumbRadius: 4.5,
+                                            overlayRadius: 11,
+                                            onChanged: _setPlayerVolume,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 24),
+                                    Text(
+                                      '${_formatControlDuration(position)} / '
+                                      '${_formatControlDuration(duration)}',
+                                      style: const TextStyle(
+                                        color: playerText,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    IconButton(
+                                      key: const ValueKey('player.screenshot'),
+                                      tooltip: '当前帧截图',
+                                      onPressed: () => unawaited(
+                                          _saveCurrentFrameScreenshot()),
+                                      icon: const Icon(
+                                          Icons.photo_camera_outlined,
+                                          size: 21),
+                                    ),
+                                    KeyedSubtree(
+                                      key: _settingsButtonAnchorKey,
+                                      child: IconButton(
+                                        key: const ValueKey('player.settings'),
+                                        tooltip: '播放设置',
+                                        onPressed: () => unawaited(
+                                            _showControlSettingsDialog()),
+                                        icon: const Icon(
+                                          Icons.settings_outlined,
+                                          size: 21,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      key: const ValueKey(
+                                          'player.fullscreen.toggle'),
+                                      tooltip:
+                                          _isWindowFullscreen ? '退出全屏' : '全屏',
+                                      onPressed: () =>
+                                          unawaited(_toggleWindowFullscreen()),
+                                      icon: Icon(_isWindowFullscreen
+                                          ? Icons.fullscreen_exit_rounded
+                                          : Icons.fullscreen_rounded),
+                                    ),
+                                    IconButton(
+                                      key:
+                                          const ValueKey('player.queue.toggle'),
+                                      tooltip: _isWindowFullscreen
+                                          ? '播放列表'
+                                          : _queueSidebarCollapsed
+                                              ? '展开筛选结果队列'
+                                              : '折叠筛选结果队列',
+                                      onPressed: () {
+                                        if (_isWindowFullscreen) {
+                                          if (_fullscreenQueueVisible) {
+                                            _fullscreenQueueHideTimer?.cancel();
+                                            _fullscreenQueueHideTimer = null;
+                                            setState(() =>
+                                                _fullscreenQueueVisible =
+                                                    false);
+                                          } else {
+                                            _showFullscreenQueueSidebar();
+                                          }
+                                        } else {
+                                          setState(() {
+                                            _queueSidebarCollapsed =
+                                                !_queueSidebarCollapsed;
+                                          });
+                                        }
+                                      },
+                                      icon: const Icon(
+                                          Icons.playlist_play_rounded),
+                                    ),
+                                  ]),
+                                ]),
+                          ),
+                        ),
                       ),
                     );
                   },
@@ -2590,9 +2625,13 @@ class PlayerPageState extends State<PlayerPage> {
   Widget build(BuildContext context) {
     // 中窄窗口改用底部队列，避免侧栏挤压蓝图式横向控制层。
     final hasWideQueueSidebar = MediaQuery.sizeOf(context).width >= 1100;
+    final accessibility = AppAccessibilityScope.of(context);
     final queueSidebar = _buildQueueSidebar();
     return Theme(
-      data: _playerPageTheme(),
+      data: playerWorkspaceTheme(
+        Theme.of(context),
+        highContrast: accessibility.highContrast,
+      ),
       child: Focus(
         focusNode: _focusNode,
         autofocus: true,
@@ -2600,7 +2639,7 @@ class PlayerPageState extends State<PlayerPage> {
         child: Listener(
           onPointerDown: _handlePointerDown,
           child: Scaffold(
-            backgroundColor: const Color(0xff070d1d),
+            backgroundColor: playerCanvas,
             body: MouseRegion(
               onHover: _handleFullscreenQueuePointerHover,
               onExit: (_) {
@@ -2617,6 +2656,8 @@ class PlayerPageState extends State<PlayerPage> {
                           PlayerTopBar(
                             currentFileName:
                                 playerTopBarFileName(_currentItem.path),
+                            contextLabel:
+                                '${_index + 1} / ${_queue.length} · $_filterSummary',
                             onBack: () => unawaited(_exitPlayer()),
                             onOpenQueue: hasWideQueueSidebar
                                 ? null
@@ -2624,7 +2665,8 @@ class PlayerPageState extends State<PlayerPage> {
                                     showModalBottomSheet<void>(
                                       context: context,
                                       isScrollControlled: true,
-                                      backgroundColor: const Color(0xff0d1528),
+                                      backgroundColor: playerSurface,
+                                      showDragHandle: true,
                                       builder: (_) => FractionallySizedBox(
                                         heightFactor: 0.82,
                                         child: queueSidebar,
@@ -2645,20 +2687,16 @@ class PlayerPageState extends State<PlayerPage> {
                                         margin: _isWindowFullscreen
                                             ? EdgeInsets.zero
                                             : const EdgeInsets.fromLTRB(
-                                                18, 18, 18, 12),
+                                                16, 12, 16, 16),
                                         decoration: BoxDecoration(
                                           color: Colors.black,
-                                          borderRadius:
-                                              BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            AppRadius.panel,
+                                          ),
                                           border: Border.all(
-                                              color: const Color(0xff1f2937)),
-                                          boxShadow: const [
-                                            BoxShadow(
-                                              color: Color(0x66000000),
-                                              blurRadius: 26,
-                                              offset: Offset(0, 14),
-                                            ),
-                                          ],
+                                            color: playerBorder,
+                                          ),
+                                          boxShadow: playerSoftShadow,
                                         ),
                                         clipBehavior: Clip.antiAlias,
                                         child: Stack(
@@ -2734,7 +2772,9 @@ class PlayerPageState extends State<PlayerPage> {
                                 TweenAnimationBuilder<double>(
                                   key: const ValueKey('player.fullscreenQueue'),
                                   tween: Tween<double>(begin: 0, end: 440),
-                                  duration: appMotionDuration,
+                                  duration: accessibility.motionDuration(
+                                    AppMotion.panel,
+                                  ),
                                   curve: appMotionCurve,
                                   builder: (context, width, child) {
                                     return SizedBox(
@@ -2766,7 +2806,9 @@ class PlayerPageState extends State<PlayerPage> {
                                 ),
                               if (hasWideQueueSidebar && !_isWindowFullscreen)
                                 AnimatedSize(
-                                  duration: appMotionDuration,
+                                  duration: accessibility.motionDuration(
+                                    AppMotion.panel,
+                                  ),
                                   curve: appMotionCurve,
                                   child: ClipRect(
                                     child: Align(
@@ -2810,53 +2852,6 @@ class PlayerPageState extends State<PlayerPage> {
   }
 }
 
-/** 播放器范围统一使用暗色弹窗、菜单、输入框和按钮语义。 */
-ThemeData _playerPageTheme() {
-  const surface = Color(0xff111a2b);
-  const border = Color(0xff2a3855);
-  return ThemeData.dark(useMaterial3: true).copyWith(
-    colorScheme: const ColorScheme.dark(
-      primary: Color(0xff8b73ff),
-      surface: surface,
-      onSurface: Color(0xffe7ecf7),
-      outline: border,
-    ),
-    dialogTheme: DialogThemeData(
-      backgroundColor: surface,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: border),
-      ),
-    ),
-    popupMenuTheme: PopupMenuThemeData(
-      color: const Color(0xff151f32),
-      surfaceTintColor: Colors.transparent,
-      textStyle: const TextStyle(color: Color(0xffe7ecf7), fontSize: 13),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(9),
-        side: const BorderSide(color: border),
-      ),
-    ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: const Color(0xff0b1425),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xff7457ff)),
-      ),
-    ),
-  );
-}
-
 /** 将 Flutter 逻辑键归一为设置 JSON 使用的稳定标识。 */
 String? _playerShortcutKeyId(LogicalKeyboardKey key) {
   if (key == LogicalKeyboardKey.space) return 'Space';
@@ -2875,7 +2870,7 @@ String? _playerShortcutKeyId(LogicalKeyboardKey key) {
 }
 
 /**
- * 蓝图风格的播放器顶栏。
+ * Apple 式播放器顶栏。
  *
  * 顶栏只展示当前播放文件名和导航动作；队列搜索保留在右侧列表内部，避免同一功能
  * 重复占用视频上方空间，也不提供绕过媒体库与 filtered queue 的“打开文件”。
@@ -2884,12 +2879,16 @@ class PlayerTopBar extends StatelessWidget {
   const PlayerTopBar({
     super.key,
     required this.currentFileName,
+    this.contextLabel,
     required this.onBack,
     required this.onOpenQueue,
   });
 
   /** 当前实际播放视频的完整文件名，包含扩展名。 */
   final String currentFileName;
+
+  /** 当前 filtered queue 的序号与筛选摘要，只读展示且不参与队列计算。 */
+  final String? contextLabel;
 
   /** 返回媒体库并释放当前播放器会话。 */
   final VoidCallback onBack;
@@ -2899,46 +2898,102 @@ class PlayerTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 66,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        child: Row(children: [
-          IconButton(
-            key: const ValueKey('player.back'),
-            tooltip: '返回媒体库',
-            onPressed: onBack,
-            icon: const Icon(Icons.arrow_back_rounded),
-            color: const Color(0xffcbd5e1),
-          ),
-          const Icon(Icons.play_arrow_rounded,
-              color: Color(0xff7c5cff), size: 30),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Tooltip(
-              message: currentFileName,
-              child: Text(
-                currentFileName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      decoration: const BoxDecoration(
+        color: playerSurface,
+        border: Border(bottom: BorderSide(color: playerBorder)),
+      ),
+      child: Row(children: [
+        _PlayerTopBarAction(
+          key: const ValueKey('player.back'),
+          tooltip: '返回媒体库',
+          semanticLabel: '返回媒体库',
+          onPressed: onBack,
+          icon: Icons.arrow_back_ios_new_rounded,
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Tooltip(
+            message: currentFileName,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  currentFileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: playerText,
+                    fontSize: AppTypography.bodyLarge,
+                    fontWeight: AppTypography.strong,
+                    height: 1.15,
+                  ),
                 ),
-              ),
+                if (contextLabel != null) ...[
+                  const SizedBox(height: AppSpacing.xxs),
+                  Text(
+                    contextLabel!,
+                    key: const ValueKey('player.topbar.context'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: playerTextMuted,
+                      fontSize: AppTypography.caption,
+                      fontWeight: AppTypography.medium,
+                      height: 1,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          const SizedBox(width: 12),
-          if (onOpenQueue != null)
-            IconButton(
-              tooltip: '播放队列',
-              onPressed: onOpenQueue,
-              icon: const Icon(Icons.playlist_play_rounded),
-            )
-          else
-            const SizedBox(width: 48),
-        ]),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        if (onOpenQueue != null)
+          _PlayerTopBarAction(
+            tooltip: '播放队列',
+            semanticLabel: '打开播放队列',
+            onPressed: onOpenQueue!,
+            icon: Icons.playlist_play_rounded,
+          )
+        else
+          const SizedBox(width: 40),
+      ]),
+    );
+  }
+}
+
+/** 顶栏紧凑动作，复用共享 press、hover、focus 与 reduced-motion 反馈。 */
+class _PlayerTopBarAction extends StatelessWidget {
+  const _PlayerTopBarAction({
+    super.key,
+    required this.tooltip,
+    required this.semanticLabel,
+    required this.onPressed,
+    required this.icon,
+  });
+
+  final String tooltip;
+  final String semanticLabel;
+  final VoidCallback onPressed;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: AppInteractionSurface(
+        onTap: onPressed,
+        semanticLabel: semanticLabel,
+        padding: EdgeInsets.zero,
+        backgroundColor: playerSurfaceAlt,
+        child: SizedBox.square(
+          dimension: 40,
+          child: Icon(icon, size: 19, color: playerText),
+        ),
       ),
     );
   }

@@ -4,6 +4,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../widgets/app_theme_tokens.dart';
+
 // ignore_for_file: slash_for_doc_comments
 
 /**
@@ -179,6 +181,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
       isFullscreen: widget.isFullscreen,
       viewportSize: MediaQuery.sizeOf(context),
     );
+    final accessibility = AppAccessibilityScope.of(context);
     return LayoutBuilder(builder: (context, constraints) {
       final width = constraints.maxWidth;
       final popupLeft = (_hoverX - _previewWidth / 2)
@@ -199,8 +202,8 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
                 child: TweenAnimationBuilder<double>(
                   key: const ValueKey('player.progress.hoverAnimation'),
                   tween: Tween<double>(end: _hovered ? 1 : 0),
-                  duration: const Duration(milliseconds: 150),
-                  curve: Curves.easeOutCubic,
+                  duration: accessibility.fadeDuration(AppMotion.hover),
+                  curve: AppMotion.standardCurve,
                   builder: (context, hoverProgress, child) {
                     return _PlayerSliderVisual(
                       sliderKey: widget.sliderKey,
@@ -208,11 +211,9 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
                       max: widget.max,
                       onChanged: widget.onChanged,
                       trackHeight: 2 + hoverProgress * 3,
-                      thumbRadius: 5.5,
+                      thumbRadius: 5.5 * thumbScale,
                       overlayRadius: 14,
                       thumbVisibility: hoverProgress,
-                      useCatSlimeThumb: true,
-                      catSlimeThumbScale: thumbScale,
                     );
                   },
                 ),
@@ -257,13 +258,10 @@ class _PlayerFramePreview extends StatelessWidget {
       height: _PlayerProgressSliderState._previewHeight,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: const Color(0xf21a2030),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: const Color(0x997f68d9)),
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x99000000), blurRadius: 16, offset: Offset(0, 6)),
-        ],
+        color: playerSurfaceRaised.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: playerBorder),
+        boxShadow: playerSoftShadow,
       ),
       child: Stack(
         fit: StackFit.expand,
@@ -284,7 +282,7 @@ class _PlayerFramePreview extends StatelessWidget {
                           dimension: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Color(0xff9b7cff),
+                            color: appAccentViolet,
                           ),
                         ),
                       )
@@ -395,8 +393,6 @@ class _PlayerSliderVisual extends StatelessWidget {
     required this.thumbRadius,
     required this.overlayRadius,
     required this.thumbVisibility,
-    this.useCatSlimeThumb = false,
-    this.catSlimeThumbScale = 1,
   });
 
   final Key? sliderKey;
@@ -408,31 +404,20 @@ class _PlayerSliderVisual extends StatelessWidget {
   final double overlayRadius;
   final double thumbVisibility;
 
-  /** 仅主进度条启用猫耳史莱姆焦点，音量条继续使用紧凑圆点。 */
-  final bool useCatSlimeThumb;
-
-  /** 高分辨率全屏下猫耳焦点的有限视觉倍率。 */
-  final double catSlimeThumbScale;
-
   @override
   Widget build(BuildContext context) {
     return SliderTheme(
       data: SliderTheme.of(context).copyWith(
         trackHeight: trackHeight,
         trackShape: const _PlayerGradientSliderTrackShape(),
-        activeTrackColor: const Color(0xff8060ff),
-        inactiveTrackColor: const Color(0x8a66718b),
-        thumbColor: Colors.white,
-        thumbShape: useCatSlimeThumb
-            ? _PlayerCatSlimeThumbShape(
-                visibility: thumbVisibility,
-                visualScale: catSlimeThumbScale,
-              )
-            : _PlayerRingSliderThumbShape(
-                radius: thumbRadius,
-                visibility: thumbVisibility,
-              ),
-        overlayColor: const Color(0x387c5cff),
+        activeTrackColor: appAccentViolet,
+        inactiveTrackColor: playerTextMuted.withValues(alpha: 0.38),
+        thumbColor: playerText,
+        thumbShape: _PlayerRingSliderThumbShape(
+          radius: thumbRadius,
+          visibility: thumbVisibility,
+        ),
+        overlayColor: appAccentViolet.withValues(alpha: 0.22),
         overlayShape: RoundSliderOverlayShape(overlayRadius: overlayRadius),
         showValueIndicator: ShowValueIndicator.never,
       ),
@@ -481,12 +466,10 @@ class PlayerHiddenProgressBar extends StatelessWidget {
                 heightFactor: 1,
                 child: const DecoratedBox(
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xff7251ff), Color(0xffa875ff)],
-                    ),
+                    color: appAccentViolet,
                     boxShadow: [
                       BoxShadow(
-                        color: Color(0x667451ff),
+                        color: Color(0x526d5dfc),
                         blurRadius: 3,
                       ),
                     ],
@@ -537,7 +520,8 @@ class _PlayerGradientSliderTrackShape extends SliderTrackShape
     );
     final radius = Radius.circular(trackRect.height / 2);
     final inactivePaint = Paint()
-      ..color = sliderTheme.inactiveTrackColor ?? const Color(0x8a66718b);
+      ..color = sliderTheme.inactiveTrackColor ??
+          playerTextMuted.withValues(alpha: 0.38);
     context.canvas
         .drawRRect(RRect.fromRectAndRadius(trackRect, radius), inactivePaint);
 
@@ -559,9 +543,7 @@ class _PlayerGradientSliderTrackShape extends SliderTrackShape
       return;
     }
     final activePaint = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0xff7251ff), Color(0xffa875ff)],
-      ).createShader(trackRect);
+      ..color = sliderTheme.activeTrackColor ?? appAccentViolet;
     context.canvas.drawRRect(
       RRect.fromRectAndRadius(activeRect, radius),
       activePaint,
@@ -613,131 +595,12 @@ class _PlayerRingSliderThumbShape extends SliderComponentShape {
     canvas.drawCircle(
       center,
       outerRadius,
-      Paint()..color = const Color(0xff7251ff),
+      Paint()..color = appAccentViolet,
     );
     canvas.drawCircle(
       center,
       (radius + pressedGrowth * 0.5) * visibility,
       Paint()..color = sliderTheme.thumbColor ?? Colors.white,
     );
-  }
-}
-
-/**
- * 绘制主进度条专用的猫耳史莱姆焦点。
- *
- * 使用矢量轮廓而不是缩放参考位图，避免十几像素尺寸下出现棋盘底色、锯齿或模糊；
- * 紫蓝渐变与进度轨道保持同一色系，浅色描边只负责从视频画面中分离焦点。
- */
-class _PlayerCatSlimeThumbShape extends SliderComponentShape {
-  const _PlayerCatSlimeThumbShape({
-    required this.visibility,
-    required this.visualScale,
-  });
-
-  /** 0 时完全隐藏，1 时显示完整焦点，并跟随进度条悬停动画取中间值。 */
-  final double visibility;
-
-  /** 仅由全屏视口计算的视觉倍率，调用层已限制在 1 到 1.25。 */
-  final double visualScale;
-
-  @override
-  Size getPreferredSize(bool isEnabled, bool isDiscrete) {
-    return Size.square(26 * visualScale);
-  }
-
-  /** 构建带双耳的圆润史莱姆轮廓，坐标围绕滑块中心定义。 */
-  Path _buildBodyPath() {
-    return Path()
-      ..moveTo(-9.3, -3)
-      ..lineTo(-7.7, -9.1)
-      ..quadraticBezierTo(-7.3, -10.4, -6.1, -9.3)
-      ..lineTo(-3.1, -6.2)
-      ..quadraticBezierTo(0, -7.3, 3.1, -6.2)
-      ..lineTo(6.1, -9.3)
-      ..quadraticBezierTo(7.3, -10.4, 7.7, -9.1)
-      ..lineTo(9.3, -3)
-      ..cubicTo(10.2, -0.7, 10.1, 4.4, 7.2, 6.8)
-      ..cubicTo(4, 9.2, -4, 9.2, -7.2, 6.8)
-      ..cubicTo(-10.1, 4.4, -10.2, -0.7, -9.3, -3)
-      ..close();
-  }
-
-  @override
-  void paint(
-    PaintingContext context,
-    Offset center, {
-    required Animation<double> activationAnimation,
-    required Animation<double> enableAnimation,
-    required bool isDiscrete,
-    required TextPainter labelPainter,
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required TextDirection textDirection,
-    required double value,
-    required double textScaleFactor,
-    required Size sizeWithOverflow,
-  }) {
-    if (visibility <= 0.01) {
-      return;
-    }
-
-    final canvas = context.canvas;
-    final appearScale =
-        Curves.easeOutBack.transform(visibility.clamp(0, 1).toDouble());
-    final pressedScale = 1 + activationAnimation.value * 0.08;
-    final body = _buildBodyPath();
-    final bodyBounds = const Rect.fromLTRB(-10.5, -10.5, 10.5, 9.5);
-
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.scale(appearScale * pressedScale * visualScale);
-
-    // 轻量外光与浅色轮廓让焦点在明暗视频画面上都清晰，但不抢占进度轨道主体。
-    canvas.drawPath(
-      body,
-      Paint()
-        ..color = const Color(0x52755cff)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.2),
-    );
-    canvas.drawPath(body, Paint()..color = const Color(0xffdcd5ff));
-
-    canvas.save();
-    canvas.scale(0.91, 0.91);
-    canvas.drawPath(
-      body,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xffc8b7ff),
-            Color(0xff8d69f7),
-            Color(0xff5548e7),
-          ],
-        ).createShader(bodyBounds),
-    );
-
-    // 小尺寸仅保留高光、眼睛和短笑线，避免完整参考图细节缩小后形成视觉噪点。
-    canvas.drawOval(
-      const Rect.fromLTWH(-5.8, -4.1, 3.8, 2.3),
-      Paint()..color = const Color(0xd9ffffff),
-    );
-    final facePaint = Paint()..color = const Color(0xff17164f);
-    canvas.drawCircle(const Offset(-3, 1.1), 1.15, facePaint);
-    canvas.drawCircle(const Offset(3, 1.1), 1.15, facePaint);
-    canvas.drawArc(
-      const Rect.fromLTWH(-1.6, 1.3, 3.2, 2.8),
-      0.15,
-      math.pi - 0.3,
-      false,
-      Paint()
-        ..color = const Color(0xff17164f)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.8
-        ..strokeCap = StrokeCap.round,
-    );
-    canvas.restore();
-    canvas.restore();
   }
 }

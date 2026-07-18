@@ -1,3 +1,12 @@
+## 2026-07-18 Apple UI Phase 2 播放器全布局
+
+- 播放器视觉层迁入共享 `playerWorkspaceTheme`：顶栏、视频结构表面、浮动控制、右侧列表/详情、设置浮层、恢复面板和删除确认使用同一组 Apple 式深色 token。
+- 顶栏保留返回和紧凑队列入口，并增加当前 filtered queue 序号/筛选摘要；队列搜索、二级标签切换、选择/双击播放、收藏、删除、详情、标签编辑、文件定位、截图、诊断、全屏和设置均未删除。
+- 控制 chrome 使用小范围实色浮动表面，不引入大面积 blur；侧栏选中态从渐变发光改为中性实色加紫色选择反馈，进度焦点从装饰猫耳收敛为简洁圆点。
+- 播放器 30 项 focused tests、完整 193 项测试、`flutter analyze` 和 Windows debug build 通过；50,000 条 filtered queue 搜索基准保持约 25–34ms。
+- Windows 自动化启动 Debug EXE 后两次无法激活唯一目标窗口，错误均为 `failed to activate captured window`；真实点击和截图待按 `CURRENT_TASK.md` 的准确路径人工补验。
+- filtered queue 来源、内容、顺序与当前 index、`PlayerBackend`、SQLite schema、标签语义、缓存队列和用户数据均未改变。
+
 ## 2026-07-17 播放器与卡片统一标签编辑
 
 - 播放器详情不再维护独立的“仅无父级 manual 标签”弹窗数据源，直接复用媒体卡片的当前层级标签编辑入口。

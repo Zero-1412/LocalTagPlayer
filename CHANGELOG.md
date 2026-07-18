@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-18 · Apple UI Phase 2 播放器全布局
+
+- 新增播放器共享深色 token 与 `playerWorkspaceTheme`，统一画布、结构/抬升表面、描边、文字、状态、阴影、弹窗、菜单和输入，删除页面私有主题分支。
+- 顶栏使用 40px 共享交互表面，并同时展示当前文件名、filtered queue 序号与筛选摘要；视频容器升级为内容优先的大圆角结构表面，底部控制改为小范围实色浮动 chrome，无大面积毛玻璃。
+- 右侧列表/详情、队列搜索、二级标签、卡片状态、左滑动作和离屏定位统一为克制实色层级；队列宽度收敛到 360–460px，所有既有功能入口和 ValueKey 保留。
+- 设置一/二/三级浮层、失败恢复与删除确认统一材质并支持 reduced motion；主进度条从装饰性猫耳焦点收敛为简洁圆点和单色紫色轨道，seek、帧预览、音量与全屏行为不变。
+- 播放器 30 项 focused widget tests、完整 193 项测试、`flutter analyze` 和 Windows debug build 通过，3 项显式 benchmark 跳过；50,000 条队列搜索约 25–34ms。
+- Windows 自动化成功启动并唯一定位 Debug 窗口，但连续两次激活均失败并返回 `failed to activate captured window`，因此没有复用旧句柄执行点击或截图；人工复测路径已记录在 `CURRENT_TASK.md`。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缩略图/媒体详情队列、稳定身份和用户数据均未改变。
+
 ## 2026-07-18 · Agent Eval 成本门槛与 Apple UI Phase 1 搜索状态
 
 - Agent Eval 增加 suite 默认工具调用、输入 token 和输出 token 预算；超限成为确定性硬失败，报告保存生效门槛与实际 usage。同一 Codex 工具调用的 started/completed 事件按 `item.id` 去重。

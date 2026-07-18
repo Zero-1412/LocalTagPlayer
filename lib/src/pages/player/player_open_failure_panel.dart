@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/app_theme_tokens.dart';
+
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
 
 /**
@@ -47,23 +49,24 @@ class PlayerOpenFailurePanel extends StatelessWidget {
             margin: const EdgeInsets.all(24),
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xff151c27),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xff49566a)),
+              color: playerSurfaceRaised.withValues(alpha: 0.96),
+              borderRadius: BorderRadius.circular(AppRadius.floating),
+              border: Border.all(color: playerBorder),
+              boxShadow: playerSoftShadow,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(
                   Icons.error_outline_rounded,
-                  color: Color(0xffffb4a9),
+                  color: playerDanger,
                   size: 34,
                 ),
                 const SizedBox(height: 12),
                 const Text(
                   '视频打开失败',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: playerText,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
@@ -74,14 +77,14 @@ class PlayerOpenFailurePanel extends StatelessWidget {
                       ? '可能是编码不支持、文件损坏或文件暂时不可访问。'
                       : '原路径已经失效，稳定记录、标签、收藏和播放进度仍已保留。',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xffc4cede)),
+                  style: TextStyle(color: playerText),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   '错误类型：$failureCode',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(0xff8f9bad),
+                    color: playerTextMuted,
                     fontSize: 12,
                   ),
                 ),

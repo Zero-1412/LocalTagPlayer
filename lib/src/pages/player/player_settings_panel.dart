@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/app_theme_tokens.dart';
 import 'player_playback_mode.dart';
 import 'player_video_aspect_mode.dart';
 
@@ -25,6 +26,7 @@ Future<void> showPlayerSettingsDialog(
   required ValueChanged<PlayerVideoAspectMode> onVideoAspectModeChanged,
   required ValueChanged<double> onPlaybackRateChanged,
 }) async {
+  final accessibility = AppAccessibilityScope.of(context);
   var localMirrorVideo = mirrorVideo;
   var localPlaybackMode = playbackMode;
   var localVideoAspectMode = videoAspectMode;
@@ -35,7 +37,7 @@ Future<void> showPlayerSettingsDialog(
     barrierDismissible: true,
     barrierLabel: '关闭播放设置',
     barrierColor: const Color(0x33000000),
-    transitionDuration: const Duration(milliseconds: 180),
+    transitionDuration: accessibility.motionDuration(AppMotion.popover),
     pageBuilder: (dialogContext, routeAnimation, secondaryAnimation) {
       return StatefulBuilder(
         builder: (context, setDialogState) => LayoutBuilder(
@@ -64,24 +66,31 @@ Future<void> showPlayerSettingsDialog(
                     child: ScaleTransition(
                       key: const ValueKey('player.settings.open.scale'),
                       alignment: Alignment.bottomRight,
-                      scale: Tween<double>(begin: 0.94, end: 1).animate(
+                      scale: Tween<double>(
+                        begin: accessibility.reduceMotion ? 1 : 0.97,
+                        end: 1,
+                      ).animate(
                         revealAnimation,
                       ),
                       child: Material(
                         key: const ValueKey('player.settings.dialog'),
-                        color: const Color(0xf2161d29),
+                        color: playerSurface.withValues(
+                          alpha: AppMaterialOpacity.floating,
+                        ),
                         surfaceTintColor: Colors.transparent,
-                        elevation: 24,
+                        elevation: 18,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: const BorderSide(color: Color(0xff34415a)),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.floating),
+                          side: const BorderSide(color: playerBorder),
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: AnimatedContainer(
                           key: const ValueKey('player.settings.shell'),
                           width: 300,
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOutCubic,
+                          duration:
+                              accessibility.motionDuration(AppMotion.popover),
+                          curve: AppMotion.standardCurve,
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
                               maxHeight: maxPanelHeight,
@@ -121,9 +130,9 @@ Future<void> showPlayerSettingsDialog(
                                           child: Text(
                                             currentPage.title,
                                             style: const TextStyle(
-                                              color: Colors.white,
+                                              color: playerText,
                                               fontSize: 15,
-                                              fontWeight: FontWeight.w900,
+                                              fontWeight: AppTypography.strong,
                                             ),
                                           ),
                                         ),
@@ -135,22 +144,26 @@ Future<void> showPlayerSettingsDialog(
                                     key: const ValueKey(
                                       'player.settings.page.switcher',
                                     ),
-                                    duration: const Duration(milliseconds: 180),
+                                    duration: accessibility.motionDuration(
+                                      AppMotion.popover,
+                                    ),
                                     transitionBuilder: (child, animation) {
                                       final enteringPrimary = child.key ==
                                           const ValueKey(
                                             'player.settings.primary.page',
                                           );
                                       final offsetAnimation = Tween<Offset>(
-                                        begin: Offset(
-                                          enteringPrimary ? -0.12 : 0.12,
-                                          0,
-                                        ),
+                                        begin: accessibility.reduceMotion
+                                            ? Offset.zero
+                                            : Offset(
+                                                enteringPrimary ? -0.08 : 0.08,
+                                                0,
+                                              ),
                                         end: Offset.zero,
                                       ).animate(
                                         CurvedAnimation(
                                           parent: animation,
-                                          curve: Curves.easeOutCubic,
+                                          curve: AppMotion.standardCurve,
                                         ),
                                       );
                                       return FadeTransition(
@@ -359,7 +372,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
             child: InkWell(
               key: const ValueKey('player.settings.advanced.open'),
               onTap: onShowAdvancedSettings,
-              borderRadius: BorderRadius.circular(7),
+              borderRadius: BorderRadius.circular(AppRadius.control),
               child: const SizedBox(
                 height: 44,
                 child: Row(
@@ -369,7 +382,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
                       child: Text(
                         '更多播放设置',
                         style: TextStyle(
-                          color: Color(0xfff0f3fa),
+                          color: playerText,
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                         ),
@@ -378,7 +391,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
                     Icon(
                       Icons.chevron_right_rounded,
                       size: 21,
-                      color: Color(0xffaeb8cc),
+                      color: playerTextMuted,
                     ),
                     SizedBox(width: 8),
                   ],
@@ -416,7 +429,7 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () => onChanged(!value),
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         child: SizedBox(
           height: 44,
           child: Row(
@@ -426,7 +439,7 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
                 child: Text(
                   label,
                   style: const TextStyle(
-                    color: Color(0xfff0f3fa),
+                    color: playerText,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -437,9 +450,9 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
                   value: value,
                   onChanged: onChanged,
                   activeThumbColor: Colors.white,
-                  activeTrackColor: const Color(0xff7047dc),
-                  inactiveThumbColor: const Color(0xffeef1f7),
-                  inactiveTrackColor: const Color(0xff596273),
+                  activeTrackColor: appAccentViolet,
+                  inactiveThumbColor: playerText,
+                  inactiveTrackColor: playerTextMuted,
                 ),
               ),
               const SizedBox(width: 4),
@@ -527,7 +540,7 @@ class _PlayerSettingsNavigationRow extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         child: SizedBox(
           height: 48,
           child: Row(
@@ -537,7 +550,7 @@ class _PlayerSettingsNavigationRow extends StatelessWidget {
                 child: Text(
                   label,
                   style: const TextStyle(
-                    color: Color(0xfff0f3fa),
+                    color: playerText,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -546,7 +559,7 @@ class _PlayerSettingsNavigationRow extends StatelessWidget {
               Text(
                 value,
                 style: const TextStyle(
-                  color: Color(0xffaeb8cc),
+                  color: playerTextMuted,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -555,7 +568,7 @@ class _PlayerSettingsNavigationRow extends StatelessWidget {
               const Icon(
                 Icons.chevron_right_rounded,
                 size: 21,
-                color: Color(0xffaeb8cc),
+                color: playerTextMuted,
               ),
               const SizedBox(width: 8),
             ],
@@ -646,13 +659,15 @@ class _PlayerSettingsOptionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = selected ? Colors.white : const Color(0xffaeb8cc);
+    final foreground = selected ? playerText : playerTextMuted;
     return Material(
-      color: selected ? const Color(0xff342767) : Colors.transparent,
-      borderRadius: BorderRadius.circular(7),
+      color: selected
+          ? appAccentViolet.withValues(alpha: 0.20)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadius.control),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         child: SizedBox(
           height: 44,
           child: Row(
@@ -676,7 +691,7 @@ class _PlayerSettingsOptionRow extends StatelessWidget {
                 const Icon(
                   Icons.check_rounded,
                   size: 19,
-                  color: Color(0xff9b7cff),
+                  color: appAccentViolet,
                 ),
               const SizedBox(width: 12),
             ],

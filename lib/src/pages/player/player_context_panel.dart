@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../models/video_item.dart';
+import '../../widgets/app_theme_tokens.dart';
 import 'player_queue_sidebar.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -65,12 +66,13 @@ class _PlayerSidePanelState extends State<PlayerSidePanel> {
     );
     return Container(
       width: sidebarWidth,
-      margin: const EdgeInsets.fromLTRB(0, 18, 14, 12),
+      margin: const EdgeInsets.fromLTRB(0, 12, 16, 16),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: const Color(0xff0d1528),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xff202c46)),
+        color: playerSurface,
+        borderRadius: BorderRadius.circular(AppRadius.panel),
+        border: Border.all(color: playerBorder),
+        boxShadow: playerSoftShadow,
       ),
       child: Column(
         children: [
@@ -114,22 +116,22 @@ class _PlayerSidePanelTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       // 侧栏顶部只承担视图切换，压缩高度让队列内容与播放器主体保持同一视觉密度。
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.all(AppSpacing.xs),
       decoration: const BoxDecoration(
-        color: Color(0xff0b1324),
-        border: Border(bottom: BorderSide(color: Color(0xff243044))),
+        color: playerSurface,
+        border: Border(bottom: BorderSide(color: playerBorder)),
       ),
       child: SizedBox(
         key: const ValueKey('player.sidebar.tabs.segment'),
-        height: 34,
+        height: 36,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: const Color(0xff0a1324),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xff2b3853), width: 1.2),
+            color: playerSurfaceAlt,
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            border: Border.all(color: playerBorder),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: BorderRadius.circular(AppRadius.control - 1),
             child: Row(
               // 两个分段必须填满外框高度，避免选中渐变只包住图标和文字。
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -205,37 +207,27 @@ class _PlayerSidePanelTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final outerRadius = position == _PlayerSidePanelTabPosition.leading
-        ? const BorderRadius.horizontal(left: Radius.circular(7))
-        : const BorderRadius.horizontal(right: Radius.circular(7));
+        ? const BorderRadius.horizontal(
+            left: Radius.circular(AppRadius.control - 1),
+          )
+        : const BorderRadius.horizontal(
+            right: Radius.circular(AppRadius.control - 1),
+          );
+    final accessibility = AppAccessibilityScope.of(context);
     return Semantics(
       button: true,
       selected: selected,
       child: AnimatedContainer(
         key: surfaceKey,
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
+        duration: accessibility.fadeDuration(AppMotion.hover),
+        curve: AppMotion.standardCurve,
         decoration: BoxDecoration(
-          color: selected ? null : Colors.transparent,
-          gradient: selected
-              ? const LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [Color(0xff5c3bb3), Color(0xff7447c8)],
-                )
-              : null,
+          color: selected
+              ? appAccentViolet.withValues(alpha: 0.24)
+              : Colors.transparent,
           borderRadius: outerRadius,
-          border: selected
-              ? Border.all(color: const Color(0xff8066ff), width: 1.2)
-              : null,
-          boxShadow: selected
-              ? const [
-                  BoxShadow(
-                    color: Color(0x405c45d8),
-                    blurRadius: 12,
-                    offset: Offset(0, 2),
-                  ),
-                ]
-              : null,
+          border:
+              selected ? Border.all(color: appAccentViolet, width: 1.2) : null,
         ),
         child: Material(
           color: Colors.transparent,
@@ -248,17 +240,13 @@ class _PlayerSidePanelTab extends StatelessWidget {
                 Icon(
                   icon,
                   size: 18,
-                  color: selected
-                      ? const Color(0xfff5f2ff)
-                      : const Color(0xff8793a8),
+                  color: selected ? playerText : playerTextMuted,
                 ),
                 const SizedBox(width: 7),
                 Text(
                   label,
                   style: TextStyle(
-                    color: selected
-                        ? const Color(0xfff5f2ff)
-                        : const Color(0xff8793a8),
+                    color: selected ? playerText : playerTextMuted,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     height: 1,
@@ -314,7 +302,12 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
 
     return ListView(
       key: const ValueKey('player.sidebar.details.scroll'),
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.sm,
+        AppSpacing.sm,
+        AppSpacing.sm,
+        AppSpacing.md,
+      ),
       children: [
         Row(
           children: [
@@ -322,9 +315,9 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
               child: Text(
                 '当前视频详情',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: playerText,
                   fontSize: 15,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: AppTypography.strong,
                 ),
               ),
             ),
@@ -345,13 +338,13 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
             tooltip: '编辑标签',
             onPressed: onEditManualTags,
             icon: const Icon(Icons.edit_outlined, size: 18),
-            color: const Color(0xffa9b8ff),
+            color: appAccentViolet,
             visualDensity: VisualDensity.compact,
           ),
           child: SelectableText(
             displayTitle,
             style: const TextStyle(
-              color: Color(0xffe7ecf7),
+              color: playerText,
               fontSize: 13,
               height: 1.45,
               fontWeight: FontWeight.w700,
@@ -370,10 +363,10 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
                 onPressed: onEditManualTags,
                 avatar: const Icon(Icons.add_rounded, size: 16),
                 label: Text(visibleTags.isEmpty ? '添加标签' : '继续添加'),
-                side: const BorderSide(color: Color(0xff39486b)),
-                backgroundColor: const Color(0xff151e36),
+                side: const BorderSide(color: playerBorder),
+                backgroundColor: playerSurfaceRaised,
                 labelStyle: const TextStyle(
-                  color: Color(0xffb9c4dc),
+                  color: playerTextMuted,
                   fontSize: 11,
                 ),
                 visualDensity: VisualDensity.compact,
@@ -422,7 +415,7 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
           child: SelectableText(
             item.path,
             style: const TextStyle(
-              color: Color(0xffaab6d0),
+              color: playerTextMuted,
               fontSize: 12,
               height: 1.45,
             ),
@@ -455,9 +448,9 @@ class _PlayerDetailCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
-        color: const Color(0xff101a2c),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: const Color(0xff25334e)),
+        color: playerSurfaceAlt,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: playerBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -468,7 +461,7 @@ class _PlayerDetailCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: const TextStyle(
-                    color: Color(0xff929fba),
+                    color: playerTextMuted,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -508,14 +501,14 @@ class _PlayerDetailRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         border: showDivider
-            ? const Border(bottom: BorderSide(color: Color(0xff202c43)))
+            ? const Border(bottom: BorderSide(color: playerBorder))
             : null,
       ),
       child: Row(
         children: [
           Expanded(
             child: Text(label,
-                style: const TextStyle(color: Color(0xff9aa7bd), fontSize: 12)),
+                style: const TextStyle(color: playerTextMuted, fontSize: 12)),
           ),
           const SizedBox(width: 12),
           Flexible(
@@ -524,7 +517,7 @@ class _PlayerDetailRow extends StatelessWidget {
               textAlign: TextAlign.right,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Color(0xffd3d9e7),
+                color: playerText,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -548,12 +541,12 @@ class _PlayerDetailTagChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xff272052),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xff4a3f87)),
+        color: appAccentViolet.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(AppRadius.capsule),
+        border: Border.all(color: appAccentViolet.withValues(alpha: 0.48)),
       ),
-      child: Text(label,
-          style: const TextStyle(color: Color(0xffc9c1ff), fontSize: 11)),
+      child:
+          Text(label, style: const TextStyle(color: playerText, fontSize: 11)),
     );
   }
 }
@@ -573,13 +566,15 @@ class _PlayerDetailStatus extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: warning ? const Color(0xff442229) : const Color(0xff25204f),
-        borderRadius: BorderRadius.circular(999),
+        color: warning
+            ? playerDanger.withValues(alpha: 0.16)
+            : appAccentViolet.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(AppRadius.capsule),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: warning ? const Color(0xffffb4b4) : const Color(0xffc9c1ff),
+          color: warning ? playerDanger : playerText,
           fontSize: 10,
           fontWeight: FontWeight.w800,
         ),
@@ -597,14 +592,14 @@ class _PlayerQueueEndNotice extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xff173328),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xff285d48)),
+        color: playerPositive.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: playerPositive.withValues(alpha: 0.45)),
       ),
       child: const Text(
         '当前筛选队列已播放完毕',
         style: TextStyle(
-          color: Color(0xffbbf7d0),
+          color: playerPositive,
           fontSize: 11,
           fontWeight: FontWeight.w800,
         ),

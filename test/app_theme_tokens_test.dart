@@ -40,6 +40,20 @@ void main() {
       highContrast.dialogTheme.surfaceTintColor,
       Colors.transparent,
     );
+
+    final playerRegular = playerWorkspaceTheme(regular);
+    final playerHighContrast = playerWorkspaceTheme(
+      regular,
+      highContrast: true,
+    );
+    expect(playerRegular.scaffoldBackgroundColor, playerCanvas);
+    expect(playerRegular.colorScheme.surface, playerSurface);
+    expect(playerRegular.colorScheme.outline, playerBorder);
+    expect(
+      playerHighContrast.colorScheme.outline,
+      const Color(0xff727b89),
+    );
+    expect(playerRegular.dialogTheme.surfaceTintColor, Colors.transparent);
   });
 
   test('system accessibility flags produce deterministic motion policy', () {

@@ -180,6 +180,33 @@ const libraryText = Color(0xfff1f5f9);
 
 /** 深色工作区的次要文字。 */
 const libraryTextMuted = Color(0xff9baabd);
+
+/** 播放器画布；接近纯黑但保留与视频黑边的可辨层级。 */
+const playerCanvas = Color(0xff090b0f);
+
+/** 播放器结构表面，用于顶栏、侧栏和弹窗。 */
+const playerSurface = Color(0xff13161b);
+
+/** 播放器嵌套表面，用于卡片、输入和分段控件。 */
+const playerSurfaceAlt = Color(0xff1b1f26);
+
+/** 播放器悬停、选中和浮动控制的抬升表面。 */
+const playerSurfaceRaised = Color(0xff232831);
+
+/** 播放器低强调描边。 */
+const playerBorder = Color(0xff303640);
+
+/** 播放器主要文字。 */
+const playerText = Color(0xfff5f7fa);
+
+/** 播放器次要文字。 */
+const playerTextMuted = Color(0xff9da5b2);
+
+/** 播放器危险操作颜色，避免与紫色选择态混淆。 */
+const playerDanger = Color(0xffff6b7a);
+
+/** 播放器完成状态颜色。 */
+const playerPositive = Color(0xff69d49a);
 const appSoftShadow = <BoxShadow>[
   BoxShadow(
     color: Color(0x140f172a),
@@ -194,6 +221,15 @@ const librarySoftShadow = <BoxShadow>[
     color: Color(0x38000000),
     blurRadius: 20,
     offset: Offset(0, 10),
+  ),
+];
+
+/** 播放器浮动控制和侧栏只使用一层克制阴影。 */
+const playerSoftShadow = <BoxShadow>[
+  BoxShadow(
+    color: Color(0x52000000),
+    blurRadius: 24,
+    offset: Offset(0, 12),
   ),
 ];
 const appMotionDuration = AppMotion.hover;
@@ -460,6 +496,89 @@ ThemeData libraryWorkspaceTheme(ThemeData base) {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: const BorderSide(color: libraryBorder),
+      ),
+    ),
+  );
+}
+
+/**
+ * 为播放器路由创建 Apple 式深色局部主题。
+ *
+ * 主题只收口颜色、圆角、焦点和浮层材质，不改变播放、队列、快捷键或平台边界。
+ * [highContrast] 生效时提高结构描边亮度，并继续使用实色表面避免透明层级失真。
+ */
+ThemeData playerWorkspaceTheme(
+  ThemeData base, {
+  bool highContrast = false,
+}) {
+  final outline = highContrast ? const Color(0xff727b89) : playerBorder;
+  final scheme = ColorScheme.dark(
+    primary: appAccentViolet,
+    secondary: appAccent,
+    surface: playerSurface,
+    onSurface: playerText,
+    outline: outline,
+    outlineVariant: outline,
+    error: playerDanger,
+  );
+  const inputBorder = OutlineInputBorder(
+    borderSide: BorderSide(color: playerBorder),
+    borderRadius: BorderRadius.all(Radius.circular(AppRadius.control)),
+  );
+  return base.copyWith(
+    colorScheme: scheme,
+    scaffoldBackgroundColor: playerCanvas,
+    textTheme: base.textTheme.apply(
+      bodyColor: playerText,
+      displayColor: playerText,
+    ),
+    iconTheme: const IconThemeData(color: playerTextMuted),
+    dividerColor: outline,
+    dialogTheme: DialogThemeData(
+      backgroundColor: playerSurface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 18,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.floating),
+        side: BorderSide(color: outline),
+      ),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: playerSurfaceRaised,
+      surfaceTintColor: Colors.transparent,
+      elevation: 16,
+      textStyle: const TextStyle(color: playerText, fontSize: 13),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        side: BorderSide(color: outline),
+      ),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: playerSurface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.floating),
+        ),
+      ),
+    ),
+    inputDecorationTheme: const InputDecorationTheme(
+      filled: true,
+      fillColor: playerSurfaceAlt,
+      hintStyle: TextStyle(color: playerTextMuted),
+      enabledBorder: inputBorder,
+      border: inputBorder,
+      focusedBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: appAccentViolet, width: 1.5),
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.control)),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(
+        foregroundColor: const WidgetStatePropertyAll(playerText),
+        overlayColor: WidgetStatePropertyAll(
+          appAccentViolet.withValues(alpha: 0.12),
+        ),
       ),
     ),
   );
