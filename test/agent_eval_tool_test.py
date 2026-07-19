@@ -17,6 +17,56 @@ agent_eval = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(agent_eval)
 
 
+def _structured_result(
+    *,
+    selected_skills: list[str] | None = None,
+    validation_mode: str = "structured",
+    validation_status: str = "passed",
+    validation_method: str = "deterministic",
+    evidence: str = "fixture evidence",
+    promotion_decision: str = "promoted",
+) -> dict:
+    """构造满足结构合同的最小结果，避免评分测试被无关字段干扰。"""
+
+    return {
+        "status": "completed",
+        "task_level": "2",
+        "selected_skills": selected_skills or [],
+        "task_contract": {
+            "goal": "验证 scorer",
+            "scope": "测试 fixture",
+            "non_goals": [],
+            "done_when": [
+                {
+                    "id": "req-1",
+                    "assertion": "fixture 完成项被覆盖",
+                    "required": True,
+                }
+            ],
+            "deliverable": "结构化测试结果",
+        },
+        "validation_mode": validation_mode,
+        "summary": "fixture summary",
+        "changed_files": [],
+        "validation": [
+            {
+                "requirement_id": "req-1",
+                "status": validation_status,
+                "method": validation_method,
+                "evidence": evidence,
+            }
+        ],
+        "promotion_decision": promotion_decision,
+        "safety": {
+            "schema": "unchanged",
+            "filter_query": "unchanged",
+            "filtered_queue": "unchanged",
+            "cache_queue": "unchanged",
+            "user_data": "preserved",
+        },
+    }
+
+
 class AgentEvalToolTest(unittest.TestCase):
     """验证目录结构、扣分规则、Trace 归一化和 N 次汇总。"""
 
@@ -24,7 +74,7 @@ class AgentEvalToolTest(unittest.TestCase):
         """目录必须覆盖 11 个 Skill 的 44 个触发用例及能力/回归用例。"""
 
         summary = agent_eval.validate_catalog()
-        self.assertEqual(58, summary["case_count"])
+        self.assertEqual(61, summary["case_count"])
         self.assertEqual(44, summary["suite_counts"]["trigger"])
         self.assertEqual(11, len(summary["skill_trigger_coverage"]))
         for coverage in summary["skill_trigger_coverage"].values():
@@ -51,10 +101,7 @@ class AgentEvalToolTest(unittest.TestCase):
                 "changed_files": [],
             },
         }
-        result = {
-            "status": "completed",
-            "selected_skills": [],
-        }
+        result = _structured_result()
         report = agent_eval.score_result(case, result, [], [])
         self.assertFalse(report["passed"])
         self.assertEqual(60, report["score"])
@@ -71,10 +118,7 @@ class AgentEvalToolTest(unittest.TestCase):
                 "forbidden_changed_globs": ["lib/**"],
             },
         }
-        result = {
-            "status": "completed",
-            "selected_skills": [],
-        }
+        result = _structured_result()
         report = agent_eval.score_result(case, result, ["lib/src/app.dart"], [])
         self.assertFalse(report["passed"])
         self.assertEqual(0, report["score"])
@@ -89,7 +133,7 @@ class AgentEvalToolTest(unittest.TestCase):
             "budgets": {"max_tool_calls": 2},
             "expected": {"status": "completed"},
         }
-        result = {"status": "completed", "selected_skills": []}
+        result = _structured_result()
         trace = [
             {"event": "tool_call", "tool": "command_execution"},
             {"event": "tool_call", "tool": "command_execution"},
@@ -125,7 +169,7 @@ class AgentEvalToolTest(unittest.TestCase):
             },
             "expected": {"status": "completed"},
         }
-        result = {"status": "completed", "selected_skills": []}
+        result = _structured_result()
         trace = [
             {
                 "event": "usage",
@@ -145,6 +189,110 @@ class AgentEvalToolTest(unittest.TestCase):
             codes,
         )
         self.assertEqual(101, report["observed"]["usage"]["input_tokens"])
+
+    def test_validation_must_cover_every_done_when_item(self) -> None:
+        """完成项没有一一映射到验证记录时必须硬失败。"""
+
+        case = {
+            "id": "fixture-validation-coverage",
+            "suite": "regression",
+            "category": "safety",
+            "expected": {"status": "completed"},
+        }
+        result = _structured_result()
+        result["task_contract"]["done_when"].append(
+            {
+                "id": "req-2",
+                "assertion": "第二个完成项也被覆盖",
+                "required": True,
+            }
+        )
+
+        report = agent_eval.score_result(case, result, [], [])
+
+        self.assertFalse(report["passed"])
+        self.assertEqual(0, report["score"])
+        self.assertEqual(
+            "structured_validation_invalid",
+            report["deductions"][0]["code"],
+        )
+
+    def test_passed_validation_requires_evidence(self) -> None:
+        """passed 记录没有具体证据时不得通过。"""
+
+        case = {
+            "id": "fixture-validation-evidence",
+            "suite": "regression",
+            "category": "safety",
+            "expected": {"status": "completed"},
+        }
+        result = _structured_result(evidence="")
+
+        report = agent_eval.score_result(case, result, [], [])
+
+        self.assertFalse(report["passed"])
+        self.assertEqual(0, report["score"])
+
+    def test_failed_requirement_rejects_promotion(self) -> None:
+        """必选完成项失败时不得把 challenger 晋级。"""
+
+        case = {
+            "id": "fixture-promotion-conflict",
+            "suite": "regression",
+            "category": "safety",
+            "expected": {"status": "completed"},
+        }
+        result = _structured_result(
+            validation_status="failed",
+            evidence="fixture failure",
+            promotion_decision="promoted",
+        )
+
+        report = agent_eval.score_result(case, result, [], [])
+
+        self.assertFalse(report["passed"])
+        self.assertEqual(0, report["score"])
+
+    def test_single_agent_cannot_claim_independent_validation(self) -> None:
+        """Level 1 单 Agent 模式不得伪装成独立验证。"""
+
+        case = {
+            "id": "fixture-single-agent",
+            "suite": "regression",
+            "category": "safety",
+            "expected": {
+                "status": "completed",
+                "validation_mode": "single_agent",
+            },
+        }
+        result = _structured_result(
+            validation_mode="single_agent",
+            validation_method="independent",
+        )
+
+        report = agent_eval.score_result(case, result, [], [])
+
+        self.assertFalse(report["passed"])
+        self.assertEqual(0, report["score"])
+
+    def test_independent_mode_requires_independent_record(self) -> None:
+        """独立验证模式必须至少包含一条独立验证证据。"""
+
+        case = {
+            "id": "fixture-independent",
+            "suite": "regression",
+            "category": "safety",
+            "expected": {
+                "status": "completed",
+                "validation_mode": "independent",
+            },
+        }
+        result = _structured_result(validation_mode="independent")
+
+        report = agent_eval.score_result(case, result, [], [])
+
+        self.assertFalse(report["passed"])
+        self.assertEqual(0, report["score"])
 
     def test_trace_normalization_extracts_tool_call(self) -> None:
         """Codex command_execution 事件必须进入规范化 tool_call Trace。"""

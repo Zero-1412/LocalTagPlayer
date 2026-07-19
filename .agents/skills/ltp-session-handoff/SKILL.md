@@ -18,9 +18,12 @@ description: Local Tag Player 会话交接技能。用于 Codex 会话过长、c
 
 ```text
 目标：
+任务级别 / 验证模式：
 当前状态：
 已改文件：
-验证：
+剩余 done_when：
+验证记录：
+晋级状态：promoted / not_promoted / needs_manual_qa
 剩余阻塞：
 禁止改动：
 下一条精确命令或任务：
@@ -30,4 +33,6 @@ description: Local Tag Player 会话交接技能。用于 Codex 会话过长、c
 
 - 不复制完整历史。
 - 不粘贴完整日志。
+- 只保留最近一次失败原因、已确认事实和仍未覆盖的 `done_when`。
+- 验证记录必须区分 `passed / failed / blocked / not_run`，未执行项不能写成通过。
 - 只保留继续开发所需的最小上下文。

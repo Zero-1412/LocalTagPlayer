@@ -1,5 +1,16 @@
 ﻿# CURRENT_TASK.md
 
+## 2026-07-19 Agent Harness 分级结构化验证
+
+- 目标：Level 1 保持单 Agent 最小修复；Level 2 使用结构化验证；Level 3 使用停止编辑的独立只读验证阶段。
+- 范围：仅修改 Agent Harness 文档、基础 Skill、Agent Eval schema/scorer/tests/cases 和本任务记录，不触碰 Flutter 业务代码。
+- done_when：结构合同可机器校验；三个新增回归分别覆盖 Level 1 单 Agent、Level 2 完成项映射、Level 3 缺证据拒绝晋级；零模型成本验证与三个 N=5 均通过后才提交推送。
+- 交付物：可复用 TaskContract、ValidationRecord、PromotionDecision、retry archive 规则及确定性 scorer 门禁。
+- 非目标：不重写全部领域 Skill，不迁移历史任务记录，不修改 schema、过滤、播放队列、缓存队列或用户数据。
+- 当前状态：补丁完成。零模型成本验证确认 61 个用例、44/6/11 suite 分布、11 个 Skill 均保持 2 正 2 负覆盖，16 项 scorer 单元测试及三个修改 Skill 的目录验证全部通过。
+- 运行时验证：Codex CLI `0.144.5`、`gpt-5.6-terra`、`reasoning_effort=low`、workspace snapshot；Level 1 单 Agent、Level 2 结构化完成项映射、Level 3 独立缺证据拒绝晋级三组回归均为 N=5、5/5、平均 100 分、`stable=true`、零基础设施错误和零真实工作树改动。
+- 晋级结论：`promoted`。本轮只修改 Harness/Eval/基础 Skill，不要求 `flutter analyze`、Windows build 或真实 UI 点击；SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列和用户数据均未改变。
+
 ## 2026-07-19 Apple UI Phase 3 维护页缩放、焦点与风险反馈
 
 - 备份与缓存页保持原业务和布局结构，新增 125%/150% 键盘回归：备份按“开关 → 立即备份 → 检查完整性 → 导出”遍历，缓存失败区按“详情 → 重试 → 清除标记”遍历；现有 125% 实窗无裁切或溢出。
@@ -933,27 +944,11 @@ flutter build windows --debug
 6. 完善诊断能力：继续增加 FFmpeg/FFprobe 实际调用耗时、可复制诊断摘要和播放诊断入口联动。
 7. 继续优化媒体库 schema：推进 `videoId + fingerprint + mutable path`，增加 `missing` 标记、单文件 relink 和批量路径替换。
 
-## 新 Chat 启动提示词
+## 新 Chat 启动入口
 
-```text
-这是 Flutter Windows 本地标签播放器项目，路径：<project-root>。
-
-请先阅读：
-- PROJECT.md
-- ARCHITECTURE.md
-- CURRENT_TASK.md
-- ROADMAP.md
-- <private-planning-document>
-- 对应 docs/chat_tasks/CHAT_*.md
-
-后续方向以 local_tag_player_flutter_cross_platform_plan_v2.md 为准；当前项目实现只代表历史状态。
-
-不要依赖旧聊天历史。先读规划、任务文档和相关代码再改。修改后运行：
-- flutter analyze
-- flutter build windows --debug
-
-当前任务：<在这里写新的具体任务>
-```
+新会话统一从 `NEW_CHAT_BOOTSTRAP.md` 路由。先按 Level 读取最小上下文；只有 Level 3、
+共享 contract、schema、平台边界或优先级任务才读取架构、路线图和外部跨平台计划。
+不要复制本文件中的历史启动提示，也不要无条件加载全部项目文档。
 
 
 

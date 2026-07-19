@@ -25,7 +25,19 @@ FilterQuery / TagQueryService / PlayerBackend / player queue / cache queue -> Le
 允许文件：
 禁止文件：
 是否需要先写计划：是/否
+验证模式：single_agent / structured / independent
 ```
+
+验证模式与 Level 固定对应：
+
+```text
+Level 1 -> single_agent
+Level 2 -> structured
+Level 3 -> independent
+```
+
+`independent` 表示实现结束后进入停止编辑的独立验证阶段；可由独立 Agent，
+或上下文重置后的只读验证回合承担，不要求 Level 1 小修复引入多 Agent。
 
 ## 约束
 

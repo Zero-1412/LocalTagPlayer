@@ -39,6 +39,21 @@ summary.json           N 次稳定性和 suite 汇总
 
 报告同时记录 Codex CLI 版本、显式或默认模型标识、延迟和 token；CLI 未提供可靠价格表时 `estimated_cost_usd` 保持 `null`，不得编造成本。
 
+## 结构化完成合同
+
+所有被测结果必须输出：
+
+```text
+task_contract: goal / scope / non_goals / done_when / deliverable
+validation_mode: single_agent / structured / independent
+validation: requirement_id / status / method / evidence
+promotion_decision: promoted / not_promoted / needs_manual_qa
+```
+
+Scorer 会确定性检查 `done_when.id` 唯一、完成项与验证记录一一对应、`passed` 证据非空、
+验证模式与方法一致，以及失败/阻塞项不会被错误晋级。Level 1 使用 `single_agent`；Level 2
+使用 `structured`；Level 3 使用 `independent`，且至少包含一条独立只读验证记录。
+
 ## 用例分层
 
 ### Trigger
@@ -74,6 +89,8 @@ summary.json           N 次稳定性和 suite 汇总
 - 修改只读用例或命中禁止文件：扣 100。
 - 缺少必要工具：每项扣 15；使用禁止工具：每项扣 30。
 - 工具顺序不满足用例：扣 15。
+- TaskContract、验证覆盖或晋级逻辑不一致：扣 100。
+- 验证模式或预期晋级结论错误：扣 100。
 - 缺少 Rubric judge：扣 20；主观评分低于 80：扣 30。
 - Rubric 出现硬失败：扣 100。
 
@@ -94,6 +111,7 @@ summary.json           N 次稳定性和 suite 汇总
 - `item.started` 与 `item.completed` 使用同一 `item.id` 时只计一次真实工具调用，避免事件生命周期重复消耗预算。
 - scorer 把生效预算和实际 usage 写入 `report.json`；基础设施错误报告也保留同样结构。
 - 被测 prompt 会声明本次门槛，并要求精确搜索、只读必要片段、停止重复读取；具体领域 Skill 仍负责定义安全的最小证据链。
+- 单试次达到硬超时后，运行器会终止对应 Codex 完整进程树；Windows 不得只结束 wrapper 而留下继续占用管道的子进程。
 
 `reg-player-source-queue` 是关键共享队列诊断，单独收紧为 12 次工具调用、600,000 输入 token 和 8,000 输出 token。60 万门槛按 challenger 的 487,159 输入 token 校准，仍相对旧五轮平均约 139 万输入 token 保留超过 50% 的压缩要求；工具门槛没有放宽。
 
@@ -119,6 +137,15 @@ summary.json           N 次稳定性和 suite 汇总
 - 四组关键回归均无基础设施错误和文件改动；产物位于被 Git 忽略的 `artifacts/agent_eval/20260718-*`，不提交包含真实本地 Trace 的运行目录。
 - 本轮零模型成本验证确认 58 个用例、44/6/8 suite 分布、11 个 Skill 的 2 正 2 负覆盖；11 项 scorer 单元测试全部通过。
 
+## 2026-07-19 分级结构化验证基线
+
+- Codex CLI：`0.144.5`；模型：`gpt-5.6-terra`；`reasoning_effort=low`；workspace snapshot：启用；单试次硬超时：1200 秒。
+- `reg-level1-single-agent`：5/5，平均 100 分，`stable=true`；累计输入 113,198、缓存输入 49,920、输出 5,321 token，平均耗时 131.765 秒。
+- `reg-level2-validation-coverage`：5/5，平均 100 分，`stable=true`；累计输入 404,105、缓存输入 275,200、输出 14,722 token，平均耗时 158.428 秒。
+- `reg-level3-validator-rejection`：5/5，平均 100 分，`stable=true`；累计输入 753,549、缓存输入 544,768、输出 14,119 token，平均耗时 164.500 秒。
+- 三组均为 5 个有效试次、零基础设施错误、零真实工作树改动；产物位于 Git 忽略的 `artifacts/agent_eval/20260719-final-snapshot-*`，不提交本地 Trace。
+- 零模型成本验证确认 61 个用例、44/6/11 suite 分布、11 个 Skill 的 2 正 2 负覆盖；16 项 scorer 单元测试和三个修改 Skill 的目录验证全部通过。
+
 ## 命令
 
 先执行零模型成本的目录与评分器验证：
@@ -132,6 +159,14 @@ python -m unittest discover -s test -p agent_eval_tool_test.py -v
 
 ```powershell
 python tool/agent_eval.py run --case-id reg-filter-semantics --trials 5
+```
+
+验证分级结构化合同的三个隔离回归：
+
+```powershell
+python tool/agent_eval.py run --case-id reg-level1-single-agent --trials 5 --workspace-snapshot --model gpt-5.6-terra --reasoning-effort low --trial-timeout-seconds 1200
+python tool/agent_eval.py run --case-id reg-level2-validation-coverage --trials 5 --workspace-snapshot --model gpt-5.6-terra --reasoning-effort low --trial-timeout-seconds 1200
+python tool/agent_eval.py run --case-id reg-level3-validator-rejection --trials 5 --workspace-snapshot --model gpt-5.6-terra --reasoning-effort low --trial-timeout-seconds 1200
 ```
 
 运行 Apple UI 能力用例并启用独立 Rubric judge：

@@ -7,9 +7,12 @@
     "status",
     "task_level",
     "selected_skills",
+    "task_contract",
+    "validation_mode",
     "summary",
     "changed_files",
     "validation",
+    "promotion_decision",
     "safety"
   ],
   "properties": {
@@ -25,6 +28,38 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "task_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal", "scope", "non_goals", "done_when", "deliverable"],
+      "properties": {
+        "goal": { "type": "string", "minLength": 1 },
+        "scope": { "type": "string", "minLength": 1 },
+        "non_goals": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "done_when": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "assertion", "required"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "assertion": { "type": "string", "minLength": 1 },
+              "required": { "type": "boolean" }
+            }
+          }
+        },
+        "deliverable": { "type": "string", "minLength": 1 }
+      }
+    },
+    "validation_mode": {
+      "type": "string",
+      "enum": ["single_agent", "structured", "independent"]
+    },
     "summary": {
       "type": "string",
       "minLength": 1
@@ -35,7 +70,28 @@
     },
     "validation": {
       "type": "array",
-      "items": { "type": "string" }
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requirement_id", "status", "method", "evidence"],
+        "properties": {
+          "requirement_id": { "type": "string", "minLength": 1 },
+          "status": {
+            "type": "string",
+            "enum": ["passed", "failed", "blocked", "not_run"]
+          },
+          "method": {
+            "type": "string",
+            "enum": ["deterministic", "same_agent", "independent", "human"]
+          },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "promotion_decision": {
+      "type": "string",
+      "enum": ["promoted", "not_promoted", "needs_manual_qa"]
     },
     "safety": {
       "type": "object",

@@ -9,6 +9,7 @@ import fnmatch
 import json
 import os
 from pathlib import Path
+import signal
 import shutil
 import subprocess
 import sys
@@ -171,6 +172,18 @@ def _register_case(
         )
     if any(not isinstance(value, int) or value < 1 for value in budgets.values()):
         raise EvalError(f"Eval 用例预算必须是正整数：{case_id}")
+    expected = case["expected"]
+    validation_mode = expected.get("validation_mode")
+    if validation_mode not in {None, "single_agent", "structured", "independent"}:
+        raise EvalError(f"Eval 用例 validation_mode 非法：{case_id}")
+    promotion_decision = expected.get("promotion_decision")
+    if promotion_decision not in {
+        None,
+        "promoted",
+        "not_promoted",
+        "needs_manual_qa",
+    }:
+        raise EvalError(f"Eval 用例 promotion_decision 非法：{case_id}")
     cases[case_id] = case
 
 
@@ -233,6 +246,91 @@ def _matches_any(path: str, patterns: Iterable[str]) -> bool:
     return any(fnmatch.fnmatch(normalized, pattern) for pattern in patterns)
 
 
+def _structured_validation_errors(result: dict[str, Any]) -> list[str]:
+    """确定性检查任务合同、完成项证据和晋级决策是否自洽。"""
+
+    errors: list[str] = []
+    contract = result.get("task_contract")
+    if not isinstance(contract, dict):
+        return ["缺少 task_contract"]
+
+    done_when = contract.get("done_when")
+    if not isinstance(done_when, list) or not done_when:
+        return ["task_contract.done_when 必须至少包含一项"]
+
+    requirement_ids: list[str] = []
+    required_by_id: dict[str, bool] = {}
+    for item in done_when:
+        if not isinstance(item, dict):
+            errors.append("done_when 条目必须是对象")
+            continue
+        requirement_id = str(item.get("id", "")).strip()
+        assertion = str(item.get("assertion", "")).strip()
+        if not requirement_id or not assertion:
+            errors.append("done_when 的 id 和 assertion 不能为空")
+            continue
+        requirement_ids.append(requirement_id)
+        required_by_id[requirement_id] = item.get("required") is True
+    if len(requirement_ids) != len(set(requirement_ids)):
+        errors.append("done_when.id 必须唯一")
+
+    validation = result.get("validation")
+    if not isinstance(validation, list) or not validation:
+        return [*errors, "validation 必须至少包含一项"]
+
+    records_by_id: dict[str, dict[str, Any]] = {}
+    for record in validation:
+        if not isinstance(record, dict):
+            errors.append("validation 条目必须是对象")
+            continue
+        requirement_id = str(record.get("requirement_id", "")).strip()
+        if not requirement_id:
+            errors.append("validation.requirement_id 不能为空")
+            continue
+        if requirement_id in records_by_id:
+            errors.append(f"完成项 {requirement_id} 存在重复验证记录")
+            continue
+        records_by_id[requirement_id] = record
+        if record.get("status") == "passed" and not str(
+            record.get("evidence", "")
+        ).strip():
+            errors.append(f"完成项 {requirement_id} 标记 passed 但没有证据")
+
+    requirement_set = set(requirement_ids)
+    validation_set = set(records_by_id)
+    missing = sorted(requirement_set - validation_set)
+    unknown = sorted(validation_set - requirement_set)
+    if missing:
+        errors.append("缺少验证记录：" + ", ".join(missing))
+    if unknown:
+        errors.append("存在未知验证记录：" + ", ".join(unknown))
+
+    validation_mode = result.get("validation_mode")
+    methods = {record.get("method") for record in records_by_id.values()}
+    if validation_mode == "single_agent" and "independent" in methods:
+        errors.append("single_agent 模式不得声称 independent 验证")
+    if validation_mode == "independent" and "independent" not in methods:
+        errors.append("independent 模式至少需要一条 independent 验证记录")
+
+    required_statuses = {
+        requirement_id: records_by_id.get(requirement_id, {}).get("status")
+        for requirement_id, is_required in required_by_id.items()
+        if is_required
+    }
+    promotion_decision = result.get("promotion_decision")
+    if any(status == "failed" for status in required_statuses.values()):
+        if promotion_decision != "not_promoted":
+            errors.append("必选完成项 failed 时只能 not_promoted")
+    if any(status in {"blocked", "not_run", None} for status in required_statuses.values()):
+        if promotion_decision == "promoted":
+            errors.append("必选完成项 blocked/not_run 时不得 promoted")
+    if promotion_decision == "promoted" and any(
+        status != "passed" for status in required_statuses.values()
+    ):
+        errors.append("promoted 要求全部必选完成项 passed")
+    return errors
+
+
 def score_result(
     case: dict[str, Any],
     result: dict[str, Any],
@@ -253,9 +351,31 @@ def score_result(
     if result.get("status") != expected.get("status", "completed"):
         deduct(100, "status_mismatch", "任务完成状态与期望不一致")
 
+    structured_errors = _structured_validation_errors(result)
+    if structured_errors:
+        deduct(
+            100,
+            "structured_validation_invalid",
+            "；".join(structured_errors),
+        )
+
     expected_level = expected.get("task_level")
     if expected_level is not None and result.get("task_level") != expected_level:
         deduct(20, "task_level_mismatch", f"期望 Level {expected_level}")
+
+    expected_validation_mode = expected.get("validation_mode")
+    if (
+        expected_validation_mode is not None
+        and result.get("validation_mode") != expected_validation_mode
+    ):
+        deduct(100, "validation_mode_mismatch", f"期望验证模式 {expected_validation_mode}")
+
+    expected_promotion = expected.get("promotion_decision")
+    if (
+        expected_promotion is not None
+        and result.get("promotion_decision") != expected_promotion
+    ):
+        deduct(100, "promotion_decision_mismatch", f"期望晋级结论 {expected_promotion}")
 
     selected = set(result.get("selected_skills", []))
     for skill in expected.get("required_skills", []):
@@ -357,6 +477,8 @@ def score_result(
         "observed": {
             "selected_skills": sorted(selected),
             "changed_files": observed_changed_files,
+            "validation_mode": result.get("validation_mode"),
+            "promotion_decision": result.get("promotion_decision"),
             "tool_calls": tool_names,
             "budgets": budgets,
             "usage": usage,
@@ -536,7 +658,13 @@ def _build_agent_prompt(case: dict[str, Any]) -> str:
     return (
         "你正在接受 Local Tag Player Agent Eval。按仓库 AGENTS.md 和 repo skills 正常处理下列任务。"
         "不要猜测评分标准，不要读取 evals/agent 中的期望结果。最终必须按 output schema 返回；"
-        "selected_skills 填写本次实际采用的 repo skill，task_level 填写实际等级。\n"
+        "selected_skills 填写本次实际采用的 repo skill，task_level 填写实际等级。"
+        "task_contract.done_when 使用本次结果可核验的唯一 id；validation 必须与这些 id 一一对应。"
+        "没有执行的检查写 not_run/blocked，不能写 passed；passed 必须给出具体证据。"
+        "Level 1 使用 single_agent，Level 2 使用 structured，Level 3 使用 independent；"
+        "independent 表示停止编辑后的独立只读验证阶段，不要求真的创建子 Agent。"
+        "有必选项 failed 时 promotion_decision 必须是 not_promoted；"
+        "有必选项 blocked/not_run 时不得 promoted。\n"
         "本次执行必须遵守确定性成本预算："
         f"工具调用不超过 {budgets['max_tool_calls']} 次，"
         f"累计输入 token 不超过 {budgets['max_input_tokens']}，"
@@ -553,6 +681,8 @@ def _run_codex(
     result_path: Path,
     raw_trace_path: Path,
     model: str | None,
+    reasoning_effort: str | None = None,
+    timeout_seconds: int = 900,
 ) -> tuple[int, float, str]:
     """在隔离仓库以只读 sandbox 执行一次 Codex，并捕获完整 JSONL。"""
 
@@ -576,22 +706,61 @@ def _run_codex(
     ]
     if model:
         command.extend(["--model", model])
+    if reasoning_effort:
+        command.extend(["--config", f'model_reasoning_effort="{reasoning_effort}"'])
     command.append("-")
     started = time.monotonic()
-    completed = subprocess.run(
+    popen_options: dict[str, Any] = {}
+    if os.name == "nt":
+        # 为 Windows 命令包装器建立独立进程组，超时时可连同 node/codex 子进程一起终止。
+        popen_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_options["start_new_session"] = True
+    process = subprocess.Popen(
         command,
         cwd=repo,
-        input=prompt,
-        capture_output=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",
+        **popen_options,
     )
+    try:
+        stdout, stderr = process.communicate(input=prompt, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        if os.name == "nt":
+            # 只终止当前隔离 trial 的进程树，避免 codex.cmd 退出后真实 codex 子进程继续占用管道。
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        else:
+            os.killpg(process.pid, signal.SIGKILL)
+        try:
+            stdout, _ = process.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, _ = process.communicate()
+        elapsed = time.monotonic() - started
+        raw_trace_path.write_text(
+            _redact_text(stdout or "", (repo,)), encoding="utf-8"
+        )
+        return (
+            124,
+            elapsed,
+            f"Codex exec 超过单 trial 时限（{timeout_seconds} 秒）",
+        )
     elapsed = time.monotonic() - started
     raw_trace_path.write_text(
-        _redact_text(completed.stdout, (repo,)), encoding="utf-8"
+        _redact_text(stdout, (repo,)), encoding="utf-8"
     )
-    return completed.returncode, elapsed, _redact_text(completed.stderr, (repo,))
+    return process.returncode, elapsed, _redact_text(stderr, (repo,))
 
 
 def _run_rubric_judge(
@@ -600,6 +769,8 @@ def _run_rubric_judge(
     candidate_result: dict[str, Any],
     artifact_dir: Path,
     model: str | None,
+    reasoning_effort: str | None,
+    timeout_seconds: int,
 ) -> dict[str, Any]:
     """用独立 Codex 回合按指定 Rubric 评价候选结果。"""
 
@@ -613,7 +784,14 @@ def _run_rubric_judge(
         f"候选输出:\n{json.dumps(candidate_result, ensure_ascii=False)}"
     )
     return_code, _, stderr = _run_codex(
-        repo, prompt, JUDGE_SCHEMA, judge_result_path, judge_raw_trace, model
+        repo,
+        prompt,
+        JUDGE_SCHEMA,
+        judge_result_path,
+        judge_raw_trace,
+        model,
+        reasoning_effort,
+        timeout_seconds,
     )
     if return_code != 0 or not judge_result_path.exists():
         raise EvalError(f"Rubric judge 失败：{stderr.strip()}")
@@ -630,6 +808,8 @@ def run_case(
     model: str | None,
     with_judge: bool,
     workspace_snapshot: bool,
+    reasoning_effort: str | None,
+    trial_timeout_seconds: int,
 ) -> list[dict[str, Any]]:
     """在每次独立临时克隆中运行用例，归档 Trace、结果、变化和评分。"""
 
@@ -657,6 +837,8 @@ def run_case(
                 result_path,
                 raw_trace,
                 model,
+                reasoning_effort,
+                trial_timeout_seconds,
             )
             trace_events = _normalize_raw_trace(raw_trace, artifact_dir / "trace.jsonl")
             observed_changes = _git_changed_files(isolated_repo)
@@ -665,9 +847,31 @@ def run_case(
                     "status": "failed",
                     "task_level": "none",
                     "selected_skills": [],
+                    "task_contract": {
+                        "goal": "记录 Agent Eval 基础设施失败",
+                        "scope": "当前隔离运行",
+                        "non_goals": [],
+                        "done_when": [
+                            {
+                                "id": "infra-result",
+                                "assertion": "生成可读取的失败结果",
+                                "required": True,
+                            }
+                        ],
+                        "deliverable": "基础设施错误报告",
+                    },
+                    "validation_mode": "single_agent",
                     "summary": stderr.strip() or "Codex exec 未生成结果",
                     "changed_files": [],
-                    "validation": [],
+                    "validation": [
+                        {
+                            "requirement_id": "infra-result",
+                            "status": "blocked",
+                            "method": "deterministic",
+                            "evidence": stderr.strip() or "Codex exec 未生成结果",
+                        }
+                    ],
+                    "promotion_decision": "not_promoted",
                     "safety": {
                         "schema": "unknown",
                         "filter_query": "unknown",
@@ -711,7 +915,13 @@ def run_case(
                 rubric_name = case["expected"].get("rubric")
                 if rubric_name and with_judge:
                     judge_result = _run_rubric_judge(
-                        isolated_repo, rubric_name, result, artifact_dir, model
+                        isolated_repo,
+                        rubric_name,
+                        result,
+                        artifact_dir,
+                        model,
+                        reasoning_effort,
+                        trial_timeout_seconds,
                     )
                 report = score_result(
                     case, result, observed_changes, trace_events, judge_result
@@ -722,6 +932,7 @@ def run_case(
                     "duration_seconds": round(elapsed, 3),
                     "return_code": return_code,
                     "model": model or "default-config",
+                    "reasoning_effort": reasoning_effort or "default-config",
                     "codex_version": _codex_version(),
                     "usage": next(
                         (
@@ -866,6 +1077,17 @@ def _build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--suite", choices=["trigger", "capability", "regression"])
     run_parser.add_argument("--trials", type=int)
     run_parser.add_argument("--model")
+    run_parser.add_argument(
+        "--reasoning-effort",
+        choices=["low", "medium", "high", "xhigh"],
+        help="显式覆盖被测 Codex 的推理强度，并写入 trial 报告",
+    )
+    run_parser.add_argument(
+        "--trial-timeout-seconds",
+        type=int,
+        default=900,
+        help="单个 Codex trial 的硬超时，默认 900 秒",
+    )
     run_parser.add_argument("--judge", action="store_true")
     run_parser.add_argument(
         "--workspace-snapshot",
@@ -897,6 +1119,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         cases = load_cases()
+        if args.trial_timeout_seconds < 1:
+            raise EvalError("--trial-timeout-seconds 必须是正整数")
         selected = _select_cases(cases, args.case_id, args.suite)
         artifact_root = (args.artifact_root or _default_artifact_root()).resolve()
         all_reports: list[dict[str, Any]] = []
@@ -912,6 +1136,8 @@ def main(argv: list[str] | None = None) -> int:
                     args.model,
                     args.judge,
                     args.workspace_snapshot,
+                    args.reasoning_effort,
+                    args.trial_timeout_seconds,
                 )
             )
         summary = summarize_reports(all_reports)

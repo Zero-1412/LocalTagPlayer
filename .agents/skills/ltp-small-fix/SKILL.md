@@ -33,6 +33,13 @@ CHANGELOG.md
 - 不做设计变更。
 - 不做无关格式化。
 
+## 验证
+
+- 固定使用 `single_agent`：同一 Agent 完成修改和最小验证，不启动独立 Validator。
+- 至少定义一条 `done_when`，并记录对应命令、报错消失或局部断言作为证据。
+- 未运行或客观不可用的验证必须标记为 `not_run` / `blocked`，不得声称通过。
+- 调查发现需要修改共享 contract、schema、过滤语义、player/cache queue 或平台边界时，停止小修复并重新路由。
+
 ## 意图
 
 用最小上下文修复明确错误，并保持行为不变。

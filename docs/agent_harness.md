@@ -86,6 +86,88 @@ scan local folders
 - 用户明确要求只做调查、只回答问题或暂不修改文件。
 - 与 Local Tag Player 无关的一次性任务。
 
+## 分级验证模式
+
+任务 Level 同时决定验证方式，避免小修复承担不必要的编排成本：
+
+| Level | 验证模式 | 执行与验证关系 |
+| --- | --- | --- |
+| Level 1 | `single_agent` | 同一 Agent 完成最小修改和最小验证，不启动独立 Validator。 |
+| Level 2 | `structured` | 同一 Agent 可以执行验证，但进入验证阶段后停止编辑，并逐项记录证据。 |
+| Level 3 | `independent` | 实现与最终验证分离；由独立 Agent 或上下文重置后的只读验证回合完成。 |
+
+Level 2 遇到主观 UI 判断、第二次验证失败或证据互相冲突时，应升级为独立验证阶段，
+但任务业务 Level 不因此自动变成 Level 3。Level 3 Validator 不得修复代码；发现缺口后返回
+结构化失败记录，由下一轮 Executor 决定是否重试。
+
+## Task Contract
+
+Level 2 / 3 在实施前必须建立最小任务合同；Level 1 可以只保留一条完成条件：
+
+```text
+task_level:
+validation_mode:
+
+TaskContract:
+  goal:
+  scope:
+  non_goals:
+  done_when:
+    - id:
+      assertion:
+      required: true / false
+  deliverable:
+```
+
+`done_when.id` 在本轮内必须唯一。完成条件描述用户可观察行为、确定性边界或必须交付的产物，
+不要只写“代码已修改”“看起来正常”等无法验证的过程描述。
+
+## 结构化验证记录
+
+每个 `done_when` 必须恰好对应一条验证记录：
+
+```text
+ValidationRecord:
+  requirement_id:
+  status: passed / failed / blocked / not_run
+  method: deterministic / same_agent / independent / human
+  evidence:
+
+PromotionDecision:
+  promoted / not_promoted / needs_manual_qa
+```
+
+确定性规则：
+
+- `passed` 必须包含具体命令、测试名、截图路径、点击路径、diff 事实或其它可复核证据。
+- 未运行、超时、工具缺失或窗口不可用必须记录为 `blocked` / `not_run`，不得降格成通过。
+- 任一必选项 `failed` 时只能 `not_promoted`。
+- 任一必选项 `blocked` / `not_run` 时不得 `promoted`；需要人工复测时使用 `needs_manual_qa`。
+- Level 1 可以使用 `same_agent`，但不得伪装成 `independent`。
+- Level 3 至少有一条关键完成项由 `independent` 记录覆盖；确定性工具证据作为该记录的依据或补充。
+- Flutter test、analyze、build、真实点击和截图分别记录，不用一条“完整验证通过”合并所有证据。
+
+## Validator 只读边界
+
+独立验证阶段只允许读取任务合同、diff、直接相关源码、测试输出、运行日志和截图；可以运行
+非破坏性检查，但不得写文件、修复代码、提交或推送。Validator 只返回覆盖项、缺项、风险和
+晋级建议，不能通过缩窄 `done_when`、删除失败测试或改写用户目标来制造通过。
+
+## 状态与重试归档
+
+较大任务使用以下最小状态流：
+
+```text
+planned -> executing -> validating -> promoted
+                         |
+                         +-> retry_archive -> executing
+                         +-> needs_manual_qa / blocked
+```
+
+重试只归档：上一轮临时结论、最近失败原因、已确认事实、未覆盖的 `done_when` 和下一条精确动作。
+同一任务最多保留最近两轮摘要；不要把完整工具轨迹、日志或 diff 重新塞回上下文。连续重复同一
+动作且没有新增证据时必须收口为失败、阻塞或更换验证方法。
+
 ## Champion / Challenger 定义
 
 `champion` 是当前可接受的开发基线，至少满足：
@@ -276,6 +358,7 @@ validation: analyze/build result
 
 ```text
 Harness iteration:
+task contract:
 baseline champion:
 challenger patch:
 changed files:
@@ -283,18 +366,21 @@ validation:
 real media smoke:
 regression check:
 promotion decision:
+retry archive:
 next exact step:
 ```
 
 字段含义：
 
 - `baseline champion`：本轮开始前的 commit、验证状态或已知稳定状态。
+- `task contract`：本轮 goal、scope、non-goals、done_when 和 deliverable 的紧凑版本。
 - `challenger patch`：本轮尝试改善的行为。
 - `changed files`：只列本轮相关文件。
 - `validation`：命令和结果，不要声称未完成的命令通过。
 - `real media smoke`：真实目录点击路径、阻塞原因或人工复测清单。
 - `regression check`：过滤、队列、缓存、用户数据和平台边界是否受影响。
 - `promotion decision`：`promoted` / `not promoted` / `needs manual QA`。
+- `retry archive`：仅在未晋级时记录最近失败原因、已确认事实和下一条精确动作。
 - `next exact step`：下一步可直接执行的命令或任务。
 
 ## 子任务和会话交接
