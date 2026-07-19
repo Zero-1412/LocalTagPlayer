@@ -139,12 +139,14 @@ Scorer 会确定性检查 `done_when.id` 唯一、完成项与验证记录一一
 
 ## 2026-07-19 分级结构化验证基线
 
+- Harness champion：`88d9bf8`（完善 Agent Harness 分级验证闭环）。在没有真实误晋级、验证证据缺失或可复现上下文成本回升前，不创建预防性 challenger。
 - Codex CLI：`0.144.5`；模型：`gpt-5.6-terra`；`reasoning_effort=low`；workspace snapshot：启用；单试次硬超时：1200 秒。
 - `reg-level1-single-agent`：5/5，平均 100 分，`stable=true`；累计输入 113,198、缓存输入 49,920、输出 5,321 token，平均耗时 131.765 秒。
 - `reg-level2-validation-coverage`：5/5，平均 100 分，`stable=true`；累计输入 404,105、缓存输入 275,200、输出 14,722 token，平均耗时 158.428 秒。
 - `reg-level3-validator-rejection`：5/5，平均 100 分，`stable=true`；累计输入 753,549、缓存输入 544,768、输出 14,119 token，平均耗时 164.500 秒。
 - 三组均为 5 个有效试次、零基础设施错误、零真实工作树改动；产物位于 Git 忽略的 `artifacts/agent_eval/20260719-final-snapshot-*`，不提交本地 Trace。
 - 零模型成本验证确认 61 个用例、44/6/11 suite 分布、11 个 Skill 的 2 正 2 负覆盖；16 项 scorer 单元测试和三个修改 Skill 的目录验证全部通过。
+- 后续迭代必须先把实际失败归入对应回归：误晋级归入晋级结论用例，漏证据归入完成项映射用例，上下文成本回升归入该用例的工具/token/耗时基线；只做能关闭该失败的最小调整，并重跑受影响 N=5。
 
 ## 命令
 

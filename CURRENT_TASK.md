@@ -10,6 +10,8 @@
 - 当前状态：补丁完成。零模型成本验证确认 61 个用例、44/6/11 suite 分布、11 个 Skill 均保持 2 正 2 负覆盖，16 项 scorer 单元测试及三个修改 Skill 的目录验证全部通过。
 - 运行时验证：Codex CLI `0.144.5`、`gpt-5.6-terra`、`reasoning_effort=low`、workspace snapshot；Level 1 单 Agent、Level 2 结构化完成项映射、Level 3 独立缺证据拒绝晋级三组回归均为 N=5、5/5、平均 100 分、`stable=true`、零基础设施错误和零真实工作树改动。
 - 晋级结论：`promoted`。本轮只修改 Harness/Eval/基础 Skill，不要求 `flutter analyze`、Windows build 或真实 UI 点击；SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列和用户数据均未改变。
+- Champion：`88d9bf8`（完善 Agent Harness 分级验证闭环）。后续默认保持该基线，不做预防性扩写或整体重构。
+- 迭代门槛：只有实际任务出现误晋级、`done_when` 漏证据，或相同范围下工具调用、输入 token、耗时等上下文成本明显回升时，才建立对应 challenger；仅调整命中问题的规则、用例或 Skill，并重跑受影响回归，不借机扩大其它 Harness 范围。
 
 ## 2026-07-19 Apple UI Phase 3 维护页缩放、焦点与风险反馈
 
