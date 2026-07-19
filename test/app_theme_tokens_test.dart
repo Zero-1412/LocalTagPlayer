@@ -78,6 +78,54 @@ void main() {
     expect(reduced.textScaler.scale(20), 30);
   });
 
+  test('maintenance switch hover keeps one readable state layer', () {
+    final theme = maintenanceWorkspaceTheme(ThemeData(useMaterial3: true));
+    final switchTheme = theme.switchTheme;
+    const selected = <WidgetState>{WidgetState.selected};
+    const selectedHovered = <WidgetState>{
+      WidgetState.selected,
+      WidgetState.hovered,
+    };
+    const hovered = <WidgetState>{WidgetState.hovered};
+
+    expect(
+      switchTheme.thumbColor?.resolve(selected),
+      const Color(0xfff8f7ff),
+    );
+    expect(
+      switchTheme.thumbColor?.resolve(selectedHovered),
+      const Color(0xfff8f7ff),
+    );
+    expect(switchTheme.trackColor?.resolve(selected), appAccentViolet);
+    expect(
+      switchTheme.trackColor?.resolve(selectedHovered),
+      const Color(0xff7b6cff),
+    );
+    expect(
+      switchTheme.trackColor?.resolve(hovered),
+      const Color(0xff27364b),
+    );
+    expect(
+      switchTheme.overlayColor?.resolve(hovered),
+      Colors.transparent,
+    );
+    expect(
+      switchTheme.trackOutlineColor?.resolve(selectedHovered),
+      Colors.transparent,
+    );
+    expect(switchTheme.trackOutlineWidth?.resolve(selectedHovered), 0);
+  });
+
+  test('maintenance dropdown routes keep the dark workspace surface', () {
+    final theme = maintenanceWorkspaceTheme(ThemeData.light());
+
+    // DropdownButtonFormField 的路由从 canvasColor 取背景，不能退回亮色基线。
+    expect(theme.canvasColor, librarySurface);
+    expect(theme.hoverColor, appAccentViolet.withValues(alpha: 0.10));
+    expect(theme.focusColor, appAccentViolet.withValues(alpha: 0.16));
+    expect(theme.highlightColor, appAccentViolet.withValues(alpha: 0.20));
+  });
+
   testWidgets('text scaling remains available to application content',
       (tester) async {
     await tester.pumpWidget(

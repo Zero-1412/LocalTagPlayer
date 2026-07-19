@@ -601,6 +601,12 @@ ThemeData maintenanceWorkspaceTheme(ThemeData base) {
     borderRadius: BorderRadius.all(Radius.circular(8)),
   );
   return workspace.copyWith(
+    // DropdownButtonFormField 的弹层仍通过 ThemeData.canvasColor 取材质色，
+    // 不会读取 popupMenuTheme；显式收口后可避免缩放验收时退回全局亮色画布。
+    canvasColor: librarySurface,
+    hoverColor: appAccentViolet.withValues(alpha: 0.10),
+    focusColor: appAccentViolet.withValues(alpha: 0.16),
+    highlightColor: appAccentViolet.withValues(alpha: 0.20),
     appBarTheme: const AppBarTheme(
       backgroundColor: libraryBackground,
       foregroundColor: libraryText,
@@ -698,6 +704,47 @@ ThemeData maintenanceWorkspaceTheme(ThemeData base) {
       iconColor: libraryTextMuted,
       selectedColor: libraryText,
       selectedTileColor: Color(0x386d5dfc),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return libraryTextMuted.withValues(alpha: 0.65);
+        }
+        // ColorScheme.dark 默认使用黑色 onPrimary；维护页必须保持浅色滑块，
+        // 否则选中状态会出现黑色孔洞，hover 时又被系统 overlay 放大。
+        return states.contains(WidgetState.selected)
+            ? const Color(0xfff8f7ff)
+            : const Color(0xffd9deea);
+      }),
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) {
+          return libraryBorder.withValues(alpha: 0.60);
+        }
+        final interactive = states.contains(WidgetState.hovered) ||
+            states.contains(WidgetState.focused) ||
+            states.contains(WidgetState.pressed);
+        if (states.contains(WidgetState.selected)) {
+          return interactive ? const Color(0xff7b6cff) : appAccentViolet;
+        }
+        return interactive ? const Color(0xff27364b) : librarySurfaceAlt;
+      }),
+      trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return Colors.transparent;
+        }
+        if (states.contains(WidgetState.focused) ||
+            states.contains(WidgetState.hovered)) {
+          return libraryTextMuted.withValues(alpha: 0.72);
+        }
+        return libraryBorder;
+      }),
+      trackOutlineWidth: WidgetStateProperty.resolveWith((states) {
+        return states.contains(WidgetState.selected) ? 0 : 1.2;
+      }),
+      // Switch 自身的轨道提亮已经提供 hover/press 反馈；关闭圆形 splash，
+      // 避免在紧凑深色卡片上形成比控件本体更大的双重光圈。
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      splashRadius: 0,
     ),
   );
 }
