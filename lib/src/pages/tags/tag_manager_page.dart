@@ -322,10 +322,13 @@ class _TagManagerPageState extends State<TagManagerPage> {
   }) {
     return showDialog<void>(
       context: context,
-      builder: (context) => _BlockedTagOperationDialog(
-        icon: icon,
-        title: title,
-        message: message,
+      builder: (dialogContext) => maintenanceDialogSurface(
+        context: dialogContext,
+        child: _BlockedTagOperationDialog(
+          icon: icon,
+          title: title,
+          message: message,
+        ),
       ),
     );
   }
@@ -559,10 +562,13 @@ Widget tagManagerBlockedOperationSmokeHarness({
             child: FilledButton(
               onPressed: () => showDialog<void>(
                 context: context,
-                builder: (_) => const _BlockedTagOperationDialog(
-                  icon: Icons.delete_outline_rounded,
-                  title: '暂不能删除此标签',
-                  message: '“示例标签”当前有 12 条引用。本次未删除标签或任何视频关联。',
+                builder: (dialogContext) => maintenanceDialogSurface(
+                  context: dialogContext,
+                  child: const _BlockedTagOperationDialog(
+                    icon: Icons.delete_outline_rounded,
+                    title: '暂不能删除此标签',
+                    message: '“示例标签”当前有 12 条引用。本次未删除标签或任何视频关联。',
+                  ),
                 ),
               ),
               child: const Text('检查删除影响'),
@@ -914,15 +920,24 @@ class _TagManagerDetail extends StatelessWidget {
                 const SizedBox(height: 12),
                 FocusTraversalOrder(
                   order: const NumericFocusOrder(3),
-                  child: DropdownButtonFormField<String>(
-                    key: const ValueKey('tagManager.detail.group'),
-                    initialValue: groupId,
-                    isExpanded: true,
-                    menuMaxHeight: 320,
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                    items: groupItems,
-                    decoration: const InputDecoration(labelText: '标签组'),
-                    onChanged: onGroupChanged,
+                  child: Builder(
+                    builder: (fieldContext) => DropdownButtonFormField<String>(
+                      key: const ValueKey('tagManager.detail.group'),
+                      initialValue: groupId,
+                      isExpanded: true,
+                      menuMaxHeight: 320,
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                      items: groupItems,
+                      decoration: const InputDecoration(labelText: '标签组'),
+                      // 大文字下字段可能贴近窗口底边；在下拉路由布局前把锚点移入
+                      // 可视区中段，避免最后一个选项落到主窗口捕获边界之外。
+                      onTap: () => Scrollable.ensureVisible(
+                        fieldContext,
+                        alignment: 0.46,
+                        duration: Duration.zero,
+                      ),
+                      onChanged: onGroupChanged,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1097,7 +1112,7 @@ class _TagManagerDetailSmokeHarnessState
   final _displayNameController = TextEditingController(text: '示例标签');
   final _aliasesController = TextEditingController(text: '别名一, 别名二');
   final _sortOrderController = TextEditingController(text: '10');
-  String _groupId = 'manual';
+  String _groupId = 'favorite';
   bool _hidden = false;
   bool _favorite = true;
 
@@ -1128,6 +1143,12 @@ class _TagManagerDetailSmokeHarnessState
         id: 'favorite',
         name: 'favorite',
         displayName: '收藏分组',
+        items: <TagItem>[],
+      ),
+      TagGroup(
+        id: 'archive',
+        name: 'archive',
+        displayName: '归档分组',
         items: <TagItem>[],
       ),
     ];

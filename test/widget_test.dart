@@ -3162,14 +3162,22 @@ void main() {
       final menuItem = find.byKey(
         const ValueKey('tagManager.detail.group.favorite'),
       );
-      expect(menuItem, findsOneWidget);
+      final lastMenuItem = find.byKey(
+        const ValueKey('tagManager.detail.group.archive'),
+      );
+      // 当前分组会同时出现在字段本体和弹层列表中，末节点才是浮层选项。
+      expect(menuItem, findsNWidgets(2));
+      expect(lastMenuItem, findsOneWidget);
       final fieldRect = tester.getRect(group);
-      final itemRect = tester.getRect(menuItem);
+      final itemRect = tester.getRect(menuItem.last);
+      final lastItemRect = tester.getRect(lastMenuItem);
       // Material 下拉层保留 8px 阴影安全区，但仍须以触发字段为同一空间锚点。
       expect(itemRect.left, closeTo(fieldRect.left, 10));
       expect(itemRect.right, closeTo(fieldRect.right, 10));
       expect(itemRect.top, greaterThanOrEqualTo(0));
       expect(itemRect.bottom, lessThanOrEqualTo(720));
+      expect(lastItemRect.top, greaterThanOrEqualTo(0));
+      expect(lastItemRect.bottom, lessThanOrEqualTo(720));
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
@@ -3211,9 +3219,13 @@ void main() {
 
     await tester.tap(find.text('检查删除影响'));
     await tester.pumpAndSettle();
+    final dialog = find.byKey(
+      const ValueKey('tagManager.blockedOperation.dialog'),
+    );
+    expect(dialog, findsOneWidget);
     expect(
-      find.byKey(const ValueKey('tagManager.blockedOperation.dialog')),
-      findsOneWidget,
+      Theme.of(tester.element(dialog)).dialogTheme.backgroundColor,
+      librarySurface,
     );
     expect(find.text('暂不能删除此标签'), findsOneWidget);
     expect(find.textContaining('本次未删除标签或任何视频关联'), findsOneWidget);
