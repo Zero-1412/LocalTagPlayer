@@ -287,22 +287,12 @@ class _TagManagerPageState extends State<TagManagerPage> {
       return;
     }
     final isFolder = tag.source == TagSource.folder;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除标签尚未启用'),
-        content: Text(
-          isFolder
-              ? '“${_tagLabel(tag)}” 是路径派生 folder 标签，当前有 $refs 条 video_tags 引用。第一阶段不允许硬删除 folder 来源标签。'
-              : '“${_tagLabel(tag)}” 当前有 $refs 条 video_tags 引用。第一阶段只做引用检查和确认入口，暂不执行删除。',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('知道了'),
-          ),
-        ],
-      ),
+    await _showBlockedTagOperation(
+      icon: Icons.delete_outline_rounded,
+      title: '暂不能删除此标签',
+      message: isFolder
+          ? '“${_tagLabel(tag)}” 是路径派生 folder 标签，当前有 $refs 条 video_tags 引用。folder 标签只能由目录结构维护，本次未执行删除。'
+          : '“${_tagLabel(tag)}” 当前有 $refs 条 video_tags 引用。当前版本只检查影响范围，本次未删除标签或任何视频关联。',
     );
   }
 
@@ -311,18 +301,31 @@ class _TagManagerPageState extends State<TagManagerPage> {
     if (!mounted) {
       return;
     }
-    await showDialog<void>(
+    await _showBlockedTagOperation(
+      icon: Icons.call_merge_rounded,
+      title: '暂不能合并此标签',
+      message:
+          '“${_tagLabel(tag)}” 当前有 $refs 条 video_tags 引用。合并需要迁移引用并处理 folder/manual 来源边界，本次未修改标签或视频关联。',
+    );
+  }
+
+  /**
+   * 展示只读的高风险影响说明。
+   *
+   * 当前阶段不会执行合并或删除，因此默认焦点落在安全返回动作；大文字下内容可滚动，
+   * 避免用户把“检查影响”误解为已经提交不可逆操作。
+   */
+  Future<void> _showBlockedTagOperation({
+    required IconData icon,
+    required String title,
+    required String message,
+  }) {
+    return showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('合并标签尚未启用'),
-        content: Text(
-            '“${_tagLabel(tag)}” 当前有 $refs 条 video_tags 引用。合并需要迁移引用并处理 folder/manual 来源边界，第一阶段先保留入口。'),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('知道了'),
-          ),
-        ],
+      builder: (context) => _BlockedTagOperationDialog(
+        icon: icon,
+        title: title,
+        message: message,
       ),
     );
   }
@@ -491,6 +494,84 @@ class _TagManagerPageState extends State<TagManagerPage> {
       ),
     );
   }
+}
+
+/** 标签高风险入口的只读反馈层，不提供任何提交或删除动作。 */
+class _BlockedTagOperationDialog extends StatelessWidget {
+  const _BlockedTagOperationDialog({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  /** 当前检查的高风险动作图标。 */
+  final IconData icon;
+
+  /** 明确说明动作未启用的标题。 */
+  final String title;
+
+  /** 引用数量、来源边界和未执行结果说明。 */
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const ValueKey('tagManager.blockedOperation.dialog'),
+      scrollable: true,
+      title: Row(
+        children: [
+          Icon(icon, color: Theme.of(context).colorScheme.error),
+          const SizedBox(width: 10),
+          Expanded(child: Text(title)),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: Text(message, style: const TextStyle(height: 1.5)),
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('tagManager.blockedOperation.close'),
+          autofocus: true,
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('返回标签详情'),
+        ),
+      ],
+    );
+  }
+}
+
+/** 构建标签高风险反馈的 focused test 容器，不连接 Store 或执行数据操作。 */
+@visibleForTesting
+Widget tagManagerBlockedOperationSmokeHarness({
+  TextScaler textScaler = TextScaler.noScaling,
+}) {
+  return MaterialApp(
+    theme: maintenanceWorkspaceTheme(ThemeData(useMaterial3: true)),
+    home: MediaQuery(
+      data: MediaQueryData(
+        size: const Size(720, 600),
+        textScaler: textScaler,
+      ),
+      child: Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const _BlockedTagOperationDialog(
+                  icon: Icons.delete_outline_rounded,
+                  title: '暂不能删除此标签',
+                  message: '“示例标签”当前有 12 条引用。本次未删除标签或任何视频关联。',
+                ),
+              ),
+              child: const Text('检查删除影响'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /** 标签中心未选择项目时的稳定空详情表面。 */
@@ -753,164 +834,337 @@ class _TagManagerDetail extends StatelessWidget {
             LayoutSize.compact;
     final groupItems = groups.isEmpty
         ? const <DropdownMenuItem<String>>[
-            DropdownMenuItem(value: 'manual', child: Text('手动标签'))
+            DropdownMenuItem(
+              key: ValueKey('tagManager.detail.group.manual'),
+              value: 'manual',
+              child: Text('手动标签'),
+            )
           ]
         : <DropdownMenuItem<String>>[
             for (final group in groups)
               DropdownMenuItem(
+                key: ValueKey('tagManager.detail.group.${group.id}'),
                 value: group.id,
                 child: Text(group.displayName ?? group.name),
               ),
           ];
-    return ListView(
-      padding:
-          EdgeInsets.fromLTRB(compact ? 14 : 24, 20, compact ? 14 : 24, 28),
-      children: [
-        Text(tag.name,
-            style: Theme.of(context)
-                .textTheme
-                .headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        Text('ID: ${tag.id}', style: const TextStyle(color: libraryTextMuted)),
-        const SizedBox(height: 18),
-        _TagManagerSection(
-          title: '使用情况',
-          child: Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _UsagePill(label: '总使用', value: usage.total),
-              _UsagePill(label: 'folder', value: usage.folder),
-              _UsagePill(label: 'manual', value: usage.manual),
-              _UsagePill(label: 'rule', value: usage.rule),
-              _UsagePill(label: 'filename', value: usage.filename),
-              _UsagePill(label: 'import', value: usage.imported),
-              _UsagePill(label: 'auto', value: usage.auto),
-            ],
-          ),
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(
+          compact ? 14 : 24,
+          20,
+          compact ? 14 : 24,
+          28,
         ),
-        const SizedBox(height: 14),
-        _TagManagerSection(
-          title: '标签属性',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: displayNameController,
-                decoration: const InputDecoration(labelText: '显示名称'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: aliasesController,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                    labelText: '别名', hintText: '用逗号或换行分隔'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: groupId,
-                items: groupItems,
-                decoration: const InputDecoration(labelText: '标签组'),
-                onChanged: onGroupChanged,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: sortOrderController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: '排序值'),
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                value: isFavorite,
-                onChanged: onFavoriteChanged,
-                title: const Text('收藏标签'),
-                subtitle: const Text('在标签发现入口优先展示'),
-                contentPadding: EdgeInsets.zero,
-              ),
-              SwitchListTile(
-                value: isHidden,
-                onChanged: onHiddenChanged,
-                title: const Text('隐藏标签'),
-                subtitle: const Text('从常规发现列表隐藏，不删除数据'),
-                contentPadding: EdgeInsets.zero,
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: onSave,
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('保存标签'),
+        children: [
+          Text(tag.name,
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text('ID: ${tag.id}',
+              style: const TextStyle(color: libraryTextMuted)),
+          const SizedBox(height: 18),
+          _TagManagerSection(
+            title: '使用情况',
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _UsagePill(label: '总使用', value: usage.total),
+                _UsagePill(label: 'folder', value: usage.folder),
+                _UsagePill(label: 'manual', value: usage.manual),
+                _UsagePill(label: 'rule', value: usage.rule),
+                _UsagePill(label: 'filename', value: usage.filename),
+                _UsagePill(label: 'import', value: usage.imported),
+                _UsagePill(label: 'auto', value: usage.auto),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          _TagManagerSection(
+            title: '标签属性',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(1),
+                  child: TextField(
+                    key: const ValueKey('tagManager.detail.displayName'),
+                    controller: displayNameController,
+                    decoration: const InputDecoration(labelText: '显示名称'),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        _TagManagerSection(
-          title: '批量打标签',
-          subtitle: '当前筛选结果：$currentResultCount 个视频',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  FilledButton.icon(
-                    onPressed: currentResultCount == 0 || !canBatchEdit
-                        ? null
-                        : onBatchAdd,
-                    icon: const Icon(Icons.playlist_add),
-                    label: const Text('批量添加 manual'),
+                const SizedBox(height: 12),
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(2),
+                  child: TextField(
+                    key: const ValueKey('tagManager.detail.aliases'),
+                    controller: aliasesController,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: '别名',
+                      hintText: '用逗号或换行分隔',
+                    ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: currentResultCount == 0 || !canBatchEdit
-                        ? null
-                        : onBatchRemove,
-                    icon: const Icon(Icons.playlist_remove),
-                    label: const Text('批量移除 manual'),
+                ),
+                const SizedBox(height: 12),
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(3),
+                  child: DropdownButtonFormField<String>(
+                    key: const ValueKey('tagManager.detail.group'),
+                    initialValue: groupId,
+                    isExpanded: true,
+                    menuMaxHeight: 320,
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    items: groupItems,
+                    decoration: const InputDecoration(labelText: '标签组'),
+                    onChanged: onGroupChanged,
                   ),
-                ],
-              ),
-              if (!canBatchEdit) ...[
-                const SizedBox(height: 10),
-                const Text(
-                  '当前标签不是 manual 来源。批量添加/移除只对 manual 标签开放，folder 标签由路径派生维护。',
-                  style: TextStyle(color: libraryTextMuted),
+                ),
+                const SizedBox(height: 12),
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(4),
+                  child: TextField(
+                    key: const ValueKey('tagManager.detail.sortOrder'),
+                    controller: sortOrderController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: '排序值'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(5),
+                  child: SwitchListTile(
+                    key: const ValueKey('tagManager.detail.favorite'),
+                    value: isFavorite,
+                    onChanged: onFavoriteChanged,
+                    title: const Text('收藏标签'),
+                    subtitle: const Text('在标签发现入口优先展示'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(6),
+                  child: SwitchListTile(
+                    key: const ValueKey('tagManager.detail.hidden'),
+                    value: isHidden,
+                    onChanged: onHiddenChanged,
+                    title: const Text('隐藏标签'),
+                    subtitle: const Text('从常规发现列表隐藏，不删除数据'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FocusTraversalOrder(
+                    order: const NumericFocusOrder(7),
+                    child: FilledButton.icon(
+                      key: const ValueKey('tagManager.detail.save'),
+                      onPressed: onSave,
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('保存标签'),
+                    ),
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
-        ),
-        const SizedBox(height: 14),
-        _TagManagerSection(
-          title: '高风险操作',
-          subtitle: '合并或删除前会先检查引用关系，不会静默改变 folder 标签。',
-          danger: true,
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              OutlinedButton.icon(
-                onPressed: onMerge,
-                icon: const Icon(Icons.call_merge),
-                label: const Text('合并'),
-              ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.error,
+          const SizedBox(height: 14),
+          _TagManagerSection(
+            title: '批量打标签',
+            subtitle: '当前筛选结果：$currentResultCount 个视频',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(8),
+                      child: FilledButton.icon(
+                        key: const ValueKey('tagManager.detail.batchAdd'),
+                        onPressed: currentResultCount == 0 || !canBatchEdit
+                            ? null
+                            : onBatchAdd,
+                        icon: const Icon(Icons.playlist_add),
+                        label: const Text('批量添加 manual'),
+                      ),
+                    ),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(9),
+                      child: OutlinedButton.icon(
+                        key: const ValueKey('tagManager.detail.batchRemove'),
+                        onPressed: currentResultCount == 0 || !canBatchEdit
+                            ? null
+                            : onBatchRemove,
+                        icon: const Icon(Icons.playlist_remove),
+                        label: const Text('批量移除 manual'),
+                      ),
+                    ),
+                  ],
                 ),
-                onPressed: onDelete,
-                icon: const Icon(Icons.delete_outline),
-                label: const Text('删除'),
-              ),
-            ],
+                if (!canBatchEdit) ...[
+                  const SizedBox(height: 10),
+                  const Text(
+                    '当前标签不是 manual 来源。批量添加/移除只对 manual 标签开放，folder 标签由路径派生维护。',
+                    style: TextStyle(color: libraryTextMuted),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          _TagManagerSection(
+            title: '高风险操作',
+            subtitle: '入口只检查引用并说明影响；当前版本不会执行合并或删除。',
+            danger: true,
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(10),
+                  child: OutlinedButton.icon(
+                    key: const ValueKey('tagManager.detail.merge'),
+                    onPressed: onMerge,
+                    icon: const Icon(Icons.call_merge),
+                    label: const Text('检查合并影响'),
+                  ),
+                ),
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(11),
+                  child: OutlinedButton.icon(
+                    key: const ValueKey('tagManager.detail.delete'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('检查删除影响'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/**
+ * 构建标签详情的 focused test 容器。
+ *
+ * 容器只承载本地控制器、缩放和焦点，不连接 Store，也不会保存、批量打标、合并或删除。
+ */
+@visibleForTesting
+Widget tagManagerDetailSmokeHarness({
+  TextScaler textScaler = TextScaler.noScaling,
+  VoidCallback? onDelete,
+}) {
+  return _TagManagerDetailSmokeHarness(
+    textScaler: textScaler,
+    onDelete: onDelete,
+  );
+}
+
+/** 标签详情测试宿主，负责释放真实输入控制器。 */
+class _TagManagerDetailSmokeHarness extends StatefulWidget {
+  const _TagManagerDetailSmokeHarness({
+    required this.textScaler,
+    this.onDelete,
+  });
+
+  /** 待验证的系统文字缩放。 */
+  final TextScaler textScaler;
+
+  /** 只记录危险入口是否命中，不执行标签操作。 */
+  final VoidCallback? onDelete;
+
+  @override
+  State<_TagManagerDetailSmokeHarness> createState() =>
+      _TagManagerDetailSmokeHarnessState();
+}
+
+class _TagManagerDetailSmokeHarnessState
+    extends State<_TagManagerDetailSmokeHarness> {
+  final _displayNameController = TextEditingController(text: '示例标签');
+  final _aliasesController = TextEditingController(text: '别名一, 别名二');
+  final _sortOrderController = TextEditingController(text: '10');
+  String _groupId = 'manual';
+  bool _hidden = false;
+  bool _favorite = true;
+
+  @override
+  void dispose() {
+    _displayNameController.dispose();
+    _aliasesController.dispose();
+    _sortOrderController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const tag = TagItem(
+      id: 'manual:example',
+      name: '示例标签',
+      source: TagSource.manual,
+      groupId: 'manual',
+    );
+    const groups = <TagGroup>[
+      TagGroup(
+        id: 'manual',
+        name: 'manual',
+        displayName: '手动标签',
+        items: <TagItem>[],
+      ),
+      TagGroup(
+        id: 'favorite',
+        name: 'favorite',
+        displayName: '收藏分组',
+        items: <TagItem>[],
+      ),
+    ];
+    return MaterialApp(
+      theme: maintenanceWorkspaceTheme(ThemeData(useMaterial3: true)),
+      home: MediaQuery(
+        data: MediaQueryData(
+          size: const Size(960, 720),
+          textScaler: widget.textScaler,
+        ),
+        child: Scaffold(
+          body: _TagManagerDetail(
+            tag: tag,
+            usage: const TagUsageSummary(total: 12, manual: 12),
+            groups: groups,
+            currentResultCount: 24,
+            displayNameController: _displayNameController,
+            aliasesController: _aliasesController,
+            sortOrderController: _sortOrderController,
+            groupId: _groupId,
+            isHidden: _hidden,
+            isFavorite: _favorite,
+            onGroupChanged: (value) {
+              if (value != null) {
+                setState(() => _groupId = value);
+              }
+            },
+            onHiddenChanged: (value) => setState(() => _hidden = value),
+            onFavoriteChanged: (value) => setState(() => _favorite = value),
+            onSave: () {},
+            onBatchAdd: () {},
+            onBatchRemove: () {},
+            onDelete: widget.onDelete ?? () {},
+            onMerge: () {},
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -939,11 +1193,12 @@ class _TagManagerSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dangerColor = Theme.of(context).colorScheme.error;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: librarySurface,
+    // 使用真实 Material 承载内部 SwitchListTile 的 focus/hover/ink，避免表面色遮住反馈。
+    return Material(
+      color: librarySurface,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(
+        side: BorderSide(
           color: danger ? dangerColor.withValues(alpha: 0.55) : libraryBorder,
         ),
       ),

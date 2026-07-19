@@ -1,5 +1,13 @@
 # CHAT_7_RESPONSIVE_UI.md
 
+## 2026-07-19 Apple UI Phase 3 维护页缩放与键盘收口
+
+- 备份、缓存和标签详情新增 125%/150% 菜单边界与键盘遍历 focused tests；备份/缓存保持既有页面结构与服务回调，不新增 I/O 或统计重算。
+- 标签属性按视觉顺序遍历，标签组浮层保持字段宽度和 8px 阴影安全区；分区改用 `Material` 恢复 Switch 的 hover/focus/ink。
+- 高风险入口改为只读“检查影响”，反馈层明确没有执行数据变更并默认聚焦安全返回；manual 标签编辑器补充未保存状态和移除 tooltip。
+- 完整 224 项测试、静态分析和 Windows debug build 通过。125% 备份/缓存实窗基线无裁切；最新 150% 标签详情连续点击因检测到用户输入停止，待空闲窗口补拍。
+- SQLite schema、过滤语义、filtered queue、备份/缓存后端、标签来源与用户数据未改变。
+
 ## 2026-07-18 Apple UI 顶部边界与 Phase 3 剩余组件族
 
 - expanded 桌面布局只在结果绝对顶部显示标题、搜索与动作区；离开顶部后持续收起，返回 offset 0 并稳定 140ms 后恢复。medium/compact 保持原结构。

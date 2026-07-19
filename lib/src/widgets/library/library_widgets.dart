@@ -4126,6 +4126,9 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
   final _controller = TextEditingController();
   String _query = '';
 
+  /** 当前选择是否与打开弹窗时不同；只用于提示未保存状态，不提前写入标签数据。 */
+  bool _dirty = false;
+
   /** 统一保存入口，让按钮和 Ctrl+Enter 走同一条结果归一化链路。 */
   void _save() {
     _addTag(_controller.text);
@@ -4147,16 +4150,19 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
       return;
     }
     setState(() {
-      _addNormalizedTag(tag);
+      _dirty = _addNormalizedTag(tag) || _dirty;
       _controller.clear();
       _query = '';
     });
   }
 
-  void _addNormalizedTag(String tag) {
+  /** 添加归一化标签并返回当前选择是否真实发生变化。 */
+  bool _addNormalizedTag(String tag) {
     if (!_tags.any((existing) => TagRules.sameTag(existing, tag))) {
       _tags.add(tag);
+      return true;
     }
+    return false;
   }
 
   /** 清除当前搜索词并恢复完整候选，不影响已经选择的标签。 */
@@ -4338,8 +4344,12 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                                       label: Text(tag),
                                       onDeleted: _isLocked(tag)
                                           ? null
-                                          : () =>
-                                              setState(() => _tags.remove(tag)),
+                                          : () => setState(() {
+                                                _dirty =
+                                                    _tags.remove(tag) || _dirty;
+                                              }),
+                                      deleteButtonTooltipMessage:
+                                          '从当前视频移除 $tag',
                                     ),
                                   ),
                               ],
@@ -4356,28 +4366,57 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                               title: '最近使用',
                               tags: recent.take(8).toList(),
                               icon: Icons.history_rounded,
-                              onSelected: (tag) =>
-                                  setState(() => _addNormalizedTag(tag)),
+                              onSelected: (tag) => setState(() {
+                                _dirty = _addNormalizedTag(tag) || _dirty;
+                              }),
                             ),
                             _TagSuggestionSection(
                               title: '收藏标签',
                               tags: favorites.take(8).toList(),
                               icon: Icons.star_rounded,
-                              onSelected: (tag) =>
-                                  setState(() => _addNormalizedTag(tag)),
+                              onSelected: (tag) => setState(() {
+                                _dirty = _addNormalizedTag(tag) || _dirty;
+                              }),
                             ),
                             _TagSuggestionSection(
                               title: _query.trim().isEmpty ? '全部可用标签' : '搜索结果',
                               tags: suggestions,
                               icon: Icons.sell_outlined,
-                              onSelected: (tag) =>
-                                  setState(() => _addNormalizedTag(tag)),
+                              onSelected: (tag) => setState(() {
+                                _dirty = _addNormalizedTag(tag) || _dirty;
+                              }),
                             ),
                           ],
                         ),
                       ),
                     ),
                   ),
+                  if (_dirty) ...[
+                    const SizedBox(height: 10),
+                    Semantics(
+                      liveRegion: true,
+                      child: const Row(
+                        key: ValueKey('tagEditor.unsavedChanges'),
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            color: libraryAccent,
+                            size: 17,
+                          ),
+                          SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              '修改尚未保存；取消将放弃本次调整。',
+                              style: TextStyle(
+                                color: libraryTextMuted,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

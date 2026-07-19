@@ -26,6 +26,27 @@ VideoItem _testVideo({
   );
 }
 
+/** 判断当前键盘焦点是否落在指定控件的子树中。 */
+bool _primaryFocusIsInside(Finder ancestor) {
+  final context = FocusManager.instance.primaryFocus?.context;
+  if (context == null) {
+    return false;
+  }
+  final targets = ancestor.evaluate().toSet();
+  if (targets.contains(context)) {
+    return true;
+  }
+  var matched = false;
+  context.visitAncestorElements((element) {
+    if (targets.contains(element)) {
+      matched = true;
+      return false;
+    }
+    return true;
+  });
+  return matched;
+}
+
 /** Missing/Relink widget 测试只暴露页面读取的视频索引。 */
 class _MissingRelinkTestRepository
     implements
@@ -2948,6 +2969,87 @@ void main() {
     expect(clearCount, 1);
   });
 
+  testWidgets('maintenance actions keep visual keyboard order at 125 and 150',
+      (tester) async {
+    for (final scale in <double>[1.25, 1.5]) {
+      await tester.pumpWidget(
+        dataBackupSettingsSmokeHarness(
+          textScaler: TextScaler.linear(scale),
+        ),
+      );
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      expect(_primaryFocusIsInside(find.byType(SwitchListTile)), isTrue);
+      for (final key in <String>[
+        'settings.dataBackup.runNow',
+        'settings.dataBackup.checkIntegrity',
+        'settings.dataBackup.export',
+      ]) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        expect(_primaryFocusIsInside(find.byKey(ValueKey(key))), isTrue);
+      }
+
+      final failedItem = _testVideo(
+        path: r'C:\cache\focus.mp4',
+        title: 'focus thumbnail',
+      );
+      await tester.pumpWidget(
+        cacheDiagnosticsSmokeHarness(
+          textScaler: TextScaler.linear(scale),
+          stats: CacheStats(
+            total: 1,
+            cached: 0,
+            missing: 1,
+            errors: 1,
+            queued: 0,
+            pendingBackgroundRequests: 0,
+            active: 0,
+            activeBackground: 0,
+            maxConcurrent: 4,
+            maxBackground: 2,
+            maxBackgroundQueued: 500,
+            paused: false,
+            completedThisRun: 0,
+            failedThisRun: 1,
+            ffmpegCompleted: 0,
+            fallbackCompleted: 0,
+            averageMs: 12,
+            failures: <CacheFailureDetail>[
+              CacheFailureDetail(
+                item: failedItem,
+                reason: 'focused failure',
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      expect(
+        _primaryFocusIsInside(
+          find.byKey(const ValueKey('settings.cache.failureDetails')),
+        ),
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      expect(
+        _primaryFocusIsInside(
+          find.byKey(const ValueKey('settings.cache.retryFailures')),
+        ),
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      expect(
+        _primaryFocusIsInside(
+          find.byKey(const ValueKey('settings.cache.clearFailures')),
+        ),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('tag manager search uses one stable TextField chain',
       (tester) async {
     final controller = TextEditingController();
@@ -3010,6 +3112,124 @@ void main() {
       isFalse,
     );
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+  });
+
+  testWidgets('tag detail anchors its menu and keeps explicit focus order',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(960, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final scale in <double>[1.25, 1.5]) {
+      await tester.pumpWidget(
+        KeyedSubtree(
+          key: ValueKey('tagManager.detail.scale.$scale'),
+          child: tagManagerDetailSmokeHarness(
+            textScaler: TextScaler.linear(scale),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final displayName = find.byKey(
+        const ValueKey('tagManager.detail.displayName'),
+      );
+      final aliases = find.byKey(
+        const ValueKey('tagManager.detail.aliases'),
+      );
+      final group = find.byKey(
+        const ValueKey('tagManager.detail.group'),
+      );
+      final sortOrder = find.byKey(
+        const ValueKey('tagManager.detail.sortOrder'),
+      );
+
+      await tester.ensureVisible(displayName);
+      await tester.tap(displayName);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(of: aliases, matching: find.byType(EditableText)),
+            )
+            .focusNode
+            .hasFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      final menuItem = find.byKey(
+        const ValueKey('tagManager.detail.group.favorite'),
+      );
+      expect(menuItem, findsOneWidget);
+      final fieldRect = tester.getRect(group);
+      final itemRect = tester.getRect(menuItem);
+      // Material 下拉层保留 8px 阴影安全区，但仍须以触发字段为同一空间锚点。
+      expect(itemRect.left, closeTo(fieldRect.left, 10));
+      expect(itemRect.right, closeTo(fieldRect.right, 10));
+      expect(itemRect.top, greaterThanOrEqualTo(0));
+      expect(itemRect.bottom, lessThanOrEqualTo(720));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: sortOrder,
+                matching: find.byType(EditableText),
+              ),
+            )
+            .focusNode
+            .hasFocus,
+        isTrue,
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('tagManager.detail.delete')),
+        360,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('检查合并影响'), findsOneWidget);
+      expect(find.text('检查删除影响'), findsOneWidget);
+      expect(find.textContaining('当前版本不会执行合并或删除'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('tag danger feedback stays safe and readable at 150 percent',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(720, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      tagManagerBlockedOperationSmokeHarness(
+        textScaler: const TextScaler.linear(1.5),
+      ),
+    );
+
+    await tester.tap(find.text('检查删除影响'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('tagManager.blockedOperation.dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('暂不能删除此标签'), findsOneWidget);
+    expect(find.textContaining('本次未删除标签或任何视频关联'), findsOneWidget);
+    final close = find.byKey(
+      const ValueKey('tagManager.blockedOperation.close'),
+    );
+    expect(_primaryFocusIsInside(close), isTrue);
+    expect(find.text('确认删除'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('tagManager.blockedOperation.dialog')),
+      findsNothing,
+    );
   });
 
   testWidgets('playback decoder dropdown only changes after confirmation',
@@ -4720,6 +4940,15 @@ void main() {
     await tester.pump();
     expect(find.text('RecentTag'), findsOneWidget);
     expect(find.byKey(const ValueKey('tagEditor.clearSearch')), findsNothing);
+
+    manualChip.onDeleted!();
+    await tester.pump();
+    expect(find.text('ManualTag'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('tagEditor.unsavedChanges')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('取消将放弃本次调整'), findsOneWidget);
   });
 
   testWidgets('manual tag editor remains usable at 150 percent text scale',
