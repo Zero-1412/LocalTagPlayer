@@ -7,12 +7,13 @@
 ### 2026-07-21 GitHub 首次公开发布与隐私收口
 
 - 目标：让首次访问仓库的人能理解产品目的、特色功能、技术框架和架构边界，并通过 GitHub Release 获取 Windows / macOS 安装包。
-- 当前状态：README 与打包工作流已完成本地修改，等待完整验证、提交、推送 `v0.1.0` 标签及远程 Release 验收。
+- 当前状态：README、隐私过滤和 `v0.1.0` GitHub Release 已完成；Actions 运行 `29821115757` 的版本解析、Windows、macOS 与公开发布 job 全部成功。
 - README 已按“问题场景 → 核心闭环 → 特色能力 → 技术栈 → 架构思想 → 下载/隐私/边界”重写，明确本项目不是 VLC / PotPlayer 的替代品。
 - `vX.Y.Z` 标签发布改为 Windows 与 macOS 双端成功后原子创建 Release，同时上传 `.exe`、`.dmg` 和两份 SHA-256；普通分支与手动构建不创建公开 Release。
-- 已清理公开 `master` 历史中的个人邮箱、本机用户名/盘符路径和 `.codex/config.toml`，提交者统一为 GitHub noreply 身份；远程 `master` 从 `de08cd36` 重写为 `7e76a94a`。
+- 已清理公开 `master` 历史中的个人邮箱、本机用户名/盘符路径和 `.codex/config.toml`，提交者统一为 GitHub noreply 身份；公开分支和标签均只引用脱敏后的历史。
 - 本地开发配置和路径上下文继续保留，但由 `.gitignore` 隔离；数据库、日志、媒体样本、环境变量、签名证书、安装包和本地私有配置均加入上传过滤。
 - 定向审计未发现已跟踪的媒体文件、数据库、日志、环境变量、私钥、签名证书或 API token。公开仓库仍包含随桌面包使用的 FFmpeg/FFprobe 第三方二进制，属于依赖与许可证审查项，不是个人隐私。
+- 公开 Release：Windows x64 安装器 108,566,180 字节，SHA-256 `74b733522c32eef027d9c1b0e846d3bfc6d740e6725fb30544a6f0f1e03c6ea6`；macOS DMG 42,757,651 字节，SHA-256 `6bbdf24c2b288dab2277bc3592557595f31c3bca37abaa7268c15c3b7bb8320a`。
 
 ### 2026-07-21 Windows / macOS 正式版安装包
 
@@ -43,9 +44,10 @@
 ## 已确认阻塞
 
 - 外部跨平台规划 `<private-planning-document>` 当前不存在；本轮依照仓库内长期规则和现有跨平台边界实施。
+- GitHub 服务端仍暂存重写前的无引用提交对象；公开 refs、普通历史浏览和 clone 均已脱敏，但已知旧哈希仍可通过 Commit API 命中。仓库侧没有删除无引用对象的 API，需由仓库所有者向 GitHub Support 请求 cached views / references purge，完成后再验证返回 404。
 
 ## 下一步入口
 
-1. 完成本轮验证后推送 `v0.1.0`，等待 Windows / macOS 双端流水线并验收公开 Release 的四项资产与 README。
+1. 向 GitHub Support 提交重写前提交对象与 cached views 的服务端清除请求，完成后确认旧 Commit API 返回 404。
 2. 对外扩大分发前配置 Windows Authenticode 证书、Apple Developer ID Application 证书与 notarization 凭据，重新验证 SmartScreen / Gatekeeper。
 3. 补充脱敏的真实产品截图，并确定项目级许可证及 FFmpeg/FFprobe 再分发说明。

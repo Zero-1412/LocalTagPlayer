@@ -7,6 +7,8 @@
 - 对当前文件和 Git 历史执行隐私审计，删除公开历史中的个人邮箱、本机用户名/盘符路径和 `.codex/config.toml`；提交者元数据改为 GitHub noreply 身份并安全强制更新远程 `master`。
 - `.gitignore` 增加本地数据库、日志、媒体样本、环境变量、证书、签名文件、安装包、`.local/` 与 Codex 本地配置过滤；这些本地信息继续保留，不进入后续提交。
 - 定向扫描未发现已跟踪的媒体、数据库、日志、私钥、签名证书、环境变量或 API token。仓库中的 FFmpeg/FFprobe 为公开第三方运行时依赖，README 已明确当前尚无项目级许可证，后续需单独收口再分发说明。
+- `v0.1.0` 的版本解析、Windows、macOS 与公开发布 job 全部成功；Release 含 Windows/macOS 安装包和两份 SHA-256 校验文件，远程 README 的核心章节与脱敏状态已复验。
+- GitHub 服务端仍可按已知旧哈希命中重写前的无引用提交对象；普通 clone 与公开 refs 已清理，彻底删除该平台缓存仍需 GitHub Support 执行服务端 purge。
 - 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、播放器/缓存后端、标签语义或用户数据。
 
 ## 2026-07-21 · 媒体卡片文件菜单收口
