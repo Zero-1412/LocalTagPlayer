@@ -91,6 +91,7 @@ export 'pages/player/player_settings_panel.dart';
 export 'pages/player/player_video_aspect_mode.dart';
 export 'pages/player/player_resume_dialog.dart';
 export 'pages/player/player_queue_sidebar.dart';
+export 'pages/player/player_rename_file_dialog.dart';
 export 'pages/player/player_page.dart';
 export 'pages/library/library_page.dart';
 export 'pages/library/library_page_helpers.dart';

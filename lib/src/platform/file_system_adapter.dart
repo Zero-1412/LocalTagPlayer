@@ -96,6 +96,14 @@ abstract interface class FileSystemAdapter {
   Future<void> deleteFile(String path);
 
   /**
+   * 把单个文件从 [sourcePath] 重命名为 [targetPath]，并返回规范化后的新路径。
+   *
+   * 目标已存在时必须拒绝覆盖；上层只负责表达用户意图，不得绕过该边界直接使用
+   * `dart:io`。当前播放器用例只允许同目录改名，跨目录移动仍由独立 relink 流程负责。
+   */
+  Future<String> renameFile(String sourcePath, String targetPath);
+
+  /**
    * 把单个文件移入当前系统的回收站或废纸篓；文件不存在时安全返回。
    *
    * 实现不能静默回退为永久删除；平台不支持时必须抛出明确异常。

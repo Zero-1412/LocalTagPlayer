@@ -141,6 +141,25 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
   }
 
   @override
+  Future<String> renameFile(String sourcePath, String targetPath) async {
+    final source = File(sourcePath);
+    final normalizedSource = normalizePath(source.absolute.path);
+    final normalizedTarget = normalizePath(File(targetPath).absolute.path);
+    if (normalizedSource == normalizedTarget) {
+      return normalizedSource;
+    }
+    if (!await source.exists()) {
+      throw FileSystemException('源文件不存在，无法重命名', normalizedSource);
+    }
+    if (await File(normalizedTarget).exists()) {
+      // 先拒绝覆盖，避免 Dart 在部分桌面平台把 rename 解释为替换现有文件。
+      throw FileSystemException('目标文件已存在，无法重命名', normalizedTarget);
+    }
+    final renamed = await source.rename(normalizedTarget);
+    return normalizePath(renamed.absolute.path);
+  }
+
+  @override
   Future<void> moveFileToTrash(String path) async {
     final file = File(path);
     if (!await file.exists()) {

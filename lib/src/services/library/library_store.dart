@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../core/tag_rules.dart';
@@ -1129,6 +1130,58 @@ class LibraryStore
     videos[pathKey] = item;
     await _videoPersistence.upsert(item);
     await dataBackupService.enqueueVideo(item.videoId);
+  }
+
+  /**
+   * 原子提交正常视频的同目录文件重命名，并保留稳定身份和全部用户数据。
+   *
+   * 物理文件操作由 [FileSystemAdapter] 在页面协调层先完成；这里仅拥有 SQLite 与内存
+   * 索引迁移。只有 batch 成功后才修改传入对象和 path 索引，避免提交失败留下半更新状态。
+   */
+  Future<void> renameVideoPath(VideoItem item, String newPath) async {
+    if (item.isMissing) {
+      throw StateError('缺失文件需要先重新关联，不能直接重命名');
+    }
+    final oldPath = item.path;
+    final normalizedPath = p.normalize(newPath);
+    if (!p.equals(p.dirname(oldPath), p.dirname(normalizedPath))) {
+      throw StateError('播放器只允许修改文件名，不能移动文件目录');
+    }
+    final oldKey = TagRules.pathKey(oldPath);
+    final current = videos[oldKey];
+    if (current == null || current.videoId != item.videoId) {
+      throw StateError('媒体库中的原文件记录已变化，请返回后重试');
+    }
+    final newKey = TagRules.pathKey(normalizedPath);
+    final occupied = videos[newKey];
+    if (occupied != null && occupied.videoId != item.videoId) {
+      throw StateError('同名文件已经存在于媒体库');
+    }
+    if (oldKey == newKey) {
+      return;
+    }
+
+    final updated = VideoItem.fromJson(item.toJson())
+      ..path = normalizedPath
+      ..title = p.basenameWithoutExtension(normalizedPath)
+      ..relativePath = item.rootPath == null || item.rootPath!.isEmpty
+          ? item.relativePath
+          : p.relative(normalizedPath, from: item.rootPath!);
+    final batch = _db.batch();
+    _videoPersistence.relinkInBatch(batch, oldPath, updated);
+    _tagPersistence.relinkVideoPathInBatch(batch, updated);
+    await batch.commit(noResult: true);
+
+    final linkedTagIds = videoTagIdsByPathKey.remove(oldKey);
+    videos.remove(oldKey);
+    item
+      ..path = updated.path
+      ..title = updated.title
+      ..relativePath = updated.relativePath;
+    videos[newKey] = item;
+    if (linkedTagIds != null) {
+      videoTagIdsByPathKey[newKey] = linkedTagIds;
+    }
   }
 
   /**

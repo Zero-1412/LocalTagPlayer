@@ -2145,6 +2145,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     var editCount = 0;
+    var renameCount = 0;
     final item = VideoItem(
       path: r'X:\test-media\原神\雷神\clip.mp4',
       title: 'clip',
@@ -2171,6 +2172,7 @@ void main() {
               queuePanel: const Center(child: Text('筛选结果列表测试')),
               item: item,
               queueEndReached: false,
+              onRenameFile: () => renameCount++,
               onEditManualTags: () => editCount++,
             ),
           ),
@@ -2259,11 +2261,19 @@ void main() {
     expect(find.text('原神'), findsOneWidget);
     expect(find.text('雷神'), findsOneWidget);
     expect(find.text('编辑标签'), findsNothing);
+    expect(find.byTooltip('重命名文件'), findsOneWidget);
     expect(find.text('打开位置'), findsNothing);
     expect(find.text('更多操作'), findsNothing);
     expect(find.byKey(const ValueKey('player.more')), findsNothing);
 
-    await tester.ensureVisible(find.widgetWithText(ActionChip, '继续添加'));
+    await tester.tap(find.byKey(const ValueKey('player.details.renameFile')));
+    await tester.pump();
+    expect(renameCount, 1);
+    expect(editCount, 0);
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('player.details.editTags')),
+    );
     await tester.tap(find.widgetWithText(ActionChip, '继续添加'));
     await tester.pump();
     expect(editCount, 1);
@@ -2272,6 +2282,77 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('筛选结果列表测试'), findsOneWidget);
     expect(find.text('当前视频详情'), findsNothing);
+  });
+
+  testWidgets('player rename dialog preserves extension and validates basename',
+      (tester) async {
+    final item = VideoItem(
+      path: r'X:\test-media\clip.mp4',
+      title: 'clip',
+      folder: r'X:\test-media',
+      tags: <String>{},
+      addedAt: DateTime.utc(2026, 7, 21),
+    );
+    String? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              result = await showPlayerRenameFileDialog(context, item: item);
+            },
+            child: const Text('打开重命名'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开重命名'));
+    await tester.pumpAndSettle();
+    expect(find.text('只修改文件名，标签请在下方“标签”区域维护。'), findsOneWidget);
+    expect(find.text('.mp4'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('player.renameFile.confirm')),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('player.renameFile.input')),
+      'bad/name',
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('player.renameFile.confirm')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.byKey(const ValueKey('player.renameFile.confirm')));
+    await tester.pump();
+    expect(find.textContaining('文件名不能包含'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('player.renameFile.input')),
+      'renamed clip',
+    );
+    await tester.tap(find.byKey(const ValueKey('player.renameFile.confirm')));
+    await tester.pumpAndSettle();
+    expect(result, 'renamed clip');
+  });
+
+  test('player rename filename validation rejects unsafe desktop names', () {
+    expect(playerRenameFileNameError(''), isNotNull);
+    expect(playerRenameFileNameError('bad/name'), isNotNull);
+    expect(playerRenameFileNameError('CON'), isNotNull);
+    expect(playerRenameFileNameError('clip.'), isNotNull);
+    expect(playerRenameFileNameError('新文件名'), isNull);
   });
 
   test('tag accordion children are scoped to their parent tag', () {

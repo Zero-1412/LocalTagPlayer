@@ -28,6 +28,7 @@ class PlayerSidePanel extends StatefulWidget {
     required this.queuePanel,
     required this.item,
     required this.queueEndReached,
+    required this.onRenameFile,
     required this.onEditManualTags,
   });
 
@@ -39,6 +40,9 @@ class PlayerSidePanel extends StatefulWidget {
 
   /** 当前筛选队列是否已经顺序播放到末尾。 */
   final bool queueEndReached;
+
+  /** 打开当前视频的文件重命名流程。 */
+  final VoidCallback onRenameFile;
 
   /** 打开当前视频的手动标签编辑器。 */
   final VoidCallback onEditManualTags;
@@ -119,6 +123,7 @@ class _PlayerSidePanelState extends State<PlayerSidePanel> {
                       key: const ValueKey('player.sidebar.details'),
                       item: widget.item,
                       queueEndReached: widget.queueEndReached,
+                      onRenameFile: widget.onRenameFile,
                       onEditManualTags: widget.onEditManualTags,
                     ),
             ),
@@ -301,6 +306,7 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
     super.key,
     required this.item,
     required this.queueEndReached,
+    required this.onRenameFile,
     required this.onEditManualTags,
   });
 
@@ -309,6 +315,9 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
 
   /** 当前 filtered queue 是否已经播放到末尾。 */
   final bool queueEndReached;
+
+  /** 修改当前本地文件的 basename，不承担标签维护。 */
+  final VoidCallback onRenameFile;
 
   /** 编辑当前视频手动标签。 */
   final VoidCallback onEditManualTags;
@@ -365,8 +374,9 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
         _PlayerDetailCard(
           title: '文件名',
           trailing: IconButton(
-            tooltip: '编辑标签',
-            onPressed: onEditManualTags,
+            key: const ValueKey('player.details.renameFile'),
+            tooltip: '重命名文件',
+            onPressed: onRenameFile,
             icon: const Icon(Icons.edit_outlined, size: 18),
             color: appAccentViolet,
             visualDensity: VisualDensity.compact,
@@ -390,6 +400,7 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
             children: [
               for (final tag in visibleTags) _PlayerDetailTagChip(label: tag),
               ActionChip(
+                key: const ValueKey('player.details.editTags'),
                 onPressed: onEditManualTags,
                 avatar: const Icon(Icons.add_rounded, size: 16),
                 label: Text(visibleTags.isEmpty ? '添加标签' : '继续添加'),

@@ -53,6 +53,40 @@ void main() {
     await adapter.deleteFile(sourcePath);
   });
 
+  test('desktop adapter renames without overwriting an existing file',
+      () async {
+    final root = await Directory.systemTemp.createTemp('ltp_rename_adapter_');
+    addTearDown(() async {
+      if (await root.exists()) {
+        await root.delete(recursive: true);
+      }
+    });
+    final adapter = const DesktopFileSystemAdapter();
+    final sourcePath = adapter.joinPath(<String>[root.path, 'before.mp4']);
+    final targetPath = adapter.joinPath(<String>[root.path, 'after.mp4']);
+    await adapter.writeBytes(
+      sourcePath,
+      Uint8List.fromList(const <int>[1, 2, 3]),
+      flush: true,
+    );
+
+    final renamedPath = await adapter.renameFile(sourcePath, targetPath);
+
+    expect(renamedPath, adapter.normalizePath(targetPath));
+    expect(await adapter.fileExists(sourcePath), isFalse);
+    expect(await adapter.fileExists(targetPath), isTrue);
+    await adapter.writeBytes(
+      sourcePath,
+      Uint8List.fromList(const <int>[4, 5, 6]),
+      flush: true,
+    );
+    await expectLater(
+      adapter.renameFile(sourcePath, targetPath),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await File(targetPath).readAsBytes(), const <int>[1, 2, 3]);
+  });
+
   test('desktop adapter routes recoverable deletion through trash boundary',
       () async {
     final root = await Directory.systemTemp.createTemp('ltp_trash_adapter_');

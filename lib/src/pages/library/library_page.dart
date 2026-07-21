@@ -6143,6 +6143,7 @@ class _LibraryPageState extends State<LibraryPage> {
             queueTitle: queueTitle,
             onDeleteVideo: _deleteVideoFromPlayer,
             onToggleFavorite: _toggleFavoriteFromPlayer,
+            onRenameFile: _renameVideoFromPlayer,
             onEditManualTags: _editManualTagsFromPlayer,
             onRelinkMissing: _relinkMissingFromPlayer,
             onPlaybackProgressUpdated: _updatePlaybackProgress,
@@ -6283,6 +6284,52 @@ class _LibraryPageState extends State<LibraryPage> {
       _playerScopedNeedsCountRefresh = true;
     }
     return changed;
+  }
+
+  /**
+   * 协调播放器发起的同目录文件重命名，并以同一 videoId 提交新的 mutable path。
+   *
+   * 文件系统先拒绝覆盖并完成物理改名；SQLite 提交失败时立即尝试恢复原名，避免磁盘与
+   * 媒体库索引分叉。返回媒体库后只刷新可见结果，不重算与文件名无关的标签计数。
+   */
+  Future<void> _renameVideoFromPlayer(
+    VideoItem item,
+    String newBaseName,
+  ) async {
+    final store = _store;
+    if (store == null) {
+      throw StateError('媒体库尚未就绪，请稍后重试');
+    }
+    final oldPath = item.path;
+    final extension = p.extension(oldPath);
+    final targetPath = _fileSystem.joinPath(<String>[
+      _fileSystem.parentPath(oldPath),
+      '$newBaseName$extension',
+    ]);
+    if (TagRules.pathKey(oldPath) == TagRules.pathKey(targetPath)) {
+      if (_fileSystem.normalizePath(oldPath) ==
+          _fileSystem.normalizePath(targetPath)) {
+        return;
+      }
+      throw StateError('当前暂不支持仅修改文件名大小写，请换一个不同名称');
+    }
+    if (await _fileSystem.fileExists(targetPath)) {
+      throw StateError('同名文件已存在，请换一个名称');
+    }
+
+    final renamedPath = await _fileSystem.renameFile(oldPath, targetPath);
+    try {
+      await store.renameVideoPath(item, renamedPath);
+    } catch (error) {
+      try {
+        await _fileSystem.renameFile(renamedPath, oldPath);
+      } catch (_) {
+        // 回滚失败表示磁盘已改名但数据库仍指向旧路径，必须要求返回媒体库重新扫描修复。
+        throw StateError('文件已改名，但媒体库更新失败；请返回媒体库后重新扫描');
+      }
+      rethrow;
+    }
+    _playerScopedLibraryDataChanged = true;
   }
 
   Future<void> _toggleFavorite(VideoItem item) async {

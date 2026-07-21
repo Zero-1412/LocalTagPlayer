@@ -199,6 +199,13 @@
 - `0.2.0`：实现平台无关 `FilterQuery.matches` 语义：标签组 AND、同组 OR、排除 NOT、标签别名搜索；媒体库筛选接入 `FilterQuery`，同时保留文件夹派生的一/二级标签行为。
 - `0.1.0`：从 roadmap 创建任务模板。
 
+## 2026-07-21 播放器同目录重命名的稳定路径提交
+
+- `LibraryRepository.renameVideoPath` 只接受正常 active 视频的同目录新路径；物理文件操作成功后，以同一 `videoId` 在 SQLite batch 中迁移视频行和兼容 `video_tags.video_path`。
+- Store 只在 batch 成功后修改 `VideoItem.path/title/relativePath` 与内存 path 索引；手动标签 tagId、收藏、播放记录、进度、媒体详情和 fingerprint 均保留。
+- 文件重命名不复用 missing relink 的指纹选择语义，也不触发全库扫描或标签计数重算；folder 层级因父目录不变而保持。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、标签来源规则或 filtered queue。
+
 ## 2026-07-08 LibraryStore tag/video persistence 拆分
 
 - 补充 repository 边界 focused tests：标签别名、隐藏、收藏、排序字段会跨 store reload 保留；manual child tag 与 folder child tag 会按来源分离；video upsert/delete 会持久化视频字段并清理 `video_tags` 关联。

@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-21 · 播放器文件重命名与标签入口解耦
+
+- 播放器详情的文件名铅笔改为“重命名文件”，下方“添加标签 / 继续添加”继续只维护 manual 标签，两个入口不再触发同一动作。
+- 重命名弹窗只编辑 basename、只读保留扩展名，并校验空值、路径字符、系统保留名和尾部点/空格；非法输入、同名占用和失败状态都有直接中文反馈。
+- `FileSystemAdapter` 增加拒绝覆盖的重命名边界；媒体库以 SQLite batch 把同一 `videoId` 更新到新 mutable path，提交失败尝试恢复原文件名。文件句柄占用时播放器会受控停止、重试并恢复原位置和播放状态。
+- 测试覆盖平台重命名/拒绝覆盖、稳定身份与手动标签/收藏/进度持久化、两个 UI 入口职责和 DialogRoute 输入生命周期。完整 233 项测试通过，3 项显式 benchmark 跳过；`flutter analyze` 与 Windows debug build 通过。1249×714 最新 Debug 实窗确认弹窗无错位、遮挡或溢出，取消后原文件名、播放和 11,170 条媒体库结果保持。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 内容/顺序、`PlayerBackend` contract、缓存队列或标签来源语义。
+
 ## 2026-07-21 · 播放器 Route、转场与反馈收口
 
 - 媒体库在播放器 Route 压入前先提交语义排除，播放器根节点声明独立 route scope；Windows UIA 在播放期间不再残留媒体库控件，返回后立即恢复媒体库语义。

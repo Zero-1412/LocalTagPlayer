@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.49` 完成删除偏好统一持久化、非主路由返回输入层和键盘快捷键录制。SQLite、stable identity、标签查询、filtered queue 与 PlayerBackend 语义不变。
+`Architecture Baseline 0.5.50` 完成播放器文件重命名的平台边界和 stable mutable path 事务。SQLite schema、标签查询、filtered queue 与 PlayerBackend contract 不变。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,11 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.49`
+已完成基线：`Architecture Baseline 0.5.50`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.50`：`FileSystemAdapter` 增加拒绝覆盖的单文件重命名契约；播放器文件名入口只编辑 basename 并保留扩展名，标签入口继续独占 manual 标签维护。`LibraryRepository.renameVideoPath` 仅提交同目录 mutable path、标题和兼容 path 索引，SQLite batch 成功后才迁移内存索引；稳定 `videoId`、标签关系、收藏和播放状态保持。当前文件句柄不允许重命名时，播放器使用既有 pause/stop/open/seek 边界恢复原位置，不修改 `PlayerBackend` contract。未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列或标签来源语义。
 
 - `0.5.49`：`PlaybackSettings` 向后兼容增加删除确认、回收站最终状态和“返回上一页”绑定；设置写入失败时恢复旧状态或中止删除。单条、批量和播放器队列共用 `VideoDeleteDecision`，跳过确认仍只通过现有 stable identity 清理与 `FileSystemAdapter.moveFileToTrash` 边界执行。非主路由用仅当前 Route 生效的键盘处理器和鼠标返回侧键统一返回，EditableText、PopupRoute 与快捷键录制焦点拥有门禁；播放器全屏 Esc 保持固定安全出口。快捷键录制支持常用基础键及 Control / Alt / Shift 组合，冲突不交换绑定。未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存队列或用户标签/收藏数据。
 

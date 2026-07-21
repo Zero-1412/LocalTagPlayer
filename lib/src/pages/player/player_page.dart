@@ -33,6 +33,7 @@ import 'player_open_request_controller.dart';
 import 'player_playback_controller.dart';
 import 'player_playback_mode.dart';
 import 'player_queue_sidebar.dart';
+import 'player_rename_file_dialog.dart';
 import 'player_resume_dialog.dart';
 import 'player_settings_panel.dart';
 import 'player_video_aspect_mode.dart';
@@ -476,6 +477,7 @@ class PlayerPage extends StatefulWidget {
     required this.queueTitle,
     required this.onDeleteVideo,
     required this.onToggleFavorite,
+    required this.onRenameFile,
     required this.onEditManualTags,
     required this.onRelinkMissing,
     required this.onPlaybackProgressUpdated,
@@ -500,6 +502,8 @@ class PlayerPage extends StatefulWidget {
   final Future<void> Function(VideoItem item, bool moveLocalFileToTrash)
       onDeleteVideo;
   final Future<void> Function(VideoItem item) onToggleFavorite;
+  /** 通过媒体库协调物理文件与稳定 mutable path 的同目录重命名事务。 */
+  final Future<void> Function(VideoItem item, String newBaseName) onRenameFile;
   final Future<void> Function(VideoItem item) onEditManualTags;
   final Future<bool> Function(VideoItem item) onRelinkMissing;
   final Future<void> Function(
@@ -596,6 +600,8 @@ class PlayerPageState extends State<PlayerPage> {
   var _queueEndReached = false;
   /** 标签弹窗打开期间阻止底层播放器重复消费 Escape，避免意外返回媒体库。 */
   var _editingManualTags = false;
+  /** 文件重命名事务期间阻止重复点击和播放器快捷键并发操作。 */
+  var _renamingFile = false;
   /** 原生文件对话框无法可靠暴露 Flutter Focus，使用显式深度暂停全部播放器快捷键。 */
   var _shortcutSuspensionDepth = 0;
   late PlayerPlaybackMode _playbackMode;
@@ -2600,6 +2606,132 @@ class PlayerPageState extends State<PlayerPage> {
   }
 
   /**
+   * 把文件名编辑、平台文件操作和稳定路径提交串成一个播放器内事务。
+   *
+   * 首次尝试不打断播放；仅当桌面文件句柄拒绝改名时才停止后端、重试并恢复原位置。
+   */
+  Future<void> _renameCurrentFile() async {
+    if (_renamingFile) {
+      return;
+    }
+    _renamingFile = true;
+    try {
+      await _withPlayerShortcutsSuspended(() async {
+        final item = _currentItem;
+        if (item.isMissing) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('文件缺失，请重新关联后再重命名')),
+            );
+          }
+          return;
+        }
+        final newBaseName = await showPlayerRenameFileDialog(
+          context,
+          item: item,
+        );
+        if (!mounted || newBaseName == null) {
+          return;
+        }
+
+        final oldPath = item.path;
+        final position = _playerBackend.state.position;
+        final wasPlaying = _playerBackend.state.playing;
+        try {
+          await widget.onRenameFile(item, newBaseName);
+          if (!mounted) {
+            return;
+          }
+          // 后端仍持有同一文件句柄时无需重新打开，只同步 path 身份供进度和诊断继续解析。
+          _openedPath = item.path;
+          setState(() {});
+          _showRenameResult('文件已重命名');
+        } on FileSystemException {
+          // Windows 后端可能独占当前媒体句柄；仅在真实文件系统失败后进入一次受控重试。
+          _openedPath = null;
+          await _playerBackend.pause();
+          await _playerBackend.stop();
+          try {
+            await widget.onRenameFile(item, newBaseName);
+            await _reopenAfterFileRename(
+              path: item.path,
+              position: position,
+              wasPlaying: wasPlaying,
+            );
+            if (mounted) {
+              _showRenameResult('文件已重命名，播放状态已恢复');
+            }
+          } catch (error) {
+            // 重试失败时原路径仍应存在；恢复旧媒体，避免一次命名错误终止当前会话。
+            try {
+              await _reopenAfterFileRename(
+                path: oldPath,
+                position: position,
+                wasPlaying: wasPlaying,
+              );
+            } catch (_) {
+              // 下方错误反馈仍保留准确重试入口；这里不以第二个异常覆盖原始失败原因。
+            }
+            if (mounted) {
+              _showRenameResult(_playerRenameErrorMessage(error));
+            }
+          }
+        } catch (error) {
+          if (mounted) {
+            _showRenameResult(_playerRenameErrorMessage(error));
+          }
+        }
+      });
+    } finally {
+      _renamingFile = false;
+    }
+  }
+
+  /** 在后端因文件占用被停止后重新打开目标路径并恢复用户可见播放状态。 */
+  Future<void> _reopenAfterFileRename({
+    required String path,
+    required Duration position,
+    required bool wasPlaying,
+  }) async {
+    _openRequests.clearFailure();
+    await _playerBackend.openPath(path);
+    await _applyPlaybackPerformanceProfile();
+    if (position > Duration.zero) {
+      await _playerBackend.seek(position);
+    }
+    if (wasPlaying) {
+      await _playerBackend.play();
+    } else {
+      await _playerBackend.pause();
+    }
+    _openedPath = path;
+    _openRequests.markSuccess();
+    _lastPersistedPosition = position;
+    _lastProgressWriteAt = DateTime.now();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  /** 展示不包含本地路径的重命名结果，避免异常正文泄露用户目录。 */
+  void _showRenameResult(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  /** 把领域校验保留为可理解文案，其它异常统一收敛为安全提示。 */
+  String _playerRenameErrorMessage(Object error) {
+    if (error is StateError) {
+      return error.message.toString();
+    }
+    if (error is FileSystemException) {
+      return '无法重命名文件，请检查文件是否被其它程序占用或目标名称已存在';
+    }
+    return '重命名失败，文件名和媒体库记录均未更改';
+  }
+
+  /**
    * 在原生文件对话框或其它不参与 Flutter Focus 树的操作期间暂停全部播放器快捷键。
    */
   Future<T> _withPlayerShortcutsSuspended<T>(
@@ -3102,6 +3234,7 @@ class PlayerPageState extends State<PlayerPage> {
       queuePanel: queuePanel,
       item: _currentItem,
       queueEndReached: _queueEndReached,
+      onRenameFile: () => unawaited(_renameCurrentFile()),
       onEditManualTags: () => unawaited(_editManualTags()),
     );
   }

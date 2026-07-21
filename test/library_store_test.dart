@@ -439,6 +439,61 @@ void main() {
     );
   });
 
+  test('same-directory rename preserves stable identity and user data',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('rename_video_path');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot = Directory(p.join(dataDir.path, 'media'));
+    final original = await _writeVideoPlaceholder(
+      mediaRoot,
+      <String>['Series', 'Album', 'before.mp4'],
+    );
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, original.path)
+      ..isFavorite = true
+      ..playbackPosition = const Duration(seconds: 37)
+      ..playbackDuration = const Duration(minutes: 2);
+    await store.upsertVideo(item);
+    final manual = await store.createManualTag(
+      name: '手动保留',
+      groupId: 'manual',
+    );
+    await store.batchAddManualTag(manual, <VideoItem>[item]);
+    final stableVideoId = item.videoId;
+    final renamedPath = p.join(original.parent.path, 'after.mp4');
+    await original.rename(renamedPath);
+
+    await store.renameVideoPath(item, renamedPath);
+
+    expect(item.videoId, stableVideoId);
+    expect(item.path, p.normalize(renamedPath));
+    expect(item.title, 'after');
+    expect(item.isFavorite, isTrue);
+    expect(item.playbackPosition, const Duration(seconds: 37));
+    expect(item.tags, containsAll(<String>['Series', '手动保留']));
+    expect(store.videos[TagRules.pathKey(original.path)], isNull);
+    expect(
+      store.videoTagIdsByPathKey[TagRules.pathKey(renamedPath)],
+      contains(manual.id),
+    );
+
+    final reloaded = await _loadTrackedStore(stores);
+    final persisted = _videoByPath(reloaded, renamedPath);
+    expect(persisted.videoId, stableVideoId);
+    expect(persisted.title, 'after');
+    expect(persisted.isFavorite, isTrue);
+    expect(persisted.playbackPosition, const Duration(seconds: 37));
+    expect(
+      reloaded.videoTagIdsByPathKey[TagRules.pathKey(renamedPath)],
+      contains(manual.id),
+    );
+  });
+
   test('save and load preserve metadata and playback fields', () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('persist');

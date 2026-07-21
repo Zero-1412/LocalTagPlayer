@@ -159,6 +159,13 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
 
   Set<String> childTagsFor(String parentTag);
 
+  /**
+   * 在物理文件已完成同目录重命名后，把同一稳定 videoId 提交到 [newPath]。
+   *
+   * 该动作只更新 mutable path、标题和兼容 path 索引，不改变标签来源或用户数据。
+   */
+  Future<void> renameVideoPath(VideoItem item, String newPath);
+
   Future<void> relinkMissingVideo(VideoItem item, String newPath);
 
   @override

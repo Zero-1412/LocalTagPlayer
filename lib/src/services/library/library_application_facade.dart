@@ -227,6 +227,10 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
   Set<String> childTagsFor(String parentTag) =>
       _repository.childTagsFor(parentTag);
 
+  /** 提交同一稳定视频在物理重命名后的 mutable path。 */
+  Future<void> renameVideoPath(VideoItem item, String newPath) =>
+      _repository.renameVideoPath(item, newPath);
+
   Future<void> relinkMissingVideo(VideoItem item, String newPath) =>
       _repository.relinkMissingVideo(item, newPath);
 
