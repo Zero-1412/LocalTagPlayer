@@ -76,13 +76,9 @@ if(LTP_CARGO_EXECUTABLE AND LTP_CARGO_VERSION_RESULT EQUAL 0)
     COMMENT "Building read-only Rust LibraryScanBackend"
     VERBATIM)
   add_custom_target(ltp_rust_library_scan ALL DEPENDS "${LTP_RUST_SCAN_EXE}")
-  install(PROGRAMS "${LTP_RUST_SCAN_EXE}"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}"
-    COMPONENT Runtime)
-  install(FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/rust_library_scan/LICENSE"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/data/licenses/rust_library_scan"
-    COMPONENT Runtime)
+  # 安装规则必须等 Flutter 将前缀绑定到 Release/Debug bundle 后再声明，
+  # 否则干净配置会把 sidecar 解析到系统 Program Files 并要求管理员权限。
+  set(LTP_RUST_SCAN_AVAILABLE TRUE)
 else()
   message(STATUS "Rust toolchain unavailable; using Dart LibraryScanBackend fallback")
 endif()
@@ -108,6 +104,16 @@ endif()
 
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
+
+if(LTP_RUST_SCAN_AVAILABLE)
+  install(PROGRAMS "${LTP_RUST_SCAN_EXE}"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+  install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/rust_library_scan/LICENSE"
+    DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/licenses/rust_library_scan"
+    COMPONENT Runtime)
+endif()
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)

@@ -4,6 +4,14 @@
 
 ## 活跃任务
 
+### 2026-07-21 Windows / macOS 正式版安装包
+
+- 目标：基于 `pubspec.yaml` 的 `0.1.0+1` 构建 Windows x64 Release 安装器与 macOS Release DMG，不改变业务、数据或播放语义。
+- 当前状态：Windows 本地 Release 安装器、隔离安装/启动/卸载冒烟均已完成；macOS 等待独立 macOS runner 构建并做启动验证。
+- Windows 安装器使用当前用户目录安装，卸载时保留用户数据库、标签、收藏和播放记录。
+- macOS bundle identifier 已从模板占位符收敛为 `com.zero1412.localtagplayer`，Finder 展示名为 `Local Tag Player`。
+- 仓库当前没有 Windows Authenticode 与 Apple Developer ID / notarization 凭据；生成的安装包必须明确标记为未签名或未公证，不能宣称通过系统信任链。
+
 ### 2026-07-21 播放器队列定位语义与媒体卡片重命名
 
 - 目标：消除重复“回到选中”入口，阻止“回到播放”覆盖浏览选中，并把统一文件重命名能力接入媒体卡片“更多”。

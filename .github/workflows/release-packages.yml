@@ -1,0 +1,123 @@
+name: 正式版桌面安装包
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 安装包版本号，不包含 v 前缀
+        required: true
+        default: 0.1.0
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/release-packages.yml"
+      - "packaging/**"
+      - "macos/Runner/Configs/AppInfo.xcconfig"
+      - "macos/Runner/Info.plist"
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_VERSION: ${{ github.event.inputs.version || '0.1.0' }}
+
+jobs:
+  windows:
+    name: Windows x64 安装器
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 获取依赖并验证静态分析
+        run: |
+          flutter pub get
+          flutter analyze
+      - name: 构建 Windows Release
+        run: flutter build windows --release --build-name "$env:RELEASE_VERSION"
+      - name: 安装 Inno Setup
+        run: choco install innosetup --yes --no-progress
+      - name: 生成 Windows 安装器
+        shell: pwsh
+        run: |
+          $sourceDir = (Resolve-Path "build/windows/x64/runner/Release").Path
+          $outputDir = Join-Path $PWD "artifacts"
+          New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=$env:RELEASE_VERSION" `
+            "/DMySourceDir=$sourceDir" `
+            "/DMyOutputDir=$outputDir" `
+            "packaging/windows/local_tag_player.iss"
+      - name: 记录 Windows 校验值
+        shell: pwsh
+        run: |
+          Get-FileHash artifacts/*.exe -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))" } |
+            Set-Content -Encoding utf8 artifacts/SHA256SUMS-windows.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LocalTagPlayer-${{ env.RELEASE_VERSION }}-windows-x64
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+
+  macos:
+    name: macOS DMG
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: 获取依赖并验证静态分析
+        run: |
+          flutter pub get
+          flutter analyze
+      - name: 构建 macOS Release
+        run: flutter build macos --release --build-name "$RELEASE_VERSION"
+      - name: 验证 Release 进程能够启动
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path="build/macos/Build/Products/Release/local_tag_player.app"
+          executable="$app_path/Contents/MacOS/local_tag_player"
+          log_file="$RUNNER_TEMP/local_tag_player_macos_release.log"
+          "$executable" >"$log_file" 2>&1 &
+          app_pid=$!
+          sleep 10
+          if ! kill -0 "$app_pid" 2>/dev/null; then
+            tail -n 80 "$log_file"
+            exit 1
+          fi
+          kill "$app_pid"
+          wait "$app_pid" || true
+      - name: 生成未公证 DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path="build/macos/Build/Products/Release/local_tag_player.app"
+          staging_dir="$RUNNER_TEMP/local-tag-player-dmg"
+          artifact_dir="$PWD/artifacts"
+          mkdir -p "$staging_dir" "$artifact_dir"
+          ditto "$app_path" "$staging_dir/Local Tag Player.app"
+          ln -s /Applications "$staging_dir/Applications"
+          hdiutil create \
+            -volname "Local Tag Player" \
+            -srcfolder "$staging_dir" \
+            -ov \
+            -format UDZO \
+            "$artifact_dir/LocalTagPlayer-$RELEASE_VERSION-macos-unnotarized.dmg"
+          shasum -a 256 "$artifact_dir"/*.dmg > "$artifact_dir/SHA256SUMS-macos.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LocalTagPlayer-${{ env.RELEASE_VERSION }}-macos-unnotarized
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30

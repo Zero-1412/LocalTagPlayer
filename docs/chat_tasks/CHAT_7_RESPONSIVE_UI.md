@@ -248,6 +248,9 @@
 
 ## macOS / Linux 适配说明
 
+- Release packaging：新增独立 Windows / macOS 正式版流水线；macOS 在 runner 上构建 Release、验证进程启动并生成 `.dmg`，Windows 使用 Inno Setup 生成当前用户级安装器。仓库尚无两端签名与 Apple notarization 凭据，产物必须保持未签名/未公证标识。
+- macOS metadata：发布 bundle identifier 使用 `com.zero1412.localtagplayer`，Finder 展示名使用 `Local Tag Player`；内部可执行文件名暂不调整，避免扩大 runner 与插件边界。
+
 - FFmpeg bundled tools：当前 Windows 布局期望 `.exe` 工具位于 `tools/ffmpeg/bin`；macOS / Linux 打包需要平台专属二进制、可执行权限、macOS quarantine / signing 检查，以及按平台分离查找顺序。
 - sqlite3 动态库：Windows 当前打包 `sqlite3.dll`；macOS / Linux 需要 `.dylib` / `.so` 放在 Flutter desktop 打包和运行时库搜索路径兼容的位置。
 - 文件管理器定位：Windows reveal 行为在 macOS 应映射到 Finder `open -R`，在 Linux 映射到具体桌面环境的 reveal/open 命令；无法精确定位时回退打开父目录。
@@ -274,6 +277,7 @@
 
 ## 变更记录
 
+- `0.3.1-packaging`：新增 Windows x64 安装器与 macOS Release DMG 流水线，收敛 macOS 发布标识并明确签名/公证边界。
 - `0.3.0`：完成 Apple UI Phase 0，共享 token、无障碍策略与基础交互表面通过测试和真实窗口验证。
 - `0.3.0-plan`：建立 Apple 式全应用 UI skill 与六阶段迁移蓝图。
 - `0.2.16`：增强左右侧栏的位移、缩放、淡入和移动边缘层次，保持网格列数与业务状态稳定。

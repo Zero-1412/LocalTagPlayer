@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-21 · Windows / macOS 正式版打包链路
+
+- 新增 Inno Setup Windows x64 安装器定义，使用当前用户目录安装，并明确保证卸载不删除用户数据库、标签、收藏或播放记录。
+- 新增 Windows 与 macOS Release 打包流水线：Windows 生成 `.exe` 安装器，macOS 在真实 runner 启动检查后生成带 Applications 入口的 `.dmg`，两端同时附带 SHA-256。
+- macOS 发布元数据移除 `com.example` 占位符，bundle identifier 改为 `com.zero1412.localtagplayer`，Finder 展示名统一为 `Local Tag Player`。
+- 当前仓库未配置 Windows Authenticode、Apple Developer ID 与 notarization 凭据，因此产物明确按未签名/未公证交付；配置证书前不得宣称系统信任链通过。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、播放器/缓存后端、标签语义或用户数据。
+
 ## 2026-07-21 · 卡片改名页面刷新回归
 
 - 新增真实 `LibraryPage` 页面级回归，以隔离临时文件完成“卡片更多 → 重命名文件 → 确认”的完整交互，不访问用户媒体。
