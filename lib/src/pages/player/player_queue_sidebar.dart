@@ -283,7 +283,6 @@ class PlayerQueueSidebar extends StatelessWidget {
         PlayerQueueHeader(
           playlistLength: playlist.length,
           playingIndex: playingIndex,
-          onLocateSelected: onLocateSelected,
           onDeleteSelected: onDeleteSelected,
           onSearch: onSearchQueue,
           onSearchVisibilityChanged: onSearchVisibilityChanged,
@@ -567,14 +566,14 @@ double playerQueueSidebarWidthForWindow(double windowWidth) {
  * 播放器队列头部，在紧凑操作区内按需展开搜索输入。
  *
  * 搜索默认收起，避免持续占用列表高度；播放序号后的操作按钮使用固定尺寸和
- * 明确间距，保证搜索、定位和删除入口在不同队列数量下仍保持稳定布局。
+ * 明确间距，保证搜索和删除入口在不同队列数量下仍保持稳定布局；离屏定位只在列表底部
+ * 按需出现，避免与标题栏形成重复入口。
  */
 class PlayerQueueHeader extends StatefulWidget {
   const PlayerQueueHeader({
     super.key,
     required this.playlistLength,
     required this.playingIndex,
-    required this.onLocateSelected,
     required this.onDeleteSelected,
     required this.onSearch,
     this.onSearchVisibilityChanged,
@@ -585,9 +584,6 @@ class PlayerQueueHeader extends StatefulWidget {
 
   /** 正在播放的视频在当前队列中的零基序号。 */
   final int playingIndex;
-
-  /** 将列表定位到当前选中项，不改变播放状态。 */
-  final VoidCallback onLocateSelected;
 
   /** 删除当前视频的入口；为 null 时禁用按钮。 */
   final VoidCallback? onDeleteSelected;
@@ -698,13 +694,6 @@ class _PlayerQueueHeaderState extends State<PlayerQueueHeader> {
                 onPressed: _toggleSearch,
                 icon:
                     _searchVisible ? Icons.close_rounded : Icons.search_rounded,
-              ),
-              const SizedBox(width: 4),
-              _actionButton(
-                key: const ValueKey('player.queue.locate.selected'),
-                tooltip: '定位已选中',
-                onPressed: widget.onLocateSelected,
-                icon: Icons.center_focus_strong_rounded,
               ),
               const SizedBox(width: 4),
               _actionButton(

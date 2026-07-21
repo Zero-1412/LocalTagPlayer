@@ -2249,14 +2249,19 @@ class PlayerPageState extends State<PlayerPage> {
     _ensureQueueIndexVisible(nextIndex, center: center);
   }
 
-  /** 从离屏位置回到播放项时同步选中态，避免两个高亮指向不同视频。 */
+  /**
+   * 从离屏位置回到播放项，但保留用户当前浏览选择。
+   *
+   * “正在播放”是播放器事实，“已选中”是用户在队列中的浏览焦点；定位动作不得把
+   * 后者静默覆盖，否则用户再点“回到选中”时会丢失原先浏览位置。
+   */
   void _returnToPlayingQueueItem(ScrollController controller) {
     if (_queue.isEmpty) {
       return;
     }
-    setState(() => _playback.select(_index));
+    final playingIndex = _playback.locatePlayingIndex();
     _ensureQueueIndexVisible(
-      _index,
+      playingIndex,
       center: true,
       // 显式定位需要立即落点；大队列跨段动画会连续重建 Windows 无障碍树，
       // 不仅浪费可视区域 I/O，还可能让桌面端语义桥接失稳。
@@ -2686,6 +2691,14 @@ class PlayerPageState extends State<PlayerPage> {
       _renamingFile = false;
     }
   }
+
+  /**
+   * 隔离冒烟测试入口；仍执行真实弹窗、文件占用回退和播放恢复链路。
+   *
+   * 生产 UI 不调用该方法，避免测试通过复制私有实现绕过播放器页面状态。
+   */
+  @visibleForTesting
+  Future<void> renameCurrentFileForTesting() => _renameCurrentFile();
 
   /** 在后端因文件占用被停止后重新打开目标路径并恢复用户可见播放状态。 */
   Future<void> _reopenAfterFileRename({

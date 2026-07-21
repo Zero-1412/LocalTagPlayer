@@ -44,6 +44,7 @@ import '../player/player_delete_dialog.dart';
 import '../player/player_hardware_decode_warning_dialog.dart';
 import '../player/player_open_request_controller.dart';
 import '../player/player_page.dart';
+import '../player/player_rename_file_dialog.dart';
 import '../tags/tag_manager_page.dart';
 import 'library_page_helpers.dart';
 import 'directory_manager_page.dart';
@@ -5330,6 +5331,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       onOpenFolder: _openLocalLibraryFolder,
                       onOpenVideo: _openVideo,
                       onEditTags: _editTags,
+                      onRenameFile: _requestRenameVideo,
                       onRevealLocation: _revealVideoLocation,
                       onToggleFavorite: _toggleFavorite,
                       onDelete: _requestDeleteVideo,
@@ -5385,6 +5387,7 @@ class _LibraryPageState extends State<LibraryPage> {
                           onVisible: _prioritizeVisibleLibraryItem,
                           onOpen: _openVideo,
                           onEditTags: _editTags,
+                          onRenameFile: _requestRenameVideo,
                           onRevealLocation: _revealVideoLocation,
                           onToggleFavorite: _toggleFavorite,
                           onDelete: _requestDeleteVideo,
@@ -6287,12 +6290,67 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   /**
-   * 协调播放器发起的同目录文件重命名，并以同一 videoId 提交新的 mutable path。
+   * 从媒体卡片打开统一重命名弹窗，并在完成后只刷新文件名相关的派生结果。
+   *
+   * 该入口与播放器详情共享 [_renameVideoPath]，不会复制文件校验、物理回滚或稳定身份逻辑。
+   */
+  Future<void> _requestRenameVideo(VideoItem item) async {
+    final newBaseName = await showPlayerRenameFileDialog(context, item: item);
+    if (newBaseName == null || !mounted) {
+      return;
+    }
+    try {
+      await _renameVideoPath(item, newBaseName);
+      if (!mounted) {
+        return;
+      }
+      _markVideoFileNameChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('文件重命名完成')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final message = switch (error) {
+        FileSystemException(:final message) => message,
+        StateError(:final message) => message,
+        _ => '请稍后重试',
+      };
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('重命名失败：$message')),
+      );
+    }
+  }
+
+  /** 播放器内改名成功后延迟到 Route 返回再刷新媒体库，避免后台页面重建。 */
+  Future<void> _renameVideoFromPlayer(
+    VideoItem item,
+    String newBaseName,
+  ) async {
+    await _renameVideoPath(item, newBaseName);
+    _playerScopedLibraryDataChanged = true;
+  }
+
+  /**
+   * 文件名或路径变化后刷新依赖它们的列表、搜索与排序缓存，但保留稳定标签计数。
+   *
+   * 同一 `videoId` 的改名不会增加、删除或迁移标签；若复用通用数据变更路径，会在大媒体库中
+   * 无意义地重算全部标签计数。筛选结果仍需刷新，因为关键字允许匹配文件名和完整路径。
+   */
+  void _markVideoFileNameChanged() {
+    _libraryDataRevision += 1;
+    _invalidateDerivedCaches();
+    _scheduleFilterRefresh(refreshCounts: false);
+  }
+
+  /**
+   * 执行同目录文件重命名，并以同一 videoId 提交新的 mutable path。
    *
    * 文件系统先拒绝覆盖并完成物理改名；SQLite 提交失败时立即尝试恢复原名，避免磁盘与
-   * 媒体库索引分叉。返回媒体库后只刷新可见结果，不重算与文件名无关的标签计数。
+   * 媒体库索引分叉。调用方只负责选择立即刷新或延迟到播放器 Route 返回后刷新。
    */
-  Future<void> _renameVideoFromPlayer(
+  Future<void> _renameVideoPath(
     VideoItem item,
     String newBaseName,
   ) async {
@@ -6329,7 +6387,6 @@ class _LibraryPageState extends State<LibraryPage> {
       }
       rethrow;
     }
-    _playerScopedLibraryDataChanged = true;
   }
 
   Future<void> _toggleFavorite(VideoItem item) async {

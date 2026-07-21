@@ -740,6 +740,70 @@ void main() {
     await gesture.removePointer();
   });
 
+  testWidgets('video more menu exposes the shared rename file action',
+      (tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'ltp_more_rename_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final item = _testVideo(
+      path: p.join(directory.path, 'rename.mp4'),
+      title: 'rename action',
+    );
+    var renameCount = 0;
+    await tester.binding.setSurfaceSize(const Size(520, 520));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 300,
+              height: 230,
+              child: InteractiveVideoCard(
+                item: item,
+                thumbnailService: ThumbnailService.forDirectory(
+                  directory,
+                  _PreviewFFmpegBackend(),
+                ),
+                playbackSettings: PlaybackSettings.defaults,
+                onOpen: () {},
+                onEditTags: () {},
+                onRenameFile: () => renameCount += 1,
+                onToggleFavorite: () {},
+                onDelete: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    await gesture.moveTo(tester.getCenter(find.text('rename action')));
+    await tester.pump(libraryCardMoreFadeDuration);
+    await tester.tap(find.byKey(LibrarySmokeKeys.cardMore(item.path)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(LibrarySmokeKeys.videoMoreRenameFile), findsOneWidget);
+    expect(find.text('重命名文件'), findsOneWidget);
+    await tester.tap(find.byKey(LibrarySmokeKeys.videoMoreRenameFile));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(renameCount, 1);
+    await gesture.removePointer();
+  });
+
   testWidgets('video more menu exposes open location through platform callback',
       (tester) async {
     final directory = Directory(
@@ -1936,7 +2000,6 @@ void main() {
             child: PlayerQueueHeader(
               playlistLength: 11165,
               playingIndex: 2,
-              onLocateSelected: () {},
               onDeleteSelected: () {},
               onSearch: (query) {
                 submittedQuery = query;
@@ -1956,15 +2019,14 @@ void main() {
     const searchFieldKey = ValueKey('player.queueSearch');
     final position = find.byKey(positionKey);
     final searchToggle = find.byKey(searchToggleKey);
-    final locate = find.byKey(locateKey);
     final delete = find.byKey(deleteKey);
 
     expect(find.byKey(searchFieldKey), findsNothing);
+    expect(find.byKey(locateKey), findsNothing);
     expect(tester.getCenter(position).dx,
         lessThan(tester.getCenter(searchToggle).dx));
     expect(tester.getCenter(searchToggle).dx,
-        lessThan(tester.getCenter(locate).dx));
-    expect(tester.getCenter(locate).dx, lessThan(tester.getCenter(delete).dx));
+        lessThan(tester.getCenter(delete).dx));
 
     await tester.tap(searchToggle);
     await tester.pump();
@@ -3759,6 +3821,8 @@ void main() {
     // 单击语义只移动选择，不改变正在播放项；双击/Enter 才调用 jumpTo 对齐两者。
     expect(playback.select(1), isTrue);
     expect(playback.playingIndex, 0);
+    expect(playback.selectedIndex, 1);
+    expect(playback.locatePlayingIndex(), 0);
     expect(playback.selectedIndex, 1);
     expect(playback.jumpTo(playback.selectedIndex), isTrue);
     expect(playback.playingIndex, 1);

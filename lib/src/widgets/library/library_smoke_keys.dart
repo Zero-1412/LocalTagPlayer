@@ -162,6 +162,9 @@ class LibrarySmokeKeys {
       ValueKey<String>('smoke.list.more:${TagRules.pathKey(path)}');
   static const videoMoreEditTags =
       ValueKey<String>('smoke.video.more.edit-tags');
+  /** 视频更多菜单“重命名文件”动作的稳定测试标识。 */
+  static const videoMoreRenameFile =
+      ValueKey<String>('smoke.video.more.rename-file');
   /** 视频更多菜单“打开位置”动作的稳定测试标识。 */
   static const videoMoreRevealLocation =
       ValueKey<String>('smoke.video.more.reveal-location');

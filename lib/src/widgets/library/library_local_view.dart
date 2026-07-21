@@ -73,6 +73,7 @@ class LocalLibraryView extends StatelessWidget {
     required this.onOpenFolder,
     required this.onOpenVideo,
     required this.onEditTags,
+    this.onRenameFile,
     this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDelete,
@@ -88,6 +89,8 @@ class LocalLibraryView extends StatelessWidget {
   final ValueChanged<String> onOpenFolder;
   final void Function(VideoItem item, List<VideoItem> playlist) onOpenVideo;
   final ValueChanged<VideoItem> onEditTags;
+  /** 请求页面复用统一文件重命名弹窗与 mutable path 事务。 */
+  final ValueChanged<VideoItem>? onRenameFile;
   /** 请求页面通过文件系统平台边界定位视频。 */
   final ValueChanged<VideoItem>? onRevealLocation;
   final ValueChanged<VideoItem> onToggleFavorite;
@@ -175,6 +178,9 @@ class LocalLibraryView extends StatelessWidget {
                               playbackSettings: playbackSettings,
                               onOpen: () => onOpenVideo(video, localVideos),
                               onEditTags: () => onEditTags(video),
+                              onRenameFile: onRenameFile == null
+                                  ? null
+                                  : () => onRenameFile!(video),
                               onRevealLocation: onRevealLocation == null
                                   ? null
                                   : () => onRevealLocation!(video),
@@ -218,6 +224,9 @@ class LocalLibraryView extends StatelessWidget {
                             playbackSettings: playbackSettings,
                             onOpen: () => onOpenVideo(video, localVideos),
                             onEditTags: () => onEditTags(video),
+                            onRenameFile: onRenameFile == null
+                                ? null
+                                : () => onRenameFile!(video),
                             onRevealLocation: onRevealLocation == null
                                 ? null
                                 : () => onRevealLocation!(video),

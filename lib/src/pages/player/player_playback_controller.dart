@@ -137,6 +137,14 @@ class PlayerPlaybackController {
   }
 
   /**
+   * 返回当前播放项的定位索引，但不修改用户浏览选择。
+   *
+   * 队列滚动定位属于视图动作；调用方可据此回到播放项，同时让 [selectedIndex]
+   * 继续指向用户刚才浏览的条目。
+   */
+  int locatePlayingIndex() => playingIndex;
+
+  /**
    * 跳转播放到指定队列项。
    *
    * 返回 `false` 表示索引越界，调用方不应触发播放器打开。
