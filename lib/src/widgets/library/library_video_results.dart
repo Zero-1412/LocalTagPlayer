@@ -182,6 +182,19 @@ const double libraryVideoCardRadius = AppRadius.card;
 /** 标题右侧更多按钮的淡入淡出时长；短过渡避免快速扫过卡片时产生闪烁。 */
 const Duration libraryCardMoreFadeDuration = Duration(milliseconds: 120);
 
+/** 媒体卡片双项菜单宽度；只容纳“打开文件 / 删除文件”，避免遮挡相邻内容。 */
+const BoxConstraints libraryVideoMoreMenuConstraints = BoxConstraints(
+  minWidth: 136,
+  maxWidth: 156,
+);
+
+/** 媒体卡片菜单单项最小高度；保持紧凑，同时保留可用的桌面点击目标。 */
+const double libraryVideoMoreMenuItemHeight = 40;
+
+/** 媒体卡片菜单外层留白；文字缩放时条目仍可按内容向下扩展。 */
+const EdgeInsets libraryVideoMoreMenuPadding =
+    EdgeInsets.symmetric(vertical: 4);
+
 /** 收藏与时长叠层的响应式视觉参数。 */
 class LibraryVideoOverlayMetrics {
   const LibraryVideoOverlayMetrics({
@@ -587,8 +600,6 @@ class VideoGrid extends StatefulWidget {
     this.columnReferenceWidth,
     this.onVisible,
     required this.onOpen,
-    required this.onEditTags,
-    this.onRenameFile,
     this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDelete,
@@ -620,12 +631,7 @@ class VideoGrid extends StatefulWidget {
 
   final void Function(VideoItem item, List<VideoItem> playlist) onOpen;
 
-  final ValueChanged<VideoItem> onEditTags;
-
-  /** 请求页面打开统一文件重命名弹窗并提交 stable mutable path 事务。 */
-  final ValueChanged<VideoItem>? onRenameFile;
-
-  /** 请求页面通过 FileSystemAdapter 定位视频；为空时兼容隔离测试宿主。 */
+  /** 请求页面通过 FileSystemAdapter 定位当前卡片的视频；为空时隐藏该菜单项。 */
   final ValueChanged<VideoItem>? onRevealLocation;
 
   final ValueChanged<VideoItem> onToggleFavorite;
@@ -1133,10 +1139,6 @@ class _VideoGridState extends State<VideoGrid> {
                   playbackSettings: widget.playbackSettings,
                   onVisible: widget.onVisible,
                   onOpen: () => widget.onOpen(item, widget.videos),
-                  onEditTags: () => widget.onEditTags(item),
-                  onRenameFile: widget.onRenameFile == null
-                      ? null
-                      : () => widget.onRenameFile!(item),
                   onRevealLocation: widget.onRevealLocation == null
                       ? null
                       : () => widget.onRevealLocation!(item),
@@ -1191,10 +1193,6 @@ class _VideoGridState extends State<VideoGrid> {
                   playbackSettings: widget.playbackSettings,
                   onVisible: widget.onVisible,
                   onOpen: () => widget.onOpen(item, widget.videos),
-                  onEditTags: () => widget.onEditTags(item),
-                  onRenameFile: widget.onRenameFile == null
-                      ? null
-                      : () => widget.onRenameFile!(item),
                   onRevealLocation: widget.onRevealLocation == null
                       ? null
                       : () => widget.onRevealLocation!(item),
@@ -1244,8 +1242,6 @@ class InteractiveVideoListRow extends StatelessWidget {
     required this.playbackSettings,
     this.onVisible,
     required this.onOpen,
-    required this.onEditTags,
-    this.onRenameFile,
     this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDelete,
@@ -1265,12 +1261,7 @@ class InteractiveVideoListRow extends StatelessWidget {
 
   final VoidCallback onOpen;
 
-  final VoidCallback onEditTags;
-
-  /** 打开与播放器详情共用的文件重命名流程；为空时菜单不展示该动作。 */
-  final VoidCallback? onRenameFile;
-
-  /** 通过页面注入的平台边界在文件管理器中定位当前视频。 */
+  /** 通过页面注入的平台边界在文件管理器中定位当前行的视频文件。 */
   final VoidCallback? onRevealLocation;
 
   final VoidCallback onToggleFavorite;
@@ -1405,8 +1396,6 @@ class InteractiveVideoListRow extends StatelessWidget {
                       item: item,
                       onOpen: onOpen,
                       onToggleFavorite: onToggleFavorite,
-                      onEditTags: onEditTags,
-                      onRenameFile: onRenameFile,
                       onRevealLocation: onRevealLocation,
                       onDelete: onDelete,
                       compact: compactActions,
@@ -1573,8 +1562,6 @@ class _ListRowActions extends StatelessWidget {
     required this.item,
     required this.onOpen,
     required this.onToggleFavorite,
-    required this.onEditTags,
-    required this.onRenameFile,
     required this.onRevealLocation,
     required this.onDelete,
     required this.compact,
@@ -1585,10 +1572,6 @@ class _ListRowActions extends StatelessWidget {
   final VoidCallback onOpen;
 
   final VoidCallback onToggleFavorite;
-
-  final VoidCallback onEditTags;
-
-  final VoidCallback? onRenameFile;
 
   final VoidCallback? onRevealLocation;
 
@@ -1665,8 +1648,6 @@ class _ListRowActions extends StatelessWidget {
             label: LibrarySmokeSemantics.videoMore(item),
             child: _VideoMoreButton(
               key: LibrarySmokeKeys.listMore(item.path),
-              onEditTags: onEditTags,
-              onRenameFile: onRenameFile,
               onRevealLocation: onRevealLocation,
               onDelete: onDelete,
             ),
@@ -1684,8 +1665,6 @@ class InteractiveVideoCard extends StatefulWidget {
     required this.playbackSettings,
     this.onVisible,
     required this.onOpen,
-    this.onEditTags,
-    this.onRenameFile,
     this.onRevealLocation,
     required this.onToggleFavorite,
     this.onDelete,
@@ -1700,11 +1679,7 @@ class InteractiveVideoCard extends StatefulWidget {
   /** 当前卡片进入真实构建范围时的轻量优先级通知。 */
   final ValueChanged<VideoItem>? onVisible;
   final VoidCallback onOpen;
-  /** 标题更多菜单的编辑标签入口；为空时不显示卡片更多按钮。 */
-  final VoidCallback? onEditTags;
-  /** 标题更多菜单的文件重命名入口；与播放器详情复用同一业务回调。 */
-  final VoidCallback? onRenameFile;
-  /** 标题更多菜单的打开位置入口；平台调用仍由页面层负责。 */
+  /** 标题更多菜单的打开文件入口；平台调用仍由页面层负责。 */
   final VoidCallback? onRevealLocation;
   final VoidCallback onToggleFavorite;
   /** 标题更多菜单的删除入口；为空时不显示卡片更多按钮。 */
@@ -1734,9 +1709,8 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
     final item = widget.item;
     final accessibility = AppAccessibilityScope.of(context);
     final textScaleFactor = MediaQuery.textScalerOf(context).scale(1);
-    final supportsMoreActions = !widget.selectionMode &&
-        widget.onEditTags != null &&
-        widget.onDelete != null;
+    final supportsMoreActions =
+        !widget.selectionMode && widget.onDelete != null;
     // 标题宽度始终为按钮保留固定槽位；显示状态变化不会触发标题重新换行和卡片抖动。
     final showMore =
         supportsMoreActions && (_hovered || _focused || _moreMenuOpen);
@@ -1833,11 +1807,6 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                                 setState(() => _moreMenuOpen = true),
                             onMoreClosed: () =>
                                 setState(() => _moreMenuOpen = false),
-                            onEditTags:
-                                widget.selectionMode ? null : widget.onEditTags,
-                            onRenameFile: widget.selectionMode
-                                ? null
-                                : widget.onRenameFile,
                             onRevealLocation: widget.selectionMode
                                 ? null
                                 : widget.onRevealLocation,
@@ -1870,8 +1839,6 @@ class _VideoCardMetadata extends StatelessWidget {
     required this.showMore,
     required this.onMoreOpened,
     required this.onMoreClosed,
-    required this.onEditTags,
-    required this.onRenameFile,
     required this.onRevealLocation,
     required this.onDelete,
   });
@@ -1880,8 +1847,6 @@ class _VideoCardMetadata extends StatelessWidget {
   final bool showMore;
   final VoidCallback onMoreOpened;
   final VoidCallback onMoreClosed;
-  final VoidCallback? onEditTags;
-  final VoidCallback? onRenameFile;
   final VoidCallback? onRevealLocation;
   final VoidCallback? onDelete;
 
@@ -1907,7 +1872,7 @@ class _VideoCardMetadata extends StatelessWidget {
                       ),
                 ),
               ),
-              if (onEditTags != null && onDelete != null) ...[
+              if (onDelete != null) ...[
                 const SizedBox(width: 2),
                 SizedBox(
                   width: 28,
@@ -1926,8 +1891,6 @@ class _VideoCardMetadata extends StatelessWidget {
                             key: LibrarySmokeKeys.cardMore(item.path),
                             onOpened: onMoreOpened,
                             onClosed: onMoreClosed,
-                            onEditTags: onEditTags!,
-                            onRenameFile: onRenameFile,
                             onRevealLocation: onRevealLocation,
                             onDelete: onDelete!,
                           ),
@@ -1947,23 +1910,19 @@ class _VideoCardMetadata extends StatelessWidget {
  * 网格卡片标题右侧的悬停更多菜单。
  *
  * 菜单展开时通过 [onOpened] 保持按钮可见；选择或取消后先通知卡片关闭状态，再把
- * 业务动作交还页面层，确保删除仍经过确认弹窗、编辑仍复用统一标签编辑器。
+ * 业务动作交还页面层。菜单只保留定位当前文件与删除，删除仍经过页面确认弹窗。
  */
 class _VideoCardMoreButton extends StatelessWidget {
   const _VideoCardMoreButton({
     super.key,
     required this.onOpened,
     required this.onClosed,
-    required this.onEditTags,
-    required this.onRenameFile,
     required this.onRevealLocation,
     required this.onDelete,
   });
 
   final VoidCallback onOpened;
   final VoidCallback onClosed;
-  final VoidCallback onEditTags;
-  final VoidCallback? onRenameFile;
   final VoidCallback? onRevealLocation;
   final VoidCallback onDelete;
 
@@ -1976,6 +1935,8 @@ class _VideoCardMoreButton extends StatelessWidget {
       offset: const Offset(0, -2),
       color: librarySurfaceAlt,
       elevation: 8,
+      constraints: libraryVideoMoreMenuConstraints,
+      menuPadding: libraryVideoMoreMenuPadding,
       shape: RoundedRectangleBorder(
         side: const BorderSide(color: libraryBorder),
         borderRadius: BorderRadius.circular(10),
@@ -1983,48 +1944,25 @@ class _VideoCardMoreButton extends StatelessWidget {
       onOpened: onOpened,
       onCanceled: onClosed,
       itemBuilder: (context) => [
-        const PopupMenuItem(
-          key: LibrarySmokeKeys.videoMoreEditTags,
-          value: _VideoMoreAction.editTags,
-          height: 42,
-          child: Row(
-            children: [
-              Icon(Icons.sell_outlined, size: 19),
-              SizedBox(width: 10),
-              Text('编辑标签'),
-            ],
-          ),
-        ),
-        if (onRenameFile != null)
-          const PopupMenuItem(
-            key: LibrarySmokeKeys.videoMoreRenameFile,
-            value: _VideoMoreAction.renameFile,
-            height: 42,
-            child: Row(
-              children: [
-                Icon(Icons.drive_file_rename_outline_rounded, size: 19),
-                SizedBox(width: 10),
-                Text('重命名文件'),
-              ],
-            ),
-          ),
         if (onRevealLocation != null)
           const PopupMenuItem(
             key: LibrarySmokeKeys.videoMoreRevealLocation,
             value: _VideoMoreAction.revealLocation,
-            height: 42,
+            height: libraryVideoMoreMenuItemHeight,
+            padding: EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
                 Icon(Icons.folder_open_rounded, size: 19),
-                SizedBox(width: 10),
-                Text('打开位置'),
+                SizedBox(width: 8),
+                Text('打开文件'),
               ],
             ),
           ),
         const PopupMenuItem(
           key: LibrarySmokeKeys.videoMoreDelete,
           value: _VideoMoreAction.delete,
-          height: 42,
+          height: libraryVideoMoreMenuItemHeight,
+          padding: EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
               Icon(
@@ -2032,7 +1970,7 @@ class _VideoCardMoreButton extends StatelessWidget {
                 size: 19,
                 color: Color(0xffe26573),
               ),
-              SizedBox(width: 10),
+              SizedBox(width: 8),
               Text('删除文件', style: TextStyle(color: Color(0xffe26573))),
             ],
           ),
@@ -2041,12 +1979,6 @@ class _VideoCardMoreButton extends StatelessWidget {
       onSelected: (value) {
         onClosed();
         switch (value) {
-          case _VideoMoreAction.editTags:
-            onEditTags();
-            break;
-          case _VideoMoreAction.renameFile:
-            onRenameFile?.call();
-            break;
           case _VideoMoreAction.revealLocation:
             onRevealLocation?.call();
             break;
@@ -2068,15 +2000,9 @@ class _VideoCardMoreButton extends StatelessWidget {
 class _VideoMoreButton extends StatelessWidget {
   const _VideoMoreButton({
     super.key,
-    required this.onEditTags,
-    required this.onRenameFile,
     required this.onRevealLocation,
     required this.onDelete,
   });
-
-  final VoidCallback onEditTags;
-
-  final VoidCallback? onRenameFile;
 
   final VoidCallback? onRevealLocation;
 
@@ -2088,62 +2014,49 @@ class _VideoMoreButton extends StatelessWidget {
       tooltip: '更多操作',
       icon: const Icon(Icons.more_horiz_rounded),
       position: PopupMenuPosition.under,
+      color: librarySurfaceAlt,
+      elevation: 8,
+      constraints: libraryVideoMoreMenuConstraints,
+      menuPadding: libraryVideoMoreMenuPadding,
+      shape: RoundedRectangleBorder(
+        side: const BorderSide(color: libraryBorder),
+        borderRadius: BorderRadius.circular(10),
+      ),
       itemBuilder: (context) => [
-        const PopupMenuItem(
-          key: LibrarySmokeKeys.videoMoreEditTags,
-          value: _VideoMoreAction.editTags,
-          child: Row(
-            children: [
-              Icon(Icons.sell_outlined),
-              SizedBox(width: 10),
-              Text('编辑标签'),
-            ],
-          ),
-        ),
-        if (onRenameFile != null)
-          const PopupMenuItem(
-            key: LibrarySmokeKeys.videoMoreRenameFile,
-            value: _VideoMoreAction.renameFile,
-            child: Row(
-              children: [
-                Icon(Icons.drive_file_rename_outline_rounded),
-                SizedBox(width: 10),
-                Text('重命名文件'),
-              ],
-            ),
-          ),
         if (onRevealLocation != null)
           const PopupMenuItem(
             key: LibrarySmokeKeys.videoMoreRevealLocation,
             value: _VideoMoreAction.revealLocation,
+            height: libraryVideoMoreMenuItemHeight,
+            padding: EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                Icon(Icons.folder_open_rounded),
-                SizedBox(width: 10),
-                Text('打开位置'),
+                Icon(Icons.folder_open_rounded, size: 19),
+                SizedBox(width: 8),
+                Text('打开文件'),
               ],
             ),
           ),
         const PopupMenuItem(
           key: LibrarySmokeKeys.videoMoreDelete,
           value: _VideoMoreAction.delete,
+          height: libraryVideoMoreMenuItemHeight,
+          padding: EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
-              Icon(Icons.delete_outline_rounded, color: Color(0xffc53b4d)),
-              SizedBox(width: 10),
-              Text('删除', style: TextStyle(color: Color(0xffc53b4d))),
+              Icon(
+                Icons.delete_outline_rounded,
+                size: 19,
+                color: Color(0xffe26573),
+              ),
+              SizedBox(width: 8),
+              Text('删除文件', style: TextStyle(color: Color(0xffe26573))),
             ],
           ),
         ),
       ],
       onSelected: (value) {
         switch (value) {
-          case _VideoMoreAction.editTags:
-            onEditTags();
-            break;
-          case _VideoMoreAction.renameFile:
-            onRenameFile?.call();
-            break;
           case _VideoMoreAction.revealLocation:
             onRevealLocation?.call();
             break;
@@ -2160,7 +2073,8 @@ class _VideoMoreButton extends StatelessWidget {
   }
 }
 
-enum _VideoMoreAction { editTags, renameFile, revealLocation, delete }
+/** 媒体卡片更多菜单只保留文件级动作，避免与详情页的标签和改名入口重复。 */
+enum _VideoMoreAction { revealLocation, delete }
 
 class _VideoPreview extends StatefulWidget {
   const _VideoPreview({

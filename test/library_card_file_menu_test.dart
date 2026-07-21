@@ -9,9 +9,9 @@ import 'package:path/path.dart' as p;
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * 为媒体库页面回归提供最小内存 Repository，并记录昂贵标签计数是否被误触发。
+ * 为媒体库卡片文件菜单回归提供最小内存 Repository，并记录页面是否意外刷新昂贵计数。
  */
-class _RenameRefreshRepository
+class _CardFileMenuRepository
     implements
         LibraryRepository,
         TagRepository,
@@ -20,7 +20,7 @@ class _RenameRefreshRepository
   /** 页面回归不扫描真实目录，因此保持空 root 集合。 */
   @override
   final List<String> roots = <String>[];
-  /** 由测试直接维护、并在改名事务中重建路径键的视频索引。 */
+  /** 由测试直接维护的两项视频索引，用于确认具体卡片的路径传递。 */
   @override
   final Map<String, VideoItem> videos = <String, VideoItem>{};
   /** 本回归不涉及收藏标签。 */
@@ -48,18 +48,6 @@ class _RenameRefreshRepository
     return const <String, int>{};
   }
 
-  /**
-   * 模拟 SQLite mutable path 事务：保持对象与 videoId，只替换路径索引和标题。
-   */
-  @override
-  Future<void> renameVideoPath(VideoItem item, String newPath) async {
-    videos.remove(TagRules.pathKey(item.path));
-    item
-      ..path = p.normalize(newPath)
-      ..title = p.basenameWithoutExtension(newPath);
-    videos[TagRules.pathKey(item.path)] = item;
-  }
-
   @override
   Future<int> countUntrackedVideos() async => 0;
 
@@ -70,9 +58,15 @@ class _RenameRefreshRepository
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-/** 使用同步临时文件 I/O 完成页面确认改名，避免 Widget FakeAsync 截留文件 Future。 */
-class _RenameRefreshFileSystem implements FileSystemAdapter {
-  const _RenameRefreshFileSystem();
+/** 记录页面交给平台边界的目标路径，确保卡片动作定位当前视频而不是媒体库目录。 */
+class _CardFileMenuFileSystem implements FileSystemAdapter {
+  /** 最近一次要求文件管理器定位的完整视频路径。 */
+  String? revealedPath;
+
+  @override
+  Future<void> revealInFileManager(String path) async {
+    revealedPath = p.normalize(path);
+  }
 
   @override
   String joinPath(List<String> parts) => p.joinAll(parts);
@@ -87,19 +81,11 @@ class _RenameRefreshFileSystem implements FileSystemAdapter {
   Future<bool> fileExists(String path) async => File(path).existsSync();
 
   @override
-  Future<String> renameFile(String sourcePath, String targetPath) async {
-    if (File(targetPath).existsSync()) {
-      throw FileSystemException('目标文件已存在', targetPath);
-    }
-    return File(sourcePath).renameSync(targetPath).path;
-  }
-
-  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /** 缩略图测试只返回空结果，不启动 FFmpeg 或读取用户媒体。 */
-class _RenameRefreshFFmpegBackend implements FFmpegBackend {
+class _CardFileMenuFFmpegBackend implements FFmpegBackend {
   @override
   Future<File?> createThumbnail({
     required VideoItem item,
@@ -121,7 +107,7 @@ class _RenameRefreshFFmpegBackend implements FFmpegBackend {
 }
 
 /** 页面可见项探测返回空批次，避免启动 FFprobe。 */
-class _RenameRefreshProbeBackend implements MediaProbeBackend {
+class _CardFileMenuProbeBackend implements MediaProbeBackend {
   @override
   Future<List<MediaProbeResult>> probeBatch({
     required int generationId,
@@ -134,7 +120,7 @@ class _RenameRefreshProbeBackend implements MediaProbeBackend {
 }
 
 /** 测试不会进入播放器，只提供满足组合边界的安全占位后端。 */
-class _RenameRefreshPlayerBackend implements PlayerBackend {
+class _CardFileMenuPlayerBackend implements PlayerBackend {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -142,9 +128,8 @@ class _RenameRefreshPlayerBackend implements PlayerBackend {
 /**
  * 向真实 LibraryPage 注入内存 Repository、隔离缓存和名称升序偏好。
  */
-class _RenameRefreshApplicationService
-    implements LibraryPageApplicationService {
-  _RenameRefreshApplicationService({
+class _CardFileMenuApplicationService implements LibraryPageApplicationService {
+  _CardFileMenuApplicationService({
     required this.store,
     required this.thumbnailService,
   });
@@ -188,7 +173,7 @@ class _RenameRefreshApplicationService
     void Function(MediaDetailsProgress progress)? onProgress,
   }) {
     return MediaDetailsService(
-      probeBackend: _RenameRefreshProbeBackend(),
+      probeBackend: _CardFileMenuProbeBackend(),
       onUpdated: onUpdated,
       onBatchUpdated: onBatchUpdated,
       onProgress: onProgress,
@@ -207,7 +192,7 @@ class _RenameRefreshApplicationService
 }
 
 void main() {
-  testWidgets('卡片改名后关键字筛选与名称排序立即更新', (tester) async {
+  testWidgets('媒体卡片菜单只保留当前文件定位与删除', (tester) async {
     tester.view.physicalSize = const Size(1248, 714);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -216,7 +201,7 @@ void main() {
     final root = Directory(
       p.join(
         Directory.systemTemp.path,
-        'ltp_library_rename_refresh_${DateTime.now().microsecondsSinceEpoch}',
+        'ltp_library_card_file_menu_${DateTime.now().microsecondsSinceEpoch}',
       ),
     )..createSync(recursive: true);
     addTearDown(() {
@@ -229,7 +214,7 @@ void main() {
     final charlieFile = File(p.join(root.path, 'charlie.mp4'))
       ..writeAsBytesSync(<int>[2], flush: true);
     final bravo = VideoItem(
-      videoId: 'rename-refresh-bravo',
+      videoId: 'card-file-menu-bravo',
       path: bravoFile.path,
       title: 'bravo',
       folder: root.path,
@@ -237,14 +222,14 @@ void main() {
       addedAt: DateTime.utc(2026, 7, 21),
     );
     final charlie = VideoItem(
-      videoId: 'rename-refresh-charlie',
+      videoId: 'card-file-menu-charlie',
       path: charlieFile.path,
       title: 'charlie',
       folder: root.path,
       tags: const <String>{},
       addedAt: DateTime.utc(2026, 7, 21),
     );
-    final repository = _RenameRefreshRepository();
+    final repository = _CardFileMenuRepository();
     repository.videos.addAll(<String, VideoItem>{
       TagRules.pathKey(bravo.path): bravo,
       TagRules.pathKey(charlie.path): charlie,
@@ -257,24 +242,25 @@ void main() {
     );
     final thumbnailService = ThumbnailService.forDirectory(
       Directory(p.join(root.path, 'thumbs')),
-      _RenameRefreshFFmpegBackend(),
+      _CardFileMenuFFmpegBackend(),
     );
-    final applicationService = _RenameRefreshApplicationService(
+    final applicationService = _CardFileMenuApplicationService(
       store: store,
       thumbnailService: thumbnailService,
     );
+    final fileSystem = _CardFileMenuFileSystem();
 
     await tester.pumpWidget(
       MaterialApp(
         home: LibraryPage(
           applicationService: applicationService,
-          fileSystem: const _RenameRefreshFileSystem(),
+          fileSystem: fileSystem,
           playerBackendFactory: ({
             required String hwdec,
             required bool enableHardwareAcceleration,
           }) =>
-              _RenameRefreshPlayerBackend(),
-          mediaProbeBackendFactory: _RenameRefreshProbeBackend.new,
+              _CardFileMenuPlayerBackend(),
+          mediaProbeBackendFactory: _CardFileMenuProbeBackend.new,
         ),
       ),
     );
@@ -293,8 +279,7 @@ void main() {
       tester.getTopLeft(cardTitle('bravo')).dx,
       lessThan(tester.getTopLeft(cardTitle('charlie')).dx),
     );
-    final countCallsBeforeRename = repository.resultCountsCalls;
-    expect(countCallsBeforeRename, greaterThan(0));
+    expect(repository.resultCountsCalls, greaterThan(0));
 
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);
@@ -303,46 +288,26 @@ void main() {
     await tester.tap(find.byKey(LibrarySmokeKeys.cardMore(charlie.path)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.byKey(LibrarySmokeKeys.videoMoreRenameFile));
-    await tester.pump();
+    expect(find.text('打开文件'), findsOneWidget);
+    expect(find.text('删除文件'), findsOneWidget);
+    expect(find.text('编辑标签'), findsNothing);
+    expect(find.text('重命名文件'), findsNothing);
+    expect(find.byKey(LibrarySmokeKeys.videoMoreEditTags), findsNothing);
+    expect(find.byKey(LibrarySmokeKeys.videoMoreRenameFile), findsNothing);
+    final openItemRect = tester.getRect(
+      find.byKey(LibrarySmokeKeys.videoMoreRevealLocation),
+    );
+    final deleteItemRect = tester.getRect(
+      find.byKey(LibrarySmokeKeys.videoMoreDelete),
+    );
+    expect(openItemRect.height, libraryVideoMoreMenuItemHeight);
+    expect(deleteItemRect.height, libraryVideoMoreMenuItemHeight);
+    expect(openItemRect.width, lessThanOrEqualTo(156));
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.videoMoreRevealLocation));
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.enterText(
-      find.byKey(const ValueKey('player.renameFile.input')),
-      'alpha',
-    );
-    await tester.pump();
-    await tester.tap(
-      find.byKey(const ValueKey('player.renameFile.confirm')),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(cardTitle('alpha'), findsOneWidget);
-    expect(cardTitle('charlie'), findsNothing);
-    expect(
-      tester.getTopLeft(cardTitle('alpha')).dx,
-      lessThan(tester.getTopLeft(cardTitle('bravo')).dx),
-    );
-    expect(File(p.join(root.path, 'alpha.mp4')).existsSync(), isTrue);
-    expect(charlieFile.existsSync(), isFalse);
-    expect(charlie.videoId, 'rename-refresh-charlie');
-
-    await tester.enterText(
-      find.byKey(LibrarySmokeKeys.searchField),
-      'charlie',
-    );
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(cardTitle('alpha'), findsNothing);
-    expect(cardTitle('bravo'), findsNothing);
-
-    await tester.enterText(
-      find.byKey(LibrarySmokeKeys.searchField),
-      'alpha',
-    );
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(cardTitle('alpha'), findsOneWidget);
-    expect(cardTitle('bravo'), findsNothing);
-    expect(repository.resultCountsCalls, countCallsBeforeRename);
+    expect(fileSystem.revealedPath, p.normalize(charlie.path));
+    expect(File(charlie.path).existsSync(), isTrue);
 
     await gesture.removePointer();
     await tester.pumpWidget(const SizedBox.shrink());

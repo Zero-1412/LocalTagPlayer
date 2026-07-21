@@ -72,8 +72,6 @@ class LocalLibraryView extends StatelessWidget {
     required this.onBack,
     required this.onOpenFolder,
     required this.onOpenVideo,
-    required this.onEditTags,
-    this.onRenameFile,
     this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDelete,
@@ -88,10 +86,7 @@ class LocalLibraryView extends StatelessWidget {
   final VoidCallback onBack;
   final ValueChanged<String> onOpenFolder;
   final void Function(VideoItem item, List<VideoItem> playlist) onOpenVideo;
-  final ValueChanged<VideoItem> onEditTags;
-  /** 请求页面复用统一文件重命名弹窗与 mutable path 事务。 */
-  final ValueChanged<VideoItem>? onRenameFile;
-  /** 请求页面通过文件系统平台边界定位视频。 */
+  /** 请求页面通过文件系统平台边界定位当前视频文件。 */
   final ValueChanged<VideoItem>? onRevealLocation;
   final ValueChanged<VideoItem> onToggleFavorite;
   final ValueChanged<VideoItem> onDelete;
@@ -177,10 +172,6 @@ class LocalLibraryView extends StatelessWidget {
                               thumbnailService: thumbnailService,
                               playbackSettings: playbackSettings,
                               onOpen: () => onOpenVideo(video, localVideos),
-                              onEditTags: () => onEditTags(video),
-                              onRenameFile: onRenameFile == null
-                                  ? null
-                                  : () => onRenameFile!(video),
                               onRevealLocation: onRevealLocation == null
                                   ? null
                                   : () => onRevealLocation!(video),
@@ -223,10 +214,6 @@ class LocalLibraryView extends StatelessWidget {
                             thumbnailService: thumbnailService,
                             playbackSettings: playbackSettings,
                             onOpen: () => onOpenVideo(video, localVideos),
-                            onEditTags: () => onEditTags(video),
-                            onRenameFile: onRenameFile == null
-                                ? null
-                                : () => onRenameFile!(video),
                             onRevealLocation: onRevealLocation == null
                                 ? null
                                 : () => onRevealLocation!(video),
@@ -341,7 +328,6 @@ class _LocalLibrarySmokeHarnessState extends State<LocalLibrarySmokeHarness> {
           onBack: _goBack,
           onOpenFolder: _openFolder,
           onOpenVideo: (_, __) {},
-          onEditTags: (_) {},
           onToggleFavorite: (_) {},
           onDelete: (_) {},
         ),
@@ -354,7 +340,7 @@ class _LocalLibrarySmokeHarnessState extends State<LocalLibrarySmokeHarness> {
  * 列表行操作 smoke test 的最小宿主。
  *
  * 只挂载真实 `InteractiveVideoListRow` 并统计播放、收藏、更多三个回调，不打开播放器、
- * 不写数据库，也不触发真实标签编辑弹窗。
+ * 不写数据库，也不触发真实文件管理器。
  */
 @visibleForTesting
 class VideoListRowSmokeHarness extends StatefulWidget {
@@ -404,7 +390,7 @@ class _VideoListRowSmokeHarnessState extends State<VideoListRowSmokeHarness> {
   /**
    * 列表行 smoke test 的状态汇总。
    *
-   * 测试只验证三个按钮是否命中对应回调，不打开播放器、不改数据库、不触发标签编辑弹窗。
+   * 测试只验证三个按钮是否命中对应回调，不打开播放器、不改数据库、不触发文件管理器。
    */
   String get _actionState =>
       'open=$_openCount favorite=$_favoriteCount more=$_moreCount';
@@ -431,7 +417,7 @@ class _VideoListRowSmokeHarnessState extends State<VideoListRowSmokeHarness> {
                       _item.isFavorite = !_item.isFavorite;
                     });
                   },
-                  onEditTags: () => setState(() => _moreCount += 1),
+                  onRevealLocation: () => setState(() => _moreCount += 1),
                   onDelete: () => setState(() => _moreCount += 1),
                 ),
               ),

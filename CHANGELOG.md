@@ -1,5 +1,14 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-21 · 媒体卡片文件菜单收口
+
+- 媒体库网格卡片、紧凑列表和本地目录视图的“更多”菜单移除“编辑标签 / 重命名文件”，只保留“打开文件 / 删除文件”；播放器详情中的标签编辑与重命名入口不变。
+- “打开文件”通过页面层把当前 `VideoItem.path` 交给 `FileSystemAdapter.revealInFileManager`，Windows 使用 Explorer `/select` 定位具体文件，不打开媒体库 root 或资源目录。
+- 双项菜单限制为 136–156px 宽、40px 条目最小高度和 4px 垂直留白，统一网格/列表表面、图标间距和删除警示色。
+- 页面级回归锁定当前卡片路径、双项文案、已移除动作和紧凑几何；完整 235 项测试通过，3 项显式 benchmark 跳过，`flutter analyze` 与 Windows debug build 通过。
+- 1248×714 隔离 Debug 实窗确认菜单无遮挡、错位或溢出；点击 `40712-1080p` 的“打开文件”后，资源管理器打开到对应目录并选中 `40712-1080p.mp4`，未执行改名或删除。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、播放器/缓存后端、标签来源语义或用户数据。
+
 ## 2026-07-21 · Windows / macOS 正式版打包链路
 
 - 新增 Inno Setup Windows x64 安装器定义，使用当前用户目录安装，并明确保证卸载不删除用户数据库、标签、收藏或播放记录。

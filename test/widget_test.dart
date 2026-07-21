@@ -612,7 +612,6 @@ void main() {
                   thumbnailService: thumbnailService,
                   playbackSettings: PlaybackSettings.defaults,
                   onOpen: () {},
-                  onEditTags: () {},
                   onToggleFavorite: () {},
                   onDelete: () {},
                 ),
@@ -659,7 +658,7 @@ void main() {
       _PreviewFFmpegBackend(),
     );
     var openCount = 0;
-    var editCount = 0;
+    var revealCount = 0;
     var deleteCount = 0;
     await tester.binding.setSurfaceSize(const Size(500, 350));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -676,7 +675,7 @@ void main() {
                 thumbnailService: thumbnailService,
                 playbackSettings: PlaybackSettings.defaults,
                 onOpen: () => openCount += 1,
-                onEditTags: () => editCount += 1,
+                onRevealLocation: () => revealCount += 1,
                 onToggleFavorite: () {},
                 onDelete: () => deleteCount += 1,
               ),
@@ -711,14 +710,17 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(openCount, 0);
-    expect(find.byKey(LibrarySmokeKeys.videoMoreEditTags), findsOneWidget);
+    expect(find.byKey(LibrarySmokeKeys.videoMoreEditTags), findsNothing);
+    expect(find.byKey(LibrarySmokeKeys.videoMoreRenameFile), findsNothing);
+    expect(find.text('编辑标签'), findsNothing);
+    expect(find.text('重命名文件'), findsNothing);
+    expect(find.text('打开文件'), findsOneWidget);
     expect(find.byKey(LibrarySmokeKeys.videoMoreDelete), findsOneWidget);
     expect(find.text('删除文件'), findsOneWidget);
-
-    await tester.tap(find.byKey(LibrarySmokeKeys.videoMoreEditTags));
+    await tester.tap(find.byKey(LibrarySmokeKeys.videoMoreRevealLocation));
     await tester.pump(const Duration(milliseconds: 300));
     expect(openCount, 0);
-    expect(editCount, 1);
+    expect(revealCount, 1);
     expect(deleteCount, 0);
 
     await gesture.moveTo(const Offset(480, 330));
@@ -735,76 +737,12 @@ void main() {
     await tester.tap(find.byKey(LibrarySmokeKeys.videoMoreDelete));
     await tester.pump(const Duration(milliseconds: 300));
     expect(openCount, 0);
-    expect(editCount, 1);
+    expect(revealCount, 1);
     expect(deleteCount, 1);
     await gesture.removePointer();
   });
 
-  testWidgets('video more menu exposes the shared rename file action',
-      (tester) async {
-    final directory = Directory(
-      p.join(
-        Directory.systemTemp.path,
-        'ltp_more_rename_${DateTime.now().microsecondsSinceEpoch}',
-      ),
-    )..createSync(recursive: true);
-    addTearDown(() {
-      if (directory.existsSync()) {
-        directory.deleteSync(recursive: true);
-      }
-    });
-    final item = _testVideo(
-      path: p.join(directory.path, 'rename.mp4'),
-      title: 'rename action',
-    );
-    var renameCount = 0;
-    await tester.binding.setSurfaceSize(const Size(520, 520));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: 300,
-              height: 230,
-              child: InteractiveVideoCard(
-                item: item,
-                thumbnailService: ThumbnailService.forDirectory(
-                  directory,
-                  _PreviewFFmpegBackend(),
-                ),
-                playbackSettings: PlaybackSettings.defaults,
-                onOpen: () {},
-                onEditTags: () {},
-                onRenameFile: () => renameCount += 1,
-                onToggleFavorite: () {},
-                onDelete: () {},
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await gesture.addPointer(location: Offset.zero);
-    await gesture.moveTo(tester.getCenter(find.text('rename action')));
-    await tester.pump(libraryCardMoreFadeDuration);
-    await tester.tap(find.byKey(LibrarySmokeKeys.cardMore(item.path)));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.byKey(LibrarySmokeKeys.videoMoreRenameFile), findsOneWidget);
-    expect(find.text('重命名文件'), findsOneWidget);
-    await tester.tap(find.byKey(LibrarySmokeKeys.videoMoreRenameFile));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(renameCount, 1);
-    await gesture.removePointer();
-  });
-
-  testWidgets('video more menu exposes open location through platform callback',
+  testWidgets('video more menu exposes the current file through callback',
       (tester) async {
     final directory = Directory(
       p.join(
@@ -842,7 +780,6 @@ void main() {
                 thumbnailService: thumbnailService,
                 playbackSettings: PlaybackSettings.defaults,
                 onOpen: () {},
-                onEditTags: () {},
                 onRevealLocation: () => revealCount++,
                 onToggleFavorite: () {},
                 onDelete: () {},
@@ -865,7 +802,7 @@ void main() {
       find.byKey(LibrarySmokeKeys.videoMoreRevealLocation),
       findsOneWidget,
     );
-    expect(find.text('打开位置'), findsOneWidget);
+    expect(find.text('打开文件'), findsOneWidget);
     await tester.tap(
       find.byKey(LibrarySmokeKeys.videoMoreRevealLocation),
     );
@@ -908,7 +845,6 @@ void main() {
               thumbnailService: thumbnailService,
               playbackSettings: PlaybackSettings.defaults,
               onOpen: () => openCount += 1,
-              onEditTags: () {},
               onToggleFavorite: () {},
               onDelete: () {},
               selectionMode: true,
@@ -1030,7 +966,6 @@ void main() {
               openedItem = item;
               openedQueue = playlist;
             },
-            onEditTags: (_) {},
             onToggleFavorite: (_) {},
             onDelete: (_) {},
           ),
@@ -1173,7 +1108,6 @@ void main() {
               scrollChromeEnabled: true,
               onHeaderVisibilityChanged: headerEvents.add,
               onOpen: (_, __) {},
-              onEditTags: (_) {},
               onToggleFavorite: (_) {},
               onDelete: (_) {},
             ),
@@ -1308,7 +1242,6 @@ void main() {
                 ifAbsent: () => 1,
               ),
               onOpen: (_, __) {},
-              onEditTags: (_) {},
               onToggleFavorite: (_) {},
               onDelete: (_) {},
             ),
@@ -1374,7 +1307,6 @@ void main() {
                   dense: false,
                   columnReferenceWidth: 900,
                   onOpen: (_, __) {},
-                  onEditTags: (_) {},
                   onToggleFavorite: (_) {},
                   onDelete: (_) {},
                 ),
@@ -6288,9 +6220,13 @@ void main() {
     await tester.tap(find.byKey(LibrarySmokeKeys.listMore(path)));
     await tester.pump(const Duration(seconds: 1));
     expect(actionState(), 'open=1 favorite=1 more=0');
-    expect(find.byKey(LibrarySmokeKeys.videoMoreEditTags), findsOneWidget);
+    expect(find.byKey(LibrarySmokeKeys.videoMoreEditTags), findsNothing);
+    expect(
+      find.byKey(LibrarySmokeKeys.videoMoreRevealLocation),
+      findsOneWidget,
+    );
     expect(find.byKey(LibrarySmokeKeys.videoMoreDelete), findsOneWidget);
-    expect(find.text('编辑标签'), findsOneWidget);
+    expect(find.text('打开文件'), findsOneWidget);
   });
 
   testWidgets('smoke path toggles tag panel rows and child expansion',

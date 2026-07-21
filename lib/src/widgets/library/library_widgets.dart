@@ -3818,7 +3818,7 @@ class RecentPlaybackView extends StatelessWidget {
     required this.playbackSettings,
     required this.dense,
     required this.onOpen,
-    required this.onEditTags,
+    this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDeleteVideo,
     required this.onToggleSelected,
@@ -3835,7 +3835,8 @@ class RecentPlaybackView extends StatelessWidget {
   final PlaybackSettings playbackSettings;
   final bool dense;
   final void Function(VideoItem item, List<VideoItem> playlist) onOpen;
-  final ValueChanged<VideoItem> onEditTags;
+  /** 在文件管理器中定位当前继续观看条目的视频文件。 */
+  final ValueChanged<VideoItem>? onRevealLocation;
   final ValueChanged<VideoItem> onToggleFavorite;
   /** 卡片更多菜单的完整视频删除动作，与“清除播放记录”保持语义隔离。 */
   final ValueChanged<VideoItem> onDeleteVideo;
@@ -3910,7 +3911,9 @@ class RecentPlaybackView extends StatelessWidget {
                       thumbnailService: thumbnailService,
                       playbackSettings: playbackSettings,
                       onOpen: () => onOpen(item, videos),
-                      onEditTags: () => onEditTags(item),
+                      onRevealLocation: onRevealLocation == null
+                          ? null
+                          : () => onRevealLocation!(item),
                       onToggleFavorite: () => onToggleFavorite(item),
                       onDeleteVideo: () => onDeleteVideo(item),
                       onToggleSelected: () => onToggleSelected(item),
@@ -3963,7 +3966,7 @@ class _RecentPlaybackRow extends StatelessWidget {
     required this.thumbnailService,
     required this.playbackSettings,
     required this.onOpen,
-    required this.onEditTags,
+    required this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDeleteVideo,
     required this.onToggleSelected,
@@ -3975,7 +3978,7 @@ class _RecentPlaybackRow extends StatelessWidget {
   final ThumbnailService thumbnailService;
   final PlaybackSettings playbackSettings;
   final VoidCallback onOpen;
-  final VoidCallback onEditTags;
+  final VoidCallback? onRevealLocation;
   final VoidCallback onToggleFavorite;
   final VoidCallback onDeleteVideo;
   final VoidCallback onToggleSelected;
@@ -3995,7 +3998,7 @@ class _RecentPlaybackRow extends StatelessWidget {
                   thumbnailService: thumbnailService,
                   playbackSettings: playbackSettings,
                   onOpen: onOpen,
-                  onEditTags: onEditTags,
+                  onRevealLocation: onRevealLocation,
                   onToggleFavorite: onToggleFavorite,
                   onDelete: onDeleteVideo,
                 ),

@@ -44,7 +44,6 @@ import '../player/player_delete_dialog.dart';
 import '../player/player_hardware_decode_warning_dialog.dart';
 import '../player/player_open_request_controller.dart';
 import '../player/player_page.dart';
-import '../player/player_rename_file_dialog.dart';
 import '../tags/tag_manager_page.dart';
 import 'library_page_helpers.dart';
 import 'directory_manager_page.dart';
@@ -5330,8 +5329,6 @@ class _LibraryPageState extends State<LibraryPage> {
                       onBack: _goBackLocalLibraryPath,
                       onOpenFolder: _openLocalLibraryFolder,
                       onOpenVideo: _openVideo,
-                      onEditTags: _editTags,
-                      onRenameFile: _requestRenameVideo,
                       onRevealLocation: _revealVideoLocation,
                       onToggleFavorite: _toggleFavorite,
                       onDelete: _requestDeleteVideo,
@@ -5348,7 +5345,7 @@ class _LibraryPageState extends State<LibraryPage> {
                           playbackSettings: _playbackSettings,
                           dense: _denseResultGrid,
                           onOpen: _openVideo,
-                          onEditTags: _editTags,
+                          onRevealLocation: _revealVideoLocation,
                           onToggleFavorite: _toggleFavorite,
                           onDeleteVideo: _requestDeleteVideo,
                           onToggleSelected: _toggleRecentSelection,
@@ -5386,8 +5383,6 @@ class _LibraryPageState extends State<LibraryPage> {
                           columnReferenceWidth: gridColumnReferenceWidth,
                           onVisible: _prioritizeVisibleLibraryItem,
                           onOpen: _openVideo,
-                          onEditTags: _editTags,
-                          onRenameFile: _requestRenameVideo,
                           onRevealLocation: _revealVideoLocation,
                           onToggleFavorite: _toggleFavorite,
                           onDelete: _requestDeleteVideo,
@@ -6289,40 +6284,6 @@ class _LibraryPageState extends State<LibraryPage> {
     return changed;
   }
 
-  /**
-   * 从媒体卡片打开统一重命名弹窗，并在完成后只刷新文件名相关的派生结果。
-   *
-   * 该入口与播放器详情共享 [_renameVideoPath]，不会复制文件校验、物理回滚或稳定身份逻辑。
-   */
-  Future<void> _requestRenameVideo(VideoItem item) async {
-    final newBaseName = await showPlayerRenameFileDialog(context, item: item);
-    if (newBaseName == null || !mounted) {
-      return;
-    }
-    try {
-      await _renameVideoPath(item, newBaseName);
-      if (!mounted) {
-        return;
-      }
-      _markVideoFileNameChanged();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('文件重命名完成')),
-      );
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      final message = switch (error) {
-        FileSystemException(:final message) => message,
-        StateError(:final message) => message,
-        _ => '请稍后重试',
-      };
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('重命名失败：$message')),
-      );
-    }
-  }
-
   /** 播放器内改名成功后延迟到 Route 返回再刷新媒体库，避免后台页面重建。 */
   Future<void> _renameVideoFromPlayer(
     VideoItem item,
@@ -6330,18 +6291,6 @@ class _LibraryPageState extends State<LibraryPage> {
   ) async {
     await _renameVideoPath(item, newBaseName);
     _playerScopedLibraryDataChanged = true;
-  }
-
-  /**
-   * 文件名或路径变化后刷新依赖它们的列表、搜索与排序缓存，但保留稳定标签计数。
-   *
-   * 同一 `videoId` 的改名不会增加、删除或迁移标签；若复用通用数据变更路径，会在大媒体库中
-   * 无意义地重算全部标签计数。筛选结果仍需刷新，因为关键字允许匹配文件名和完整路径。
-   */
-  void _markVideoFileNameChanged() {
-    _libraryDataRevision += 1;
-    _invalidateDerivedCaches();
-    _scheduleFilterRefresh(refreshCounts: false);
   }
 
   /**
@@ -6676,10 +6625,10 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   /**
-   * 播放器与视频卡片复用同一标签编辑入口。
+   * 播放器继续复用媒体库页面的统一标签编辑入口。
    *
    * 当前一级标签、folder 锁定项、manual 候选集合和保存语义全部由 [_editTags] 统一决定，
-   * 防止两个入口随时间演化成不同的数据视图。
+   * 防止播放器与批量维护入口随时间演化成不同的数据视图。
    */
   Future<void> _editManualTagsFromPlayer(VideoItem item) =>
       _editTags(item, deferLibraryRefresh: true);
