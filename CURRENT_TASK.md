@@ -7,10 +7,12 @@
 ### 2026-07-21 Windows / macOS 正式版安装包
 
 - 目标：基于 `pubspec.yaml` 的 `0.1.0+1` 构建 Windows x64 Release 安装器与 macOS Release DMG，不改变业务、数据或播放语义。
-- 当前状态：Windows 本地 Release 安装器、隔离安装/启动/卸载冒烟均已完成；macOS 等待独立 macOS runner 构建并做启动验证。
+- 当前状态：已完成。Windows 本地 Release 安装器、隔离安装/启动/卸载冒烟均通过；独立 macOS runner 已完成 Release 构建、10 秒启动检查、DMG 生成与上传。
 - Windows 安装器使用当前用户目录安装，卸载时保留用户数据库、标签、收藏和播放记录。
 - macOS bundle identifier 已从模板占位符收敛为 `com.zero1412.localtagplayer`，Finder 展示名为 `Local Tag Player`。
 - 仓库当前没有 Windows Authenticode 与 Apple Developer ID / notarization 凭据；生成的安装包必须明确标记为未签名或未公证，不能宣称通过系统信任链。
+- Windows 安装器：108,571,720 字节，SHA-256 `0ad9b542bed463d9036111c1a2a7acc2e1e0fe4ff4d4261339665890a506fe36`。
+- macOS DMG：42,757,735 字节，SHA-256 `536c53e804e2267ccecc3d6991da66561e25bc6676cf94119e5d3222b03a5094`；Actions 运行 `29815594317` 的 Windows / macOS job 均成功。
 
 ### 2026-07-21 播放器队列定位语义与媒体卡片重命名
 
@@ -36,5 +38,6 @@
 
 ## 下一步入口
 
-1. 若继续精修，优先统一“回到播放 / 回到选中”的 tooltip 与无障碍状态描述，继续保持播放事实和浏览焦点分离。
-2. 若扩展改名覆盖，优先补紧凑列表与本地目录视图的同一页面级确认回归；继续复用当前事务和轻刷新链路。
+1. 对外公开分发前配置 Windows Authenticode 证书、Apple Developer ID Application 证书与 notarization 凭据，重新打包并验证 SmartScreen / Gatekeeper。
+2. 若继续精修，优先统一“回到播放 / 回到选中”的 tooltip 与无障碍状态描述，继续保持播放事实和浏览焦点分离。
+3. 若扩展改名覆盖，优先补紧凑列表与本地目录视图的同一页面级确认回归；继续复用当前事务和轻刷新链路。

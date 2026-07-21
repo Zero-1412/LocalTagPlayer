@@ -6,6 +6,8 @@
 - 新增 Windows 与 macOS Release 打包流水线：Windows 生成 `.exe` 安装器，macOS 在真实 runner 启动检查后生成带 Applications 入口的 `.dmg`，两端同时附带 SHA-256。
 - macOS 发布元数据移除 `com.example` 占位符，bundle identifier 改为 `com.zero1412.localtagplayer`，Finder 展示名统一为 `Local Tag Player`。
 - 当前仓库未配置 Windows Authenticode、Apple Developer ID 与 notarization 凭据，因此产物明确按未签名/未公证交付；配置证书前不得宣称系统信任链通过。
+- Windows 安装器完成隔离安装、关键运行时检查、Release 进程 10 秒存活与卸载冒烟；最终 108,571,720 字节，SHA-256 为 `0ad9b542bed463d9036111c1a2a7acc2e1e0fe4ff4d4261339665890a506fe36`。
+- Actions 运行 `29815594317` 的 Windows / macOS job 均成功；macOS 通过 Release 进程 10 秒启动检查，DMG 为 42,757,735 字节，SHA-256 为 `536c53e804e2267ccecc3d6991da66561e25bc6676cf94119e5d3222b03a5094`。
 - 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、播放器/缓存后端、标签语义或用户数据。
 
 ## 2026-07-21 · 卡片改名页面刷新回归
