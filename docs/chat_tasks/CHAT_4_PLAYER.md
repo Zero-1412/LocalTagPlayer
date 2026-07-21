@@ -1,3 +1,13 @@
+## 2026-07-21 Route 语义、退出画面与反馈收口
+
+- 媒体库使用 `_playerRouteActive` 只在播放器 Route 存续期间排除自身语义，并在 push 前等待一帧提交；播放器根节点声明独立 route scope。该协调不卸载库页、不重建结果列表，也不改变筛选状态。
+- `_exitPlayer` 正常路径只等待 pause 确认并发起 pop，最后一帧和当前时间会保留到反向 Route 已开始；`_releaseAsyncResources` 再串行 stop/dispose。pause 超时或失败仍在 pop 前启动 stop，保证音频安全。
+- `AppSequentialTransition` 把同容器层级切换分为退出和进入两阶段，播放器列表/详情及播放设置页不再同时绘制新旧文字和控件；reduced motion 继续只保留短淡入。
+- 快捷键 HUD 覆盖播放/暂停、前后 seek、上下条、全屏、倍速和音量，并调用原控制条显示链路；队列搜索回调返回 `played / noMatch / emptyQuery`，文案明确提交会直接播放下一条匹配视频。
+- 详情路径使用更高对比的连续阅读色，关键字号小幅提升；未收藏项不再常驻空心心形，但保留“未收藏”语义，播放/缺失状态徽标保持紧凑。
+- 测试覆盖 Route/退出策略、语义排除、快捷键 live region、搜索三态和顺序转场；完整 229 项测试、静态分析、Windows debug build 与 1249×714 实窗通过。真实返回 70ms 中间帧保留视频纹理和时间，UIA 播放期间不再暴露媒体库节点，返回后恢复。
+- filtered queue 来源、内容、顺序和当前 index 未改变；`PlayerBackend`、缓存队列、SQLite schema、标签语义、稳定身份与用户数据均未改变。
+
 ## 2026-07-19 删除偏好与可录制返回快捷键
 
 - `PlaybackSettings` 向后兼容持久化删除确认、回收站默认动作和“返回上一页”绑定；旧 JSON 缺字段时保持提示开启、仅移出媒体库与 Esc 返回。

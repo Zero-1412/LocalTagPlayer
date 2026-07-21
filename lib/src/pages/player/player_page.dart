@@ -328,6 +328,16 @@ bool playerRouteHasBlockingOverlay(BuildContext playerContext) {
 }
 
 /**
+ * pause 未确认时才允许在路由 pop 前启动 stop。
+ *
+ * 正常退出必须保留最后一帧；异常路径则优先确保音频和原生播放不会残留。
+ */
+@visibleForTesting
+bool playerExitStopShouldStartBeforePop({required bool pauseAcknowledged}) {
+  return !pauseAcknowledged;
+}
+
+/**
  * 把持久化的画面比例与倍速重新应用到刚打开的播放后端。
  *
  * 播放器在 open 前后都会调用该函数，避免后端重建媒体状态后只保留设置数据或
@@ -357,6 +367,100 @@ Future<void> applyPlayerOpenPreferences({
   await setPropertySafely('video-pan-x', '0');
   await setPropertySafely('video-pan-y', '0');
   await backend.setRate(playbackRate);
+}
+
+/**
+ * 把播放器声明为独立语义路由，并阻断其下方媒体库的无障碍节点。
+ *
+ * Windows Route 过渡期间可能同时挂载前后两个页面；视觉叠放不应让读屏器继续命中
+ * 媒体库控件，因此播放器根节点必须显式承担 route scope。
+ */
+class PlayerRouteSemantics extends StatelessWidget {
+  const PlayerRouteSemantics({super.key, required this.child});
+
+  /** 播放器页面的完整视觉与交互树。 */
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlockSemantics(
+      key: const ValueKey('player.route.blockSemantics'),
+      child: Semantics(
+        key: const ValueKey('player.route.semantics'),
+        container: true,
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: '播放器',
+        child: child,
+      ),
+    );
+  }
+}
+
+/** 画面中央的短时快捷键反馈，不拦截视频或控制条的鼠标命中。 */
+class PlayerShortcutFeedback extends StatelessWidget {
+  const PlayerShortcutFeedback({
+    super.key,
+    required this.visible,
+    required this.label,
+    required this.icon,
+  });
+
+  /** 当前反馈是否处于可见时段。 */
+  final bool visible;
+
+  /** 对本次快捷键结果的简短说明。 */
+  final String label;
+
+  /** 与本次快捷键动作一致的图标。 */
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final accessibility = AppAccessibilityScope.of(context);
+    return IgnorePointer(
+      child: Semantics(
+        liveRegion: true,
+        label: visible ? '快捷键反馈：$label' : null,
+        excludeSemantics: !visible,
+        child: AnimatedOpacity(
+          key: const ValueKey('player.shortcutFeedback'),
+          opacity: visible ? 1 : 0,
+          duration: accessibility.fadeDuration(AppMotion.hover),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: playerSurfaceRaised.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              border: Border.all(color: playerBorder),
+              boxShadow: playerSoftShadow,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 12,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 22, color: playerText),
+                  const SizedBox(width: 9),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: playerText,
+                      fontSize: 14,
+                      fontWeight: AppTypography.strong,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class PlayerPage extends StatefulWidget {
@@ -445,11 +549,15 @@ class PlayerPageState extends State<PlayerPage> {
   StreamSubscription<Duration>? _positionSubscription;
   StreamSubscription<bool>? _playingSubscription;
   Timer? _controlsHideTimer;
+  Timer? _shortcutFeedbackTimer;
   Timer? _queuePrefetchTimer;
   Timer? _fullscreenQueueHideTimer;
   Timer? _playbackHealthTimer;
   var _playbackHealthSampling = false;
   var _controlsVisible = true;
+  var _shortcutFeedbackVisible = false;
+  String? _shortcutFeedbackLabel;
+  IconData _shortcutFeedbackIcon = Icons.keyboard_rounded;
   /** 鼠标停留在底部进度与控制区时暂停自动隐藏计时。 */
   var _pointerInControlBar = false;
   /** 设置浮层展开期间锁定底部进度与控制区为可见。 */
@@ -910,7 +1018,10 @@ class PlayerPageState extends State<PlayerPage> {
   }
 
   /**
-   * 在路由消失前先停止原生播放，保证返回媒体库后不会残留声音。
+   * 返回前先暂停音频，但保留最后一帧直到反向路由已经开始。
+   *
+   * 正常路径的 stop 由 dispose 串行执行，避免播放器纹理在媒体库完全接管画面前变黑
+   * 或重置到 0:00；只有 pause 失败时才提前 stop，优先保证不会残留声音。
    */
   Future<void> _exitPlayer() async {
     if (_isExiting) {
@@ -926,18 +1037,24 @@ class PlayerPageState extends State<PlayerPage> {
     _openRequests.cancel();
     _detailsService.dispose();
     _persistOpenedProgress();
+    var pauseAcknowledged = false;
     try {
       // pause 的确认路径比 stop 短，先确保音频静音，不能让原生 stop 阻塞路由退出。
       await _playerBackend.pause().timeout(const Duration(milliseconds: 800));
+      pauseAcknowledged = true;
       _pauseAcknowledgedAt = DateTime.now();
       unawaited(PlayerMemoryDiagnostics.logStage(
         'pause_acknowledged',
         backend: _playerBackend,
       ));
     } catch (_) {
-      // 即使 pause 超时也继续退出；下方 stop 与 dispose 仍会终止原生播放。
+      // pause 失败时提前 stop 是音频安全兜底；正常返回不会在反向转场前清空纹理。
     }
-    _exitStopFuture ??= _stopForExitDiagnostics();
+    if (playerExitStopShouldStartBeforePop(
+      pauseAcknowledged: pauseAcknowledged,
+    )) {
+      _exitStopFuture ??= _stopForExitDiagnostics();
+    }
     // 返回媒体库前等待最后一次全局设置写入，避免用户改完立即退出时丢失配置。
     await _playbackSettingsSaveTail;
     if (mounted) {
@@ -1074,6 +1191,24 @@ class PlayerPageState extends State<PlayerPage> {
         }
       });
     }
+  }
+
+  /** 显示短时快捷键结果，同时恢复控制条以建立动作与播放器状态的视觉联系。 */
+  void _showShortcutFeedback(String label, IconData icon) {
+    _shortcutFeedbackTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _shortcutFeedbackLabel = label;
+        _shortcutFeedbackIcon = icon;
+        _shortcutFeedbackVisible = true;
+      });
+    }
+    _showVideoControls();
+    _shortcutFeedbackTimer = Timer(const Duration(milliseconds: 850), () {
+      if (mounted) {
+        setState(() => _shortcutFeedbackVisible = false);
+      }
+    });
   }
 
   /** 控制条进出状态只协调计时，不触发播放、筛选队列或媒体后台任务。 */
@@ -2125,19 +2260,20 @@ class PlayerPageState extends State<PlayerPage> {
   }
 
   /** 搜索当前 filtered queue 并直接定位播放，不访问全媒体库。 */
-  void _searchQueue(String query) {
+  PlayerQueueSearchOutcome _searchQueue(String query) {
+    if (query.trim().isEmpty) {
+      return PlayerQueueSearchOutcome.emptyQuery;
+    }
     final index = playerQueueSearchIndex(
       _queue,
       query,
       startIndex: _index,
     );
     if (index == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前队列没有匹配项')),
-      );
-      return;
+      return PlayerQueueSearchOutcome.noMatch;
     }
     _jumpTo(index, ignoreFollowUpSelection: true);
+    return PlayerQueueSearchOutcome.played;
   }
 
   void _jumpTo(int index, {bool ignoreFollowUpSelection = false}) {
@@ -2768,25 +2904,42 @@ class PlayerPageState extends State<PlayerPage> {
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.playPause)) {
+      final playing = _playerBackend.state.playing;
       unawaited(_playerBackend.playOrPause());
+      _showShortcutFeedback(
+        playing ? '暂停' : '播放',
+        playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+      );
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekBackward)) {
       unawaited(_seekWithDiagnostics(
           _playerBackend.state.position - const Duration(seconds: 5)));
+      _showShortcutFeedback('后退 5 秒', Icons.replay_5_rounded);
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekForward)) {
       unawaited(_seekWithDiagnostics(
           _playerBackend.state.position + const Duration(seconds: 5)));
+      _showShortcutFeedback('前进 5 秒', Icons.forward_5_rounded);
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.previous)) {
-      _jumpTo(_index - 1, ignoreFollowUpSelection: true);
+      if (_index > 0) {
+        _jumpTo(_index - 1, ignoreFollowUpSelection: true);
+        _showShortcutFeedback('上一条', Icons.skip_previous_rounded);
+      } else {
+        _showShortcutFeedback('已到队列开头', Icons.first_page_rounded);
+      }
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.next)) {
-      _jumpTo(_index + 1, ignoreFollowUpSelection: true);
+      if (_index + 1 < _queue.length) {
+        _jumpTo(_index + 1, ignoreFollowUpSelection: true);
+        _showShortcutFeedback('下一条', Icons.skip_next_rounded);
+      } else {
+        _showShortcutFeedback('已到队列末尾', Icons.last_page_rounded);
+      }
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.editTags)) {
@@ -2799,22 +2952,38 @@ class PlayerPageState extends State<PlayerPage> {
     }
     if (matches(PlayerShortcutAction.fullscreen)) {
       unawaited(_toggleWindowFullscreen());
+      _showShortcutFeedback(
+        _isWindowFullscreen ? '退出全屏' : '进入全屏',
+        _isWindowFullscreen
+            ? Icons.fullscreen_exit_rounded
+            : Icons.fullscreen_rounded,
+      );
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.speedDown)) {
       _stepPlaybackRate(-1);
+      _showShortcutFeedback('倍速 $_playbackRate×', Icons.speed_rounded);
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.speedUp)) {
       _stepPlaybackRate(1);
+      _showShortcutFeedback('倍速 $_playbackRate×', Icons.speed_rounded);
       return KeyEventResult.handled;
     }
     switch (event.logicalKey) {
       case LogicalKeyboardKey.arrowUp:
         _stepPlayerVolume(5);
+        _showShortcutFeedback(
+          '音量 ${_volume.round()}%',
+          Icons.volume_up_rounded,
+        );
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowDown:
         _stepPlayerVolume(-5);
+        _showShortcutFeedback(
+          '音量 ${_volume.round()}%',
+          _volume == 0 ? Icons.volume_off_rounded : Icons.volume_down_rounded,
+        );
         return KeyEventResult.handled;
       case LogicalKeyboardKey.home:
         _selectQueueIndex(0, center: true);
@@ -2840,6 +3009,7 @@ class PlayerPageState extends State<PlayerPage> {
   void dispose() {
     _openRequests.cancel();
     _controlsHideTimer?.cancel();
+    _shortcutFeedbackTimer?.cancel();
     _queuePrefetchTimer?.cancel();
     _fullscreenQueueHideTimer?.cancel();
     _playbackHealthTimer?.cancel();
@@ -2949,7 +3119,7 @@ class PlayerPageState extends State<PlayerPage> {
       pointerInTopBarRegion: _pointerInWindowTopBarRegion,
       accessibleNavigation: accessibility.accessibleNavigation,
     );
-    return Theme(
+    final page = Theme(
       data: playerWorkspaceTheme(
         Theme.of(context),
         highContrast: accessibility.highContrast,
@@ -3107,6 +3277,18 @@ class PlayerPageState extends State<PlayerPage> {
                                                           : null,
                                                 ),
                                               ),
+                                            if (_shortcutFeedbackLabel != null)
+                                              Positioned.fill(
+                                                child: Center(
+                                                  child: PlayerShortcutFeedback(
+                                                    visible:
+                                                        _shortcutFeedbackVisible,
+                                                    label:
+                                                        _shortcutFeedbackLabel!,
+                                                    icon: _shortcutFeedbackIcon,
+                                                  ),
+                                                ),
+                                              ),
                                           ],
                                         ),
                                       ),
@@ -3225,6 +3407,7 @@ class PlayerPageState extends State<PlayerPage> {
         ),
       ),
     );
+    return PlayerRouteSemantics(child: page);
   }
 }
 

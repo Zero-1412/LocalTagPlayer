@@ -103,15 +103,11 @@ class _PlayerSidePanelState extends State<PlayerSidePanel> {
                 final begin = accessibility.reduceMotion
                     ? Offset.zero
                     : Offset(0.025 * _transitionDirection, 0);
-                return FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: begin,
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  ),
+                return AppSequentialTransition(
+                  animation: animation,
+                  beginOffset: begin,
+                  reduceMotion: accessibility.reduceMotion,
+                  child: child,
                 );
               },
               child: _view == PlayerSidePanelView.queue
@@ -350,7 +346,7 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
                 '当前视频详情',
                 style: TextStyle(
                   color: playerText,
-                  fontSize: 15,
+                  fontSize: 16,
                   fontWeight: AppTypography.strong,
                 ),
               ),
@@ -379,7 +375,7 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
             displayTitle,
             style: const TextStyle(
               color: playerText,
-              fontSize: 13,
+              fontSize: 14,
               height: 1.45,
               fontWeight: FontWeight.w700,
             ),
@@ -401,7 +397,7 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
                 backgroundColor: playerSurfaceRaised,
                 labelStyle: const TextStyle(
                   color: playerTextMuted,
-                  fontSize: 11,
+                  fontSize: 12,
                 ),
                 visualDensity: VisualDensity.compact,
               ),
@@ -449,8 +445,8 @@ class PlayerVideoDetailsPanel extends StatelessWidget {
           child: SelectableText(
             item.path,
             style: const TextStyle(
-              color: playerTextMuted,
-              fontSize: 12,
+              color: playerTextSecondary,
+              fontSize: 13,
               height: 1.45,
             ),
           ),
@@ -552,7 +548,7 @@ class _PlayerDetailRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: playerText,
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -580,7 +576,7 @@ class _PlayerDetailTagChip extends StatelessWidget {
         border: Border.all(color: appAccentViolet.withValues(alpha: 0.48)),
       ),
       child:
-          Text(label, style: const TextStyle(color: playerText, fontSize: 11)),
+          Text(label, style: const TextStyle(color: playerText, fontSize: 12)),
     );
   }
 }
@@ -609,7 +605,7 @@ class _PlayerDetailStatus extends StatelessWidget {
         label,
         style: TextStyle(
           color: warning ? playerDanger : playerText,
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: FontWeight.w800,
         ),
       ),

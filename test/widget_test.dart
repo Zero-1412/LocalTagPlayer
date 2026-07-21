@@ -1926,6 +1926,7 @@ void main() {
   testWidgets('player queue search expands from the count action',
       (tester) async {
     String? submittedQuery;
+    var searchOutcome = PlayerQueueSearchOutcome.played;
     final searchVisibility = <bool>[];
     await tester.pumpWidget(
       MaterialApp(
@@ -1937,7 +1938,10 @@ void main() {
               playingIndex: 2,
               onLocateSelected: () {},
               onDeleteSelected: () {},
-              onSearch: (query) => submittedQuery = query,
+              onSearch: (query) {
+                submittedQuery = query;
+                return searchOutcome;
+              },
               onSearchVisibilityChanged: searchVisibility.add,
             ),
           ),
@@ -1966,6 +1970,8 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(searchFieldKey), findsOneWidget);
+    expect(find.text('查找并播放下一条'), findsOneWidget);
+    expect(find.text('Enter 查找并播放下一条匹配视频'), findsOneWidget);
     expect(
         tester.widget<TextField>(find.byKey(searchFieldKey)).autofocus, isTrue);
     expect(searchVisibility, <bool>[true]);
@@ -1975,12 +1981,93 @@ void main() {
     );
     await tester.enterText(find.byKey(searchFieldKey), 'chamosan');
     await tester.tap(find.byKey(const ValueKey('player.queueSearchSubmit')));
+    await tester.pump();
     expect(submittedQuery, 'chamosan');
+    expect(find.text('已切换到下一条匹配视频'), findsOneWidget);
+
+    searchOutcome = PlayerQueueSearchOutcome.noMatch;
+    await tester.enterText(find.byKey(searchFieldKey), 'missing');
+    await tester.tap(find.byKey(const ValueKey('player.queueSearchSubmit')));
+    await tester.pump();
+    expect(find.text('当前筛选队列没有匹配项'), findsOneWidget);
+
+    await tester.enterText(find.byKey(searchFieldKey), '');
+    searchOutcome = PlayerQueueSearchOutcome.emptyQuery;
+    await tester.tap(find.byKey(const ValueKey('player.queueSearchSubmit')));
+    await tester.pump();
+    expect(find.text('请先输入关键词'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(find.byKey(searchFieldKey), findsNothing);
     expect(searchVisibility, <bool>[true, false]);
+  });
+
+  testWidgets('player route owns semantics and shortcut feedback is live',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: PlayerRouteSemantics(
+          child: PlayerShortcutFeedback(
+            visible: true,
+            label: '前进 5 秒',
+            icon: Icons.forward_5_rounded,
+          ),
+        ),
+      ),
+    );
+
+    final blocker = tester.widget<BlockSemantics>(
+      find.byKey(const ValueKey('player.route.blockSemantics')),
+    );
+    final routeSemantics = tester.widget<Semantics>(
+      find.byKey(const ValueKey('player.route.semantics')),
+    );
+    final feedbackSemantics = tester.widget<Semantics>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('player.shortcutFeedback')),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+
+    expect(blocker.blocking, isTrue);
+    expect(routeSemantics.properties.scopesRoute, isTrue);
+    expect(routeSemantics.properties.namesRoute, isTrue);
+    expect(routeSemantics.properties.label, '播放器');
+    expect(feedbackSemantics.properties.liveRegion, isTrue);
+    expect(feedbackSemantics.properties.label, '快捷键反馈：前进 5 秒');
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const ValueKey('player.shortcutFeedback')),
+          )
+          .opacity,
+      1,
+    );
+  });
+
+  test('player exit preserves texture after acknowledged pause', () {
+    expect(
+      playerExitStopShouldStartBeforePop(pauseAcknowledged: true),
+      isFalse,
+    );
+    expect(
+      playerExitStopShouldStartBeforePop(pauseAcknowledged: false),
+      isTrue,
+    );
+  });
+
+  test('library excludes semantics only while player route is active', () {
+    expect(
+      libraryRouteShouldExcludeSemantics(playerRouteActive: true),
+      isTrue,
+    );
+    expect(
+      libraryRouteShouldExcludeSemantics(playerRouteActive: false),
+      isFalse,
+    );
   });
 
   testWidgets('player delete dialog keeps recycle-bin action explicit',
@@ -2127,9 +2214,32 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('player.sidebar.tab.details')));
     await tester.pump(const Duration(milliseconds: 60));
 
-    // 切换期间短暂保留两侧内容建立空间连续性，完成后旧队列必须卸载。
+    // 旧层级先退出，新层级后进入；中点两侧均不可同时绘制。
     expect(find.text('筛选结果列表测试'), findsOneWidget);
     expect(find.text('当前视频详情'), findsOneWidget);
+    final queueOpacity = tester
+        .widget<FadeTransition>(
+          find
+              .ancestor(
+                of: find.text('筛选结果列表测试'),
+                matching: find.byType(FadeTransition),
+              )
+              .first,
+        )
+        .opacity
+        .value;
+    final detailsOpacity = tester
+        .widget<FadeTransition>(
+          find
+              .ancestor(
+                of: find.text('当前视频详情'),
+                matching: find.byType(FadeTransition),
+              )
+              .first,
+        )
+        .opacity
+        .value;
+    expect(queueOpacity == 0 || detailsOpacity == 0, isTrue);
     await tester.pumpAndSettle();
 
     expect(find.text('筛选结果列表测试'), findsNothing);
@@ -4296,7 +4406,7 @@ void main() {
               onDeleteSelected: null,
               onToggleFavorite: (_) {},
               onDeleteItem: (_) {},
-              onSearchQueue: (_) {},
+              onSearchQueue: (_) => PlayerQueueSearchOutcome.noMatch,
             ),
           ),
         ),
@@ -4406,7 +4516,7 @@ void main() {
                   onDeleteSelected: null,
                   onToggleFavorite: (_) {},
                   onDeleteItem: (_) {},
-                  onSearchQueue: (_) {},
+                  onSearchQueue: (_) => PlayerQueueSearchOutcome.noMatch,
                 ),
               );
             },
@@ -4415,6 +4525,15 @@ void main() {
       ),
     );
     await tester.pump();
+
+    expect(
+      find.byKey(
+        const ValueKey(
+          'player.queue.favoriteIndicator.queue-transition-first',
+        ),
+      ),
+      findsNothing,
+    );
 
     final card = find.byKey(
       const ValueKey('player.queue.card.queue-transition-first'),

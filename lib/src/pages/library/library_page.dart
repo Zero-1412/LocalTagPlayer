@@ -114,6 +114,12 @@ Route<T> _smoothRoute<T>(
   );
 }
 
+/** 播放器 Route 挂载期间排除媒体库语义，防止 Windows UIA 保留旧页面节点。 */
+@visibleForTesting
+bool libraryRouteShouldExcludeSemantics({required bool playerRouteActive}) {
+  return playerRouteActive;
+}
+
 /** 返回快捷键冲突说明；null 表示可安全保存且不会覆盖其它动作。 */
 @visibleForTesting
 String? playerShortcutConflictMessage({
@@ -3144,6 +3150,8 @@ class _LibraryPageState extends State<LibraryPage> {
   var _playerScopedNeedsCountRefresh = false;
   /** 最近一次播放器的原生释放信号；专项压测必须等它完成再开始下一会话。 */
   Future<void> _latestPlayerRelease = Future<void>.value();
+  /** 播放器 Route 存续期间只隐藏媒体库语义，不卸载列表或丢失筛选状态。 */
+  var _playerRouteActive = false;
 
   var _isRefreshingVideos = false;
 
@@ -5603,7 +5611,7 @@ class _LibraryPageState extends State<LibraryPage> {
       );
     }
 
-    return Shortcuts(
+    final page = Shortcuts(
       shortcuts: <ShortcutActivator, Intent>{
         const SingleActivator(LogicalKeyboardKey.keyK, control: true):
             const FocusLibrarySearchIntent(),
@@ -5676,6 +5684,12 @@ class _LibraryPageState extends State<LibraryPage> {
           ),
         ),
       ),
+    );
+    return ExcludeSemantics(
+      excluding: libraryRouteShouldExcludeSemantics(
+        playerRouteActive: _playerRouteActive,
+      ),
+      child: page,
     );
   }
 
@@ -6098,6 +6112,17 @@ class _LibraryPageState extends State<LibraryPage> {
       store.resumeDataBackupAfterPlayback();
       return;
     }
+    setState(() => _playerRouteActive = true);
+    // 先让媒体库提交 ExcludeSemantics，再压入不透明播放器 Route；否则底层 Route
+    // 可能在本次 rebuild 前进入 offstage，让 Windows UIA 继续缓存旧页面节点。
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) {
+      if (!wasPaused) {
+        thumbnailService.resume();
+      }
+      store.resumeDataBackupAfterPlayback();
+      return;
+    }
     try {
       await Navigator.of(context).push(
         _smoothRoute<void>(
@@ -6130,6 +6155,10 @@ class _LibraryPageState extends State<LibraryPage> {
         ),
       );
     } finally {
+      if (mounted) {
+        // 反向 Route 已完成后立即恢复媒体库语义，不等待原生资源释放尾部。
+        setState(() => _playerRouteActive = false);
+      }
       // 路由返回不代表 media_kit 原生线程已释放；等待完成信号再恢复后台任务。
       await playerDisposed.future.timeout(
         const Duration(seconds: 15),

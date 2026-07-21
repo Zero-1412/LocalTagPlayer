@@ -43,6 +43,23 @@ bool playerQueueActionShouldOpen({
       (horizontalVelocity <= 250 && progress >= 0.45);
 }
 
+/** 队列搜索提交后返回给输入框的明确状态，不改变队列搜索语义。 */
+enum PlayerQueueSearchOutcome {
+  /** 已找到下一条匹配视频，并同步选中与实际播放位置。 */
+  played,
+
+  /** 当前 filtered queue 中没有匹配项。 */
+  noMatch,
+
+  /** 查询为空，未执行定位或播放。 */
+  emptyQuery,
+}
+
+/** 在当前 filtered queue 内查找并直接播放下一条匹配视频。 */
+typedef PlayerQueueSearchCallback = PlayerQueueSearchOutcome Function(
+  String query,
+);
+
 class _PlayerDesktopDragScrollBehavior extends MaterialScrollBehavior {
   const _PlayerDesktopDragScrollBehavior();
 
@@ -226,8 +243,8 @@ class PlayerQueueSidebar extends StatelessWidget {
   /** 请求删除指定队列索引，实际文件动作由播放器页确认后执行。 */
   final ValueChanged<int> onDeleteItem;
 
-  /** 在当前队列内搜索并定位，不改变队列内容。 */
-  final ValueChanged<String> onSearchQueue;
+  /** 在当前队列内查找并播放下一条匹配视频，不改变队列内容。 */
+  final PlayerQueueSearchCallback onSearchQueue;
 
   /**
    * 队列搜索展开/收起通知。
@@ -575,8 +592,8 @@ class PlayerQueueHeader extends StatefulWidget {
   /** 删除当前视频的入口；为 null 时禁用按钮。 */
   final VoidCallback? onDeleteSelected;
 
-  /** 在当前队列内搜索并定位，不重新查询媒体库。 */
-  final ValueChanged<String> onSearch;
+  /** 在当前队列内查找并播放下一条匹配视频，不重新查询媒体库。 */
+  final PlayerQueueSearchCallback onSearch;
 
   /** 搜索输入展开/收起通知，供播放器恢复快捷键焦点。 */
   final ValueChanged<bool>? onSearchVisibilityChanged;
@@ -725,8 +742,8 @@ class _QueueSearchField extends StatefulWidget {
   /** 展开后是否立即接管键盘输入焦点。 */
   final bool autofocus;
 
-  /** 仅在播放器已持有的队列中定位，不访问媒体库或触发重新扫描。 */
-  final ValueChanged<String> onSearch;
+  /** 仅在播放器已持有的队列中查找并播放，不访问媒体库或触发重新扫描。 */
+  final PlayerQueueSearchCallback onSearch;
 
   /** Escape 或关闭动作只收起搜索，不让同一按键继续冒泡成播放器退出。 */
   final VoidCallback onClose;
@@ -738,9 +755,19 @@ class _QueueSearchField extends StatefulWidget {
 /** 维护搜索输入，避免把临时查询状态提升到播放器或媒体库控制器。 */
 class _QueueSearchFieldState extends State<_QueueSearchField> {
   final TextEditingController _controller = TextEditingController();
+  String _status = 'Enter 查找并播放下一条匹配视频';
 
-  /** 提交当前查询；空查询由队列搜索规则稳定忽略。 */
-  void _submit() => widget.onSearch(_controller.text);
+  /** 提交当前查询，并把实际播放结果反馈在输入框下方的固定状态区。 */
+  void _submit() {
+    final outcome = widget.onSearch(_controller.text);
+    setState(() {
+      _status = switch (outcome) {
+        PlayerQueueSearchOutcome.played => '已切换到下一条匹配视频',
+        PlayerQueueSearchOutcome.noMatch => '当前筛选队列没有匹配项',
+        PlayerQueueSearchOutcome.emptyQuery => '请先输入关键词',
+      };
+    });
+  }
 
   @override
   void dispose() {
@@ -754,39 +781,63 @@ class _QueueSearchFieldState extends State<_QueueSearchField> {
       bindings: <ShortcutActivator, VoidCallback>{
         const SingleActivator(LogicalKeyboardKey.escape): widget.onClose,
       },
-      child: TextField(
-        key: const ValueKey('player.queueSearch'),
-        controller: _controller,
-        autofocus: widget.autofocus,
-        style: const TextStyle(color: playerText, fontSize: 12),
-        textInputAction: TextInputAction.search,
-        decoration: InputDecoration(
-          isDense: true,
-          hintText: '搜索当前队列并定位',
-          hintStyle: const TextStyle(color: playerTextMuted),
-          prefixIcon: const Icon(
-            Icons.search_rounded,
-            size: 18,
-            color: playerTextMuted,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            key: const ValueKey('player.queueSearch'),
+            controller: _controller,
+            autofocus: widget.autofocus,
+            style: const TextStyle(color: playerText, fontSize: 12),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: '查找并播放下一条',
+              hintStyle: const TextStyle(color: playerTextMuted),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                size: 18,
+                color: playerTextMuted,
+              ),
+              filled: true,
+              fillColor: playerSurfaceAlt,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                borderSide: const BorderSide(color: playerBorder),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                borderSide:
+                    const BorderSide(color: appAccentViolet, width: 1.5),
+              ),
+              suffixIcon: IconButton(
+                key: const ValueKey('player.queueSearchSubmit'),
+                tooltip: '播放下一条匹配视频',
+                onPressed: _submit,
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+              ),
+            ),
+            onChanged: (_) {
+              if (_status != 'Enter 查找并播放下一条匹配视频') {
+                setState(() => _status = 'Enter 查找并播放下一条匹配视频');
+              }
+            },
+            onSubmitted: (_) => _submit(),
           ),
-          filled: true,
-          fillColor: playerSurfaceAlt,
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            borderSide: const BorderSide(color: playerBorder),
+          const SizedBox(height: 5),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _status,
+              key: const ValueKey('player.queueSearch.status'),
+              style: const TextStyle(
+                color: playerTextSecondary,
+                fontSize: 11,
+                height: 1.2,
+              ),
+            ),
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            borderSide: const BorderSide(color: appAccentViolet, width: 1.5),
-          ),
-          suffixIcon: IconButton(
-            key: const ValueKey('player.queueSearchSubmit'),
-            tooltip: '定位下一条匹配视频',
-            onPressed: _submit,
-            icon: const Icon(Icons.my_location_rounded, size: 17),
-          ),
-        ),
-        onSubmitted: (_) => _submit(),
+        ],
       ),
     );
   }
@@ -897,8 +948,8 @@ class _QueueStateBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 19,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      height: 20,
+      padding: const EdgeInsets.symmetric(horizontal: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(AppRadius.capsule),
@@ -907,7 +958,7 @@ class _QueueStateBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: color),
+          Icon(icon, size: 12, color: color),
           const SizedBox(width: 3),
           Text(
             label,
@@ -915,7 +966,7 @@ class _QueueStateBadge extends StatelessWidget {
             overflow: TextOverflow.clip,
             style: TextStyle(
               color: color,
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.w900,
               height: 1,
             ),
@@ -1403,20 +1454,21 @@ class _QueueListItemState extends State<_QueueListItem>
                                   Semantics(
                                     label:
                                         widget.item.isFavorite ? '已收藏' : '未收藏',
-                                    child: Icon(
-                                      widget.item.isFavorite
-                                          ? Icons.favorite_rounded
-                                          : Icons.favorite_border_rounded,
-                                      key: ValueKey(
-                                        'player.queue.favoriteIndicator.'
-                                        '${widget.item.videoId}',
-                                      ),
-                                      size: 15,
-                                      color: widget.item.isFavorite
-                                          ? playerDanger
-                                          : playerTextMuted.withValues(
-                                              alpha: 0.52,
-                                            ),
+                                    child: SizedBox(
+                                      width: 15,
+                                      height: 15,
+                                      child: widget.item.isFavorite
+                                          ? Icon(
+                                              Icons.favorite_rounded,
+                                              key: ValueKey(
+                                                'player.queue.'
+                                                'favoriteIndicator.'
+                                                '${widget.item.videoId}',
+                                              ),
+                                              size: 15,
+                                              color: playerDanger,
+                                            )
+                                          : null,
                                     ),
                                   ),
                                   if (stateBadgeLabel != null &&

@@ -147,6 +147,60 @@ class AppAccessibilityScope extends InheritedWidget {
   }
 }
 
+/**
+ * 让同一容器内的新旧层级按“旧内容退出、再进入新内容”的顺序切换。
+ *
+ * [animation] 来自 `AnimatedSwitcher`：正向时新内容在后半程进入，反向时旧内容
+ * 在前半程退出，因此任一时刻最多绘制一个层级，避免文字和控件短暂重叠。
+ */
+class AppSequentialTransition extends StatelessWidget {
+  const AppSequentialTransition({
+    super.key,
+    required this.animation,
+    required this.child,
+    required this.beginOffset,
+    required this.reduceMotion,
+  });
+
+  /** `AnimatedSwitcher` 为当前子项提供的进出动画。 */
+  final Animation<double> animation;
+
+  /** 当前参与层级切换的页面或面板。 */
+  final Widget child;
+
+  /** 内容进入时的轻量位移；减弱动效时只保留透明度变化。 */
+  final Offset beginOffset;
+
+  /** 是否遵循系统偏好停用装饰位移。 */
+  final bool reduceMotion;
+
+  @override
+  Widget build(BuildContext context) {
+    final phasedAnimation = CurvedAnimation(
+      parent: animation,
+      curve: const Interval(0.5, 1, curve: AppMotion.standardCurve),
+    );
+    final offset = reduceMotion ? Offset.zero : beginOffset;
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, transitionedChild) => IgnorePointer(
+        ignoring: animation.value <= 0.5,
+        child: FadeTransition(
+          opacity: phasedAnimation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: offset,
+              end: Offset.zero,
+            ).animate(phasedAnimation),
+            child: transitionedChild,
+          ),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
 /** 应用强调色。 */
 const appAccent = Color(0xff0f766e);
 const appAccentStrong = Color(0xff0b5d57);
@@ -204,6 +258,9 @@ const playerText = Color(0xfff5f7fa);
 
 /** 播放器次要文字。 */
 const playerTextMuted = Color(0xff9da5b2);
+
+/** 播放器需连续阅读的次级信息，亮度高于弱化标签但低于主文字。 */
+const playerTextSecondary = Color(0xffc7ccd5);
 
 /** 播放器危险操作颜色，避免与紫色选择态混淆。 */
 const playerDanger = Color(0xffff6b7a);

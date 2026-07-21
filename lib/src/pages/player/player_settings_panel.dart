@@ -152,26 +152,15 @@ Future<void> showPlayerSettingsDialog(
                                           const ValueKey(
                                             'player.settings.primary.page',
                                           );
-                                      final offsetAnimation = Tween<Offset>(
-                                        begin: accessibility.reduceMotion
-                                            ? Offset.zero
-                                            : Offset(
-                                                enteringPrimary ? -0.08 : 0.08,
-                                                0,
-                                              ),
-                                        end: Offset.zero,
-                                      ).animate(
-                                        CurvedAnimation(
-                                          parent: animation,
-                                          curve: AppMotion.standardCurve,
+                                      return AppSequentialTransition(
+                                        animation: animation,
+                                        beginOffset: Offset(
+                                          enteringPrimary ? -0.08 : 0.08,
+                                          0,
                                         ),
-                                      );
-                                      return FadeTransition(
-                                        opacity: animation,
-                                        child: SlideTransition(
-                                          position: offsetAnimation,
-                                          child: child,
-                                        ),
+                                        reduceMotion:
+                                            accessibility.reduceMotion,
+                                        child: child,
                                       );
                                     },
                                     child: switch (currentPage) {
