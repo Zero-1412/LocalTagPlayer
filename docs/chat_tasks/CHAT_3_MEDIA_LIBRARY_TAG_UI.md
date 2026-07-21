@@ -1,5 +1,12 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
+## 2026-07-21 卡片改名后的搜索与排序刷新回归
+
+- 真实 `LibraryPage` 页面测试从名称升序网格打开卡片更多菜单并确认改名，隔离临时文件和内存 Repository 共同覆盖物理路径、stable mutable path 与页面刷新链路。
+- `charlie → alpha` 后结果立即重排到 `bravo` 前；搜索旧名称得到空结果，搜索新名称只显示改名卡片，证明真实 `TextField` 与页面过滤状态读取最新路径和标题。
+- 测试记录 `resultCounts` 调用次数，确认改名和关键字输入不会重新统计未变化的标签；完整 236 项测试、analyze 与 Windows debug build 通过。
+- 未修改生产 UI、SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/media 队列或用户数据。
+
 ## 2026-07-18 Apple UI Phase 1 排序入口与菜单几何统一
 
 - expanded 排序字段固定为 168px，六项 `PopupMenuButton` 弹层使用同一紧约束，入口与菜单左边缘和宽度一致；medium/compact 图标形态不变。
