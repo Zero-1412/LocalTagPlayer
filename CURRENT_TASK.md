@@ -45,9 +45,10 @@
 
 - 外部跨平台规划 `<private-planning-document>` 当前不存在；本轮依照仓库内长期规则和现有跨平台边界实施。
 - GitHub 服务端仍暂存重写前的无引用提交对象；公开 refs、普通历史浏览和 clone 均已脱敏，但已知旧哈希仍可通过 Commit API 命中。仓库侧没有删除无引用对象的 API，需由仓库所有者向 GitHub Support 请求 cached views / references purge，完成后再验证返回 404。
+- GitHub 仓库顶部 About 简介仍是旧的“替代手动文件夹 + PotPlayer”定位，会进入浏览器标题和搜索摘要；当前 GitHub 连接没有仓库元数据写接口，验收浏览器也未登录。需所有者在仓库首页 About 设置中改为“用标签发现、组合筛选与当前结果队列管理和播放大型本地视频库的 Flutter 桌面应用。”
 
 ## 下一步入口
 
-1. 向 GitHub Support 提交重写前提交对象与 cached views 的服务端清除请求，完成后确认旧 Commit API 返回 404。
+1. 向 GitHub Support 提交重写前提交对象与 cached views 的服务端清除请求，并在仓库 About 设置同步新的单句定位；完成后确认旧 Commit API 返回 404、公开页标题不再显示旧描述。
 2. 对外扩大分发前配置 Windows Authenticode 证书、Apple Developer ID Application 证书与 notarization 凭据，重新验证 SmartScreen / Gatekeeper。
 3. 补充脱敏的真实产品截图，并确定项目级许可证及 FFmpeg/FFprobe 再分发说明。
