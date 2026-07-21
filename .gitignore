@@ -7,8 +7,43 @@
 .pub/
 build/
 /artifacts/
+.local/
+.codex/config.toml
 __pycache__/
 *.pyc
+
+# Local databases, settings, diagnostics, and media samples
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.log
+*.jsonl
+*.dmp
+*.trace
+*.har
+logs/
+recordings/
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.webm
+
+# Local secrets and signing credentials
+.env
+.env.*
+!.env.example
+.secrets/
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.cer
+*.crt
+*.mobileprovision
 
 # Generated desktop folders
 windows/flutter/ephemeral/

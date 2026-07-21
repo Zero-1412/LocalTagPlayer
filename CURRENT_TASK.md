@@ -4,6 +4,16 @@
 
 ## 活跃任务
 
+### 2026-07-21 GitHub 首次公开发布与隐私收口
+
+- 目标：让首次访问仓库的人能理解产品目的、特色功能、技术框架和架构边界，并通过 GitHub Release 获取 Windows / macOS 安装包。
+- 当前状态：README 与打包工作流已完成本地修改，等待完整验证、提交、推送 `v0.1.0` 标签及远程 Release 验收。
+- README 已按“问题场景 → 核心闭环 → 特色能力 → 技术栈 → 架构思想 → 下载/隐私/边界”重写，明确本项目不是 VLC / PotPlayer 的替代品。
+- `vX.Y.Z` 标签发布改为 Windows 与 macOS 双端成功后原子创建 Release，同时上传 `.exe`、`.dmg` 和两份 SHA-256；普通分支与手动构建不创建公开 Release。
+- 已清理公开 `master` 历史中的个人邮箱、本机用户名/盘符路径和 `.codex/config.toml`，提交者统一为 GitHub noreply 身份；远程 `master` 从 `de08cd36` 重写为 `7e76a94a`。
+- 本地开发配置和路径上下文继续保留，但由 `.gitignore` 隔离；数据库、日志、媒体样本、环境变量、签名证书、安装包和本地私有配置均加入上传过滤。
+- 定向审计未发现已跟踪的媒体文件、数据库、日志、环境变量、私钥、签名证书或 API token。公开仓库仍包含随桌面包使用的 FFmpeg/FFprobe 第三方二进制，属于依赖与许可证审查项，不是个人隐私。
+
 ### 2026-07-21 Windows / macOS 正式版安装包
 
 - 目标：基于 `pubspec.yaml` 的 `0.1.0+1` 构建 Windows x64 Release 安装器与 macOS Release DMG，不改变业务、数据或播放语义。
@@ -36,6 +46,6 @@
 
 ## 下一步入口
 
-1. 对外公开分发前配置 Windows Authenticode 证书、Apple Developer ID Application 证书与 notarization 凭据，重新打包并验证 SmartScreen / Gatekeeper。
-2. 若继续精修，优先统一“回到播放 / 回到选中”的 tooltip 与无障碍状态描述，继续保持播放事实和浏览焦点分离。
-3. 若继续压缩媒体卡片操作层，优先复核 125%/150% 系统文字缩放下的双项菜单宽度，不恢复已移除的重复动作。
+1. 完成本轮验证后推送 `v0.1.0`，等待 Windows / macOS 双端流水线并验收公开 Release 的四项资产与 README。
+2. 对外扩大分发前配置 Windows Authenticode 证书、Apple Developer ID Application 证书与 notarization 凭据，重新验证 SmartScreen / Gatekeeper。
+3. 补充脱敏的真实产品截图，并确定项目级许可证及 FFmpeg/FFprobe 再分发说明。

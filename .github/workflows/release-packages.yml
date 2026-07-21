@@ -8,6 +8,8 @@ on:
         required: true
         default: 0.1.0
   push:
+    tags:
+      - "v*"
     branches:
       - master
     paths:
@@ -19,14 +21,40 @@ on:
 permissions:
   contents: read
 
-env:
-  RELEASE_VERSION: ${{ github.event.inputs.version || '0.1.0' }}
-
 jobs:
+  prepare:
+    name: 解析发布版本
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - id: version
+        name: 解析并校验版本号
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="${INPUT_VERSION:-0.1.0}"
+          fi
+
+          # 版本号将进入文件名和安装器元数据，先限制为可审查的 SemVer 形式。
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "不支持的版本号: $version" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
   windows:
     name: Windows x64 安装器
+    needs: prepare
     runs-on: windows-latest
     timeout-minutes: 35
+    env:
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -68,8 +96,11 @@ jobs:
 
   macos:
     name: macOS DMG
+    needs: prepare
     runs-on: macos-latest
     timeout-minutes: 35
+    env:
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -114,10 +145,58 @@ jobs:
             -ov \
             -format UDZO \
             "$artifact_dir/LocalTagPlayer-$RELEASE_VERSION-macos-unnotarized.dmg"
-          shasum -a 256 "$artifact_dir"/*.dmg > "$artifact_dir/SHA256SUMS-macos.txt"
+          # 在产物目录内计算，避免把 GitHub runner 的临时绝对路径写入公开校验文件。
+          (
+            cd "$artifact_dir"
+            shasum -a 256 *.dmg > SHA256SUMS-macos.txt
+          )
       - uses: actions/upload-artifact@v4
         with:
           name: LocalTagPlayer-${{ env.RELEASE_VERSION }}-macos-unnotarized
           path: artifacts/*
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    name: 发布 GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - prepare
+      - windows
+      - macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 下载安装包产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: LocalTagPlayer-${{ needs.prepare.outputs.version }}-*
+          path: release-assets
+          merge-multiple: true
+      - name: 检查发布资产
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.prepare.outputs.version }}"
+          test -f "release-assets/LocalTagPlayer-$version-windows-x64-setup.exe"
+          test -f "release-assets/LocalTagPlayer-$version-macos-unnotarized.dmg"
+          test -f "release-assets/SHA256SUMS-windows.txt"
+          test -f "release-assets/SHA256SUMS-macos.txt"
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Local Tag Player ${{ needs.prepare.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            Local Tag Player 的首个公开桌面安装包。
+
+            - Windows x64：未进行 Authenticode 签名，可能触发 SmartScreen。
+            - macOS：未进行 Developer ID 签名和 notarization，可能触发 Gatekeeper。
+            - 安装前请用随附的 SHA256SUMS 文件核对下载内容。
+          files: |
+            release-assets/*.exe
+            release-assets/*.dmg
+            release-assets/SHA256SUMS-*.txt
