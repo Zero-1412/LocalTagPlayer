@@ -52,6 +52,183 @@ bool playerControlsShouldAutoHide({
     !settingsOpen && !pointerInControlBar;
 
 /**
+ * 本地视频打开超过该时长后才展示加载遮罩。
+ *
+ * media_kit 往往已经渲染首帧，但可播放性与损坏文件校验仍在后台完成；立即展示
+ * loading 会盖住可用画面并制造二次冷启动错觉。短打开直接出画，真正慢盘或异常
+ * 媒体仍会得到明确反馈。
+ */
+const playerOpeningOverlayDelay = Duration(milliseconds: 800);
+
+/** open 成功后继续保留首帧占位的最短时间，覆盖原生纹理异步接管窗口。 */
+const playerOpeningPosterHold = Duration(milliseconds: 500);
+
+/** 延迟展示播放器打开遮罩，避免正常本地首播闪烁 loading。 */
+class PlayerOpeningOverlay extends StatefulWidget {
+  const PlayerOpeningOverlay({
+    super.key,
+    required this.opening,
+    this.delay = playerOpeningOverlayDelay,
+  });
+
+  /** open worker 是否仍在处理当前媒体。 */
+  final bool opening;
+
+  /** 达到该等待时长后才把慢打开反馈给用户。 */
+  final Duration delay;
+
+  @override
+  State<PlayerOpeningOverlay> createState() => _PlayerOpeningOverlayState();
+}
+
+/**
+ * 用媒体库已验证缩略图覆盖原生纹理接管前的短暂黑帧。
+ *
+ * 播放器 Route 创建前已经预热当前队列缩略图，因此这里只读取内存命中的文件，
+ * 不新增磁盘扫描或 FFmpeg 任务。open 完成后保留短淡出，让首个真实视频帧自然接管。
+ */
+class PlayerOpeningPoster extends StatefulWidget {
+  const PlayerOpeningPoster({
+    super.key,
+    required this.opening,
+    required this.file,
+    this.hold = playerOpeningPosterHold,
+  });
+
+  /** 当前媒体是否仍处于打开校验阶段。 */
+  final bool opening;
+
+  /** 跳转前已由 [ThumbnailService] 验证并缓存的缩略图。 */
+  final File? file;
+
+  /** open 成功后继续覆盖原生纹理接管窗口的时间。 */
+  final Duration hold;
+
+  @override
+  State<PlayerOpeningPoster> createState() => _PlayerOpeningPosterState();
+}
+
+/** 保证占位图不会因系统“减少动态效果”而在纹理首帧前过早消失。 */
+class _PlayerOpeningPosterState extends State<PlayerOpeningPoster> {
+  Timer? _hideTimer;
+  late bool _visible;
+
+  @override
+  void initState() {
+    super.initState();
+    _visible = widget.opening && widget.file != null;
+  }
+
+  @override
+  void didUpdateWidget(covariant PlayerOpeningPoster oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.opening) {
+      _hideTimer?.cancel();
+      _visible = widget.file != null;
+      return;
+    }
+    if (oldWidget.opening && !widget.opening && _visible) {
+      _hideTimer?.cancel();
+      _hideTimer = Timer(widget.hold, () {
+        if (mounted && !widget.opening) {
+          setState(() => _visible = false);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final poster = widget.file;
+    if (poster == null) {
+      return const SizedBox.shrink();
+    }
+    final accessibility = AppAccessibilityScope.of(context);
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        key: const ValueKey('player.opening.poster'),
+        opacity: _visible ? 1 : 0,
+        duration: accessibility.fadeDuration(
+          const Duration(milliseconds: 600),
+        ),
+        curve: appMotionCurve,
+        child: ColoredBox(
+          color: Colors.black,
+          child: Image.file(
+            poster,
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/** 管理延迟计时器，并在打开完成或销毁时立即取消过期回调。 */
+class _PlayerOpeningOverlayState extends State<PlayerOpeningOverlay> {
+  Timer? _timer;
+  var _showOverlay = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant PlayerOpeningOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.opening != widget.opening ||
+        oldWidget.delay != widget.delay) {
+      _syncTimer();
+    }
+  }
+
+  /** 每轮打开只保留一个计时器；完成时同步移除遮罩。 */
+  void _syncTimer() {
+    _timer?.cancel();
+    _timer = null;
+    if (!widget.opening) {
+      _showOverlay = false;
+      return;
+    }
+    _showOverlay = false;
+    _timer = Timer(widget.delay, () {
+      if (!mounted || !widget.opening) {
+        return;
+      }
+      setState(() => _showOverlay = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_showOverlay) {
+      return const SizedBox.shrink();
+    }
+    return const ColoredBox(
+      key: ValueKey('player.opening.overlay'),
+      color: Color(0x66000000),
+      child: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+/**
  * 媒体库与播放器 Route 共享的全屏会话状态。
  *
  * 该状态只在当前应用会话内记住“下次进入播放器是否恢复全屏”，不写入播放设置或
@@ -743,6 +920,10 @@ class PlayerPageState extends State<PlayerPage> {
   DateTime? _ignoreQueueSelectionBefore;
   String? _handledCompletedPath;
   String? _openedPath;
+  /** 当前打开请求使用的已验证缩略图；只承担原生纹理首帧占位。 */
+  File? _openingPosterFile;
+  /** [_openingPosterFile] 对应路径，防止快速切换时旧 Future 覆盖新视频。 */
+  String? _openingPosterPath;
   int? _lastSeekLatencyMs;
   DateTime? _lastSeekAt;
   int? _lastVideoFrameNumber;
@@ -2368,6 +2549,7 @@ class PlayerPageState extends State<PlayerPage> {
     if (_queue.isEmpty) {
       return;
     }
+    _prepareOpeningPoster(_currentItem);
     if (_currentItem.isMissing) {
       _openedPath = null;
       _openRequests.markFailure(
@@ -2396,6 +2578,41 @@ class PlayerPageState extends State<PlayerPage> {
     if (_openRequests.request(_currentItem.path)) {
       unawaited(_drainOpenRequests());
     }
+  }
+
+  /**
+   * 读取当前进程已验证缩略图；缓存尚未落入同步索引时只补一次轻量异步查询。
+   *
+   * 媒体库在压入播放器 Route 前已经预热当前队列，因此这里不会启动 FFmpeg；
+   * 路径校验避免快速点选队列时过期缩略图闪到新媒体上。
+   */
+  void _prepareOpeningPoster(VideoItem item) {
+    final path = item.path;
+    if (_openingPosterPath == path) {
+      return;
+    }
+    _openingPosterPath = path;
+    _openingPosterFile = widget.thumbnailService.cachedThumbnailFor(item);
+    if (_openingPosterFile != null) {
+      debugPrint(
+        'PLAYER_OPEN_POSTER status=ready file=${p.basename(path)} source=memory',
+      );
+      return;
+    }
+    unawaited(widget.thumbnailService.thumbnailFor(item).then((file) {
+      if (!mounted || _openingPosterPath != path || file == null) {
+        if (mounted && _openingPosterPath == path) {
+          debugPrint(
+            'PLAYER_OPEN_POSTER status=missing file=${p.basename(path)}',
+          );
+        }
+        return;
+      }
+      setState(() => _openingPosterFile = file);
+      debugPrint(
+        'PLAYER_OPEN_POSTER status=ready file=${p.basename(path)} source=async',
+      );
+    }));
   }
 
   /**
@@ -3968,15 +4185,26 @@ class PlayerPageState extends State<PlayerPage> {
                                                 ),
                                               ),
                                             ),
-                                            if (_openRequests.isOpening)
-                                              const Positioned.fill(
-                                                child: ColoredBox(
-                                                  color: Color(0x66000000),
-                                                  child: Center(
-                                                      child:
-                                                          CircularProgressIndicator()),
-                                                ),
+                                            Positioned.fill(
+                                              child: PlayerOpeningPoster(
+                                                // 首次 build 时 open worker 尚未把 isOpening
+                                                // 提交到树中；路径未确认也必须立即显示占位。
+                                                opening:
+                                                    _openRequests.isOpening ||
+                                                        _openedPath !=
+                                                            _currentItem.path,
+                                                file: _openingPosterPath ==
+                                                        _currentItem.path
+                                                    ? _openingPosterFile
+                                                    : null,
                                               ),
+                                            ),
+                                            Positioned.fill(
+                                              child: PlayerOpeningOverlay(
+                                                opening:
+                                                    _openRequests.isOpening,
+                                              ),
+                                            ),
                                             if (!_openRequests.isOpening &&
                                                 _openRequests.hasFailure)
                                               Positioned.fill(

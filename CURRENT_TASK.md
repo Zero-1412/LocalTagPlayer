@@ -4,6 +4,14 @@
 
 ## 活跃任务
 
+### 2026-07-22 启动后卡片预览与首播冷启动
+
+- 目标：修复应用启动后首次悬停视频卡片永久 loading，并降低首次点击卡片进入播放器时的原生冷启动与 loading 闪烁。
+- 当前状态：实现与 focused test 已完成。MediaKit 在 Flutter 首帧提交后统一预热，悬停预览和正式播放器共用可重试的幂等初始化门；悬停 Player 构造也纳入异常保护，失败会释放资源并复位 loading。
+- 播放器跳转复用媒体库已验证缩略图覆盖原生纹理接管窗口；open 成功后至少保持 500ms 再按系统动效策略淡出。正常本地打开 800ms 内不闪 loading，真正慢盘或损坏媒体继续显示加载与失败反馈。
+- Debug 真实启动测得首帧后 MediaKit 预热约 210ms；真实鼠标悬停连续出画。点击后约 575ms 显示缓存首帧占位且无 loading/黑屏，再约 700ms 由正在播放的原生视频帧接管；截图位于 `.local/qa/hover_preview_cold_start/final-hover-preview.png` 与 `final-player-playing.png`。
+- `flutter analyze`、6 项聚焦回归、完整 263 项测试与 Windows Debug build 均通过，3 项显式真实媒体 benchmark 按设计跳过。SQLite、标签查询、filtered queue 内容/顺序、PlayerBackend contract、缩略图调度、稳定身份和用户数据均未改变。
+
 ### 2026-07-22 暗部增强闭环与 HDR 能力正式化
 
 - 目标：补齐“画质增强路线”中未完成的 SDR 暗部增强，并将已具备活动 LUID、Compute 门槛和会话回滚的 HDR 映射从内部实验文案收敛为真实可选能力。

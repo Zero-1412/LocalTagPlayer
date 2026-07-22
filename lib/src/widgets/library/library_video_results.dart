@@ -8,12 +8,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/layout_size.dart';
 import '../../core/playback_settings.dart';
 import '../../models/video_item.dart';
 import '../../services/library/library_card_ui_diagnostics.dart';
 import '../../services/media/thumbnail_service.dart';
+import '../../services/player/media_kit_initializer.dart';
 import '../app_theme_tokens.dart';
 import '../design_system/app_interaction_surface.dart';
 import 'library_smoke_keys.dart';
@@ -1671,6 +1673,7 @@ class InteractiveVideoCard extends StatefulWidget {
     this.selectionMode = false,
     this.selected = false,
     this.onToggleSelected,
+    this.mediaKitInitializer,
   });
 
   final VideoItem item;
@@ -1693,6 +1696,10 @@ class InteractiveVideoCard extends StatefulWidget {
 
   /** 切换当前卡片选择状态。 */
   final VoidCallback? onToggleSelected;
+
+  /** 只供回归测试注入初始化失败；生产路径始终使用进程级默认门禁。 */
+  @visibleForTesting
+  final MediaKitInitializer? mediaKitInitializer;
 
   @override
   State<InteractiveVideoCard> createState() => InteractiveVideoCardState();
@@ -1792,6 +1799,7 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                           onToggleSelected: widget.selectionMode
                               ? widget.onToggleSelected
                               : null,
+                          mediaKitInitializer: widget.mediaKitInitializer,
                         ),
                       ),
                       Padding(
@@ -2087,6 +2095,7 @@ class _VideoPreview extends StatefulWidget {
     this.onToggleFavorite,
     this.selected,
     this.onToggleSelected,
+    this.mediaKitInitializer,
   });
 
   final VideoItem item;
@@ -2107,6 +2116,9 @@ class _VideoPreview extends StatefulWidget {
 
   /** 多选模式切换回调；与 [selected] 同时存在时替换收藏红心。 */
   final VoidCallback? onToggleSelected;
+
+  /** 悬停预览创建 Player 前使用的初始化门禁。 */
+  final MediaKitInitializer? mediaKitInitializer;
 
   @override
   State<_VideoPreview> createState() => _VideoPreviewState();
@@ -2184,25 +2196,34 @@ class _VideoPreviewState extends State<_VideoPreview> {
       return;
     }
     setState(() => _isHoverPreviewLoading = true);
-
-    final player = Player(
-      configuration: const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
-    );
-    final controller = VideoController(
-      player,
-      configuration: VideoControllerConfiguration(
-        width: 640,
-        height: 360,
-        hwdec: widget.playbackSettings.hwdec,
-        enableHardwareAcceleration:
-            widget.playbackSettings.hardwareDecodingEnabled,
-      ),
-    );
-
-    _hoverPlayer = player;
-    _hoverController = controller;
-
+    Player? player;
     try {
+      // 上次为避免首帧前阻塞将 media_kit 改为延迟初始化；悬停
+      // 预览也是真实 Player 消费者，必须与正式播放共用同一门禁。
+      (widget.mediaKitInitializer ?? defaultMediaKitInitializer)
+          .ensureInitialized();
+      if (!mounted || !widget.hoverPreviewEnabled) {
+        if (mounted) {
+          setState(() => _isHoverPreviewLoading = false);
+        }
+        return;
+      }
+      player = Player(
+        configuration: const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
+      );
+      final controller = VideoController(
+        player,
+        configuration: VideoControllerConfiguration(
+          width: 640,
+          height: 360,
+          hwdec: widget.playbackSettings.hwdec,
+          enableHardwareAcceleration:
+              widget.playbackSettings.hardwareDecodingEnabled,
+        ),
+      );
+
+      _hoverPlayer = player;
+      _hoverController = controller;
       await player.setVolume(0);
       await player.open(Media(widget.item.path), play: true).timeout(
             const Duration(seconds: 10),
@@ -2219,12 +2240,14 @@ class _VideoPreviewState extends State<_VideoPreview> {
         _isHoverPreviewReady = true;
         _isHoverPreviewVisible = true;
       });
-    } catch (_) {
+    } catch (error) {
       if (_hoverPlayer == player) {
         _hoverPlayer = null;
         _hoverController = null;
       }
-      await player.dispose();
+      if (player != null) {
+        await player.dispose();
+      }
       if (mounted) {
         setState(() {
           _isHoverPreviewLoading = false;
@@ -2232,6 +2255,11 @@ class _VideoPreviewState extends State<_VideoPreview> {
           _isHoverPreviewVisible = false;
         });
       }
+      // 只记录文件名与错误，不输出用户完整媒体路径。
+      debugPrint(
+        'LIBRARY_HOVER_PREVIEW status=failed '
+        'file=${p.basename(widget.item.path)} error=$error',
+      );
     }
   }
 
@@ -2359,6 +2387,9 @@ class _VideoPreviewState extends State<_VideoPreview> {
                     ),
                     if (_isHoverPreviewLoading)
                       Center(
+                        key: LibrarySmokeKeys.cardHoverPreviewLoading(
+                          widget.item.path,
+                        ),
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.64),

@@ -204,6 +204,12 @@ class LibrarySmokeKeys {
         'smoke.card.hover-preview:${TagRules.pathKey(path)}',
       );
 
+  /** 动态预览冷启动期间的稳定测试入口。 */
+  static ValueKey<String> cardHoverPreviewLoading(String path) =>
+      ValueKey<String>(
+        'smoke.card.hover-preview-loading:${TagRules.pathKey(path)}',
+      );
+
   /** 动态预览期间隐藏时长角标的稳定测试入口。 */
   static ValueKey<String> cardDuration(String path) => ValueKey<String>(
         'smoke.card.duration:${TagRules.pathKey(path)}',

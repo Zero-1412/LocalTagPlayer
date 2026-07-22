@@ -461,6 +461,184 @@ void main() {
     await gesture.removePointer();
   });
 
+  test('media kit initializer retries failure and becomes idempotent', () {
+    var calls = 0;
+    var shouldFail = true;
+    final initializer = MediaKitInitializer(initialize: () {
+      calls++;
+      if (shouldFail) {
+        throw StateError('first initialization failed');
+      }
+    });
+
+    expect(initializer.ensureInitialized, throwsStateError);
+    expect(initializer.initialized, isFalse);
+    shouldFail = false;
+    initializer.ensureInitialized();
+    initializer.ensureInitialized();
+
+    expect(calls, 2);
+    expect(initializer.initialized, isTrue);
+  });
+
+  testWidgets('media kit warmup runs once only after the first frame',
+      (tester) async {
+    var calls = 0;
+    var readyCalls = 0;
+    final initializer = MediaKitInitializer(initialize: () => calls++);
+    initializer.scheduleWarmupAfterFirstFrame(onReady: () => readyCalls++);
+    initializer.scheduleWarmupAfterFirstFrame(onReady: () => readyCalls++);
+
+    expect(calls, 0);
+    expect(initializer.warmupScheduled, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+    // 首帧回调会再让出一个事件轮；推进虚拟时钟才能执行 Timer.run。
+    await tester.pump(const Duration(milliseconds: 1));
+
+    expect(calls, 1);
+    expect(readyCalls, 1);
+    expect(initializer.initialized, isTrue);
+  });
+
+  testWidgets('hover preview clears loading when media kit init fails',
+      (tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_hover_init_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final item = _testVideo(
+      path: p.join(directory.path, 'hover-init.mp4'),
+      title: 'hover init failure',
+    );
+    var initializeCalls = 0;
+    final initializer = MediaKitInitializer(initialize: () {
+      initializeCalls++;
+      throw StateError('media kit unavailable');
+    });
+    await tester.binding.setSurfaceSize(const Size(500, 350));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 300,
+            height: 230,
+            child: InteractiveVideoCard(
+              item: item,
+              thumbnailService: ThumbnailService.forDirectory(
+                directory,
+                _PreviewFFmpegBackend(),
+              ),
+              playbackSettings: PlaybackSettings.defaults,
+              onOpen: () {},
+              onToggleFavorite: () {},
+              mediaKitInitializer: initializer,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: const Offset(480, 330));
+    await gesture.moveTo(
+      tester.getCenter(
+        find.byKey(LibrarySmokeKeys.cardThumbnailSurface(item.path)),
+      ),
+    );
+    await tester.pump(libraryHoverPreviewStartDelay);
+    await tester.pump();
+
+    expect(initializeCalls, 1);
+    expect(
+      find.byKey(LibrarySmokeKeys.cardHoverPreviewLoading(item.path)),
+      findsNothing,
+    );
+    await gesture.removePointer();
+  });
+
+  testWidgets('player opening overlay ignores fast local startup',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Stack(
+          children: [PlayerOpeningOverlay(opening: true)],
+        ),
+      ),
+    );
+
+    await tester
+        .pump(playerOpeningOverlayDelay - const Duration(milliseconds: 1));
+    expect(find.byKey(const ValueKey('player.opening.overlay')), findsNothing);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(
+        find.byKey(const ValueKey('player.opening.overlay')), findsOneWidget);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Stack(
+          children: [PlayerOpeningOverlay(opening: false)],
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('player.opening.overlay')), findsNothing);
+  });
+
+  testWidgets('player opening poster covers native texture handoff',
+      (tester) async {
+    final poster = File(
+      p.join(Directory.systemTemp.path, 'missing-opening-poster.jpg'),
+    );
+    Future<void> pumpPoster(bool opening) => tester.pumpWidget(
+          MaterialApp(
+            home: Stack(
+              children: [
+                PlayerOpeningPoster(opening: opening, file: poster),
+              ],
+            ),
+          ),
+        );
+
+    await pumpPoster(true);
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const ValueKey('player.opening.poster')),
+          )
+          .opacity,
+      1,
+    );
+    await pumpPoster(false);
+    await tester.pump(
+      playerOpeningPosterHold - const Duration(milliseconds: 1),
+    );
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const ValueKey('player.opening.poster')),
+          )
+          .opacity,
+      1,
+    );
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const ValueKey('player.opening.poster')),
+          )
+          .opacity,
+      0,
+    );
+  });
+
   testWidgets('hover preview uses a short thumbnail crossfade', (tester) async {
     var visible = true;
     late StateSetter update;

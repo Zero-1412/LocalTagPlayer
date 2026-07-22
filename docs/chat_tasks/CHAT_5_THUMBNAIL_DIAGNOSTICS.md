@@ -1,5 +1,12 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
+## 2026-07-22 启动后悬停预览与首播衔接
+
+- MediaKit 原生库在 Flutter 首帧后由进程级门禁统一预热；媒体卡动态预览与正式播放器共用同一幂等初始化路径，失败不会锁死后续重试。
+- 悬停预览把初始化、Player/VideoController 构造、open 与首帧等待全部纳入资源保护；任一步失败都会释放已创建 Player，并清除 loading/ready/visible 状态。
+- 播放器 Route 只读取 `ThumbnailService` 已验证的内存命中缩略图作为原生纹理首帧占位，不触发新 FFmpeg 任务；正常快速打开不显示 loading，超过 800ms 才进入慢打开反馈。
+- Debug 首帧后预热实测约 210ms，启动后真实悬停连续出画；点击后缓存占位在约 575ms 可见且无 loading/黑屏，再约 700ms 由原生播放帧接管。完整 263 项测试、静态分析与 Windows Debug build 通过。
+
 ## 2026-07-18 Apple UI Phase 3 缓存诊断
 
 - 缓存页以状态摘要、覆盖率、四项关键指标和后台任务分组替代稀疏单列统计；失败与缺失的包含关系改为独立说明表面，无失败时提供明确完成状态。

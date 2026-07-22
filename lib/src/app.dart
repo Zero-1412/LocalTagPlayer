@@ -5,7 +5,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -23,6 +22,7 @@ import 'services/library/library_store.dart';
 import 'services/media/external_media_tools.dart';
 import 'services/media/media_probe_backend.dart';
 import 'services/player/media_kit_player_backend.dart';
+import 'services/player/media_kit_initializer.dart';
 import 'services/player/windows_native_player_backend.dart';
 import 'services/window/desktop_window_state_service.dart';
 import 'pages/library/library_page.dart';
@@ -75,6 +75,7 @@ export 'services/player/player_gpu_capability_detector.dart';
 export 'services/player/player_hdr_mapping_experiment.dart';
 export 'services/player/player_hardware_acceleration.dart';
 export 'services/player/media_kit_player_backend.dart';
+export 'services/player/media_kit_initializer.dart';
 export 'services/player/player_hardware_compatibility.dart';
 export 'services/player/player_memory_diagnostics.dart';
 export 'services/player/player_video_super_resolution.dart';
@@ -134,9 +135,9 @@ PlayerBackend _createPlayerBackend({
           'windows-native-stub') {
     return WindowsNativePlayerBackend(mode: 'stub');
   }
-  // media_kit 的原生库延迟到真正创建默认播放后端时加载；独立双击启动时，首帧前
-  // 同步加载会阻塞应用入口，表现为进程存在但窗口服务和首帧都尚未创建。
-  MediaKit.ensureInitialized();
+  // 首帧后的统一预热通常已完成；这里仍保留幂等门禁，覆盖用户在预热任务执行前
+  // 立即进入播放器，以及预热失败后由正式播放安全重试的场景。
+  defaultMediaKitInitializer.ensureInitialized();
   return MediaKitPlayerBackend(
     hwdec: hwdec,
     enableHardwareAcceleration: enableHardwareAcceleration,
@@ -226,6 +227,8 @@ Future<void> bootstrapLocalTagPlayer() async {
     dependencies: dependencies,
     debugTextScaleFactor: debugTextScaleFactorFromEnvironment(),
   ));
+  // 窗口首帧可见后再预热 libmpv，同时避免首次悬停和首播冷启动。
+  scheduleDefaultMediaKitWarmupAfterFirstFrame();
 }
 
 /**
