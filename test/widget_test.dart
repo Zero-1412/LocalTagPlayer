@@ -2054,6 +2054,39 @@ void main() {
     );
   });
 
+  testWidgets('player seek feedback uses a compact text watermark',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: PlayerSeekFeedbackWatermark(
+            visible: true,
+            label: '前进 15 秒',
+          ),
+        ),
+      ),
+    );
+
+    final opacity = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey('player.seekFeedback.watermark')),
+    );
+    final semantics = tester.widget<Semantics>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('player.seekFeedback.watermark')),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+
+    expect(find.text('前进 15 秒'), findsOneWidget);
+    expect(find.byType(Icon), findsNothing);
+    expect(opacity.opacity, 1);
+    expect(semantics.properties.liveRegion, isTrue);
+    expect(semantics.properties.label, '播放跳转：前进 15 秒');
+  });
+
   test('player exit preserves texture after acknowledged pause', () {
     expect(
       playerExitStopShouldStartBeforePop(pauseAcknowledged: true),
@@ -3568,6 +3601,7 @@ void main() {
     expect(settings.toJson()['moveDeletedFileToTrash'], isTrue);
     expect(settings.fullscreenQueueEdgeWidth, 12);
     expect(settings.fullscreenQueueHideDelayMs, 180);
+    expect(settings.seekStepSeconds, 5);
   });
 
   test('old settings keep safe delete defaults and reject invalid shortcuts',
@@ -3609,6 +3643,7 @@ void main() {
     expect(oldSettings.playbackMode, PlayerPlaybackMode.sequential);
     expect(oldSettings.videoAspectMode, PlayerVideoAspectMode.automatic);
     expect(oldSettings.playbackRate, 1);
+    expect(oldSettings.seekStepSeconds, 5);
     expect(oldSettings.videoSuperResolutionEnabled, isFalse);
 
     final directory = await Directory.systemTemp.createTemp(
@@ -3621,6 +3656,7 @@ void main() {
       playbackMode: PlayerPlaybackMode.repeatAll,
       videoAspectMode: PlayerVideoAspectMode.cover,
       playbackRate: 1.5,
+      seekStepSeconds: 30,
       videoSuperResolutionEnabled: true,
       confirmBeforeDeletingVideo: false,
       moveDeletedFileToTrash: true,
@@ -3632,21 +3668,25 @@ void main() {
     expect(loaded.playbackMode, PlayerPlaybackMode.repeatAll);
     expect(loaded.videoAspectMode, PlayerVideoAspectMode.cover);
     expect(loaded.playbackRate, 1.5);
+    expect(loaded.seekStepSeconds, 30);
     expect(loaded.videoSuperResolutionEnabled, isTrue);
     expect(loaded.confirmBeforeDeletingVideo, isFalse);
     expect(loaded.moveDeletedFileToTrash, isTrue);
     expect(loaded.toJson()['playbackMode'], 'repeatAll');
     expect(loaded.toJson()['videoAspectMode'], 'cover');
+    expect(loaded.toJson()['seekStepSeconds'], 30);
     expect(loaded.toJson()['videoSuperResolutionEnabled'], isTrue);
 
     final unsafe = PlaybackSettings.fromJson({
       'playbackMode': 'unknown',
       'videoAspectMode': 'stretched',
       'playbackRate': 9,
+      'seekStepSeconds': 7,
     });
     expect(unsafe.playbackMode, PlayerPlaybackMode.sequential);
     expect(unsafe.videoAspectMode, PlayerVideoAspectMode.automatic);
     expect(unsafe.playbackRate, 1);
+    expect(unsafe.seekStepSeconds, 5);
     expect(unsafe.videoSuperResolutionEnabled, isFalse);
   });
 
@@ -3937,10 +3977,11 @@ void main() {
     );
   });
 
-  testWidgets('advanced player settings only expose aspect and speed routes',
+  testWidgets('advanced player settings expose aspect speed and seek step',
       (tester) async {
     var aspectOpened = false;
     var rateOpened = false;
+    int? seekStep;
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
@@ -3949,8 +3990,11 @@ void main() {
             child: PlayerSettingsAdvancedList(
               videoAspectMode: PlayerVideoAspectMode.automatic,
               playbackRate: 1,
+              seekStepSeconds: 5,
+              seekStepOptions: const <int>[5, 10, 15, 30, 60],
               onShowVideoAspect: () => aspectOpened = true,
               onShowPlaybackRate: () => rateOpened = true,
+              onSeekStepChanged: (seconds) => seekStep = seconds,
             ),
           ),
         ),
@@ -3960,12 +4004,19 @@ void main() {
     expect(find.text('播放方式'), findsNothing);
     expect(find.text('视频比例'), findsOneWidget);
     expect(find.text('播放速度'), findsOneWidget);
+    expect(find.text('快进 / 快退时间'), findsOneWidget);
     expect(find.text('快捷键'), findsNothing);
     expect(find.text('播放诊断'), findsNothing);
 
     await tester.tap(
       find.byKey(const ValueKey('player.settings.aspect.open')),
     );
+    tester
+        .widget<Slider>(
+          find.byKey(const ValueKey('player.settings.seekStep.slider')),
+        )
+        .onChanged!(2);
+    expect(seekStep, 15);
     await tester.tap(
       find.byKey(const ValueKey('player.settings.rate.open')),
     );
@@ -3990,6 +4041,7 @@ void main() {
     PlayerPlaybackMode? selectedPlaybackMode;
     PlayerVideoAspectMode? selectedAspectMode;
     double? selectedRate;
+    int? selectedSeekStep;
     bool? superResolutionEnabled;
     await tester.pumpWidget(
       MaterialApp(
@@ -4006,8 +4058,10 @@ void main() {
                   playbackMode: PlayerPlaybackMode.sequential,
                   videoAspectMode: PlayerVideoAspectMode.automatic,
                   playbackRate: 1,
+                  seekStepSeconds: 5,
                   videoSuperResolutionEnabled: false,
                   playbackRates: const <double>[0.5, 1, 1.5],
+                  seekStepOptions: const <int>[5, 10, 15, 30, 60],
                   onMirrorVideoChanged: (enabled) {
                     mirrorVideo = enabled;
                   },
@@ -4019,6 +4073,9 @@ void main() {
                   },
                   onPlaybackRateChanged: (rate) {
                     selectedRate = rate;
+                  },
+                  onSeekStepChanged: (seconds) {
+                    selectedSeekStep = seconds;
                   },
                   onVideoSuperResolutionChanged: (enabled) {
                     superResolutionEnabled = enabled;
@@ -4096,11 +4153,11 @@ void main() {
     await tester.tap(
       find.byKey(const ValueKey('player.settings.advanced.open')),
     );
-    await tester.pump(const Duration(milliseconds: 90));
-    expect(find.byType(SlideTransition), findsWidgets);
+    await tester.pump();
+    // Windows 视频纹理上不同时保留新旧设置页，避免 engine 访问异常。
     expect(
       find.byKey(const ValueKey('player.settings.primary.page')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const ValueKey('player.settings.advanced.page')),
@@ -4114,9 +4171,19 @@ void main() {
     expect(find.text('更多播放设置'), findsOneWidget);
     expect(find.text('视频比例'), findsOneWidget);
     expect(find.text('播放速度'), findsOneWidget);
+    expect(find.text('快进 / 快退时间'), findsOneWidget);
+    expect(find.text('5 秒'), findsOneWidget);
     expect(find.text('播放方式'), findsNothing);
     expect(find.text('快捷键'), findsNothing);
     expect(find.text('播放诊断'), findsNothing);
+
+    final seekSlider = tester.widget<Slider>(
+      find.byKey(const ValueKey('player.settings.seekStep.slider')),
+    );
+    seekSlider.onChanged!(3);
+    await tester.pump();
+    expect(selectedSeekStep, 30);
+    expect(find.text('30 秒'), findsOneWidget);
 
     await tester.tap(
       find.byKey(const ValueKey('player.settings.aspect.open')),
@@ -4165,6 +4232,10 @@ void main() {
   });
 
   test('player controls hide only outside controls and settings', () {
+    expect(playerSeekFeedbackShouldShow(isRepeat: false), isTrue);
+    expect(playerSeekFeedbackShouldShow(isRepeat: true), isFalse);
+    expect(playerFullscreenQueueWidth(800), 320);
+    expect(playerFullscreenQueueWidth(2000), 476);
     expect(
       playerPointerInControlBar(localY: 500, surfaceHeight: 700),
       isFalse,

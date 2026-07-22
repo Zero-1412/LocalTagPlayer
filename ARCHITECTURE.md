@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.51` 在既有 `PlayerBackend.setProperty` 边界后增加可持久化 GPU 画质超分配置。SQLite schema、标签查询、filtered queue 与 PlayerBackend contract 不变。
+`Architecture Baseline 0.5.52` 在既有播放器页面边界内收口控制条显隐、全屏覆盖队列、快进档位与左上角文字反馈。SQLite schema、标签查询、filtered queue 与 PlayerBackend contract 不变。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,11 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.51`
+已完成基线：`Architecture Baseline 0.5.52`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.52`：`PlaybackSettings` 向后兼容增加 5 / 10 / 15 / 30 / 60 秒快进快退档位；播放器快捷键与按钮统一消费该档位，按键连发只显示一次左上角轻量文字水印，不再在画面中央遮挡内容。控制条首次进入默认显示，3 秒无交互后收起，仅底部进度区域重新唤出；全屏队列迁到根 `Stack` 的固定覆盖层，以淡入和短距离右滑动画出现，不再逐帧改变视频纹理尺寸。播放设置二级页改为直接替换内容树，避免 Windows 视频纹理与新旧复杂设置树重叠时触发 Flutter 引擎访问冲突；弹层开合动效与 reduced motion 降级保持。未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend` contract、缓存队列或用户数据。
 
 - `0.5.51`：`PlaybackSettings` 向后兼容增加默认关闭的 GPU 画质超分开关；`PlayerVideoSuperResolution` 只通过既有 `PlayerBackend.setProperty` 应用 libmpv GPU renderer 的 `ewa_lanczossharp`、sigmoid 与 resize-only，并按后端串行化 open 重放和用户切换，在媒体 open 前后恢复完整配置。当前 libmpv 不包含 Intel/NVIDIA `d3d11vpp scaling-mode` 厂商扩展，因此不宣称 AI 超分。Flutter UI 不处理视频帧；未修改 `PlayerBackend` contract、硬解选择、SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列或用户数据。
 

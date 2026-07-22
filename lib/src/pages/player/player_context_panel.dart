@@ -30,6 +30,8 @@ class PlayerSidePanel extends StatefulWidget {
     required this.queueEndReached,
     required this.onRenameFile,
     required this.onEditManualTags,
+    this.edgeToEdge = false,
+    this.width,
   });
 
   /** 原有 filtered queue 内容；隐藏详情时才挂载，避免离屏列表继续构建。 */
@@ -46,6 +48,12 @@ class PlayerSidePanel extends StatefulWidget {
 
   /** 打开当前视频的手动标签编辑器。 */
   final VoidCallback onEditManualTags;
+
+  /** 全屏覆盖侧栏是否铺满可用高度并取消外围留白。 */
+  final bool edgeToEdge;
+
+  /** 可选固定宽度；全屏覆盖层用于保持动画边界与阅读密度稳定。 */
+  final double? width;
 
   @override
   State<PlayerSidePanel> createState() => _PlayerSidePanelState();
@@ -72,18 +80,23 @@ class _PlayerSidePanelState extends State<PlayerSidePanel> {
   @override
   Widget build(BuildContext context) {
     final accessibility = AppAccessibilityScope.of(context);
-    final sidebarWidth = playerQueueSidebarWidthForWindow(
-      MediaQuery.sizeOf(context).width,
-    );
+    final sidebarWidth = widget.width ??
+        playerQueueSidebarWidthForWindow(MediaQuery.sizeOf(context).width);
     return Container(
       width: sidebarWidth,
-      margin: const EdgeInsets.fromLTRB(0, 12, 16, 16),
+      margin: widget.edgeToEdge
+          ? EdgeInsets.zero
+          : const EdgeInsets.fromLTRB(0, 12, 16, 16),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: playerSurface,
-        borderRadius: BorderRadius.circular(AppRadius.panel),
-        border: Border.all(color: playerBorder),
-        boxShadow: playerSoftShadow,
+        borderRadius: widget.edgeToEdge
+            ? BorderRadius.zero
+            : BorderRadius.circular(AppRadius.panel),
+        border: widget.edgeToEdge
+            ? const Border(left: BorderSide(color: playerBorder))
+            : Border.all(color: playerBorder),
+        boxShadow: widget.edgeToEdge ? null : playerSoftShadow,
       ),
       child: Column(
         children: [

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../widgets/app_theme_tokens.dart';
@@ -11,7 +13,7 @@ import 'player_video_aspect_mode.dart';
  *
  * 使用独立路由而不是把复杂列表塞入系统 Menu，避免 Windows 上菜单获得点击
  * 高亮但自定义内容未挂载。一级保留镜像、GPU 超分与循环开关，二级只承担
- * 比例/倍速导航，具体选项进入三级列表；每次变更立即回传播放器。
+ * 比例/倍速导航和离散快进档位；具体选项进入三级列表或滑杆，每次变更立即回传播放器。
  */
 Future<void> showPlayerSettingsDialog(
   BuildContext context, {
@@ -20,12 +22,15 @@ Future<void> showPlayerSettingsDialog(
   required PlayerPlaybackMode playbackMode,
   required PlayerVideoAspectMode videoAspectMode,
   required double playbackRate,
+  required int seekStepSeconds,
   required bool videoSuperResolutionEnabled,
   required List<double> playbackRates,
+  required List<int> seekStepOptions,
   required ValueChanged<bool> onMirrorVideoChanged,
   required ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged,
   required ValueChanged<PlayerVideoAspectMode> onVideoAspectModeChanged,
   required ValueChanged<double> onPlaybackRateChanged,
+  required ValueChanged<int> onSeekStepChanged,
   required ValueChanged<bool> onVideoSuperResolutionChanged,
 }) async {
   final accessibility = AppAccessibilityScope.of(context);
@@ -33,6 +38,7 @@ Future<void> showPlayerSettingsDialog(
   var localPlaybackMode = playbackMode;
   var localVideoAspectMode = videoAspectMode;
   var localPlaybackRate = playbackRate;
+  var localSeekStepSeconds = seekStepSeconds;
   var localVideoSuperResolutionEnabled = videoSuperResolutionEnabled;
   var currentPage = _PlayerSettingsPage.primary;
   await showGeneralDialog<void>(
@@ -143,29 +149,13 @@ Future<void> showPlayerSettingsDialog(
                                       ],
                                     ),
                                   ),
-                                  AnimatedSwitcher(
+                                  KeyedSubtree(
                                     key: const ValueKey(
-                                      'player.settings.page.switcher',
+                                      'player.settings.page.host',
                                     ),
-                                    duration: accessibility.motionDuration(
-                                      AppMotion.popover,
-                                    ),
-                                    transitionBuilder: (child, animation) {
-                                      final enteringPrimary = child.key ==
-                                          const ValueKey(
-                                            'player.settings.primary.page',
-                                          );
-                                      return AppSequentialTransition(
-                                        animation: animation,
-                                        beginOffset: Offset(
-                                          enteringPrimary ? -0.08 : 0.08,
-                                          0,
-                                        ),
-                                        reduceMotion:
-                                            accessibility.reduceMotion,
-                                        child: child,
-                                      );
-                                    },
+                                    // Windows 播放纹理上叠加新旧设置页会偶发触发
+                                    // Flutter engine 访问异常；页内导航直接换树，浮层
+                                    // 本身的打开/关闭动画已足够表达空间连续性。
                                     child: switch (currentPage) {
                                       _PlayerSettingsPage.primary =>
                                         PlayerSettingsPrimaryList(
@@ -212,6 +202,8 @@ Future<void> showPlayerSettingsDialog(
                                           ),
                                           videoAspectMode: localVideoAspectMode,
                                           playbackRate: localPlaybackRate,
+                                          seekStepSeconds: localSeekStepSeconds,
+                                          seekStepOptions: seekStepOptions,
                                           onShowVideoAspect: () =>
                                               setDialogState(
                                             () => currentPage =
@@ -222,6 +214,13 @@ Future<void> showPlayerSettingsDialog(
                                             () => currentPage =
                                                 _PlayerSettingsPage.rate,
                                           ),
+                                          onSeekStepChanged: (seconds) {
+                                            setDialogState(
+                                              () => localSeekStepSeconds =
+                                                  seconds,
+                                            );
+                                            onSeekStepChanged(seconds);
+                                          },
                                         ),
                                       _PlayerSettingsPage.aspect =>
                                         PlayerSettingsOptionList<
@@ -508,15 +507,19 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
  * 更多播放设置的二级导航列表。
  *
  * 播放方式只保留在一级循环开关中；快捷键与播放诊断不再属于该浮层。比例和
- * 倍速只展示当前值，点击后进入各自独立的三级选择列表。
+ * 倍速只展示当前值，点击后进入各自独立的三级选择列表；快进档位直接使用离散
+ * 滑杆，调整时只回传一个固定秒数，不触发播放或队列计算。
  */
 class PlayerSettingsAdvancedList extends StatelessWidget {
   const PlayerSettingsAdvancedList({
     super.key,
     required this.videoAspectMode,
     required this.playbackRate,
+    required this.seekStepSeconds,
+    required this.seekStepOptions,
     required this.onShowVideoAspect,
     required this.onShowPlaybackRate,
+    required this.onSeekStepChanged,
   });
 
   /** 当前全局画面比例。 */
@@ -525,11 +528,20 @@ class PlayerSettingsAdvancedList extends StatelessWidget {
   /** 当前全局播放倍速。 */
   final double playbackRate;
 
+  /** 当前快进与快退共用的秒数。 */
+  final int seekStepSeconds;
+
+  /** 滑杆允许选择的稳定快进档位。 */
+  final List<int> seekStepOptions;
+
   /** 进入画面比例三级列表的回调。 */
   final VoidCallback onShowVideoAspect;
 
   /** 进入播放倍速三级列表的回调。 */
   final VoidCallback onShowPlaybackRate;
+
+  /** 用户在离散滑杆上选择新档位后的回调。 */
+  final ValueChanged<int> onSeekStepChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -549,6 +561,109 @@ class PlayerSettingsAdvancedList extends StatelessWidget {
             label: '播放速度',
             value: '${playbackRate}x',
             onTap: onShowPlaybackRate,
+          ),
+          PlayerSeekStepSlider(
+            selectedSeconds: seekStepSeconds,
+            options: seekStepOptions,
+            onChanged: onSeekStepChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/**
+ * 更多播放设置中的离散快进档位滑杆。
+ *
+ * 滑杆内部使用档位索引而不是任意秒数，确保拖动期间只产生五个稳定值；语义标签
+ * 同时报告当前秒数，便于键盘和屏幕阅读器确认真实生效状态。
+ */
+class PlayerSeekStepSlider extends StatelessWidget {
+  const PlayerSeekStepSlider({
+    super.key,
+    required this.selectedSeconds,
+    required this.options,
+    required this.onChanged,
+  });
+
+  /** 当前已经生效的跳转秒数。 */
+  final int selectedSeconds;
+
+  /** 由播放设置公开的有序固定档位。 */
+  final List<int> options;
+
+  /** 新档位即时生效并持久化的回调。 */
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final safeOptions = options.isEmpty ? const <int>[5] : options;
+    final selectedIndex = safeOptions.indexOf(selectedSeconds);
+    final value = (selectedIndex < 0 ? 0 : selectedIndex).toDouble();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '快进 / 快退时间',
+                  style: TextStyle(
+                    color: playerText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '$selectedSeconds 秒',
+                key: const ValueKey('player.settings.seekStep.value'),
+                style: const TextStyle(
+                  color: playerTextMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          Semantics(
+            label: '快进和快退时间，当前 $selectedSeconds 秒',
+            child: Slider(
+              key: const ValueKey('player.settings.seekStep.slider'),
+              value: value,
+              min: 0,
+              max: math.max(1, safeOptions.length - 1).toDouble(),
+              divisions: safeOptions.length > 1 ? safeOptions.length - 1 : 1,
+              label: '$selectedSeconds 秒',
+              onChanged: safeOptions.length <= 1
+                  ? null
+                  : (rawValue) {
+                      final index = rawValue.round().clamp(
+                            0,
+                            safeOptions.length - 1,
+                          );
+                      onChanged(safeOptions[index]);
+                    },
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (final seconds in safeOptions)
+                Text(
+                  '$seconds',
+                  style: const TextStyle(
+                    color: playerTextMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+            ],
           ),
         ],
       ),

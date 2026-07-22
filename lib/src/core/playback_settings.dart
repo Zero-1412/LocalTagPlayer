@@ -39,6 +39,7 @@ class PlaybackSettings {
     required this.playbackMode,
     required this.videoAspectMode,
     required this.playbackRate,
+    required this.seekStepSeconds,
     required this.videoSuperResolutionEnabled,
     required this.confirmBeforeDeletingVideo,
     required this.moveDeletedFileToTrash,
@@ -54,12 +55,15 @@ class PlaybackSettings {
     playbackMode: PlayerPlaybackMode.sequential,
     videoAspectMode: PlayerVideoAspectMode.automatic,
     playbackRate: 1,
+    seekStepSeconds: 5,
     videoSuperResolutionEnabled: false,
     confirmBeforeDeletingVideo: true,
     moveDeletedFileToTrash: false,
   );
   /** 播放内核已验证并允许持久化的固定倍速档位。 */
   static const playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
+  /** 播放器快进与快退允许选择的固定秒数，避免异常配置产生过大的跳转。 */
+  static const seekStepOptions = <int>[5, 10, 15, 30, 60];
   static const defaultShortcuts = <PlayerShortcutAction, String>{
     PlayerShortcutAction.navigateBack: 'Escape',
     PlayerShortcutAction.playPause: 'Space',
@@ -194,6 +198,8 @@ class PlaybackSettings {
   final PlayerVideoAspectMode videoAspectMode;
   /** 全局播放倍速；每次打开媒体后重新应用到播放后端。 */
   final double playbackRate;
+  /** 快进与快退快捷键共用的全局跳转秒数。 */
+  final int seekStepSeconds;
   /** 是否启用只在画面放大时运行的 libmpv GPU 高质量超分。 */
   final bool videoSuperResolutionEnabled;
   /** 删除视频前是否显示影响范围与回收站选择确认。 */
@@ -213,6 +219,7 @@ class PlaybackSettings {
     PlayerPlaybackMode? playbackMode,
     PlayerVideoAspectMode? videoAspectMode,
     double? playbackRate,
+    int? seekStepSeconds,
     bool? videoSuperResolutionEnabled,
     bool? confirmBeforeDeletingVideo,
     bool? moveDeletedFileToTrash,
@@ -229,6 +236,7 @@ class PlaybackSettings {
       playbackMode: playbackMode ?? this.playbackMode,
       videoAspectMode: videoAspectMode ?? this.videoAspectMode,
       playbackRate: playbackRate ?? this.playbackRate,
+      seekStepSeconds: seekStepSeconds ?? this.seekStepSeconds,
       videoSuperResolutionEnabled:
           videoSuperResolutionEnabled ?? this.videoSuperResolutionEnabled,
       confirmBeforeDeletingVideo:
@@ -256,6 +264,7 @@ class PlaybackSettings {
         'playbackMode': playbackMode.name,
         'videoAspectMode': videoAspectMode.name,
         'playbackRate': playbackRate,
+        'seekStepSeconds': seekStepSeconds,
         'videoSuperResolutionEnabled': videoSuperResolutionEnabled,
         'confirmBeforeDeletingVideo': confirmBeforeDeletingVideo,
         'moveDeletedFileToTrash': moveDeletedFileToTrash,
@@ -306,6 +315,7 @@ class PlaybackSettings {
         defaults.videoAspectMode,
       ),
       playbackRate: _supportedPlaybackRate(json['playbackRate']),
+      seekStepSeconds: _supportedSeekStep(json['seekStepSeconds']),
       videoSuperResolutionEnabled: json['videoSuperResolutionEnabled'] is bool
           ? json['videoSuperResolutionEnabled']! as bool
           : defaults.videoSuperResolutionEnabled,
@@ -339,6 +349,14 @@ class PlaybackSettings {
     return parsed != null && playbackRates.contains(parsed)
         ? parsed
         : defaults.playbackRate;
+  }
+
+  /** 只接受界面公开的离散快进档位，旧设置缺字段时继续使用 5 秒。 */
+  static int _supportedSeekStep(Object? value) {
+    final parsed = int.tryParse(value?.toString() ?? '');
+    return parsed != null && seekStepOptions.contains(parsed)
+        ? parsed
+        : defaults.seekStepSeconds;
   }
 
   /** 读取旧版或手工编辑的设置值，并约束到播放器可安全使用的范围。 */
@@ -415,8 +433,8 @@ class PlaybackSettings {
       switch (action) {
         PlayerShortcutAction.navigateBack => '返回上一页',
         PlayerShortcutAction.playPause => '播放 / 暂停',
-        PlayerShortcutAction.seekBackward => '快退 5 秒',
-        PlayerShortcutAction.seekForward => '快进 5 秒',
+        PlayerShortcutAction.seekBackward => '快退（播放器档位）',
+        PlayerShortcutAction.seekForward => '快进（播放器档位）',
         PlayerShortcutAction.previous => '上一条',
         PlayerShortcutAction.next => '下一条',
         PlayerShortcutAction.editTags => '编辑标签',
