@@ -1,3 +1,9 @@
+## 2026-07-23 未授权功能删除事故治理
+
+- 隐藏态细进度事故新增源码挂载合同：真实 `PlayerPage` 必须在完整控制条之前独立挂载 `PlayerHiddenProgressBar`，并保留 `_controlsVisible ? 0 : 1` 的互斥显隐；组件孤立存在不再足以通过回归。
+- 仓库规则要求播放器控制层重构先列受保护行为和授权删除项，再审计 Widget、ValueKey、回调与 Overlay/Stack 删除；未授权或不可验证时默认恢复，并阻断提交推送。
+- 事故被固化为 Level 3 independent Agent 回归；N=5 最终 5/5、平均 100 分、`stable=true`。播放器运行时、filtered queue、`PlayerBackend` 与缓存边界未改变。
+
 ## 2026-07-22 隐藏态细进度回归修复
 
 - 提交 `5271f63` 重排播放器控制层时误删了 `PlayerPage` 中独立的 `PlayerHiddenProgressBar` 挂载，组件和三像素孤立测试仍在，因此此前验证没有覆盖真实页面退化。

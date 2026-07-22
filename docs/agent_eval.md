@@ -54,6 +54,10 @@ Scorer 会确定性检查 `done_when.id` 唯一、完成项与验证记录一一
 验证模式与方法一致，以及失败/阻塞项不会被错误晋级。Level 1 使用 `single_agent`；Level 2
 使用 `structured`；Level 3 使用 `independent`，且至少包含一条独立只读验证记录。
 
+生产事故用例可在 `expected.required_validation_records` 中为关键 `requirement_id` 固定
+`status` 与 `method`。缺少指定记录或状态/方法不一致时，确定性评分直接归零；这样不能用一段
+看似正确的最终总结绕过挂载、可达性或真实窗口验证。
+
 ## 用例分层
 
 ### Trigger
@@ -155,6 +159,15 @@ Scorer 会确定性检查 `done_when.id` 唯一、完成项与验证记录一一
 - 本轮累计输入 746,901、缓存输入 538,368、输出 14,426 token，平均耗时 165.047 秒；旧基线分别为 404,105、275,200、14,722 token 和 158.428 秒。
 - Trace 定向检查确认没有试次读取历史归档；新运行共 13 次工具调用，旧基线共 6 次，其中本轮一个高探索试次产生 348,431 输入 token。匹配的常规上下文读取试次从旧基线约 167k 降到本轮约 118k，但 N=5 聚合成本仍由自主探索路径方差主导。
 - 决策：任务归档结构晋级；不建立全局规则压缩 challenger。后续若要评价 `AGENTS.md` 长度，先增加固定读取路径的成本用例，避免把工具调用数量变化误归因于规则文件体积。
+
+## 2026-07-23 既有行为保护生产事故回归
+
+- 事故来源：提交 `5271f63` 重排播放器控制层时删除了真实 `PlayerHiddenProgressBar` 挂载，但组件与孤立三像素测试仍存在，导致静态验证通过而生产行为消失；修复提交为 `fe353f1`。
+- `AGENTS.md` 新增显式删除授权、受保护行为清单、diff 删除审计、页面/Route 可达性证据、失败关闭与提交阻断；`ltp-task-router` 把生产或真实窗口发现的未授权功能删除固定升级为 Level 3 `independent`。
+- 新增 `reg-existing-behavior-preservation` 和 `required_validation_records` 硬门。首轮错误地期待 Level 2 structured，五轮 Agent 均选择 Level 3 independent，结果 0/5；据此收紧规则与用例，而不是降低验证等级。
+- 第二轮使用 `gpt-5.6-terra`、`reasoning_effort=low`、workspace snapshot 与 N=5：5/5、平均 100 分、`stable=true`，0 基础设施错误，平均耗时 190.994 秒；累计输入 1,269,778、缓存输入 1,053,952、输出 19,324 token。
+- 零模型成本验证确认 62 个用例、44/6/12 suite 分布、11 个 Skill 的 2 正 2 负覆盖；17 项评分器单元测试通过，`ltp-task-router` 使用 `quick_validate.py` 的 UTF-8 模式通过目录验证。
+- 两轮 Trace 与报告保留在 `.local/agent-eval-preserve-20260722/artifacts/agent_eval/`，由 `.gitignore` 隔离，不提交包含本地路径或运行 Trace 的产物。
 
 ## 命令
 

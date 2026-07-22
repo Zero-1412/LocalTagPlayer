@@ -184,6 +184,33 @@ def _register_case(
         "needs_manual_qa",
     }:
         raise EvalError(f"Eval 用例 promotion_decision 非法：{case_id}")
+    required_validation_records = expected.get("required_validation_records", {})
+    if not isinstance(required_validation_records, dict):
+        raise EvalError(f"Eval 用例 required_validation_records 必须是对象：{case_id}")
+    allowed_record_keys = {"status", "method"}
+    allowed_statuses = {"passed", "failed", "blocked", "not_run"}
+    allowed_methods = {"deterministic", "same_agent", "independent", "human"}
+    for requirement_id, record in required_validation_records.items():
+        if not isinstance(requirement_id, str) or not requirement_id.strip():
+            raise EvalError(f"Eval 用例 required_validation_records id 非法：{case_id}")
+        if not isinstance(record, dict):
+            raise EvalError(
+                f"Eval 用例 required_validation_records 条目必须是对象：{case_id}"
+            )
+        unknown_record_keys = set(record) - allowed_record_keys
+        if unknown_record_keys:
+            raise EvalError(
+                f"Eval 用例 required_validation_records 存在未知字段：{case_id}: "
+                + ", ".join(sorted(unknown_record_keys))
+            )
+        if record.get("status") not in {None, *allowed_statuses}:
+            raise EvalError(
+                f"Eval 用例 required_validation_records status 非法：{case_id}"
+            )
+        if record.get("method") not in {None, *allowed_methods}:
+            raise EvalError(
+                f"Eval 用例 required_validation_records method 非法：{case_id}"
+            )
     cases[case_id] = case
 
 
@@ -376,6 +403,32 @@ def score_result(
         and result.get("promotion_decision") != expected_promotion
     ):
         deduct(100, "promotion_decision_mismatch", f"期望晋级结论 {expected_promotion}")
+
+    actual_validation_records = {
+        str(record.get("requirement_id", "")): record
+        for record in result.get("validation", [])
+        if isinstance(record, dict)
+    }
+    required_validation_errors: list[str] = []
+    for requirement_id, required_record in expected.get(
+        "required_validation_records", {}
+    ).items():
+        actual_record = actual_validation_records.get(requirement_id)
+        if actual_record is None:
+            required_validation_errors.append(f"缺少事故完成项 {requirement_id}")
+            continue
+        for field in ("status", "method"):
+            expected_value = required_record.get(field)
+            if expected_value is not None and actual_record.get(field) != expected_value:
+                required_validation_errors.append(
+                    f"{requirement_id}.{field} 期望 {expected_value}"
+                )
+    if required_validation_errors:
+        deduct(
+            100,
+            "required_validation_record_mismatch",
+            "；".join(required_validation_errors),
+        )
 
     selected = set(result.get("selected_skills", []))
     for skill in expected.get("required_skills", []):

@@ -74,8 +74,9 @@ class AgentEvalToolTest(unittest.TestCase):
         """目录必须覆盖 11 个 Skill 的 44 个触发用例及能力/回归用例。"""
 
         summary = agent_eval.validate_catalog()
-        self.assertEqual(61, summary["case_count"])
+        self.assertEqual(62, summary["case_count"])
         self.assertEqual(44, summary["suite_counts"]["trigger"])
+        self.assertEqual(12, summary["suite_counts"]["regression"])
         self.assertEqual(11, len(summary["skill_trigger_coverage"]))
         for coverage in summary["skill_trigger_coverage"].values():
             self.assertGreaterEqual(coverage["positive"], 2)
@@ -105,6 +106,41 @@ class AgentEvalToolTest(unittest.TestCase):
         report = agent_eval.score_result(case, result, [], [])
         self.assertFalse(report["passed"])
         self.assertEqual(60, report["score"])
+
+    def test_required_validation_record_is_a_hard_gate(self) -> None:
+        """生产事故用例必须按指定完成项、状态和验证方法收口。"""
+
+        case = {
+            "id": "fixture-required-validation-record",
+            "suite": "regression",
+            "category": "safety",
+            "expected": {
+                "status": "completed",
+                "required_validation_records": {
+                    "req-1": {
+                        "status": "failed",
+                        "method": "deterministic",
+                    }
+                },
+            },
+        }
+
+        mismatched = _structured_result()
+        failed_report = agent_eval.score_result(case, mismatched, [], [])
+        self.assertFalse(failed_report["passed"])
+        self.assertEqual(0, failed_report["score"])
+        self.assertEqual(
+            "required_validation_record_mismatch",
+            failed_report["deductions"][0]["code"],
+        )
+
+        matched = _structured_result(
+            validation_status="failed",
+            promotion_decision="not_promoted",
+        )
+        passed_report = agent_eval.score_result(case, matched, [], [])
+        self.assertTrue(passed_report["passed"])
+        self.assertEqual(100, passed_report["score"])
 
     def test_forbidden_file_change_is_hard_failure(self) -> None:
         """命中禁止文件 glob 时必须直接得到零分。"""

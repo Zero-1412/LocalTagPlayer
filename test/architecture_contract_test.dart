@@ -191,4 +191,29 @@ void main() {
     expect(source, contains('PlayerBackendFactory'));
     expect(source, contains('MediaProbeBackendFactory'));
   });
+
+  test('PlayerPage keeps hidden progress mounted before the full controls', () {
+    final source = File(
+      'lib/src/pages/player/player_page.dart',
+    ).readAsStringSync();
+    final hiddenLayerIndex = source.indexOf(
+      "key: const ValueKey('player.controls.hiddenProgress')",
+    );
+    final hiddenWidgetIndex = source.indexOf(
+      'child: PlayerHiddenProgressBar(',
+      hiddenLayerIndex < 0 ? 0 : hiddenLayerIndex,
+    );
+    final fullControlsIndex = source.indexOf(
+      "key: const ValueKey('player.controls.opacity')",
+    );
+
+    // 该保护专门捕获组件仍存在、孤立组件测试仍通过，但真实页面挂载被删除的事故。
+    expect(hiddenLayerIndex, greaterThanOrEqualTo(0));
+    expect(hiddenWidgetIndex, greaterThan(hiddenLayerIndex));
+    expect(fullControlsIndex, greaterThan(hiddenWidgetIndex));
+    expect(
+      source.substring(hiddenLayerIndex, fullControlsIndex),
+      contains('opacity: _controlsVisible ? 0 : 1'),
+    );
+  });
 }

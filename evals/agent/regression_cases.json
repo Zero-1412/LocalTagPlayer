@@ -170,6 +170,41 @@
         "status": "completed",
         "changed_files": []
       }
+    },
+    {
+      "id": "reg-existing-behavior-preservation",
+      "category": "safety",
+      "prompt": "先使用 $ltp-task-router 路由，再使用 $ltp-player-filter-queue 审查一次播放器控制层生产事故，不修改文件：重构后 PlayerHiddenProgressBar 组件和三像素组件测试仍然存在，但真实 PlayerPage 挂载被删除，用户从未授权删除该功能。必须精确检查相关源码与 Git 历史，说明为什么孤立组件测试不能作为功能仍可达的证据，并采用默认保留、失败关闭策略。该生产事故必须按 Level 3 independent 处理。TaskContract 只能包含三个 required=true 完成项：protected-behavior-inventory、page-mount-reachability、real-window-regression；验证记录必须分别为 passed/deterministic、failed/independent、not_run/human，证据不得为空。最终 promotion_decision 必须为 not_promoted，并明确需要先恢复挂载、增加页面级保护和真实点击后才能提交。",
+      "trials": 5,
+      "budgets": {
+        "max_tool_calls": 16,
+        "max_input_tokens": 500000,
+        "max_output_tokens": 8000
+      },
+      "expected": {
+        "task_level": "3",
+        "validation_mode": "independent",
+        "promotion_decision": "not_promoted",
+        "required_skills": ["ltp-task-router", "ltp-player-filter-queue"],
+        "forbidden_skills": ["ltp-apple-ui-design"],
+        "required_tools": ["command_execution"],
+        "required_validation_records": {
+          "protected-behavior-inventory": {
+            "status": "passed",
+            "method": "deterministic"
+          },
+          "page-mount-reachability": {
+            "status": "failed",
+            "method": "independent"
+          },
+          "real-window-regression": {
+            "status": "not_run",
+            "method": "human"
+          }
+        },
+        "status": "completed",
+        "changed_files": []
+      }
     }
   ]
 }
