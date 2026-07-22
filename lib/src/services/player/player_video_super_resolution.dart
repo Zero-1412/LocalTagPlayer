@@ -1,4 +1,5 @@
 import '../../platform/platform_interfaces.dart';
+import '../../core/playback_settings.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -25,14 +26,6 @@ class PlayerVideoSuperResolution {
     'scaler-resizes-only': 'yes',
   };
 
-  /** 关闭超分时恢复的低开销基线，保持现有播放行为与清晰度。 */
-  static const disabledProperties = <String, String>{
-    'scale': 'lanczos',
-    'cscale': 'lanczos',
-    'sigmoid-upscaling': 'no',
-    'scaler-resizes-only': 'yes',
-  };
-
   /**
    * 把 [enabled] 对应的完整配置串行送入 [backend]。
    *
@@ -42,10 +35,15 @@ class PlayerVideoSuperResolution {
   static Future<void> apply({
     required PlayerBackend backend,
     required bool enabled,
+    PlayerVideoScaler baseScaler = PlayerVideoScaler.lanczos,
   }) {
     final previous = _applyTails[backend] ?? Future<void>.value();
     final operation = previous.then(
-      (_) => _applyProperties(backend: backend, enabled: enabled),
+      (_) => _applyProperties(
+        backend: backend,
+        enabled: enabled,
+        baseScaler: baseScaler,
+      ),
     );
     _applyTails[backend] = operation;
     return operation;
@@ -55,8 +53,21 @@ class PlayerVideoSuperResolution {
   static Future<void> _applyProperties({
     required PlayerBackend backend,
     required bool enabled,
+    required PlayerVideoScaler baseScaler,
   }) async {
-    final properties = enabled ? enabledProperties : disabledProperties;
+    final scaler = switch (baseScaler) {
+      PlayerVideoScaler.bicubic => 'bicubic',
+      PlayerVideoScaler.lanczos => 'lanczos',
+    };
+    // 超分关闭时恢复用户选择的基线，避免设置页显示 Bicubic 而后端仍保留 Lanczos。
+    final properties = enabled
+        ? enabledProperties
+        : <String, String>{
+            'scale': scaler,
+            'cscale': scaler,
+            'sigmoid-upscaling': 'no',
+            'scaler-resizes-only': 'yes',
+          };
     for (final entry in properties.entries) {
       try {
         await backend.setProperty(entry.key, entry.value);

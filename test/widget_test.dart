@@ -2821,7 +2821,7 @@ void main() {
 
     expect(find.text('播放设置'), findsOneWidget);
     expect(find.text('数据与维护'), findsOneWidget);
-    expect(find.text('当前策略：每次询问 · 解码设置'), findsOneWidget);
+    expect(find.text('当前策略：每次询问 · 解码、缓存与画质'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('settings.resumeBehavior.summary')),
       findsOneWidget,
@@ -3642,6 +3642,9 @@ void main() {
     expect(oldSettings.mirrorVideo, isFalse);
     expect(oldSettings.playbackMode, PlayerPlaybackMode.sequential);
     expect(oldSettings.videoAspectMode, PlayerVideoAspectMode.automatic);
+    expect(oldSettings.videoScaler, PlayerVideoScaler.lanczos);
+    expect(oldSettings.videoOutputRange, PlayerVideoOutputRange.automatic);
+    expect(oldSettings.highQualityStreamCacheEnabled, isTrue);
     expect(oldSettings.playbackRate, 1);
     expect(oldSettings.seekStepSeconds, 5);
     expect(oldSettings.videoSuperResolutionEnabled, isFalse);
@@ -3655,6 +3658,9 @@ void main() {
       mirrorVideo: true,
       playbackMode: PlayerPlaybackMode.repeatAll,
       videoAspectMode: PlayerVideoAspectMode.cover,
+      videoScaler: PlayerVideoScaler.bicubic,
+      videoOutputRange: PlayerVideoOutputRange.limited,
+      highQualityStreamCacheEnabled: false,
       playbackRate: 1.5,
       seekStepSeconds: 30,
       videoSuperResolutionEnabled: true,
@@ -3667,6 +3673,9 @@ void main() {
     expect(loaded.mirrorVideo, isTrue);
     expect(loaded.playbackMode, PlayerPlaybackMode.repeatAll);
     expect(loaded.videoAspectMode, PlayerVideoAspectMode.cover);
+    expect(loaded.videoScaler, PlayerVideoScaler.bicubic);
+    expect(loaded.videoOutputRange, PlayerVideoOutputRange.limited);
+    expect(loaded.highQualityStreamCacheEnabled, isFalse);
     expect(loaded.playbackRate, 1.5);
     expect(loaded.seekStepSeconds, 30);
     expect(loaded.videoSuperResolutionEnabled, isTrue);
@@ -3674,17 +3683,24 @@ void main() {
     expect(loaded.moveDeletedFileToTrash, isTrue);
     expect(loaded.toJson()['playbackMode'], 'repeatAll');
     expect(loaded.toJson()['videoAspectMode'], 'cover');
+    expect(loaded.toJson()['videoScaler'], 'bicubic');
+    expect(loaded.toJson()['videoOutputRange'], 'limited');
+    expect(loaded.toJson()['highQualityStreamCacheEnabled'], isFalse);
     expect(loaded.toJson()['seekStepSeconds'], 30);
     expect(loaded.toJson()['videoSuperResolutionEnabled'], isTrue);
 
     final unsafe = PlaybackSettings.fromJson({
       'playbackMode': 'unknown',
       'videoAspectMode': 'stretched',
+      'videoScaler': 'nearest',
+      'videoOutputRange': 'invalid',
       'playbackRate': 9,
       'seekStepSeconds': 7,
     });
     expect(unsafe.playbackMode, PlayerPlaybackMode.sequential);
     expect(unsafe.videoAspectMode, PlayerVideoAspectMode.automatic);
+    expect(unsafe.videoScaler, PlayerVideoScaler.lanczos);
+    expect(unsafe.videoOutputRange, PlayerVideoOutputRange.automatic);
     expect(unsafe.playbackRate, 1);
     expect(unsafe.seekStepSeconds, 5);
     expect(unsafe.videoSuperResolutionEnabled, isFalse);
@@ -3697,6 +3713,8 @@ void main() {
     await applyPlayerOpenPreferences(
       backend: backend,
       videoAspectMode: PlayerVideoAspectMode.cover,
+      videoScaler: PlayerVideoScaler.bicubic,
+      videoOutputRange: PlayerVideoOutputRange.full,
       playbackRate: 1.5,
       videoSuperResolutionEnabled: true,
     );
@@ -3704,6 +3722,7 @@ void main() {
     expect(backend.properties['video-aspect-override'], '-1');
     expect(backend.properties['panscan'], '1.0');
     expect(backend.properties['video-zoom'], '0');
+    expect(backend.properties['video-output-levels'], 'full');
     expect(backend.properties['scale'], 'ewa_lanczossharp');
     expect(backend.properties['cscale'], 'lanczos');
     expect(backend.properties['sigmoid-upscaling'], 'yes');
@@ -3718,10 +3737,11 @@ void main() {
     await PlayerVideoSuperResolution.apply(
       backend: backend,
       enabled: false,
+      baseScaler: PlayerVideoScaler.bicubic,
     );
 
-    expect(backend.properties['scale'], 'lanczos');
-    expect(backend.properties['cscale'], 'lanczos');
+    expect(backend.properties['scale'], 'bicubic');
+    expect(backend.properties['cscale'], 'bicubic');
     expect(backend.properties['sigmoid-upscaling'], 'no');
     expect(backend.properties['scaler-resizes-only'], 'yes');
   });

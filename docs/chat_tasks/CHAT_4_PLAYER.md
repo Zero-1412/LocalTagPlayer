@@ -671,3 +671,14 @@
 - focused 5 项、全量 237 项测试、`flutter analyze` 和 Windows Debug 构建通过，3 项显式 benchmark 跳过。
 - 显式启动 Debug 路径时 Windows 应用激活实际路由到已安装 Release 进程，准备点击时又检测到用户输入，自动化按安全规则中止；准确复测路径为：关闭已安装 Release → 启动新 Debug 构建 → 进入低分辨率视频 → 进度条齿轮 → 开启/关闭超分 → 拖动进度与滚动队列 → 诊断确认 `ewa_lanczossharp / yes` 与恢复 `lanczos` → 保存两态截图。
 - 未修改 filtered queue 来源、当前 index、播放模式、硬解选择、SQLite、标签语义、缩略图或媒体详情队列。
+
+# 2026-07-22 第一阶段画质能力与专业播放器调研
+
+- 官方 mpv 文档确认 `hwdec=auto/auto-safe` 支持不可用时回退软件解码，`hwdec-software-fallback` 可约束失败帧数；本轮显式使用 3 帧回退门槛，优先保证视频继续播放。
+- mpv 的 demuxer cache、`scale`、`video-output-levels`、`video-params/*` 与 dropped-frame properties 可直接覆盖原始压缩码流缓存、Bicubic/Lanczos、Limited/Full Range 和播放诊断，不需要让 Flutter UI isolate 处理视频帧。
+- VLC 官方能力页与 MPC-HC 官方仓库均把硬件解码、视频滤镜、HDR/渲染器和诊断信息作为专业能力；MPC-HC 同时明确高级渲染设置存在显卡/驱动差异。因此第二、三阶段必须先有设备能力检测和性能基线，再开放真实开关。
+- 主界面设置新增第一阶段实际控件，并把第二、三阶段作为只读路线；现有 FFprobe 详情缓存继续解析编码、分辨率与时长，播放器诊断新增缩放和色彩链路实际值。
+- 队列条目横向留白收紧，缩略图与标题提高可读性；没有扩大 item extent、预建窗口、媒体详情读取或缩略图任务。
+- 精确 Debug 实测 `d3d11va-copy`、Lanczos、自动输出范围、源 `limited / BT.709 / BT.1886`、解码/总丢帧 0、缓存约 111 秒；Bicubic/Lanczos 切换并恢复、11176 项队列滚动和持续播放均正常。
+- 调研依据：[mpv 官方手册](https://mpv.io/manual/master/)、[VLC 官方功能页](https://www.videolan.org/vlc/features.html)、[MPC-HC 官方仓库](https://github.com/clsid2/mpc-hc) 与 [MPC-HC 官方渲染器建议](https://github.com/clsid2/mpc-hc/issues/2869)。
+- `flutter analyze`、238 项测试和 Windows Debug 构建通过，3 项显式 benchmark 跳过；SQLite、标签筛选语义、filtered queue 与用户数据不变。

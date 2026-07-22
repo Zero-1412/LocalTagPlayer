@@ -1320,7 +1320,8 @@ class _QueueListItemState extends State<_QueueListItem>
                 ),
                 duration: accessibility.fadeDuration(AppMotion.hover),
                 curve: AppMotion.standardCurve,
-                padding: const EdgeInsets.all(7),
+                // 队列宽度有限，优先把横向空间留给标题与状态；垂直留白仍保证点击目标舒适。
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                 decoration: BoxDecoration(
                   color: backgroundColor,
                   borderRadius: BorderRadius.circular(AppRadius.card),
@@ -1341,10 +1342,10 @@ class _QueueListItemState extends State<_QueueListItem>
                         borderRadius: BorderRadius.circular(AppRadius.capsule),
                       ),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 4),
                     SizedBox(
-                      width: 100,
-                      height: 58,
+                      width: 104,
+                      height: 60,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(AppRadius.control),
                         child: Stack(
@@ -1393,7 +1394,7 @@ class _QueueListItemState extends State<_QueueListItem>
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 7),
                     Expanded(
                       child: FutureBuilder<MediaDetails>(
                         future: _detailsFuture,
@@ -1408,7 +1409,7 @@ class _QueueListItemState extends State<_QueueListItem>
                               Row(
                                 children: [
                                   SizedBox(
-                                    width: 30,
+                                    width: 24,
                                     child: Text(
                                       (widget.index + 1)
                                           .toString()
@@ -1431,7 +1432,7 @@ class _QueueListItemState extends State<_QueueListItem>
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         color: titleColor,
-                                        fontSize: 13,
+                                        fontSize: 14,
                                         height: 1.15,
                                         fontWeight: emphasis >= 2
                                             ? FontWeight.w700

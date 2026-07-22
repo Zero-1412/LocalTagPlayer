@@ -724,7 +724,7 @@ class SettingsLandingList extends StatelessWidget {
               icon: Icons.play_circle_outline_rounded,
               title: '播放与继续观看',
               subtitle:
-                  '当前策略：${PlaybackSettings.resumeLabelFor(resumeBehavior)} · 解码设置',
+                  '当前策略：${PlaybackSettings.resumeLabelFor(resumeBehavior)} · 解码、缓存与画质',
               statusLabel: PlaybackSettings.resumeLabelFor(resumeBehavior),
               onTap: onOpenPlayback,
             ),
@@ -768,6 +768,198 @@ class SettingsLandingList extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/**
+ * 第一阶段播放质量设置。
+ *
+ * 控件只保存播放会话参数，不在设置页启动解码、FFprobe 或媒体库重算；新播放器
+ * 会话统一把这些值送入 PlayerBackend，避免设置操作阻塞 UI isolate。
+ */
+class _PlaybackQualitySettingsPanel extends StatelessWidget {
+  const _PlaybackQualitySettingsPanel({
+    required this.settings,
+    required this.onChanged,
+  });
+
+  /** 当前播放设置快照。 */
+  final PlaybackSettings settings;
+
+  /** 保存完整设置快照，确保连续修改不会丢失其它字段。 */
+  final ValueChanged<PlaybackSettings> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      key: const ValueKey('settings.playbackQuality.card'),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '视频质量与渲染',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '第一阶段能力默认以流畅播放为边界；高开销增强不在 UI 线程处理视频帧。',
+              style: TextStyle(color: libraryTextMuted, height: 1.45),
+            ),
+            const SizedBox(height: 14),
+            SwitchListTile.adaptive(
+              key: const ValueKey('settings.playbackQuality.streamCache'),
+              contentPadding: EdgeInsets.zero,
+              value: settings.highQualityStreamCacheEnabled,
+              title: const Text('缓存原始高清码流'),
+              subtitle: const Text('为当前会话保留 96 MiB 前向、32 MiB 回看内存窗口；不复制源文件'),
+              onChanged: (value) => onChanged(
+                settings.copyWith(highQualityStreamCacheEnabled: value),
+              ),
+            ),
+            const Divider(height: 20),
+            DropdownButtonFormField<PlayerVideoAspectMode>(
+              key: const ValueKey('settings.playbackQuality.aspect'),
+              initialValue: settings.videoAspectMode,
+              decoration: const InputDecoration(labelText: '画面比例'),
+              items: [
+                for (final mode in PlayerVideoAspectMode.values)
+                  DropdownMenuItem(
+                    value: mode,
+                    child: Text(PlaybackSettings.videoAspectLabelFor(mode)),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  onChanged(settings.copyWith(videoAspectMode: value));
+                }
+              },
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<PlayerVideoScaler>(
+              key: const ValueKey('settings.playbackQuality.scaler'),
+              initialValue: settings.videoScaler,
+              decoration: const InputDecoration(labelText: '高质量缩放'),
+              items: [
+                for (final scaler in PlayerVideoScaler.values)
+                  DropdownMenuItem(
+                    value: scaler,
+                    child: Text(PlaybackSettings.videoScalerLabelFor(scaler)),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  onChanged(settings.copyWith(videoScaler: value));
+                }
+              },
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<PlayerVideoOutputRange>(
+              key: const ValueKey('settings.playbackQuality.outputRange'),
+              initialValue: settings.videoOutputRange,
+              decoration: const InputDecoration(labelText: '输出色彩范围'),
+              items: [
+                for (final range in PlayerVideoOutputRange.values)
+                  DropdownMenuItem(
+                    value: range,
+                    child:
+                        Text(PlaybackSettings.videoOutputRangeLabelFor(range)),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  onChanged(settings.copyWith(videoOutputRange: value));
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            const _PlaybackCapabilityRow(
+              icon: Icons.analytics_outlined,
+              title: '视频质量信息解析',
+              subtitle: 'FFprobe 缓存解析编码、分辨率、时长；播放诊断读取实时色彩参数',
+              status: '已启用',
+            ),
+            const _PlaybackCapabilityRow(
+              icon: Icons.monitor_heart_outlined,
+              title: '解码与丢帧诊断',
+              subtitle: '播放器诊断可核验实际硬解、缓存、解码/输出/总丢帧及色彩范围',
+              status: '已启用',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 设置页中的只读能力状态行，避免尚未实现的能力伪装成可操作开关。 */
+class _PlaybackCapabilityRow extends StatelessWidget {
+  const _PlaybackCapabilityRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.status,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: appAccentViolet),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: Text(
+        status,
+        style: const TextStyle(
+          color: appAccentViolet,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+/** 后续画质增强路线；只展示范围与状态，不暴露尚不能保证流畅度的假开关。 */
+class _PlaybackEnhancementRoadmapCard extends StatelessWidget {
+  const _PlaybackEnhancementRoadmapCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      key: ValueKey('settings.playbackQuality.roadmap'),
+      child: Padding(
+        padding: EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '画质增强路线',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            SizedBox(height: 12),
+            _PlaybackCapabilityRow(
+              icon: Icons.auto_fix_high_rounded,
+              title: '第二阶段 · 观感增强',
+              subtitle: '去块、降噪、适度锐化、暗部增强、自动画质模式',
+              status: '待性能基线',
+            ),
+            Divider(height: 16),
+            _PlaybackCapabilityRow(
+              icon: Icons.memory_rounded,
+              title: '第三阶段 · 高级增强',
+              subtitle: 'AI 超分、时域降噪、运动补帧、HDR 映射、Vulkan / Compute Shader',
+              status: '待能力检测',
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1571,6 +1763,18 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        _PlaybackQualitySettingsPanel(
+                          settings: _settings,
+                          onChanged: (settings) {
+                            setState(() => _settings = settings);
+                            unawaited(
+                              widget.onPlaybackSettingsChanged(settings),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        const _PlaybackEnhancementRoadmapCard(),
                         const SizedBox(height: 16),
                       ],
                       if (_section == _SettingsSection.dataBackup) ...[

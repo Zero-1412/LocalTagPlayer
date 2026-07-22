@@ -191,16 +191,9 @@ class WindowsNativePlayerBackend implements PlayerBackend {
 
   @override
   Future<void> setProperty(String property, String value) {
-    // 原生后端没有 media_kit 的额外输入缓冲，因此使用更小但仍覆盖 4K seek 的 demux 预算。
-    final adjustedValue = mode == 'mpv'
-        ? switch (property) {
-            'demuxer-readahead-secs' => '12',
-            'demuxer-max-bytes' => '64MiB',
-            'demuxer-max-back-bytes' => '16MiB',
-            _ => value,
-          }
-        : value;
-    return _command('property', text: '$property=$adjustedValue');
+    // 缓存档位由播放器会话统一约束；原生 A/B 后端必须接受同一组值，避免设置页显示
+    // 已关闭高质量缓存而此处仍静默覆盖为固定 64 MiB。
+    return _command('property', text: '$property=$value');
   }
 
   @override

@@ -355,6 +355,8 @@ bool playerExitStopShouldStartBeforePop({required bool pauseAcknowledged}) {
 Future<void> applyPlayerOpenPreferences({
   required PlayerBackend backend,
   required PlayerVideoAspectMode videoAspectMode,
+  required PlayerVideoScaler videoScaler,
+  required PlayerVideoOutputRange videoOutputRange,
   required double playbackRate,
   required bool videoSuperResolutionEnabled,
 }) async {
@@ -376,9 +378,18 @@ Future<void> applyPlayerOpenPreferences({
   await setPropertySafely('video-zoom', '0');
   await setPropertySafely('video-pan-x', '0');
   await setPropertySafely('video-pan-y', '0');
+  await setPropertySafely(
+    'video-output-levels',
+    switch (videoOutputRange) {
+      PlayerVideoOutputRange.automatic => 'auto',
+      PlayerVideoOutputRange.limited => 'limited',
+      PlayerVideoOutputRange.full => 'full',
+    },
+  );
   await PlayerVideoSuperResolution.apply(
     backend: backend,
     enabled: videoSuperResolutionEnabled,
+    baseScaler: videoScaler,
   );
   await backend.setRate(playbackRate);
 }
@@ -676,6 +687,10 @@ class PlayerPageState extends State<PlayerPage> {
   late bool _mirrorVideo;
   /** 当前全局画面比例；打开新媒体后会重新应用到后端。 */
   late PlayerVideoAspectMode _videoAspectMode;
+  /** 当前缩放器基线；超分关闭后恢复该值。 */
+  late PlayerVideoScaler _videoScaler;
+  /** 当前显示输出电平策略。 */
+  late PlayerVideoOutputRange _videoOutputRange;
   /** 当前全局 GPU 画质超分开关；只影响视频渲染缩放器。 */
   late bool _videoSuperResolutionEnabled;
   /** 快进与快退快捷键共用的离散跳转秒数。 */
@@ -746,6 +761,8 @@ class PlayerPageState extends State<PlayerPage> {
     _mirrorVideo = _effectivePlaybackSettings.mirrorVideo;
     _playbackMode = _effectivePlaybackSettings.playbackMode;
     _videoAspectMode = _effectivePlaybackSettings.videoAspectMode;
+    _videoScaler = _effectivePlaybackSettings.videoScaler;
+    _videoOutputRange = _effectivePlaybackSettings.videoOutputRange;
     _playbackRate = _effectivePlaybackSettings.playbackRate;
     _videoSuperResolutionEnabled =
         _effectivePlaybackSettings.videoSuperResolutionEnabled;
@@ -989,6 +1006,7 @@ class PlayerPageState extends State<PlayerPage> {
       PlayerVideoSuperResolution.apply(
         backend: _playerBackend,
         enabled: enabled,
+        baseScaler: _videoScaler,
       ),
     );
   }
@@ -2012,13 +2030,22 @@ class PlayerPageState extends State<PlayerPage> {
       'vd-lavc-threads': '4',
       'cache': 'yes',
       'hwdec': _requestedHwdec,
+      // 自动硬解连续失败三帧后允许回退软件解码，优先保证视频继续播放。
+      'hwdec-software-fallback': '3',
       // 允许 mpv 对高分辨率 HEVC/VP9/AV1 等编码尝试用户选择的硬解后端。
       'hwdec-codecs': 'all',
       // 缓存暂时耗尽时让 mpv 等待输入恢复，不以连续丢帧追赶播放时钟。
       'cache-pause': 'yes',
-      'demuxer-readahead-secs': '15',
-      'demuxer-max-bytes': '96MiB',
-      'demuxer-max-back-bytes': '32MiB',
+      'demuxer-readahead-secs':
+          _effectivePlaybackSettings.highQualityStreamCacheEnabled ? '15' : '5',
+      'demuxer-max-bytes':
+          _effectivePlaybackSettings.highQualityStreamCacheEnabled
+              ? '96MiB'
+              : '32MiB',
+      'demuxer-max-back-bytes':
+          _effectivePlaybackSettings.highQualityStreamCacheEnabled
+              ? '32MiB'
+              : '8MiB',
     };
     for (final entry in options.entries) {
       await _setMpvProperty(entry.key, entry.value);
@@ -2027,6 +2054,8 @@ class PlayerPageState extends State<PlayerPage> {
     await applyPlayerOpenPreferences(
       backend: _playerBackend,
       videoAspectMode: _videoAspectMode,
+      videoScaler: _videoScaler,
+      videoOutputRange: _videoOutputRange,
       playbackRate: _playbackRate,
       videoSuperResolutionEnabled: _videoSuperResolutionEnabled,
     );
@@ -2911,7 +2940,14 @@ class PlayerPageState extends State<PlayerPage> {
       'video-sync',
       'interpolation',
       'scale',
+      'cscale',
       'scaler-resizes-only',
+      'video-output-levels',
+      'video-params/colorlevels',
+      'video-params/colormatrix',
+      'video-params/primaries',
+      'video-params/gamma',
+      'video-target-params/colorlevels',
       'avsync',
       'total-avsync-change',
       'mistimed-frame-count',
@@ -2963,7 +2999,14 @@ class PlayerPageState extends State<PlayerPage> {
       'mpv \u63d2\u5e27: ${mpv['interpolation']}',
       '画质超分设置: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
       'mpv GPU 缩放器: ${mpv['scale']}',
+      'mpv GPU 色度缩放器: ${mpv['cscale']}',
       'mpv 仅缩放时增强: ${mpv['scaler-resizes-only']}',
+      'mpv 输出电平设置: ${mpv['video-output-levels']}',
+      '源色彩范围: ${mpv['video-params/colorlevels']}',
+      '源色彩矩阵: ${mpv['video-params/colormatrix']}',
+      '源色彩原色: ${mpv['video-params/primaries']}',
+      '源传递函数: ${mpv['video-params/gamma']}',
+      '实际输出色彩范围: ${mpv['video-target-params/colorlevels']}',
       'mpv AV \u504f\u79fb: ${mpv['avsync']}',
       'mpv AV \u7d2f\u8ba1\u4fee\u6b63: ${mpv['total-avsync-change']}',
       'mpv \u65f6\u5e8f\u5f02\u5e38\u5e27: ${mpv['mistimed-frame-count']}',

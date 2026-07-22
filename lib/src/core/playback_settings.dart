@@ -13,6 +13,12 @@ enum PlayerPlaybackMode { sequential, shuffle, repeatOne, repeatAll }
 /** 全局画面比例模式，只影响视频表面的呈现方式。 */
 enum PlayerVideoAspectMode { automatic, ratio4x3, ratio16x9, cover }
 
+/** GPU 视频缩放器；只提供已在 libmpv 中稳定支持的两种质量档位。 */
+enum PlayerVideoScaler { bicubic, lanczos }
+
+/** 显示输出电平；自动模式由 libmpv 根据输出链路选择安全值。 */
+enum PlayerVideoOutputRange { automatic, limited, full }
+
 /** 用户可配置的播放器快捷功能，绑定可包含 Control、Alt 与 Shift 修饰键。 */
 enum PlayerShortcutAction {
   navigateBack,
@@ -38,6 +44,9 @@ class PlaybackSettings {
     required this.mirrorVideo,
     required this.playbackMode,
     required this.videoAspectMode,
+    required this.videoScaler,
+    required this.videoOutputRange,
+    required this.highQualityStreamCacheEnabled,
     required this.playbackRate,
     required this.seekStepSeconds,
     required this.videoSuperResolutionEnabled,
@@ -54,6 +63,9 @@ class PlaybackSettings {
     mirrorVideo: false,
     playbackMode: PlayerPlaybackMode.sequential,
     videoAspectMode: PlayerVideoAspectMode.automatic,
+    videoScaler: PlayerVideoScaler.lanczos,
+    videoOutputRange: PlayerVideoOutputRange.automatic,
+    highQualityStreamCacheEnabled: true,
     playbackRate: 1,
     seekStepSeconds: 5,
     videoSuperResolutionEnabled: false,
@@ -196,6 +208,12 @@ class PlaybackSettings {
   final PlayerPlaybackMode playbackMode;
   /** 全局画面比例；每次打开媒体后重新应用到播放后端。 */
   final PlayerVideoAspectMode videoAspectMode;
+  /** 未开启超分时使用的 GPU 缩放器；超分关闭后必须恢复此值。 */
+  final PlayerVideoScaler videoScaler;
+  /** 输出到显示设备的 Limited / Full Range 策略。 */
+  final PlayerVideoOutputRange videoOutputRange;
+  /** 是否为当前播放会话保留原始压缩码流的高质量内存缓存窗口。 */
+  final bool highQualityStreamCacheEnabled;
   /** 全局播放倍速；每次打开媒体后重新应用到播放后端。 */
   final double playbackRate;
   /** 快进与快退快捷键共用的全局跳转秒数。 */
@@ -218,6 +236,9 @@ class PlaybackSettings {
     bool? mirrorVideo,
     PlayerPlaybackMode? playbackMode,
     PlayerVideoAspectMode? videoAspectMode,
+    PlayerVideoScaler? videoScaler,
+    PlayerVideoOutputRange? videoOutputRange,
+    bool? highQualityStreamCacheEnabled,
     double? playbackRate,
     int? seekStepSeconds,
     bool? videoSuperResolutionEnabled,
@@ -235,6 +256,10 @@ class PlaybackSettings {
       mirrorVideo: mirrorVideo ?? this.mirrorVideo,
       playbackMode: playbackMode ?? this.playbackMode,
       videoAspectMode: videoAspectMode ?? this.videoAspectMode,
+      videoScaler: videoScaler ?? this.videoScaler,
+      videoOutputRange: videoOutputRange ?? this.videoOutputRange,
+      highQualityStreamCacheEnabled:
+          highQualityStreamCacheEnabled ?? this.highQualityStreamCacheEnabled,
       playbackRate: playbackRate ?? this.playbackRate,
       seekStepSeconds: seekStepSeconds ?? this.seekStepSeconds,
       videoSuperResolutionEnabled:
@@ -263,6 +288,9 @@ class PlaybackSettings {
         'mirrorVideo': mirrorVideo,
         'playbackMode': playbackMode.name,
         'videoAspectMode': videoAspectMode.name,
+        'videoScaler': videoScaler.name,
+        'videoOutputRange': videoOutputRange.name,
+        'highQualityStreamCacheEnabled': highQualityStreamCacheEnabled,
         'playbackRate': playbackRate,
         'seekStepSeconds': seekStepSeconds,
         'videoSuperResolutionEnabled': videoSuperResolutionEnabled,
@@ -314,6 +342,20 @@ class PlaybackSettings {
         json['videoAspectMode'],
         defaults.videoAspectMode,
       ),
+      videoScaler: _enumByName(
+        PlayerVideoScaler.values,
+        json['videoScaler'],
+        defaults.videoScaler,
+      ),
+      videoOutputRange: _enumByName(
+        PlayerVideoOutputRange.values,
+        json['videoOutputRange'],
+        defaults.videoOutputRange,
+      ),
+      highQualityStreamCacheEnabled:
+          json['highQualityStreamCacheEnabled'] is bool
+              ? json['highQualityStreamCacheEnabled']! as bool
+              : defaults.highQualityStreamCacheEnabled,
       playbackRate: _supportedPlaybackRate(json['playbackRate']),
       seekStepSeconds: _supportedSeekStep(json['seekStepSeconds']),
       videoSuperResolutionEnabled: json['videoSuperResolutionEnabled'] is bool
@@ -427,6 +469,30 @@ class PlaybackSettings {
         PlaybackResumeBehavior.continueWatching => '从上次位置继续',
         PlaybackResumeBehavior.restart => '从头播放',
         PlaybackResumeBehavior.ask => '每次询问',
+      };
+
+  /** 设置页画面比例名称。 */
+  static String videoAspectLabelFor(PlayerVideoAspectMode mode) =>
+      switch (mode) {
+        PlayerVideoAspectMode.automatic => '自动保持源比例',
+        PlayerVideoAspectMode.ratio4x3 => '固定 4:3',
+        PlayerVideoAspectMode.ratio16x9 => '固定 16:9',
+        PlayerVideoAspectMode.cover => '铺满并等比裁边',
+      };
+
+  /** 设置页缩放器名称。 */
+  static String videoScalerLabelFor(PlayerVideoScaler scaler) =>
+      switch (scaler) {
+        PlayerVideoScaler.bicubic => 'Bicubic（平衡）',
+        PlayerVideoScaler.lanczos => 'Lanczos（高质量）',
+      };
+
+  /** 设置页输出电平名称。 */
+  static String videoOutputRangeLabelFor(PlayerVideoOutputRange range) =>
+      switch (range) {
+        PlayerVideoOutputRange.automatic => '自动（推荐）',
+        PlayerVideoOutputRange.limited => 'Limited（16–235）',
+        PlayerVideoOutputRange.full => 'Full（0–255）',
       };
 
   static String shortcutActionLabel(PlayerShortcutAction action) =>
