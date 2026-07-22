@@ -647,6 +647,9 @@ class PlayerPageState extends State<PlayerPage> {
   /** 第三阶段能力检测器；只查询当前 PlayerBackend 的真实运行属性。 */
   final PlayerGpuCapabilityDetector _gpuCapabilityDetector =
       const PlayerGpuCapabilityDetector();
+  /** HDR 实验复用播放健康样本，并在压力出现后锁存关闭到下一媒体。 */
+  final PlayerHdrMappingSafetyCoordinator _hdrMappingSafetyCoordinator =
+      PlayerHdrMappingSafetyCoordinator();
   /** 当前会话已经实际送入后端的自动增强档位。 */
   PlayerAdaptiveQualityLevel _adaptiveQualityLevel =
       PlayerAdaptiveQualityLevel.off;
@@ -654,8 +657,12 @@ class PlayerPageState extends State<PlayerPage> {
   PlayerGpuCapabilitySnapshot? _gpuCapabilitySnapshot;
   /** HDR 实验只有在当前媒体与实际活动 LUID 均通过门槛后才对本会话生效。 */
   var _hdrMappingExperimentActive = false;
-  /** 自动增强扩展采样每两秒执行一次，避免增加每秒平台属性调用压力。 */
-  var _adaptiveQualitySampleTick = 0;
+  /** 当前媒体最近一次 HDR 自动回滚原因；全局实验开关不会被改写。 */
+  String? _hdrMappingRollbackReason;
+  /** 当前媒体 HDR 自动回滚发生时间，用于与掉帧和功耗基线对齐。 */
+  DateTime? _hdrMappingRollbackAt;
+  /** 画质余量扩展采样每两秒执行一次，供自动增强与 HDR 压力保护共享。 */
+  var _qualityMarginSampleTick = 0;
   var _controlsVisible = true;
   var _shortcutFeedbackVisible = false;
   String? _shortcutFeedbackLabel;
@@ -1321,10 +1328,11 @@ class PlayerPageState extends State<PlayerPage> {
         }
         _audioProgressState = '音频播放头停滞';
       }
-      if (_effectivePlaybackSettings.automaticQualityEnhancementEnabled) {
-        _adaptiveQualitySampleTick++;
-        if (_adaptiveQualitySampleTick.isEven) {
-          await _sampleAdaptiveQualityMargin(
+      if (_effectivePlaybackSettings.automaticQualityEnhancementEnabled ||
+          _hdrMappingExperimentActive) {
+        _qualityMarginSampleTick++;
+        if (_qualityMarginSampleTick.isEven) {
+          await _sampleQualityMargin(
             sampledAt: now,
             frame: frame,
             previousFrame: previousFrame,
@@ -1338,9 +1346,12 @@ class PlayerPageState extends State<PlayerPage> {
   }
 
   /**
-   * 复用播放健康 Timer 的低频样本评估实时余量，并仅在档位变化时重建滤镜链。
+   * 复用播放健康 Timer 的低频样本评估自动画质与 HDR 实验实时余量。
+   *
+   * 属性读取只执行一次；第二阶段协调器仅在档位变化时重建滤镜，HDR 实验只在
+   * 压力触发时执行一次完整回滚，不增加新的 UI Timer 或逐帧读取。
    */
-  Future<void> _sampleAdaptiveQualityMargin({
+  Future<void> _sampleQualityMargin({
     required DateTime sampledAt,
     required int? frame,
     required int? previousFrame,
@@ -1358,37 +1369,54 @@ class PlayerPageState extends State<PlayerPage> {
     final outputDrops =
         _parseMpvInt(await _getMpvProperty('vo-drop-frame-count'));
     final totalDrops = _parseMpvInt(await _getMpvProperty('frame-drop-count'));
-    final decision = _adaptiveQualityCoordinator.evaluate(
-      PlayerAdaptiveQualitySample(
-        sampledAt: sampledAt,
-        playing: _playerBackend.state.playing,
-        buffering: _playerBackend.state.buffering,
-        recentSeek: _lastSeekAt != null &&
-            sampledAt.difference(_lastSeekAt!) < const Duration(seconds: 3),
-        videoAdvanced:
-            frame != null && previousFrame != null && frame > previousFrame,
-        videoStalled: _videoProgressState == '视频帧停滞',
-        audioStalled: _audioProgressState == '音频播放头停滞',
-        width: details.width,
-        height: details.height,
-        hwdecCurrent: hwdecCurrent,
-        sourceFps: sourceFps,
-        estimatedFps: estimatedFps,
-        cacheDuration: cacheDuration,
-        decoderDroppedFrames: decoderDrops,
-        outputDroppedFrames: outputDrops,
-        totalDroppedFrames: totalDrops,
-      ),
+    final sample = PlayerAdaptiveQualitySample(
+      sampledAt: sampledAt,
+      playing: _playerBackend.state.playing,
+      buffering: _playerBackend.state.buffering,
+      recentSeek: _lastSeekAt != null &&
+          sampledAt.difference(_lastSeekAt!) < const Duration(seconds: 3),
+      videoAdvanced:
+          frame != null && previousFrame != null && frame > previousFrame,
+      videoStalled: _videoProgressState == '视频帧停滞',
+      audioStalled: _audioProgressState == '音频播放头停滞',
+      width: details.width,
+      height: details.height,
+      hwdecCurrent: hwdecCurrent,
+      sourceFps: sourceFps,
+      estimatedFps: estimatedFps,
+      cacheDuration: cacheDuration,
+      decoderDroppedFrames: decoderDrops,
+      outputDroppedFrames: outputDrops,
+      totalDroppedFrames: totalDrops,
     );
-    if (!decision.changed || _isExiting) return;
-    await PlayerAdaptiveQualityEnhancer.apply(
+    if (_effectivePlaybackSettings.automaticQualityEnhancementEnabled) {
+      final decision = _adaptiveQualityCoordinator.evaluate(sample);
+      if (decision.changed && !_isExiting) {
+        await PlayerAdaptiveQualityEnhancer.apply(
+          backend: _playerBackend,
+          level: decision.level,
+        );
+        _adaptiveQualityLevel = decision.level;
+        debugPrint(
+          'PLAYER_ADAPTIVE_QUALITY level=${decision.level.name} '
+          'profile=${decision.profile.label} reason=${decision.reason}',
+        );
+      }
+    }
+    if (!_hdrMappingExperimentActive || _isExiting) return;
+    final hdrDecision = _hdrMappingSafetyCoordinator.evaluate(sample);
+    if (!hdrDecision.shouldRollback) return;
+    final guardedPath = _openedPath;
+    await PlayerHdrMappingExperiment.apply(
       backend: _playerBackend,
-      level: decision.level,
+      enabled: false,
     );
-    _adaptiveQualityLevel = decision.level;
+    if (!mounted || _openedPath != guardedPath) return;
+    _hdrMappingExperimentActive = false;
+    _hdrMappingRollbackReason = hdrDecision.reason;
+    _hdrMappingRollbackAt = sampledAt;
     debugPrint(
-      'PLAYER_ADAPTIVE_QUALITY level=${decision.level.name} '
-      'profile=${decision.profile.label} reason=${decision.reason}',
+      'PLAYER_HDR_MAPPING rollback=true reason=${hdrDecision.reason}',
     );
   }
 
@@ -2263,9 +2291,12 @@ class PlayerPageState extends State<PlayerPage> {
           _softwareDecodeConfirmed = false;
           _adaptiveQualityCoordinator.reset();
           _adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
-          _adaptiveQualitySampleTick = 0;
+          _qualityMarginSampleTick = 0;
           _gpuCapabilitySnapshot = null;
           _hdrMappingExperimentActive = false;
+          _hdrMappingSafetyCoordinator.reset();
+          _hdrMappingRollbackReason = null;
+          _hdrMappingRollbackAt = null;
           // 新媒体必须先清除上一条的滤镜，再从本条稳定样本逐级恢复。
           await PlayerAdaptiveQualityEnhancer.apply(
             backend: _playerBackend,
@@ -2360,6 +2391,10 @@ class PlayerPageState extends State<PlayerPage> {
     }
     _gpuCapabilitySnapshot = snapshot;
     _hdrMappingExperimentActive = experimentAllowed;
+    if (experimentAllowed) {
+      // 从实验真正启用后再建立累计掉帧基线，避免把媒体打开阶段算作 HDR 成本。
+      _hdrMappingSafetyCoordinator.reset();
+    }
     debugPrint(
       'PLAYER_GPU_CAPABILITY renderer=${snapshot.rendererDetected} '
       'api=${snapshot.gpuApi} context=${snapshot.gpuContext} '
@@ -3171,17 +3206,29 @@ class PlayerPageState extends State<PlayerPage> {
       'HDR 源信号: ${_gpuCapabilitySnapshot?.hdrSourceDetected == true ? '已检测' : '未检测'}',
       'HDR 动态映射实验设置: ${_effectivePlaybackSettings.hdrDynamicToneMappingExperimentEnabled ? '开启' : '关闭'}',
       'HDR 动态映射会话: ${_hdrMappingExperimentActive ? '已通过门槛并启用' : '未启用 / 门槛未通过'}',
+      'HDR 会话压力保护: ${_hdrMappingSafetyCoordinator.reason}',
+      'HDR 自动回滚原因: ${_hdrMappingRollbackReason ?? '无'}',
+      'HDR 自动回滚时间: ${_hdrMappingRollbackAt?.toIso8601String() ?? 'none'}',
       'mpv HDR 映射曲线: ${mpv['tone-mapping']}',
       'mpv HDR 动态峰值: ${mpv['hdr-compute-peak']}',
       '第三阶段能力状态: ${_gpuCapabilitySnapshot?.readinessLabel ?? '等待当前媒体能力检测'}',
-      ...?_gpuCapabilitySnapshot?.capabilityMatrix.adapters.map(
-        (adapter) => 'GPU[${adapter.enumerationIndex}]: ${adapter.name} · '
-            'VID ${adapter.vendorId.toRadixString(16).padLeft(4, '0')} '
-            'DID ${adapter.deviceId.toRadixString(16).padLeft(4, '0')} · '
-            'VRAM ${_formatBytes(adapter.dedicatedVideoMemoryBytes)} · '
-            'D3D ${adapter.d3dFeatureLevel} · '
-            'Compute ${adapter.computeShaderSupported ? '是' : '否'} · '
-            'Vulkan ${adapter.vulkanSupported ? adapter.vulkanApiVersion ?? '是' : '否'}',
+      ...?_gpuCapabilitySnapshot?.capabilityMatrix.adapters.expand(
+        (adapter) => <String>[
+          'GPU[${adapter.enumerationIndex}]: ${adapter.name} · '
+              'VID ${adapter.vendorId.toRadixString(16).padLeft(4, '0')} '
+              'DID ${adapter.deviceId.toRadixString(16).padLeft(4, '0')} · '
+              'VRAM ${_formatBytes(adapter.dedicatedVideoMemoryBytes)} · '
+              'D3D ${adapter.d3dFeatureLevel} · '
+              'Compute ${adapter.computeShaderSupported ? '是' : '否'} · '
+              'Vulkan ${adapter.vulkanSupported ? adapter.vulkanApiVersion ?? '是' : '否'}',
+          for (final output in adapter.outputs)
+            '显示输出 ${output.deviceName}: '
+                '${output.desktopWidth}x${output.desktopHeight} · '
+                '${output.bitsPerColor ?? 0} bit · '
+                '${output.colorSpace ?? 'unavailable'} · '
+                'HDR 信号 ${output.hdrSignalActive ? '活动' : '未活动'} · '
+                '峰值 ${output.maxLuminanceNits?.toStringAsFixed(1) ?? 'unknown'} nits',
+        ],
       ),
       'mpv AV \u504f\u79fb: ${mpv['avsync']}',
       'mpv AV \u7d2f\u8ba1\u4fee\u6b63: ${mpv['total-avsync-change']}',
@@ -3483,6 +3530,8 @@ class PlayerPageState extends State<PlayerPage> {
 
   @override
   void dispose() {
+    // 路由或测试直接卸载播放器时同样进入退出态，禁止尚未结束的健康采样把释放期停顿误判为 HDR 压力。
+    _isExiting = true;
     _openRequests.cancel();
     _controlsHideTimer?.cancel();
     _shortcutFeedbackTimer?.cancel();

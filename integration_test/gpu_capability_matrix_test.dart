@@ -52,6 +52,17 @@ void main() {
           .where((adapter) => adapter.luid == active.adapterLuid)
           .toList(growable: false);
       expect(selected, hasLength(1));
+      final attachedOutputs = selected.single.outputs
+          .where((output) => output.attachedToDesktop)
+          .toList(growable: false);
+      expect(attachedOutputs, isNotEmpty);
+      for (final output in attachedOutputs) {
+        expect(output.deviceName, isNotEmpty);
+        expect(output.desktopWidth, greaterThan(0));
+        expect(output.desktopHeight, greaterThan(0));
+        expect(output.bitsPerColor, greaterThan(0));
+        expect(output.colorSpace, isNot('unavailable'));
+      }
 
       final computeBudget =
           await backend.benchmarkGpuComputeFrameBudget(active.adapterLuid!);

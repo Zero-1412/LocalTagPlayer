@@ -37,7 +37,7 @@
 
 ## 第三阶段门槛
 
-AI 超分、时域降噪、运动补帧、HDR 映射与 Vulkan / Compute Shader 在实现前必须由 `PlayerGpuCapabilityDetector` 读取当前 `PlayerBackend` 的真实渲染 API、上下文、硬解与 HDR 源信号。后续原生设备矩阵已补齐 Compute / Vulkan 能力位；当前双硬件卡环境仍无法唯一确认活动适配器，所以第三阶段继续锁定，详见 `player_gpu_capability_matrix_20260722.md`。
+原生设备矩阵已补齐 Compute / Vulkan 能力位，实际 MediaKit / ANGLE 渲染边界也已返回活动 adapter LUID 并精确匹配 RTX 4070 SUPER。第三阶段只开放默认关闭的 HDR 动态映射单项实验，固定 300 秒 HDR 长播和独立 180 秒 SDR 暗部关闭态基线已经完成；运动补帧与时域降噪仍锁定，详见 `player_gpu_capability_matrix_20260722.md` 与 `player_hdr_sdr_baseline_20260722.md`。
 
 ## 自动协调器真实窗口复验
 

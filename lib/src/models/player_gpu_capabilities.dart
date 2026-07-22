@@ -1,5 +1,70 @@
 // ignore_for_file: slash_for_doc_comments
 
+/** 当前 DXGI 桌面输出的真实色彩空间与亮度快照。 */
+class PlayerGpuDisplayOutput {
+  const PlayerGpuDisplayOutput({
+    required this.deviceName,
+    required this.attachedToDesktop,
+    required this.desktopLeft,
+    required this.desktopTop,
+    required this.desktopWidth,
+    required this.desktopHeight,
+    required this.bitsPerColor,
+    required this.colorSpace,
+    required this.hdrSignalActive,
+    required this.minLuminanceNits,
+    required this.maxLuminanceNits,
+    required this.maxFullFrameLuminanceNits,
+  });
+
+  final String deviceName;
+  final bool attachedToDesktop;
+  final int desktopLeft;
+  final int desktopTop;
+  final int desktopWidth;
+  final int desktopHeight;
+  final int? bitsPerColor;
+  final String? colorSpace;
+  final bool hdrSignalActive;
+  final double? minLuminanceNits;
+  final double? maxLuminanceNits;
+  final double? maxFullFrameLuminanceNits;
+
+  factory PlayerGpuDisplayOutput.fromPlatformMap(
+    Map<Object?, Object?> value,
+  ) =>
+      PlayerGpuDisplayOutput(
+        deviceName: _string(value['deviceName']),
+        attachedToDesktop: value['attachedToDesktop'] == true,
+        desktopLeft: _int(value['desktopLeft']),
+        desktopTop: _int(value['desktopTop']),
+        desktopWidth: _int(value['desktopWidth']),
+        desktopHeight: _int(value['desktopHeight']),
+        bitsPerColor: _nullableInt(value['bitsPerColor']),
+        colorSpace: _nullableString(value['colorSpace']),
+        hdrSignalActive: value['hdrSignalActive'] == true,
+        minLuminanceNits: _nullableDouble(value['minLuminanceNits']),
+        maxLuminanceNits: _nullableDouble(value['maxLuminanceNits']),
+        maxFullFrameLuminanceNits:
+            _nullableDouble(value['maxFullFrameLuminanceNits']),
+      );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'deviceName': deviceName,
+        'attachedToDesktop': attachedToDesktop,
+        'desktopLeft': desktopLeft,
+        'desktopTop': desktopTop,
+        'desktopWidth': desktopWidth,
+        'desktopHeight': desktopHeight,
+        'bitsPerColor': bitsPerColor,
+        'colorSpace': colorSpace,
+        'hdrSignalActive': hdrSignalActive,
+        'minLuminanceNits': minLuminanceNits,
+        'maxLuminanceNits': maxLuminanceNits,
+        'maxFullFrameLuminanceNits': maxFullFrameLuminanceNits,
+      };
+}
+
 /** 单个物理显卡适配器的只读能力快照。 */
 class PlayerGpuAdapterCapabilities {
   const PlayerGpuAdapterCapabilities({
@@ -20,6 +85,7 @@ class PlayerGpuAdapterCapabilities {
     required this.vulkanSupported,
     required this.vulkanApiVersion,
     required this.vulkanDeviceName,
+    this.outputs = const <PlayerGpuDisplayOutput>[],
   });
 
   /** DXGI 返回的适配器名称。 */
@@ -73,6 +139,9 @@ class PlayerGpuAdapterCapabilities {
   /** Vulkan 物理设备名称，仅用于核对 DXGI 匹配结果。 */
   final String? vulkanDeviceName;
 
+  /** 当前连接在该适配器上的 DXGI 桌面输出。 */
+  final List<PlayerGpuDisplayOutput> outputs;
+
   /** 从 StandardMethodCodec 的平台 Map 安全解析单个适配器。 */
   factory PlayerGpuAdapterCapabilities.fromPlatformMap(
     Map<Object?, Object?> value,
@@ -97,6 +166,12 @@ class PlayerGpuAdapterCapabilities {
         vulkanSupported: value['vulkanSupported'] == true,
         vulkanApiVersion: _nullableString(value['vulkanApiVersion']),
         vulkanDeviceName: _nullableString(value['vulkanDeviceName']),
+        outputs: value['outputs'] is List
+            ? (value['outputs']! as List)
+                .whereType<Map<Object?, Object?>>()
+                .map(PlayerGpuDisplayOutput.fromPlatformMap)
+                .toList(growable: false)
+            : const <PlayerGpuDisplayOutput>[],
       );
 
   /** 输出不含路径和用户数据的设备矩阵 JSON。 */
@@ -118,6 +193,7 @@ class PlayerGpuAdapterCapabilities {
         'vulkanSupported': vulkanSupported,
         'vulkanApiVersion': vulkanApiVersion,
         'vulkanDeviceName': vulkanDeviceName,
+        'outputs': outputs.map((output) => output.toJson()).toList(),
       };
 }
 

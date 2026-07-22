@@ -705,7 +705,17 @@
 ## 2026-07-22 活动 adapter LUID、Compute 帧预算与 HDR 单项实验
 
 - MediaKit 固定源码的 `ANGLESurfaceManager` 在实际 D3D11 device 创建和销毁时登记 adapter LUID，runner 从插件 DLL 导出读取；不修改 Pub Cache，也不再以单硬件卡或 Feature Level 推断活动显卡。
-- 当前生产纹理返回 LUID `00000000:00016bec`，在系统矩阵中唯一匹配 RTX 4070 SUPER。显式 QA 使用 D3D11 GPU timestamp 对 HDR 类 Compute kernel 各采样 16 次，1080p / 4K P95 为 0.041ms / 0.127ms，均低于 60fps 的 4.167ms 预留切片。
+- 当前生产纹理返回 LUID `00000000:00016bec`，在系统矩阵中唯一匹配 RTX 4070 SUPER。显式 QA 使用 D3D11 GPU timestamp 对 HDR 类 Compute kernel 各采样 16 次，1080p / 4K P95 为 0.036ms / 0.129ms，均低于 60fps 的 4.167ms 预留切片。
 - 第三阶段只增加 HDR 动态映射实验；设置默认关闭且启用前确认，真实播放必须同时确认 HDR 源、精确活动 LUID 和 Compute 能力才应用 `hable + hdr-compute-peak=yes`，关闭或门槛未过恢复 `auto`。
 - Windows integration test 真实点击开启和关闭并保存两态截图；真实 MediaKit 后端另行验证 `hable/yes → auto/auto`。运动补帧、时域降噪和暗部增强未并行加入。
 - filtered queue 来源、内容、顺序与当前 index 未改变；SQLite schema、`FilterQuery` / `TagQueryService`、缓存队列、稳定身份和用户数据均保持不变。
+
+## 2026-07-22 HDR 长播、压力回滚与设置拆分
+
+- 主设置首页把旧“播放与继续观看”按职责拆为“播放与解码”和“视频画质与增强”；继续观看、硬解和码流缓存留在前者，比例、缩放、色彩、自动画质、超分与 HDR 实验进入后者。两页仍共享同一 `PlaybackSettings` 快照与保存链。
+- Windows 原生 GPU 矩阵在 adapter 下新增 DXGI 显示输出：当前活动 RTX 4070 SUPER 的 `DISPLAY1` 为 3840×2160、8 bit、`rgb-full-g22-p709`、HDR 信号未活动、峰值 417 nits；播放诊断展示实际输出，不从 HDR 源推断显示器状态。
+- 固定 HDR10/PQ 1080p 样本真实长播 302 秒：60 个诊断样本的解码/总掉帧最大值为 0，停滞 0，全部平滑，会话结束仍启用 Hable 与 Compute peak；进程 GPU Engine 中位/P95 为 6.7% / 9.6%，GPU committed 为 458.5 / 470.4 MiB。
+- 固定 SDR 暗部 1080p 样本独立长播 182 秒：36 个诊断样本为 0 掉帧、0 停滞，近黑渐变和相邻灰阶可辨；该结果只作为暗部增强关闭态对照，不与 HDR 结果混算。
+- HDR 压力协调器复用两秒健康样本：新增掉帧、缓冲或音视频停滞立即回滚；中等 FPS、缓存或帧推进压力连续两次回滚；seek、暂停和释放期不评估，回滚只锁存当前媒体且不修改持久开关。
+- 固定样本采证同时保存播放器后端帧和 PID 绑定 `PrintWindow` 窗口截图，避免前台覆盖污染；真实点击覆盖设置首页、画质页、HDR 开启和关闭四态，未见截断、遮挡、溢出或状态歧义。
+- 完整口径见 `docs/qa/player_hdr_sdr_baseline_20260722.md`。filtered queue 来源/内容/顺序、当前 index、SQLite、标签语义、稳定身份、缩略图/媒体详情队列与用户数据均未改变。

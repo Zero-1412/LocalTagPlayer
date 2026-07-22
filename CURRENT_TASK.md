@@ -4,12 +4,24 @@
 
 ## 活跃任务
 
+### 2026-07-22 HDR 长播、会话回滚与 SDR 暗部基线
+
+- 目标：固定 HDR 样本验证长播观感、掉帧、GPU 功耗和显示输出；运行时压力自动回滚本次 HDR 会话；暗部增强继续使用独立 SDR 基线。
+- 当前状态：已完成。主设置页把原“播放与继续观看”拆为“播放与解码”和独立“视频画质与增强”；继续观看、硬解和码流缓存留在前者，比例、缩放、色彩、自动画质、超分与 HDR 实验进入后者，仍共用同一设置快照与保存链。
+- Windows DXGI 输出探针现返回每块 adapter 的桌面输出、分辨率、位深、色彩空间、HDR 信号和亮度元数据。当前活动 RTX 4070 SUPER 的 `DISPLAY1` 为 3840×2160、8 bit、`rgb-full-g22-p709`、HDR 信号未活动、峰值 417 nits；本轮 HDR 结论是映射到 SDR 显示输出，不宣称 HDR 直通。
+- 固定 1080p HDR10/PQ 样本长播 302 秒，共 60 个 5 秒诊断样本：解码/输出/总掉帧最大值均为 0，停滞 0，全部 `smooth=true`，会话结束仍为 `hable + hdr-compute-peak=yes` 且无自动回滚。进程 GPU Engine 中位/P95 为 6.7% / 9.6%，GPU committed 为 458.5 / 470.4 MiB；NVIDIA-SMI 整卡功耗中位/P95 为 157.77 / 168.31 W，不能冒充进程功耗。
+- 固定 1080p SDR 暗部样本长播 182 秒，共 36 个诊断样本：解码/输出/总掉帧最大值均为 0，停滞 0，全部 `smooth=true`。进程 GPU Engine 中位/P95 为 5.1% / 5.7%，GPU committed 为 301.4 / 308.4 MiB；近黑梯度与相邻灰阶可辨，作为暗部增强关闭态原始对照。
+- HDR 压力保护复用两秒播放健康样本：新增掉帧、缓冲或音视频停滞立即回滚；帧推进、缓存或 FPS 中等压力连续两次才回滚；seek/暂停不评估，回滚锁存到下一媒体且不改写持久开关。释放期进入退出态，避免销毁停顿误触发。
+- 真实点击已覆盖“设置 → 视频画质与增强 → HDR 实验 → 确认 → 关闭”，首页拆分、画质页和两态截图均无截断、遮挡、溢出或状态歧义，证据位于 `.local/qa/hdr-mapping/`；固定样本 JSON、进程指标、后端帧和窗口截图位于 `.local/qa/fixed-quality-baseline/`。
+- 最终 `flutter analyze`、完整 253 项测试、Windows Debug build、活动 LUID / Compute / 显示输出 integration test、设置真实点击和固定样本长播/短复测均通过；3 项显式真实媒体 benchmark 按设计跳过。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、缩略图/媒体详情队列、稳定身份或用户数据。
+
 ### 2026-07-22 原生 GPU 能力矩阵与第三阶段闸门
 
 - 目标：从实际 MediaKit / ANGLE 渲染设备返回活动 adapter LUID，在该 LUID 上建立 1080p / 4K Compute 帧预算，只选择一个第三阶段功能做默认关闭、可回滚实验；暗部增强保持独立观感与性能基线。
 - 当前状态：已完成。构建期只替换固定 SHA256 的 MediaKit `ANGLESurfaceManager` 单个源文件，在真实 D3D11 device 创建/销毁处登记 LUID；不修改 Pub Cache，不按枚举顺序、Feature Level、名称或显存占用推断活动显卡。
 - 当前设备矩阵：RTX 4070 SUPER（约 11.72 GiB 专用显存）与 AMD Radeon Graphics（约 460 MiB 专用显存）均为 D3D 12_1、Compute 已验证、Vulkan 已匹配；Microsoft Basic Render Driver 标记为软件适配器，不参与活动硬件卡选择。完整证据见 `docs/qa/player_gpu_capability_matrix_20260722.md`。
-- 实际生产渲染设备返回 LUID `00000000:00016bec`，精确匹配 RTX 4070 SUPER。D3D11 HDR 类 Compute kernel 在 60fps 的 4.167ms 预留切片下，1080p P95 为 0.041ms、4K P95 为 0.127ms，两档均通过；JSON 位于 `.local/qa/gpu-capability-matrix/active-device-compute-budget.json`。
+- 实际生产渲染设备返回 LUID `00000000:00016bec`，精确匹配 RTX 4070 SUPER。D3D11 HDR 类 Compute kernel 在 60fps 的 4.167ms 预留切片下，1080p P95 为 0.036ms、4K P95 为 0.129ms，两档均通过；JSON 位于 `.local/qa/gpu-capability-matrix/active-device-compute-budget.json`。
 - 第三阶段只开放“HDR 动态映射实验”：默认关闭，开启前确认；只有当前媒体为 HDR、活动 LUID 精确匹配且 Compute 能力验证后才对会话应用 `hable + hdr-compute-peak=yes`，关闭或门槛不满足时恢复 `auto`。运动补帧与时域降噪保持未启动。
 - `tool/run_gpu_capability_matrix.ps1` 可重建活动 LUID、设备矩阵和 1080p / 4K 预算；压测显式触发并在原生后台执行，普通播放启动不运行 Compute 基线。
 - 暗部增强不与第三阶段 Compute 功能共用结论；需固定 SDR 暗场样本，分别评估暗部细节、黑位抬升、色带、CPU/GPU、掉帧和 UI 响应后再决定是否进入自动协调器。

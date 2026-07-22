@@ -1,10 +1,19 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-22 · HDR 长播基线、会话压力回滚与画质设置拆分
+
+- 主设置页把“播放与继续观看”重命名并拆分为“播放与解码”和“视频画质与增强”；继续观看、硬解、码流缓存与画质渲染各归其位，仍使用同一 `PlaybackSettings` 保存链。
+- Windows GPU 探针通过 DXGI 输出活动显示器的分辨率、位深、色彩空间、HDR 信号和亮度元数据；播放诊断同步展示，不再用 HDR 媒体或显卡能力推断显示输出状态。
+- 新增固定 HDR10/PQ 与 SDR 暗部样本生成器、长播 integration test 和进程监控脚本。300 秒 HDR 与 180 秒 SDR 记录期均为 0 掉帧、0 停滞、窗口 0 次无响应；视频后端帧与 PID 绑定窗口截图避免桌面遮挡污染证据。
+- HDR 会话压力协调器复用既有健康样本，严重压力立即恢复 `auto`，中等压力连续两次才回滚；回滚仅作用于当前媒体会话，不改写用户全局设置，seek、暂停和释放期不误判。
+- 当前显示输出为 3840×2160、8 bit、BT.709 全范围且 HDR 信号未活动，因此本次为 HDR10/PQ 源经 Hable 映射到 SDR 输出；暗部增强继续以独立 SDR 关闭态基线推进。
+- SQLite、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列、稳定身份与用户数据未修改。
+
 ## 2026-07-22 · 活动渲染 LUID、Compute 帧预算与 HDR 单项实验
 
 - MediaKit 固定版本的 `ANGLESurfaceManager` 在真实 D3D11 device 创建/销毁边界登记活动 adapter LUID；runner 通过显式导出读取，Pub Cache 保持只读，Feature Level、名称、显存占用和 DXGI 顺序不再用于活动显卡选择。
 - `PlayerGpuRenderBoundary` 新增活动适配器证据与显式 Compute 基线；普通播放只读取轻量 LUID，1080p / 4K D3D11 timestamp benchmark 仅由 QA 脚本后台运行，不阻塞 Flutter 平台线程或正常播放。
-- 当前 MediaKit 纹理返回 `00000000:00016bec` 并精确匹配 RTX 4070 SUPER；60fps 4.167ms Compute 切片下，HDR 类 kernel 的 1080p / 4K P95 分别为 0.041ms / 0.127ms，两档通过。
+- 当前 MediaKit 纹理返回 `00000000:00016bec` 并精确匹配 RTX 4070 SUPER；60fps 4.167ms Compute 切片下，HDR 类 kernel 的 1080p / 4K P95 分别为 0.036ms / 0.129ms，两档通过。
 - 第三阶段只增加默认关闭的 HDR 动态映射实验。主设置页启用前确认；播放器仅在 HDR 源、精确活动 LUID 和 Compute 能力均通过时应用 Hable 与动态峰值，关闭完整恢复 mpv 自动值。运动补帧、时域降噪与暗部增强未并行加入。
 - Windows integration test 完成设置页真实点击与开启/回滚截图；真实 MediaKit/libmpv 会话确认 `tone-mapping` 与 `hdr-compute-peak` 可从 `hable/yes` 回到 `auto/auto`。
 - `flutter analyze`、完整 251 项测试、Windows Debug build、活动 LUID / Compute 基线 integration test 与 HDR 两态点击 integration test 全部通过，3 项显式 benchmark 跳过。

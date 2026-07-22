@@ -2868,6 +2868,7 @@ void main() {
             confirmBeforeDeletingVideo: true,
             moveDeletedFileToTrash: false,
             onOpenPlayback: () => openedSections.add('playback'),
+            onOpenVideoQuality: () => openedSections.add('quality'),
             onOpenPlayerInteraction: () => openedSections.add('interaction'),
             onOpenFileDeletion: () => openedSections.add('deletion'),
             onOpenDataBackup: () => openedSections.add('backup'),
@@ -2879,7 +2880,9 @@ void main() {
 
     expect(find.text('播放设置'), findsOneWidget);
     expect(find.text('数据与维护'), findsOneWidget);
-    expect(find.text('当前策略：每次询问 · 解码、缓存与画质'), findsOneWidget);
+    expect(find.text('播放与解码'), findsOneWidget);
+    expect(find.text('视频画质与增强'), findsOneWidget);
+    expect(find.text('继续观看：每次询问 · 硬解与码流缓存'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('settings.resumeBehavior.summary')),
       findsOneWidget,
@@ -2887,10 +2890,11 @@ void main() {
     expect(find.byType(Switch), findsNothing);
     expect(find.byType(Slider), findsNothing);
     expect(find.byType(DropdownButtonFormField<dynamic>), findsNothing);
-    expect(find.byType(AppInteractionSurface), findsNWidgets(5));
+    expect(find.byType(AppInteractionSurface), findsNWidgets(6));
 
     for (final entry in <(String, String)>[
       ('settings.category.playback', 'playback'),
+      ('settings.category.videoQuality', 'quality'),
       ('settings.category.playerInteraction', 'interaction'),
       ('settings.category.fileDeletion', 'deletion'),
       ('settings.category.dataBackup', 'backup'),
@@ -3867,6 +3871,78 @@ void main() {
     );
     expect(profile.label, '4K · CPU 软件解码');
     expect(profile.maximumLevel, PlayerAdaptiveQualityLevel.off);
+  });
+
+  test('HDR safety rolls back on new drops and latches for current media', () {
+    final coordinator = PlayerHdrMappingSafetyCoordinator();
+    var sampledAt = DateTime.utc(2026, 7, 22, 8);
+
+    PlayerAdaptiveQualitySample sample({int totalDrops = 0}) {
+      sampledAt = sampledAt.add(const Duration(seconds: 2));
+      return PlayerAdaptiveQualitySample(
+        sampledAt: sampledAt,
+        playing: true,
+        buffering: false,
+        recentSeek: false,
+        videoAdvanced: true,
+        videoStalled: false,
+        audioStalled: false,
+        width: 1920,
+        height: 1080,
+        hwdecCurrent: 'd3d11va-copy',
+        sourceFps: 30,
+        estimatedFps: 30,
+        cacheDuration: 12,
+        decoderDroppedFrames: 0,
+        outputDroppedFrames: 0,
+        totalDroppedFrames: totalDrops,
+      );
+    }
+
+    expect(coordinator.evaluate(sample()).shouldRollback, isFalse);
+    final rollback = coordinator.evaluate(sample(totalDrops: 1));
+    expect(rollback.shouldRollback, isTrue);
+    expect(rollback.reason, contains('自动回滚'));
+    expect(coordinator.rollbackLatched, isTrue);
+    expect(
+      coordinator.evaluate(sample(totalDrops: 1)).shouldRollback,
+      isFalse,
+    );
+    coordinator.reset();
+    expect(coordinator.rollbackLatched, isFalse);
+    expect(coordinator.evaluate(sample(totalDrops: 1)).shouldRollback, isFalse);
+  });
+
+  test('HDR safety requires two consecutive moderate pressure samples', () {
+    final coordinator = PlayerHdrMappingSafetyCoordinator();
+    var sampledAt = DateTime.utc(2026, 7, 22, 9);
+
+    PlayerAdaptiveQualitySample sample(double estimatedFps) {
+      sampledAt = sampledAt.add(const Duration(seconds: 2));
+      return PlayerAdaptiveQualitySample(
+        sampledAt: sampledAt,
+        playing: true,
+        buffering: false,
+        recentSeek: false,
+        videoAdvanced: true,
+        videoStalled: false,
+        audioStalled: false,
+        width: 1920,
+        height: 1080,
+        hwdecCurrent: 'd3d11va-copy',
+        sourceFps: 60,
+        estimatedFps: estimatedFps,
+        cacheDuration: 12,
+        decoderDroppedFrames: 0,
+        outputDroppedFrames: 0,
+        totalDroppedFrames: 0,
+      );
+    }
+
+    expect(coordinator.evaluate(sample(56)).shouldRollback, isFalse);
+    final rollback = coordinator.evaluate(sample(56));
+    expect(rollback.shouldRollback, isTrue);
+    expect(rollback.consecutivePressureSamples, 2);
   });
 
   test('adaptive quality keeps unknown resolution disabled', () {

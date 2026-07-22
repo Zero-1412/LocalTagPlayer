@@ -654,6 +654,7 @@ class CacheSettingsPage extends StatefulWidget {
 enum _SettingsSection {
   home,
   playback,
+  videoQuality,
   playerInteraction,
   fileDeletion,
   dataBackup,
@@ -672,6 +673,7 @@ class SettingsLandingList extends StatelessWidget {
     required this.confirmBeforeDeletingVideo,
     required this.moveDeletedFileToTrash,
     required this.onOpenPlayback,
+    required this.onOpenVideoQuality,
     required this.onOpenPlayerInteraction,
     required this.onOpenFileDeletion,
     required this.onOpenDataBackup,
@@ -689,6 +691,9 @@ class SettingsLandingList extends StatelessWidget {
 
   /** 打开播放与解码二级页。 */
   final VoidCallback onOpenPlayback;
+
+  /** 打开视频画质与增强二级页。 */
+  final VoidCallback onOpenVideoQuality;
 
   /** 打开播放器交互二级页。 */
   final VoidCallback onOpenPlayerInteraction;
@@ -722,11 +727,18 @@ class SettingsLandingList extends StatelessWidget {
             _SettingsNavigationTile(
               key: const ValueKey('settings.category.playback'),
               icon: Icons.play_circle_outline_rounded,
-              title: '播放与继续观看',
+              title: '播放与解码',
               subtitle:
-                  '当前策略：${PlaybackSettings.resumeLabelFor(resumeBehavior)} · 解码、缓存与画质',
+                  '继续观看：${PlaybackSettings.resumeLabelFor(resumeBehavior)} · 硬解与码流缓存',
               statusLabel: PlaybackSettings.resumeLabelFor(resumeBehavior),
               onTap: onOpenPlayback,
+            ),
+            _SettingsNavigationTile(
+              key: const ValueKey('settings.category.videoQuality'),
+              icon: Icons.auto_awesome_outlined,
+              title: '视频画质与增强',
+              subtitle: '画面比例、缩放与色彩 · 自动画质、超分与 HDR 实验',
+              onTap: onOpenVideoQuality,
             ),
             _SettingsNavigationTile(
               key: const ValueKey('settings.category.playerInteraction'),
@@ -773,6 +785,47 @@ class SettingsLandingList extends StatelessWidget {
 }
 
 /**
+ * 播放与解码页中的原始码流缓存设置。
+ *
+ * 该开关只影响播放器会话的 demux 内存窗口，不复制媒体文件，也不触发缩略图或
+ * 媒体详情缓存任务；因此与解码策略放在同一入口，而不是混入画质增强页面。
+ */
+class _PlaybackStreamCacheCard extends StatelessWidget {
+  const _PlaybackStreamCacheCard({
+    required this.settings,
+    required this.onChanged,
+  });
+
+  /** 当前播放设置快照。 */
+  final PlaybackSettings settings;
+
+  /** 保存更新后的完整设置快照。 */
+  final ValueChanged<PlaybackSettings> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      key: const ValueKey('settings.playback.streamCache.card'),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: SwitchListTile.adaptive(
+          key: const ValueKey('settings.playbackQuality.streamCache'),
+          contentPadding: EdgeInsets.zero,
+          value: settings.highQualityStreamCacheEnabled,
+          title: const Text('缓存原始高清码流'),
+          subtitle: const Text(
+            '为当前会话保留 96 MiB 前向、32 MiB 回看内存窗口；不复制源文件',
+          ),
+          onChanged: (value) => onChanged(
+            settings.copyWith(highQualityStreamCacheEnabled: value),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/**
  * 第一阶段播放质量设置。
  *
  * 控件只保存播放会话参数，不在设置页启动解码、FFprobe 或媒体库重算；新播放器
@@ -809,17 +862,6 @@ class _PlaybackQualitySettingsPanel extends StatelessWidget {
               style: TextStyle(color: libraryTextMuted, height: 1.45),
             ),
             const SizedBox(height: 14),
-            SwitchListTile.adaptive(
-              key: const ValueKey('settings.playbackQuality.streamCache'),
-              contentPadding: EdgeInsets.zero,
-              value: settings.highQualityStreamCacheEnabled,
-              title: const Text('缓存原始高清码流'),
-              subtitle: const Text('为当前会话保留 96 MiB 前向、32 MiB 回看内存窗口；不复制源文件'),
-              onChanged: (value) => onChanged(
-                settings.copyWith(highQualityStreamCacheEnabled: value),
-              ),
-            ),
-            const Divider(height: 20),
             DropdownButtonFormField<PlayerVideoAspectMode>(
               key: const ValueKey('settings.playbackQuality.aspect'),
               initialValue: settings.videoAspectMode,
@@ -1679,7 +1721,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   /** 当前层级的页面标题。 */
   String get _sectionTitle => switch (_section) {
         _SettingsSection.home => '设置',
-        _SettingsSection.playback => '播放与继续观看',
+        _SettingsSection.playback => '播放与解码',
+        _SettingsSection.videoQuality => '视频画质与增强',
         _SettingsSection.playerInteraction => '播放器交互',
         _SettingsSection.fileDeletion => '删除文件',
         _SettingsSection.dataBackup => '视频数据备份',
@@ -1748,6 +1791,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                     moveDeletedFileToTrash: _settings.moveDeletedFileToTrash,
                     onOpenPlayback: () =>
                         _openSection(_SettingsSection.playback),
+                    onOpenVideoQuality: () =>
+                        _openSection(_SettingsSection.videoQuality),
                     onOpenPlayerInteraction: () =>
                         _openSection(_SettingsSection.playerInteraction),
                     onOpenFileDeletion: () =>
@@ -1833,6 +1878,18 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                           ),
                         ),
                         const SizedBox(height: 16),
+                        _PlaybackStreamCacheCard(
+                          settings: _settings,
+                          onChanged: (settings) {
+                            setState(() => _settings = settings);
+                            unawaited(
+                              widget.onPlaybackSettingsChanged(settings),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_section == _SettingsSection.videoQuality) ...[
                         _PlaybackQualitySettingsPanel(
                           settings: _settings,
                           onChanged: (settings) {

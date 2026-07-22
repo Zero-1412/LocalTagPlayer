@@ -10,8 +10,11 @@ $resolvedProfile = [System.IO.Path]::GetFullPath((Join-Path $workspace $ProfileP
 New-Item -ItemType Directory -Force -Path $resolvedOutput | Out-Null
 New-Item -ItemType Directory -Force -Path $resolvedProfile | Out-Null
 Remove-Item -Force -ErrorAction SilentlyContinue `
+  (Join-Path $resolvedOutput "settings-playback-split.ready"), `
+  (Join-Path $resolvedOutput "video-quality-page.ready"), `
   (Join-Path $resolvedOutput "hdr-mapping-enabled.ready"), `
-  (Join-Path $resolvedOutput "hdr-mapping-rollback.ready")
+  (Join-Path $resolvedOutput "hdr-mapping-rollback.ready"), `
+  (Join-Path $resolvedOutput "process.pid")
 
 # Pixel capture only. The integration test owns all clicks and never enables Windows UIA.
 $captureJob = Start-Job -ArgumentList $resolvedOutput -ScriptBlock {
@@ -26,17 +29,27 @@ public static class LtpHdrWindowCapture {
   [DllImport("user32.dll")]
   public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
   [DllImport("user32.dll")]
+  public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint flags);
+  [DllImport("user32.dll")]
   public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 }
 '@
   [LtpHdrWindowCapture]::SetProcessDpiAwarenessContext([IntPtr](-4)) | Out-Null
 
-  foreach ($name in @("hdr-mapping-enabled", "hdr-mapping-rollback")) {
+  foreach ($name in @(
+      "settings-playback-split",
+      "video-quality-page",
+      "hdr-mapping-enabled",
+      "hdr-mapping-rollback"
+    )) {
     $marker = Join-Path $Output "$name.ready"
     while (-not (Test-Path -LiteralPath $marker)) { Start-Sleep -Milliseconds 100 }
-    $process = Get-Process local_tag_player |
-      Where-Object MainWindowHandle -ne 0 |
-      Select-Object -First 1
+    $pidPath = Join-Path $Output "process.pid"
+    $testPid = [int]((Get-Content -LiteralPath $pidPath -Raw).Trim())
+    $process = Get-Process -Id $testPid -ErrorAction Stop
+    if ($process.MainWindowHandle -eq 0) {
+      throw "HDR QA process has no main window."
+    }
     $rect = New-Object LtpHdrWindowCapture+RECT
     if (-not ([LtpHdrWindowCapture]::GetWindowRect(
         $process.MainWindowHandle, [ref]$rect))) {
@@ -46,9 +59,15 @@ public static class LtpHdrWindowCapture {
       $rect.Right - $rect.Left,
       $rect.Bottom - $rect.Top)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $graphics.CopyFromScreen(
-      $rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+    $deviceContext = $graphics.GetHdc()
+    $capturedWindow = [LtpHdrWindowCapture]::PrintWindow(
+      $process.MainWindowHandle, $deviceContext, 2)
+    $graphics.ReleaseHdc($deviceContext)
     $graphics.Dispose()
+    if (-not $capturedWindow) {
+      $bitmap.Dispose()
+      throw "PrintWindow failed for isolated HDR QA."
+    }
     $bitmap.Save((Join-Path $Output "$name.png"))
     $bitmap.Dispose()
   }
@@ -72,7 +91,12 @@ try {
   Pop-Location
 }
 
-foreach ($name in @("hdr-mapping-enabled.png", "hdr-mapping-rollback.png")) {
+foreach ($name in @(
+    "settings-playback-split.png",
+    "video-quality-page.png",
+    "hdr-mapping-enabled.png",
+    "hdr-mapping-rollback.png"
+  )) {
   if (-not (Test-Path -LiteralPath (Join-Path $resolvedOutput $name))) {
     throw "Missing visual QA screenshot: $name"
   }

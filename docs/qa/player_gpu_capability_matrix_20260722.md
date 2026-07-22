@@ -39,14 +39,24 @@ match  = NVIDIA GeForce RTX 4070 SUPER
 
 这消除了 RTX 与 AMD 同为 D3D 12_1 时的歧义。构建期只对已固定 SHA256 的单个上游源文件做可审计补丁，不写入 Pub Cache；若上游标记片段变化，CMake 配置直接失败。
 
+## 当前显示输出
+
+DXGI 探针在每块 adapter 下枚举 `IDXGIOutput`，并用 `IDXGIOutput6::GetDesc1` 返回当前桌面输出；该数据与显卡 Compute/Vulkan 能力分开，不从媒体色彩参数推断：
+
+| 活动 adapter 输出 | 桌面 | 位深 | 色彩空间 | HDR 信号 | 最小 / 峰值 / 全屏峰值亮度 |
+|---|---:|---:|---|---|---:|
+| `\\.\DISPLAY1` | 3840×2160 | 8 bit | `rgb-full-g22-p709` | 未活动 | 0.01 / 417 / 417 nits |
+
+当前固定 HDR10/PQ 样本因此属于播放器 HDR 映射到 SDR 输出的验证，不是 HDR passthrough。输出证据随当前桌面配置变化，应在显示设置、线缆或显示器变化后重新采集。
+
 ## 1080p / 4K Compute 帧预算
 
 基线在上述活动 LUID 上创建独立 D3D11 compute device，运行与 HDR 映射相近的逐像素 Hable 类 kernel。每档 3 次预热、16 次正式样本，只用 `D3D11_QUERY_TIMESTAMP` 统计 GPU dispatch，不把纹理分配或 CPU 提交时间冒充 GPU 成本。
 
 | 分辨率 | 中位 GPU | P95 GPU | 最大 GPU | 60fps 帧预算 | Compute 预留切片 | 结论 |
 |---|---:|---:|---:|---:|---:|---|
-| 1920×1080 | 0.027ms | 0.041ms | 0.041ms | 16.667ms | 4.167ms（25%） | 通过 |
-| 3840×2160 | 0.121ms | 0.127ms | 0.127ms | 16.667ms | 4.167ms（25%） | 通过 |
+| 1920×1080 | 0.025ms | 0.036ms | 0.036ms | 16.667ms | 4.167ms（25%） | 通过 |
+| 3840×2160 | 0.117ms | 0.129ms | 0.129ms | 16.667ms | 4.167ms（25%） | 通过 |
 
 该结论只代表当前设备、驱动与 kernel 的显式 QA，不代表所有显卡，也不能替代真实 HDR 长播、功耗和显示输出验证。
 
@@ -56,9 +66,9 @@ match  = NVIDIA GeForce RTX 4070 SUPER
 
 [mpv 官方手册](https://mpv.io/manual/stable/)明确说明 `hdr-compute-peak` 需要 Compute Shader，且部分驱动可能表现很差；因此本项目不把系统“支持 Compute”直接解释为应默认开启，而是保留显式基线、用户确认和完整回滚。
 
-真实 MediaKit/libmpv integration test 已验证 `hable/yes → auto/auto`；设置页真实点击截图保存在 `.local/qa/hdr-mapping/hdr-mapping-enabled.png` 与 `hdr-mapping-rollback.png`。
+真实 MediaKit/libmpv integration test 已验证 `hable/yes → auto/auto`；设置页真实点击截图保存在 `.local/qa/hdr-mapping/hdr-mapping-enabled.png` 与 `hdr-mapping-rollback.png`。固定 HDR 300 秒长播、运行时压力回滚和独立 SDR 暗部基线见 `player_hdr_sdr_baseline_20260722.md`。
 
-最终验证为 `flutter analyze`、完整 251 项测试、Windows Debug build、活动 LUID / Compute 基线 integration test 与 HDR 两态点击 integration test 全部通过；3 项需要真实媒体或显式环境变量的 benchmark 按设计跳过。
+活动 LUID / Compute 基线 integration test 现同时断言活动 adapter 至少返回一个有效桌面输出及其尺寸、位深和色彩空间；完整验证结果见 `CURRENT_TASK.md`。
 
 ## 设备矩阵真实窗口复验
 
@@ -77,4 +87,4 @@ match  = NVIDIA GeForce RTX 4070 SUPER
 - 拖动进度、滚动队列、打开设置时的 UI 响应；
 - 自动协调器降级后能否完整恢复原画。
 
-在该观感与性能基线完成前，暗部增强不进入自动画质协调器，也不与第三阶段功能同时试验。
+固定 SDR 暗部关闭态的 180 秒原始基线已经完成，近黑梯度与相邻灰阶可辨，36 个诊断样本为 0 掉帧、0 停滞；详见 `player_hdr_sdr_baseline_20260722.md`。暗部增强仍未实现，下一步必须在同一样本上做关闭/开启 A/B，未通过前不进入自动画质协调器，也不与第三阶段功能同时试验。

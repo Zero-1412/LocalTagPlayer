@@ -16,6 +16,15 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('主设置页确认开启并关闭 HDR 动态映射实验', (tester) async {
+    final outputPath =
+        Platform.environment['LOCAL_TAG_PLAYER_SCREENSHOT_DIR']?.trim();
+    if (outputPath == null || outputPath.isEmpty) {
+      throw StateError('缺少 LOCAL_TAG_PLAYER_SCREENSHOT_DIR');
+    }
+    final outputDirectory = Directory(outputPath)..createSync(recursive: true);
+    // 窗口采证必须绑定本次测试进程，不能按同名窗口猜测。
+    File('${outputDirectory.path}\\process.pid')
+        .writeAsStringSync(pid.toString(), flush: true);
     await app.main();
     await tester.pumpAndSettle(const Duration(seconds: 8));
 
@@ -23,11 +32,13 @@ void main() {
     expect(settingsEntry, findsOneWidget);
     await tester.tap(settingsEntry);
     await tester.pumpAndSettle(const Duration(seconds: 2));
+    await _signalDesktopCapture('settings-playback-split');
 
-    final playbackEntry = find.text('播放与继续观看');
-    expect(playbackEntry, findsOneWidget);
-    await tester.tap(playbackEntry);
+    final qualityEntry = find.text('视频画质与增强');
+    expect(qualityEntry, findsOneWidget);
+    await tester.tap(qualityEntry);
     await tester.pumpAndSettle(const Duration(seconds: 2));
+    await _signalDesktopCapture('video-quality-page');
 
     final experiment = find.byKey(
       const ValueKey('settings.playbackQuality.hdrMappingExperiment'),

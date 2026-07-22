@@ -1,7 +1,7 @@
 #include "gpu_capability_probe.h"
 
 #include <d3d11.h>
-#include <dxgi1_4.h>
+#include <dxgi1_6.h>
 #include <windows.h>
 #include <wrl/client.h>
 
@@ -124,6 +124,25 @@ std::string VulkanVersionString(uint32_t version) {
          std::to_string(version & 0xfffu);
 }
 
+std::string ColorSpaceString(DXGI_COLOR_SPACE_TYPE color_space) {
+  switch (color_space) {
+    case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709:
+      return "rgb-full-g22-p709";
+    case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709:
+      return "rgb-full-linear-p709";
+    case DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P709:
+      return "rgb-limited-g22-p709";
+    case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020:
+      return "rgb-full-pq-p2020";
+    case DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020:
+      return "rgb-limited-pq-p2020";
+    case DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020:
+      return "ycbcr-limited-pq-p2020";
+    default:
+      return "dxgi-" + std::to_string(static_cast<int>(color_space));
+  }
+}
+
 VulkanSnapshot QueryVulkanDevices() {
   VulkanSnapshot snapshot;
   HMODULE library = LoadLibraryW(L"vulkan-1.dll");
@@ -236,6 +255,80 @@ void AddMemoryInfo(flutter::EncodableMap* values, IDXGIAdapter1* adapter,
                                static_cast<int64_t>(info.CurrentUsage)));
 }
 
+/** 枚举适配器当前连接的桌面输出，记录真实输出色彩空间而非推测 HDR 状态。 */
+void AddDisplayOutputs(flutter::EncodableMap* values, IDXGIAdapter1* adapter) {
+  flutter::EncodableList outputs;
+  for (UINT index = 0;; ++index) {
+    ComPtr<IDXGIOutput> output;
+    const HRESULT enumeration_result = adapter->EnumOutputs(index, &output);
+    if (enumeration_result == DXGI_ERROR_NOT_FOUND) break;
+    if (FAILED(enumeration_result) || output == nullptr) break;
+
+    DXGI_OUTPUT_DESC base_description{};
+    if (FAILED(output->GetDesc(&base_description))) continue;
+    flutter::EncodableMap output_values{
+        {flutter::EncodableValue("deviceName"),
+         flutter::EncodableValue(Utf8FromWide(base_description.DeviceName))},
+        {flutter::EncodableValue("attachedToDesktop"),
+         flutter::EncodableValue(base_description.AttachedToDesktop != FALSE)},
+        {flutter::EncodableValue("desktopLeft"),
+         flutter::EncodableValue(
+             static_cast<int64_t>(base_description.DesktopCoordinates.left))},
+        {flutter::EncodableValue("desktopTop"),
+         flutter::EncodableValue(
+             static_cast<int64_t>(base_description.DesktopCoordinates.top))},
+        {flutter::EncodableValue("desktopWidth"),
+         flutter::EncodableValue(static_cast<int64_t>(
+             base_description.DesktopCoordinates.right -
+             base_description.DesktopCoordinates.left))},
+        {flutter::EncodableValue("desktopHeight"),
+         flutter::EncodableValue(static_cast<int64_t>(
+             base_description.DesktopCoordinates.bottom -
+             base_description.DesktopCoordinates.top))},
+    };
+
+    ComPtr<IDXGIOutput6> output6;
+    if (SUCCEEDED(output.As(&output6)) && output6 != nullptr) {
+      DXGI_OUTPUT_DESC1 description{};
+      if (SUCCEEDED(output6->GetDesc1(&description))) {
+        const bool hdr_signal_active =
+            description.BitsPerColor >= 10 &&
+            (description.ColorSpace ==
+                 DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 ||
+             description.ColorSpace ==
+                 DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020 ||
+             description.ColorSpace ==
+                 DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020);
+        output_values.insert_or_assign(
+            flutter::EncodableValue("bitsPerColor"),
+            flutter::EncodableValue(
+                static_cast<int64_t>(description.BitsPerColor)));
+        output_values.insert_or_assign(
+            flutter::EncodableValue("colorSpace"),
+            flutter::EncodableValue(ColorSpaceString(description.ColorSpace)));
+        output_values.insert_or_assign(
+            flutter::EncodableValue("hdrSignalActive"),
+            flutter::EncodableValue(hdr_signal_active));
+        output_values.insert_or_assign(
+            flutter::EncodableValue("minLuminanceNits"),
+            flutter::EncodableValue(
+                static_cast<double>(description.MinLuminance)));
+        output_values.insert_or_assign(
+            flutter::EncodableValue("maxLuminanceNits"),
+            flutter::EncodableValue(
+                static_cast<double>(description.MaxLuminance)));
+        output_values.insert_or_assign(
+            flutter::EncodableValue("maxFullFrameLuminanceNits"),
+            flutter::EncodableValue(
+                static_cast<double>(description.MaxFullFrameLuminance)));
+      }
+    }
+    outputs.emplace_back(std::move(output_values));
+  }
+  values->insert_or_assign(flutter::EncodableValue("outputs"),
+                           flutter::EncodableValue(std::move(outputs)));
+}
+
 }  // namespace
 
 flutter::EncodableMap QueryGpuCapabilityMatrix() {
@@ -318,6 +411,7 @@ flutter::EncodableMap QueryGpuCapabilityMatrix() {
                   "localMemoryBudgetBytes", "localMemoryUsageBytes");
     AddMemoryInfo(&values, adapter.Get(), DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL,
                   "nonLocalMemoryBudgetBytes", "nonLocalMemoryUsageBytes");
+    AddDisplayOutputs(&values, adapter.Get());
     if (matched_vulkan != nullptr) {
       values.insert_or_assign(
           flutter::EncodableValue("vulkanApiVersion"),
