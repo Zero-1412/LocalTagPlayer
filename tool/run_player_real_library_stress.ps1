@@ -33,7 +33,7 @@ Set-Content -LiteralPath "$Output\phase.current" -Value 'test_start|0'
 $monitorJob = Start-Job -ArgumentList $Output -ScriptBlock {
   param($Output)
   $metrics = Join-Path $Output 'process-metrics.csv'
-  'timestamp,phase,cycle,cpu_seconds,threads,working_set_mb,private_mb,handles,responding,gpu_dedicated_mb,gpu_shared_mb,gpu_committed_mb' | Set-Content $metrics
+  'timestamp,phase,cycle,cpu_seconds,threads,working_set_mb,private_mb,handles,responding,gpu_util_percent,gpu_dedicated_mb,gpu_shared_mb,gpu_committed_mb' | Set-Content $metrics
   while (-not (Test-Path -LiteralPath (Join-Path $Output 'stress.done'))) {
     $sampleStarted = Get-Date
     $process = Get-Process local_tag_player -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -49,20 +49,24 @@ $monitorJob = Start-Job -ArgumentList $Output -ScriptBlock {
       $gpuDedicated = 0.0
       $gpuShared = 0.0
       $gpuCommitted = 0.0
+      $gpuUtilPercent = 0.0
       try {
         $gpuPrefix = '\GPU Process Memory(pid_' + $process.Id + '_*)\'
+        $gpuEngine = '\GPU Engine(pid_' + $process.Id + '_*)\Utilization Percentage'
         $gpu = Get-Counter -Counter @(
           ($gpuPrefix + 'Dedicated Usage'),
           ($gpuPrefix + 'Shared Usage'),
-          ($gpuPrefix + 'Total Committed')
+          ($gpuPrefix + 'Total Committed'),
+          $gpuEngine
         ) -ErrorAction Stop
         foreach ($sample in $gpu.CounterSamples) {
           if ($sample.Path -like '*\dedicated usage') { $gpuDedicated += $sample.CookedValue }
           elseif ($sample.Path -like '*\shared usage') { $gpuShared += $sample.CookedValue }
           elseif ($sample.Path -like '*\total committed') { $gpuCommitted += $sample.CookedValue }
+          elseif ($sample.Path -like '*\utilization percentage') { $gpuUtilPercent += $sample.CookedValue }
         }
       } catch {}
-      $line = '{0},{1},{2},{3:F3},{4},{5:F1},{6:F1},{7},{8},{9:F1},{10:F1},{11:F1}' -f `
+      $line = '{0},{1},{2},{3:F3},{4},{5:F1},{6:F1},{7},{8},{9:F1},{10:F1},{11:F1},{12:F1}' -f `
         $(Get-Date -Format o),
         $phase,
         $cycle,
@@ -72,6 +76,7 @@ $monitorJob = Start-Job -ArgumentList $Output -ScriptBlock {
         ($process.PrivateMemorySize64 / 1MB),
         $process.HandleCount,
         $process.Responding,
+        $gpuUtilPercent,
         ($gpuDedicated / 1MB),
         ($gpuShared / 1MB),
         ($gpuCommitted / 1MB)
@@ -145,16 +150,19 @@ try {
   Remove-Item Env:LOCAL_TAG_PLAYER_STRESS_MEDIA_PATH -ErrorAction SilentlyContinue
 }
 if (Test-Path -LiteralPath (Join-Path $Output 'process-metrics.csv')) {
-  & (Join-Path $PSScriptRoot 'summarize_player_stress_metrics.ps1') `
-    -InputDirectory $Output `
-    -LogPath (Join-Path $Output 'stress.log')
+  $summaryArguments = @{
+    InputDirectory = $Output;
+    LogPath = (Join-Path $Output 'stress.log');
+  }
+  & (Join-Path $PSScriptRoot 'summarize_player_stress_metrics.ps1') @summaryArguments
 }
 if ($testExitCode -eq 0 -and -not $KeepRawArtifacts) {
-  # 汇总成功后删除逐秒采样、截图等原始证据，避免长期压测持续占用磁盘。
-  & (Join-Path $PSScriptRoot 'manage_stress_artifacts.ps1') `
-    -ArtifactsRoot $artifactsRoot `
-    -RetentionDays $ArtifactRetentionDays `
-    -CompactDirectory $Output `
-    -KeepFileNames @('phase-summary.csv', 'latency-summary.csv')
+  $compactArguments = @{
+    ArtifactsRoot = $artifactsRoot;
+    RetentionDays = $ArtifactRetentionDays;
+    CompactDirectory = $Output;
+    KeepFileNames = @('phase-summary.csv', 'latency-summary.csv');
+  }
+  & (Join-Path $PSScriptRoot 'manage_stress_artifacts.ps1') @compactArguments
 }
 exit $testExitCode

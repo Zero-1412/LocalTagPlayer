@@ -50,6 +50,7 @@ class PlaybackSettings {
     required this.playbackRate,
     required this.seekStepSeconds,
     required this.videoSuperResolutionEnabled,
+    required this.automaticQualityEnhancementEnabled,
     required this.confirmBeforeDeletingVideo,
     required this.moveDeletedFileToTrash,
   });
@@ -69,6 +70,7 @@ class PlaybackSettings {
     playbackRate: 1,
     seekStepSeconds: 5,
     videoSuperResolutionEnabled: false,
+    automaticQualityEnhancementEnabled: false,
     confirmBeforeDeletingVideo: true,
     moveDeletedFileToTrash: false,
   );
@@ -220,6 +222,8 @@ class PlaybackSettings {
   final int seekStepSeconds;
   /** 是否启用只在画面放大时运行的 libmpv GPU 高质量超分。 */
   final bool videoSuperResolutionEnabled;
+  /** 是否按实时播放余量自动协调去块、降噪与适度锐化。 */
+  final bool automaticQualityEnhancementEnabled;
   /** 删除视频前是否显示影响范围与回收站选择确认。 */
   final bool confirmBeforeDeletingVideo;
   /** 删除确认或无提示删除时，是否先把本地文件移入系统回收站。 */
@@ -242,6 +246,7 @@ class PlaybackSettings {
     double? playbackRate,
     int? seekStepSeconds,
     bool? videoSuperResolutionEnabled,
+    bool? automaticQualityEnhancementEnabled,
     bool? confirmBeforeDeletingVideo,
     bool? moveDeletedFileToTrash,
   }) {
@@ -264,6 +269,8 @@ class PlaybackSettings {
       seekStepSeconds: seekStepSeconds ?? this.seekStepSeconds,
       videoSuperResolutionEnabled:
           videoSuperResolutionEnabled ?? this.videoSuperResolutionEnabled,
+      automaticQualityEnhancementEnabled: automaticQualityEnhancementEnabled ??
+          this.automaticQualityEnhancementEnabled,
       confirmBeforeDeletingVideo:
           confirmBeforeDeletingVideo ?? this.confirmBeforeDeletingVideo,
       moveDeletedFileToTrash:
@@ -294,6 +301,8 @@ class PlaybackSettings {
         'playbackRate': playbackRate,
         'seekStepSeconds': seekStepSeconds,
         'videoSuperResolutionEnabled': videoSuperResolutionEnabled,
+        'automaticQualityEnhancementEnabled':
+            automaticQualityEnhancementEnabled,
         'confirmBeforeDeletingVideo': confirmBeforeDeletingVideo,
         'moveDeletedFileToTrash': moveDeletedFileToTrash,
       };
@@ -361,6 +370,10 @@ class PlaybackSettings {
       videoSuperResolutionEnabled: json['videoSuperResolutionEnabled'] is bool
           ? json['videoSuperResolutionEnabled']! as bool
           : defaults.videoSuperResolutionEnabled,
+      automaticQualityEnhancementEnabled:
+          json['automaticQualityEnhancementEnabled'] is bool
+              ? json['automaticQualityEnhancementEnabled']! as bool
+              : defaults.automaticQualityEnhancementEnabled,
       confirmBeforeDeletingVideo: json['confirmBeforeDeletingVideo'] is bool
           ? json['confirmBeforeDeletingVideo']! as bool
           : defaults.confirmBeforeDeletingVideo,

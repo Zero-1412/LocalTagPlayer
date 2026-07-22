@@ -1,5 +1,17 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-22 · 自动画质协调器与 GPU 能力检测
+
+- 隔离 profile 固定 1080p 类 H.264 与 4K 类 HEVC 样本，分别运行 `auto-safe` 和 `no`，稳定段同时采集进程 CPU、GPU Engine、GPU committed、实际解码器、掉帧、AV 偏移和音视频停滞；完整口径与结果写入 `docs/qa/player_quality_baseline_20260722.md`。
+- 1080p 硬解 / 软解均为 0 掉帧，但软解 CPU 中位从 64.9% 升至 142.4%；4K 硬解为 0 掉帧，4K 软解 CPU 中位 216.1% 且出现 27 帧总掉帧与 0.114 秒 AV 偏移，因此 4K 软件解码不开放自动滤镜。
+- 新增默认关闭的“自动画质协调器”。它复用原播放健康 Timer，每两秒读取扩展样本；连续健康与 10 秒冷却后逐级启用去块、`hqdn3d` 降噪和轻量 `unsharp`，掉帧、缓冲、停滞或 FPS 余量不足时立即回退。
+- 基线最高档按实际媒体和解码路径限制：1080p 硬解可到锐化、1080p 软解最多降噪、4K 硬解最多去块、4K 软解保持关闭；新媒体打开前清空上一条滤镜和余量状态。
+- 第三阶段增加只读 GPU 能力检测：媒体可播放后通过 `PlayerBackend` 读取输出驱动、渲染 API/上下文、D3D11 Feature Level、实际硬解和 HDR 源信号；Vulkan 与 Compute Shader 未由后端明确确认时保持“未验证”。
+- 修正嵌入式 `libmpv` 只返回 `current-vo=libmpv` 时的保守误判：已明确读取到 D3D11 Feature Level 12_1 即视为 GPU 渲染能力证据，但 Compute Shader 仍保持未验证。
+- 压力测试适配控制条自动收起后的真实交互，并改为直接消费与诊断弹窗相同的只读快照；进程采样脚本新增 GPU Engine 利用率，PowerShell 子脚本参数改用 splatting，避免测试成功后产物整理误报失败。
+- 隔离 Debug 真实点击覆盖设置开关、1080p / 4K 播放、队列滚动与诊断：1080p 实际应用去块、降噪和锐化，4K 只应用去块，两者解码/总掉帧为 0；完整 244 项测试、`flutter analyze` 与 Windows Debug 构建通过，3 项显式 benchmark 跳过。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、PlayerBackend contract、缩略图/媒体详情队列、稳定身份或用户数据。
+
 ## 2026-07-22 · 播放器第一阶段画质能力与队列密度
 
 - 播放器队列卡片减少横向内边距、序号占位与内容间距，缩略图扩大到 104×60，标题字号提升；大队列继续只构建可见项，不新增滚动期 I/O。

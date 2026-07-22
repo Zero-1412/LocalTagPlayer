@@ -69,6 +69,8 @@ export 'services/media/media_probe_backend.dart';
 export 'services/media/thumbnail_service.dart';
 export 'services/media/media_details_service.dart';
 export 'services/player/playback_snapshot_write_queue.dart';
+export 'services/player/player_adaptive_quality.dart';
+export 'services/player/player_gpu_capability_detector.dart';
 export 'services/player/player_hardware_acceleration.dart';
 export 'services/player/media_kit_player_backend.dart';
 export 'services/player/player_hardware_compatibility.dart';

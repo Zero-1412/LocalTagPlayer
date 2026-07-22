@@ -178,6 +178,17 @@ class _SkewedSuperResolutionPlayerBackend
   }
 }
 
+/** 为第三阶段能力检测提供可控属性，不创建真实 GPU 会话。 */
+class _CapabilityPlayerBackend extends _PreferenceRecordingPlayerBackend {
+  _CapabilityPlayerBackend(this.values);
+
+  final Map<String, String> values;
+
+  @override
+  Future<String> getProperty(String property) async =>
+      values[property] ?? 'unavailable';
+}
+
 void main() {
   test('library video card uses compact height and stable duration labels', () {
     expect(
@@ -3648,6 +3659,7 @@ void main() {
     expect(oldSettings.playbackRate, 1);
     expect(oldSettings.seekStepSeconds, 5);
     expect(oldSettings.videoSuperResolutionEnabled, isFalse);
+    expect(oldSettings.automaticQualityEnhancementEnabled, isFalse);
 
     final directory = await Directory.systemTemp.createTemp(
       'local_tag_player_playback_settings_',
@@ -3664,6 +3676,7 @@ void main() {
       playbackRate: 1.5,
       seekStepSeconds: 30,
       videoSuperResolutionEnabled: true,
+      automaticQualityEnhancementEnabled: true,
       confirmBeforeDeletingVideo: false,
       moveDeletedFileToTrash: true,
     );
@@ -3679,6 +3692,7 @@ void main() {
     expect(loaded.playbackRate, 1.5);
     expect(loaded.seekStepSeconds, 30);
     expect(loaded.videoSuperResolutionEnabled, isTrue);
+    expect(loaded.automaticQualityEnhancementEnabled, isTrue);
     expect(loaded.confirmBeforeDeletingVideo, isFalse);
     expect(loaded.moveDeletedFileToTrash, isTrue);
     expect(loaded.toJson()['playbackMode'], 'repeatAll');
@@ -3688,6 +3702,10 @@ void main() {
     expect(loaded.toJson()['highQualityStreamCacheEnabled'], isFalse);
     expect(loaded.toJson()['seekStepSeconds'], 30);
     expect(loaded.toJson()['videoSuperResolutionEnabled'], isTrue);
+    expect(
+      loaded.toJson()['automaticQualityEnhancementEnabled'],
+      isTrue,
+    );
 
     final unsafe = PlaybackSettings.fromJson({
       'playbackMode': 'unknown',
@@ -3704,6 +3722,124 @@ void main() {
     expect(unsafe.playbackRate, 1);
     expect(unsafe.seekStepSeconds, 5);
     expect(unsafe.videoSuperResolutionEnabled, isFalse);
+    expect(unsafe.automaticQualityEnhancementEnabled, isFalse);
+  });
+
+  test('adaptive quality upgrades with hysteresis and drops immediately off',
+      () {
+    final coordinator = PlayerAdaptiveQualityCoordinator(
+      healthySamplesToUpgrade: 2,
+      upgradeCooldown: Duration.zero,
+    );
+    var sampledAt = DateTime.utc(2026, 7, 22, 6);
+
+    PlayerAdaptiveQualitySample sample({int totalDrops = 0}) {
+      sampledAt = sampledAt.add(const Duration(seconds: 1));
+      return PlayerAdaptiveQualitySample(
+        sampledAt: sampledAt,
+        playing: true,
+        buffering: false,
+        recentSeek: false,
+        videoAdvanced: true,
+        videoStalled: false,
+        audioStalled: false,
+        width: 1920,
+        height: 1080,
+        hwdecCurrent: 'd3d11va-copy',
+        sourceFps: 60,
+        estimatedFps: 60,
+        cacheDuration: 12,
+        decoderDroppedFrames: 0,
+        outputDroppedFrames: 0,
+        totalDroppedFrames: totalDrops,
+      );
+    }
+
+    expect(
+        coordinator.evaluate(sample()).level, PlayerAdaptiveQualityLevel.off);
+    final upgraded = coordinator.evaluate(sample());
+    expect(upgraded.changed, isTrue);
+    expect(upgraded.level, PlayerAdaptiveQualityLevel.deblock);
+
+    final pressured = coordinator.evaluate(sample(totalDrops: 1));
+    expect(pressured.changed, isTrue);
+    expect(pressured.level, PlayerAdaptiveQualityLevel.off);
+    expect(pressured.reason, contains('立即关闭增强'));
+  });
+
+  test('adaptive quality baseline keeps 4K software decode disabled', () {
+    final profile = PlayerQualityBaselineProfile.resolve(
+      width: 3456,
+      height: 2160,
+      hwdecCurrent: 'no',
+    );
+    expect(profile.label, '4K · CPU 软件解码');
+    expect(profile.maximumLevel, PlayerAdaptiveQualityLevel.off);
+  });
+
+  test('adaptive quality keeps unknown resolution disabled', () {
+    final profile = PlayerQualityBaselineProfile.resolve(
+      width: null,
+      height: null,
+      hwdecCurrent: 'd3d11va-copy',
+    );
+
+    expect(profile.maximumLevel, PlayerAdaptiveQualityLevel.off);
+    expect(profile.label, contains('分辨率未知'));
+  });
+
+  test('adaptive quality applies one complete lavfi graph per level', () async {
+    final backend = _PreferenceRecordingPlayerBackend();
+    await PlayerAdaptiveQualityEnhancer.apply(
+      backend: backend,
+      level: PlayerAdaptiveQualityLevel.deblockDenoiseSharpen,
+    );
+    expect(backend.properties['vf'], contains('deblock='));
+    expect(backend.properties['vf'], contains('hqdn3d='));
+    expect(backend.properties['vf'], contains('unsharp='));
+
+    await PlayerAdaptiveQualityEnhancer.apply(
+      backend: backend,
+      level: PlayerAdaptiveQualityLevel.off,
+    );
+    expect(backend.properties['vf'], isEmpty);
+  });
+
+  test('GPU detector reports only backend-confirmed capabilities', () async {
+    final detected = await const PlayerGpuCapabilityDetector().detect(
+      _CapabilityPlayerBackend(<String, String>{
+        'current-vo': 'gpu-next',
+        'gpu-api': 'd3d11',
+        'gpu-context': 'win',
+        'd3d11-feature-level': '12_1',
+        'hwdec-current': 'd3d11va-copy',
+        'video-params/gamma': 'pq',
+      }),
+    );
+    expect(detected.rendererDetected, isTrue);
+    expect(detected.vulkanDetected, isFalse);
+    expect(detected.computeShaderVerified, isFalse);
+    expect(detected.hdrSourceDetected, isTrue);
+    expect(detected.readinessLabel, contains('Compute 能力待原生验证'));
+  });
+
+  test('GPU detector accepts an explicit D3D11 feature level in libmpv mode',
+      () async {
+    final detected = await const PlayerGpuCapabilityDetector().detect(
+      _CapabilityPlayerBackend(<String, String>{
+        'current-vo': 'libmpv',
+        'gpu-api': 'empty',
+        'gpu-context': 'empty',
+        'd3d11-feature-level': '12_1',
+        'hwdec-current': 'd3d11va-copy',
+        'video-params/gamma': 'bt.1886',
+      }),
+    );
+
+    expect(detected.rendererDetected, isTrue);
+    expect(detected.vulkanDetected, isFalse);
+    expect(detected.computeShaderVerified, isFalse);
+    expect(detected.readinessLabel, contains('Compute 能力待原生验证'));
   });
 
   test('persisted visual settings are applied to the playback backend',

@@ -18,6 +18,8 @@ import '../../services/media/media_details_service.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../../services/player/player_hardware_acceleration.dart';
 import '../../services/player/player_hardware_compatibility.dart';
+import '../../services/player/player_adaptive_quality.dart';
+import '../../services/player/player_gpu_capability_detector.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import '../../services/player/player_video_super_resolution.dart';
 import '../../widgets/app_theme_tokens.dart';
@@ -633,6 +635,19 @@ class PlayerPageState extends State<PlayerPage> {
   Timer? _fullscreenQueueHideTimer;
   Timer? _playbackHealthTimer;
   var _playbackHealthSampling = false;
+  /** 第二阶段自动画质协调器；只消费低频诊断样本，不创建额外定时器。 */
+  final PlayerAdaptiveQualityCoordinator _adaptiveQualityCoordinator =
+      PlayerAdaptiveQualityCoordinator();
+  /** 第三阶段能力检测器；只查询当前 PlayerBackend 的真实运行属性。 */
+  final PlayerGpuCapabilityDetector _gpuCapabilityDetector =
+      const PlayerGpuCapabilityDetector();
+  /** 当前会话已经实际送入后端的自动增强档位。 */
+  PlayerAdaptiveQualityLevel _adaptiveQualityLevel =
+      PlayerAdaptiveQualityLevel.off;
+  /** 最近一次播放器会话能力检测结果；新媒体打开时作废并重新检测。 */
+  PlayerGpuCapabilitySnapshot? _gpuCapabilitySnapshot;
+  /** 自动增强扩展采样每两秒执行一次，避免增加每秒平台属性调用压力。 */
+  var _adaptiveQualitySampleTick = 0;
   var _controlsVisible = true;
   var _shortcutFeedbackVisible = false;
   String? _shortcutFeedbackLabel;
@@ -1230,6 +1245,7 @@ class PlayerPageState extends State<PlayerPage> {
     }
     _playbackHealthSampling = true;
     try {
+      final previousFrame = _lastVideoFrameNumber;
       final frame =
           _parseMpvInt(await _getMpvProperty('estimated-frame-number'));
       final audioPts = _parseMpvNumber(await _getMpvProperty('audio-pts'));
@@ -1297,9 +1313,75 @@ class PlayerPageState extends State<PlayerPage> {
         }
         _audioProgressState = '音频播放头停滞';
       }
+      if (_effectivePlaybackSettings.automaticQualityEnhancementEnabled) {
+        _adaptiveQualitySampleTick++;
+        if (_adaptiveQualitySampleTick.isEven) {
+          await _sampleAdaptiveQualityMargin(
+            sampledAt: now,
+            frame: frame,
+            previousFrame: previousFrame,
+            hwdecCurrent: effectiveHwdec,
+          );
+        }
+      }
     } finally {
       _playbackHealthSampling = false;
     }
+  }
+
+  /**
+   * 复用播放健康 Timer 的低频样本评估实时余量，并仅在档位变化时重建滤镜链。
+   */
+  Future<void> _sampleAdaptiveQualityMargin({
+    required DateTime sampledAt,
+    required int? frame,
+    required int? previousFrame,
+    required String? hwdecCurrent,
+  }) async {
+    final details =
+        _detailsService.cachedDetailsFor(_currentItem) ?? const MediaDetails();
+    final sourceFps = _parseMpvNumber(await _getMpvProperty('container-fps'));
+    final estimatedFps =
+        _parseMpvNumber(await _getMpvProperty('estimated-vf-fps'));
+    final cacheDuration =
+        _parseMpvNumber(await _getMpvProperty('demuxer-cache-duration'));
+    final decoderDrops =
+        _parseMpvInt(await _getMpvProperty('decoder-frame-drop-count'));
+    final outputDrops =
+        _parseMpvInt(await _getMpvProperty('vo-drop-frame-count'));
+    final totalDrops = _parseMpvInt(await _getMpvProperty('frame-drop-count'));
+    final decision = _adaptiveQualityCoordinator.evaluate(
+      PlayerAdaptiveQualitySample(
+        sampledAt: sampledAt,
+        playing: _playerBackend.state.playing,
+        buffering: _playerBackend.state.buffering,
+        recentSeek: _lastSeekAt != null &&
+            sampledAt.difference(_lastSeekAt!) < const Duration(seconds: 3),
+        videoAdvanced:
+            frame != null && previousFrame != null && frame > previousFrame,
+        videoStalled: _videoProgressState == '视频帧停滞',
+        audioStalled: _audioProgressState == '音频播放头停滞',
+        width: details.width,
+        height: details.height,
+        hwdecCurrent: hwdecCurrent,
+        sourceFps: sourceFps,
+        estimatedFps: estimatedFps,
+        cacheDuration: cacheDuration,
+        decoderDroppedFrames: decoderDrops,
+        outputDroppedFrames: outputDrops,
+        totalDroppedFrames: totalDrops,
+      ),
+    );
+    if (!decision.changed || _isExiting) return;
+    await PlayerAdaptiveQualityEnhancer.apply(
+      backend: _playerBackend,
+      level: decision.level,
+    );
+    _adaptiveQualityLevel = decision.level;
+    debugPrint(
+      'PLAYER_ADAPTIVE_QUALITY level=${decision.level.name} '
+      'profile=${decision.profile.label} reason=${decision.reason}',
+    );
   }
 
   void _showVideoControls() {
@@ -2168,6 +2250,15 @@ class PlayerPageState extends State<PlayerPage> {
           _lastHwdecCurrent = null;
           _consecutiveSoftwareDecodeSamples = 0;
           _softwareDecodeConfirmed = false;
+          _adaptiveQualityCoordinator.reset();
+          _adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
+          _adaptiveQualitySampleTick = 0;
+          _gpuCapabilitySnapshot = null;
+          // 新媒体必须先清除上一条的滤镜，再从本条稳定样本逐级恢复。
+          await PlayerAdaptiveQualityEnhancer.apply(
+            backend: _playerBackend,
+            level: PlayerAdaptiveQualityLevel.off,
+          );
           await _applyPlaybackPerformanceProfile();
           if (!mounted) {
             return;
@@ -2191,6 +2282,7 @@ class PlayerPageState extends State<PlayerPage> {
             continue;
           }
           _openedPath = path;
+          unawaited(_detectCurrentGpuCapabilities(path));
           unawaited(PlayerMemoryDiagnostics.logStage(
             'media_opened',
             backend: _playerBackend,
@@ -2229,6 +2321,20 @@ class PlayerPageState extends State<PlayerPage> {
     if (shouldContinue) {
       unawaited(_drainOpenRequests());
     }
+  }
+
+  /**
+   * 媒体确认可播放后检测当前 GPU 渲染会话；过期 open 的结果不得覆盖新媒体。
+   */
+  Future<void> _detectCurrentGpuCapabilities(String openedPath) async {
+    final snapshot = await _gpuCapabilityDetector.detect(_playerBackend);
+    if (!mounted || _openedPath != openedPath) return;
+    _gpuCapabilitySnapshot = snapshot;
+    debugPrint(
+      'PLAYER_GPU_CAPABILITY renderer=${snapshot.rendererDetected} '
+      'api=${snapshot.gpuApi} context=${snapshot.gpuContext} '
+      'vulkan=${snapshot.vulkanDetected} compute=${snapshot.computeShaderVerified}',
+    );
   }
 
   /**
@@ -2939,6 +3045,7 @@ class PlayerPageState extends State<PlayerPage> {
       'display-fps',
       'video-sync',
       'interpolation',
+      'vf',
       'scale',
       'cscale',
       'scaler-resizes-only',
@@ -2948,6 +3055,9 @@ class PlayerPageState extends State<PlayerPage> {
       'video-params/primaries',
       'video-params/gamma',
       'video-target-params/colorlevels',
+      'gpu-api',
+      'gpu-context',
+      'd3d11-feature-level',
       'avsync',
       'total-avsync-change',
       'mistimed-frame-count',
@@ -2997,6 +3107,11 @@ class PlayerPageState extends State<PlayerPage> {
       'mpv \u663e\u793a FPS: ${mpv['display-fps']}',
       'mpv \u89c6\u9891\u540c\u6b65: ${mpv['video-sync']}',
       'mpv \u63d2\u5e27: ${mpv['interpolation']}',
+      '自动画质协调器: ${_effectivePlaybackSettings.automaticQualityEnhancementEnabled ? '开启' : '关闭'}',
+      '自动画质基线: ${_adaptiveQualityCoordinator.profile.label}',
+      '自动画质档位: ${playerAdaptiveQualityLevelLabel(_adaptiveQualityLevel)}',
+      '自动画质判断: ${_adaptiveQualityCoordinator.reason}',
+      'mpv 视频滤镜: ${mpv['vf']}',
       '画质超分设置: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
       'mpv GPU 缩放器: ${mpv['scale']}',
       'mpv GPU 色度缩放器: ${mpv['cscale']}',
@@ -3007,6 +3122,14 @@ class PlayerPageState extends State<PlayerPage> {
       '源色彩原色: ${mpv['video-params/primaries']}',
       '源传递函数: ${mpv['video-params/gamma']}',
       '实际输出色彩范围: ${mpv['video-target-params/colorlevels']}',
+      'GPU 输出驱动: ${_gpuCapabilitySnapshot?.outputDriver ?? mpv['current-vo']}',
+      'GPU 渲染 API: ${_gpuCapabilitySnapshot?.gpuApi ?? mpv['gpu-api']}',
+      'GPU 渲染上下文: ${_gpuCapabilitySnapshot?.gpuContext ?? mpv['gpu-context']}',
+      'D3D11 Feature Level: ${_gpuCapabilitySnapshot?.d3d11FeatureLevel ?? mpv['d3d11-feature-level']}',
+      'Vulkan 已检测: ${_gpuCapabilitySnapshot?.vulkanDetected == true ? '是' : '否 / 未验证'}',
+      'Compute Shader 已验证: ${_gpuCapabilitySnapshot?.computeShaderVerified == true ? '是' : '否'}',
+      'HDR 源信号: ${_gpuCapabilitySnapshot?.hdrSourceDetected == true ? '已检测' : '未检测'}',
+      '第三阶段能力状态: ${_gpuCapabilitySnapshot?.readinessLabel ?? '等待当前媒体能力检测'}',
       'mpv AV \u504f\u79fb: ${mpv['avsync']}',
       'mpv AV \u7d2f\u8ba1\u4fee\u6b63: ${mpv['total-avsync-change']}',
       'mpv \u65f6\u5e8f\u5f02\u5e38\u5e27: ${mpv['mistimed-frame-count']}',

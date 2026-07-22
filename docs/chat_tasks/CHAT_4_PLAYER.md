@@ -662,6 +662,16 @@
 - 每次媒体 open 前后把比例、panscan 和倍速重新应用到 `PlayerBackend`；focused test 明确验证后端收到持久化的 1.5x 与铺满参数，不以 JSON 或 UI 选中态代替真实生效。
 - focused 7 项、完整 128 项测试、`flutter analyze`、Windows debug build 和真实窗口一级/二级/三级点击通过，2 项显式基准跳过；完整重启后“铺满 / 1.5x”仍显示并真实生效，验证后恢复默认。filtered queue、当前索引、SQLite、标签语义和缓存队列均未改变。
 
+# 2026-07-22 自动画质协调器与显卡能力检测
+
+- 在隔离 profile 上完成 1080p 类 / 4K 类 × GPU 硬解 / CPU 软件解码四组真实基线；稳定段记录 CPU、GPU Engine、GPU committed、实际解码器、掉帧、AV 偏移和停滞，4K 软件解码确认出现 27 帧总掉帧。
+- `PlayerAdaptiveQualityCoordinator` 复用原每秒播放健康 Timer，并把扩展 mpv 属性读取限制为每两秒一次；升级要求连续健康与冷却时间，压力出现立即降级，不在 UI isolate 读取视频帧。
+- 自动档位使用单条 `vf` 快照串行切换官方 FFmpeg `deblock`、`hqdn3d` 与轻量 `unsharp`；1080p 硬解最高锐化、1080p 软解最高降噪、4K 硬解最高去块、4K 软解保持关闭。
+- `PlayerGpuCapabilityDetector` 在媒体可播放后只通过现有 `PlayerBackend` 读取输出驱动、GPU API/上下文、D3D11 Feature Level、实际硬解与 HDR 源信号；嵌入式 `libmpv` 已返回 D3D11 Feature Level 时作为明确 GPU 证据，没有能力位的 Compute Shader 仍保持未验证。
+- 压力测试适配控制条自动隐藏，并改用诊断弹窗共用的只读快照采样；Windows 进程采样新增 GPU Engine 利用率。
+- 隔离 Debug 真实点击确认 1080p GPU 档实际启用去块、降噪、锐化，4K GPU 档只启用去块，两者解码/总掉帧为 0；完整 244 项测试、`flutter analyze` 和 Windows Debug 构建通过，3 项显式 benchmark 跳过。
+- filtered queue 来源、内容、顺序和当前 index 未改变；PlayerBackend contract、SQLite、标签语义、稳定身份和缩略图/媒体详情队列均未修改。
+
 # 2026-07-22 GPU 画质超分
 
 - 进度条齿轮一级设置新增默认关闭的“GPU 画质超分”；开关全局持久化，旧设置文件缺字段时保持关闭，并提示该能力只在低分辨率画面被放大时运行。

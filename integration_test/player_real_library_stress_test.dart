@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/main.dart' as app;
 import 'package:local_tag_player/src/app.dart' as ltp;
+import 'package:local_tag_player/src/pages/player/player_page.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -78,7 +79,7 @@ void main() {
       _logAction(cycle + 1, 'seek_2');
       await _randomlySeek(tester, random, videoSurface);
       _logAction(cycle + 1, 'diagnostics');
-      await _samplePlaybackDiagnostics(tester, videoSurface, cycle + 1);
+      await _samplePlaybackDiagnostics(tester, cycle + 1);
 
       final back = find.byKey(const ValueKey('player.back')).hitTestable();
       if (back.evaluate().isEmpty) {
@@ -291,43 +292,76 @@ Future<void> _randomlySeek(
 
 /** 进入并退出桌面全屏，保证每轮结束时回到普通播放器布局。 */
 Future<void> _toggleFullscreenRoundTrip(WidgetTester tester) async {
-  final toggle = find.byKey(const ValueKey('player.fullscreen.toggle'));
+  final mouse = await _showPlayerControls(tester);
+  final toggle =
+      find.byKey(const ValueKey('player.fullscreen.toggle')).hitTestable();
   if (toggle.evaluate().isEmpty) {
+    await mouse.removePointer();
     throw StateError('播放器全屏按钮不存在');
   }
   await tester.tap(toggle);
   await _pumpContinuously(tester, const Duration(seconds: 1));
-  await tester.tap(toggle);
+  await mouse.moveTo(tester.getCenter(
+    find.byKey(const ValueKey('player.video.surface')),
+  ));
+  await mouse.moveTo(tester.getCenter(
+        find.byKey(const ValueKey('player.video.surface')),
+      ) +
+      Offset(
+        0,
+        tester
+                    .getSize(find.byKey(const ValueKey('player.video.surface')))
+                    .height /
+                2 -
+            24,
+      ));
+  await tester.pump(const Duration(milliseconds: 250));
+  await tester.tap(
+    find.byKey(const ValueKey('player.fullscreen.toggle')).hitTestable(),
+  );
   await _pumpContinuously(tester, const Duration(seconds: 1));
+  await mouse.removePointer();
+}
+
+/** 把鼠标移入底部控制区并返回手势，适配控制条自动收起后的真实交互。 */
+Future<TestGesture> _showPlayerControls(WidgetTester tester) async {
+  final surface = find.byKey(const ValueKey('player.video.surface'));
+  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  final center = tester.getCenter(surface);
+  final height = tester.getSize(surface).height;
+  await mouse.addPointer(location: center);
+  await mouse.moveTo(center + Offset(0, height / 2 - 24));
+  await tester.pump(const Duration(milliseconds: 250));
+  return mouse;
 }
 
 /**
- * 打开真实诊断弹窗持续采样，并把不含本地路径的关键指标写入测试日志。
+ * 通过当前 PlayerPage 的只读诊断边界持续采样，并把不含本地路径的关键指标写入测试日志。
+ *
+ * 压力测试不能依赖已自动收起的控制条或设置浮层坐标；诊断弹窗的真实点击由独立 UI QA
+ * 覆盖，这里只消费与弹窗相同的快照入口，保证长跑指标采集不会反向扰动播放。
  */
 Future<void> _samplePlaybackDiagnostics(
   WidgetTester tester,
-  Finder videoSurface,
   int cycle,
 ) async {
-  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-  await mouse.addPointer(location: tester.getCenter(videoSurface));
-  await mouse.moveTo(tester.getCenter(videoSurface));
-  await tester.pump(const Duration(milliseconds: 250));
-  await tester.tap(find.byKey(const ValueKey('player.settings')));
-  await tester.pump(const Duration(milliseconds: 300));
-  final open = find.byKey(const ValueKey('player.diagnostics.open'));
-  if (open.evaluate().isEmpty) {
-    await mouse.removePointer();
-    throw StateError('播放器诊断菜单项不存在');
+  final playerPage = find.byType(PlayerPage);
+  if (playerPage.evaluate().isEmpty) {
+    throw StateError('播放器页面不存在，无法采集诊断');
   }
-  await tester.tap(open);
-  await _pumpContinuously(tester, const Duration(seconds: 4));
+  final snapshot = await tester
+      .state<PlayerPageState>(playerPage)
+      .buildDiagnosticsSnapshot();
 
   final metricPrefixes = <String>[
     'mpv 请求硬解:',
     'mpv 实际硬解:',
     '估算单帧耗时:',
     'mpv AV 偏移:',
+    'mpv 解码掉帧:',
+    'mpv VO 掉帧:',
+    'mpv 总掉帧:',
+    'mpv 缓存时长:',
     '最近 seek 耗时:',
     '媒体详情活动读取:',
     '媒体详情排队读取:',
@@ -347,26 +381,14 @@ Future<void> _samplePlaybackDiagnostics(
     '暂停确认时间:',
     '路由退出请求时间:',
   ];
-  final metricLines = <String>[];
-  for (final element in find.byType(Text).evaluate()) {
-    final data = (element.widget as Text).data;
-    if (data == null) {
-      continue;
-    }
-    for (final line in data.split('\n')) {
-      if (metricPrefixes.any(line.startsWith)) {
-        metricLines.add(line);
-      }
-    }
-  }
+  final metricLines = snapshot.lines
+      .where((line) => metricPrefixes.any(line.startsWith))
+      .toList(growable: false);
   // ignore: avoid_print
   print('PLAYER_DIAGNOSTICS cycle=$cycle ${metricLines.join(' | ')}');
   if (cycle == 1 || cycle % 5 == 0) {
     await _signalDesktopCapture('stress-diagnostics-cycle-$cycle');
   }
-  await tester.tap(find.byKey(const ValueKey('player.diagnostics.close')));
-  await _pumpContinuously(tester, const Duration(milliseconds: 500));
-  await mouse.removePointer();
 }
 
 /**

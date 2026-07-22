@@ -51,7 +51,7 @@ for ($index = 0; $index -lt $rows.Count; $index++) {
 
 $properties = @(
   'cpu_percent', 'threads', 'working_set_mb', 'private_mb',
-  'handles', 'gpu_dedicated_mb', 'gpu_shared_mb', 'gpu_committed_mb'
+  'handles', 'gpu_util_percent', 'gpu_dedicated_mb', 'gpu_shared_mb', 'gpu_committed_mb'
 )
 $summary = foreach ($group in $rows | Group-Object phase) {
   $record = [ordered]@{
@@ -70,7 +70,7 @@ $summary = foreach ($group in $rows | Group-Object phase) {
 
 $summaryPath = Join-Path $InputDirectory 'phase-summary.csv'
 $summary | Export-Csv -LiteralPath $summaryPath -NoTypeInformation -Encoding utf8
-$summary | Format-Table phase, samples, unresponsive, cpu_percent_median, threads_median, working_set_mb_median, private_mb_median, gpu_committed_mb_median
+$summary | Format-Table phase, samples, unresponsive, cpu_percent_median, gpu_util_percent_median, threads_median, working_set_mb_median, private_mb_median, gpu_committed_mb_median
 
 if ($LogPath -and (Test-Path -LiteralPath $LogPath)) {
   $text = Get-Content -LiteralPath $LogPath -Raw

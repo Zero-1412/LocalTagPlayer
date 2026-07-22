@@ -875,6 +875,23 @@ class _PlaybackQualitySettingsPanel extends StatelessWidget {
               },
             ),
             const SizedBox(height: 16),
+            SwitchListTile.adaptive(
+              key: const ValueKey(
+                'settings.playbackQuality.automaticEnhancement',
+              ),
+              contentPadding: EdgeInsets.zero,
+              value: settings.automaticQualityEnhancementEnabled,
+              title: const Text('自动画质协调器'),
+              subtitle: const Text(
+                '根据 1080p / 4K 与软硬解基线，按实时余量动态启用去块、降噪和适度锐化',
+              ),
+              onChanged: (value) => onChanged(
+                settings.copyWith(
+                  automaticQualityEnhancementEnabled: value,
+                ),
+              ),
+            ),
+            const Divider(height: 20),
             const _PlaybackCapabilityRow(
               icon: Icons.analytics_outlined,
               title: '视频质量信息解析',
@@ -947,15 +964,15 @@ class _PlaybackEnhancementRoadmapCard extends StatelessWidget {
             _PlaybackCapabilityRow(
               icon: Icons.auto_fix_high_rounded,
               title: '第二阶段 · 观感增强',
-              subtitle: '去块、降噪、适度锐化、暗部增强、自动画质模式',
-              status: '待性能基线',
+              subtitle: '去块、降噪和适度锐化已由自动协调器按余量分级；暗部增强仍待独立验证',
+              status: '已接入基线',
             ),
             Divider(height: 16),
             _PlaybackCapabilityRow(
               icon: Icons.memory_rounded,
               title: '第三阶段 · 高级增强',
-              subtitle: 'AI 超分、时域降噪、运动补帧、HDR 映射、Vulkan / Compute Shader',
-              status: '待能力检测',
+              subtitle: '播放器先检测真实渲染 API、上下文、硬解与 HDR 源信号，再评估高级增强',
+              status: '已接入检测',
             ),
           ],
         ),

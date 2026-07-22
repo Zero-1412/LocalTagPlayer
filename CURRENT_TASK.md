@@ -4,6 +4,17 @@
 
 ## 活跃任务
 
+### 2026-07-22 自动画质协调器与 GPU 能力检测
+
+- 目标：先建立 1080p / 4K 的 GPU、CPU 与丢帧基线，再让第二阶段去块、降噪和适度锐化只在实时余量允许时动态启用；第三阶段功能必须先经过真实显卡能力检测。
+- 当前状态：已完成。主界面“播放与继续观看”设置新增默认关闭的“自动画质协调器”，隔离 Debug 窗口已完成设置开关、1080p / 4K 播放、队列滚动与诊断真实点击。
+- 隔离实测稳定段：1080p 硬解 CPU / GPU Engine 中位 64.9% / 43.3%，软解 142.4% / 1.0%，两者解码/总掉帧均为 0；4K 硬解 66.5% / 59.2% 且 0 掉帧，4K 软解 216.1% / 1.0%，出现 27 帧总掉帧与 0.114 秒 AV 偏移。完整口径见 `docs/qa/player_quality_baseline_20260722.md`。
+- 协调器复用原播放健康 Timer，每两秒采集扩展样本；连续 8 个健康样本且满足 10 秒冷却才升级。1080p 硬解最高锐化、1080p 软解最高降噪、4K 硬解最高去块、4K 软解保持关闭；新增掉帧、缓冲、停滞或 FPS 压力立即降级。
+- 去块、`hqdn3d` 和 `unsharp` 使用 FFmpeg 官方滤镜参数，并作为单条 `vf` 快照经既有 `PlayerBackend` 串行应用；Flutter 不读取视频帧，不新增 UI Timer，不触碰 filtered queue 或后台媒体队列。
+- `PlayerGpuCapabilityDetector` 在媒体可播放后读取实际输出驱动、GPU API/上下文、D3D11 Feature Level、当前硬解和 HDR 源信号。嵌入式 `libmpv` 返回 D3D11 12_1 时可确认 GPU 渲染存在；当前 contract 没有 Compute Shader 能力位，因此仍明确保持未验证，不按显卡型号猜测第三阶段能力。
+- 最终 `flutter analyze`、完整 244 项测试与 Windows Debug build 通过，3 项显式 benchmark 跳过。真实诊断中 1080p GPU 档升至“去块 + 降噪 + 锐化”，4K GPU 档封顶“去块”，两者解码/总掉帧均为 0；截图保存于 `.local/qa/2026-07-22-quality-live/`，不进入仓库。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、PlayerBackend contract、缩略图/媒体详情队列或用户数据。
+
 ### 2026-07-22 播放器第一阶段画质能力与队列密度
 
 - 目标：减小播放器队列卡片的无效内间距，并把第一阶段画质、解码、缓存与诊断能力集中到主界面设置页；第二、三阶段只展示真实路线，不提供尚未满足流畅度门槛的假开关。
@@ -68,8 +79,8 @@
 
 - 产品边界：Tag 驱动的本地视频发现播放器，不扩展字幕、音轨、逐帧或 A-B loop 等专业播放器能力。
 - 数据边界：SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 内容与顺序、标签来源语义均未改变。
-- 验证：237 项测试通过，3 项显式 benchmark 跳过；GPU 超分设置、属性串行化与后端回归、卡片双项菜单、页面当前路径、文件系统边界回归、`flutter analyze`、Windows debug build 均通过。超分真实点击与截图因检测到用户输入而中止，不能宣称实窗通过。
-- 架构基线：`Architecture Baseline 0.5.51`。
+- 验证：244 项测试通过，3 项显式 benchmark 跳过；播放器控制显隐、全屏覆盖队列、快进档位、左上角文字反馈、GPU 超分、自动画质协调与显卡能力检测回归、`flutter analyze`、Windows debug build 均通过。真实窗口完成设置开关、1080p / 4K 播放、队列滚动与诊断复测；低分辨率超分两态及自动画质诊断截图已保存。
+- 架构基线：`Architecture Baseline 0.5.53`。
 
 ## 已确认阻塞
 
