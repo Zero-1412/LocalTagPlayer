@@ -1,5 +1,14 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-22 · 播放器快速切换与预览纹理交接
+
+- 媒体卡点击进入正式播放器前先停止悬停预览媒体与视频输出，取消旧预览 open 代次；媒体库 Route 保留在下层时不再让独立预览纹理与正式播放器同时重建分辨率。
+- 播放器缩略图只用于 Route 首次冷启动占位，队列切换不再跨视频替换 `Image.file`；图片流按文件路径隔离，避免与 Windows 原生纹理接管交叉。
+- latest-open worker 在每个异步边界发现更新选择后立即丢弃旧路径；`openPath` 已返回时也不再等待旧媒体首帧。可播放校验保持约 1.5 秒总窗口，快速请求检测粒度由 250ms 缩短为 80ms。
+- 修复前 Windows Application Error 存在 `flutter_windows.dll` 的访问异常；修复后动态预览到正式播放的纹理释放顺序正确，跨 1080p、2048×1080 和 4K 的 40 次切换无新增 Application Error。
+- 毫秒级 20 次输入用时 4.19 秒，仅产生 5 次实际 open，最终选择正常播放；完整 264 项测试、`flutter analyze` 与 Windows Debug build 通过。
+- 未修改 SQLite schema、标签查询、filtered queue 来源/内容/顺序、`PlayerBackend` contract、缩略图调度或用户数据。
+
 ## 2026-07-22 · 启动后悬停预览与首播冷启动
 
 - 新增首帧后的 MediaKit 进程级幂等预热，保留 Debug 独立启动先显示窗口的边界，同时避免第一次悬停或正式播放承担完整原生库冷启动。

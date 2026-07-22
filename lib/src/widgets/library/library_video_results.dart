@@ -1706,10 +1706,25 @@ class InteractiveVideoCard extends StatefulWidget {
 }
 
 class InteractiveVideoCardState extends State<InteractiveVideoCard> {
+  /** 当前卡片预览状态；正式播放前用于先停止独立的悬停解码会话。 */
+  final _previewKey = GlobalKey<_VideoPreviewState>();
   var _hovered = false;
   var _focused = false;
   var _pressed = false;
   var _moreMenuOpen = false;
+
+  /**
+   * 进入正式播放器前先关闭悬停预览的媒体与纹理。
+   *
+   * 媒体库 Route 会保留在播放器下方，不能依赖 widget dispose 释放预览 Player；
+   * 否则正式播放器切换分辨率时会与后台预览同时重建 Windows 纹理。
+   */
+  Future<void> _openAfterReleasingPreview() async {
+    await _previewKey.currentState?.releaseForPlayback();
+    if (mounted) {
+      widget.onOpen();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1778,13 +1793,14 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                   // 多选期间点击只更新选择；普通状态才打开完整 filtered queue。
                   onTap: widget.selectionMode
                       ? widget.onToggleSelected
-                      : widget.onOpen,
+                      : () => unawaited(_openAfterReleasingPreview()),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       KeyedSubtree(
                         key: LibrarySmokeKeys.cardThumbnailSurface(item.path),
                         child: _VideoPreview(
+                          key: _previewKey,
                           item: item,
                           thumbnailService: widget.thumbnailService,
                           playbackSettings: widget.playbackSettings,
@@ -2086,6 +2102,7 @@ enum _VideoMoreAction { revealLocation, delete }
 
 class _VideoPreview extends StatefulWidget {
   const _VideoPreview({
+    super.key,
     required this.item,
     required this.thumbnailService,
     required this.playbackSettings,
@@ -2132,6 +2149,8 @@ class _VideoPreviewState extends State<_VideoPreview> {
   var _isHoverPreviewLoading = false;
   var _isHoverPreviewReady = false;
   var _isHoverPreviewVisible = false;
+  /** 每次创建或停止预览都会递增，阻止旧 open Future 恢复过期画面。 */
+  var _hoverPreviewGeneration = 0;
 
   @override
   void initState() {
@@ -2196,14 +2215,17 @@ class _VideoPreviewState extends State<_VideoPreview> {
       return;
     }
     setState(() => _isHoverPreviewLoading = true);
+    final generation = ++_hoverPreviewGeneration;
     Player? player;
     try {
       // 上次为避免首帧前阻塞将 media_kit 改为延迟初始化；悬停
       // 预览也是真实 Player 消费者，必须与正式播放共用同一门禁。
       (widget.mediaKitInitializer ?? defaultMediaKitInitializer)
           .ensureInitialized();
-      if (!mounted || !widget.hoverPreviewEnabled) {
-        if (mounted) {
+      if (!mounted ||
+          !widget.hoverPreviewEnabled ||
+          generation != _hoverPreviewGeneration) {
+        if (mounted && generation == _hoverPreviewGeneration) {
           setState(() => _isHoverPreviewLoading = false);
         }
         return;
@@ -2231,8 +2253,10 @@ class _VideoPreviewState extends State<_VideoPreview> {
       await controller.platform.future
           .then((platform) => platform.waitUntilFirstFrameRendered)
           .timeout(const Duration(seconds: 8), onTimeout: () {});
-      if (!mounted || _hoverPlayer != player) {
-        await player.dispose();
+      if (!mounted ||
+          generation != _hoverPreviewGeneration ||
+          _hoverPlayer != player) {
+        // 停止路径已经接管并释放该 Player，旧 Future 不得重复 dispose。
         return;
       }
       setState(() {
@@ -2241,12 +2265,18 @@ class _VideoPreviewState extends State<_VideoPreview> {
         _isHoverPreviewVisible = true;
       });
     } catch (error) {
-      if (_hoverPlayer == player) {
+      final generationStillCurrent = generation == _hoverPreviewGeneration;
+      final ownsPlayer = _hoverPlayer == player;
+      if (ownsPlayer) {
         _hoverPlayer = null;
         _hoverController = null;
       }
-      if (player != null) {
+      if (player != null && (ownsPlayer || generationStillCurrent)) {
         await player.dispose();
+      }
+      if (!generationStillCurrent) {
+        // 用户已离开或进入正式播放时属于主动取消，不记录为预览失败。
+        return;
       }
       if (mounted) {
         setState(() {
@@ -2265,6 +2295,21 @@ class _VideoPreviewState extends State<_VideoPreview> {
 
   /** 取消淡出计时并释放当前卡片独占的动态预览资源。 */
   void _stopHoverPreview() {
+    unawaited(_releaseHoverPlayer(stopMediaFirst: false));
+  }
+
+  /**
+   * 卡片进入正式播放前停止悬停媒体，再把原生销毁尾部留在后台完成。
+   *
+   * `stop` 会先关闭当前媒体与视频输出，避免媒体库下层 Route 的预览纹理与正式
+   * Player 同时切换分辨率；dispose 不阻塞页面跳转，以保持点击后的响应速度。
+   */
+  Future<void> releaseForPlayback() =>
+      _releaseHoverPlayer(stopMediaFirst: true);
+
+  /** 统一取消旧代次并释放当前预览 Player，防止异步 open 回写已停止状态。 */
+  Future<void> _releaseHoverPlayer({required bool stopMediaFirst}) async {
+    _hoverPreviewGeneration++;
     _hoverExitTimer?.cancel();
     _hoverExitTimer = null;
     final player = _hoverPlayer;
@@ -2278,11 +2323,19 @@ class _VideoPreviewState extends State<_VideoPreview> {
       });
     }
     if (player != null) {
+      if (stopMediaFirst) {
+        try {
+          await player.stop().timeout(const Duration(milliseconds: 800));
+        } catch (_) {
+          // stop 超时仍继续销毁；正式播放器不等待预览原生线程的延迟回收尾部。
+        }
+      }
       unawaited(player.dispose());
     }
   }
 
   Future<void> _disposeHoverPlayer() async {
+    _hoverPreviewGeneration++;
     final player = _hoverPlayer;
     _hoverPlayer = null;
     _hoverController = null;

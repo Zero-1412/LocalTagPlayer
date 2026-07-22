@@ -616,6 +616,10 @@ void main() {
           .opacity,
       1,
     );
+    expect(
+      tester.widget<Image>(find.byType(Image)).key,
+      ValueKey<String>(poster.path),
+    );
     await pumpPoster(false);
     await tester.pump(
       playerOpeningPosterHold - const Duration(milliseconds: 1),
@@ -1120,6 +1124,56 @@ void main() {
     await tester.pump();
     expect(selectCount, 2);
     expect(openCount, 0);
+  });
+
+  testWidgets('normal card tap completes preview handoff before opening',
+      (tester) async {
+    final directory = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'local_tag_player_open_handoff_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (directory.existsSync()) {
+        directory.deleteSync(recursive: true);
+      }
+    });
+    final item = _testVideo(
+      path: p.join(directory.path, 'handoff.mp4'),
+      title: 'preview handoff',
+    );
+    var openCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 300,
+            height: 230,
+            child: InteractiveVideoCard(
+              item: item,
+              thumbnailService: ThumbnailService.forDirectory(
+                directory,
+                _PreviewFFmpegBackend(),
+              ),
+              playbackSettings: PlaybackSettings.defaults,
+              onOpen: () => openCount += 1,
+              onToggleFavorite: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.cardOpen(item.path)));
+    await tester.pump();
+
+    expect(openCount, 1);
+    expect(
+      find.byKey(LibrarySmokeKeys.cardHoverPreviewLoading(item.path)),
+      findsNothing,
+    );
   });
 
   testWidgets('library scrolling appends ten rows and keeps full play queue',

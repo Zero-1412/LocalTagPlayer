@@ -162,6 +162,7 @@ class _PlayerOpeningPosterState extends State<PlayerOpeningPoster> {
           color: Colors.black,
           child: Image.file(
             poster,
+            key: ValueKey<String>(poster.path),
             fit: BoxFit.contain,
             gaplessPlayback: true,
             errorBuilder: (_, __, ___) => const SizedBox.shrink(),
@@ -2549,7 +2550,11 @@ class PlayerPageState extends State<PlayerPage> {
     if (_queue.isEmpty) {
       return;
     }
-    _prepareOpeningPoster(_currentItem);
+    if (_openedPath == null && _openingPosterPath == null) {
+      // 缩略图只承担 Route 首次冷启动占位；队列切换继续复用唯一视频纹理，
+      // 避免图片解码与不同分辨率的原生纹理重建在同一帧交叉。
+      _prepareOpeningPoster(_currentItem);
+    }
     if (_currentItem.isMissing) {
       _openedPath = null;
       _openRequests.markFailure(
@@ -2686,15 +2691,29 @@ class PlayerPageState extends State<PlayerPage> {
             level: PlayerAdaptiveQualityLevel.off,
             darkSceneEnhancementEnabled: false,
           );
+          if (_openRequests.hasPending) {
+            // 新选择已经覆盖旧路径时，不再为旧媒体执行后续配置或 open。
+            continue;
+          }
           await _applyPlaybackPerformanceProfile();
           if (!mounted) {
             return;
+          }
+          if (_openRequests.hasPending) {
+            continue;
           }
           await _playerBackend.openPath(path);
           if (!mounted) {
             return;
           }
+          if (_openRequests.hasPending) {
+            // open 本身无法中断，但返回后立即消费最新路径，不等待旧媒体首帧。
+            continue;
+          }
           await _applyPlaybackPerformanceProfile();
+          if (_openRequests.hasPending) {
+            continue;
+          }
           final playable = await _waitForPlayableMedia();
           if (!playable) {
             // 快速切换已有更新请求时只放弃旧验证，不展示过时错误。
@@ -2706,6 +2725,9 @@ class PlayerPageState extends State<PlayerPage> {
               );
               await _playerBackend.stop();
             }
+            continue;
+          }
+          if (_openRequests.hasPending) {
             continue;
           }
           _openedPath = path;
@@ -2811,12 +2833,16 @@ class PlayerPageState extends State<PlayerPage> {
    * 归入稳定错误面板。检测期间如出现更新 open 请求则立即放弃旧验证，保护快速切换流畅度。
    */
   Future<bool> _waitForPlayableMedia() async {
-    const attempts = 6;
+    // 保持约 1.5 秒损坏媒体判定窗口，但把新请求响应粒度从 250ms 缩短到 80ms。
+    const attempts = 19;
     for (var attempt = 0; attempt < attempts; attempt++) {
       if (_openRequests.hasPending) {
         return false;
       }
       final videoCodec = await _getMpvProperty('video-codec');
+      if (_openRequests.hasPending) {
+        return false;
+      }
       final audioCodec = await _getMpvProperty('audio-codec');
       if (playerMediaStateIsPlayable(
         duration: _playerBackend.state.duration,
@@ -2825,7 +2851,7 @@ class PlayerPageState extends State<PlayerPage> {
       )) {
         return true;
       }
-      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
     }
     return false;
   }
