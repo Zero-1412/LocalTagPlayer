@@ -10,8 +10,8 @@ import 'player_video_aspect_mode.dart';
  * 显示桌面播放器设置浮层。
  *
  * 使用独立路由而不是把复杂列表塞入系统 Menu，避免 Windows 上菜单获得点击
- * 高亮但自定义内容未挂载。一级保留镜像与循环开关，二级只承担比例/倍速
- * 导航，具体选项进入三级列表；每次变更立即回传播放器。
+ * 高亮但自定义内容未挂载。一级保留镜像、GPU 超分与循环开关，二级只承担
+ * 比例/倍速导航，具体选项进入三级列表；每次变更立即回传播放器。
  */
 Future<void> showPlayerSettingsDialog(
   BuildContext context, {
@@ -20,17 +20,20 @@ Future<void> showPlayerSettingsDialog(
   required PlayerPlaybackMode playbackMode,
   required PlayerVideoAspectMode videoAspectMode,
   required double playbackRate,
+  required bool videoSuperResolutionEnabled,
   required List<double> playbackRates,
   required ValueChanged<bool> onMirrorVideoChanged,
   required ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged,
   required ValueChanged<PlayerVideoAspectMode> onVideoAspectModeChanged,
   required ValueChanged<double> onPlaybackRateChanged,
+  required ValueChanged<bool> onVideoSuperResolutionChanged,
 }) async {
   final accessibility = AppAccessibilityScope.of(context);
   var localMirrorVideo = mirrorVideo;
   var localPlaybackMode = playbackMode;
   var localVideoAspectMode = videoAspectMode;
   var localPlaybackRate = playbackRate;
+  var localVideoSuperResolutionEnabled = videoSuperResolutionEnabled;
   var currentPage = _PlayerSettingsPage.primary;
   await showGeneralDialog<void>(
     context: context,
@@ -170,6 +173,8 @@ Future<void> showPlayerSettingsDialog(
                                             'player.settings.primary.page',
                                           ),
                                           mirrorVideo: localMirrorVideo,
+                                          videoSuperResolutionEnabled:
+                                              localVideoSuperResolutionEnabled,
                                           playbackMode: localPlaybackMode,
                                           onMirrorVideoChanged: (enabled) {
                                             setDialogState(
@@ -182,6 +187,17 @@ Future<void> showPlayerSettingsDialog(
                                               () => localPlaybackMode = mode,
                                             );
                                             onPlaybackModeChanged(mode);
+                                          },
+                                          onVideoSuperResolutionChanged:
+                                              (enabled) {
+                                            setDialogState(
+                                              () =>
+                                                  localVideoSuperResolutionEnabled =
+                                                      enabled,
+                                            );
+                                            onVideoSuperResolutionChanged(
+                                              enabled,
+                                            );
                                           },
                                           onShowAdvancedSettings: () =>
                                               setDialogState(
@@ -296,14 +312,17 @@ extension on _PlayerSettingsPage {
  * 播放设置一级列表。
  *
  * 高频的镜像与循环开关保持单行可达；比例、倍速和低频入口收进二级页，避免
- * 打开设置时立即呈现大块按钮网格。循环开关互斥，关闭当前模式会回到顺序播放。
+ * 打开设置时立即呈现大块按钮网格。GPU 超分保留在一级，便于用户在播放中快速
+ * 对比和关闭；循环开关互斥，关闭当前模式会回到顺序播放。
  */
 class PlayerSettingsPrimaryList extends StatelessWidget {
   const PlayerSettingsPrimaryList({
     super.key,
     required this.mirrorVideo,
+    required this.videoSuperResolutionEnabled,
     required this.playbackMode,
     required this.onMirrorVideoChanged,
+    required this.onVideoSuperResolutionChanged,
     required this.onPlaybackModeChanged,
     required this.onShowAdvancedSettings,
   });
@@ -311,11 +330,17 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
   /** 是否仅水平翻转视频画面。 */
   final bool mirrorVideo;
 
+  /** 是否使用仅在画面放大时运行的本地 GPU 高质量超分。 */
+  final bool videoSuperResolutionEnabled;
+
   /** 当前队列播放方式，用于计算两个循环开关的互斥状态。 */
   final PlayerPlaybackMode playbackMode;
 
   /** 镜像画面开关变化回调。 */
   final ValueChanged<bool> onMirrorVideoChanged;
+
+  /** GPU 画质超分开关变化回调。 */
+  final ValueChanged<bool> onVideoSuperResolutionChanged;
 
   /** 循环方式变化回调。 */
   final ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged;
@@ -335,6 +360,13 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
             label: '镜像画面',
             value: mirrorVideo,
             onChanged: onMirrorVideoChanged,
+          ),
+          _PlayerSettingsToggleRow(
+            key: const ValueKey('player.settings.superResolution'),
+            label: 'GPU 画质超分',
+            subtitle: '仅放大低分辨率画面',
+            value: videoSuperResolutionEnabled,
+            onChanged: onVideoSuperResolutionChanged,
           ),
           _PlayerSettingsToggleRow(
             key: const ValueKey('player.settings.repeatOne'),
@@ -401,10 +433,14 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    this.subtitle,
   });
 
   /** 设置名称。 */
   final String label;
+
+  /** 可选的性能边界说明；不提供时保持原有紧凑行高。 */
+  final String? subtitle;
 
   /** 当前开关状态。 */
   final bool value;
@@ -420,18 +456,33 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
         onTap: () => onChanged(!value),
         borderRadius: BorderRadius.circular(AppRadius.control),
         child: SizedBox(
-          height: 44,
+          height: subtitle == null ? 44 : 58,
           child: Row(
             children: [
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    color: playerText,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: playerText,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        style: const TextStyle(
+                          color: playerTextMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               IgnorePointer(

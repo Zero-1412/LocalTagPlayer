@@ -39,6 +39,7 @@ class PlaybackSettings {
     required this.playbackMode,
     required this.videoAspectMode,
     required this.playbackRate,
+    required this.videoSuperResolutionEnabled,
     required this.confirmBeforeDeletingVideo,
     required this.moveDeletedFileToTrash,
   });
@@ -53,6 +54,7 @@ class PlaybackSettings {
     playbackMode: PlayerPlaybackMode.sequential,
     videoAspectMode: PlayerVideoAspectMode.automatic,
     playbackRate: 1,
+    videoSuperResolutionEnabled: false,
     confirmBeforeDeletingVideo: true,
     moveDeletedFileToTrash: false,
   );
@@ -192,6 +194,8 @@ class PlaybackSettings {
   final PlayerVideoAspectMode videoAspectMode;
   /** 全局播放倍速；每次打开媒体后重新应用到播放后端。 */
   final double playbackRate;
+  /** 是否启用只在画面放大时运行的 libmpv GPU 高质量超分。 */
+  final bool videoSuperResolutionEnabled;
   /** 删除视频前是否显示影响范围与回收站选择确认。 */
   final bool confirmBeforeDeletingVideo;
   /** 删除确认或无提示删除时，是否先把本地文件移入系统回收站。 */
@@ -209,6 +213,7 @@ class PlaybackSettings {
     PlayerPlaybackMode? playbackMode,
     PlayerVideoAspectMode? videoAspectMode,
     double? playbackRate,
+    bool? videoSuperResolutionEnabled,
     bool? confirmBeforeDeletingVideo,
     bool? moveDeletedFileToTrash,
   }) {
@@ -224,6 +229,8 @@ class PlaybackSettings {
       playbackMode: playbackMode ?? this.playbackMode,
       videoAspectMode: videoAspectMode ?? this.videoAspectMode,
       playbackRate: playbackRate ?? this.playbackRate,
+      videoSuperResolutionEnabled:
+          videoSuperResolutionEnabled ?? this.videoSuperResolutionEnabled,
       confirmBeforeDeletingVideo:
           confirmBeforeDeletingVideo ?? this.confirmBeforeDeletingVideo,
       moveDeletedFileToTrash:
@@ -249,6 +256,7 @@ class PlaybackSettings {
         'playbackMode': playbackMode.name,
         'videoAspectMode': videoAspectMode.name,
         'playbackRate': playbackRate,
+        'videoSuperResolutionEnabled': videoSuperResolutionEnabled,
         'confirmBeforeDeletingVideo': confirmBeforeDeletingVideo,
         'moveDeletedFileToTrash': moveDeletedFileToTrash,
       };
@@ -298,6 +306,9 @@ class PlaybackSettings {
         defaults.videoAspectMode,
       ),
       playbackRate: _supportedPlaybackRate(json['playbackRate']),
+      videoSuperResolutionEnabled: json['videoSuperResolutionEnabled'] is bool
+          ? json['videoSuperResolutionEnabled']! as bool
+          : defaults.videoSuperResolutionEnabled,
       confirmBeforeDeletingVideo: json['confirmBeforeDeletingVideo'] is bool
           ? json['confirmBeforeDeletingVideo']! as bool
           : defaults.confirmBeforeDeletingVideo,

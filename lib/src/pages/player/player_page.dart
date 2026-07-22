@@ -19,6 +19,7 @@ import '../../services/media/thumbnail_service.dart';
 import '../../services/player/player_hardware_acceleration.dart';
 import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_memory_diagnostics.dart';
+import '../../services/player/player_video_super_resolution.dart';
 import '../../widgets/app_theme_tokens.dart';
 import '../../widgets/design_system/app_interaction_surface.dart';
 import '../../widgets/player_shortcut_input.dart';
@@ -339,7 +340,7 @@ bool playerExitStopShouldStartBeforePop({required bool pauseAcknowledged}) {
 }
 
 /**
- * 把持久化的画面比例与倍速重新应用到刚打开的播放后端。
+ * 把持久化的画面比例、倍速与 GPU 超分重新应用到刚打开的播放后端。
  *
  * 播放器在 open 前后都会调用该函数，避免后端重建媒体状态后只保留设置数据或
  * UI 选中态，却没有把真实参数送入当前播放会话。
@@ -348,6 +349,7 @@ Future<void> applyPlayerOpenPreferences({
   required PlayerBackend backend,
   required PlayerVideoAspectMode videoAspectMode,
   required double playbackRate,
+  required bool videoSuperResolutionEnabled,
 }) async {
   /** 单个可选 mpv 属性失败时继续应用其余偏好，兼容能力较少的后端。 */
   Future<void> setPropertySafely(String property, String value) async {
@@ -367,6 +369,10 @@ Future<void> applyPlayerOpenPreferences({
   await setPropertySafely('video-zoom', '0');
   await setPropertySafely('video-pan-x', '0');
   await setPropertySafely('video-pan-y', '0');
+  await PlayerVideoSuperResolution.apply(
+    backend: backend,
+    enabled: videoSuperResolutionEnabled,
+  );
   await backend.setRate(playbackRate);
 }
 
@@ -610,6 +616,8 @@ class PlayerPageState extends State<PlayerPage> {
   late bool _mirrorVideo;
   /** 当前全局画面比例；打开新媒体后会重新应用到后端。 */
   late PlayerVideoAspectMode _videoAspectMode;
+  /** 当前全局 GPU 画质超分开关；只影响视频渲染缩放器。 */
+  late bool _videoSuperResolutionEnabled;
   /** 当前播放器会话使用的全局配置快照。 */
   late PlaybackSettings _effectivePlaybackSettings;
   /** 页面即时音量；避免异步后端快照让滑条、图标和键盘反馈不同步。 */
@@ -676,6 +684,8 @@ class PlayerPageState extends State<PlayerPage> {
     _playbackMode = _effectivePlaybackSettings.playbackMode;
     _videoAspectMode = _effectivePlaybackSettings.videoAspectMode;
     _playbackRate = _effectivePlaybackSettings.playbackRate;
+    _videoSuperResolutionEnabled =
+        _effectivePlaybackSettings.videoSuperResolutionEnabled;
     _focusNode = FocusNode(debugLabel: 'player-shortcuts');
     _queueScrollController = ScrollController();
     _fullscreenQueueScrollController = ScrollController();
@@ -882,6 +892,28 @@ class PlayerPageState extends State<PlayerPage> {
     setState(() => _mirrorVideo = enabled);
     _saveGlobalPlaybackSettings(
       _effectivePlaybackSettings.copyWith(mirrorVideo: enabled),
+    );
+  }
+
+  /**
+   * 即时切换本地 GPU 画质超分并异步持久化。
+   *
+   * Flutter 只重绘设置开关；高质量缩放留在 mpv GPU renderer，不能在 UI isolate
+   * 解码或处理视频帧，也不能触发 filtered queue 与媒体详情重算。
+   */
+  void _setVideoSuperResolutionEnabled(bool enabled) {
+    if (_videoSuperResolutionEnabled == enabled) return;
+    setState(() => _videoSuperResolutionEnabled = enabled);
+    _saveGlobalPlaybackSettings(
+      _effectivePlaybackSettings.copyWith(
+        videoSuperResolutionEnabled: enabled,
+      ),
+    );
+    unawaited(
+      PlayerVideoSuperResolution.apply(
+        backend: _playerBackend,
+        enabled: enabled,
+      ),
     );
   }
 
@@ -1800,6 +1832,7 @@ class PlayerPageState extends State<PlayerPage> {
         playbackMode: _playbackMode,
         videoAspectMode: _videoAspectMode,
         playbackRate: _playbackRate,
+        videoSuperResolutionEnabled: _videoSuperResolutionEnabled,
         playbackRates: _playbackRates,
         onMirrorVideoChanged: _setMirrorVideo,
         onPlaybackModeChanged: _setPlaybackMode,
@@ -1807,6 +1840,7 @@ class PlayerPageState extends State<PlayerPage> {
           unawaited(_setVideoAspectMode(mode));
         },
         onPlaybackRateChanged: _setPlaybackRate,
+        onVideoSuperResolutionChanged: _setVideoSuperResolutionEnabled,
       );
     } finally {
       if (mounted) {
@@ -1937,11 +1971,12 @@ class PlayerPageState extends State<PlayerPage> {
     for (final entry in options.entries) {
       await _setMpvProperty(entry.key, entry.value);
     }
-    // 部分后端会在打开新媒体时重建参数；每次 open 前后恢复全局比例与倍速。
+    // 部分后端会在打开新媒体时重建参数；每次 open 前后恢复比例、倍速与超分。
     await applyPlayerOpenPreferences(
       backend: _playerBackend,
       videoAspectMode: _videoAspectMode,
       playbackRate: _playbackRate,
+      videoSuperResolutionEnabled: _videoSuperResolutionEnabled,
     );
   }
 
@@ -2823,6 +2858,8 @@ class PlayerPageState extends State<PlayerPage> {
       'display-fps',
       'video-sync',
       'interpolation',
+      'scale',
+      'scaler-resizes-only',
       'avsync',
       'total-avsync-change',
       'mistimed-frame-count',
@@ -2872,6 +2909,9 @@ class PlayerPageState extends State<PlayerPage> {
       'mpv \u663e\u793a FPS: ${mpv['display-fps']}',
       'mpv \u89c6\u9891\u540c\u6b65: ${mpv['video-sync']}',
       'mpv \u63d2\u5e27: ${mpv['interpolation']}',
+      '画质超分设置: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
+      'mpv GPU 缩放器: ${mpv['scale']}',
+      'mpv 仅缩放时增强: ${mpv['scaler-resizes-only']}',
       'mpv AV \u504f\u79fb: ${mpv['avsync']}',
       'mpv AV \u7d2f\u8ba1\u4fee\u6b63: ${mpv['total-avsync-change']}',
       'mpv \u65f6\u5e8f\u5f02\u5e38\u5e27: ${mpv['mistimed-frame-count']}',

@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.50` 完成播放器文件重命名的平台边界和 stable mutable path 事务。SQLite schema、标签查询、filtered queue 与 PlayerBackend contract 不变。
+`Architecture Baseline 0.5.51` 在既有 `PlayerBackend.setProperty` 边界后增加可持久化 GPU 画质超分配置。SQLite schema、标签查询、filtered queue 与 PlayerBackend contract 不变。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,11 +37,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.50`
+已完成基线：`Architecture Baseline 0.5.51`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.51`：`PlaybackSettings` 向后兼容增加默认关闭的 GPU 画质超分开关；`PlayerVideoSuperResolution` 只通过既有 `PlayerBackend.setProperty` 应用 libmpv GPU renderer 的 `ewa_lanczossharp`、sigmoid 与 resize-only，并按后端串行化 open 重放和用户切换，在媒体 open 前后恢复完整配置。当前 libmpv 不包含 Intel/NVIDIA `d3d11vpp scaling-mode` 厂商扩展，因此不宣称 AI 超分。Flutter UI 不处理视频帧；未修改 `PlayerBackend` contract、硬解选择、SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列或用户数据。
 
 - `0.5.50`：`FileSystemAdapter` 增加拒绝覆盖的单文件重命名契约；播放器文件名入口只编辑 basename 并保留扩展名，标签入口继续独占 manual 标签维护。`LibraryRepository.renameVideoPath` 仅提交同目录 mutable path、标题和兼容 path 索引，SQLite batch 成功后才迁移内存索引；稳定 `videoId`、标签关系、收藏和播放状态保持。当前文件句柄不允许重命名时，播放器使用既有 pause/stop/open/seek 边界恢复原位置，不修改 `PlayerBackend` contract。未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列或标签来源语义。
 

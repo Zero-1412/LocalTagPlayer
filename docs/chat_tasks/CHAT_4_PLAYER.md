@@ -652,3 +652,13 @@
 - `PlaybackSettings` 向后兼容增加镜像、队列播放方式、比例和倍速；页面变更即时应用，写入串行化，并在退出播放器前等待最后一次持久化完成。
 - 每次媒体 open 前后把比例、panscan 和倍速重新应用到 `PlayerBackend`；focused test 明确验证后端收到持久化的 1.5x 与铺满参数，不以 JSON 或 UI 选中态代替真实生效。
 - focused 7 项、完整 128 项测试、`flutter analyze`、Windows debug build 和真实窗口一级/二级/三级点击通过，2 项显式基准跳过；完整重启后“铺满 / 1.5x”仍显示并真实生效，验证后恢复默认。filtered queue、当前索引、SQLite、标签语义和缓存队列均未改变。
+
+# 2026-07-22 GPU 画质超分
+
+- 进度条齿轮一级设置新增默认关闭的“GPU 画质超分”；开关全局持久化，旧设置文件缺字段时保持关闭，并提示该能力只在低分辨率画面被放大时运行。
+- `PlayerVideoSuperResolution` 通过现有 `PlayerBackend.setProperty` 应用 libmpv GPU renderer 的 `ewa_lanczossharp`、Lanczos chroma、sigmoid upscaling 与 resize-only；关闭时恢复 Lanczos 基线，每次 open 前后重新应用完整配置。
+- 当前打包 libmpv `v0.36.0-403` 没有新版 Intel/NVIDIA `d3d11vpp scaling-mode`，本轮不宣称 RTX/Intel AI 超分；渲染留在 GPU，Flutter UI 不读取视频帧，不访问全媒体库或后台缓存队列。
+- 同一 `PlayerBackend` 的配置应用按请求串行化，媒体 open 前后重放与用户点击不会交错留下半套旧配置；播放诊断新增超分开关、实际缩放器与 resize-only 状态。
+- focused 5 项、全量 237 项测试、`flutter analyze` 和 Windows Debug 构建通过，3 项显式 benchmark 跳过。
+- 显式启动 Debug 路径时 Windows 应用激活实际路由到已安装 Release 进程，准备点击时又检测到用户输入，自动化按安全规则中止；准确复测路径为：关闭已安装 Release → 启动新 Debug 构建 → 进入低分辨率视频 → 进度条齿轮 → 开启/关闭超分 → 拖动进度与滚动队列 → 诊断确认 `ewa_lanczossharp / yes` 与恢复 `lanczos` → 保存两态截图。
+- 未修改 filtered queue 来源、当前 index、播放模式、硬解选择、SQLite、标签语义、缩略图或媒体详情队列。

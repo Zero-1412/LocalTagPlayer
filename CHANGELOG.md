@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-22 · 播放器 GPU 画质超分
+
+- 播放器进度条齿轮的一级设置新增“GPU 画质超分”，默认关闭、整行可点，并明确提示只放大低分辨率画面；开关通过现有播放设置串行持久化，旧 `settings.json` 缺字段时保持安全默认值。
+- 新增 `PlayerVideoSuperResolution`，开启时向 `PlayerBackend` 应用 `ewa_lanczossharp`、Lanczos chroma、sigmoid upscaling 与 resize-only；关闭时恢复 Lanczos 低开销基线。每次媒体 open 前后重放完整配置，避免后端状态重建后只剩 UI 选中态。
+- 当前发布依赖的 libmpv `v0.36.0-403` 未包含新版 Intel/NVIDIA `d3d11vpp scaling-mode`，因此本轮是本地 GPU 高质量上采样，不宣称厂商 AI 超分；Flutter UI 不读取或处理视频帧，也不触发 filtered queue、媒体详情或缩略图重算。
+- 同一 `PlayerBackend` 的超分属性应用按请求串行化，避免媒体 open 前后重放与用户点击交错后留下半套旧配置；播放诊断新增超分设置、实际 GPU 缩放器与 resize-only 状态。
+- focused 5 项及全量 237 项测试通过，3 项显式 benchmark 跳过，`flutter analyze` 与 Windows Debug 构建通过。
+- 显式启动 Debug 路径时，Windows 应用激活实际路由到已安装 Release 进程；准备点击时自动化又检测到用户输入并按安全规则中止。尚未完成新构建的“进入播放器 → 齿轮 → 开关 → 诊断”真实点击截图，已在 `CURRENT_TASK.md` 保留准确复测路径。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列、硬解设置、稳定身份或用户标签/收藏数据。
+
 ## 2026-07-21 · GitHub 首次公开发布与隐私收口
 
 - README 从内部进度索引重写为面向首次访问者的产品说明，完整交代创建目的、标签发现闭环、特色功能、技术栈、架构边界、下载方式、平台限制和本地数据策略。

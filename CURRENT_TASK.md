@@ -4,6 +4,15 @@
 
 ## 活跃任务
 
+### 2026-07-22 播放器 GPU 画质超分
+
+- 目标：在播放器进度条齿轮设置中提供可即时开关的画质超分，同时保持视频播放、filtered queue 与 Flutter UI 响应流畅。
+- 当前状态：代码、持久化、focused tests、全量测试、静态分析与 Windows Debug 构建已完成；显式启动 Debug 路径时 Windows 应用激活实际路由到已安装 Release 进程，随后又检测到用户正在窗口输入，自动化按安全规则中止，因此仍需补做新构建的准确人工点击与截图复验。
+- 当前打包的 libmpv `v0.36.0-403` 不包含新版 Intel/NVIDIA `d3d11vpp scaling-mode` 厂商扩展；本轮使用其已支持的 `ewa_lanczossharp` GPU 高质量上采样，不宣称 RTX/Intel AI 超分。
+- 设置默认关闭；开启后显式使用 `scaler-resizes-only=yes`，仅在源画面需要放大时运行，高质量亮度缩放与 sigmoid 变换留在 GPU renderer，Flutter UI 不处理视频帧。
+- 关闭后恢复 Lanczos 基线；每次媒体 open 前后重新应用设置，播放诊断显示开关、实际 `scale` 与 resize-only 状态。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列、解码设置或用户标签/收藏数据。
+
 ### 2026-07-21 GitHub 首次公开发布与隐私收口
 
 - 目标：让首次访问仓库的人能理解产品目的、特色功能、技术框架和架构边界，并通过 GitHub Release 获取 Windows / macOS 安装包。
@@ -38,8 +47,8 @@
 
 - 产品边界：Tag 驱动的本地视频发现播放器，不扩展字幕、音轨、逐帧或 A-B loop 等专业播放器能力。
 - 数据边界：SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 内容与顺序、标签来源语义均未改变。
-- 验证：235 项测试通过，3 项显式 benchmark 跳过；卡片双项菜单、页面当前路径、文件系统边界回归、`flutter analyze`、Windows debug build 均通过。1248×714 隔离 Debug 实窗确认菜单紧凑，并在资源管理器中选中当前卡片 `40712-1080p.mp4`；未改名或删除真实媒体。
-- 架构基线：`Architecture Baseline 0.5.50`。
+- 验证：237 项测试通过，3 项显式 benchmark 跳过；GPU 超分设置、属性串行化与后端回归、卡片双项菜单、页面当前路径、文件系统边界回归、`flutter analyze`、Windows debug build 均通过。超分真实点击与截图因检测到用户输入而中止，不能宣称实窗通过。
+- 架构基线：`Architecture Baseline 0.5.51`。
 
 ## 已确认阻塞
 

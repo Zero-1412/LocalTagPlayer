@@ -166,6 +166,18 @@ class _PreferenceRecordingPlayerBackend implements PlayerBackend {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/** 故意让开启档延迟更久，用于验证并发请求仍以最后一次选择收尾。 */
+class _SkewedSuperResolutionPlayerBackend
+    extends _PreferenceRecordingPlayerBackend {
+  /** 模拟平台通道和 GPU 属性应用耗时不一致。 */
+  @override
+  Future<void> setProperty(String property, String value) async {
+    final delay = value == 'ewa_lanczossharp' ? 20 : 1;
+    await Future<void>.delayed(Duration(milliseconds: delay));
+    await super.setProperty(property, value);
+  }
+}
+
 void main() {
   test('library video card uses compact height and stable duration labels', () {
     expect(
@@ -3597,6 +3609,7 @@ void main() {
     expect(oldSettings.playbackMode, PlayerPlaybackMode.sequential);
     expect(oldSettings.videoAspectMode, PlayerVideoAspectMode.automatic);
     expect(oldSettings.playbackRate, 1);
+    expect(oldSettings.videoSuperResolutionEnabled, isFalse);
 
     final directory = await Directory.systemTemp.createTemp(
       'local_tag_player_playback_settings_',
@@ -3608,6 +3621,7 @@ void main() {
       playbackMode: PlayerPlaybackMode.repeatAll,
       videoAspectMode: PlayerVideoAspectMode.cover,
       playbackRate: 1.5,
+      videoSuperResolutionEnabled: true,
       confirmBeforeDeletingVideo: false,
       moveDeletedFileToTrash: true,
     );
@@ -3618,10 +3632,12 @@ void main() {
     expect(loaded.playbackMode, PlayerPlaybackMode.repeatAll);
     expect(loaded.videoAspectMode, PlayerVideoAspectMode.cover);
     expect(loaded.playbackRate, 1.5);
+    expect(loaded.videoSuperResolutionEnabled, isTrue);
     expect(loaded.confirmBeforeDeletingVideo, isFalse);
     expect(loaded.moveDeletedFileToTrash, isTrue);
     expect(loaded.toJson()['playbackMode'], 'repeatAll');
     expect(loaded.toJson()['videoAspectMode'], 'cover');
+    expect(loaded.toJson()['videoSuperResolutionEnabled'], isTrue);
 
     final unsafe = PlaybackSettings.fromJson({
       'playbackMode': 'unknown',
@@ -3631,6 +3647,7 @@ void main() {
     expect(unsafe.playbackMode, PlayerPlaybackMode.sequential);
     expect(unsafe.videoAspectMode, PlayerVideoAspectMode.automatic);
     expect(unsafe.playbackRate, 1);
+    expect(unsafe.videoSuperResolutionEnabled, isFalse);
   });
 
   test('persisted visual settings are applied to the playback backend',
@@ -3641,12 +3658,51 @@ void main() {
       backend: backend,
       videoAspectMode: PlayerVideoAspectMode.cover,
       playbackRate: 1.5,
+      videoSuperResolutionEnabled: true,
     );
 
     expect(backend.properties['video-aspect-override'], '-1');
     expect(backend.properties['panscan'], '1.0');
     expect(backend.properties['video-zoom'], '0');
+    expect(backend.properties['scale'], 'ewa_lanczossharp');
+    expect(backend.properties['cscale'], 'lanczos');
+    expect(backend.properties['sigmoid-upscaling'], 'yes');
+    expect(backend.properties['scaler-resizes-only'], 'yes');
     expect(backend.rates, <double>[1.5]);
+  });
+
+  test('disabled video super resolution restores the low-cost GPU baseline',
+      () async {
+    final backend = _PreferenceRecordingPlayerBackend();
+
+    await PlayerVideoSuperResolution.apply(
+      backend: backend,
+      enabled: false,
+    );
+
+    expect(backend.properties['scale'], 'lanczos');
+    expect(backend.properties['cscale'], 'lanczos');
+    expect(backend.properties['sigmoid-upscaling'], 'no');
+    expect(backend.properties['scaler-resizes-only'], 'yes');
+  });
+
+  test('video super resolution serializes open replay and the latest toggle',
+      () async {
+    final backend = _SkewedSuperResolutionPlayerBackend();
+
+    final openingReplay = PlayerVideoSuperResolution.apply(
+      backend: backend,
+      enabled: true,
+    );
+    final latestToggle = PlayerVideoSuperResolution.apply(
+      backend: backend,
+      enabled: false,
+    );
+    await Future.wait(<Future<void>>[openingReplay, latestToggle]);
+
+    expect(backend.properties['scale'], 'lanczos');
+    expect(backend.properties['sigmoid-upscaling'], 'no');
+    expect(backend.properties['scaler-resizes-only'], 'yes');
   });
 
   test('playback settings clamp fullscreen queue interaction values', () {
@@ -3934,6 +3990,7 @@ void main() {
     PlayerPlaybackMode? selectedPlaybackMode;
     PlayerVideoAspectMode? selectedAspectMode;
     double? selectedRate;
+    bool? superResolutionEnabled;
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
@@ -3949,6 +4006,7 @@ void main() {
                   playbackMode: PlayerPlaybackMode.sequential,
                   videoAspectMode: PlayerVideoAspectMode.automatic,
                   playbackRate: 1,
+                  videoSuperResolutionEnabled: false,
                   playbackRates: const <double>[0.5, 1, 1.5],
                   onMirrorVideoChanged: (enabled) {
                     mirrorVideo = enabled;
@@ -3961,6 +4019,9 @@ void main() {
                   },
                   onPlaybackRateChanged: (rate) {
                     selectedRate = rate;
+                  },
+                  onVideoSuperResolutionChanged: (enabled) {
+                    superResolutionEnabled = enabled;
                   },
                 ),
                 icon: const Icon(Icons.settings_outlined),
@@ -4000,6 +4061,8 @@ void main() {
       findsNothing,
     );
     expect(find.text('镜像画面'), findsOneWidget);
+    expect(find.text('GPU 画质超分'), findsOneWidget);
+    expect(find.text('仅放大低分辨率画面'), findsOneWidget);
     expect(find.text('单曲循环'), findsOneWidget);
     expect(find.text('列表循环'), findsOneWidget);
     expect(find.text('更多播放设置'), findsOneWidget);
@@ -4011,6 +4074,12 @@ void main() {
     );
     await tester.pump();
     expect(mirrorVideo, isTrue);
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.superResolution')),
+    );
+    await tester.pump();
+    expect(superResolutionEnabled, isTrue);
 
     await tester.tap(
       find.byKey(const ValueKey('player.settings.repeatOne')),
