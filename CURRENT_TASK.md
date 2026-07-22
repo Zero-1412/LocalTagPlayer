@@ -4,6 +4,13 @@
 
 ## 活跃任务
 
+### 2026-07-22 播放器隐藏态细进度回归修复
+
+- 目标：恢复完整控制条自动收起后贴在视频底边的 3px 只读播放进度，避免既有功能在未获授权时随控制层重排被删除。
+- 当前状态：已完成。历史定位确认提交 `5271f63` 删除了 `PlayerPage` 中独立的 `PlayerHiddenProgressBar` 挂载，但遗留组件与孤立测试；现已按原 Stack 层级恢复，并增加边界注释禁止把它并入透明控制条子树。
+- `flutter analyze`、完整 264 项测试与 Windows Debug build 通过，3 项显式真实媒体 benchmark 按设计跳过。真实 Debug 点击覆盖“进入播放器 → 3 秒自动隐藏 → 底部细进度保留 → 鼠标进入底部唤回控制条”，两态截图位于 `.local/qa/player-hidden-progress/`。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend` contract、缓存队列、播放设置、稳定身份或用户数据。
+
 ### 2026-07-22 播放器快速切换与预览纹理交接
 
 - 目标：修复播放器连续切换不同分辨率视频时的 Windows 原生闪退，并让快速输入直接收敛到最新选择，不等待旧视频达到可播放状态。

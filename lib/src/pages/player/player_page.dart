@@ -1887,6 +1887,28 @@ class PlayerPageState extends State<PlayerPage> {
               ),
             ),
           ),
+        // 隐藏态进度提示必须独立于控制条树常驻；如果放进下方透明控制条，
+        // 控制条收起时它会一起消失，用户也会失去当前播放位置的最低限度反馈。
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: StreamBuilder<Duration>(
+            stream: _playerBackend.positionChanges,
+            initialData: _playerBackend.state.position,
+            builder: (context, positionSnapshot) {
+              return AnimatedOpacity(
+                key: const ValueKey('player.controls.hiddenProgress'),
+                duration: fadeDuration,
+                opacity: _controlsVisible ? 0 : 1,
+                child: PlayerHiddenProgressBar(
+                  position: positionSnapshot.data ?? Duration.zero,
+                  duration: _playerBackend.state.duration,
+                ),
+              );
+            },
+          ),
+        ),
         Positioned(
           left: 0,
           right: 0,
