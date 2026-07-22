@@ -1,5 +1,7 @@
 #include "native_player_bridge.h"
 
+#include "gpu_capability_probe.h"
+
 #include <algorithm>
 #include <chrono>
 #include <mpv/render_gl.h>
@@ -39,7 +41,10 @@ NativePlayerBridge::NativePlayerBridge(flutter::BinaryMessenger* messenger,
     : textures_(textures),
       channel_(std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           messenger, kChannelName,
-          &flutter::StandardMethodCodec::GetInstance())) {
+          &flutter::StandardMethodCodec::GetInstance())),
+      gpu_capability_future_(std::async(std::launch::async, []() {
+        return QueryGpuCapabilityMatrix();
+      })) {
   channel_->SetMethodCallHandler(
       [this](const auto& call, auto result) {
         HandleMethodCall(call, std::move(result));
@@ -68,6 +73,10 @@ void NativePlayerBridge::HandleMethodCall(
   const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
   const flutter::EncodableMap empty;
   const auto& values = arguments == nullptr ? empty : *arguments;
+  if (call.method_name() == "gpuCapabilities") {
+    result->Success(flutter::EncodableValue(GpuCapabilitySnapshot()));
+    return;
+  }
   if (call.method_name() == "create") {
     const auto mode = StringArgument(values, "mode");
     native_mpv_enabled_ = mode == "mpv";
@@ -99,6 +108,31 @@ void NativePlayerBridge::HandleMethodCall(
     return;
   }
   result->NotImplemented();
+}
+
+flutter::EncodableMap NativePlayerBridge::GpuCapabilitySnapshot() {
+  if (gpu_capability_cache_.has_value()) return *gpu_capability_cache_;
+  if (gpu_capability_future_.valid() &&
+      gpu_capability_future_.wait_for(std::chrono::milliseconds(0)) ==
+          std::future_status::ready) {
+    gpu_capability_cache_ = gpu_capability_future_.get();
+    return *gpu_capability_cache_;
+  }
+  // probing 快照不包含半成品数据，Dart 会短暂让出事件循环后重试。
+  return flutter::EncodableMap{
+      {flutter::EncodableValue("platformSupported"),
+       flutter::EncodableValue(true)},
+      {flutter::EncodableValue("probeStatus"),
+       flutter::EncodableValue("probing")},
+      {flutter::EncodableValue("detectionSource"),
+       flutter::EncodableValue("dxgi-d3d11-vulkan-loader")},
+      {flutter::EncodableValue("vulkanLoaderAvailable"),
+       flutter::EncodableValue(false)},
+      {flutter::EncodableValue("vulkanInstanceAvailable"),
+       flutter::EncodableValue(false)},
+      {flutter::EncodableValue("adapters"),
+       flutter::EncodableValue(flutter::EncodableList{})},
+  };
 }
 
 void NativePlayerBridge::EnsureTexture() {

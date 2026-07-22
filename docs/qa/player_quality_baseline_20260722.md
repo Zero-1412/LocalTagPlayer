@@ -37,7 +37,7 @@
 
 ## 第三阶段门槛
 
-AI 超分、时域降噪、运动补帧、HDR 映射与 Vulkan / Compute Shader 在实现前必须由 `PlayerGpuCapabilityDetector` 读取当前 `PlayerBackend` 的真实渲染 API、上下文、硬解与 HDR 源信号。当前契约没有 Compute Shader 能力位，因此该项必须显示“未验证”，不能按显卡型号猜测支持。
+AI 超分、时域降噪、运动补帧、HDR 映射与 Vulkan / Compute Shader 在实现前必须由 `PlayerGpuCapabilityDetector` 读取当前 `PlayerBackend` 的真实渲染 API、上下文、硬解与 HDR 源信号。后续原生设备矩阵已补齐 Compute / Vulkan 能力位；当前双硬件卡环境仍无法唯一确认活动适配器，所以第三阶段继续锁定，详见 `player_gpu_capability_matrix_20260722.md`。
 
 ## 自动协调器真实窗口复验
 

@@ -40,6 +40,7 @@ export 'models/media_details.dart';
 export 'models/library_scan_models.dart';
 export 'models/library_sort.dart';
 export 'models/platform_models.dart';
+export 'models/player_gpu_capabilities.dart';
 export 'models/video_item.dart';
 export 'platform/desktop_file_system_adapter.dart';
 export 'platform/database_provider.dart';

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../models/external_media_tools_state.dart';
 import '../models/media_details.dart';
 import '../models/platform_models.dart';
+import '../models/player_gpu_capabilities.dart';
 import '../models/video_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -51,6 +52,14 @@ abstract interface class PlayerBackend {
 
   /** 查询后端诊断属性；不可用时返回统一占位文本。 */
   Future<String> getProperty(String property);
+
+  /**
+   * 查询原生显卡设备矩阵。
+   *
+   * 返回值必须区分系统具备某能力与当前渲染器已经唯一锁定该适配器；不支持的平台
+   * 返回 `unsupported` 快照，禁止按显卡名称猜测 Compute、Vulkan 或显存。
+   */
+  Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities();
 
   /** 截取当前视频帧，编码格式由调用方指定。 */
   Future<Uint8List?> screenshot({String format = 'image/jpeg'});

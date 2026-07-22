@@ -3126,10 +3126,26 @@ class PlayerPageState extends State<PlayerPage> {
       'GPU 渲染 API: ${_gpuCapabilitySnapshot?.gpuApi ?? mpv['gpu-api']}',
       'GPU 渲染上下文: ${_gpuCapabilitySnapshot?.gpuContext ?? mpv['gpu-context']}',
       'D3D11 Feature Level: ${_gpuCapabilitySnapshot?.d3d11FeatureLevel ?? mpv['d3d11-feature-level']}',
+      '原生 GPU 探测: ${_gpuCapabilitySnapshot?.capabilityMatrix.probeStatus ?? '等待检测'}',
+      'GPU 设备数量: ${_gpuCapabilitySnapshot?.capabilityMatrix.adapters.length ?? 0}',
+      '活动 GPU: ${_gpuCapabilitySnapshot?.selectedAdapter?.name ?? '未唯一确认'}',
+      '活动 GPU 判定: ${_gpuCapabilitySnapshot?.adapterSelectionSource ?? '等待检测'}',
+      '活动 GPU 专用显存: ${_gpuCapabilitySnapshot?.selectedAdapter == null ? '未确认' : _formatBytes(_gpuCapabilitySnapshot!.selectedAdapter!.dedicatedVideoMemoryBytes)}',
+      '活动 GPU 本地显存预算/占用: ${_formatGpuMemoryPair(_gpuCapabilitySnapshot?.selectedAdapter?.localMemoryBudgetBytes, _gpuCapabilitySnapshot?.selectedAdapter?.localMemoryUsageBytes)}',
+      'Vulkan loader / 实例: ${_gpuCapabilitySnapshot?.capabilityMatrix.vulkanLoaderAvailable == true ? '是' : '否'} / ${_gpuCapabilitySnapshot?.capabilityMatrix.vulkanInstanceAvailable == true ? '是' : '否'}',
       'Vulkan 已检测: ${_gpuCapabilitySnapshot?.vulkanDetected == true ? '是' : '否 / 未验证'}',
       'Compute Shader 已验证: ${_gpuCapabilitySnapshot?.computeShaderVerified == true ? '是' : '否'}',
       'HDR 源信号: ${_gpuCapabilitySnapshot?.hdrSourceDetected == true ? '已检测' : '未检测'}',
       '第三阶段能力状态: ${_gpuCapabilitySnapshot?.readinessLabel ?? '等待当前媒体能力检测'}',
+      ...?_gpuCapabilitySnapshot?.capabilityMatrix.adapters.map(
+        (adapter) => 'GPU[${adapter.enumerationIndex}]: ${adapter.name} · '
+            'VID ${adapter.vendorId.toRadixString(16).padLeft(4, '0')} '
+            'DID ${adapter.deviceId.toRadixString(16).padLeft(4, '0')} · '
+            'VRAM ${_formatBytes(adapter.dedicatedVideoMemoryBytes)} · '
+            'D3D ${adapter.d3dFeatureLevel} · '
+            'Compute ${adapter.computeShaderSupported ? '是' : '否'} · '
+            'Vulkan ${adapter.vulkanSupported ? adapter.vulkanApiVersion ?? '是' : '否'}',
+      ),
       'mpv AV \u504f\u79fb: ${mpv['avsync']}',
       'mpv AV \u7d2f\u8ba1\u4fee\u6b63: ${mpv['total-avsync-change']}',
       'mpv \u65f6\u5e8f\u5f02\u5e38\u5e27: ${mpv['mistimed-frame-count']}',
@@ -3244,6 +3260,12 @@ class PlayerPageState extends State<PlayerPage> {
       unit++;
     }
     return '${size.toStringAsFixed(unit == 0 ? 0 : 2)} ${units[unit]}';
+  }
+
+  /** 显存预算和当前进程占用必须成对展示，缺失时不以 0 冒充真实读数。 */
+  String _formatGpuMemoryPair(int? budgetBytes, int? usageBytes) {
+    if (budgetBytes == null || usageBytes == null) return '不可用';
+    return '${_formatBytes(budgetBytes)} / ${_formatBytes(usageBytes)}';
   }
 
   String _childTagSummary(VideoItem item) {

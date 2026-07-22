@@ -6,7 +6,9 @@ import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../models/player_gpu_capabilities.dart';
 import '../../platform/platform_interfaces.dart';
+import 'windows_gpu_capability_channel.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -132,6 +134,10 @@ class MediaKitPlayerBackend implements PlayerBackend {
       return 'unavailable';
     }
   }
+
+  @override
+  Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities() =>
+      queryWindowsGpuCapabilities();
 
   @override
   Future<Uint8List?> screenshot({String format = 'image/jpeg'}) =>

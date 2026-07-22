@@ -10,7 +10,11 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.53` 在既有 `PlayerBackend` 诊断属性边界上增加软硬解分辨率基线、自动画质协调和第三阶段 GPU 能力检测。SQLite schema、标签查询、filtered queue 与 PlayerBackend contract 不变。
+`Architecture Baseline 0.5.54` 扩展 `PlayerBackend` 的只读平台能力 contract：Windows runner 在后台建立 DXGI / D3D11 / Vulkan 设备矩阵，Dart 只在活动适配器能够唯一匹配时验证 Compute 能力。SQLite schema、标签查询和 filtered queue 不变。
+
+GPU 能力边界分为两层：原生矩阵描述当前系统可见设备、显存和 API 能力，播放会话属性描述当前渲染路径。系统“存在支持 Compute/Vulkan 的显卡”不等于播放器已选择该显卡；单硬件适配器或唯一 Feature Level 匹配才允许形成临时活动适配器结论，多卡歧义必须保持锁定。DXGI LUID 仅在当前 Windows 会话内用于诊断，不进入 SQLite 或设置文件。
+
+显卡探测由 runner 后台 future 执行，平台通道在未完成时返回 `probing`，避免驱动和 Vulkan loader 初始化阻塞 Flutter UI。Vulkan 采用系统 loader 动态枚举，不把 Vulkan SDK 变成安装依赖。运动补帧、时域降噪和 HDR 映射必须在活动适配器唯一确认、1080p/4K 性能余量和回退路径都具备后才能进入实验；暗部增强使用独立 SDR 观感/性能基线，不复用 Compute 能力结论。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -37,11 +41,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.53`
+已完成基线：`Architecture Baseline 0.5.54`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.54`：`PlayerBackend` 新增类型化显卡设备矩阵。Windows runner 在后台用 DXGI 枚举适配器与显存、用真实 D3D11 device 验证 Feature Level / Compute、用系统 Vulkan loader 匹配物理设备；Flutter 平台线程只读取 `probing/ready` 快照。系统能力与活动渲染器分离，只有当前会话已确认 GPU renderer 且单硬件卡或 Feature Level 唯一匹配时才验证活动 Compute，多卡歧义保持锁定。未修改 SQLite、标签查询、filtered queue、缓存队列或用户数据。
 
 - `0.5.53`：在隔离 profile 中建立 1080p 类 / 4K 类 × GPU 硬解 / CPU 软件解码四组真实稳定段基线，同时采集进程 CPU、GPU Engine、GPU committed、实际解码器和掉帧；基线明确 4K 软件解码已有掉帧与 AV 偏移，因此禁止自动叠加滤镜。`PlayerAdaptiveQualityCoordinator` 复用播放器健康 Timer，每两秒读取一次扩展样本，以连续健康、滞回和冷却时间逐级启用去块、降噪与适度锐化，任何掉帧、缓冲、停滞或 FPS 压力立即降级；`vf` 完整快照通过既有 `PlayerBackend.setProperty` 串行应用。`PlayerGpuCapabilityDetector` 只读取当前后端明确报告的输出驱动、渲染 API/上下文、D3D11 Feature Level、硬解和 HDR 源信号；嵌入式 `libmpv` 返回明确 D3D11 Feature Level 时可确认 GPU 渲染存在，Compute Shader 能力仍保持未验证，不按显卡型号猜测。未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、PlayerBackend contract、缓存队列或用户数据。
 

@@ -692,3 +692,12 @@
 - 精确 Debug 实测 `d3d11va-copy`、Lanczos、自动输出范围、源 `limited / BT.709 / BT.1886`、解码/总丢帧 0、缓存约 111 秒；Bicubic/Lanczos 切换并恢复、11176 项队列滚动和持续播放均正常。
 - 调研依据：[mpv 官方手册](https://mpv.io/manual/master/)、[VLC 官方功能页](https://www.videolan.org/vlc/features.html)、[MPC-HC 官方仓库](https://github.com/clsid2/mpc-hc) 与 [MPC-HC 官方渲染器建议](https://github.com/clsid2/mpc-hc/issues/2869)。
 - `flutter analyze`、238 项测试和 Windows Debug 构建通过，3 项显式 benchmark 跳过；SQLite、标签筛选语义、filtered queue 与用户数据不变。
+
+## 2026-07-22 原生 GPU 能力矩阵
+
+- `PlayerBackend.queryGpuCapabilities()` 返回类型化系统设备矩阵；MediaKit 与 Windows 原生实验后端共用同一 Windows 平台探针。
+- runner 后台通过 DXGI / D3D11 获取适配器、显存预算、Feature Level 和 Compute 支持，通过动态 Vulkan loader 按 vendor/device 匹配物理设备；平台线程不执行阻塞探测。
+- 当前播放诊断展示设备矩阵，但系统设备能力与活动播放适配器严格分离。当前会话确认 GPU renderer 后，单硬件卡可确认；多卡只允许唯一 Feature Level 匹配。DXGI 顺序和名称不得作为选择证据。
+- 当前机器的 RTX 4070 SUPER 与 AMD Radeon Graphics 均支持 Compute/Vulkan，Feature Level 同为 12_1，因此活动适配器保持未唯一确认，第三阶段增强不开启。
+- 设备矩阵可由 `tool/run_gpu_capability_matrix.ps1` 重建，结果口径见 `docs/qa/player_gpu_capability_matrix_20260722.md`。
+- 运动补帧、时域降噪和 HDR 映射尚未实现；暗部增强另建观感/性能基线。filtered queue、当前 index、队列切换、SQLite 与用户数据不变。

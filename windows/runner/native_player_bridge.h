@@ -16,6 +16,7 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <string>
 #include <thread>
@@ -58,6 +59,8 @@ class NativePlayerBridge {
   void EnqueueAndWait(Command command);
   void WorkerLoop();
   flutter::EncodableMap StateSnapshot() const;
+  /** 返回后台探测完成的显卡矩阵；未完成时只返回非阻塞状态。 */
+  flutter::EncodableMap GpuCapabilitySnapshot();
 
   flutter::TextureRegistrar* textures_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
@@ -89,6 +92,9 @@ class NativePlayerBridge {
   std::condition_variable condition_;
   std::queue<Command> commands_;
   std::thread worker_;
+  /** 驱动初始化独立于 Flutter 平台线程，避免首次打开设置或诊断时卡住 UI。 */
+  std::future<flutter::EncodableMap> gpu_capability_future_;
+  std::optional<flutter::EncodableMap> gpu_capability_cache_;
   bool shutting_down_ = false;
   bool playing_ = false;
   bool buffering_ = false;

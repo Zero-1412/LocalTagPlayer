@@ -2,15 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../../models/player_gpu_capabilities.dart';
 import '../../platform/platform_interfaces.dart';
+import 'windows_gpu_capability_channel.dart';
 
 // ignore_for_file: slash_for_doc_comments
-
-/** Windows 原生播放器后端使用的方法通道名称。 */
-const _windowsNativePlayerChannel =
-    MethodChannel('local_tag_player/native_player');
 
 /**
  * Windows C++ 播放器的 Flutter 适配器。
@@ -55,7 +52,7 @@ class WindowsNativePlayerBackend implements PlayerBackend {
 
   /** 创建指定原生会话并启动低频状态轮询。 */
   Future<void> _initialize() async {
-    final value = await _windowsNativePlayerChannel
+    final value = await windowsNativePlayerChannel
         .invokeMapMethod<String, Object?>('create', {'mode': mode});
     _applyState(value);
     _pollTimer = Timer.periodic(
@@ -69,7 +66,7 @@ class WindowsNativePlayerBackend implements PlayerBackend {
     if (_disposed || _polling) return;
     _polling = true;
     try {
-      final value = await _windowsNativePlayerChannel
+      final value = await windowsNativePlayerChannel
           .invokeMapMethod<String, Object?>('state');
       _applyState(value);
     } catch (error) {
@@ -136,7 +133,7 @@ class WindowsNativePlayerBackend implements PlayerBackend {
   /** 将所有控制动作送入同一个原生串行队列。 */
   Future<void> _command(String name, {String? text, int? integer}) async {
     await _ready;
-    await _windowsNativePlayerChannel.invokeMethod<void>('command', {
+    await windowsNativePlayerChannel.invokeMethod<void>('command', {
       'name': name,
       if (text != null) 'text': text,
       if (integer != null) 'integer': integer,
@@ -208,6 +205,10 @@ class WindowsNativePlayerBackend implements PlayerBackend {
   }
 
   @override
+  Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities() =>
+      queryWindowsGpuCapabilities();
+
+  @override
   Future<Uint8List?> screenshot({String format = 'image/jpeg'}) async => null;
 
   @override
@@ -250,7 +251,7 @@ class WindowsNativePlayerBackend implements PlayerBackend {
     _pollTimer?.cancel();
     try {
       await _ready;
-      await _windowsNativePlayerChannel.invokeMethod<void>('dispose');
+      await windowsNativePlayerChannel.invokeMethod<void>('dispose');
     } finally {
       _textureId.value = null;
       await Future.wait<void>([

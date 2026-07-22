@@ -101,6 +101,11 @@ class _RenameSmokePlayerBackend implements PlayerBackend {
   @override
   Future<String> getProperty(String property) async => 'unknown';
 
+  /** 重命名测试不探测真实显卡，保持平台能力显式未知。 */
+  @override
+  Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities() async =>
+      const PlayerGpuCapabilityMatrix.unsupported();
+
   @override
   Future<Uint8List?> screenshot({String format = 'image/jpeg'}) async => null;
 

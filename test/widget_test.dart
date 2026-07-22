@@ -180,14 +180,49 @@ class _SkewedSuperResolutionPlayerBackend
 
 /** 为第三阶段能力检测提供可控属性，不创建真实 GPU 会话。 */
 class _CapabilityPlayerBackend extends _PreferenceRecordingPlayerBackend {
-  _CapabilityPlayerBackend(this.values);
+  _CapabilityPlayerBackend(
+    this.values, {
+    this.matrix = const PlayerGpuCapabilityMatrix.unsupported(),
+  });
 
   final Map<String, String> values;
+  final PlayerGpuCapabilityMatrix matrix;
 
   @override
   Future<String> getProperty(String property) async =>
       values[property] ?? 'unavailable';
+
+  @override
+  Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities() async => matrix;
 }
+
+/** 构造不依赖真实驱动的 GPU 适配器能力快照。 */
+PlayerGpuAdapterCapabilities _testGpuAdapter({
+  required String name,
+  required int index,
+  String featureLevel = '12_1',
+  bool compute = true,
+  bool vulkan = true,
+}) =>
+    PlayerGpuAdapterCapabilities(
+      name: name,
+      luid: '00000000:0000000$index',
+      vendorId: 0x10de,
+      deviceId: 0x2783 + index,
+      enumerationIndex: index,
+      isSoftware: false,
+      dedicatedVideoMemoryBytes: 8 * 1024 * 1024 * 1024,
+      sharedSystemMemoryBytes: 16 * 1024 * 1024 * 1024,
+      localMemoryBudgetBytes: 7 * 1024 * 1024 * 1024,
+      localMemoryUsageBytes: 512 * 1024 * 1024,
+      nonLocalMemoryBudgetBytes: 8 * 1024 * 1024 * 1024,
+      nonLocalMemoryUsageBytes: 0,
+      d3dFeatureLevel: featureLevel,
+      computeShaderSupported: compute,
+      vulkanSupported: vulkan,
+      vulkanApiVersion: vulkan ? '1.3.0' : null,
+      vulkanDeviceName: vulkan ? name : null,
+    );
 
 void main() {
   test('library video card uses compact height and stable duration labels', () {
@@ -3806,6 +3841,7 @@ void main() {
   });
 
   test('GPU detector reports only backend-confirmed capabilities', () async {
+    final adapter = _testGpuAdapter(name: 'Test GPU', index: 0);
     final detected = await const PlayerGpuCapabilityDetector().detect(
       _CapabilityPlayerBackend(<String, String>{
         'current-vo': 'gpu-next',
@@ -3814,13 +3850,23 @@ void main() {
         'd3d11-feature-level': '12_1',
         'hwdec-current': 'd3d11va-copy',
         'video-params/gamma': 'pq',
-      }),
+      },
+          matrix: PlayerGpuCapabilityMatrix(
+            platformSupported: true,
+            probeStatus: 'ready',
+            detectionSource: 'test',
+            vulkanLoaderAvailable: true,
+            vulkanInstanceAvailable: true,
+            adapters: <PlayerGpuAdapterCapabilities>[adapter],
+          )),
     );
     expect(detected.rendererDetected, isTrue);
-    expect(detected.vulkanDetected, isFalse);
-    expect(detected.computeShaderVerified, isFalse);
+    expect(detected.selectedAdapter, same(adapter));
+    expect(detected.adapterSelectionSource, 'single-hardware-adapter');
+    expect(detected.vulkanDetected, isTrue);
+    expect(detected.computeShaderVerified, isTrue);
     expect(detected.hdrSourceDetected, isTrue);
-    expect(detected.readinessLabel, contains('Compute 能力待原生验证'));
+    expect(detected.readinessLabel, contains('Compute 能力已验证'));
   });
 
   test('GPU detector accepts an explicit D3D11 feature level in libmpv mode',
@@ -3839,7 +3885,90 @@ void main() {
     expect(detected.rendererDetected, isTrue);
     expect(detected.vulkanDetected, isFalse);
     expect(detected.computeShaderVerified, isFalse);
-    expect(detected.readinessLabel, contains('Compute 能力待原生验证'));
+    expect(detected.readinessLabel, contains('原生设备矩阵不可用'));
+  });
+
+  test('GPU detector keeps multi-adapter Compute capability locked', () async {
+    final detected = await const PlayerGpuCapabilityDetector().detect(
+      _CapabilityPlayerBackend(<String, String>{
+        'current-vo': 'libmpv-angle-d3d11',
+        'd3d11-feature-level': '12_1',
+      },
+          matrix: PlayerGpuCapabilityMatrix(
+            platformSupported: true,
+            probeStatus: 'ready',
+            detectionSource: 'test',
+            vulkanLoaderAvailable: true,
+            vulkanInstanceAvailable: true,
+            adapters: <PlayerGpuAdapterCapabilities>[
+              _testGpuAdapter(name: 'GPU A', index: 0),
+              _testGpuAdapter(name: 'GPU B', index: 1),
+            ],
+          )),
+    );
+
+    expect(detected.selectedAdapter, isNull);
+    expect(detected.adapterSelectionSource, 'multi-adapter-unresolved');
+    expect(detected.computeShaderVerified, isFalse);
+    expect(detected.readinessLabel, contains('活动适配器尚未唯一确认'));
+  });
+
+  test('GPU detector does not treat a system device as active renderer',
+      () async {
+    final detected = await const PlayerGpuCapabilityDetector().detect(
+      _CapabilityPlayerBackend(
+        const <String, String>{},
+        matrix: PlayerGpuCapabilityMatrix(
+          platformSupported: true,
+          probeStatus: 'ready',
+          detectionSource: 'test',
+          vulkanLoaderAvailable: true,
+          vulkanInstanceAvailable: true,
+          adapters: <PlayerGpuAdapterCapabilities>[
+            _testGpuAdapter(name: 'Only GPU', index: 0),
+          ],
+        ),
+      ),
+    );
+
+    expect(detected.rendererDetected, isFalse);
+    expect(detected.selectedAdapter, isNull);
+    expect(detected.adapterSelectionSource, 'session-renderer-unverified');
+    expect(detected.computeShaderVerified, isFalse);
+  });
+
+  test('GPU matrix safely parses platform maps and memory budgets', () {
+    final matrix = PlayerGpuCapabilityMatrix.fromPlatformMap(
+      <Object?, Object?>{
+        'platformSupported': true,
+        'probeStatus': 'ready',
+        'detectionSource': 'dxgi-d3d11-vulkan-loader',
+        'vulkanLoaderAvailable': true,
+        'vulkanInstanceAvailable': true,
+        'adapters': <Object?>[
+          <Object?, Object?>{
+            'name': 'Parsed GPU',
+            'vendorId': 0x10de,
+            'deviceId': 0x2783,
+            'enumerationIndex': 0,
+            'dedicatedVideoMemoryBytes': 12 * 1024 * 1024 * 1024,
+            'sharedSystemMemoryBytes': 16 * 1024 * 1024 * 1024,
+            'localMemoryBudgetBytes': 10 * 1024 * 1024 * 1024,
+            'localMemoryUsageBytes': 1024,
+            'd3dFeatureLevel': '12_1',
+            'computeShaderSupported': true,
+            'vulkanSupported': true,
+            'vulkanApiVersion': '1.3.280',
+          },
+        ],
+      },
+    );
+
+    expect(matrix.ready, isTrue);
+    expect(matrix.adapters, hasLength(1));
+    expect(matrix.adapters.single.name, 'Parsed GPU');
+    expect(matrix.adapters.single.localMemoryUsageBytes, 1024);
+    expect(matrix.adapters.single.computeShaderSupported, isTrue);
   });
 
   test('persisted visual settings are applied to the playback backend',

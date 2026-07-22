@@ -4,6 +4,19 @@
 
 ## 活跃任务
 
+### 2026-07-22 原生 GPU 能力矩阵与第三阶段闸门
+
+- 目标：先让 `PlayerBackend` 真实报告显卡适配器、专用/共享显存、进程显存预算、D3D Feature Level、Compute 和 Vulkan 能力，再决定是否启动运动补帧、时域降噪或 HDR 映射；暗部增强保持独立观感与性能基线。
+- 当前状态：能力 contract、Windows DXGI / D3D11 / Vulkan 动态探测、播放器诊断和可复用矩阵测试已完成。探测在 runner 后台执行，Flutter 平台线程只轮询轻量状态，不阻塞播放和 UI。
+- 当前设备矩阵：RTX 4070 SUPER（约 11.72 GiB 专用显存）与 AMD Radeon Graphics（约 460 MiB 专用显存）均为 D3D 12_1、Compute 已验证、Vulkan 已匹配；Microsoft Basic Render Driver 标记为软件适配器，不参与活动硬件卡选择。完整证据见 `docs/qa/player_gpu_capability_matrix_20260722.md`。
+- 当前机器有两块硬件适配器且 Feature Level 相同，现有播放会话属性不足以唯一确认活动适配器，因此第三阶段总状态保持“活动适配器尚未唯一确认”；不按 DXGI 枚举顺序或显卡名称猜测。
+- `tool/run_gpu_capability_matrix.ps1` 可通过真实 Windows runner 重建隐私安全 JSON；矩阵不读取媒体路径，不持久化仅在当前会话有效的 LUID。
+- 运动补帧、时域降噪和 HDR 映射仍未启动。下一步先把当前渲染器的活动适配器 LUID 暴露到 `PlayerBackend`，完成唯一匹配和 1080p / 4K 余量门槛后只选择一个阶段三功能做最小实验。
+- 暗部增强不与第三阶段 Compute 功能共用结论；需固定 SDR 暗场样本，分别评估暗部细节、黑位抬升、色带、CPU/GPU、掉帧和 UI 响应后再决定是否进入自动协调器。
+- 隔离 Debug 真实点击完成“进入播放器 → 右键 → 诊断检查 → 滚动设备矩阵”：视频持续推进、解码/总掉帧为 0，矩阵文本无遮挡、横向溢出或状态误报；两张证据截图保存在 `.local/qa/2026-07-22-gpu-matrix/`。
+- 最终 `flutter analyze`、完整 247 项测试与 Windows Debug build 通过，3 项显式 benchmark 跳过；Windows integration matrix test 单独通过。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列、稳定身份或用户数据。
+
 ### 2026-07-22 自动画质协调器与 GPU 能力检测
 
 - 目标：先建立 1080p / 4K 的 GPU、CPU 与丢帧基线，再让第二阶段去块、降噪和适度锐化只在实时余量允许时动态启用；第三阶段功能必须先经过真实显卡能力检测。
@@ -11,7 +24,7 @@
 - 隔离实测稳定段：1080p 硬解 CPU / GPU Engine 中位 64.9% / 43.3%，软解 142.4% / 1.0%，两者解码/总掉帧均为 0；4K 硬解 66.5% / 59.2% 且 0 掉帧，4K 软解 216.1% / 1.0%，出现 27 帧总掉帧与 0.114 秒 AV 偏移。完整口径见 `docs/qa/player_quality_baseline_20260722.md`。
 - 协调器复用原播放健康 Timer，每两秒采集扩展样本；连续 8 个健康样本且满足 10 秒冷却才升级。1080p 硬解最高锐化、1080p 软解最高降噪、4K 硬解最高去块、4K 软解保持关闭；新增掉帧、缓冲、停滞或 FPS 压力立即降级。
 - 去块、`hqdn3d` 和 `unsharp` 使用 FFmpeg 官方滤镜参数，并作为单条 `vf` 快照经既有 `PlayerBackend` 串行应用；Flutter 不读取视频帧，不新增 UI Timer，不触碰 filtered queue 或后台媒体队列。
-- `PlayerGpuCapabilityDetector` 在媒体可播放后读取实际输出驱动、GPU API/上下文、D3D11 Feature Level、当前硬解和 HDR 源信号。嵌入式 `libmpv` 返回 D3D11 12_1 时可确认 GPU 渲染存在；当前 contract 没有 Compute Shader 能力位，因此仍明确保持未验证，不按显卡型号猜测第三阶段能力。
+- `PlayerGpuCapabilityDetector` 在媒体可播放后读取实际输出驱动、GPU API/上下文、D3D11 Feature Level、当前硬解和 HDR 源信号；后续原生设备矩阵已补齐 Compute / Vulkan 能力，但多卡环境仍须唯一确认活动适配器才可解锁。
 - 最终 `flutter analyze`、完整 244 项测试与 Windows Debug build 通过，3 项显式 benchmark 跳过。真实诊断中 1080p GPU 档升至“去块 + 降噪 + 锐化”，4K GPU 档封顶“去块”，两者解码/总掉帧均为 0；截图保存于 `.local/qa/2026-07-22-quality-live/`，不进入仓库。
 - 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、PlayerBackend contract、缩略图/媒体详情队列或用户数据。
 
@@ -79,8 +92,8 @@
 
 - 产品边界：Tag 驱动的本地视频发现播放器，不扩展字幕、音轨、逐帧或 A-B loop 等专业播放器能力。
 - 数据边界：SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 内容与顺序、标签来源语义均未改变。
-- 验证：244 项测试通过，3 项显式 benchmark 跳过；播放器控制显隐、全屏覆盖队列、快进档位、左上角文字反馈、GPU 超分、自动画质协调与显卡能力检测回归、`flutter analyze`、Windows debug build 均通过。真实窗口完成设置开关、1080p / 4K 播放、队列滚动与诊断复测；低分辨率超分两态及自动画质诊断截图已保存。
-- 架构基线：`Architecture Baseline 0.5.53`。
+- 验证：247 项测试通过，3 项显式 benchmark 跳过；播放器控制显隐、全屏覆盖队列、快进档位、左上角文字反馈、GPU 超分、自动画质协调与原生显卡设备矩阵回归、`flutter analyze`、Windows debug build 均通过。真实窗口完成设置开关、1080p / 4K 播放、队列滚动与诊断复测；低分辨率超分两态、自动画质和 GPU 设备矩阵诊断截图已保存。
+- 架构基线：`Architecture Baseline 0.5.54`。
 
 ## 已确认阻塞
 
