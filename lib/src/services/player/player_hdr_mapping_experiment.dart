@@ -35,7 +35,7 @@ class PlayerHdrMappingExperiment {
   }
 }
 
-/** HDR 实验会话安全协调器的一次判定。 */
+/** 可选画质增强会话安全协调器的一次判定。 */
 class PlayerHdrMappingSafetyDecision {
   const PlayerHdrMappingSafetyDecision({
     required this.shouldRollback,
@@ -54,26 +54,30 @@ class PlayerHdrMappingSafetyDecision {
 }
 
 /**
- * 复用播放器两秒健康样本，为 HDR 动态映射提供一次会话内的压力熔断。
+ * 复用播放器两秒健康样本，为可选画质增强提供一次会话内的压力熔断。
  *
  * 新增掉帧、缓冲或音视频停滞会立即回滚；轻度 FPS、缓存或帧推进压力需要连续
  * 两个样本才回滚，避免 seek 后的短暂波动误触发。回滚一旦发生会锁存到下一媒体，
- * 但不会改写用户的全局实验开关。
+ * 但不会改写用户的全局开关。`featureLabel` 使 HDR 与暗部增强
+ * 共享经验证的低频判定，但仍保持独立计数与回滚锁存。
  */
 class PlayerHdrMappingSafetyCoordinator {
   PlayerHdrMappingSafetyCoordinator({
     this.pressureSamplesToRollback = 2,
-  });
+    this.featureLabel = 'HDR 动态映射',
+  }) : _reason = '等待 $featureLabel 播放健康样本';
 
   /** 轻度压力触发回滚所需的连续样本数。 */
   final int pressureSamplesToRollback;
+  /** 诊断中使用的功能名称，使同一压力判定可安全复用于暗部增强。 */
+  final String featureLabel;
 
   int? _previousDecoderDrops;
   int? _previousOutputDrops;
   int? _previousTotalDrops;
   var _consecutivePressureSamples = 0;
   var _rollbackLatched = false;
-  var _reason = '等待 HDR 播放健康样本';
+  String _reason;
 
   bool get rollbackLatched => _rollbackLatched;
   String get reason => _reason;
@@ -86,7 +90,7 @@ class PlayerHdrMappingSafetyCoordinator {
     _previousTotalDrops = null;
     _consecutivePressureSamples = 0;
     _rollbackLatched = false;
-    _reason = '等待 HDR 播放健康样本';
+    _reason = '等待 $featureLabel 播放健康样本';
   }
 
   /** 评估一次只读播放样本；本类不直接访问 PlayerBackend 或 UI。 */
@@ -112,7 +116,9 @@ class PlayerHdrMappingSafetyCoordinator {
     }
     if (!sample.playing || sample.recentSeek) {
       _consecutivePressureSamples = 0;
-      _reason = sample.recentSeek ? 'seek 后等待 HDR 会话重新稳定' : '暂停时不评估 HDR 压力';
+      _reason = sample.recentSeek
+          ? 'seek 后等待 $featureLabel 会话重新稳定'
+          : '暂停时不评估 $featureLabel 压力';
       return _decision(shouldRollback: false);
     }
 
@@ -130,7 +136,7 @@ class PlayerHdrMappingSafetyCoordinator {
     if (severePressure) {
       _rollbackLatched = true;
       _consecutivePressureSamples = 0;
-      _reason = '检测到新增掉帧、缓冲或音视频停滞，HDR 会话已自动回滚';
+      _reason = '检测到新增掉帧、缓冲或音视频停滞，$featureLabel 会话已自动回滚';
       return _decision(shouldRollback: true);
     }
 
@@ -139,17 +145,17 @@ class PlayerHdrMappingSafetyCoordinator {
         (fpsRatio != null && fpsRatio < 0.95);
     if (!moderatePressure) {
       _consecutivePressureSamples = 0;
-      _reason = 'HDR 会话实时余量正常';
+      _reason = '$featureLabel 会话实时余量正常';
       return _decision(shouldRollback: false);
     }
     _consecutivePressureSamples++;
     _reason =
-        'HDR 会话轻度压力 $_consecutivePressureSamples / $pressureSamplesToRollback';
+        '$featureLabel 会话轻度压力 $_consecutivePressureSamples / $pressureSamplesToRollback';
     if (_consecutivePressureSamples < pressureSamplesToRollback) {
       return _decision(shouldRollback: false);
     }
     _rollbackLatched = true;
-    _reason = '连续 FPS、缓存或帧推进压力，HDR 会话已自动回滚';
+    _reason = '连续 FPS、缓存或帧推进压力，$featureLabel 会话已自动回滚';
     return _decision(shouldRollback: true);
   }
 

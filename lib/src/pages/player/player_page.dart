@@ -703,17 +703,26 @@ class PlayerPageState extends State<PlayerPage> {
   /** 第三阶段能力检测器；只查询当前 PlayerBackend 的真实运行属性。 */
   final PlayerGpuCapabilityDetector _gpuCapabilityDetector =
       const PlayerGpuCapabilityDetector();
-  /** HDR 实验复用播放健康样本，并在压力出现后锁存关闭到下一媒体。 */
+  /** HDR 映射复用播放健康样本，并在压力出现后锁存关闭到下一媒体。 */
   final PlayerHdrMappingSafetyCoordinator _hdrMappingSafetyCoordinator =
       PlayerHdrMappingSafetyCoordinator();
+  /** 暗部增强复用同一低频压力判定，但拥有独立计数与会话回滚锁存。 */
+  final PlayerHdrMappingSafetyCoordinator _darkSceneSafetyCoordinator =
+      PlayerHdrMappingSafetyCoordinator(featureLabel: '暗部增强');
   /** 当前会话已经实际送入后端的自动增强档位。 */
   PlayerAdaptiveQualityLevel _adaptiveQualityLevel =
       PlayerAdaptiveQualityLevel.off;
   /** 最近一次播放器会话能力检测结果；新媒体打开时作废并重新检测。 */
   PlayerGpuCapabilitySnapshot? _gpuCapabilitySnapshot;
-  /** HDR 实验只有在当前媒体与实际活动 LUID 均通过门槛后才对本会话生效。 */
+  /** HDR 映射只有在当前媒体与实际活动 LUID 均通过门槛后才对本会话生效。 */
   var _hdrMappingExperimentActive = false;
-  /** 当前媒体最近一次 HDR 自动回滚原因；全局实验开关不会被改写。 */
+  /** 当前 SDR 会话已经通过分辨率、硬解和传递函数门槛并启用暗部增强。 */
+  var _darkSceneEnhancementActive = false;
+  /** 暗部增强只回滚当前媒体，不改写用户的持久开关。 */
+  String? _darkSceneEnhancementRollbackReason;
+  /** 暗部增强自动回滚时间，用于与诊断掉帧样本对齐。 */
+  DateTime? _darkSceneEnhancementRollbackAt;
+  /** 当前媒体最近一次 HDR 自动回滚原因；全局开关不会被改写。 */
   String? _hdrMappingRollbackReason;
   /** 当前媒体 HDR 自动回滚发生时间，用于与掉帧和功耗基线对齐。 */
   DateTime? _hdrMappingRollbackAt;
@@ -1399,7 +1408,8 @@ class PlayerPageState extends State<PlayerPage> {
         _audioProgressState = '音频播放头停滞';
       }
       if (_effectivePlaybackSettings.automaticQualityEnhancementEnabled ||
-          _hdrMappingExperimentActive) {
+          _hdrMappingExperimentActive ||
+          _darkSceneEnhancementActive) {
         _qualityMarginSampleTick++;
         if (_qualityMarginSampleTick.isEven) {
           await _sampleQualityMargin(
@@ -1416,9 +1426,9 @@ class PlayerPageState extends State<PlayerPage> {
   }
 
   /**
-   * 复用播放健康 Timer 的低频样本评估自动画质与 HDR 实验实时余量。
+   * 复用播放健康 Timer 的低频样本评估自动画质与可选增强实时余量。
    *
-   * 属性读取只执行一次；第二阶段协调器仅在档位变化时重建滤镜，HDR 实验只在
+   * 属性读取只执行一次；第二阶段协调器仅在档位变化时重建滤镜，HDR 映射只在
    * 压力触发时执行一次完整回滚，不增加新的 UI Timer 或逐帧读取。
    */
   Future<void> _sampleQualityMargin({
@@ -1465,11 +1475,31 @@ class PlayerPageState extends State<PlayerPage> {
         await PlayerAdaptiveQualityEnhancer.apply(
           backend: _playerBackend,
           level: decision.level,
+          darkSceneEnhancementEnabled: _darkSceneEnhancementActive,
         );
         _adaptiveQualityLevel = decision.level;
         debugPrint(
           'PLAYER_ADAPTIVE_QUALITY level=${decision.level.name} '
           'profile=${decision.profile.label} reason=${decision.reason}',
+        );
+      }
+    }
+    if (_darkSceneEnhancementActive && !_isExiting) {
+      final darkDecision = _darkSceneSafetyCoordinator.evaluate(sample);
+      if (darkDecision.shouldRollback) {
+        final guardedPath = _openedPath;
+        await PlayerAdaptiveQualityEnhancer.apply(
+          backend: _playerBackend,
+          level: _adaptiveQualityLevel,
+          darkSceneEnhancementEnabled: false,
+        );
+        if (!mounted || _openedPath != guardedPath) return;
+        _darkSceneEnhancementActive = false;
+        _darkSceneEnhancementRollbackReason = darkDecision.reason;
+        _darkSceneEnhancementRollbackAt = sampledAt;
+        debugPrint(
+          'PLAYER_DARK_SCENE_ENHANCEMENT rollback=true '
+          'reason=${darkDecision.reason}',
         );
       }
     }
@@ -2426,6 +2456,10 @@ class PlayerPageState extends State<PlayerPage> {
           _qualityMarginSampleTick = 0;
           _gpuCapabilitySnapshot = null;
           _hdrMappingExperimentActive = false;
+          _darkSceneEnhancementActive = false;
+          _darkSceneSafetyCoordinator.reset();
+          _darkSceneEnhancementRollbackReason = null;
+          _darkSceneEnhancementRollbackAt = null;
           _hdrMappingSafetyCoordinator.reset();
           _hdrMappingRollbackReason = null;
           _hdrMappingRollbackAt = null;
@@ -2433,6 +2467,7 @@ class PlayerPageState extends State<PlayerPage> {
           await PlayerAdaptiveQualityEnhancer.apply(
             backend: _playerBackend,
             level: PlayerAdaptiveQualityLevel.off,
+            darkSceneEnhancementEnabled: false,
           );
           await _applyPlaybackPerformanceProfile();
           if (!mounted) {
@@ -2509,6 +2544,14 @@ class PlayerPageState extends State<PlayerPage> {
             snapshot.selectedAdapter != null &&
             snapshot.computeShaderVerified &&
             snapshot.hdrSourceDetected;
+    final darkSceneAllowed =
+        _effectivePlaybackSettings.darkSceneEnhancementEnabled &&
+            snapshot.darkSceneEnhancementEligible;
+    await PlayerAdaptiveQualityEnhancer.apply(
+      backend: _playerBackend,
+      level: _adaptiveQualityLevel,
+      darkSceneEnhancementEnabled: darkSceneAllowed,
+    );
     await PlayerHdrMappingExperiment.apply(
       backend: _playerBackend,
       enabled: experimentAllowed,
@@ -2519,10 +2562,20 @@ class PlayerPageState extends State<PlayerPage> {
         backend: _playerBackend,
         enabled: false,
       );
+      await PlayerAdaptiveQualityEnhancer.apply(
+        backend: _playerBackend,
+        level: _adaptiveQualityLevel,
+        darkSceneEnhancementEnabled: false,
+      );
       return;
     }
     _gpuCapabilitySnapshot = snapshot;
     _hdrMappingExperimentActive = experimentAllowed;
+    _darkSceneEnhancementActive = darkSceneAllowed;
+    if (darkSceneAllowed) {
+      // 从真实滤镜应用后再建立压力基线，媒体打开阶段不能算入暗部增强成本。
+      _darkSceneSafetyCoordinator.reset();
+    }
     if (experimentAllowed) {
       // 从实验真正启用后再建立累计掉帧基线，避免把媒体打开阶段算作 HDR 成本。
       _hdrMappingSafetyCoordinator.reset();
@@ -3336,7 +3389,13 @@ class PlayerPageState extends State<PlayerPage> {
       'Vulkan 已检测: ${_gpuCapabilitySnapshot?.vulkanDetected == true ? '是' : '否 / 未验证'}',
       'Compute Shader 已验证: ${_gpuCapabilitySnapshot?.computeShaderVerified == true ? '是' : '否'}',
       'HDR 源信号: ${_gpuCapabilitySnapshot?.hdrSourceDetected == true ? '已检测' : '未检测'}',
-      'HDR 动态映射实验设置: ${_effectivePlaybackSettings.hdrDynamicToneMappingExperimentEnabled ? '开启' : '关闭'}',
+      'SDR 源信号: ${_gpuCapabilitySnapshot?.sdrSourceDetected == true ? '已检测' : '未检测 / 未确认'}',
+      '暗部细节增强设置: ${_effectivePlaybackSettings.darkSceneEnhancementEnabled ? '开启' : '关闭'}',
+      '暗部细节增强会话: ${_darkSceneEnhancementActive ? '已通过 SDR/1080p/硬解门槛并启用' : '未启用 / 门槛未通过 / 已回滚'}',
+      '暗部增强压力保护: ${_darkSceneSafetyCoordinator.reason}',
+      '暗部增强自动回滚原因: ${_darkSceneEnhancementRollbackReason ?? '无'}',
+      '暗部增强自动回滚时间: ${_darkSceneEnhancementRollbackAt?.toIso8601String() ?? 'none'}',
+      'HDR 动态映射设置: ${_effectivePlaybackSettings.hdrDynamicToneMappingExperimentEnabled ? '开启' : '关闭'}',
       'HDR 动态映射会话: ${_hdrMappingExperimentActive ? '已通过门槛并启用' : '未启用 / 门槛未通过'}',
       'HDR 会话压力保护: ${_hdrMappingSafetyCoordinator.reason}',
       'HDR 自动回滚原因: ${_hdrMappingRollbackReason ?? '无'}',

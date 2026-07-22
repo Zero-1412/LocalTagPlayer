@@ -60,9 +60,9 @@ DXGI 探针在每块 adapter 下枚举 `IDXGIOutput`，并用 `IDXGIOutput6::Get
 
 该结论只代表当前设备、驱动与 kernel 的显式 QA，不代表所有显卡，也不能替代真实 HDR 长播、功耗和显示输出验证。
 
-## 第三阶段单项实验
+## 第三阶段单项验证
 
-本轮只选择 HDR 动态映射，运动补帧和时域降噪保持未启动。设置默认关闭，启用前显示影响与回滚确认；真实播放还必须同时检测到 HDR 源、精确活动 LUID 和 Compute 能力，才应用 `tone-mapping=hable`、`hdr-compute-peak=yes`。关闭或门槛未通过时恢复 `tone-mapping=auto`、`hdr-compute-peak=auto`。
+本轮只选择 HDR 动态映射，运动补帧保持未启动。设置默认关闭，启用前显示影响与回滚确认；真实播放还必须同时检测到 HDR 源、精确活动 LUID 和 Compute 能力，才应用 `tone-mapping=hable`、`hdr-compute-peak=yes`。关闭、门槛未通过或会话压力出现时恢复 `tone-mapping=auto`、`hdr-compute-peak=auto`。`hqdn3d` 已以保守时域参数执行时空降噪，不属于本 Compute 验证。
 
 [mpv 官方手册](https://mpv.io/manual/stable/)明确说明 `hdr-compute-peak` 需要 Compute Shader，且部分驱动可能表现很差；因此本项目不把系统“支持 Compute”直接解释为应默认开启，而是保留显式基线、用户确认和完整回滚。
 

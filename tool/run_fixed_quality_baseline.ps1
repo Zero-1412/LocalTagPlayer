@@ -23,6 +23,71 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 <#
+  在长播前用同一 FFmpeg eq 参数验证像素边界：近黑平均亮度必须上升，Limited Range
+  黑位 YMIN 必须保持不变。该检查补足播放器截图接口可能返回静态源帧的采证限制。
+#>
+function Get-SdrDarkSignalStats {
+  param(
+    [Parameter(Mandatory = $true)][string]$FfmpegPath,
+    [Parameter(Mandatory = $true)][string]$SamplePath,
+    [Parameter(Mandatory = $true)][string]$FilterGraph
+  )
+  # Windows PowerShell 会把 FFmpeg 的正常 stderr 媒体信息包装成非终止错误；
+  # 只在该原生进程调用期间放宽，最终仍以退出码判定成败。
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $lines = @(& $FfmpegPath -hide_banner -loglevel info -ss 30 `
+      -i $SamplePath -vf $FilterGraph -frames:v 1 -f null - 2>&1)
+    $ffmpegExitCode = $LASTEXITCODE
+  }
+  finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+  if ($ffmpegExitCode -ne 0) {
+    throw "SDR dark signal validation failed: $ffmpegExitCode"
+  }
+  $stats = [ordered]@{}
+  foreach ($name in @("YMIN", "YAVG", "YMAX")) {
+    $match = $lines | Select-String -Pattern "lavfi.signalstats.$name=([0-9.]+)" |
+      Select-Object -First 1
+    if ($null -eq $match) {
+      throw "Missing SDR dark signal statistic: $name"
+    }
+    $stats[$name] = [double]$match.Matches[0].Groups[1].Value
+  }
+  return $stats
+}
+
+$ffmpegPath = Join-Path $workspace `
+  "build/windows/x64/runner/Debug/tools/ffmpeg/bin/ffmpeg.exe"
+if (-not (Test-Path -LiteralPath $ffmpegPath)) {
+  throw "Bundled FFmpeg is required for SDR dark curve validation: $ffmpegPath"
+}
+$sdrSamplePath = Join-Path $samples "fixed-sdr-dark-1080p.mp4"
+$sdrOffSignal = Get-SdrDarkSignalStats `
+  -FfmpegPath $ffmpegPath `
+  -SamplePath $sdrSamplePath `
+  -FilterGraph "signalstats,metadata=print"
+$sdrOnSignal = Get-SdrDarkSignalStats `
+  -FfmpegPath $ffmpegPath `
+  -SamplePath $sdrSamplePath `
+  -FilterGraph "eq=gamma=1.06:gamma_weight=0.82:brightness=-0.006,signalstats,metadata=print"
+if ($sdrOnSignal.YMIN -ne $sdrOffSignal.YMIN) {
+  throw "SDR dark enhancement changed black level: $($sdrOffSignal.YMIN) -> $($sdrOnSignal.YMIN)"
+}
+if ($sdrOnSignal.YAVG -le $sdrOffSignal.YAVG) {
+  throw "SDR dark enhancement did not lift near-black detail."
+}
+[ordered]@{
+  filter = "eq=gamma=1.06:gamma_weight=0.82:brightness=-0.006"
+  off = $sdrOffSignal
+  on = $sdrOnSignal
+} | ConvertTo-Json -Depth 4 |
+  Set-Content -LiteralPath (Join-Path $output "sdr-dark-curve-validation.json") `
+    -Encoding utf8
+
+<#
   对单个模式启动真实 Flutter Windows 长播；后台只读取进程计数器、NVIDIA-SMI
   和窗口像素，不创建 UIA 客户端，也不访问用户媒体库。
 #>
@@ -192,6 +257,10 @@ Invoke-QualityBaselineMode `
   -Mode "sdr-dark" `
   -SamplePath (Join-Path $samples "fixed-sdr-dark-1080p.mp4") `
   -DurationSeconds $SdrDarkSeconds
+Invoke-QualityBaselineMode `
+  -Mode "sdr-dark-enhanced" `
+  -SamplePath (Join-Path $samples "fixed-sdr-dark-1080p.mp4") `
+  -DurationSeconds $SdrDarkSeconds
 
 <# 生成两种固定样本的可比较摘要；NVIDIA-SMI 是整卡功耗，不冒充进程功耗。 #>
 function Get-MetricSummary {
@@ -212,14 +281,16 @@ function Get-MetricSummary {
 }
 
 $summary = [ordered]@{
-  schemaVersion = 1
+  schemaVersion = 2
   powerScope = "whole NVIDIA adapter, not per-process"
   hdr = [ordered]@{}
   sdrDark = [ordered]@{}
+  sdrDarkEnhanced = [ordered]@{}
 }
 foreach ($entry in @(
     @{ Name = "hdr"; Key = "hdr" },
-    @{ Name = "sdr-dark"; Key = "sdrDark" }
+    @{ Name = "sdr-dark"; Key = "sdrDark" },
+    @{ Name = "sdr-dark-enhanced"; Key = "sdrDarkEnhanced" }
   )) {
   $rows = @(Import-Csv -LiteralPath (Join-Path $output "$($entry.Name)/system-metrics.csv"))
   $modeSummary = $summary[$entry.Key]
@@ -234,4 +305,4 @@ foreach ($entry in @(
 }
 $summary | ConvertTo-Json -Depth 8 |
   Set-Content -LiteralPath (Join-Path $output "baseline-summary.json") -Encoding utf8
-Write-Host "Fixed HDR and SDR dark baselines are ready: $output"
+Write-Host "Fixed HDR, SDR-off, and SDR-enhanced baselines are ready: $output"

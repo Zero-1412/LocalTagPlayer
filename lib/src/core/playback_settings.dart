@@ -52,6 +52,7 @@ class PlaybackSettings {
     required this.seekStepSeconds,
     required this.videoSuperResolutionEnabled,
     required this.automaticQualityEnhancementEnabled,
+    required this.darkSceneEnhancementEnabled,
     required this.hdrDynamicToneMappingExperimentEnabled,
     required this.confirmBeforeDeletingVideo,
     required this.moveDeletedFileToTrash,
@@ -74,6 +75,7 @@ class PlaybackSettings {
     seekStepSeconds: 5,
     videoSuperResolutionEnabled: false,
     automaticQualityEnhancementEnabled: false,
+    darkSceneEnhancementEnabled: false,
     hdrDynamicToneMappingExperimentEnabled: false,
     confirmBeforeDeletingVideo: true,
     moveDeletedFileToTrash: false,
@@ -230,7 +232,9 @@ class PlaybackSettings {
   final bool videoSuperResolutionEnabled;
   /** 是否按实时播放余量自动协调去块、降噪与适度锐化。 */
   final bool automaticQualityEnhancementEnabled;
-  /** 是否启用默认关闭、关闭即恢复 mpv 自动值的 HDR 动态映射实验。 */
+  /** 是否对已确认的 SDR 视频启用经过独立基线验证的保守暗部细节增强。 */
+  final bool darkSceneEnhancementEnabled;
+  /** 是否启用默认关闭、关闭即恢复 mpv 自动值的 HDR 动态映射。 */
   final bool hdrDynamicToneMappingExperimentEnabled;
   /** 删除视频前是否显示影响范围与回收站选择确认。 */
   final bool confirmBeforeDeletingVideo;
@@ -256,6 +260,7 @@ class PlaybackSettings {
     int? seekStepSeconds,
     bool? videoSuperResolutionEnabled,
     bool? automaticQualityEnhancementEnabled,
+    bool? darkSceneEnhancementEnabled,
     bool? hdrDynamicToneMappingExperimentEnabled,
     bool? confirmBeforeDeletingVideo,
     bool? moveDeletedFileToTrash,
@@ -283,6 +288,8 @@ class PlaybackSettings {
           videoSuperResolutionEnabled ?? this.videoSuperResolutionEnabled,
       automaticQualityEnhancementEnabled: automaticQualityEnhancementEnabled ??
           this.automaticQualityEnhancementEnabled,
+      darkSceneEnhancementEnabled:
+          darkSceneEnhancementEnabled ?? this.darkSceneEnhancementEnabled,
       hdrDynamicToneMappingExperimentEnabled:
           hdrDynamicToneMappingExperimentEnabled ??
               this.hdrDynamicToneMappingExperimentEnabled,
@@ -321,6 +328,7 @@ class PlaybackSettings {
         'videoSuperResolutionEnabled': videoSuperResolutionEnabled,
         'automaticQualityEnhancementEnabled':
             automaticQualityEnhancementEnabled,
+        'darkSceneEnhancementEnabled': darkSceneEnhancementEnabled,
         'hdrDynamicToneMappingExperimentEnabled':
             hdrDynamicToneMappingExperimentEnabled,
         'confirmBeforeDeletingVideo': confirmBeforeDeletingVideo,
@@ -398,6 +406,9 @@ class PlaybackSettings {
           json['automaticQualityEnhancementEnabled'] is bool
               ? json['automaticQualityEnhancementEnabled']! as bool
               : defaults.automaticQualityEnhancementEnabled,
+      darkSceneEnhancementEnabled: json['darkSceneEnhancementEnabled'] is bool
+          ? json['darkSceneEnhancementEnabled']! as bool
+          : defaults.darkSceneEnhancementEnabled,
       hdrDynamicToneMappingExperimentEnabled:
           json['hdrDynamicToneMappingExperimentEnabled'] is bool
               ? json['hdrDynamicToneMappingExperimentEnabled']! as bool

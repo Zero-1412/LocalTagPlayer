@@ -3648,7 +3648,7 @@ void main() {
     );
   });
 
-  testWidgets('HDR mapping experiment confirms enable and rolls back directly',
+  testWidgets('HDR mapping confirms enable and rolls back directly',
       (WidgetTester tester) async {
     final changes = <PlaybackSettings>[];
     await tester.pumpWidget(
@@ -3663,7 +3663,7 @@ void main() {
     await tester.ensureVisible(switchFinder);
     await tester.tap(switchFinder);
     await tester.pumpAndSettle();
-    expect(find.text('开启 HDR 动态映射实验？'), findsOneWidget);
+    expect(find.text('开启 HDR 动态映射？'), findsOneWidget);
     expect(changes, isEmpty);
 
     await tester.tap(
@@ -3687,7 +3687,28 @@ void main() {
     await tester.tap(switchFinder);
     await tester.pump();
     expect(changes.single.hdrDynamicToneMappingExperimentEnabled, isFalse);
-    expect(find.text('开启 HDR 动态映射实验？'), findsNothing);
+    expect(find.text('开启 HDR 动态映射？'), findsNothing);
+  });
+
+  testWidgets('dark scene enhancement is actionable and roadmap is removed',
+      (WidgetTester tester) async {
+    final changes = <PlaybackSettings>[];
+    await tester.pumpWidget(
+      playbackQualitySettingsSmokeHarness(onChanged: changes.add),
+    );
+
+    final darkSwitch = find.byKey(
+      const ValueKey('settings.playbackQuality.darkSceneEnhancement'),
+    );
+    await tester.ensureVisible(darkSwitch);
+    await tester.tap(darkSwitch);
+    await tester.pump();
+
+    expect(changes.single.darkSceneEnhancementEnabled, isTrue);
+    expect(
+      find.byKey(const ValueKey('settings.playbackQuality.roadmap')),
+      findsNothing,
+    );
   });
 
   test('playback settings default to continuing without a prompt', () {
@@ -3779,6 +3800,7 @@ void main() {
     expect(oldSettings.seekStepSeconds, 5);
     expect(oldSettings.videoSuperResolutionEnabled, isFalse);
     expect(oldSettings.automaticQualityEnhancementEnabled, isFalse);
+    expect(oldSettings.darkSceneEnhancementEnabled, isFalse);
     expect(oldSettings.hdrDynamicToneMappingExperimentEnabled, isFalse);
 
     final directory = await Directory.systemTemp.createTemp(
@@ -3797,6 +3819,7 @@ void main() {
       seekStepSeconds: 30,
       videoSuperResolutionEnabled: true,
       automaticQualityEnhancementEnabled: true,
+      darkSceneEnhancementEnabled: true,
       hdrDynamicToneMappingExperimentEnabled: true,
       confirmBeforeDeletingVideo: false,
       moveDeletedFileToTrash: true,
@@ -3814,6 +3837,7 @@ void main() {
     expect(loaded.seekStepSeconds, 30);
     expect(loaded.videoSuperResolutionEnabled, isTrue);
     expect(loaded.automaticQualityEnhancementEnabled, isTrue);
+    expect(loaded.darkSceneEnhancementEnabled, isTrue);
     expect(loaded.hdrDynamicToneMappingExperimentEnabled, isTrue);
     expect(loaded.confirmBeforeDeletingVideo, isFalse);
     expect(loaded.moveDeletedFileToTrash, isTrue);
@@ -3828,6 +3852,7 @@ void main() {
       loaded.toJson()['automaticQualityEnhancementEnabled'],
       isTrue,
     );
+    expect(loaded.toJson()['darkSceneEnhancementEnabled'], isTrue);
 
     final unsafe = PlaybackSettings.fromJson({
       'playbackMode': 'unknown',
@@ -3845,6 +3870,7 @@ void main() {
     expect(unsafe.seekStepSeconds, 5);
     expect(unsafe.videoSuperResolutionEnabled, isFalse);
     expect(unsafe.automaticQualityEnhancementEnabled, isFalse);
+    expect(unsafe.darkSceneEnhancementEnabled, isFalse);
   });
 
   test('adaptive quality upgrades with hysteresis and drops immediately off',
@@ -3971,6 +3997,41 @@ void main() {
     expect(rollback.consecutivePressureSamples, 2);
   });
 
+  test('画质压力保护使用当前功能名称输出回滚诊断', () {
+    final coordinator = PlayerHdrMappingSafetyCoordinator(
+      featureLabel: '暗部增强',
+    );
+    var sampledAt = DateTime.utc(2026, 7, 22, 10);
+
+    PlayerAdaptiveQualitySample sample(int totalDrops) {
+      sampledAt = sampledAt.add(const Duration(seconds: 2));
+      return PlayerAdaptiveQualitySample(
+        sampledAt: sampledAt,
+        playing: true,
+        buffering: false,
+        recentSeek: false,
+        videoAdvanced: true,
+        videoStalled: false,
+        audioStalled: false,
+        width: 1920,
+        height: 1080,
+        hwdecCurrent: 'd3d11va-copy',
+        sourceFps: 60,
+        estimatedFps: 60,
+        cacheDuration: 10,
+        decoderDroppedFrames: 0,
+        outputDroppedFrames: 0,
+        totalDroppedFrames: totalDrops,
+      );
+    }
+
+    expect(coordinator.evaluate(sample(0)).shouldRollback, isFalse);
+    final decision = coordinator.evaluate(sample(1));
+
+    expect(decision.shouldRollback, isTrue);
+    expect(decision.reason, allOf(contains('暗部增强'), contains('自动回滚')));
+  });
+
   test('adaptive quality keeps unknown resolution disabled', () {
     final profile = PlayerQualityBaselineProfile.resolve(
       width: null,
@@ -3995,6 +4056,17 @@ void main() {
     await PlayerAdaptiveQualityEnhancer.apply(
       backend: backend,
       level: PlayerAdaptiveQualityLevel.off,
+      darkSceneEnhancementEnabled: true,
+    );
+    expect(
+      backend.properties['vf'],
+      contains('eq=gamma=1.06:gamma_weight=0.82:brightness=-0.006'),
+    );
+    expect(backend.properties['vf'], isNot(contains('deblock=')));
+
+    await PlayerAdaptiveQualityEnhancer.apply(
+      backend: backend,
+      level: PlayerAdaptiveQualityLevel.off,
     );
     expect(backend.properties['vf'], isEmpty);
   });
@@ -4009,6 +4081,8 @@ void main() {
         'd3d11-feature-level': '12_1',
         'hwdec-current': 'd3d11va-copy',
         'video-params/gamma': 'pq',
+        'video-params/w': '1920',
+        'video-params/h': '1080',
       },
           matrix: PlayerGpuCapabilityMatrix(
             platformSupported: true,
@@ -4033,6 +4107,8 @@ void main() {
     expect(detected.vulkanDetected, isTrue);
     expect(detected.computeShaderVerified, isTrue);
     expect(detected.hdrSourceDetected, isTrue);
+    expect(detected.sdrSourceDetected, isFalse);
+    expect(detected.darkSceneEnhancementEligible, isFalse);
     expect(detected.readinessLabel, contains('Compute 能力已验证'));
   });
 
@@ -4046,13 +4122,50 @@ void main() {
         'd3d11-feature-level': '12_1',
         'hwdec-current': 'd3d11va-copy',
         'video-params/gamma': 'bt.1886',
+        'video-params/w': '1920',
+        'video-params/h': '1080',
       }),
     );
 
     expect(detected.rendererDetected, isTrue);
     expect(detected.vulkanDetected, isFalse);
     expect(detected.computeShaderVerified, isFalse);
+    expect(detected.sdrSourceDetected, isTrue);
+    expect(detected.darkSceneEnhancementEligible, isTrue);
     expect(detected.readinessLabel, contains('原生设备矩阵不可用'));
+  });
+
+  test('SDR 暗部增强拒绝 4K 或软解会话', () async {
+    Future<PlayerGpuCapabilitySnapshot> detect({
+      required String width,
+      required String height,
+      required String hwdec,
+    }) {
+      return const PlayerGpuCapabilityDetector().detect(
+        _CapabilityPlayerBackend(<String, String>{
+          'current-vo': 'libmpv',
+          'd3d11-feature-level': '12_1',
+          'hwdec-current': hwdec,
+          'video-params/gamma': 'bt.1886',
+          'video-params/w': width,
+          'video-params/h': height,
+        }),
+      );
+    }
+
+    final ultraHd = await detect(
+      width: '3840',
+      height: '2160',
+      hwdec: 'd3d11va-copy',
+    );
+    final software = await detect(
+      width: '1920',
+      height: '1080',
+      hwdec: 'no',
+    );
+
+    expect(ultraHd.darkSceneEnhancementEligible, isFalse);
+    expect(software.darkSceneEnhancementEligible, isFalse);
   });
 
   test('GPU detector keeps multi-adapter Compute capability locked', () async {

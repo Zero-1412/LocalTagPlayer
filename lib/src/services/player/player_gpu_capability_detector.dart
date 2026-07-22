@@ -11,6 +11,8 @@ class PlayerGpuCapabilitySnapshot {
     required this.gpuContext,
     required this.d3d11FeatureLevel,
     required this.hwdecCurrent,
+    required this.sourceWidth,
+    required this.sourceHeight,
     required this.capabilityMatrix,
     required this.activeAdapterEvidence,
     required this.selectedAdapter,
@@ -19,6 +21,7 @@ class PlayerGpuCapabilitySnapshot {
     required this.vulkanDetected,
     required this.computeShaderVerified,
     required this.hdrSourceDetected,
+    required this.sdrSourceDetected,
   });
 
   final String outputDriver;
@@ -26,6 +29,10 @@ class PlayerGpuCapabilitySnapshot {
   final String gpuContext;
   final String d3d11FeatureLevel;
   final String hwdecCurrent;
+  /** 后端当前视频参数报告的源宽度；不可用时为 null。 */
+  final int? sourceWidth;
+  /** 后端当前视频参数报告的源高度；不可用时为 null。 */
+  final int? sourceHeight;
 
   /** 原生平台返回的系统设备矩阵。 */
   final PlayerGpuCapabilityMatrix capabilityMatrix;
@@ -43,6 +50,24 @@ class PlayerGpuCapabilitySnapshot {
   final bool vulkanDetected;
   final bool computeShaderVerified;
   final bool hdrSourceDetected;
+  /** 只有后端明确返回标准 SDR 传递函数时才为 true；未知值不得猜测为 SDR。 */
+  final bool sdrSourceDetected;
+
+  /**
+   * 暗部增强只放行已确认 SDR、1080p 及以下且正在硬解的会话。
+   *
+   * 这与当前独立 A/B 样本边界一致；未知分辨率、软件解码或 4K 不得外推为安全。
+   */
+  bool get darkSceneEnhancementEligible {
+    final width = sourceWidth;
+    final height = sourceHeight;
+    if (!sdrSourceDetected || width == null || height == null) return false;
+    final hardwareDecoded = hwdecCurrent.isNotEmpty &&
+        hwdecCurrent != 'no' &&
+        hwdecCurrent != 'empty' &&
+        hwdecCurrent != 'unavailable';
+    return hardwareDecoded && width * height <= 1920 * 1080;
+  }
 
   /** 第三阶段功能进入实现前使用的保守总状态。 */
   String get readinessLabel {
@@ -72,6 +97,8 @@ class PlayerGpuCapabilityDetector {
       'd3d11-feature-level',
       'hwdec-current',
       'video-params/gamma',
+      'video-params/w',
+      'video-params/h',
     ]) {
       try {
         values[property] = await backend.getProperty(property);
@@ -138,6 +165,8 @@ class PlayerGpuCapabilityDetector {
       gpuContext: context,
       d3d11FeatureLevel: d3d11FeatureLevel,
       hwdecCurrent: values['hwdec-current'] ?? 'unavailable',
+      sourceWidth: int.tryParse(values['video-params/w'] ?? ''),
+      sourceHeight: int.tryParse(values['video-params/h'] ?? ''),
       capabilityMatrix: matrix,
       activeAdapterEvidence: activeAdapter,
       selectedAdapter: selection.adapter,
@@ -149,6 +178,10 @@ class PlayerGpuCapabilityDetector {
       hdrSourceDetected: gamma.contains('pq') ||
           gamma.contains('hlg') ||
           gamma.contains('st2084'),
+      sdrSourceDetected: gamma.contains('bt.1886') ||
+          gamma.contains('srgb') ||
+          gamma.contains('gamma2.2') ||
+          gamma.contains('gamma2.4'),
     );
   }
 

@@ -312,26 +312,59 @@ class PlayerAdaptiveQualityEnhancer {
       Expando<Future<void>>('player-adaptive-quality-tail');
 
   /** 官方 FFmpeg 滤镜使用保守参数，锐化只处理亮度且不增强色度噪点。 */
-  static const _graphs = <PlayerAdaptiveQualityLevel, String>{
-    PlayerAdaptiveQualityLevel.off: '',
-    PlayerAdaptiveQualityLevel.deblock:
-        'lavfi=[deblock=filter=weak:block=8:alpha=0.06:beta=0.03:gamma=0.03:delta=0.03]',
-    PlayerAdaptiveQualityLevel.deblockDenoise:
-        'lavfi=[deblock=filter=weak:block=8:alpha=0.06:beta=0.03:gamma=0.03:delta=0.03,hqdn3d=1.2:0.9:1.8:1.35]',
-    PlayerAdaptiveQualityLevel.deblockDenoiseSharpen:
-        'lavfi=[deblock=filter=weak:block=8:alpha=0.06:beta=0.03:gamma=0.03:delta=0.03,hqdn3d=1.2:0.9:1.8:1.35,unsharp=5:5:0.35:5:5:0.0]',
+  static const _filters = <PlayerAdaptiveQualityLevel, List<String>>{
+    PlayerAdaptiveQualityLevel.off: <String>[],
+    PlayerAdaptiveQualityLevel.deblock: <String>[
+      'deblock=filter=weak:block=8:alpha=0.06:beta=0.03:gamma=0.03:delta=0.03'
+    ],
+    PlayerAdaptiveQualityLevel.deblockDenoise: <String>[
+      'deblock=filter=weak:block=8:alpha=0.06:beta=0.03:gamma=0.03:delta=0.03',
+      // hqdn3d 后两项是时间域亮度/色度强度，当前“降噪”已包含保守时域降噪。
+      'hqdn3d=1.2:0.9:1.8:1.35',
+    ],
+    PlayerAdaptiveQualityLevel.deblockDenoiseSharpen: <String>[
+      'deblock=filter=weak:block=8:alpha=0.06:beta=0.03:gamma=0.03:delta=0.03',
+      'hqdn3d=1.2:0.9:1.8:1.35',
+      'unsharp=5:5:0.35:5:5:0.0',
+    ],
   };
+
+  /**
+   * 把自动档位与 SDR 暗部增强合成为一条原子 `vf` 快照。
+   *
+   * 暗部增强使用轻量 gamma 曲线并降低高光权重，同时以小幅负 brightness 抵消
+   * Limited Range 黑位抬升。固定 SDR 样本验证 YMIN 保持 16，是否为已确认 SDR
+   * 由播放器能力检测层决定。
+   */
+  static String filterGraph({
+    required PlayerAdaptiveQualityLevel level,
+    required bool darkSceneEnhancementEnabled,
+  }) {
+    final filters = <String>[
+      ..._filters[level]!,
+      if (darkSceneEnhancementEnabled)
+        'eq=gamma=1.06:gamma_weight=0.82:brightness=-0.006',
+    ];
+    return filters.isEmpty ? '' : 'lavfi=[${filters.join(',')}]';
+  }
 
   /** 同一后端上的 open 重放和动态切换按调用顺序串行执行。 */
   static Future<void> apply({
     required PlayerBackend backend,
     required PlayerAdaptiveQualityLevel level,
+    bool darkSceneEnhancementEnabled = false,
   }) {
     final previous = _applyTails[backend] ?? Future<void>.value();
     final operation = previous.then((_) async {
       try {
         // 当前产品没有其它视频滤镜；设置完整 `vf` 快照可确定地清除上一档。
-        await backend.setProperty('vf', _graphs[level]!);
+        await backend.setProperty(
+          'vf',
+          filterGraph(
+            level: level,
+            darkSceneEnhancementEnabled: darkSceneEnhancementEnabled,
+          ),
+        );
       } catch (_) {
         // 可选滤镜不可用时不得阻止播放；诊断读取最终 `vf` 值供用户确认。
       }
@@ -346,6 +379,6 @@ String playerAdaptiveQualityLevelLabel(PlayerAdaptiveQualityLevel level) =>
     switch (level) {
       PlayerAdaptiveQualityLevel.off => '关闭',
       PlayerAdaptiveQualityLevel.deblock => '去块',
-      PlayerAdaptiveQualityLevel.deblockDenoise => '去块 + 降噪',
-      PlayerAdaptiveQualityLevel.deblockDenoiseSharpen => '去块 + 降噪 + 锐化',
+      PlayerAdaptiveQualityLevel.deblockDenoise => '去块 + 时空降噪',
+      PlayerAdaptiveQualityLevel.deblockDenoiseSharpen => '去块 + 时空降噪 + 锐化',
     };

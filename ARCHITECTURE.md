@@ -10,11 +10,11 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.59` 为全屏右缘自动播放列表增加持久化布尔门禁，并把运行时热区与隐藏延迟收敛为内部固定值。展开态不再叠加边缘命中层，保持区域使用实际列表宽度，避免最右边缘 enter/exit 交错。PlayerBackend contract、SQLite schema、标签查询和 filtered queue 不变。
+`Architecture Baseline 0.5.60` 在不改变 PlayerBackend contract 的前提下补齐 SDR 暗部增强：当前后端必须明确报告 SDR 传递函数、1080p 及以下源分辨率与实际硬解，否则不应用。暗部曲线与自动画质档位合成单条 `vf` 快照，两者的异步设置不会互相覆盖。暗部增强与 HDR 映射共享经验证的低频压力判定，但使用独立计数、锁存和诊断，回滚只影响当前媒体。SQLite schema、标签查询、filtered queue 和用户数据不变。
 
 GPU 能力边界分为两层：原生矩阵描述当前系统可见设备、显存和 API 能力，实际纹理渲染边界描述当前选中的 device LUID。系统“存在支持 Compute/Vulkan 的显卡”不等于播放器已选择该显卡；单硬件卡、Feature Level、名称、显存使用或枚举顺序均不能替代实际 LUID。DXGI LUID 仅在当前 Windows 会话内用于匹配和 QA，不进入 SQLite 或设置文件。
 
-显卡矩阵与显式 Compute 基线由 runner 后台 future 执行，平台通道在未完成时返回 `probing`，避免驱动、Vulkan loader 或 benchmark 阻塞 Flutter UI。普通播放不会自动运行基线。第三阶段当前只允许 HDR 动态映射：持久化开关只是用户意图，实际会话还必须同时满足 HDR 源、精确活动 LUID 与 Compute 能力；否则保持 mpv 自动映射。会话复用两秒健康样本，新增掉帧、缓冲或停滞立即恢复自动映射，中等压力需连续两次才回滚；该回滚不改写全局开关。运动补帧、时域降噪保持未启动，暗部增强继续使用独立 SDR 观感/性能基线。
+显卡矩阵与显式 Compute 基线由 runner 后台 future 执行，平台通道在未完成时返回 `probing`，避免驱动、Vulkan loader 或 benchmark 阻塞 Flutter UI。普通播放不会自动运行基线。第三阶段当前只允许 HDR 动态映射：持久化开关只是用户意图，实际会话还必须同时满足 HDR 源、精确活动 LUID 与 Compute 能力；否则保持 mpv 自动映射。会话复用两秒健康样本，新增掉帧、缓冲或停滞立即恢复自动映射，中等压力需连续两次才回滚；该回滚不改写全局开关。运动补帧保持未启动；自动画质的 `hqdn3d` 已以保守时域参数执行时空降噪，SDR 暗部增强也已完成独立 A/B 后作为默认关闭的可选能力。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -41,11 +41,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.59`
+已完成基线：`Architecture Baseline 0.5.60`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.60`：`PlaybackSettings` 向后兼容增加暗部细节增强开关；实际会话只在明确 SDR、1080p 及以下与硬解三项都通过时应用 `eq` 曲线。曲线与自动去块/时空降噪/锐化使用同一原子 `vf` 快照，压力回滚拥有独立会话状态。设置页删除内部路线卡，HDR 映射保留 LUID/Compute/HDR 源门槛并使用正式用户文案。PlayerBackend contract、SQLite、标签查询、filtered queue 和用户数据不变。
 
 - `0.5.59`：`PlaybackSettings` 向后兼容增加 `fullscreenQueueEdgeHoverEnabled`，旧 JSON 缺字段时默认开启。播放器交互页只暴露该开关，历史热区宽度与隐藏延迟字段保留读取兼容但不再驱动运行时；播放器使用固定 32px 入口、实际列表宽度加 12px 保持区和 450ms 离开宽限。展开后移除覆盖列表最右侧的独立边缘层，显式列表按钮不受开关影响。未修改 PlayerBackend、SQLite、标签查询、filtered queue、缓存队列或用户数据。
 

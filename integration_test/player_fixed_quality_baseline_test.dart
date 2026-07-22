@@ -40,8 +40,8 @@ void main() {
     if (outputPath == null || outputPath.isEmpty) {
       throw StateError('缺少匿名基线输出路径');
     }
-    if (mode != 'hdr' && mode != 'sdr-dark') {
-      throw StateError('基线模式必须是 hdr 或 sdr-dark');
+    if (mode != 'hdr' && mode != 'sdr-dark' && mode != 'sdr-dark-enhanced') {
+      throw StateError('基线模式必须是 hdr、sdr-dark 或 sdr-dark-enhanced');
     }
     final baselineMode = mode!;
 
@@ -67,6 +67,7 @@ void main() {
     final playerKey = GlobalKey<PlayerPageState>();
     final settings = PlaybackSettings.defaults.copyWith(
       hdrDynamicToneMappingExperimentEnabled: baselineMode == 'hdr',
+      darkSceneEnhancementEnabled: baselineMode == 'sdr-dark-enhanced',
       highQualityStreamCacheEnabled: true,
     );
 
@@ -153,6 +154,12 @@ void main() {
           (line) => <String>[
             'mpv 实际硬解:',
             '源传递函数:',
+            'SDR 源信号:',
+            '暗部细节增强设置:',
+            '暗部细节增强会话:',
+            '暗部增强压力保护:',
+            '暗部增强自动回滚原因:',
+            'mpv 视频滤镜:',
             'HDR 动态映射会话:',
             'HDR 会话压力保护:',
             'HDR 自动回滚原因:',
@@ -204,8 +211,19 @@ void main() {
         expect(finalLines, contains('mpv HDR 映射曲线: auto'));
         expect(finalLines, contains('mpv HDR 动态峰值: auto'));
       }
+    } else if (baselineMode == 'sdr-dark-enhanced') {
+      expect(
+        finalLines,
+        contains('暗部细节增强会话: 已通过 SDR/1080p/硬解门槛并启用'),
+      );
+      expect(finalLines, contains('暗部增强自动回滚原因: 无'));
+      expect(
+        finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
+        contains('eq=gamma=1.06:gamma_weight=0.82:brightness=-0.006'),
+      );
     } else {
       expect(finalLines, contains('HDR 动态映射会话: 未启用 / 门槛未通过'));
+      expect(finalLines, contains('暗部细节增强设置: 关闭'));
     }
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -233,7 +251,13 @@ Future<void> _waitForSessionState(
         (line) => line.startsWith('HDR 自动回滚原因: ') && line != 'HDR 自动回滚原因: 无',
       );
       if (active || safelyRolledBack) return;
-    } else if (snapshot.lines.contains('HDR 源信号: 未检测')) {
+    } else if (mode == 'sdr-dark-enhanced') {
+      if (snapshot.lines.contains(
+        '暗部细节增强会话: 已通过 SDR/1080p/硬解门槛并启用',
+      )) {
+        return;
+      }
+    } else if (snapshot.lines.contains('SDR 源信号: 已检测')) {
       return;
     }
   }

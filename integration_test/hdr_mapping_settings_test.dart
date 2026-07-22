@@ -8,14 +8,14 @@ import 'package:local_tag_player/main.dart' as app;
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * 在真实 Windows Flutter 窗口中点击 HDR 动态映射实验并验证可回滚两态。
+ * 在真实 Windows Flutter 窗口中点击 HDR 动态映射并验证可回滚两态。
  *
  * 测试使用隔离数据目录，不打开媒体、不运行 Compute 压测；压测由设备基线测试负责。
  */
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('主设置页确认开启并关闭 HDR 动态映射实验', (tester) async {
+  testWidgets('主设置页确认开启并关闭 HDR 动态映射', (tester) async {
     final outputPath =
         Platform.environment['LOCAL_TAG_PLAYER_SCREENSHOT_DIR']?.trim();
     if (outputPath == null || outputPath.isEmpty) {
@@ -59,7 +59,7 @@ void main() {
 
     await tester.tap(experiment);
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
-    expect(find.text('开启 HDR 动态映射实验？'), findsOneWidget);
+    expect(find.text('开启 HDR 动态映射？'), findsOneWidget);
     await tester.tap(
       find.byKey(
         const ValueKey('settings.playbackQuality.hdrMappingConfirm'),
@@ -72,7 +72,7 @@ void main() {
     await tester.tap(experiment);
     await tester.pumpAndSettle(const Duration(seconds: 1));
     expect(tester.widget<Switch>(switchFinder).value, isFalse);
-    expect(find.text('开启 HDR 动态映射实验？'), findsNothing);
+    expect(find.text('开启 HDR 动态映射？'), findsNothing);
     await _signalDesktopCapture('hdr-mapping-rollback');
   });
 }

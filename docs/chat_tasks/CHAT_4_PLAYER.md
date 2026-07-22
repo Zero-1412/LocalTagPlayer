@@ -743,3 +743,12 @@
 - 展开态不再渲染位于列表上层的独立最右热区，避免鼠标到达屏幕边缘时产生交错 enter/exit 并阻挡最右条目点击。
 - 关闭开关只禁用边缘自动唤出，播放器显式列表按钮仍可打开同一 filtered queue；队列来源、内容、顺序、当前 index 和独立滚动控制器均未改变。
 - `flutter analyze`、完整 255 项测试和 Windows Debug build 均通过；Debug 真实点击确认关闭态最右缘不触发、开启态约 320ms 展开、最右缘停留超过 850ms 保持、离开 700ms 收起，设置页和全屏列表未见截断、遮挡、错位或溢出。
+
+## 2026-07-22 暗部增强闭环与 HDR 能力正式化
+
+- `PlaybackSettings` 向后兼容增加默认关闭的暗部细节增强开关；`PlayerGpuCapabilityDetector` 只在当前后端明确报告 SDR 传递函数、1080p 及以下源分辨率与实际硬解时放行，4K、软解或未知保持关闭。
+- `PlayerAdaptiveQualityEnhancer` 把保守 `eq` 曲线与自动去块、`hqdn3d` 时空降噪和锐化合成单条 `vf` 快照，避免异步设置相互覆盖；Flutter UI 不读取或处理视频帧。
+- 暗部增强与 HDR 映射共享经过基线验证的低频压力判定，但各自保持计数、锁存、回滚原因和时间；回滚只作用当前媒体，不改写持久开关。
+- 最终 SDR 关闭/开启态各 60 秒、12 个诊断样本，均为 0 掉帧、0 停滞、GPU Engine P95 5.0%；开启态显存 P95 300.1 MiB，Limited 黑位保持 `YMIN=16`，`YAVG` 从 43.6642 提升到 45.4358。同轮 HDR 在新增 1 个总掉帧后真实回滚为 `auto`。
+- 设置页删除内部“画质增强路线”卡，展示真实暗部增强与“HDR 动态映射”开关。Debug 真实点击开启/关闭暗部增强并恢复原状态，两态截图无截断、遮挡、错位或溢出。
+- `flutter analyze`、完整 258 项测试、Windows Debug build 与三态固定样本均通过。PlayerBackend contract、filtered queue 来源/内容/顺序、SQLite schema、标签查询、缓存队列、稳定身份和用户数据未改变。

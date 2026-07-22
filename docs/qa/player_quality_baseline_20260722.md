@@ -37,7 +37,7 @@
 
 ## 第三阶段门槛
 
-原生设备矩阵已补齐 Compute / Vulkan 能力位，实际 MediaKit / ANGLE 渲染边界也已返回活动 adapter LUID 并精确匹配 RTX 4070 SUPER。第三阶段只开放默认关闭的 HDR 动态映射单项实验，固定 300 秒 HDR 长播和独立 180 秒 SDR 暗部关闭态基线已经完成；运动补帧与时域降噪仍锁定，详见 `player_gpu_capability_matrix_20260722.md` 与 `player_hdr_sdr_baseline_20260722.md`。
+原生设备矩阵已补齐 Compute / Vulkan 能力位，实际 MediaKit / ANGLE 渲染边界也已返回活动 adapter LUID 并精确匹配 RTX 4070 SUPER。第三阶段只保留默认关闭且可会话回滚的 HDR 动态映射；固定 300 秒 HDR 长播和 SDR 暗部关闭/开启 A/B 已完成。运动补帧仍锁定，`hqdn3d` 已以保守时域参数执行时空降噪，详见 `player_gpu_capability_matrix_20260722.md` 与 `player_hdr_sdr_baseline_20260722.md`。
 
 ## 自动协调器真实窗口复验
 

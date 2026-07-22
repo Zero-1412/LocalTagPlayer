@@ -4,6 +4,16 @@
 
 ## 活跃任务
 
+### 2026-07-22 暗部增强闭环与 HDR 能力正式化
+
+- 目标：补齐“画质增强路线”中未完成的 SDR 暗部增强，并将已具备活动 LUID、Compute 门槛和会话回滚的 HDR 映射从内部实验文案收敛为真实可选能力。
+- 当前状态：已完成。新增默认关闭的“暗部细节增强”，仅对后端明确报告的 SDR、1080p 及以下、当前硬解会话应用保守 gamma 曲线；未知传递函数、4K 或软解保持关闭。
+- 暗部曲线与自动去块/时空降噪/锐化合成单条 `vf` 快照，不在 UI 线程处理视频帧；独立压力计数在新增掉帧、缓冲或停滞时只回滚当前媒体，不改写用户持久开关。
+- 最终固定样本 A/B：关闭/开启态各 60 秒、12 个诊断样本，均为 0 掉帧、0 停滞、窗口 0 无响应；进程 GPU Engine P95 均为 5.0%，显存 committed P95 为 299.4 / 300.1 MiB。像素预检保持 Limited 黑位 `YMIN=16`，`YAVG` 从 43.6642 提升到 45.4358。
+- 同轮 HDR 60 秒样本在新增 1 个总掉帧后立即恢复 `auto`，验证运行时熔断真实生效。设置页删除内部“画质增强路线”卡，展示暗部增强与“HDR 动态映射”真实开关。
+- `flutter analyze`、完整 258 项测试、Windows Debug build 和三组真实 MediaKit 固定样本均通过。Debug 真实点击确认开关可操作、恢复关闭后状态正确，页面无截断、遮挡、错位或溢出；两态截图位于 `.local/qa/settings-quality-completion/`。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、PlayerBackend contract、缩略图/媒体详情队列、稳定身份或用户数据。
+
 ### 2026-07-22 全屏边缘播放列表开关与命中修复
 
 - 目标：提高全屏右缘播放列表的触发可靠性，避免鼠标到达最右边时列表反向消失，并把自动边缘唤出收敛为播放器交互页的单一开关。
@@ -47,9 +57,9 @@
 - 当前状态：已完成。构建期只替换固定 SHA256 的 MediaKit `ANGLESurfaceManager` 单个源文件，在真实 D3D11 device 创建/销毁处登记 LUID；不修改 Pub Cache，不按枚举顺序、Feature Level、名称或显存占用推断活动显卡。
 - 当前设备矩阵：RTX 4070 SUPER（约 11.72 GiB 专用显存）与 AMD Radeon Graphics（约 460 MiB 专用显存）均为 D3D 12_1、Compute 已验证、Vulkan 已匹配；Microsoft Basic Render Driver 标记为软件适配器，不参与活动硬件卡选择。完整证据见 `docs/qa/player_gpu_capability_matrix_20260722.md`。
 - 实际生产渲染设备返回 LUID `00000000:00016bec`，精确匹配 RTX 4070 SUPER。D3D11 HDR 类 Compute kernel 在 60fps 的 4.167ms 预留切片下，1080p P95 为 0.036ms、4K P95 为 0.129ms，两档均通过；JSON 位于 `.local/qa/gpu-capability-matrix/active-device-compute-budget.json`。
-- 第三阶段只开放“HDR 动态映射实验”：默认关闭，开启前确认；只有当前媒体为 HDR、活动 LUID 精确匹配且 Compute 能力验证后才对会话应用 `hable + hdr-compute-peak=yes`，关闭或门槛不满足时恢复 `auto`。运动补帧与时域降噪保持未启动。
+- 该阶段只选择了“HDR 动态映射”做可回滚验证；后续已保留默认关闭、HDR 源、精确 LUID、Compute 能力与会话压力门槛，并收敛为正式用户文案。运动补帧保持未启动；`hqdn3d` 已以保守时域参数参与时空降噪。
 - `tool/run_gpu_capability_matrix.ps1` 可重建活动 LUID、设备矩阵和 1080p / 4K 预算；压测显式触发并在原生后台执行，普通播放启动不运行 Compute 基线。
-- 暗部增强不与第三阶段 Compute 功能共用结论；需固定 SDR 暗场样本，分别评估暗部细节、黑位抬升、色带、CPU/GPU、掉帧和 UI 响应后再决定是否进入自动协调器。
+- 暗部增强不与第三阶段 Compute 功能共用结论；后续已使用固定 SDR 暗场样本完成独立开/关 A/B，并只在 SDR、1080p 及以下、实际硬解边界内提供默认关闭的手动开关。
 - 隔离 Windows integration test 真实点击“设置 → 播放与继续观看 → HDR 实验 → 确认 → 关闭”，开启/回滚两态无遮挡、溢出或状态歧义；截图位于 `.local/qa/hdr-mapping/`。真实 MediaKit 会话另行核验 `hable/yes → auto/auto` 回滚。
 - 最终 `flutter analyze`、完整 251 项测试、Windows Debug build、活动 LUID / Compute 基线 integration test 与 HDR 两态真实点击 integration test 全部通过，3 项显式 benchmark 按设计跳过。
 - 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列、稳定身份或用户数据。

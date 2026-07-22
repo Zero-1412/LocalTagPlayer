@@ -737,7 +737,7 @@ class SettingsLandingList extends StatelessWidget {
               key: const ValueKey('settings.category.videoQuality'),
               icon: Icons.auto_awesome_outlined,
               title: '视频画质与增强',
-              subtitle: '画面比例、缩放与色彩 · 自动画质、超分与 HDR 实验',
+              subtitle: '画面比例、缩放与色彩 · 自动画质、暗部增强与 HDR 映射',
               onTap: onOpenVideoQuality,
             ),
             _SettingsNavigationTile(
@@ -925,7 +925,7 @@ class _PlaybackQualitySettingsPanel extends StatelessWidget {
               value: settings.automaticQualityEnhancementEnabled,
               title: const Text('自动画质协调器'),
               subtitle: const Text(
-                '根据 1080p / 4K 与软硬解基线，按实时余量动态启用去块、降噪和适度锐化',
+                '根据 1080p / 4K 与软硬解基线，按实时余量动态启用去块、时空降噪和适度锐化',
               ),
               onChanged: (value) => onChanged(
                 settings.copyWith(
@@ -936,13 +936,28 @@ class _PlaybackQualitySettingsPanel extends StatelessWidget {
             const Divider(height: 20),
             SwitchListTile.adaptive(
               key: const ValueKey(
+                'settings.playbackQuality.darkSceneEnhancement',
+              ),
+              contentPadding: EdgeInsets.zero,
+              value: settings.darkSceneEnhancementEnabled,
+              title: const Text('暗部细节增强'),
+              subtitle: const Text(
+                '仅对已确认的 SDR、1080p 及以下硬解视频启用保守暗部曲线；出现播放压力时当前会话自动回滚',
+              ),
+              onChanged: (value) => onChanged(
+                settings.copyWith(darkSceneEnhancementEnabled: value),
+              ),
+            ),
+            const Divider(height: 20),
+            SwitchListTile.adaptive(
+              key: const ValueKey(
                 'settings.playbackQuality.hdrMappingExperiment',
               ),
               contentPadding: EdgeInsets.zero,
               value: settings.hdrDynamicToneMappingExperimentEnabled,
-              title: const Text('HDR 动态映射实验'),
+              title: const Text('HDR 动态映射'),
               subtitle: const Text(
-                '默认关闭；仅建议在活动 GPU LUID 与 1080p/4K Compute 基线通过后开启，关闭即恢复自动映射',
+                '仅对 HDR 视频在活动 GPU LUID 与 Compute 门槛通过后启用；播放压力会自动回滚，关闭即恢复自动映射',
               ),
               onChanged: (value) async {
                 if (!value) {
@@ -956,9 +971,9 @@ class _PlaybackQualitySettingsPanel extends StatelessWidget {
                 final confirmed = await showDialog<bool>(
                   context: context,
                   builder: (dialogContext) => AlertDialog(
-                    title: const Text('开启 HDR 动态映射实验？'),
+                    title: const Text('开启 HDR 动态映射？'),
                     content: const Text(
-                      '实验会为 HDR 视频启用 Hable 映射与逐帧峰值 Compute。若出现掉帧、功耗升高或观感异常，可随时关闭并恢复 mpv 自动值。',
+                      '该功能会为通过能力门槛的 HDR 视频启用 Hable 映射与逐帧峰值 Compute。若出现掉帧、功耗升高或观感异常，可随时关闭并恢复 mpv 自动值。',
                     ),
                     actions: [
                       TextButton(
@@ -1030,45 +1045,6 @@ class _PlaybackCapabilityRow extends StatelessWidget {
         style: const TextStyle(
           color: appAccentViolet,
           fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-}
-
-/** 后续画质增强路线；只展示范围与状态，不暴露尚不能保证流畅度的假开关。 */
-class _PlaybackEnhancementRoadmapCard extends StatelessWidget {
-  const _PlaybackEnhancementRoadmapCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Card(
-      key: ValueKey('settings.playbackQuality.roadmap'),
-      child: Padding(
-        padding: EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              '画质增强路线',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-            ),
-            SizedBox(height: 12),
-            _PlaybackCapabilityRow(
-              icon: Icons.auto_fix_high_rounded,
-              title: '第二阶段 · 观感增强',
-              subtitle: '去块、降噪和适度锐化已由自动协调器按余量分级；暗部增强仍待独立验证',
-              status: '已接入基线',
-            ),
-            Divider(height: 16),
-            _PlaybackCapabilityRow(
-              icon: Icons.memory_rounded,
-              title: '第三阶段 · 高级增强',
-              subtitle:
-                  '实际渲染边界返回 adapter LUID；1080p/4K Compute 基线通过后仅开放 HDR 动态映射',
-              status: '单项实验',
-            ),
-          ],
         ),
       ),
     );
@@ -1894,8 +1870,6 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                             );
                           },
                         ),
-                        const SizedBox(height: 16),
-                        const _PlaybackEnhancementRoadmapCard(),
                         const SizedBox(height: 16),
                       ],
                       if (_section == _SettingsSection.dataBackup) ...[
