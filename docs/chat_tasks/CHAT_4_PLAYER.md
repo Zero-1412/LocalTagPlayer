@@ -727,3 +727,11 @@
 - 新 Debug exe 从构建目录直接启动约 864ms 获得可见窗口；真实点击完成“媒体库 → 播放器 → 全屏 → 控制条显示/收起”两态截图，证据位于 `.local/qa/fullscreen-controls/`。
 - focused test、完整 254 项测试、`flutter analyze` 与 Windows Debug build 均通过，3 项显式真实媒体 benchmark 按设计跳过。
 - 未修改 PlayerBackend contract、SQLite、标签筛选、filtered queue 或缓存队列。
+
+## 2026-07-22 播放器全屏返回与会话恢复
+
+- 媒体库页面新增 Route 级 `PlayerFullscreenSessionController`，只保存当前应用会话的播放器全屏偏好；不持久化，也不改变普通桌面窗口恢复规则。
+- 全屏播放器点击返回时，先通过现有 `window_manager` 边界退出系统全屏并最大化窗口，再 pop 播放器 Route，保证媒体库和随后进入的其他页面均使用最大化布局。
+- 再次从媒体库进入播放器时按会话偏好恢复全屏；播放器内手动退出全屏会清除偏好。普通窗口或最大化窗口进入、返回时不执行这组特殊命令。
+- 状态测试覆盖普通最大化、全屏返回保留及手动退出清除；filtered queue、当前 index、PlayerBackend、SQLite、缓存队列和用户数据不变。
+- Debug 真实窗口完成“最大化主界面 → 播放器 → 返回”“播放器全屏 → Esc → 返回 → 再进窗口播放器”点击与截图检查，未见布局异常、遮挡或溢出。Computer Use 仅支持左/右/中键并明确拒绝 `back`，因此全屏鼠标侧键直接返回仍需实体侧键补验；对应会话状态与分支已由 focused test 覆盖。

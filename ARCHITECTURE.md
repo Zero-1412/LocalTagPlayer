@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.57` 将默认 `media_kit` 原生库初始化从应用首帧前移到实际 MediaKit 播放后端创建边界，避免 Windows Debug 独立启动卡在首帧前原生加载路径；播放器全屏队列语境与控制条改为互斥显隐。PlayerBackend contract、SQLite schema、标签查询和 filtered queue 不变。
+`Architecture Baseline 0.5.58` 在媒体库 Route 生命周期内新增非持久化的播放器全屏会话状态。只有播放器实际全屏返回时才先退出系统全屏并最大化底层窗口；再次进入播放器恢复全屏，普通最大化窗口不进入该路径。PlayerBackend contract、播放设置、桌面窗口布局持久化、SQLite schema、标签查询和 filtered queue 不变。
 
 GPU 能力边界分为两层：原生矩阵描述当前系统可见设备、显存和 API 能力，实际纹理渲染边界描述当前选中的 device LUID。系统“存在支持 Compute/Vulkan 的显卡”不等于播放器已选择该显卡；单硬件卡、Feature Level、名称、显存使用或枚举顺序均不能替代实际 LUID。DXGI LUID 仅在当前 Windows 会话内用于匹配和 QA，不进入 SQLite 或设置文件。
 
@@ -41,11 +41,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.57`
+已完成基线：`Architecture Baseline 0.5.58`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.58`：媒体库 Route 持有只存在于当前应用会话的 `PlayerFullscreenSessionController`。播放器切换全屏时同步该状态；全屏返回以 `window_manager` 实际状态兜底，按“退出全屏 → 最大化 → Route 返回”恢复主界面，且保留下次播放器全屏偏好。用户主动退出全屏会清除偏好，普通窗口/最大化进入与返回不触发窗口改写。未修改 PlayerBackend contract、`PlaybackSettings`、桌面窗口布局文件、SQLite、标签查询、filtered queue、缓存队列或用户数据。
 
 - `0.5.57`：组合根不再在应用首帧前加载 `media_kit` 原生库；只有默认 MediaKit 播放后端被实际创建时才执行初始化，修复 Windows Debug exe 独立启动后进程存活但窗口不出现。全屏顶部队列语境与底部控制条互斥显示，只复用现有显隐状态和动画时长。未修改 PlayerBackend contract、SQLite、标签查询、filtered queue、缓存队列或用户数据。
 
@@ -401,3 +403,9 @@ lib/
 - 播放器全屏通过既有 `window_manager` 桌面边界切换，不把平台命令散落到业务数据层。
 - `DesktopWindowStateService` 在全屏期间跳过尺寸快照，避免显示器尺寸污染普通窗口恢复状态。
 - 本次未修改 `PlayerBackend`、SQLite schema、filtered queue 或标签查询契约。
+
+## 2026-07-22 播放器 Route 全屏会话边界补充
+
+- `DesktopWindowStateService` 继续只负责普通窗口尺寸和最大化持久化；播放器是否在下一次进入时恢复全屏由媒体库 Route 的内存态单独负责。
+- 全屏播放器返回时必须在 Route pop 前退出系统全屏并最大化底层窗口，避免主界面或设置页继承全屏布局；该恢复动作不等于清除播放器全屏偏好。
+- 普通窗口或最大化窗口没有播放器全屏事实时，不执行任何全屏退出或最大化命令；用户在播放器内主动退出全屏则清除会话偏好。

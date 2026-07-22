@@ -103,6 +103,7 @@ void main() {
           ),
           mediaProbeBackendFactory: () =>
               createMediaProbeBackend(ffmpegBackend),
+          fullscreenSessionController: PlayerFullscreenSessionController(),
         ),
       ),
     );

@@ -3505,6 +3505,8 @@ class _LibraryPageState extends State<LibraryPage> {
   Future<void> _latestPlayerRelease = Future<void>.value();
   /** 播放器 Route 存续期间只隐藏媒体库语义，不卸载列表或丢失筛选状态。 */
   var _playerRouteActive = false;
+  /** 当前应用会话内保留播放器全屏偏好，媒体库和其他页面本身始终使用普通窗口状态。 */
+  final _playerFullscreenSession = PlayerFullscreenSessionController();
 
   var _isRefreshingVideos = false;
 
@@ -6503,6 +6505,7 @@ class _LibraryPageState extends State<LibraryPage> {
             fileSystem: _fileSystem,
             playerBackendFactory: widget.playerBackendFactory,
             mediaProbeBackendFactory: widget.mediaProbeBackendFactory,
+            fullscreenSessionController: _playerFullscreenSession,
           ),
         ),
       );

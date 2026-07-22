@@ -2156,6 +2156,31 @@ void main() {
     );
   });
 
+  test('player fullscreen session distinguishes fullscreen from maximized flow',
+      () {
+    final session = PlayerFullscreenSessionController();
+
+    // 普通窗口或最大化窗口进入播放器时，不得创建全屏恢复状态。
+    expect(session.shouldOpenFullscreen, isFalse);
+    expect(
+      session.prepareForPlayerExit(currentlyFullscreen: false),
+      isFalse,
+    );
+    expect(session.shouldOpenFullscreen, isFalse);
+
+    // 用户进入全屏后返回，主窗口需要最大化，下一次播放器仍恢复全屏。
+    session.recordPlayerFullscreen(true);
+    expect(
+      session.prepareForPlayerExit(currentlyFullscreen: true),
+      isTrue,
+    );
+    expect(session.shouldOpenFullscreen, isTrue);
+
+    // 用户在播放器内主动退出全屏后，后续进入恢复普通窗口路径。
+    session.recordPlayerFullscreen(false);
+    expect(session.shouldOpenFullscreen, isFalse);
+  });
+
   test('library excludes semantics only while player route is active', () {
     expect(
       libraryRouteShouldExcludeSemantics(playerRouteActive: true),

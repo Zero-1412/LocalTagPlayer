@@ -260,6 +260,7 @@ void main() {
           }) =>
               backend,
           mediaProbeBackendFactory: _RenameSmokeProbeBackend.new,
+          fullscreenSessionController: PlayerFullscreenSessionController(),
         ),
       ),
     );

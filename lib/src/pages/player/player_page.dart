@@ -51,6 +51,36 @@ bool playerControlsShouldAutoHide({
 }) =>
     !settingsOpen && !pointerInControlBar;
 
+/**
+ * 媒体库与播放器 Route 共享的全屏会话状态。
+ *
+ * 该状态只在当前应用会话内记住“下次进入播放器是否恢复全屏”，不写入播放设置或
+ * 桌面窗口布局。用户主动退出播放器全屏时立即清除，避免普通最大化窗口误走恢复路径。
+ */
+class PlayerFullscreenSessionController {
+  bool _shouldOpenFullscreen = false;
+
+  /** 新播放器 Route 是否需要恢复上一次播放器全屏状态。 */
+  bool get shouldOpenFullscreen => _shouldOpenFullscreen;
+
+  /** 记录用户在播放器内完成的全屏切换。 */
+  void recordPlayerFullscreen(bool fullscreen) {
+    _shouldOpenFullscreen = fullscreen;
+  }
+
+  /**
+   * 判断返回前是否需要把系统窗口恢复为最大化。
+   *
+   * 从全屏返回时保留播放器偏好，非全屏返回则不改变窗口，也不凭空创建全屏偏好。
+   */
+  bool prepareForPlayerExit({required bool currentlyFullscreen}) {
+    if (currentlyFullscreen) {
+      _shouldOpenFullscreen = true;
+    }
+    return currentlyFullscreen;
+  }
+}
+
 /** 持续按住快进键仍可重复 seek，但居中反馈只在首次按下时展示。 */
 bool playerSeekFeedbackShouldShow({required bool isRepeat}) => !isRepeat;
 
@@ -583,6 +613,7 @@ class PlayerPage extends StatefulWidget {
     required this.fileSystem,
     required this.playerBackendFactory,
     required this.mediaProbeBackendFactory,
+    required this.fullscreenSessionController,
   });
 
   final VideoItem initialItem;
@@ -623,6 +654,9 @@ class PlayerPage extends StatefulWidget {
 
   /** 由组合根选择的媒体探测后端工厂。 */
   final MediaProbeBackendFactory mediaProbeBackendFactory;
+
+  /** 媒体库 Route 持有的播放器全屏会话状态，不参与持久化。 */
+  final PlayerFullscreenSessionController fullscreenSessionController;
 
   @override
   State<PlayerPage> createState() => PlayerPageState();
@@ -751,6 +785,8 @@ class PlayerPageState extends State<PlayerPage> {
   var _queueSidebarCollapsed = false;
   /** 是否由播放器页面进入桌面窗口全屏。 */
   var _isWindowFullscreen = false;
+  /** 会话全屏恢复只执行一次；返回流程等待它结束，避免首帧后立即返回造成窗口命令交错。 */
+  Future<void> _sessionFullscreenRestore = Future<void>.value();
   /** 全屏时是否在画面右侧显示不改变视频尺寸的当前筛选队列覆盖层。 */
   var _fullscreenQueueVisible = false;
   /** 宽屏队列折叠时，指针是否进入非全屏顶部标题栏热区。 */
@@ -801,6 +837,8 @@ class PlayerPageState extends State<PlayerPage> {
   @override
   void initState() {
     super.initState();
+    _isWindowFullscreen =
+        widget.fullscreenSessionController.shouldOpenFullscreen;
     _effectivePlaybackSettings = widget.playbackSettings;
     _mirrorVideo = _effectivePlaybackSettings.mirrorVideo;
     _playbackMode = _effectivePlaybackSettings.playbackMode;
@@ -861,6 +899,9 @@ class PlayerPageState extends State<PlayerPage> {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        if (_isWindowFullscreen) {
+          _sessionFullscreenRestore = _restoreSessionWindowFullscreen();
+        }
         _focusNode.requestFocus();
         _ensureQueueIndexVisible(_index, center: true, animated: false);
         // 首次进入默认展示控制条，再按统一三秒规则自动收起。
@@ -1231,6 +1272,13 @@ class PlayerPageState extends State<PlayerPage> {
     }
     // 返回媒体库前等待最后一次全局设置写入，避免用户改完立即退出时丢失配置。
     await _playbackSettingsSaveTail;
+    await _sessionFullscreenRestore;
+    final actuallyFullscreen = await _isActuallyWindowFullscreen();
+    if (widget.fullscreenSessionController.prepareForPlayerExit(
+      currentlyFullscreen: actuallyFullscreen,
+    )) {
+      await _restoreMaximizedWindowForRouteExit();
+    }
     if (mounted) {
       _routePopRequestedAt = DateTime.now();
       Navigator.of(context).maybePop();
@@ -1930,7 +1978,60 @@ class PlayerPageState extends State<PlayerPage> {
       _fullscreenQueueVisible = false;
       _pointerInWindowTopBarRegion = false;
     });
+    widget.fullscreenSessionController.recordPlayerFullscreen(target);
     _showVideoControls();
+  }
+
+  /** 首帧提交后恢复当前会话记住的播放器全屏，普通最大化进入时不会调用。 */
+  Future<void> _restoreSessionWindowFullscreen() async {
+    try {
+      await windowManager.setFullScreen(true);
+    } catch (error) {
+      // 平台边界拒绝全屏时回退为普通窗口，并清除会话标记，避免后续每次进入重复失败。
+      widget.fullscreenSessionController.recordPlayerFullscreen(false);
+      if (mounted) {
+        setState(() => _isWindowFullscreen = false);
+      }
+      debugPrint('PLAYER_FULLSCREEN_RESTORE_FAILED error=$error');
+    }
+  }
+
+  /** 退出 Route 前以插件实际状态兜底，防止异步窗口回调与页面布尔值短暂不同步。 */
+  Future<bool> _isActuallyWindowFullscreen() async {
+    if (_isWindowFullscreen) {
+      return true;
+    }
+    try {
+      return await windowManager.isFullScreen();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * 全屏播放器返回时先退出系统全屏，再最大化底层应用窗口。
+   *
+   * 此处故意不清除会话全屏标记：媒体库保持最大化，下一次进入播放器才恢复全屏。
+   */
+  Future<void> _restoreMaximizedWindowForRouteExit() async {
+    try {
+      await windowManager.setFullScreen(false);
+    } catch (error) {
+      debugPrint('PLAYER_FULLSCREEN_EXIT_FAILED error=$error');
+    }
+    try {
+      await windowManager.maximize();
+    } catch (error) {
+      // 窗口恢复失败不能阻塞播放器释放与 Route 返回，保留日志供真实桌面诊断。
+      debugPrint('PLAYER_FULLSCREEN_EXIT_MAXIMIZE_FAILED error=$error');
+    }
+    if (mounted) {
+      setState(() {
+        _isWindowFullscreen = false;
+        _fullscreenQueueVisible = false;
+        _pointerInWindowTopBarRegion = false;
+      });
+    }
   }
 
   /** 鼠标进入右侧热区或队列时展示全屏侧栏，并取消待执行的自动隐藏。 */
