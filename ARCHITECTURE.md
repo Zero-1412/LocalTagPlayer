@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.56` 在活动 GPU LUID 与 Compute 帧预算之上补齐 DXGI 显示输出矩阵、固定 HDR/SDR 长播基线与 HDR 会话压力回滚。播放设置按职责拆成“播放与解码”和“视频画质与增强”，但仍共享同一 `PlaybackSettings` 持久化链。SQLite schema、标签查询和 filtered queue 不变。
+`Architecture Baseline 0.5.57` 将默认 `media_kit` 原生库初始化从应用首帧前移到实际 MediaKit 播放后端创建边界，避免 Windows Debug 独立启动卡在首帧前原生加载路径；播放器全屏队列语境与控制条改为互斥显隐。PlayerBackend contract、SQLite schema、标签查询和 filtered queue 不变。
 
 GPU 能力边界分为两层：原生矩阵描述当前系统可见设备、显存和 API 能力，实际纹理渲染边界描述当前选中的 device LUID。系统“存在支持 Compute/Vulkan 的显卡”不等于播放器已选择该显卡；单硬件卡、Feature Level、名称、显存使用或枚举顺序均不能替代实际 LUID。DXGI LUID 仅在当前 Windows 会话内用于匹配和 QA，不进入 SQLite 或设置文件。
 
@@ -41,11 +41,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.56`
+已完成基线：`Architecture Baseline 0.5.57`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.57`：组合根不再在应用首帧前加载 `media_kit` 原生库；只有默认 MediaKit 播放后端被实际创建时才执行初始化，修复 Windows Debug exe 独立启动后进程存活但窗口不出现。全屏顶部队列语境与底部控制条互斥显示，只复用现有显隐状态和动画时长。未修改 PlayerBackend contract、SQLite、标签查询、filtered queue、缓存队列或用户数据。
 
 - `0.5.56`：Windows DXGI 探针从活动适配器返回桌面输出、分辨率、位深、色彩空间、HDR 信号与亮度元数据；固定 1080p HDR10/PQ 与 SDR 暗部样本分别建立 300 秒和 180 秒真实 MediaKit 长播基线。HDR 会话压力协调器复用既有健康 Timer，严重压力立即回滚、中等压力连续两次回滚并锁存到下一媒体，用户持久设置不变。设置首页拆分“播放与解码”和“视频画质与增强”，仍共享同一设置模型。未修改 SQLite、标签查询、filtered queue、缓存队列或用户数据。
 

@@ -4,6 +4,15 @@
 
 ## 活跃任务
 
+### 2026-07-22 全屏队列语境显隐与 Debug 独立启动
+
+- 目标：全屏底部控制条可见时移除顶部队列语境遮挡，并修复手动双击 Windows Debug 包后进程存在但窗口不出现。
+- 当前状态：已完成。全屏队列语境改为与控制条互斥；控制条出现时淡出，3 秒自动收起后恢复，不新增 Timer、队列查询或逐帧视频处理。
+- Debug 启动根因是组合根在应用首帧前同步调用 `MediaKit.ensureInitialized()`；独立 exe 卡在该原生加载路径时，Dart VM 中 `_initialized=false`、窗口服务尚未创建。默认 MediaKit 后端现只在真正创建播放器时初始化，原生实验后端不受影响。
+- 新 Debug exe 从构建目录直接启动后 864ms 获得非零窗口句柄并保持响应；真实点击覆盖“媒体库首项 → 播放器 → 全屏 → 控制条显示 → 3 秒收起”，两态截图位于 `.local/qa/fullscreen-controls/`。
+- focused test、完整 254 项测试、`flutter analyze` 与 Windows Debug build 均通过，3 项显式真实媒体 benchmark 按设计跳过。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、PlayerBackend contract、缓存队列、稳定身份或用户数据。
+
 ### 2026-07-22 HDR 长播、会话回滚与 SDR 暗部基线
 
 - 目标：固定 HDR 样本验证长播观感、掉帧、GPU 功耗和显示输出；运行时压力自动回滚本次 HDR 会话；暗部增强继续使用独立 SDR 基线。

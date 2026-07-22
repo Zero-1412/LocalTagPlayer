@@ -134,6 +134,9 @@ PlayerBackend _createPlayerBackend({
           'windows-native-stub') {
     return WindowsNativePlayerBackend(mode: 'stub');
   }
+  // media_kit 的原生库延迟到真正创建默认播放后端时加载；独立双击启动时，首帧前
+  // 同步加载会阻塞应用入口，表现为进程存在但窗口服务和首帧都尚未创建。
+  MediaKit.ensureInitialized();
   return MediaKitPlayerBackend(
     hwdec: hwdec,
     enableHardwareAcceleration: enableHardwareAcceleration,
@@ -211,7 +214,6 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies({
 
 Future<void> bootstrapLocalTagPlayer() async {
   WidgetsFlutterBinding.ensureInitialized();
-  MediaKit.ensureInitialized();
   sqfliteFfiInit();
   final paths = AppPaths();
   final windowStateService = DesktopWindowStateService(paths);

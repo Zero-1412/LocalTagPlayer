@@ -719,3 +719,11 @@
 - HDR 压力协调器复用两秒健康样本：新增掉帧、缓冲或音视频停滞立即回滚；中等 FPS、缓存或帧推进压力连续两次回滚；seek、暂停和释放期不评估，回滚只锁存当前媒体且不修改持久开关。
 - 固定样本采证同时保存播放器后端帧和 PID 绑定 `PrintWindow` 窗口截图，避免前台覆盖污染；真实点击覆盖设置首页、画质页、HDR 开启和关闭四态，未见截断、遮挡、溢出或状态歧义。
 - 完整口径见 `docs/qa/player_hdr_sdr_baseline_20260722.md`。filtered queue 来源/内容/顺序、当前 index、SQLite、标签语义、稳定身份、缩略图/媒体详情队列与用户数据均未改变。
+
+## 2026-07-22 全屏队列语境显隐与 Debug 独立启动
+
+- 全屏顶部队列语境只在底部控制条收起后显示；控制条出现时使用既有淡出时长让出画面，不改变当前索引、筛选摘要或 filtered queue。
+- 默认 `media_kit` 从 bootstrap 首帧前同步加载改为创建实际 MediaKit 后端时初始化，避免 Debug 独立启动卡在首帧前原生加载路径；原生实验后端选择逻辑不变。
+- 新 Debug exe 从构建目录直接启动约 864ms 获得可见窗口；真实点击完成“媒体库 → 播放器 → 全屏 → 控制条显示/收起”两态截图，证据位于 `.local/qa/fullscreen-controls/`。
+- focused test、完整 254 项测试、`flutter analyze` 与 Windows Debug build 均通过，3 项显式真实媒体 benchmark 按设计跳过。
+- 未修改 PlayerBackend contract、SQLite、标签筛选、filtered queue 或缓存队列。

@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-22 · 全屏队列语境显隐与 Debug 独立启动
+
+- 全屏顶部队列语境与底部控制条改为互斥显隐：控制条出现时顶部胶囊淡出，控制条自动收起后才恢复，沿用既有 Apple 式时长与无障碍降级，不新增动画控制器或 UI Timer。
+- 默认 `media_kit` 原生库从应用首帧前初始化改为创建实际 MediaKit 播放后端时按需初始化，修复直接双击 Windows Debug exe 后进程存活但窗口不出现；Windows 原生实验后端保持独立。
+- 新 Debug exe 从构建目录启动约 864ms 获得可见窗口；真实点击完成媒体库、播放器、全屏控制条显示/收起两态复测，截图位于 `.local/qa/fullscreen-controls/`。
+- focused test、完整 254 项测试、`flutter analyze` 与 Windows Debug build 均通过，3 项显式真实媒体 benchmark 按设计跳过。
+- 未修改 SQLite、标签查询、filtered queue、PlayerBackend contract、缓存队列、稳定身份或用户数据。
+
 ## 2026-07-22 · HDR 长播基线、会话压力回滚与画质设置拆分
 
 - 主设置页把“播放与继续观看”重命名并拆分为“播放与解码”和“视频画质与增强”；继续观看、硬解、码流缓存与画质渲染各归其位，仍使用同一 `PlaybackSettings` 保存链。

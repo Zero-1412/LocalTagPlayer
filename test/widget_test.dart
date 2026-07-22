@@ -4292,6 +4292,31 @@ void main() {
     expect(layout?.maximized, isTrue);
   });
 
+  test('fullscreen queue context yields while playback controls are visible',
+      () {
+    expect(
+      playerFullscreenContextShouldShow(
+        isFullscreen: true,
+        controlsVisible: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playerFullscreenContextShouldShow(
+        isFullscreen: true,
+        controlsVisible: false,
+      ),
+      isTrue,
+    );
+    expect(
+      playerFullscreenContextShouldShow(
+        isFullscreen: false,
+        controlsVisible: false,
+      ),
+      isFalse,
+    );
+  });
+
   test('library sort helper applies to every video source list', () {
     final alpha = VideoItem(
       path: 'D:\\video\\B\\alpha.mp4',

@@ -295,6 +295,20 @@ bool playerWindowTopBarShouldShow({
 }
 
 /**
+ * 判断全屏顶部队列语境是否应显示。
+ *
+ * 底部控制条出现时已经包含当前进度与队列操作，顶部胶囊必须让出画面；控制条收起后
+ * 才恢复最小队列语境。该判断只消费现有轻量状态，不新增计时器或队列计算。
+ */
+@visibleForTesting
+bool playerFullscreenContextShouldShow({
+  required bool isFullscreen,
+  required bool controlsVisible,
+}) {
+  return isFullscreen && !controlsVisible;
+}
+
+/**
  * 判断当前焦点是否属于可编辑文本。
  *
  * 播放器快捷键位于页面祖先 Focus；EditableText 未消费的字母仍可能继续冒泡，
@@ -1535,9 +1549,16 @@ class PlayerPageState extends State<PlayerPage> {
   /** 构建画面底部统一控制条，并在全屏顶部保留最小队列语境。 */
   Widget _buildVideoControls() {
     final accessibility = AppAccessibilityScope.of(context);
+    final fullscreenContextVisible = playerFullscreenContextShouldShow(
+      isFullscreen: _isWindowFullscreen,
+      controlsVisible: _controlsVisible,
+    );
     // 进入稍慢以建立层级，退出更短以快速让出画面；无障碍模式由 token 自动降级。
     final fadeDuration = accessibility.fadeDuration(
       _controlsVisible ? AppMotion.popover : AppMotion.hover,
+    );
+    final fullscreenContextFadeDuration = accessibility.fadeDuration(
+      fullscreenContextVisible ? AppMotion.popover : AppMotion.hover,
     );
     final motionDuration = accessibility.motionDuration(
       _controlsVisible ? AppMotion.popover : AppMotion.hover,
@@ -1560,8 +1581,9 @@ class PlayerPageState extends State<PlayerPage> {
             top: 18,
             child: SafeArea(
               child: AnimatedOpacity(
-                duration: fadeDuration,
-                opacity: _controlsVisible ? 1 : 0,
+                // 顶部语境进入略慢、退出更快；它与底部控制条方向相反，不能共用时长。
+                duration: fullscreenContextFadeDuration,
+                opacity: fullscreenContextVisible ? 1 : 0,
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: DecoratedBox(
