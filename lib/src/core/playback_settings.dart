@@ -39,6 +39,7 @@ class PlaybackSettings {
     required this.hwdec,
     required this.resumeBehavior,
     required this.shortcuts,
+    required this.fullscreenQueueEdgeHoverEnabled,
     required this.fullscreenQueueEdgeWidth,
     required this.fullscreenQueueHideDelayMs,
     required this.mirrorVideo,
@@ -60,6 +61,7 @@ class PlaybackSettings {
     hwdec: 'auto-safe',
     resumeBehavior: PlaybackResumeBehavior.continueWatching,
     shortcuts: defaultShortcuts,
+    fullscreenQueueEdgeHoverEnabled: true,
     fullscreenQueueEdgeWidth: 12,
     fullscreenQueueHideDelayMs: 180,
     mirrorVideo: false,
@@ -202,9 +204,11 @@ class PlaybackSettings {
   final PlaybackResumeBehavior resumeBehavior;
   /** 播放器功能到规范化快捷键标识的持久化绑定。 */
   final Map<PlayerShortcutAction, String> shortcuts;
-  /** 全屏时用于唤出播放队列的右侧鼠标热区宽度，单位为逻辑像素。 */
+  /** 是否允许鼠标移到全屏右侧边缘时自动唤出播放队列。 */
+  final bool fullscreenQueueEdgeHoverEnabled;
+  /** 兼容旧设置文件的历史热区参数；播放器改用内部验证过的固定值。 */
   final int fullscreenQueueEdgeWidth;
-  /** 鼠标离开全屏队列后的自动隐藏延迟，单位为毫秒。 */
+  /** 兼容旧设置文件的历史隐藏延迟；播放器改用内部验证过的固定值。 */
   final int fullscreenQueueHideDelayMs;
   /** 是否全局水平翻转视频画面，不影响控制条和鼠标命中区域。 */
   final bool mirrorVideo;
@@ -239,6 +243,7 @@ class PlaybackSettings {
     String? hwdec,
     PlaybackResumeBehavior? resumeBehavior,
     Map<PlayerShortcutAction, String>? shortcuts,
+    bool? fullscreenQueueEdgeHoverEnabled,
     int? fullscreenQueueEdgeWidth,
     int? fullscreenQueueHideDelayMs,
     bool? mirrorVideo,
@@ -259,6 +264,8 @@ class PlaybackSettings {
       hwdec: hwdec ?? this.hwdec,
       resumeBehavior: resumeBehavior ?? this.resumeBehavior,
       shortcuts: shortcuts ?? this.shortcuts,
+      fullscreenQueueEdgeHoverEnabled: fullscreenQueueEdgeHoverEnabled ??
+          this.fullscreenQueueEdgeHoverEnabled,
       fullscreenQueueEdgeWidth:
           fullscreenQueueEdgeWidth ?? this.fullscreenQueueEdgeWidth,
       fullscreenQueueHideDelayMs:
@@ -288,6 +295,8 @@ class PlaybackSettings {
 
   /** 仅恢复全屏队列交互默认值，保留其它所有播放设置。 */
   PlaybackSettings resetFullscreenQueueInteraction() => copyWith(
+        fullscreenQueueEdgeHoverEnabled:
+            defaults.fullscreenQueueEdgeHoverEnabled,
         fullscreenQueueEdgeWidth: defaults.fullscreenQueueEdgeWidth,
         fullscreenQueueHideDelayMs: defaults.fullscreenQueueHideDelayMs,
       );
@@ -298,6 +307,7 @@ class PlaybackSettings {
         'shortcuts': {
           for (final entry in shortcuts.entries) entry.key.name: entry.value,
         },
+        'fullscreenQueueEdgeHoverEnabled': fullscreenQueueEdgeHoverEnabled,
         'fullscreenQueueEdgeWidth': fullscreenQueueEdgeWidth,
         'fullscreenQueueHideDelayMs': fullscreenQueueHideDelayMs,
         'mirrorVideo': mirrorVideo,
@@ -336,6 +346,10 @@ class PlaybackSettings {
         orElse: () => defaults.resumeBehavior,
       ),
       shortcuts: Map.unmodifiable(shortcuts),
+      fullscreenQueueEdgeHoverEnabled:
+          json['fullscreenQueueEdgeHoverEnabled'] is bool
+              ? json['fullscreenQueueEdgeHoverEnabled']! as bool
+              : defaults.fullscreenQueueEdgeHoverEnabled,
       fullscreenQueueEdgeWidth: _boundedInt(
         json['fullscreenQueueEdgeWidth'],
         fallback: defaults.fullscreenQueueEdgeWidth,

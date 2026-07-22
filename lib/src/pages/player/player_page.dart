@@ -88,6 +88,12 @@ bool playerSeekFeedbackShouldShow({required bool isRepeat}) => !isRepeat;
 double playerFullscreenQueueWidth(double windowWidth) =>
     math.min(476.0, math.max(320.0, windowWidth * 0.32));
 
+/** 未展开时使用固定 32px 容错热区，避免高分屏最右边缘难以命中。 */
+const playerFullscreenQueueEdgeActivationWidth = 32.0;
+
+/** 离开完整列表后保留 450ms 退场宽限，避免手部微小抖动造成闪退。 */
+const playerFullscreenQueueHideGrace = Duration(milliseconds: 450);
+
 /** 按固定步长调整播放器音量，并把结果限制在后端接受的 0..100。 */
 double playerVolumeAfterStep(double currentVolume, double delta) =>
     (currentVolume + delta).clamp(0, 100).toDouble();
@@ -283,12 +289,14 @@ bool playerPointerInFullscreenQueueActivationZone({
   required bool queueVisible,
   required double edgeWidth,
   double queueWidth = 440,
+  double retentionPadding = 12,
 }) {
   final distanceFromRight = surfaceWidth - localX;
   if (distanceFromRight < 0) {
     return false;
   }
-  return distanceFromRight <= (queueVisible ? queueWidth : edgeWidth);
+  return distanceFromRight <=
+      (queueVisible ? queueWidth + retentionPadding : edgeWidth);
 }
 
 /** 判断指针是否进入折叠宽屏队列对应的非全屏标题栏热区。 */
@@ -2048,10 +2056,7 @@ class PlayerPageState extends State<PlayerPage> {
     if (_fullscreenQueueHideTimer?.isActive ?? false) {
       return;
     }
-    _fullscreenQueueHideTimer = Timer(
-        Duration(
-          milliseconds: widget.playbackSettings.fullscreenQueueHideDelayMs,
-        ), () {
+    _fullscreenQueueHideTimer = Timer(playerFullscreenQueueHideGrace, () {
       _fullscreenQueueHideTimer = null;
       if (mounted && _fullscreenQueueVisible) {
         setState(() => _fullscreenQueueVisible = false);
@@ -2082,10 +2087,14 @@ class PlayerPageState extends State<PlayerPage> {
       localX: event.localPosition.dx,
       surfaceWidth: MediaQuery.sizeOf(context).width,
       queueVisible: _fullscreenQueueVisible,
-      edgeWidth: widget.playbackSettings.fullscreenQueueEdgeWidth.toDouble(),
+      edgeWidth: playerFullscreenQueueEdgeActivationWidth,
+      queueWidth: playerFullscreenQueueWidth(MediaQuery.sizeOf(context).width),
     );
     if (inActivationZone) {
-      _showFullscreenQueueSidebar();
+      if (_fullscreenQueueVisible ||
+          widget.playbackSettings.fullscreenQueueEdgeHoverEnabled) {
+        _showFullscreenQueueSidebar();
+      }
     } else if (_fullscreenQueueVisible) {
       _scheduleFullscreenQueueHide();
     }
@@ -4041,8 +4050,6 @@ class PlayerPageState extends State<PlayerPage> {
                                     child: MouseRegion(
                                       onEnter: (_) =>
                                           _showFullscreenQueueSidebar(),
-                                      onExit: (_) =>
-                                          _scheduleFullscreenQueueHide(),
                                       child: _buildQueueSidebar(
                                         key: const ValueKey(
                                           'player.fullscreenQueue.sidebar',
@@ -4063,14 +4070,15 @@ class PlayerPageState extends State<PlayerPage> {
                         ),
                       ),
                     ),
-                  if (_isWindowFullscreen)
+                  if (_isWindowFullscreen &&
+                      widget.playbackSettings.fullscreenQueueEdgeHoverEnabled &&
+                      !_fullscreenQueueVisible)
                     Positioned(
                       key: const ValueKey('player.fullscreenQueue.edge'),
                       top: 0,
                       right: 0,
                       bottom: 0,
-                      width: widget.playbackSettings.fullscreenQueueEdgeWidth
-                          .toDouble(),
+                      width: playerFullscreenQueueEdgeActivationWidth,
                       child: MouseRegion(
                         opaque: true,
                         onEnter: (_) => _showFullscreenQueueSidebar(),

@@ -1693,29 +1693,24 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     }
   }
 
-  /** 预览全屏队列交互参数；滑杆松开时由调用方统一持久化。 */
-  void _previewFullscreenQueueSettings({
-    int? edgeWidth,
-    int? hideDelayMs,
-  }) {
-    setState(() {
-      _settings = _settings.copyWith(
-        fullscreenQueueEdgeWidth: edgeWidth,
-        fullscreenQueueHideDelayMs: hideDelayMs,
-      );
-    });
-  }
-
-  /** 将当前全屏队列交互参数写入现有播放设置文件。 */
-  Future<void> _saveFullscreenQueueSettings() async {
-    await widget.onPlaybackSettingsChanged(_settings);
-  }
-
-  /** 仅恢复全屏队列交互参数，不触碰解码、快捷键或继续观看设置。 */
-  Future<void> _resetFullscreenQueueSettings() async {
-    final next = _settings.resetFullscreenQueueInteraction();
+  /** 切换全屏右缘自动队列并立即持久化；失败时恢复界面旧值。 */
+  Future<void> _changeFullscreenQueueEdgeHoverEnabled(bool enabled) async {
+    final previous = _settings;
+    final next = previous.copyWith(fullscreenQueueEdgeHoverEnabled: enabled);
     setState(() => _settings = next);
-    await widget.onPlaybackSettingsChanged(next);
+    try {
+      await widget.onPlaybackSettingsChanged(next);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (identical(_settings, next)) {
+        setState(() => _settings = previous);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('保存全屏播放列表设置失败：$error')),
+      );
+    }
   }
 
   /** 当前层级的页面标题。 */
@@ -1953,79 +1948,47 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                           key: const ValueKey('settings.fullscreenQueue.card'),
                           child: Padding(
                             padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Expanded(
-                                      child: Text(
-                                        '全屏播放列表',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ),
-                                    TextButton.icon(
-                                      key: const ValueKey(
-                                          'settings.fullscreenQueue.reset'),
-                                      onPressed: _resetFullscreenQueueSettings,
-                                      icon:
-                                          const Icon(Icons.restart_alt_rounded),
-                                      label: const Text('恢复默认'),
-                                    ),
-                                  ],
+                            child: SwitchListTile.adaptive(
+                              key: const ValueKey(
+                                'settings.fullscreenQueue.edgeHoverEnabled',
+                              ),
+                              contentPadding: EdgeInsets.zero,
+                              value: _settings.fullscreenQueueEdgeHoverEnabled,
+                              onChanged: (value) => unawaited(
+                                _changeFullscreenQueueEdgeHoverEnabled(value),
+                              ),
+                              secondary: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color:
+                                      appAccentViolet.withValues(alpha: 0.15),
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.control),
                                 ),
-                                const SizedBox(height: 6),
-                                const Text(
-                                  '鼠标移到屏幕右侧边缘时展开，离开列表范围后自动隐藏。',
-                                  style: TextStyle(color: libraryTextMuted),
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                    '边缘热区宽度：${_settings.fullscreenQueueEdgeWidth}px'),
-                                Slider(
-                                  key: const ValueKey(
-                                      'settings.fullscreenQueue.edgeWidth'),
-                                  min: 4,
-                                  max: 40,
-                                  divisions: 18,
-                                  value: _settings.fullscreenQueueEdgeWidth
-                                      .toDouble(),
-                                  label:
-                                      '${_settings.fullscreenQueueEdgeWidth}px',
-                                  onChanged: (value) =>
-                                      _previewFullscreenQueueSettings(
-                                    edgeWidth: value.round(),
+                                child: const SizedBox.square(
+                                  dimension: 42,
+                                  child: Icon(
+                                    Icons.playlist_play_rounded,
+                                    color: libraryAccent,
                                   ),
-                                  onChangeEnd: (_) {
-                                    unawaited(_saveFullscreenQueueSettings());
-                                  },
                                 ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '自动隐藏延迟：${_settings.fullscreenQueueHideDelayMs}ms',
+                              ),
+                              title: const Text(
+                                '全屏边缘播放列表',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
                                 ),
-                                Slider(
-                                  key: const ValueKey(
-                                      'settings.fullscreenQueue.hideDelay'),
-                                  min: 0,
-                                  max: 1000,
-                                  divisions: 20,
-                                  value: _settings.fullscreenQueueHideDelayMs
-                                      .toDouble(),
-                                  label:
-                                      '${_settings.fullscreenQueueHideDelayMs}ms',
-                                  onChanged: (value) =>
-                                      _previewFullscreenQueueSettings(
-                                    hideDelayMs: value.round(),
+                              ),
+                              subtitle: const Padding(
+                                padding: EdgeInsets.only(top: 5),
+                                child: Text(
+                                  '开启后将鼠标移到屏幕右侧边缘即可展开；触发范围与隐藏延迟使用流畅度验证后的默认值。',
+                                  style: TextStyle(
+                                    color: libraryTextMuted,
+                                    height: 1.4,
                                   ),
-                                  onChangeEnd: (_) {
-                                    unawaited(_saveFullscreenQueueSettings());
-                                  },
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ),

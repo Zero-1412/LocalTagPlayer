@@ -3730,6 +3730,7 @@ void main() {
     expect(settings.toJson()['moveDeletedFileToTrash'], isTrue);
     expect(settings.fullscreenQueueEdgeWidth, 12);
     expect(settings.fullscreenQueueHideDelayMs, 180);
+    expect(settings.fullscreenQueueEdgeHoverEnabled, isTrue);
     expect(settings.seekStepSeconds, 5);
   });
 
@@ -4295,11 +4296,20 @@ void main() {
     expect(changed.toJson()['fullscreenQueueEdgeWidth'], 20);
     expect(changed.toJson()['fullscreenQueueHideDelayMs'], 450);
     final reset = changed.resetFullscreenQueueInteraction();
+    expect(reset.fullscreenQueueEdgeHoverEnabled, isTrue);
     expect(reset.fullscreenQueueEdgeWidth, 12);
     expect(reset.fullscreenQueueHideDelayMs, 180);
     expect(reset.hwdec, changed.hwdec);
     expect(reset.resumeBehavior, changed.resumeBehavior);
     expect(reset.shortcuts, changed.shortcuts);
+    final disabled = changed.copyWith(fullscreenQueueEdgeHoverEnabled: false);
+    expect(disabled.fullscreenQueueEdgeHoverEnabled, isFalse);
+    expect(disabled.toJson()['fullscreenQueueEdgeHoverEnabled'], isFalse);
+    expect(
+      PlaybackSettings.fromJson(disabled.toJson())
+          .fullscreenQueueEdgeHoverEnabled,
+      isFalse,
+    );
   });
 
   test('desktop window layout rejects unsafe tiny snapshots', () {
@@ -4852,6 +4862,16 @@ void main() {
         edgeWidth: 12,
       ),
       isFalse,
+    );
+    expect(
+      playerPointerInFullscreenQueueActivationZone(
+        localX: 512,
+        surfaceWidth: 1000,
+        queueVisible: true,
+        edgeWidth: playerFullscreenQueueEdgeActivationWidth,
+        queueWidth: 476,
+      ),
+      isTrue,
     );
     expect(
       playerWindowTopBarShouldShow(

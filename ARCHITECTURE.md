@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.58` 在媒体库 Route 生命周期内新增非持久化的播放器全屏会话状态。只有播放器实际全屏返回时才先退出系统全屏并最大化底层窗口；再次进入播放器恢复全屏，普通最大化窗口不进入该路径。PlayerBackend contract、播放设置、桌面窗口布局持久化、SQLite schema、标签查询和 filtered queue 不变。
+`Architecture Baseline 0.5.59` 为全屏右缘自动播放列表增加持久化布尔门禁，并把运行时热区与隐藏延迟收敛为内部固定值。展开态不再叠加边缘命中层，保持区域使用实际列表宽度，避免最右边缘 enter/exit 交错。PlayerBackend contract、SQLite schema、标签查询和 filtered queue 不变。
 
 GPU 能力边界分为两层：原生矩阵描述当前系统可见设备、显存和 API 能力，实际纹理渲染边界描述当前选中的 device LUID。系统“存在支持 Compute/Vulkan 的显卡”不等于播放器已选择该显卡；单硬件卡、Feature Level、名称、显存使用或枚举顺序均不能替代实际 LUID。DXGI LUID 仅在当前 Windows 会话内用于匹配和 QA，不进入 SQLite 或设置文件。
 
@@ -41,11 +41,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.58`
+已完成基线：`Architecture Baseline 0.5.59`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.59`：`PlaybackSettings` 向后兼容增加 `fullscreenQueueEdgeHoverEnabled`，旧 JSON 缺字段时默认开启。播放器交互页只暴露该开关，历史热区宽度与隐藏延迟字段保留读取兼容但不再驱动运行时；播放器使用固定 32px 入口、实际列表宽度加 12px 保持区和 450ms 离开宽限。展开后移除覆盖列表最右侧的独立边缘层，显式列表按钮不受开关影响。未修改 PlayerBackend、SQLite、标签查询、filtered queue、缓存队列或用户数据。
 
 - `0.5.58`：媒体库 Route 持有只存在于当前应用会话的 `PlayerFullscreenSessionController`。播放器切换全屏时同步该状态；全屏返回以 `window_manager` 实际状态兜底，按“退出全屏 → 最大化 → Route 返回”恢复主界面，且保留下次播放器全屏偏好。用户主动退出全屏会清除偏好，普通窗口/最大化进入与返回不触发窗口改写。未修改 PlayerBackend contract、`PlaybackSettings`、桌面窗口布局文件、SQLite、标签查询、filtered queue、缓存队列或用户数据。
 
