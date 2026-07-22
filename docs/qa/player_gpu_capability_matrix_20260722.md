@@ -4,16 +4,16 @@
 
 本矩阵是第三阶段运动补帧、时域降噪和 HDR 映射的前置设备证据。它通过真实 `PlayerBackend`、Windows runner、DXGI、D3D11 和系统 Vulkan loader 生成，不按显卡名称推测能力。
 
-矩阵描述系统当前可见设备，不等价于播放器当前活动适配器。多硬件卡无法唯一匹配时，Compute 增强必须保持关闭。探测不读取媒体库或媒体路径；DXGI LUID 只对当前 Windows 会话有意义，因此不写入本文、不进入设置或数据库。
+矩阵描述系统当前可见设备，实际活动显卡另由 MediaKit / ANGLE 的真实 D3D11 device 返回。探测和 benchmark 不读取媒体库或媒体路径；DXGI LUID 只对当前 Windows 会话有意义，只用于本次 QA 精确匹配，不进入设置或数据库。
 
 ## 复现命令
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tool\run_gpu_capability_matrix.ps1 `
-  -OutputPath ".local/qa/2026-07-22-gpu-matrix/device-matrix.json"
+  -OutputPath ".local/qa/gpu-capability-matrix/active-device-compute-budget.json"
 ```
 
-integration test 会验证至少存在一块硬件适配器，所有设备名称、vendor/device ID、显存值和 D3D Feature Level 均可解析，再保存隐私安全 JSON。完整回归为 247 项测试通过、3 项显式 benchmark 跳过，`flutter analyze` 与 Windows Debug build 通过。
+integration test 会创建真实 MediaKit 视频纹理，验证活动 LUID 在设备矩阵中唯一匹配，再在该 LUID 上运行 1080p / 4K Compute GPU 时间戳基线并保存隐私安全 JSON。普通应用启动不会自动运行此 benchmark。
 
 ## 当前设备矩阵
 
@@ -29,15 +29,38 @@ integration test 会验证至少存在一块硬件适配器，所有设备名称
 
 ## 活动适配器判定
 
-当前机器存在两块硬件适配器，且两者 D3D Feature Level 都是 12_1。现有 MediaKit/libmpv 会话只报告 D3D Feature Level，不能据此唯一选择 NVIDIA 或 AMD，因此诊断结论为：
+MediaKit 的实际 `ANGLESurfaceManager::CreateD3DTexture()` 在创建 D3D11 device 后通过 `IDXGIDevice::GetAdapter()` 取得真实 adapter。当前生产纹理返回：
 
 ```text
-GPU 设备已枚举，活动适配器尚未唯一确认
+source = media-kit-angle-d3d11-device
+LUID   = 00000000:00016bec
+match  = NVIDIA GeForce RTX 4070 SUPER
 ```
 
-这意味着系统能力位已经建立，但运动补帧、时域降噪和 HDR 映射仍不能启动。下一步必须由当前渲染边界返回活动 adapter LUID，再叠加 1080p / 4K Compute 帧预算和掉帧回退门槛。
+这消除了 RTX 与 AMD 同为 D3D 12_1 时的歧义。构建期只对已固定 SHA256 的单个上游源文件做可审计补丁，不写入 Pub Cache；若上游标记片段变化，CMake 配置直接失败。
 
-## 真实窗口复验
+## 1080p / 4K Compute 帧预算
+
+基线在上述活动 LUID 上创建独立 D3D11 compute device，运行与 HDR 映射相近的逐像素 Hable 类 kernel。每档 3 次预热、16 次正式样本，只用 `D3D11_QUERY_TIMESTAMP` 统计 GPU dispatch，不把纹理分配或 CPU 提交时间冒充 GPU 成本。
+
+| 分辨率 | 中位 GPU | P95 GPU | 最大 GPU | 60fps 帧预算 | Compute 预留切片 | 结论 |
+|---|---:|---:|---:|---:|---:|---|
+| 1920×1080 | 0.027ms | 0.041ms | 0.041ms | 16.667ms | 4.167ms（25%） | 通过 |
+| 3840×2160 | 0.121ms | 0.127ms | 0.127ms | 16.667ms | 4.167ms（25%） | 通过 |
+
+该结论只代表当前设备、驱动与 kernel 的显式 QA，不代表所有显卡，也不能替代真实 HDR 长播、功耗和显示输出验证。
+
+## 第三阶段单项实验
+
+本轮只选择 HDR 动态映射，运动补帧和时域降噪保持未启动。设置默认关闭，启用前显示影响与回滚确认；真实播放还必须同时检测到 HDR 源、精确活动 LUID 和 Compute 能力，才应用 `tone-mapping=hable`、`hdr-compute-peak=yes`。关闭或门槛未通过时恢复 `tone-mapping=auto`、`hdr-compute-peak=auto`。
+
+[mpv 官方手册](https://mpv.io/manual/stable/)明确说明 `hdr-compute-peak` 需要 Compute Shader，且部分驱动可能表现很差；因此本项目不把系统“支持 Compute”直接解释为应默认开启，而是保留显式基线、用户确认和完整回滚。
+
+真实 MediaKit/libmpv integration test 已验证 `hable/yes → auto/auto`；设置页真实点击截图保存在 `.local/qa/hdr-mapping/hdr-mapping-enabled.png` 与 `hdr-mapping-rollback.png`。
+
+最终验证为 `flutter analyze`、完整 251 项测试、Windows Debug build、活动 LUID / Compute 基线 integration test 与 HDR 两态点击 integration test 全部通过；3 项需要真实媒体或显式环境变量的 benchmark 按设计跳过。
+
+## 设备矩阵真实窗口复验
 
 - 使用隔离 Debug profile 打开 1080p H.264，实际硬解为 `d3d11va-copy`，播放器持续推进，解码/总掉帧均为 0。
 - 右键打开“诊断检查”并滚动详细指标，确认原生探测 `ready`、设备数量 3、Vulkan loader / instance 为“是 / 是”、活动 GPU 为“未唯一确认”。

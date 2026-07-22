@@ -18,7 +18,7 @@ import 'windows_gpu_capability_channel.dart';
  * Player 与 VideoController 的所有权完全留在此类内部；页面只能通过稳定命令、
  * 轻量状态和纹理表面访问播放器，为后续 Windows C++ 后端保留可替换边界。
  */
-class MediaKitPlayerBackend implements PlayerBackend {
+class MediaKitPlayerBackend implements PlayerBackend, PlayerGpuRenderBoundary {
   /**
    * media_kit 1.2.6 的 Windows NativePlayer 会在 dispose 返回 5 秒后才调用
    * `mpv_terminate_destroy`；多留 200 ms，确保 released 不早于真实原生销毁。
@@ -138,6 +138,16 @@ class MediaKitPlayerBackend implements PlayerBackend {
   @override
   Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities() =>
       queryWindowsGpuCapabilities();
+
+  @override
+  Future<PlayerGpuActiveAdapter> queryActiveGpuAdapter() =>
+      queryWindowsActiveGpuAdapter(backend: 'media-kit');
+
+  @override
+  Future<PlayerGpuComputeFrameBudget> benchmarkGpuComputeFrameBudget(
+    String adapterLuid,
+  ) =>
+      benchmarkWindowsGpuComputeFrameBudget(adapterLuid);
 
   @override
   Future<Uint8List?> screenshot({String format = 'image/jpeg'}) =>

@@ -140,8 +140,125 @@ file(REMOVE_RECURSE
   "${LTP_NATIVE_DEPS}/video/example"
   "${LTP_NATIVE_DEPS}/video/test")
 
+# MediaKit 真正创建渲染 D3D11 设备的位置位于其 ANGLESurfaceManager。这里对已固定
+# SHA256 的单个上游源文件做可审计、可失败的构建期补丁：只登记实际设备的 LUID，
+# 不修改 Pub Cache，也不按 DXGI 枚举顺序推断活动显卡。
+set(LTP_UPSTREAM_ANGLE_SOURCE
+  "${LTP_NATIVE_DEPS}/video/windows/angle_surface_manager.cc")
+set(LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE
+  "${CMAKE_BINARY_DIR}/ltp_generated/angle_surface_manager_ltp.cc")
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/ltp_generated")
+file(READ "${LTP_UPSTREAM_ANGLE_SOURCE}" LTP_ANGLE_SOURCE_TEXT)
+
+set(LTP_ANGLE_INCLUDE_MARKER "#include <iostream>\n")
+set(LTP_ANGLE_INCLUDE_PATCH [=[#include <iostream>
+#include <map>
+#include <mutex>
+]=])
+string(REPLACE "${LTP_ANGLE_INCLUDE_MARKER}" "${LTP_ANGLE_INCLUDE_PATCH}"
+  LTP_ANGLE_SOURCE_TEXT "${LTP_ANGLE_SOURCE_TEXT}")
+
+set(LTP_ANGLE_REGISTRY_MARKER "int ANGLESurfaceManager::instance_count_ = 0;\n")
+set(LTP_ANGLE_REGISTRY_PATCH [=[int ANGLESurfaceManager::instance_count_ = 0;
+
+namespace {
+std::mutex g_ltp_adapter_mutex;
+std::map<uint64_t, uint32_t> g_ltp_active_adapter_counts;
+
+uint64_t LtpAdapterKey(const LUID& luid) {
+  return (static_cast<uint64_t>(static_cast<uint32_t>(luid.HighPart)) << 32) |
+         luid.LowPart;
+}
+
+void LtpRegisterActiveAdapter(ID3D11Device* device) {
+  Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
+  Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+  DXGI_ADAPTER_DESC description{};
+  if (device == nullptr ||
+      FAILED(device->QueryInterface(IID_PPV_ARGS(&dxgi_device))) ||
+      FAILED(dxgi_device->GetAdapter(&adapter)) ||
+      FAILED(adapter->GetDesc(&description))) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(g_ltp_adapter_mutex);
+  ++g_ltp_active_adapter_counts[LtpAdapterKey(description.AdapterLuid)];
+}
+
+void LtpUnregisterActiveAdapter(ID3D11Device* device) {
+  Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
+  Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+  DXGI_ADAPTER_DESC description{};
+  if (device == nullptr ||
+      FAILED(device->QueryInterface(IID_PPV_ARGS(&dxgi_device))) ||
+      FAILED(dxgi_device->GetAdapter(&adapter)) ||
+      FAILED(adapter->GetDesc(&description))) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(g_ltp_adapter_mutex);
+  const auto key = LtpAdapterKey(description.AdapterLuid);
+  const auto found = g_ltp_active_adapter_counts.find(key);
+  if (found == g_ltp_active_adapter_counts.end()) return;
+  if (found->second <= 1) {
+    g_ltp_active_adapter_counts.erase(found);
+  } else {
+    --found->second;
+  }
+}
+}  // namespace
+
+// 1 表示当前模块只有一个活动适配器，0 表示尚未创建，2 表示多个不同 LUID。
+extern "C" __declspec(dllexport) int LtpMediaKitQueryActiveAdapterLuid(
+    int32_t* high_part, uint32_t* low_part) {
+  if (high_part == nullptr || low_part == nullptr) return 0;
+  std::lock_guard<std::mutex> lock(g_ltp_adapter_mutex);
+  if (g_ltp_active_adapter_counts.empty()) return 0;
+  if (g_ltp_active_adapter_counts.size() != 1) return 2;
+  const uint64_t key = g_ltp_active_adapter_counts.begin()->first;
+  *high_part = static_cast<int32_t>(key >> 32);
+  *low_part = static_cast<uint32_t>(key);
+  return 1;
+}
+]=])
+string(REPLACE "${LTP_ANGLE_REGISTRY_MARKER}" "${LTP_ANGLE_REGISTRY_PATCH}"
+  LTP_ANGLE_SOURCE_TEXT "${LTP_ANGLE_SOURCE_TEXT}")
+
+set(LTP_ANGLE_CREATE_MARKER [=[    CHECK_HRESULT("D3D11CreateDevice");
+]=])
+set(LTP_ANGLE_CREATE_PATCH [=[    CHECK_HRESULT("D3D11CreateDevice");
+    LtpRegisterActiveAdapter(d3d_11_device_);
+]=])
+string(REPLACE "${LTP_ANGLE_CREATE_MARKER}" "${LTP_ANGLE_CREATE_PATCH}"
+  LTP_ANGLE_SOURCE_TEXT "${LTP_ANGLE_SOURCE_TEXT}")
+
+set(LTP_ANGLE_RELEASE_MARKER [=[    if (d3d_11_device_) {
+      d3d_11_device_->Release();
+]=])
+set(LTP_ANGLE_RELEASE_PATCH [=[    if (d3d_11_device_) {
+      LtpUnregisterActiveAdapter(d3d_11_device_);
+      d3d_11_device_->Release();
+]=])
+string(REPLACE "${LTP_ANGLE_RELEASE_MARKER}" "${LTP_ANGLE_RELEASE_PATCH}"
+  LTP_ANGLE_SOURCE_TEXT "${LTP_ANGLE_SOURCE_TEXT}")
+
+foreach(required_fragment IN ITEMS
+    "LtpMediaKitQueryActiveAdapterLuid"
+    "LtpRegisterActiveAdapter(d3d_11_device_)"
+    "LtpUnregisterActiveAdapter(d3d_11_device_)")
+  string(FIND "${LTP_ANGLE_SOURCE_TEXT}" "${required_fragment}" fragment_index)
+  if(fragment_index EQUAL -1)
+    message(FATAL_ERROR
+      "Pinned media_kit_video source no longer matches the active-adapter patch")
+  endif()
+endforeach()
+file(WRITE "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}"
+  "${LTP_ANGLE_SOURCE_TEXT}")
+set(LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE
+  "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}" PARENT_SCOPE)
+set(LTP_PINNED_MEDIA_KIT_VIDEO_WINDOWS_DIR
+  "${LTP_NATIVE_DEPS}/video/windows" PARENT_SCOPE)
+
 add_library(ltp_native_runtime STATIC
-  "${LTP_NATIVE_DEPS}/video/windows/angle_surface_manager.cc"
+  "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}"
   "${LTP_NATIVE_DEPS}/video/windows/utils.cc")
 apply_standard_settings(ltp_native_runtime)
 target_compile_options(ltp_native_runtime PRIVATE /utf-8)

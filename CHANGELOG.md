@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-22 · 活动渲染 LUID、Compute 帧预算与 HDR 单项实验
+
+- MediaKit 固定版本的 `ANGLESurfaceManager` 在真实 D3D11 device 创建/销毁边界登记活动 adapter LUID；runner 通过显式导出读取，Pub Cache 保持只读，Feature Level、名称、显存占用和 DXGI 顺序不再用于活动显卡选择。
+- `PlayerGpuRenderBoundary` 新增活动适配器证据与显式 Compute 基线；普通播放只读取轻量 LUID，1080p / 4K D3D11 timestamp benchmark 仅由 QA 脚本后台运行，不阻塞 Flutter 平台线程或正常播放。
+- 当前 MediaKit 纹理返回 `00000000:00016bec` 并精确匹配 RTX 4070 SUPER；60fps 4.167ms Compute 切片下，HDR 类 kernel 的 1080p / 4K P95 分别为 0.041ms / 0.127ms，两档通过。
+- 第三阶段只增加默认关闭的 HDR 动态映射实验。主设置页启用前确认；播放器仅在 HDR 源、精确活动 LUID 和 Compute 能力均通过时应用 Hable 与动态峰值，关闭完整恢复 mpv 自动值。运动补帧、时域降噪与暗部增强未并行加入。
+- Windows integration test 完成设置页真实点击与开启/回滚截图；真实 MediaKit/libmpv 会话确认 `tone-mapping` 与 `hdr-compute-peak` 可从 `hable/yes` 回到 `auto/auto`。
+- `flutter analyze`、完整 251 项测试、Windows Debug build、活动 LUID / Compute 基线 integration test 与 HDR 两态点击 integration test 全部通过，3 项显式 benchmark 跳过。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列、稳定身份或用户数据。
+
 ## 2026-07-22 · 原生 GPU 能力矩阵与第三阶段安全闸门
 
 - `PlayerBackend` 新增类型化显卡能力矩阵，统一由 MediaKit 与 Windows 原生实验后端查询；不支持的平台和探测失败均返回显式状态，不按品牌或型号猜测能力。

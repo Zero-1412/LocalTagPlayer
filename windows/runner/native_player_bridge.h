@@ -61,6 +61,12 @@ class NativePlayerBridge {
   flutter::EncodableMap StateSnapshot() const;
   /** 返回后台探测完成的显卡矩阵；未完成时只返回非阻塞状态。 */
   flutter::EncodableMap GpuCapabilitySnapshot();
+  /** 从实际 ANGLE 渲染设备返回活动 LUID，不使用系统枚举顺序推断。 */
+  flutter::EncodableMap ActiveGpuAdapterSnapshot(
+      const std::string& backend_kind) const;
+  /** 启动或轮询绑定活动 LUID 的 1080p/4K Compute 帧预算。 */
+  flutter::EncodableMap ComputeFrameBudgetSnapshot(
+      const std::string& adapter_luid);
 
   flutter::TextureRegistrar* textures_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
@@ -95,6 +101,10 @@ class NativePlayerBridge {
   /** 驱动初始化独立于 Flutter 平台线程，避免首次打开设置或诊断时卡住 UI。 */
   std::future<flutter::EncodableMap> gpu_capability_future_;
   std::optional<flutter::EncodableMap> gpu_capability_cache_;
+  /** Compute 压测只在显式 QA 请求时创建，并始终离开 Flutter 平台线程。 */
+  std::future<flutter::EncodableMap> compute_budget_future_;
+  std::optional<flutter::EncodableMap> compute_budget_cache_;
+  std::string compute_budget_luid_;
   bool shutting_down_ = false;
   bool playing_ = false;
   bool buffering_ = false;

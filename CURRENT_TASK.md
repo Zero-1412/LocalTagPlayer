@@ -6,15 +6,15 @@
 
 ### 2026-07-22 原生 GPU 能力矩阵与第三阶段闸门
 
-- 目标：先让 `PlayerBackend` 真实报告显卡适配器、专用/共享显存、进程显存预算、D3D Feature Level、Compute 和 Vulkan 能力，再决定是否启动运动补帧、时域降噪或 HDR 映射；暗部增强保持独立观感与性能基线。
-- 当前状态：能力 contract、Windows DXGI / D3D11 / Vulkan 动态探测、播放器诊断和可复用矩阵测试已完成。探测在 runner 后台执行，Flutter 平台线程只轮询轻量状态，不阻塞播放和 UI。
+- 目标：从实际 MediaKit / ANGLE 渲染设备返回活动 adapter LUID，在该 LUID 上建立 1080p / 4K Compute 帧预算，只选择一个第三阶段功能做默认关闭、可回滚实验；暗部增强保持独立观感与性能基线。
+- 当前状态：已完成。构建期只替换固定 SHA256 的 MediaKit `ANGLESurfaceManager` 单个源文件，在真实 D3D11 device 创建/销毁处登记 LUID；不修改 Pub Cache，不按枚举顺序、Feature Level、名称或显存占用推断活动显卡。
 - 当前设备矩阵：RTX 4070 SUPER（约 11.72 GiB 专用显存）与 AMD Radeon Graphics（约 460 MiB 专用显存）均为 D3D 12_1、Compute 已验证、Vulkan 已匹配；Microsoft Basic Render Driver 标记为软件适配器，不参与活动硬件卡选择。完整证据见 `docs/qa/player_gpu_capability_matrix_20260722.md`。
-- 当前机器有两块硬件适配器且 Feature Level 相同，现有播放会话属性不足以唯一确认活动适配器，因此第三阶段总状态保持“活动适配器尚未唯一确认”；不按 DXGI 枚举顺序或显卡名称猜测。
-- `tool/run_gpu_capability_matrix.ps1` 可通过真实 Windows runner 重建隐私安全 JSON；矩阵不读取媒体路径，不持久化仅在当前会话有效的 LUID。
-- 运动补帧、时域降噪和 HDR 映射仍未启动。下一步先把当前渲染器的活动适配器 LUID 暴露到 `PlayerBackend`，完成唯一匹配和 1080p / 4K 余量门槛后只选择一个阶段三功能做最小实验。
+- 实际生产渲染设备返回 LUID `00000000:00016bec`，精确匹配 RTX 4070 SUPER。D3D11 HDR 类 Compute kernel 在 60fps 的 4.167ms 预留切片下，1080p P95 为 0.041ms、4K P95 为 0.127ms，两档均通过；JSON 位于 `.local/qa/gpu-capability-matrix/active-device-compute-budget.json`。
+- 第三阶段只开放“HDR 动态映射实验”：默认关闭，开启前确认；只有当前媒体为 HDR、活动 LUID 精确匹配且 Compute 能力验证后才对会话应用 `hable + hdr-compute-peak=yes`，关闭或门槛不满足时恢复 `auto`。运动补帧与时域降噪保持未启动。
+- `tool/run_gpu_capability_matrix.ps1` 可重建活动 LUID、设备矩阵和 1080p / 4K 预算；压测显式触发并在原生后台执行，普通播放启动不运行 Compute 基线。
 - 暗部增强不与第三阶段 Compute 功能共用结论；需固定 SDR 暗场样本，分别评估暗部细节、黑位抬升、色带、CPU/GPU、掉帧和 UI 响应后再决定是否进入自动协调器。
-- 隔离 Debug 真实点击完成“进入播放器 → 右键 → 诊断检查 → 滚动设备矩阵”：视频持续推进、解码/总掉帧为 0，矩阵文本无遮挡、横向溢出或状态误报；两张证据截图保存在 `.local/qa/2026-07-22-gpu-matrix/`。
-- 最终 `flutter analyze`、完整 247 项测试与 Windows Debug build 通过，3 项显式 benchmark 跳过；Windows integration matrix test 单独通过。
+- 隔离 Windows integration test 真实点击“设置 → 播放与继续观看 → HDR 实验 → 确认 → 关闭”，开启/回滚两态无遮挡、溢出或状态歧义；截图位于 `.local/qa/hdr-mapping/`。真实 MediaKit 会话另行核验 `hable/yes → auto/auto` 回滚。
+- 最终 `flutter analyze`、完整 251 项测试、Windows Debug build、活动 LUID / Compute 基线 integration test 与 HDR 两态真实点击 integration test 全部通过，3 项显式 benchmark 按设计跳过。
 - 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列、稳定身份或用户数据。
 
 ### 2026-07-22 自动画质协调器与 GPU 能力检测

@@ -88,7 +88,40 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+set(LTP_MEDIA_KIT_VIDEO_ANGLE_SOURCE
+  "${FLUTTER_MANAGED_DIR}/ephemeral/.plugin_symlinks/media_kit_video/windows/angle_surface_manager.cc")
+# 上游源文件仍保留在插件目标中用于 IDE 导航，但不再编译；实际编译的是上面从
+# 固定归档生成的 LUID 补丁版本，因此不会写入全局 Pub Cache。
+set_source_files_properties("${LTP_MEDIA_KIT_VIDEO_ANGLE_SOURCE}"
+  PROPERTIES HEADER_FILE_ONLY TRUE)
 include(flutter/generated_plugins.cmake)
+if(TARGET media_kit_video_plugin)
+  get_target_property(LTP_MEDIA_KIT_VIDEO_SOURCES
+    media_kit_video_plugin SOURCES)
+  get_target_property(LTP_MEDIA_KIT_VIDEO_SOURCE_DIR
+    media_kit_video_plugin SOURCE_DIR)
+  set(LTP_MEDIA_KIT_VIDEO_FILTERED_SOURCES)
+  foreach(source IN LISTS LTP_MEDIA_KIT_VIDEO_SOURCES)
+    if(source MATCHES "(^|[/\\\\])angle_surface_manager\\.cc$")
+      continue()
+    endif()
+    if(IS_ABSOLUTE "${source}")
+      list(APPEND LTP_MEDIA_KIT_VIDEO_FILTERED_SOURCES "${source}")
+    else()
+      # SOURCES 属性中的相对路径属于插件自身 SOURCE_DIR；转换成绝对路径后再从
+      # 父目录重设，避免 CMake 把它们误解为项目根目录文件。
+      list(APPEND LTP_MEDIA_KIT_VIDEO_FILTERED_SOURCES
+        "${LTP_MEDIA_KIT_VIDEO_SOURCE_DIR}/${source}")
+    endif()
+  endforeach()
+  set_property(TARGET media_kit_video_plugin PROPERTY SOURCES
+    "${LTP_MEDIA_KIT_VIDEO_FILTERED_SOURCES}")
+  target_sources(media_kit_video_plugin PRIVATE
+    "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}")
+  target_include_directories(media_kit_video_plugin PRIVATE
+    "${LTP_PINNED_MEDIA_KIT_VIDEO_WINDOWS_DIR}")
+  target_compile_options(media_kit_video_plugin PRIVATE /utf-8)
+endif()
 
 
 # === Installation ===

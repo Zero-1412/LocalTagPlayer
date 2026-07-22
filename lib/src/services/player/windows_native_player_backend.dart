@@ -15,7 +15,8 @@ import 'windows_gpu_capability_channel.dart';
  * `stub`模式验证纹理与生命周期，`mpv`模式接入原生解码和 D3D11 共享纹理；两者
  * 都只用于显式 A/B，默认生产路径继续使用 MediaKitPlayerBackend。
  */
-class WindowsNativePlayerBackend implements PlayerBackend {
+class WindowsNativePlayerBackend
+    implements PlayerBackend, PlayerGpuRenderBoundary {
   WindowsNativePlayerBackend({this.mode = 'stub'})
       : _positionChanges = StreamController<Duration>.broadcast(),
         _playingChanges = StreamController<bool>.broadcast(),
@@ -207,6 +208,16 @@ class WindowsNativePlayerBackend implements PlayerBackend {
   @override
   Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities() =>
       queryWindowsGpuCapabilities();
+
+  @override
+  Future<PlayerGpuActiveAdapter> queryActiveGpuAdapter() =>
+      queryWindowsActiveGpuAdapter(backend: 'windows-native');
+
+  @override
+  Future<PlayerGpuComputeFrameBudget> benchmarkGpuComputeFrameBudget(
+    String adapterLuid,
+  ) =>
+      benchmarkWindowsGpuComputeFrameBudget(adapterLuid);
 
   @override
   Future<Uint8List?> screenshot({String format = 'image/jpeg'}) async => null;

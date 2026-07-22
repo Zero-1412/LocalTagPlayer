@@ -10,11 +10,11 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.54` 扩展 `PlayerBackend` 的只读平台能力 contract：Windows runner 在后台建立 DXGI / D3D11 / Vulkan 设备矩阵，Dart 只在活动适配器能够唯一匹配时验证 Compute 能力。SQLite schema、标签查询和 filtered queue 不变。
+`Architecture Baseline 0.5.55` 在系统 GPU 矩阵之外增加 `PlayerGpuRenderBoundary`：MediaKit 与 Windows 原生实验后端从实际 ANGLE D3D11 device 返回活动 adapter LUID，并只按精确 LUID 匹配设备；显式 QA 可在该 LUID 上运行 1080p / 4K Compute 帧预算。SQLite schema、标签查询和 filtered queue 不变。
 
-GPU 能力边界分为两层：原生矩阵描述当前系统可见设备、显存和 API 能力，播放会话属性描述当前渲染路径。系统“存在支持 Compute/Vulkan 的显卡”不等于播放器已选择该显卡；单硬件适配器或唯一 Feature Level 匹配才允许形成临时活动适配器结论，多卡歧义必须保持锁定。DXGI LUID 仅在当前 Windows 会话内用于诊断，不进入 SQLite 或设置文件。
+GPU 能力边界分为两层：原生矩阵描述当前系统可见设备、显存和 API 能力，实际纹理渲染边界描述当前选中的 device LUID。系统“存在支持 Compute/Vulkan 的显卡”不等于播放器已选择该显卡；单硬件卡、Feature Level、名称、显存使用或枚举顺序均不能替代实际 LUID。DXGI LUID 仅在当前 Windows 会话内用于匹配和 QA，不进入 SQLite 或设置文件。
 
-显卡探测由 runner 后台 future 执行，平台通道在未完成时返回 `probing`，避免驱动和 Vulkan loader 初始化阻塞 Flutter UI。Vulkan 采用系统 loader 动态枚举，不把 Vulkan SDK 变成安装依赖。运动补帧、时域降噪和 HDR 映射必须在活动适配器唯一确认、1080p/4K 性能余量和回退路径都具备后才能进入实验；暗部增强使用独立 SDR 观感/性能基线，不复用 Compute 能力结论。
+显卡矩阵与显式 Compute 基线由 runner 后台 future 执行，平台通道在未完成时返回 `probing`，避免驱动、Vulkan loader 或 benchmark 阻塞 Flutter UI。普通播放不会自动运行基线。第三阶段当前只允许 HDR 动态映射：持久化开关只是用户意图，实际会话还必须同时满足 HDR 源、精确活动 LUID 与 Compute 能力；否则保持 mpv 自动映射。运动补帧、时域降噪保持未启动，暗部增强继续使用独立 SDR 观感/性能基线。
 
 SQLite schema 与写入、标签筛选和 stable identity 仍由 Dart 业务层统一拥有；Rust/C++ 只保留在只读扫描、媒体探测和实验播放器等平台边界后。`test/architecture_contract_test.dart` 会阻止重新引入 `part`。
 
@@ -41,11 +41,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.54`
+已完成基线：`Architecture Baseline 0.5.55`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.55`：固定 SHA256 的 MediaKit `ANGLESurfaceManager` 在真实 D3D11 device 生命周期登记活动 LUID，runner 通过导出函数读取；构建期补丁不写 Pub Cache，并在上游片段变化时失败。`PlayerGpuRenderBoundary` 类型化返回活动证据和显式 D3D11 timestamp Compute 报告；当前 RTX 4070 SUPER 的 1080p / 4K HDR 类 kernel P95 为 0.041ms / 0.127ms，均低于 60fps 的 4.167ms 预留切片。第三阶段仅开放默认关闭、确认启用、关闭恢复 `auto` 的 HDR 动态映射；真实播放还由 HDR 源、精确 LUID 与 Compute 能力共同门控。未修改 SQLite、标签查询、filtered queue、缓存队列或用户数据。
 
 - `0.5.54`：`PlayerBackend` 新增类型化显卡设备矩阵。Windows runner 在后台用 DXGI 枚举适配器与显存、用真实 D3D11 device 验证 Feature Level / Compute、用系统 Vulkan loader 匹配物理设备；Flutter 平台线程只读取 `probing/ready` 快照。系统能力与活动渲染器分离，只有当前会话已确认 GPU renderer 且单硬件卡或 Feature Level 唯一匹配时才验证活动 Compute，多卡歧义保持锁定。未修改 SQLite、标签查询、filtered queue、缓存队列或用户数据。
 

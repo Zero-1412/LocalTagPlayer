@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
   "gpu_capability_probe.cpp"
+  "gpu_compute_frame_budget.cpp"
   "native_player_bridge.cpp"
   "native_media_probe_bridge.cpp"
   "utils.cpp"
@@ -39,7 +40,8 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app flutter_wrapper_plugin)
 target_link_libraries(${BINARY_NAME} PRIVATE ltp_native_runtime)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
-target_link_libraries(${BINARY_NAME} PRIVATE "d3d11.lib" "dxgi.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE
+  "d3d11.lib" "dxgi.lib" "d3dcompiler.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

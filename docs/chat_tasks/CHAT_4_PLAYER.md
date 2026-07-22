@@ -701,3 +701,11 @@
 - 当前机器的 RTX 4070 SUPER 与 AMD Radeon Graphics 均支持 Compute/Vulkan，Feature Level 同为 12_1，因此活动适配器保持未唯一确认，第三阶段增强不开启。
 - 设备矩阵可由 `tool/run_gpu_capability_matrix.ps1` 重建，结果口径见 `docs/qa/player_gpu_capability_matrix_20260722.md`。
 - 运动补帧、时域降噪和 HDR 映射尚未实现；暗部增强另建观感/性能基线。filtered queue、当前 index、队列切换、SQLite 与用户数据不变。
+
+## 2026-07-22 活动 adapter LUID、Compute 帧预算与 HDR 单项实验
+
+- MediaKit 固定源码的 `ANGLESurfaceManager` 在实际 D3D11 device 创建和销毁时登记 adapter LUID，runner 从插件 DLL 导出读取；不修改 Pub Cache，也不再以单硬件卡或 Feature Level 推断活动显卡。
+- 当前生产纹理返回 LUID `00000000:00016bec`，在系统矩阵中唯一匹配 RTX 4070 SUPER。显式 QA 使用 D3D11 GPU timestamp 对 HDR 类 Compute kernel 各采样 16 次，1080p / 4K P95 为 0.041ms / 0.127ms，均低于 60fps 的 4.167ms 预留切片。
+- 第三阶段只增加 HDR 动态映射实验；设置默认关闭且启用前确认，真实播放必须同时确认 HDR 源、精确活动 LUID 和 Compute 能力才应用 `hable + hdr-compute-peak=yes`，关闭或门槛未过恢复 `auto`。
+- Windows integration test 真实点击开启和关闭并保存两态截图；真实 MediaKit 后端另行验证 `hable/yes → auto/auto`。运动补帧、时域降噪和暗部增强未并行加入。
+- filtered queue 来源、内容、顺序与当前 index 未改变；SQLite schema、`FilterQuery` / `TagQueryService`、缓存队列、稳定身份和用户数据均保持不变。

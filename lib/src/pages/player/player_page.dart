@@ -19,6 +19,7 @@ import '../../services/media/thumbnail_service.dart';
 import '../../services/player/player_hardware_acceleration.dart';
 import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_adaptive_quality.dart';
+import '../../services/player/player_hdr_mapping_experiment.dart';
 import '../../services/player/player_gpu_capability_detector.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import '../../services/player/player_video_super_resolution.dart';
@@ -361,6 +362,7 @@ Future<void> applyPlayerOpenPreferences({
   required PlayerVideoOutputRange videoOutputRange,
   required double playbackRate,
   required bool videoSuperResolutionEnabled,
+  bool hdrDynamicToneMappingExperimentEnabled = false,
 }) async {
   /** 单个可选 mpv 属性失败时继续应用其余偏好，兼容能力较少的后端。 */
   Future<void> setPropertySafely(String property, String value) async {
@@ -392,6 +394,10 @@ Future<void> applyPlayerOpenPreferences({
     backend: backend,
     enabled: videoSuperResolutionEnabled,
     baseScaler: videoScaler,
+  );
+  await PlayerHdrMappingExperiment.apply(
+    backend: backend,
+    enabled: hdrDynamicToneMappingExperimentEnabled,
   );
   await backend.setRate(playbackRate);
 }
@@ -646,6 +652,8 @@ class PlayerPageState extends State<PlayerPage> {
       PlayerAdaptiveQualityLevel.off;
   /** 最近一次播放器会话能力检测结果；新媒体打开时作废并重新检测。 */
   PlayerGpuCapabilitySnapshot? _gpuCapabilitySnapshot;
+  /** HDR 实验只有在当前媒体与实际活动 LUID 均通过门槛后才对本会话生效。 */
+  var _hdrMappingExperimentActive = false;
   /** 自动增强扩展采样每两秒执行一次，避免增加每秒平台属性调用压力。 */
   var _adaptiveQualitySampleTick = 0;
   var _controlsVisible = true;
@@ -2140,6 +2148,9 @@ class PlayerPageState extends State<PlayerPage> {
       videoOutputRange: _videoOutputRange,
       playbackRate: _playbackRate,
       videoSuperResolutionEnabled: _videoSuperResolutionEnabled,
+      // 第三阶段实验不能仅凭持久化开关提前启动；媒体可播放后的真实 LUID、
+      // Compute 与 HDR 源信号检测会在 `_detectCurrentGpuCapabilities` 中解锁。
+      hdrDynamicToneMappingExperimentEnabled: false,
     );
   }
 
@@ -2254,6 +2265,7 @@ class PlayerPageState extends State<PlayerPage> {
           _adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
           _adaptiveQualitySampleTick = 0;
           _gpuCapabilitySnapshot = null;
+          _hdrMappingExperimentActive = false;
           // 新媒体必须先清除上一条的滤镜，再从本条稳定样本逐级恢复。
           await PlayerAdaptiveQualityEnhancer.apply(
             backend: _playerBackend,
@@ -2329,7 +2341,25 @@ class PlayerPageState extends State<PlayerPage> {
   Future<void> _detectCurrentGpuCapabilities(String openedPath) async {
     final snapshot = await _gpuCapabilityDetector.detect(_playerBackend);
     if (!mounted || _openedPath != openedPath) return;
+    final experimentAllowed =
+        _effectivePlaybackSettings.hdrDynamicToneMappingExperimentEnabled &&
+            snapshot.selectedAdapter != null &&
+            snapshot.computeShaderVerified &&
+            snapshot.hdrSourceDetected;
+    await PlayerHdrMappingExperiment.apply(
+      backend: _playerBackend,
+      enabled: experimentAllowed,
+    );
+    if (!mounted || _openedPath != openedPath) {
+      // 能力查询期间若已切换媒体，不允许旧 HDR 结论泄漏到新会话。
+      await PlayerHdrMappingExperiment.apply(
+        backend: _playerBackend,
+        enabled: false,
+      );
+      return;
+    }
     _gpuCapabilitySnapshot = snapshot;
+    _hdrMappingExperimentActive = experimentAllowed;
     debugPrint(
       'PLAYER_GPU_CAPABILITY renderer=${snapshot.rendererDetected} '
       'api=${snapshot.gpuApi} context=${snapshot.gpuContext} '
@@ -3055,6 +3085,9 @@ class PlayerPageState extends State<PlayerPage> {
       'video-params/primaries',
       'video-params/gamma',
       'video-target-params/colorlevels',
+      'tone-mapping',
+      'hdr-compute-peak',
+      'allow-delayed-peak-detect',
       'gpu-api',
       'gpu-context',
       'd3d11-feature-level',
@@ -3136,6 +3169,10 @@ class PlayerPageState extends State<PlayerPage> {
       'Vulkan 已检测: ${_gpuCapabilitySnapshot?.vulkanDetected == true ? '是' : '否 / 未验证'}',
       'Compute Shader 已验证: ${_gpuCapabilitySnapshot?.computeShaderVerified == true ? '是' : '否'}',
       'HDR 源信号: ${_gpuCapabilitySnapshot?.hdrSourceDetected == true ? '已检测' : '未检测'}',
+      'HDR 动态映射实验设置: ${_effectivePlaybackSettings.hdrDynamicToneMappingExperimentEnabled ? '开启' : '关闭'}',
+      'HDR 动态映射会话: ${_hdrMappingExperimentActive ? '已通过门槛并启用' : '未启用 / 门槛未通过'}',
+      'mpv HDR 映射曲线: ${mpv['tone-mapping']}',
+      'mpv HDR 动态峰值: ${mpv['hdr-compute-peak']}',
       '第三阶段能力状态: ${_gpuCapabilitySnapshot?.readinessLabel ?? '等待当前媒体能力检测'}',
       ...?_gpuCapabilitySnapshot?.capabilityMatrix.adapters.map(
         (adapter) => 'GPU[${adapter.enumerationIndex}]: ${adapter.name} · '

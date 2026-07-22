@@ -1,14 +1,22 @@
 #include "native_player_bridge.h"
 
 #include "gpu_capability_probe.h"
+#include "gpu_compute_frame_budget.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstdio>
 #include <mpv/render_gl.h>
 #include <utility>
 
+extern "C" int LtpMediaKitQueryActiveAdapterLuid(int32_t* high_part,
+                                                  uint32_t* low_part);
+
 namespace {
 constexpr char kChannelName[] = "local_tag_player/native_player";
+
+using QueryActiveAdapterLuid = int (*)(int32_t*, uint32_t*);
 
 std::string StringArgument(const flutter::EncodableMap& arguments,
                            const char* key) {
@@ -25,6 +33,13 @@ int64_t IntegerArgument(const flutter::EncodableMap& arguments,
   if (const auto* value = std::get_if<int64_t>(&iterator->second)) return *value;
   if (const auto* value = std::get_if<int32_t>(&iterator->second)) return *value;
   return 0;
+}
+
+std::string LuidString(int32_t high_part, uint32_t low_part) {
+  std::array<char, 32> buffer{};
+  std::snprintf(buffer.data(), buffer.size(), "%08x:%08x",
+                static_cast<uint32_t>(high_part), low_part);
+  return buffer.data();
 }
 
 /** 将 Flutter 请求尺寸量化并限制在原生纹理预算内，避免窗口动画产生频繁小幅重建。 */
@@ -75,6 +90,16 @@ void NativePlayerBridge::HandleMethodCall(
   const auto& values = arguments == nullptr ? empty : *arguments;
   if (call.method_name() == "gpuCapabilities") {
     result->Success(flutter::EncodableValue(GpuCapabilitySnapshot()));
+    return;
+  }
+  if (call.method_name() == "activeGpuAdapter") {
+    result->Success(flutter::EncodableValue(
+        ActiveGpuAdapterSnapshot(StringArgument(values, "backend"))));
+    return;
+  }
+  if (call.method_name() == "computeFrameBudget") {
+    result->Success(flutter::EncodableValue(
+        ComputeFrameBudgetSnapshot(StringArgument(values, "adapterLuid"))));
     return;
   }
   if (call.method_name() == "create") {
@@ -133,6 +158,108 @@ flutter::EncodableMap NativePlayerBridge::GpuCapabilitySnapshot() {
       {flutter::EncodableValue("adapters"),
        flutter::EncodableValue(flutter::EncodableList{})},
   };
+}
+
+flutter::EncodableMap NativePlayerBridge::ActiveGpuAdapterSnapshot(
+    const std::string& backend_kind) const {
+  QueryActiveAdapterLuid query = nullptr;
+  std::string source;
+  if (backend_kind == "media-kit") {
+    // 默认生产后端的设备由插件 DLL 拥有；读取其导出快照才能保证 LUID 来自实际纹理。
+    const HMODULE plugin = GetModuleHandleW(L"media_kit_video_plugin.dll");
+    if (plugin != nullptr) {
+      query = reinterpret_cast<QueryActiveAdapterLuid>(
+          GetProcAddress(plugin, "LtpMediaKitQueryActiveAdapterLuid"));
+    }
+    source = "media-kit-angle-d3d11-device";
+  } else if (backend_kind == "windows-native") {
+    query = &LtpMediaKitQueryActiveAdapterLuid;
+    source = "windows-native-angle-d3d11-device";
+  }
+
+  if (query == nullptr) {
+    return flutter::EncodableMap{
+        {flutter::EncodableValue("probeStatus"),
+         flutter::EncodableValue("unavailable")},
+        {flutter::EncodableValue("detectionSource"),
+         flutter::EncodableValue(source.empty() ? "unsupported-backend"
+                                                : source)},
+        {flutter::EncodableValue("errorCode"),
+         flutter::EncodableValue("active-adapter-export-unavailable")}};
+  }
+  int32_t high_part = 0;
+  uint32_t low_part = 0;
+  const int status = query(&high_part, &low_part);
+  if (status == 1) {
+    return flutter::EncodableMap{
+        {flutter::EncodableValue("probeStatus"),
+         flutter::EncodableValue("ready")},
+        {flutter::EncodableValue("detectionSource"),
+         flutter::EncodableValue(source)},
+        {flutter::EncodableValue("adapterLuid"),
+         flutter::EncodableValue(LuidString(high_part, low_part))}};
+  }
+  return flutter::EncodableMap{
+      {flutter::EncodableValue("probeStatus"),
+       flutter::EncodableValue(status == 2 ? "ambiguous" : "unavailable")},
+      {flutter::EncodableValue("detectionSource"),
+       flutter::EncodableValue(source)},
+      {flutter::EncodableValue("errorCode"),
+       flutter::EncodableValue(status == 2 ? "multiple-active-adapter-luids"
+                                           : "render-device-not-created")}};
+}
+
+flutter::EncodableMap NativePlayerBridge::ComputeFrameBudgetSnapshot(
+    const std::string& adapter_luid) {
+  if (adapter_luid.empty()) {
+    return flutter::EncodableMap{
+        {flutter::EncodableValue("probeStatus"),
+         flutter::EncodableValue("failed")},
+        {flutter::EncodableValue("detectionSource"),
+         flutter::EncodableValue("d3d11-timestamp-query-hdr-compute-kernel")},
+        {flutter::EncodableValue("errorCode"),
+         flutter::EncodableValue("missing-adapter-luid")},
+        {flutter::EncodableValue("samples"),
+         flutter::EncodableValue(flutter::EncodableList{})}};
+  }
+  if (compute_budget_cache_.has_value() &&
+      compute_budget_luid_ == adapter_luid) {
+    return *compute_budget_cache_;
+  }
+  if (compute_budget_future_.valid()) {
+    if (compute_budget_luid_ != adapter_luid) {
+      return flutter::EncodableMap{
+          {flutter::EncodableValue("probeStatus"),
+           flutter::EncodableValue("failed")},
+          {flutter::EncodableValue("detectionSource"),
+           flutter::EncodableValue(
+               "d3d11-timestamp-query-hdr-compute-kernel")},
+          {flutter::EncodableValue("errorCode"),
+           flutter::EncodableValue("another-adapter-benchmark-is-running")},
+          {flutter::EncodableValue("samples"),
+           flutter::EncodableValue(flutter::EncodableList{})}};
+    }
+    if (compute_budget_future_.wait_for(std::chrono::milliseconds(0)) ==
+        std::future_status::ready) {
+      compute_budget_cache_ = compute_budget_future_.get();
+      return *compute_budget_cache_;
+    }
+  } else {
+    compute_budget_luid_ = adapter_luid;
+    compute_budget_future_ =
+        std::async(std::launch::async, [adapter_luid]() {
+          return QueryGpuComputeFrameBudget(adapter_luid);
+        });
+  }
+  return flutter::EncodableMap{
+      {flutter::EncodableValue("probeStatus"),
+       flutter::EncodableValue("probing")},
+      {flutter::EncodableValue("adapterLuid"),
+       flutter::EncodableValue(adapter_luid)},
+      {flutter::EncodableValue("detectionSource"),
+       flutter::EncodableValue("d3d11-timestamp-query-hdr-compute-kernel")},
+      {flutter::EncodableValue("samples"),
+       flutter::EncodableValue(flutter::EncodableList{})}};
 }
 
 void NativePlayerBridge::EnsureTexture() {

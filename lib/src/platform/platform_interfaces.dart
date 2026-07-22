@@ -85,6 +85,19 @@ abstract interface class PlayerBackend {
 }
 
 /**
+ * 可返回实际渲染设备证据和显式 Compute 基线的 Windows 播放边界。
+ *
+ * 基线属于 QA/实验动作，普通播放启动不得自动运行高负载 Compute 压测。
+ */
+abstract interface class PlayerGpuRenderBoundary {
+  Future<PlayerGpuActiveAdapter> queryActiveGpuAdapter();
+
+  Future<PlayerGpuComputeFrameBudget> benchmarkGpuComputeFrameBudget(
+    String adapterLuid,
+  );
+}
+
+/**
  * 根据用户硬解设置创建独占播放会话后端。
  *
  * 默认工厂返回 media_kit 适配器；后续 Windows C++ 实现可在组合根切换，

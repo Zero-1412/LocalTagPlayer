@@ -12,6 +12,7 @@ class PlayerGpuCapabilitySnapshot {
     required this.d3d11FeatureLevel,
     required this.hwdecCurrent,
     required this.capabilityMatrix,
+    required this.activeAdapterEvidence,
     required this.selectedAdapter,
     required this.adapterSelectionSource,
     required this.rendererDetected,
@@ -28,6 +29,9 @@ class PlayerGpuCapabilitySnapshot {
 
   /** 原生平台返回的系统设备矩阵。 */
   final PlayerGpuCapabilityMatrix capabilityMatrix;
+
+  /** 由实际视频纹理 D3D11 设备返回的活动 LUID 证据。 */
+  final PlayerGpuActiveAdapter activeAdapterEvidence;
 
   /** 有足够证据与当前播放会话唯一匹配的适配器；多卡不明确时保持 null。 */
   final PlayerGpuAdapterCapabilities? selectedAdapter;
@@ -53,8 +57,8 @@ class PlayerGpuCapabilitySnapshot {
 /**
  * 合并当前播放会话属性与 PlayerBackend 原生设备矩阵。
  *
- * 单硬件适配器可直接唯一匹配；多显卡只有 Feature Level 唯一匹配时才选择设备。
- * 枚举顺序和显卡名称都不能作为活动适配器证据，防止错误开启高负载增强。
+ * 只有实际渲染设备返回的 LUID 能选择活动适配器；Feature Level、枚举顺序、
+ * 显存占用和显卡名称都不能作为替代证据，防止多显卡机器错误开启高负载增强。
  */
 class PlayerGpuCapabilityDetector {
   const PlayerGpuCapabilityDetector();
@@ -91,23 +95,41 @@ class PlayerGpuCapabilityDetector {
       );
     }
 
+    PlayerGpuActiveAdapter activeAdapter =
+        const PlayerGpuActiveAdapter.unsupported();
+    final renderBoundary = backend is PlayerGpuRenderBoundary
+        ? backend as PlayerGpuRenderBoundary
+        : null;
+    if (renderBoundary != null) {
+      try {
+        activeAdapter = await renderBoundary.queryActiveGpuAdapter();
+      } catch (_) {
+        activeAdapter = const PlayerGpuActiveAdapter(
+          probeStatus: 'unavailable',
+          detectionSource: 'backend-query-failed',
+          errorCode: 'backend-query-failed',
+        );
+      }
+    }
+
     final output = values['current-vo'] ?? 'unavailable';
     final api = values['gpu-api'] ?? 'unavailable';
     final context = values['gpu-context'] ?? 'unavailable';
     final d3d11FeatureLevel = values['d3d11-feature-level'] ?? 'unavailable';
     final combined = '$output $api $context'.toLowerCase();
-    final sessionUsesGpuRenderer = _available(d3d11FeatureLevel) ||
+    final sessionUsesGpuRenderer = activeAdapter.ready ||
+        _available(d3d11FeatureLevel) ||
         combined.contains('gpu') ||
         combined.contains('d3d11') ||
         combined.contains('vulkan') ||
         combined.contains('angle');
     final selection = _selectAdapter(
       matrix,
-      d3d11FeatureLevel,
+      activeAdapter,
       sessionUsesGpuRenderer,
     );
-    // 系统设备矩阵不能替代当前会话证据；只有属性确认 GPU renderer 后，才尝试
-    // 把单硬件卡或唯一 Feature Level 匹配为活动适配器。
+    // 系统设备矩阵和播放器属性都不能替代渲染设备证据；即使已经确认 GPU
+    // renderer，也只允许实际 LUID 在矩阵中唯一命中时选择活动适配器。
     final rendererDetected = sessionUsesGpuRenderer;
     final gamma = (values['video-params/gamma'] ?? '').toLowerCase();
     return PlayerGpuCapabilitySnapshot(
@@ -117,6 +139,7 @@ class PlayerGpuCapabilityDetector {
       d3d11FeatureLevel: d3d11FeatureLevel,
       hwdecCurrent: values['hwdec-current'] ?? 'unavailable',
       capabilityMatrix: matrix,
+      activeAdapterEvidence: activeAdapter,
       selectedAdapter: selection.adapter,
       adapterSelectionSource: selection.source,
       rendererDetected: rendererDetected,
@@ -131,7 +154,7 @@ class PlayerGpuCapabilityDetector {
 
   static _AdapterSelection _selectAdapter(
     PlayerGpuCapabilityMatrix matrix,
-    String sessionFeatureLevel,
+    PlayerGpuActiveAdapter activeAdapter,
     bool sessionUsesGpuRenderer,
   ) {
     if (!matrix.ready) {
@@ -140,23 +163,22 @@ class PlayerGpuCapabilityDetector {
     if (!sessionUsesGpuRenderer) {
       return const _AdapterSelection(null, 'session-renderer-unverified');
     }
-    final hardware = matrix.adapters
-        .where((adapter) => !adapter.isSoftware)
+    if (!activeAdapter.ready) {
+      return _AdapterSelection(
+        null,
+        'active-luid-${activeAdapter.probeStatus}',
+      );
+    }
+    final matches = matrix.adapters
+        .where((adapter) => adapter.luid == activeAdapter.adapterLuid)
         .toList(growable: false);
-    if (hardware.length == 1) {
-      return _AdapterSelection(hardware.single, 'single-hardware-adapter');
+    if (matches.length == 1) {
+      return _AdapterSelection(
+        matches.single,
+        '${activeAdapter.detectionSource}:exact-luid-match',
+      );
     }
-    if (_available(sessionFeatureLevel)) {
-      final matches = hardware
-          .where(
-            (adapter) => adapter.d3dFeatureLevel == sessionFeatureLevel,
-          )
-          .toList(growable: false);
-      if (matches.length == 1) {
-        return _AdapterSelection(matches.single, 'unique-feature-level-match');
-      }
-    }
-    return const _AdapterSelection(null, 'multi-adapter-unresolved');
+    return const _AdapterSelection(null, 'active-luid-not-in-device-matrix');
   }
 
   static bool _available(String value) =>

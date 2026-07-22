@@ -892,6 +892,57 @@ class _PlaybackQualitySettingsPanel extends StatelessWidget {
               ),
             ),
             const Divider(height: 20),
+            SwitchListTile.adaptive(
+              key: const ValueKey(
+                'settings.playbackQuality.hdrMappingExperiment',
+              ),
+              contentPadding: EdgeInsets.zero,
+              value: settings.hdrDynamicToneMappingExperimentEnabled,
+              title: const Text('HDR 动态映射实验'),
+              subtitle: const Text(
+                '默认关闭；仅建议在活动 GPU LUID 与 1080p/4K Compute 基线通过后开启，关闭即恢复自动映射',
+              ),
+              onChanged: (value) async {
+                if (!value) {
+                  onChanged(
+                    settings.copyWith(
+                      hdrDynamicToneMappingExperimentEnabled: false,
+                    ),
+                  );
+                  return;
+                }
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const Text('开启 HDR 动态映射实验？'),
+                    content: const Text(
+                      '实验会为 HDR 视频启用 Hable 映射与逐帧峰值 Compute。若出现掉帧、功耗升高或观感异常，可随时关闭并恢复 mpv 自动值。',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(false),
+                        child: const Text('取消'),
+                      ),
+                      FilledButton(
+                        key: const ValueKey(
+                          'settings.playbackQuality.hdrMappingConfirm',
+                        ),
+                        onPressed: () => Navigator.of(dialogContext).pop(true),
+                        child: const Text('确认开启'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  onChanged(
+                    settings.copyWith(
+                      hdrDynamicToneMappingExperimentEnabled: true,
+                    ),
+                  );
+                }
+              },
+            ),
+            const Divider(height: 20),
             const _PlaybackCapabilityRow(
               icon: Icons.analytics_outlined,
               title: '视频质量信息解析',
@@ -971,8 +1022,9 @@ class _PlaybackEnhancementRoadmapCard extends StatelessWidget {
             _PlaybackCapabilityRow(
               icon: Icons.memory_rounded,
               title: '第三阶段 · 高级增强',
-              subtitle: '播放器先检测真实渲染 API、上下文、硬解与 HDR 源信号，再评估高级增强',
-              status: '已接入检测',
+              subtitle:
+                  '实际渲染边界返回 adapter LUID；1080p/4K Compute 基线通过后仅开放 HDR 动态映射',
+              status: '单项实验',
             ),
           ],
         ),
@@ -2030,6 +2082,29 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       ),
     );
   }
+}
+
+/** 构建播放画质设置 focused test 容器，不创建播放器或运行 Compute 基线。 */
+@visibleForTesting
+Widget playbackQualitySettingsSmokeHarness({
+  PlaybackSettings settings = PlaybackSettings.defaults,
+  ValueChanged<PlaybackSettings>? onChanged,
+}) {
+  return MaterialApp(
+    theme: settingsWorkspaceTheme(ThemeData(useMaterial3: true)),
+    home: MediaQuery(
+      data: const MediaQueryData(size: Size(900, 900)),
+      child: Scaffold(
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: _PlaybackQualitySettingsPanel(
+            settings: settings,
+            onChanged: onChanged ?? (_) {},
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /** 构建删除文件设置的 focused test 容器，不触发真实删除或文件系统调用。 */

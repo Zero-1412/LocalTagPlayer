@@ -179,14 +179,17 @@ class _SkewedSuperResolutionPlayerBackend
 }
 
 /** 为第三阶段能力检测提供可控属性，不创建真实 GPU 会话。 */
-class _CapabilityPlayerBackend extends _PreferenceRecordingPlayerBackend {
+class _CapabilityPlayerBackend extends _PreferenceRecordingPlayerBackend
+    implements PlayerGpuRenderBoundary {
   _CapabilityPlayerBackend(
     this.values, {
     this.matrix = const PlayerGpuCapabilityMatrix.unsupported(),
+    this.activeAdapter = const PlayerGpuActiveAdapter.unsupported(),
   });
 
   final Map<String, String> values;
   final PlayerGpuCapabilityMatrix matrix;
+  final PlayerGpuActiveAdapter activeAdapter;
 
   @override
   Future<String> getProperty(String property) async =>
@@ -194,6 +197,15 @@ class _CapabilityPlayerBackend extends _PreferenceRecordingPlayerBackend {
 
   @override
   Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities() async => matrix;
+
+  @override
+  Future<PlayerGpuActiveAdapter> queryActiveGpuAdapter() async => activeAdapter;
+
+  @override
+  Future<PlayerGpuComputeFrameBudget> benchmarkGpuComputeFrameBudget(
+    String adapterLuid,
+  ) =>
+      throw UnsupportedError('focused test does not run native GPU benchmark');
 }
 
 /** 构造不依赖真实驱动的 GPU 适配器能力快照。 */
@@ -3607,6 +3619,48 @@ void main() {
     );
   });
 
+  testWidgets('HDR mapping experiment confirms enable and rolls back directly',
+      (WidgetTester tester) async {
+    final changes = <PlaybackSettings>[];
+    await tester.pumpWidget(
+      playbackQualitySettingsSmokeHarness(
+        onChanged: changes.add,
+      ),
+    );
+
+    final switchFinder = find.byKey(
+      const ValueKey('settings.playbackQuality.hdrMappingExperiment'),
+    );
+    await tester.ensureVisible(switchFinder);
+    await tester.tap(switchFinder);
+    await tester.pumpAndSettle();
+    expect(find.text('开启 HDR 动态映射实验？'), findsOneWidget);
+    expect(changes, isEmpty);
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('settings.playbackQuality.hdrMappingConfirm'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(changes.single.hdrDynamicToneMappingExperimentEnabled, isTrue);
+
+    changes.clear();
+    await tester.pumpWidget(
+      playbackQualitySettingsSmokeHarness(
+        settings: PlaybackSettings.defaults.copyWith(
+          hdrDynamicToneMappingExperimentEnabled: true,
+        ),
+        onChanged: changes.add,
+      ),
+    );
+    await tester.ensureVisible(switchFinder);
+    await tester.tap(switchFinder);
+    await tester.pump();
+    expect(changes.single.hdrDynamicToneMappingExperimentEnabled, isFalse);
+    expect(find.text('开启 HDR 动态映射实验？'), findsNothing);
+  });
+
   test('playback settings default to continuing without a prompt', () {
     expect(
       PlaybackSettings.defaults.resumeBehavior,
@@ -3695,6 +3749,7 @@ void main() {
     expect(oldSettings.seekStepSeconds, 5);
     expect(oldSettings.videoSuperResolutionEnabled, isFalse);
     expect(oldSettings.automaticQualityEnhancementEnabled, isFalse);
+    expect(oldSettings.hdrDynamicToneMappingExperimentEnabled, isFalse);
 
     final directory = await Directory.systemTemp.createTemp(
       'local_tag_player_playback_settings_',
@@ -3712,6 +3767,7 @@ void main() {
       seekStepSeconds: 30,
       videoSuperResolutionEnabled: true,
       automaticQualityEnhancementEnabled: true,
+      hdrDynamicToneMappingExperimentEnabled: true,
       confirmBeforeDeletingVideo: false,
       moveDeletedFileToTrash: true,
     );
@@ -3728,6 +3784,7 @@ void main() {
     expect(loaded.seekStepSeconds, 30);
     expect(loaded.videoSuperResolutionEnabled, isTrue);
     expect(loaded.automaticQualityEnhancementEnabled, isTrue);
+    expect(loaded.hdrDynamicToneMappingExperimentEnabled, isTrue);
     expect(loaded.confirmBeforeDeletingVideo, isFalse);
     expect(loaded.moveDeletedFileToTrash, isTrue);
     expect(loaded.toJson()['playbackMode'], 'repeatAll');
@@ -3858,11 +3915,19 @@ void main() {
             vulkanLoaderAvailable: true,
             vulkanInstanceAvailable: true,
             adapters: <PlayerGpuAdapterCapabilities>[adapter],
+          ),
+          activeAdapter: PlayerGpuActiveAdapter(
+            probeStatus: 'ready',
+            detectionSource: 'test-render-boundary',
+            adapterLuid: adapter.luid,
           )),
     );
     expect(detected.rendererDetected, isTrue);
     expect(detected.selectedAdapter, same(adapter));
-    expect(detected.adapterSelectionSource, 'single-hardware-adapter');
+    expect(
+      detected.adapterSelectionSource,
+      'test-render-boundary:exact-luid-match',
+    );
     expect(detected.vulkanDetected, isTrue);
     expect(detected.computeShaderVerified, isTrue);
     expect(detected.hdrSourceDetected, isTrue);
@@ -3908,9 +3973,35 @@ void main() {
     );
 
     expect(detected.selectedAdapter, isNull);
-    expect(detected.adapterSelectionSource, 'multi-adapter-unresolved');
+    expect(detected.adapterSelectionSource, 'active-luid-unsupported');
     expect(detected.computeShaderVerified, isFalse);
     expect(detected.readinessLabel, contains('活动适配器尚未唯一确认'));
+  });
+
+  test('GPU detector selects only the exact render-boundary LUID', () async {
+    final first = _testGpuAdapter(name: 'GPU A', index: 0);
+    final second = _testGpuAdapter(name: 'GPU B', index: 1);
+    final detected = await const PlayerGpuCapabilityDetector().detect(
+      _CapabilityPlayerBackend(
+        const <String, String>{'current-vo': 'libmpv-angle-d3d11'},
+        matrix: PlayerGpuCapabilityMatrix(
+          platformSupported: true,
+          probeStatus: 'ready',
+          detectionSource: 'test',
+          vulkanLoaderAvailable: true,
+          vulkanInstanceAvailable: true,
+          adapters: <PlayerGpuAdapterCapabilities>[first, second],
+        ),
+        activeAdapter: PlayerGpuActiveAdapter(
+          probeStatus: 'ready',
+          detectionSource: 'test-render-boundary',
+          adapterLuid: second.luid,
+        ),
+      ),
+    );
+
+    expect(detected.selectedAdapter, same(second));
+    expect(detected.adapterSelectionSource, contains('exact-luid-match'));
   });
 
   test('GPU detector does not treat a system device as active renderer',
@@ -3971,6 +4062,47 @@ void main() {
     expect(matrix.adapters.single.computeShaderSupported, isTrue);
   });
 
+  test('Compute frame budget requires both 1080p and 4K P95 headroom', () {
+    final budget = PlayerGpuComputeFrameBudget.fromPlatformMap(
+      <Object?, Object?>{
+        'probeStatus': 'ready',
+        'adapterLuid': '00000000:00000001',
+        'detectionSource': 'test',
+        'targetFrameRate': 60.0,
+        'computeSliceRatio': 0.25,
+        'samples': <Object?>[
+          <Object?, Object?>{
+            'width': 1920,
+            'height': 1080,
+            'probeStatus': 'ready',
+            'sampleCount': 16,
+            'medianGpuMs': 0.2,
+            'p95GpuMs': 0.3,
+            'maxGpuMs': 0.4,
+            'frameBudgetMs': 16.67,
+            'computeSliceMs': 4.17,
+            'p95WithinComputeSlice': true,
+          },
+          <Object?, Object?>{
+            'width': 3840,
+            'height': 2160,
+            'probeStatus': 'ready',
+            'sampleCount': 16,
+            'medianGpuMs': 0.8,
+            'p95GpuMs': 1.0,
+            'maxGpuMs': 1.2,
+            'frameBudgetMs': 16.67,
+            'computeSliceMs': 4.17,
+            'p95WithinComputeSlice': true,
+          },
+        ],
+      },
+    );
+
+    expect(budget.phaseThreeEligible, isTrue);
+    expect(budget.samples.last.resolutionLabel, '3840x2160');
+  });
+
   test('persisted visual settings are applied to the playback backend',
       () async {
     final backend = _PreferenceRecordingPlayerBackend();
@@ -3982,6 +4114,7 @@ void main() {
       videoOutputRange: PlayerVideoOutputRange.full,
       playbackRate: 1.5,
       videoSuperResolutionEnabled: true,
+      hdrDynamicToneMappingExperimentEnabled: true,
     );
 
     expect(backend.properties['video-aspect-override'], '-1');
@@ -3992,7 +4125,24 @@ void main() {
     expect(backend.properties['cscale'], 'lanczos');
     expect(backend.properties['sigmoid-upscaling'], 'yes');
     expect(backend.properties['scaler-resizes-only'], 'yes');
+    expect(backend.properties['tone-mapping'], 'hable');
+    expect(backend.properties['hdr-compute-peak'], 'yes');
+    expect(backend.properties['allow-delayed-peak-detect'], 'yes');
     expect(backend.rates, <double>[1.5]);
+  });
+
+  test('disabled HDR mapping experiment restores every mpv automatic value',
+      () async {
+    final backend = _PreferenceRecordingPlayerBackend();
+
+    await PlayerHdrMappingExperiment.apply(
+      backend: backend,
+      enabled: false,
+    );
+
+    expect(backend.properties['tone-mapping'], 'auto');
+    expect(backend.properties['hdr-compute-peak'], 'auto');
+    expect(backend.properties['allow-delayed-peak-detect'], 'no');
   });
 
   test('disabled video super resolution restores the low-cost GPU baseline',

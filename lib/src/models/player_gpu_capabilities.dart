@@ -200,6 +200,176 @@ class PlayerGpuCapabilityMatrix {
       };
 }
 
+/** 从实际视频纹理渲染设备返回的活动适配器证据。 */
+class PlayerGpuActiveAdapter {
+  const PlayerGpuActiveAdapter({
+    required this.probeStatus,
+    required this.detectionSource,
+    this.adapterLuid,
+    this.errorCode,
+  });
+
+  const PlayerGpuActiveAdapter.unsupported()
+      : probeStatus = 'unsupported',
+        detectionSource = 'unavailable',
+        adapterLuid = null,
+        errorCode = null;
+
+  /** `ready`、`unavailable`、`ambiguous` 或 `unsupported`。 */
+  final String probeStatus;
+
+  /** LUID 的所有权边界，例如 MediaKit 实际 ANGLE D3D11 设备。 */
+  final String detectionSource;
+
+  /** 当前 Windows 会话内的 DXGI LUID；离开本次会话后不得持久化复用。 */
+  final String? adapterLuid;
+
+  /** 不含驱动原始文本和本地路径的稳定错误码。 */
+  final String? errorCode;
+
+  bool get ready => probeStatus == 'ready' && adapterLuid != null;
+
+  factory PlayerGpuActiveAdapter.fromPlatformMap(
+    Map<Object?, Object?> value,
+  ) =>
+      PlayerGpuActiveAdapter(
+        probeStatus: _string(value['probeStatus']),
+        detectionSource: _string(value['detectionSource']),
+        adapterLuid: _nullableString(value['adapterLuid']),
+        errorCode: _nullableString(value['errorCode']),
+      );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'probeStatus': probeStatus,
+        'detectionSource': detectionSource,
+        'adapterLuid': adapterLuid,
+        'errorCode': errorCode,
+      };
+}
+
+/** 单个分辨率下的 D3D11 Compute GPU 时间戳统计。 */
+class PlayerGpuComputeResolutionBudget {
+  const PlayerGpuComputeResolutionBudget({
+    required this.width,
+    required this.height,
+    required this.probeStatus,
+    required this.sampleCount,
+    required this.medianGpuMs,
+    required this.p95GpuMs,
+    required this.maxGpuMs,
+    required this.frameBudgetMs,
+    required this.computeSliceMs,
+    required this.p95WithinComputeSlice,
+    this.errorCode,
+  });
+
+  final int width;
+  final int height;
+  final String probeStatus;
+  final int sampleCount;
+  final double? medianGpuMs;
+  final double? p95GpuMs;
+  final double? maxGpuMs;
+  final double? frameBudgetMs;
+  final double? computeSliceMs;
+  final bool p95WithinComputeSlice;
+  final String? errorCode;
+
+  String get resolutionLabel => '${width}x$height';
+
+  factory PlayerGpuComputeResolutionBudget.fromPlatformMap(
+    Map<Object?, Object?> value,
+  ) =>
+      PlayerGpuComputeResolutionBudget(
+        width: _int(value['width']),
+        height: _int(value['height']),
+        probeStatus: _string(value['probeStatus']),
+        sampleCount: _int(value['sampleCount']),
+        medianGpuMs: _nullableDouble(value['medianGpuMs']),
+        p95GpuMs: _nullableDouble(value['p95GpuMs']),
+        maxGpuMs: _nullableDouble(value['maxGpuMs']),
+        frameBudgetMs: _nullableDouble(value['frameBudgetMs']),
+        computeSliceMs: _nullableDouble(value['computeSliceMs']),
+        p95WithinComputeSlice: value['p95WithinComputeSlice'] == true,
+        errorCode: _nullableString(value['errorCode']),
+      );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'width': width,
+        'height': height,
+        'probeStatus': probeStatus,
+        'sampleCount': sampleCount,
+        'medianGpuMs': medianGpuMs,
+        'p95GpuMs': p95GpuMs,
+        'maxGpuMs': maxGpuMs,
+        'frameBudgetMs': frameBudgetMs,
+        'computeSliceMs': computeSliceMs,
+        'p95WithinComputeSlice': p95WithinComputeSlice,
+        'errorCode': errorCode,
+      };
+}
+
+/** 绑定一个实际活动 LUID 的 1080p/4K Compute 帧预算报告。 */
+class PlayerGpuComputeFrameBudget {
+  const PlayerGpuComputeFrameBudget({
+    required this.probeStatus,
+    required this.adapterLuid,
+    required this.detectionSource,
+    required this.targetFrameRate,
+    required this.computeSliceRatio,
+    required this.samples,
+    this.errorCode,
+  });
+
+  final String probeStatus;
+  final String adapterLuid;
+  final String detectionSource;
+  final double targetFrameRate;
+  final double computeSliceRatio;
+  final List<PlayerGpuComputeResolutionBudget> samples;
+  final String? errorCode;
+
+  bool get ready => probeStatus == 'ready';
+
+  /** 两个目标分辨率都在预留切片内才允许本机进入第三阶段实验。 */
+  bool get phaseThreeEligible =>
+      ready &&
+      samples.length == 2 &&
+      samples.every((sample) => sample.p95WithinComputeSlice);
+
+  factory PlayerGpuComputeFrameBudget.fromPlatformMap(
+    Map<Object?, Object?> value,
+  ) {
+    final rawSamples = value['samples'];
+    final samples = rawSamples is List
+        ? rawSamples
+            .whereType<Map<Object?, Object?>>()
+            .map(PlayerGpuComputeResolutionBudget.fromPlatformMap)
+            .toList(growable: false)
+        : const <PlayerGpuComputeResolutionBudget>[];
+    return PlayerGpuComputeFrameBudget(
+      probeStatus: _string(value['probeStatus']),
+      adapterLuid: _string(value['adapterLuid']),
+      detectionSource: _string(value['detectionSource']),
+      targetFrameRate: _double(value['targetFrameRate']),
+      computeSliceRatio: _double(value['computeSliceRatio']),
+      samples: samples,
+      errorCode: _nullableString(value['errorCode']),
+    );
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'probeStatus': probeStatus,
+        'adapterLuid': adapterLuid,
+        'detectionSource': detectionSource,
+        'targetFrameRate': targetFrameRate,
+        'computeSliceRatio': computeSliceRatio,
+        'errorCode': errorCode,
+        'phaseThreeEligible': phaseThreeEligible,
+        'samples': samples.map((sample) => sample.toJson()).toList(),
+      };
+}
+
 String _string(Object? value) => value?.toString().trim() ?? '';
 
 String? _nullableString(Object? value) {
@@ -210,3 +380,8 @@ String? _nullableString(Object? value) {
 int _int(Object? value) => value is num ? value.toInt() : 0;
 
 int? _nullableInt(Object? value) => value is num ? value.toInt() : null;
+
+double _double(Object? value) => value is num ? value.toDouble() : 0;
+
+double? _nullableDouble(Object? value) =>
+    value is num ? value.toDouble() : null;
