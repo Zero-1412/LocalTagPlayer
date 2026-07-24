@@ -10,6 +10,8 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
+`Architecture Baseline 0.5.63` 在不改变 SQLite schema 的前提下增加显式无效记录清理策略。设置默认开启，但 missing 删除只接受成功扫描 root 形成的 `isMissing`，临时离线且未标记的路径保留；不可读只接受当前存在但不是普通文件或无法打开句柄。Repository 批量删除主库行、标签关系与对应依赖备份，不进入 `FileSystemAdapter` 删除/回收站边界。标签查询、filtered queue、PlayerBackend 和磁盘媒体内容不变。
+
 `Architecture Baseline 0.5.62` 在应用组合根外层增加独立的 GitHub Release 更新边界：首帧后以短超时读取公开正式 Release，只有远端语义版本更高时才展示更新说明和安装包入口。网络失败保持静默，不进入媒体库 Store、SQLite、标签查询、filtered queue、播放器或缓存队列。
 
 `Architecture Baseline 0.5.61` 在不改变 PlayerBackend contract 的前提下统一 MediaKit 冷启动边界：应用先提交 Flutter 首帧，再由进程级幂等门禁预热原生库；媒体卡悬停和正式播放器都必须经过同一门禁并允许失败重试。播放器首帧占位只复用 `ThumbnailService` 已验证的进程内缓存，不启动额外 FFmpeg、磁盘扫描或 UI 线程视频处理。SQLite schema、标签查询、filtered queue 和用户数据不变。
@@ -43,12 +45,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.62`
+已完成基线：`Architecture Baseline 0.5.63`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.63`：`PlaybackSettings` 增加默认开启的无效记录清理策略；设置开启与扫描完成后经 `LibraryRepository.removeMissingOrUnreadableVideos` 串行执行。探测限并发并让出 UI，主库与依赖备份同步删除以防自动复活，但不删除磁盘文件。SQLite schema、标签来源、FilterQuery、filtered queue、PlayerBackend 和缓存队列不变。
 - `0.5.62`：新增平台无关 `AppUpdateService` 查询边界及 GitHub Releases 实现；应用首帧后检查 `Zero-1412/LocalTagPlayer` 最新正式 Release，按安装包版本比较并展示 Release 正文，Windows 优先打开对应安装器资产。网络失败不阻塞本地启动；SQLite、标签查询、filtered queue、PlayerBackend、缓存队列和用户数据不变。
 - `0.5.61`：MediaKit 从“首次创建播放后端时初始化”收敛为“Flutter 首帧后统一预热、消费者幂等兜底”；悬停 Player 构造失败不再泄漏 loading。播放器使用已验证缩略图跨越纹理接管窗口，并把 loading 延迟到真实慢打开。PlayerBackend contract、缩略图调度、SQLite、标签查询、filtered queue 和用户数据不变。
 - `0.5.60`：`PlaybackSettings` 向后兼容增加暗部细节增强开关；实际会话只在明确 SDR、1080p 及以下与硬解三项都通过时应用 `eq` 曲线。曲线与自动去块/时空降噪/锐化使用同一原子 `vf` 快照，压力回滚拥有独立会话状态。设置页删除内部路线卡，HDR 映射保留 LUID/Compute/HDR 源门槛并使用正式用户文案。PlayerBackend contract、SQLite、标签查询、filtered queue 和用户数据不变。

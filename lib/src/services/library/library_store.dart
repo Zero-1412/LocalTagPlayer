@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
@@ -1272,6 +1273,83 @@ class LibraryStore
       if (item != null) {
         dataBackupService.resumeAfterPlayback();
       }
+    }
+  }
+
+  /**
+   * 从数据库批量移除已确认 missing 或当前存在但不可读的视频。
+   *
+   * 未标记 missing 且路径不存在的记录按临时离线保留；该入口不调用磁盘删除边界。
+   */
+  Future<int> removeMissingOrUnreadableVideos() async {
+    await cancelActiveScan();
+    final snapshot = List<VideoItem>.of(videos.values);
+    final removable = <VideoItem>[];
+    const probeBatchSize = 8;
+    for (var offset = 0; offset < snapshot.length; offset += probeBatchSize) {
+      final end = math.min(offset + probeBatchSize, snapshot.length);
+      final candidates = snapshot.sublist(offset, end);
+      final unavailable =
+          await Future.wait(candidates.map(_isMissingOrUnreadableVideo));
+      for (var index = 0; index < candidates.length; index += 1) {
+        if (unavailable[index]) {
+          removable.add(candidates[index]);
+        }
+      }
+      // 大媒体库探测分批让出事件循环，避免设置开关冻结界面。
+      await Future<void>.delayed(Duration.zero);
+    }
+    if (removable.isEmpty) {
+      return 0;
+    }
+    await dataBackupService.pauseForPlayback();
+    try {
+      await dataBackupService
+          .deleteSnapshots(removable.map((item) => item.videoId));
+      final batch = _db.batch();
+      for (final item in removable) {
+        _tagPersistence.deleteVideoLinksInBatch(
+          batch,
+          item,
+          updateMemoryIndex: false,
+        );
+        _videoPersistence.deleteInBatch(batch, item.path);
+      }
+      await batch.commit(noResult: true);
+      for (final item in removable) {
+        final pathKey = TagRules.pathKey(item.path);
+        videos.remove(pathKey);
+        detachedVideos.remove(pathKey);
+        videoTagIdsByPathKey.remove(pathKey);
+      }
+      return removable.length;
+    } catch (_) {
+      await dataBackupService
+          .enqueueVideos(removable.map((item) => item.videoId));
+      rethrow;
+    } finally {
+      dataBackupService.resumeAfterPlayback();
+    }
+  }
+
+  /** 路径不存在但未安全标记 missing 时保留；存在但无法作为普通文件打开时才算不可读。 */
+  Future<bool> _isMissingOrUnreadableVideo(VideoItem item) async {
+    if (item.isMissing) {
+      return true;
+    }
+    try {
+      final type = await FileSystemEntity.type(item.path, followLinks: false);
+      if (type == FileSystemEntityType.notFound) {
+        return false;
+      }
+      if (type != FileSystemEntityType.file) {
+        return true;
+      }
+      final handle = await File(item.path).open();
+      await handle.close();
+      return false;
+    } catch (_) {
+      return true;
     }
   }
 

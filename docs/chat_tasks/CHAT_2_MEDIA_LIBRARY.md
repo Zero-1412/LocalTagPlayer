@@ -239,3 +239,8 @@
 - 媒体库增删压测输出增加 `.ltp-stress-artifact` 安全标记；启动前仅清理带标记且超过默认 7 天保留期的目录。
 - 成功运行默认只保留 `summary.json` 与 `artifact-manifest.json`，删除隔离 profile、缩略图、临时数据库、录像、截图和原始采样；失败运行保留全部现场。
 - `-KeepRawArtifacts` 可显式保留完整证据，`-ArtifactRetentionDays 0` 可禁用过期清理；本轮不修改媒体库、SQLite、标签或播放器业务语义。
+## 2026-07-24 自动清理缺失或不可读记录
+
+- 设置默认开启；开启瞬间和扫描完成后从数据库清理安全确认的 missing/不可读视频。
+- 临时离线但未标记 missing 的记录继续保留；不可读必须是当前存在但无法作为普通文件打开，不能用缩略图或 FFprobe 失败代替。
+- 删除范围包括视频行、标签关系和依赖备份，确保不会自动复活；磁盘文件、文件夹、SQLite schema、标签来源与 filtered queue 不变。

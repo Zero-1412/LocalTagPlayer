@@ -3183,6 +3183,7 @@ void main() {
       (tester) async {
     bool? confirmChanged;
     bool? trashChanged;
+    bool? autoRemoveChanged;
     await tester.pumpWidget(
       deleteFileSettingsSmokeHarness(
         confirmBeforeDeletingVideo: false,
@@ -3190,6 +3191,8 @@ void main() {
         textScaler: TextScaler.linear(1.5),
         onConfirmChanged: (value) => confirmChanged = value,
         onMoveToTrashChanged: (value) => trashChanged = value,
+        onAutoRemoveMissingOrUnreadableChanged: (value) =>
+            autoRemoveChanged = value,
       ),
     );
     await tester.pump();
@@ -3198,6 +3201,12 @@ void main() {
     expect(find.text('同步将本地文件移入回收站'), findsOneWidget);
     expect(find.textContaining('直接把本地文件移入回收站'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey(
+        'settings.fileDeletion.autoRemoveMissingOrUnreadable',
+      )),
+      findsOneWidget,
+    );
 
     await tester.tap(
       find.byKey(const ValueKey('settings.fileDeletion.confirm')),
@@ -3205,8 +3214,14 @@ void main() {
     await tester.tap(
       find.byKey(const ValueKey('settings.fileDeletion.moveToTrash')),
     );
+    await tester.tap(
+      find.byKey(const ValueKey(
+        'settings.fileDeletion.autoRemoveMissingOrUnreadable',
+      )),
+    );
     expect(confirmChanged, isTrue);
     expect(trashChanged, isFalse);
+    expect(autoRemoveChanged, isFalse);
   });
 
   testWidgets('shortcut recorder captures keys and keeps conflicts visible',
@@ -3987,6 +4002,7 @@ void main() {
       },
       'confirmBeforeDeletingVideo': false,
       'moveDeletedFileToTrash': true,
+      'autoRemoveMissingOrUnreadableVideos': false,
     });
     expect(settings.shortcuts[PlayerShortcutAction.navigateBack], 'Control+B');
     expect(settings.shortcuts[PlayerShortcutAction.playPause], 'Control+F');
@@ -3994,9 +4010,14 @@ void main() {
     expect(settings.shortcuts[PlayerShortcutAction.screenshot], 'S');
     expect(settings.confirmBeforeDeletingVideo, isFalse);
     expect(settings.moveDeletedFileToTrash, isTrue);
+    expect(settings.autoRemoveMissingOrUnreadableVideos, isFalse);
     expect(settings.toJson()['shortcuts'], isA<Map>());
     expect(settings.toJson()['confirmBeforeDeletingVideo'], isFalse);
     expect(settings.toJson()['moveDeletedFileToTrash'], isTrue);
+    expect(
+      settings.toJson()['autoRemoveMissingOrUnreadableVideos'],
+      isFalse,
+    );
     expect(settings.fullscreenQueueEdgeWidth, 12);
     expect(settings.fullscreenQueueHideDelayMs, 180);
     expect(settings.fullscreenQueueEdgeHoverEnabled, isTrue);
@@ -4013,6 +4034,7 @@ void main() {
     });
     expect(settings.confirmBeforeDeletingVideo, isTrue);
     expect(settings.moveDeletedFileToTrash, isFalse);
+    expect(settings.autoRemoveMissingOrUnreadableVideos, isTrue);
     expect(settings.shortcuts[PlayerShortcutAction.navigateBack], 'Escape');
     expect(settings.shortcuts[PlayerShortcutAction.playPause], 'Control+K');
     expect(PlaybackSettings.isSupportedShortcut('Alt+K'), isTrue);

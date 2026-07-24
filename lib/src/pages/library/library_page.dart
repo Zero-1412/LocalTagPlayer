@@ -672,6 +672,7 @@ class SettingsLandingList extends StatelessWidget {
     required this.resumeBehavior,
     required this.confirmBeforeDeletingVideo,
     required this.moveDeletedFileToTrash,
+    this.autoRemoveMissingOrUnreadableVideos = true,
     required this.onOpenPlayback,
     required this.onOpenVideoQuality,
     required this.onOpenPlayerInteraction,
@@ -688,6 +689,8 @@ class SettingsLandingList extends StatelessWidget {
 
   /** 删除动作当前是否同步把本地文件移入回收站。 */
   final bool moveDeletedFileToTrash;
+  /** 扫描后是否自动清理缺失/不可读数据库记录。 */
+  final bool autoRemoveMissingOrUnreadableVideos;
 
   /** 打开播放与解码二级页。 */
   final VoidCallback onOpenPlayback;
@@ -759,8 +762,8 @@ class SettingsLandingList extends StatelessWidget {
               icon: Icons.delete_outline_rounded,
               title: '删除文件',
               subtitle: confirmBeforeDeletingVideo
-                  ? '删除前提示 · ${moveDeletedFileToTrash ? '移入回收站' : '仅移出媒体库'}'
-                  : '不再提示 · ${moveDeletedFileToTrash ? '直接移入回收站' : '直接移出媒体库'}',
+                  ? '删除前提示 · ${moveDeletedFileToTrash ? '移入回收站' : '仅移除记录'} · ${autoRemoveMissingOrUnreadableVideos ? '自动清理无效记录' : '保留无效记录'}'
+                  : '不再提示 · ${moveDeletedFileToTrash ? '移入回收站' : '仅移除记录'} · ${autoRemoveMissingOrUnreadableVideos ? '自动清理无效记录' : '保留无效记录'}',
               onTap: onOpenFileDeletion,
             ),
             _SettingsNavigationTile(
@@ -1061,8 +1064,10 @@ class _DeleteFileSettingsPanel extends StatelessWidget {
   const _DeleteFileSettingsPanel({
     required this.confirmBeforeDeletingVideo,
     required this.moveDeletedFileToTrash,
+    required this.autoRemoveMissingOrUnreadableVideos,
     required this.onConfirmChanged,
     required this.onMoveToTrashChanged,
+    required this.onAutoRemoveMissingOrUnreadableChanged,
   });
 
   /** 是否在删除前展示影响范围确认。 */
@@ -1070,12 +1075,16 @@ class _DeleteFileSettingsPanel extends StatelessWidget {
 
   /** 是否在删除记录前把本地文件移入回收站。 */
   final bool moveDeletedFileToTrash;
+  /** 是否自动清理缺失/不可读视频的数据库记录。 */
+  final bool autoRemoveMissingOrUnreadableVideos;
 
   /** 确认层显示偏好回调。 */
   final ValueChanged<bool> onConfirmChanged;
 
   /** 回收站默认行为回调。 */
   final ValueChanged<bool> onMoveToTrashChanged;
+  /** 清理运行期间为 null，阻止重复触发同一批删除。 */
+  final ValueChanged<bool>? onAutoRemoveMissingOrUnreadableChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1096,6 +1105,19 @@ class _DeleteFileSettingsPanel extends StatelessWidget {
               style: TextStyle(color: libraryTextMuted, height: 1.45),
             ),
             const SizedBox(height: 16),
+            SwitchListTile.adaptive(
+              key: const ValueKey(
+                'settings.fileDeletion.autoRemoveMissingOrUnreadable',
+              ),
+              contentPadding: EdgeInsets.zero,
+              value: autoRemoveMissingOrUnreadableVideos,
+              title: const Text('自动移除缺失或不可读视频'),
+              subtitle: const Text(
+                '默认开启；开启后立即从数据库清理当前无效记录，不删除磁盘文件或文件夹',
+              ),
+              onChanged: onAutoRemoveMissingOrUnreadableChanged,
+            ),
+            const Divider(height: 20),
             SwitchListTile.adaptive(
               key: const ValueKey('settings.fileDeletion.confirm'),
               contentPadding: EdgeInsets.zero,
@@ -1297,6 +1319,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   bool _backupMaintenanceRunning = false;
   /** 缓存诊断动作串行执行，避免重试、清理与统计刷新互相覆盖。 */
   bool _cacheActionRunning = false;
+  /** 自动清理运行期间锁定开关，避免重复删除同一批稳定身份。 */
+  bool _unavailableCleanupRunning = false;
 
   /** 快捷键录制冲突按动作就地展示，成功保存或恢复默认后清除。 */
   final Map<PlayerShortcutAction, String> _shortcutErrors = {};
@@ -1647,11 +1671,14 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   Future<void> _changeDeletePreferences({
     bool? confirmBeforeDeletingVideo,
     bool? moveDeletedFileToTrash,
+    bool? autoRemoveMissingOrUnreadableVideos,
   }) async {
     final previous = _settings;
     final next = previous.copyWith(
       confirmBeforeDeletingVideo: confirmBeforeDeletingVideo,
       moveDeletedFileToTrash: moveDeletedFileToTrash,
+      autoRemoveMissingOrUnreadableVideos:
+          autoRemoveMissingOrUnreadableVideos,
     );
     setState(() => _settings = next);
     try {
@@ -1666,6 +1693,46 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('保存删除设置失败：$error')),
       );
+      return;
+    }
+    if (autoRemoveMissingOrUnreadableVideos == true) {
+      await _removeMissingOrUnreadableVideos(showFeedback: true);
+    }
+  }
+
+  /** 即时执行数据库清理；失败时保留已保存的开启状态，供后续扫描继续重试。 */
+  Future<int> _removeMissingOrUnreadableVideos({
+    required bool showFeedback,
+  }) async {
+    if (_unavailableCleanupRunning) {
+      return 0;
+    }
+    setState(() => _unavailableCleanupRunning = true);
+    try {
+      final removed = await widget.store.removeMissingOrUnreadableVideos();
+      if (mounted && showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              removed == 0
+                  ? '没有需要清理的缺失或不可读记录'
+                  : '已从数据库移除 $removed 条记录；磁盘文件未删除',
+            ),
+          ),
+        );
+      }
+      return removed;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('清理缺失或不可读记录失败：$error')),
+        );
+      }
+      return 0;
+    } finally {
+      if (mounted) {
+        setState(() => _unavailableCleanupRunning = false);
+      }
     }
   }
 
@@ -1760,6 +1827,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                     confirmBeforeDeletingVideo:
                         _settings.confirmBeforeDeletingVideo,
                     moveDeletedFileToTrash: _settings.moveDeletedFileToTrash,
+                    autoRemoveMissingOrUnreadableVideos:
+                        _settings.autoRemoveMissingOrUnreadableVideos,
                     onOpenPlayback: () =>
                         _openSection(_SettingsSection.playback),
                     onOpenVideoQuality: () =>
@@ -1904,6 +1973,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                               _settings.confirmBeforeDeletingVideo,
                           moveDeletedFileToTrash:
                               _settings.moveDeletedFileToTrash,
+                          autoRemoveMissingOrUnreadableVideos:
+                              _settings.autoRemoveMissingOrUnreadableVideos,
                           onConfirmChanged: (value) {
                             unawaited(_changeDeletePreferences(
                               confirmBeforeDeletingVideo: value,
@@ -1914,6 +1985,15 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                               moveDeletedFileToTrash: value,
                             ));
                           },
+                          onAutoRemoveMissingOrUnreadableChanged:
+                              _unavailableCleanupRunning
+                                  ? null
+                                  : (value) {
+                                      unawaited(_changeDeletePreferences(
+                                        autoRemoveMissingOrUnreadableVideos:
+                                            value,
+                                      ));
+                                    },
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -2106,9 +2186,11 @@ Widget playbackQualitySettingsSmokeHarness({
 Widget deleteFileSettingsSmokeHarness({
   bool confirmBeforeDeletingVideo = true,
   bool moveDeletedFileToTrash = false,
+  bool autoRemoveMissingOrUnreadableVideos = true,
   TextScaler textScaler = TextScaler.noScaling,
   ValueChanged<bool>? onConfirmChanged,
   ValueChanged<bool>? onMoveToTrashChanged,
+  ValueChanged<bool>? onAutoRemoveMissingOrUnreadableChanged,
 }) {
   return MaterialApp(
     theme: settingsWorkspaceTheme(ThemeData(useMaterial3: true)),
@@ -2123,8 +2205,12 @@ Widget deleteFileSettingsSmokeHarness({
           child: _DeleteFileSettingsPanel(
             confirmBeforeDeletingVideo: confirmBeforeDeletingVideo,
             moveDeletedFileToTrash: moveDeletedFileToTrash,
+            autoRemoveMissingOrUnreadableVideos:
+                autoRemoveMissingOrUnreadableVideos,
             onConfirmChanged: onConfirmChanged ?? (_) {},
             onMoveToTrashChanged: onMoveToTrashChanged ?? (_) {},
+            onAutoRemoveMissingOrUnreadableChanged:
+                onAutoRemoveMissingOrUnreadableChanged ?? (_) {},
           ),
         ),
       ),
@@ -3401,6 +3487,8 @@ class _LibraryPageState extends State<LibraryPage> {
   ThumbnailService? _thumbnailService;
   MediaDetailsService? _libraryMediaDetailsService;
   PlaybackSettings _playbackSettings = PlaybackSettings.defaults;
+  /** 当前自动清理任务；启动与扫描完成阶段共享，避免重复遍历大型媒体库。 */
+  Future<int>? _unavailableCleanupFuture;
   DataBackupSettings _dataBackupSettings = DataBackupSettings.defaults;
   final _filterStateSource = FilterStateSource();
   final _countRefreshCoordinator = LibraryCountRefreshCoordinator();
@@ -3703,7 +3791,34 @@ class _LibraryPageState extends State<LibraryPage> {
       }
       _scheduleFilterRefresh();
       _scheduleInitialStableTagCounts(store);
-      unawaited(_promptForNewVideos(store));
+      unawaited(() async {
+        if (playbackSettings.autoRemoveMissingOrUnreadableVideos) {
+          await _cleanupMissingOrUnreadableVideos(store);
+        }
+        if (mounted && identical(_store, store)) {
+          await _promptForNewVideos(store);
+        }
+      }());
+    });
+  }
+
+  /** 串行清理无效数据库记录，完成后统一刷新筛选结果与标签计数。 */
+  Future<int> _cleanupMissingOrUnreadableVideos(
+    LibraryApplicationFacade store,
+  ) {
+    final active = _unavailableCleanupFuture;
+    if (active != null) {
+      return active;
+    }
+    final task = store.removeMissingOrUnreadableVideos();
+    _unavailableCleanupFuture = task;
+    return task.whenComplete(() {
+      if (identical(_unavailableCleanupFuture, task)) {
+        _unavailableCleanupFuture = null;
+      }
+      if (mounted && identical(_store, store)) {
+        _markLibraryDataChanged();
+      }
     });
   }
 
@@ -3959,6 +4074,12 @@ class _LibraryPageState extends State<LibraryPage> {
       diagnostics?.markPostApply();
       final applyWatch = Stopwatch()..start();
       _applyLibraryScanDelta(result);
+      final store = _store;
+      if (store != null &&
+          _playbackSettings.autoRemoveMissingOrUnreadableVideos) {
+        // 先反馈扫描完成，再异步串行清理；不可读探测不得阻塞 UI。
+        unawaited(_cleanupMissingOrUnreadableVideos(store));
+      }
       applyWatch.stop();
       diagnostics?.recordStage(
         'ui.delta_schedule',

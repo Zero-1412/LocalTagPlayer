@@ -207,6 +207,56 @@ void main() {
     );
   });
 
+  test(
+      'automatic cleanup removes only marked missing or existing unreadable records',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('unavailable_cleanup');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final store = await _loadTrackedStore(stores);
+    final readableFile =
+        await _writeVideoPlaceholder(dataDir, <String>['readable.mp4']);
+    final unreadablePath = p.join(dataDir.path, 'unreadable.mp4');
+    await Directory(unreadablePath).create();
+    final missingPath = p.join(dataDir.path, 'missing.mp4');
+    final offlinePath = p.join(dataDir.path, 'offline.mp4');
+    VideoItem item(String path, String title, {bool missing = false}) =>
+        VideoItem(
+          path: path,
+          title: title,
+          folder: dataDir.path,
+          tags: const <String>{},
+          addedAt: DateTime.utc(2026, 7, 24),
+          isMissing: missing,
+        );
+    final readable = item(readableFile.path, 'readable');
+    final unreadable = item(unreadablePath, 'unreadable');
+    final missing = item(missingPath, 'missing', missing: true);
+    final offline = item(offlinePath, 'offline');
+    await store.upsertVideos(
+      <VideoItem>[readable, unreadable, missing, offline],
+    );
+
+    expect(await store.removeMissingOrUnreadableVideos(), 2);
+    expect(store.videos, contains(TagRules.pathKey(readable.path)));
+    expect(store.videos, contains(TagRules.pathKey(offline.path)));
+    expect(store.videos, isNot(contains(TagRules.pathKey(missing.path))));
+    expect(store.videos, isNot(contains(TagRules.pathKey(unreadable.path))));
+    expect(await readableFile.exists(), isTrue);
+    expect(await Directory(unreadablePath).exists(), isTrue);
+    expect(
+      await store.database.query(
+        'videos',
+        where: 'video_id IN (?, ?)',
+        whereArgs: <Object?>[missing.videoId, unreadable.videoId],
+      ),
+      isEmpty,
+    );
+  });
+
   test('batch root import persists all roots and scans only after registration',
       () async {
     final stores = <LibraryStore>[];

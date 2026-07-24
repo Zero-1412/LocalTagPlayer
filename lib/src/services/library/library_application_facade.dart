@@ -165,6 +165,9 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
   Future<void> upsertPlaybackStates(Iterable<VideoItem> items) =>
       _repository.upsertPlaybackStates(items);
   Future<VideoItem?> deleteVideo(String path) => _repository.deleteVideo(path);
+  /** 执行设置页授权的数据库清理，不向 UI 暴露 SQLite 或文件删除能力。 */
+  Future<int> removeMissingOrUnreadableVideos() =>
+      _repository.removeMissingOrUnreadableVideos();
 
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(
     String rootPath, {

@@ -56,6 +56,7 @@ class PlaybackSettings {
     required this.hdrDynamicToneMappingExperimentEnabled,
     required this.confirmBeforeDeletingVideo,
     required this.moveDeletedFileToTrash,
+    this.autoRemoveMissingOrUnreadableVideos = true,
   });
 
   static const defaults = PlaybackSettings(
@@ -79,6 +80,7 @@ class PlaybackSettings {
     hdrDynamicToneMappingExperimentEnabled: false,
     confirmBeforeDeletingVideo: true,
     moveDeletedFileToTrash: false,
+    autoRemoveMissingOrUnreadableVideos: true,
   );
   /** 播放内核已验证并允许持久化的固定倍速档位。 */
   static const playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -240,6 +242,8 @@ class PlaybackSettings {
   final bool confirmBeforeDeletingVideo;
   /** 删除确认或无提示删除时，是否先把本地文件移入系统回收站。 */
   final bool moveDeletedFileToTrash;
+  /** 是否只从数据库自动移除安全确认的 missing 或不可读视频；不授权删除磁盘文件。 */
+  final bool autoRemoveMissingOrUnreadableVideos;
 
   bool get hardwareDecodingEnabled => hwdec != 'no';
 
@@ -264,6 +268,7 @@ class PlaybackSettings {
     bool? hdrDynamicToneMappingExperimentEnabled,
     bool? confirmBeforeDeletingVideo,
     bool? moveDeletedFileToTrash,
+    bool? autoRemoveMissingOrUnreadableVideos,
   }) {
     return PlaybackSettings(
       hwdec: hwdec ?? this.hwdec,
@@ -297,6 +302,9 @@ class PlaybackSettings {
           confirmBeforeDeletingVideo ?? this.confirmBeforeDeletingVideo,
       moveDeletedFileToTrash:
           moveDeletedFileToTrash ?? this.moveDeletedFileToTrash,
+      autoRemoveMissingOrUnreadableVideos:
+          autoRemoveMissingOrUnreadableVideos ??
+              this.autoRemoveMissingOrUnreadableVideos,
     );
   }
 
@@ -333,6 +341,8 @@ class PlaybackSettings {
             hdrDynamicToneMappingExperimentEnabled,
         'confirmBeforeDeletingVideo': confirmBeforeDeletingVideo,
         'moveDeletedFileToTrash': moveDeletedFileToTrash,
+        'autoRemoveMissingOrUnreadableVideos':
+            autoRemoveMissingOrUnreadableVideos,
       };
 
   static PlaybackSettings fromJson(Map<String, Object?> json) {
@@ -419,6 +429,10 @@ class PlaybackSettings {
       moveDeletedFileToTrash: json['moveDeletedFileToTrash'] is bool
           ? json['moveDeletedFileToTrash']! as bool
           : defaults.moveDeletedFileToTrash,
+      autoRemoveMissingOrUnreadableVideos:
+          json['autoRemoveMissingOrUnreadableVideos'] is bool
+              ? json['autoRemoveMissingOrUnreadableVideos']! as bool
+              : defaults.autoRemoveMissingOrUnreadableVideos,
     );
   }
 

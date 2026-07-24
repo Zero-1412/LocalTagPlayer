@@ -21,6 +21,14 @@
 - 独立 EXE 的启动可见性验证完成后，整进程关闭另产生同一 PID 的 `0xc0000005` / `0xc000041d` dump；本地符号栈指向 registrar 已为空后仍调用 `FlutterDesktopTextureRegistrarMarkExternalTextureFrameAvailable`。该宿主关闭竞态不推翻播放器 Route 退出门禁结论，但作为下一任务保留，未宣称本轮已修复。
 - 未修改 SQLite schema、标签/过滤语义、filtered queue 来源/内容/顺序、`PlayerBackend` contract、缓存队列、稳定身份或用户数据。
 
+## 2026-07-24 · 自动清理缺失或不可读媒体记录
+
+- `PlaybackSettings` 向后兼容新增默认开启的 `autoRemoveMissingOrUnreadableVideos`；旧设置文件缺字段时自动采用开启状态。
+- 设置页“删除文件”增加独立开关。开启后立即从数据库移除当前 missing/不可读记录，扫描结束后也异步复用同一策略；运行期间锁定开关，避免重复清理。
+- Repository 以 8 路小批次探测并持续让出事件循环；只删除安全标记的 missing 或当前存在但无法作为普通文件打开的记录。未标记 missing 的离线路径保留。
+- 主库视频行、标签关系与依赖备份批量清理，防止记录被后台备份重新恢复；没有调用磁盘删除、回收站或目录操作。
+- SQLite schema、folder/manual 标签语义、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存队列和真实媒体文件均未改变。
+
 ## 2026-07-23 · 未授权功能删除事故治理
 
 - 新增仓库级既有行为保护：重构前建立受保护行为与授权删除清单，重构后逐项审计被删除的 Widget、ValueKey、回调、Route、菜单和 Overlay/Stack 挂载点；不明确时默认保留。
