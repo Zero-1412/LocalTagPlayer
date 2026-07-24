@@ -93,12 +93,13 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "无法创建临时集成 Worktree"
   }
-  & git -C $temporaryRoot config user.name "Local Tag Player Release Gate"
-  & git -C $temporaryRoot config user.email "release-gate@local.invalid"
-
   foreach ($branch in $pendingBranches) {
     Write-Host "试合并未进入主分支的内容：$branch"
-    & git -C $temporaryRoot merge --no-ff --no-edit $branch
+    # 临时 Worktree 与主仓库共享本地配置，身份只传给本次命令，不能污染维护者配置。
+    & git -C $temporaryRoot `
+      -c "user.name=Local Tag Player Release Gate" `
+      -c "user.email=release-gate@local.invalid" `
+      merge --no-ff --no-edit $branch
     if ($LASTEXITCODE -ne 0) {
       $conflicts = @(
         & git -C $temporaryRoot diff --name-only --diff-filter=U

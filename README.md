@@ -158,6 +158,8 @@ flutter build windows --debug
 - 当前版本：`0.1.0+1`。
 - 当前优先级：标签发现、稳定身份、标签维护、筛选队列、缓存诊断与跨平台发布。
 - 暂不优先：字幕、音轨、逐帧、A-B loop 等专业播放器能力。
-- 仓库当前尚未附项目级开源许可证；第三方组件与随包工具仍分别受其原始许可证约束。
+- 项目源代码采用 [MIT License](LICENSE)；第三方组件与随包工具仍分别受其原始许可证约束。
+- Windows 开源免费签名的申请、构建来源、审批角色和隐私承诺见
+  [Code signing policy](CODE_SIGNING_POLICY.md)。
 
 项目背景、约定和后续方向可继续阅读 [PROJECT.md](PROJECT.md)、[CURRENT_TASK.md](CURRENT_TASK.md) 与 [CHANGELOG.md](CHANGELOG.md)。
