@@ -216,4 +216,73 @@ void main() {
       contains('opacity: _controlsVisible ? 0 : 1'),
     );
   });
+
+  test('Windows build patches media texture callbacks to stable descriptors',
+      () {
+    final nativeBuild =
+        File('windows/native_player/CMakeLists.txt').readAsStringSync();
+    final windowsBuild = File('windows/CMakeLists.txt').readAsStringSync();
+    final generatedPatchStart =
+        nativeBuild.indexOf('set(LTP_VIDEO_OUTPUT_GPU_PATCH');
+    final generatedPatchEnd = nativeBuild.indexOf(
+      r'file(WRITE "${LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE}"',
+    );
+    expect(generatedPatchStart, greaterThanOrEqualTo(0));
+    expect(generatedPatchEnd, greaterThan(generatedPatchStart));
+    final generatedPatch =
+        nativeBuild.substring(generatedPatchStart, generatedPatchEnd);
+
+    // RegisterTexture 允许同步取帧；回调必须绑定自己的描述符，不能读取尚未入表或已切换的全局 ID。
+    expect(generatedPatch, contains('[&, texture_descriptor]'));
+    expect(generatedPatch, contains('return texture_descriptor'));
+    expect(generatedPatch, contains('[&, pixel_buffer_descriptor]'));
+    expect(generatedPatch, contains('return pixel_buffer_descriptor'));
+    expect(
+      windowsBuild,
+      contains('LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE'),
+    );
+    expect(
+      windowsBuild,
+      contains('(angle_surface_manager|video_output)\\\\.cc'),
+    );
+  });
+
+  test('desktop startup centers size-only persisted window layouts', () {
+    final source = File(
+      'lib/src/services/window/desktop_window_state_service.dart',
+    ).readAsStringSync();
+
+    // 窗口快照没有坐标时不能要求插件按缺失的位置恢复，否则独立 EXE 可能保持隐藏。
+    expect(source, contains('center: true'));
+    expect(source, isNot(contains('center: layout == null')));
+  });
+
+  test('player stress fullscreen uses the production state machine directly',
+      () {
+    final playerSource =
+        File('lib/src/pages/player/player_page.dart').readAsStringSync();
+    final stressSource = File(
+      'integration_test/player_real_library_stress_test.dart',
+    ).readAsStringSync();
+
+    // 控制条可见性属于动画状态，长跑门禁必须稳定覆盖真正的窗口与纹理切换路径。
+    expect(
+      playerSource,
+      contains('toggleWindowFullscreenForStressTest'),
+    );
+    expect(
+      stressSource,
+      contains('.toggleWindowFullscreenForStressTest()'),
+    );
+    final roundTripStart =
+        stressSource.indexOf('Future<void> _toggleFullscreenRoundTrip');
+    final helperStart = stressSource
+        .indexOf('Future<void> _toggleFullscreenThroughPlayerState');
+    expect(roundTripStart, greaterThanOrEqualTo(0));
+    expect(helperStart, greaterThan(roundTripStart));
+    expect(
+      stressSource.substring(roundTripStart, helperStart),
+      isNot(contains("find.byKey(const ValueKey('player.fullscreen.toggle'))")),
+    );
+  });
 }

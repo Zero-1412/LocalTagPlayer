@@ -4,6 +4,18 @@
 
 ## 活跃任务
 
+### 2026-07-24 原生纹理退出竞态与独立启动修复
+
+- 目标：优先捕获并符号化原生 crash dump，围绕播放器纹理创建/销毁与退出做 N≥5 复现，再修复独立 EXE 启动、当前页面语义挂载并执行长时压力门禁。
+- 原生根因已确认：既有 full dump 为 `0xc0000409`，WinDbg 精确落到 `media_kit_video_plugin` 的 `unordered_map::at`；Flutter 注册纹理时可在描述符写入 map 前同步取帧，回调又读取可变的全局 `texture_id_`，异常越过原生回调边界后终止进程。
+- 构建期现从固定 SHA256 的 `media_kit_video 1.3.1` 归档生成 `video_output_ltp.cc`，GPU/软件纹理回调各自捕获稳定描述符，所有权继续由对应 texture ID 的 map 保持到注销完成；不修改 Pub Cache、`PlayerBackend` contract 或播放器队列。
+- 播放器页面竞态基线 N=5 为 4 次完整通过、1 次控制条可见性脚本失败；修复后一次完整 900 秒门禁退出码 0，完成 35 个播放器创建/退出循环、0 无响应，门禁 WER 目录 0 dump，seek P95 28ms、dispose P95 5265.7ms。最终候选按用户指令停止，并在进程树收口前完成到第 30 轮、剩余约 140 秒，期间门禁目录 0 dump、日志 0 原生异常。
+- 独立 EXE 旧配置无窗口根因是只保存尺寸/最大化、不保存坐标，却在有快照时传入 `center:false`；改为始终居中恢复尺寸后，真实现有配置直接启动 N=5 全部在 0.78–1.05 秒获得可响应 HWND。
+- 当前实际挂载的紧凑排序控件补齐字段、方向和 6 个菜单项语义。真实 Windows UIA 点击确认全部 `qa.sort.*` 节点可达，菜单无溢出/遮挡并已恢复用户原“日期/倒序”偏好。
+- `flutter analyze`、完整 268 项测试和 Windows Debug build 通过，3 项显式真实媒体 benchmark 按设计跳过。SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列、稳定身份和用户数据语义均未改变。
+- 剩余风险：独立 EXE 启动可见性验证后的整进程关闭在全局 CrashDumps 产生同一 PID 的 `0xc0000005` / `0xc000041d`；本地符号栈显示纹理线程在 registrar 已为空后仍调用 `FlutterDesktopTextureRegistrarMarkExternalTextureFrameAvailable`。它与已通过的播放器 Route 退出门禁不同，本轮未宣称修复。
+- 下一步：优先把宿主关闭纳入独立 WER 门禁并收敛 registrar 生命周期；随后排查压力日志仍输出媒体 basename 的隐私缺口，并用更长门禁确认媒体库空闲阶段句柄缓慢上行是否属于驱动/DevTools 缓存还是可回收资源泄漏。
+
 ### 2026-07-23 未授权功能删除事故治理
 
 - 目标：把播放器隐藏态细进度被误删的生产事故转化为仓库级容错，确保重构、布局调整或性能优化不能再次用孤立组件测试掩盖真实功能不可达。

@@ -1894,6 +1894,7 @@ void main() {
 
   testWidgets('compact sort menu opens below its trigger without covering it',
       (WidgetTester tester) async {
+    final semantics = tester.ensureSemantics();
     tester.view.physicalSize = const Size(452, 500);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1912,9 +1913,23 @@ void main() {
       ),
     );
 
+    expect(
+      find.bySemanticsLabel(LibrarySmokeSemantics.sortFieldButton),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(LibrarySmokeSemantics.sortDirectionButton),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(LibrarySmokeKeys.topSortFieldButton));
     await tester.pumpAndSettle();
 
+    expect(
+      find.bySemanticsLabel(
+        LibrarySmokeSemantics.sortMenuItem(SortMode.name),
+      ),
+      findsOneWidget,
+    );
     final buttonRect =
         tester.getRect(find.byKey(LibrarySmokeKeys.topSortFieldButton));
     final firstItemRect = tester.getRect(
@@ -1922,6 +1937,7 @@ void main() {
     );
     expect(firstItemRect.top, greaterThanOrEqualTo(buttonRect.bottom + 6));
     expect(tester.takeException(), isNull);
+    semantics.dispose();
   });
 
   testWidgets('expanded sort field and menu share a compact width',

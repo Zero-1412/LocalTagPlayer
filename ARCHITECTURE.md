@@ -414,3 +414,12 @@ lib/
 - `DesktopWindowStateService` 继续只负责普通窗口尺寸和最大化持久化；播放器是否在下一次进入时恢复全屏由媒体库 Route 的内存态单独负责。
 - 全屏播放器返回时必须在 Route pop 前退出系统全屏并最大化底层窗口，避免主界面或设置页继承全屏布局；该恢复动作不等于清除播放器全屏偏好。
 - 普通窗口或最大化窗口没有播放器全屏事实时，不执行任何全屏退出或最大化命令；用户在播放器内主动退出全屏则清除会话偏好。
+
+## 2026-07-24 Windows 纹理回调与窗口恢复边界补充
+
+- `media_kit_video` 的 Flutter 纹理回调不得通过可变的全局 `texture_id_` 查找当前描述符；`RegisterTexture` 允许同步取帧，创建尚未入表或注销时 ID 已切换都会形成竞态。
+- 每个 GPU/软件纹理回调捕获自己的稳定描述符地址，描述符所有权继续由对应 texture ID 的 map 保持到 `UnregisterTexture` 完成。项目只补丁化固定 SHA256 归档，禁止直接修改全局 Pub Cache。
+- 压力测试通过 `PlayerPageState` 的测试专用入口调用按钮和快捷键共用的正式全屏状态机；该入口不复制窗口命令、会话语义或纹理逻辑，也不进入生产 UI。
+- `DesktopWindowStateService` 当前只保存普通窗口尺寸与最大化状态，不保存坐标，因此恢复时必须居中。只有未来同时持久化并校验显示器内坐标后，才允许传入非居中恢复。
+- 播放器 Route 退出与 Windows 宿主进程关闭是两条独立生命周期：前者通过页面压力门禁不代表后者安全。宿主关闭必须单独验证 registrar 销毁后不再有纹理线程调用 `FlutterDesktopTextureRegistrarMarkExternalTextureFrameAvailable`。
+- 本轮不改变 `PlayerBackend` contract、SQLite schema、标签查询、filtered queue、缓存队列或用户数据。

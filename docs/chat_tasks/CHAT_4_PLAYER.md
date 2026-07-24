@@ -1,3 +1,13 @@
+## 2026-07-24 原生纹理退出竞态与压力门禁
+
+- Windows full dump 经 WinDbg/PDB 精确定位到 `media_kit_video_plugin` 的 GPU 纹理回调：`RegisterTexture` 可能同步取帧，而描述符 map 尚未写入；回调通过可变 `texture_id_` 调用 `.at()` 后抛出 `out_of_range`，最终以 `0xc0000409` 终止进程。
+- 固定归档构建补丁让每个 GPU/软件纹理回调捕获自己的稳定描述符；对应 map 仍持有所有权直到 Flutter 完成注销，不改变 Dart `PlayerBackend`、filtered queue 或退出完成信号。
+- 压力门禁的全屏往返直接调用按钮和快捷键共用的正式页面状态机，避免控制条自动收起造成假失败；真实窗口与纹理仍每轮进入/退出全屏。
+- N=5 基线、完整 900 秒 35 轮门禁及最终候选 30 轮在各自 WER 门禁目录均无新增 dump。完整门禁 0 无响应，seek P95 28ms、dispose P95 5265.7ms。
+- 独立 EXE 启动可见性验证后的整进程关闭另产生 `0xc0000005` / `0xc000041d`：纹理线程在 registrar 已为空后仍调用 `FlutterDesktopTextureRegistrarMarkExternalTextureFrameAvailable`。该宿主关闭路径不属于已通过的播放器 Route 退出门禁，作为后续独立任务保留。
+- 桌面 EXE 使用旧尺寸快照时改为仍然居中，修复无坐标却传入 `center:false` 导致的隐藏窗口；真实配置启动 N=5 全部可见。
+- 媒体库当前挂载的紧凑排序控件已补齐稳定语义，真实 UIA 点击确认字段、方向和 6 个菜单项均可达；未删除或替换播放器既有入口。
+
 ## 2026-07-23 未授权功能删除事故治理
 
 - 隐藏态细进度事故新增源码挂载合同：真实 `PlayerPage` 必须在完整控制条之前独立挂载 `PlayerHiddenProgressBar`，并保留 `_controlsVisible ? 0 : 1` 的互斥显隐；组件孤立存在不再足以通过回归。

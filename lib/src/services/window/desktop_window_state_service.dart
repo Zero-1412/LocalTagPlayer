@@ -79,7 +79,9 @@ class DesktopWindowStateService with WindowListener {
     final options = WindowOptions(
       size: initialSize,
       minimumSize: const Size(1000, 650),
-      center: layout == null,
+      // 当前快照只保存尺寸和最大化状态，不保存坐标；恢复时仍需居中，
+      // 否则 Windows 插件会收到“非居中但无位置”的不完整布局并可能一直不显示窗口。
+      center: true,
       title: 'local_tag_player',
     );
     // 桌面窗口默认会立即结束进程；拦截一次以等待备份 clean marker 和数据库关闭。

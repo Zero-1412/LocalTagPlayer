@@ -3477,18 +3477,25 @@ class _CompactTopSortControl extends StatelessWidget {
           PopupMenuItem<SortMode>(
             key: LibrarySmokeKeys.topSortMenuItem(mode),
             value: mode,
-            child: Row(
-              children: [
-                Icon(
-                  mode == sortMode
-                      ? Icons.check_rounded
-                      : Icons.circle_outlined,
-                  size: 17,
-                  color: mode == sortMode ? appAccentViolet : libraryTextMuted,
-                ),
-                const SizedBox(width: 8),
-                Text(sortModeLabel(mode)),
-              ],
+            child: Semantics(
+              label: LibrarySmokeSemantics.sortMenuItem(mode),
+              selected: mode == sortMode,
+              // 自动化入口使用稳定标签，菜单可见文字不再合并进 UIA 名称。
+              excludeSemantics: true,
+              child: Row(
+                children: [
+                  Icon(
+                    mode == sortMode
+                        ? Icons.check_rounded
+                        : Icons.circle_outlined,
+                    size: 17,
+                    color:
+                        mode == sortMode ? appAccentViolet : libraryTextMuted,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(sortModeLabel(mode)),
+                ],
+              ),
             ),
           ),
       ],
@@ -3550,16 +3557,27 @@ class _CompactTopSortControl extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        fieldButton,
+        Semantics(
+          button: true,
+          label: LibrarySmokeSemantics.sortFieldButton,
+          value: sortModeLabel(sortMode),
+          child: fieldButton,
+        ),
         const SizedBox(width: 6),
-        _ReferenceIconButton(
-          tooltip: ascending
-              ? '\u5207\u6362\u4e3a\u5012\u5e8f'
-              : '\u5207\u6362\u4e3a\u6b63\u5e8f',
-          icon: ascending
-              ? Icons.arrow_upward_rounded
-              : Icons.arrow_downward_rounded,
-          onPressed: onDirectionToggle,
+        Semantics(
+          key: LibrarySmokeKeys.topSortDirectionButton,
+          button: true,
+          label: LibrarySmokeSemantics.sortDirectionButton,
+          value: ascending ? '\u6b63\u5e8f' : '\u5012\u5e8f',
+          child: _ReferenceIconButton(
+            tooltip: ascending
+                ? '\u5207\u6362\u4e3a\u5012\u5e8f'
+                : '\u5207\u6362\u4e3a\u6b63\u5e8f',
+            icon: ascending
+                ? Icons.arrow_upward_rounded
+                : Icons.arrow_downward_rounded,
+            onPressed: onDirectionToggle,
+          ),
         ),
       ],
     );

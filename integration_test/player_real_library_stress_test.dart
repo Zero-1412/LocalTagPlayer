@@ -292,47 +292,23 @@ Future<void> _randomlySeek(
 
 /** 进入并退出桌面全屏，保证每轮结束时回到普通播放器布局。 */
 Future<void> _toggleFullscreenRoundTrip(WidgetTester tester) async {
-  final mouse = await _showPlayerControls(tester);
-  final toggle =
-      find.byKey(const ValueKey('player.fullscreen.toggle')).hitTestable();
-  if (toggle.evaluate().isEmpty) {
-    await mouse.removePointer();
-    throw StateError('播放器全屏按钮不存在');
-  }
-  await tester.tap(toggle);
+  // 长跑门禁验证窗口切换与纹理重建，不验证控制条动画；直接调用按钮和快捷键共用的
+  // 正式状态机，避免把自动收起期间的瞬时未挂载误判为播放器生命周期失败。
+  await _toggleFullscreenThroughPlayerState(tester);
   await _pumpContinuously(tester, const Duration(seconds: 1));
-  await mouse.moveTo(tester.getCenter(
-    find.byKey(const ValueKey('player.video.surface')),
-  ));
-  await mouse.moveTo(tester.getCenter(
-        find.byKey(const ValueKey('player.video.surface')),
-      ) +
-      Offset(
-        0,
-        tester
-                    .getSize(find.byKey(const ValueKey('player.video.surface')))
-                    .height /
-                2 -
-            24,
-      ));
-  await tester.pump(const Duration(milliseconds: 250));
-  await tester.tap(
-    find.byKey(const ValueKey('player.fullscreen.toggle')).hitTestable(),
-  );
+  await _toggleFullscreenThroughPlayerState(tester);
   await _pumpContinuously(tester, const Duration(seconds: 1));
-  await mouse.removePointer();
 }
 
-/** 把鼠标移入底部控制区并返回手势，适配控制条自动收起后的真实交互。 */
-Future<TestGesture> _showPlayerControls(WidgetTester tester) async {
-  final surface = find.byKey(const ValueKey('player.video.surface'));
-  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-  final center = tester.getCenter(surface);
-  final height = tester.getSize(surface).height;
-  await mouse.addPointer(location: center);
-  await mouse.moveTo(center + Offset(0, height / 2 - 24));
-  await tester.pump(const Duration(milliseconds: 250));
-  return mouse;
+/** 只供压力门禁在控制条动画竞态下调用播放器正式全屏状态机。 */
+Future<void> _toggleFullscreenThroughPlayerState(WidgetTester tester) async {
+  final playerPage = find.byType(PlayerPage);
+  if (playerPage.evaluate().isEmpty) {
+    throw StateError('播放器页面不存在，无法执行全屏状态机');
+  }
+  await tester
+      .state<PlayerPageState>(playerPage)
+      .toggleWindowFullscreenForStressTest();
 }
 
 /**

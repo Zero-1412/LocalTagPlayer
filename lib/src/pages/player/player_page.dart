@@ -2224,6 +2224,16 @@ class PlayerPageState extends State<PlayerPage> {
     _showVideoControls();
   }
 
+  /**
+   * 长时压力测试在控制栏自动收起时仍通过正式全屏状态机完成往返。
+   *
+   * 该入口不复制窗口命令或会话语义，只绕过瞬时不可见的按钮挂载；生产交互仍使用
+   * `_toggleWindowFullscreen` 的按钮、快捷键和会话恢复路径。
+   */
+  @visibleForTesting
+  Future<void> toggleWindowFullscreenForStressTest() =>
+      _toggleWindowFullscreen();
+
   /** 首帧提交后恢复当前会话记住的播放器全屏，普通最大化进入时不会调用。 */
   Future<void> _restoreSessionWindowFullscreen() async {
     try {

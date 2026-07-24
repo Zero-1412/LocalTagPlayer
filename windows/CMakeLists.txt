@@ -90,9 +90,13 @@ add_subdirectory("runner")
 # them to the application.
 set(LTP_MEDIA_KIT_VIDEO_ANGLE_SOURCE
   "${FLUTTER_MANAGED_DIR}/ephemeral/.plugin_symlinks/media_kit_video/windows/angle_surface_manager.cc")
+set(LTP_MEDIA_KIT_VIDEO_OUTPUT_SOURCE
+  "${FLUTTER_MANAGED_DIR}/ephemeral/.plugin_symlinks/media_kit_video/windows/video_output.cc")
 # 上游源文件仍保留在插件目标中用于 IDE 导航，但不再编译；实际编译的是上面从
-# 固定归档生成的 LUID 补丁版本，因此不会写入全局 Pub Cache。
+# 固定归档生成的 LUID 与纹理生命周期补丁版本，因此不会写入全局 Pub Cache。
 set_source_files_properties("${LTP_MEDIA_KIT_VIDEO_ANGLE_SOURCE}"
+  PROPERTIES HEADER_FILE_ONLY TRUE)
+set_source_files_properties("${LTP_MEDIA_KIT_VIDEO_OUTPUT_SOURCE}"
   PROPERTIES HEADER_FILE_ONLY TRUE)
 include(flutter/generated_plugins.cmake)
 if(TARGET media_kit_video_plugin)
@@ -102,7 +106,7 @@ if(TARGET media_kit_video_plugin)
     media_kit_video_plugin SOURCE_DIR)
   set(LTP_MEDIA_KIT_VIDEO_FILTERED_SOURCES)
   foreach(source IN LISTS LTP_MEDIA_KIT_VIDEO_SOURCES)
-    if(source MATCHES "(^|[/\\\\])angle_surface_manager\\.cc$")
+    if(source MATCHES "(^|[/\\\\])(angle_surface_manager|video_output)\\.cc$")
       continue()
     endif()
     if(IS_ABSOLUTE "${source}")
@@ -117,7 +121,8 @@ if(TARGET media_kit_video_plugin)
   set_property(TARGET media_kit_video_plugin PROPERTY SOURCES
     "${LTP_MEDIA_KIT_VIDEO_FILTERED_SOURCES}")
   target_sources(media_kit_video_plugin PRIVATE
-    "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}")
+    "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}"
+    "${LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE}")
   target_include_directories(media_kit_video_plugin PRIVATE
     "${LTP_PINNED_MEDIA_KIT_VIDEO_WINDOWS_DIR}")
   target_compile_options(media_kit_video_plugin PRIVATE /utf-8)

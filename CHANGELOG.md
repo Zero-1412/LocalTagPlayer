@@ -1,5 +1,16 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-24 · 原生纹理退出竞态、独立启动与语义挂载
+
+- 捕获并符号化 Windows full dump：`flutter_windows.dll` 的 `0xc0000409` 最终来自 `media_kit_video_plugin` 纹理回调在注册/注销竞态中调用 `unordered_map::at(texture_id_)`，不是 Dart 异常或 OOM。
+- 对固定 SHA256 的 `media_kit_video 1.3.1` 源码增加可审计构建期补丁；GPU 与软件纹理回调捕获各自稳定描述符，map 继续负责保活到 `UnregisterTexture` 完成，不写全局 Pub Cache。
+- 桌面窗口只持久化尺寸和最大化状态，因此恢复时始终居中；修复有旧布局快照的 Debug EXE 进程存活但 HWND 始终为 0。真实现有配置直接启动 N=5 全部在 1.05 秒内显示。
+- 媒体库实际挂载的紧凑排序控件补齐字段、方向和菜单项稳定语义；真实 UIA 点击确认 6 个排序项可达并保持既有布局、排序和持久化行为。
+- 压力门禁全屏往返改为直接调用按钮/快捷键共用的正式页面状态机，仍真实执行 Windows 全屏和纹理重建，不再把控制条自动收起误判成生命周期失败。
+- 播放器页面竞态的基线 N=5、一次完整 900 秒门禁及最终候选 30 轮在各自 WER 门禁目录均无新增 dump；完整门禁完成 35 个循环、0 无响应，seek P95 28ms、dispose P95 5265.7ms。`flutter analyze`、完整 268 项测试和 Windows Debug build 通过。
+- 独立 EXE 的启动可见性验证完成后，整进程关闭另产生同一 PID 的 `0xc0000005` / `0xc000041d` dump；本地符号栈指向 registrar 已为空后仍调用 `FlutterDesktopTextureRegistrarMarkExternalTextureFrameAvailable`。该宿主关闭竞态不推翻播放器 Route 退出门禁结论，但作为下一任务保留，未宣称本轮已修复。
+- 未修改 SQLite schema、标签/过滤语义、filtered queue 来源/内容/顺序、`PlayerBackend` contract、缓存队列、稳定身份或用户数据。
+
 ## 2026-07-23 · 未授权功能删除事故治理
 
 - 新增仓库级既有行为保护：重构前建立受保护行为与授权删除清单，重构后逐项审计被删除的 Widget、ValueKey、回调、Route、菜单和 Overlay/Stack 挂载点；不明确时默认保留。
