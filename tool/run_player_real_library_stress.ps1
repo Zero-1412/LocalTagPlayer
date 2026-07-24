@@ -3,6 +3,8 @@ param(
   [int]$DurationSeconds = 1800,
   [int]$Seed = 20260713,
   [string]$MediaPath = '',
+  # 复用真实播放、输入和全屏路径建立 Windows Profile 基线，不改变当前 Flutter SDK。
+  [switch]$Profile,
   # 自动过期只处理带压力测试标记的目录；0 表示禁用。
   [ValidateRange(0, 3650)]
   [int]$ArtifactRetentionDays = 7,
@@ -20,6 +22,9 @@ New-Item -ItemType Directory -Force -Path $artifactsRoot | Out-Null
 if (-not $Output) {
   $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
   $Output = Join-Path $artifactsRoot "player_real_library_stress_$stamp"
+}
+if (-not [System.IO.Path]::IsPathRooted($Output)) {
+  $Output = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Output))
 }
 if (Test-Path -LiteralPath $Output) {
   throw "输出目录已存在，拒绝覆盖：$Output"
@@ -136,10 +141,22 @@ if ($MediaPath) {
   Remove-Item Env:LOCAL_TAG_PLAYER_STRESS_MEDIA_PATH -ErrorAction SilentlyContinue
 }
 try {
-  & $Flutter test integration_test/player_real_library_stress_test.dart -d windows *>&1 |
-    Tee-Object -FilePath (Join-Path $Output 'stress.log')
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  if ($Profile) {
+    & $Flutter drive `
+      --profile `
+      --driver test_driver/integration_test.dart `
+      --target integration_test/player_real_library_stress_test.dart `
+      -d windows *>&1 |
+      Tee-Object -FilePath (Join-Path $Output 'stress.log')
+  } else {
+    & $Flutter test integration_test/player_real_library_stress_test.dart -d windows *>&1 |
+      Tee-Object -FilePath (Join-Path $Output 'stress.log')
+  }
   $testExitCode = $LASTEXITCODE
 } finally {
+  $ErrorActionPreference = $previousErrorActionPreference
   New-Item -ItemType File -Force -Path "$Output\stress.done" | Out-Null
   Wait-Job $monitorJob, $captureJob -Timeout 20 | Out-Null
   Receive-Job $monitorJob, $captureJob

@@ -216,4 +216,34 @@ void main() {
       contains('opacity: _controlsVisible ? 0 : 1'),
     );
   });
+
+  test('Windows build patches media texture callbacks to stable descriptors',
+      () {
+    final nativeBuild =
+        File('windows/native_player/CMakeLists.txt').readAsStringSync();
+    final windowsBuild = File('windows/CMakeLists.txt').readAsStringSync();
+    final generatedPatchStart =
+        nativeBuild.indexOf('set(LTP_VIDEO_OUTPUT_GPU_PATCH');
+    final generatedPatchEnd = nativeBuild.indexOf(
+      r'file(WRITE "${LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE}"',
+    );
+    expect(generatedPatchStart, greaterThanOrEqualTo(0));
+    expect(generatedPatchEnd, greaterThan(generatedPatchStart));
+    final generatedPatch =
+        nativeBuild.substring(generatedPatchStart, generatedPatchEnd);
+
+    // RegisterTexture 允许同步取帧；回调必须绑定自己的描述符，不能读取尚未入表或已切换的全局 ID。
+    expect(generatedPatch, contains('[&, texture_descriptor]'));
+    expect(generatedPatch, contains('return texture_descriptor'));
+    expect(generatedPatch, contains('[&, pixel_buffer_descriptor]'));
+    expect(generatedPatch, contains('return pixel_buffer_descriptor'));
+    expect(
+      windowsBuild,
+      contains('LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE'),
+    );
+    expect(
+      windowsBuild,
+      contains('(angle_surface_manager|video_output)\\\\.cc'),
+    );
+  });
 }

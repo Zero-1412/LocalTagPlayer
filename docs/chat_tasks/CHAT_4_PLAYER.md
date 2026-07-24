@@ -1,3 +1,9 @@
+## 2026-07-24 media_kit_video 2.0.1 隔离迁移
+
+- 2.0.1 上游 `video_output.cc` 仍在纹理回调中按可变 `texture_id_` 查询 map；实验迁移必须继续使用稳定 GPU/软件 descriptor 补丁，不能只改 pubspec。
+- 75 秒 Debug 与 Profile 真实压力均完成 3 轮打开、队列滚动、两次 seek、全屏往返和退出；filtered queue 的 1/11172 语境、返回路径与纹理释放保持。
+- Profile 基线命令由 `tool/run_player_real_library_stress.ps1 -Profile` 提供，不切换 Flutter SDK；未来 Impeller 或 Flutter Windows 补丁评估必须复用同一持续时间、seed 和媒体样本。
+
 ## 2026-07-23 未授权功能删除事故治理
 
 - 隐藏态细进度事故新增源码挂载合同：真实 `PlayerPage` 必须在完整控制条之前独立挂载 `PlayerHiddenProgressBar`，并保留 `_controlsVisible ? 0 : 1` 的互斥显隐；组件孤立存在不再足以通过回归。

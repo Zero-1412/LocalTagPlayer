@@ -24,6 +24,10 @@ if (-not $Output) {
   $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
   $Output = Join-Path $artifactsRoot "library_add_remove_stress_$stamp"
 }
+# 后台 PowerShell 作业的当前目录不是仓库；启动前固定绝对路径，避免采样文件写到 Documents。
+if (-not [System.IO.Path]::IsPathRooted($Output)) {
+  $Output = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Output))
+}
 if (Test-Path -LiteralPath $Output) {
   throw "输出目录已存在，拒绝覆盖：$Output"
 }

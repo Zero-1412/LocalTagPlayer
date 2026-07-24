@@ -77,8 +77,8 @@ ltp_download(
   "cc5911bb15d596fd5a2b362613ad35b7093b427117269a7359054a65746a5f9a"
   "${LTP_ANGLE_ARCHIVE}")
 ltp_download(
-  "https://pub.dev/api/archives/media_kit_video-1.3.1.tar.gz"
-  "813858c3fe84eb46679eb698695f60665e2bfbef757766fac4d2e683f926e15a"
+  "https://pub.dev/api/archives/media_kit_video-2.0.1.tar.gz"
+  "afaa509e7b7e0bf247557a3a740cde903a52c34ace9810f94500e127bd7b043d"
   "${LTP_VIDEO_ARCHIVE}")
 ltp_download(
   "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-12-13-16/ffmpeg-n8.1.2-22-g94138f6973-win64-lgpl-shared-8.1.zip"
@@ -254,6 +254,102 @@ file(WRITE "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}"
   "${LTP_ANGLE_SOURCE_TEXT}")
 set(LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE
   "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}" PARENT_SCOPE)
+
+# media_kit_video 2.0.1 的纹理回调仍会用可变的 texture_id_ 查询描述符映射。
+# RegisterTexture 可在映射写入前同步取帧，退出或缩放时也可能切换当前 ID；
+# 此时 unordered_map::at 抛出的异常会越过 Flutter 原生回调边界并终止进程。
+# 每个回调必须捕获自己描述符的稳定地址，所有权仍由对应 texture ID 的 map
+# 持有到 UnregisterTexture 完成；补丁只作用于固定归档，不修改全局 Pub Cache。
+set(LTP_UPSTREAM_VIDEO_OUTPUT_SOURCE
+  "${LTP_NATIVE_DEPS}/video/windows/video_output.cc")
+set(LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE
+  "${CMAKE_BINARY_DIR}/ltp_generated/video_output_ltp.cc")
+file(READ "${LTP_UPSTREAM_VIDEO_OUTPUT_SOURCE}" LTP_VIDEO_OUTPUT_SOURCE_TEXT)
+
+set(LTP_VIDEO_OUTPUT_GPU_MARKER [=[    auto texture_variant =
+        std::make_unique<flutter::TextureVariant>(flutter::GpuSurfaceTexture(
+            kFlutterDesktopGpuSurfaceTypeDxgiSharedHandle, [&](auto, auto) {
+              std::lock_guard<std::mutex> lock(textures_mutex_);
+              if (texture_id_) {
+                surface_manager_->Read();
+                return textures_.at(texture_id_).get();
+              } else {
+                return (FlutterDesktopGpuSurfaceDescriptor*)nullptr;
+              }
+            }));
+]=])
+set(LTP_VIDEO_OUTPUT_GPU_PATCH [=[    // 回调可能在 RegisterTexture 返回前取帧，不能依赖尚未写入 map 的 ID。
+    auto* texture_descriptor = texture.get();
+    auto texture_variant =
+        std::make_unique<flutter::TextureVariant>(flutter::GpuSurfaceTexture(
+            kFlutterDesktopGpuSurfaceTypeDxgiSharedHandle,
+            [&, texture_descriptor](auto, auto) {
+              std::lock_guard<std::mutex> lock(textures_mutex_);
+              if (destroyed_ || surface_manager_ == nullptr) {
+                return (FlutterDesktopGpuSurfaceDescriptor*)nullptr;
+              }
+              surface_manager_->Read();
+              return texture_descriptor;
+            }));
+]=])
+string(FIND "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}"
+  "${LTP_VIDEO_OUTPUT_GPU_MARKER}" LTP_VIDEO_OUTPUT_GPU_MARKER_INDEX)
+if(LTP_VIDEO_OUTPUT_GPU_MARKER_INDEX EQUAL -1)
+  message(FATAL_ERROR
+    "Pinned media_kit_video source no longer matches the GPU texture patch")
+endif()
+string(REPLACE "${LTP_VIDEO_OUTPUT_GPU_MARKER}"
+  "${LTP_VIDEO_OUTPUT_GPU_PATCH}"
+  LTP_VIDEO_OUTPUT_SOURCE_TEXT "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}")
+
+set(LTP_VIDEO_OUTPUT_PIXEL_MARKER [=[    auto texture_variant = std::make_unique<flutter::TextureVariant>(
+        flutter::PixelBufferTexture([&](auto, auto) {
+          std::lock_guard<std::mutex> lock(textures_mutex_);
+          if (texture_id_) {
+            return pixel_buffer_textures_.at(texture_id_).get();
+          } else {
+            return (FlutterDesktopPixelBuffer*)nullptr;
+          }
+        }));
+]=])
+set(LTP_VIDEO_OUTPUT_PIXEL_PATCH [=[    // 软件纹理遵循同一所有权规则，避免退出阶段读取已切换的全局 ID。
+    auto* pixel_buffer_descriptor = pixel_buffer_texture.get();
+    auto texture_variant = std::make_unique<flutter::TextureVariant>(
+        flutter::PixelBufferTexture(
+            [&, pixel_buffer_descriptor](auto, auto) {
+              std::lock_guard<std::mutex> lock(textures_mutex_);
+              if (destroyed_) {
+                return (FlutterDesktopPixelBuffer*)nullptr;
+              }
+              return pixel_buffer_descriptor;
+            }));
+]=])
+string(FIND "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}"
+  "${LTP_VIDEO_OUTPUT_PIXEL_MARKER}" LTP_VIDEO_OUTPUT_PIXEL_MARKER_INDEX)
+if(LTP_VIDEO_OUTPUT_PIXEL_MARKER_INDEX EQUAL -1)
+  message(FATAL_ERROR
+    "Pinned media_kit_video source no longer matches the pixel texture patch")
+endif()
+string(REPLACE "${LTP_VIDEO_OUTPUT_PIXEL_MARKER}"
+  "${LTP_VIDEO_OUTPUT_PIXEL_PATCH}"
+  LTP_VIDEO_OUTPUT_SOURCE_TEXT "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}")
+
+foreach(required_fragment IN ITEMS
+    "[&, texture_descriptor]"
+    "return texture_descriptor"
+    "[&, pixel_buffer_descriptor]"
+    "return pixel_buffer_descriptor")
+  string(FIND "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}" "${required_fragment}"
+    fragment_index)
+  if(fragment_index EQUAL -1)
+    message(FATAL_ERROR
+      "Pinned media_kit_video source no longer matches the texture lifetime patch")
+  endif()
+endforeach()
+file(WRITE "${LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE}"
+  "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}")
+set(LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE
+  "${LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE}" PARENT_SCOPE)
 set(LTP_PINNED_MEDIA_KIT_VIDEO_WINDOWS_DIR
   "${LTP_NATIVE_DEPS}/video/windows" PARENT_SCOPE)
 

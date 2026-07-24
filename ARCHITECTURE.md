@@ -10,7 +10,7 @@
 
 当前代码结构是过渡实现，不再作为后续功能优先级的主导依据。后续架构重构必须服务该规划中的 Tag 驱动检索闭环：分组 Tag、组合筛选、筛选结果播放队列、Tag 管理、缓存诊断和跨平台边界。
 
-`Architecture Baseline 0.5.61` 在不改变 PlayerBackend contract 的前提下统一 MediaKit 冷启动边界：应用先提交 Flutter 首帧，再由进程级幂等门禁预热原生库；媒体卡悬停和正式播放器都必须经过同一门禁并允许失败重试。播放器首帧占位只复用 `ThumbnailService` 已验证的进程内缓存，不启动额外 FFmpeg、磁盘扫描或 UI 线程视频处理。SQLite schema、标签查询、filtered queue 和用户数据不变。
+`Architecture Baseline 0.5.62` 在不改变 PlayerBackend contract 的前提下把 Windows MediaKit 升级实验固定在独立分支。`media_kit_video 2.0.1` 的上游纹理回调仍会按可变 `texture_id_` 查 map，因此 Windows 构建继续替换 `video_output.cc`：回调捕获稳定 descriptor，销毁后返回空指针，descriptor 所有权保持到 Flutter 注销纹理。Flutter SDK 保持 3.44.4；Profile 基线和 FFmpeg 缩略图 A/B 都是 QA 工具，不进入用户运行路径。SQLite schema、标签查询、filtered queue 和用户数据不变。
 
 GPU 能力边界分为两层：原生矩阵描述当前系统可见设备、显存和 API 能力，实际纹理渲染边界描述当前选中的 device LUID。系统“存在支持 Compute/Vulkan 的显卡”不等于播放器已选择该显卡；单硬件卡、Feature Level、名称、显存使用或枚举顺序均不能替代实际 LUID。DXGI LUID 仅在当前 Windows 会话内用于匹配和 QA，不进入 SQLite 或设置文件。
 
@@ -41,11 +41,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.61`
+已完成基线：`Architecture Baseline 0.5.62`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.62`：独立升级实验固定 `media_kit_video 2.0.1` archive 与 SHA256，并在 Windows 构建期同时替换 `ANGLESurfaceManager` 和 `video_output.cc`；架构合同要求稳定 GPU/软件 descriptor 捕获及销毁门禁。新增不切换 SDK 的 Windows Profile 播放/输入/全屏基线，以及不接入产品的 FFmpeg 8.1.2 缩略图 GPU A/B。PlayerBackend contract、SQLite、标签查询、filtered queue、缓存队列和用户数据不变。
 
 - `0.5.61`：MediaKit 从“首次创建播放后端时初始化”收敛为“Flutter 首帧后统一预热、消费者幂等兜底”；悬停 Player 构造失败不再泄漏 loading。播放器使用已验证缩略图跨越纹理接管窗口，并把 loading 延迟到真实慢打开。PlayerBackend contract、缩略图调度、SQLite、标签查询、filtered queue 和用户数据不变。
 - `0.5.60`：`PlaybackSettings` 向后兼容增加暗部细节增强开关；实际会话只在明确 SDR、1080p 及以下与硬解三项都通过时应用 `eq` 曲线。曲线与自动去块/时空降噪/锐化使用同一原子 `vf` 快照，压力回滚拥有独立会话状态。设置页删除内部路线卡，HDR 映射保留 LUID/Compute/HDR 源门槛并使用正式用户文案。PlayerBackend contract、SQLite、标签查询、filtered queue 和用户数据不变。
