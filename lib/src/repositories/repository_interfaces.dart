@@ -104,6 +104,9 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
 
   Future<VideoItem?> deleteVideo(String path);
 
+  /** 只移除数据库中的 missing/不可读记录；临时离线路径和磁盘内容必须保留。 */
+  Future<int> removeMissingOrUnreadableVideos();
+
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(
     String rootPath, {
     LibraryScanProgressCallback? onProgress,

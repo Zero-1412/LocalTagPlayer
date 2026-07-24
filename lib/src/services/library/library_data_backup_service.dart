@@ -252,17 +252,28 @@ class LibraryDataBackupService {
    * 该动作不受开关影响：关闭备份期间的显式删除也不能留下未来会误恢复的旧快照。
    */
   Future<void> deleteSnapshot(String videoId) async {
+    await deleteSnapshots(<String>[videoId]);
+  }
+
+  /** 批量清理主库已删除视频的依赖快照与待同步行，防止无效记录自动复活。 */
+  Future<void> deleteSnapshots(Iterable<String> videoIds) async {
+    final stableIds = videoIds.where((id) => id.isNotEmpty).toSet();
+    if (stableIds.isEmpty) {
+      return;
+    }
     final batch = _backupDatabase.batch();
-    batch.delete(
-      'video_dependency_backups',
-      where: 'video_id = ?',
-      whereArgs: <Object?>[videoId],
-    );
-    batch.delete(
-      'pending_video_sync',
-      where: 'video_id = ?',
-      whereArgs: <Object?>[videoId],
-    );
+    for (final videoId in stableIds) {
+      batch.delete(
+        'video_dependency_backups',
+        where: 'video_id = ?',
+        whereArgs: <Object?>[videoId],
+      );
+      batch.delete(
+        'pending_video_sync',
+        where: 'video_id = ?',
+        whereArgs: <Object?>[videoId],
+      );
+    }
     await batch.commit(noResult: true);
     await _refreshStatus();
   }
