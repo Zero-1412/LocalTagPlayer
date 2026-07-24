@@ -77,8 +77,8 @@ ltp_download(
   "cc5911bb15d596fd5a2b362613ad35b7093b427117269a7359054a65746a5f9a"
   "${LTP_ANGLE_ARCHIVE}")
 ltp_download(
-  "https://pub.dev/api/archives/media_kit_video-1.3.1.tar.gz"
-  "813858c3fe84eb46679eb698695f60665e2bfbef757766fac4d2e683f926e15a"
+  "https://pub.dev/api/archives/media_kit_video-2.0.1.tar.gz"
+  "afaa509e7b7e0bf247557a3a740cde903a52c34ace9810f94500e127bd7b043d"
   "${LTP_VIDEO_ARCHIVE}")
 ltp_download(
   "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-12-13-16/ffmpeg-n8.1.2-22-g94138f6973-win64-lgpl-shared-8.1.zip"
@@ -255,11 +255,11 @@ file(WRITE "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}"
 set(LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE
   "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}" PARENT_SCOPE)
 
-# media_kit_video 1.3.1 的纹理回调会用可变的 texture_id_ 查询描述符映射。
-# RegisterTexture 可在映射写入前同步取帧，退出/缩放时也可能切换当前 ID；
+# media_kit_video 2.0.1 的纹理回调仍会用可变的 texture_id_ 查询描述符映射。
+# RegisterTexture 可在映射写入前同步取帧，退出或缩放时也可能切换当前 ID；
 # 此时 unordered_map::at 抛出的异常会越过 Flutter 原生回调边界并终止进程。
-# 这里让每个回调捕获自己描述符的稳定地址，所有权仍由对应 texture ID
-# 的 map 持有到 UnregisterTexture 完成，不修改全局 Pub Cache。
+# 每个回调必须捕获自己描述符的稳定地址，所有权仍由对应 texture ID 的 map
+# 持有到 UnregisterTexture 完成；补丁只作用于固定归档，不修改全局 Pub Cache。
 set(LTP_UPSTREAM_VIDEO_OUTPUT_SOURCE
   "${LTP_NATIVE_DEPS}/video/windows/video_output.cc")
 set(LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE

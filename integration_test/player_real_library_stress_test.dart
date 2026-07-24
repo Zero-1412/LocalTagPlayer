@@ -1,6 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:ui' show PointerDeviceKind;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,16 @@ void main() {
         Platform.environment['LOCAL_TAG_PLAYER_STRESS_MEDIA_PATH']?.trim();
     final random = Random(seed);
     var cycle = 0;
+    final profileFrames = <ui.FrameTiming>[];
+    void collectProfileFrames(List<ui.FrameTiming> timings) {
+      profileFrames.addAll(timings);
+    }
+
+    WidgetsBinding.instance.addTimingsCallback(collectProfileFrames);
+    addTearDown(() {
+      WidgetsBinding.instance.removeTimingsCallback(collectProfileFrames);
+      _writeProfileFrameSummary(profileFrames);
+    });
 
     await app.main();
     await _waitForLibraryReady(tester);
@@ -111,6 +122,39 @@ void main() {
     await _signalDesktopCapture('stress-30m-complete');
     expect(cycle, greaterThan(0));
   }, timeout: const Timeout(Duration(minutes: 40)));
+}
+
+/**
+ * 将 Profile 模式下的总体帧耗时写入独立结果，不把性能采样逻辑放进业务代码。
+ */
+void _writeProfileFrameSummary(List<ui.FrameTiming> frames) {
+  final outputPath = Platform.environment['LOCAL_TAG_PLAYER_STRESS_OUTPUT'];
+  if (outputPath == null || outputPath.isEmpty || frames.isEmpty) return;
+  final totals = frames
+      .map((frame) => frame.totalSpan.inMicroseconds / 1000)
+      .toList()
+    ..sort();
+  final builds = frames
+      .map((frame) => frame.buildDuration.inMicroseconds / 1000)
+      .toList()
+    ..sort();
+  final rasters = frames
+      .map((frame) => frame.rasterDuration.inMicroseconds / 1000)
+      .toList()
+    ..sort();
+  double percentile(List<double> values, double value) =>
+      values[((values.length - 1) * value).round()];
+  File('$outputPath\\profile-frame-summary.json').writeAsStringSync(
+    const JsonEncoder.withIndent('  ').convert(<String, Object>{
+      'frames': frames.length,
+      'buildP95Ms': percentile(builds, 0.95),
+      'rasterP95Ms': percentile(rasters, 0.95),
+      'totalP95Ms': percentile(totals, 0.95),
+      'totalMaxMs': totals.last,
+      'over16ms': totals.where((value) => value > 16.7).length,
+      'over33ms': totals.where((value) => value > 33.3).length,
+    }),
+  );
 }
 
 /**
@@ -270,7 +314,7 @@ Future<void> _randomlySeek(
   Random random,
   Finder videoSurface,
 ) async {
-  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  final mouse = await tester.createGesture(kind: ui.PointerDeviceKind.mouse);
   await mouse.addPointer(location: tester.getCenter(videoSurface));
   await mouse.moveTo(tester.getCenter(videoSurface));
   await tester.pump(const Duration(milliseconds: 250));

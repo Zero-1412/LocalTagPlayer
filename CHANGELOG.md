@@ -1,5 +1,11 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-24 · 远程开发分支收口
+
+- 自动清理分支的生产补丁已由主线等价包含；以保留主线内容的祖先合并记录集成关系，避免回退远程更新、正式打包门禁和后续文档。
+- `media_kit_video 2.0.1` 隔离迁移正常合入主线，保留固定归档、稳定纹理 descriptor 补丁、架构合同、Profile 压力入口和 FFmpeg 缩略图 A/B 工具。
+- 合并验证通过后删除 `codex/auto-remove-missing-unreadable-clean` 与 `codex/media-kit-2-migration-experiment` 两个远程分支。
+
 ## 2026-07-24 · 正式打包分支集成与 Debug 门禁
 
 - 新增正式打包前远程分支检查：待打包提交必须等于 `origin/master`，其它远程分支必须已经合入主线或达到补丁等价。
@@ -36,6 +42,15 @@
 - Repository 以 8 路小批次探测并持续让出事件循环；只删除安全标记的 missing 或当前存在但无法作为普通文件打开的记录。未标记 missing 的离线路径保留。
 - 主库视频行、标签关系与依赖备份批量清理，防止记录被后台备份重新恢复；没有调用磁盘删除、回收站或目录操作。
 - SQLite schema、folder/manual 标签语义、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend`、缓存队列和真实媒体文件均未改变。
+
+## 2026-07-24 · media_kit_video 2.0.1 隔离迁移与 Windows 基线
+
+- 在独立 worktree/分支升级到 `media_kit_video 2.0.1`，固定 pub.dev archive SHA256；没有直接采用上游可变纹理回调。
+- Windows 构建继续替换 `video_output.cc`：GPU 和软件回调捕获稳定 descriptor，销毁后返回空指针，map 所有权保持到 Flutter `UnregisterTexture`。新增架构合同阻止未来依赖升级绕过该补丁。
+- `flutter analyze`、架构聚焦测试和 Windows Debug build 通过；真实 Windows 窗口进入播放器、返回媒体库正常，75 秒 Debug 压力测试完成 3 轮并确认每轮纹理释放到 `texture_id=-1`，0 解码掉帧、0 音视频停滞。
+- 保持 Flutter 3.44.4 与 VS2022 17.13.6，新增真实播放器 `--profile` 基线入口及总体 FrameTiming 输出。75 秒 Profile 完成 3 轮，1227 帧 total P95 13.023ms、超过 33ms 共 8 帧，0 播放掉帧/停滞。
+- 新增 FFmpeg 8.1.2 缩略图软件/D3D11/D3D12 可复跑 A/B。两份 H.264 样本均由软件路径胜出，因此不修改 `ThumbnailService`、`MediaDetailsService`、FFprobe 或正式播放路径。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend` contract、缩略图/媒体详情队列、稳定身份、用户设置与用户数据均未改变。
 
 ## 2026-07-23 · 未授权功能删除事故治理
 
