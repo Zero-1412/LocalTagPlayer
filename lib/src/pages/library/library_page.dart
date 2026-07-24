@@ -1111,9 +1111,9 @@ class _DeleteFileSettingsPanel extends StatelessWidget {
               ),
               contentPadding: EdgeInsets.zero,
               value: autoRemoveMissingOrUnreadableVideos,
-              title: const Text('自动移除缺失或不可读视频'),
+              title: const Text('自动移除路径失效或不可读视频'),
               subtitle: const Text(
-                '默认开启；开启后立即从数据库清理当前无效记录，不删除磁盘文件或文件夹',
+                '默认开启；路径不存在时直接清理数据库记录，不删除磁盘文件或文件夹',
               ),
               onChanged: onAutoRemoveMissingOrUnreadableChanged,
             ),
@@ -6416,6 +6416,18 @@ class _LibraryPageState extends State<LibraryPage> {
   Future<void> _openVideo(VideoItem item, List<VideoItem> playlist) async {
     final store = _store;
     if (store == null) {
+      return;
+    }
+    if (_playbackSettings.autoRemoveMissingOrUnreadableVideos &&
+        !await _fileSystem.fileExists(item.path)) {
+      // 点击与后台清理可能竞态；播放前再次确认路径，失效时只删数据库记录并阻止进入错误页。
+      await store.deleteVideo(item.path);
+      if (mounted) {
+        _markLibraryDataChanged();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('路径已失效，已从媒体库移除记录')),
+        );
+      }
       return;
     }
     final scanWasActive = _isScanning;

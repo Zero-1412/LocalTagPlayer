@@ -208,7 +208,7 @@ void main() {
   });
 
   test(
-      'automatic cleanup removes only marked missing or existing unreadable records',
+      'automatic cleanup removes missing paths and existing unreadable records',
       () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('unavailable_cleanup');
@@ -240,9 +240,9 @@ void main() {
       <VideoItem>[readable, unreadable, missing, offline],
     );
 
-    expect(await store.removeMissingOrUnreadableVideos(), 2);
+    expect(await store.removeMissingOrUnreadableVideos(), 3);
     expect(store.videos, contains(TagRules.pathKey(readable.path)));
-    expect(store.videos, contains(TagRules.pathKey(offline.path)));
+    expect(store.videos, isNot(contains(TagRules.pathKey(offline.path))));
     expect(store.videos, isNot(contains(TagRules.pathKey(missing.path))));
     expect(store.videos, isNot(contains(TagRules.pathKey(unreadable.path))));
     expect(await readableFile.exists(), isTrue);
@@ -250,8 +250,12 @@ void main() {
     expect(
       await store.database.query(
         'videos',
-        where: 'video_id IN (?, ?)',
-        whereArgs: <Object?>[missing.videoId, unreadable.videoId],
+        where: 'video_id IN (?, ?, ?)',
+        whereArgs: <Object?>[
+          missing.videoId,
+          unreadable.videoId,
+          offline.videoId,
+        ],
       ),
       isEmpty,
     );

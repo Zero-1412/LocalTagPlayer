@@ -225,3 +225,7 @@
 2. 等待 GitHub Support 完成服务端 purge，随后确认旧 Commit API 返回 404。
 3. 确定项目级许可证并提交根目录 `LICENSE`；保留 `THIRD_PARTY_NOTICES.md` 与安装包内第三方许可证。
 4. 在 GitHub Actions secrets 配置两端签名凭据，创建新标签并在真实 Windows / macOS 上复验 SmartScreen、Gatekeeper、签名、时间戳、公证票据与校验值。
+## 2026-07-24 路径失效自动清理语义修正
+
+- 开关开启时，数据库记录对应路径只要不存在就直接清理，不要求先经过扫描写入 `isMissing`。
+- 清理仍只作用于数据库视频行、标签关系和依赖备份；不删除磁盘文件或文件夹。

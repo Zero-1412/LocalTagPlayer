@@ -1277,9 +1277,9 @@ class LibraryStore
   }
 
   /**
-   * 从数据库批量移除已确认 missing 或当前存在但不可读的视频。
+   * 从数据库批量移除路径失效、已确认 missing 或当前不可读的视频。
    *
-   * 未标记 missing 且路径不存在的记录按临时离线保留；该入口不调用磁盘删除边界。
+   * 路径不存在即属于用户授权的清理范围，不要求扫描先写入 missing；该入口不调用磁盘删除边界。
    */
   Future<int> removeMissingOrUnreadableVideos() async {
     await cancelActiveScan();
@@ -1332,7 +1332,7 @@ class LibraryStore
     }
   }
 
-  /** 路径不存在但未安全标记 missing 时保留；存在但无法作为普通文件打开时才算不可读。 */
+  /** 路径不存在、不是普通文件或无法打开句柄时均视为数据库无效记录。 */
   Future<bool> _isMissingOrUnreadableVideo(VideoItem item) async {
     if (item.isMissing) {
       return true;
@@ -1340,7 +1340,7 @@ class LibraryStore
     try {
       final type = await FileSystemEntity.type(item.path, followLinks: false);
       if (type == FileSystemEntityType.notFound) {
-        return false;
+        return true;
       }
       if (type != FileSystemEntityType.file) {
         return true;
