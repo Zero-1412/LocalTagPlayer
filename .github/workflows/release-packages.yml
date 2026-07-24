@@ -7,16 +7,14 @@ on:
         description: 安装包版本号，不包含 v 前缀
         required: true
         default: 0.1.0
+      publish_unsigned_release:
+        description: 明确发布未签名/未公证安装包；默认只生成临时产物
+        required: true
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
-    branches:
-      - master
-    paths:
-      - ".github/workflows/release-packages.yml"
-      - "packaging/**"
-      - "macos/Runner/Configs/AppInfo.xcconfig"
-      - "macos/Runner/Info.plist"
 
 permissions:
   contents: read
@@ -221,7 +219,9 @@ jobs:
 
   release:
     name: 发布 GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_unsigned_release)
     needs:
       - prepare
       - windows
@@ -242,21 +242,22 @@ jobs:
           set -euo pipefail
           version="${{ needs.prepare.outputs.version }}"
           test -f "release-assets/LocalTagPlayer-$version-windows-x64-setup.exe"
-          test -f "release-assets/LocalTagPlayer-$version-macos.dmg"
+          test -f "release-assets/LocalTagPlayer-$version-macos.dmg" ||
+            test -f "release-assets/LocalTagPlayer-$version-macos-unnotarized.dmg"
           test -f "release-assets/SHA256SUMS-windows.txt"
           test -f "release-assets/SHA256SUMS-macos.txt"
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Local Tag Player ${{ needs.prepare.outputs.version }}
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}', needs.prepare.outputs.version) }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           body: |
             Local Tag Player 的正式桌面安装包。
 
-            - Windows x64：应用程序与安装器已进行 Authenticode SHA-256 签名和 RFC 3161 时间戳验证。
-            - macOS：应用与 DMG 已进行 Developer ID 签名、Apple notarization 和票据 stapling。
+            ${{ startsWith(github.ref, 'refs/tags/v') && '- Windows x64：应用程序与安装器已进行 Authenticode SHA-256 签名和 RFC 3161 时间戳验证。' || '- Windows x64：本次手动发布包未进行 Authenticode 签名；请核对 SHA-256。' }}
+            ${{ startsWith(github.ref, 'refs/tags/v') && '- macOS：应用与 DMG 已进行 Developer ID 签名、Apple notarization 和票据 stapling。' || '- macOS：本次手动发布包未进行 Developer ID 签名或 Apple notarization。' }}
             - 安装前请用随附的 SHA256SUMS 文件核对下载内容。
           files: |
             release-assets/*.exe

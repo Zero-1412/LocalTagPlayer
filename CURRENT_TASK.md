@@ -10,6 +10,7 @@
 - 正式包首帧后异步检查 GitHub 最新正式 Release；发现更高版本时弹窗展示更新内容，并优先打开 Windows x64 安装器。
 - 更新网络失败不会阻塞媒体库；SQLite、标签语义、filtered queue、PlayerBackend、缩略图和用户数据保持不变。
 - GitHub 仓库当前未配置 Windows/Apple 签名 Secrets；签名/公证标签工作流在凭据补齐前不能产出双平台签名包。
+- 工作流增加默认关闭的 `publish_unsigned_release` 手动门禁；只有显式选择时才允许把未签名/未公证产物发布，并在 Release 正文标明状态。
 - `flutter analyze`、271 项测试、Windows Debug/Release build 均通过；真实已安装 `0.1.0` 窗口确认同版本 Release 不会误弹提示。
 
 ### 2026-07-24 原生纹理退出竞态与独立启动修复

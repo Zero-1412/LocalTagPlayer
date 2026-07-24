@@ -14,6 +14,8 @@
 
 普通的 `master` 打包配置变更和手动触发只生成未签名的 Actions 临时产物，不会覆盖或新建公开 Release。标签发布缺少任何签名凭据时会直接失败，不会静默回退为未签名公开包。
 
+需要在尚未配置签名凭据时明确发布测试用正式构建，可手动触发工作流并同时填写版本号、勾选 `publish_unsigned_release`。该开关默认关闭，发布正文会明确标注 Windows 未签名、macOS 未签名且未公证；标签发布的严格签名门禁不受影响。
+
 ```powershell
 git tag -a v0.1.0 -m "Local Tag Player 0.1.0"
 git push origin v0.1.0

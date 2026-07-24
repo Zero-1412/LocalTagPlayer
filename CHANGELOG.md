@@ -7,6 +7,7 @@
 - Windows 包优先打开对应 x64 安装器直链，未找到匹配资产时安全回退到 Release 页面。
 - 离线、超时、限流和响应异常保持静默，不影响本地媒体库启动。
 - 新增版本比较与更新弹窗 focused tests；SQLite schema、标签查询、filtered queue、播放器和缓存队列不变。
+- 发布工作流增加默认关闭的显式未签名发布门禁；标签发布仍严格要求 Windows 签名与 Apple 公证，不会静默降级。
 - `flutter analyze`、271 项测试、Windows Debug/Release build 均通过；真实已安装 `0.1.0` 窗口确认同版本 Release 不会误报更新。
 
 ## 2026-07-24 · 原生纹理退出竞态、独立启动与语义挂载
