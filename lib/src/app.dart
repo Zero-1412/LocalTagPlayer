@@ -24,8 +24,10 @@ import 'services/media/media_probe_backend.dart';
 import 'services/player/media_kit_player_backend.dart';
 import 'services/player/media_kit_initializer.dart';
 import 'services/player/windows_native_player_backend.dart';
+import 'services/update/github_release_update_service.dart';
 import 'services/window/desktop_window_state_service.dart';
 import 'pages/library/library_page.dart';
+import 'widgets/app_update_prompt.dart';
 import 'widgets/app_theme_tokens.dart';
 
 export 'core/tag_rules.dart';
@@ -42,6 +44,7 @@ export 'models/library_sort.dart';
 export 'models/platform_models.dart';
 export 'models/player_gpu_capabilities.dart';
 export 'models/video_item.dart';
+export 'models/app_release.dart';
 export 'platform/desktop_file_system_adapter.dart';
 export 'platform/database_provider.dart';
 export 'platform/file_system_adapter.dart';
@@ -82,12 +85,15 @@ export 'services/player/player_video_super_resolution.dart';
 export 'services/player/windows_native_player_backend.dart';
 export 'services/relink/bulk_path_relink_service.dart';
 export 'services/tags/tag_query_service.dart';
+export 'services/update/app_update_service.dart';
+export 'services/update/github_release_update_service.dart';
 export 'services/window/desktop_window_state_service.dart';
 export 'pages/player/player_context_panel.dart';
 export 'pages/player/player_control_slider.dart';
 export 'pages/player/player_delete_dialog.dart';
 export 'pages/player/player_diagnostics_dialog.dart';
 export 'pages/player/player_dialog_content.dart';
+export 'widgets/app_update_prompt.dart';
 export 'pages/player/player_hardware_decode_warning_dialog.dart';
 export 'pages/player/player_open_failure_panel.dart';
 export 'pages/player/player_open_request_controller.dart';
@@ -295,11 +301,14 @@ class LocalTagPlayerApp extends StatelessWidget {
           ),
         );
       },
-      home: LibraryPage(
-        applicationService: dependencies.libraryPageApplicationService,
-        fileSystem: dependencies.fileSystem,
-        playerBackendFactory: dependencies.playerBackendFactory,
-        mediaProbeBackendFactory: dependencies.mediaProbeBackendFactory,
+      home: AppUpdatePrompt(
+        service: GitHubReleaseUpdateService(),
+        child: LibraryPage(
+          applicationService: dependencies.libraryPageApplicationService,
+          fileSystem: dependencies.fileSystem,
+          playerBackendFactory: dependencies.playerBackendFactory,
+          mediaProbeBackendFactory: dependencies.mediaProbeBackendFactory,
+        ),
       ),
     );
   }

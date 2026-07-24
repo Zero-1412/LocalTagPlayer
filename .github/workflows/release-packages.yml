@@ -68,6 +68,32 @@ jobs:
           flutter analyze
       - name: 构建 Windows Release
         run: flutter build windows --release --build-name "$env:RELEASE_VERSION"
+      - name: 准备 Windows Authenticode 证书
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
+            throw '标签发布缺少 Windows Authenticode 证书或密码。'
+          }
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'local-tag-player-signing.pfx'
+          [IO.File]::WriteAllBytes(
+            $certificatePath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
+          )
+      - name: 签名 Windows 应用程序
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          ./packaging/windows/sign_release.ps1 `
+            -CertificatePath "$env:RUNNER_TEMP/local-tag-player-signing.pfx" `
+            -CertificatePassword $env:WINDOWS_CERTIFICATE_PASSWORD `
+            -Files 'build/windows/x64/runner/Release/local_tag_player.exe'
       - name: 安装 Inno Setup
         run: choco install innosetup --yes --no-progress
       - name: 生成 Windows 安装器
@@ -81,6 +107,20 @@ jobs:
             "/DMySourceDir=$sourceDir" `
             "/DMyOutputDir=$outputDir" `
             "packaging/windows/local_tag_player.iss"
+      - name: 签名并验证 Windows 安装器
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          ./packaging/windows/sign_release.ps1 `
+            -CertificatePath "$env:RUNNER_TEMP/local-tag-player-signing.pfx" `
+            -CertificatePassword $env:WINDOWS_CERTIFICATE_PASSWORD `
+            -Files "artifacts/LocalTagPlayer-$env:RELEASE_VERSION-windows-x64-setup.exe"
+      - name: 清理 Windows 签名证书
+        if: always() && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: Remove-Item "$env:RUNNER_TEMP/local-tag-player-signing.pfx" -Force -ErrorAction SilentlyContinue
       - name: 记录 Windows 校验值
         shell: pwsh
         run: |
@@ -98,7 +138,7 @@ jobs:
     name: macOS DMG
     needs: prepare
     runs-on: macos-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     env:
       RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
     steps:
@@ -129,7 +169,24 @@ jobs:
           fi
           kill "$app_pid"
           wait "$app_pid" || true
-      - name: 生成未公证 DMG
+      - name: 签名并公证 macOS DMG
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          chmod +x packaging/macos/package_notarized.sh
+          packaging/macos/package_notarized.sh \
+            'build/macos/Build/Products/Release/local_tag_player.app' \
+            "$RELEASE_VERSION" \
+            "$PWD/artifacts"
+      - name: 生成未公证 DMG（非标签验证）
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -145,6 +202,11 @@ jobs:
             -ov \
             -format UDZO \
             "$artifact_dir/LocalTagPlayer-$RELEASE_VERSION-macos-unnotarized.dmg"
+      - name: 记录 macOS 校验值
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_dir="$PWD/artifacts"
           # 在产物目录内计算，避免把 GitHub runner 的临时绝对路径写入公开校验文件。
           (
             cd "$artifact_dir"
@@ -152,7 +214,7 @@ jobs:
           )
       - uses: actions/upload-artifact@v4
         with:
-          name: LocalTagPlayer-${{ env.RELEASE_VERSION }}-macos-unnotarized
+          name: LocalTagPlayer-${{ env.RELEASE_VERSION }}-macos
           path: artifacts/*
           if-no-files-found: error
           retention-days: 30
@@ -180,7 +242,7 @@ jobs:
           set -euo pipefail
           version="${{ needs.prepare.outputs.version }}"
           test -f "release-assets/LocalTagPlayer-$version-windows-x64-setup.exe"
-          test -f "release-assets/LocalTagPlayer-$version-macos-unnotarized.dmg"
+          test -f "release-assets/LocalTagPlayer-$version-macos.dmg"
           test -f "release-assets/SHA256SUMS-windows.txt"
           test -f "release-assets/SHA256SUMS-macos.txt"
       - name: 创建 GitHub Release
@@ -191,10 +253,10 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           body: |
-            Local Tag Player 的首个公开桌面安装包。
+            Local Tag Player 的正式桌面安装包。
 
-            - Windows x64：未进行 Authenticode 签名，可能触发 SmartScreen。
-            - macOS：未进行 Developer ID 签名和 notarization，可能触发 Gatekeeper。
+            - Windows x64：应用程序与安装器已进行 Authenticode SHA-256 签名和 RFC 3161 时间戳验证。
+            - macOS：应用与 DMG 已进行 Developer ID 签名、Apple notarization 和票据 stapling。
             - 安装前请用随附的 SHA256SUMS 文件核对下载内容。
           files: |
             release-assets/*.exe

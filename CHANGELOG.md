@@ -1,5 +1,14 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-24 · 正式版远程更新
+
+- 应用版本提升为 `0.2.0+2`，正式安装包启动后以 GitHub Releases 为更新源。
+- 首帧后低优先级检查最新正式 Release；仅在版本更高时弹窗展示 Release 更新说明。
+- Windows 包优先打开对应 x64 安装器直链，未找到匹配资产时安全回退到 Release 页面。
+- 离线、超时、限流和响应异常保持静默，不影响本地媒体库启动。
+- 新增版本比较与更新弹窗 focused tests；SQLite schema、标签查询、filtered queue、播放器和缓存队列不变。
+- `flutter analyze`、271 项测试、Windows Debug/Release build 均通过；真实已安装 `0.1.0` 窗口确认同版本 Release 不会误报更新。
+
 ## 2026-07-24 · 原生纹理退出竞态、独立启动与语义挂载
 
 - 捕获并符号化 Windows full dump：`flutter_windows.dll` 的 `0xc0000409` 最终来自 `media_kit_video_plugin` 纹理回调在注册/注销竞态中调用 `unordered_map::at(texture_id_)`，不是 Dart 异常或 OOM。
@@ -149,6 +158,15 @@
 - focused 5 项及全量 237 项测试通过，3 项显式 benchmark 跳过，`flutter analyze` 与 Windows Debug 构建通过。
 - 显式启动 Debug 路径时，Windows 应用激活实际路由到已安装 Release 进程；准备点击时自动化又检测到用户输入并按安全规则中止。尚未完成新构建的“进入播放器 → 齿轮 → 开关 → 诊断”真实点击截图，已在 `CURRENT_TASK.md` 保留准确复测路径。
 - 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列、硬解设置、稳定身份或用户标签/收藏数据。
+
+## 2026-07-21 · 公开展示与可信发布门禁
+
+- 仓库 About 更新为“用标签发现、组合筛选与当前结果队列管理和播放大型本地视频库的 Flutter 桌面应用”，GitHub Support 的旧提交对象与 cached views purge 工单已提交，当前等待服务端处理。
+- README 新增媒体库、分层标签筛选和当前筛选结果播放队列三张产品截图；全部使用隔离 profile 与程序生成的演示视频制作，不含真实媒体、个人路径、观看记录或用户标签。
+- 新增根级第三方再分发说明，明确 Flutter `NOTICES.Z`、原生播放器许可证目录、Rust 扫描器许可证和 libmpv / FFmpeg 的 GPL/LGPL 核对边界；该声明不替代待选择的项目级 `LICENSE`。
+- 标签发布新增 Windows Authenticode SHA-256 / RFC 3161 时间戳门禁，以及 macOS Developer ID、hardened runtime、`notarytool`、stapling 与 Gatekeeper 验证门禁；缺少凭据时直接失败，不回退为未签名正式包。
+- `v0.1.0` 保持未签名、未公证历史状态；实际可信新包仍需在 GitHub Actions secrets 配置 Windows PFX、Apple Developer ID Application 证书与 App Store Connect 团队 API key 后创建新标签。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、播放器/缓存后端、标签语义或用户数据。
 
 ## 2026-07-21 · GitHub 首次公开发布与隐私收口
 

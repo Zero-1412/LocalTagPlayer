@@ -1,5 +1,12 @@
 # CHAT_1_ARCHITECTURE.md
 
+## 2026-07-24 GitHub 正式版更新边界
+
+- 应用版本提升为 `0.2.0+2`，以 `pubspec.yaml` 作为安装包和运行时版本来源。
+- 新增独立 `AppUpdateService` 与 GitHub Releases 实现；首帧后异步检查公开正式 Release，远端版本更高时展示 Release 正文和 Windows 安装器入口。
+- 网络错误、离线或 GitHub 限流保持静默，不阻塞媒体库启动，不进入 SQLite、标签、播放器或缓存边界。
+- 发布工作流继续以 `vX.Y.Z` 标签创建 Release；更新弹窗只认 Release，不把普通 commit 误报为可安装更新。
+
 当前版本：`0.5.28`
 状态：已完成页面依赖收窄并接入 macOS/Linux runner
 

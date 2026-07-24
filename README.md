@@ -8,6 +8,22 @@ Local Tag Player 是一款使用 Flutter 构建的跨平台桌面本地视频管
 
 [下载最新版本](https://github.com/Zero-1412/LocalTagPlayer/releases/latest) · [查看更新记录](CHANGELOG.md) · [阅读架构说明](ARCHITECTURE.md)
 
+## 产品预览
+
+以下画面使用隔离 profile 与程序生成的演示视频制作，不包含真实媒体、个人路径、观看记录或用户标签。
+
+### 媒体库与缩略图
+
+![脱敏演示媒体库](docs/assets/screenshots/media-library-demo.jpg)
+
+### 分层标签筛选
+
+![脱敏分层标签筛选](docs/assets/screenshots/tag-filter-demo.jpg)
+
+### 当前筛选结果播放队列
+
+![脱敏播放器筛选结果队列](docs/assets/screenshots/player-queue-demo.jpg)
+
 ## 为什么创建这个项目
 
 当本地媒体库不断增大时，单纯依靠“文件夹层级 + 文件名”会出现几个问题：
@@ -101,11 +117,11 @@ flowchart LR
 
 | 平台 | 产物 | 当前状态 |
 | --- | --- | --- |
-| Windows x64 | `.exe` 安装器 | 主要开发与验证平台；当前安装包未做 Authenticode 签名 |
-| macOS | `.dmg` | 已完成 Release 构建与启动检查；当前未签名、未公证 |
+| Windows x64 | `.exe` 安装器 | `v0.1.0` 未签名；后续标签发布已设置 Authenticode 必过门禁，等待配置证书 |
+| macOS | `.dmg` | `v0.1.0` 未签名、未公证；后续标签发布已设置 Developer ID 与 notarization 必过门禁，等待配置凭据 |
 | Linux | 源码构建 | CI 验证 adapter、构建与启动，暂未提供正式安装包 |
 
-> 未签名版本可能触发 Windows SmartScreen 或 macOS Gatekeeper。请核对 Release 页面提供的 SHA-256；对外正式分发前仍需配置平台签名与公证。
+> 历史未签名版本可能触发 Windows SmartScreen 或 macOS Gatekeeper。请核对 Release 页面提供的 SHA-256；新的正式标签在签名或公证凭据缺失时会构建失败，不会发布未签名包。
 
 ## 从源码运行
 
@@ -128,7 +144,7 @@ flutter analyze
 flutter build windows --debug
 ```
 
-跨平台构建与正式包生成由 `.github/workflows/` 中的 GitHub Actions 持续验证。打包细节见 [packaging/README.md](packaging/README.md)。
+跨平台构建与正式包生成由 `.github/workflows/` 中的 GitHub Actions 持续验证。打包、签名与公证细节见 [packaging/README.md](packaging/README.md)，第三方再分发边界见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 本地数据与隐私
 

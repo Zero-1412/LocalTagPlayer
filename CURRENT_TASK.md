@@ -4,6 +4,14 @@
 
 ## 活跃任务
 
+### 2026-07-24 远程正式版更新
+
+- 应用版本已提升为 `0.2.0+2`。
+- 正式包首帧后异步检查 GitHub 最新正式 Release；发现更高版本时弹窗展示更新内容，并优先打开 Windows x64 安装器。
+- 更新网络失败不会阻塞媒体库；SQLite、标签语义、filtered queue、PlayerBackend、缩略图和用户数据保持不变。
+- GitHub 仓库当前未配置 Windows/Apple 签名 Secrets；签名/公证标签工作流在凭据补齐前不能产出双平台签名包。
+- `flutter analyze`、271 项测试、Windows Debug/Release build 均通过；真实已安装 `0.1.0` 窗口确认同版本 Release 不会误弹提示。
+
 ### 2026-07-24 原生纹理退出竞态与独立启动修复
 
 - 目标：优先捕获并符号化原生 crash dump，围绕播放器纹理创建/销毁与退出做 N≥5 复现，再修复独立 EXE 启动、当前页面语义挂载并执行长时压力门禁。
@@ -159,6 +167,9 @@
 - 本地开发配置和路径上下文继续保留，但由 `.gitignore` 隔离；数据库、日志、媒体样本、环境变量、签名证书、安装包和本地私有配置均加入上传过滤。
 - 定向审计未发现已跟踪的媒体文件、数据库、日志、环境变量、私钥、签名证书或 API token。公开仓库仍包含随桌面包使用的 FFmpeg/FFprobe 第三方二进制，属于依赖与许可证审查项，不是个人隐私。
 - 公开 Release：Windows x64 安装器 108,566,180 字节，SHA-256 `74b733522c32eef027d9c1b0e846d3bfc6d740e6725fb30544a6f0f1e03c6ea6`；macOS DMG 42,757,651 字节，SHA-256 `6bbdf24c2b288dab2277bc3592557595f31c3bca37abaa7268c15c3b7bb8320a`。
+- GitHub Support 的 cached views / dangling commit purge 工单已由仓库所有者提交，当前等待 GitHub 后台处理；仓库 About 已更新为标签发现、组合筛选与当前结果队列定位。
+- README 已补充三张完全隔离 profile、程序生成演示媒体制作的脱敏截图；截图不含真实媒体、个人路径、观看记录或用户标签。
+- 后续标签发布已配置 Windows Authenticode 与 macOS Developer ID / notarization 必过门禁；签名凭据缺失时构建失败，不会发布未签名正式包。`v0.1.0` 仍是未签名、未公证的历史产物。
 
 ### 2026-07-21 Windows / macOS 正式版安装包
 
@@ -189,11 +200,13 @@
 ## 已确认阻塞
 
 - 外部跨平台规划 `<private-planning-document>` 当前不存在；本轮依照仓库内长期规则和现有跨平台边界实施。
-- GitHub 服务端仍暂存重写前的无引用提交对象；公开 refs、普通历史浏览和 clone 均已脱敏，但已知旧哈希仍可通过 Commit API 命中。仓库侧没有删除无引用对象的 API，需由仓库所有者向 GitHub Support 请求 cached views / references purge，完成后再验证返回 404。
-- GitHub 仓库顶部 About 简介仍是旧的“替代手动文件夹 + PotPlayer”定位，会进入浏览器标题和搜索摘要；当前 GitHub 连接没有仓库元数据写接口，验收浏览器也未登录。需所有者在仓库首页 About 设置中改为“用标签发现、组合筛选与当前结果队列管理和播放大型本地视频库的 Flutter 桌面应用。”
+- GitHub Support purge 工单已提交，但服务端缓存清理尚未确认完成；处理完成后仍需验证旧提交 API 返回 404。
+- 项目级 `LICENSE` 必须由仓库所有者在 `GPL-3.0-or-later` 与 `MIT` 等授权策略中明确选择；第三方声明不能代替项目源码授权。
+- 实际生成可信安装包仍需仓库所有者在 GitHub Actions 配置 Windows PFX、Apple Developer ID Application 证书和 App Store Connect 团队 API key；不得把证书、密码、Base64 或私钥提交到仓库。
 
 ## 下一步入口
 
-1. 向 GitHub Support 提交重写前提交对象与 cached views 的服务端清除请求，并在仓库 About 设置同步新的单句定位；完成后确认旧 Commit API 返回 404、公开页标题不再显示旧描述。
-2. 对外扩大分发前配置 Windows Authenticode 证书、Apple Developer ID Application 证书与 notarization 凭据，重新验证 SmartScreen / Gatekeeper。
-3. 补充脱敏的真实产品截图，并确定项目级许可证及 FFmpeg/FFprobe 再分发说明。
+1. 后续播放器视觉复验优先覆盖 Windows 150% 文字缩放与系统 reduced motion，确认全屏覆盖队列、左上角 seek 水印和更多设置仍无溢出、纹理抖动或引擎崩溃。
+2. 等待 GitHub Support 完成服务端 purge，随后确认旧 Commit API 返回 404。
+3. 确定项目级许可证并提交根目录 `LICENSE`；保留 `THIRD_PARTY_NOTICES.md` 与安装包内第三方许可证。
+4. 在 GitHub Actions secrets 配置两端签名凭据，创建新标签并在真实 Windows / macOS 上复验 SmartScreen、Gatekeeper、签名、时间戳、公证票据与校验值。
