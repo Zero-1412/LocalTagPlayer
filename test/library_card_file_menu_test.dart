@@ -51,6 +51,12 @@ class _CardFileMenuRepository
   @override
   Future<int> countUntrackedVideos() async => 0;
 
+  /**
+   * 页面启动可能执行自动清理；菜单回归测试没有无效记录，因此返回零且不改变视频集合。
+   */
+  @override
+  Future<int> removeMissingOrUnreadableVideos() async => 0;
+
   @override
   Future<void> close() async {}
 

@@ -2,6 +2,8 @@
 
 ## 总览
 
+`Architecture Baseline 0.5.64` 在正式打包边界增加远程分支集成门禁。待打包提交必须等于 `origin/master` 当前提交；所有其它远程分支必须已经成为主线祖先或与主线补丁等价。仍有独有提交时只在临时 Worktree 中累计试合并，用于暴露分支间冲突，但不会把未经审查的临时结果直接打包。门禁通过后还必须完成全量测试、静态分析、Windows Debug 构建和启动存活检查，平台安装包 job 才能继续。
+
 架构路线以以下规划文件为准：
 
 ```text
@@ -45,12 +47,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.63`
+已完成基线：`Architecture Baseline 0.5.64`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.64`：正式打包工作流先刷新并检查全部 `origin/*` 分支；祖先关系与 `git cherry` 补丁等价均视为已集成，仍有独有提交则在隔离临时 Worktree 中按稳定顺序累计试合并并阻断发布。只有待打包提交等于 `origin/master`，且全量测试、静态分析、Windows Debug 构建与启动存活检查全部通过，Windows/macOS 正式包才允许构建。该边界不修改应用业务、SQLite、标签语义、filtered queue、PlayerBackend、缓存队列或用户数据。
 - `0.5.63`：`PlaybackSettings` 增加默认开启的无效记录清理策略；设置开启与扫描完成后经 `LibraryRepository.removeMissingOrUnreadableVideos` 串行执行。探测限并发并让出 UI，主库与依赖备份同步删除以防自动复活，但不删除磁盘文件。SQLite schema、标签来源、FilterQuery、filtered queue、PlayerBackend 和缓存队列不变。
 - `0.5.62`：新增平台无关 `AppUpdateService` 查询边界及 GitHub Releases 实现；应用首帧后检查 `Zero-1412/LocalTagPlayer` 最新正式 Release，按安装包版本比较并展示 Release 正文，Windows 优先打开对应安装器资产。网络失败不阻塞本地启动；SQLite、标签查询、filtered queue、PlayerBackend、缓存队列和用户数据不变。
 - `0.5.61`：MediaKit 从“首次创建播放后端时初始化”收敛为“Flutter 首帧后统一预热、消费者幂等兜底”；悬停 Player 构造失败不再泄漏 loading。播放器使用已验证缩略图跨越纹理接管窗口，并把 loading 延迟到真实慢打开。PlayerBackend contract、缩略图调度、SQLite、标签查询、filtered queue 和用户数据不变。

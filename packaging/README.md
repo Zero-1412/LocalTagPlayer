@@ -6,11 +6,22 @@
 
 向远程推送符合 `vX.Y.Z` 形式的标签后，`.github/workflows/release-packages.yml` 会执行以下流程：
 
-1. 分别在 GitHub 托管的 Windows 与 macOS runner 上执行静态分析和 Release 构建。
-2. 对 Windows 主程序和安装器执行 Authenticode SHA-256 签名、RFC 3161 时间戳与签名验证。
-3. 对 macOS `.app` 和 `.dmg` 执行 Developer ID 签名、hardened runtime、Apple notarization 与票据 stapling。
-4. 为两个安装包生成 SHA-256 校验文件。
-5. 只有两个平台的签名、公证和校验全部成功后，才创建对应标签的 GitHub Release。
+1. 刷新全部远程分支，确认待打包提交就是 `origin/master` 当前提交。
+2. 确认其它远程分支已经合入主线或与主线补丁等价；仍有独有提交时，在隔离临时 Worktree 中累计试合并以暴露冲突，并阻断正式打包。
+3. 在 Windows runner 上执行全量测试、静态分析、Debug 构建和 10 秒启动存活检查。
+4. 分别在 GitHub 托管的 Windows 与 macOS runner 上执行静态分析和 Release 构建。
+5. 对 Windows 主程序和安装器执行 Authenticode SHA-256 签名、RFC 3161 时间戳与签名验证。
+6. 对 macOS `.app` 和 `.dmg` 执行 Developer ID 签名、hardened runtime、Apple notarization 与票据 stapling。
+7. 为两个安装包生成 SHA-256 校验文件。
+8. 只有分支集成、Debug 业务门禁及两个平台的签名、公证和校验全部成功后，才创建对应标签的 GitHub Release。
+
+门禁命令也可在干净的本地主线工作树中单独运行：
+
+```powershell
+./tool/check_release_branch_integration.ps1
+```
+
+门禁不会自动合并或删除远程分支。即使临时试合并没有冲突，只要分支仍有主线不存在的独有提交，也必须先完成业务审查并正式合入 `master`；当前两个保留的远程实验/开发分支会阻断打包，直至其内容完成合并或由维护者明确处理。
 
 普通的 `master` 打包配置变更和手动触发只生成未签名的 Actions 临时产物，不会覆盖或新建公开 Release。标签发布缺少任何签名凭据时会直接失败，不会静默回退为未签名公开包。
 
