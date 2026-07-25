@@ -12,6 +12,8 @@ class AppRelease {
     required this.notes,
     required this.pageUrl,
     this.downloadUrl,
+    this.downloadName,
+    this.downloadSha256,
   });
 
   /** 去掉 `v` 前缀后的远端语义版本号。 */
@@ -28,4 +30,50 @@ class AppRelease {
 
   /** 当前平台安装包直链；找不到匹配资产时保持为空并打开发布页。 */
   final Uri? downloadUrl;
+
+  /** 当前平台安装包的公开文件名；仅用于安全的临时下载目标。 */
+  final String? downloadName;
+
+  /** GitHub 资产元数据提供的 SHA-256；缺失时不得直接执行安装包。 */
+  final String? downloadSha256;
+}
+
+/**
+ * 应用当前安装版本的只读信息。
+ *
+ * 关于页通过更新服务读取这些字段，避免 UI 直接依赖平台包信息插件。
+ */
+class AppVersionInfo {
+  const AppVersionInfo({
+    required this.appName,
+    required this.version,
+    required this.buildNumber,
+  });
+
+  /** 面向用户展示的应用名称。 */
+  final String appName;
+
+  /** 语义版本号，不包含构建号。 */
+  final String version;
+
+  /** 平台构建号。 */
+  final String buildNumber;
+}
+
+/** 安装包下载过程中的不可变进度快照。 */
+class AppUpdateDownloadProgress {
+  const AppUpdateDownloadProgress({
+    required this.receivedBytes,
+    required this.totalBytes,
+  });
+
+  /** 已写入临时文件的字节数。 */
+  final int receivedBytes;
+
+  /** 服务端声明的总字节数；未知时为 -1。 */
+  final int totalBytes;
+
+  /** 总大小可用时返回 0 到 1 的进度，否则返回 null。 */
+  double? get fraction =>
+      totalBytes > 0 ? (receivedBytes / totalBytes).clamp(0.0, 1.0) : null;
 }

@@ -274,6 +274,7 @@ class LocalTagPlayerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final updateService = GitHubReleaseUpdateService();
     return MaterialApp(
       title: '\u672c\u5730\u6807\u7b7e\u64ad\u653e\u5668',
       debugShowCheckedModeBanner: false,
@@ -302,12 +303,13 @@ class LocalTagPlayerApp extends StatelessWidget {
         );
       },
       home: AppUpdatePrompt(
-        service: GitHubReleaseUpdateService(),
+        service: updateService,
         child: LibraryPage(
           applicationService: dependencies.libraryPageApplicationService,
           fileSystem: dependencies.fileSystem,
           playerBackendFactory: dependencies.playerBackendFactory,
           mediaProbeBackendFactory: dependencies.mediaProbeBackendFactory,
+          updateService: updateService,
         ),
       ),
     );

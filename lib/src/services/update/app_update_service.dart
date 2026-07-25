@@ -8,8 +8,21 @@ import '../../models/app_release.dart';
  * 页面只依赖这一接口，GitHub API、包版本读取和网络超时留在具体实现中。
  */
 abstract interface class AppUpdateService {
+  /** 返回当前安装包的应用名称、版本和构建号。 */
+  Future<AppVersionInfo> currentVersion();
+
   /** 返回高于本地正式版本的 Release；已经最新时返回 null。 */
   Future<AppRelease?> checkForUpdate();
+
+  /**
+   * 下载、校验并启动当前平台安装包。
+   *
+   * [onProgress] 只接收轻量进度快照；实现不得在回调中暴露本地临时路径。
+   */
+  Future<void> downloadAndLaunch(
+    AppRelease release, {
+    void Function(AppUpdateDownloadProgress progress)? onProgress,
+  });
 }
 
 /**

@@ -32,6 +32,8 @@ import '../../services/player/playback_snapshot_write_queue.dart';
 import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import '../../services/tags/tag_query_service.dart';
+import '../../services/update/app_update_service.dart';
+import '../../services/update/github_release_update_service.dart';
 import '../../widgets/app_theme_tokens.dart';
 import '../../widgets/design_system/app_interaction_surface.dart';
 import '../../widgets/library/library_local_view.dart';
@@ -45,6 +47,7 @@ import '../player/player_hardware_decode_warning_dialog.dart';
 import '../player/player_open_request_controller.dart';
 import '../player/player_page.dart';
 import '../tags/tag_manager_page.dart';
+import '../settings/about_settings_page.dart';
 import 'library_page_helpers.dart';
 import 'directory_manager_page.dart';
 import 'missing_relink_page.dart';
@@ -619,6 +622,7 @@ class CacheSettingsPage extends StatefulWidget {
     required this.onRunDataBackupNow,
     required this.onCheckDataBackupIntegrity,
     required this.onExportDataBackup,
+    this.updateService,
   });
 
   final LibraryApplicationFacade store;
@@ -646,6 +650,9 @@ class CacheSettingsPage extends StatefulWidget {
   /** 选择目标并写出便携备份；取消选择时返回 null。 */
   final Future<String?> Function() onExportDataBackup;
 
+  /** 关于页使用的更新边界；测试可注入，正常运行由组合根或默认实现提供。 */
+  final AppUpdateService? updateService;
+
   @override
   State<CacheSettingsPage> createState() => _CacheSettingsPageState();
 }
@@ -659,6 +666,7 @@ enum _SettingsSection {
   fileDeletion,
   dataBackup,
   cache,
+  about,
 }
 
 /**
@@ -679,6 +687,7 @@ class SettingsLandingList extends StatelessWidget {
     required this.onOpenFileDeletion,
     required this.onOpenDataBackup,
     required this.onOpenCache,
+    required this.onOpenAbout,
   });
 
   /** 首页直接展示的继续观看策略，避免用户必须先进入二级页才能发现当前行为。 */
@@ -709,6 +718,9 @@ class SettingsLandingList extends StatelessWidget {
 
   /** 打开缩略图缓存二级页。 */
   final VoidCallback onOpenCache;
+
+  /** 打开关于与更新二级页。 */
+  final VoidCallback onOpenAbout;
 
   @override
   Widget build(BuildContext context) {
@@ -779,6 +791,20 @@ class SettingsLandingList extends StatelessWidget {
               title: '缩略图缓存',
               subtitle: '缓存状态与后台任务统计',
               onTap: onOpenCache,
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        const _SettingsGroupTitle(title: '应用'),
+        const SizedBox(height: 8),
+        _SettingsNavigationGroup(
+          children: [
+            _SettingsNavigationTile(
+              key: const ValueKey('settings.category.about'),
+              icon: Icons.info_outline_rounded,
+              title: '关于 Local Tag Player',
+              subtitle: '版本信息、正式版更新与安装',
+              onTap: onOpenAbout,
             ),
           ],
         ),
@@ -1677,8 +1703,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     final next = previous.copyWith(
       confirmBeforeDeletingVideo: confirmBeforeDeletingVideo,
       moveDeletedFileToTrash: moveDeletedFileToTrash,
-      autoRemoveMissingOrUnreadableVideos:
-          autoRemoveMissingOrUnreadableVideos,
+      autoRemoveMissingOrUnreadableVideos: autoRemoveMissingOrUnreadableVideos,
     );
     setState(() => _settings = next);
     try {
@@ -1714,9 +1739,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              removed == 0
-                  ? '没有需要清理的缺失或不可读记录'
-                  : '已从数据库移除 $removed 条记录；磁盘文件未删除',
+              removed == 0 ? '没有需要清理的缺失或不可读记录' : '已从数据库移除 $removed 条记录；磁盘文件未删除',
             ),
           ),
         );
@@ -1765,6 +1788,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
         _SettingsSection.fileDeletion => '删除文件',
         _SettingsSection.dataBackup => '视频数据备份',
         _SettingsSection.cache => '缩略图缓存',
+        _SettingsSection.about => '关于',
       };
 
   /** 从设置首页进入指定功能二级页。 */
@@ -1840,6 +1864,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                     onOpenDataBackup: () =>
                         _openSection(_SettingsSection.dataBackup),
                     onOpenCache: () => _openSection(_SettingsSection.cache),
+                    onOpenAbout: () => _openSection(_SettingsSection.about),
                   )
                 : ListView(
                     padding: const EdgeInsets.all(24),
@@ -2149,6 +2174,14 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                           ),
                         ),
                       ],
+                      if (_section == _SettingsSection.about)
+                        SizedBox(
+                          height: MediaQuery.sizeOf(context).height - 120,
+                          child: AboutSettingsPage(
+                            updateService: widget.updateService ??
+                                GitHubReleaseUpdateService(),
+                          ),
+                        ),
                     ],
                   ),
           ),
@@ -3312,6 +3345,7 @@ class LibraryPage extends StatefulWidget {
     required this.fileSystem,
     required this.playerBackendFactory,
     required this.mediaProbeBackendFactory,
+    this.updateService,
   });
 
   /** facade 加载、偏好持久化、缩略图与媒体详情创建的页面应用服务。 */
@@ -3325,6 +3359,9 @@ class LibraryPage extends StatefulWidget {
 
   /** 仅转交播放器页面的媒体探测工厂。 */
   final MediaProbeBackendFactory mediaProbeBackendFactory;
+
+  /** 应用组合根注入的更新服务；测试或旧调用方未提供时关于页使用默认实现。 */
+  final AppUpdateService? updateService;
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
@@ -6117,6 +6154,7 @@ class _LibraryPageState extends State<LibraryPage> {
           thumbnailService: thumbnailService,
           playbackSettings: _playbackSettings,
           dataBackupSettings: _dataBackupSettings,
+          updateService: widget.updateService,
           onPlaybackSettingsChanged: (settings) async {
             await widget.applicationService.savePlaybackSettings(settings);
             if (mounted) {

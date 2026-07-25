@@ -2,6 +2,8 @@
 
 ## 总览
 
+`Architecture Baseline 0.5.67` 将 GitHub Release 更新边界扩展为可验证的 Windows 应用内安装：安装器先写入系统临时更新目录的 `.part` 文件，完整下载后流式校验 GitHub 资产 SHA-256，只有摘要匹配才原子改名并启动交互式安装器。设置新增关于页，版本信息和主动检查均消费 `AppUpdateService`，不直接访问平台 API。旧 Release 缺少摘要、非 Windows 平台或下载失败时保留发布页降级入口；SQLite、标签查询、filtered queue、PlayerBackend、缓存队列和用户数据不变。
+
 `Architecture Baseline 0.5.66` 修正默认开启的无效记录清理语义：当前路径只要不存在，即使尚未由扫描写入 `isMissing`，也会从主库、标签关系和依赖备份中移除。该策略仍不调用 `FileSystemAdapter` 的删除或回收站能力，不删除任何磁盘文件或文件夹。
 
 `Architecture Baseline 0.5.65` 将已验证的 `media_kit_video 2.0.1` Windows 隔离迁移纳入主线。固定 pub.dev 归档与 SHA256，继续在构建期替换 `video_output.cc`：GPU 与软件纹理回调捕获稳定 descriptor，销毁后返回空指针，所有权保持到 Flutter 注销纹理。Profile 基线与 FFmpeg 缩略图 A/B 只作为 QA 工具，不改变正式缩略图路径、PlayerBackend contract、filtered queue 或用户数据。
@@ -51,12 +53,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.66`
+已完成基线：`Architecture Baseline 0.5.67`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.67`：`AppUpdateService` 增加当前版本读取与下载安装边界；GitHub 实现仅在 Windows 下载带 SHA-256 摘要的正式安装器，使用 `.part`、长度检查、流式摘要校验和原子改名后启动，不传递静默安装或提权参数。设置首页新增关于入口，显示版本、构建号、正式版渠道和主动检查状态。非 Windows、摘要缺失与失败路径继续使用 Release 页面，不修改 SQLite、标签语义、filtered queue、PlayerBackend、缓存队列或用户数据。
 - `0.5.66`：无效记录清理把 `FileSystemEntityType.notFound` 明确纳入删除条件，不再要求路径先由扫描标记为 missing；既有批量数据库事务、依赖备份清理和磁盘文件保护边界不变。
 - `0.5.65`：主线升级到 `media_kit_video 2.0.1`，固定 archive 与 SHA256，并在 Windows 构建期继续替换 `ANGLESurfaceManager` 和 `video_output.cc`；架构合同要求稳定 GPU/软件 descriptor 捕获及销毁门禁。新增不切换 SDK 的 Windows Profile 播放/输入/全屏基线，以及不接入产品的 FFmpeg 8.1.2 缩略图 GPU A/B。PlayerBackend contract、SQLite、标签查询、filtered queue、缓存队列和用户数据不变。
 - `0.5.64`：正式打包工作流先刷新并检查全部 `origin/*` 分支；祖先关系与 `git cherry` 补丁等价均视为已集成，仍有独有提交则在隔离临时 Worktree 中按稳定顺序累计试合并并阻断发布。只有待打包提交等于 `origin/master`，且全量测试、静态分析、Windows Debug 构建与启动存活检查全部通过，Windows/macOS 正式包才允许构建。该边界不修改应用业务、SQLite、标签语义、filtered queue、PlayerBackend、缓存队列或用户数据。

@@ -277,6 +277,7 @@
 
 ## 变更记录
 
+- `0.3.3-about-update`：设置首页新增关于入口与版本/构建号展示；Windows 正式安装器在应用内下载、显示进度并校验 GitHub SHA-256 后启动，缺少可信摘要或非 Windows 平台继续回退 Release 页面。设置既有入口、响应式维护主题、媒体库和播放器状态不变。
 - `0.3.2-public-release`：将安装包工作流扩展为 `vX.Y.Z` 标签触发的原子 GitHub Release，补齐面向首次访问者的 README、下载校验说明和公开仓库隐私过滤边界。
 - `0.3.1-packaging`：新增 Windows x64 安装器与 macOS Release DMG 流水线，收敛 macOS 发布标识并明确签名/公证边界。
 - `0.3.0`：完成 Apple UI Phase 0，共享 token、无障碍策略与基础交互表面通过测试和真实窗口验证。

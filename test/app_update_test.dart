@@ -1,15 +1,66 @@
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/pages/settings/about_settings_page.dart';
 
 class _FakeUpdateService implements AppUpdateService {
-  const _FakeUpdateService(this.release);
+  _FakeUpdateService({
+    this.release,
+    this.checkError,
+  });
 
   final AppRelease? release;
+  final Object? checkError;
+  static const AppVersionInfo version = AppVersionInfo(
+    appName: 'Local Tag Player',
+    version: '0.2.1',
+    buildNumber: '3',
+  );
+  bool launched = false;
 
   @override
-  Future<AppRelease?> checkForUpdate() async => release;
+  Future<AppVersionInfo> currentVersion() async => version;
+
+  @override
+  Future<AppRelease?> checkForUpdate() async {
+    if (checkError != null) {
+      throw checkError!;
+    }
+    return release;
+  }
+
+  @override
+  Future<void> downloadAndLaunch(
+    AppRelease release, {
+    void Function(AppUpdateDownloadProgress progress)? onProgress,
+  }) async {
+    onProgress?.call(
+      const AppUpdateDownloadProgress(
+        receivedBytes: 50,
+        totalBytes: 100,
+      ),
+    );
+    launched = true;
+  }
 }
+
+AppRelease _release() => AppRelease(
+      version: '0.3.0',
+      title: 'Local Tag Player 0.3.0',
+      notes: '新增应用内更新\n增加关于页面',
+      pageUrl: Uri.parse(
+        'https://github.com/Zero-1412/LocalTagPlayer/releases/tag/v0.3.0',
+      ),
+      downloadUrl: Uri.parse(
+        'https://github.com/Zero-1412/LocalTagPlayer/releases/download/'
+        'v0.3.0/LocalTagPlayer-0.3.0-windows-x64-setup.exe',
+      ),
+      downloadName: 'LocalTagPlayer-0.3.0-windows-x64-setup.exe',
+      downloadSha256: 'a' * 64,
+    );
 
 void main() {
   test('正式版本比较按数字段判断，不把 0.10 误判为低于 0.9', () {
@@ -18,28 +69,59 @@ void main() {
     expect(compareAppVersions('1.2.3', '2.0.0'), lessThan(0));
   });
 
-  testWidgets('启动检查发现新版本后展示更新说明并打开安装包', (tester) async {
-    final release = AppRelease(
-      version: '0.2.0',
-      title: 'Local Tag Player 0.2.0',
-      notes: '新增远程更新提醒\n修复播放器稳定性',
-      pageUrl: Uri.parse(
-        'https://github.com/Zero-1412/LocalTagPlayer/releases/tag/v0.2.0',
-      ),
-      downloadUrl: Uri.parse(
-        'https://github.com/Zero-1412/LocalTagPlayer/releases/download/'
-        'v0.2.0/LocalTagPlayer-0.2.0-windows-x64-setup.exe',
-      ),
+  test('GitHub Release 资产同时保留文件名和 SHA-256', () {
+    final release = appReleaseFromGitHubJson({
+      'tag_name': 'v0.3.0',
+      'name': 'Local Tag Player 0.3.0',
+      'body': '更新',
+      'html_url':
+          'https://github.com/Zero-1412/LocalTagPlayer/releases/tag/v0.3.0',
+      'assets': [
+        {
+          'name': 'LocalTagPlayer-0.3.0-windows-x64-setup.exe',
+          'browser_download_url':
+              'https://example.invalid/LocalTagPlayer-0.3.0-windows-x64-setup.exe',
+          'digest': 'sha256:${'b' * 64}',
+        },
+      ],
+    });
+
+    expect(release.downloadName, 'LocalTagPlayer-0.3.0-windows-x64-setup.exe');
+    expect(release.downloadSha256, 'b' * 64);
+  });
+
+  test('安装器 SHA-256 文件校验拒绝不匹配内容', () async {
+    final payload = List<int>.generate(4096, (index) => index % 251);
+    final temporaryDirectory =
+        await Directory.systemTemp.createTemp('ltp-update-test-');
+    final installer = File(
+      '${temporaryDirectory.path}${Platform.pathSeparator}setup.exe',
     );
-    Uri? opened;
+
+    try {
+      await installer.writeAsBytes(payload, flush: true);
+      expect(
+        await installerSha256Matches(
+          installer,
+          sha256.convert(payload).toString(),
+        ),
+        isTrue,
+      );
+      expect(
+        await installerSha256Matches(installer, '0' * 64),
+        isFalse,
+      );
+    } finally {
+      await temporaryDirectory.delete(recursive: true);
+    }
+  });
+
+  testWidgets('启动检查发现新版本后在应用内下载并启动安装器', (tester) async {
+    final service = _FakeUpdateService(release: _release());
     await tester.pumpWidget(
       MaterialApp(
         home: AppUpdatePrompt(
-          service: _FakeUpdateService(release),
-          launchExternalUrl: (url) async {
-            opened = url;
-            return true;
-          },
+          service: service,
           child: const Scaffold(body: Text('媒体库')),
         ),
       ),
@@ -47,21 +129,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('app.update.dialog')), findsOneWidget);
-    expect(find.text('新增远程更新提醒\n修复播放器稳定性'), findsOneWidget);
+    expect(find.text('新增应用内更新\n增加关于页面'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('app.update.download')));
     await tester.pumpAndSettle();
 
-    expect(opened, release.downloadUrl);
+    expect(service.launched, isTrue);
     expect(find.byKey(const ValueKey('app.update.dialog')), findsNothing);
   });
 
   testWidgets('没有新版本时不打扰媒体库', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: AppUpdatePrompt(
-          service: _FakeUpdateService(null),
-          child: Scaffold(body: Text('媒体库')),
+          service: _FakeUpdateService(),
+          child: const Scaffold(body: Text('媒体库')),
         ),
       ),
     );
@@ -69,5 +151,47 @@ void main() {
 
     expect(find.text('媒体库'), findsOneWidget);
     expect(find.byKey(const ValueKey('app.update.dialog')), findsNothing);
+  });
+
+  testWidgets('关于页展示版本并主动检查最新状态', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AboutSettingsPage(updateService: _FakeUpdateService()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('版本 0.2.1 (3)'), findsOneWidget);
+    expect(find.text('Local Tag Player'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('settings.about.checkUpdate')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前已是最新正式版本'), findsOneWidget);
+  });
+
+  testWidgets('关于页主动检查失败时提供可重试反馈', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AboutSettingsPage(
+            updateService: _FakeUpdateService(
+              checkError: const FormatException('网络失败'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings.about.checkUpdate')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('检查更新失败，请确认网络连接后重试'), findsOneWidget);
   });
 }
