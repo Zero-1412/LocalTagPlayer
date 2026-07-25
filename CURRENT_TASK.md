@@ -1,5 +1,10 @@
 # CURRENT_TASK.md
 
+## 2026-07-25 GitHub Actions Node.js 24
+
+- 正式包与跨平台工作流使用的 checkout、artifact 和 GitHub Release 动作已升级到 Node.js 24 版本；不改变构建、签名、公证或发布门禁。
+- 待完成工作流语法/引用验证、提交推送和一次无公开发布的手动流水线验证。
+
 > 本文件只保存当前活跃任务、最近稳定基线、已确认阻塞和下一步入口。已完成的详细记录进入 `CHANGELOG.md` 与对应 Chat 文档。
 
 ## 活跃任务：远程开发分支收口

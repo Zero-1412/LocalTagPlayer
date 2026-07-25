@@ -1,5 +1,9 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-25 · GitHub Actions Node.js 24
+
+- GitHub Actions 的 checkout、artifact 上传/下载和 Release 发布动作升级到 Node.js 24 运行时版本，消除正式包与跨平台流水线的 Node.js 20 弃用警告；构建、签名、公证和发布输入保持不变。
+
 ## 2026-07-25 · 应用内更新与关于页面
 
 - 应用版本提升为 `0.2.2+4`；设置首页新增“关于 Local Tag Player”，展示当前版本、构建号、正式版渠道和主动检查更新入口。
