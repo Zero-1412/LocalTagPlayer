@@ -81,11 +81,11 @@ void main() {
             onMediaDetailsUpdated: (_, __, ___) async {},
             disposalCompleter: disposalCompleter,
             fileSystem: const DesktopFileSystemAdapter(),
-            playerBackendFactory: ({
+            playerServiceFactory: ({
               required String hwdec,
               required bool enableHardwareAcceleration,
             }) =>
-                backend,
+                PlayerService(backend: backend),
             mediaProbeBackendFactory: () =>
                 createMediaProbeBackend(DesktopFFmpegBackend()),
             fullscreenSessionController: PlayerFullscreenSessionController(),
@@ -162,8 +162,8 @@ void main() {
     await tester.tap(find.text('诊断检查'));
     await _pumpContinuously(tester, const Duration(seconds: 2));
 
-    final pluginStateLine = find.textContaining(
-        '本机增强插件: ltp-d3d11-round-trip-probe · $expectedState');
+    final pluginStateLine = find
+        .textContaining('本机增强插件: ltp-d3d11-round-trip-probe · $expectedState');
     expect(pluginStateLine, findsOneWidget);
     expect(find.textContaining('本机增强插件帧:'), findsOneWidget);
     final diagnosticsScroll = find.descendant(

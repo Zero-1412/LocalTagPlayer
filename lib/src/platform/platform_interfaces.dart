@@ -11,10 +11,41 @@ import '../models/video_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-abstract interface class PlayerBackend {
+/**
+ * 播放应用层与底层引擎之间共享的最小运行时能力。
+ *
+ * 画质协调器和诊断服务可以通过该接口读取引擎属性，但 Flutter 页面不应据此取得
+ * media_kit Player、mpv handle、D3D11 纹理或 HWND。正式页面只持有 PlayerService。
+ */
+abstract interface class PlayerRuntimeAccess {
   /** 当前后端的只读播放状态；UI 不得据此取得原生 Player。 */
   PlayerBackendState get state;
 
+  /** 纹理标识变化通知；原生后端可据此报告纹理挂载与解绑。 */
+  ValueListenable<int?> get textureId;
+
+  /** 设置底层引擎属性；不存在的属性允许被实现安全忽略。 */
+  Future<void> setProperty(String property, String value);
+
+  /** 查询底层诊断属性；不可用时返回统一占位文本。 */
+  Future<String> getProperty(String property);
+
+  /**
+   * 查询原生显卡设备矩阵。
+   *
+   * 返回值必须区分系统具备某能力与当前渲染器已经唯一锁定该适配器；不支持的平台
+   * 返回 `unsupported` 快照，禁止按显卡名称猜测 Compute、Vulkan 或显存。
+   */
+  Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities();
+}
+
+/**
+ * 单个播放会话的底层引擎和视频表面契约。
+ *
+ * 该接口只由 PlayerService 与组合根持有；PlayerPage 依赖应用层服务，避免把
+ * MediaKit、libmpv 或 Windows 增强能力直接耦合进 Flutter 页面。
+ */
+abstract interface class PlayerBackend implements PlayerRuntimeAccess {
   /** 播放位置变化流。 */
   Stream<Duration> get positionChanges;
 
@@ -26,9 +57,6 @@ abstract interface class PlayerBackend {
 
   /** 原生播放错误流，内容不得包含本地媒体路径。 */
   Stream<String> get errorChanges;
-
-  /** 纹理标识变化通知；原生后端可据此报告纹理挂载与解绑。 */
-  ValueListenable<int?> get textureId;
 
   /** 打开一个媒体路径；filtered queue 的选择仍由页面层负责。 */
   Future<void> openPath(String path);
@@ -46,20 +74,6 @@ abstract interface class PlayerBackend {
   Future<void> setVolume(double volume);
 
   Future<void> playOrPause();
-
-  /** 设置后端专有属性；不存在的属性允许被实现安全忽略。 */
-  Future<void> setProperty(String property, String value);
-
-  /** 查询后端诊断属性；不可用时返回统一占位文本。 */
-  Future<String> getProperty(String property);
-
-  /**
-   * 查询原生显卡设备矩阵。
-   *
-   * 返回值必须区分系统具备某能力与当前渲染器已经唯一锁定该适配器；不支持的平台
-   * 返回 `unsupported` 快照，禁止按显卡名称猜测 Compute、Vulkan 或显存。
-   */
-  Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities();
 
   /** 截取当前视频帧，编码格式由调用方指定。 */
   Future<Uint8List?> screenshot({String format = 'image/jpeg'});

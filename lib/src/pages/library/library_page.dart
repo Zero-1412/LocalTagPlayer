@@ -31,6 +31,7 @@ import '../../services/media/thumbnail_service.dart';
 import '../../services/player/playback_snapshot_write_queue.dart';
 import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_memory_diagnostics.dart';
+import '../../services/player/player_service.dart';
 import '../../services/tags/tag_query_service.dart';
 import '../../services/update/app_update_service.dart';
 import '../../services/update/github_release_update_service.dart';
@@ -3353,7 +3354,7 @@ class LibraryPage extends StatefulWidget {
     super.key,
     required this.applicationService,
     required this.fileSystem,
-    required this.playerBackendFactory,
+    required this.playerServiceFactory,
     required this.mediaProbeBackendFactory,
     this.updateService,
   });
@@ -3364,8 +3365,8 @@ class LibraryPage extends StatefulWidget {
   /** 目录选择、异步枚举、文件检查和删除的平台边界。 */
   final FileSystemAdapter fileSystem;
 
-  /** 仅转交播放器页面的后端工厂。 */
-  final PlayerBackendFactory playerBackendFactory;
+  /** 仅转交播放器页面的应用层播放服务工厂。 */
+  final PlayerServiceFactory playerServiceFactory;
 
   /** 仅转交播放器页面的媒体探测工厂。 */
   final MediaProbeBackendFactory mediaProbeBackendFactory;
@@ -6621,7 +6622,7 @@ class _LibraryPageState extends State<LibraryPage> {
             onMediaDetailsUpdated: _updateMediaDetails,
             disposalCompleter: playerDisposed,
             fileSystem: _fileSystem,
-            playerBackendFactory: widget.playerBackendFactory,
+            playerServiceFactory: widget.playerServiceFactory,
             mediaProbeBackendFactory: widget.mediaProbeBackendFactory,
             fullscreenSessionController: _playerFullscreenSession,
           ),

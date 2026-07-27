@@ -23,6 +23,7 @@ import 'services/media/external_media_tools.dart';
 import 'services/media/media_probe_backend.dart';
 import 'services/player/media_kit_player_backend.dart';
 import 'services/player/media_kit_initializer.dart';
+import 'services/player/player_service.dart';
 import 'services/player/windows_native_player_backend.dart';
 import 'services/update/github_release_update_service.dart';
 import 'services/window/desktop_window_state_service.dart';
@@ -82,6 +83,7 @@ export 'services/player/media_kit_initializer.dart';
 export 'services/player/player_hardware_compatibility.dart';
 export 'services/player/player_memory_diagnostics.dart';
 export 'services/player/player_nvidia_video_enhancement_experiment.dart';
+export 'services/player/player_service.dart';
 export 'services/player/player_video_super_resolution.dart';
 export 'services/player/windows_native_player_backend.dart';
 export 'services/relink/bulk_path_relink_service.dart';
@@ -158,6 +160,23 @@ PlayerBackend _createPlayerBackend({
 }
 
 /**
+ * 创建 Flutter 页面唯一可见的播放应用服务。
+ *
+ * 后端选择先在组合根完成，再由服务独占具体实例；页面因此不会接触 MediaKit、
+ * Windows libmpv、D3D11 或 HWND 的构造和类型判断。
+ */
+PlayerService _createPlayerService({
+  required String hwdec,
+  required bool enableHardwareAcceleration,
+}) =>
+    PlayerService(
+      backend: _createPlayerBackend(
+        hwdec: hwdec,
+        enableHardwareAcceleration: enableHardwareAcceleration,
+      ),
+    );
+
+/**
  * 创建当前平台的完整依赖图，确保具体实现只在组合根出现一次。
  *
  * [appPaths] 允许 bootstrap 与窗口服务共享同一路径策略；
@@ -221,7 +240,7 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies({
       debugOptions: libraryDebugOptions,
       registerBeforeWindowClose: registerBeforeWindowClose,
     ),
-    playerBackendFactory: _createPlayerBackend,
+    playerServiceFactory: _createPlayerService,
     mediaProbeBackendFactory: mediaProbeBackendFactory,
   );
 }
@@ -314,7 +333,7 @@ class LocalTagPlayerApp extends StatelessWidget {
         child: LibraryPage(
           applicationService: dependencies.libraryPageApplicationService,
           fileSystem: dependencies.fileSystem,
-          playerBackendFactory: dependencies.playerBackendFactory,
+          playerServiceFactory: dependencies.playerServiceFactory,
           mediaProbeBackendFactory: dependencies.mediaProbeBackendFactory,
           updateService: updateService,
         ),

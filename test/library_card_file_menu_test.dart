@@ -261,11 +261,11 @@ void main() {
         home: LibraryPage(
           applicationService: applicationService,
           fileSystem: fileSystem,
-          playerBackendFactory: ({
+          playerServiceFactory: ({
             required String hwdec,
             required bool enableHardwareAcceleration,
           }) =>
-              _CardFileMenuPlayerBackend(),
+              PlayerService(backend: _CardFileMenuPlayerBackend()),
           mediaProbeBackendFactory: _CardFileMenuProbeBackend.new,
         ),
       ),

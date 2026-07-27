@@ -1,5 +1,22 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · PlayerService 播放器应用层解耦
+
+- 新增 Route 级 `PlayerService`，依赖方向明确为
+  `PlayerPage → PlayerService → PlayerBackend → MediaKit / Windows libmpv`；
+  组合根封装具体后端后再注入页面。
+- `LibraryPage`、`PlayerPage` 和集成测试改用 `PlayerServiceFactory`；具体
+  MediaKit/Windows 后端不再从组合根穿透到 Flutter 页面。
+- 新增 `PlayerRuntimeAccess` 供画质协调、GPU/HDR/NVIDIA 检测和内存诊断使用；
+  GPU 活动设备、Compute 基线、视频表面与 child HWND 弹层显隐由服务统一代理。
+- 每次媒体 open 的比例、平移复位、输出范围、GPU 高质量缩放、HDR 和倍速恢复迁入
+  `PlayerService.applyOpenPreferences`，运行顺序和失败回退保持不变。
+- 默认 MediaKit、显式 Windows QA 门禁、filtered queue 来源/内容/顺序/索引、
+  返回媒体库状态、设置键、插件 ABI、SQLite、缓存队列和用户数据均未改变。
+- `flutter analyze`、287 项全量测试与 Windows Debug build 通过；真实 Debug
+  窗口点击因安装版窗口检测到用户持续输入而中止，保留媒体卡片、齿轮和返回路径
+  的人工复测门禁，不以安装版截图替代。
+
 ## 2026-07-27 · 固定 mpv 0.41 与普通窗口 HWND 门禁
 
 - Windows 固定 libmpv 升级为 `v0.41.0-908-g48e6c35c0`，CMake 固定

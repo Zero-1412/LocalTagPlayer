@@ -1,5 +1,23 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 PlayerService 播放器应用层边界
+
+- 播放器依赖方向改为
+  `Flutter PlayerPage → PlayerService → PlayerBackend → MediaKit / Windows libmpv`。
+  `LibraryPage` 与 `PlayerPage` 只接收 `PlayerServiceFactory`，具体后端只在组合根
+  选择并由服务独占。
+- 新增 `PlayerRuntimeAccess`，让自动画质、GPU 检测、HDR、NVIDIA 门禁和内存诊断
+  只消费必要的运行时属性；页面不能取得 MediaKit Player、VideoController、
+  mpv handle、D3D11 纹理或 HWND。
+- `PlayerService` 统一代理播放命令、状态流、视频表面、截图、显卡能力和 child HWND
+  弹层显隐，并接管每次 open 前后的类型化比例、缩放、输出范围、HDR 与倍速恢复。
+- 默认后端仍为 MediaKit；`windows-native-mpv`、`windows-native-hwnd` 和 stub
+  仍只由显式 QA 环境变量启用。filtered queue、当前索引、返回媒体库状态、设置键、
+  插件 ABI、SQLite、缓存队列和用户数据均未改变。
+- `flutter analyze`、287 项全量测试与 Windows Debug build 已通过；真实窗口复测
+  因已打开的安装版检测到用户持续输入而按保护规则中止，未把安装版结果冒充本次
+  Debug 证据。仍需人工复测“媒体库卡片 → 播放器 → 齿轮 → 返回媒体库”。
+
 ## 2026-07-27 Flutter child HWND airspace 原型
 
 - 新增显式 `LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd`；默认 Windows

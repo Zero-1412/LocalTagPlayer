@@ -88,7 +88,8 @@ class PlayerGpuCapabilitySnapshot {
 class PlayerGpuCapabilityDetector {
   const PlayerGpuCapabilityDetector();
 
-  Future<PlayerGpuCapabilitySnapshot> detect(PlayerBackend backend) async {
+  Future<PlayerGpuCapabilitySnapshot> detect(
+      PlayerRuntimeAccess runtime) async {
     final values = <String, String>{};
     for (final property in const <String>[
       'current-vo',
@@ -101,7 +102,7 @@ class PlayerGpuCapabilityDetector {
       'video-params/h',
     ]) {
       try {
-        values[property] = await backend.getProperty(property);
+        values[property] = await runtime.getProperty(property);
       } catch (_) {
         values[property] = 'unavailable';
       }
@@ -109,7 +110,7 @@ class PlayerGpuCapabilityDetector {
 
     PlayerGpuCapabilityMatrix matrix;
     try {
-      matrix = await backend.queryGpuCapabilities();
+      matrix = await runtime.queryGpuCapabilities();
     } catch (_) {
       matrix = const PlayerGpuCapabilityMatrix(
         platformSupported: false,
@@ -124,8 +125,8 @@ class PlayerGpuCapabilityDetector {
 
     PlayerGpuActiveAdapter activeAdapter =
         const PlayerGpuActiveAdapter.unsupported();
-    final renderBoundary = backend is PlayerGpuRenderBoundary
-        ? backend as PlayerGpuRenderBoundary
+    final renderBoundary = runtime is PlayerGpuRenderBoundary
+        ? runtime as PlayerGpuRenderBoundary
         : null;
     if (renderBoundary != null) {
       try {

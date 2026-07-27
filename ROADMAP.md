@@ -1,5 +1,17 @@
 # ROADMAP.md
 
+## 2026-07-27 播放器应用层与平台后端解耦
+
+- 已建立 `PlayerPage → PlayerService → PlayerBackend` 三层边界；MediaKit 与
+  Windows libmpv 只在组合根成为同级候选，页面不再选择或取得具体后端。
+- Windows GPU、HWND、D3D11 与本机视频增强继续作为 libmpv 后端可选能力，不进入
+  filtered queue、标签查询或跨平台 UI 业务。
+- 下一阶段先把仍用于诊断和画质协调的字符串属性收敛为类型化能力/快照，再考虑把
+  Windows libmpv 提升为默认后端；不得以 PlayerService 重新暴露具体 Player 或
+  VideoController。
+- 参考实现只采纳 media_kit 的“控制核心/视频嵌入分离”和开源播放器的服务生命周期
+  所有权，不复制其页面穿透具体 NativePlayer 的耦合。
+
 ## 2026-07-22 播放画质第二阶段协调器与第三阶段能力门槛
 
 - 1080p / 4K × GPU 硬解 / CPU 软件解码的真实基线已经建立；第二阶段只开放默认关闭的自动协调器，不提供独立常开高开销滤镜。

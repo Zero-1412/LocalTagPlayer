@@ -254,11 +254,11 @@ void main() {
           onMediaDetailsUpdated: (_, __, ___) async {},
           disposalCompleter: disposalCompleter,
           fileSystem: fileSystem,
-          playerBackendFactory: ({
+          playerServiceFactory: ({
             required String hwdec,
             required bool enableHardwareAcceleration,
           }) =>
-              backend,
+              PlayerService(backend: backend),
           mediaProbeBackendFactory: _RenameSmokeProbeBackend.new,
           fullscreenSessionController: PlayerFullscreenSessionController(),
         ),

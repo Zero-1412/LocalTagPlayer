@@ -133,7 +133,7 @@ class PlayerNvidiaVideoEnhancementExperiment {
    * [conflictingCpuFilters] 由播放器根据压缩增强和暗场增强会话状态提供。
    */
   static Future<PlayerNvidiaVideoEnhancementCapability> probe(
-    PlayerBackend backend, {
+    PlayerRuntimeAccess backend, {
     bool? isWindows,
     bool conflictingCpuFilters = false,
     bool filterChainIntegrated = filterChainValidated,

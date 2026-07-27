@@ -1,5 +1,26 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.76` 在现有 `PlayerBackend` 下游增加应用层
+`PlayerService`：Flutter 的 `LibraryPage` / `PlayerPage` 只接收
+`PlayerServiceFactory`，组合根先选择 `MediaKitPlayerBackend` 或显式
+`WindowsNativePlayerBackend`，再把具体实例封装进服务。画质协调器和诊断只依赖
+更窄的 `PlayerRuntimeAccess`；GPU 活动设备、Compute 基线与 child HWND airspace
+由服务代理，页面不再取得具体后端、MediaKit Player、VideoController、mpv handle、
+D3D11 纹理或 HWND。filtered queue 仍由 `PlayerPlaybackController` 独立拥有，
+默认 MediaKit、Windows 实验门禁、设置键、插件 ABI 与释放时序不变。
+
+```text
+Flutter PlayerPage
+        |
+   PlayerService
+        |
+   PlayerBackend
+     /       \
+MediaKit   Windows libmpv
+               |
+      GPU / HWND / D3D11 / 本机增强
+```
+
 `Architecture Baseline 0.5.75` 把 Windows 固定 libmpv 升级为
 `v0.41.0-908-g48e6c35c0`，归档、SHA-256 与许可证均由 CMake 固定。显式
 `windows-native-hwnd` 后端在 Dart 和 runner 两层锁定非 copy `d3d11va`，
@@ -96,11 +117,17 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.75`
+已完成基线：`Architecture Baseline 0.5.76`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.76`：新增 Route 级 `PlayerService`，组合根把 MediaKit/Windows libmpv
+  后端封装后再注入页面；`PlayerPage` 与 `LibraryPage` 改依赖
+  `PlayerServiceFactory`，画质/诊断改依赖 `PlayerRuntimeAccess`。Windows GPU、
+  HWND、D3D11 与本机增强仍是后端可选能力，filtered queue、默认后端、插件 ABI、
+  设置和退出释放顺序不变。
 
 - `0.5.75`：Windows 固定 mpv 升级到 `v0.41.0-908-g48e6c35c0`；child
   HWND 使用命中透明窗口过程并在 Flutter 弹层期间隐藏。普通窗口的鼠标、

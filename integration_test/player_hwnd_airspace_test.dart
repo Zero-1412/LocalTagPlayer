@@ -77,11 +77,11 @@ void main() {
           onMediaDetailsUpdated: (_, __, ___) async {},
           disposalCompleter: disposalCompleter,
           fileSystem: const DesktopFileSystemAdapter(),
-          playerBackendFactory: ({
+          playerServiceFactory: ({
             required String hwdec,
             required bool enableHardwareAcceleration,
           }) =>
-              backend,
+              PlayerService(backend: backend),
           mediaProbeBackendFactory: () =>
               createMediaProbeBackend(DesktopFFmpegBackend()),
           fullscreenSessionController: PlayerFullscreenSessionController(),

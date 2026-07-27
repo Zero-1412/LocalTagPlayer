@@ -18,7 +18,7 @@ class PlayerMemoryDiagnostics {
   /** 记录一个阶段；播放器已经释放时应省略 [player] 与 [controller]。 */
   static Future<void> logStage(
     String stage, {
-    PlayerBackend? backend,
+    PlayerRuntimeAccess? backend,
   }) async {
     final imageCache = PaintingBinding.instance.imageCache;
     var demuxSeconds = 'unavailable';

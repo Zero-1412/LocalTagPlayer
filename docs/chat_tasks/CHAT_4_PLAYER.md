@@ -1,3 +1,22 @@
+## 2026-07-27 PlayerService 播放器应用层边界
+
+- `PlayerPage` 不再接收 `PlayerBackendFactory`，改为只接收
+  `PlayerServiceFactory`；组合根先选择 MediaKit 或显式 Windows libmpv 后端，
+  再交给 Route 级服务独占生命周期。
+- 新增 `PlayerRuntimeAccess` 作为画质协调与诊断的窄能力；`PlayerService` 代理
+  播放状态/命令、视频表面、截图、GPU 能力与 child HWND airspace，不暴露具体
+  Player、VideoController、mpv handle、D3D11 纹理或 HWND。
+- 每次 open 前后恢复的比例、缩放、输出范围、HDR 与倍速进入服务；filtered queue
+  仍由 `PlayerPlaybackController` 拥有，页面切换、索引和返回状态不变。
+- 调研依据包括 [media_kit 架构](https://github.com/media-kit/media-kit#architecture)、
+  [mpv 官方 libmpv 示例](https://github.com/mpv-player/mpv-examples/tree/master/libmpv)、
+  [MusicPod PlayerService](https://github.com/ubuntu-flutter-community/musicpod/blob/main/lib/player/service/player_service.dart)
+  与 [clubTivi PlayerService](https://github.com/clubanderson/clubTivi/blob/main/lib/features/player/player_service.dart)；
+  后两者只用于比较生命周期所有权，本项目不复制其向页面暴露具体 Player 的做法。
+- `flutter analyze`、287 项全量测试与 Windows Debug build 已通过。真实窗口自动化
+  发现目标为安装版且检测到用户持续输入，因此按输入保护中止；仍需在本次 Debug
+  构建上人工点击媒体卡片、齿轮并返回媒体库。
+
 ## 2026-07-27 Flutter child HWND airspace 原型
 
 - Windows 固定 mpv 已升级为 `v0.41.0-908-g48e6c35c0`；固定归档、摘要和

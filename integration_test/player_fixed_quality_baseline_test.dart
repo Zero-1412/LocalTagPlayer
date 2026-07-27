@@ -130,13 +130,15 @@ void main() {
           onMediaDetailsUpdated: (_, __, ___) async {},
           disposalCompleter: disposalCompleter,
           fileSystem: const DesktopFileSystemAdapter(),
-          playerBackendFactory: ({
+          playerServiceFactory: ({
             required String hwdec,
             required bool enableHardwareAcceleration,
           }) =>
-              MediaKitPlayerBackend(
-            hwdec: hwdec,
-            enableHardwareAcceleration: enableHardwareAcceleration,
+              PlayerService(
+            backend: MediaKitPlayerBackend(
+              hwdec: hwdec,
+              enableHardwareAcceleration: enableHardwareAcceleration,
+            ),
           ),
           mediaProbeBackendFactory: () =>
               createMediaProbeBackend(ffmpegBackend),
@@ -175,8 +177,8 @@ void main() {
     }
     if (holdFixedComparisonFrame) {
       // 屏幕级 A/B 必须停在相同内容时间点，不能让运动测试图的差异伪装成滤镜差异。
-      await playerKey.currentState!.playerBackend.pause();
-      await playerKey.currentState!.playerBackend.seek(
+      await playerKey.currentState!.playerService.pause();
+      await playerKey.currentState!.playerService.seek(
         const Duration(seconds: 12),
       );
       await tester.pump(const Duration(milliseconds: 800));
@@ -241,7 +243,7 @@ void main() {
         await _captureBaselineFrame(
           outputDirectory,
           '$baselineMode-midpoint',
-          playerKey.currentState!.playerBackend,
+          playerKey.currentState!.playerService,
         );
       }
     }
@@ -249,11 +251,11 @@ void main() {
     final finalSnapshot =
         await playerKey.currentState!.buildDiagnosticsSnapshot();
     // 结束帧导出可能短暂占用渲染队列；先暂停可确保采证动作不被误计为长播压力。
-    await playerKey.currentState!.playerBackend.pause();
+    await playerKey.currentState!.playerService.pause();
     if (baselineMode.startsWith('compression-') ||
         baselineMode.startsWith('nvidia-')) {
       // 压缩修复 A/B 固定回到同一时间点，避免移动测试图的内容差异污染像素对比。
-      await playerKey.currentState!.playerBackend.seek(
+      await playerKey.currentState!.playerService.seek(
         const Duration(seconds: 12),
       );
       await tester.pump(const Duration(milliseconds: 800));
@@ -263,7 +265,7 @@ void main() {
     await _captureBaselineFrame(
       outputDirectory,
       '$baselineMode-complete',
-      playerKey.currentState!.playerBackend,
+      playerKey.currentState!.playerService,
     );
     final finalLines = finalSnapshot.lines
         .where(
@@ -296,12 +298,10 @@ void main() {
           ].any(line.startsWith),
         )
         .toList(growable: false);
-    final renderBoundary = playerKey.currentState!.playerBackend;
-    final gpuBoundary = renderBoundary is PlayerGpuRenderBoundary
-        ? renderBoundary as PlayerGpuRenderBoundary
-        : null;
+    final renderBoundary = playerKey.currentState!.playerService;
+    final gpuBoundary = renderBoundary as PlayerGpuRenderBoundary;
     final matrix = await renderBoundary.queryGpuCapabilities();
-    final activeAdapter = await gpuBoundary?.queryActiveGpuAdapter();
+    final activeAdapter = await gpuBoundary.queryActiveGpuAdapter();
     final angleInteropQaEnabled =
         Platform.environment['LOCAL_TAG_PLAYER_ANGLE_INTEROP_QA'] == '1';
     // 隔离 ANGLE 门禁需要保留 libmpv 的请求值与实际值，避免仅凭构建 DLL 摘要
@@ -324,7 +324,7 @@ void main() {
       'samples': samples,
       'finalDiagnostics': finalLines,
       'gpuMatrix': matrix.toJson(),
-      'activeAdapter': activeAdapter?.toJson(),
+      'activeAdapter': activeAdapter.toJson(),
       if (angleInteropEvidence != null)
         'angleInteropEvidence': angleInteropEvidence,
     };
@@ -484,7 +484,7 @@ Map<String, Object?> _diagnosticSample(
 Future<void> _captureBaselineFrame(
   Directory output,
   String name,
-  PlayerBackend backend,
+  PlayerService backend,
 ) async {
   final bytes = await backend.screenshot(format: 'image/png');
   if (bytes == null || bytes.isEmpty) {

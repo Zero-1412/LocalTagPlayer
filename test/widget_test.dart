@@ -4770,9 +4770,9 @@ void main() {
       () async {
     final backend = _PreferenceRecordingPlayerBackend();
 
-    await applyPlayerOpenPreferences(
-      backend: backend,
-      videoAspectMode: PlayerVideoAspectMode.cover,
+    await PlayerService(backend: backend).applyOpenPreferences(
+      videoAspectOverride: PlayerVideoAspectMode.cover.mpvAspectOverride,
+      panscan: PlayerVideoAspectMode.cover.mpvPanscan,
       videoScaler: PlayerVideoScaler.bicubic,
       videoOutputRange: PlayerVideoOutputRange.full,
       playbackRate: 1.5,

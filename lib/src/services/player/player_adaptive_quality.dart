@@ -402,7 +402,7 @@ class PlayerAdaptiveQualityEnhancer {
 
   /** 同一后端上的 open 重放和动态切换按调用顺序串行执行。 */
   static Future<void> apply({
-    required PlayerBackend backend,
+    required PlayerRuntimeAccess backend,
     required PlayerAdaptiveQualityLevel level,
     bool darkSceneEnhancementEnabled = false,
     bool nvidiaVideoEnhancementEnabled = false,

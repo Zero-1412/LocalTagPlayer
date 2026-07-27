@@ -1,0 +1,162 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:local_tag_player/src/app.dart';
+
+// ignore_for_file: slash_for_doc_comments
+
+/**
+ * 记录 PlayerService 转发结果的最小后端，避免测试依赖 MediaKit 或 Windows runner。
+ */
+class _RecordingPlayerBackend implements PlayerBackend {
+  final ValueNotifier<int?> _textureId = ValueNotifier<int?>(7);
+  final Map<String, String> properties = <String, String>{};
+  final List<String> commands = <String>[];
+  double? appliedRate;
+
+  @override
+  PlayerBackendState get state => const PlayerBackendState(
+        position: Duration(seconds: 3),
+        duration: Duration(minutes: 1),
+        playing: true,
+        buffering: false,
+        volume: 75,
+        videoTrackCount: 1,
+        audioTrackCount: 1,
+      );
+
+  @override
+  Stream<Duration> get positionChanges => const Stream<Duration>.empty();
+
+  @override
+  Stream<bool> get playingChanges => const Stream<bool>.empty();
+
+  @override
+  Stream<bool> get completedChanges => const Stream<bool>.empty();
+
+  @override
+  Stream<String> get errorChanges => const Stream<String>.empty();
+
+  @override
+  ValueListenable<int?> get textureId => _textureId;
+
+  @override
+  Future<void> openPath(String path) async => commands.add('open');
+
+  @override
+  Future<void> play() async => commands.add('play');
+
+  @override
+  Future<void> pause() async => commands.add('pause');
+
+  @override
+  Future<void> stop() async => commands.add('stop');
+
+  @override
+  Future<void> seek(Duration position) async => commands.add('seek');
+
+  @override
+  Future<void> setRate(double rate) async {
+    appliedRate = rate;
+    commands.add('rate');
+  }
+
+  @override
+  Future<void> setVolume(double volume) async => commands.add('volume');
+
+  @override
+  Future<void> playOrPause() async => commands.add('toggle');
+
+  @override
+  Future<void> setProperty(String property, String value) async {
+    properties[property] = value;
+  }
+
+  @override
+  Future<String> getProperty(String property) async =>
+      properties[property] ?? 'unavailable';
+
+  @override
+  Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities() async =>
+      const PlayerGpuCapabilityMatrix.unsupported();
+
+  @override
+  Future<Uint8List?> screenshot({String format = 'image/jpeg'}) async => null;
+
+  @override
+  Widget buildVideoSurface({
+    required Widget controls,
+    BoxFit fit = BoxFit.contain,
+    double? aspectRatio,
+    bool mirror = false,
+  }) =>
+      controls;
+
+  @override
+  Future<void> dispose() async {
+    commands.add('dispose');
+    _textureId.dispose();
+  }
+
+  @override
+  Future<void> get released => Future<void>.value();
+}
+
+void main() {
+  test('PlayerPage 只依赖 PlayerService 工厂，不导入具体播放器后端', () {
+    final source =
+        File('lib/src/pages/player/player_page.dart').readAsStringSync();
+
+    expect(
+        source, contains('final PlayerServiceFactory playerServiceFactory;'));
+    expect(source, isNot(contains('MediaKitPlayerBackend')));
+    expect(source, isNot(contains('WindowsNativePlayerBackend')));
+    expect(
+        source, isNot(contains('PlayerBackendFactory playerBackendFactory')));
+  });
+
+  test('PlayerService 统一转发播放命令并应用类型化打开偏好', () async {
+    final backend = _RecordingPlayerBackend();
+    final service = PlayerService(backend: backend);
+
+    await service.openPath('ignored-local-path');
+    await service.pause();
+    await service.seek(const Duration(seconds: 12));
+    await service.applyOpenPreferences(
+      videoAspectOverride: '-1',
+      panscan: '1.0',
+      videoScaler: PlayerVideoScaler.bicubic,
+      videoOutputRange: PlayerVideoOutputRange.full,
+      playbackRate: 1.5,
+      videoSuperResolutionEnabled: false,
+    );
+
+    expect(
+        backend.commands,
+        containsAllInOrder(<String>[
+          'open',
+          'pause',
+          'seek',
+          'rate',
+        ]));
+    expect(backend.properties['video-aspect-override'], '-1');
+    expect(backend.properties['panscan'], '1.0');
+    expect(backend.properties['video-output-levels'], 'full');
+    expect(backend.properties['scale'], 'bicubic');
+    expect(backend.appliedRate, 1.5);
+  });
+
+  test('不支持 Windows 可选能力的后端由 PlayerService 安全回退', () async {
+    final service = PlayerService(backend: _RecordingPlayerBackend());
+
+    expect((await service.queryActiveGpuAdapter()).probeStatus, 'unsupported');
+    expect(
+      (await service.benchmarkGpuComputeFrameBudget('qa-luid')).probeStatus,
+      'unsupported',
+    );
+    await expectLater(service.setFlutterOverlayVisible(true), completes);
+  });
+}

@@ -2,6 +2,7 @@ import '../core/app_paths.dart';
 import '../platform/file_system_adapter.dart';
 import '../platform/platform_interfaces.dart';
 import '../services/library/library_page_application_service.dart';
+import '../services/player/player_service.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -15,7 +16,7 @@ class LocalTagPlayerDependencies {
     required this.fileSystem,
     required this.paths,
     required this.libraryPageApplicationService,
-    required this.playerBackendFactory,
+    required this.playerServiceFactory,
     required this.mediaProbeBackendFactory,
   });
 
@@ -28,8 +29,8 @@ class LocalTagPlayerDependencies {
   /** 媒体库页面专用的应用用例边界。 */
   final LibraryPageApplicationService libraryPageApplicationService;
 
-  /** 每个播放路由独占的播放器后端工厂。 */
-  final PlayerBackendFactory playerBackendFactory;
+  /** 每个播放路由独占的应用层播放服务工厂。 */
+  final PlayerServiceFactory playerServiceFactory;
 
   /** 每个探测队列独占的媒体探测后端工厂。 */
   final MediaProbeBackendFactory mediaProbeBackendFactory;

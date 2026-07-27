@@ -34,7 +34,7 @@ class PlayerVideoSuperResolution {
    * 不支持某项属性的后端按 `PlayerBackend` 契约安全忽略，不能阻止视频继续播放。
    */
   static Future<void> apply({
-    required PlayerBackend backend,
+    required PlayerRuntimeAccess backend,
     required bool enabled,
     PlayerVideoScaler baseScaler = PlayerVideoScaler.lanczos,
   }) {
@@ -52,7 +52,7 @@ class PlayerVideoSuperResolution {
 
   /** 按固定顺序应用单次完整属性快照；调用方负责同一后端的串行化。 */
   static Future<void> _applyProperties({
-    required PlayerBackend backend,
+    required PlayerRuntimeAccess backend,
     required bool enabled,
     required PlayerVideoScaler baseScaler,
   }) async {

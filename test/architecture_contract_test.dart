@@ -188,7 +188,7 @@ void main() {
     expect(source, isNot(contains('local_tag_player_dependencies.dart')));
     expect(source, isNot(contains('LocalTagPlayerDependencies')));
     expect(source, contains('LibraryPageApplicationService'));
-    expect(source, contains('PlayerBackendFactory'));
+    expect(source, contains('PlayerServiceFactory'));
     expect(source, contains('MediaProbeBackendFactory'));
   });
 

@@ -14,7 +14,7 @@ class PlayerHdrMappingExperiment {
 
   /** 把实验开关完整应用到当前播放会话。 */
   static Future<void> apply({
-    required PlayerBackend backend,
+    required PlayerRuntimeAccess backend,
     required bool enabled,
   }) async {
     final values = enabled

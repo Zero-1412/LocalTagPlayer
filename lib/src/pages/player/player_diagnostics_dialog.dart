@@ -168,7 +168,7 @@ class PlaybackDiagnosticsDialogState extends State<PlaybackDiagnosticsDialog> {
   void initState() {
     super.initState();
     _playingSubscription =
-        widget.playerPage.playerBackend.playingChanges.listen((playing) {
+        widget.playerPage.playerService.playingChanges.listen((playing) {
       if (playing && !_isSampling) {
         _scheduleRefresh(Duration.zero);
       } else if (!playing) {
