@@ -151,6 +151,8 @@ class PlayerAdaptiveQualityCoordinator {
   int? _previousDecoderDrops;
   int? _previousOutputDrops;
   int? _previousTotalDrops;
+  /** 清晰增强只在新媒体或用户刚切换档位后的首个稳定样本快速请求最高安全档。 */
+  bool _clarityBoostPending = true;
   String _reason = '等待稳定播放样本';
   PlayerQualityBaselineProfile _profile = PlayerQualityBaselineProfile.resolve(
     width: null,
@@ -171,6 +173,7 @@ class PlayerAdaptiveQualityCoordinator {
     _previousDecoderDrops = null;
     _previousOutputDrops = null;
     _previousTotalDrops = null;
+    _clarityBoostPending = true;
     _reason = '等待稳定播放样本';
     _profile = PlayerQualityBaselineProfile.resolve(
       width: null,
@@ -179,8 +182,16 @@ class PlayerAdaptiveQualityCoordinator {
     );
   }
 
-  /** 评估一次实时样本并返回是否需要切换滤镜档位。 */
-  PlayerAdaptiveQualityDecision evaluate(PlayerAdaptiveQualitySample sample) {
+  /**
+   * 评估一次实时样本并返回是否需要切换滤镜档位。
+   *
+   * [preferClarity] 只让首个无压力样本直接请求当前基线最高档；一旦出现压力，
+   * 后续恢复仍使用原有连续健康样本与冷却规则，避免清晰档在降级后反复抖动。
+   */
+  PlayerAdaptiveQualityDecision evaluate(
+    PlayerAdaptiveQualitySample sample, {
+    bool preferClarity = false,
+  }) {
     _profile = PlayerQualityBaselineProfile.resolve(
       width: sample.width,
       height: sample.height,
@@ -226,6 +237,7 @@ class PlayerAdaptiveQualityCoordinator {
 
     if (severePressure) {
       _healthySamples = 0;
+      _clarityBoostPending = false;
       _reason = '检测到掉帧、缓冲、停滞或 FPS 余量不足，立即关闭增强';
       return _setLevel(
         PlayerAdaptiveQualityLevel.off,
@@ -234,12 +246,29 @@ class PlayerAdaptiveQualityCoordinator {
     }
     if (moderatePressure) {
       _healthySamples = 0;
+      _clarityBoostPending = false;
       _reason = '实时余量偏低，降低一级以保护流畅度';
       return _setLevel(_previousLevel(_level), sample.sampledAt);
     }
     if (_level.index > _profile.maximumLevel.index) {
       _healthySamples = 0;
       _reason = '当前媒体超过基线档位上限，回落到安全级别';
+      return _setLevel(_profile.maximumLevel, sample.sampledAt);
+    }
+    if (preferClarity && _clarityBoostPending) {
+      _healthySamples = 0;
+      if (_profile.maximumLevel == PlayerAdaptiveQualityLevel.off) {
+        // 首帧尚未拿到分辨率时保留一次快速请求机会，避免清晰档退化为慢速自动升级。
+        _reason = '${_profile.label} 没有可用增强余量';
+        return PlayerAdaptiveQualityDecision(
+          level: _level,
+          profile: _profile,
+          reason: _reason,
+          changed: false,
+        );
+      }
+      _clarityBoostPending = false;
+      _reason = '清晰增强已请求当前基线最高安全档';
       return _setLevel(_profile.maximumLevel, sample.sampledAt);
     }
     if (_level == _profile.maximumLevel) {
@@ -330,6 +359,19 @@ class PlayerAdaptiveQualityEnhancer {
   };
 
   /**
+   * GPU 去色带使用低于 mpv 默认值的保守参数。
+   *
+   * 单次迭代与较低阈值优先减轻低码率渐变断层，较少颗粒只用于掩盖残余量化带，
+   * 避免把正常纹理抹平；是否启用与实际增强档位一起接受性能回滚。
+   */
+  static const conservativeDebandProperties = <String, String>{
+    'deband-iterations': '1',
+    'deband-threshold': '24',
+    'deband-range': '12',
+    'deband-grain': '8',
+  };
+
+  /**
    * 把自动档位与 SDR 暗部增强合成为一条原子 `vf` 快照。
    *
    * 暗部增强使用轻量 gamma 曲线并降低高光权重，同时以小幅负 brightness 抵消
@@ -356,17 +398,35 @@ class PlayerAdaptiveQualityEnhancer {
   }) {
     final previous = _applyTails[backend] ?? Future<void>.value();
     final operation = previous.then((_) async {
-      try {
-        // 当前产品没有其它视频滤镜；设置完整 `vf` 快照可确定地清除上一档。
-        await backend.setProperty(
-          'vf',
-          filterGraph(
-            level: level,
-            darkSceneEnhancementEnabled: darkSceneEnhancementEnabled,
-          ),
-        );
-      } catch (_) {
-        // 可选滤镜不可用时不得阻止播放；诊断读取最终 `vf` 值供用户确认。
+      /** 单个旧后端不支持 GPU 去色带属性时仍继续应用其余画质设置。 */
+      Future<void> setPropertySafely(String property, String value) async {
+        try {
+          await backend.setProperty(property, value);
+        } catch (_) {
+          // 可选滤镜不可用时不得阻止播放；诊断读取最终属性供用户确认。
+        }
+      }
+
+      final debandEnabled = level != PlayerAdaptiveQualityLevel.off;
+      if (!debandEnabled) {
+        // 回滚先关闭 GPU 去色带，再清理 CPU 滤镜，尽快释放额外渲染开销。
+        await setPropertySafely('deband', 'no');
+      } else {
+        for (final entry in conservativeDebandProperties.entries) {
+          await setPropertySafely(entry.key, entry.value);
+        }
+      }
+      // 当前产品没有其它视频滤镜；设置完整 `vf` 快照可确定地清除上一档。
+      await setPropertySafely(
+        'vf',
+        filterGraph(
+          level: level,
+          darkSceneEnhancementEnabled: darkSceneEnhancementEnabled,
+        ),
+      );
+      if (debandEnabled) {
+        // 参数完整写入后再启用，避免用户切换时短暂运行半套去色带配置。
+        await setPropertySafely('deband', 'yes');
       }
     });
     _applyTails[backend] = operation;

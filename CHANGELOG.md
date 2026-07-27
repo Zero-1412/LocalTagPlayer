@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · 压缩画质增强
+
+- 播放器齿轮新增“压缩画质增强”入口，并与全局播放画质设置共用“关闭 / 自动 / 清晰增强”三档和向后兼容持久化。
+- 自动档保持原自适应基线；清晰增强优先请求当前硬件与分辨率允许的最高安全去块、时空降噪、轻锐化组合，所有档位继续服从掉帧、缓冲和停滞回滚。
+- 增强链增加保守 mpv GPU 去色带，并在关闭、低性能基线或压力回滚时同步禁用；未增加离线转码、AI 补帧或缩放后 GLSL 锐化。
+- 450 kbps 低码率 1080P Windows A/B 两档均为 0 掉帧、0 卡顿；固定 12 秒窗口截图确认改善克制且无明显光晕，因此暂不叠加第二层锐化。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/顺序/索引、`PlayerBackend` contract、缩略图/媒体详情队列和用户数据均未改变。
+
 ## 2026-07-25 · GitHub Actions Node.js 24
 
 - GitHub Actions 的 checkout、artifact 上传/下载和 Release 发布动作升级到 Node.js 24 运行时版本，消除正式包与跨平台流水线的 Node.js 20 弃用警告；构建、签名、公证和发布输入保持不变。

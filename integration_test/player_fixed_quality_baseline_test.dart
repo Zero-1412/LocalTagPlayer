@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -11,7 +12,7 @@ import 'package:media_kit/media_kit.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * 使用仓库生成的固定 HDR/SDR 样本做真实 MediaKit 长播基线。
+ * 使用仓库生成的固定 HDR/SDR/低码率样本做真实 MediaKit 长播基线。
  *
  * 测试直接构建单条来源队列，不读取用户媒体库；外部脚本负责进程 GPU、功耗和像素
  * 截图，本测试只保存匿名播放器诊断与 DXGI 输出矩阵。
@@ -32,6 +33,15 @@ void main() {
               '',
         ) ??
         300;
+    final keepSettingsControlVisible = Platform
+            .environment['LOCAL_TAG_PLAYER_QUALITY_KEEP_SETTINGS_VISIBLE'] ==
+        '1';
+    final openCompressionSettings = Platform.environment[
+            'LOCAL_TAG_PLAYER_QUALITY_OPEN_COMPRESSION_SETTINGS'] ==
+        '1';
+    final holdFixedComparisonFrame =
+        Platform.environment['LOCAL_TAG_PLAYER_QUALITY_HOLD_FIXED_FRAME'] ==
+            '1';
     if (samplePath == null ||
         samplePath.isEmpty ||
         !File(samplePath).existsSync()) {
@@ -40,8 +50,14 @@ void main() {
     if (outputPath == null || outputPath.isEmpty) {
       throw StateError('缺少匿名基线输出路径');
     }
-    if (mode != 'hdr' && mode != 'sdr-dark' && mode != 'sdr-dark-enhanced') {
-      throw StateError('基线模式必须是 hdr、sdr-dark 或 sdr-dark-enhanced');
+    if (mode != 'hdr' &&
+        mode != 'sdr-dark' &&
+        mode != 'sdr-dark-enhanced' &&
+        mode != 'compression-off' &&
+        mode != 'compression-clarity') {
+      throw StateError(
+        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off 或 compression-clarity',
+      );
     }
     final baselineMode = mode!;
 
@@ -58,7 +74,11 @@ void main() {
     final item = VideoItem(
       videoId: 'fixed-quality-$baselineMode',
       path: samplePath,
-      title: baselineMode == 'hdr' ? '固定 HDR10 样本' : '固定 SDR 暗场样本',
+      title: switch (baselineMode) {
+        'hdr' => '固定 HDR10 样本',
+        'compression-off' || 'compression-clarity' => '固定低码率 1080P 样本',
+        _ => '固定 SDR 暗场样本',
+      },
       folder: 'isolated-quality-baseline',
       tags: const <String>{'QA'},
       addedAt: DateTime.utc(2026, 7, 22),
@@ -68,6 +88,9 @@ void main() {
     final settings = PlaybackSettings.defaults.copyWith(
       hdrDynamicToneMappingExperimentEnabled: baselineMode == 'hdr',
       darkSceneEnhancementEnabled: baselineMode == 'sdr-dark-enhanced',
+      compressionEnhancementMode: baselineMode == 'compression-clarity'
+          ? PlayerCompressionEnhancementMode.clarity
+          : PlayerCompressionEnhancementMode.off,
       highQualityStreamCacheEnabled: true,
     );
 
@@ -115,6 +138,44 @@ void main() {
       mode: baselineMode,
       timeout: const Duration(seconds: 30),
     );
+    if (holdFixedComparisonFrame) {
+      // 屏幕级 A/B 必须停在相同内容时间点，不能让运动测试图的差异伪装成滤镜差异。
+      await playerKey.currentState!.playerBackend.pause();
+      await playerKey.currentState!.playerBackend.seek(
+        const Duration(seconds: 12),
+      );
+      await tester.pump(const Duration(milliseconds: 800));
+    }
+    TestGesture? settingsPointer;
+    if (keepSettingsControlVisible) {
+      // 仅供 Windows 真实点击 QA：把测试鼠标停在齿轮中心，复现用户 hover 后的
+      // 可见控制栏；生产播放器仍只遵循自身的底部热区与三秒隐藏规则。
+      final settingsFinder =
+          find.byKey(const ValueKey<String>('player.settings'));
+      expect(settingsFinder, findsOneWidget);
+      settingsPointer = await tester.createGesture(
+        kind: PointerDeviceKind.mouse,
+      );
+      await settingsPointer.addPointer(
+        location: tester.getCenter(settingsFinder),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      addTearDown(() async {
+        await settingsPointer?.removePointer();
+      });
+    }
+    if (openCompressionSettings) {
+      final settingsFinder =
+          find.byKey(const ValueKey<String>('player.settings'));
+      await tester.tap(settingsFinder);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('player.settings.compression.open'),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
     final samples = <Map<String, Object?>>[];
     final startedAt = DateTime.now();
     var nextSampleAt = startedAt;
@@ -143,7 +204,15 @@ void main() {
         await playerKey.currentState!.buildDiagnosticsSnapshot();
     // 结束帧导出可能短暂占用渲染队列；先暂停可确保采证动作不被误计为长播压力。
     await playerKey.currentState!.playerBackend.pause();
-    await tester.pump(const Duration(milliseconds: 250));
+    if (baselineMode.startsWith('compression-')) {
+      // 压缩修复 A/B 固定回到同一时间点，避免移动测试图的内容差异污染像素对比。
+      await playerKey.currentState!.playerBackend.seek(
+        const Duration(seconds: 12),
+      );
+      await tester.pump(const Duration(milliseconds: 800));
+    } else {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
     await _captureBaselineFrame(
       outputDirectory,
       '$baselineMode-complete',
@@ -159,7 +228,13 @@ void main() {
             '暗部细节增强会话:',
             '暗部增强压力保护:',
             '暗部增强自动回滚原因:',
+            '压缩画质增强设置:',
+            '自动画质基线:',
+            '自动画质档位:',
+            '自动画质判断:',
             'mpv 视频滤镜:',
+            'mpv 去色带:',
+            'mpv 去色带参数:',
             'HDR 动态映射会话:',
             'HDR 会话压力保护:',
             'HDR 自动回滚原因:',
@@ -221,6 +296,23 @@ void main() {
         finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
         contains('eq=gamma=1.06:gamma_weight=0.82:brightness=-0.006'),
       );
+    } else if (baselineMode == 'compression-clarity') {
+      expect(finalLines, contains('压缩画质增强设置: 清晰增强'));
+      expect(finalLines, contains('自动画质档位: 去块 + 时空降噪 + 锐化'));
+      expect(finalLines, contains('mpv 去色带: yes'));
+      final filterLine =
+          finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single;
+      expect(filterLine, contains('deblock='));
+      expect(filterLine, contains('hqdn3d='));
+      expect(filterLine, contains('unsharp='));
+    } else if (baselineMode == 'compression-off') {
+      expect(finalLines, contains('压缩画质增强设置: 关闭'));
+      expect(finalLines, contains('自动画质档位: 关闭'));
+      expect(finalLines, contains('mpv 去色带: no'));
+      expect(
+        finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
+        isNot(contains('deblock=')),
+      );
     } else {
       expect(finalLines, contains('HDR 动态映射会话: 未启用 / 门槛未通过'));
       expect(finalLines, contains('暗部细节增强设置: 关闭'));
@@ -255,6 +347,11 @@ Future<void> _waitForSessionState(
       if (snapshot.lines.contains(
         '暗部细节增强会话: 已通过 SDR/1080p/硬解门槛并启用',
       )) {
+        return;
+      }
+    } else if (mode == 'compression-clarity') {
+      if (snapshot.lines.contains('自动画质档位: 去块 + 时空降噪 + 锐化') &&
+          snapshot.lines.contains('mpv 去色带: yes')) {
         return;
       }
     } else if (snapshot.lines.contains('SDR 源信号: 已检测')) {

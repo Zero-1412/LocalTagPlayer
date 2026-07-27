@@ -970,6 +970,8 @@ class PlayerPageState extends State<PlayerPage> {
   late PlayerVideoOutputRange _videoOutputRange;
   /** 当前全局 GPU 画质超分开关；只影响视频渲染缩放器。 */
   late bool _videoSuperResolutionEnabled;
+  /** 当前压缩画质增强档位；只控制实时滤镜与低频性能协调。 */
+  late PlayerCompressionEnhancementMode _compressionEnhancementMode;
   /** 快进与快退快捷键共用的离散跳转秒数。 */
   late int _seekStepSeconds;
   /** 当前播放器会话使用的全局配置快照。 */
@@ -1047,6 +1049,8 @@ class PlayerPageState extends State<PlayerPage> {
     _playbackRate = _effectivePlaybackSettings.playbackRate;
     _videoSuperResolutionEnabled =
         _effectivePlaybackSettings.videoSuperResolutionEnabled;
+    _compressionEnhancementMode =
+        _effectivePlaybackSettings.compressionEnhancementMode;
     _seekStepSeconds = _effectivePlaybackSettings.seekStepSeconds;
     _focusNode = FocusNode(debugLabel: 'player-shortcuts');
     _queueScrollController = ScrollController();
@@ -1291,6 +1295,35 @@ class PlayerPageState extends State<PlayerPage> {
         backend: _playerBackend,
         enabled: enabled,
         baseScaler: _videoScaler,
+      ),
+    );
+  }
+
+  /**
+   * 即时切换压缩画质增强档位并复用原有性能回滚。
+   *
+   * 切档先清除上一档滤镜和去色带状态，再由下一次低频健康样本决定新档位；
+   * 清晰增强只在首个稳定样本快速请求基线最高档，不会在压力后反复强制拉高。
+   */
+  void _setCompressionEnhancementMode(
+    PlayerCompressionEnhancementMode mode,
+  ) {
+    if (_compressionEnhancementMode == mode) return;
+    setState(() => _compressionEnhancementMode = mode);
+    _saveGlobalPlaybackSettings(
+      _effectivePlaybackSettings.copyWith(
+        compressionEnhancementMode: mode,
+      ),
+    );
+    _adaptiveQualityCoordinator.reset();
+    _adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
+    // 下一次一秒健康采样即进入画质判定，避免用户切档后等待完整两秒周期。
+    _qualityMarginSampleTick = 1;
+    unawaited(
+      PlayerAdaptiveQualityEnhancer.apply(
+        backend: _playerBackend,
+        level: PlayerAdaptiveQualityLevel.off,
+        darkSceneEnhancementEnabled: _darkSceneEnhancementActive,
       ),
     );
   }
@@ -1589,7 +1622,7 @@ class PlayerPageState extends State<PlayerPage> {
         }
         _audioProgressState = '音频播放头停滞';
       }
-      if (_effectivePlaybackSettings.automaticQualityEnhancementEnabled ||
+      if (_compressionEnhancementMode != PlayerCompressionEnhancementMode.off ||
           _hdrMappingExperimentActive ||
           _darkSceneEnhancementActive) {
         _qualityMarginSampleTick++;
@@ -1651,8 +1684,12 @@ class PlayerPageState extends State<PlayerPage> {
       outputDroppedFrames: outputDrops,
       totalDroppedFrames: totalDrops,
     );
-    if (_effectivePlaybackSettings.automaticQualityEnhancementEnabled) {
-      final decision = _adaptiveQualityCoordinator.evaluate(sample);
+    if (_compressionEnhancementMode != PlayerCompressionEnhancementMode.off) {
+      final decision = _adaptiveQualityCoordinator.evaluate(
+        sample,
+        preferClarity: _compressionEnhancementMode ==
+            PlayerCompressionEnhancementMode.clarity,
+      );
       if (decision.changed && !_isExiting) {
         await PlayerAdaptiveQualityEnhancer.apply(
           backend: _playerBackend,
@@ -2395,6 +2432,7 @@ class PlayerPageState extends State<PlayerPage> {
         playbackRate: _playbackRate,
         seekStepSeconds: _seekStepSeconds,
         videoSuperResolutionEnabled: _videoSuperResolutionEnabled,
+        compressionEnhancementMode: _compressionEnhancementMode,
         playbackRates: _playbackRates,
         seekStepOptions: _seekStepOptions,
         onMirrorVideoChanged: _setMirrorVideo,
@@ -2405,6 +2443,7 @@ class PlayerPageState extends State<PlayerPage> {
         onPlaybackRateChanged: _setPlaybackRate,
         onSeekStepChanged: _setSeekStepSeconds,
         onVideoSuperResolutionChanged: _setVideoSuperResolutionEnabled,
+        onCompressionEnhancementModeChanged: _setCompressionEnhancementMode,
       );
     } finally {
       if (mounted) {
@@ -3571,6 +3610,11 @@ class PlayerPageState extends State<PlayerPage> {
       'video-sync',
       'interpolation',
       'vf',
+      'deband',
+      'deband-iterations',
+      'deband-threshold',
+      'deband-range',
+      'deband-grain',
       'scale',
       'cscale',
       'scaler-resizes-only',
@@ -3635,11 +3679,13 @@ class PlayerPageState extends State<PlayerPage> {
       'mpv \u663e\u793a FPS: ${mpv['display-fps']}',
       'mpv \u89c6\u9891\u540c\u6b65: ${mpv['video-sync']}',
       'mpv \u63d2\u5e27: ${mpv['interpolation']}',
-      '自动画质协调器: ${_effectivePlaybackSettings.automaticQualityEnhancementEnabled ? '开启' : '关闭'}',
+      '压缩画质增强设置: ${PlaybackSettings.compressionEnhancementLabelFor(_compressionEnhancementMode)}',
       '自动画质基线: ${_adaptiveQualityCoordinator.profile.label}',
       '自动画质档位: ${playerAdaptiveQualityLevelLabel(_adaptiveQualityLevel)}',
       '自动画质判断: ${_adaptiveQualityCoordinator.reason}',
       'mpv 视频滤镜: ${mpv['vf']}',
+      'mpv 去色带: ${mpv['deband']}',
+      'mpv 去色带参数: iterations=${mpv['deband-iterations']} · threshold=${mpv['deband-threshold']} · range=${mpv['deband-range']} · grain=${mpv['deband-grain']}',
       '画质超分设置: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
       'mpv GPU 缩放器: ${mpv['scale']}',
       'mpv GPU 色度缩放器: ${mpv['cscale']}',

@@ -3980,6 +3980,31 @@ void main() {
     );
   });
 
+  testWidgets('compression enhancement exposes three reversible modes',
+      (WidgetTester tester) async {
+    final changes = <PlaybackSettings>[];
+    await tester.pumpWidget(
+      playbackQualitySettingsSmokeHarness(onChanged: changes.add),
+    );
+
+    final dropdown = find.byKey(
+      const ValueKey('settings.playbackQuality.automaticEnhancement'),
+    );
+    await tester.ensureVisible(dropdown);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    expect(find.text('关闭').last, findsOneWidget);
+    expect(find.text('自动').last, findsOneWidget);
+    expect(find.text('清晰增强').last, findsOneWidget);
+
+    await tester.tap(find.text('清晰增强').last);
+    await tester.pumpAndSettle();
+    expect(
+      changes.single.compressionEnhancementMode,
+      PlayerCompressionEnhancementMode.clarity,
+    );
+  });
+
   test('playback settings default to continuing without a prompt', () {
     expect(
       PlaybackSettings.defaults.resumeBehavior,
@@ -4075,6 +4100,10 @@ void main() {
     expect(oldSettings.playbackRate, 1);
     expect(oldSettings.seekStepSeconds, 5);
     expect(oldSettings.videoSuperResolutionEnabled, isFalse);
+    expect(
+      oldSettings.compressionEnhancementMode,
+      PlayerCompressionEnhancementMode.off,
+    );
     expect(oldSettings.automaticQualityEnhancementEnabled, isFalse);
     expect(oldSettings.darkSceneEnhancementEnabled, isFalse);
     expect(oldSettings.hdrDynamicToneMappingExperimentEnabled, isFalse);
@@ -4094,7 +4123,7 @@ void main() {
       playbackRate: 1.5,
       seekStepSeconds: 30,
       videoSuperResolutionEnabled: true,
-      automaticQualityEnhancementEnabled: true,
+      compressionEnhancementMode: PlayerCompressionEnhancementMode.clarity,
       darkSceneEnhancementEnabled: true,
       hdrDynamicToneMappingExperimentEnabled: true,
       confirmBeforeDeletingVideo: false,
@@ -4112,6 +4141,10 @@ void main() {
     expect(loaded.playbackRate, 1.5);
     expect(loaded.seekStepSeconds, 30);
     expect(loaded.videoSuperResolutionEnabled, isTrue);
+    expect(
+      loaded.compressionEnhancementMode,
+      PlayerCompressionEnhancementMode.clarity,
+    );
     expect(loaded.automaticQualityEnhancementEnabled, isTrue);
     expect(loaded.darkSceneEnhancementEnabled, isTrue);
     expect(loaded.hdrDynamicToneMappingExperimentEnabled, isTrue);
@@ -4124,6 +4157,7 @@ void main() {
     expect(loaded.toJson()['highQualityStreamCacheEnabled'], isFalse);
     expect(loaded.toJson()['seekStepSeconds'], 30);
     expect(loaded.toJson()['videoSuperResolutionEnabled'], isTrue);
+    expect(loaded.toJson()['compressionEnhancementMode'], 'clarity');
     expect(
       loaded.toJson()['automaticQualityEnhancementEnabled'],
       isTrue,
@@ -4145,8 +4179,20 @@ void main() {
     expect(unsafe.playbackRate, 1);
     expect(unsafe.seekStepSeconds, 5);
     expect(unsafe.videoSuperResolutionEnabled, isFalse);
+    expect(
+      unsafe.compressionEnhancementMode,
+      PlayerCompressionEnhancementMode.off,
+    );
     expect(unsafe.automaticQualityEnhancementEnabled, isFalse);
     expect(unsafe.darkSceneEnhancementEnabled, isFalse);
+
+    final legacyAutomatic = PlaybackSettings.fromJson({
+      'automaticQualityEnhancementEnabled': true,
+    });
+    expect(
+      legacyAutomatic.compressionEnhancementMode,
+      PlayerCompressionEnhancementMode.automatic,
+    );
   });
 
   test('adaptive quality upgrades with hysteresis and drops immediately off',
@@ -4199,6 +4245,61 @@ void main() {
     );
     expect(profile.label, '4K · CPU 软件解码');
     expect(profile.maximumLevel, PlayerAdaptiveQualityLevel.off);
+  });
+
+  test('clarity mode requests the highest safe level once then keeps rollback',
+      () {
+    final coordinator = PlayerAdaptiveQualityCoordinator(
+      healthySamplesToUpgrade: 2,
+      upgradeCooldown: Duration.zero,
+    );
+    var sampledAt = DateTime.utc(2026, 7, 27, 6);
+
+    PlayerAdaptiveQualitySample sample({
+      int totalDrops = 0,
+      bool knownResolution = true,
+    }) {
+      sampledAt = sampledAt.add(const Duration(seconds: 2));
+      return PlayerAdaptiveQualitySample(
+        sampledAt: sampledAt,
+        playing: true,
+        buffering: false,
+        recentSeek: false,
+        videoAdvanced: true,
+        videoStalled: false,
+        audioStalled: false,
+        width: knownResolution ? 1920 : null,
+        height: knownResolution ? 1080 : null,
+        hwdecCurrent: 'd3d11va-copy',
+        sourceFps: 30,
+        estimatedFps: 30,
+        cacheDuration: 12,
+        decoderDroppedFrames: 0,
+        outputDroppedFrames: 0,
+        totalDroppedFrames: totalDrops,
+      );
+    }
+
+    final waiting = coordinator.evaluate(
+      sample(knownResolution: false),
+      preferClarity: true,
+    );
+    expect(waiting.changed, isFalse);
+    expect(waiting.reason, contains('分辨率未知'));
+
+    final boosted = coordinator.evaluate(sample(), preferClarity: true);
+    expect(boosted.changed, isTrue);
+    expect(
+      boosted.level,
+      PlayerAdaptiveQualityLevel.deblockDenoiseSharpen,
+    );
+
+    final rollback =
+        coordinator.evaluate(sample(totalDrops: 1), preferClarity: true);
+    expect(rollback.level, PlayerAdaptiveQualityLevel.off);
+    final firstRecovery =
+        coordinator.evaluate(sample(totalDrops: 1), preferClarity: true);
+    expect(firstRecovery.level, PlayerAdaptiveQualityLevel.off);
   });
 
   test('HDR safety rolls back on new drops and latches for current media', () {
@@ -4328,6 +4429,11 @@ void main() {
     expect(backend.properties['vf'], contains('deblock='));
     expect(backend.properties['vf'], contains('hqdn3d='));
     expect(backend.properties['vf'], contains('unsharp='));
+    expect(backend.properties['deband'], 'yes');
+    expect(backend.properties['deband-iterations'], '1');
+    expect(backend.properties['deband-threshold'], '24');
+    expect(backend.properties['deband-range'], '12');
+    expect(backend.properties['deband-grain'], '8');
 
     await PlayerAdaptiveQualityEnhancer.apply(
       backend: backend,
@@ -4345,6 +4451,7 @@ void main() {
       level: PlayerAdaptiveQualityLevel.off,
     );
     expect(backend.properties['vf'], isEmpty);
+    expect(backend.properties['deband'], 'no');
   });
 
   test('GPU detector reports only backend-confirmed capabilities', () async {
@@ -5003,6 +5110,7 @@ void main() {
     double? selectedRate;
     int? selectedSeekStep;
     bool? superResolutionEnabled;
+    PlayerCompressionEnhancementMode? selectedCompressionEnhancementMode;
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
@@ -5020,6 +5128,8 @@ void main() {
                   playbackRate: 1,
                   seekStepSeconds: 5,
                   videoSuperResolutionEnabled: false,
+                  compressionEnhancementMode:
+                      PlayerCompressionEnhancementMode.off,
                   playbackRates: const <double>[0.5, 1, 1.5],
                   seekStepOptions: const <int>[5, 10, 15, 30, 60],
                   onMirrorVideoChanged: (enabled) {
@@ -5039,6 +5149,9 @@ void main() {
                   },
                   onVideoSuperResolutionChanged: (enabled) {
                     superResolutionEnabled = enabled;
+                  },
+                  onCompressionEnhancementModeChanged: (mode) {
+                    selectedCompressionEnhancementMode = mode;
                   },
                 ),
                 icon: const Icon(Icons.settings_outlined),
@@ -5080,6 +5193,8 @@ void main() {
     expect(find.text('镜像画面'), findsOneWidget);
     expect(find.text('GPU 画质超分'), findsOneWidget);
     expect(find.text('仅放大低分辨率画面'), findsOneWidget);
+    expect(find.text('压缩画质增强'), findsOneWidget);
+    expect(find.text('关闭'), findsOneWidget);
     expect(find.text('单曲循环'), findsOneWidget);
     expect(find.text('列表循环'), findsOneWidget);
     expect(find.text('更多播放设置'), findsOneWidget);
@@ -5097,6 +5212,27 @@ void main() {
     );
     await tester.pump();
     expect(superResolutionEnabled, isTrue);
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.compression.open')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('player.settings.compression.page')),
+      findsOneWidget,
+    );
+    expect(find.text('自动'), findsOneWidget);
+    expect(find.text('清晰增强'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.compression.clarity')),
+    );
+    await tester.pump();
+    expect(
+      selectedCompressionEnhancementMode,
+      PlayerCompressionEnhancementMode.clarity,
+    );
+    await tester.tap(find.byKey(const ValueKey('player.settings.back')));
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const ValueKey('player.settings.repeatOne')),

@@ -19,6 +19,14 @@ enum PlayerVideoScaler { bicubic, lanczos }
 /** 显示输出电平；自动模式由 libmpv 根据输出链路选择安全值。 */
 enum PlayerVideoOutputRange { automatic, limited, full }
 
+/**
+ * 压缩画质增强的用户档位。
+ *
+ * 关闭不启用压缩修复滤镜；自动沿用播放余量协调器逐级增强；清晰增强会在首个
+ * 稳定样本上请求当前分辨率与解码路径允许的最高档，出现压力后仍自动回滚。
+ */
+enum PlayerCompressionEnhancementMode { off, automatic, clarity }
+
 /** 用户可配置的播放器快捷功能，绑定可包含 Control、Alt 与 Shift 修饰键。 */
 enum PlayerShortcutAction {
   navigateBack,
@@ -51,13 +59,17 @@ class PlaybackSettings {
     required this.playbackRate,
     required this.seekStepSeconds,
     required this.videoSuperResolutionEnabled,
-    required this.automaticQualityEnhancementEnabled,
+    PlayerCompressionEnhancementMode? compressionEnhancementMode,
+    bool? automaticQualityEnhancementEnabled,
     required this.darkSceneEnhancementEnabled,
     required this.hdrDynamicToneMappingExperimentEnabled,
     required this.confirmBeforeDeletingVideo,
     required this.moveDeletedFileToTrash,
     this.autoRemoveMissingOrUnreadableVideos = true,
-  });
+  }) : compressionEnhancementMode = compressionEnhancementMode ??
+            (automaticQualityEnhancementEnabled == true
+                ? PlayerCompressionEnhancementMode.automatic
+                : PlayerCompressionEnhancementMode.off);
 
   static const defaults = PlaybackSettings(
     hwdec: 'auto-safe',
@@ -75,7 +87,7 @@ class PlaybackSettings {
     playbackRate: 1,
     seekStepSeconds: 5,
     videoSuperResolutionEnabled: false,
-    automaticQualityEnhancementEnabled: false,
+    compressionEnhancementMode: PlayerCompressionEnhancementMode.off,
     darkSceneEnhancementEnabled: false,
     hdrDynamicToneMappingExperimentEnabled: false,
     confirmBeforeDeletingVideo: true,
@@ -232,8 +244,8 @@ class PlaybackSettings {
   final int seekStepSeconds;
   /** 是否启用只在画面放大时运行的 libmpv GPU 高质量超分。 */
   final bool videoSuperResolutionEnabled;
-  /** 是否按实时播放余量自动协调去块、降噪与适度锐化。 */
-  final bool automaticQualityEnhancementEnabled;
+  /** 压缩画质增强档位；旧布尔设置会安全迁移为关闭或自动。 */
+  final PlayerCompressionEnhancementMode compressionEnhancementMode;
   /** 是否对已确认的 SDR 视频启用经过独立基线验证的保守暗部细节增强。 */
   final bool darkSceneEnhancementEnabled;
   /** 是否启用默认关闭、关闭即恢复 mpv 自动值的 HDR 动态映射。 */
@@ -246,6 +258,14 @@ class PlaybackSettings {
   final bool autoRemoveMissingOrUnreadableVideos;
 
   bool get hardwareDecodingEnabled => hwdec != 'no';
+
+  /**
+   * 兼容旧调用方的布尔视图。
+   *
+   * 清晰增强同样需要播放健康采样，因此对旧逻辑表现为已启用。
+   */
+  bool get automaticQualityEnhancementEnabled =>
+      compressionEnhancementMode != PlayerCompressionEnhancementMode.off;
 
   PlaybackSettings copyWith({
     String? hwdec,
@@ -263,6 +283,7 @@ class PlaybackSettings {
     double? playbackRate,
     int? seekStepSeconds,
     bool? videoSuperResolutionEnabled,
+    PlayerCompressionEnhancementMode? compressionEnhancementMode,
     bool? automaticQualityEnhancementEnabled,
     bool? darkSceneEnhancementEnabled,
     bool? hdrDynamicToneMappingExperimentEnabled,
@@ -270,6 +291,12 @@ class PlaybackSettings {
     bool? moveDeletedFileToTrash,
     bool? autoRemoveMissingOrUnreadableVideos,
   }) {
+    final resolvedCompressionMode = compressionEnhancementMode ??
+        (automaticQualityEnhancementEnabled == null
+            ? this.compressionEnhancementMode
+            : automaticQualityEnhancementEnabled
+                ? PlayerCompressionEnhancementMode.automatic
+                : PlayerCompressionEnhancementMode.off);
     return PlaybackSettings(
       hwdec: hwdec ?? this.hwdec,
       resumeBehavior: resumeBehavior ?? this.resumeBehavior,
@@ -291,8 +318,7 @@ class PlaybackSettings {
       seekStepSeconds: seekStepSeconds ?? this.seekStepSeconds,
       videoSuperResolutionEnabled:
           videoSuperResolutionEnabled ?? this.videoSuperResolutionEnabled,
-      automaticQualityEnhancementEnabled: automaticQualityEnhancementEnabled ??
-          this.automaticQualityEnhancementEnabled,
+      compressionEnhancementMode: resolvedCompressionMode,
       darkSceneEnhancementEnabled:
           darkSceneEnhancementEnabled ?? this.darkSceneEnhancementEnabled,
       hdrDynamicToneMappingExperimentEnabled:
@@ -334,6 +360,8 @@ class PlaybackSettings {
         'playbackRate': playbackRate,
         'seekStepSeconds': seekStepSeconds,
         'videoSuperResolutionEnabled': videoSuperResolutionEnabled,
+        'compressionEnhancementMode': compressionEnhancementMode.name,
+        // 保留旧键，确保降级读取设置时仍能得到“关闭 / 已启用”的安全语义。
         'automaticQualityEnhancementEnabled':
             automaticQualityEnhancementEnabled,
         'darkSceneEnhancementEnabled': darkSceneEnhancementEnabled,
@@ -412,10 +440,15 @@ class PlaybackSettings {
       videoSuperResolutionEnabled: json['videoSuperResolutionEnabled'] is bool
           ? json['videoSuperResolutionEnabled']! as bool
           : defaults.videoSuperResolutionEnabled,
-      automaticQualityEnhancementEnabled:
-          json['automaticQualityEnhancementEnabled'] is bool
-              ? json['automaticQualityEnhancementEnabled']! as bool
-              : defaults.automaticQualityEnhancementEnabled,
+      compressionEnhancementMode: json['compressionEnhancementMode'] == null
+          ? (json['automaticQualityEnhancementEnabled'] == true
+              ? PlayerCompressionEnhancementMode.automatic
+              : defaults.compressionEnhancementMode)
+          : _enumByName(
+              PlayerCompressionEnhancementMode.values,
+              json['compressionEnhancementMode'],
+              defaults.compressionEnhancementMode,
+            ),
       darkSceneEnhancementEnabled: json['darkSceneEnhancementEnabled'] is bool
           ? json['darkSceneEnhancementEnabled']! as bool
           : defaults.darkSceneEnhancementEnabled,
@@ -559,6 +592,16 @@ class PlaybackSettings {
         PlayerVideoOutputRange.automatic => '自动（推荐）',
         PlayerVideoOutputRange.limited => 'Limited（16–235）',
         PlayerVideoOutputRange.full => 'Full（0–255）',
+      };
+
+  /** 设置页与播放器齿轮共用的压缩画质增强名称。 */
+  static String compressionEnhancementLabelFor(
+    PlayerCompressionEnhancementMode mode,
+  ) =>
+      switch (mode) {
+        PlayerCompressionEnhancementMode.off => '关闭',
+        PlayerCompressionEnhancementMode.automatic => '自动',
+        PlayerCompressionEnhancementMode.clarity => '清晰增强',
       };
 
   static String shortcutActionLabel(PlayerShortcutAction action) =>

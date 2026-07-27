@@ -217,6 +217,37 @@ void main() {
     );
   });
 
+  test('PlayerPage gear keeps compression enhancement mounted and reachable',
+      () {
+    final pageSource = File(
+      'lib/src/pages/player/player_page.dart',
+    ).readAsStringSync();
+    final panelSource = File(
+      'lib/src/pages/player/player_settings_panel.dart',
+    ).readAsStringSync();
+
+    // 同时保护齿轮按钮、页面回调和三档入口，避免组件仍存在但从真实播放器孤立。
+    expect(pageSource, contains("'player.settings'"));
+    expect(pageSource, contains('_showControlSettingsDialog()'));
+    expect(
+      pageSource,
+      contains('compressionEnhancementMode: _compressionEnhancementMode'),
+    );
+    expect(
+      pageSource,
+      contains('onCompressionEnhancementModeChanged:'),
+    );
+    expect(pageSource, contains('_setCompressionEnhancementMode'));
+    expect(
+      panelSource,
+      contains("ValueKey('player.settings.compression.open')"),
+    );
+    expect(
+      panelSource,
+      contains("'player.settings.compression.\${mode.name}'"),
+    );
+  });
+
   test('Windows build patches media texture callbacks to stable descriptors',
       () {
     final nativeBuild =

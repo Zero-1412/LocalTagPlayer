@@ -1,5 +1,7 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.68` 在不扩展 `PlayerBackend` contract 的前提下，把旧自动画质布尔配置升级为“关闭 / 自动 / 清晰增强”枚举。播放器页面仍通过既有 mpv 属性边界串行应用同一 `vf` 去块、`hqdn3d` 与 `unsharp` 图，并以 GPU renderer 的 `deband` 属性增加保守去色带；性能协调器拥有实际档位，掉帧、缓冲或停滞可覆盖用户请求并回滚。设置只表达意图，不承诺恢复源视频已丢失的细节；缩放后 GLSL 锐化在固定低码率 1080P A/B 后保持未启用。SQLite、标签查询、filtered queue、缓存队列和用户数据不变。
+
 ## 总览
 
 `Architecture Baseline 0.5.67` 将 GitHub Release 更新边界扩展为可验证的 Windows 应用内安装：安装器先写入系统临时更新目录的 `.part` 文件，完整下载后流式校验 GitHub 资产 SHA-256，只有摘要匹配才原子改名并启动交互式安装器。设置新增关于页，版本信息和主动检查均消费 `AppUpdateService`，不直接访问平台 API。旧 Release 缺少摘要、非 Windows 平台或下载失败时保留发布页降级入口；SQLite、标签查询、filtered queue、PlayerBackend、缓存队列和用户数据不变。
@@ -53,12 +55,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.67`
+已完成基线：`Architecture Baseline 0.5.68`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.68`：`PlaybackSettings` 向后兼容增加压缩画质增强三档；旧布尔 `true` 迁移为自动，缺失或无效值保持关闭。`PlayerPage` 复用现有低频健康样本和 profile 上限，清晰增强只提前请求最高安全档，后续压力回滚与迟滞恢复不变。去色带通过现有 mpv 属性访问串行启停，不新增离线处理、FFmpeg 播放链或 `PlayerBackend` 方法。450 kbps 1080P Windows A/B 为 0 掉帧/0 卡顿，固定帧未见明显光晕，故缩放后 GLSL 锐化继续不启用。SQLite、标签查询、filtered queue、缓存队列和用户数据未改变。
 - `0.5.67`：`AppUpdateService` 增加当前版本读取与下载安装边界；GitHub 实现仅在 Windows 下载带 SHA-256 摘要的正式安装器，使用 `.part`、长度检查、流式摘要校验和原子改名后启动，不传递静默安装或提权参数。设置首页新增关于入口，显示版本、构建号、正式版渠道和主动检查状态。非 Windows、摘要缺失与失败路径继续使用 Release 页面，不修改 SQLite、标签语义、filtered queue、PlayerBackend、缓存队列或用户数据。
 - `0.5.66`：无效记录清理把 `FileSystemEntityType.notFound` 明确纳入删除条件，不再要求路径先由扫描标记为 missing；既有批量数据库事务、依赖备份清理和磁盘文件保护边界不变。
 - `0.5.65`：主线升级到 `media_kit_video 2.0.1`，固定 archive 与 SHA256，并在 Windows 构建期继续替换 `ANGLESurfaceManager` 和 `video_output.cc`；架构合同要求稳定 GPU/软件 descriptor 捕获及销毁门禁。新增不切换 SDK 的 Windows Profile 播放/输入/全屏基线，以及不接入产品的 FFmpeg 8.1.2 缩略图 GPU A/B。PlayerBackend contract、SQLite、标签查询、filtered queue、缓存队列和用户数据不变。

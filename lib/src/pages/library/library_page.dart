@@ -946,21 +946,31 @@ class _PlaybackQualitySettingsPanel extends StatelessWidget {
               },
             ),
             const SizedBox(height: 16),
-            SwitchListTile.adaptive(
+            DropdownButtonFormField<PlayerCompressionEnhancementMode>(
               key: const ValueKey(
                 'settings.playbackQuality.automaticEnhancement',
               ),
-              contentPadding: EdgeInsets.zero,
-              value: settings.automaticQualityEnhancementEnabled,
-              title: const Text('自动画质协调器'),
-              subtitle: const Text(
-                '根据 1080p / 4K 与软硬解基线，按实时余量动态启用去块、时空降噪和适度锐化',
+              initialValue: settings.compressionEnhancementMode,
+              decoration: const InputDecoration(
+                labelText: '压缩画质增强',
+                helperText: '自动按播放余量逐级增强；清晰增强优先请求当前设备的最高安全档',
               ),
-              onChanged: (value) => onChanged(
-                settings.copyWith(
-                  automaticQualityEnhancementEnabled: value,
-                ),
-              ),
+              items: [
+                for (final mode in PlayerCompressionEnhancementMode.values)
+                  DropdownMenuItem(
+                    value: mode,
+                    child: Text(
+                      PlaybackSettings.compressionEnhancementLabelFor(mode),
+                    ),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  onChanged(
+                    settings.copyWith(compressionEnhancementMode: value),
+                  );
+                }
+              },
             ),
             const Divider(height: 20),
             SwitchListTile.adaptive(

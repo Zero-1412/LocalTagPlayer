@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/playback_settings.dart'
+    show PlaybackSettings, PlayerCompressionEnhancementMode;
 import '../../widgets/app_theme_tokens.dart';
 import 'player_playback_mode.dart';
 import 'player_video_aspect_mode.dart';
@@ -12,8 +14,9 @@ import 'player_video_aspect_mode.dart';
  * 显示桌面播放器设置浮层。
  *
  * 使用独立路由而不是把复杂列表塞入系统 Menu，避免 Windows 上菜单获得点击
- * 高亮但自定义内容未挂载。一级保留镜像、GPU 超分与循环开关，二级只承担
- * 比例/倍速导航和离散快进档位；具体选项进入三级列表或滑杆，每次变更立即回传播放器。
+ * 高亮但自定义内容未挂载。一级保留压缩画质增强、镜像、GPU 超分与循环开关，
+ * 二级只承担比例/倍速导航和离散快进档位；具体选项进入三级列表或滑杆，每次
+ * 变更立即回传播放器。
  */
 Future<void> showPlayerSettingsDialog(
   BuildContext context, {
@@ -24,6 +27,7 @@ Future<void> showPlayerSettingsDialog(
   required double playbackRate,
   required int seekStepSeconds,
   required bool videoSuperResolutionEnabled,
+  required PlayerCompressionEnhancementMode compressionEnhancementMode,
   required List<double> playbackRates,
   required List<int> seekStepOptions,
   required ValueChanged<bool> onMirrorVideoChanged,
@@ -32,6 +36,8 @@ Future<void> showPlayerSettingsDialog(
   required ValueChanged<double> onPlaybackRateChanged,
   required ValueChanged<int> onSeekStepChanged,
   required ValueChanged<bool> onVideoSuperResolutionChanged,
+  required ValueChanged<PlayerCompressionEnhancementMode>
+      onCompressionEnhancementModeChanged,
 }) async {
   final accessibility = AppAccessibilityScope.of(context);
   var localMirrorVideo = mirrorVideo;
@@ -40,6 +46,7 @@ Future<void> showPlayerSettingsDialog(
   var localPlaybackRate = playbackRate;
   var localSeekStepSeconds = seekStepSeconds;
   var localVideoSuperResolutionEnabled = videoSuperResolutionEnabled;
+  var localCompressionEnhancementMode = compressionEnhancementMode;
   var currentPage = _PlayerSettingsPage.primary;
   await showGeneralDialog<void>(
     context: context,
@@ -165,6 +172,8 @@ Future<void> showPlayerSettingsDialog(
                                           mirrorVideo: localMirrorVideo,
                                           videoSuperResolutionEnabled:
                                               localVideoSuperResolutionEnabled,
+                                          compressionEnhancementMode:
+                                              localCompressionEnhancementMode,
                                           playbackMode: localPlaybackMode,
                                           onMirrorVideoChanged: (enabled) {
                                             setDialogState(
@@ -189,6 +198,12 @@ Future<void> showPlayerSettingsDialog(
                                               enabled,
                                             );
                                           },
+                                          onShowCompressionEnhancement: () =>
+                                              setDialogState(
+                                            () => currentPage =
+                                                _PlayerSettingsPage
+                                                    .compressionEnhancement,
+                                          ),
                                           onShowAdvancedSettings: () =>
                                               setDialogState(
                                             () => currentPage =
@@ -260,6 +275,45 @@ Future<void> showPlayerSettingsDialog(
                                             onPlaybackRateChanged(rate);
                                           },
                                         ),
+                                      _PlayerSettingsPage
+                                            .compressionEnhancement =>
+                                        PlayerSettingsOptionList<
+                                            PlayerCompressionEnhancementMode>(
+                                          key: const ValueKey(
+                                            'player.settings.compression.page',
+                                          ),
+                                          values:
+                                              PlayerCompressionEnhancementMode
+                                                  .values,
+                                          selected:
+                                              localCompressionEnhancementMode,
+                                          labelFor: PlaybackSettings
+                                              .compressionEnhancementLabelFor,
+                                          iconFor: (mode) => switch (mode) {
+                                            PlayerCompressionEnhancementMode
+                                                  .off =>
+                                              Icons.block_rounded,
+                                            PlayerCompressionEnhancementMode
+                                                  .automatic =>
+                                              Icons.auto_fix_high_rounded,
+                                            PlayerCompressionEnhancementMode
+                                                  .clarity =>
+                                              Icons.hd_rounded,
+                                          },
+                                          keyFor: (mode) => ValueKey(
+                                            'player.settings.compression.${mode.name}',
+                                          ),
+                                          onSelected: (mode) {
+                                            setDialogState(
+                                              () =>
+                                                  localCompressionEnhancementMode =
+                                                      mode,
+                                            );
+                                            onCompressionEnhancementModeChanged(
+                                              mode,
+                                            );
+                                          },
+                                        ),
                                     },
                                   ),
                                 ],
@@ -281,7 +335,13 @@ Future<void> showPlayerSettingsDialog(
 }
 
 /** 播放设置浮层的页级导航状态。 */
-enum _PlayerSettingsPage { primary, advanced, aspect, rate }
+enum _PlayerSettingsPage {
+  primary,
+  advanced,
+  aspect,
+  rate,
+  compressionEnhancement,
+}
 
 /** 播放设置页标题与返回目标，避免各分支复制导航规则。 */
 extension on _PlayerSettingsPage {
@@ -290,6 +350,7 @@ extension on _PlayerSettingsPage {
         _PlayerSettingsPage.advanced => '更多播放设置',
         _PlayerSettingsPage.aspect => '视频比例',
         _PlayerSettingsPage.rate => '播放速度',
+        _PlayerSettingsPage.compressionEnhancement => '压缩画质增强',
       };
 
   _PlayerSettingsPage get parentPage => switch (this) {
@@ -298,6 +359,8 @@ extension on _PlayerSettingsPage {
         _PlayerSettingsPage.aspect ||
         _PlayerSettingsPage.rate =>
           _PlayerSettingsPage.advanced,
+        _PlayerSettingsPage.compressionEnhancement =>
+          _PlayerSettingsPage.primary,
       };
 
   String get parentTitle => switch (parentPage) {
@@ -312,16 +375,19 @@ extension on _PlayerSettingsPage {
  *
  * 高频的镜像与循环开关保持单行可达；比例、倍速和低频入口收进二级页，避免
  * 打开设置时立即呈现大块按钮网格。GPU 超分保留在一级，便于用户在播放中快速
- * 对比和关闭；循环开关互斥，关闭当前模式会回到顺序播放。
+ * 对比和关闭；压缩画质增强用独立三级列表明确展示三档，循环开关互斥，关闭
+ * 当前模式会回到顺序播放。
  */
 class PlayerSettingsPrimaryList extends StatelessWidget {
   const PlayerSettingsPrimaryList({
     super.key,
     required this.mirrorVideo,
     required this.videoSuperResolutionEnabled,
+    required this.compressionEnhancementMode,
     required this.playbackMode,
     required this.onMirrorVideoChanged,
     required this.onVideoSuperResolutionChanged,
+    required this.onShowCompressionEnhancement,
     required this.onPlaybackModeChanged,
     required this.onShowAdvancedSettings,
   });
@@ -332,6 +398,9 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
   /** 是否使用仅在画面放大时运行的本地 GPU 高质量超分。 */
   final bool videoSuperResolutionEnabled;
 
+  /** 当前压缩画质增强档位。 */
+  final PlayerCompressionEnhancementMode compressionEnhancementMode;
+
   /** 当前队列播放方式，用于计算两个循环开关的互斥状态。 */
   final PlayerPlaybackMode playbackMode;
 
@@ -340,6 +409,9 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
 
   /** GPU 画质超分开关变化回调。 */
   final ValueChanged<bool> onVideoSuperResolutionChanged;
+
+  /** 打开压缩画质增强档位列表。 */
+  final VoidCallback onShowCompressionEnhancement;
 
   /** 循环方式变化回调。 */
   final ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged;
@@ -366,6 +438,14 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
             subtitle: '仅放大低分辨率画面',
             value: videoSuperResolutionEnabled,
             onChanged: onVideoSuperResolutionChanged,
+          ),
+          _PlayerSettingsNavigationRow(
+            key: const ValueKey('player.settings.compression.open'),
+            label: '压缩画质增强',
+            value: PlaybackSettings.compressionEnhancementLabelFor(
+              compressionEnhancementMode,
+            ),
+            onTap: onShowCompressionEnhancement,
           ),
           _PlayerSettingsToggleRow(
             key: const ValueKey('player.settings.repeatOne'),
