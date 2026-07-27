@@ -1,5 +1,20 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · NVOFA CUDA 硬件光流真实执行
+
+- 增加显式、`EXCLUDE_FROM_ALL` 的 NVOFA CUDA execute 探针；动态完成 CUDA
+  context、NVOFA session、GPU buffer、两帧上传、执行、同步与向量回读。
+- 官方公开头文件固定到 NVIDIA 仓库精确提交并逐文件校验 SHA-256，只下载到
+  Git 忽略目录；不提交、不安装、不分发 NVIDIA 文件，也不要求 CUDA Toolkit。
+- RTX 4070 SUPER 上 Debug/Release 均由 API 5.0 驱动成功执行 NVOFA 2.0，
+  320×192 测试回读 3840 个非零向量。
+- 架构测试阻止探针进入默认构建或 install，并要求保留 System32 安全加载、
+  `nvOFExecute` 和非零光流门禁。
+- analyze、297 项测试与 Windows Debug build 通过；标准 Debug bundle 确认没有
+  NVOFA、CUDA 或 NVIDIA SDK 文件。
+- 这不是 FRUC 成品插帧或 RTX Video SDK 接入；产品入口、默认后端、filtered
+  queue、插件 ABI v1、SQLite、标签、缓存和用户数据不变。
+
 ## 2026-07-28 · R78 真实送帧与 NVIDIA 驱动门禁
 
 - 隔离验证官方 VapourSynth R78 的 Core R78 / API R4.2；真实 H.264 帧、seek、

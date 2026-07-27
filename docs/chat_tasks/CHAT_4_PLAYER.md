@@ -1,3 +1,14 @@
+## 2026-07-28 NVOFA CUDA 真实 execute 门禁
+
+- 隔离 QA 目标已在 RTX 4070 SUPER 上建立 CUDA context 与 NVOFA session，
+  上传两帧后调用 `nvOFExecute` 并回读非零 S10.5 光流；Debug/Release 均通过。
+- NVIDIA 公开头文件固定到精确提交和 SHA-256，只落入 Git 忽略目录；探针为
+  `EXCLUDE_FROM_ALL` 且无 install，不进入正式播放器。
+- 该 primitive 尚未拥有目标时间戳和生成中间帧，不能报告 FRUC/插帧 active；
+  RTX Video VSR、伪影修复和 HDR 仍属于独立 SDK 路线。
+- filtered queue、当前 index、来源队列、返回媒体库状态、现有单帧插件 ABI 和
+  释放顺序不变。
+
 ## 2026-07-28 R78 真实帧与 NVIDIA 驱动能力门禁
 
 - 官方 VapourSynth R78 已在隔离目录通过 Core R78 / API R4.2 自检；固定 libmpv

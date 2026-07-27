@@ -353,6 +353,13 @@ void main() {
     final nvofaDriver = File(
       'windows/runner/nvidia_optical_flow_driver_probe.cpp',
     ).readAsStringSync();
+    final nvofaExecute = File(
+      'windows/nvidia_optical_flow_probe/nvofa_cuda_execute_probe.cpp',
+    ).readAsStringSync();
+    final nvofaScript =
+        File('tool/run_nvofa_execute_probe.ps1').readAsStringSync();
+    final nativeBuild =
+        File('windows/native_player/CMakeLists.txt').readAsStringSync();
     final runtime = File(
       'windows/runner/vapoursynth_motion_runtime.cpp',
     ).readAsStringSync();
@@ -401,6 +408,26 @@ void main() {
       bridge,
       contains('ProbeNvidiaOpticalFlowDriver()'),
     );
+
+    // 真实硬件执行证据必须保持为显式、零分发的隔离目标，不能悄悄进入正式应用。
+    expect(nativeBuild, contains('LTP_BUILD_NVOFA_EXECUTE_PROBE'));
+    expect(
+      nativeBuild,
+      contains('ltp_nvofa_cuda_execute_probe EXCLUDE_FROM_ALL'),
+    );
+    expect(
+      nativeBuild,
+      isNot(contains('install(TARGETS ltp_nvofa_cuda_execute_probe')),
+    );
+    expect(nvofaExecute, contains('NvOFAPICreateInstanceCuda'));
+    expect(nvofaExecute, contains('nvOFExecute'));
+    expect(nvofaExecute, contains('validate-nonzero-flow'));
+    expect(nvofaExecute, contains('LOAD_LIBRARY_SEARCH_SYSTEM32'));
+    expect(
+      nvofaScript,
+      contains('edb50da3cf849840d680249aa6dbef248ebce2ca'),
+    );
+    expect(nvofaScript, contains('Get-FileHash'));
   });
 
   test('desktop startup centers size-only persisted window layouts', () {

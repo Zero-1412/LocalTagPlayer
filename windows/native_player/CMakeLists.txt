@@ -657,3 +657,42 @@ if(LTP_BUILD_NVOFA_DRIVER_PROBE)
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
       "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe")
 endif()
+
+# NVOFA CUDA 执行探针只在显式 QA 构建中使用固定提交的官方公开头文件。
+# 头文件目录必须由调用方提供；目标不进入 ALL、install 或 Flutter 发布物，
+# 项目因此不会分发 NVIDIA SDK 文件，也不会改变正式播放器的运行时依赖。
+option(LTP_BUILD_NVOFA_EXECUTE_PROBE
+  "Build the isolated NVIDIA Optical Flow CUDA execute probe" OFF)
+set(LTP_NVOFA_PUBLIC_HEADER_DIR "" CACHE PATH
+  "Directory containing pinned nvOpticalFlowCommon.h and nvOpticalFlowCuda.h")
+if(LTP_BUILD_NVOFA_EXECUTE_PROBE)
+  foreach(required_nvofa_header IN ITEMS
+      nvOpticalFlowCommon.h
+      nvOpticalFlowCuda.h)
+    if(NOT EXISTS
+        "${LTP_NVOFA_PUBLIC_HEADER_DIR}/${required_nvofa_header}")
+      message(FATAL_ERROR
+        "NVOFA execute probe is missing ${required_nvofa_header}: "
+        "${LTP_NVOFA_PUBLIC_HEADER_DIR}")
+    endif()
+  endforeach()
+
+  add_executable(ltp_nvofa_cuda_execute_probe EXCLUDE_FROM_ALL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe/nvofa_cuda_execute_probe.cpp")
+  apply_standard_settings(ltp_nvofa_cuda_execute_probe)
+  target_compile_features(ltp_nvofa_cuda_execute_probe PRIVATE cxx_std_17)
+  target_compile_options(ltp_nvofa_cuda_execute_probe PRIVATE /utf-8)
+  target_compile_definitions(ltp_nvofa_cuda_execute_probe PRIVATE NOMINMAX)
+  target_include_directories(ltp_nvofa_cuda_execute_probe PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe"
+    "${LTP_NVOFA_PUBLIC_HEADER_DIR}")
+  set_target_properties(ltp_nvofa_cuda_execute_probe PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe")
+endif()

@@ -1,5 +1,28 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 NVOFA CUDA 真实硬件执行门禁
+
+- 固定 NVIDIA 官方公开头文件提交
+  `edb50da3cf849840d680249aa6dbef248ebce2ca`；QA 脚本按两个原始文件的
+  SHA-256 下载到被忽略的 `build` 目录，不提交、不安装、不打包厂商头文件。
+- 新增隔离 `ltp_nvofa_cuda_execute_probe`：只从 System32 加载 `nvcuda.dll`
+  与 `nvofapi64.dll`，动态建立 CUDA context、NVOFA API 2.0 session 和
+  CUdeviceptr 缓冲区，上传两帧水平位移灰度图并实际调用 `nvOFExecute`。
+- RTX 4070 SUPER / NVIDIA 595.97 上 Debug 与 Release 均通过；驱动最大 API
+  5.0，输出 grid 4、320×192，回读 3840 个非零 S10.5 光流向量。
+- 探针目标为 `EXCLUDE_FROM_ALL` 且没有 install 规则；标准应用没有新增 CUDA
+  Toolkit、NVIDIA SDK、DLL 或启动时 GPU 会话依赖。
+- 该结果只证明硬件光流 primitive 可执行，不表示 FRUC 已生成中间帧，也不表示
+  RTX Video SDK 的 VSR、Artifact Reduction 或 SDR→HDR 已接入；现有产品入口
+  与能力快照不冒充 active。
+- 架构门禁测试覆盖固定提交、摘要校验、System32 加载、真实 execute/非零向量及
+  零分发 CMake 约束。
+- `flutter analyze`、297 项全量测试（另 3 项按既有条件跳过）与 Windows Debug
+  build 通过；Debug bundle 复核没有 NVOFA、CUDA 或 NVIDIA SDK 文件。
+- 默认 MediaKit、Windows 后端选择、filtered queue、当前 index、返回状态、
+  插件 ABI v1、SQLite、标签、缓存队列和用户数据均未改变。
+- 完整证据见 `docs/qa/nvofa_cuda_execute_20260728.md`。
+
 ## 2026-07-28 VapourSynth R78 真实帧与 NVOFA 驱动门禁
 
 - 官方 `VapourSynth64-Portable-R78.zip` 已按 GitHub Release 摘要

@@ -1,5 +1,18 @@
 # ROADMAP.md
 
+## 2026-07-28 NVOFA 硬件 execute 门禁已通过
+
+- 当前 RTX 4070 SUPER 已实际完成 NVOFA CUDA session、GPU buffer 和
+  `nvOFExecute`，不再只凭 DLL 导出或 GPU 名称判断可用。
+- 公开 BSD-3-Clause NVOFA 头文件仅用于固定提交的本机 QA 下载；正式应用仍
+  零分发 NVIDIA SDK，产品能力也不会把该 primitive 冒充插帧 active。
+- 下一阶段仍是中间帧所有权：优先使用用户明确接受许可后提供的 Optical Flow
+  SDK FRUC，实现连续前后帧、目标时间戳、生成帧输出与失败回退；若 FRUC 无法
+  接入 VapourSynth，再设计独立多帧 ABI v2，不破坏单帧 ABI v1。
+- FRUC 完成后必须重新验证 seek、快速切换、退出、音视频同步和三类自然片源六组
+  A/B；RTX Video SDK 的 VSR、Artifact Reduction、SDR→HDR 继续作为另一插件，
+  不与硬件补帧混称。
+
 ## 2026-07-28 官方 R78 与 NVOFA 驱动门禁已通过
 
 - 官方 VapourSynth R78 已完成隔离安装和真实 H.264 帧、seek、reload 透传验证；

@@ -1,5 +1,18 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.82` 将 NVIDIA Optical Flow 门禁从“驱动导出存在”
+推进到“硬件会话实际执行”。隔离 QA 目标按固定提交和 SHA-256 临时取得 NVIDIA
+BSD-3-Clause 公开的 NVOFA CUDA 2.0 头文件，只从 System32 动态加载
+`nvcuda.dll` 与 `nvofapi64.dll`，在 RTX 4070 SUPER 上完成 CUDA context、
+NVOFA session、三块 GPU buffer、两帧上传、`nvOFExecute`、同步与 S10.5 光流
+回读。Debug/Release 都由驱动 API 5.0 接受，并产生非零水平位移向量。头文件、
+探针和可执行文件只留在被忽略的构建目录；目标是 `EXCLUDE_FROM_ALL`，没有
+install 规则，也不进入正式 runner 或 Flutter bundle。该证据证明本机 NVOFA
+硬件光流可执行，但不等于 FRUC 已生成中间帧，更不等于 RTX Video SDK 的 VSR、
+Artifact Reduction 或 SDR→HDR 已接入；因此产品能力快照、设置入口与现有插件
+ABI v1 均不冒进修改。默认后端、filtered queue、SQLite、标签、缓存队列和用户
+数据不变。
+
 `Architecture Baseline 0.5.81` 将 Windows 插帧路线从“宿主结构可用”推进到
 “官方 VapourSynth R78 真实帧链可用”，并增加 NVIDIA Optical Flow 驱动能力
 门禁。R78 只安装在被忽略的本机 QA 目录，不修改 PATH/注册表，也不进入应用包；
