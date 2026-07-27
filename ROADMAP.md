@@ -1,5 +1,19 @@
 # ROADMAP.md
 
+## 2026-07-28 NVIDIA TrueHDR 驱动路径已接入
+
+- [x] 固定 mpv 的 `nvidia-true-hdr` 已在 Windows 原生 D3D11VA 非 copy 链实际
+  启用，并由 NVIDIA 驱动日志、10-bit PQ/BT.2020 HDR 活动信号和三类片源六组
+  A/B 共同确认。
+- [x] VSR 与 TrueHDR 使用一个原子 `d3d11vpp`，联合模式不强制 NV12；任一模式
+  失败恢复先前组合，播放压力回滚当前会话。
+- [x] 产品入口区分“RTX 视频超分”和“RTX Video HDR”，默认关闭、仅会话保存，
+  不把普通 GPU 缩放或 NVOFA 光流冒充 RTX Video。
+- [ ] 用支持峰值亮度读取的 HDR 显示链补齐实际 nits、桌面录屏/相机观感与长播
+  功耗；当前 DXGI 峰值为 0.0 nits，只能确认 HDR 信号而不能完成显示器校准。
+- [ ] RTX Video SDK Artifact Reduction 仍需 NVIDIA 账户/许可与本机 SDK；
+  继续使用不分发厂商文件的插件原型，不能因 TrueHDR 驱动扩展已可用而跳过许可。
+
 ## 2026-07-28 NVOFA 硬件 execute 门禁已通过
 
 - 当前 RTX 4070 SUPER 已实际完成 NVOFA CUDA session、GPU buffer 和
@@ -33,7 +47,8 @@
   错误回退和真实输出帧率门禁均已落地。
 - NVIDIA 硬件补帧的准确目标改为 Optical Flow SDK 的 NVOFA FRUC，而不是把 RTX
   Video Super Resolution/HDR SDK 当作插帧 API。现有 NVIDIA VSR 继续由
-  `d3d11vpp scaling-mode=nvidia` 提供；RTX Video HDR 仍需单独原生能力。
+  `d3d11vpp scaling-mode=nvidia` 提供；RTX Video HDR 已由固定 mpv 的
+  `nvidia-true-hdr` 驱动扩展单独接入，但仍不是补帧 API。
 - 官方 VapourSynth R78 透传送帧已经完成；下一阶段接一个不分发厂商文件的本机
   FRUC/VapourSynth 插件，必须读回输出帧率、测三类自然片源、掉帧、音视频同步、
   seek/切换/退出和失败回退后，才增加用户入口。

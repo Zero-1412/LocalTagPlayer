@@ -29,6 +29,7 @@ Future<void> showPlayerSettingsDialog(
   required int seekStepSeconds,
   required bool videoSuperResolutionEnabled,
   required bool nvidiaVideoEnhancementExperimentEnabled,
+  required bool nvidiaVideoHdrExperimentEnabled,
   required PlayerNvidiaVideoEnhancementCapability
       nvidiaVideoEnhancementCapability,
   required PlayerCompressionEnhancementMode compressionEnhancementMode,
@@ -41,6 +42,7 @@ Future<void> showPlayerSettingsDialog(
   required ValueChanged<int> onSeekStepChanged,
   required ValueChanged<bool> onVideoSuperResolutionChanged,
   required ValueChanged<bool> onNvidiaVideoEnhancementExperimentChanged,
+  required ValueChanged<bool> onNvidiaVideoHdrExperimentChanged,
   required ValueChanged<PlayerCompressionEnhancementMode>
       onCompressionEnhancementModeChanged,
 }) async {
@@ -53,6 +55,7 @@ Future<void> showPlayerSettingsDialog(
   var localVideoSuperResolutionEnabled = videoSuperResolutionEnabled;
   var localNvidiaVideoEnhancementExperimentEnabled =
       nvidiaVideoEnhancementExperimentEnabled;
+  var localNvidiaVideoHdrExperimentEnabled = nvidiaVideoHdrExperimentEnabled;
   var localCompressionEnhancementMode = compressionEnhancementMode;
   var currentPage = _PlayerSettingsPage.primary;
   await showGeneralDialog<void>(
@@ -180,6 +183,8 @@ Future<void> showPlayerSettingsDialog(
                                               localNvidiaVideoEnhancementExperimentEnabled,
                                           nvidiaVideoEnhancementCapability:
                                               nvidiaVideoEnhancementCapability,
+                                          nvidiaVideoHdrExperimentEnabled:
+                                              localNvidiaVideoHdrExperimentEnabled,
                                           playbackMode: localPlaybackMode,
                                           onPlaybackModeChanged: (mode) {
                                             setDialogState(
@@ -195,6 +200,17 @@ Future<void> showPlayerSettingsDialog(
                                                       enabled,
                                             );
                                             onNvidiaVideoEnhancementExperimentChanged(
+                                              enabled,
+                                            );
+                                          },
+                                          onNvidiaVideoHdrExperimentChanged:
+                                              (enabled) {
+                                            setDialogState(
+                                              () =>
+                                                  localNvidiaVideoHdrExperimentEnabled =
+                                                      enabled,
+                                            );
+                                            onNvidiaVideoHdrExperimentChanged(
                                               enabled,
                                             );
                                           },
@@ -402,15 +418,20 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
   const PlayerSettingsPrimaryList({
     super.key,
     required this.nvidiaVideoEnhancementExperimentEnabled,
+    required this.nvidiaVideoHdrExperimentEnabled,
     required this.nvidiaVideoEnhancementCapability,
     required this.playbackMode,
     required this.onNvidiaVideoEnhancementExperimentChanged,
+    required this.onNvidiaVideoHdrExperimentChanged,
     required this.onPlaybackModeChanged,
     required this.onShowAdvancedSettings,
   });
 
   /** NVIDIA 驱动视频增强实验的会话状态；当前不会写入全局设置。 */
   final bool nvidiaVideoEnhancementExperimentEnabled;
+
+  /** NVIDIA RTX Video HDR 的会话状态；仅处理已确认的 SDR 源。 */
+  final bool nvidiaVideoHdrExperimentEnabled;
 
   /** 内嵌 mpv 对 `d3d11vpp` NVIDIA 模式的只读能力快照。 */
   final PlayerNvidiaVideoEnhancementCapability nvidiaVideoEnhancementCapability;
@@ -420,6 +441,9 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
 
   /** NVIDIA 驱动视频增强实验开关变化回调；不可用时整行禁用。 */
   final ValueChanged<bool> onNvidiaVideoEnhancementExperimentChanged;
+
+  /** NVIDIA RTX Video HDR 会话开关；不可用时整行禁用。 */
+  final ValueChanged<bool> onNvidiaVideoHdrExperimentChanged;
 
   /** 循环方式变化回调。 */
   final ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged;
@@ -438,11 +462,22 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
             key: const ValueKey(
               'player.settings.nvidiaVideoEnhancementExperiment',
             ),
-            label: 'NVIDIA 视频增强（实验）',
+            label: 'NVIDIA RTX 视频超分（实验）',
             subtitle: nvidiaVideoEnhancementCapability.helperText,
             value: nvidiaVideoEnhancementExperimentEnabled,
             onChanged: nvidiaVideoEnhancementCapability.canEnable
                 ? onNvidiaVideoEnhancementExperimentChanged
+                : null,
+          ),
+          _PlayerSettingsToggleRow(
+            key: const ValueKey(
+              'player.settings.nvidiaVideoHdrExperiment',
+            ),
+            label: 'NVIDIA RTX Video HDR（实验）',
+            subtitle: nvidiaVideoEnhancementCapability.hdrHelperText,
+            value: nvidiaVideoHdrExperimentEnabled,
+            onChanged: nvidiaVideoEnhancementCapability.canEnableHdr
+                ? onNvidiaVideoHdrExperimentChanged
                 : null,
           ),
           _PlayerSettingsToggleRow(

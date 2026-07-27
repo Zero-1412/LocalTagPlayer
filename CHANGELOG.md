@@ -1,5 +1,20 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · Windows 原生播放器启用 NVIDIA RTX Video HDR
+
+- 固定 mpv 的 `nvidia-true-hdr` 已接入原生 child HWND / D3D11VA 非 copy 链；
+  不下载、不提交、不分发 RTX Video SDK 文件。
+- 播放器齿轮明确区分“NVIDIA RTX 视频超分（实验）”与
+  “NVIDIA RTX Video HDR（实验）”；两者默认关闭且仅保存当前会话。
+- VSR/TrueHDR 原子合成唯一 `d3d11vpp`；联合模式不再强制 NV12，失败恢复之前
+  已确认组合，掉帧、缓冲或停滞继续触发当前媒体回滚。
+- 原生诊断分别报告 VSR/HDR 驱动状态，并返回源 primaries/gamma；HDR 源会被
+  安全拒绝，未知色彩信息不会被当成 SDR。
+- 真人面部、动画渐变、暗场六组 20 秒 A/B 均由驱动确认 `active`，0 总掉帧、
+  0 音视频停滞；DXGI 报告 10-bit PQ/BT.2020 HDR 活动信号。
+- 默认 MediaKit、filtered queue、插件 ABI v1、SQLite、标签、缓存队列和用户
+  数据未改变。
+
 ## 2026-07-28 · NVOFA CUDA 硬件光流真实执行
 
 - 增加显式、`EXCLUDE_FROM_ALL` 的 NVOFA CUDA execute 探针；动态完成 CUDA

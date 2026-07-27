@@ -712,6 +712,11 @@ void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
         } else {
           nvidia_vsr_state_ = result >= 0 ? "requested" : "rejected";
         }
+        if (value.find("nvidia-true-hdr") == std::string::npos) {
+          nvidia_hdr_state_ = "inactive";
+        } else {
+          nvidia_hdr_state_ = result >= 0 ? "requested" : "rejected";
+        }
         if (result >= 0) {
           // 压缩增强会重写完整滤镜图；已启用插帧必须以结构化条目重新追加。
           motion_runtime_.ReapplyAfterFilterGraphChange(player_);
@@ -737,6 +742,22 @@ void NativePlayerBridge::SamplePlayerState() {
         if (text.find("NVIDIA RTX Super Resolution enabled") !=
             std::string::npos) {
           nvidia_vsr_state_ = "active";
+        } else if (text.find(
+                       "Failed to enable NVIDIA RTX Super Resolution") !=
+                   std::string::npos) {
+          nvidia_vsr_state_ = "rejected";
+        }
+        if (text.find("NVIDIA RTX Video HDR enabled") != std::string::npos) {
+          nvidia_hdr_state_ = "active";
+        } else if (text.find("NVIDIA RTX Video HDR not supported") !=
+                       std::string::npos ||
+                   text.find("Failed to enable NVIDIA RTX Video HDR") !=
+                       std::string::npos) {
+          nvidia_hdr_state_ = "rejected";
+        } else if (text.find(
+                       "NVIDIA RTX Video HDR requested, but the source is "
+                       "already HDR, not used") != std::string::npos) {
+          nvidia_hdr_state_ = "ignored-source-hdr";
         }
         motion_runtime_.ObserveLog(player_, log_message->prefix,
                                    log_message->text);
@@ -798,6 +819,8 @@ void NativePlayerBridge::SamplePlayerState() {
   hwdec_ = read_string("hwdec-current");
   mpv_version_ = read_string("mpv-version");
   video_filters_ = read_string("vf");
+  video_primaries_ = read_string("video-params/primaries");
+  video_gamma_ = read_string("video-params/gamma");
   video_codec_ = read_string("video-codec");
   audio_codec_ = read_string("audio-codec");
 }
@@ -954,6 +977,12 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(video_filters_)},
           {flutter::EncodableValue("native-nvidia-vsr-state"),
            flutter::EncodableValue(nvidia_vsr_state_)},
+          {flutter::EncodableValue("native-nvidia-hdr-state"),
+           flutter::EncodableValue(nvidia_hdr_state_)},
+          {flutter::EncodableValue("video-params/primaries"),
+           flutter::EncodableValue(video_primaries_)},
+          {flutter::EncodableValue("video-params/gamma"),
+           flutter::EncodableValue(video_gamma_)},
           {flutter::EncodableValue("video-codec"),
            flutter::EncodableValue(video_codec_)},
           {flutter::EncodableValue("audio-codec"),

@@ -32,6 +32,9 @@ void main() {
           'mpv-version': 'mpv 0.41.0',
           'vf': 'd3d11vpp=scale=2:scaling-mode=nvidia:format=nv12',
           'native-nvidia-vsr-state': 'active',
+          'native-nvidia-hdr-state': 'active',
+          'video-params/primaries': 'bt.709',
+          'video-params/gamma': 'bt.1886',
           'video-sync': 'display-resample',
           'interpolation': 'yes',
           'tscale': 'oversample',
@@ -92,6 +95,12 @@ void main() {
       await backend.getProperty('native-nvidia-vsr-state'),
       'active',
     );
+    expect(
+      await backend.getProperty('native-nvidia-hdr-state'),
+      'active',
+    );
+    expect(await backend.getProperty('video-params/primaries'), 'bt.709');
+    expect(await backend.getProperty('video-params/gamma'), 'bt.1886');
     expect(await backend.getProperty('video-sync'), 'display-resample');
     expect(await backend.getProperty('interpolation'), 'yes');
     expect(await backend.getProperty('tscale'), 'oversample');

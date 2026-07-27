@@ -25,9 +25,13 @@ class PlayerNvidiaVideoEnhancementCapability {
     required this.mpvVersion,
     required this.hasD3d11vpp,
     required this.hasNvidiaScalingMode,
+    this.hasNvidiaTrueHdr = false,
     this.hwdecCurrent,
     this.currentVo,
     this.runtimeState = 'inactive',
+    this.hdrRuntimeState = 'inactive',
+    this.sourcePrimaries,
+    this.sourceGamma,
     this.filterChainIntegrated = false,
     this.conflictingCpuFilters = false,
   });
@@ -38,9 +42,13 @@ class PlayerNvidiaVideoEnhancementCapability {
         mpvVersion = null,
         hasD3d11vpp = false,
         hasNvidiaScalingMode = false,
+        hasNvidiaTrueHdr = false,
         hwdecCurrent = null,
         currentVo = null,
         runtimeState = 'inactive',
+        hdrRuntimeState = 'inactive',
+        sourcePrimaries = null,
+        sourceGamma = null,
         filterChainIntegrated = false,
         conflictingCpuFilters = false;
 
@@ -56,6 +64,9 @@ class PlayerNvidiaVideoEnhancementCapability {
   /** 当前内嵌构建是否包含 NVIDIA 专用缩放模式。 */
   final bool hasNvidiaScalingMode;
 
+  /** 当前固定 mpv 构建是否包含 `nvidia-true-hdr` 驱动扩展选项。 */
+  final bool hasNvidiaTrueHdr;
+
   /** 当前媒体实际使用的硬解器；只有 `d3d11va` 代表非 copy 纹理链。 */
   final String? hwdecCurrent;
 
@@ -69,6 +80,19 @@ class PlayerNvidiaVideoEnhancementCapability {
    */
   final String runtimeState;
 
+  /**
+   * 原生层根据固定 mpv 日志归一化的 RTX Video HDR 状态。
+   *
+   * `ignored-source-hdr` 表示请求被安全忽略，因为源视频本身已经是 HDR。
+   */
+  final String hdrRuntimeState;
+
+  /** 当前源视频的色彩原色，仅用于诊断，不单独作为 HDR 判据。 */
+  final String? sourcePrimaries;
+
+  /** 当前源视频的传递函数；PQ/HLG 才会被识别为 HDR 源。 */
+  final String? sourceGamma;
+
   /** 多片源 A/B、掉帧与回滚验证是否已覆盖当前滤镜接入。 */
   final bool filterChainIntegrated;
 
@@ -81,13 +105,31 @@ class PlayerNvidiaVideoEnhancementCapability {
   /** 当前会话是否绕过 Flutter Texture 并由 libmpv 直接拥有 D3D11 输出。 */
   bool get usesNativeD3d11Output => currentVo == 'gpu-next-d3d11-child-hwnd';
 
-  /** 所有可验证门槛同时满足时才允许实验开关响应点击。 */
-  bool get canEnable =>
+  /** VSR 与 TrueHDR 共用的 D3D11 非 copy、滤镜互斥和产品验证门禁。 */
+  bool get _passesCommonGate =>
       status == PlayerNvidiaVideoEnhancementStatus.available &&
       filterChainIntegrated &&
       usesNonCopyD3d11 &&
       usesNativeD3d11Output &&
       !conflictingCpuFilters;
+
+  /** 所有可验证门槛同时满足时才允许实验开关响应点击。 */
+  bool get canEnable => _passesCommonGate;
+
+  /**
+   * 当前源是否明确为 HDR。
+   *
+   * 属性尚未就绪时返回 null，入口保持禁用，避免把未知源误送入 SDR→HDR 扩展。
+   */
+  bool? get sourceIsHdr {
+    final gamma = sourceGamma?.toLowerCase();
+    if (gamma == null) return null;
+    return const <String>{'pq', 'hlg', 'st2084', 'smpte2084'}.contains(gamma);
+  }
+
+  /** TrueHDR 只允许固定实现版本、SDR 源和共同 D3D11 门禁全部通过时开启。 */
+  bool get canEnableHdr =>
+      _passesCommonGate && hasNvidiaTrueHdr && sourceIsHdr == false;
 
   /** 面向设置页的边界说明，不把驱动扩展描述成 RTX Video SDK。 */
   String get helperText {
@@ -126,6 +168,50 @@ class PlayerNvidiaVideoEnhancementCapability {
     }
     return 'mpv $mpvVersion · 原生 D3D11VA 零拷贝';
   }
+
+  /** 面向设置页的 RTX Video HDR 边界说明。 */
+  String get hdrHelperText {
+    if (status == PlayerNvidiaVideoEnhancementStatus.probing) {
+      return '正在检查 TrueHDR、源色彩与 D3D11 纹理链';
+    }
+    if (status == PlayerNvidiaVideoEnhancementStatus.unsupportedPlatform) {
+      return '仅支持 Windows NVIDIA D3D11 驱动扩展';
+    }
+    if (!hasNvidiaTrueHdr) {
+      return '当前 mpv 构建不含 nvidia-true-hdr';
+    }
+    if (!filterChainIntegrated) {
+      return 'TrueHDR 滤镜链尚未通过本机验证';
+    }
+    if (conflictingCpuFilters) {
+      return '请先关闭压缩画质增强和暗场增强';
+    }
+    if (!usesNativeD3d11Output) {
+      return '需使用 Windows 原生 libmpv D3D11 渲染器';
+    }
+    if (!usesNonCopyD3d11) {
+      return '需使用 D3D11VA（非 copy）并重新打开视频';
+    }
+    if (sourceIsHdr == null) {
+      return '等待当前视频的 SDR/HDR 色彩信息';
+    }
+    if (sourceIsHdr!) {
+      return '源视频已经是 HDR，驱动会安全忽略 SDR→HDR';
+    }
+    if (hdrRuntimeState == 'active') {
+      return '驱动已启用；最终 HDR 显示还需 Windows HDR 与 10-bit 输出';
+    }
+    if (hdrRuntimeState == 'requested') {
+      return '已请求 NVIDIA RTX Video HDR，等待驱动确认';
+    }
+    if (hdrRuntimeState == 'rejected') {
+      return '驱动不支持或拒绝 TrueHDR，已保持关闭';
+    }
+    if (hdrRuntimeState == 'ignored-source-hdr') {
+      return '源视频已是 HDR，本次请求未使用';
+    }
+    return 'SDR 源已确认；开启后仍需 Windows HDR 才能看到最终效果';
+  }
 }
 
 /**
@@ -154,6 +240,27 @@ class PlayerNvidiaVideoEnhancementExperiment {
   /** NVIDIA 视频处理滤镜占用的完整 `vf` 快照。 */
   static const filterGraph = 'd3d11vpp=scale=2:scaling-mode=nvidia:format=nv12';
 
+  /** TrueHDR 单独启用时不强制 8-bit 格式，由 mpv 选择 X2BGR10。 */
+  static const hdrFilterGraph = 'd3d11vpp=nvidia-true-hdr=yes';
+
+  /**
+   * 原子生成唯一的 NVIDIA `d3d11vpp` 滤镜。
+   *
+   * TrueHDR 与 VSR 联合启用时不能沿用 VSR 单独模式的 `format=nv12`，否则会
+   * 覆盖 mpv 为 TrueHDR 自动选择的 10-bit 输出格式。
+   */
+  static String buildFilterGraph({
+    required bool videoSuperResolutionEnabled,
+    required bool videoHdrEnabled,
+  }) {
+    if (videoSuperResolutionEnabled && videoHdrEnabled) {
+      return 'd3d11vpp=scale=2:scaling-mode=nvidia:nvidia-true-hdr=yes';
+    }
+    if (videoHdrEnabled) return hdrFilterGraph;
+    if (videoSuperResolutionEnabled) return filterGraph;
+    return '';
+  }
+
   /**
    * 查询当前后端版本和实际硬解链，返回不修改播放状态的能力快照。
    *
@@ -179,6 +286,11 @@ class PlayerNvidiaVideoEnhancementExperiment {
     final reportedVo = await backend.getProperty('current-vo');
     final reportedRuntimeState =
         await backend.getProperty('native-nvidia-vsr-state');
+    final reportedHdrRuntimeState =
+        await backend.getProperty('native-nvidia-hdr-state');
+    final reportedPrimaries =
+        await backend.getProperty('video-params/primaries');
+    final reportedGamma = await backend.getProperty('video-params/gamma');
     final version = parseVersion(reportedVersion) ??
         parseVersion(PlayerNvidiaVideoEnhancementExperiment.bundledMpvVersion);
     if (version == null) {
@@ -192,6 +304,10 @@ class PlayerNvidiaVideoEnhancementExperiment {
     final normalizedVersion = version.join('.');
     final hasD3d11vpp = _isAtLeast(version, const <int>[0, 36, 0]);
     final hasNvidiaScalingMode = _isAtLeast(version, const <int>[0, 39, 0]);
+    // 固定提交先于下一个正式版本包含 TrueHDR；未来正式版本按版本门槛识别。
+    final hasNvidiaTrueHdr =
+        reportedVersion.toLowerCase().contains('g48e6c35c0') ||
+            _isAtLeast(version, const <int>[0, 42, 0]);
     return PlayerNvidiaVideoEnhancementCapability(
       status: hasD3d11vpp && hasNvidiaScalingMode
           ? PlayerNvidiaVideoEnhancementStatus.available
@@ -201,9 +317,16 @@ class PlayerNvidiaVideoEnhancementExperiment {
       mpvVersion: normalizedVersion,
       hasD3d11vpp: hasD3d11vpp,
       hasNvidiaScalingMode: hasNvidiaScalingMode,
+      hasNvidiaTrueHdr: hasNvidiaTrueHdr,
       hwdecCurrent: _normalizeProperty(reportedHwdec),
       currentVo: _normalizeProperty(reportedVo),
       runtimeState: _normalizeRuntimeState(reportedRuntimeState),
+      hdrRuntimeState: _normalizeRuntimeState(
+        reportedHdrRuntimeState,
+        allowIgnoredSourceHdr: true,
+      ),
+      sourcePrimaries: _normalizeProperty(reportedPrimaries),
+      sourceGamma: _normalizeProperty(reportedGamma),
       filterChainIntegrated: filterChainIntegrated,
       conflictingCpuFilters: conflictingCpuFilters,
     );
@@ -233,16 +356,19 @@ class PlayerNvidiaVideoEnhancementExperiment {
   }
 
   /** 把原生状态限制在无路径、可稳定展示的枚举集合。 */
-  static String _normalizeRuntimeState(String rawValue) {
+  static String _normalizeRuntimeState(
+    String rawValue, {
+    bool allowIgnoredSourceHdr = false,
+  }) {
     final normalized = rawValue.trim().toLowerCase();
-    return const <String>{
+    final allowed = <String>{
       'inactive',
       'requested',
       'active',
       'rejected',
-    }.contains(normalized)
-        ? normalized
-        : 'inactive';
+      if (allowIgnoredSourceHdr) 'ignored-source-hdr',
+    };
+    return allowed.contains(normalized) ? normalized : 'inactive';
   }
 
   /** 按 major/minor/patch 比较版本，忽略提交后缀。 */

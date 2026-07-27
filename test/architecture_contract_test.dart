@@ -245,6 +245,10 @@ void main() {
       pageSource,
       contains('onNvidiaVideoEnhancementExperimentChanged:'),
     );
+    expect(
+      pageSource,
+      contains('onNvidiaVideoHdrExperimentChanged:'),
+    );
     expect(pageSource, contains('_setCompressionEnhancementMode'));
     expect(
       panelSource,
@@ -259,6 +263,10 @@ void main() {
       contains(
         "'player.settings.nvidiaVideoEnhancementExperiment'",
       ),
+    );
+    expect(
+      panelSource,
+      contains("'player.settings.nvidiaVideoHdrExperiment'"),
     );
   });
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +43,9 @@ void main() {
         '1';
     final openPlayerSettings =
         Platform.environment['LOCAL_TAG_PLAYER_QUALITY_OPEN_SETTINGS'] == '1';
+    final capturePlayerSettings =
+        Platform.environment['LOCAL_TAG_PLAYER_QUALITY_CAPTURE_SETTINGS'] ==
+            '1';
     final openAdvancedSettings = Platform
             .environment['LOCAL_TAG_PLAYER_QUALITY_OPEN_ADVANCED_SETTINGS'] ==
         '1';
@@ -62,9 +66,11 @@ void main() {
         mode != 'compression-off' &&
         mode != 'compression-clarity' &&
         mode != 'nvidia-off' &&
-        mode != 'nvidia-on') {
+        mode != 'nvidia-on' &&
+        mode != 'nvidia-hdr-off' &&
+        mode != 'nvidia-hdr-on') {
       throw StateError(
-        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、nvidia-off 或 nvidia-on',
+        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、nvidia-off、nvidia-on、nvidia-hdr-off 或 nvidia-hdr-on',
       );
     }
     final baselineMode = mode!;
@@ -87,7 +93,9 @@ void main() {
         'compression-off' ||
         'compression-clarity' ||
         'nvidia-off' ||
-        'nvidia-on' =>
+        'nvidia-on' ||
+        'nvidia-hdr-off' ||
+        'nvidia-hdr-on' =>
           '固定低码率 1080P 样本',
         _ => '固定 SDR 暗场样本',
       },
@@ -151,13 +159,19 @@ void main() {
       ),
     );
 
+    final nvidiaVsrOn = baselineMode == 'nvidia-on';
+    final nvidiaHdrOn = baselineMode == 'nvidia-hdr-on';
     await _waitForSessionState(
       tester,
       playerKey,
-      mode: baselineMode == 'nvidia-on' ? 'nvidia-off' : baselineMode,
+      mode: nvidiaVsrOn
+          ? 'nvidia-off'
+          : nvidiaHdrOn
+              ? 'nvidia-hdr-off'
+              : baselineMode,
       timeout: const Duration(seconds: 30),
     );
-    if (baselineMode == 'nvidia-on') {
+    if (nvidiaVsrOn || nvidiaHdrOn) {
       final settingsFinder =
           find.byKey(const ValueKey<String>('player.settings'));
       await tester.tap(settingsFinder);
@@ -167,17 +181,24 @@ void main() {
           'player.settings.nvidiaVideoEnhancementExperiment',
         ),
       );
-      expect(nvidiaToggle, findsOneWidget);
+      final nvidiaHdrToggle = find.byKey(
+        const ValueKey<String>('player.settings.nvidiaVideoHdrExperiment'),
+      );
+      expect(nvidiaVsrOn ? nvidiaToggle : nvidiaHdrToggle, findsOneWidget);
       final nvidiaSwitch = tester.widget<Switch>(
         find.descendant(
-          of: nvidiaToggle,
+          of: nvidiaVsrOn ? nvidiaToggle : nvidiaHdrToggle,
           matching: find.byType(Switch),
         ),
       );
       expect(nvidiaSwitch.onChanged, isNotNull);
       // 画质 A/B 只验证滤镜、驱动与性能；child HWND 的物理鼠标命中由独立
       // airspace 门禁负责，不能让坐标点击偶发性污染六组画质结论。
-      await playerKey.currentState!.setNvidiaVideoEnhancementForTesting(true);
+      if (nvidiaVsrOn) {
+        await playerKey.currentState!.setNvidiaVideoEnhancementForTesting(true);
+      } else {
+        await playerKey.currentState!.setNvidiaVideoHdrForTesting(true);
+      }
       await tester.pump(const Duration(seconds: 2));
       final requestedSnapshot =
           await playerKey.currentState!.buildDiagnosticsSnapshot();
@@ -225,6 +246,24 @@ void main() {
           find.byKey(const ValueKey<String>('player.settings'));
       await tester.tap(settingsFinder);
       await tester.pumpAndSettle();
+      if (capturePlayerSettings) {
+        // 原生 child HWND 已由弹层生命周期临时隐藏；这里截取真实 Flutter 窗口，
+        // 验证设置入口挂载、排版和状态反馈，不把视频后端帧冒充成 UI 证据。
+        final image = await captureImage(
+          // GeneralDialog 位于 Navigator Overlay，不能只截 PlayerPage 子树。
+          tester.element(find.byType(Overlay).first),
+        );
+        final screenshot = await image.toByteData(
+          format: ui.ImageByteFormat.png,
+        );
+        image.dispose();
+        if (screenshot == null) {
+          throw StateError('播放器设置合成层截图失败');
+        }
+        await File(
+          '${outputDirectory.path}\\$baselineMode-player-settings.png',
+        ).writeAsBytes(screenshot.buffer.asUint8List(), flush: true);
+      }
     }
     if (openAdvancedSettings) {
       // 真实 Windows 冒烟测试必须从齿轮一级点击“更多”进入，防止三个低频入口
@@ -304,7 +343,9 @@ void main() {
             'mpv 去色带:',
             'mpv 去色带参数:',
             'NVIDIA 视频增强（实验）:',
-            'NVIDIA 驱动确认:',
+            'NVIDIA RTX Video HDR（实验）:',
+            'NVIDIA VSR 驱动确认:',
+            'NVIDIA HDR 驱动确认:',
             'NVIDIA 压力保护:',
             'NVIDIA 自动回滚原因:',
             'HDR 动态映射会话:',
@@ -413,13 +454,35 @@ void main() {
           finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
           contains('scaling-mode=nvidia'),
         );
-        expect(finalLines, contains('NVIDIA 驱动确认: active'));
+        expect(finalLines, contains('NVIDIA VSR 驱动确认: active'));
         expect(finalLines, contains('NVIDIA 自动回滚原因: 无'));
       }
     } else if (baselineMode == 'nvidia-off') {
       expect(
         finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
         isNot(contains('scaling-mode=nvidia')),
+      );
+    } else if (baselineMode == 'nvidia-hdr-on') {
+      final active = finalLines.any(
+        (line) => line.startsWith('NVIDIA RTX Video HDR（实验）: 会话已请求'),
+      );
+      final rolledBack = finalLines.any(
+        (line) =>
+            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+      );
+      expect(active || rolledBack, isTrue);
+      if (active) {
+        final filterLine =
+            finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single;
+        expect(filterLine, contains('nvidia-true-hdr'));
+        expect(filterLine, isNot(contains('format=nv12')));
+        expect(finalLines, contains('NVIDIA HDR 驱动确认: active'));
+        expect(finalLines, contains('NVIDIA 自动回滚原因: 无'));
+      }
+    } else if (baselineMode == 'nvidia-hdr-off') {
+      expect(
+        finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
+        isNot(contains('nvidia-true-hdr')),
       );
     } else {
       expect(finalLines, contains('HDR 动态映射会话: 未启用 / 门槛未通过'));
@@ -463,13 +526,20 @@ Future<void> _waitForSessionState(
         return;
       }
     } else if (mode == 'nvidia-on') {
-      final active = snapshot.lines.contains('NVIDIA 驱动确认: active');
+      final active = snapshot.lines.contains('NVIDIA VSR 驱动确认: active');
       final safelyRolledBack = snapshot.lines.any(
         (line) =>
             line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
       );
       if (active || safelyRolledBack) return;
-    } else if (mode == 'nvidia-off') {
+    } else if (mode == 'nvidia-hdr-on') {
+      final active = snapshot.lines.contains('NVIDIA HDR 驱动确认: active');
+      final safelyRolledBack = snapshot.lines.any(
+        (line) =>
+            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+      );
+      if (active || safelyRolledBack) return;
+    } else if (mode == 'nvidia-off' || mode == 'nvidia-hdr-off') {
       final usesNativeD3d11 = snapshot.lines.contains(
             'mpv 输出驱动: gpu-next-d3d11-child-hwnd',
           ) &&

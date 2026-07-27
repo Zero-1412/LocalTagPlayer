@@ -162,6 +162,17 @@ class NativePlayerBridge {
    * 原始日志传回 Flutter。
    */
   std::string nvidia_vsr_state_ = "inactive";
+  /**
+   * NVIDIA RTX Video HDR 运行状态。
+   *
+   * 只允许 `inactive/requested/active/rejected/ignored-source-hdr`，禁止把
+   * HRESULT、媒体路径或原始日志传回 Flutter。
+   */
+  std::string nvidia_hdr_state_ = "inactive";
+  /** 当前源色彩原色，供 Dart 诊断和保守 SDR/HDR 门禁使用。 */
+  std::string video_primaries_ = "unavailable";
+  /** 当前源传递函数；只有明确的 PQ/HLG 才会被 Dart 识别为 HDR。 */
+  std::string video_gamma_ = "unavailable";
   std::string video_codec_ = "unavailable";
   std::string audio_codec_ = "unavailable";
   double avsync_ = 0.0;

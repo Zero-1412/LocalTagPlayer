@@ -1,5 +1,18 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.83` 在既有 Windows 原生 child HWND 边界内接入固定
+mpv 提交自带的 NVIDIA RTX Video HDR 驱动扩展，不下载或分发 RTX Video SDK。
+`PlayerNvidiaVideoEnhancementCapability` 现在分别建模 VSR 与 TrueHDR，并要求
+固定实现版本、原生 `gpu-next/D3D11`、非 copy `d3d11va`、明确 SDR 源和无 CPU
+滤镜冲突。页面只提交 VSR/HDR 两个布尔意图；应用层原子合成唯一
+`d3d11vpp`，联合开启时移除 VSR 单独模式的 `format=nv12`，让 mpv 自动选择
+TrueHDR 所需 10-bit 输出。原生桥只把固定日志归一化为独立的
+`native-nvidia-vsr-state` / `native-nvidia-hdr-state`，并返回源 primaries/gamma；
+失败恢复此前已确认组合，播放压力则同时回滚当前 NVIDIA 会话。真人面部、动画
+渐变和暗场六组 20 秒 A/B 均得到驱动 `active`、PQ/BT.2020 10-bit HDR 活动信号、
+0 总掉帧和 0 音视频停滞。默认 MediaKit、插件 ABI v1、filtered queue、SQLite、
+标签、缓存队列和用户数据不变。
+
 `Architecture Baseline 0.5.82` 将 NVIDIA Optical Flow 门禁从“驱动导出存在”
 推进到“硬件会话实际执行”。隔离 QA 目标按固定提交和 SHA-256 临时取得 NVIDIA
 BSD-3-Clause 公开的 NVOFA CUDA 2.0 头文件，只从 System32 动态加载

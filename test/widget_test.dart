@@ -4436,7 +4436,9 @@ void main() {
     );
     expect(bundled.hasD3d11vpp, isTrue);
     expect(bundled.hasNvidiaScalingMode, isTrue);
+    expect(bundled.hasNvidiaTrueHdr, isTrue);
     expect(bundled.canEnable, isFalse);
+    expect(bundled.canEnableHdr, isFalse);
     expect(bundled.helperText, contains('纹理/滤镜链尚未验证'));
 
     final newer = await PlayerNvidiaVideoEnhancementExperiment.probe(
@@ -4479,6 +4481,38 @@ void main() {
     );
     expect(conflicting.canEnable, isFalse);
     expect(conflicting.helperText, contains('不能安全串联'));
+
+    final trueHdr = await PlayerNvidiaVideoEnhancementExperiment.probe(
+      _CapabilityPlayerBackend(<String, String>{
+        'mpv-version': 'mpv 0.41.0-908-g48e6c35c0',
+        'hwdec-current': 'd3d11va',
+        'current-vo': 'gpu-next-d3d11-child-hwnd',
+        'native-nvidia-hdr-state': 'active',
+        'video-params/primaries': 'bt.709',
+        'video-params/gamma': 'bt.1886',
+      }),
+      isWindows: true,
+      filterChainIntegrated: true,
+    );
+    expect(trueHdr.hasNvidiaTrueHdr, isTrue);
+    expect(trueHdr.sourceIsHdr, isFalse);
+    expect(trueHdr.canEnableHdr, isTrue);
+    expect(trueHdr.hdrHelperText, contains('驱动已启用'));
+
+    final hdrSource = await PlayerNvidiaVideoEnhancementExperiment.probe(
+      _CapabilityPlayerBackend(<String, String>{
+        'mpv-version': 'mpv 0.41.0-908-g48e6c35c0',
+        'hwdec-current': 'd3d11va',
+        'current-vo': 'gpu-next-d3d11-child-hwnd',
+        'video-params/primaries': 'bt.2020',
+        'video-params/gamma': 'pq',
+      }),
+      isWindows: true,
+      filterChainIntegrated: true,
+    );
+    expect(hdrSource.sourceIsHdr, isTrue);
+    expect(hdrSource.canEnableHdr, isFalse);
+    expect(hdrSource.hdrHelperText, contains('已经是 HDR'));
   });
 
   test('adaptive quality applies one complete lavfi graph per level', () async {
@@ -4523,6 +4557,16 @@ void main() {
     expect(backend.properties['vf'], contains('scaling-mode=nvidia'));
     expect(backend.properties['vf'], isNot(contains('lavfi')));
     expect(backend.properties['deband'], 'no');
+
+    await PlayerAdaptiveQualityEnhancer.apply(
+      backend: backend,
+      level: PlayerAdaptiveQualityLevel.off,
+      nvidiaVideoEnhancementEnabled: true,
+      nvidiaVideoHdrEnabled: true,
+    );
+    expect(backend.properties['vf'], contains('scaling-mode=nvidia'));
+    expect(backend.properties['vf'], contains('nvidia-true-hdr=yes'));
+    expect(backend.properties['vf'], isNot(contains('format=nv12')));
   });
 
   test('GPU detector reports only backend-confirmed capabilities', () async {
@@ -5208,6 +5252,7 @@ void main() {
     int? selectedSeekStep;
     bool? superResolutionEnabled;
     bool? nvidiaVideoEnhancementEnabled;
+    bool? nvidiaVideoHdrEnabled;
     PlayerCompressionEnhancementMode? selectedCompressionEnhancementMode;
     await tester.pumpWidget(
       MaterialApp(
@@ -5227,6 +5272,7 @@ void main() {
                   seekStepSeconds: 5,
                   videoSuperResolutionEnabled: false,
                   nvidiaVideoEnhancementExperimentEnabled: false,
+                  nvidiaVideoHdrExperimentEnabled: false,
                   nvidiaVideoEnhancementCapability:
                       const PlayerNvidiaVideoEnhancementCapability(
                     status: PlayerNvidiaVideoEnhancementStatus.available,
@@ -5258,6 +5304,9 @@ void main() {
                   },
                   onNvidiaVideoEnhancementExperimentChanged: (enabled) {
                     nvidiaVideoEnhancementEnabled = enabled;
+                  },
+                  onNvidiaVideoHdrExperimentChanged: (enabled) {
+                    nvidiaVideoHdrEnabled = enabled;
                   },
                   onCompressionEnhancementModeChanged: (mode) {
                     selectedCompressionEnhancementMode = mode;
@@ -5302,7 +5351,8 @@ void main() {
     expect(find.text('镜像画面'), findsNothing);
     expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsNothing);
     expect(find.text('libmpv 缩放，仅在画面放大时生效'), findsNothing);
-    expect(find.text('NVIDIA 视频增强（实验）'), findsOneWidget);
+    expect(find.text('NVIDIA RTX 视频超分（实验）'), findsOneWidget);
+    expect(find.text('NVIDIA RTX Video HDR（实验）'), findsOneWidget);
     expect(
       find.text(
         'mpv 0.41.0 支持该模式，但纹理/滤镜链尚未验证',
@@ -5330,6 +5380,16 @@ void main() {
     );
     expect(nvidiaSwitch.onChanged, isNull);
     expect(nvidiaVideoEnhancementEnabled, isNull);
+    final nvidiaHdrSwitch = tester.widget<Switch>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('player.settings.nvidiaVideoHdrExperiment'),
+        ),
+        matching: find.byType(Switch),
+      ),
+    );
+    expect(nvidiaHdrSwitch.onChanged, isNull);
+    expect(nvidiaVideoHdrEnabled, isNull);
 
     await tester.tap(
       find.byKey(const ValueKey('player.settings.repeatOne')),
@@ -5459,7 +5519,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('player.settings.back')));
     await tester.pumpAndSettle();
     expect(find.text('镜像画面'), findsNothing);
-    expect(find.text('NVIDIA 视频增强（实验）'), findsOneWidget);
+    expect(find.text('NVIDIA RTX 视频超分（实验）'), findsOneWidget);
     expect(find.text('视频比例'), findsNothing);
 
     await tester.tapAt(const Offset(20, 20));

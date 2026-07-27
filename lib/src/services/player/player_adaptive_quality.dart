@@ -388,9 +388,13 @@ class PlayerAdaptiveQualityEnhancer {
     required PlayerAdaptiveQualityLevel level,
     required bool darkSceneEnhancementEnabled,
     bool nvidiaVideoEnhancementEnabled = false,
+    bool nvidiaVideoHdrEnabled = false,
   }) {
-    if (nvidiaVideoEnhancementEnabled) {
-      return PlayerNvidiaVideoEnhancementExperiment.filterGraph;
+    if (nvidiaVideoEnhancementEnabled || nvidiaVideoHdrEnabled) {
+      return PlayerNvidiaVideoEnhancementExperiment.buildFilterGraph(
+        videoSuperResolutionEnabled: nvidiaVideoEnhancementEnabled,
+        videoHdrEnabled: nvidiaVideoHdrEnabled,
+      );
     }
     final filters = <String>[
       ..._filters[level]!,
@@ -406,6 +410,7 @@ class PlayerAdaptiveQualityEnhancer {
     required PlayerAdaptiveQualityLevel level,
     bool darkSceneEnhancementEnabled = false,
     bool nvidiaVideoEnhancementEnabled = false,
+    bool nvidiaVideoHdrEnabled = false,
   }) {
     final previous = _applyTails[backend] ?? Future<void>.value();
     final operation = previous.then((_) async {
@@ -419,6 +424,7 @@ class PlayerAdaptiveQualityEnhancer {
       }
 
       final debandEnabled = !nvidiaVideoEnhancementEnabled &&
+          !nvidiaVideoHdrEnabled &&
           level != PlayerAdaptiveQualityLevel.off;
       if (!debandEnabled) {
         // 回滚先关闭 GPU 去色带，再清理 CPU 滤镜，尽快释放额外渲染开销。
@@ -435,6 +441,7 @@ class PlayerAdaptiveQualityEnhancer {
           level: level,
           darkSceneEnhancementEnabled: darkSceneEnhancementEnabled,
           nvidiaVideoEnhancementEnabled: nvidiaVideoEnhancementEnabled,
+          nvidiaVideoHdrEnabled: nvidiaVideoHdrEnabled,
         ),
       );
       if (debandEnabled) {

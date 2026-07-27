@@ -1,3 +1,22 @@
+## 2026-07-28 NVIDIA RTX Video HDR 驱动实链
+
+- 固定 mpv `v0.41.0-908-g48e6c35c0` 的 `nvidia-true-hdr` 已在 Windows
+  child HWND / D3D11VA 非 copy 链实际调用 NVIDIA 驱动，不依赖或分发 RTX
+  Video SDK 文件。
+- `PlayerNvidiaVideoEnhancementCapability` 分别建模 VSR/TrueHDR、源 gamma 和
+  两个驱动状态；TrueHDR 只允许明确 SDR 源，HDR/未知源均不能点击。
+- 齿轮一级保留 VSR 稳定键并改为“NVIDIA RTX 视频超分（实验）”，新增稳定键
+  `player.settings.nvidiaVideoHdrExperiment`；两个开关默认关闭、会话级。
+- VSR/HDR 原子合成唯一 `d3d11vpp`；联合模式不强制 NV12，新组合失败恢复先前
+  组合，运行压力沿用同一个 NVIDIA 会话熔断。
+- 真人面部、动画渐变、暗场六组 20 秒 A/B 全部驱动 `active`、0 总掉帧、
+  0 音视频停滞，并建立 10-bit PQ/BT.2020 HDR 活动信号。峰值元数据不可用，
+  不宣称完成显示器亮度校准。
+- Flutter 合成层真实点击截图确认弹层锚点、HWND 遮挡、文本换行与开关状态正常；
+  filtered queue、当前 index、返回状态、默认 MediaKit、插件 ABI v1 和用户数据
+  未改变。
+- 完整证据见 `docs/qa/mpv_nvidia_true_hdr_20260728.md`。
+
 ## 2026-07-28 NVOFA CUDA 真实 execute 门禁
 
 - 隔离 QA 目标已在 RTX 4070 SUPER 上建立 CUDA context 与 NVOFA session，

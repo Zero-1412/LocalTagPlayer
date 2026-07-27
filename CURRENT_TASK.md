@@ -1,5 +1,31 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 NVIDIA RTX Video HDR 驱动实链
+
+- 固定 libmpv `v0.41.0-908-g48e6c35c0` 已确认包含
+  `d3d11vpp=nvidia-true-hdr=yes`；通过 NVIDIA D3D11 驱动扩展执行，不下载、
+  提交或分发 RTX Video SDK 文件。
+- 能力快照分别建模 VSR 与 TrueHDR；HDR 入口只允许 Windows 原生 child HWND、
+  非 copy `d3d11va`、固定实现版本、明确 SDR 源且无压缩/暗场 CPU 滤镜冲突。
+- 齿轮一级保留原 VSR 稳定键并明确显示“NVIDIA RTX 视频超分（实验）”，新增
+  `player.settings.nvidiaVideoHdrExperiment`。两个开关会话级、默认关闭。
+- VSR/HDR 由一次完整 `vf` 原子应用；联合开启使用
+  `d3d11vpp=scale=2:scaling-mode=nvidia:nvidia-true-hdr=yes`，不强制 NV12。
+  新组合被拒绝时恢复之前已确认组合；运行压力复用既有 NVIDIA 回滚。
+- 原生桥只匹配固定成功/失败/已是 HDR 文本，返回
+  `inactive/requested/active/rejected/ignored-source-hdr`，不泄漏原始 verbose
+  日志；同时返回源 primaries/gamma 供 SDR/HDR 门禁。
+- 真人面部、动画渐变、暗场各 off/on 20 秒六组均为驱动 `active`、0 总掉帧、
+  0 视频/音频停滞；滤镜均无 `format=nv12`。播放期间 DXGI 报告 3840×2160、
+  10-bit、PQ/BT.2020、HDR 信号活动；峰值亮度元数据为 0.0 nits，仍不可用于
+  显示器亮度校准结论。
+- 真实 Debug 点击后的 Flutter 合成层截图确认两个 NVIDIA 入口可达，TrueHDR
+  开启态、三行说明、锚点、边界和对比度正常。自定义 runner 未注册系统级
+  `captureScreenshot`，因此未把该替代截图描述成 Windows Graphics Capture。
+- 默认 MediaKit、渲染器选择、filtered queue、当前 index、返回状态、插件 ABI
+  v1、SQLite、标签、缓存队列和用户数据均未改变。
+- 完整证据见 `docs/qa/mpv_nvidia_true_hdr_20260728.md`。
+
 ## 2026-07-28 NVOFA CUDA 真实硬件执行门禁
 
 - 固定 NVIDIA 官方公开头文件提交
