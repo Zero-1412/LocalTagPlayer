@@ -1,5 +1,23 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 PlayerService 显示同步插值边界
+
+- 播放设置新增“流畅度提升：关闭 / 显示同步插值”，旧设置缺字段时安全关闭；
+  启用前说明这不是 NVIDIA 或其它 AI 生成中间帧，并提供跨 Route 撤销。
+- `PlayerPage` 只传递 `PlayerSmoothMotionMode`；`PlayerService` 统一配置
+  `display-resample / oversample / interpolation`，不让页面持有 mpv 字符串协议。
+- Windows 原生桥补齐四个固定属性读回；只有 `video-sync`、`tscale` 和
+  `interpolation` 全部符合预期才标记为配置已确认，逐帧运行态单独展示
+  `display-sync-active`；能力不足时关闭插值并继续播放。
+- 复用既有两秒健康采样和掉帧/缓冲/停滞熔断；运行期压力只回滚当前媒体，下一条
+  媒体仍按用户偏好重新验证，不修改全局设置。
+- filtered queue、当前 index、返回媒体库状态、MediaKit/Windows 后端选择、
+  插件 ABI、SQLite、缓存队列和用户数据均不改变。
+- `flutter analyze`、295 项全量测试与 Windows Debug build 通过；真实 Debug
+  窗口已点击“设置 → 视频画质与增强 → 流畅度提升”，确认弹窗、状态文案和撤销
+  均可达，最终设置恢复为“关闭”。
+- 验证记录见 `docs/qa/player_smooth_motion_20260727.md`。
+
 ## 2026-07-27 Windows 播放渲染器用户入口
 
 - `PlaybackSettings` 新增类型化 `rendererPreference`，旧设置缺字段时迁移为

@@ -32,6 +32,10 @@ void main() {
           'mpv-version': 'mpv 0.41.0',
           'vf': 'd3d11vpp=scale=2:scaling-mode=nvidia:format=nv12',
           'native-nvidia-vsr-state': 'active',
+          'video-sync': 'display-resample',
+          'interpolation': 'yes',
+          'tscale': 'oversample',
+          'display-sync-active': 'true',
         };
       }
       return null;
@@ -88,6 +92,10 @@ void main() {
       await backend.getProperty('native-nvidia-vsr-state'),
       'active',
     );
+    expect(await backend.getProperty('video-sync'), 'display-resample');
+    expect(await backend.getProperty('interpolation'), 'yes');
+    expect(await backend.getProperty('tscale'), 'oversample');
+    expect(await backend.getProperty('display-sync-active'), 'true');
 
     final rectCountBeforeDpiChange =
         calls.where((call) => call.method == 'setSurfaceRect').length;

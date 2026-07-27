@@ -164,6 +164,11 @@ class NativePlayerBridge {
   double cache_duration_ = 0.0;
   double estimated_vf_fps_ = 0.0;
   double display_fps_ = 0.0;
+  /** 显示同步插值的实际 mpv 属性，用于 Flutter 侧能力读回而非写入推断。 */
+  std::string video_sync_ = "unavailable";
+  std::string interpolation_ = "unavailable";
+  std::string temporal_scaler_ = "unavailable";
+  std::string display_sync_active_ = "unavailable";
   int64_t frame_number_ = 0;
   int64_t dropped_frames_ = 0;
   int64_t completed_count_ = 0;

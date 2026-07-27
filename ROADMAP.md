@@ -1,5 +1,15 @@
 # ROADMAP.md
 
+## 2026-07-27 普通显示同步插值
+
+- 已把 `off/displayInterpolation` 作为类型化能力接入 `PlayerService`，并由后端
+  读回 `video-sync/interpolation/tscale` 后确认实际状态。
+- 该档只解决源帧率与显示刷新率不匹配的顿挫，不宣传为运动补帧或 AI 生成帧；
+  缓冲、掉帧和停滞继续触发当前媒体回滚。
+- 下一阶段在 Windows 原生后端完成多帧率长播与真实显示 A/B 后，再单独定义
+  运动补帧插件 contract；不得把 VapourSynth/SVP/RIFE 模型或延迟控制塞进
+  `PlayerService` 通用命令层。
+
 ## 2026-07-27 播放器应用层与平台后端解耦
 
 - 已建立 `PlayerPage → PlayerService → PlayerBackend` 三层边界；MediaKit 与

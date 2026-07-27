@@ -87,6 +87,7 @@ export 'services/player/player_hardware_compatibility.dart';
 export 'services/player/player_memory_diagnostics.dart';
 export 'services/player/player_nvidia_video_enhancement_experiment.dart';
 export 'services/player/player_service.dart';
+export 'services/player/player_smooth_motion.dart';
 export 'services/player/player_video_super_resolution.dart';
 export 'services/player/windows_native_player_backend.dart';
 export 'services/relink/bulk_path_relink_service.dart';

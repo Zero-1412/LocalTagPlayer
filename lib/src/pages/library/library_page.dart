@@ -1144,6 +1144,11 @@ class _PlaybackQualitySettingsPanel extends StatelessWidget {
               },
             ),
             const SizedBox(height: 16),
+            PlaybackSmoothMotionDropdown(
+              settings: settings,
+              onChanged: onChanged,
+            ),
+            const SizedBox(height: 16),
             DropdownButtonFormField<PlayerCompressionEnhancementMode>(
               key: const ValueKey(
                 'settings.playbackQuality.automaticEnhancement',
@@ -1252,6 +1257,103 @@ class _PlaybackQualitySettingsPanel extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/**
+ * 需要确认和可撤销路径的流畅度增强选择器。
+ *
+ * 启用只保存类型化偏好，下次进入播放器后由 PlayerService 配置具体后端；弹窗等待
+ * 期间组件若被移除，不得再更新旧 Route 或触发持久化。
+ */
+class PlaybackSmoothMotionDropdown extends StatefulWidget {
+  const PlaybackSmoothMotionDropdown({
+    super.key,
+    required this.settings,
+    required this.onChanged,
+  });
+
+  /** 当前应用级播放设置快照。 */
+  final PlaybackSettings settings;
+
+  /** 把确认后的完整设置交还设置页统一持久化。 */
+  final ValueChanged<PlaybackSettings> onChanged;
+
+  @override
+  State<PlaybackSmoothMotionDropdown> createState() =>
+      _PlaybackSmoothMotionDropdownState();
+}
+
+/** 管理确认弹窗生命周期与撤销动作，不持有播放器后端。 */
+class _PlaybackSmoothMotionDropdownState
+    extends State<PlaybackSmoothMotionDropdown> {
+  /** 处理用户选择；只有确认启用后才修改应用级设置。 */
+  Future<void> _changeMode(PlayerSmoothMotionMode mode) async {
+    final previous = widget.settings;
+    if (mode == previous.smoothMotionMode) return;
+    if (mode == PlayerSmoothMotionMode.displayInterpolation) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('启用显示同步插值？'),
+          content: const Text(
+            '它会用相邻原始帧缓解帧率与屏幕刷新率不匹配的顿挫，'
+            '不是 NVIDIA 或其它 AI 生成中间帧。播放压力出现时只回滚当前视频。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('启用'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
+    }
+    final next = previous.copyWith(smoothMotionMode: mode);
+    widget.onChanged(next);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            '流畅度提升已设为 ${PlaybackSettings.smoothMotionLabelFor(mode)}，'
+            '下次进入播放器生效',
+          ),
+          action: SnackBarAction(
+            label: '撤销',
+            onPressed: () => widget.onChanged(previous),
+          ),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mode = widget.settings.smoothMotionMode;
+    return DropdownButtonFormField<PlayerSmoothMotionMode>(
+      key: ValueKey('settings.playbackQuality.smoothMotion.${mode.name}'),
+      initialValue: mode,
+      decoration: InputDecoration(
+        labelText: '流畅度提升',
+        helperText: PlaybackSettings.smoothMotionDescriptionFor(mode),
+      ),
+      items: [
+        for (final option in PlayerSmoothMotionMode.values)
+          DropdownMenuItem(
+            value: option,
+            child: Text(PlaybackSettings.smoothMotionLabelFor(option)),
+          ),
+      ],
+      onChanged: (value) {
+        if (value != null) unawaited(_changeMode(value));
+      },
     );
   }
 }

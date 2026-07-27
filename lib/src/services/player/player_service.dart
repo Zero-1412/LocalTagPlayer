@@ -5,6 +5,7 @@ import '../../core/playback_settings.dart';
 import '../../models/player_gpu_capabilities.dart';
 import '../../platform/platform_interfaces.dart';
 import 'player_hdr_mapping_experiment.dart';
+import 'player_smooth_motion.dart';
 import 'player_video_super_resolution.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -86,13 +87,14 @@ class PlayerService
    * [videoAspectOverride] 与 [panscan] 由平台无关的画面比例模型计算；服务负责把
    * 它们与缩放、输出范围、HDR 和倍速按稳定顺序送入当前引擎。
    */
-  Future<void> applyOpenPreferences({
+  Future<PlayerSmoothMotionApplyResult> applyOpenPreferences({
     required String videoAspectOverride,
     required String panscan,
     required PlayerVideoScaler videoScaler,
     required PlayerVideoOutputRange videoOutputRange,
     required double playbackRate,
     required bool videoSuperResolutionEnabled,
+    PlayerSmoothMotionMode smoothMotionMode = PlayerSmoothMotionMode.off,
     bool hdrDynamicToneMappingExperimentEnabled = false,
   }) async {
     /** 单个可选属性失败时继续应用其余偏好，兼容能力较少的后端。 */
@@ -128,7 +130,19 @@ class PlayerService
       enabled: hdrDynamicToneMappingExperimentEnabled,
     );
     await setRate(playbackRate);
+    return applySmoothMotion(smoothMotionMode);
   }
+
+  /**
+   * 应用类型化的显示同步插值意图。
+   *
+   * 页面不接触 `video-sync`、`interpolation` 或 `tscale` 字符串；后端缺少能力
+   * 时由统一协调器回退并返回可诊断结果。
+   */
+  Future<PlayerSmoothMotionApplyResult> applySmoothMotion(
+    PlayerSmoothMotionMode mode,
+  ) =>
+      PlayerSmoothMotion.apply(backend: this, mode: mode);
 
   /** 截取当前视频帧；失败语义由具体后端保持不变。 */
   Future<Uint8List?> screenshot({String format = 'image/jpeg'}) =>

@@ -849,6 +849,9 @@ class PlayerPageState extends State<PlayerPage> {
   /** NVIDIA D3D11 滤镜复用同一掉帧熔断，但独立锁存且不改其它增强设置。 */
   final PlayerHdrMappingSafetyCoordinator _nvidiaVideoSafetyCoordinator =
       PlayerHdrMappingSafetyCoordinator(featureLabel: 'NVIDIA 视频增强');
+  /** 显示同步插值复用同一播放压力熔断，但不与 AI 补帧或 NVIDIA 能力混淆。 */
+  final PlayerHdrMappingSafetyCoordinator _smoothMotionSafetyCoordinator =
+      PlayerHdrMappingSafetyCoordinator(featureLabel: '显示同步插值');
   /** 当前会话已经实际送入后端的自动增强档位。 */
   PlayerAdaptiveQualityLevel _adaptiveQualityLevel =
       PlayerAdaptiveQualityLevel.off;
@@ -930,6 +933,16 @@ class PlayerPageState extends State<PlayerPage> {
   late PlayerVideoAspectMode _videoAspectMode;
   /** 当前缩放器基线；超分关闭后恢复该值。 */
   late PlayerVideoScaler _videoScaler;
+  /** 用户请求的流畅度增强档位；运行期回滚不会改写此持久偏好。 */
+  late PlayerSmoothMotionMode _smoothMotionMode;
+  /** 当前媒体是否已通过属性读回确认显示同步插值配置。 */
+  var _smoothMotionActive = false;
+  /** 最近一次类型化配置或回退结果，不包含原生错误与路径。 */
+  var _smoothMotionApplyReason = '尚未应用';
+  /** 当前媒体显示同步插值的自动回滚原因。 */
+  String? _smoothMotionRollbackReason;
+  /** 当前媒体显示同步插值的自动回滚时间。 */
+  DateTime? _smoothMotionRollbackAt;
   /** 当前显示输出电平策略。 */
   late PlayerVideoOutputRange _videoOutputRange;
   /** 当前全局 GPU 高质量缩放开关；只影响 libmpv 渲染缩放器，不调用 NVIDIA AI。 */
@@ -1018,6 +1031,7 @@ class PlayerPageState extends State<PlayerPage> {
     _playbackMode = _effectivePlaybackSettings.playbackMode;
     _videoAspectMode = _effectivePlaybackSettings.videoAspectMode;
     _videoScaler = _effectivePlaybackSettings.videoScaler;
+    _smoothMotionMode = _effectivePlaybackSettings.smoothMotionMode;
     _videoOutputRange = _effectivePlaybackSettings.videoOutputRange;
     _playbackRate = _effectivePlaybackSettings.playbackRate;
     _videoSuperResolutionEnabled =
@@ -1722,6 +1736,7 @@ class PlayerPageState extends State<PlayerPage> {
       if (_compressionEnhancementMode != PlayerCompressionEnhancementMode.off ||
           _hdrMappingExperimentActive ||
           _darkSceneEnhancementActive ||
+          _smoothMotionActive ||
           _nvidiaVideoEnhancementExperimentEnabled) {
         _qualityMarginSampleTick++;
         if (_qualityMarginSampleTick.isEven) {
@@ -1842,6 +1857,25 @@ class PlayerPageState extends State<PlayerPage> {
         debugPrint(
           'PLAYER_NVIDIA_VIDEO_ENHANCEMENT rollback=true '
           'reason=${nvidiaDecision.reason}',
+        );
+      }
+    }
+    if (_smoothMotionActive && !_isExiting) {
+      final smoothMotionDecision =
+          _smoothMotionSafetyCoordinator.evaluate(sample);
+      if (smoothMotionDecision.shouldRollback) {
+        final guardedPath = _openedPath;
+        final result = await _playerService.applySmoothMotion(
+          PlayerSmoothMotionMode.off,
+        );
+        if (!mounted || _openedPath != guardedPath) return;
+        _smoothMotionActive = false;
+        _smoothMotionApplyReason = result.reason;
+        _smoothMotionRollbackReason = smoothMotionDecision.reason;
+        _smoothMotionRollbackAt = sampledAt;
+        debugPrint(
+          'PLAYER_SMOOTH_MOTION rollback=true '
+          'reason=${smoothMotionDecision.reason}',
         );
       }
     }
@@ -2687,8 +2721,6 @@ class PlayerPageState extends State<PlayerPage> {
 
   Future<void> _applyPlaybackPerformanceProfile() async {
     final options = <String, String>{
-      'video-sync': 'display-resample',
-      'interpolation': 'no',
       // 固定解码并发，避免 FFmpeg 在高核心数机器上为单个视频扩张大量工作线程。
       'vd-lavc-threads': '4',
       'cache': 'yes',
@@ -2714,10 +2746,11 @@ class PlayerPageState extends State<PlayerPage> {
       await _setMpvProperty(entry.key, entry.value);
     }
     // 部分后端会在打开新媒体时重建参数；每次 open 前后恢复比例、倍速与超分。
-    await _playerService.applyOpenPreferences(
+    final smoothMotionResult = await _playerService.applyOpenPreferences(
       videoAspectOverride: _videoAspectMode.mpvAspectOverride,
       panscan: _videoAspectMode.mpvPanscan,
       videoScaler: _videoScaler,
+      smoothMotionMode: _smoothMotionMode,
       videoOutputRange: _videoOutputRange,
       playbackRate: _playbackRate,
       videoSuperResolutionEnabled: _videoSuperResolutionEnabled,
@@ -2725,6 +2758,8 @@ class PlayerPageState extends State<PlayerPage> {
       // Compute 与 HDR 源信号检测会在 `_detectCurrentGpuCapabilities` 中解锁。
       hdrDynamicToneMappingExperimentEnabled: false,
     );
+    _smoothMotionActive = smoothMotionResult.active;
+    _smoothMotionApplyReason = smoothMotionResult.reason;
   }
 
   Future<void> _setMpvProperty(String property, String value) async {
@@ -2889,6 +2924,11 @@ class PlayerPageState extends State<PlayerPage> {
           _nvidiaVideoSafetyCoordinator.reset();
           _nvidiaVideoEnhancementRollbackReason = null;
           _nvidiaVideoEnhancementRollbackAt = null;
+          _smoothMotionActive = false;
+          _smoothMotionApplyReason = '等待当前媒体配置';
+          _smoothMotionSafetyCoordinator.reset();
+          _smoothMotionRollbackReason = null;
+          _smoothMotionRollbackAt = null;
           _hdrMappingSafetyCoordinator.reset();
           _hdrMappingRollbackReason = null;
           _hdrMappingRollbackAt = null;
@@ -3790,6 +3830,8 @@ class PlayerPageState extends State<PlayerPage> {
       'display-fps',
       'video-sync',
       'interpolation',
+      'tscale',
+      'display-sync-active',
       'vf',
       'deband',
       'deband-iterations',
@@ -3865,7 +3907,14 @@ class PlayerPageState extends State<PlayerPage> {
       '估算单帧耗时: ${frameDurationMs?.toStringAsFixed(2) ?? 'unavailable'} ms',
       'mpv \u663e\u793a FPS: ${mpv['display-fps']}',
       'mpv \u89c6\u9891\u540c\u6b65: ${mpv['video-sync']}',
-      'mpv \u63d2\u5e27: ${mpv['interpolation']}',
+      'mpv 插值请求: ${mpv['interpolation']}',
+      'mpv 时间缩放器: ${mpv['tscale']}',
+      'mpv 显示同步活动: ${mpv['display-sync-active']}',
+      '流畅度提升设置: ${PlaybackSettings.smoothMotionLabelFor(_smoothMotionMode)}',
+      '显示同步插值配置: ${_smoothMotionActive ? '属性已确认' : '未启用'} · $_smoothMotionApplyReason',
+      '显示同步插值压力保护: ${_smoothMotionSafetyCoordinator.reason}',
+      '显示同步插值回滚原因: ${_smoothMotionRollbackReason ?? '无'}',
+      '显示同步插值回滚时间: ${_smoothMotionRollbackAt?.toIso8601String() ?? 'none'}',
       '压缩画质增强设置: ${PlaybackSettings.compressionEnhancementLabelFor(_compressionEnhancementMode)}',
       '自动画质基线: ${_adaptiveQualityCoordinator.profile.label}',
       '自动画质档位: ${playerAdaptiveQualityLevelLabel(_adaptiveQualityLevel)}',

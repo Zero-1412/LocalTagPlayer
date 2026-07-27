@@ -1,5 +1,16 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.79` 将普通显示同步插值纳入播放器应用层边界：
+`PlaybackSettings` 只保存 `off/displayInterpolation` 类型化意图，
+`PlayerService.applySmoothMotion` 统一转换为
+`video-sync=display-resample + tscale=oversample + interpolation=yes`，页面不再
+直接拼接这三个 mpv 属性。配置只有在后端完整读回后才标记为已确认；逐帧运行态
+另由 `display-sync-active` 展示。写入或读回失败、
+缓冲、掉帧或音视频停滞时只回滚当前媒体，不改写用户全局选择。Windows 原生桥
+新增固定字段读回，MediaKit 与非 Windows 继续通过同一 `PlayerRuntimeAccess`
+安全失败语义工作。该能力是相邻原始帧的显示插值，不是 NVIDIA/RIFE AI 生成帧。
+filtered queue、插件 ABI、SQLite、缓存队列和用户数据不变。
+
 `Architecture Baseline 0.5.78` 把 Windows 原生 libmpv 从环境变量专用路径提升为
 可持久化、可撤销的用户渲染器偏好。`PlaybackSettings` 只保存
 `automatic/mediaKit/windowsLibmpv`；`PlayerPage` 将偏好随硬解配置交给

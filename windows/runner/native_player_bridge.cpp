@@ -771,6 +771,10 @@ void NativePlayerBridge::SamplePlayerState() {
   cache_duration_ = read_double("demuxer-cache-duration", cache_duration_);
   estimated_vf_fps_ = read_double("estimated-vf-fps", estimated_vf_fps_);
   display_fps_ = read_double("display-fps", display_fps_);
+  video_sync_ = read_string("video-sync");
+  interpolation_ = read_string("interpolation");
+  temporal_scaler_ = read_string("tscale");
+  display_sync_active_ = read_string("display-sync-active");
   frame_number_ = read_int("estimated-frame-number", frame_number_);
   dropped_frames_ = read_int("frame-drop-count", dropped_frames_);
   hwdec_ = read_string("hwdec-current");
@@ -944,6 +948,14 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(estimated_vf_fps_)},
           {flutter::EncodableValue("display-fps"),
            flutter::EncodableValue(display_fps_)},
+          {flutter::EncodableValue("video-sync"),
+           flutter::EncodableValue(video_sync_)},
+          {flutter::EncodableValue("interpolation"),
+           flutter::EncodableValue(interpolation_)},
+          {flutter::EncodableValue("tscale"),
+           flutter::EncodableValue(temporal_scaler_)},
+          {flutter::EncodableValue("display-sync-active"),
+           flutter::EncodableValue(display_sync_active_)},
           {flutter::EncodableValue("estimated-frame-number"),
            flutter::EncodableValue(frame_number_)},
           {flutter::EncodableValue("frame-drop-count"),

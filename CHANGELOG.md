@@ -1,5 +1,18 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · 显示同步插值进入 PlayerService
+
+- 新增默认关闭的“流畅度提升：显示同步插值”，启用需要确认且保存后可撤销；
+  文案明确它不是 NVIDIA/RIFE 等 AI 生成中间帧。
+- 页面只提交类型化档位，`PlayerService` 负责 mpv 显示同步、时间缩放器和插值
+  属性；Windows 原生后端提供固定字段读回，不以写入成功冒充配置或逐帧运行态。
+- 插值复用既有掉帧、缓冲和音视频停滞保护；压力出现时仅关闭当前媒体插值，
+  不修改用户全局偏好。
+- 默认 MediaKit、渲染器选择、filtered queue、SQLite、标签、缓存队列、插件 ABI
+  和用户数据未改变。
+- analyze、295 项测试和 Windows Debug build 通过；真实窗口确认启用说明、
+  保存反馈与撤销可达，最终设置恢复关闭。
+
 ## 2026-07-27 · Windows 增强渲染器可由设置启用
 
 - 播放设置新增“自动 / MediaKit 兼容 / Windows 增强（libmpv / D3D11）”

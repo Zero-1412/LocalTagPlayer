@@ -14,7 +14,7 @@ Windows 优先使用原生 libmpv/D3D11；macOS/Linux 继续保留 MediaKit，�
 | NVIDIA RTX Super Resolution | mpv `d3d11vpp scaling-mode=nvidia` | 原生 D3D11VA 非 copy、驱动日志确认、掉帧回滚 | 已集成并通过六组 A/B |
 | 低码率伪影修复 | NVIDIA RTX Video SDK Artifact Reduction | 本机插件、零分发 SDK、同设备 D3D11 纹理；许可通过后再发布 | 待 SDK 包内 EULA/ABI |
 | SDR → HDR | RTX Video SDK 或 mpv/libplacebo tone mapping | 先区分显示器 HDR 信号与算法实际运行，禁止名称推断 | 已有保守 mpv 实验，SDK 待评估 |
-| 普通帧同步插值 | mpv `video-sync=display-resample` + `interpolation` | 作为低风险“显示流畅”档，不宣传为 AI 补帧 | 下一阶段 |
+| 普通帧同步插值 | mpv `video-sync=display-resample` + `interpolation` | 类型化档位、属性读回、掉帧回滚；不宣传为 AI 补帧 | 已接入，待多帧率长播 |
 | 运动补帧 | VapourSynth/SVP/RIFE | 独立 Windows 插件；需要模型许可、延迟、音画同步和 24→60 长播门禁 | 高风险后续 |
 | GLSL/libplacebo 着色器 | mpv `glsl-shaders` | 只安装许可明确、固定摘要的着色器包，提供顺序和一键回滚 | 下一阶段评估 |
 | 去隔行 | mpv `d3d11vpp deint` | 仅对标记为隔行的内容自动启用，优先驱动自适应模式 | 中优先级 |
@@ -40,8 +40,8 @@ Windows 优先使用原生 libmpv/D3D11；macOS/Linux 继续保留 MediaKit，�
 
 1. 把 Windows 原生 libmpv 渲染器做成可持久化、可撤销的设置，并完成普通窗口
    鼠标、全屏、跨 DPI、快速切换、截图与退出门禁后再提升为 Windows 默认。
-2. 增加“流畅度提升”档：关闭 / 显示同步插值 / 运动补帧插件，并明确区分
-   mpv 插值与 AI 生成中间帧。
+2. 对已接入的“关闭 / 显示同步插值”运行 24/25/30fps 到 60/120Hz 的长播 A/B；
+   运动补帧插件另立 contract，继续明确区分 mpv 插值与 AI 生成中间帧。
 3. 建立固定摘要的着色器包格式与许可清单，先评估 FSRCNNX/Anime4K 类缩放，
    不与 NVIDIA VSR 同时启用。
 4. RTX Video SDK 继续沿用本机零分发插件路线；拿到正式包后实现 Artifact

@@ -1,3 +1,13 @@
+## 2026-07-27 PlayerService 显示同步插值
+
+- `PlaybackSettings` 新增默认关闭的 `PlayerSmoothMotionMode`；设置页启用需确认、
+  保存后可撤销，并明确不是 AI 生成中间帧。
+- `PlayerService` 独占 `video-sync=display-resample`、`tscale=oversample` 和
+  `interpolation` 的写入/读回，页面只使用类型化档位和结果。
+- Windows 原生桥返回固定诊断字段；任一读回不匹配时立即关闭插值。运行中复用
+  既有掉帧、缓冲和停滞熔断，只锁存当前媒体。
+- filtered queue、当前 index、来源队列、返回状态和后端生命周期不变。
+
 ## 2026-07-27 Windows 增强渲染器用户入口
 
 - `PlaybackSettings.rendererPreference` 提供自动、MediaKit 兼容和 Windows

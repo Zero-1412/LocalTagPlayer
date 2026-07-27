@@ -25,6 +25,14 @@ enum PlayerRendererPreference { automatic, mediaKit, windowsLibmpv }
 /** GPU 视频缩放器；只提供已在 libmpv 中稳定支持的两种质量档位。 */
 enum PlayerVideoScaler { bicubic, lanczos }
 
+/**
+ * 播放流畅度增强档位。
+ *
+ * `displayInterpolation` 只请求 mpv 基于相邻原始帧的显示同步插值，不代表
+ * NVIDIA、RIFE 或其它 AI 生成中间帧能力。
+ */
+enum PlayerSmoothMotionMode { off, displayInterpolation }
+
 /** 显示输出电平；自动模式由 libmpv 根据输出链路选择安全值。 */
 enum PlayerVideoOutputRange { automatic, limited, full }
 
@@ -64,6 +72,7 @@ class PlaybackSettings {
     required this.playbackMode,
     required this.videoAspectMode,
     required this.videoScaler,
+    required this.smoothMotionMode,
     required this.videoOutputRange,
     required this.highQualityStreamCacheEnabled,
     required this.playbackRate,
@@ -93,6 +102,7 @@ class PlaybackSettings {
     playbackMode: PlayerPlaybackMode.sequential,
     videoAspectMode: PlayerVideoAspectMode.automatic,
     videoScaler: PlayerVideoScaler.lanczos,
+    smoothMotionMode: PlayerSmoothMotionMode.off,
     videoOutputRange: PlayerVideoOutputRange.automatic,
     highQualityStreamCacheEnabled: true,
     playbackRate: 1,
@@ -247,6 +257,8 @@ class PlaybackSettings {
   final PlayerVideoAspectMode videoAspectMode;
   /** 未开启超分时使用的 GPU 缩放器；超分关闭后必须恢复此值。 */
   final PlayerVideoScaler videoScaler;
+  /** 显示同步插值偏好；旧设置迁移时默认关闭，不冒充 AI 补帧。 */
+  final PlayerSmoothMotionMode smoothMotionMode;
   /** 输出到显示设备的 Limited / Full Range 策略。 */
   final PlayerVideoOutputRange videoOutputRange;
   /** 是否为当前播放会话保留原始压缩码流的高质量内存缓存窗口。 */
@@ -292,6 +304,7 @@ class PlaybackSettings {
     PlayerPlaybackMode? playbackMode,
     PlayerVideoAspectMode? videoAspectMode,
     PlayerVideoScaler? videoScaler,
+    PlayerSmoothMotionMode? smoothMotionMode,
     PlayerVideoOutputRange? videoOutputRange,
     bool? highQualityStreamCacheEnabled,
     double? playbackRate,
@@ -326,6 +339,7 @@ class PlaybackSettings {
       playbackMode: playbackMode ?? this.playbackMode,
       videoAspectMode: videoAspectMode ?? this.videoAspectMode,
       videoScaler: videoScaler ?? this.videoScaler,
+      smoothMotionMode: smoothMotionMode ?? this.smoothMotionMode,
       videoOutputRange: videoOutputRange ?? this.videoOutputRange,
       highQualityStreamCacheEnabled:
           highQualityStreamCacheEnabled ?? this.highQualityStreamCacheEnabled,
@@ -371,6 +385,7 @@ class PlaybackSettings {
         'playbackMode': playbackMode.name,
         'videoAspectMode': videoAspectMode.name,
         'videoScaler': videoScaler.name,
+        'smoothMotionMode': smoothMotionMode.name,
         'videoOutputRange': videoOutputRange.name,
         'highQualityStreamCacheEnabled': highQualityStreamCacheEnabled,
         'playbackRate': playbackRate,
@@ -446,6 +461,11 @@ class PlaybackSettings {
         PlayerVideoScaler.values,
         json['videoScaler'],
         defaults.videoScaler,
+      ),
+      smoothMotionMode: _enumByName(
+        PlayerSmoothMotionMode.values,
+        json['smoothMotionMode'],
+        defaults.smoothMotionMode,
       ),
       videoOutputRange: _enumByName(
         PlayerVideoOutputRange.values,
@@ -622,6 +642,21 @@ class PlaybackSettings {
       switch (scaler) {
         PlayerVideoScaler.bicubic => 'Bicubic（平衡）',
         PlayerVideoScaler.lanczos => 'Lanczos（高质量）',
+      };
+
+  /** 设置页流畅度增强名称；明确区分显示插值与 AI 生成帧。 */
+  static String smoothMotionLabelFor(PlayerSmoothMotionMode mode) =>
+      switch (mode) {
+        PlayerSmoothMotionMode.off => '关闭',
+        PlayerSmoothMotionMode.displayInterpolation => '显示同步插值',
+      };
+
+  /** 解释显示同步插值的性能边界和失败回退。 */
+  static String smoothMotionDescriptionFor(PlayerSmoothMotionMode mode) =>
+      switch (mode) {
+        PlayerSmoothMotionMode.off => '保持源帧率，不增加时间采样开销',
+        PlayerSmoothMotionMode.displayInterpolation =>
+          '缓解帧率与刷新率不匹配的顿挫；非 AI 补帧，播放压力出现时仅回滚当前视频',
       };
 
   /** 设置页输出电平名称。 */

@@ -131,10 +131,11 @@ void main() {
     await service.openPath('ignored-local-path');
     await service.pause();
     await service.seek(const Duration(seconds: 12));
-    await service.applyOpenPreferences(
+    final smoothMotionResult = await service.applyOpenPreferences(
       videoAspectOverride: '-1',
       panscan: '1.0',
       videoScaler: PlayerVideoScaler.bicubic,
+      smoothMotionMode: PlayerSmoothMotionMode.displayInterpolation,
       videoOutputRange: PlayerVideoOutputRange.full,
       playbackRate: 1.5,
       videoSuperResolutionEnabled: false,
@@ -152,6 +153,10 @@ void main() {
     expect(backend.properties['panscan'], '1.0');
     expect(backend.properties['video-output-levels'], 'full');
     expect(backend.properties['scale'], 'bicubic');
+    expect(backend.properties['video-sync'], 'display-resample');
+    expect(backend.properties['tscale'], 'oversample');
+    expect(backend.properties['interpolation'], 'yes');
+    expect(smoothMotionResult.active, isTrue);
     expect(backend.appliedRate, 1.5);
   });
 
