@@ -758,4 +758,29 @@ if(LTP_BUILD_NVOFA_VAPOURSYNTH_PLUGIN)
       "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
     LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO
       "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe")
+
+  add_executable(ltp_d3d11_midpoint_warper_probe EXCLUDE_FROM_ALL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe/d3d11_midpoint_warper_probe.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe/d3d11_midpoint_warper.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner/d3d11_adapter_selector.cpp")
+  apply_standard_settings(ltp_d3d11_midpoint_warper_probe)
+  target_compile_features(ltp_d3d11_midpoint_warper_probe PRIVATE cxx_std_17)
+  target_compile_options(ltp_d3d11_midpoint_warper_probe PRIVATE /utf-8)
+  target_compile_definitions(
+    ltp_d3d11_midpoint_warper_probe PRIVATE NOMINMAX)
+  target_include_directories(ltp_d3d11_midpoint_warper_probe PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner"
+    "${LTP_NVOFA_PUBLIC_HEADER_DIR}")
+  target_link_libraries(ltp_d3d11_midpoint_warper_probe PRIVATE
+    d3d11.lib d3dcompiler.lib dxgi.lib)
+  set_target_properties(ltp_d3d11_midpoint_warper_probe PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe")
 endif()

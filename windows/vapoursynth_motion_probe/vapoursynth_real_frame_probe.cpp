@@ -340,6 +340,7 @@ int wmain(int argc, wchar_t** argv) {
             << (expect_active ? "interpolation-active=passed"
                               : "passthrough-not-active=passed")
             << (expect_active ? " d3d11-warp=passed" : "")
+            << (expect_active ? " consistency-protected=passed" : "")
             << (performance_mode
                     ? " realtime-performance=passed"
                     : "")

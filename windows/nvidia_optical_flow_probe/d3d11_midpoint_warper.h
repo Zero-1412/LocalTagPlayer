@@ -26,10 +26,16 @@ class D3D11MidpointWarper {
   /** 在 [adapter_luid] 对应的物理适配器上创建设备并编译固定 shader。 */
   bool Initialize(const std::string& adapter_luid);
 
-  /** 上传当前帧对的前向/后向 S10.5 光流；每个中间帧只调用一次。 */
+  /**
+   * 上传当前帧对的双向 S10.5 光流与 NVOFA 8-bit cost。
+   *
+   * cost 越高表示硬件估计越不可靠；它与前后向一致性共同决定合成权重。
+   */
   bool PrepareFlow(
       const std::vector<NV_OF_FLOW_VECTOR>& forward,
       const std::vector<NV_OF_FLOW_VECTOR>& backward,
+      const std::vector<std::uint8_t>& forward_cost,
+      const std::vector<std::uint8_t>& backward_cost,
       std::uint32_t width,
       std::uint32_t height,
       std::uint32_t grid);

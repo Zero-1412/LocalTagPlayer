@@ -61,6 +61,8 @@ if (@($cases | Where-Object { -not (Test-Path -LiteralPath $_.samplePath) }).Cou
 if ($LASTEXITCODE -ne 0) {
   throw "NVOFA 插帧前置门禁未通过。"
 }
+$pluginHash = (Get-FileHash -LiteralPath $plugin -Algorithm SHA256).
+  Hash.ToLowerInvariant()
 
 function Invoke-MotionMode {
   param(
@@ -97,11 +99,48 @@ function Invoke-MotionMode {
   if ($testExitCode -ne 0) {
     throw "NVOFA 插帧 A/B 失败：$($Case.name) / $Mode"
   }
+  [System.IO.File]::WriteAllText(
+    (Join-Path $modeOutput "plugin-sha256.txt"),
+    "$pluginHash`n",
+    [System.Text.UTF8Encoding]::new($false))
+}
+
+function Test-MotionModeComplete {
+  param(
+    [Parameter(Mandatory = $true)]
+    [System.Collections.IDictionary]$Case,
+    [Parameter(Mandatory = $true)][string]$Mode
+  )
+
+  $modeOutput = Join-Path (Join-Path $output $Case.name) $Mode
+  $report = Join-Path $modeOutput "$Mode-player-baseline.json"
+  $screenshot = Join-Path $modeOutput "$Mode-complete-video.png"
+  $log = Join-Path $modeOutput "baseline.log"
+  $hashMarker = Join-Path $modeOutput "plugin-sha256.txt"
+  if (-not (Test-Path -LiteralPath $report -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $screenshot -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $log -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $hashMarker -PathType Leaf)) {
+    return $false
+  }
+
+  # Windows 真实窗口连续启动偶发在 native holder 尚未完全释放时退出。
+  # 只有同一插件二进制的完整单组证据可以复用，旧 hash、失败或不完整组仍重跑。
+  $recordedHash = (Get-Content -LiteralPath $hashMarker -Raw).Trim().
+    ToLowerInvariant()
+  return $recordedHash -eq $pluginHash -and
+    [bool](Select-String -LiteralPath $log `
+        -SimpleMatch "All tests passed!" -Quiet)
 }
 
 foreach ($case in $cases) {
-  Invoke-MotionMode -Case $case -Mode "nvofa-motion-off"
-  Invoke-MotionMode -Case $case -Mode "nvofa-motion-on"
+  foreach ($mode in @("nvofa-motion-off", "nvofa-motion-on")) {
+    if (Test-MotionModeComplete -Case $case -Mode $mode) {
+      Write-Host "复用已通过的 NVOFA A/B 单组证据：$($case.name) / $mode"
+      continue
+    }
+    Invoke-MotionMode -Case $case -Mode $mode
+  }
 }
 
 function Get-MotionSummary {
@@ -172,11 +211,12 @@ $caseSummaries = foreach ($case in $cases) {
 }
 
 $summary = [ordered]@{
-  schemaVersion = 2
+  schemaVersion = 4
   generatedAt = (Get-Date).ToUniversalTime().ToString("o")
   runtimePolicy = "local-only VapourSynth R78 and NVOFA plugin; no install"
+  pluginSha256 = $pluginHash
   interpolationPolicy =
-    "24fps to 48fps with exact D3D11/CUDA LUID, forward/backward NVOFA, D3D11 compute warp, and scene-cut protection"
+    "24fps to 48fps with exact D3D11/CUDA LUID, forward/backward NVOFA cost, average-dominant consistency protection, and scene-cut protection"
   cases = @($caseSummaries)
   allGatesPassed =
     @($caseSummaries | Where-Object { -not $_.passed }).Count -eq 0

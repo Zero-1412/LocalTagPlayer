@@ -37,7 +37,49 @@ Texture2D<float> FirstFrame : register(t0);
 Texture2D<float> SecondFrame : register(t1);
 Texture2D<int2> ForwardFlow : register(t2);
 Texture2D<int2> BackwardFlow : register(t3);
+Texture2D<uint> ForwardCost : register(t4);
+Texture2D<uint> BackwardCost : register(t5);
 RWTexture2D<float> OutputFrame : register(u0);
+
+int2 FlowCoordinate(float2 luma_position) {
+  int2 coordinate =
+      int2(max(luma_position, float2(0.0, 0.0)) / (float)Grid);
+  return clamp(coordinate, int2(0, 0),
+               int2(FlowWidth - 1, FlowHeight - 1));
+}
+
+float2 LoadForward(float2 luma_position) {
+  return float2(ForwardFlow.Load(
+      int3(FlowCoordinate(luma_position), 0))) / 32.0;
+}
+
+float2 LoadBackward(float2 luma_position) {
+  return float2(BackwardFlow.Load(
+      int3(FlowCoordinate(luma_position), 0))) / 32.0;
+}
+
+uint LoadForwardCost(float2 luma_position) {
+  return ForwardCost.Load(int3(FlowCoordinate(luma_position), 0));
+}
+
+uint LoadBackwardCost(float2 luma_position) {
+  return BackwardCost.Load(int3(FlowCoordinate(luma_position), 0));
+}
+
+float FlowConfidence(float2 flow, float2 reverse, uint hardware_cost) {
+  float residual = length(flow + reverse);
+  float tolerance =
+      1.5 + 0.05 * (length(flow) + length(reverse));
+  float consistency =
+      1.0 - saturate((residual - tolerance) / tolerance);
+  float cost_confidence =
+      1.0 - saturate((float)hardware_cost / 255.0);
+  // 两侧都不可靠时仍保留很小权重，避免空洞变成未定义像素；相对权重会优先
+  // 使用 cost 更低且前后向更一致的一侧。
+  return max(0.02,
+             (0.15 + 0.85 * consistency) *
+             (0.15 + 0.85 * cost_confidence));
+}
 
 float SampleFirst(float2 position) {
   position = clamp(position, float2(0.0, 0.0),
@@ -71,17 +113,39 @@ void main(uint3 dispatch_id : SV_DispatchThreadID) {
   float2 plane_position = float2(dispatch_id.xy);
   float2 luma_position =
       (plane_position + 0.5) * float2(LumaPerPlaneX, LumaPerPlaneY) - 0.5;
-  int2 flow_position = int2(max(luma_position, float2(0.0, 0.0)) /
-                            (float)Grid);
-  flow_position = clamp(flow_position, int2(0, 0),
-                        int2(FlowWidth - 1, FlowHeight - 1));
-  float2 forward = float2(ForwardFlow.Load(int3(flow_position, 0))) /
-                   32.0 * float2(PlanePerLumaX, PlanePerLumaY);
-  float2 backward = float2(BackwardFlow.Load(int3(flow_position, 0))) /
-                    32.0 * float2(PlanePerLumaX, PlanePerLumaY);
-  float first_value = SampleFirst(plane_position - 0.5 * forward);
-  float second_value = SampleSecond(plane_position - 0.5 * backward);
-  OutputFrame[dispatch_id.xy] = saturate((first_value + second_value) * 0.5);
+  // 保持已通过真实片源验证的中点取样路径。没有矢量补洞时，二次反推源坐标
+  // 会在遮挡边界暴露单侧空洞，因此一致性只用于保守修正合成比例。
+  float2 forward = LoadForward(luma_position);
+  float2 first_source_luma = luma_position - 0.5 * forward;
+  float2 backward = LoadBackward(luma_position);
+  float2 second_source_luma = luma_position - 0.5 * backward;
+
+  float2 backward_at_forward_target =
+      LoadBackward(first_source_luma + forward);
+  float2 forward_at_backward_target =
+      LoadForward(second_source_luma + backward);
+  float first_confidence = FlowConfidence(
+      forward, backward_at_forward_target,
+      LoadForwardCost(first_source_luma));
+  float second_confidence = FlowConfidence(
+      backward, forward_at_backward_target,
+      LoadBackwardCost(second_source_luma));
+
+  float2 plane_scale = float2(PlanePerLumaX, PlanePerLumaY);
+  float first_value =
+      SampleFirst(plane_position - 0.5 * forward * plane_scale);
+  float second_value =
+      SampleSecond(plane_position - 0.5 * backward * plane_scale);
+  float confidence_sum = first_confidence + second_confidence;
+  float reliability_share = first_confidence / confidence_sum;
+  // NVOFA cost 与前后向一致性只能识别风险，不能替代 FRUC 的矢量补洞和图像补洞。
+  // 因此平均合成仍占 85%，可靠性最多把比例推到约 57.5/42.5，避免高反差
+  // 动画边缘因强选单侧样本产生暗色拖影。
+  float first_weight =
+      clamp(lerp(0.5, reliability_share, 0.15), 0.425, 0.575);
+  OutputFrame[dispatch_id.xy] = saturate(
+      first_value * first_weight +
+      second_value * (1.0 - first_weight));
 }
 )";
 
@@ -231,6 +295,8 @@ class D3D11MidpointWarper::Impl {
   bool PrepareFlow(
       const std::vector<NV_OF_FLOW_VECTOR>& forward,
       const std::vector<NV_OF_FLOW_VECTOR>& backward,
+      const std::vector<std::uint8_t>& forward_cost,
+      const std::vector<std::uint8_t>& backward_cost,
       std::uint32_t width,
       std::uint32_t height,
       std::uint32_t grid) {
@@ -238,7 +304,8 @@ class D3D11MidpointWarper::Impl {
         static_cast<std::size_t>(width) * height;
     if (device_ == nullptr || context_ == nullptr || width == 0 ||
         height == 0 || grid == 0 || forward.size() != count ||
-        backward.size() != count) {
+        backward.size() != count || forward_cost.size() != count ||
+        backward_cost.size() != count) {
       return Fail("invalid-d3d11-flow");
     }
     if (!EnsureFlowResources(width, height)) return false;
@@ -248,6 +315,10 @@ class D3D11MidpointWarper::Impl {
         forward_flow_.Get(), 0, nullptr, forward.data(), row_pitch, 0);
     context_->UpdateSubresource(
         backward_flow_.Get(), 0, nullptr, backward.data(), row_pitch, 0);
+    context_->UpdateSubresource(
+        forward_cost_.Get(), 0, nullptr, forward_cost.data(), width, 0);
+    context_->UpdateSubresource(
+        backward_cost_.Get(), 0, nullptr, backward_cost.data(), width, 0);
     flow_width_ = width;
     flow_height_ = height;
     grid_ = grid;
@@ -304,21 +375,22 @@ class D3D11MidpointWarper::Impl {
 
     ID3D11ShaderResourceView* views[] = {
         plane.first_view.Get(), plane.second_view.Get(),
-        forward_flow_view_.Get(), backward_flow_view_.Get()};
+        forward_flow_view_.Get(), backward_flow_view_.Get(),
+        forward_cost_view_.Get(), backward_cost_view_.Get()};
     ID3D11UnorderedAccessView* output_view = plane.output_view.Get();
     ID3D11Buffer* constants = constant_buffer_.Get();
     context_->CSSetShader(shader_.Get(), nullptr, 0);
     context_->CSSetConstantBuffers(0, 1, &constants);
-    context_->CSSetShaderResources(0, 4, views);
+    context_->CSSetShaderResources(0, 6, views);
     context_->CSSetUnorderedAccessViews(0, 1, &output_view, nullptr);
     context_->Dispatch(
         (static_cast<UINT>(width) + 15) / 16,
         (static_cast<UINT>(height) + 15) / 16, 1);
 
     // 解除绑定后再复制到 staging，避免驱动把读写 hazard 延迟到下一帧。
-    std::array<ID3D11ShaderResourceView*, 4> empty_views{};
+    std::array<ID3D11ShaderResourceView*, 6> empty_views{};
     ID3D11UnorderedAccessView* empty_output = nullptr;
-    context_->CSSetShaderResources(0, 4, empty_views.data());
+    context_->CSSetShaderResources(0, 6, empty_views.data());
     context_->CSSetUnorderedAccessViews(0, 1, &empty_output, nullptr);
     context_->CSSetShader(nullptr, nullptr, 0);
     context_->CopyResource(plane.staging.Get(), plane.output.Get());
@@ -358,7 +430,7 @@ class D3D11MidpointWarper::Impl {
     return false;
   }
 
-  /** 创建或复用 R16G16_SINT 光流纹理及 SRV。 */
+  /** 创建或复用 R16G16_SINT 光流、R8_UINT cost 纹理及 SRV。 */
   bool EnsureFlowResources(std::uint32_t width, std::uint32_t height) {
     if (forward_flow_ != nullptr && flow_resource_width_ == width &&
         flow_resource_height_ == height) {
@@ -368,6 +440,10 @@ class D3D11MidpointWarper::Impl {
     backward_flow_.Reset();
     forward_flow_view_.Reset();
     backward_flow_view_.Reset();
+    forward_cost_.Reset();
+    backward_cost_.Reset();
+    forward_cost_view_.Reset();
+    backward_cost_view_.Reset();
     D3D11_TEXTURE2D_DESC description{};
     description.Width = width;
     description.Height = height;
@@ -386,6 +462,18 @@ class D3D11MidpointWarper::Impl {
         FAILED(device_->CreateShaderResourceView(
             backward_flow_.Get(), nullptr, &backward_flow_view_))) {
       return Fail("create-d3d11-flow-resources");
+    }
+    D3D11_TEXTURE2D_DESC cost = description;
+    cost.Format = DXGI_FORMAT_R8_UINT;
+    if (FAILED(device_->CreateTexture2D(
+            &cost, nullptr, &forward_cost_)) ||
+        FAILED(device_->CreateTexture2D(
+            &cost, nullptr, &backward_cost_)) ||
+        FAILED(device_->CreateShaderResourceView(
+            forward_cost_.Get(), nullptr, &forward_cost_view_)) ||
+        FAILED(device_->CreateShaderResourceView(
+            backward_cost_.Get(), nullptr, &backward_cost_view_))) {
+      return Fail("create-d3d11-cost-resources");
     }
     flow_resource_width_ = width;
     flow_resource_height_ = height;
@@ -451,6 +539,10 @@ class D3D11MidpointWarper::Impl {
   ComPtr<ID3D11Texture2D> backward_flow_;
   ComPtr<ID3D11ShaderResourceView> forward_flow_view_;
   ComPtr<ID3D11ShaderResourceView> backward_flow_view_;
+  ComPtr<ID3D11Texture2D> forward_cost_;
+  ComPtr<ID3D11Texture2D> backward_cost_;
+  ComPtr<ID3D11ShaderResourceView> forward_cost_view_;
+  ComPtr<ID3D11ShaderResourceView> backward_cost_view_;
   std::array<PlaneResources, 3> planes_;
   std::uint32_t flow_resource_width_ = 0;
   std::uint32_t flow_resource_height_ = 0;
@@ -474,10 +566,14 @@ bool D3D11MidpointWarper::Initialize(
 bool D3D11MidpointWarper::PrepareFlow(
     const std::vector<NV_OF_FLOW_VECTOR>& forward,
     const std::vector<NV_OF_FLOW_VECTOR>& backward,
+    const std::vector<std::uint8_t>& forward_cost,
+    const std::vector<std::uint8_t>& backward_cost,
     std::uint32_t width,
     std::uint32_t height,
     std::uint32_t grid) {
-  return impl_->PrepareFlow(forward, backward, width, height, grid);
+  return impl_->PrepareFlow(
+      forward, backward, forward_cost, backward_cost,
+      width, height, grid);
 }
 
 bool D3D11MidpointWarper::WarpPlane(

@@ -66,7 +66,9 @@ if ($LASTEXITCODE -ne 0) {
   throw "NVOFA VapourSynth CMake configure failed with exit code $LASTEXITCODE."
 }
 & $cmake --build $buildRoot --config $Configuration `
-  --target ltp_nvofa_vapoursynth_plugin ltp_vapoursynth_real_frame_probe
+  --target ltp_nvofa_vapoursynth_plugin `
+    ltp_d3d11_midpoint_warper_probe `
+    ltp_vapoursynth_real_frame_probe
 if ($LASTEXITCODE -ne 0) {
   throw "NVOFA VapourSynth build failed with exit code $LASTEXITCODE."
 }
@@ -75,6 +77,8 @@ $probeDirectory = Join-Path $buildRoot "vapoursynth_motion_probe"
 $nvofaDirectory = Join-Path $buildRoot "nvidia_optical_flow_probe"
 $probe = Join-Path $probeDirectory "ltp_vapoursynth_real_frame_probe.exe"
 $plugin = Join-Path $nvofaDirectory "ltp_nvofa_vapoursynth.dll"
+$warperProbe = Join-Path $nvofaDirectory `
+  "ltp_d3d11_midpoint_warper_probe.exe"
 $runnerDirectory = Join-Path $buildRoot "runner\$Configuration"
 $mpvRuntime = Join-Path $runnerDirectory "libmpv-2.dll"
 $probeMpvRuntime = Join-Path $probeDirectory "libmpv-2.dll"
@@ -84,10 +88,21 @@ if (-not (Test-Path -LiteralPath $probe -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $plugin -PathType Leaf)) {
   throw "NVOFA VapourSynth plugin was not produced: $plugin"
 }
+if (-not (Test-Path -LiteralPath $warperProbe -PathType Leaf)) {
+  throw "D3D11 midpoint warper probe was not produced: $warperProbe"
+}
 if (-not (Test-Path -LiteralPath $mpvRuntime -PathType Leaf)) {
   throw "Pinned libmpv runtime is missing: $mpvRuntime"
 }
 Copy-Item -LiteralPath $mpvRuntime -Destination $probeMpvRuntime -Force
+
+$warperResult = & $warperProbe
+if ($LASTEXITCODE -ne 0 -or
+    (@($warperResult) -join "`n") -notmatch
+      "d3d11-warp-confidence=passed") {
+  throw "D3D11 confidence warp probe failed.`n$warperResult"
+}
+$warperResult
 
 if ([string]::IsNullOrWhiteSpace($SamplePath)) {
   $sampleDirectory = Join-Path $repositoryRoot `
@@ -124,10 +139,11 @@ try {
     throw "NVOFA VapourSynth real-frame probe failed with exit code $LASTEXITCODE.`n$probeResult"
   }
   $joinedProbeResult = @($probeResult) -join "`n"
-  if ($joinedProbeResult -notmatch "d3d11-warp=passed" -or
+  if ($joinedProbeResult -notmatch "consistency-protected=passed" -or
+      $joinedProbeResult -notmatch "d3d11-warp=passed" -or
       $joinedProbeResult -notmatch "cuda-luid-match=passed" -or
       $joinedProbeResult -notmatch "d3d11-luid=([0-9a-f]{8}):([0-9a-f]{8})") {
-    throw "NVOFA VapourSynth probe did not prove D3D11 warp and exact D3D11/CUDA LUID matching.`n$probeResult"
+    throw "NVOFA VapourSynth probe did not prove consistency-protected D3D11 warp and exact D3D11/CUDA LUID matching.`n$probeResult"
   }
   $probeResult
 } finally {

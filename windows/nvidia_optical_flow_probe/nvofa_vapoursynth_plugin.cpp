@@ -56,6 +56,8 @@ struct BidirectionalFlow {
   std::uint32_t height = 0;
   std::vector<NV_OF_FLOW_VECTOR> forward;
   std::vector<NV_OF_FLOW_VECTOR> backward;
+  std::vector<std::uint8_t> forward_cost;
+  std::vector<std::uint8_t> backward_cost;
 };
 
 /** CUDA 的 8-byte Windows LUID 与 DXGI 能力矩阵使用同一高/低位格式。 */
@@ -236,7 +238,9 @@ class NvidiaOpticalFlowEngine {
     init.mode = NV_OF_MODE_OPTICALFLOW;
     init.perfLevel = NV_OF_PERF_LEVEL_MEDIUM;
     init.enableExternalHints = NV_OF_FALSE;
-    init.enableOutputCost = NV_OF_FALSE;
+    // 官方建议使用 8-bit cost；数值越高表示向量越不可靠，后续 Compute 会把
+    // 它与前后向一致性共同用于遮挡保护。
+    init.enableOutputCost = NV_OF_TRUE;
     init.disparityRange = NV_OF_STEREO_DISPARITY_RANGE_UNDEFINED;
     init.enableRoi = NV_OF_FALSE;
     if (api_.nvOFInit(optical_flow_, &init) != NV_OF_SUCCESS) {
@@ -253,7 +257,10 @@ class NvidiaOpticalFlowEngine {
             NV_OF_BUFFER_FORMAT_GRAYSCALE8, &reference_) ||
         !CreateBuffer(
             output_width_, output_height_, NV_OF_BUFFER_USAGE_OUTPUT,
-            NV_OF_BUFFER_FORMAT_SHORT2, &output_)) {
+            NV_OF_BUFFER_FORMAT_SHORT2, &output_) ||
+        !CreateBuffer(
+            output_width_, output_height_, NV_OF_BUFFER_USAGE_COST,
+            NV_OF_BUFFER_FORMAT_UINT8, &cost_)) {
       return Fail("create-nvofa-buffers");
     }
 
@@ -284,8 +291,12 @@ class NvidiaOpticalFlowEngine {
     bool success =
         UploadFrame(input_, first, first_stride) &&
         UploadFrame(reference_, second, second_stride) &&
-        Execute(input_, reference_, &flow->forward) &&
-        Execute(reference_, input_, &flow->backward);
+        Execute(
+            input_, reference_, &flow->forward,
+            &flow->forward_cost) &&
+        Execute(
+            reference_, input_, &flow->backward,
+            &flow->backward_cost);
     if (!PopContext()) success = false;
     if (!success) return Fail("execute-bidirectional-flow");
     flow->grid = grid_;
@@ -355,13 +366,16 @@ class NvidiaOpticalFlowEngine {
   bool Execute(
       NvOFGPUBufferHandle input,
       NvOFGPUBufferHandle reference,
-      std::vector<NV_OF_FLOW_VECTOR>* flow) {
+      std::vector<NV_OF_FLOW_VECTOR>* flow,
+      std::vector<std::uint8_t>* cost) {
+    if (flow == nullptr || cost == nullptr) return false;
     NV_OF_EXECUTE_INPUT_PARAMS execute_input{};
     execute_input.inputFrame = input;
     execute_input.referenceFrame = reference;
     execute_input.disableTemporalHints = NV_OF_TRUE;
     NV_OF_EXECUTE_OUTPUT_PARAMS execute_output{};
     execute_output.outputBuffer = output_;
+    execute_output.outputCostBuffer = cost_;
     if (api_.nvOFExecute(
             optical_flow_, &execute_input, &execute_output) != NV_OF_SUCCESS ||
         cu_ctx_synchronize_() != kCudaSuccess) {
@@ -389,6 +403,28 @@ class NvidiaOpticalFlowEngine {
               flow->data() + y * output_width_,
               device_pointer + y * source_stride,
               row_size) != kCudaSuccess) {
+        return false;
+      }
+    }
+    const CUdeviceptr cost_pointer =
+        api_.nvOFGPUBufferGetCUdeviceptr(cost_);
+    NV_OF_CUDA_BUFFER_STRIDE_INFO cost_stride{};
+    if (cost_pointer == 0 ||
+        api_.nvOFGPUBufferGetStrideInfo(cost_, &cost_stride) !=
+            NV_OF_SUCCESS ||
+        cost_stride.numPlanes != 1 ||
+        cost_stride.strideInfo[0].strideXInBytes < output_width_) {
+      return false;
+    }
+    cost->assign(
+        static_cast<std::size_t>(output_width_) * output_height_, 0);
+    const std::size_t cost_source_stride =
+        cost_stride.strideInfo[0].strideXInBytes;
+    for (std::uint32_t y = 0; y < output_height_; ++y) {
+      if (cu_memcpy_d_to_h_(
+              cost->data() + y * output_width_,
+              cost_pointer + y * cost_source_stride,
+              output_width_) != kCudaSuccess) {
         return false;
       }
     }
@@ -426,12 +462,14 @@ class NvidiaOpticalFlowEngine {
       context_is_current_ = true;
     }
     if (api_.nvOFDestroyGPUBufferCuda != nullptr) {
+      if (cost_ != nullptr) api_.nvOFDestroyGPUBufferCuda(cost_);
       if (output_ != nullptr) api_.nvOFDestroyGPUBufferCuda(output_);
       if (reference_ != nullptr) {
         api_.nvOFDestroyGPUBufferCuda(reference_);
       }
       if (input_ != nullptr) api_.nvOFDestroyGPUBufferCuda(input_);
     }
+    cost_ = nullptr;
     output_ = nullptr;
     reference_ = nullptr;
     input_ = nullptr;
@@ -467,6 +505,7 @@ class NvidiaOpticalFlowEngine {
   NvOFGPUBufferHandle input_ = nullptr;
   NvOFGPUBufferHandle reference_ = nullptr;
   NvOFGPUBufferHandle output_ = nullptr;
+  NvOFGPUBufferHandle cost_ = nullptr;
   std::uint32_t width_ = 0;
   std::uint32_t height_ = 0;
   std::uint32_t grid_ = 0;
@@ -532,8 +571,8 @@ bool WarpMidpoint(
     const VSAPI* vsapi) {
   if (warper == nullptr ||
       !warper->PrepareFlow(
-          flow.forward, flow.backward, flow.width, flow.height,
-          flow.grid)) {
+          flow.forward, flow.backward, flow.forward_cost,
+          flow.backward_cost, flow.width, flow.height, flow.grid)) {
     return false;
   }
   const int luma_width = vsapi->getFrameWidth(first, 0);
@@ -583,6 +622,8 @@ void SetOutputProperties(
       data->engine.cuda_device_index(), maReplace);
   vsapi->mapSetInt(
       properties, "LTPNVOFAD3D11Warp", 1, maReplace);
+  vsapi->mapSetInt(
+      properties, "LTPNVOFAConsistencyProtected", 1, maReplace);
 }
 
 /** VapourSynth 请求输出帧；偶数帧保留源帧，奇数帧生成 0.5 中间帧。 */

@@ -375,11 +375,18 @@ void main() {
     final nvofaD3d11Warp = File(
       'windows/nvidia_optical_flow_probe/d3d11_midpoint_warper.cpp',
     ).readAsStringSync();
+    final nvofaD3d11WarpProbe = File(
+      'windows/nvidia_optical_flow_probe/'
+      'd3d11_midpoint_warper_probe.cpp',
+    ).readAsStringSync();
     final nvofaInterpolationScript = File(
       'tool/vapoursynth_nvofa_interpolation.vpy',
     ).readAsStringSync();
     final nvofaInterpolationProbe = File(
       'tool/run_nvofa_vapoursynth_interpolation_probe.ps1',
+    ).readAsStringSync();
+    final nvofaMotionAb = File(
+      'tool/run_nvofa_motion_ab.ps1',
     ).readAsStringSync();
     final nativeBuild =
         File('windows/native_player/CMakeLists.txt').readAsStringSync();
@@ -510,11 +517,11 @@ void main() {
     expect(nvofaInterpolation, contains('nvOFExecute'));
     expect(
       nvofaInterpolation,
-      contains('Execute(input_, reference_, &flow->forward)'),
+      contains('input_, reference_, &flow->forward,'),
     );
     expect(
       nvofaInterpolation,
-      contains('Execute(reference_, input_, &flow->backward)'),
+      contains('reference_, input_, &flow->backward,'),
     );
     expect(nvofaInterpolation, contains('cuDeviceGetLuid'));
     expect(
@@ -525,7 +532,13 @@ void main() {
     expect(nvofaInterpolation, contains('LTPNVOFAInterpolated'));
     expect(nvofaInterpolation, contains('LTPNVOFAAdapterMatched'));
     expect(nvofaInterpolation, contains('LTPNVOFAD3D11Warp'));
+    expect(
+      nvofaInterpolation,
+      contains('LTPNVOFAConsistencyProtected'),
+    );
     expect(nvofaInterpolation, contains('LTPNVOFASceneCut'));
+    expect(nvofaInterpolation, contains('enableOutputCost = NV_OF_TRUE'));
+    expect(nvofaInterpolation, contains('NV_OF_BUFFER_FORMAT_UINT8'));
     expect(
       nvofaInterpolation,
       isNot(contains('concurrency::parallel_for')),
@@ -534,7 +547,22 @@ void main() {
     expect(nvofaD3d11Warp, contains('"cs_5_0"'));
     expect(nvofaD3d11Warp, contains('context_->Dispatch'));
     expect(nvofaD3d11Warp, contains('DXGI_FORMAT_R16G16_SINT'));
+    expect(nvofaD3d11Warp, contains('DXGI_FORMAT_R8_UINT'));
     expect(nvofaD3d11Warp, contains('DXGI_FORMAT_R32_FLOAT'));
+    expect(nvofaD3d11Warp, contains('FlowConfidence'));
+    expect(nvofaD3d11Warp, contains('backward_at_forward_target'));
+    expect(
+      nvofaD3d11WarpProbe,
+      contains('d3d11-warp-confidence=passed'),
+    );
+    expect(
+      nativeBuild,
+      contains('ltp_d3d11_midpoint_warper_probe EXCLUDE_FROM_ALL'),
+    );
+    expect(
+      nativeBuild,
+      isNot(contains('install(TARGETS ltp_d3d11_midpoint_warper_probe')),
+    );
     expect(
       nvofaInterpolationScript,
       contains('plugin_path, adapter_luid = user_data.rsplit("|", 1)'),
@@ -545,6 +573,12 @@ void main() {
       contains('expect-active-performance'),
     );
     expect(nvofaInterpolationProbe, contains('d3d11-warp=passed'));
+    expect(
+      nvofaInterpolationProbe,
+      contains('consistency-protected=passed'),
+    );
+    expect(nvofaMotionAb, contains('plugin-sha256.txt'));
+    expect(nvofaMotionAb, contains('pluginSha256 = \$pluginHash'));
   });
 
   test('desktop startup centers size-only persisted window layouts', () {

@@ -1,5 +1,17 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.86` 在同 LUID NVOFA + D3D11 Compute 原型中增加
+硬件 cost 与前后向一致性保护，但明确拒绝把“置信度加权”冒充完整遮挡处理。
+NVOFA 的 A→B/B→A 两次 execute 都请求 `UINT8` cost；shader 以
+forward-backward residual 和 cost 判断两侧可靠性。真实动画片源证明强权重和
+二次反推光流会在显露边缘产生暗色拖影，因此最终保留已验证的中点取样，并让
+等权合成占 85%，只允许 42.5%–57.5% 的保守修正。确定性 Compute 探针锁定
+零流等权、正确运动方向和极端不可靠单侧三种结果；三类 1080P 六组 A/B 仍为
+24→48fps、0 总掉帧、0 音视频停滞和精确 LUID `00000000:00017093`。完整
+遮挡 mask、矢量补洞和图像域显露区域补洞仍缺失，因此 QA 插件不安装、不进入
+bundle，产品入口和默认后端不变。filtered queue、插件 ABI v1、SQLite、标签、
+缓存队列与用户数据不变。
+
 `Architecture Baseline 0.5.85` 把 NVOFA 原型的物理 GPU 身份与中点像素合成
 收敛到 Windows 平台边界。child HWND 通过 DXGI 1.6 选择唯一 NVIDIA 适配器，
 用名称设置 mpv `d3d11-adapter`，再用 Windows LUID 精确匹配 CUDA/NVOFA 与
