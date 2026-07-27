@@ -611,4 +611,49 @@ if(LTP_BUILD_VAPOURSYNTH_MOTION_PROBE)
       "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe"
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
       "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe")
+
+  add_executable(ltp_vapoursynth_real_frame_probe EXCLUDE_FROM_ALL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../vapoursynth_motion_probe/vapoursynth_real_frame_probe.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner/vapoursynth_motion_runtime.cpp")
+  apply_standard_settings(ltp_vapoursynth_real_frame_probe)
+  target_compile_options(ltp_vapoursynth_real_frame_probe PRIVATE /utf-8)
+  target_compile_definitions(ltp_vapoursynth_real_frame_probe PRIVATE NOMINMAX)
+  target_include_directories(ltp_vapoursynth_real_frame_probe PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner")
+  target_link_libraries(ltp_vapoursynth_real_frame_probe PRIVATE
+    ltp_native_runtime)
+  set_target_properties(ltp_vapoursynth_real_frame_probe PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe")
+
+endif()
+
+# NVOFA 驱动探针只验证系统驱动公开的 API 版本和后端导出，不依赖或分发 SDK 文件。
+# 独立开关避免把 NVIDIA 驱动门禁与 VapourSynth 宿主验证错误耦合。
+option(LTP_BUILD_NVOFA_DRIVER_PROBE
+  "Build the local NVIDIA Optical Flow driver probe" OFF)
+if(LTP_BUILD_NVOFA_DRIVER_PROBE)
+  add_executable(ltp_nvofa_driver_probe EXCLUDE_FROM_ALL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe/nvofa_driver_probe.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner/nvidia_optical_flow_driver_probe.cpp")
+  apply_standard_settings(ltp_nvofa_driver_probe)
+  target_compile_options(ltp_nvofa_driver_probe PRIVATE /utf-8)
+  target_compile_definitions(ltp_nvofa_driver_probe PRIVATE NOMINMAX)
+  target_include_directories(ltp_nvofa_driver_probe PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner")
+  set_target_properties(ltp_nvofa_driver_probe PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe")
 endif()

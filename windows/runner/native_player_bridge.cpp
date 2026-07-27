@@ -552,6 +552,8 @@ void NativePlayerBridge::InitializePlayer() {
   if (player_ != nullptr) return;
   lifecycle_ =
       native_hwnd_enabled_ ? "mpv_hwnd_initializing" : "mpv_initializing";
+  // 驱动探测只读 System32 固定模块，不创建 OF 会话或占用视频纹理。
+  nvofa_driver_ = ProbeNvidiaOpticalFlowDriver();
   // 仅预加载用户显式配置的本机运行时；未配置时保持零副作用。
   motion_runtime_.Initialize();
   player_ = mpv_create();
@@ -1017,6 +1019,15 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(motion.enabled)},
           {flutter::EncodableValue("native-motion-interpolation-fallbacks"),
            flutter::EncodableValue(motion.fallback_count)},
+          {flutter::EncodableValue("native-nvofa-driver-state"),
+           flutter::EncodableValue(nvofa_driver_.state)},
+          {flutter::EncodableValue("native-nvofa-driver-error"),
+           flutter::EncodableValue(nvofa_driver_.error)},
+          {flutter::EncodableValue("native-nvofa-api-version"),
+           flutter::EncodableValue(
+               static_cast<int64_t>(nvofa_driver_.api_version_raw))},
+          {flutter::EncodableValue("native-nvofa-d3d11"),
+           flutter::EncodableValue(nvofa_driver_.d3d11_available)},
           {flutter::EncodableValue("completedCount"),
            flutter::EncodableValue(completed_count_)},
           {flutter::EncodableValue("errorCount"),

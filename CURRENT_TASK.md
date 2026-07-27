@@ -1,5 +1,32 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 VapourSynth R78 真实帧与 NVOFA 驱动门禁
+
+- 官方 `VapourSynth64-Portable-R78.zip` 已按 GitHub Release 摘要
+  `8f12c2436aba6f596cde88d779f923a0bd454899b4bde1dd111b7ebbd8d7c3e3`
+  下载并隔离安装到被忽略的 `build` 目录；未修改系统 PATH、注册表或应用包。
+- R78 报告 Core R78 / API R4.2；固定 libmpv 的真实帧探针向透传脚本送入
+  320×180、24 fps、144 帧 H.264 样本，Debug/Release 均通过实际帧推进、
+  精确 seek、同进程 reload，并确认透传帧率不会被标记为插帧 active。
+- 新增独立 NVOFA 系统驱动探针和 runner 只读快照。宿主只以
+  `LOAD_LIBRARY_SEARCH_SYSTEM32` 加载 `nvofapi64.dll`；本机返回 API 5.0，
+  D3D11、D3D12、CUDA、Vulkan 入口均存在。
+- `PlayerMotionInterpolationCapability` 只增加驱动状态、API 版本和 D3D11
+  可用性；驱动 API 可用不等于 FRUC SDK/插件已接入，也不等于 RTX Video SDK
+  的 VSR、伪影消除或 HDR 已完成。
+- 两个 QA 目标均为独立 `EXCLUDE_FROM_ALL` 目标，没有 install 规则；正式 runner
+  只包含无厂商头文件依赖的系统驱动门禁，不包含 VapourSynth、Python 或 NVIDIA
+  SDK 文件。
+- NVIDIA Optical Flow SDK 与 RTX Video SDK 下载均要求 NVIDIA 开发者账户/
+  许可流程；本轮没有代替用户登录或接受许可，也没有提交或分发厂商文件。
+- `flutter analyze`、297 项全量测试（另 3 项按既有条件跳过）与 Windows Debug
+  build 通过；真实工作区 Debug 窗口以 `windows-native-hwnd` 进入首个媒体并
+  正常出画，Escape 返回 11239 项媒体库，原生 stop/dispose/released 在 57 ms
+  内完成，最终进程正常退出。
+- 默认 MediaKit、Windows 后端选择、filtered queue、当前 index、返回状态、
+  插件 ABI、SQLite、标签、缓存队列和用户数据均未改变。
+- 完整证据见 `docs/qa/vapoursynth_r78_real_frames_nvofa_20260728.md`。
+
 ## 2026-07-28 Windows 本机运动补偿插帧运行时边界
 
 - 固定 libmpv `v0.41.0-908-g48e6c35c0` 的运行日志确认
@@ -21,9 +48,9 @@
   正常，默认未配置外部运行时没有启动崩溃、遮挡、溢出或错位。
 - QA 探针目标标记为 `EXCLUDE_FROM_ALL` 且没有 install 规则；标准 runner 目录确认
   不含假 `VSScript.dll`。
-- 官方 VapourSynth 最新稳定版已为 R78（2026-07-24）；官方便携包真实下载受当前
-  网络吞吐阻断，尚未完成 R78 透传送帧。NVIDIA NVOFA FRUC SDK 仍需开发者账户和
-  许可确认，本轮未下载、提交或分发厂商文件。
+- 本节当时记录的 R78 下载阻断已由上方“R78 真实帧与 NVOFA 驱动门禁”解除；
+  NVIDIA NVOFA FRUC SDK 仍需开发者账户和许可确认，尚未下载、提交或分发厂商
+  文件。
 - filtered queue、当前 index、返回媒体库状态、插件 ABI v1、SQLite、标签、缓存
   队列和用户数据均未改变。
 - 验证记录见 `docs/qa/vapoursynth_motion_runtime_20260728.md`。

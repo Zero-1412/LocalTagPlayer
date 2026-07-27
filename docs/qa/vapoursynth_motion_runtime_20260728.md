@@ -140,8 +140,9 @@ VapourSynth64-Portable-R78.zip
 sha256:8f12c2436aba6f596cde88d779f923a0bd454899b4bde1dd111b7ebbd8d7c3e3
 ```
 
-本轮下载在当前网络环境持续低速并超时，文件未通过摘要，因此没有解压或用作
-运行证据。不得用假 DLL 的结构化测试替代完整 R78 送帧测试。
+后续已完成官方摘要校验、隔离安装和真实 R78 送帧测试；结果见
+`docs/qa/vapoursynth_r78_real_frames_nvofa_20260728.md`。本文件保留最初宿主
+边界证据，不再代表 R78 当前状态。
 
 ## NVIDIA 插帧目标
 
@@ -181,7 +182,7 @@ mpv/VapourSynth 负责帧序与时间戳
 
 ## 下一阶段门禁
 
-1. 完成官方 R78 便携运行时的透传脚本真实送帧和 seek/reload。
+1. 官方 R78 便携运行时的透传脚本真实送帧和 seek/reload 已完成。
 2. 由用户/发布负责人接受 NVIDIA Optical Flow SDK 许可后，在本机隔离目录构建
    FRUC 插件，不提交厂商二进制。
 3. 真人面部、动画渐变、暗场三类自然低码率片源各做关闭/开启 A/B，读回源/输出

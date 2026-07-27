@@ -1,5 +1,19 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · R78 真实送帧与 NVIDIA 驱动门禁
+
+- 隔离验证官方 VapourSynth R78 的 Core R78 / API R4.2；真实 H.264 帧、seek、
+  reload 和透传非 active 语义在 Debug/Release 均通过。
+- Windows runner 新增只读 NVOFA 驱动探测：只从 System32 加载驱动 DLL，读取
+  官方最大 API 版本并检查 D3D11 导出，不创建 Optical Flow 会话。
+- 插帧能力快照增加 NVOFA 驱动状态、API 版本与 D3D11 可用性；UI、默认后端和
+  用户设置不变，驱动可用不会被描述成 FRUC 或 RTX Video SDK 已完成。
+- R78 与两个原生探针均留在本机 QA 边界；没有下载、提交或分发 NVIDIA SDK 文件。
+- analyze、297 项测试、Windows Debug build 与真实 child HWND 进入/返回/退出
+  均通过；播放器原生资源在返回后完成释放。
+- filtered queue、当前索引、返回状态、插件 ABI、SQLite、标签、缓存队列和用户
+  数据不变。
+
 ## 2026-07-28 · Windows 插帧运行时进入强类型平台边界
 
 - 固定 libmpv 已实测包含 VapourSynth，但当前 bundle 缺少 `VSScript.dll`；诊断

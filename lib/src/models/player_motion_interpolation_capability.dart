@@ -29,6 +29,10 @@ class PlayerMotionInterpolationCapability {
     this.errorCode = '',
     this.enabled = false,
     this.fallbackCount = 0,
+    this.nvidiaDriverState = 'unavailable',
+    this.nvidiaDriverError = 'not-probed',
+    this.nvidiaOpticalFlowApiVersion = 0,
+    this.nvidiaD3D11Available = false,
   });
 
   /** 非 Windows 原生后端使用的确定性回退。 */
@@ -38,7 +42,11 @@ class PlayerMotionInterpolationCapability {
         runtimeState = 'unsupported',
         errorCode = 'backend-capability-unsupported',
         enabled = false,
-        fallbackCount = 0;
+        fallbackCount = 0,
+        nvidiaDriverState = 'unsupported',
+        nvidiaDriverError = 'backend-capability-unsupported',
+        nvidiaOpticalFlowApiVersion = 0,
+        nvidiaD3D11Available = false;
 
   final PlayerMotionInterpolationStatus status;
 
@@ -56,6 +64,22 @@ class PlayerMotionInterpolationCapability {
 
   /** 本会话发生过的确定性滤镜回退次数。 */
   final int fallbackCount;
+
+  /** NVIDIA 显示驱动 OFAPI 的稳定状态，不表示 FRUC 插件已经存在。 */
+  final String nvidiaDriverState;
+
+  /** NVIDIA 驱动门禁失败时的稳定错误码，不包含系统路径或驱动日志。 */
+  final String nvidiaDriverError;
+
+  /** 驱动返回的原始 OFAPI 版本编码。 */
+  final int nvidiaOpticalFlowApiVersion;
+
+  /** 驱动是否导出 Windows D3D11 Optical Flow 入口。 */
+  final bool nvidiaD3D11Available;
+
+  /** 仅证明驱动侧 NVOFA/D3D11 前置条件就绪。 */
+  bool get nvidiaDriverReady =>
+      nvidiaDriverState == 'available' && nvidiaD3D11Available;
 
   /** 只有运行时和脚本通过门禁后才允许发送启用命令。 */
   bool get canEnable =>

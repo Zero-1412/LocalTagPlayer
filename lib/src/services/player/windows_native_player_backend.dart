@@ -147,6 +147,10 @@ class WindowsNativePlayerBackend
       'native-motion-interpolation-configured',
       'native-motion-interpolation-enabled',
       'native-motion-interpolation-fallbacks',
+      'native-nvofa-driver-state',
+      'native-nvofa-driver-error',
+      'native-nvofa-api-version',
+      'native-nvofa-d3d11',
     ]) {
       final propertyValue = value[property];
       if (propertyValue != null) _properties[property] = '$propertyValue';
@@ -323,6 +327,15 @@ class WindowsNativePlayerBackend
           _properties['native-motion-interpolation-fallbacks'] ?? '',
         ) ??
         0;
+    final nvidiaDriverState =
+        _properties['native-nvofa-driver-state'] ?? 'unavailable';
+    final nvidiaDriverError =
+        _properties['native-nvofa-driver-error'] ?? 'not-probed';
+    final nvidiaApiVersion = int.tryParse(
+          _properties['native-nvofa-api-version'] ?? '',
+        ) ??
+        0;
+    final nvidiaD3D11Available = _properties['native-nvofa-d3d11'] == 'true';
     final status = switch (runtimeState) {
       'not-configured' ||
       'runtime-not-configured' ||
@@ -341,6 +354,10 @@ class WindowsNativePlayerBackend
       errorCode: errorCode,
       enabled: enabled,
       fallbackCount: fallbackCount,
+      nvidiaDriverState: nvidiaDriverState,
+      nvidiaDriverError: nvidiaDriverError,
+      nvidiaOpticalFlowApiVersion: nvidiaApiVersion,
+      nvidiaD3D11Available: nvidiaD3D11Available,
     );
   }
 

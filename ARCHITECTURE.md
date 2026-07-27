@@ -1,5 +1,18 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.81` 将 Windows 插帧路线从“宿主结构可用”推进到
+“官方 VapourSynth R78 真实帧链可用”，并增加 NVIDIA Optical Flow 驱动能力
+门禁。R78 只安装在被忽略的本机 QA 目录，不修改 PATH/注册表，也不进入应用包；
+固定 libmpv 经真实 H.264 帧验证了滤镜送帧、精确 seek、同进程 reload 和透传
+不会被误报为插帧 active。Windows runner 仅从 System32 安全加载
+`nvofapi64.dll`，调用官方公开的最大 API 版本入口并检查 D3D11 导出，再通过
+`PlayerMotionInterpolationCapability` 返回类型化只读快照。本机 API 5.0 与
+D3D11 导出可用只证明驱动侧 NVOFA 入口存在，不证明 FRUC SDK/插件已安装，也不
+证明 RTX Video SDK 的 VSR、伪影消除或 HDR 已接入。应用仍不下载、不提交、不
+分发 NVIDIA SDK 文件；下一阶段必须由用户接受 NVIDIA 许可并提供本机 SDK 后，
+才构建不分发厂商文件的 FRUC 与 RTX Video 1.1 插件。默认后端、现有插件 ABI、
+filtered queue、SQLite、标签、缓存队列和用户数据不变。
+
 `Architecture Baseline 0.5.80` 增加 Windows 本机运动补偿插帧边界，但不把外部
 运行时或厂商文件伪装成应用内置能力。`PlayerService` 只暴露
 `PlayerMotionInterpolationBoundary` 的强类型查询与启停结果；MediaKit 和其它

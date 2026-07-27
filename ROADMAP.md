@@ -1,5 +1,18 @@
 # ROADMAP.md
 
+## 2026-07-28 官方 R78 与 NVOFA 驱动门禁已通过
+
+- 官方 VapourSynth R78 已完成隔离安装和真实 H.264 帧、seek、reload 透传验证；
+  “先证明完整帧链，再接 NVIDIA FRUC”这一前置门禁已通过。
+- Windows runner 已证明当前 RTX 4070 SUPER 驱动提供 NVOFA API 5.0 与 D3D11
+  入口；该结果只开放下一阶段原型资格，不代表已有生成中间帧的实现。
+- 下一阶段分成两个互不冒充的本机插件：
+  1. Optical Flow SDK 5.0 FRUC：负责连续帧、时间戳与中间帧；
+  2. RTX Video SDK 1.1：负责 VSR、压缩伪影消除与 SDR→HDR。
+- 两个 SDK 都先采用“不分发 NVIDIA 文件”的本机原型。用户完成 NVIDIA 账户与
+  许可流程并提供 SDK 后，才编译插件、验证 D3D11 设备/LUID、seek、切换、退出、
+  非 NVIDIA 回退、多片源 A/B、掉帧和音视频同步；未通过前不增加用户可启用入口。
+
 ## 2026-07-28 NVIDIA 硬件补帧与外部运行时路线
 
 - 已建立 `PlayerService → PlayerMotionInterpolationBoundary → Windows libmpv
@@ -8,8 +21,8 @@
 - NVIDIA 硬件补帧的准确目标改为 Optical Flow SDK 的 NVOFA FRUC，而不是把 RTX
   Video Super Resolution/HDR SDK 当作插帧 API。现有 NVIDIA VSR 继续由
   `d3d11vpp scaling-mode=nvidia` 提供；RTX Video HDR 仍需单独原生能力。
-- 下一阶段先用官方 VapourSynth R78 完成透传送帧，再接一个不分发厂商文件的本机
-  FRUC/VapourSynth 插件；必须读回输出帧率、测三类自然片源、掉帧、音视频同步、
+- 官方 VapourSynth R78 透传送帧已经完成；下一阶段接一个不分发厂商文件的本机
+  FRUC/VapourSynth 插件，必须读回输出帧率、测三类自然片源、掉帧、音视频同步、
   seek/切换/退出和失败回退后，才增加用户入口。
 - 单帧 D3D11 插件 ABI v1 继续服务超分/降噪类原位处理，不扩充为补帧 ABI；
   若 VapourSynth 无法承载 FRUC 的 D3D11 纹理，再另立拥有前后帧、时间戳和输出

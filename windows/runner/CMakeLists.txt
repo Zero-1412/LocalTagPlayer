@@ -13,6 +13,7 @@ add_executable(${BINARY_NAME} WIN32
   "gpu_compute_frame_budget.cpp"
   "local_video_enhancement_plugin.cpp"
   "native_player_bridge.cpp"
+  "nvidia_optical_flow_driver_probe.cpp"
   "vapoursynth_motion_runtime.cpp"
   "native_media_probe_bridge.cpp"
   "utils.cpp"

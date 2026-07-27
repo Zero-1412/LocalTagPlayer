@@ -1,3 +1,13 @@
+## 2026-07-28 R78 真实帧与 NVIDIA 驱动能力门禁
+
+- 官方 VapourSynth R78 已在隔离目录通过 Core R78 / API R4.2 自检；固定 libmpv
+  对真实 H.264 样本完成帧推进、seek 与 reload，透传脚本不会冒充插帧 active。
+- Windows runner 只从 System32 探测 NVOFA 驱动。本机 API 5.0 与 D3D11 导出
+  可用，但没有创建 FRUC 会话，也没有把该状态展示为 NVIDIA 补帧已启用。
+- 类型化能力快照保持在 `PlayerService` 平台边界后；Flutter 页面不接触 DLL、
+  SDK 头文件、D3D11 资源或 mpv handle。
+- filtered queue、当前 index、来源队列、返回媒体库状态和释放顺序不变。
+
 ## 2026-07-28 Windows 本机运动补偿插帧边界
 
 - 固定 mpv 已实测编译含 VapourSynth；实际视频送帧确认当前 bundle 缺

@@ -350,6 +350,9 @@ void main() {
         File('windows/runner/CMakeLists.txt').readAsStringSync();
     final bridge =
         File('windows/runner/native_player_bridge.cpp').readAsStringSync();
+    final nvofaDriver = File(
+      'windows/runner/nvidia_optical_flow_driver_probe.cpp',
+    ).readAsStringSync();
     final runtime = File(
       'windows/runner/vapoursynth_motion_runtime.cpp',
     ).readAsStringSync();
@@ -384,6 +387,19 @@ void main() {
     expect(
       boundary,
       contains('abstract interface class PlayerMotionInterpolationBoundary'),
+    );
+
+    // NVOFA 只从 System32 探测官方驱动入口，不把驱动存在冒充 FRUC 已安装。
+    expect(nvofaDriver, contains('LOAD_LIBRARY_SEARCH_SYSTEM32'));
+    expect(nvofaDriver, contains('NvOFGetMaxSupportedApiVersion'));
+    expect(nvofaDriver, contains('NvOFAPICreateInstanceD3D11'));
+    expect(
+      bridge,
+      contains('native-nvofa-driver-state'),
+    );
+    expect(
+      bridge,
+      contains('ProbeNvidiaOpticalFlowDriver()'),
     );
   });
 

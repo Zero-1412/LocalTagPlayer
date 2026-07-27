@@ -10,6 +10,7 @@
 
 #include "angle_surface_manager.h"
 #include "local_video_enhancement_plugin.h"
+#include "nvidia_optical_flow_driver_probe.h"
 #include "vapoursynth_motion_runtime.h"
 
 #include <array>
@@ -101,6 +102,8 @@ class NativePlayerBridge {
   LocalVideoEnhancementPlugin video_enhancement_plugin_;
   /** 只服务显式本机 VapourSynth/插帧脚本的结构化滤镜宿主。 */
   VapourSynthMotionRuntime motion_runtime_;
+  /** NVIDIA 显示驱动 OFAPI 的只读能力，不代表 FRUC 插件已经安装。 */
+  NvidiaOpticalFlowDriverSnapshot nvofa_driver_;
   mpv_handle* player_ = nullptr;
   mpv_render_context* render_context_ = nullptr;
   FlutterDesktopPixelBuffer pixel_buffer_{};

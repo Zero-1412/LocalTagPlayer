@@ -122,6 +122,10 @@ class _RecordingMotionBackend extends _RecordingPlayerBackend
             backend: 'recording-native',
             runtimeState: enabled ? 'requested' : 'ready',
             enabled: enabled,
+            nvidiaDriverState: 'available',
+            nvidiaDriverError: '',
+            nvidiaOpticalFlowApiVersion: 0x50,
+            nvidiaD3D11Available: true,
           );
 
   @override
@@ -219,6 +223,8 @@ void main() {
     expect(before.status, PlayerMotionInterpolationStatus.ready);
     expect(enabled.applied, isTrue);
     expect(enabled.capability.enabled, isTrue);
+    expect(enabled.capability.nvidiaDriverReady, isTrue);
+    expect(enabled.capability.nvidiaOpticalFlowApiVersion, 0x50);
     expect(disabled.applied, isTrue);
     expect(disabled.capability.enabled, isFalse);
   });
