@@ -1,5 +1,12 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 三类自然低码率片源 A/B 与 NVIDIA 状态核查
+
+- `Tears of Steel` 真人面部/暗场与 `Sintel` 动画渐变均以 CC BY 3.0 开放片源隔离压制为低码率 1080P；关闭/清晰增强共六轮真实 Windows 播放均为 0 掉帧、0 音视频停滞。
+- 清晰增强对动画渐变最有价值，对面部与暗场保持克制；QA-only 额外 0.18 后锐化只改善部分动画轮廓，却让面部压缩纹理和暗场噪点变硬，未达到三类一致获益，GLSL 继续不加入。
+- 本机 NVIDIA App 的视频页显示超分辨率关闭、HDR 禁用；播放器虽精确使用 RTX 4070 SUPER 的 `d3d11va-copy`，当前“GPU 画质超分”仍是 libmpv `ewa_lanczossharp`，未接 RTX Video SDK，因此不能宣称 NVIDIA AI 增强已工作。
+- 可复跑工具为 `tool/run_natural_compression_quality_ab.ps1`，完整证据与限制见 `docs/qa/player_natural_compression_ab_20260727.md`；未修改正式播放器、filtered queue、PlayerBackend contract、缓存队列或用户数据。
+
 ## 2026-07-27 压缩画质增强三档与低码率 1080P A/B
 
 - 播放器齿轮和全局播放画质页统一提供“关闭 / 自动 / 清晰增强”；旧布尔设置安全迁移为关闭或自动，不改变解码器、超分、HDR、暗部增强或 filtered queue。

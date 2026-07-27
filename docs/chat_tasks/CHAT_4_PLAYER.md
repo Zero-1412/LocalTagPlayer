@@ -1,3 +1,11 @@
+## 2026-07-27 三类自然片源 A/B 与 NVIDIA RTX Video 边界
+
+- 使用 CC BY 3.0 的 `Tears of Steel` 与 `Sintel` 隔离生成真人面部、动画渐变、暗场三类低码率 1080P；关闭/清晰增强六轮均为 0 掉帧、0 音视频停滞。
+- 真实窗口固定第 12 秒取证；后端 PNG 被证明是滤镜前帧，不再用于冒充观感 A/B。清晰增强对渐变最有帮助，对面部和暗场保持克制且未见明显光晕。
+- QA-only 的 0.18 强度缩放后锐化只略改善动画轮廓，却让面部压缩纹理和暗场噪点变硬；未达到多片源一致稳定获益，GLSL 继续不实现。
+- RTX 4070 SUPER 的 `d3d11va-copy` 与精确 LUID 只证明 NVIDIA GPU 正在解码/渲染；当前 GPU 画质超分仍为 libmpv `ewa_lanczossharp`，不是 RTX Video AI。NVIDIA App 视频页实查为超分辨率关闭、HDR 禁用，项目也未接 RTX Video SDK。
+- 新增 `tool/run_natural_compression_quality_ab.ps1` 与 `docs/qa/player_natural_compression_ab_20260727.md`；正式播放器、filtered queue、最新请求切换、硬解回退、超分/HDR/暗部增强、缓存队列和用户数据均未修改。
+
 ## 2026-07-27 压缩画质增强与保守去色带
 
 - 播放器齿轮一级增加“压缩画质增强”，三级列表明确提供“关闭 / 自动 / 清晰增强”；页面级挂载合同同时保护齿轮、回调、子页和三个稳定选项键。
