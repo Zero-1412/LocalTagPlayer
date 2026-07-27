@@ -1,5 +1,17 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.75` 把 Windows 固定 libmpv 升级为
+`v0.41.0-908-g48e6c35c0`，归档、SHA-256 与许可证均由 CMake 固定。显式
+`windows-native-hwnd` 后端在 Dart 和 runner 两层锁定非 copy `d3d11va`，
+避免通用 `auto-safe` 在会话初始化后覆盖实验目标。child HWND 使用命中透明且
+不激活的窗口过程，把真实鼠标语义留给 Flutter；`PlayerOverlaySurfaceBoundary`
+只负责在设置、上下文菜单和对话框期间隐藏/恢复原生表面，不改变共享
+`PlayerBackend`。矩形同步把 device pixel ratio 纳入去重，跨 DPI 且逻辑尺寸
+不变时仍要求 runner 依据父 HWND 客户区重算物理几何。普通窗口的弹层、全屏、
+快速切换、Route 返回和退出已通过；当前只有单个 96 DPI 显示器，真实跨屏证据
+缺失，因此三类片源六组 A/B 与默认后端切换均继续阻断。SQLite、标签查询、
+filtered queue、缓存队列、插件 ABI 和用户数据不变。
+
 `Architecture Baseline 0.5.74` 增加仅由
 `LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd` 启用的 Windows 平台实验边界：
 runner 在 Flutter view 下创建双层 child HWND，外层只负责几何和 airspace
@@ -7,9 +19,9 @@ runner 在 Flutter view 下创建双层 child HWND，外层只负责几何和 ai
 `PlayerBackend` 控制同一 filtered queue、当前 index、播放命令和返回状态，
 没有把 HWND、mpv handle 或 D3D11 资源泄漏到页面。隔离 mpv 0.41 在真人面部、
 动画渐变和暗场三类低码率 1080P 页面中均为非 copy `d3d11va`、0 Flutter
-纹理复制、0 掉帧；固定 mpv 0.36 无法启动该输出链。真实窗口画面与队列边界已
+纹理复制、0 掉帧；当时固定 mpv 0.36 无法启动该输出链。真实窗口画面与队列边界已
 正确，但物理鼠标齿轮/右键可达性尚未形成可靠证据，因此默认 Windows 后端继续
-使用 MediaKit，正式 bundle 也已恢复固定 mpv 0.36。SQLite、标签查询、
+使用 MediaKit，当轮正式 bundle 也恢复固定 mpv 0.36。SQLite、标签查询、
 filtered queue、缓存队列、插件 ABI 和用户数据均未改变。
 
 `Architecture Baseline 0.5.73` 收纳播放器齿轮的低频画面设置，但不改变
@@ -84,12 +96,16 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.74`
+已完成基线：`Architecture Baseline 0.5.75`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.75`：Windows 固定 mpv 升级到 `v0.41.0-908-g48e6c35c0`；child
+  HWND 使用命中透明窗口过程并在 Flutter 弹层期间隐藏。普通窗口的鼠标、
+  弹层、全屏、快速切换、返回和退出已通过，DPR 变化会强制重算物理矩形；
+  真实跨 DPI 尚无多显示器证据，因此 A/B 和默认后端切换继续阻断。
 - `0.5.74`：Windows runner 增加显式 QA-only 双层 child HWND 后端；外层
   约束 Flutter airspace，内层交给 libmpv D3D11 输出。mpv 0.41 的三类自然
   低码率 1080P 页面均得到 `hwdec-current=d3d11va`、0 纹理复制和 0 掉帧，

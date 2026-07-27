@@ -2,7 +2,8 @@
 
 本模块使用固定摘要下载以下未修改上游组件：
 
-- libmpv Windows video build：`2023-09-24`，提交版本`652a1dd`。
+- libmpv Windows video build：`2026-07-26`，mpv
+  `v0.41.0-908-g48e6c35c0`。
 - mpv API头文件：随上述libmpv构建归档提供。
 - ANGLE Windows二进制：`v1.0.1`。
 - media_kit_video Windows ANGLE桥接源码：`1.3.1`，MIT许可证。
@@ -18,8 +19,8 @@ ANGLE使用BSD风格许可证，并可能包含Chromium第三方组件。发布�
 
 上游来源：
 
-- https://github.com/media-kit/libmpv-win32-video-build/tree/2023-09-24
-- https://github.com/mpv-player/mpv/tree/v0.36.0
+- https://github.com/zhongfly/mpv-winbuild/releases/tag/2026-07-26-48e6c35c0e
+- https://github.com/mpv-player/mpv/tree/v0.41.0
 - https://github.com/alexmercerind/flutter-windows-ANGLE-OpenGL-ES/tree/v1.0.1
 - https://github.com/media-kit/media-kit
 - https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-07-12-13-16

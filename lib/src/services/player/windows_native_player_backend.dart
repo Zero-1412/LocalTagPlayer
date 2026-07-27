@@ -17,7 +17,10 @@ import 'windows_gpu_capability_channel.dart';
  * A/B，默认生产路径继续使用 MediaKitPlayerBackend。
  */
 class WindowsNativePlayerBackend
-    implements PlayerBackend, PlayerGpuRenderBoundary {
+    implements
+        PlayerBackend,
+        PlayerGpuRenderBoundary,
+        PlayerOverlaySurfaceBoundary {
   WindowsNativePlayerBackend({this.mode = 'stub'})
       : _positionChanges = StreamController<Duration>.broadcast(),
         _playingChanges = StreamController<bool>.broadcast(),
@@ -118,7 +121,9 @@ class WindowsNativePlayerBackend
       'native-surface-height',
       'native-surface-kind',
       'native-surface-visible',
+      'native-surface-occluded',
       'native-input-forwarding',
+      'native-input-mode',
       'native-airspace-inset-top',
       'native-airspace-inset-bottom',
       'native-video-plugin-state',
@@ -184,6 +189,24 @@ class WindowsNativePlayerBackend
     });
   }
 
+  /**
+   * 在 Flutter 弹层挂载前同步隐藏 child HWND，关闭最后一层弹层后恢复。
+   *
+   * 纹理与 stub 模式没有独立 airspace，因此直接返回；默认 MediaKit 也不会实现
+   * 该可选边界。原生层保存最后一个有效矩形，恢复时无需等待 Flutter 再布局。
+   */
+  @override
+  Future<void> setFlutterOverlayVisible(bool visible) async {
+    if (mode != 'hwnd' || _disposed) return;
+    await _ready;
+    if (_disposed) return;
+    await windowsNativePlayerChannel.invokeMethod<void>(
+      'setSurfaceOccluded',
+      <String, Object?>{'occluded': visible},
+    );
+    await _pollState();
+  }
+
   @override
   PlayerBackendState get state => _state;
 
@@ -231,6 +254,11 @@ class WindowsNativePlayerBackend
 
   @override
   Future<void> setProperty(String property, String value) {
+    if (mode == 'hwnd' && property == 'hwdec') {
+      // child HWND 实验的唯一目标是验证 D3D11VA 非 copy 纹理链；不能让通用
+      // `auto-safe` 配置在会话创建后把原生层重新降回 `d3d11va-copy`。
+      return _command('property', text: 'hwdec=d3d11va');
+    }
     // 缓存档位由播放器会话统一约束；原生 A/B 后端必须接受同一组值，避免设置页显示
     // 已关闭高质量缓存而此处仍静默覆盖为固定 64 MiB。
     return _command('property', text: '$property=$value');
@@ -361,6 +389,7 @@ class _WindowsHwndVideoSurfaceState extends State<_WindowsHwndVideoSurface>
   final GlobalKey _placeholderKey = GlobalKey();
   Rect? _lastLogicalRect;
   Size? _lastLogicalViewSize;
+  double? _lastDevicePixelRatio;
   bool _syncScheduled = false;
 
   @override
@@ -404,6 +433,7 @@ class _WindowsHwndVideoSurfaceState extends State<_WindowsHwndVideoSurface>
     if (renderObject == null || !renderObject.hasSize) return;
     final origin = renderObject.localToGlobal(Offset.zero);
     final viewSize = MediaQuery.sizeOf(context);
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
     final logicalHeight =
         (renderObject.size.height - _topAirspace - _bottomAirspace)
             .clamp(0.0, double.infinity)
@@ -414,11 +444,16 @@ class _WindowsHwndVideoSurfaceState extends State<_WindowsHwndVideoSurface>
       renderObject.size.width,
       logicalHeight,
     );
-    if (_lastLogicalRect == logicalRect && _lastLogicalViewSize == viewSize) {
+    if (_lastLogicalRect == logicalRect &&
+        _lastLogicalViewSize == viewSize &&
+        _lastDevicePixelRatio == devicePixelRatio) {
       return;
     }
     _lastLogicalRect = logicalRect;
     _lastLogicalViewSize = viewSize;
+    // 跨 DPI 移窗时逻辑尺寸可能保持不变；仍须让 runner 按新的父 HWND
+    // 客户区重新计算物理矩形，避免 child HWND 沿用旧显示器的缩放比例。
+    _lastDevicePixelRatio = devicePixelRatio;
     await widget.backend._setHwndSurfaceRect(
       left: logicalRect.left.round(),
       top: logicalRect.top.round(),

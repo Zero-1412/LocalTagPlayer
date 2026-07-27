@@ -98,6 +98,21 @@ abstract interface class PlayerGpuRenderBoundary {
 }
 
 /**
+ * 需要在 Flutter 弹层显示期间让出原生视频 airspace 的可选边界。
+ *
+ * 普通纹理后端无需实现；child HWND 等始终位于 Flutter 合成层之上的后端通过该
+ * 边界在弹层出现前隐藏原生表面，并在最后一层弹层关闭后恢复。
+ */
+abstract interface class PlayerOverlaySurfaceBoundary {
+  /**
+   * 同步 Flutter 是否正在显示可能与原生视频表面重叠的弹层。
+   *
+   * [visible] 为 true 时原生后端必须先完成让出，再允许调用方挂载弹层。
+   */
+  Future<void> setFlutterOverlayVisible(bool visible);
+}
+
+/**
  * 根据用户硬解设置创建独占播放会话后端。
  *
  * 默认工厂返回 media_kit 适配器；后续 Windows C++ 实现可在组合根切换，

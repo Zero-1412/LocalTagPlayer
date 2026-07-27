@@ -55,6 +55,8 @@ class NativePlayerBridge {
   bool CreateHwndSurface();
   /** 同步 Flutter 视频占位区域对应的物理像素矩形与可见性。 */
   void UpdateHwndSurface(const flutter::EncodableMap& arguments);
+  /** Flutter 弹层挂载期间立即隐藏 child HWND，并在弹层关闭后恢复最后矩形。 */
+  void SetHwndSurfaceOccluded(const flutter::EncodableMap& arguments);
   /** 在 libmpv 会话释放后销毁 child HWND，避免悬空 wid。 */
   void DestroyHwndSurface();
   void EnsureTexture();
@@ -103,6 +105,10 @@ class NativePlayerBridge {
   int64_t texture_id_ = -1;
   bool native_mpv_enabled_ = false;
   bool native_hwnd_enabled_ = false;
+  /** Flutter 布局是否仍请求显示 child HWND；与弹层临时遮挡状态分开保存。 */
+  bool hwnd_surface_requested_visible_ = false;
+  /** Flutter 弹层是否正在占用视频区域；该状态为 true 时 HWND 必须隐藏。 */
+  bool hwnd_surface_occluded_ = false;
   bool hwnd_surface_visible_ = false;
   std::atomic<bool> rendering_enabled_{false};
   std::atomic<bool> render_requested_{false};

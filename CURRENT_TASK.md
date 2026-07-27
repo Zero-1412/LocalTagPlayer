@@ -7,17 +7,22 @@
 - runner 创建双层 child HWND：外层按 Flutter 逻辑矩形和实际 view 客户区换算
   几何并裁剪，内层交给 libmpv `wid + gpu-next + d3d11 + d3d11va`；不注册
   Flutter Texture，诊断中的纹理复制数保持 0。
-- 隔离 mpv 0.41 在真人面部、动画渐变和暗场三类低码率 1080P 页面均得到
-  `hwdec-current=d3d11va`、播放头推进、0 掉帧和 0 Flutter 纹理复制；真实
-  窗口画面已正确限制在视频面板，右侧 filtered queue 未被覆盖。
-- 项目固定 mpv 0.36 的同路径停在 `hwdec-current=unavailable`，无法成为正式
-  后端依赖。QA 完成后 Debug bundle 已恢复固定 DLL，摘要与 pinned 依赖一致。
-- 真实键盘播放/暂停可达，物理鼠标能触发 Flutter hover；但在集成测试窗口中
-  显式左键齿轮仍未打开设置，中央右键也未形成可靠可达证据。airspace 门禁因此
-  判定未通过，Windows 默认后端继续 MediaKit。
-- 下一步先用普通应用而非 integration-test harness 建立确定性鼠标命中、设置
-  弹层隐藏/恢复 HWND、全屏/跨 DPI/快速切换/退出矩阵；未通过前不启用 NVIDIA
-  filter，也不切默认后端。完整记录见
+- Windows 固定依赖已从 mpv 0.36 升级到 `v0.41.0-908-g48e6c35c0`；
+  CMake 固定 2026-07-26 归档、SHA-256 和 mpv v0.41.0 许可证，Debug bundle
+  已读回同一版本。
+- child HWND 对 Flutter view 使用 `HTTRANSPARENT/MA_NOACTIVATE`，真实左键、
+  右键、控制条和快捷键均由 Flutter 接收；设置、更多设置、上下文菜单和诊断
+  弹层打开前隐藏外层 HWND，关闭后按最后矩形恢复。
+- 通用 `auto-safe` 仍保留给默认 MediaKit；显式 HWND 实验在 Dart 与 runner
+  两层固定 `d3d11va`，普通应用诊断已确认实际为非 copy `d3d11va`。
+- 普通应用完成全屏 2560×1440、连续 PageDown 切换 1→2→3→4、返回媒体库和
+  宿主退出；filtered queue 仍为 11164 项，当前索引、标题和画面同步，退出日志
+  包含 pause/pop/dispose 完整确认。
+- 跨 DPI 修复把 device pixel ratio 纳入矩形去重，逻辑尺寸不变时也会请求
+  runner 按新客户区重算物理矩形；focused test 覆盖 100%→150%。当前机器只
+  枚举到一个 96 DPI 显示器，真实跨屏门禁仍未完成。
+- 因真实跨 DPI 尚无物理证据，三类片源六组 A/B 未重新运行，Windows 默认后端
+  继续 MediaKit，NVIDIA filter 继续禁用。完整记录见
   `docs/qa/child_hwnd_airspace_20260727.md`。
 
 ## 2026-07-27 新版 ANGLE 与原生 HWND/D3D11 边界复核
@@ -48,7 +53,7 @@
 - 非 copy 硬门槛未解决，因此三类片源六组 NVIDIA A/B 没有继续运行，也没有
   调整滤镜参数。下一步只评估隔离升级 ANGLE 或新的 Windows 渲染边界。
 - 依赖审计确认 Flutter stable、MediaKit 1.2.6、media_kit_video 2.0.1 与多数
-  直接包已是当前版本；mpv 0.36 不是最新版。`file_picker` 11、
+  直接包已是当前版本；mpv 后续已固定升级到 0.41.0 系列。`file_picker` 11、
   `package_info_plus` 10、`flutter_lints` 6 均需独立主版本升级，不在本次混入。
 - 完整审计见 `docs/qa/dependency_audit_20260727.md`；纹理证据更新在
   `docs/qa/mpv_nvidia_scaling_isolated_20260727.md`。

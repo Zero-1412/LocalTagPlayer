@@ -11,7 +11,8 @@
 - 显式环境开关`LOCAL_TAG_PLAYER_BACKEND=windows-native-stub`。
 - 显式 QA 开关`LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd`可创建双层
   child HWND；外层归 runner 几何/裁剪，内层只交给 libmpv `wid`。该路径不
-  注册 Flutter Texture，且在鼠标/弹层 airspace 门禁通过前不得替换 MediaKit。
+  注册 Flutter Texture。鼠标命中、弹层显隐、全屏、快速切换和退出已通过；
+  真实跨 DPI 与后续 A/B 通过前不得替换 MediaKit。
 
 假后端只显示2×2棋盘格，用于验证纹理与生命周期，不执行真实媒体解码。默认路径仍为`MediaKitPlayerBackend`。
 

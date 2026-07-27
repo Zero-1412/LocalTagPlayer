@@ -80,6 +80,38 @@ void main() {
     expect(
         await backend.getProperty('current-vo'), 'gpu-next-d3d11-child-hwnd');
 
+    final rectCountBeforeDpiChange =
+        calls.where((call) => call.method == 'setSurfaceRect').length;
+    tester.view.devicePixelRatio = 1.5;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(
+      calls.where((call) => call.method == 'setSurfaceRect').length,
+      rectCountBeforeDpiChange + 1,
+      reason: '跨 DPI 移窗即使逻辑尺寸不变，也必须触发原生物理矩形重算',
+    );
+
+    await backend.setProperty('hwdec', 'd3d11va-copy');
+    final hwdecCommand = calls.lastWhere((call) => call.method == 'command');
+    expect(
+      hwdecCommand.arguments,
+      containsPair('text', 'hwdec=d3d11va'),
+    );
+
+    await backend.setFlutterOverlayVisible(true);
+    await backend.setFlutterOverlayVisible(false);
+    final occlusionCalls =
+        calls.where((call) => call.method == 'setSurfaceOccluded').toList();
+    expect(occlusionCalls, hasLength(2));
+    expect(
+      (occlusionCalls.first.arguments! as Map<Object?, Object?>)['occluded'],
+      isTrue,
+    );
+    expect(
+      (occlusionCalls.last.arguments! as Map<Object?, Object?>)['occluded'],
+      isFalse,
+    );
+
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
     await backend.dispose();

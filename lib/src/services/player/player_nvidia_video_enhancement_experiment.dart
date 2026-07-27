@@ -108,7 +108,7 @@ class PlayerNvidiaVideoEnhancementExperiment {
   const PlayerNvidiaVideoEnhancementExperiment._();
 
   /** 当前 Windows 构建脚本固定下载的 mpv 版本。 */
-  static const bundledMpvVersion = '0.36.0';
+  static const bundledMpvVersion = '0.41.0';
 
   /** `scaling-mode=nvidia` 首次进入 mpv 正式版本的最低版本。 */
   static const minimumNvidiaScalingModeVersion = '0.39.0';

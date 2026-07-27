@@ -2,18 +2,24 @@
 
 ## 结论
 
-原型只通过了“画面与非 copy 硬解”门槛，没有通过完整 airspace 产品门槛：
+普通应用已通过鼠标、弹层、全屏、快速切换和退出门槛，但真实跨 DPI 仍缺少
+多显示器物理证据，因此没有进入三类片源六组 A/B，也没有切换默认后端：
 
-- 隔离 mpv `v0.41.0-744-g304426c39` 可在正式 `PlayerPage` 中使用
+- Windows 固定 mpv 已升级为 `v0.41.0-908-g48e6c35c0`，可在正式
+  `PlayerPage` 中使用
   `wid + gpu-next + d3d11 + d3d11va`。
 - 真人面部、动画渐变、暗场三类低码率 1080P 均为
   `hwdec-current=d3d11va`、0 Flutter 纹理复制、0 总掉帧，播放头持续推进。
 - 双层 child HWND 已把视频限制在左侧视频面板，右侧 filtered queue 和底部
   控制条可见；不再出现 mpv 重新配置 `wid` 后越过面板的问题。
-- 项目固定 mpv 0.36 在同一路径中停在
-  `hwdec-current=unavailable`，不能直接作为正式实现。
-- 真实键盘播放/暂停可达，物理鼠标能触发 Flutter hover；但齿轮左键与视频中央
-  右键尚未可靠打开设置/诊断弹层。逻辑 `tester.tap` 通过不能替代该证据。
+- child HWND 使用 `HTTRANSPARENT/MA_NOACTIVATE`，普通应用中的真实鼠标
+  齿轮、右键菜单、设置与诊断均可达；弹层期间 HWND 隐藏，关闭后恢复。
+- `auto-safe` 用户设置不会再把实验会话覆盖为 copy 后端；Dart 与 runner 两层
+  固定 `d3d11va`，普通应用诊断确认实际值为 `d3d11va`。
+- 2560×1440 全屏、连续 PageDown 切换 1→2→3→4、返回 11164 项媒体库和关闭
+  宿主均通过，退出日志记录 pause、Route pop、dispose 开始和结束。
+- DPR 已加入几何同步去重，100%→150% focused test 会重新通知 runner；当前
+  机器只枚举到一个 96 DPI 显示器，不能把合成测试冒充真实跨屏验证。
 
 因此 `LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd` 继续只作为 QA 入口，
 Windows 默认仍使用 MediaKit，macOS/Linux 完全不变。
@@ -44,8 +50,10 @@ integration test 不能调用 `setSurfaceSize` 覆盖离屏画布，否则原生
 可见顶层窗口尺寸不一致。
 
 mpv 可能在媒体加载时重配传入的 `wid`。因此不能把 Flutter 几何直接交给 mpv
-窗口；外层宿主负责裁剪，mpv 只使用内部子窗口。鼠标消息从当前子窗口客户区直接
-映射到 Flutter view，禁止逐层转换造成坐标重复偏移。
+窗口；外层宿主负责裁剪，mpv 只使用内部子窗口。child HWND 不再手工转发鼠标
+消息：`WM_NCHITTEST` 返回 `HTTRANSPARENT`，`WM_MOUSEACTIVATE` 返回
+`MA_NOACTIVATE`，由 Windows 把真实按键状态、双击和捕获语义直接交给 Flutter
+view。弹层边界只控制外层 HWND 显隐。
 
 ## 验证结果
 
@@ -71,22 +79,29 @@ native-surface-visible=true
 native-input-forwarding=true
 ```
 
-真实窗口使用 35 秒真人面部样本循环观察：
+普通应用 QA profile 的真实窗口结果：
 
 - 画面、黑边和底部控制条均限制在左侧视频面板；
-- 右侧队列卡片、`1 / 1` 和筛选队列标题未被 HWND 覆盖；
-- 键盘 Space 可以暂停/继续；
-- 物理鼠标移动能让 Flutter 控制条和齿轮 hover 反馈出现；
-- 显式物理左键未稳定打开齿轮设置，中央物理右键也未稳定打开诊断菜单。
+- 右侧 filtered queue 保持 11164 项，连续切换后的索引、标题和画面一致；
+- 物理左键可打开齿轮与“更多播放设置”，中央右键可打开视频信息/诊断菜单；
+- 设置、上下文菜单和诊断显示时视频 HWND 完全隐藏，无画面穿透；关闭后恢复；
+- 全屏客户区为 2560×1440，退出全屏后普通布局恢复；
+- 普通 `auto-safe` profile 的诊断为“请求 `d3d11va-copy`、实际
+  `d3d11va`”，证明 HWND 边界强制非 copy 已生效；
+- 返回媒体库后视频 HWND 消失，关闭窗口后三个播放器释放时间点完整且进程退出。
 
-最后两项是产品阻断，不以控件仍在 Widget 树或自动化逻辑点击成功替代。
+当前唯一未完成的物理门禁是跨 DPI：系统只枚举到一个
+`96×96 DPI / 1.00x` 显示器。focused test 已证明 DPR 改为 1.5 时即使逻辑
+尺寸不变也会再次发送矩形，但仍需多 DPI 显示器实测。
 
 ## 固定依赖与回退
 
-固定 mpv 0.36 的同路径没有打开媒体，`hwdec-current` 保持
-`unavailable`。隔离 mpv 0.41 只由 `LOCAL_TAG_PLAYER_MPV_QA_DLL` 注入；
-三类测试结束后重新执行无 QA 环境变量的 Windows Debug build，bundle
-`libmpv-2.dll` 的 SHA-256 与 `ltp_native_deps/mpv` pinned DLL 一致。
+固定依赖来自 `zhongfly/mpv-winbuild` 2026-07-26 开发归档，版本
+`v0.41.0-908-g48e6c35c0`。归档 SHA-256 为
+`72b1b348458f632063ed92a967617a078dc05129635a1b929c61d121b0e3a802`，
+bundle `libmpv-2.dll` SHA-256 为
+`4955444addd87a6be28fd42a8a5508ec76630b406292d7d3e5c8a4ab2ae727b0`。
+CMake 同时固定 mpv v0.41.0 GPL/LGPL 许可证来源；构建与 P/Invoke 版本读回通过。
 
 没有修改：
 
@@ -101,12 +116,12 @@ native-input-forwarding=true
 
 在讨论 Windows 默认切换前必须完成：
 
-1. 用普通应用 QA profile，而非 integration-test harness，复测真实左键、右键、
-   滚轮、seek 拖动和焦点；
-2. 设置/诊断/上下文菜单显示期间隐藏或裁剪 HWND，关闭弹层后恢复；
-3. 100% / 125% / 150% / 200% DPI、跨屏、缩放、最大化与全屏；
-4. 快速媒体切换、Route 返回、最小化、Alt+Tab 与宿主退出；
-5. 决定正式 Windows mpv 版本并完成固定归档、许可和回退验证。
+1. 在至少两台不同 DPI 的真实显示器之间移动普通窗口，覆盖 100% / 125% /
+   150% / 200%、最大化、全屏与恢复；
+2. 补真实滚轮、seek 拖动、最小化和 Alt+Tab 长驻测试；
+3. 上述通过后才重新运行真人面部、动画渐变、暗场三类片源六组 A/B；
+4. A/B 仍需同时满足非 copy、0 异常掉帧、退出无残留和多片源观感稳定获益，
+   才重新评估 Windows 默认后端。
 
 上述全部通过前，不运行 NVIDIA filter 产品 A/B，也不把 Windows 默认后端从
 MediaKit 切到原生 mpv。

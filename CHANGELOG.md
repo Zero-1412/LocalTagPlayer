@@ -1,5 +1,21 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · 固定 mpv 0.41 与普通窗口 HWND 门禁
+
+- Windows 固定 libmpv 升级为 `v0.41.0-908-g48e6c35c0`，CMake 固定
+  2026-07-26 Windows 开发归档、SHA-256 与 mpv v0.41.0 许可证来源。
+- child HWND 改为 `HTTRANSPARENT/MA_NOACTIVATE`，真实鼠标继续由 Flutter
+  处理；播放器设置、更多设置、上下文菜单和对话框期间隐藏原生表面，关闭后
+  恢复最后几何。
+- 显式 HWND 后端在 Dart 与 runner 两层固定 `d3d11va`；普通应用使用
+  `auto-safe` 配置时，诊断仍确认实际非 copy `d3d11va`。
+- 普通应用真实验证齿轮/右键无穿透、2560×1440 全屏、连续四项切换、返回媒体库
+  和宿主退出；filtered queue 的来源、11164 项内容、当前索引与返回状态保留。
+- DPI 变化加入矩形同步去重条件，并以 100%→150% focused test 验证会重新通知
+  runner；本机只有单个 96 DPI 显示器，真实跨屏仍是门禁，因此没有重跑三类
+  片源六组 A/B，也没有切换默认 MediaKit。
+- SQLite schema、标签查询、缓存队列、插件 ABI 和用户数据均未改变。
+
 ## 2026-07-27 · Flutter child HWND airspace 原型未提升为默认后端
 
 - Windows 组合根增加显式 `windows-native-hwnd` QA 入口；默认 MediaKit 与

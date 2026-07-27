@@ -69,8 +69,8 @@ function(ltp_seed_verified_archive source output sha256)
 endfunction()
 
 ltp_download(
-  "https://github.com/media-kit/libmpv-win32-video-build/releases/download/2023-09-24/mpv-dev-x86_64-20230924-git-652a1dd.7z"
-  "dce982222d7a23e4a1c6f0fb6cc39f6e899a6714624b95ea49cff6558ee97572"
+  "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-07-26-48e6c35c0e/mpv-dev-x86_64-20260726-git-48e6c35c0e.7z"
+  "72b1b348458f632063ed92a967617a078dc05129635a1b929c61d121b0e3a802"
   "${LTP_MPV_ARCHIVE}")
 ltp_download(
   "https://github.com/alexmercerind/flutter-windows-ANGLE-OpenGL-ES/releases/download/v1.0.1/ANGLE.7z"
@@ -85,12 +85,12 @@ ltp_download(
   "08c967cc9a52e23eec43e7a50dd42b02f64e22d6ee4ef51de684fe55b7f69a75"
   "${LTP_FFMPEG_ARCHIVE}")
 ltp_download(
-  "https://raw.githubusercontent.com/mpv-player/mpv/v0.36.0/LICENSE.GPL"
-  "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+  "https://raw.githubusercontent.com/mpv-player/mpv/v0.41.0/LICENSE.GPL"
+  "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
   "${LTP_NATIVE_DEPS}/LICENSE.mpv.GPL-2.0.txt")
 ltp_download(
-  "https://raw.githubusercontent.com/mpv-player/mpv/v0.36.0/LICENSE.LGPL"
-  "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551"
+  "https://raw.githubusercontent.com/mpv-player/mpv/v0.41.0/LICENSE.LGPL"
+  "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9"
   "${LTP_NATIVE_DEPS}/LICENSE.mpv.LGPL-2.1.txt")
 ltp_download(
   "https://raw.githubusercontent.com/google/angle/chromium/5359/LICENSE"
@@ -101,8 +101,8 @@ ltp_download(
 # 在插件配置前提供项目已校验的副本，避免重复下载及半成品摘要错误。
 ltp_seed_verified_archive(
   "${LTP_MPV_ARCHIVE}"
-  "${CMAKE_BINARY_DIR}/mpv-dev-x86_64-20230924-git-652a1dd.7z"
-  "dce982222d7a23e4a1c6f0fb6cc39f6e899a6714624b95ea49cff6558ee97572")
+  "${CMAKE_BINARY_DIR}/mpv-dev-x86_64-20260726-git-48e6c35c0e.7z"
+  "72b1b348458f632063ed92a967617a078dc05129635a1b929c61d121b0e3a802")
 ltp_seed_verified_archive(
   "${LTP_ANGLE_ARCHIVE}"
   "${CMAKE_BINARY_DIR}/ANGLE.7z"

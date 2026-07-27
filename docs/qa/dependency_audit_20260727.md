@@ -11,7 +11,7 @@ ANGLE 供应包和大多数直接 Dart 依赖已处于当前稳定或发布方�
 
 | 依赖 | 当前实际版本 | 最新稳定/发布方最新 | 决策 |
 | --- | --- | --- | --- |
-| mpv / libmpv | 0.36.0 固定构建 | 官方 0.41.0；Windows QA 候选为 0.41.0 后续提交 | 暂不升；MediaKit 非 copy D3D11VA 门槛失败 |
+| mpv / libmpv | `v0.41.0-908-g48e6c35c0` 固定构建 | 官方稳定版 0.41.0；固定 Windows 构建含后续提交 | 已升级；默认 MediaKit 不切换，HWND 仍受门禁 |
 | `file_picker` | 8.3.7 | 11.0.2 | 主版本升级，另做目录选择、取消、Unicode 路径和 Windows 打包回归 |
 | `package_info_plus` | 9.0.1 | 10.2.1 | 主版本升级，对本功能收益小；另做关于页和跨平台打包回归 |
 | `flutter_lints` | 5.0.0 | 6.0.0 | 只影响开发期；另开纯分析器变更，避免和播放器代码混合 |
@@ -39,16 +39,16 @@ ANGLE 供应包和大多数直接 Dart 依赖已处于当前稳定或发布方�
 
 ### mpv
 
-正式构建仍固定 `media-kit/libmpv-win32-video-build` 2023-09-24，对应 mpv
-0.36.0；它不是最新版。官方当前发布为 0.41.0。隔离 Windows 候选
-`v0.41.0-744-g304426c39` 已验证独立 `gpu-next + d3d11` 路径可以运行
-NVIDIA scaling mode，但进入 MediaKit 的 `MPV_RENDER_API_TYPE_OPENGL`
-纹理边界后仍得到 `hwdec-current=no`。
+正式构建已固定升级到 `zhongfly/mpv-winbuild` 2026-07-26 开发归档，对应
+`v0.41.0-908-g48e6c35c0`；上游稳定基线为 0.41.0。归档、DLL、GPL/LGPL
+许可证均固定摘要，Debug bundle 已通过 P/Invoke 读回相同版本。新版进入
+MediaKit 的 `MPV_RENDER_API_TYPE_OPENGL` 纹理边界仍不能产生非 copy
+D3D11VA；显式 child HWND 路径则已确认 `hwdec-current=d3d11va`。
 
 升级收益包括较新的解码/渲染修复、`gpu-next` 默认策略和 NVIDIA scaling
-mode；风险包括约 4 倍 DLL 体积、MediaKit OpenGL render API 兼容、硬解回退、
-滤镜语义、许可证清单与三平台运行库差异。非 copy D3D11VA 未通过前，不把
-QA 候选提升为正式依赖。
+mode；已接受的代价包括较大的 DLL、许可证清单和 Windows 构建下载变化。
+该依赖升级不等于后端切换：MediaKit 默认路径、硬解回退与滤镜门禁保持原样，
+child HWND 仍需真实跨 DPI 和后续 A/B 才能讨论默认启用。
 
 ### ANGLE
 
@@ -76,10 +76,10 @@ descriptor；不能只替换 DLL。
 
 ## 推荐升级顺序
 
-1. 先把 MediaKit 的 D3D11VA 非 copy 问题作为独立 Windows 渲染边界实验；
-   优先验证新版 ANGLE interop，而不是继续改 NVIDIA 滤镜参数。
-2. 只有边界成功并完成三类片源六组 A/B、掉帧、退出和回退测试，才评估正式
-   升级 mpv。
+1. mpv 已独立升级并固定；继续保持默认 MediaKit，不把版本升级等同于渲染边界
+   通过。
+2. child HWND 完成真实跨 DPI 后，才运行三类片源六组 A/B、掉帧、退出和回退
+   测试，并重新评估 Windows 默认后端。
 3. `file_picker`、`package_info_plus`、`flutter_lints` 分成三个小提交升级，
    每个提交保留完整跨平台构建与对应 UI/功能回归证据。
 4. 传递依赖随直接依赖自然解析，不增加 dependency overrides。

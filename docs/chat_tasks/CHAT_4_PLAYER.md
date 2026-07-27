@@ -1,16 +1,20 @@
 ## 2026-07-27 Flutter child HWND airspace 原型
 
+- Windows 固定 mpv 已升级为 `v0.41.0-908-g48e6c35c0`；固定归档、摘要和
+  v0.41.0 许可证随可重复构建边界管理。
 - 新增 `LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd`，只在显式 QA 中创建
   双层 child HWND；外层按 Flutter view 几何裁剪，内层由 libmpv
   `gpu-next/D3D11` 使用。默认 MediaKit 与其它平台不变。
-- 固定 mpv 0.36 无法启动该输出链；隔离 mpv 0.41 在真人面部、动画渐变和暗场
+- 当时固定 mpv 0.36 无法启动该输出链；隔离 mpv 0.41 在真人面部、动画渐变和暗场
   三类自然低码率 1080P 中均为非 copy `d3d11va`、0 Flutter 纹理复制和
   0 掉帧。
-- 真实窗口画面已落在视频面板内，右侧 filtered queue 和底部控制条保持可见；
-  键盘播放/暂停可用。物理鼠标可产生 Flutter hover，但齿轮左键和视频中央右键
-  尚未可靠打开对应弹层，因此 airspace 门禁判定失败。
-- 默认 Windows 后端不切换，正式 bundle 恢复固定 mpv 0.36；下一步先在普通
-  应用窗口验证鼠标命中、弹层期间 HWND 可见性、全屏、跨 DPI、快速切换和退出。
+- child HWND 现为命中透明且不激活，普通应用真实左键齿轮和中央右键均能打开
+  Flutter 弹层；弹层期间 HWND 隐藏，关闭后恢复，无视频穿透。
+- 普通应用已通过全屏、连续切换 1→2→3→4、返回媒体库与退出；显式 HWND 后端
+  在两层固定 `d3d11va`，真实诊断确认非 copy。
+- DPR 已纳入几何同步判定并通过 100%→150% focused test；当前测试机只有单个
+  96 DPI 显示器，真实跨屏仍未验证。默认 Windows 后端不切换，也不提前重跑
+  三类片源六组 A/B。
 - 完整记录：`docs/qa/child_hwnd_airspace_20260727.md`。
 
 ## 2026-07-27 新版 ANGLE 与原生 HWND/D3D11 边界

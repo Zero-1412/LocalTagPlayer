@@ -109,6 +109,10 @@ void main() {
         await backend.getProperty('current-vo'), 'gpu-next-d3d11-child-hwnd');
     expect(await backend.getProperty('native-surface-kind'), 'child-hwnd');
     expect(await backend.getProperty('native-input-forwarding'), 'true');
+    expect(
+      await backend.getProperty('native-input-mode'),
+      'hit-test-transparent',
+    );
     expect(await backend.getProperty('native-texture-copies'), '0');
 
     final before = backend.state.position;
@@ -130,6 +134,22 @@ void main() {
       find.byKey(const ValueKey<String>('player.settings')).hitTestable(),
       findsOneWidget,
     );
+    await tester.tap(find.byKey(const ValueKey<String>('player.settings')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('player.settings.dialog')),
+      findsOneWidget,
+    );
+    expect(await backend.getProperty('native-surface-occluded'), 'true');
+    expect(await backend.getProperty('native-surface-visible'), 'false');
+    await tester.tapAt(const Offset(12, 12));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('player.settings.dialog')),
+      findsNothing,
+    );
+    expect(await backend.getProperty('native-surface-occluded'), 'false');
+    expect(await backend.getProperty('native-surface-visible'), 'true');
 
     final readyPath = '${output.path}\\ready.json';
     File(readyPath).writeAsStringSync(
@@ -160,7 +180,9 @@ void main() {
       'hwdecCurrent': await backend.getProperty('hwdec-current'),
       'surfaceKind': await backend.getProperty('native-surface-kind'),
       'surfaceVisible': await backend.getProperty('native-surface-visible'),
+      'surfaceOccluded': await backend.getProperty('native-surface-occluded'),
       'inputForwarding': await backend.getProperty('native-input-forwarding'),
+      'inputMode': await backend.getProperty('native-input-mode'),
       'textureCopies':
           int.tryParse(await backend.getProperty('native-texture-copies')),
       'frameDropCount':

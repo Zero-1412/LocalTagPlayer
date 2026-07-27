@@ -12,8 +12,9 @@
 - `LOCAL_TAG_PLAYER_BACKEND=windows-native-stub`：仅验证假纹理与生命周期。
 - `LOCAL_TAG_PLAYER_BACKEND=windows-native-mpv`：启用单个 libmpv/ANGLE/D3D11 原生会话，供同媒体 A/B 使用。
 - `LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd`：启用 QA-only 双层 child
-  HWND，让 libmpv 直接使用 `gpu-next/D3D11/D3D11VA`；当前 airspace
-  鼠标门禁未通过，不能作为正式默认后端。
+  HWND，让固定 mpv `v0.41.0-908-g48e6c35c0` 直接使用
+  `gpu-next/D3D11/D3D11VA`。普通窗口鼠标、弹层、全屏、快速切换和退出已
+  通过；真实跨 DPI 仍无物理证据，因此不能作为正式默认后端。
 
 原生模式从 1280×720 起按 Flutter 实际纹理请求量化表面，并封顶 1920×1080；只有 `mpv_render_context_update` 返回视频帧更新时才渲染。截图接口尚未实现，且 4K 长视频 A/B 中 Private/GPU committed 仍高于 MediaKit，因此仍属于实验后端。
 

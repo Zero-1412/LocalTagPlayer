@@ -4424,19 +4424,19 @@ void main() {
       () async {
     final bundled = await PlayerNvidiaVideoEnhancementExperiment.probe(
       _CapabilityPlayerBackend(<String, String>{
-        'mpv-version': 'mpv 0.36.0-652a1dd',
+        'mpv-version': 'mpv 0.41.0-908-g48e6c35c0',
       }),
       isWindows: true,
-      filterChainIntegrated: true,
+      filterChainIntegrated: false,
     );
     expect(
       bundled.status,
-      PlayerNvidiaVideoEnhancementStatus.missingNvidiaScalingMode,
+      PlayerNvidiaVideoEnhancementStatus.available,
     );
     expect(bundled.hasD3d11vpp, isTrue);
-    expect(bundled.hasNvidiaScalingMode, isFalse);
+    expect(bundled.hasNvidiaScalingMode, isTrue);
     expect(bundled.canEnable, isFalse);
-    expect(bundled.helperText, contains('无 NVIDIA scaling-mode'));
+    expect(bundled.helperText, contains('纹理/滤镜链尚未验证'));
 
     final newer = await PlayerNvidiaVideoEnhancementExperiment.probe(
       _CapabilityPlayerBackend(<String, String>{
@@ -5223,11 +5223,10 @@ void main() {
                   nvidiaVideoEnhancementExperimentEnabled: false,
                   nvidiaVideoEnhancementCapability:
                       const PlayerNvidiaVideoEnhancementCapability(
-                    status: PlayerNvidiaVideoEnhancementStatus
-                        .missingNvidiaScalingMode,
-                    mpvVersion: '0.36.0',
+                    status: PlayerNvidiaVideoEnhancementStatus.available,
+                    mpvVersion: '0.41.0',
                     hasD3d11vpp: true,
-                    hasNvidiaScalingMode: false,
+                    hasNvidiaScalingMode: true,
                   ),
                   compressionEnhancementMode:
                       PlayerCompressionEnhancementMode.off,
@@ -5300,7 +5299,7 @@ void main() {
     expect(find.text('NVIDIA 视频增强（实验）'), findsOneWidget);
     expect(
       find.text(
-        'mpv 0.36.0：有 d3d11vpp；无 NVIDIA scaling-mode',
+        'mpv 0.41.0 支持该模式，但纹理/滤镜链尚未验证',
       ),
       findsOneWidget,
     );

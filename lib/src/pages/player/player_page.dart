@@ -962,6 +962,8 @@ class PlayerPageState extends State<PlayerPage> {
   var _renamingFile = false;
   /** 原生文件对话框无法可靠暴露 Flutter Focus，使用显式深度暂停全部播放器快捷键。 */
   var _shortcutSuspensionDepth = 0;
+  /** Flutter 弹层嵌套深度；最后一层关闭前不得恢复始终置顶的原生视频表面。 */
+  var _overlaySurfaceDepth = 0;
   late PlayerPlaybackMode _playbackMode;
   late double _playbackRate;
   /** 是否仅水平翻转当前视频画面，控制条与命中区域保持原方向。 */
@@ -2545,32 +2547,34 @@ class PlayerPageState extends State<PlayerPage> {
       });
     }
     try {
-      await showPlayerSettingsDialog(
-        context,
-        anchorRect: anchorRect,
-        mirrorVideo: _mirrorVideo,
-        playbackMode: _playbackMode,
-        videoAspectMode: _videoAspectMode,
-        playbackRate: _playbackRate,
-        seekStepSeconds: _seekStepSeconds,
-        videoSuperResolutionEnabled: _videoSuperResolutionEnabled,
-        nvidiaVideoEnhancementExperimentEnabled:
-            _nvidiaVideoEnhancementExperimentEnabled,
-        nvidiaVideoEnhancementCapability: _nvidiaVideoEnhancementCapability,
-        compressionEnhancementMode: _compressionEnhancementMode,
-        playbackRates: _playbackRates,
-        seekStepOptions: _seekStepOptions,
-        onMirrorVideoChanged: _setMirrorVideo,
-        onPlaybackModeChanged: _setPlaybackMode,
-        onVideoAspectModeChanged: (mode) {
-          unawaited(_setVideoAspectMode(mode));
-        },
-        onPlaybackRateChanged: _setPlaybackRate,
-        onSeekStepChanged: _setSeekStepSeconds,
-        onVideoSuperResolutionChanged: _setVideoSuperResolutionEnabled,
-        onNvidiaVideoEnhancementExperimentChanged:
-            _setNvidiaVideoEnhancementExperimentEnabled,
-        onCompressionEnhancementModeChanged: _setCompressionEnhancementMode,
+      await _withPlayerOverlaySurfaceOccluded(
+        () => showPlayerSettingsDialog(
+          context,
+          anchorRect: anchorRect,
+          mirrorVideo: _mirrorVideo,
+          playbackMode: _playbackMode,
+          videoAspectMode: _videoAspectMode,
+          playbackRate: _playbackRate,
+          seekStepSeconds: _seekStepSeconds,
+          videoSuperResolutionEnabled: _videoSuperResolutionEnabled,
+          nvidiaVideoEnhancementExperimentEnabled:
+              _nvidiaVideoEnhancementExperimentEnabled,
+          nvidiaVideoEnhancementCapability: _nvidiaVideoEnhancementCapability,
+          compressionEnhancementMode: _compressionEnhancementMode,
+          playbackRates: _playbackRates,
+          seekStepOptions: _seekStepOptions,
+          onMirrorVideoChanged: _setMirrorVideo,
+          onPlaybackModeChanged: _setPlaybackMode,
+          onVideoAspectModeChanged: (mode) {
+            unawaited(_setVideoAspectMode(mode));
+          },
+          onPlaybackRateChanged: _setPlaybackRate,
+          onSeekStepChanged: _setSeekStepSeconds,
+          onVideoSuperResolutionChanged: _setVideoSuperResolutionEnabled,
+          onNvidiaVideoEnhancementExperimentChanged:
+              _setNvidiaVideoEnhancementExperimentEnabled,
+          onCompressionEnhancementModeChanged: _setCompressionEnhancementMode,
+        ),
       );
     } finally {
       if (mounted) {
@@ -2833,9 +2837,11 @@ class PlayerPageState extends State<PlayerPage> {
     }
     final requestedPath = item.path;
     _compatibilityPromptPath = requestedPath;
-    await showPlayerHardwareDecodeWarningDialog(
-      context,
-      compatibility,
+    await _withPlayerOverlaySurfaceOccluded(
+      () => showPlayerHardwareDecodeWarningDialog(
+        context,
+        compatibility,
+      ),
     );
     _compatibilityPromptPath = null;
     if (!mounted) {
@@ -3080,11 +3086,13 @@ class PlayerPageState extends State<PlayerPage> {
       if (!mounted || _openedPath != item.path) {
         return;
       }
-      choice = await showPlayerResumeDialog(
-        context,
-        item: item,
-        position: saved,
-        duration: duration,
+      choice = await _withPlayerOverlaySurfaceOccluded(
+        () => showPlayerResumeDialog(
+          context,
+          item: item,
+          position: saved,
+          duration: duration,
+        ),
       );
     } else {
       choice = behavior == PlaybackResumeBehavior.continueWatching
@@ -3270,10 +3278,12 @@ class PlayerPageState extends State<PlayerPage> {
     final item = _queue[queueIndex];
     final settings = _effectivePlaybackSettings;
     final decision = videoDeleteDecisionWithoutPrompt(settings) ??
-        await showPlayerDeleteConfirmationDialog(
-          context,
-          item,
-          initialMoveLocalFileToTrash: settings.moveDeletedFileToTrash,
+        await _withPlayerOverlaySurfaceOccluded(
+          () => showPlayerDeleteConfirmationDialog(
+            context,
+            item,
+            initialMoveLocalFileToTrash: settings.moveDeletedFileToTrash,
+          ),
         );
     if (decision == null || !mounted) {
       return;
@@ -3358,42 +3368,44 @@ class PlayerPageState extends State<PlayerPage> {
   }
 
   Future<void> _showPlayerContextMenu(TapDownDetails details) async {
-    final action = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        details.globalPosition.dx,
-        details.globalPosition.dy,
-        details.globalPosition.dx,
-        details.globalPosition.dy,
-      ),
-      items: const [
-        PopupMenuItem(
-          value: 'info',
-          child: ListTile(
-            dense: true,
-            leading: Icon(Icons.info_outline),
-            title: Text('\u89c6\u9891\u4fe1\u606f'),
-          ),
+    await _withPlayerOverlaySurfaceOccluded(() async {
+      final action = await showMenu<String>(
+        context: context,
+        position: RelativeRect.fromLTRB(
+          details.globalPosition.dx,
+          details.globalPosition.dy,
+          details.globalPosition.dx,
+          details.globalPosition.dy,
         ),
-        PopupMenuItem(
-          value: 'diagnostics',
-          child: ListTile(
-            dense: true,
-            leading: Icon(Icons.monitor_heart_outlined),
-            title: Text('\u8bca\u65ad\u68c0\u67e5'),
+        items: const [
+          PopupMenuItem(
+            value: 'info',
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.info_outline),
+              title: Text('\u89c6\u9891\u4fe1\u606f'),
+            ),
           ),
-        ),
-      ],
-    );
-    if (!mounted) {
-      return;
-    }
-    switch (action) {
-      case 'info':
-        await _showVideoInfoDialog();
-      case 'diagnostics':
-        await _showDiagnosticsDialog();
-    }
+          PopupMenuItem(
+            value: 'diagnostics',
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.monitor_heart_outlined),
+              title: Text('\u8bca\u65ad\u68c0\u67e5'),
+            ),
+          ),
+        ],
+      );
+      if (!mounted) {
+        return;
+      }
+      switch (action) {
+        case 'info':
+          await _showVideoInfoDialog();
+        case 'diagnostics':
+          await _showDiagnosticsDialog();
+      }
+    });
   }
 
   Future<void> _showVideoInfoDialog() async {
@@ -3403,103 +3415,106 @@ class PlayerPageState extends State<PlayerPage> {
     if (!mounted) {
       return;
     }
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.info_outline_rounded),
-            SizedBox(width: 10),
-            Text('视频信息'),
-          ],
-        ),
-        content: SizedBox(
-          width: 700,
-          height: math.min(590, MediaQuery.sizeOf(context).height * 0.72),
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                PlayerDialogSectionCard(
-                  title: '文件',
-                  icon: Icons.insert_drive_file_outlined,
-                  child: Column(
-                    children: [
-                      PlayerDialogInfoRow(
-                          label: '文件名', value: item.title, emphasize: true),
-                      PlayerDialogInfoRow(label: '路径', value: item.path),
-                      PlayerDialogInfoRow(label: '目录', value: item.folder),
-                      PlayerDialogInfoRow(
-                        label: '大小',
-                        value: _formatBytes(stat?.size ?? item.fileSize ?? 0),
-                      ),
-                      PlayerDialogInfoRow(
-                        label: '修改时间',
-                        value: stat?.modifiedAt?.toString() ?? '未知',
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                PlayerDialogSectionCard(
-                  title: '媒体',
-                  icon: Icons.movie_outlined,
-                  child: Column(
-                    children: [
-                      PlayerDialogInfoRow(
-                          label: '视频', value: details.videoLabel),
-                      PlayerDialogInfoRow(
-                          label: '音频', value: details.audioLabel),
-                      PlayerDialogInfoRow(
-                          label: '媒体指纹', value: item.mediaFingerprint ?? '未读取'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                PlayerDialogSectionCard(
-                  title: '整理状态',
-                  icon: Icons.sell_outlined,
-                  child: Column(
-                    children: [
-                      PlayerDialogInfoRow(
-                          label: '标签',
-                          value: item.tags.isEmpty
-                              ? '未添加'
-                              : (item.tags.toList()..sort()).join('、')),
-                      PlayerDialogInfoRow(
-                          label: '二级标签', value: _childTagSummary(item)),
-                      PlayerDialogInfoRow(
-                          label: '收藏', value: item.isFavorite ? '是' : '否'),
-                    ],
-                  ),
-                ),
-                if (item.mediaDetailsError != null ||
-                    item.thumbnailError != null) ...[
-                  const SizedBox(height: 12),
+    await _withPlayerOverlaySurfaceOccluded(
+      () => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline_rounded),
+              SizedBox(width: 10),
+              Text('视频信息'),
+            ],
+          ),
+          content: SizedBox(
+            width: 700,
+            height: math.min(590, MediaQuery.sizeOf(context).height * 0.72),
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
                   PlayerDialogSectionCard(
-                    title: '异常',
-                    icon: Icons.warning_amber_rounded,
+                    title: '文件',
+                    icon: Icons.insert_drive_file_outlined,
                     child: Column(
                       children: [
-                        if (item.mediaDetailsError != null)
-                          PlayerDialogInfoRow(
-                              label: '媒体信息', value: item.mediaDetailsError!),
-                        if (item.thumbnailError != null)
-                          PlayerDialogInfoRow(
-                              label: '缩略图', value: item.thumbnailError!),
+                        PlayerDialogInfoRow(
+                            label: '文件名', value: item.title, emphasize: true),
+                        PlayerDialogInfoRow(label: '路径', value: item.path),
+                        PlayerDialogInfoRow(label: '目录', value: item.folder),
+                        PlayerDialogInfoRow(
+                          label: '大小',
+                          value: _formatBytes(stat?.size ?? item.fileSize ?? 0),
+                        ),
+                        PlayerDialogInfoRow(
+                          label: '修改时间',
+                          value: stat?.modifiedAt?.toString() ?? '未知',
+                        ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  PlayerDialogSectionCard(
+                    title: '媒体',
+                    icon: Icons.movie_outlined,
+                    child: Column(
+                      children: [
+                        PlayerDialogInfoRow(
+                            label: '视频', value: details.videoLabel),
+                        PlayerDialogInfoRow(
+                            label: '音频', value: details.audioLabel),
+                        PlayerDialogInfoRow(
+                            label: '媒体指纹',
+                            value: item.mediaFingerprint ?? '未读取'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  PlayerDialogSectionCard(
+                    title: '整理状态',
+                    icon: Icons.sell_outlined,
+                    child: Column(
+                      children: [
+                        PlayerDialogInfoRow(
+                            label: '标签',
+                            value: item.tags.isEmpty
+                                ? '未添加'
+                                : (item.tags.toList()..sort()).join('、')),
+                        PlayerDialogInfoRow(
+                            label: '二级标签', value: _childTagSummary(item)),
+                        PlayerDialogInfoRow(
+                            label: '收藏', value: item.isFavorite ? '是' : '否'),
+                      ],
+                    ),
+                  ),
+                  if (item.mediaDetailsError != null ||
+                      item.thumbnailError != null) ...[
+                    const SizedBox(height: 12),
+                    PlayerDialogSectionCard(
+                      title: '异常',
+                      icon: Icons.warning_amber_rounded,
+                      child: Column(
+                        children: [
+                          if (item.mediaDetailsError != null)
+                            PlayerDialogInfoRow(
+                                label: '媒体信息', value: item.mediaDetailsError!),
+                          if (item.thumbnailError != null)
+                            PlayerDialogInfoRow(
+                                label: '缩略图', value: item.thumbnailError!),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
+          actions: [
+            FilledButton.tonal(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
         ),
-        actions: [
-          FilledButton.tonal(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
       ),
     );
   }
@@ -3508,11 +3523,13 @@ class PlayerPageState extends State<PlayerPage> {
     if (!mounted) {
       return;
     }
-    await showDialog<void>(
-      context: context,
-      builder: (context) => PlaybackDiagnosticsDialog(
-        playerPage: this,
-        title: '\u64ad\u653e\u8bca\u65ad',
+    await _withPlayerOverlaySurfaceOccluded(
+      () => showDialog<void>(
+        context: context,
+        builder: (context) => PlaybackDiagnosticsDialog(
+          playerPage: this,
+          title: '\u64ad\u653e\u8bca\u65ad',
+        ),
       ),
     );
   }
@@ -3521,7 +3538,9 @@ class PlayerPageState extends State<PlayerPage> {
   Future<void> _editManualTags() async {
     _editingManualTags = true;
     try {
-      await widget.onEditManualTags(_currentItem);
+      await _withPlayerOverlaySurfaceOccluded(
+        () => widget.onEditManualTags(_currentItem),
+      );
       if (mounted) {
         setState(() {});
       }
@@ -3552,9 +3571,11 @@ class PlayerPageState extends State<PlayerPage> {
           }
           return;
         }
-        final newBaseName = await showPlayerRenameFileDialog(
-          context,
-          item: item,
+        final newBaseName = await _withPlayerOverlaySurfaceOccluded(
+          () => showPlayerRenameFileDialog(
+            context,
+            item: item,
+          ),
         );
         if (!mounted || newBaseName == null) {
           return;
@@ -3676,6 +3697,34 @@ class PlayerPageState extends State<PlayerPage> {
     } finally {
       _shortcutSuspensionDepth = math.max(0, _shortcutSuspensionDepth - 1);
       _restorePlayerShortcutFocus();
+    }
+  }
+
+  /**
+   * 在 Flutter 路由弹层显示前让可选原生视频表面退出 airspace。
+   *
+   * 普通 MediaKit/纹理后端不实现该边界，因此没有额外平台调用；嵌套菜单继续打开
+   * 诊断或信息弹窗时使用深度计数，避免中途闪回 child HWND。
+   */
+  Future<T> _withPlayerOverlaySurfaceOccluded<T>(
+    Future<T> Function() action,
+  ) async {
+    final boundary = _playerBackend is PlayerOverlaySurfaceBoundary
+        ? _playerBackend as PlayerOverlaySurfaceBoundary
+        : null;
+    _overlaySurfaceDepth += 1;
+    var surfaceWasOccluded = false;
+    try {
+      if (_overlaySurfaceDepth == 1 && boundary != null) {
+        await boundary.setFlutterOverlayVisible(true);
+        surfaceWasOccluded = true;
+      }
+      return await action();
+    } finally {
+      _overlaySurfaceDepth = math.max(0, _overlaySurfaceDepth - 1);
+      if (_overlaySurfaceDepth == 0 && boundary != null && surfaceWasOccluded) {
+        await boundary.setFlutterOverlayVisible(false);
+      }
     }
   }
 
