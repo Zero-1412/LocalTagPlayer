@@ -16,8 +16,8 @@ enum PlayerNvidiaVideoEnhancementStatus {
 /**
  * 播放器齿轮消费的 NVIDIA 驱动视频增强只读能力快照。
  *
- * 该快照描述 mpv `d3d11vpp` 的 `scaling-mode=nvidia` 驱动路径，不代表
- * RTX Video SDK 已接入，也不把显卡型号或普通 D3D11 输出误判为 AI 正在工作。
+ * 该路径使用 mpv `d3d11vpp` 的 `scaling-mode=nvidia`，不是 RTX Video SDK。
+ * 开关只有在版本、零拷贝解码链和滤镜互斥条件同时满足时才可用。
  */
 class PlayerNvidiaVideoEnhancementCapability {
   const PlayerNvidiaVideoEnhancementCapability({
@@ -25,7 +25,9 @@ class PlayerNvidiaVideoEnhancementCapability {
     required this.mpvVersion,
     required this.hasD3d11vpp,
     required this.hasNvidiaScalingMode,
+    this.hwdecCurrent,
     this.filterChainIntegrated = false,
+    this.conflictingCpuFilters = false,
   });
 
   /** 后端属性仍在查询时使用的稳定初始状态。 */
@@ -34,7 +36,9 @@ class PlayerNvidiaVideoEnhancementCapability {
         mpvVersion = null,
         hasD3d11vpp = false,
         hasNvidiaScalingMode = false,
-        filterChainIntegrated = false;
+        hwdecCurrent = null,
+        filterChainIntegrated = false,
+        conflictingCpuFilters = false;
 
   /** 当前能力判定结果。 */
   final PlayerNvidiaVideoEnhancementStatus status;
@@ -48,40 +52,57 @@ class PlayerNvidiaVideoEnhancementCapability {
   /** 当前内嵌构建是否包含 NVIDIA 专用缩放模式。 */
   final bool hasNvidiaScalingMode;
 
-  /**
-   * 当前播放器 `vf` 与解码纹理链是否已完成该模式的接入验证。
-   *
-   * 即使用户本机替换为新版 mpv，也不能仅按版本号开放开关；否则
-   * `d3d11va-copy` 或现有 CPU 画质滤镜可能让 D3D11 视频处理链失效。
-   */
+  /** 当前媒体实际使用的硬解器；只有 `d3d11va` 代表非 copy 纹理链。 */
+  final String? hwdecCurrent;
+
+  /** 多片源 A/B、掉帧与回滚验证是否已覆盖当前滤镜接入。 */
   final bool filterChainIntegrated;
 
-  /** 只有 mpv 能力和播放器滤镜链都完成验证时才允许实验开关响应点击。 */
+  /** 压缩增强或暗场增强是否正在占用 CPU `lavfi` 滤镜链。 */
+  final bool conflictingCpuFilters;
+
+  /** 当前媒体是否真实运行在 D3D11VA 非 copy 解码链。 */
+  bool get usesNonCopyD3d11 => hwdecCurrent == 'd3d11va';
+
+  /** 所有可验证门槛同时满足时才允许实验开关响应点击。 */
   bool get canEnable =>
       status == PlayerNvidiaVideoEnhancementStatus.available &&
-      filterChainIntegrated;
+      filterChainIntegrated &&
+      usesNonCopyD3d11 &&
+      !conflictingCpuFilters;
 
   /** 面向设置页的边界说明，不把驱动扩展描述成 RTX Video SDK。 */
-  String get helperText => switch (status) {
-        PlayerNvidiaVideoEnhancementStatus.probing => '正在检查内嵌 mpv 能力',
-        PlayerNvidiaVideoEnhancementStatus.available => filterChainIntegrated
-            ? 'mpv $mpvVersion：d3d11vpp NVIDIA 模式可用；非 RTX Video SDK'
-            : 'mpv $mpvVersion 支持该模式，但纹理/滤镜链尚未验证',
-        PlayerNvidiaVideoEnhancementStatus.unsupportedPlatform =>
-          '仅支持 Windows D3D11；非 RTX Video SDK',
-        PlayerNvidiaVideoEnhancementStatus.missingNvidiaScalingMode =>
-          'mpv $mpvVersion：有 d3d11vpp；无 NVIDIA scaling-mode',
-        PlayerNvidiaVideoEnhancementStatus.unavailable =>
-          '无法确认内嵌 mpv 能力，实验入口保持关闭',
-      };
+  String get helperText {
+    if (status == PlayerNvidiaVideoEnhancementStatus.probing) {
+      return '正在检查内嵌 mpv 与当前纹理链';
+    }
+    if (status == PlayerNvidiaVideoEnhancementStatus.unsupportedPlatform) {
+      return '仅支持 Windows D3D11；非 RTX Video SDK';
+    }
+    if (status == PlayerNvidiaVideoEnhancementStatus.missingNvidiaScalingMode) {
+      return 'mpv $mpvVersion：有 d3d11vpp；无 NVIDIA scaling-mode';
+    }
+    if (status == PlayerNvidiaVideoEnhancementStatus.unavailable) {
+      return '无法确认内嵌 mpv 能力，实验入口保持关闭';
+    }
+    if (!filterChainIntegrated) {
+      return 'mpv $mpvVersion 支持该模式，但纹理/滤镜链尚未验证';
+    }
+    if (conflictingCpuFilters) {
+      return '请先关闭压缩画质增强和暗场增强；两类滤镜不能安全串联';
+    }
+    if (!usesNonCopyD3d11) {
+      return '需在解码设置中选择 D3D11VA（非 copy），并重新打开视频';
+    }
+    return 'mpv $mpvVersion · D3D11VA 零拷贝 · 非 RTX Video SDK';
+  }
 }
 
 /**
- * 检测 mpv NVIDIA 驱动视频增强路径，不写播放器属性或插件 ABI。
+ * 检测 mpv NVIDIA 驱动视频增强路径，不改插件 ABI 或播放器属性。
  *
- * 项目固定的 0.36.0 二进制已通过字符串检查确认含 `d3d11vpp`，但 NVIDIA
- * scaling mode 从 mpv 0.39.0 才提供。实际后端暂时无法读取版本时回退固定依赖
- * 版本，确保原生 A/B 后端与默认 MediaKit 都不会展示可点击的假开关。
+ * 固定版本仅用于后端尚未就绪时的保守回退；实际媒体打开后必须再次读取
+ * `hwdec-current`，不能用用户选择的解码器名称代替真实纹理链证据。
  */
 class PlayerNvidiaVideoEnhancementExperiment {
   const PlayerNvidiaVideoEnhancementExperiment._();
@@ -92,10 +113,30 @@ class PlayerNvidiaVideoEnhancementExperiment {
   /** `scaling-mode=nvidia` 首次进入 mpv 正式版本的最低版本。 */
   static const minimumNvidiaScalingModeVersion = '0.39.0';
 
-  /** 查询当前后端 mpv 版本并返回不会修改播放状态的能力快照。 */
+  /**
+   * 隔离候选构建完成真人、动画渐变和暗场 A/B 后设置的产品门禁。
+   *
+   * 该常量只证明本项目的互斥滤镜接入已验证，不代表所有 NVIDIA 驱动都会启用
+   * RTX Super Resolution；最终驱动状态仍需由诊断日志和用户观感确认。
+   */
+  static const filterChainValidated = bool.fromEnvironment(
+    'LTP_ENABLE_NVIDIA_SCALING_QA',
+    defaultValue: false,
+  );
+
+  /** NVIDIA 视频处理滤镜占用的完整 `vf` 快照。 */
+  static const filterGraph = 'd3d11vpp=scale=2:scaling-mode=nvidia:format=nv12';
+
+  /**
+   * 查询当前后端版本和实际硬解链，返回不修改播放状态的能力快照。
+   *
+   * [conflictingCpuFilters] 由播放器根据压缩增强和暗场增强会话状态提供。
+   */
   static Future<PlayerNvidiaVideoEnhancementCapability> probe(
     PlayerBackend backend, {
     bool? isWindows,
+    bool conflictingCpuFilters = false,
+    bool filterChainIntegrated = filterChainValidated,
   }) async {
     final platformSupported = isWindows ?? Platform.isWindows;
     if (!platformSupported) {
@@ -107,6 +148,7 @@ class PlayerNvidiaVideoEnhancementExperiment {
       );
     }
     final reportedVersion = await backend.getProperty('mpv-version');
+    final reportedHwdec = await backend.getProperty('hwdec-current');
     final version = parseVersion(reportedVersion) ??
         parseVersion(PlayerNvidiaVideoEnhancementExperiment.bundledMpvVersion);
     if (version == null) {
@@ -118,7 +160,6 @@ class PlayerNvidiaVideoEnhancementExperiment {
       );
     }
     final normalizedVersion = version.join('.');
-    // 本项目已对固定的 0.36.0 DLL 做过二进制检查；后续更高版本沿用同一滤镜能力。
     final hasD3d11vpp = _isAtLeast(version, const <int>[0, 36, 0]);
     final hasNvidiaScalingMode = _isAtLeast(version, const <int>[0, 39, 0]);
     return PlayerNvidiaVideoEnhancementCapability(
@@ -130,10 +171,13 @@ class PlayerNvidiaVideoEnhancementExperiment {
       mpvVersion: normalizedVersion,
       hasD3d11vpp: hasD3d11vpp,
       hasNvidiaScalingMode: hasNvidiaScalingMode,
+      hwdecCurrent: _normalizeProperty(reportedHwdec),
+      filterChainIntegrated: filterChainIntegrated,
+      conflictingCpuFilters: conflictingCpuFilters,
     );
   }
 
-  /** 从 `mpv 0.36.0-...` 或 `0.39.0` 中提取可比较的三段版本号。 */
+  /** 从 `mpv 0.41.0-...` 或 `0.39.0` 中提取可比较的三段版本号。 */
   static List<int>? parseVersion(String rawValue) {
     final match = RegExp(r'(\d+)\.(\d+)\.(\d+)').firstMatch(rawValue);
     if (match == null) return null;
@@ -142,6 +186,18 @@ class PlayerNvidiaVideoEnhancementExperiment {
       int.parse(match.group(2)!),
       int.parse(match.group(3)!),
     ];
+  }
+
+  /** 把平台属性中的空值统一为 null，避免把 `unavailable` 当成解码器名称。 */
+  static String? _normalizeProperty(String rawValue) {
+    final normalized = rawValue.trim().toLowerCase();
+    if (normalized.isEmpty ||
+        normalized == 'empty' ||
+        normalized == 'unavailable' ||
+        normalized == 'no') {
+      return null;
+    }
+    return normalized;
   }
 
   /** 按 major/minor/patch 比较版本，忽略提交后缀。 */

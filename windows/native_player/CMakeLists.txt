@@ -112,7 +112,13 @@ foreach(pair IN ITEMS "mpv;${LTP_MPV_ARCHIVE}" "angle;${LTP_ANGLE_ARCHIVE}" "vid
   list(GET pair 0 name)
   list(GET pair 1 archive)
   set(destination "${LTP_NATIVE_DEPS}/${name}")
-  if(NOT EXISTS "${destination}/.extracted")
+  file(SHA256 "${archive}" archive_sha256)
+  set(extracted_sha256 "")
+  if(EXISTS "${destination}/.extracted")
+    file(READ "${destination}/.extracted" extracted_sha256)
+  endif()
+  # 提升固定依赖版本时必须按归档摘要重建目录，不能让旧 `.extracted` 标记复用旧 DLL。
+  if(NOT "${extracted_sha256}" STREQUAL "${archive_sha256}")
     file(REMOVE_RECURSE "${destination}")
     file(MAKE_DIRECTORY "${destination}")
     execute_process(COMMAND "${CMAKE_COMMAND}" -E tar xzf "${archive}"
@@ -120,7 +126,7 @@ foreach(pair IN ITEMS "mpv;${LTP_MPV_ARCHIVE}" "angle;${LTP_ANGLE_ARCHIVE}" "vid
     if(NOT extract_result EQUAL 0)
       message(FATAL_ERROR "Failed to extract ${archive}")
     endif()
-    file(WRITE "${destination}/.extracted" "verified")
+    file(WRITE "${destination}/.extracted" "${archive_sha256}")
   endif()
 endforeach()
 

@@ -1,4 +1,5 @@
 import '../../platform/platform_interfaces.dart';
+import 'player_nvidia_video_enhancement_experiment.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -333,7 +334,12 @@ class PlayerAdaptiveQualityCoordinator {
       )];
 }
 
-/** 把协调器档位串行应用为单条 libavfilter 图，避免留下半套滤镜状态。 */
+/**
+ * 串行应用压缩增强或 NVIDIA D3D11 滤镜，避免两个所有者互相覆盖 `vf`。
+ *
+ * 隔离验证证明 D3D11 纹理直接进入 CPU `lavfi` 时，mpv 会停用其中一条滤镜；
+ * 因此 NVIDIA 路径必须独占 `vf`，并同步关闭压缩增强的 GPU 去色带。
+ */
 class PlayerAdaptiveQualityEnhancer {
   const PlayerAdaptiveQualityEnhancer._();
 
@@ -381,7 +387,11 @@ class PlayerAdaptiveQualityEnhancer {
   static String filterGraph({
     required PlayerAdaptiveQualityLevel level,
     required bool darkSceneEnhancementEnabled,
+    bool nvidiaVideoEnhancementEnabled = false,
   }) {
+    if (nvidiaVideoEnhancementEnabled) {
+      return PlayerNvidiaVideoEnhancementExperiment.filterGraph;
+    }
     final filters = <String>[
       ..._filters[level]!,
       if (darkSceneEnhancementEnabled)
@@ -395,6 +405,7 @@ class PlayerAdaptiveQualityEnhancer {
     required PlayerBackend backend,
     required PlayerAdaptiveQualityLevel level,
     bool darkSceneEnhancementEnabled = false,
+    bool nvidiaVideoEnhancementEnabled = false,
   }) {
     final previous = _applyTails[backend] ?? Future<void>.value();
     final operation = previous.then((_) async {
@@ -407,7 +418,8 @@ class PlayerAdaptiveQualityEnhancer {
         }
       }
 
-      final debandEnabled = level != PlayerAdaptiveQualityLevel.off;
+      final debandEnabled = !nvidiaVideoEnhancementEnabled &&
+          level != PlayerAdaptiveQualityLevel.off;
       if (!debandEnabled) {
         // 回滚先关闭 GPU 去色带，再清理 CPU 滤镜，尽快释放额外渲染开销。
         await setPropertySafely('deband', 'no');
@@ -422,6 +434,7 @@ class PlayerAdaptiveQualityEnhancer {
         filterGraph(
           level: level,
           darkSceneEnhancementEnabled: darkSceneEnhancementEnabled,
+          nvidiaVideoEnhancementEnabled: nvidiaVideoEnhancementEnabled,
         ),
       );
       if (debandEnabled) {

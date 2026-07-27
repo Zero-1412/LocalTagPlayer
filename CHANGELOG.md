@@ -1,5 +1,14 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · mpv NVIDIA scaling-mode 隔离升级未开放
+
+- 独立新版 mpv 可启用 NVIDIA RTX Super Resolution，但 MediaKit 应用内实际回退为软件解码，未形成 `d3d11va` 非 copy 纹理链。
+- NVIDIA `d3d11vpp` 与压缩/暗场 CPU `lavfi` 直接串联会静默丢失后者；预置互斥滤镜所有权、写入读回确认和播放健康样本自动回滚。
+- 真人面部第一条开启组未通过硬门槛后停止其余片源，不宣称完成多片源 A/B；正式依赖恢复 mpv 0.36.0，产品门禁保持关闭。
+- Windows 构建缓存的解压标记改为记录归档 SHA-256，未来隔离换包不会错误复用旧 DLL。
+- focused tests、静态分析与正式 mpv 0.36.0 Windows Debug build 通过；真实齿轮确认 NVIDIA 缺失说明、GPU 非 AI 命名和压缩增强入口均完整可达。
+- SQLite、标签查询、filtered queue、`PlayerBackend` contract、插件 ABI、缓存队列和用户数据均未改变。
+
 ## 2026-07-27 · 内嵌 mpv NVIDIA scaling-mode 实验门禁
 
 - 核对 Windows 固定依赖和 Debug `libmpv-2.dll`：当前 mpv 0.36.0 包含 `d3d11vpp`，但不包含 mpv 0.39.0 才加入的 `scaling-mode=nvidia`。

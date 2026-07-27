@@ -1,5 +1,7 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.72` 隔离验证 mpv NVIDIA scaling-mode，而不把失败候选提升为正式依赖。新版独立 mpv 已证明 `d3d11va → d3d11vpp scaling-mode=nvidia → D3D11` 和驱动 RTX Super Resolution 日志成立；同一 DLL 进入 MediaKit 后却得到 `hwdec-current=no`，因此非 copy 门槛失败。NVIDIA D3D11 滤镜与现有 CPU `lavfi` 直接串联还会静默停用压缩滤镜，所以 `PlayerAdaptiveQualityEnhancer` 统一拥有完整 `vf` 快照，并把两类路径设为互斥；NVIDIA 请求需读回、复用掉帧熔断且只保存会话状态。正式包继续固定 mpv 0.36.0，`filterChainValidated=false`，未改 `PlayerBackend`、插件 ABI、SQLite、filtered queue、缓存或用户数据。
+
 `Architecture Baseline 0.5.71` 在播放器齿轮增加内嵌 mpv NVIDIA scaling-mode 的只读实验门禁。Windows 固定的 mpv 0.36.0 实际 DLL 包含 `d3d11vpp`，但不包含 mpv 0.39.0 才加入的 `scaling-mode=nvidia`；能力服务优先读取 `mpv-version`，不可用时回退固定依赖版本。当前会话开关明确禁用，且把“mpv 解析器具备选项”与“D3D11 硬件帧、现有 `vf` 链和性能回滚完成接入”分开判定，所以替换新版 DLL 也不会产生假启用。未写 NVIDIA filter、未升级依赖、未改 `PlayerBackend` 或本机视频增强插件 ABI，也不把该驱动路径描述成 RTX Video SDK。
 
 `Architecture Baseline 0.5.70` 在实验性 `WindowsNativePlayerBackend` 后增加 SDK 中立的本机视频增强 ABI v1。只有同时显式选择 `LOCAL_TAG_PLAYER_BACKEND=windows-native-mpv` 并提供绝对 `LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH` 时，runner 才会加载可信本机 DLL；不扫描安装目录、不修改默认 MediaKit、不安装或分发探针/NVIDIA 文件。mpv 帧在原生工作线程从 ANGLE 内部纹理复制到同一设备的共享 D3D11 纹理，再调用插件；宿主先备份原帧，插件返回错误时恢复纹理、停用当前插件会话并继续原播放器。诊断通过既有只读属性展示插件状态、处理帧与回退数，不扩展 `PlayerBackend` contract。QA-only 往返探针和宿主自测均无 install 规则，后者已证明“无损往返”和“破坏输出后原帧恢复”。真实 RTX Video SDK、许可及发布隔离仍未进入产品。
@@ -67,6 +69,7 @@ lib/src/widgets/library
 
 变更点：
 
+- `0.5.72`：隔离新版 mpv 的独立进程可启用 NVIDIA scaling mode，但 MediaKit 内实际回退 `hwdec-current=no`；首条自然片源即阻断开关。NVIDIA `d3d11vpp` 与 CPU `lavfi` 改为互斥完整 `vf` 快照，并预置读回确认和掉帧熔断；正式 mpv 仍为 0.36.0，产品门禁保持关闭。
 - `0.5.71`：固定的 Windows mpv 0.36.0 DLL 已确认有 `d3d11vpp`、无 `scaling-mode=nvidia`。齿轮新增只读能力门禁和禁用的会话级实验开关；版本达到 0.39+ 仍需独立完成 D3D11 硬件帧、现有 `vf` 共存和回滚验证才允许点击。未升级 libmpv、未写 NVIDIA filter、未改插件 ABI、`PlayerBackend`、SQLite、filtered queue、缓存队列或用户数据。
 - `0.5.70`：实验性 Windows 原生 mpv 后端新增 SDK 中立本机视频增强插件 ABI v1。插件只从 `LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH` 显式绝对路径加载，不扫描、不安装、不分发；mpv/ANGLE 在原生工作线程写入共享 D3D11 纹理后调用插件，宿主提前备份原帧，插件失败时恢复并停用该会话。QA-only 往返探针和宿主自测无 install 规则，已验证无损往返与故障恢复；诊断通过现有 `PlayerBackend.getProperty` 展示插件状态。默认 MediaKit、filtered queue、缓存和用户数据不变，真实 RTX SDK 与发布许可仍未接入。
 - `0.5.69`：播放器齿轮与诊断把既有 libmpv 能力统一标注为“GPU 高质量缩放（非 NVIDIA AI）”，保留 `videoSuperResolutionEnabled` 键、mpv 缩放属性和运行行为。RTX Video SDK 只形成平台评估：公开 RTX SDK 家族许可允许嵌入应用的目标代码分发但禁止 SDK 受开源许可约束，实际 SDK 1.1 下载包 EULA 仍是发布阻断；D3D11 原型必须在 Windows 原生边界拥有同一活动 LUID 的逐帧输入/输出纹理，失败回到 libmpv 缩放。未修改 PlayerBackend、SQLite、标签查询、filtered queue、缓存队列或用户数据。

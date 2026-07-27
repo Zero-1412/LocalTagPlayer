@@ -39,6 +39,8 @@ void main() {
     final openCompressionSettings = Platform.environment[
             'LOCAL_TAG_PLAYER_QUALITY_OPEN_COMPRESSION_SETTINGS'] ==
         '1';
+    final openPlayerSettings =
+        Platform.environment['LOCAL_TAG_PLAYER_QUALITY_OPEN_SETTINGS'] == '1';
     final holdFixedComparisonFrame =
         Platform.environment['LOCAL_TAG_PLAYER_QUALITY_HOLD_FIXED_FRAME'] ==
             '1';
@@ -54,9 +56,11 @@ void main() {
         mode != 'sdr-dark' &&
         mode != 'sdr-dark-enhanced' &&
         mode != 'compression-off' &&
-        mode != 'compression-clarity') {
+        mode != 'compression-clarity' &&
+        mode != 'nvidia-off' &&
+        mode != 'nvidia-on') {
       throw StateError(
-        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off 或 compression-clarity',
+        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、nvidia-off 或 nvidia-on',
       );
     }
     final baselineMode = mode!;
@@ -76,7 +80,11 @@ void main() {
       path: samplePath,
       title: switch (baselineMode) {
         'hdr' => '固定 HDR10 样本',
-        'compression-off' || 'compression-clarity' => '固定低码率 1080P 样本',
+        'compression-off' ||
+        'compression-clarity' ||
+        'nvidia-off' ||
+        'nvidia-on' =>
+          '固定低码率 1080P 样本',
         _ => '固定 SDR 暗场样本',
       },
       folder: 'isolated-quality-baseline',
@@ -91,6 +99,8 @@ void main() {
       compressionEnhancementMode: baselineMode == 'compression-clarity'
           ? PlayerCompressionEnhancementMode.clarity
           : PlayerCompressionEnhancementMode.off,
+      // NVIDIA 对照组和实验组都固定使用真实 D3D11VA 非 copy，避免解码链差异污染 A/B。
+      hwdec: baselineMode.startsWith('nvidia-') ? 'd3d11va' : null,
       highQualityStreamCacheEnabled: true,
     );
 
@@ -135,9 +145,31 @@ void main() {
     await _waitForSessionState(
       tester,
       playerKey,
-      mode: baselineMode,
+      mode: baselineMode == 'nvidia-on' ? 'nvidia-off' : baselineMode,
       timeout: const Duration(seconds: 30),
     );
+    if (baselineMode == 'nvidia-on') {
+      final settingsFinder =
+          find.byKey(const ValueKey<String>('player.settings'));
+      await tester.tap(settingsFinder);
+      await tester.pumpAndSettle();
+      final nvidiaToggle = find.byKey(
+        const ValueKey<String>(
+          'player.settings.nvidiaVideoEnhancementExperiment',
+        ),
+      );
+      expect(nvidiaToggle, findsOneWidget);
+      await tester.tap(nvidiaToggle);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.tapAt(const Offset(8, 8));
+      await tester.pumpAndSettle();
+      await _waitForSessionState(
+        tester,
+        playerKey,
+        mode: baselineMode,
+        timeout: const Duration(seconds: 20),
+      );
+    }
     if (holdFixedComparisonFrame) {
       // 屏幕级 A/B 必须停在相同内容时间点，不能让运动测试图的差异伪装成滤镜差异。
       await playerKey.currentState!.playerBackend.pause();
@@ -164,11 +196,13 @@ void main() {
         await settingsPointer?.removePointer();
       });
     }
-    if (openCompressionSettings) {
+    if (openPlayerSettings || openCompressionSettings) {
       final settingsFinder =
           find.byKey(const ValueKey<String>('player.settings'));
       await tester.tap(settingsFinder);
       await tester.pumpAndSettle();
+    }
+    if (openCompressionSettings) {
       await tester.tap(
         find.byKey(
           const ValueKey<String>('player.settings.compression.open'),
@@ -204,7 +238,8 @@ void main() {
         await playerKey.currentState!.buildDiagnosticsSnapshot();
     // 结束帧导出可能短暂占用渲染队列；先暂停可确保采证动作不被误计为长播压力。
     await playerKey.currentState!.playerBackend.pause();
-    if (baselineMode.startsWith('compression-')) {
+    if (baselineMode.startsWith('compression-') ||
+        baselineMode.startsWith('nvidia-')) {
       // 压缩修复 A/B 固定回到同一时间点，避免移动测试图的内容差异污染像素对比。
       await playerKey.currentState!.playerBackend.seek(
         const Duration(seconds: 12),
@@ -235,6 +270,9 @@ void main() {
             'mpv 视频滤镜:',
             'mpv 去色带:',
             'mpv 去色带参数:',
+            'NVIDIA 视频增强（实验）:',
+            'NVIDIA 压力保护:',
+            'NVIDIA 自动回滚原因:',
             'HDR 动态映射会话:',
             'HDR 会话压力保护:',
             'HDR 自动回滚原因:',
@@ -313,6 +351,27 @@ void main() {
         finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
         isNot(contains('deblock=')),
       );
+    } else if (baselineMode == 'nvidia-on') {
+      final active = finalLines.any(
+        (line) => line.startsWith('NVIDIA 视频增强（实验）: 会话已请求'),
+      );
+      final rolledBack = finalLines.any(
+        (line) =>
+            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+      );
+      expect(active || rolledBack, isTrue);
+      if (active) {
+        expect(
+          finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
+          contains('scaling-mode=nvidia'),
+        );
+        expect(finalLines, contains('NVIDIA 自动回滚原因: 无'));
+      }
+    } else if (baselineMode == 'nvidia-off') {
+      expect(
+        finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
+        isNot(contains('scaling-mode=nvidia')),
+      );
     } else {
       expect(finalLines, contains('HDR 动态映射会话: 未启用 / 门槛未通过'));
       expect(finalLines, contains('暗部细节增强设置: 关闭'));
@@ -354,6 +413,15 @@ Future<void> _waitForSessionState(
           snapshot.lines.contains('mpv 去色带: yes')) {
         return;
       }
+    } else if (mode == 'nvidia-on') {
+      final active = snapshot.lines.any(
+        (line) => line.startsWith('NVIDIA 视频增强（实验）: 会话已请求'),
+      );
+      final safelyRolledBack = snapshot.lines.any(
+        (line) =>
+            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+      );
+      if (active || safelyRolledBack) return;
     } else if (snapshot.lines.contains('SDR 源信号: 已检测')) {
       return;
     }

@@ -4427,6 +4427,7 @@ void main() {
         'mpv-version': 'mpv 0.36.0-652a1dd',
       }),
       isWindows: true,
+      filterChainIntegrated: true,
     );
     expect(
       bundled.status,
@@ -4440,13 +4441,38 @@ void main() {
     final newer = await PlayerNvidiaVideoEnhancementExperiment.probe(
       _CapabilityPlayerBackend(<String, String>{
         'mpv-version': 'mpv 0.39.0',
+        'hwdec-current': 'd3d11va',
       }),
       isWindows: true,
+      filterChainIntegrated: true,
     );
     expect(newer.status, PlayerNvidiaVideoEnhancementStatus.available);
-    // 只升级 mpv 仍不能绕过 D3D11 纹理链与现有 vf 回滚验证。
-    expect(newer.canEnable, isFalse);
-    expect(newer.helperText, contains('纹理/滤镜链尚未验证'));
+    expect(newer.usesNonCopyD3d11, isTrue);
+    expect(newer.canEnable, isTrue);
+    expect(newer.helperText, contains('D3D11VA 零拷贝'));
+
+    final copyChain = await PlayerNvidiaVideoEnhancementExperiment.probe(
+      _CapabilityPlayerBackend(<String, String>{
+        'mpv-version': 'mpv 0.41.0',
+        'hwdec-current': 'd3d11va-copy',
+      }),
+      isWindows: true,
+      filterChainIntegrated: true,
+    );
+    expect(copyChain.canEnable, isFalse);
+    expect(copyChain.helperText, contains('非 copy'));
+
+    final conflicting = await PlayerNvidiaVideoEnhancementExperiment.probe(
+      _CapabilityPlayerBackend(<String, String>{
+        'mpv-version': 'mpv 0.41.0',
+        'hwdec-current': 'd3d11va',
+      }),
+      isWindows: true,
+      conflictingCpuFilters: true,
+      filterChainIntegrated: true,
+    );
+    expect(conflicting.canEnable, isFalse);
+    expect(conflicting.helperText, contains('不能安全串联'));
   });
 
   test('adaptive quality applies one complete lavfi graph per level', () async {
@@ -4480,6 +4506,16 @@ void main() {
       level: PlayerAdaptiveQualityLevel.off,
     );
     expect(backend.properties['vf'], isEmpty);
+    expect(backend.properties['deband'], 'no');
+
+    await PlayerAdaptiveQualityEnhancer.apply(
+      backend: backend,
+      level: PlayerAdaptiveQualityLevel.deblockDenoiseSharpen,
+      darkSceneEnhancementEnabled: true,
+      nvidiaVideoEnhancementEnabled: true,
+    );
+    expect(backend.properties['vf'], contains('scaling-mode=nvidia'));
+    expect(backend.properties['vf'], isNot(contains('lavfi')));
     expect(backend.properties['deband'], 'no');
   });
 

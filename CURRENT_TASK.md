@@ -1,5 +1,13 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 mpv NVIDIA scaling-mode 隔离升级结果
+
+- 独立 `mpv v0.41.0-744-g304426c39` 已证明 D3D11VA、NVIDIA scaling mode 和驱动 RTX Super Resolution 日志成立。
+- NVIDIA `d3d11vpp` 与现有 CPU `lavfi` 不能安全串联；直接串联会静默停用压缩滤镜，显式下载又会让放大后的 4K 帧回到 CPU。
+- 同一新版 DLL 进入 MediaKit 后，请求 `d3d11va` 的实际值为 `hwdec-current=no`；真人面部第一条开启组即未通过非 copy 硬门槛，因此按规则终止动画渐变与暗场开启组。
+- 正式 Windows 包已恢复固定 mpv 0.36.0。代码只预置互斥 `vf` 所有权、读回确认和掉帧回滚；`filterChainValidated=false`，不会真正写入 NVIDIA filter。
+- 可复跑工具为 `tool/run_nvidia_scaling_ab.ps1`，完整证据见 `docs/qa/mpv_nvidia_scaling_isolated_20260727.md`。
+
 ## 2026-07-27 内嵌 mpv NVIDIA scaling-mode 实验门禁
 
 - Windows 构建继续固定 `media-kit/libmpv-win32-video-build` 2023-09-24 的 mpv 0.36.0；对 Debug bundle 的 `libmpv-2.dll` 做二进制字符串检查，确认包含 `d3d11vpp`，但不包含 `scaling-mode`、NVIDIA RTX Super Resolution 文案或相关扩展 GUID。

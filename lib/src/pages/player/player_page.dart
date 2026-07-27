@@ -888,6 +888,9 @@ class PlayerPageState extends State<PlayerPage> {
   /** 暗部增强复用同一低频压力判定，但拥有独立计数与会话回滚锁存。 */
   final PlayerHdrMappingSafetyCoordinator _darkSceneSafetyCoordinator =
       PlayerHdrMappingSafetyCoordinator(featureLabel: '暗部增强');
+  /** NVIDIA D3D11 滤镜复用同一掉帧熔断，但独立锁存且不改其它增强设置。 */
+  final PlayerHdrMappingSafetyCoordinator _nvidiaVideoSafetyCoordinator =
+      PlayerHdrMappingSafetyCoordinator(featureLabel: 'NVIDIA 视频增强');
   /** 当前会话已经实际送入后端的自动增强档位。 */
   PlayerAdaptiveQualityLevel _adaptiveQualityLevel =
       PlayerAdaptiveQualityLevel.off;
@@ -973,6 +976,10 @@ class PlayerPageState extends State<PlayerPage> {
   late bool _videoSuperResolutionEnabled;
   /** NVIDIA 驱动视频增强实验只在当前会话内保存，避免能力未确认时污染全局设置。 */
   var _nvidiaVideoEnhancementExperimentEnabled = false;
+  /** NVIDIA 视频增强只回滚当前媒体，不自动切换用户选择的解码器。 */
+  String? _nvidiaVideoEnhancementRollbackReason;
+  /** NVIDIA 视频增强自动回滚时间，用于与诊断掉帧样本对齐。 */
+  DateTime? _nvidiaVideoEnhancementRollbackAt;
   /** 内嵌 mpv 的 d3d11vpp NVIDIA 模式能力；探测只读且不触碰插件 ABI。 */
   var _nvidiaVideoEnhancementCapability =
       const PlayerNvidiaVideoEnhancementCapability.probing();
@@ -1309,12 +1316,16 @@ class PlayerPageState extends State<PlayerPage> {
   /**
    * 只读检测当前内嵌 mpv 的 NVIDIA scaling mode。
    *
-   * 当前固定的 0.36.0 构建会得到“缺少 scaling-mode=nvidia”，因此设置项保持
-   * 禁用；检测不加载 NVIDIA 文件、不写 `vf`，也不经过本机视频增强插件 ABI。
+   * 检测不加载 NVIDIA 文件、不写 `vf`，也不经过本机视频增强插件 ABI；媒体
+   * 打开后会再次读取实际 `hwdec-current`，避免把配置值误当成零拷贝证据。
    */
   Future<void> _probeNvidiaVideoEnhancementCapability() async {
-    final capability =
-        await PlayerNvidiaVideoEnhancementExperiment.probe(_playerBackend);
+    final capability = await PlayerNvidiaVideoEnhancementExperiment.probe(
+      _playerBackend,
+      conflictingCpuFilters:
+          _compressionEnhancementMode != PlayerCompressionEnhancementMode.off ||
+              _darkSceneEnhancementActive,
+    );
     if (!mounted) return;
     setState(() {
       _nvidiaVideoEnhancementCapability = capability;
@@ -1327,16 +1338,57 @@ class PlayerPageState extends State<PlayerPage> {
   /**
    * 更新实验入口的会话状态。
    *
-   * 只有能力检测明确可用时才接受切换；当前版本不会进入此分支。真正写入
-   * `d3d11vpp=scale=2:scaling-mode=nvidia` 前仍需升级内嵌 mpv，并完成与现有
-   * `vf` 性能回滚链的 A/B 验证，不能把可点击状态当作增强已工作。
+   * 开启前重新读取真实 `hwdec-current`，并在写入完整 `vf` 后读回确认；任何
+   * 失败都会恢复空滤镜。该确认只表示 mpv 接受请求，驱动是否真正启用 RTX
+   * Super Resolution 仍以诊断日志为准。
    */
-  void _setNvidiaVideoEnhancementExperimentEnabled(bool enabled) {
-    if (!_nvidiaVideoEnhancementCapability.canEnable ||
-        _nvidiaVideoEnhancementExperimentEnabled == enabled) {
+  Future<void> _setNvidiaVideoEnhancementExperimentEnabled(
+    bool enabled,
+  ) async {
+    if (_nvidiaVideoEnhancementExperimentEnabled == enabled) {
       return;
     }
-    setState(() => _nvidiaVideoEnhancementExperimentEnabled = enabled);
+    await _probeNvidiaVideoEnhancementCapability();
+    if (!mounted) return;
+    if (enabled && !_nvidiaVideoEnhancementCapability.canEnable) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(_nvidiaVideoEnhancementCapability.helperText)),
+        );
+      return;
+    }
+    await PlayerAdaptiveQualityEnhancer.apply(
+      backend: _playerBackend,
+      level: PlayerAdaptiveQualityLevel.off,
+      nvidiaVideoEnhancementEnabled: enabled,
+    );
+    final appliedFilter = await _getMpvProperty('vf');
+    final accepted = !enabled ||
+        appliedFilter.contains('d3d11vpp') &&
+            appliedFilter.contains('scaling-mode=nvidia');
+    if (!accepted) {
+      await PlayerAdaptiveQualityEnhancer.apply(
+        backend: _playerBackend,
+        level: PlayerAdaptiveQualityLevel.off,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('mpv 未接受 NVIDIA 视频增强滤镜，已安全回滚')),
+        );
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _nvidiaVideoEnhancementExperimentEnabled = enabled;
+      _nvidiaVideoEnhancementRollbackReason = null;
+      _nvidiaVideoEnhancementRollbackAt = null;
+    });
+    if (enabled) {
+      _nvidiaVideoSafetyCoordinator.reset();
+    }
   }
 
   /**
@@ -1345,10 +1397,15 @@ class PlayerPageState extends State<PlayerPage> {
    * 切档先清除上一档滤镜和去色带状态，再由下一次低频健康样本决定新档位；
    * 清晰增强只在首个稳定样本快速请求基线最高档，不会在压力后反复强制拉高。
    */
-  void _setCompressionEnhancementMode(
+  Future<void> _setCompressionEnhancementMode(
     PlayerCompressionEnhancementMode mode,
-  ) {
+  ) async {
     if (_compressionEnhancementMode == mode) return;
+    if (mode != PlayerCompressionEnhancementMode.off &&
+        _nvidiaVideoEnhancementExperimentEnabled) {
+      await _setNvidiaVideoEnhancementExperimentEnabled(false);
+      if (!mounted) return;
+    }
     setState(() => _compressionEnhancementMode = mode);
     _saveGlobalPlaybackSettings(
       _effectivePlaybackSettings.copyWith(
@@ -1359,13 +1416,12 @@ class PlayerPageState extends State<PlayerPage> {
     _adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
     // 下一次一秒健康采样即进入画质判定，避免用户切档后等待完整两秒周期。
     _qualityMarginSampleTick = 1;
-    unawaited(
-      PlayerAdaptiveQualityEnhancer.apply(
-        backend: _playerBackend,
-        level: PlayerAdaptiveQualityLevel.off,
-        darkSceneEnhancementEnabled: _darkSceneEnhancementActive,
-      ),
+    await PlayerAdaptiveQualityEnhancer.apply(
+      backend: _playerBackend,
+      level: PlayerAdaptiveQualityLevel.off,
+      darkSceneEnhancementEnabled: _darkSceneEnhancementActive,
     );
+    await _probeNvidiaVideoEnhancementCapability();
   }
 
   /**
@@ -1664,7 +1720,8 @@ class PlayerPageState extends State<PlayerPage> {
       }
       if (_compressionEnhancementMode != PlayerCompressionEnhancementMode.off ||
           _hdrMappingExperimentActive ||
-          _darkSceneEnhancementActive) {
+          _darkSceneEnhancementActive ||
+          _nvidiaVideoEnhancementExperimentEnabled) {
         _qualityMarginSampleTick++;
         if (_qualityMarginSampleTick.isEven) {
           await _sampleQualityMargin(
@@ -1735,6 +1792,8 @@ class PlayerPageState extends State<PlayerPage> {
           backend: _playerBackend,
           level: decision.level,
           darkSceneEnhancementEnabled: _darkSceneEnhancementActive,
+          nvidiaVideoEnhancementEnabled:
+              _nvidiaVideoEnhancementExperimentEnabled,
         );
         _adaptiveQualityLevel = decision.level;
         debugPrint(
@@ -1751,6 +1810,8 @@ class PlayerPageState extends State<PlayerPage> {
           backend: _playerBackend,
           level: _adaptiveQualityLevel,
           darkSceneEnhancementEnabled: false,
+          nvidiaVideoEnhancementEnabled:
+              _nvidiaVideoEnhancementExperimentEnabled,
         );
         if (!mounted || _openedPath != guardedPath) return;
         _darkSceneEnhancementActive = false;
@@ -1759,6 +1820,27 @@ class PlayerPageState extends State<PlayerPage> {
         debugPrint(
           'PLAYER_DARK_SCENE_ENHANCEMENT rollback=true '
           'reason=${darkDecision.reason}',
+        );
+      }
+    }
+    if (_nvidiaVideoEnhancementExperimentEnabled && !_isExiting) {
+      final nvidiaDecision = _nvidiaVideoSafetyCoordinator.evaluate(sample);
+      if (nvidiaDecision.shouldRollback) {
+        final guardedPath = _openedPath;
+        await PlayerAdaptiveQualityEnhancer.apply(
+          backend: _playerBackend,
+          level: PlayerAdaptiveQualityLevel.off,
+        );
+        if (!mounted || _openedPath != guardedPath) return;
+        setState(() {
+          _nvidiaVideoEnhancementExperimentEnabled = false;
+          _nvidiaVideoEnhancementRollbackReason = nvidiaDecision.reason;
+          _nvidiaVideoEnhancementRollbackAt = sampledAt;
+        });
+        await _probeNvidiaVideoEnhancementCapability();
+        debugPrint(
+          'PLAYER_NVIDIA_VIDEO_ENHANCEMENT rollback=true '
+          'reason=${nvidiaDecision.reason}',
         );
       }
     }
@@ -2798,6 +2880,10 @@ class PlayerPageState extends State<PlayerPage> {
           _darkSceneSafetyCoordinator.reset();
           _darkSceneEnhancementRollbackReason = null;
           _darkSceneEnhancementRollbackAt = null;
+          _nvidiaVideoEnhancementExperimentEnabled = false;
+          _nvidiaVideoSafetyCoordinator.reset();
+          _nvidiaVideoEnhancementRollbackReason = null;
+          _nvidiaVideoEnhancementRollbackAt = null;
           _hdrMappingSafetyCoordinator.reset();
           _hdrMappingRollbackReason = null;
           _hdrMappingRollbackAt = null;
@@ -2906,6 +2992,7 @@ class PlayerPageState extends State<PlayerPage> {
       backend: _playerBackend,
       level: _adaptiveQualityLevel,
       darkSceneEnhancementEnabled: darkSceneAllowed,
+      nvidiaVideoEnhancementEnabled: _nvidiaVideoEnhancementExperimentEnabled,
     );
     await PlayerHdrMappingExperiment.apply(
       backend: _playerBackend,
@@ -2921,12 +3008,15 @@ class PlayerPageState extends State<PlayerPage> {
         backend: _playerBackend,
         level: _adaptiveQualityLevel,
         darkSceneEnhancementEnabled: false,
+        nvidiaVideoEnhancementEnabled: false,
       );
       return;
     }
     _gpuCapabilitySnapshot = snapshot;
     _hdrMappingExperimentActive = experimentAllowed;
     _darkSceneEnhancementActive = darkSceneAllowed;
+    await _probeNvidiaVideoEnhancementCapability();
+    if (!mounted || _openedPath != openedPath) return;
     if (darkSceneAllowed) {
       // 从真实滤镜应用后再建立压力基线，媒体打开阶段不能算入暗部增强成本。
       _darkSceneSafetyCoordinator.reset();
@@ -3738,6 +3828,9 @@ class PlayerPageState extends State<PlayerPage> {
       'mpv 去色带参数: iterations=${mpv['deband-iterations']} · threshold=${mpv['deband-threshold']} · range=${mpv['deband-range']} · grain=${mpv['deband-grain']}',
       'GPU 高质量缩放（非 NVIDIA AI）: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
       'NVIDIA 视频增强（实验）: ${_nvidiaVideoEnhancementExperimentEnabled ? '会话已请求' : '关闭'} · ${_nvidiaVideoEnhancementCapability.helperText}',
+      'NVIDIA 压力保护: ${_nvidiaVideoSafetyCoordinator.reason}',
+      'NVIDIA 自动回滚原因: ${_nvidiaVideoEnhancementRollbackReason ?? '无'}',
+      'NVIDIA 自动回滚时间: ${_nvidiaVideoEnhancementRollbackAt?.toIso8601String() ?? 'none'}',
       'mpv GPU 缩放器: ${mpv['scale']}',
       'mpv GPU 色度缩放器: ${mpv['cscale']}',
       'mpv 仅缩放时增强: ${mpv['scaler-resizes-only']}',

@@ -1,3 +1,11 @@
+## 2026-07-27 mpv NVIDIA scaling-mode 隔离升级与 MediaKit 阻断
+
+- 独立 `mpv v0.41.0-744-g304426c39` 的 D3D11 进程确认 `d3d11va` 硬件帧、`scaling-mode=nvidia` 和 RTX Super Resolution 驱动日志均成立。
+- 当前压缩/暗场增强是 CPU `lavfi`；与 NVIDIA `d3d11vpp` 直接串联时 mpv 会停用 `lavfi`，显式下载又会让 2 倍放大的 4K 帧回到 CPU，因此产品实现只能互斥。
+- 应用内真人面部开启组请求 `d3d11va` 后实际为 `hwdec-current=no`，非 copy 门槛失败；按“多片源全部通过才启用”规则立即停止。
+- 正式 mpv 固定版本恢复为 0.36.0，`filterChainValidated=false`。齿轮开关保持禁用，预置代码只负责互斥、`vf` 读回和掉帧熔断，不修改插件 ABI 或持久设置。
+- 完整记录：`docs/qa/mpv_nvidia_scaling_isolated_20260727.md`。
+
 ## 2026-07-27 内嵌 mpv NVIDIA scaling-mode 实验门禁
 
 - Windows 构建脚本固定下载 2023-09-24 的 mpv 0.36.0；对实际 Debug `libmpv-2.dll` 搜索 `d3d11vpp|scaling-mode|NVIDIA RTX Super Resolution|NVIDIA_PPE_INTERFACE_GUID`，仅命中 `d3d11vpp`，因此当前驱动增强路径不完整。
