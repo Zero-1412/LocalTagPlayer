@@ -4420,6 +4420,35 @@ void main() {
     expect(profile.label, contains('分辨率未知'));
   });
 
+  test('NVIDIA video experiment distinguishes bundled mpv capabilities',
+      () async {
+    final bundled = await PlayerNvidiaVideoEnhancementExperiment.probe(
+      _CapabilityPlayerBackend(<String, String>{
+        'mpv-version': 'mpv 0.36.0-652a1dd',
+      }),
+      isWindows: true,
+    );
+    expect(
+      bundled.status,
+      PlayerNvidiaVideoEnhancementStatus.missingNvidiaScalingMode,
+    );
+    expect(bundled.hasD3d11vpp, isTrue);
+    expect(bundled.hasNvidiaScalingMode, isFalse);
+    expect(bundled.canEnable, isFalse);
+    expect(bundled.helperText, contains('无 NVIDIA scaling-mode'));
+
+    final newer = await PlayerNvidiaVideoEnhancementExperiment.probe(
+      _CapabilityPlayerBackend(<String, String>{
+        'mpv-version': 'mpv 0.39.0',
+      }),
+      isWindows: true,
+    );
+    expect(newer.status, PlayerNvidiaVideoEnhancementStatus.available);
+    // 只升级 mpv 仍不能绕过 D3D11 纹理链与现有 vf 回滚验证。
+    expect(newer.canEnable, isFalse);
+    expect(newer.helperText, contains('纹理/滤镜链尚未验证'));
+  });
+
   test('adaptive quality applies one complete lavfi graph per level', () async {
     final backend = _PreferenceRecordingPlayerBackend();
     await PlayerAdaptiveQualityEnhancer.apply(
@@ -5110,6 +5139,7 @@ void main() {
     double? selectedRate;
     int? selectedSeekStep;
     bool? superResolutionEnabled;
+    bool? nvidiaVideoEnhancementEnabled;
     PlayerCompressionEnhancementMode? selectedCompressionEnhancementMode;
     await tester.pumpWidget(
       MaterialApp(
@@ -5128,6 +5158,15 @@ void main() {
                   playbackRate: 1,
                   seekStepSeconds: 5,
                   videoSuperResolutionEnabled: false,
+                  nvidiaVideoEnhancementExperimentEnabled: false,
+                  nvidiaVideoEnhancementCapability:
+                      const PlayerNvidiaVideoEnhancementCapability(
+                    status: PlayerNvidiaVideoEnhancementStatus
+                        .missingNvidiaScalingMode,
+                    mpvVersion: '0.36.0',
+                    hasD3d11vpp: true,
+                    hasNvidiaScalingMode: false,
+                  ),
                   compressionEnhancementMode:
                       PlayerCompressionEnhancementMode.off,
                   playbackRates: const <double>[0.5, 1, 1.5],
@@ -5149,6 +5188,9 @@ void main() {
                   },
                   onVideoSuperResolutionChanged: (enabled) {
                     superResolutionEnabled = enabled;
+                  },
+                  onNvidiaVideoEnhancementExperimentChanged: (enabled) {
+                    nvidiaVideoEnhancementEnabled = enabled;
                   },
                   onCompressionEnhancementModeChanged: (mode) {
                     selectedCompressionEnhancementMode = mode;
@@ -5193,6 +5235,13 @@ void main() {
     expect(find.text('镜像画面'), findsOneWidget);
     expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsOneWidget);
     expect(find.text('libmpv 缩放，仅在画面放大时生效'), findsOneWidget);
+    expect(find.text('NVIDIA 视频增强（实验）'), findsOneWidget);
+    expect(
+      find.text(
+        'mpv 0.36.0：有 d3d11vpp；无 NVIDIA scaling-mode',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('GPU 画质超分'), findsNothing);
     expect(find.text('压缩画质增强'), findsOneWidget);
     expect(find.text('关闭'), findsOneWidget);
@@ -5213,6 +5262,19 @@ void main() {
     );
     await tester.pump();
     expect(superResolutionEnabled, isTrue);
+
+    final nvidiaSwitch = tester.widget<Switch>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey(
+            'player.settings.nvidiaVideoEnhancementExperiment',
+          ),
+        ),
+        matching: find.byType(Switch),
+      ),
+    );
+    expect(nvidiaSwitch.onChanged, isNull);
+    expect(nvidiaVideoEnhancementEnabled, isNull);
 
     await tester.tap(
       find.byKey(const ValueKey('player.settings.compression.open')),

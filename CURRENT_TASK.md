@@ -1,5 +1,13 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 内嵌 mpv NVIDIA scaling-mode 实验门禁
+
+- Windows 构建继续固定 `media-kit/libmpv-win32-video-build` 2023-09-24 的 mpv 0.36.0；对 Debug bundle 的 `libmpv-2.dll` 做二进制字符串检查，确认包含 `d3d11vpp`，但不包含 `scaling-mode`、NVIDIA RTX Super Resolution 文案或相关扩展 GUID。
+- 播放器齿轮新增会话级“NVIDIA 视频增强（实验）”开关，当前明确显示“mpv 0.36.0：有 d3d11vpp；无 NVIDIA scaling-mode”并禁用；不会把 D3D11 解码/渲染误报为 NVIDIA AI 已工作。
+- 能力检测优先读取后端 `mpv-version`，不可用时回退项目固定依赖版本；即使本机替换为 mpv 0.39+，在 `d3d11va` 纹理输入、现有 `vf` 链共存和性能回滚完成验证前仍不开放点击。
+- 本轮未写入 `d3d11vpp=scale=2:scaling-mode=nvidia`，未升级 libmpv，未修改或调用本机视频增强插件 ABI，也未新增 NVIDIA 文件、持久化设置、解码器变化或 SDK 分发。
+- focused 能力/设置/页面挂载测试、`flutter analyze` 与 Windows Debug build 通过；真实 1248×714 Debug 窗口点击媒体卡片、齿轮及禁用开关，入口文案完整、状态不变，相邻设置可达且无溢出、遮挡或错位。
+
 ## 2026-07-27 SDK 零分发本机视频增强插件原型
 
 - 实验性 Windows 原生 mpv 后端新增 SDK 中立 ABI v1；只从 `LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH` 指定的绝对路径加载可信本机 DLL，不扫描、不安装、不分发插件或 NVIDIA 文件。

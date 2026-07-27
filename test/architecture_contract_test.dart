@@ -237,6 +237,14 @@ void main() {
       pageSource,
       contains('onCompressionEnhancementModeChanged:'),
     );
+    expect(
+      pageSource,
+      contains('nvidiaVideoEnhancementCapability:'),
+    );
+    expect(
+      pageSource,
+      contains('onNvidiaVideoEnhancementExperimentChanged:'),
+    );
     expect(pageSource, contains('_setCompressionEnhancementMode'));
     expect(
       panelSource,
@@ -245,6 +253,12 @@ void main() {
     expect(
       panelSource,
       contains("'player.settings.compression.\${mode.name}'"),
+    );
+    expect(
+      panelSource,
+      contains(
+        "'player.settings.nvidiaVideoEnhancementExperiment'",
+      ),
     );
   });
 

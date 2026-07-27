@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · 内嵌 mpv NVIDIA scaling-mode 实验门禁
+
+- 核对 Windows 固定依赖和 Debug `libmpv-2.dll`：当前 mpv 0.36.0 包含 `d3d11vpp`，但不包含 mpv 0.39.0 才加入的 `scaling-mode=nvidia`。
+- 播放器齿轮与诊断新增“NVIDIA 视频增强（实验）”能力状态；当前开关禁用并显示缺失项，不把普通 GPU 高质量缩放或 NVIDIA 显卡解码描述成 RTX Video AI。
+- 能力服务优先读取实际 `mpv-version`，并把 mpv 版本能力与播放器 D3D11 纹理/`vf` 链接入分开判定；仅替换新版 DLL 也不会产生可点击但无效果的假开关。
+- 未升级 libmpv，未应用 NVIDIA scaling filter，未改本机视频增强插件 ABI、`PlayerBackend` contract、解码器、SQLite、标签查询、filtered queue、缓存队列或用户数据。
+- focused test 3/3、静态分析与 Windows Debug build 通过；真实窗口点击确认禁用入口不改变状态，标题、两行能力说明及相邻设置均完整可见。
+
 ## 2026-07-27 · SDK 零分发本机视频增强插件原型
 
 - 在实验性 Windows 原生 mpv 后端加入版本化 D3D11 插件 ABI；只接受环境变量提供的绝对 DLL 路径，不做自动发现，不改变默认 MediaKit。

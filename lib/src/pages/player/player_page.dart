@@ -22,6 +22,7 @@ import '../../services/player/player_adaptive_quality.dart';
 import '../../services/player/player_hdr_mapping_experiment.dart';
 import '../../services/player/player_gpu_capability_detector.dart';
 import '../../services/player/player_memory_diagnostics.dart';
+import '../../services/player/player_nvidia_video_enhancement_experiment.dart';
 import '../../services/player/player_video_super_resolution.dart';
 import '../../widgets/app_theme_tokens.dart';
 import '../../widgets/design_system/app_interaction_surface.dart';
@@ -970,6 +971,11 @@ class PlayerPageState extends State<PlayerPage> {
   late PlayerVideoOutputRange _videoOutputRange;
   /** 当前全局 GPU 高质量缩放开关；只影响 libmpv 渲染缩放器，不调用 NVIDIA AI。 */
   late bool _videoSuperResolutionEnabled;
+  /** NVIDIA 驱动视频增强实验只在当前会话内保存，避免能力未确认时污染全局设置。 */
+  var _nvidiaVideoEnhancementExperimentEnabled = false;
+  /** 内嵌 mpv 的 d3d11vpp NVIDIA 模式能力；探测只读且不触碰插件 ABI。 */
+  var _nvidiaVideoEnhancementCapability =
+      const PlayerNvidiaVideoEnhancementCapability.probing();
   /** 当前压缩画质增强档位；只控制实时滤镜与低频性能协调。 */
   late PlayerCompressionEnhancementMode _compressionEnhancementMode;
   /** 快进与快退快捷键共用的离散跳转秒数。 */
@@ -1074,6 +1080,7 @@ class PlayerPageState extends State<PlayerPage> {
       enableHardwareAcceleration:
           widget.playbackSettings.hardwareDecodingEnabled,
     );
+    unawaited(_probeNvidiaVideoEnhancementCapability());
     _volume = _playerBackend.state.volume.clamp(0, 100).toDouble();
     if (_volume > 0) {
       _lastAudibleVolume = _volume;
@@ -1297,6 +1304,39 @@ class PlayerPageState extends State<PlayerPage> {
         baseScaler: _videoScaler,
       ),
     );
+  }
+
+  /**
+   * 只读检测当前内嵌 mpv 的 NVIDIA scaling mode。
+   *
+   * 当前固定的 0.36.0 构建会得到“缺少 scaling-mode=nvidia”，因此设置项保持
+   * 禁用；检测不加载 NVIDIA 文件、不写 `vf`，也不经过本机视频增强插件 ABI。
+   */
+  Future<void> _probeNvidiaVideoEnhancementCapability() async {
+    final capability =
+        await PlayerNvidiaVideoEnhancementExperiment.probe(_playerBackend);
+    if (!mounted) return;
+    setState(() {
+      _nvidiaVideoEnhancementCapability = capability;
+      if (!capability.canEnable) {
+        _nvidiaVideoEnhancementExperimentEnabled = false;
+      }
+    });
+  }
+
+  /**
+   * 更新实验入口的会话状态。
+   *
+   * 只有能力检测明确可用时才接受切换；当前版本不会进入此分支。真正写入
+   * `d3d11vpp=scale=2:scaling-mode=nvidia` 前仍需升级内嵌 mpv，并完成与现有
+   * `vf` 性能回滚链的 A/B 验证，不能把可点击状态当作增强已工作。
+   */
+  void _setNvidiaVideoEnhancementExperimentEnabled(bool enabled) {
+    if (!_nvidiaVideoEnhancementCapability.canEnable ||
+        _nvidiaVideoEnhancementExperimentEnabled == enabled) {
+      return;
+    }
+    setState(() => _nvidiaVideoEnhancementExperimentEnabled = enabled);
   }
 
   /**
@@ -2432,6 +2472,9 @@ class PlayerPageState extends State<PlayerPage> {
         playbackRate: _playbackRate,
         seekStepSeconds: _seekStepSeconds,
         videoSuperResolutionEnabled: _videoSuperResolutionEnabled,
+        nvidiaVideoEnhancementExperimentEnabled:
+            _nvidiaVideoEnhancementExperimentEnabled,
+        nvidiaVideoEnhancementCapability: _nvidiaVideoEnhancementCapability,
         compressionEnhancementMode: _compressionEnhancementMode,
         playbackRates: _playbackRates,
         seekStepOptions: _seekStepOptions,
@@ -2443,6 +2486,8 @@ class PlayerPageState extends State<PlayerPage> {
         onPlaybackRateChanged: _setPlaybackRate,
         onSeekStepChanged: _setSeekStepSeconds,
         onVideoSuperResolutionChanged: _setVideoSuperResolutionEnabled,
+        onNvidiaVideoEnhancementExperimentChanged:
+            _setNvidiaVideoEnhancementExperimentEnabled,
         onCompressionEnhancementModeChanged: _setCompressionEnhancementMode,
       );
     } finally {
@@ -3692,6 +3737,7 @@ class PlayerPageState extends State<PlayerPage> {
       'mpv 去色带: ${mpv['deband']}',
       'mpv 去色带参数: iterations=${mpv['deband-iterations']} · threshold=${mpv['deband-threshold']} · range=${mpv['deband-range']} · grain=${mpv['deband-grain']}',
       'GPU 高质量缩放（非 NVIDIA AI）: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
+      'NVIDIA 视频增强（实验）: ${_nvidiaVideoEnhancementExperimentEnabled ? '会话已请求' : '关闭'} · ${_nvidiaVideoEnhancementCapability.helperText}',
       'mpv GPU 缩放器: ${mpv['scale']}',
       'mpv GPU 色度缩放器: ${mpv['cscale']}',
       'mpv 仅缩放时增强: ${mpv['scaler-resizes-only']}',

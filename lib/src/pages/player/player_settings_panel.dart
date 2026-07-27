@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/playback_settings.dart'
     show PlaybackSettings, PlayerCompressionEnhancementMode;
+import '../../services/player/player_nvidia_video_enhancement_experiment.dart';
 import '../../widgets/app_theme_tokens.dart';
 import 'player_playback_mode.dart';
 import 'player_video_aspect_mode.dart';
@@ -14,9 +15,9 @@ import 'player_video_aspect_mode.dart';
  * 显示桌面播放器设置浮层。
  *
  * 使用独立路由而不是把复杂列表塞入系统 Menu，避免 Windows 上菜单获得点击
- * 高亮但自定义内容未挂载。一级保留压缩画质增强、镜像、GPU 超分与循环开关，
- * 二级只承担比例/倍速导航和离散快进档位；具体选项进入三级列表或滑杆，每次
- * 变更立即回传播放器。
+ * 高亮但自定义内容未挂载。一级保留压缩画质增强、镜像、GPU 缩放、NVIDIA
+ * 实验能力门禁与循环开关，二级只承担比例/倍速导航和离散快进档位；具体选项
+ * 进入三级列表或滑杆，每次变更立即回传播放器。
  */
 Future<void> showPlayerSettingsDialog(
   BuildContext context, {
@@ -27,6 +28,9 @@ Future<void> showPlayerSettingsDialog(
   required double playbackRate,
   required int seekStepSeconds,
   required bool videoSuperResolutionEnabled,
+  required bool nvidiaVideoEnhancementExperimentEnabled,
+  required PlayerNvidiaVideoEnhancementCapability
+      nvidiaVideoEnhancementCapability,
   required PlayerCompressionEnhancementMode compressionEnhancementMode,
   required List<double> playbackRates,
   required List<int> seekStepOptions,
@@ -36,6 +40,7 @@ Future<void> showPlayerSettingsDialog(
   required ValueChanged<double> onPlaybackRateChanged,
   required ValueChanged<int> onSeekStepChanged,
   required ValueChanged<bool> onVideoSuperResolutionChanged,
+  required ValueChanged<bool> onNvidiaVideoEnhancementExperimentChanged,
   required ValueChanged<PlayerCompressionEnhancementMode>
       onCompressionEnhancementModeChanged,
 }) async {
@@ -46,6 +51,8 @@ Future<void> showPlayerSettingsDialog(
   var localPlaybackRate = playbackRate;
   var localSeekStepSeconds = seekStepSeconds;
   var localVideoSuperResolutionEnabled = videoSuperResolutionEnabled;
+  var localNvidiaVideoEnhancementExperimentEnabled =
+      nvidiaVideoEnhancementExperimentEnabled;
   var localCompressionEnhancementMode = compressionEnhancementMode;
   var currentPage = _PlayerSettingsPage.primary;
   await showGeneralDialog<void>(
@@ -172,6 +179,10 @@ Future<void> showPlayerSettingsDialog(
                                           mirrorVideo: localMirrorVideo,
                                           videoSuperResolutionEnabled:
                                               localVideoSuperResolutionEnabled,
+                                          nvidiaVideoEnhancementExperimentEnabled:
+                                              localNvidiaVideoEnhancementExperimentEnabled,
+                                          nvidiaVideoEnhancementCapability:
+                                              nvidiaVideoEnhancementCapability,
                                           compressionEnhancementMode:
                                               localCompressionEnhancementMode,
                                           playbackMode: localPlaybackMode,
@@ -195,6 +206,17 @@ Future<void> showPlayerSettingsDialog(
                                                       enabled,
                                             );
                                             onVideoSuperResolutionChanged(
+                                              enabled,
+                                            );
+                                          },
+                                          onNvidiaVideoEnhancementExperimentChanged:
+                                              (enabled) {
+                                            setDialogState(
+                                              () =>
+                                                  localNvidiaVideoEnhancementExperimentEnabled =
+                                                      enabled,
+                                            );
+                                            onNvidiaVideoEnhancementExperimentChanged(
                                               enabled,
                                             );
                                           },
@@ -374,19 +396,22 @@ extension on _PlayerSettingsPage {
  * 播放设置一级列表。
  *
  * 高频的镜像与循环开关保持单行可达；比例、倍速和低频入口收进二级页，避免
- * 打开设置时立即呈现大块按钮网格。GPU 超分保留在一级，便于用户在播放中快速
- * 对比和关闭；压缩画质增强用独立三级列表明确展示三档，循环开关互斥，关闭
- * 当前模式会回到顺序播放。
+ * 打开设置时立即呈现大块按钮网格。GPU 缩放与 NVIDIA 实验门禁保留在一级，
+ * 便于用户区分普通缩放和驱动能力；压缩画质增强用独立三级列表明确展示三档，
+ * 循环开关互斥，关闭当前模式会回到顺序播放。
  */
 class PlayerSettingsPrimaryList extends StatelessWidget {
   const PlayerSettingsPrimaryList({
     super.key,
     required this.mirrorVideo,
     required this.videoSuperResolutionEnabled,
+    required this.nvidiaVideoEnhancementExperimentEnabled,
+    required this.nvidiaVideoEnhancementCapability,
     required this.compressionEnhancementMode,
     required this.playbackMode,
     required this.onMirrorVideoChanged,
     required this.onVideoSuperResolutionChanged,
+    required this.onNvidiaVideoEnhancementExperimentChanged,
     required this.onShowCompressionEnhancement,
     required this.onPlaybackModeChanged,
     required this.onShowAdvancedSettings,
@@ -397,6 +422,12 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
 
   /** 是否使用仅在画面放大时运行的 libmpv GPU 高质量缩放；该能力不是 NVIDIA AI。 */
   final bool videoSuperResolutionEnabled;
+
+  /** NVIDIA 驱动视频增强实验的会话状态；当前不会写入全局设置。 */
+  final bool nvidiaVideoEnhancementExperimentEnabled;
+
+  /** 内嵌 mpv 对 `d3d11vpp` NVIDIA 模式的只读能力快照。 */
+  final PlayerNvidiaVideoEnhancementCapability nvidiaVideoEnhancementCapability;
 
   /** 当前压缩画质增强档位。 */
   final PlayerCompressionEnhancementMode compressionEnhancementMode;
@@ -409,6 +440,9 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
 
   /** GPU 高质量缩放开关变化回调；保留既有设置键和持久化语义。 */
   final ValueChanged<bool> onVideoSuperResolutionChanged;
+
+  /** NVIDIA 驱动视频增强实验开关变化回调；不可用时整行禁用。 */
+  final ValueChanged<bool> onNvidiaVideoEnhancementExperimentChanged;
 
   /** 打开压缩画质增强档位列表。 */
   final VoidCallback onShowCompressionEnhancement;
@@ -438,6 +472,17 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
             subtitle: 'libmpv 缩放，仅在画面放大时生效',
             value: videoSuperResolutionEnabled,
             onChanged: onVideoSuperResolutionChanged,
+          ),
+          _PlayerSettingsToggleRow(
+            key: const ValueKey(
+              'player.settings.nvidiaVideoEnhancementExperiment',
+            ),
+            label: 'NVIDIA 视频增强（实验）',
+            subtitle: nvidiaVideoEnhancementCapability.helperText,
+            value: nvidiaVideoEnhancementExperimentEnabled,
+            onChanged: nvidiaVideoEnhancementCapability.canEnable
+                ? onNvidiaVideoEnhancementExperimentChanged
+                : null,
           ),
           _PlayerSettingsNavigationRow(
             key: const ValueKey('player.settings.compression.open'),
@@ -525,14 +570,14 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
   final bool value;
 
   /** 用户切换后的回调。 */
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => onChanged(!value),
+        onTap: onChanged == null ? null : () => onChanged!(!value),
         borderRadius: BorderRadius.circular(AppRadius.control),
         child: SizedBox(
           // 带说明的长能力名称允许自然换行；72px 可完整容纳两行名称和一行边界说明。
@@ -556,6 +601,8 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
                     if (subtitle != null)
                       Text(
                         subtitle!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: playerTextMuted,
                           fontSize: 11,

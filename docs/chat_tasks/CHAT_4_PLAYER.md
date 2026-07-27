@@ -1,3 +1,11 @@
+## 2026-07-27 内嵌 mpv NVIDIA scaling-mode 实验门禁
+
+- Windows 构建脚本固定下载 2023-09-24 的 mpv 0.36.0；对实际 Debug `libmpv-2.dll` 搜索 `d3d11vpp|scaling-mode|NVIDIA RTX Super Resolution|NVIDIA_PPE_INTERFACE_GUID`，仅命中 `d3d11vpp`，因此当前驱动增强路径不完整。
+- 齿轮一级新增稳定键 `player.settings.nvidiaVideoEnhancementExperiment`；开关只保存会话状态，当前显示“mpv 0.36.0：有 d3d11vpp；无 NVIDIA scaling-mode”并禁用。
+- `PlayerNvidiaVideoEnhancementExperiment` 优先读取后端 `mpv-version`，不可用时回退固定依赖；mpv 0.39+ 只代表解析器/滤镜能力存在，仍需独立通过 D3D11 硬件帧、现有压缩增强 `vf` 共存和回滚验证后才允许点击。
+- 本轮不写 `vf=d3d11vpp=scale=2:scaling-mode=nvidia`，不改变 `d3d11va-copy`、默认 MediaKit、原生后端门禁、本机插件 ABI、filtered queue 或用户数据；RTX Video SDK 许可和纹理插件路线继续独立评估。
+- focused test 3/3、`flutter analyze` 与 Windows Debug build 通过；1248×714 真实 Debug 窗口从媒体卡进入播放器并打开齿轮，禁用开关点击后保持关闭，标题/说明无溢出或遮挡，相邻入口继续可达。
+
 ## 2026-07-27 SDK 零分发本机视频增强插件原型
 
 - `WindowsNativePlayerBackend` 的 mpv 模式新增 SDK 中立 ABI v1，入口仍受 `LOCAL_TAG_PLAYER_BACKEND=windows-native-mpv` 保护；DLL 还必须由 `LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH` 以绝对路径显式指定。
