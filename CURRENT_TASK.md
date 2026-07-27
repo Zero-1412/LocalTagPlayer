@@ -1,5 +1,42 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 Flutter child HWND airspace 原型
+
+- 新增显式 `LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd`；默认 Windows
+  MediaKit、macOS/Linux 后端选择、`PlayerBackend` contract 均不改变。
+- runner 创建双层 child HWND：外层按 Flutter 逻辑矩形和实际 view 客户区换算
+  几何并裁剪，内层交给 libmpv `wid + gpu-next + d3d11 + d3d11va`；不注册
+  Flutter Texture，诊断中的纹理复制数保持 0。
+- 隔离 mpv 0.41 在真人面部、动画渐变和暗场三类低码率 1080P 页面均得到
+  `hwdec-current=d3d11va`、播放头推进、0 掉帧和 0 Flutter 纹理复制；真实
+  窗口画面已正确限制在视频面板，右侧 filtered queue 未被覆盖。
+- 项目固定 mpv 0.36 的同路径停在 `hwdec-current=unavailable`，无法成为正式
+  后端依赖。QA 完成后 Debug bundle 已恢复固定 DLL，摘要与 pinned 依赖一致。
+- 真实键盘播放/暂停可达，物理鼠标能触发 Flutter hover；但在集成测试窗口中
+  显式左键齿轮仍未打开设置，中央右键也未形成可靠可达证据。airspace 门禁因此
+  判定未通过，Windows 默认后端继续 MediaKit。
+- 下一步先用普通应用而非 integration-test harness 建立确定性鼠标命中、设置
+  弹层隐藏/恢复 HWND、全屏/跨 DPI/快速切换/退出矩阵；未通过前不启用 NVIDIA
+  filter，也不切默认后端。完整记录见
+  `docs/qa/child_hwnd_airspace_20260727.md`。
+
+## 2026-07-27 新版 ANGLE 与原生 HWND/D3D11 边界复核
+
+- 固定 ANGLE 提交 `c3ede28106e957254509e36fe94a838c761c77d0` 已在
+  `.local/qa` 隔离构建；EGL/D3D11 shared texture、ANGLE device、
+  adapter LUID 和像素读回探针全部通过。
+- 新 ANGLE 分别配合正式 mpv 0.36 与隔离 mpv 0.41 进入 MediaKit 后，
+  `hwdec=d3d11va` 和 `gpu-hwdec-interop=d3d11va` 请求值均存在，实际仍为
+  `hwdec-current=no`。因此不运行三类片源六组 NVIDIA A/B，不调整滤镜。
+- 独立子 HWND + mpv 0.41 的 `gpu-next/D3D11` 路径得到
+  `hwdec-current=d3d11va`、0 解码/输出掉帧和正常导出帧，证明阻断位于当前
+  Flutter Texture / OpenGL render API 边界。
+- 正式 ANGLE/mpv 依赖、MediaKit 插件 ABI、默认回退均未改变；新增入口只接受
+  显式 QA 环境变量。
+- 下一步只做 Flutter child HWND 的矩形、DPI、z-order、控制条/设置/队列
+  airspace 与生命周期原型。完整证据见
+  `docs/qa/angle_d3d11_interop_20260727.md`。
+
 ## 2026-07-27 播放设置收纳、D3D11VA 边界复核与依赖审计
 
 - 播放器齿轮一级只保留 NVIDIA 实验、循环方式和“更多播放设置”；镜像画面、

@@ -139,6 +139,12 @@ PlayerBackend _createPlayerBackend({
   }
   if (Platform.isWindows &&
       Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
+          'windows-native-hwnd') {
+    // 该入口只服务 child HWND airspace QA；默认生产路径继续使用 MediaKit。
+    return WindowsNativePlayerBackend(mode: 'hwnd');
+  }
+  if (Platform.isWindows &&
+      Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
           'windows-native-stub') {
     return WindowsNativePlayerBackend(mode: 'stub');
   }

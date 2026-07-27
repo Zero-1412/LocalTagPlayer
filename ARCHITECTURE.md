@@ -1,5 +1,17 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.74` 增加仅由
+`LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd` 启用的 Windows 平台实验边界：
+runner 在 Flutter view 下创建双层 child HWND，外层只负责几何和 airspace
+裁剪，内层交给 libmpv `wid + gpu-next + d3d11 + d3d11va`。Flutter 仍通过既有
+`PlayerBackend` 控制同一 filtered queue、当前 index、播放命令和返回状态，
+没有把 HWND、mpv handle 或 D3D11 资源泄漏到页面。隔离 mpv 0.41 在真人面部、
+动画渐变和暗场三类低码率 1080P 页面中均为非 copy `d3d11va`、0 Flutter
+纹理复制、0 掉帧；固定 mpv 0.36 无法启动该输出链。真实窗口画面与队列边界已
+正确，但物理鼠标齿轮/右键可达性尚未形成可靠证据，因此默认 Windows 后端继续
+使用 MediaKit，正式 bundle 也已恢复固定 mpv 0.36。SQLite、标签查询、
+filtered queue、缓存队列、插件 ABI 和用户数据均未改变。
+
 `Architecture Baseline 0.5.73` 收纳播放器齿轮的低频画面设置，但不改变
 `PlayerBackend` 或持久化：镜像、GPU 高质量缩放和压缩增强只从一级页迁移到
 “更多播放设置”。MediaKit Windows 仍通过 `MPV_RENDER_API_TYPE_OPENGL` 与
@@ -72,12 +84,17 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.71`
+已完成基线：`Architecture Baseline 0.5.74`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.74`：Windows runner 增加显式 QA-only 双层 child HWND 后端；外层
+  约束 Flutter airspace，内层交给 libmpv D3D11 输出。mpv 0.41 的三类自然
+  低码率 1080P 页面均得到 `hwdec-current=d3d11va`、0 纹理复制和 0 掉帧，
+  固定 mpv 0.36 不能启动该链。真实窗口画面与右侧队列不重叠，但齿轮和中央
+  右键的物理鼠标门禁未可靠通过，因此实验入口不提升为 Windows 默认后端。
 - `0.5.72`：隔离新版 mpv 的独立进程可启用 NVIDIA scaling mode，但 MediaKit 内实际回退 `hwdec-current=no`；首条自然片源即阻断开关。NVIDIA `d3d11vpp` 与 CPU `lavfi` 改为互斥完整 `vf` 快照，并预置读回确认和掉帧熔断；正式 mpv 仍为 0.36.0，产品门禁保持关闭。
 - `0.5.71`：固定的 Windows mpv 0.36.0 DLL 已确认有 `d3d11vpp`、无 `scaling-mode=nvidia`。齿轮新增只读能力门禁和禁用的会话级实验开关；版本达到 0.39+ 仍需独立完成 D3D11 硬件帧、现有 `vf` 共存和回滚验证才允许点击。未升级 libmpv、未写 NVIDIA filter、未改插件 ABI、`PlayerBackend`、SQLite、filtered queue、缓存队列或用户数据。
 - `0.5.70`：实验性 Windows 原生 mpv 后端新增 SDK 中立本机视频增强插件 ABI v1。插件只从 `LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH` 显式绝对路径加载，不扫描、不安装、不分发；mpv/ANGLE 在原生工作线程写入共享 D3D11 纹理后调用插件，宿主提前备份原帧，插件失败时恢复并停用该会话。QA-only 往返探针和宿主自测无 install 规则，已验证无损往返与故障恢复；诊断通过现有 `PlayerBackend.getProperty` 展示插件状态。默认 MediaKit、filtered queue、缓存和用户数据不变，真实 RTX SDK 与发布许可仍未接入。

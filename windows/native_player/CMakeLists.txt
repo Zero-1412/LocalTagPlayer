@@ -301,6 +301,68 @@ set(LTP_PATCHED_MEDIA_KIT_VIDEO_OUTPUT_SOURCE
   "${CMAKE_BINARY_DIR}/ltp_generated/video_output_ltp.cc")
 file(READ "${LTP_UPSTREAM_VIDEO_OUTPUT_SOURCE}" LTP_VIDEO_OUTPUT_SOURCE_TEXT)
 
+# 该开关只服务隔离 QA：libmpv 必须在创建 OpenGL render context 前知道期望的
+# D3D11VA interop，否则 Dart 层在 VideoController 构造完成后再写属性已经太晚。
+# 环境变量缺省时不写任何新 mpv 选项，不改变正式播放器的解码与回退行为。
+set(LTP_VIDEO_OUTPUT_INTEROP_MARKER [=[  auto future = thread_pool_ref_->Post([&]() {
+    mpv_set_option_string(handle_, "video-sync", "audio");
+]=])
+set(LTP_VIDEO_OUTPUT_INTEROP_PATCH [=[  auto future = thread_pool_ref_->Post([&]() {
+    char angle_interop_qa[2] = {};
+    const auto angle_interop_qa_length = GetEnvironmentVariableA(
+        "LOCAL_TAG_PLAYER_ANGLE_INTEROP_QA", angle_interop_qa,
+        static_cast<DWORD>(sizeof(angle_interop_qa)));
+    const bool angle_interop_qa_enabled =
+        angle_interop_qa_length == 1 && angle_interop_qa[0] == '1';
+    if (angle_interop_qa_enabled) {
+      // 只提前声明硬件帧互操作，不注入 d3d11vpp 或其它画质滤镜。
+      const int hwdec_result =
+          mpv_set_option_string(handle_, "hwdec", "d3d11va");
+      const int interop_result = mpv_set_option_string(
+          handle_, "gpu-hwdec-interop", "d3d11va");
+      std::cout << "ltp-angle-interop-qa: pre-render hwdec="
+                << hwdec_result << ", gpu-hwdec-interop=" << interop_result
+                << std::endl;
+    }
+    mpv_set_option_string(handle_, "video-sync", "audio");
+]=])
+string(FIND "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}"
+  "${LTP_VIDEO_OUTPUT_INTEROP_MARKER}" LTP_VIDEO_OUTPUT_INTEROP_MARKER_INDEX)
+if(LTP_VIDEO_OUTPUT_INTEROP_MARKER_INDEX EQUAL -1)
+  message(FATAL_ERROR
+    "Pinned media_kit_video source no longer matches the interop QA patch")
+endif()
+string(REPLACE "${LTP_VIDEO_OUTPUT_INTEROP_MARKER}"
+  "${LTP_VIDEO_OUTPUT_INTEROP_PATCH}"
+  LTP_VIDEO_OUTPUT_SOURCE_TEXT "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}")
+
+set(LTP_VIDEO_OUTPUT_ANGLE_LOG_MARKER [=[        surface_manager_->MakeCurrent(true);
+        Resize(width_.value_or(1), height_.value_or(1));
+]=])
+set(LTP_VIDEO_OUTPUT_ANGLE_LOG_PATCH [=[        surface_manager_->MakeCurrent(true);
+        if (angle_interop_qa_enabled) {
+          const auto display = eglGetCurrentDisplay();
+          const auto* vendor = eglQueryString(display, EGL_VENDOR);
+          const auto* version = eglQueryString(display, EGL_VERSION);
+          std::cout << "ltp-angle-interop-qa: EGL vendor="
+                    << (vendor == nullptr ? "unavailable" : vendor)
+                    << ", version="
+                    << (version == nullptr ? "unavailable" : version)
+                    << std::endl;
+        }
+        Resize(width_.value_or(1), height_.value_or(1));
+]=])
+string(FIND "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}"
+  "${LTP_VIDEO_OUTPUT_ANGLE_LOG_MARKER}"
+  LTP_VIDEO_OUTPUT_ANGLE_LOG_MARKER_INDEX)
+if(LTP_VIDEO_OUTPUT_ANGLE_LOG_MARKER_INDEX EQUAL -1)
+  message(FATAL_ERROR
+    "Pinned media_kit_video source no longer matches the ANGLE QA log patch")
+endif()
+string(REPLACE "${LTP_VIDEO_OUTPUT_ANGLE_LOG_MARKER}"
+  "${LTP_VIDEO_OUTPUT_ANGLE_LOG_PATCH}"
+  LTP_VIDEO_OUTPUT_SOURCE_TEXT "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}")
+
 set(LTP_VIDEO_OUTPUT_GPU_MARKER [=[    auto texture_variant =
         std::make_unique<flutter::TextureVariant>(flutter::GpuSurfaceTexture(
             kFlutterDesktopGpuSurfaceTypeDxgiSharedHandle, [&](auto, auto) {
@@ -370,6 +432,9 @@ string(REPLACE "${LTP_VIDEO_OUTPUT_PIXEL_MARKER}"
   LTP_VIDEO_OUTPUT_SOURCE_TEXT "${LTP_VIDEO_OUTPUT_SOURCE_TEXT}")
 
 foreach(required_fragment IN ITEMS
+    "LOCAL_TAG_PLAYER_ANGLE_INTEROP_QA"
+    "gpu-hwdec-interop"
+    "ltp-angle-interop-qa: EGL vendor="
     "[&, texture_descriptor]"
     "return texture_descriptor"
     "[&, pixel_buffer_descriptor]"
@@ -416,11 +481,41 @@ set(LTP_FFMPEG_RUNTIME_DLLS
   "${LTP_FFMPEG_ROOT}/bin/swresample-6.dll"
   "${LTP_FFMPEG_ROOT}/bin/swscale-9.dll")
 
+# 正式包始终使用固定摘要的 ANGLE。隔离 QA 可在构建进程中显式提供另一组 DLL，
+# 只替换运行时文件，不修改固定归档、import library 或插件 ABI。
+set(LTP_ANGLE_RUNTIME_ROOT "${LTP_NATIVE_DEPS}/angle")
+if(DEFINED ENV{LOCAL_TAG_PLAYER_ANGLE_QA_ROOT} AND
+   NOT "$ENV{LOCAL_TAG_PLAYER_ANGLE_QA_ROOT}" STREQUAL "")
+  file(TO_CMAKE_PATH "$ENV{LOCAL_TAG_PLAYER_ANGLE_QA_ROOT}"
+    LTP_ANGLE_RUNTIME_ROOT)
+  foreach(required_angle_dll IN ITEMS libEGL.dll libGLESv2.dll)
+    if(NOT EXISTS "${LTP_ANGLE_RUNTIME_ROOT}/${required_angle_dll}")
+      message(FATAL_ERROR
+        "ANGLE QA runtime is missing ${required_angle_dll}: ${LTP_ANGLE_RUNTIME_ROOT}")
+    endif()
+  endforeach()
+  message(STATUS "Using isolated ANGLE QA runtime: ${LTP_ANGLE_RUNTIME_ROOT}")
+endif()
+
+# 新版 mpv 只允许在隔离 QA 构建中替换运行时 DLL；正式链接仍使用固定 import
+# library，因此该门禁不改变 MediaKit 插件 ABI，也不覆盖项目固定归档。
+set(LTP_MPV_RUNTIME_DLL "${LTP_NATIVE_DEPS}/mpv/libmpv-2.dll")
+if(DEFINED ENV{LOCAL_TAG_PLAYER_MPV_QA_DLL} AND
+   NOT "$ENV{LOCAL_TAG_PLAYER_MPV_QA_DLL}" STREQUAL "")
+  file(TO_CMAKE_PATH "$ENV{LOCAL_TAG_PLAYER_MPV_QA_DLL}"
+    LTP_MPV_RUNTIME_DLL)
+  if(NOT EXISTS "${LTP_MPV_RUNTIME_DLL}")
+    message(FATAL_ERROR
+      "mpv QA runtime does not exist: ${LTP_MPV_RUNTIME_DLL}")
+  endif()
+  message(STATUS "Using isolated mpv QA runtime: ${LTP_MPV_RUNTIME_DLL}")
+endif()
+
 set(LTP_NATIVE_RUNTIME_DLLS
-  "${LTP_NATIVE_DEPS}/mpv/libmpv-2.dll"
+  "${LTP_MPV_RUNTIME_DLL}"
   "${LTP_NATIVE_DEPS}/angle/d3dcompiler_47.dll"
-  "${LTP_NATIVE_DEPS}/angle/libEGL.dll"
-  "${LTP_NATIVE_DEPS}/angle/libGLESv2.dll"
+  "${LTP_ANGLE_RUNTIME_ROOT}/libEGL.dll"
+  "${LTP_ANGLE_RUNTIME_ROOT}/libGLESv2.dll"
   ${LTP_FFMPEG_RUNTIME_DLLS}
   PARENT_SCOPE)
 set(LTP_NATIVE_LICENSE_FILES

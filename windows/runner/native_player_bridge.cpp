@@ -6,15 +6,21 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <mpv/render_gl.h>
 #include <utility>
+#include <windowsx.h>
 
 extern "C" int LtpMediaKitQueryActiveAdapterLuid(int32_t* high_part,
                                                   uint32_t* low_part);
 
 namespace {
 constexpr char kChannelName[] = "local_tag_player/native_player";
+constexpr wchar_t kVideoHostWindowClass[] =
+    L"LocalTagPlayerNativeVideoHost";
+constexpr wchar_t kFlutterInputTargetProperty[] =
+    L"LocalTagPlayerFlutterInputTarget";
 
 using QueryActiveAdapterLuid = int (*)(int32_t*, uint32_t*);
 
@@ -35,6 +41,94 @@ int64_t IntegerArgument(const flutter::EncodableMap& arguments,
   return 0;
 }
 
+bool BooleanArgument(const flutter::EncodableMap& arguments, const char* key) {
+  const auto iterator = arguments.find(flutter::EncodableValue(key));
+  if (iterator == arguments.end()) return false;
+  const auto* value = std::get_if<bool>(&iterator->second);
+  return value != nullptr && *value;
+}
+
+/**
+ * 把 child HWND 收到的鼠标消息转回 Flutter view。
+ *
+ * 原生子窗口天然位于 Flutter 合成层之上；转发只恢复视频中央区域的点击、右键和
+ * 滚轮输入，不承诺 Flutter overlay 能覆盖 child HWND。
+ */
+LRESULT CALLBACK VideoHostWindowProc(HWND window, UINT message, WPARAM wparam,
+                                     LPARAM lparam) {
+  const HWND input_target = reinterpret_cast<HWND>(
+      GetPropW(window, kFlutterInputTargetProperty));
+  switch (message) {
+    case WM_MOUSEACTIVATE:
+      if (input_target != nullptr) SetFocus(input_target);
+      return MA_ACTIVATE;
+    case WM_LBUTTONDOWN:
+    case WM_RBUTTONDOWN:
+    case WM_MBUTTONDOWN:
+    case WM_XBUTTONDOWN:
+      SetCapture(window);
+      if (input_target != nullptr) SetFocus(input_target);
+      [[fallthrough]];
+    case WM_MOUSEMOVE:
+    case WM_LBUTTONUP:
+    case WM_RBUTTONUP:
+    case WM_MBUTTONUP:
+    case WM_XBUTTONUP: {
+      if (message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
+          message == WM_MBUTTONUP || message == WM_XBUTTONUP) {
+        ReleaseCapture();
+      }
+      if (input_target == nullptr) return 0;
+      POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      ClientToScreen(window, &point);
+      ScreenToClient(input_target, &point);
+      PostMessage(input_target, message, wparam,
+                  MAKELPARAM(static_cast<short>(point.x),
+                             static_cast<short>(point.y)));
+      return 0;
+    }
+    case WM_MOUSEWHEEL:
+    case WM_MOUSEHWHEEL:
+      if (input_target != nullptr) {
+        PostMessage(input_target, message, wparam, lparam);
+      }
+      return 0;
+    case WM_ERASEBKGND: {
+      const HDC device_context = reinterpret_cast<HDC>(wparam);
+      RECT bounds{};
+      GetClientRect(window, &bounds);
+      FillRect(device_context, &bounds,
+               static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+      return 1;
+    }
+    case WM_NCDESTROY:
+      RemovePropW(window, kFlutterInputTargetProperty);
+      return DefWindowProc(window, message, wparam, lparam);
+    default:
+      return DefWindowProc(window, message, wparam, lparam);
+  }
+}
+
+/** 每个进程只登记一次原生视频宿主窗口类。 */
+bool EnsureVideoHostWindowClass() {
+  static std::once_flag once;
+  static bool registered = false;
+  std::call_once(once, []() {
+    WNDCLASSEXW window_class{};
+    window_class.cbSize = sizeof(WNDCLASSEXW);
+    window_class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    window_class.lpfnWndProc = VideoHostWindowProc;
+    window_class.hInstance = GetModuleHandle(nullptr);
+    window_class.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    window_class.hbrBackground =
+        static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    window_class.lpszClassName = kVideoHostWindowClass;
+    registered = RegisterClassExW(&window_class) != 0 ||
+                 GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+  });
+  return registered;
+}
+
 std::string LuidString(int32_t high_part, uint32_t low_part) {
   std::array<char, 32> buffer{};
   std::snprintf(buffer.data(), buffer.size(), "%08x:%08x",
@@ -52,8 +146,10 @@ int32_t NormalizeSurfaceDimension(size_t value, int32_t minimum,
 }  // namespace
 
 NativePlayerBridge::NativePlayerBridge(flutter::BinaryMessenger* messenger,
-                                       flutter::TextureRegistrar* textures)
+                                       flutter::TextureRegistrar* textures,
+                                       HWND flutter_view_window)
     : textures_(textures),
+      flutter_view_window_(flutter_view_window),
       channel_(std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           messenger, kChannelName,
           &flutter::StandardMethodCodec::GetInstance())),
@@ -74,6 +170,7 @@ NativePlayerBridge::~NativePlayerBridge() {
   if (native_mpv_enabled_ && worker_.joinable()) {
     EnqueueAndWait({"destroy", {}, 0, nullptr});
   }
+  DestroyHwndSurface();
   {
     std::lock_guard<std::mutex> lock(mutex_);
     shutting_down_ = true;
@@ -104,11 +201,17 @@ void NativePlayerBridge::HandleMethodCall(
   }
   if (call.method_name() == "create") {
     const auto mode = StringArgument(values, "mode");
-    native_mpv_enabled_ = mode == "mpv";
+    native_hwnd_enabled_ = mode == "hwnd";
+    native_mpv_enabled_ = mode == "mpv" || native_hwnd_enabled_;
+    if (native_hwnd_enabled_ && !CreateHwndSurface()) {
+      result->Error("native-hwnd-create-failed",
+                    "无法创建隔离的 Windows 视频子窗口");
+      return;
+    }
     if (native_mpv_enabled_) {
       EnqueueAndWait({"initialize", {}, 0, nullptr});
     }
-    EnsureTexture();
+    if (!native_hwnd_enabled_) EnsureTexture();
     result->Success(flutter::EncodableValue(StateSnapshot()));
     return;
   }
@@ -116,12 +219,19 @@ void NativePlayerBridge::HandleMethodCall(
     result->Success(flutter::EncodableValue(StateSnapshot()));
     return;
   }
+  if (call.method_name() == "setSurfaceRect") {
+    UpdateHwndSurface(values);
+    result->Success();
+    return;
+  }
   if (call.method_name() == "dispose") {
+    if (video_host_window_ != nullptr) ShowWindow(video_host_window_, SW_HIDE);
     EnqueueAndWait({"dispose", {}, 0, nullptr});
     DisposeSession();
     if (native_mpv_enabled_) {
       EnqueueAndWait({"destroy", {}, 0, nullptr});
     }
+    DestroyHwndSurface();
     result->Success();
     return;
   }
@@ -262,6 +372,111 @@ flutter::EncodableMap NativePlayerBridge::ComputeFrameBudgetSnapshot(
        flutter::EncodableValue(flutter::EncodableList{})}};
 }
 
+bool NativePlayerBridge::CreateHwndSurface() {
+  if (video_host_window_ != nullptr) return true;
+  if (flutter_view_window_ == nullptr || !EnsureVideoHostWindowClass()) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    lifecycle_ = "hwnd_host_unavailable";
+    last_error_ = "native-hwnd-host-unavailable";
+    ++error_count_;
+    return false;
+  }
+  video_host_window_ = CreateWindowExW(
+      0, kVideoHostWindowClass, L"", WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
+      0, 0, 1, 1, flutter_view_window_, nullptr, GetModuleHandle(nullptr),
+      nullptr);
+  if (video_host_window_ == nullptr) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    lifecycle_ = "hwnd_create_failed";
+    last_error_ = "native-hwnd-create-failed";
+    ++error_count_;
+    return false;
+  }
+  mpv_render_window_ = CreateWindowExW(
+      0, kVideoHostWindowClass, L"",
+      WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, 0, 0, 1, 1,
+      video_host_window_, nullptr, GetModuleHandle(nullptr), nullptr);
+  if (mpv_render_window_ == nullptr ||
+      !SetPropW(video_host_window_, kFlutterInputTargetProperty,
+                flutter_view_window_) ||
+      !SetPropW(mpv_render_window_, kFlutterInputTargetProperty,
+                flutter_view_window_)) {
+    DestroyWindow(video_host_window_);
+    video_host_window_ = nullptr;
+    mpv_render_window_ = nullptr;
+    std::lock_guard<std::mutex> lock(mutex_);
+    lifecycle_ = "hwnd_render_create_failed";
+    last_error_ = "native-hwnd-render-create-failed";
+    ++error_count_;
+    return false;
+  }
+  ShowWindow(mpv_render_window_, SW_SHOWNA);
+  ShowWindow(video_host_window_, SW_HIDE);
+  std::lock_guard<std::mutex> lock(mutex_);
+  lifecycle_ = "hwnd_created";
+  hwnd_surface_visible_ = false;
+  return true;
+}
+
+void NativePlayerBridge::UpdateHwndSurface(
+    const flutter::EncodableMap& arguments) {
+  if (!native_hwnd_enabled_ || video_host_window_ == nullptr) return;
+  const auto logical_left = std::clamp<int64_t>(
+      IntegerArgument(arguments, "left"), -32768, 32767);
+  const auto logical_top = std::clamp<int64_t>(
+      IntegerArgument(arguments, "top"), -32768, 32767);
+  const auto logical_width =
+      std::clamp<int64_t>(IntegerArgument(arguments, "width"), 0, 16384);
+  const auto logical_height =
+      std::clamp<int64_t>(IntegerArgument(arguments, "height"), 0, 16384);
+  const auto view_width =
+      std::max<int64_t>(IntegerArgument(arguments, "viewWidth"), 1);
+  const auto view_height =
+      std::max<int64_t>(IntegerArgument(arguments, "viewHeight"), 1);
+  RECT parent_bounds{};
+  GetClientRect(flutter_view_window_, &parent_bounds);
+  const double scale_x =
+      static_cast<double>(parent_bounds.right - parent_bounds.left) /
+      static_cast<double>(view_width);
+  const double scale_y =
+      static_cast<double>(parent_bounds.bottom - parent_bounds.top) /
+      static_cast<double>(view_height);
+  // Flutter 测试可覆盖逻辑 surface size；以实际父 HWND 客户区做最终换算，不能
+  // 假定 devicePixelRatio 就等于当前测试画布到窗口客户区的比例。
+  const auto left = static_cast<int>(std::lround(logical_left * scale_x));
+  const auto top = static_cast<int>(std::lround(logical_top * scale_y));
+  const auto width = static_cast<int>(std::lround(logical_width * scale_x));
+  const auto height = static_cast<int>(std::lround(logical_height * scale_y));
+  const bool visible =
+      BooleanArgument(arguments, "visible") && width >= 64 && height >= 64;
+  if (visible) {
+    SetWindowPos(video_host_window_, HWND_TOP, left, top, width, height,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    // 内层由 mpv 使用，外层始终裁剪其输出，防止媒体加载时 wid 自行扩张越界。
+    SetWindowPos(mpv_render_window_, HWND_TOP, 0, 0, width, height,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+  } else {
+    ShowWindow(video_host_window_, SW_HIDE);
+  }
+  surface_left_ = left;
+  surface_top_ = top;
+  surface_width_ = width;
+  surface_height_ = height;
+  std::lock_guard<std::mutex> lock(mutex_);
+  hwnd_surface_visible_ = visible;
+}
+
+void NativePlayerBridge::DestroyHwndSurface() {
+  if (video_host_window_ != nullptr) {
+    ShowWindow(video_host_window_, SW_HIDE);
+    DestroyWindow(video_host_window_);
+    video_host_window_ = nullptr;
+    mpv_render_window_ = nullptr;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  hwnd_surface_visible_ = false;
+}
+
 void NativePlayerBridge::EnsureTexture() {
   if (texture_id_ >= 0) return;
   if (native_mpv_enabled_ && surface_manager_ != nullptr) {
@@ -340,14 +555,30 @@ void NativePlayerBridge::DisposeSession() {
 
 void NativePlayerBridge::InitializePlayer() {
   if (player_ != nullptr) return;
-  lifecycle_ = "mpv_initializing";
+  lifecycle_ =
+      native_hwnd_enabled_ ? "mpv_hwnd_initializing" : "mpv_initializing";
   player_ = mpv_create();
   if (player_ == nullptr) {
     lifecycle_ = "mpv_create_failed";
     return;
   }
-  mpv_set_option_string(player_, "vo", "libmpv");
-  mpv_set_option_string(player_, "hwdec", "d3d11va-copy");
+  if (native_hwnd_enabled_) {
+    // wid 路径让 libmpv 直接拥有 D3D11 swap chain，绕开 Flutter Texture 与
+    // MediaKit/ANGLE 的 copy 边界；只在显式实验开关下使用。
+    mpv_set_option_string(player_, "vo", "gpu-next");
+    mpv_set_option_string(player_, "gpu-api", "d3d11");
+    mpv_set_option_string(player_, "gpu-context", "d3d11");
+    mpv_set_option_string(player_, "hwdec", "d3d11va");
+    mpv_set_option_string(player_, "gpu-hwdec-interop", "d3d11va");
+    mpv_set_option_string(player_, "input-default-bindings", "no");
+    mpv_set_option_string(player_, "input-cursor", "no");
+    int64_t window_id =
+        static_cast<int64_t>(reinterpret_cast<intptr_t>(mpv_render_window_));
+    mpv_set_option(player_, "wid", MPV_FORMAT_INT64, &window_id);
+  } else {
+    mpv_set_option_string(player_, "vo", "libmpv");
+    mpv_set_option_string(player_, "hwdec", "d3d11va-copy");
+  }
   mpv_set_option_string(player_, "video-sync", "display-resample");
   mpv_set_option_string(player_, "cache", "yes");
   mpv_set_option_string(player_, "demuxer-readahead-secs", "12");
@@ -357,6 +588,10 @@ void NativePlayerBridge::InitializePlayer() {
     lifecycle_ = "mpv_initialize_failed";
     mpv_terminate_destroy(player_);
     player_ = nullptr;
+    return;
+  }
+  if (native_hwnd_enabled_) {
+    lifecycle_ = "mpv_hwnd_ready";
     return;
   }
   try {
@@ -421,7 +656,7 @@ void NativePlayerBridge::DestroyPlayer() {
   }
   playing_ = false;
   buffering_ = false;
-  lifecycle_ = "mpv_disposed";
+  lifecycle_ = native_hwnd_enabled_ ? "mpv_hwnd_disposed" : "mpv_disposed";
 }
 
 void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
@@ -635,8 +870,22 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
           {flutter::EncodableValue("lifecycle"),
            flutter::EncodableValue(lifecycle_)},
           {flutter::EncodableValue("backend"),
-           flutter::EncodableValue(native_mpv_enabled_ ? "windows-native-mpv"
-                                                       : "windows-native-stub")},
+           flutter::EncodableValue(
+               native_hwnd_enabled_
+                   ? "windows-native-hwnd"
+                   : native_mpv_enabled_ ? "windows-native-mpv"
+                                         : "windows-native-stub")},
+          {flutter::EncodableValue("native-surface-kind"),
+           flutter::EncodableValue(native_hwnd_enabled_ ? "child-hwnd"
+                                                        : "flutter-texture")},
+          {flutter::EncodableValue("native-surface-visible"),
+           flutter::EncodableValue(hwnd_surface_visible_)},
+          {flutter::EncodableValue("native-input-forwarding"),
+           flutter::EncodableValue(native_hwnd_enabled_)},
+          {flutter::EncodableValue("native-airspace-inset-top"),
+           flutter::EncodableValue(native_hwnd_enabled_ ? 64 : 0)},
+          {flutter::EncodableValue("native-airspace-inset-bottom"),
+           flutter::EncodableValue(native_hwnd_enabled_ ? 128 : 0)},
           {flutter::EncodableValue("hwdec-current"),
            flutter::EncodableValue(hwdec_)},
           {flutter::EncodableValue("video-codec"),
@@ -666,6 +915,10 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(texture_copy_count_.load())},
           {flutter::EncodableValue("native-surface-resizes"),
            flutter::EncodableValue(surface_resize_count_.load())},
+          {flutter::EncodableValue("native-surface-left"),
+           flutter::EncodableValue(surface_left_.load())},
+          {flutter::EncodableValue("native-surface-top"),
+           flutter::EncodableValue(surface_top_.load())},
           {flutter::EncodableValue("native-surface-width"),
            flutter::EncodableValue(surface_width_.load())},
           {flutter::EncodableValue("native-surface-height"),

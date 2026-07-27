@@ -33,7 +33,8 @@ bool FlutterWindow::OnCreate() {
               "LocalTagPlayerNativePlayer"));
   native_player_bridge_ = std::make_unique<NativePlayerBridge>(
       native_player_registrar_->messenger(),
-      native_player_registrar_->texture_registrar());
+      native_player_registrar_->texture_registrar(),
+      flutter_controller_->view()->GetNativeWindow());
   native_probe_registrar_ =
       std::make_unique<flutter::PluginRegistrarWindows>(
           flutter_controller_->engine()->GetRegistrarForPlugin(

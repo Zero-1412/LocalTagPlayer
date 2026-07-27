@@ -302,6 +302,20 @@ void main() {
         : null;
     final matrix = await renderBoundary.queryGpuCapabilities();
     final activeAdapter = await gpuBoundary?.queryActiveGpuAdapter();
+    final angleInteropQaEnabled =
+        Platform.environment['LOCAL_TAG_PLAYER_ANGLE_INTEROP_QA'] == '1';
+    // 隔离 ANGLE 门禁需要保留 libmpv 的请求值与实际值，避免仅凭构建 DLL 摘要
+    // 或 UI 的硬解设置推断非 copy 链已经成立。
+    final angleInteropEvidence = angleInteropQaEnabled
+        ? <String, String>{
+            'hwdec': await renderBoundary.getProperty('hwdec'),
+            'hwdec-current': await renderBoundary.getProperty('hwdec-current'),
+            'gpu-hwdec-interop':
+                await renderBoundary.getProperty('gpu-hwdec-interop'),
+            'gpu-api': await renderBoundary.getProperty('gpu-api'),
+            'gpu-context': await renderBoundary.getProperty('gpu-context'),
+          }
+        : null;
     final report = <String, Object?>{
       'schemaVersion': 1,
       'mode': baselineMode,
@@ -311,6 +325,8 @@ void main() {
       'finalDiagnostics': finalLines,
       'gpuMatrix': matrix.toJson(),
       'activeAdapter': activeAdapter?.toJson(),
+      if (angleInteropEvidence != null)
+        'angleInteropEvidence': angleInteropEvidence,
     };
     await File('${outputDirectory.path}\\$baselineMode-player-baseline.json')
         .writeAsString(

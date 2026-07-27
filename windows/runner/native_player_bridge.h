@@ -6,6 +6,7 @@
 #include <flutter/texture_registrar.h>
 #include <mpv/client.h>
 #include <mpv/render.h>
+#include <windows.h>
 
 #include "angle_surface_manager.h"
 #include "local_video_enhancement_plugin.h"
@@ -31,7 +32,8 @@
 class NativePlayerBridge {
  public:
   NativePlayerBridge(flutter::BinaryMessenger* messenger,
-                     flutter::TextureRegistrar* textures);
+                     flutter::TextureRegistrar* textures,
+                     HWND flutter_view_window);
   ~NativePlayerBridge();
 
   NativePlayerBridge(const NativePlayerBridge&) = delete;
@@ -49,6 +51,12 @@ class NativePlayerBridge {
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  /** 在 Flutter 平台线程创建隔离 child HWND；默认路径不会触发该窗口。 */
+  bool CreateHwndSurface();
+  /** 同步 Flutter 视频占位区域对应的物理像素矩形与可见性。 */
+  void UpdateHwndSurface(const flutter::EncodableMap& arguments);
+  /** 在 libmpv 会话释放后销毁 child HWND，避免悬空 wid。 */
+  void DestroyHwndSurface();
   void EnsureTexture();
   void InitializePlayer();
   void DestroyPlayer();
@@ -70,6 +78,17 @@ class NativePlayerBridge {
       const std::string& adapter_luid);
 
   flutter::TextureRegistrar* textures_;
+  /** Flutter view 的 HWND，只作为实验视频子窗口的父窗口，不改变主 runner 所有权。 */
+  HWND flutter_view_window_ = nullptr;
+  /** `gpu-next/d3d11` 直接输出目标；该窗口只在显式 `hwnd` 模式创建。 */
+  HWND video_host_window_ = nullptr;
+  /**
+   * 交给 libmpv 的内部 HWND。
+   *
+   * 外层宿主负责 Flutter 几何与裁剪；即使 mpv 在媒体加载时重设内部窗口尺寸，也
+   * 不能越过外层 child HWND 的 airspace 边界。
+   */
+  HWND mpv_render_window_ = nullptr;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::unique_ptr<flutter::TextureVariant> pixel_texture_;
   std::unique_ptr<flutter::TextureVariant> gpu_texture_;
@@ -83,10 +102,14 @@ class NativePlayerBridge {
   std::array<uint8_t, 16> pixels_{};
   int64_t texture_id_ = -1;
   bool native_mpv_enabled_ = false;
+  bool native_hwnd_enabled_ = false;
+  bool hwnd_surface_visible_ = false;
   std::atomic<bool> rendering_enabled_{false};
   std::atomic<bool> render_requested_{false};
   std::atomic<int32_t> desired_surface_width_{1280};
   std::atomic<int32_t> desired_surface_height_{720};
+  std::atomic<int32_t> surface_left_{0};
+  std::atomic<int32_t> surface_top_{0};
   std::atomic<int32_t> surface_width_{1280};
   std::atomic<int32_t> surface_height_{720};
   std::atomic<int64_t> render_request_count_{0};

@@ -12,8 +12,9 @@ import 'windows_gpu_capability_channel.dart';
 /**
  * Windows C++ 播放器的 Flutter 适配器。
  *
- * `stub`模式验证纹理与生命周期，`mpv`模式接入原生解码和 D3D11 共享纹理；两者
- * 都只用于显式 A/B，默认生产路径继续使用 MediaKitPlayerBackend。
+ * `stub`模式验证纹理与生命周期，`mpv`模式接入原生解码和 D3D11 共享纹理，
+ * `hwnd`模式隔离验证 libmpv 直接输出到 Flutter child HWND；三者都只用于显式
+ * A/B，默认生产路径继续使用 MediaKitPlayerBackend。
  */
 class WindowsNativePlayerBackend
     implements PlayerBackend, PlayerGpuRenderBoundary {
@@ -26,7 +27,7 @@ class WindowsNativePlayerBackend
   }
 
   final StreamController<Duration> _positionChanges;
-  /** 原生创建模式：`stub`仅验证纹理，`mpv`启用真实解码。 */
+  /** 原生创建模式：`stub`验证纹理，`mpv`验证 ANGLE，`hwnd`验证 D3D11VA。 */
   final String mode;
   final StreamController<bool> _playingChanges;
   final StreamController<bool> _completedChanges;
@@ -111,8 +112,15 @@ class WindowsNativePlayerBackend
       'native-skipped-renders',
       'native-texture-copies',
       'native-surface-resizes',
+      'native-surface-left',
+      'native-surface-top',
       'native-surface-width',
       'native-surface-height',
+      'native-surface-kind',
+      'native-surface-visible',
+      'native-input-forwarding',
+      'native-airspace-inset-top',
+      'native-airspace-inset-bottom',
       'native-video-plugin-state',
       'native-video-plugin-name',
       'native-video-plugin-frames',
@@ -145,6 +153,35 @@ class WindowsNativePlayerBackend
       if (integer != null) 'integer': integer,
     });
     await _pollState();
+  }
+
+  /**
+   * 把 Flutter 视频占位区域同步到原生 child HWND。
+   *
+   * 坐标使用 Flutter 逻辑画布；runner 再按实际 view 客户区换算为物理像素。
+   * 默认 MediaKit 与纹理实验路径不会调用该方法，因此不会引入额外平台消息。
+   */
+  Future<void> _setHwndSurfaceRect({
+    required int left,
+    required int top,
+    required int width,
+    required int height,
+    required int viewWidth,
+    required int viewHeight,
+    required bool visible,
+  }) async {
+    if (_disposed || mode != 'hwnd') return;
+    await _ready;
+    if (_disposed) return;
+    await windowsNativePlayerChannel.invokeMethod<void>('setSurfaceRect', {
+      'left': left,
+      'top': top,
+      'width': width,
+      'height': height,
+      'viewWidth': viewWidth,
+      'viewHeight': viewHeight,
+      'visible': visible,
+    });
   }
 
   @override
@@ -204,6 +241,7 @@ class WindowsNativePlayerBackend
     await _ready;
     if (_properties.containsKey(property)) return _properties[property]!;
     if (property == 'current-vo') {
+      if (mode == 'hwnd') return 'gpu-next-d3d11-child-hwnd';
       return mode == 'mpv' ? 'libmpv-angle-d3d11' : 'flutter-pixel-buffer';
     }
     if (property == 'native-lifecycle') return _lifecycle;
@@ -234,6 +272,12 @@ class WindowsNativePlayerBackend
     double? aspectRatio,
     bool mirror = false,
   }) {
+    if (mode == 'hwnd') {
+      return _WindowsHwndVideoSurface(
+        backend: this,
+        controls: controls,
+      );
+    }
     final textureSurface = ValueListenableBuilder<int?>(
       valueListenable: _textureId,
       builder: (_, texture, __) => texture == null
@@ -283,4 +327,141 @@ class WindowsNativePlayerBackend
 
   @override
   Future<void> get released => _released.future;
+}
+
+/**
+ * 隔离 child HWND 的 Flutter 占位面。
+ *
+ * 原生窗口无法被 Flutter overlay 覆盖，因此原型固定保留顶部 64 与底部 128
+ * 逻辑像素给标题语境和控制条；runner 再按实际父 HWND 客户区缩放该逻辑矩形，
+ * 避免高 DPI 或集成测试画布尺寸与窗口尺寸不一致时发生越界。
+ */
+class _WindowsHwndVideoSurface extends StatefulWidget {
+  const _WindowsHwndVideoSurface({
+    required this.backend,
+    required this.controls,
+  });
+
+  /** 拥有方法通道与原生会话的后端。 */
+  final WindowsNativePlayerBackend backend;
+
+  /** 必须继续挂载的正式播放器控制层。 */
+  final Widget controls;
+
+  @override
+  State<_WindowsHwndVideoSurface> createState() =>
+      _WindowsHwndVideoSurfaceState();
+}
+
+/** 负责把 Flutter 逻辑布局转换成 child HWND 物理像素矩形。 */
+class _WindowsHwndVideoSurfaceState extends State<_WindowsHwndVideoSurface>
+    with WidgetsBindingObserver {
+  static const double _topAirspace = 64;
+  static const double _bottomAirspace = 128;
+  final GlobalKey _placeholderKey = GlobalKey();
+  Rect? _lastLogicalRect;
+  Size? _lastLogicalViewSize;
+  bool _syncScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _scheduleRectSync();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scheduleRectSync();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WindowsHwndVideoSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _scheduleRectSync();
+  }
+
+  @override
+  void didChangeMetrics() {
+    _scheduleRectSync();
+  }
+
+  /** 合并同一帧内的布局变更，避免窗口动画向平台线程发送重复 MoveWindow。 */
+  void _scheduleRectSync() {
+    if (_syncScheduled || !mounted) return;
+    _syncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncScheduled = false;
+      if (mounted) unawaited(_syncRect());
+    });
+  }
+
+  /** 读取最终布局并只在逻辑矩形或 Flutter 画布尺寸变化时同步原生窗口。 */
+  Future<void> _syncRect() async {
+    final renderObject =
+        _placeholderKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderObject == null || !renderObject.hasSize) return;
+    final origin = renderObject.localToGlobal(Offset.zero);
+    final viewSize = MediaQuery.sizeOf(context);
+    final logicalHeight =
+        (renderObject.size.height - _topAirspace - _bottomAirspace)
+            .clamp(0.0, double.infinity)
+            .toDouble();
+    final logicalRect = Rect.fromLTWH(
+      origin.dx,
+      origin.dy + _topAirspace,
+      renderObject.size.width,
+      logicalHeight,
+    );
+    if (_lastLogicalRect == logicalRect && _lastLogicalViewSize == viewSize) {
+      return;
+    }
+    _lastLogicalRect = logicalRect;
+    _lastLogicalViewSize = viewSize;
+    await widget.backend._setHwndSurfaceRect(
+      left: logicalRect.left.round(),
+      top: logicalRect.top.round(),
+      width: logicalRect.width.round(),
+      height: logicalRect.height.round(),
+      viewWidth: viewSize.width.round(),
+      viewHeight: viewSize.height.round(),
+      visible: logicalRect.width >= 64 && logicalRect.height >= 64,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _scheduleRectSync();
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(
+          key: _placeholderKey,
+          color: Colors.black,
+          child: const SizedBox.expand(
+            key: ValueKey<String>('windows-native.hwnd.placeholder'),
+          ),
+        ),
+        widget.controls,
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(
+      widget.backend._setHwndSurfaceRect(
+        left: 0,
+        top: 0,
+        width: 0,
+        height: 0,
+        viewWidth: 1,
+        viewHeight: 1,
+        visible: false,
+      ),
+    );
+    super.dispose();
+  }
 }

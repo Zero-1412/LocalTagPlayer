@@ -1,5 +1,36 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · Flutter child HWND airspace 原型未提升为默认后端
+
+- Windows 组合根增加显式 `windows-native-hwnd` QA 入口；默认 MediaKit 与
+  macOS/Linux 路径不变。
+- runner 使用双层 child HWND，把 Flutter 几何/裁剪所有权与 libmpv
+  `gpu-next/D3D11` 输出所有权分开；Flutter 占位面只同步逻辑矩形和可见性，
+  不注册或复制视频纹理。
+- 隔离 mpv 0.41 的真人面部、动画渐变、暗场三类低码率 1080P 页面均得到
+  `d3d11va`、0 Flutter 纹理复制、0 掉帧和持续播放；固定 mpv 0.36 无法启动
+  同一路径。
+- 真实窗口截图确认画面限制在视频面板、右侧 filtered queue 未被覆盖；键盘
+  播放/暂停可达。物理鼠标齿轮与中央右键仍没有可靠通过，故 airspace 产品门禁
+  失败，Windows 默认后端未切换。
+- 新增 HWND surface focused test 和真实 Windows 集成门禁；正式 Debug bundle
+  最终恢复 pinned mpv 0.36。SQLite、标签查询、filtered queue、缓存队列、
+  插件 ABI 与用户数据均未改变。
+
+## 2026-07-27 · 新版 ANGLE 隔离互操作与 HWND/D3D11 评估
+
+- 固定官方 ANGLE 新版提交并完成 D3D11-only 隔离构建；最小探针确认
+  EGL device、shared texture、adapter LUID 和 GLES→D3D11 像素读回成立。
+- 构建增加显式 QA-only ANGLE/mpv 运行时入口，并在 MediaKit render context
+  前请求 D3D11VA interop；默认依赖、插件 ABI 和正式回退行为保持不变。
+- 新 ANGLE 配合 mpv 0.36 与 0.41 时，MediaKit 实际均为
+  `hwdec-current=no`；非 copy 门槛失败后按规则跳过六组 NVIDIA A/B，未调滤镜。
+- 独立子 HWND + mpv 0.41 的 `gpu-next/D3D11/d3d11va` 探针通过，解码与输出
+  掉帧均为 0，并导出正常真人帧；后续只评估 Flutter child HWND airspace。
+- SQLite、标签查询、filtered queue、`PlayerBackend` contract、缓存队列和
+  用户数据均未改变。完整证据见
+  `docs/qa/angle_d3d11_interop_20260727.md`。
+
 ## 2026-07-27 · 播放设置收纳与依赖/渲染边界复核
 
 - 镜像画面、GPU 高质量缩放（非 NVIDIA AI）和压缩画质增强从齿轮一级移入

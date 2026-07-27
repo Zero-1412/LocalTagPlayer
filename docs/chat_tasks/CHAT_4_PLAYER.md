@@ -1,3 +1,33 @@
+## 2026-07-27 Flutter child HWND airspace 原型
+
+- 新增 `LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd`，只在显式 QA 中创建
+  双层 child HWND；外层按 Flutter view 几何裁剪，内层由 libmpv
+  `gpu-next/D3D11` 使用。默认 MediaKit 与其它平台不变。
+- 固定 mpv 0.36 无法启动该输出链；隔离 mpv 0.41 在真人面部、动画渐变和暗场
+  三类自然低码率 1080P 中均为非 copy `d3d11va`、0 Flutter 纹理复制和
+  0 掉帧。
+- 真实窗口画面已落在视频面板内，右侧 filtered queue 和底部控制条保持可见；
+  键盘播放/暂停可用。物理鼠标可产生 Flutter hover，但齿轮左键和视频中央右键
+  尚未可靠打开对应弹层，因此 airspace 门禁判定失败。
+- 默认 Windows 后端不切换，正式 bundle 恢复固定 mpv 0.36；下一步先在普通
+  应用窗口验证鼠标命中、弹层期间 HWND 可见性、全屏、跨 DPI、快速切换和退出。
+- 完整记录：`docs/qa/child_hwnd_airspace_20260727.md`。
+
+## 2026-07-27 新版 ANGLE 与原生 HWND/D3D11 边界
+
+- 官方 ANGLE 固定到提交 `c3ede28106e957254509e36fe94a838c761c77d0`，
+  D3D11-only 隔离构建和 EGL/shared texture/LUID/像素读回探针通过。
+- MediaKit 在 render context 前已明确请求 `d3d11va` interop，但新 ANGLE
+  配合 mpv 0.36、0.41 均为 `hwdec-current=no`；按硬门槛停止六组 NVIDIA
+  A/B，不修改 `d3d11vpp` 或 `scaling-mode`。
+- 独立子 HWND + mpv 0.41 使用 `gpu-next/D3D11` 后得到真实非 copy
+  `d3d11va`、0 掉帧和正常解码帧，说明下一阶段应验证 Flutter child HWND
+  airspace，而不是继续替换 ANGLE。
+- 任何 HWND 原型必须保护 filtered queue、当前 index、返回状态、控制条、
+  设置弹层和右侧队列；z-order、DPI、全屏、焦点、快速切换和退出生命周期未
+  通过前，不替换默认 MediaKit。
+- 完整记录：`docs/qa/angle_d3d11_interop_20260727.md`。
+
 ## 2026-07-27 播放设置收纳、D3D11VA interop 复核与依赖审计
 
 - 齿轮一级保留 NVIDIA 实验与循环方式；镜像、GPU 高质量缩放和压缩画质增强
