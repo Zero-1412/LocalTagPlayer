@@ -1,5 +1,23 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · NVOFA 真实生成 2× 中间帧本机原型
+
+- 增加不安装、不打包的 VapourSynth R78 NVOFA 插件；实际执行前向/后向硬件光流，
+  以双向 warp 生成奇数中间帧，并用切场阈值避免跨镜头混合。
+- mpv 插帧宿主新增绝对插件路径 `user-data`，脚本显式注册 output index 0 并约分
+  帧率；24fps→48fps、seek、reload 和关闭回退通过。
+- 单线程 1080P 的 97 掉帧失败被保留为性能门禁证据；按行块并行后，真人、动画、
+  暗场三类 off/on 六组均为 0 总掉帧、0 音视频停滞，开启组实测 48fps。
+- 固定中间帧人工检查未见明显五官双影、动画轮廓撕裂或暗场污染；没有真值帧，
+  因此不把 PSNR 差异冒充质量分数。
+- Windows 强类型启停边界等待异步原生状态读回，避免命令已排队却立即返回
+  `applied=false`。
+- 当前仍包含软件帧、CUDA 上传/回读和 CPU warp；插件/R78/NVIDIA 公开头文件
+  不进入 bundle，未开放 UI 或持久化设置。默认 MediaKit、filtered queue、
+  插件 ABI v1、SQLite、标签、缓存与用户数据不变。
+- `flutter analyze`、297 项全量测试（另 3 项跳过）和 Windows Debug build
+  通过；正式 Debug bundle 未携带 NVOFA、CUDA、VapourSynth 或 VSScript 文件。
+
 ## 2026-07-28 · Windows 原生播放器启用 NVIDIA RTX Video HDR
 
 - 固定 mpv 的 `nvidia-true-hdr` 已接入原生 child HWND / D3D11VA 非 copy 链；

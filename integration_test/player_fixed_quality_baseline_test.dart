@@ -68,9 +68,12 @@ void main() {
         mode != 'nvidia-off' &&
         mode != 'nvidia-on' &&
         mode != 'nvidia-hdr-off' &&
-        mode != 'nvidia-hdr-on') {
+        mode != 'nvidia-hdr-on' &&
+        mode != 'nvidia-vsr-hdr-on' &&
+        mode != 'nvofa-motion-off' &&
+        mode != 'nvofa-motion-on') {
       throw StateError(
-        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、nvidia-off、nvidia-on、nvidia-hdr-off 或 nvidia-hdr-on',
+        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、nvidia-off、nvidia-on、nvidia-hdr-off、nvidia-hdr-on、nvidia-vsr-hdr-on、nvofa-motion-off 或 nvofa-motion-on',
       );
     }
     final baselineMode = mode!;
@@ -95,7 +98,10 @@ void main() {
         'nvidia-off' ||
         'nvidia-on' ||
         'nvidia-hdr-off' ||
-        'nvidia-hdr-on' =>
+        'nvidia-hdr-on' ||
+        'nvidia-vsr-hdr-on' ||
+        'nvofa-motion-off' ||
+        'nvofa-motion-on' =>
           '固定低码率 1080P 样本',
         _ => '固定 SDR 暗场样本',
       },
@@ -105,6 +111,8 @@ void main() {
     );
     final disposalCompleter = Completer<void>();
     final playerKey = GlobalKey<PlayerPageState>();
+    final usesWindowsNative =
+        baselineMode.startsWith('nvidia-') || baselineMode.startsWith('nvofa-');
     final settings = PlaybackSettings.defaults.copyWith(
       hdrDynamicToneMappingExperimentEnabled: baselineMode == 'hdr',
       darkSceneEnhancementEnabled: baselineMode == 'sdr-dark-enhanced',
@@ -112,7 +120,11 @@ void main() {
           ? PlayerCompressionEnhancementMode.clarity
           : PlayerCompressionEnhancementMode.off,
       // NVIDIA 对照组和实验组都固定使用真实 D3D11VA 非 copy，避免解码链差异污染 A/B。
-      hwdec: baselineMode.startsWith('nvidia-') ? 'd3d11va' : null,
+      hwdec: baselineMode.startsWith('nvidia-')
+          ? 'd3d11va'
+          : baselineMode.startsWith('nvofa-')
+              ? 'no'
+              : null,
       highQualityStreamCacheEnabled: true,
     );
 
@@ -145,7 +157,7 @@ void main() {
             required PlayerRendererPreference rendererPreference,
           }) =>
               PlayerService(
-            backend: baselineMode.startsWith('nvidia-')
+            backend: usesWindowsNative
                 ? WindowsNativePlayerBackend(mode: 'hwnd')
                 : MediaKitPlayerBackend(
                     hwdec: hwdec,
@@ -159,16 +171,20 @@ void main() {
       ),
     );
 
-    final nvidiaVsrOn = baselineMode == 'nvidia-on';
-    final nvidiaHdrOn = baselineMode == 'nvidia-hdr-on';
+    final nvidiaVsrHdrOn = baselineMode == 'nvidia-vsr-hdr-on';
+    final nvidiaVsrOn = baselineMode == 'nvidia-on' || nvidiaVsrHdrOn;
+    final nvidiaHdrOn = baselineMode == 'nvidia-hdr-on' || nvidiaVsrHdrOn;
+    final nvofaMotionOn = baselineMode == 'nvofa-motion-on';
     await _waitForSessionState(
       tester,
       playerKey,
-      mode: nvidiaVsrOn
-          ? 'nvidia-off'
-          : nvidiaHdrOn
-              ? 'nvidia-hdr-off'
-              : baselineMode,
+      mode: nvofaMotionOn
+          ? 'nvofa-motion-off'
+          : nvidiaVsrOn
+              ? 'nvidia-off'
+              : nvidiaHdrOn
+                  ? 'nvidia-hdr-off'
+                  : baselineMode,
       timeout: const Duration(seconds: 30),
     );
     if (nvidiaVsrOn || nvidiaHdrOn) {
@@ -184,19 +200,26 @@ void main() {
       final nvidiaHdrToggle = find.byKey(
         const ValueKey<String>('player.settings.nvidiaVideoHdrExperiment'),
       );
-      expect(nvidiaVsrOn ? nvidiaToggle : nvidiaHdrToggle, findsOneWidget);
-      final nvidiaSwitch = tester.widget<Switch>(
-        find.descendant(
-          of: nvidiaVsrOn ? nvidiaToggle : nvidiaHdrToggle,
-          matching: find.byType(Switch),
-        ),
-      );
-      expect(nvidiaSwitch.onChanged, isNotNull);
+      if (nvidiaVsrOn) {
+        expect(nvidiaToggle, findsOneWidget);
+        final nvidiaSwitch = tester.widget<Switch>(
+          find.descendant(of: nvidiaToggle, matching: find.byType(Switch)),
+        );
+        expect(nvidiaSwitch.onChanged, isNotNull);
+      }
+      if (nvidiaHdrOn) {
+        expect(nvidiaHdrToggle, findsOneWidget);
+        final nvidiaHdrSwitch = tester.widget<Switch>(
+          find.descendant(of: nvidiaHdrToggle, matching: find.byType(Switch)),
+        );
+        expect(nvidiaHdrSwitch.onChanged, isNotNull);
+      }
       // 画质 A/B 只验证滤镜、驱动与性能；child HWND 的物理鼠标命中由独立
       // airspace 门禁负责，不能让坐标点击偶发性污染六组画质结论。
       if (nvidiaVsrOn) {
         await playerKey.currentState!.setNvidiaVideoEnhancementForTesting(true);
-      } else {
+      }
+      if (nvidiaHdrOn) {
         await playerKey.currentState!.setNvidiaVideoHdrForTesting(true);
       }
       await tester.pump(const Duration(seconds: 2));
@@ -212,6 +235,24 @@ void main() {
         tester,
         playerKey,
         mode: baselineMode,
+        timeout: const Duration(seconds: 20),
+      );
+    }
+    if (nvofaMotionOn) {
+      final result = await playerKey.currentState!.playerService
+          .setMotionInterpolationEnabled(true);
+      debugPrint(
+        'NVOFA_MOTION_REQUEST applied=${result.applied} '
+        'status=${result.capability.status.name} '
+        'runtime=${result.capability.runtimeState} '
+        'enabled=${result.capability.enabled} '
+        'error=${result.capability.errorCode}',
+      );
+      expect(result.applied, isTrue);
+      await _waitForMotionCapability(
+        tester,
+        playerKey,
+        PlayerMotionInterpolationStatus.active,
         timeout: const Duration(seconds: 20),
       );
     }
@@ -311,10 +352,14 @@ void main() {
     // 结束帧导出可能短暂占用渲染队列；先暂停可确保采证动作不被误计为长播压力。
     await playerKey.currentState!.playerService.pause();
     if (baselineMode.startsWith('compression-') ||
-        baselineMode.startsWith('nvidia-')) {
+        baselineMode.startsWith('nvidia-') ||
+        baselineMode.startsWith('nvofa-')) {
       // 压缩修复 A/B 固定回到同一时间点，避免移动测试图的内容差异污染像素对比。
       await playerKey.currentState!.playerService.seek(
-        const Duration(seconds: 12),
+        baselineMode.startsWith('nvofa-')
+            // 24fps 两个源帧之间的 0.5 时间点，用于比较真实生成的奇数帧。
+            ? const Duration(microseconds: 12020833)
+            : const Duration(seconds: 12),
       );
       await tester.pump(const Duration(milliseconds: 800));
     } else {
@@ -329,6 +374,8 @@ void main() {
         .where(
           (line) => <String>[
             'mpv 实际硬解:',
+            'mpv 容器 FPS:',
+            'mpv 估算视频 FPS:',
             '源传递函数:',
             'SDR 源信号:',
             '暗部细节增强设置:',
@@ -398,7 +445,29 @@ void main() {
     expect(samples, isNotEmpty);
     expect(finalSnapshot.videoStalled, isFalse);
     expect(finalSnapshot.audioStalled, isFalse);
-    if (baselineMode == 'hdr') {
+    if (baselineMode.startsWith('nvofa-')) {
+      final capability = await playerKey.currentState!.playerService
+          .queryMotionInterpolationCapability();
+      final estimatedFpsLine =
+          finalLines.where((line) => line.startsWith('mpv 估算视频 FPS: ')).single;
+      final estimatedFps =
+          double.tryParse(estimatedFpsLine.split(': ').last) ?? 0;
+      if (nvofaMotionOn) {
+        expect(
+          capability.status,
+          PlayerMotionInterpolationStatus.active,
+        );
+        expect(capability.enabled, isTrue);
+        expect(estimatedFps, greaterThanOrEqualTo(47.5));
+      } else {
+        expect(
+          capability.status,
+          PlayerMotionInterpolationStatus.ready,
+        );
+        expect(capability.enabled, isFalse);
+        expect(estimatedFps, closeTo(24, 0.5));
+      }
+    } else if (baselineMode == 'hdr') {
       final experimentStillActive = finalLines.contains('HDR 动态映射会话: 已通过门槛并启用');
       if (experimentStillActive) {
         expect(finalLines, contains('HDR 自动回滚原因: 无'));
@@ -440,6 +509,32 @@ void main() {
         finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
         isNot(contains('deblock=')),
       );
+    } else if (baselineMode == 'nvidia-vsr-hdr-on') {
+      final vsrRequested = finalLines.any(
+        (line) => line.startsWith(
+          'NVIDIA 视频增强（实验）: 会话已请求',
+        ),
+      );
+      final hdrRequested = finalLines.any(
+        (line) => line.startsWith(
+          'NVIDIA RTX Video HDR（实验）: 会话已请求',
+        ),
+      );
+      final rolledBack = finalLines.any(
+        (line) =>
+            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+      );
+      expect((vsrRequested && hdrRequested) || rolledBack, isTrue);
+      if (vsrRequested && hdrRequested) {
+        final filterLine =
+            finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single;
+        expect(filterLine, contains('scaling-mode=nvidia'));
+        expect(filterLine, contains('nvidia-true-hdr'));
+        expect(filterLine, isNot(contains('format=nv12')));
+        expect(finalLines, contains('NVIDIA VSR 驱动确认: active'));
+        expect(finalLines, contains('NVIDIA HDR 驱动确认: active'));
+        expect(finalLines, contains('NVIDIA 自动回滚原因: 无'));
+      }
     } else if (baselineMode == 'nvidia-on') {
       final active = finalLines.any(
         (line) => line.startsWith('NVIDIA 视频增强（实验）: 会话已请求'),
@@ -495,6 +590,31 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 15)));
 }
 
+/** 等待原生运行时以实际滤镜输出帧率确认运动补偿插帧状态。 */
+Future<void> _waitForMotionCapability(
+  WidgetTester tester,
+  GlobalKey<PlayerPageState> playerKey,
+  PlayerMotionInterpolationStatus expected, {
+  required Duration timeout,
+}) async {
+  final stopwatch = Stopwatch()..start();
+  while (stopwatch.elapsed < timeout) {
+    await tester.pump(const Duration(milliseconds: 100));
+    final state = playerKey.currentState;
+    if (state == null) continue;
+    final capability =
+        await state.playerService.queryMotionInterpolationCapability();
+    if (capability.status == expected) return;
+    if (capability.status == PlayerMotionInterpolationStatus.fallback ||
+        capability.status == PlayerMotionInterpolationStatus.unavailable) {
+      throw StateError(
+        'NVOFA 插帧回退：${capability.runtimeState}/${capability.errorCode}',
+      );
+    }
+  }
+  throw StateError('NVOFA 插帧未在时限内进入 ${expected.name}');
+}
+
 /** 等待真实媒体可播放，并确认 HDR/SDR 分支已经完成能力门禁。 */
 Future<void> _waitForSessionState(
   WidgetTester tester,
@@ -539,6 +659,24 @@ Future<void> _waitForSessionState(
             line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
       );
       if (active || safelyRolledBack) return;
+    } else if (mode == 'nvidia-vsr-hdr-on') {
+      final vsrActive = snapshot.lines.contains('NVIDIA VSR 驱动确认: active');
+      final hdrActive = snapshot.lines.contains('NVIDIA HDR 驱动确认: active');
+      final safelyRolledBack = snapshot.lines.any(
+        (line) =>
+            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+      );
+      if ((vsrActive && hdrActive) || safelyRolledBack) return;
+    } else if (mode == 'nvofa-motion-off') {
+      final capability =
+          await state.playerService.queryMotionInterpolationCapability();
+      final nativeVideoReady = snapshot.lines.contains(
+        'mpv 输出驱动: gpu-next-d3d11-child-hwnd',
+      );
+      if (capability.status == PlayerMotionInterpolationStatus.ready &&
+          nativeVideoReady) {
+        return;
+      }
     } else if (mode == 'nvidia-off' || mode == 'nvidia-hdr-off') {
       final usesNativeD3d11 = snapshot.lines.contains(
             'mpv 输出驱动: gpu-next-d3d11-child-hwnd',

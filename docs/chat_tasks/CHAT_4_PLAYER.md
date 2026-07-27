@@ -1,3 +1,18 @@
+## 2026-07-28 NVOFA 2× 中间帧本机原型
+
+- 隔离 VapourSynth R78 插件实际执行前向/后向 NVOFA，并以 0.5 双向 warp 生成
+  中间帧；切场保护、24→48fps、seek、reload 和关闭回退均通过。
+- 初始单线程 1080P 产生 97 个输出掉帧，未放宽门禁；按行块并行后，真人面部、
+  动画渐变、暗场六组 20 秒 A/B 均为 0 总掉帧、0 音视频停滞。
+- 固定中点 PNG 显示真人五官、动画轮廓与暗场边缘没有明显新增双影/撕裂/污染，
+  但缺少高帧率真值，不把单帧差异当成完整运动质量结论。
+- 插件和 R78 仍为 `EXCLUDE_FROM_ALL` 本机 QA 资产，不进入 bundle；当前存在
+  软件帧、CUDA 上传/回读和 CPU warp，尚未开放 UI。下一步是同 LUID D3D11
+  compute warp 与更长运动序列门禁。
+- filtered queue、当前 index、来源队列、返回状态、默认 MediaKit、插件 ABI v1
+  和用户数据不变。
+- 完整证据见 `docs/qa/nvofa_vapoursynth_interpolation_20260728.md`。
+
 ## 2026-07-28 NVIDIA RTX Video HDR 驱动实链
 
 - 固定 mpv `v0.41.0-908-g48e6c35c0` 的 `nvidia-true-hdr` 已在 Windows

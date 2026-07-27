@@ -1,5 +1,35 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 NVOFA 2× 中间帧本机原型
+
+- 新增显式 `EXCLUDE_FROM_ALL` 的 VapourSynth R78 插件目标。插件只从 System32
+  动态加载 `nvcuda.dll` / `nvofapi64.dll`，使用已固定的 NVIDIA BSD-3-Clause
+  公开头文件构建；没有 install 规则，也不进入正式 runner 或 Flutter bundle。
+- 每个滤镜实例实际执行 A→B 与 B→A 两次 NVOFA Optical Flow，偶数帧保留源帧，
+  奇数帧以双向 0.5 warp 合成；切场时复制前帧，禁止跨镜头混合。输出帧属性记录
+  是否插值、切场和处理耗时。
+- mpv 通过结构化 `vf` 的 `user-data` 传入唯一绝对插件 DLL；脚本显式注册
+  VSScript output index 0，并把容器帧率约分后传给插件。24fps→48fps、精确 seek、
+  同进程 reload 与关闭回退均通过。
+- 初始单线程 CPU warp 在真实 1080P 上 7 秒只推进 3.52 秒并产生 97 个输出掉帧，
+  因此未开放入口。按 16 行块并行后，三类 650 kbps 1080P 的 4 秒实时门禁用时
+  3.998 / 4.016 / 4.010 秒，窗口内无新增掉帧。
+- 真人面部、动画渐变、暗场各 off/on 20 秒六组均为 off 24fps、on 48fps，
+  off/on 总掉帧 0/0、音视频停滞 0/0。12.020833 秒固定中间帧人工检查未见明显
+  五官双影、动画轮廓撕裂或暗场污染；off/on PSNR 为 46.94 / 26.05 / 53.50 dB，
+  证明不是同帧复制，但这些数值不是无真值条件下的质量评分。
+- Windows 后端启停命令与状态快照存在不同平台消息时序；强类型边界现在最多等待
+  2 秒读回 `requested/active`，仍不以命令发送成功冒充应用成功。
+- 当前链仍为 D3D11VA→VapourSynth 软件帧→CUDA luma 上传→NVOFA→CPU warp，
+  不属于非 copy D3D11 合成；未增加播放器 UI、持久化键或默认启用。下一阶段必须
+  匹配活动 D3D11 LUID 并把 warp 迁到 D3D11 compute，再重跑六组与运动序列审查。
+- 默认 MediaKit、Windows 后端选择、现有插件 ABI v1、filtered queue、当前
+  index、返回状态、SQLite、标签、缓存队列和用户数据均未改变。
+- `flutter analyze`、297 项全量测试（另 3 项按既有条件跳过）和 Windows Debug
+  build 通过；正式 Debug bundle 未发现 NVOFA、CUDA、VapourSynth 或 VSScript
+  文件，四个新增/扩展 QA 脚本均通过 PowerShell 语法解析。
+- 完整证据见 `docs/qa/nvofa_vapoursynth_interpolation_20260728.md`。
+
 ## 2026-07-28 NVIDIA RTX Video HDR 驱动实链
 
 - 固定 libmpv `v0.41.0-908-g48e6c35c0` 已确认包含

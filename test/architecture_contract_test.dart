@@ -366,6 +366,15 @@ void main() {
     ).readAsStringSync();
     final nvofaScript =
         File('tool/run_nvofa_execute_probe.ps1').readAsStringSync();
+    final nvofaInterpolation = File(
+      'windows/nvidia_optical_flow_probe/nvofa_vapoursynth_plugin.cpp',
+    ).readAsStringSync();
+    final nvofaInterpolationScript = File(
+      'tool/vapoursynth_nvofa_interpolation.vpy',
+    ).readAsStringSync();
+    final nvofaInterpolationProbe = File(
+      'tool/run_nvofa_vapoursynth_interpolation_probe.ps1',
+    ).readAsStringSync();
     final nativeBuild =
         File('windows/native_player/CMakeLists.txt').readAsStringSync();
     final runtime = File(
@@ -373,6 +382,9 @@ void main() {
     ).readAsStringSync();
     final boundary =
         File('lib/src/platform/platform_interfaces.dart').readAsStringSync();
+    final flutterBackend = File(
+      'lib/src/services/player/windows_native_player_backend.dart',
+    ).readAsStringSync();
 
     // 本机原型不分发第三方运行时；只有两个绝对路径环境变量能开启探测。
     expect(runnerBuild, contains('vapoursynth_motion_runtime.cpp'));
@@ -402,6 +414,20 @@ void main() {
     expect(
       boundary,
       contains('abstract interface class PlayerMotionInterpolationBoundary'),
+    );
+    // 平台命令返回不等于滤镜已经生效；Flutter 边界必须等待原生状态确认。
+    expect(flutterBackend, contains("'motion-interpolation'"));
+    expect(
+      flutterBackend,
+      contains('const Duration(milliseconds: 50)'),
+    );
+    expect(
+      flutterBackend,
+      contains('PlayerMotionInterpolationStatus.requested'),
+    );
+    expect(
+      flutterBackend,
+      contains('PlayerMotionInterpolationStatus.active'),
     );
 
     // NVOFA 只从 System32 探测官方驱动入口，不把驱动存在冒充 FRUC 已安装。
@@ -436,6 +462,39 @@ void main() {
       contains('edb50da3cf849840d680249aa6dbef248ebce2ca'),
     );
     expect(nvofaScript, contains('Get-FileHash'));
+
+    // 生成中间帧的本机插件仍是显式 QA 目标：不进入默认构建、不安装、不分发。
+    expect(nativeBuild, contains('LTP_BUILD_NVOFA_VAPOURSYNTH_PLUGIN'));
+    expect(
+      nativeBuild,
+      contains('ltp_nvofa_vapoursynth_plugin MODULE EXCLUDE_FROM_ALL'),
+    );
+    expect(
+      nativeBuild,
+      isNot(contains('install(TARGETS ltp_nvofa_vapoursynth_plugin')),
+    );
+    expect(
+      runtime,
+      contains('LOCAL_TAG_PLAYER_NVOFA_VS_PLUGIN_PATH'),
+    );
+    expect(runtime, contains('const_cast<char*>("user-data")'));
+    expect(nvofaInterpolation, contains('nvOFExecute'));
+    expect(
+      nvofaInterpolation,
+      contains('Execute(input_, reference_, &flow->forward)'),
+    );
+    expect(
+      nvofaInterpolation,
+      contains('Execute(reference_, input_, &flow->backward)'),
+    );
+    expect(nvofaInterpolation, contains('concurrency::parallel_for'));
+    expect(nvofaInterpolation, contains('LTPNVOFAInterpolated'));
+    expect(nvofaInterpolation, contains('LTPNVOFASceneCut'));
+    expect(nvofaInterpolationScript, contains('video_out.set_output()'));
+    expect(
+      nvofaInterpolationProbe,
+      contains('expect-active-performance'),
+    );
   });
 
   test('desktop startup centers size-only persisted window layouts', () {

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cwctype>
 #include <filesystem>
 #include <vector>
@@ -12,6 +13,8 @@ constexpr wchar_t kRuntimeDirectoryEnvironment[] =
     L"LOCAL_TAG_PLAYER_VAPOURSYNTH_RUNTIME_DIR";
 constexpr wchar_t kScriptPathEnvironment[] =
     L"LOCAL_TAG_PLAYER_MOTION_INTERPOLATION_SCRIPT_PATH";
+constexpr wchar_t kUserDataEnvironment[] =
+    L"LOCAL_TAG_PLAYER_NVOFA_VS_PLUGIN_PATH";
 constexpr char kFilterLabel[] = "ltp-motion-interpolation";
 
 /** 读取完整环境变量；空值保持“未配置”，不会搜索当前工作目录。 */
@@ -56,6 +59,14 @@ bool HasVpyExtension(const std::filesystem::path& path) {
   std::transform(extension.begin(), extension.end(), extension.begin(),
                  [](wchar_t value) { return std::towlower(value); });
   return extension == L".vpy";
+}
+
+/** 可选本机插件只接受 DLL，避免脚本用户数据被误配为目录或其它文件。 */
+bool HasDllExtension(const std::filesystem::path& path) {
+  auto extension = path.extension().wstring();
+  std::transform(extension.begin(), extension.end(), extension.begin(),
+                 [](wchar_t value) { return std::towlower(value); });
+  return extension == L".dll";
 }
 
 /** 把 Win32 错误压缩为稳定码，避免配置路径进入诊断。 */
@@ -123,6 +134,8 @@ void VapourSynthMotionRuntime::Initialize() {
       ReadEnvironmentValue(kRuntimeDirectoryEnvironment);
   const std::wstring script_path =
       ReadEnvironmentValue(kScriptPathEnvironment);
+  const std::wstring user_data_path =
+      ReadEnvironmentValue(kUserDataEnvironment);
   if (runtime_directory.empty() && script_path.empty()) {
     snapshot_.state = "not-configured";
     return;
@@ -159,6 +172,23 @@ void VapourSynthMotionRuntime::Initialize() {
     snapshot_.state = "invalid-script";
     snapshot_.error = "motion-script-missing-or-not-vpy";
     return;
+  }
+  if (!user_data_path.empty()) {
+    const std::filesystem::path user_data_file(user_data_path);
+    file_error.clear();
+    if (!IsAbsoluteWindowsPath(user_data_path) ||
+        !std::filesystem::is_regular_file(user_data_file, file_error) ||
+        !HasDllExtension(user_data_file)) {
+      snapshot_.state = "invalid-user-data";
+      snapshot_.error = "motion-user-data-missing-or-not-dll";
+      return;
+    }
+    user_data_utf8_ = WideToUtf8(user_data_path);
+    if (user_data_utf8_.empty()) {
+      snapshot_.state = "invalid-user-data";
+      snapshot_.error = "motion-user-data-utf8-conversion-failed";
+      return;
+    }
   }
 
   const auto vsscript_path = runtime_path / L"VSScript.dll";
@@ -252,14 +282,22 @@ void VapourSynthMotionRuntime::ObserveLog(mpv_handle* player,
   if (prefix == nullptr || text == nullptr) return;
   const std::string component(prefix);
   const std::string message(text);
+  std::string normalized_message(message);
+  std::transform(normalized_message.begin(), normalized_message.end(),
+                 normalized_message.begin(),
+                 [](unsigned char value) {
+                   return static_cast<char>(std::tolower(value));
+                 });
   const bool runtime_failed =
       component == "vapoursynth" &&
       message.find("Failed to load VapourSynth VSScript library") !=
           std::string::npos;
   const bool script_failed =
       component == "vapoursynth" &&
-      (message.find("script evaluation failed") != std::string::npos ||
-       message.find("VapourSynth error") != std::string::npos);
+      (normalized_message.find("script evaluation failed") !=
+           std::string::npos ||
+       normalized_message.find("vapoursynth error") !=
+           std::string::npos);
   const bool filter_failed =
       component == "user_filter_wrapper" &&
       message.find("Creating filter 'vapoursynth' failed") !=
@@ -297,6 +335,7 @@ void VapourSynthMotionRuntime::ConfirmFrameRateIncrease(
 void VapourSynthMotionRuntime::Shutdown() {
   std::lock_guard<std::mutex> lock(mutex_);
   script_path_utf8_.clear();
+  user_data_utf8_.clear();
   snapshot_.enabled = false;
   if (vsscript_module_ != nullptr) {
     FreeLibrary(vsscript_module_);
@@ -331,15 +370,17 @@ bool VapourSynthMotionRuntime::RewriteFilterGraph(
     if (!IsMotionFilterEntry(entry)) entries.push_back(entry);
   }
 
-  std::array<char*, 3> parameter_keys{
+  std::array<char*, 4> parameter_keys{
       const_cast<char*>("file"),
       const_cast<char*>("buffered-frames"),
       const_cast<char*>("concurrent-frames"),
+      const_cast<char*>("user-data"),
   };
-  std::array<mpv_node, 3> parameter_values{
+  std::array<mpv_node, 4> parameter_values{
       StringNode(script_path_utf8_.data()),
       StringNode(const_cast<char*>("4")),
       StringNode(const_cast<char*>("4")),
+      StringNode(user_data_utf8_.data()),
   };
   mpv_node_list parameter_map{
       static_cast<int>(parameter_values.size()),

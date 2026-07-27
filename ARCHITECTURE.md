@@ -1,5 +1,20 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.84` 在既有
+`PlayerMotionInterpolationBoundary` 后完成首条真实 NVOFA 2× 中间帧原型，但
+继续隔离在本机 QA 边界。显式 CMake 目标动态加载 System32 的 CUDA/NVOFA 驱动，
+分别执行前向与后向 Optical Flow；VapourSynth R78 插件用双向 0.5 warp 合成奇数
+帧，偶数帧保留源帧，切场阈值禁止跨镜头混合。脚本通过 `user-data` 接收唯一绝对
+插件路径，mpv 0.40 所需 output index 0 被显式注册；输出帧率有理数先约分，避免
+非法 `VSVideoInfo`。单线程 1080P 初测 7 秒仅推进 3.52 秒并产生 97 个输出掉帧，
+因此没有开放入口；按 16 行块并行后，真人、动画、暗场三类 650 kbps 1080P
+off/on 六组均从 24fps 实测提升到 48fps，20 秒长播两侧均为 0 总掉帧和 0 音视频
+停滞，固定中间帧人工检查未见明显双影、撕裂或暗场污染。该链仍会把 mpv 帧交给
+VapourSynth 软件表面、上传 luma 到 CUDA、回读光流并在 CPU warp，不是
+D3D11VA 非 copy 合成；插件、R78 与公开头文件均不进入 bundle，UI 也不开放。
+默认 MediaKit、插件 ABI v1、filtered queue、SQLite、标签、缓存队列和用户数据
+不变。
+
 `Architecture Baseline 0.5.83` 在既有 Windows 原生 child HWND 边界内接入固定
 mpv 提交自带的 NVIDIA RTX Video HDR 驱动扩展，不下载或分发 RTX Video SDK。
 `PlayerNvidiaVideoEnhancementCapability` 现在分别建模 VSR 与 TrueHDR，并要求

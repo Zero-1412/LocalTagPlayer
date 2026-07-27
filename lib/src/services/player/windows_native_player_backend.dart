@@ -379,13 +379,26 @@ class WindowsNativePlayerBackend
       'motion-interpolation',
       integer: enabled ? 1 : 0,
     );
-    final after = await queryMotionInterpolationCapability();
-    final applied = enabled
-        ? after.enabled &&
-            (after.status == PlayerMotionInterpolationStatus.requested ||
-                after.status == PlayerMotionInterpolationStatus.active)
-        : !after.enabled &&
-            after.status != PlayerMotionInterpolationStatus.fallback;
+    var after = await queryMotionInterpolationCapability();
+    bool matchesRequest(PlayerMotionInterpolationCapability capability) =>
+        enabled
+            ? capability.enabled &&
+                (capability.status ==
+                        PlayerMotionInterpolationStatus.requested ||
+                    capability.status == PlayerMotionInterpolationStatus.active)
+            : !capability.enabled &&
+                capability.status != PlayerMotionInterpolationStatus.fallback;
+    // 原生命令与固定属性快照通过不同平台消息返回，紧邻读回可能仍看到旧状态。
+    // 只在该短窗口内等待状态确认，不把命令投递成功本身冒充插帧已经应用。
+    for (var attempt = 0; attempt < 40 && !matchesRequest(after); attempt++) {
+      if (after.status == PlayerMotionInterpolationStatus.fallback ||
+          after.status == PlayerMotionInterpolationStatus.unavailable) {
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      after = await queryMotionInterpolationCapability();
+    }
+    final applied = matchesRequest(after);
     return PlayerMotionInterpolationApplyResult(
       applied: applied,
       capability: after,

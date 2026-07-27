@@ -24,6 +24,8 @@ struct PlaybackProbeState {
   double source_fps = 0.0;
   double filtered_fps = 0.0;
   int64_t frame_number = -1;
+  int64_t frame_drop_count = 0;
+  int64_t decoder_frame_drop_count = 0;
   std::string video_format;
 };
 
@@ -114,6 +116,11 @@ bool WaitForState(mpv_handle* player, VapourSynthMotionRuntime* runtime,
         ReadDouble(player, "estimated-vf-fps", state->filtered_fps);
     state->frame_number =
         ReadInt64(player, "estimated-frame-number", state->frame_number);
+    state->frame_drop_count =
+        ReadInt64(player, "frame-drop-count", state->frame_drop_count);
+    state->decoder_frame_drop_count = ReadInt64(
+        player, "decoder-frame-drop-count",
+        state->decoder_frame_drop_count);
     state->video_format = ReadString(player, "video-format");
     runtime->ConfirmFrameRateIncrease(player, state->source_fps,
                                       state->filtered_fps);
@@ -132,11 +139,16 @@ bool RunCommand(mpv_handle* player, const char** arguments) {
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
-  if (argc != 4) {
+  if (argc != 4 && argc != 5) {
     std::cerr
-        << "usage: real_frame_probe <runtime-dir> <script-path> <sample>\n";
+        << "usage: real_frame_probe <runtime-dir> <script-path> <sample> "
+           "[expect-active|expect-active-performance]\n";
     return 2;
   }
+  const std::wstring mode = argc == 5 ? argv[4] : L"";
+  const bool expect_active =
+      mode == L"expect-active" || mode == L"expect-active-performance";
+  const bool performance_mode = mode == L"expect-active-performance";
   SetEnvironmentVariableW(L"LOCAL_TAG_PLAYER_VAPOURSYNTH_RUNTIME_DIR",
                           argv[1]);
   SetEnvironmentVariableW(
@@ -159,7 +171,8 @@ int wmain(int argc, wchar_t** argv) {
   mpv_set_option_string(player, "ao", "null");
   mpv_set_option_string(player, "hwdec", "no");
   mpv_set_option_string(player, "keep-open", "yes");
-  mpv_set_option_string(player, "speed", "2");
+  // 普通探针加速完成；性能门禁保持 1 倍速，防止把超实时压力误算为正常播放失败。
+  mpv_set_option_string(player, "speed", performance_mode ? "1" : "2");
   if (mpv_initialize(player) < 0) {
     mpv_terminate_destroy(player);
     return 5;
@@ -189,18 +202,24 @@ int wmain(int argc, wchar_t** argv) {
   if (!RunCommand(player, load_arguments) ||
       !WaitForState(
           player, &runtime, &state, std::chrono::seconds(8),
-          [](const PlaybackProbeState& current,
-             const VapourSynthMotionRuntime::Snapshot& snapshot) {
+          [expect_active](
+              const PlaybackProbeState& current,
+              const VapourSynthMotionRuntime::Snapshot& snapshot) {
             return current.file_loaded_count >= 1 &&
                    current.position >= 0.6 && current.source_fps > 1.0 &&
                    current.filtered_fps > 1.0 &&
                    current.frame_number >= 5 &&
                    !current.video_format.empty() && snapshot.enabled &&
-                   snapshot.state == "requested";
+                   snapshot.state ==
+                       (expect_active ? "active" : "requested");
           })) {
     const auto failed = runtime.GetSnapshot();
     std::cerr << "real-frame-timeout state=" << failed.state
-              << " error=" << failed.error << "\n";
+              << " error=" << failed.error
+              << " source-fps=" << state.source_fps
+              << " filtered-fps=" << state.filtered_fps
+              << " position=" << state.position
+              << " frame=" << state.frame_number << "\n";
     mpv_terminate_destroy(player);
     return 8;
   }
@@ -209,15 +228,20 @@ int wmain(int argc, wchar_t** argv) {
   if (!RunCommand(player, seek_arguments) ||
       !WaitForState(
           player, &runtime, &state, std::chrono::seconds(6),
-          [](const PlaybackProbeState& current,
-             const VapourSynthMotionRuntime::Snapshot& snapshot) {
+          [expect_active](
+              const PlaybackProbeState& current,
+              const VapourSynthMotionRuntime::Snapshot& snapshot) {
             return current.seek_count >= 1 && current.position >= 3.1 &&
                    current.playback_restart_count >= 1 && snapshot.enabled &&
-                   snapshot.state == "requested";
+                   snapshot.state ==
+                       (expect_active ? "active" : "requested");
           })) {
     const auto failed = runtime.GetSnapshot();
     std::cerr << "seek-timeout state=" << failed.state
-              << " error=" << failed.error << "\n";
+              << " error=" << failed.error
+              << " source-fps=" << state.source_fps
+              << " filtered-fps=" << state.filtered_fps
+              << " position=" << state.position << "\n";
     mpv_terminate_destroy(player);
     return 9;
   }
@@ -226,27 +250,93 @@ int wmain(int argc, wchar_t** argv) {
   if (!RunCommand(player, load_arguments) ||
       !WaitForState(
           player, &runtime, &state, std::chrono::seconds(8),
-          [](const PlaybackProbeState& current,
-             const VapourSynthMotionRuntime::Snapshot& snapshot) {
+          [expect_active](
+              const PlaybackProbeState& current,
+              const VapourSynthMotionRuntime::Snapshot& snapshot) {
             return current.file_loaded_count >= 2 &&
                    current.position >= 0.5 && current.position < 2.5 &&
                    current.filtered_fps > 1.0 && snapshot.enabled &&
-                   snapshot.state == "requested";
+                   snapshot.state ==
+                       (expect_active ? "active" : "requested");
           })) {
     const auto failed = runtime.GetSnapshot();
     std::cerr << "reload-timeout state=" << failed.state
-              << " error=" << failed.error << "\n";
+              << " error=" << failed.error
+              << " source-fps=" << state.source_fps
+              << " filtered-fps=" << state.filtered_fps
+              << " position=" << state.position << "\n";
     mpv_terminate_destroy(player);
     return 10;
   }
 
+  double performance_media_seconds = 0.0;
+  double performance_wall_seconds = 0.0;
+  if (performance_mode) {
+    const double performance_start_position = state.position;
+    const int64_t performance_start_drops =
+        state.frame_drop_count + state.decoder_frame_drop_count;
+    const auto performance_start = std::chrono::steady_clock::now();
+    constexpr double kPerformanceWindowSeconds = 4.0;
+    if (!WaitForState(
+            player, &runtime, &state, std::chrono::seconds(7),
+            [performance_start_position, kPerformanceWindowSeconds](
+                const PlaybackProbeState& current,
+                const VapourSynthMotionRuntime::Snapshot& snapshot) {
+              return current.position >=
+                         performance_start_position +
+                             kPerformanceWindowSeconds &&
+                     snapshot.state == "active";
+            })) {
+      const auto failed = runtime.GetSnapshot();
+      std::cerr << "performance-timeout state=" << failed.state
+                << " error=" << failed.error
+                << " position=" << state.position
+                << " frame-drops=" << state.frame_drop_count
+                << " decoder-drops=" << state.decoder_frame_drop_count
+                << "\n";
+      mpv_terminate_destroy(player);
+      return 11;
+    }
+    performance_media_seconds =
+        state.position - performance_start_position;
+    performance_wall_seconds =
+        std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - performance_start)
+            .count();
+    const int64_t performance_end_drops =
+        state.frame_drop_count + state.decoder_frame_drop_count;
+    // 1 倍速播放允许 30% 的调度余量，但不接受通过丢帧伪装成实时。
+    if (performance_wall_seconds >
+            kPerformanceWindowSeconds * 1.30 ||
+        performance_end_drops != performance_start_drops) {
+      std::cerr << "performance-gate-failed media-seconds="
+                << performance_media_seconds
+                << " wall-seconds=" << performance_wall_seconds
+                << " frame-drops="
+                << performance_end_drops - performance_start_drops << "\n";
+      mpv_terminate_destroy(player);
+      return 12;
+    }
+  }
+
   if (!runtime.Apply(player, false)) {
     mpv_terminate_destroy(player);
-    return 11;
+    return 13;
   }
   mpv_terminate_destroy(player);
   runtime.Shutdown();
   std::cout << "real-frames=passed seek=passed reload=passed "
-               "passthrough-not-active=passed\n";
+            << (expect_active ? "interpolation-active=passed"
+                              : "passthrough-not-active=passed")
+            << (performance_mode
+                    ? " realtime-performance=passed"
+                    : "")
+            << (performance_mode
+                    ? " media-seconds=" +
+                          std::to_string(performance_media_seconds) +
+                          " wall-seconds=" +
+                          std::to_string(performance_wall_seconds)
+                    : "")
+            << "\n";
   return 0;
 }

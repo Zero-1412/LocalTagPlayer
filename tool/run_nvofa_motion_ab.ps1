@@ -3,9 +3,8 @@
   [int]$DurationSeconds = 20,
   [ValidateRange(300, 1200)]
   [int]$VideoBitrateKbps = 650,
-  [string]$OutputDirectory = ".local/qa/nvidia-true-hdr-ab",
-  [string]$Workspace = "",
-  [switch]$CombinedVsr
+  [string]$OutputDirectory = ".local/qa/nvofa-motion-ab",
+  [string]$Workspace = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,12 +15,16 @@ $workspace = if ([string]::IsNullOrWhiteSpace($Workspace)) {
 }
 $output = [System.IO.Path]::GetFullPath((Join-Path $workspace $OutputDirectory))
 $sampleRoot = Join-Path $workspace ".local/qa/natural-compression-ab/samples"
-$onMode = if ($CombinedVsr) { "nvidia-vsr-hdr-on" } else { "nvidia-hdr-on" }
+$runtime = Join-Path $workspace `
+  "build\vapoursynth-r78\installed\Lib\site-packages\vapoursynth"
+$motionScript = Join-Path $workspace "tool\vapoursynth_nvofa_interpolation.vpy"
+$plugin = Join-Path $workspace `
+  "build\windows\x64\nvidia_optical_flow_probe\ltp_nvofa_vapoursynth.dll"
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 
 <#
- * TrueHDR A/B 复用三类匿名自然低码率 SDR 样本，不读取用户媒体库。
- * 每个模式使用独立进程，防止 D3D11 视频处理器和掉帧计数跨样本残留。
+ * 本机 NVOFA 插帧 A/B 只使用仓库生成的匿名自然片源。插件和 R78 均来自隔离
+ * QA 路径；脚本不安装、不复制，也不把它们加入正式 Flutter bundle。
 #>
 $cases = @(
   [ordered]@{
@@ -50,8 +53,16 @@ if (@($cases | Where-Object { -not (Test-Path -LiteralPath $_.samplePath) }).Cou
   }
 }
 
-# 在独立 Windows 集成测试进程中运行一个 TrueHDR 模式。
-function Invoke-TrueHdrMode {
+# 先用一条真实 1080P 片源完成构建、硬件 execute、2× 帧率和零新增掉帧门禁。
+& (Join-Path $PSScriptRoot "run_nvofa_vapoursynth_interpolation_probe.ps1") `
+  -Configuration Release `
+  -SamplePath $cases[0].samplePath `
+  -PerformanceGate
+if ($LASTEXITCODE -ne 0) {
+  throw "NVOFA 插帧前置门禁未通过。"
+}
+
+function Invoke-MotionMode {
   param(
     [Parameter(Mandatory = $true)]
     [System.Collections.IDictionary]$Case,
@@ -64,6 +75,9 @@ function Invoke-TrueHdrMode {
   $env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_OUTPUT = $modeOutput
   $env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_MODE = $Mode
   $env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_SECONDS = $DurationSeconds.ToString()
+  $env:LOCAL_TAG_PLAYER_VAPOURSYNTH_RUNTIME_DIR = $runtime
+  $env:LOCAL_TAG_PLAYER_MOTION_INTERPOLATION_SCRIPT_PATH = $motionScript
+  $env:LOCAL_TAG_PLAYER_NVOFA_VS_PLUGIN_PATH = $plugin
   try {
     Push-Location $workspace
     & flutter test integration_test/player_fixed_quality_baseline_test.dart `
@@ -76,34 +90,38 @@ function Invoke-TrueHdrMode {
     Remove-Item Env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_OUTPUT -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_MODE -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_SECONDS -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_VAPOURSYNTH_RUNTIME_DIR -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_MOTION_INTERPOLATION_SCRIPT_PATH -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_NVOFA_VS_PLUGIN_PATH -ErrorAction SilentlyContinue
   }
   if ($testExitCode -ne 0) {
-    throw "NVIDIA TrueHDR A/B 失败：$($Case.name) / $Mode"
+    throw "NVOFA 插帧 A/B 失败：$($Case.name) / $Mode"
   }
 }
 
 foreach ($case in $cases) {
-  Invoke-TrueHdrMode -Case $case -Mode "nvidia-hdr-off"
-  Invoke-TrueHdrMode -Case $case -Mode $onMode
+  Invoke-MotionMode -Case $case -Mode "nvofa-motion-off"
+  Invoke-MotionMode -Case $case -Mode "nvofa-motion-on"
 }
 
-# 从匿名时间序列和固定诊断字段提取驱动、滤镜与性能证据。
-function Get-ModeSummary {
+function Get-MotionSummary {
   param(
     [Parameter(Mandatory = $true)]
     [System.Collections.IDictionary]$Case,
     [Parameter(Mandatory = $true)][string]$Mode
   )
 
-  $reportPath = Join-Path `
-    (Join-Path (Join-Path $output $Case.name) $Mode) `
-    "$Mode-player-baseline.json"
+  $modeRoot = Join-Path (Join-Path $output $Case.name) $Mode
+  $reportPath = Join-Path $modeRoot "$Mode-player-baseline.json"
   $report = Get-Content -LiteralPath $reportPath -Raw -Encoding UTF8 |
     ConvertFrom-Json
   $samples = @($report.samples)
+  $fpsLine = @($report.finalDiagnostics |
+      Where-Object { $_ -like "mpv 估算视频 FPS:*" }) |
+    Select-Object -First 1
   return [ordered]@{
     mode = $Mode
-    sampleCount = $samples.Count
+    estimatedFps = [double](($fpsLine -split ": ")[-1])
     maxDecoderDroppedFrames = ($samples |
         Measure-Object -Property decoderDroppedFrames -Maximum).Maximum
     maxOutputDroppedFrames = ($samples |
@@ -114,30 +132,15 @@ function Get-ModeSummary {
         Where-Object { $_.videoStalled -eq $true }).Count
     audioStallSamples = @($samples |
         Where-Object { $_.audioStalled -eq $true }).Count
-    finalDiagnostics = @($report.finalDiagnostics)
+    screenshot = Join-Path $modeRoot "$Mode-complete-video.png"
   }
 }
 
 $caseSummaries = foreach ($case in $cases) {
-  $off = Get-ModeSummary -Case $case -Mode "nvidia-hdr-off"
-  $on = Get-ModeSummary -Case $case -Mode $onMode
-  $hdrDriverActive =
-    @($on.finalDiagnostics | Where-Object {
-      $_ -eq "NVIDIA HDR 驱动确认: active"
-    }).Count -eq 1
-  $vsrDriverActive =
-    -not $CombinedVsr -or
-    @($on.finalDiagnostics | Where-Object {
-      $_ -eq "NVIDIA VSR 驱动确认: active"
-    }).Count -eq 1
-  $driverActive = $hdrDriverActive -and $vsrDriverActive
-  $filterLine = @($on.finalDiagnostics | Where-Object {
-      $_ -like "mpv 视频滤镜:*"
-    }) | Select-Object -First 1
-  $filterGate =
-    $filterLine -like "*nvidia-true-hdr*" -and
-    $filterLine -notlike "*format=nv12*" -and
-    (-not $CombinedVsr -or $filterLine -like "*scaling-mode=nvidia*")
+  $off = Get-MotionSummary -Case $case -Mode "nvofa-motion-off"
+  $on = Get-MotionSummary -Case $case -Mode "nvofa-motion-on"
+  $fpsGate = $off.estimatedFps -ge 23.5 -and $off.estimatedFps -le 24.5 -and
+    $on.estimatedFps -ge 47.5
   $performanceGate =
     $on.maxDecoderDroppedFrames -le $off.maxDecoderDroppedFrames -and
     $on.maxOutputDroppedFrames -le $off.maxOutputDroppedFrames -and
@@ -147,27 +150,20 @@ $caseSummaries = foreach ($case in $cases) {
   [ordered]@{
     name = $case.name
     category = $case.category
-    samplePath = $case.samplePath
     off = $off
     on = $on
-    driverGatePassed = $driverActive
-    filterGatePassed = $filterGate
+    frameRateGatePassed = $fpsGate
     performanceGatePassed = $performanceGate
-    passed = $driverActive -and $filterGate -and $performanceGate
+    passed = $fpsGate -and $performanceGate
   }
 }
 
 $summary = [ordered]@{
   schemaVersion = 1
   generatedAt = (Get-Date).ToUniversalTime().ToString("o")
-  decoderPolicy = "d3d11va non-copy for both A/B modes"
-  filterPolicy = if ($CombinedVsr) {
-    "VSR scaling-mode=nvidia and TrueHDR d3d11vpp coexist without forced NV12"
-  } else {
-    "TrueHDR uses d3d11vpp without forced NV12"
-  }
-  displayPolicy =
-    "Driver activation is verified independently; final HDR display requires Windows HDR and 10-bit output"
+  runtimePolicy = "local-only VapourSynth R78 and NVOFA plugin; no install"
+  interpolationPolicy =
+    "24fps to 48fps with forward/backward NVOFA and scene-cut protection"
   cases = @($caseSummaries)
   allGatesPassed =
     @($caseSummaries | Where-Object { -not $_.passed }).Count -eq 0
@@ -175,7 +171,7 @@ $summary = [ordered]@{
 $summaryPath = Join-Path $output "summary.json"
 $summary | ConvertTo-Json -Depth 12 |
   Set-Content -LiteralPath $summaryPath -Encoding UTF8
-Write-Host "NVIDIA TrueHDR A/B summary: $summaryPath"
+Write-Host "NVOFA motion A/B summary: $summaryPath"
 if (-not $summary.allGatesPassed) {
-  throw "至少一个自然片源的 NVIDIA TrueHDR 驱动、滤镜或性能门禁未通过。"
+  throw "至少一个自然片源的 NVOFA 帧率或性能门禁未通过。"
 }

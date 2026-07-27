@@ -48,6 +48,18 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -File tool/run_nvidia_true_hdr_ab.ps1 -DurationSeconds 20
 ```
 
+另有同一会话同时开启 VSR 与 TrueHDR 的三类六组门禁。组合滤镜固定为
+`scale=2:scaling-mode=nvidia:nvidia-true-hdr=yes`，三类驱动门禁、滤镜共存
+门禁和性能门禁全部通过；关闭/组合开启两侧总掉帧均为 0，音视频停滞均为 0。
+复跑命令：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File tool/run_nvidia_vsr_hdr_ab.ps1 -DurationSeconds 20
+```
+
+组合汇总位于 `.local/qa/nvidia-vsr-hdr-ab/summary.json`。
+
 三组完成帧的 off/on PSNR 分别为 39.47 dB、37.14 dB、31.83 dB，证明导出帧
 确实发生处理而不是同帧复制。人工检查未见真人肤色断层、高光剪切、动画渐变新增
 条带或暗场黑位吞噬。PNG 会把 HDR 输出重新映射到普通图像，因此这些帧只用于

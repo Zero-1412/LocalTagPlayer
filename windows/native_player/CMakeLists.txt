@@ -696,3 +696,58 @@ if(LTP_BUILD_NVOFA_EXECUTE_PROBE)
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
       "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe")
 endif()
+
+# NVOFA VapourSynth 插帧插件只在显式本机原型构建中生成。调用方必须提供
+# 固定公开 NVOFA 头文件和本机 VapourSynth SDK 头目录；目标不进入 ALL、
+# install 或 Flutter bundle，因此不分发 NVIDIA/VapourSynth 文件。
+option(LTP_BUILD_NVOFA_VAPOURSYNTH_PLUGIN
+  "Build the local-only NVOFA VapourSynth interpolation plugin" OFF)
+set(LTP_VAPOURSYNTH_INCLUDE_DIR "" CACHE PATH
+  "Directory containing VapourSynth4.h for the local interpolation plugin")
+if(LTP_BUILD_NVOFA_VAPOURSYNTH_PLUGIN)
+  foreach(required_nvofa_header IN ITEMS
+      nvOpticalFlowCommon.h
+      nvOpticalFlowCuda.h)
+    if(NOT EXISTS
+        "${LTP_NVOFA_PUBLIC_HEADER_DIR}/${required_nvofa_header}")
+      message(FATAL_ERROR
+        "NVOFA VapourSynth plugin is missing ${required_nvofa_header}: "
+        "${LTP_NVOFA_PUBLIC_HEADER_DIR}")
+    endif()
+  endforeach()
+  if(NOT EXISTS "${LTP_VAPOURSYNTH_INCLUDE_DIR}/VapourSynth4.h")
+    message(FATAL_ERROR
+      "NVOFA VapourSynth plugin is missing VapourSynth4.h: "
+      "${LTP_VAPOURSYNTH_INCLUDE_DIR}")
+  endif()
+
+  add_library(ltp_nvofa_vapoursynth_plugin MODULE EXCLUDE_FROM_ALL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe/nvofa_vapoursynth_plugin.cpp")
+  apply_standard_settings(ltp_nvofa_vapoursynth_plugin)
+  target_compile_features(ltp_nvofa_vapoursynth_plugin PRIVATE cxx_std_17)
+  target_compile_options(ltp_nvofa_vapoursynth_plugin PRIVATE /utf-8)
+  target_compile_definitions(ltp_nvofa_vapoursynth_plugin PRIVATE NOMINMAX)
+  target_include_directories(ltp_nvofa_vapoursynth_plugin PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe"
+    "${LTP_NVOFA_PUBLIC_HEADER_DIR}"
+    "${LTP_VAPOURSYNTH_INCLUDE_DIR}")
+  set_target_properties(ltp_nvofa_vapoursynth_plugin PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "ltp_nvofa_vapoursynth"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    LIBRARY_OUTPUT_DIRECTORY
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
+    LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO
+      "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe")
+endif()

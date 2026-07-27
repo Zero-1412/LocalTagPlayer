@@ -86,6 +86,8 @@ class VapourSynthMotionRuntime {
   mutable std::mutex mutex_;
   HMODULE vsscript_module_ = nullptr;
   std::string script_path_utf8_;
+  /** 可选脚本用户数据；NVOFA 原型用它传递本机插件绝对路径。 */
+  std::string user_data_utf8_;
   Snapshot snapshot_;
 };
 
