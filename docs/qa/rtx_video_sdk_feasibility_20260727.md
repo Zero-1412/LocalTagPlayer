@@ -6,6 +6,13 @@
 
 RTX Video SDK 在 Windows 与 RTX 20 系列及以上显卡上具备技术可行性，但当前不适合直接进入产品实现。项目已完成一个不含厂商 SDK 的本机 D3D11 插件原型，验证显式 DLL 加载、同设备共享纹理往返与返回错误后的原帧恢复；既有入口仍明确标注为“GPU 高质量缩放（非 NVIDIA AI）”。当前不下载、不提交、不分发 NVIDIA SDK，也不修改 `PlayerBackend`。
 
+2026-07-28 补充：RTX Video SDK 的 Super Resolution / Artifact Reduction /
+SDR→HDR 不等于运动补帧。NVIDIA 硬件插帧的准确目标是 Optical Flow SDK 的
+NVOFA FRUC。项目已另建 `PlayerMotionInterpolationBoundary` 与 VapourSynth
+结构化滤镜宿主；现有 D3D11 插件 ABI v1 每次只处理一帧，继续用于空间画质处理，
+不扩充为没有时间戳所有权的伪插帧接口。详细记录见
+`docs/qa/vapoursynth_motion_runtime_20260728.md`。
+
 正式立项前必须依次解除三个阻断：
 
 1. 登录下载 RTX Video SDK 1.1，保存下载包摘要，并由发布负责人核对包内实际 EULA、第三方声明与公开 RTX SDK 家族许可是否一致。

@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../core/playback_settings.dart';
 import '../../models/player_gpu_capabilities.dart';
+import '../../models/player_motion_interpolation_capability.dart';
 import '../../platform/platform_interfaces.dart';
 import 'player_hdr_mapping_experiment.dart';
 import 'player_smooth_motion.dart';
@@ -21,7 +22,8 @@ class PlayerService
     implements
         PlayerRuntimeAccess,
         PlayerGpuRenderBoundary,
-        PlayerOverlaySurfaceBoundary {
+        PlayerOverlaySurfaceBoundary,
+        PlayerMotionInterpolationBoundary {
   /** 创建一个独占单个播放 Route 生命周期的服务。 */
   PlayerService({required PlayerBackend backend}) : _backend = backend;
 
@@ -205,6 +207,34 @@ class PlayerService
         ? _backend as PlayerOverlaySurfaceBoundary
         : null;
     return boundary?.setFlutterOverlayVisible(visible) ?? Future<void>.value();
+  }
+
+  @override
+  Future<PlayerMotionInterpolationCapability>
+      queryMotionInterpolationCapability() {
+    final boundary = _backend is PlayerMotionInterpolationBoundary
+        ? _backend as PlayerMotionInterpolationBoundary
+        : null;
+    return boundary?.queryMotionInterpolationCapability() ??
+        Future<PlayerMotionInterpolationCapability>.value(
+          const PlayerMotionInterpolationCapability.unsupported(),
+        );
+  }
+
+  @override
+  Future<PlayerMotionInterpolationApplyResult> setMotionInterpolationEnabled(
+    bool enabled,
+  ) async {
+    final boundary = _backend is PlayerMotionInterpolationBoundary
+        ? _backend as PlayerMotionInterpolationBoundary
+        : null;
+    if (boundary == null) {
+      return const PlayerMotionInterpolationApplyResult(
+        applied: false,
+        capability: PlayerMotionInterpolationCapability.unsupported(),
+      );
+    }
+    return boundary.setMotionInterpolationEnabled(enabled);
   }
 
   /** 释放服务独占的引擎、视频表面和原生资源。 */

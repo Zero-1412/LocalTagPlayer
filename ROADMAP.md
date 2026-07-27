@@ -1,5 +1,20 @@
 # ROADMAP.md
 
+## 2026-07-28 NVIDIA 硬件补帧与外部运行时路线
+
+- 已建立 `PlayerService → PlayerMotionInterpolationBoundary → Windows libmpv
+  → VapourSynth` 的强类型、本机可插拔边界；外部绝对路径、结构化 `vf` 合成、
+  错误回退和真实输出帧率门禁均已落地。
+- NVIDIA 硬件补帧的准确目标改为 Optical Flow SDK 的 NVOFA FRUC，而不是把 RTX
+  Video Super Resolution/HDR SDK 当作插帧 API。现有 NVIDIA VSR 继续由
+  `d3d11vpp scaling-mode=nvidia` 提供；RTX Video HDR 仍需单独原生能力。
+- 下一阶段先用官方 VapourSynth R78 完成透传送帧，再接一个不分发厂商文件的本机
+  FRUC/VapourSynth 插件；必须读回输出帧率、测三类自然片源、掉帧、音视频同步、
+  seek/切换/退出和失败回退后，才增加用户入口。
+- 单帧 D3D11 插件 ABI v1 继续服务超分/降噪类原位处理，不扩充为补帧 ABI；
+  若 VapourSynth 无法承载 FRUC 的 D3D11 纹理，再另立拥有前后帧、时间戳和输出
+  队列的 ABI v2，不能破坏现有插件。
+
 ## 2026-07-27 普通显示同步插值
 
 - 已把 `off/displayInterpolation` 作为类型化能力接入 `PlayerService`，并由后端

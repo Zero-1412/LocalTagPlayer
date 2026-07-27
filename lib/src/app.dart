@@ -46,6 +46,7 @@ export 'models/library_scan_models.dart';
 export 'models/library_sort.dart';
 export 'models/platform_models.dart';
 export 'models/player_gpu_capabilities.dart';
+export 'models/player_motion_interpolation_capability.dart';
 export 'models/video_item.dart';
 export 'models/app_release.dart';
 export 'platform/desktop_file_system_adapter.dart';

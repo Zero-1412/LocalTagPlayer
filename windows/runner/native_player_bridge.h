@@ -10,6 +10,7 @@
 
 #include "angle_surface_manager.h"
 #include "local_video_enhancement_plugin.h"
+#include "vapoursynth_motion_runtime.h"
 
 #include <array>
 #include <atomic>
@@ -98,6 +99,8 @@ class NativePlayerBridge {
   std::unique_ptr<ANGLESurfaceManager> surface_manager_;
   /** 只服务显式本机 DLL 的 SDK 中立 D3D11 原型宿主。 */
   LocalVideoEnhancementPlugin video_enhancement_plugin_;
+  /** 只服务显式本机 VapourSynth/插帧脚本的结构化滤镜宿主。 */
+  VapourSynthMotionRuntime motion_runtime_;
   mpv_handle* player_ = nullptr;
   mpv_render_context* render_context_ = nullptr;
   FlutterDesktopPixelBuffer pixel_buffer_{};
@@ -162,6 +165,8 @@ class NativePlayerBridge {
   /** 属性不可用时保留显式文本，避免把回退 0 误判成音频播放头停滞。 */
   std::string audio_pts_ = "unavailable";
   double cache_duration_ = 0.0;
+  /** 容器报告的源帧率，用于确认外部插帧确实提高了时间采样。 */
+  double container_fps_ = 0.0;
   double estimated_vf_fps_ = 0.0;
   double display_fps_ = 0.0;
   /** 显示同步插值的实际 mpv 属性，用于 Flutter 侧能力读回而非写入推断。 */

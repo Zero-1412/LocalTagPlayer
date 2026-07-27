@@ -1,3 +1,15 @@
+## 2026-07-28 Windows 本机运动补偿插帧边界
+
+- 固定 mpv 已实测编译含 VapourSynth；实际视频送帧确认当前 bundle 缺
+  `VSScript.dll`，因此不把可解析滤镜误报为可用补帧。
+- `PlayerService` 新增强类型 `PlayerMotionInterpolationBoundary`；Windows
+  原生层独占外部运行时、脚本路径、结构化 `vf` 与失败回退。
+- `ltp-motion-interpolation` 标签与现有压缩增强共存；完整 `vf` 被重写后自动
+  恢复。只有输出帧率显著高于源帧率才报告 active。
+- 本机假运行时探针只验证 ABI/结构化滤镜，不安装、不进入 bundle；现有单帧
+  D3D11 插件 ABI v1 不改。
+- filtered queue、当前 index、来源队列、返回状态和后端释放顺序不变。
+
 ## 2026-07-27 PlayerService 显示同步插值
 
 - `PlaybackSettings` 新增默认关闭的 `PlayerSmoothMotionMode`；设置页启用需确认、

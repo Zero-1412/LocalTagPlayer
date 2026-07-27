@@ -105,6 +105,37 @@ class _RecordingPlayerBackend implements PlayerBackend {
   Future<void> get released => Future<void>.value();
 }
 
+/**
+ * 记录强类型插帧调用的可选后端，验证页面服务不会传递 DLL 或脚本路径。
+ */
+class _RecordingMotionBackend extends _RecordingPlayerBackend
+    implements PlayerMotionInterpolationBoundary {
+  bool enabled = false;
+
+  @override
+  Future<PlayerMotionInterpolationCapability>
+      queryMotionInterpolationCapability() async =>
+          PlayerMotionInterpolationCapability(
+            status: enabled
+                ? PlayerMotionInterpolationStatus.requested
+                : PlayerMotionInterpolationStatus.ready,
+            backend: 'recording-native',
+            runtimeState: enabled ? 'requested' : 'ready',
+            enabled: enabled,
+          );
+
+  @override
+  Future<PlayerMotionInterpolationApplyResult> setMotionInterpolationEnabled(
+    bool enabled,
+  ) async {
+    this.enabled = enabled;
+    return PlayerMotionInterpolationApplyResult(
+      applied: true,
+      capability: await queryMotionInterpolationCapability(),
+    );
+  }
+}
+
 void main() {
   test('PlayerPage 只依赖 PlayerService 工厂，不导入具体播放器后端', () {
     final source =
@@ -169,5 +200,26 @@ void main() {
       'unsupported',
     );
     await expectLater(service.setFlutterOverlayVisible(true), completes);
+    final motion = await service.queryMotionInterpolationCapability();
+    expect(motion.status, PlayerMotionInterpolationStatus.unsupported);
+    expect(
+      (await service.setMotionInterpolationEnabled(true)).applied,
+      isFalse,
+    );
+  });
+
+  test('PlayerService 只转发强类型插帧意图并读回原生状态', () async {
+    final backend = _RecordingMotionBackend();
+    final service = PlayerService(backend: backend);
+
+    final before = await service.queryMotionInterpolationCapability();
+    final enabled = await service.setMotionInterpolationEnabled(true);
+    final disabled = await service.setMotionInterpolationEnabled(false);
+
+    expect(before.status, PlayerMotionInterpolationStatus.ready);
+    expect(enabled.applied, isTrue);
+    expect(enabled.capability.enabled, isTrue);
+    expect(disabled.applied, isTrue);
+    expect(disabled.capability.enabled, isFalse);
   });
 }

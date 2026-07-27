@@ -344,6 +344,49 @@ void main() {
     expect(host, contains('CopyResource(texture, backup_texture_.Get())'));
   });
 
+  test('motion interpolation runtime uses structured vf and local-only paths',
+      () {
+    final runnerBuild =
+        File('windows/runner/CMakeLists.txt').readAsStringSync();
+    final bridge =
+        File('windows/runner/native_player_bridge.cpp').readAsStringSync();
+    final runtime = File(
+      'windows/runner/vapoursynth_motion_runtime.cpp',
+    ).readAsStringSync();
+    final boundary =
+        File('lib/src/platform/platform_interfaces.dart').readAsStringSync();
+
+    // 本机原型不分发第三方运行时；只有两个绝对路径环境变量能开启探测。
+    expect(runnerBuild, contains('vapoursynth_motion_runtime.cpp'));
+    expect(
+      runtime,
+      contains('LOCAL_TAG_PLAYER_VAPOURSYNTH_RUNTIME_DIR'),
+    );
+    expect(
+      runtime,
+      contains('LOCAL_TAG_PLAYER_MOTION_INTERPOLATION_SCRIPT_PATH'),
+    );
+    expect(runtime, contains('runtime-and-script-paths-must-be-absolute'));
+    expect(runtime, contains('LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR'));
+    expect(runtime, contains('getVSScriptAPI'));
+
+    // `vf` 必须按结构化节点保留现有压缩增强；禁止把 Windows 路径拼成滤镜字符串。
+    expect(runtime, contains('MPV_FORMAT_NODE_ARRAY'));
+    expect(runtime, contains('MPV_FORMAT_NODE_MAP'));
+    expect(runtime, contains('mpv_get_property(player, "vf"'));
+    expect(runtime, contains('mpv_set_property(player, "vf"'));
+    expect(runtime, contains('ltp-motion-interpolation'));
+    expect(runtime, isNot(contains('mpv_set_property_string(player, "vf"')));
+    expect(
+      bridge,
+      contains('ReapplyAfterFilterGraphChange(player_)'),
+    );
+    expect(
+      boundary,
+      contains('abstract interface class PlayerMotionInterpolationBoundary'),
+    );
+  });
+
   test('desktop startup centers size-only persisted window layouts', () {
     final source = File(
       'lib/src/services/window/desktop_window_state_service.dart',

@@ -552,6 +552,8 @@ void NativePlayerBridge::InitializePlayer() {
   if (player_ != nullptr) return;
   lifecycle_ =
       native_hwnd_enabled_ ? "mpv_hwnd_initializing" : "mpv_initializing";
+  // 仅预加载用户显式配置的本机运行时；未配置时保持零副作用。
+  motion_runtime_.Initialize();
   player_ = mpv_create();
   if (player_ == nullptr) {
     lifecycle_ = "mpv_create_failed";
@@ -653,6 +655,8 @@ void NativePlayerBridge::DestroyPlayer() {
     mpv_terminate_destroy(player_);
     player_ = nullptr;
   }
+  // VSScript 必须晚于 mpv 会话释放，避免滤镜线程仍持有运行时函数表。
+  motion_runtime_.Shutdown();
   playing_ = false;
   buffering_ = false;
   lifecycle_ = native_hwnd_enabled_ ? "mpv_hwnd_disposed" : "mpv_disposed";
@@ -679,6 +683,9 @@ void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
   } else if (command.name == "rate") {
     double value = static_cast<double>(command.integer) / 1000.0;
     mpv_set_property(player_, "speed", MPV_FORMAT_DOUBLE, &value);
+  } else if (command.name == "motion-interpolation") {
+    // 插帧脚本路径只存在于原生宿主，Flutter 仅发送布尔意图。
+    motion_runtime_.Apply(player_, command.integer != 0);
   } else if (command.name == "screenshot") {
     // Dart 只传入应用生成的临时路径；使用 video 模式保留滤镜输出且不包含
     // Flutter 控制层，便于 NVIDIA/压缩增强做同帧 A/B。
@@ -703,6 +710,10 @@ void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
         } else {
           nvidia_vsr_state_ = result >= 0 ? "requested" : "rejected";
         }
+        if (result >= 0) {
+          // 压缩增强会重写完整滤镜图；已启用插帧必须以结构化条目重新追加。
+          motion_runtime_.ReapplyAfterFilterGraphChange(player_);
+        }
       }
     }
   }
@@ -725,6 +736,8 @@ void NativePlayerBridge::SamplePlayerState() {
             std::string::npos) {
           nvidia_vsr_state_ = "active";
         }
+        motion_runtime_.ObserveLog(player_, log_message->prefix,
+                                   log_message->text);
       }
     } else if (event->event_id == MPV_EVENT_END_FILE) {
       const auto* end_file = static_cast<const mpv_event_end_file*>(event->data);
@@ -769,7 +782,10 @@ void NativePlayerBridge::SamplePlayerState() {
   avsync_ = read_double("avsync", avsync_);
   audio_pts_ = read_string("audio-pts");
   cache_duration_ = read_double("demuxer-cache-duration", cache_duration_);
+  container_fps_ = read_double("container-fps", container_fps_);
   estimated_vf_fps_ = read_double("estimated-vf-fps", estimated_vf_fps_);
+  motion_runtime_.ConfirmFrameRateIncrease(player_, container_fps_,
+                                           estimated_vf_fps_);
   display_fps_ = read_double("display-fps", display_fps_);
   video_sync_ = read_string("video-sync");
   interpolation_ = read_string("interpolation");
@@ -892,6 +908,7 @@ void NativePlayerBridge::WorkerLoop() {
 flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
   std::lock_guard<std::mutex> lock(mutex_);
   const auto plugin = video_enhancement_plugin_.GetSnapshot();
+  const auto motion = motion_runtime_.GetSnapshot();
   return {{flutter::EncodableValue("textureId"),
            flutter::EncodableValue(texture_id_)},
           {flutter::EncodableValue("positionMs"),
@@ -944,6 +961,8 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(audio_pts_)},
           {flutter::EncodableValue("demuxer-cache-duration"),
            flutter::EncodableValue(cache_duration_)},
+          {flutter::EncodableValue("container-fps"),
+           flutter::EncodableValue(container_fps_)},
           {flutter::EncodableValue("estimated-vf-fps"),
            flutter::EncodableValue(estimated_vf_fps_)},
           {flutter::EncodableValue("display-fps"),
@@ -988,6 +1007,16 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(plugin.fallback_frames)},
           {flutter::EncodableValue("native-video-plugin-error"),
            flutter::EncodableValue(plugin.error)},
+          {flutter::EncodableValue("native-motion-interpolation-state"),
+           flutter::EncodableValue(motion.state)},
+          {flutter::EncodableValue("native-motion-interpolation-error"),
+           flutter::EncodableValue(motion.error)},
+          {flutter::EncodableValue("native-motion-interpolation-configured"),
+           flutter::EncodableValue(motion.configured)},
+          {flutter::EncodableValue("native-motion-interpolation-enabled"),
+           flutter::EncodableValue(motion.enabled)},
+          {flutter::EncodableValue("native-motion-interpolation-fallbacks"),
+           flutter::EncodableValue(motion.fallback_count)},
           {flutter::EncodableValue("completedCount"),
            flutter::EncodableValue(completed_count_)},
           {flutter::EncodableValue("errorCount"),

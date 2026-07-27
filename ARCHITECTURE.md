@@ -1,5 +1,19 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.80` 增加 Windows 本机运动补偿插帧边界，但不把外部
+运行时或厂商文件伪装成应用内置能力。`PlayerService` 只暴露
+`PlayerMotionInterpolationBoundary` 的强类型查询与启停结果；MediaKit 和其它
+平台返回明确 unsupported。Windows libmpv runner 仅在
+`LOCAL_TAG_PLAYER_VAPOURSYNTH_RUNTIME_DIR` 与
+`LOCAL_TAG_PLAYER_MOTION_INTERPOLATION_SCRIPT_PATH` 都是有效绝对路径时预加载
+`VSScript.dll`，校验 `getVSScriptAPI` 后才允许请求。滤镜不再拼接 Windows 路径
+字符串，而是通过 `MPV_FORMAT_NODE` 读取、保留并重写完整 `vf`，只拥有
+`ltp-motion-interpolation` 标签；压缩增强重写滤镜图后自动恢复该条目。运行时
+错误立即移除标签并增加回退计数，只有实际滤镜输出帧率至少达到源帧率 1.5 倍才
+标记 active。该边界不分发 VapourSynth、Python、NVIDIA Optical Flow SDK 或
+模型；现有单帧 D3D11 插件 ABI v1 保持不变，因为它没有时间戳与多帧输出所有权，
+不能用于补帧。filtered queue、SQLite、标签、缓存队列和用户数据不变。
+
 `Architecture Baseline 0.5.79` 将普通显示同步插值纳入播放器应用层边界：
 `PlaybackSettings` 只保存 `off/displayInterpolation` 类型化意图，
 `PlayerService.applySmoothMotion` 统一转换为

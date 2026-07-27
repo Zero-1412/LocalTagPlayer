@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/player_gpu_capabilities.dart';
+import '../../models/player_motion_interpolation_capability.dart';
 import '../../platform/platform_interfaces.dart';
 import 'windows_gpu_capability_channel.dart';
 
@@ -21,7 +22,8 @@ class WindowsNativePlayerBackend
     implements
         PlayerBackend,
         PlayerGpuRenderBoundary,
-        PlayerOverlaySurfaceBoundary {
+        PlayerOverlaySurfaceBoundary,
+        PlayerMotionInterpolationBoundary {
   WindowsNativePlayerBackend({this.mode = 'stub'})
       : _positionChanges = StreamController<Duration>.broadcast(),
         _playingChanges = StreamController<bool>.broadcast(),
@@ -110,6 +112,7 @@ class WindowsNativePlayerBackend
       'avsync',
       'audio-pts',
       'demuxer-cache-duration',
+      'container-fps',
       'estimated-vf-fps',
       'display-fps',
       'video-sync',
@@ -139,6 +142,11 @@ class WindowsNativePlayerBackend
       'native-video-plugin-frames',
       'native-video-plugin-fallbacks',
       'native-video-plugin-error',
+      'native-motion-interpolation-state',
+      'native-motion-interpolation-error',
+      'native-motion-interpolation-configured',
+      'native-motion-interpolation-enabled',
+      'native-motion-interpolation-fallbacks',
     ]) {
       final propertyValue = value[property];
       if (propertyValue != null) _properties[property] = '$propertyValue';
@@ -297,6 +305,72 @@ class WindowsNativePlayerBackend
     String adapterLuid,
   ) =>
       benchmarkWindowsGpuComputeFrameBudget(adapterLuid);
+
+  @override
+  Future<PlayerMotionInterpolationCapability>
+      queryMotionInterpolationCapability() async {
+    if (mode != 'mpv' && mode != 'hwnd') {
+      return const PlayerMotionInterpolationCapability.unsupported();
+    }
+    await _ready;
+    await _pollState();
+    final runtimeState =
+        _properties['native-motion-interpolation-state'] ?? 'unavailable';
+    final errorCode = _properties['native-motion-interpolation-error'] ?? '';
+    final enabled =
+        _properties['native-motion-interpolation-enabled'] == 'true';
+    final fallbackCount = int.tryParse(
+          _properties['native-motion-interpolation-fallbacks'] ?? '',
+        ) ??
+        0;
+    final status = switch (runtimeState) {
+      'not-configured' ||
+      'runtime-not-configured' ||
+      'script-not-configured' =>
+        PlayerMotionInterpolationStatus.notConfigured,
+      'ready' => PlayerMotionInterpolationStatus.ready,
+      'requested' => PlayerMotionInterpolationStatus.requested,
+      'active' => PlayerMotionInterpolationStatus.active,
+      'fallback' => PlayerMotionInterpolationStatus.fallback,
+      _ => PlayerMotionInterpolationStatus.unavailable,
+    };
+    return PlayerMotionInterpolationCapability(
+      status: status,
+      backend: 'windows-native-libmpv',
+      runtimeState: runtimeState,
+      errorCode: errorCode,
+      enabled: enabled,
+      fallbackCount: fallbackCount,
+    );
+  }
+
+  @override
+  Future<PlayerMotionInterpolationApplyResult> setMotionInterpolationEnabled(
+    bool enabled,
+  ) async {
+    final before = await queryMotionInterpolationCapability();
+    if (enabled && !before.canEnable) {
+      return PlayerMotionInterpolationApplyResult(
+        applied: false,
+        capability: before,
+      );
+    }
+    await _command(
+      'motion-interpolation',
+      integer: enabled ? 1 : 0,
+    );
+    final after = await queryMotionInterpolationCapability();
+    final applied = enabled
+        ? after.enabled &&
+            (after.status == PlayerMotionInterpolationStatus.requested ||
+                after.status == PlayerMotionInterpolationStatus.active)
+        : !after.enabled &&
+            after.status != PlayerMotionInterpolationStatus.fallback;
+    return PlayerMotionInterpolationApplyResult(
+      applied: applied,
+      capability: after,
+    );
+  }
 
   @override
   Future<Uint8List?> screenshot({String format = 'image/jpeg'}) async {

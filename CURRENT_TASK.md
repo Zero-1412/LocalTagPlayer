@@ -1,5 +1,33 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 Windows 本机运动补偿插帧运行时边界
+
+- 固定 libmpv `v0.41.0-908-g48e6c35c0` 的运行日志确认
+  `-Dvapoursynth=enabled`，未知滤镜会被拒绝而 `vapoursynth` 可解析；实际送入
+  320×180 H.264 帧后确定当前应用包缺少 `VSScript.dll`，因此此前只有滤镜入口，
+  没有完整插帧运行链。
+- 新增 `PlayerMotionInterpolationBoundary`。`PlayerService` 只传递强类型能力和
+  布尔启停意图；路径、DLL、Python、mpv handle 与第三方日志留在 Windows 原生层。
+- runner 只接受两个绝对路径环境变量，安全预加载并校验 `VSScript.dll`；
+  `MPV_FORMAT_NODE` 结构化滤镜保留现有去块、降噪、锐化/NVIDIA 图，只替换
+  `ltp-motion-interpolation` 标签。脚本/运行时/滤镜失败自动移除并继续原视频。
+- `requested` 不冒充真实插帧；只有滤镜标签仍存在且 `estimated-vf-fps` 至少达到
+  `container-fps` 的 1.5 倍才进入 `active`。
+- 新增不安装、不分发的假 VSScript 宿主探针；本机结果为
+  `structured-vf=passed preserve-existing=passed remove=passed`
+  `active-revocation=passed reload=passed`。
+- `flutter analyze`、297 项全量测试（另 3 项跳过）和 Windows Debug build 通过；
+  真实启动工作区 Debug exe 后媒体库正常加载 11239 个视频，“设置 → 返回”点击链
+  正常，默认未配置外部运行时没有启动崩溃、遮挡、溢出或错位。
+- QA 探针目标标记为 `EXCLUDE_FROM_ALL` 且没有 install 规则；标准 runner 目录确认
+  不含假 `VSScript.dll`。
+- 官方 VapourSynth 最新稳定版已为 R78（2026-07-24）；官方便携包真实下载受当前
+  网络吞吐阻断，尚未完成 R78 透传送帧。NVIDIA NVOFA FRUC SDK 仍需开发者账户和
+  许可确认，本轮未下载、提交或分发厂商文件。
+- filtered queue、当前 index、返回媒体库状态、插件 ABI v1、SQLite、标签、缓存
+  队列和用户数据均未改变。
+- 验证记录见 `docs/qa/vapoursynth_motion_runtime_20260728.md`。
+
 ## 2026-07-27 PlayerService 显示同步插值边界
 
 - 播放设置新增“流畅度提升：关闭 / 显示同步插值”，旧设置缺字段时安全关闭；

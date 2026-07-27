@@ -1,5 +1,22 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · Windows 插帧运行时进入强类型平台边界
+
+- 固定 libmpv 已实测包含 VapourSynth，但当前 bundle 缺少 `VSScript.dll`；诊断
+  现在区分“mpv 有滤镜入口”“本机运行时就绪”“已请求”和“真实帧率提升”。
+- 新增外部 VapourSynth 运行时宿主，只接受显式绝对路径并校验 ABI；不扫描应用
+  目录，不下载或分发 Python、VapourSynth、NVIDIA SDK 与模型。
+- 插帧滤镜改用 `MPV_FORMAT_NODE` 结构化合成，Windows 路径不会被冒号解析拆开；
+  已有压缩增强滤镜保持顺序，重写后自动恢复插帧标签，失败则只回退本会话。
+- `PlayerService` 新增可选强类型插帧能力，MediaKit/非 Windows 安全返回
+  unsupported；既有单帧视频增强插件 ABI v1 不变。
+- 本机宿主探针通过结构化追加、保留现有滤镜和关闭移除；完整 R78 送帧与 NVIDIA
+  NVOFA FRUC 仍属于下一阶段门禁。
+- `flutter analyze`、297 项全量测试（另 3 项跳过）、Windows Debug build 和原生
+  宿主探针均通过；真实 Debug 窗口确认媒体库、设置进入/返回与未配置运行时启动
+  路径正常，假 `VSScript.dll` 未进入 runner bundle。
+- filtered queue、当前索引、返回状态、SQLite、标签、缓存队列和用户数据不变。
+
 ## 2026-07-27 · 显示同步插值进入 PlayerService
 
 - 新增默认关闭的“流畅度提升：显示同步插值”，启用需要确认且保存后可撤销；

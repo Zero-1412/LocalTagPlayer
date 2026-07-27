@@ -570,3 +570,45 @@ if(LTP_BUILD_LOCAL_VIDEO_PLUGIN_PROBE)
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
       "${CMAKE_BINARY_DIR}/local_video_plugin_probe")
 endif()
+
+# VapourSynth 插帧宿主探针只验证本机绝对路径、ABI 导出和结构化 `vf` 往返。
+# 假 VSScript 不处理视频帧且没有 install 规则，标准应用包不会包含任何运行时。
+option(LTP_BUILD_VAPOURSYNTH_MOTION_PROBE
+  "Build the local VapourSynth motion runtime probe" OFF)
+if(LTP_BUILD_VAPOURSYNTH_MOTION_PROBE)
+  add_library(ltp_vsscript_stub SHARED EXCLUDE_FROM_ALL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../vapoursynth_motion_probe/vsscript_stub.cpp")
+  apply_standard_settings(ltp_vsscript_stub)
+  target_compile_options(ltp_vsscript_stub PRIVATE /utf-8)
+  target_compile_definitions(ltp_vsscript_stub PRIVATE NOMINMAX)
+  set_target_properties(ltp_vsscript_stub PROPERTIES
+    OUTPUT_NAME "VSScript"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe")
+
+  add_executable(ltp_vapoursynth_motion_host_test EXCLUDE_FROM_ALL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../vapoursynth_motion_probe/vapoursynth_motion_host_test.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner/vapoursynth_motion_runtime.cpp")
+  apply_standard_settings(ltp_vapoursynth_motion_host_test)
+  target_compile_options(ltp_vapoursynth_motion_host_test PRIVATE /utf-8)
+  target_compile_definitions(ltp_vapoursynth_motion_host_test PRIVATE NOMINMAX)
+  target_include_directories(ltp_vapoursynth_motion_host_test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner")
+  target_link_libraries(ltp_vapoursynth_motion_host_test PRIVATE
+    ltp_native_runtime)
+  set_target_properties(ltp_vapoursynth_motion_host_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+      "${CMAKE_BINARY_DIR}/vapoursynth_motion_probe")
+endif()

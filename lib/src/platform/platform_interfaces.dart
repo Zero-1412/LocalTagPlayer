@@ -7,6 +7,7 @@ import '../models/external_media_tools_state.dart';
 import '../models/media_details.dart';
 import '../models/platform_models.dart';
 import '../models/player_gpu_capabilities.dart';
+import '../models/player_motion_interpolation_capability.dart';
 import '../models/video_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -124,6 +125,27 @@ abstract interface class PlayerOverlaySurfaceBoundary {
    * [visible] 为 true 时原生后端必须先完成让出，再允许调用方挂载弹层。
    */
   Future<void> setFlutterOverlayVisible(bool visible);
+}
+
+/**
+ * Windows 原生播放器可选的运动补偿插帧边界。
+ *
+ * MediaKit 等后端无需伪造实现；PlayerService 会返回明确 unsupported 快照。
+ * 路径、DLL 与第三方 SDK 句柄必须留在平台实现内部。
+ */
+abstract interface class PlayerMotionInterpolationBoundary {
+  /** 查询本机运行时、脚本和当前会话的实际状态。 */
+  Future<PlayerMotionInterpolationCapability>
+      queryMotionInterpolationCapability();
+
+  /**
+   * 改变当前会话的插帧意图并读回结果。
+   *
+   * [enabled] 为 false 时必须只移除本边界拥有的滤镜条目。
+   */
+  Future<PlayerMotionInterpolationApplyResult> setMotionInterpolationEnabled(
+    bool enabled,
+  );
 }
 
 /**
