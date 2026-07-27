@@ -1,5 +1,14 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.73` 收纳播放器齿轮的低频画面设置，但不改变
+`PlayerBackend` 或持久化：镜像、GPU 高质量缩放和压缩增强只从一级页迁移到
+“更多播放设置”。MediaKit Windows 仍通过 `MPV_RENDER_API_TYPE_OPENGL` 与
+Chromium 5359 ANGLE 输出 D3D11 共享纹理；在 render context 创建前显式选择
+D3D11VA interop 对 mpv 0.36/0.41 均不能产生非 copy 硬件帧，实验补丁已撤回。
+因此不运行后续 NVIDIA A/B，也不升级正式 mpv。下一条底层实验只能隔离验证新版
+ANGLE interop 或重新评估 Windows 原生渲染边界；SQLite、filtered queue、缓存、
+插件 ABI 和用户数据保持不变。
+
 `Architecture Baseline 0.5.72` 隔离验证 mpv NVIDIA scaling-mode，而不把失败候选提升为正式依赖。新版独立 mpv 已证明 `d3d11va → d3d11vpp scaling-mode=nvidia → D3D11` 和驱动 RTX Super Resolution 日志成立；同一 DLL 进入 MediaKit 后却得到 `hwdec-current=no`，因此非 copy 门槛失败。NVIDIA D3D11 滤镜与现有 CPU `lavfi` 直接串联还会静默停用压缩滤镜，所以 `PlayerAdaptiveQualityEnhancer` 统一拥有完整 `vf` 快照，并把两类路径设为互斥；NVIDIA 请求需读回、复用掉帧熔断且只保存会话状态。正式包继续固定 mpv 0.36.0，`filterChainValidated=false`，未改 `PlayerBackend`、插件 ABI、SQLite、filtered queue、缓存或用户数据。
 
 `Architecture Baseline 0.5.71` 在播放器齿轮增加内嵌 mpv NVIDIA scaling-mode 的只读实验门禁。Windows 固定的 mpv 0.36.0 实际 DLL 包含 `d3d11vpp`，但不包含 mpv 0.39.0 才加入的 `scaling-mode=nvidia`；能力服务优先读取 `mpv-version`，不可用时回退固定依赖版本。当前会话开关明确禁用，且把“mpv 解析器具备选项”与“D3D11 硬件帧、现有 `vf` 链和性能回滚完成接入”分开判定，所以替换新版 DLL 也不会产生假启用。未写 NVIDIA filter、未升级依赖、未改 `PlayerBackend` 或本机视频增强插件 ABI，也不把该驱动路径描述成 RTX Video SDK。

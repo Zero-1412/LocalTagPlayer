@@ -176,38 +176,16 @@ Future<void> showPlayerSettingsDialog(
                                           key: const ValueKey(
                                             'player.settings.primary.page',
                                           ),
-                                          mirrorVideo: localMirrorVideo,
-                                          videoSuperResolutionEnabled:
-                                              localVideoSuperResolutionEnabled,
                                           nvidiaVideoEnhancementExperimentEnabled:
                                               localNvidiaVideoEnhancementExperimentEnabled,
                                           nvidiaVideoEnhancementCapability:
                                               nvidiaVideoEnhancementCapability,
-                                          compressionEnhancementMode:
-                                              localCompressionEnhancementMode,
                                           playbackMode: localPlaybackMode,
-                                          onMirrorVideoChanged: (enabled) {
-                                            setDialogState(
-                                              () => localMirrorVideo = enabled,
-                                            );
-                                            onMirrorVideoChanged(enabled);
-                                          },
                                           onPlaybackModeChanged: (mode) {
                                             setDialogState(
                                               () => localPlaybackMode = mode,
                                             );
                                             onPlaybackModeChanged(mode);
-                                          },
-                                          onVideoSuperResolutionChanged:
-                                              (enabled) {
-                                            setDialogState(
-                                              () =>
-                                                  localVideoSuperResolutionEnabled =
-                                                      enabled,
-                                            );
-                                            onVideoSuperResolutionChanged(
-                                              enabled,
-                                            );
                                           },
                                           onNvidiaVideoEnhancementExperimentChanged:
                                               (enabled) {
@@ -220,12 +198,6 @@ Future<void> showPlayerSettingsDialog(
                                               enabled,
                                             );
                                           },
-                                          onShowCompressionEnhancement: () =>
-                                              setDialogState(
-                                            () => currentPage =
-                                                _PlayerSettingsPage
-                                                    .compressionEnhancement,
-                                          ),
                                           onShowAdvancedSettings: () =>
                                               setDialogState(
                                             () => currentPage =
@@ -241,6 +213,34 @@ Future<void> showPlayerSettingsDialog(
                                           playbackRate: localPlaybackRate,
                                           seekStepSeconds: localSeekStepSeconds,
                                           seekStepOptions: seekStepOptions,
+                                          mirrorVideo: localMirrorVideo,
+                                          videoSuperResolutionEnabled:
+                                              localVideoSuperResolutionEnabled,
+                                          compressionEnhancementMode:
+                                              localCompressionEnhancementMode,
+                                          onMirrorVideoChanged: (enabled) {
+                                            setDialogState(
+                                              () => localMirrorVideo = enabled,
+                                            );
+                                            onMirrorVideoChanged(enabled);
+                                          },
+                                          onVideoSuperResolutionChanged:
+                                              (enabled) {
+                                            setDialogState(
+                                              () =>
+                                                  localVideoSuperResolutionEnabled =
+                                                      enabled,
+                                            );
+                                            onVideoSuperResolutionChanged(
+                                              enabled,
+                                            );
+                                          },
+                                          onShowCompressionEnhancement: () =>
+                                              setDialogState(
+                                            () => currentPage =
+                                                _PlayerSettingsPage
+                                                    .compressionEnhancement,
+                                          ),
                                           onShowVideoAspect: () =>
                                               setDialogState(
                                             () => currentPage =
@@ -382,7 +382,7 @@ extension on _PlayerSettingsPage {
         _PlayerSettingsPage.rate =>
           _PlayerSettingsPage.advanced,
         _PlayerSettingsPage.compressionEnhancement =>
-          _PlayerSettingsPage.primary,
+          _PlayerSettingsPage.advanced,
       };
 
   String get parentTitle => switch (parentPage) {
@@ -395,33 +395,19 @@ extension on _PlayerSettingsPage {
 /**
  * 播放设置一级列表。
  *
- * 高频的镜像与循环开关保持单行可达；比例、倍速和低频入口收进二级页，避免
- * 打开设置时立即呈现大块按钮网格。GPU 缩放与 NVIDIA 实验门禁保留在一级，
- * 便于用户区分普通缩放和驱动能力；压缩画质增强用独立三级列表明确展示三档，
- * 循环开关互斥，关闭当前模式会回到顺序播放。
+ * 一级页只保留会话级 NVIDIA 实验门禁、循环方式和“更多”入口，避免打开设置
+ * 时呈现过多低频画面选项。循环开关互斥，关闭当前模式会回到顺序播放。
  */
 class PlayerSettingsPrimaryList extends StatelessWidget {
   const PlayerSettingsPrimaryList({
     super.key,
-    required this.mirrorVideo,
-    required this.videoSuperResolutionEnabled,
     required this.nvidiaVideoEnhancementExperimentEnabled,
     required this.nvidiaVideoEnhancementCapability,
-    required this.compressionEnhancementMode,
     required this.playbackMode,
-    required this.onMirrorVideoChanged,
-    required this.onVideoSuperResolutionChanged,
     required this.onNvidiaVideoEnhancementExperimentChanged,
-    required this.onShowCompressionEnhancement,
     required this.onPlaybackModeChanged,
     required this.onShowAdvancedSettings,
   });
-
-  /** 是否仅水平翻转视频画面。 */
-  final bool mirrorVideo;
-
-  /** 是否使用仅在画面放大时运行的 libmpv GPU 高质量缩放；该能力不是 NVIDIA AI。 */
-  final bool videoSuperResolutionEnabled;
 
   /** NVIDIA 驱动视频增强实验的会话状态；当前不会写入全局设置。 */
   final bool nvidiaVideoEnhancementExperimentEnabled;
@@ -429,23 +415,11 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
   /** 内嵌 mpv 对 `d3d11vpp` NVIDIA 模式的只读能力快照。 */
   final PlayerNvidiaVideoEnhancementCapability nvidiaVideoEnhancementCapability;
 
-  /** 当前压缩画质增强档位。 */
-  final PlayerCompressionEnhancementMode compressionEnhancementMode;
-
   /** 当前队列播放方式，用于计算两个循环开关的互斥状态。 */
   final PlayerPlaybackMode playbackMode;
 
-  /** 镜像画面开关变化回调。 */
-  final ValueChanged<bool> onMirrorVideoChanged;
-
-  /** GPU 高质量缩放开关变化回调；保留既有设置键和持久化语义。 */
-  final ValueChanged<bool> onVideoSuperResolutionChanged;
-
   /** NVIDIA 驱动视频增强实验开关变化回调；不可用时整行禁用。 */
   final ValueChanged<bool> onNvidiaVideoEnhancementExperimentChanged;
-
-  /** 打开压缩画质增强档位列表。 */
-  final VoidCallback onShowCompressionEnhancement;
 
   /** 循环方式变化回调。 */
   final ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged;
@@ -461,19 +435,6 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _PlayerSettingsToggleRow(
-            key: const ValueKey('player.settings.mirror'),
-            label: '镜像画面',
-            value: mirrorVideo,
-            onChanged: onMirrorVideoChanged,
-          ),
-          _PlayerSettingsToggleRow(
-            key: const ValueKey('player.settings.superResolution'),
-            label: 'GPU 高质量缩放（非 NVIDIA AI）',
-            subtitle: 'libmpv 缩放，仅在画面放大时生效',
-            value: videoSuperResolutionEnabled,
-            onChanged: onVideoSuperResolutionChanged,
-          ),
-          _PlayerSettingsToggleRow(
             key: const ValueKey(
               'player.settings.nvidiaVideoEnhancementExperiment',
             ),
@@ -483,14 +444,6 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
             onChanged: nvidiaVideoEnhancementCapability.canEnable
                 ? onNvidiaVideoEnhancementExperimentChanged
                 : null,
-          ),
-          _PlayerSettingsNavigationRow(
-            key: const ValueKey('player.settings.compression.open'),
-            label: '压缩画质增强',
-            value: PlaybackSettings.compressionEnhancementLabelFor(
-              compressionEnhancementMode,
-            ),
-            onTap: onShowCompressionEnhancement,
           ),
           _PlayerSettingsToggleRow(
             key: const ValueKey('player.settings.repeatOne'),
@@ -634,9 +587,9 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
 /**
  * 更多播放设置的二级导航列表。
  *
- * 播放方式只保留在一级循环开关中；快捷键与播放诊断不再属于该浮层。比例和
- * 倍速只展示当前值，点击后进入各自独立的三级选择列表；快进档位直接使用离散
- * 滑杆，调整时只回传一个固定秒数，不触发播放或队列计算。
+ * 低频画面选项与比例、倍速集中在该页；三个迁移入口保留原键、回调和状态，
+ * 只改变页级挂载。比例、倍速和压缩增强进入各自三级列表；快进档位直接使用
+ * 离散滑杆，调整时只回传一个固定秒数，不触发播放或队列计算。
  */
 class PlayerSettingsAdvancedList extends StatelessWidget {
   const PlayerSettingsAdvancedList({
@@ -645,6 +598,12 @@ class PlayerSettingsAdvancedList extends StatelessWidget {
     required this.playbackRate,
     required this.seekStepSeconds,
     required this.seekStepOptions,
+    required this.mirrorVideo,
+    required this.videoSuperResolutionEnabled,
+    required this.compressionEnhancementMode,
+    required this.onMirrorVideoChanged,
+    required this.onVideoSuperResolutionChanged,
+    required this.onShowCompressionEnhancement,
     required this.onShowVideoAspect,
     required this.onShowPlaybackRate,
     required this.onSeekStepChanged,
@@ -662,6 +621,24 @@ class PlayerSettingsAdvancedList extends StatelessWidget {
   /** 滑杆允许选择的稳定快进档位。 */
   final List<int> seekStepOptions;
 
+  /** 是否仅水平翻转视频画面。 */
+  final bool mirrorVideo;
+
+  /** 是否使用仅在画面放大时运行的 libmpv GPU 高质量缩放；该能力不是 NVIDIA AI。 */
+  final bool videoSuperResolutionEnabled;
+
+  /** 当前压缩画质增强档位。 */
+  final PlayerCompressionEnhancementMode compressionEnhancementMode;
+
+  /** 镜像画面开关变化回调。 */
+  final ValueChanged<bool> onMirrorVideoChanged;
+
+  /** GPU 高质量缩放开关变化回调；保留既有设置键和持久化语义。 */
+  final ValueChanged<bool> onVideoSuperResolutionChanged;
+
+  /** 打开压缩画质增强档位列表。 */
+  final VoidCallback onShowCompressionEnhancement;
+
   /** 进入画面比例三级列表的回调。 */
   final VoidCallback onShowVideoAspect;
 
@@ -678,6 +655,27 @@ class PlayerSettingsAdvancedList extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          _PlayerSettingsToggleRow(
+            key: const ValueKey('player.settings.mirror'),
+            label: '镜像画面',
+            value: mirrorVideo,
+            onChanged: onMirrorVideoChanged,
+          ),
+          _PlayerSettingsToggleRow(
+            key: const ValueKey('player.settings.superResolution'),
+            label: 'GPU 高质量缩放（非 NVIDIA AI）',
+            subtitle: 'libmpv 缩放，仅在画面放大时生效',
+            value: videoSuperResolutionEnabled,
+            onChanged: onVideoSuperResolutionChanged,
+          ),
+          _PlayerSettingsNavigationRow(
+            key: const ValueKey('player.settings.compression.open'),
+            label: '压缩画质增强',
+            value: PlaybackSettings.compressionEnhancementLabelFor(
+              compressionEnhancementMode,
+            ),
+            onTap: onShowCompressionEnhancement,
+          ),
           _PlayerSettingsNavigationRow(
             key: const ValueKey('player.settings.aspect.open'),
             label: '视频比例',

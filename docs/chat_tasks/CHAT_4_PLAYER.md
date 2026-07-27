@@ -1,3 +1,19 @@
+## 2026-07-27 播放设置收纳、D3D11VA interop 复核与依赖审计
+
+- 齿轮一级保留 NVIDIA 实验与循环方式；镜像、GPU 高质量缩放和压缩画质增强
+  移入“更多播放设置”，稳定键、回调、压缩三档和持久化均保留。
+- MediaKit Windows 路径固定使用 libmpv OpenGL render API 与 ANGLE D3D11
+  共享纹理。render context 创建前显式指定 D3D11VA interop 后，mpv 0.36 和
+  隔离 0.41 仍为 `hwdec-current=no`；补丁撤回，正式 DLL 恢复 0.36。
+- 非 copy 门槛没有通过，按规则停止后五组自然片源 A/B，不调整 NVIDIA filter。
+- 依赖审计确认 MediaKit Dart/视频包当前；mpv 落后于官方 0.41，但在边界修复
+  前不升级。三个 Dart 主版本升级项分别留给独立跨平台回归。
+- filtered queue、当前 index、返回状态、SQLite、缓存队列、插件 ABI 和用户
+  数据均未改变。
+- focused widget test、静态分析和 Windows Debug build 通过；真实 1268×714
+  Windows 集成进程从播放器齿轮点击进入更多页，71 秒播放后退出正常，截图未见
+  位置错位、遮挡、截断、对比度不足或状态反馈歧义。
+
 ## 2026-07-27 mpv NVIDIA scaling-mode 隔离升级与 MediaKit 阻断
 
 - 独立 `mpv v0.41.0-744-g304426c39` 的 D3D11 进程确认 `d3d11va` 硬件帧、`scaling-mode=nvidia` 和 RTX Super Resolution 驱动日志均成立。

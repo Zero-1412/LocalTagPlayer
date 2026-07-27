@@ -63,3 +63,30 @@ NVIDIA `vf`。这证明当前阻断位于 MediaKit/libmpv 的非 copy D3D11 设�
    提供 `d3d11va` 非 copy 硬件帧。
 5. 只有该门槛通过后，才重跑真人面部、动画渐变、暗场各自关闭/开启 A/B；全部
    片源无新增掉帧、停滞或回滚后，才能把 `filterChainValidated` 改为 `true`。
+
+## MediaKit interop 复核
+
+后续复核确认 MediaKit Windows 输出只创建
+`MPV_RENDER_API_TYPE_OPENGL` render context，再通过 Chromium 5359 的 ANGLE
+渲染到 BGRA D3D11 共享纹理；libmpv render API 头文件没有可由宿主选择的
+`MPV_RENDER_API_TYPE_D3D11`。
+
+按 mpv 文档，`gpu-hwdec-interop=auto` 在 `vo=libmpv` 下已经等价于加载全部
+interop。仍在 render context 创建前显式收窄为 `d3d11va`，分别用正式 0.36
+和隔离 0.41 候选运行真人面部关闭组，两次都得到：
+
+```text
+PLAYER_HEALTH software_decode_confirmed requested=d3d11va actual=no
+```
+
+因此该参数补丁无效并已撤回，Debug DLL 和构建缓存均恢复 0.36。硬门槛没有
+解决，所以没有运行余下五组，也没有改 NVIDIA 滤镜参数。新的证据位于：
+
+```text
+.local/qa/mpv-d3d11va-interop/
+```
+
+下一条可验证路线不是增加 mpv 参数，而是隔离构建新版 Google ANGLE，确认其
+EGL/D3D11 interop 能否在 MediaKit 自建上下文中导入硬件帧；若仍失败，则
+MediaKit Flutter 纹理模型与 mpv 原生 D3D11 VO 之间不存在小补丁，需要重新
+评估原生 HWND/渲染后端边界。

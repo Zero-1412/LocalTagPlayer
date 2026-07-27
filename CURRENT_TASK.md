@@ -1,5 +1,24 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 播放设置收纳、D3D11VA 边界复核与依赖审计
+
+- 播放器齿轮一级只保留 NVIDIA 实验、循环方式和“更多播放设置”；镜像画面、
+  GPU 高质量缩放（非 NVIDIA AI）与压缩画质增强已移入更多页，原键、回调、
+  持久化和压缩三档返回路径不变。
+- MediaKit Windows 只以 OpenGL render API 接入 libmpv，再经旧 ANGLE 输出
+  D3D11 共享纹理；显式提前选择 `gpu-hwdec-interop=d3d11va` 对正式 0.36 和
+  隔离 0.41 均无效，实际仍为 `hwdec-current=no`，实验补丁已撤回。
+- 非 copy 硬门槛未解决，因此三类片源六组 NVIDIA A/B 没有继续运行，也没有
+  调整滤镜参数。下一步只评估隔离升级 ANGLE 或新的 Windows 渲染边界。
+- 依赖审计确认 Flutter stable、MediaKit 1.2.6、media_kit_video 2.0.1 与多数
+  直接包已是当前版本；mpv 0.36 不是最新版。`file_picker` 11、
+  `package_info_plus` 10、`flutter_lints` 6 均需独立主版本升级，不在本次混入。
+- 完整审计见 `docs/qa/dependency_audit_20260727.md`；纹理证据更新在
+  `docs/qa/mpv_nvidia_scaling_isolated_20260727.md`。
+- 两项 focused widget test、`flutter analyze`、Windows Debug build 通过；
+  1268×714 真实 Windows 集成进程从齿轮点击进入更多页并完成 71 秒播放，截图中
+  长 GPU 名称自然换行，三个迁移项及相邻比例/倍速/滑杆无遮挡、截断或溢出。
+
 ## 2026-07-27 mpv NVIDIA scaling-mode 隔离升级结果
 
 - 独立 `mpv v0.41.0-744-g304426c39` 已证明 D3D11VA、NVIDIA scaling mode 和驱动 RTX Super Resolution 日志成立。

@@ -5113,6 +5113,9 @@ void main() {
       (tester) async {
     var aspectOpened = false;
     var rateOpened = false;
+    var compressionOpened = false;
+    bool? mirrorVideo;
+    bool? superResolutionEnabled;
     int? seekStep;
     await tester.pumpWidget(
       MaterialApp(
@@ -5124,6 +5127,14 @@ void main() {
               playbackRate: 1,
               seekStepSeconds: 5,
               seekStepOptions: const <int>[5, 10, 15, 30, 60],
+              mirrorVideo: false,
+              videoSuperResolutionEnabled: false,
+              compressionEnhancementMode: PlayerCompressionEnhancementMode.off,
+              onMirrorVideoChanged: (enabled) => mirrorVideo = enabled,
+              onVideoSuperResolutionChanged: (enabled) {
+                superResolutionEnabled = enabled;
+              },
+              onShowCompressionEnhancement: () => compressionOpened = true,
               onShowVideoAspect: () => aspectOpened = true,
               onShowPlaybackRate: () => rateOpened = true,
               onSeekStepChanged: (seconds) => seekStep = seconds,
@@ -5137,6 +5148,9 @@ void main() {
     expect(find.text('视频比例'), findsOneWidget);
     expect(find.text('播放速度'), findsOneWidget);
     expect(find.text('快进 / 快退时间'), findsOneWidget);
+    expect(find.text('镜像画面'), findsOneWidget);
+    expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsOneWidget);
+    expect(find.text('压缩画质增强'), findsOneWidget);
     expect(find.text('快捷键'), findsNothing);
     expect(find.text('播放诊断'), findsNothing);
 
@@ -5152,9 +5166,21 @@ void main() {
     await tester.tap(
       find.byKey(const ValueKey('player.settings.rate.open')),
     );
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.mirror')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.superResolution')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.compression.open')),
+    );
 
     expect(aspectOpened, isTrue);
     expect(rateOpened, isTrue);
+    expect(mirrorVideo, isTrue);
+    expect(superResolutionEnabled, isTrue);
+    expect(compressionOpened, isTrue);
     expect(PlayerVideoAspectMode.automatic.mpvAspectOverride, '-1');
     expect(PlayerVideoAspectMode.ratio4x3.mpvAspectOverride, '4:3');
     expect(PlayerVideoAspectMode.ratio16x9.mpvAspectOverride, '16:9');
@@ -5268,9 +5294,9 @@ void main() {
       find.byKey(const ValueKey('player.settings.close')),
       findsNothing,
     );
-    expect(find.text('镜像画面'), findsOneWidget);
-    expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsOneWidget);
-    expect(find.text('libmpv 缩放，仅在画面放大时生效'), findsOneWidget);
+    expect(find.text('镜像画面'), findsNothing);
+    expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsNothing);
+    expect(find.text('libmpv 缩放，仅在画面放大时生效'), findsNothing);
     expect(find.text('NVIDIA 视频增强（实验）'), findsOneWidget);
     expect(
       find.text(
@@ -5279,25 +5305,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('GPU 画质超分'), findsNothing);
-    expect(find.text('压缩画质增强'), findsOneWidget);
-    expect(find.text('关闭'), findsOneWidget);
+    expect(find.text('压缩画质增强'), findsNothing);
+    expect(find.text('关闭'), findsNothing);
     expect(find.text('单曲循环'), findsOneWidget);
     expect(find.text('列表循环'), findsOneWidget);
     expect(find.text('更多播放设置'), findsOneWidget);
     expect(find.text('视频比例'), findsNothing);
     expect(find.text('播放速度'), findsNothing);
-
-    await tester.tap(
-      find.byKey(const ValueKey('player.settings.mirror')),
-    );
-    await tester.pump();
-    expect(mirrorVideo, isTrue);
-
-    await tester.tap(
-      find.byKey(const ValueKey('player.settings.superResolution')),
-    );
-    await tester.pump();
-    expect(superResolutionEnabled, isTrue);
 
     final nvidiaSwitch = tester.widget<Switch>(
       find.descendant(
@@ -5311,27 +5325,6 @@ void main() {
     );
     expect(nvidiaSwitch.onChanged, isNull);
     expect(nvidiaVideoEnhancementEnabled, isNull);
-
-    await tester.tap(
-      find.byKey(const ValueKey('player.settings.compression.open')),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('player.settings.compression.page')),
-      findsOneWidget,
-    );
-    expect(find.text('自动'), findsOneWidget);
-    expect(find.text('清晰增强'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const ValueKey('player.settings.compression.clarity')),
-    );
-    await tester.pump();
-    expect(
-      selectedCompressionEnhancementMode,
-      PlayerCompressionEnhancementMode.clarity,
-    );
-    await tester.tap(find.byKey(const ValueKey('player.settings.back')));
-    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const ValueKey('player.settings.repeatOne')),
@@ -5364,6 +5357,11 @@ void main() {
       closeTo(300, 0.1),
     );
     expect(find.text('更多播放设置'), findsOneWidget);
+    expect(find.text('镜像画面'), findsOneWidget);
+    expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsOneWidget);
+    expect(find.text('libmpv 缩放，仅在画面放大时生效'), findsOneWidget);
+    expect(find.text('压缩画质增强'), findsOneWidget);
+    expect(find.text('关闭'), findsOneWidget);
     expect(find.text('视频比例'), findsOneWidget);
     expect(find.text('播放速度'), findsOneWidget);
     expect(find.text('快进 / 快退时间'), findsOneWidget);
@@ -5371,6 +5369,43 @@ void main() {
     expect(find.text('播放方式'), findsNothing);
     expect(find.text('快捷键'), findsNothing);
     expect(find.text('播放诊断'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.mirror')),
+    );
+    await tester.pump();
+    expect(mirrorVideo, isTrue);
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.superResolution')),
+    );
+    await tester.pump();
+    expect(superResolutionEnabled, isTrue);
+
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.compression.open')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('player.settings.compression.page')),
+      findsOneWidget,
+    );
+    expect(find.text('自动'), findsOneWidget);
+    expect(find.text('清晰增强'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.compression.clarity')),
+    );
+    await tester.pump();
+    expect(
+      selectedCompressionEnhancementMode,
+      PlayerCompressionEnhancementMode.clarity,
+    );
+    await tester.tap(find.byKey(const ValueKey('player.settings.back')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('player.settings.advanced.page')),
+      findsOneWidget,
+    );
 
     final seekSlider = tester.widget<Slider>(
       find.byKey(const ValueKey('player.settings.seekStep.slider')),
@@ -5418,7 +5453,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('player.settings.back')));
     await tester.pumpAndSettle();
-    expect(find.text('镜像画面'), findsOneWidget);
+    expect(find.text('镜像画面'), findsNothing);
+    expect(find.text('NVIDIA 视频增强（实验）'), findsOneWidget);
     expect(find.text('视频比例'), findsNothing);
 
     await tester.tapAt(const Offset(20, 20));

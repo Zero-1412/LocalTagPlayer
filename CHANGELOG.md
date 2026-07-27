@@ -1,5 +1,19 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · 播放设置收纳与依赖/渲染边界复核
+
+- 镜像画面、GPU 高质量缩放（非 NVIDIA AI）和压缩画质增强从齿轮一级移入
+  “更多播放设置”；原 `ValueKey`、回调、状态、压缩三档和持久化不变。
+- 对 MediaKit OpenGL/ANGLE 边界提前指定 D3D11VA interop 的隔离实验，在 mpv
+  0.36 与 0.41 候选上均回退软件解码；无效补丁已撤回，正式依赖仍为 0.36。
+- 因非 copy 门槛失败，未运行余下五组 NVIDIA A/B，未改滤镜参数或开放开关。
+- 依赖审计确认 MediaKit 1.2.6、media_kit_video 2.0.1 及多数直接包已是当前
+  版本；记录 mpv 与三个 Dart 主版本升级项的收益、风险和独立验证范围。
+- SQLite、标签查询、filtered queue、`PlayerBackend` contract、插件 ABI、
+  缓存队列和用户数据均未改变。
+- focused 页面测试、静态分析、Windows Debug build 与 71 秒真实 Windows
+  集成播放通过；截图确认更多页位置、长文案、开关、导航行和滑杆布局正常。
+
 ## 2026-07-27 · mpv NVIDIA scaling-mode 隔离升级未开放
 
 - 独立新版 mpv 可启用 NVIDIA RTX Super Resolution，但 MediaKit 应用内实际回退为软件解码，未形成 `d3d11va` 非 copy 纹理链。

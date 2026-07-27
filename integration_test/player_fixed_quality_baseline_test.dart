@@ -41,6 +41,9 @@ void main() {
         '1';
     final openPlayerSettings =
         Platform.environment['LOCAL_TAG_PLAYER_QUALITY_OPEN_SETTINGS'] == '1';
+    final openAdvancedSettings = Platform
+            .environment['LOCAL_TAG_PLAYER_QUALITY_OPEN_ADVANCED_SETTINGS'] ==
+        '1';
     final holdFixedComparisonFrame =
         Platform.environment['LOCAL_TAG_PLAYER_QUALITY_HOLD_FIXED_FRAME'] ==
             '1';
@@ -196,13 +199,22 @@ void main() {
         await settingsPointer?.removePointer();
       });
     }
-    if (openPlayerSettings || openCompressionSettings) {
+    if (openPlayerSettings || openCompressionSettings || openAdvancedSettings) {
       final settingsFinder =
           find.byKey(const ValueKey<String>('player.settings'));
       await tester.tap(settingsFinder);
       await tester.pumpAndSettle();
     }
-    if (openCompressionSettings) {
+    if (openAdvancedSettings) {
+      // 真实 Windows 冒烟测试必须从齿轮一级点击“更多”进入，防止三个低频入口
+      // 只在组件测试存在，却没有挂载到播放器实际导航路径。
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('player.settings.advanced.open'),
+        ),
+      );
+      await tester.pumpAndSettle();
+    } else if (openCompressionSettings) {
       await tester.tap(
         find.byKey(
           const ValueKey<String>('player.settings.compression.open'),
