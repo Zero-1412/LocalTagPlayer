@@ -116,6 +116,12 @@ void main() {
     expect(source, isNot(contains('WindowsNativePlayerBackend')));
     expect(
         source, isNot(contains('PlayerBackendFactory playerBackendFactory')));
+    expect(
+      source,
+      contains(
+        'rendererPreference: widget.playbackSettings.rendererPreference',
+      ),
+    );
   });
 
   test('PlayerService 统一转发播放命令并应用类型化打开偏好', () async {

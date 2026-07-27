@@ -134,6 +134,7 @@ void main() {
           playerServiceFactory: ({
             required String hwdec,
             required bool enableHardwareAcceleration,
+            required PlayerRendererPreference rendererPreference,
           }) =>
               PlayerService(
             backend: baselineMode.startsWith('nvidia-')

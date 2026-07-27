@@ -674,8 +674,10 @@ flutter build windows --debug
 
 - [x] 建立 `PlayerService → PlayerBackend → MediaKit / Windows libmpv` 边界。
 - [x] 原生 D3D11VA 非 copy 路径启用并由驱动确认 NVIDIA RTX Super Resolution。
-- [ ] 增加可持久化、可撤销的 Windows 渲染器选择，完成全屏、跨 DPI、快速切换、
-  截图和退出门禁后再评估默认切换。
+- [x] 增加可持久化、可撤销的 Windows 渲染器选择；用户已可在下次进入播放器时
+  启用原生 libmpv/D3D11，非 Windows 或硬解关闭时回退 MediaKit。
+- [ ] 补齐原生渲染器跨 DPI 长期门禁，再评估 Windows“自动”档是否默认选择
+  libmpv；当前自动档继续 MediaKit。
 - [ ] 增加“关闭 / 显示同步插值 / 运动补帧插件”流畅度档位，禁止把 mpv
   `interpolation` 宣传为 AI 补帧。
 - [ ] 建立带许可证与固定摘要的 GLSL/libplacebo 着色器包格式。

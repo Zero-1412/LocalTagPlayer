@@ -208,4 +208,5 @@ class PlayerService
 typedef PlayerServiceFactory = PlayerService Function({
   required String hwdec,
   required bool enableHardwareAcceleration,
+  required PlayerRendererPreference rendererPreference,
 });

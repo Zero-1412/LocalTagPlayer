@@ -1,5 +1,18 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · Windows 增强渲染器可由设置启用
+
+- 播放设置新增“自动 / MediaKit 兼容 / Windows 增强（libmpv / D3D11）”
+  类型化偏好，旧设置安全迁移为自动。
+- 设置首页展示当前渲染器；高影响切换要求确认，保存成功后可撤销，并明确下次
+  进入播放器生效；撤销在退出设置子页后仍可使用。
+- 组合根依据平台、硬解状态和偏好选择后端；Windows 增强使用 child HWND，
+  非 Windows 或硬解关闭时回退 MediaKit，QA 环境覆盖保持不变。
+- `PlayerPage` 只把偏好传给 `PlayerServiceFactory`；filtered queue、SQLite、
+  标签、缓存队列和用户数据未改变。
+- 真实 Debug 窗口已验证持久化偏好可到达 mpv child HWND，跨 Route 撤销正常，
+  最终安全恢复“自动（推荐）”；analyze、290 项测试和 Windows Debug build 通过。
+
 ## 2026-07-27 · Windows 原生 libmpv 启用 NVIDIA RTX Super Resolution
 
 - child HWND 后端补齐 `mpv-version`、`vf` 与 NVIDIA 驱动运行状态；原生层只把

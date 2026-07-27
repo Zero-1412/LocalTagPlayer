@@ -13,6 +13,15 @@ enum PlayerPlaybackMode { sequential, shuffle, repeatOne, repeatAll }
 /** 全局画面比例模式，只影响视频表面的呈现方式。 */
 enum PlayerVideoAspectMode { automatic, ratio4x3, ratio16x9, cover }
 
+/**
+ * 播放器渲染器偏好。
+ *
+ * `automatic` 保留组合根决定当前平台安全默认值；`mediaKit` 强制跨平台兼容
+ * 后端；`windowsLibmpv` 只在 Windows 组合根解析为原生 child HWND/D3D11，
+ * 其它平台或硬解关闭时必须安全回退 MediaKit。
+ */
+enum PlayerRendererPreference { automatic, mediaKit, windowsLibmpv }
+
 /** GPU 视频缩放器；只提供已在 libmpv 中稳定支持的两种质量档位。 */
 enum PlayerVideoScaler { bicubic, lanczos }
 
@@ -45,6 +54,7 @@ enum PlayerShortcutAction {
 class PlaybackSettings {
   const PlaybackSettings({
     required this.hwdec,
+    required this.rendererPreference,
     required this.resumeBehavior,
     required this.shortcuts,
     required this.fullscreenQueueEdgeHoverEnabled,
@@ -73,6 +83,7 @@ class PlaybackSettings {
 
   static const defaults = PlaybackSettings(
     hwdec: 'auto-safe',
+    rendererPreference: PlayerRendererPreference.automatic,
     resumeBehavior: PlaybackResumeBehavior.continueWatching,
     shortcuts: defaultShortcuts,
     fullscreenQueueEdgeHoverEnabled: true,
@@ -216,6 +227,8 @@ class PlaybackSettings {
   ];
 
   final String hwdec;
+  /** 下一次创建播放器 Route 时使用的渲染器偏好；当前会话不热拆后端。 */
+  final PlayerRendererPreference rendererPreference;
   /** 用户在设置页选择的继续观看默认策略。 */
   final PlaybackResumeBehavior resumeBehavior;
   /** 播放器功能到规范化快捷键标识的持久化绑定。 */
@@ -269,6 +282,7 @@ class PlaybackSettings {
 
   PlaybackSettings copyWith({
     String? hwdec,
+    PlayerRendererPreference? rendererPreference,
     PlaybackResumeBehavior? resumeBehavior,
     Map<PlayerShortcutAction, String>? shortcuts,
     bool? fullscreenQueueEdgeHoverEnabled,
@@ -299,6 +313,7 @@ class PlaybackSettings {
                 : PlayerCompressionEnhancementMode.off);
     return PlaybackSettings(
       hwdec: hwdec ?? this.hwdec,
+      rendererPreference: rendererPreference ?? this.rendererPreference,
       resumeBehavior: resumeBehavior ?? this.resumeBehavior,
       shortcuts: shortcuts ?? this.shortcuts,
       fullscreenQueueEdgeHoverEnabled: fullscreenQueueEdgeHoverEnabled ??
@@ -344,6 +359,7 @@ class PlaybackSettings {
 
   Map<String, Object?> toJson() => {
         'hwdec': hwdec,
+        'rendererPreference': rendererPreference.name,
         'resumeBehavior': resumeBehavior.name,
         'shortcuts': {
           for (final entry in shortcuts.entries) entry.key.name: entry.value,
@@ -387,6 +403,11 @@ class PlaybackSettings {
     }
     return PlaybackSettings(
       hwdec: decoderOptions.contains(value) ? value! : defaults.hwdec,
+      rendererPreference: _enumByName(
+        PlayerRendererPreference.values,
+        json['rendererPreference'],
+        defaults.rendererPreference,
+      ),
       resumeBehavior: PlaybackResumeBehavior.values.firstWhere(
         (behavior) => behavior.name == json['resumeBehavior']?.toString(),
         orElse: () => defaults.resumeBehavior,
@@ -553,6 +574,23 @@ class PlaybackSettings {
       _ => value,
     };
   }
+
+  /** 把渲染器枚举转换为面向用户的稳定名称。 */
+  static String rendererLabelFor(PlayerRendererPreference value) =>
+      switch (value) {
+        PlayerRendererPreference.automatic => '自动（推荐）',
+        PlayerRendererPreference.mediaKit => 'MediaKit 兼容渲染',
+        PlayerRendererPreference.windowsLibmpv => 'Windows 增强（libmpv / D3D11）',
+      };
+
+  /** 解释渲染器的真实能力和生效边界，避免把兼容后端描述为 NVIDIA AI。 */
+  static String rendererDescriptionFor(PlayerRendererPreference value) =>
+      switch (value) {
+        PlayerRendererPreference.automatic => '当前版本优先使用稳定兼容后端；后续可随平台验证结果升级',
+        PlayerRendererPreference.mediaKit => '跨平台兼容性优先；Windows NVIDIA 原生增强不可用',
+        PlayerRendererPreference.windowsLibmpv =>
+          '下次进入播放器使用原生 D3D11，可启用 NVIDIA 视频增强',
+      };
 
   /** 设置页常用解码档位使用面向产品目标的名称。 */
   static String commonLabelFor(String value) => switch (value) {

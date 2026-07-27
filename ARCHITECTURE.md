@@ -1,5 +1,14 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.78` 把 Windows 原生 libmpv 从环境变量专用路径提升为
+可持久化、可撤销的用户渲染器偏好。`PlaybackSettings` 只保存
+`automatic/mediaKit/windowsLibmpv`；`PlayerPage` 将偏好随硬解配置交给
+`PlayerServiceFactory`，具体平台解析由组合根的
+`resolvePlayerBackendSelection` 完成。Windows 增强映射到已通过 NVIDIA A/B 的
+child HWND/D3D11 后端；非 Windows、硬解关闭或旧/异常设置安全回退 MediaKit，
+三个既有 QA 环境覆盖保持最高优先级。当前 Route 不热拆引擎，下次进入播放器
+生效。filtered queue、插件 ABI、SQLite、缓存队列和用户数据不变。
+
 `Architecture Baseline 0.5.77` 在 Windows 原生 child HWND 后端完成
 `d3d11va → d3d11vpp scaling-mode=nvidia → gpu-next/D3D11`。原生层订阅
 libmpv verbose 日志，但只匹配固定 NVIDIA 成功事件并向 Flutter 返回
@@ -127,12 +136,15 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.77`
+已完成基线：`Architecture Baseline 0.5.78`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.78`：新增类型化播放器渲染器偏好和纯组合根解析器；设置切换需确认并
+  可撤销，Windows 用户无需环境变量即可在下次播放时进入原生 libmpv/D3D11。
+  非 Windows、硬解关闭与异常值回退 MediaKit，自动档暂不改变默认后端。
 - `0.5.77`：Windows 原生 libmpv 后端补齐 NVIDIA RTX Super Resolution
   驱动确认与滤镜后截图；能力只在 child HWND、非 copy D3D11VA、无 CPU
   滤镜冲突时开放。三类自然低码率片源六组 A/B 全部 0 掉帧、0 停滞、无回滚。

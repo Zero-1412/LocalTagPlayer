@@ -1,3 +1,13 @@
+## 2026-07-27 Windows 增强渲染器用户入口
+
+- `PlaybackSettings.rendererPreference` 提供自动、MediaKit 兼容和 Windows
+  增强三档，旧文件缺字段时安全使用自动。
+- 设置页切换需确认并可撤销；当前 Route 不热拆播放器，下次进入播放器时由
+  `PlayerServiceFactory` 消费偏好。
+- 组合根的纯解析器保留 QA 环境变量优先级，并在非 Windows 或硬解关闭时回退
+  MediaKit；Windows 增强映射到已通过 NVIDIA A/B 的 child HWND 后端。
+- filtered queue、当前 index、来源筛选队列、返回媒体库状态和释放顺序不变。
+
 ## 2026-07-27 Windows 原生 libmpv NVIDIA RTX Super Resolution
 
 - child HWND 后端通过 `d3d11va → d3d11vpp scaling-mode=nvidia →

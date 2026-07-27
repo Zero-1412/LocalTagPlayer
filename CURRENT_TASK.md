@@ -1,5 +1,24 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 Windows 播放渲染器用户入口
+
+- `PlaybackSettings` 新增类型化 `rendererPreference`，旧设置缺字段时迁移为
+  `automatic`；可选“自动（推荐）/ MediaKit 兼容渲染 / Windows 增强
+  （libmpv / D3D11）”。
+- 设置首页直接显示当前渲染器，播放与解码页的切换必须确认，保存后提供撤销；
+  当前播放不热拆引擎，下次进入播放器 Route 时生效；Snackbar 撤销不依赖已销毁
+  的设置控件，退出设置子 Route 后仍可恢复原值。
+- 组合根通过 `resolvePlayerBackendSelection` 选择具体后端。Windows 增强使用已
+  通过 NVIDIA 六组 A/B 的 child HWND 路径；非 Windows、硬解关闭或异常配置
+  安全回退 MediaKit，既有 `LOCAL_TAG_PLAYER_BACKEND` QA 覆盖继续优先。
+- 页面仍只传递用户偏好给 `PlayerServiceFactory`，不接触 MediaKit、libmpv、
+  HWND 或 D3D11 类型；filtered queue、当前索引、返回状态、SQLite、缓存队列
+  和用户数据不变。
+- `flutter analyze`、290 项全量测试与 Windows Debug build 通过；真实窗口确认
+  持久化 Windows 增强可打开 mpv child HWND，跨 Route 撤销可用，最终偏好已
+  恢复为“自动（推荐）”。
+- 验证记录见 `docs/qa/windows_renderer_preference_20260727.md`。
+
 ## 2026-07-27 Windows 原生 libmpv NVIDIA RTX Super Resolution
 
 - 原生 child HWND 后端现可读取 `mpv-version`、完整 `vf` 与归一化的

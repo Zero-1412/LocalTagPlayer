@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/app_paths.dart';
+import 'core/playback_settings.dart';
 import 'composition/local_tag_player_dependencies.dart';
 import 'platform/desktop_file_system_adapter.dart';
 import 'platform/database_provider.dart';
@@ -23,6 +24,7 @@ import 'services/media/external_media_tools.dart';
 import 'services/media/media_probe_backend.dart';
 import 'services/player/media_kit_player_backend.dart';
 import 'services/player/media_kit_initializer.dart';
+import 'services/player/player_backend_selection.dart';
 import 'services/player/player_service.dart';
 import 'services/player/windows_native_player_backend.dart';
 import 'services/update/github_release_update_service.dart';
@@ -80,6 +82,7 @@ export 'services/player/player_hdr_mapping_experiment.dart';
 export 'services/player/player_hardware_acceleration.dart';
 export 'services/player/media_kit_player_backend.dart';
 export 'services/player/media_kit_initializer.dart';
+export 'services/player/player_backend_selection.dart';
 export 'services/player/player_hardware_compatibility.dart';
 export 'services/player/player_memory_diagnostics.dart';
 export 'services/player/player_nvidia_video_enhancement_experiment.dart';
@@ -133,22 +136,23 @@ export 'widgets/library/library_widgets.dart';
 PlayerBackend _createPlayerBackend({
   required String hwdec,
   required bool enableHardwareAcceleration,
+  required PlayerRendererPreference rendererPreference,
 }) {
-  if (Platform.isWindows &&
-      Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
-          'windows-native-mpv') {
-    return WindowsNativePlayerBackend(mode: 'mpv');
-  }
-  if (Platform.isWindows &&
-      Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
-          'windows-native-hwnd') {
-    // 该入口只服务 child HWND airspace QA；默认生产路径继续使用 MediaKit。
-    return WindowsNativePlayerBackend(mode: 'hwnd');
-  }
-  if (Platform.isWindows &&
-      Platform.environment['LOCAL_TAG_PLAYER_BACKEND'] ==
-          'windows-native-stub') {
-    return WindowsNativePlayerBackend(mode: 'stub');
+  final selection = resolvePlayerBackendSelection(
+    isWindows: Platform.isWindows,
+    hardwareDecodingEnabled: enableHardwareAcceleration,
+    rendererPreference: rendererPreference,
+    environmentOverride: Platform.environment['LOCAL_TAG_PLAYER_BACKEND'],
+  );
+  switch (selection) {
+    case PlayerBackendSelection.windowsNativeMpv:
+      return WindowsNativePlayerBackend(mode: 'mpv');
+    case PlayerBackendSelection.windowsNativeHwnd:
+      return WindowsNativePlayerBackend(mode: 'hwnd');
+    case PlayerBackendSelection.windowsNativeStub:
+      return WindowsNativePlayerBackend(mode: 'stub');
+    case PlayerBackendSelection.mediaKit:
+      break;
   }
   // 首帧后的统一预热通常已完成；这里仍保留幂等门禁，覆盖用户在预热任务执行前
   // 立即进入播放器，以及预热失败后由正式播放安全重试的场景。
@@ -168,11 +172,13 @@ PlayerBackend _createPlayerBackend({
 PlayerService _createPlayerService({
   required String hwdec,
   required bool enableHardwareAcceleration,
+  required PlayerRendererPreference rendererPreference,
 }) =>
     PlayerService(
       backend: _createPlayerBackend(
         hwdec: hwdec,
         enableHardwareAcceleration: enableHardwareAcceleration,
+        rendererPreference: rendererPreference,
       ),
     );
 

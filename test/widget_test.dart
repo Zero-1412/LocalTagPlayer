@@ -3138,6 +3138,7 @@ void main() {
         home: Scaffold(
           body: SettingsLandingList(
             resumeBehavior: PlaybackResumeBehavior.ask,
+            rendererPreference: PlayerRendererPreference.automatic,
             confirmBeforeDeletingVideo: true,
             moveDeletedFileToTrash: false,
             onOpenPlayback: () => openedSections.add('playback'),
@@ -3156,7 +3157,7 @@ void main() {
     expect(find.text('数据与维护'), findsOneWidget);
     expect(find.text('播放与解码'), findsOneWidget);
     expect(find.text('视频画质与增强'), findsOneWidget);
-    expect(find.text('继续观看：每次询问 · 硬解与码流缓存'), findsOneWidget);
+    expect(find.text('自动（推荐） · 继续观看：每次询问'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('settings.resumeBehavior.summary')),
       findsOneWidget,

@@ -1046,6 +1046,7 @@ class PlayerPageState extends State<PlayerPage> {
       hwdec: _requestedHwdec,
       enableHardwareAcceleration:
           widget.playbackSettings.hardwareDecodingEnabled,
+      rendererPreference: widget.playbackSettings.rendererPreference,
     );
     unawaited(_probeNvidiaVideoEnhancementCapability());
     _volume = _playerService.state.volume.clamp(0, 100).toDouble();
@@ -3874,6 +3875,7 @@ class PlayerPageState extends State<PlayerPage> {
       'mpv 去色带参数: iterations=${mpv['deband-iterations']} · threshold=${mpv['deband-threshold']} · range=${mpv['deband-range']} · grain=${mpv['deband-grain']}',
       'GPU 高质量缩放（非 NVIDIA AI）: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
       'NVIDIA 视频增强（实验）: ${_nvidiaVideoEnhancementExperimentEnabled ? '会话已请求' : '关闭'} · ${_nvidiaVideoEnhancementCapability.helperText}',
+      '播放渲染器偏好: ${PlaybackSettings.rendererLabelFor(_effectivePlaybackSettings.rendererPreference)}',
       'NVIDIA 驱动确认: ${mpv['native-nvidia-vsr-state']}',
       'NVIDIA 压力保护: ${_nvidiaVideoSafetyCoordinator.reason}',
       'NVIDIA 自动回滚原因: ${_nvidiaVideoEnhancementRollbackReason ?? '无'}',

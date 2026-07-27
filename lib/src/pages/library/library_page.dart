@@ -463,8 +463,13 @@ class _PlaybackDecoderDropdownState extends State<PlaybackDecoderDropdown> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) {
-      setState(() => _fieldRevision++);
+    if (confirmed != true) {
+      if (mounted) {
+        setState(() => _fieldRevision++);
+      }
+      return;
+    }
+    if (!mounted) {
       return;
     }
     final next = _settings.copyWith(hwdec: value);
@@ -546,6 +551,193 @@ class _PlaybackDecoderDropdownState extends State<PlaybackDecoderDropdown> {
               },
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/**
+ * Windows 播放渲染器选择控件。
+ *
+ * 高影响切换必须先确认，并在保存成功后提供撤销。该控件只保存下一次播放器 Route
+ * 使用的偏好，不热拆当前播放器、D3D11 设备或 child HWND。
+ */
+class PlaybackRendererDropdown extends StatefulWidget {
+  const PlaybackRendererDropdown({
+    super.key,
+    required this.settings,
+    required this.onChanged,
+    this.windowsNativeRendererAvailable,
+  });
+
+  /** 当前完整播放设置，撤销时只恢复渲染器字段。 */
+  final PlaybackSettings settings;
+
+  /** 保存确认后的完整播放设置。 */
+  final Future<void> Function(PlaybackSettings settings) onChanged;
+
+  /** 测试可覆盖的平台能力；正常运行由桌面平台边界提供。 */
+  final bool? windowsNativeRendererAvailable;
+
+  @override
+  State<PlaybackRendererDropdown> createState() =>
+      _PlaybackRendererDropdownState();
+}
+
+class _PlaybackRendererDropdownState extends State<PlaybackRendererDropdown> {
+  late PlaybackSettings _settings = widget.settings;
+  var _fieldRevision = 0;
+
+  @override
+  void didUpdateWidget(covariant PlaybackRendererDropdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.settings, widget.settings)) {
+      _settings = widget.settings;
+    }
+  }
+
+  /** 确认、保存渲染器偏好；失败或取消时恢复下拉框的已生效值。 */
+  Future<void> _changeRenderer(PlayerRendererPreference value) async {
+    if (value == _settings.rendererPreference) {
+      return;
+    }
+    final previousPreference = _settings.rendererPreference;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('切换播放渲染器'),
+        content: Text(
+          '将渲染器从 ${PlaybackSettings.rendererLabelFor(previousPreference)}'
+          ' 切换为 ${PlaybackSettings.rendererLabelFor(value)}。\n\n'
+          '新渲染器在下次进入播放器时生效；如果画面、鼠标或显卡驱动出现异常，'
+          '可随时切回 MediaKit 兼容渲染。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认切换'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    final next = _settings.copyWith(rendererPreference: value);
+    setState(() {
+      _settings = next;
+      _fieldRevision++;
+    });
+    try {
+      await widget.onChanged(next);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _settings = _settings.copyWith(rendererPreference: previousPreference);
+        _fieldRevision++;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('保存渲染器设置失败：$error')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    // Snackbar 会跨设置 Route 保留；提前捕获持久化回调与恢复快照，避免用户离开
+    // 设置页后点击“撤销”时访问已销毁 State.widget。
+    final undoSettings = next.copyWith(rendererPreference: previousPreference);
+    final saveSettings = widget.onChanged;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('渲染器已保存，将在下次进入播放器时生效'),
+          action: SnackBarAction(
+            label: '撤销',
+            onPressed: () => unawaited(
+              _undoRendererChange(
+                undoSettings: undoSettings,
+                saveSettings: saveSettings,
+              ),
+            ),
+          ),
+        ),
+      );
+  }
+
+  /** 即使设置 Route 已退出，也使用预先捕获的回调恢复渲染器偏好。 */
+  Future<void> _undoRendererChange({
+    required PlaybackSettings undoSettings,
+    required Future<void> Function(PlaybackSettings settings) saveSettings,
+  }) async {
+    final beforeUndo = _settings;
+    if (mounted) {
+      setState(() {
+        _settings = undoSettings;
+        _fieldRevision++;
+      });
+    }
+    try {
+      await saveSettings(undoSettings);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _settings = beforeUndo;
+        _fieldRevision++;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('撤销渲染器设置失败：$error')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selection = _settings.rendererPreference;
+    final nativeAvailable =
+        widget.windowsNativeRendererAvailable ?? Platform.isWindows;
+    final nativeBlocked =
+        !nativeAvailable || !_settings.hardwareDecodingEnabled;
+    final helper =
+        selection == PlayerRendererPreference.windowsLibmpv && nativeBlocked
+            ? nativeAvailable
+                ? '当前已关闭硬件解码，将安全回退 MediaKit；先启用硬解才能使用原生 D3D11'
+                : 'Windows 增强渲染仅在 Windows 可用，当前平台将安全回退 MediaKit'
+            : PlaybackSettings.rendererDescriptionFor(selection);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<PlayerRendererPreference>(
+          key: ValueKey('renderer:${selection.name}:$_fieldRevision'),
+          initialValue: selection,
+          decoration: const InputDecoration(
+            labelText: '播放渲染器',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            for (final option in PlayerRendererPreference.values)
+              DropdownMenuItem(
+                value: option,
+                enabled: option != PlayerRendererPreference.windowsLibmpv ||
+                    nativeAvailable && _settings.hardwareDecodingEnabled,
+                child: Text(PlaybackSettings.rendererLabelFor(option)),
+              ),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              unawaited(_changeRenderer(value));
+            }
+          },
+        ),
+        const SizedBox(height: 8),
+        Text(
+          helper,
+          key: const ValueKey('settings.renderer.helper'),
+          style: const TextStyle(color: libraryTextMuted, height: 1.4),
         ),
       ],
     );
@@ -679,6 +871,7 @@ class SettingsLandingList extends StatelessWidget {
   const SettingsLandingList({
     super.key,
     required this.resumeBehavior,
+    required this.rendererPreference,
     required this.confirmBeforeDeletingVideo,
     required this.moveDeletedFileToTrash,
     this.autoRemoveMissingOrUnreadableVideos = true,
@@ -693,6 +886,9 @@ class SettingsLandingList extends StatelessWidget {
 
   /** 首页直接展示的继续观看策略，避免用户必须先进入二级页才能发现当前行为。 */
   final PlaybackResumeBehavior resumeBehavior;
+
+  /** 当前渲染器偏好，用于首页直接显示下一次播放会话的后端策略。 */
+  final PlayerRendererPreference rendererPreference;
 
   /** 删除动作当前是否保留确认层。 */
   final bool confirmBeforeDeletingVideo;
@@ -745,8 +941,9 @@ class SettingsLandingList extends StatelessWidget {
               icon: Icons.play_circle_outline_rounded,
               title: '播放与解码',
               subtitle:
-                  '继续观看：${PlaybackSettings.resumeLabelFor(resumeBehavior)} · 硬解与码流缓存',
-              statusLabel: PlaybackSettings.resumeLabelFor(resumeBehavior),
+                  '${PlaybackSettings.rendererLabelFor(rendererPreference)} · 继续观看：${PlaybackSettings.resumeLabelFor(resumeBehavior)}',
+              statusLabel:
+                  PlaybackSettings.rendererLabelFor(rendererPreference),
               onTap: onOpenPlayback,
             ),
             _SettingsNavigationTile(
@@ -1859,6 +2056,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
             child: _section == _SettingsSection.home
                 ? SettingsLandingList(
                     resumeBehavior: _settings.resumeBehavior,
+                    rendererPreference: _settings.rendererPreference,
                     confirmBeforeDeletingVideo:
                         _settings.confirmBeforeDeletingVideo,
                     moveDeletedFileToTrash: _settings.moveDeletedFileToTrash,
@@ -1928,6 +2126,30 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                     setState(() => _settings = next);
                                     await widget
                                         .onPlaybackSettingsChanged(next);
+                                  },
+                                ),
+                                const SizedBox(height: 22),
+                                const Divider(height: 1),
+                                const SizedBox(height: 20),
+                                const Text(
+                                  '播放渲染器',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  '选择下一次进入播放器时使用的跨平台兼容或 Windows 增强渲染边界。',
+                                  style: TextStyle(color: libraryTextMuted),
+                                ),
+                                const SizedBox(height: 14),
+                                PlaybackRendererDropdown(
+                                  settings: _settings,
+                                  onChanged: (settings) async {
+                                    setState(() => _settings = settings);
+                                    await widget
+                                        .onPlaybackSettingsChanged(settings);
                                   },
                                 ),
                                 const SizedBox(height: 22),
