@@ -1,5 +1,17 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.85` 把 NVOFA 原型的物理 GPU 身份与中点像素合成
+收敛到 Windows 平台边界。child HWND 通过 DXGI 1.6 选择唯一 NVIDIA 适配器，
+用名称设置 mpv `d3d11-adapter`，再用 Windows LUID 精确匹配 CUDA/NVOFA 与
+D3D11 Compute 设备；同名多卡或任一匹配失败时拒绝启用。中点帧逐像素双线性
+采样与融合已由固定 `cs_5_0` Compute Shader 执行，GPU 阶段失败会撤销整条实验
+滤镜，没有 CPU 隐式回退。RTX 4070 SUPER 上三类 1080P 直接门禁和六组 20 秒
+A/B 均得到 24→48fps、0 总掉帧、0 音视频停滞及同一 LUID
+`00000000:00017093`。由于 VapourSynth 仍提供软件平面，CUDA luma 上传、光流
+回读、D3D11 输入上传和最终平面读回仍存在；这是“同 GPU NVOFA + D3D11
+compute warp”，不是全程 non-copy。QA 插件无 install 且不进入 bundle；默认
+MediaKit、插件 ABI v1、filtered queue、SQLite、标签、缓存队列和用户数据不变。
+
 `Architecture Baseline 0.5.84` 在既有
 `PlayerMotionInterpolationBoundary` 后完成首条真实 NVOFA 2× 中间帧原型，但
 继续隔离在本机 QA 边界。显式 CMake 目标动态加载 System32 的 CUDA/NVOFA 驱动，

@@ -69,6 +69,19 @@ bool HasDllExtension(const std::filesystem::path& path) {
   return extension == L".dll";
 }
 
+/** 只接受能力矩阵输出的规范化 LUID，禁止回退到 GPU 名称或枚举序号。 */
+bool IsNormalizedLuid(const std::string& value) {
+  if (value.size() != 17 || value[8] != ':') return false;
+  for (std::size_t index = 0; index < value.size(); ++index) {
+    if (index == 8) continue;
+    const char current = value[index];
+    const bool decimal = current >= '0' && current <= '9';
+    const bool lower_hex = current >= 'a' && current <= 'f';
+    if (!decimal && !lower_hex) return false;
+  }
+  return true;
+}
+
 /** 把 Win32 错误压缩为稳定码，避免配置路径进入诊断。 */
 std::string WindowsErrorCode(const char* operation) {
   return std::string(operation) + "-" + std::to_string(GetLastError());
@@ -126,7 +139,8 @@ VapourSynthMotionRuntime::~VapourSynthMotionRuntime() {
   Shutdown();
 }
 
-void VapourSynthMotionRuntime::Initialize() {
+void VapourSynthMotionRuntime::Initialize(
+    const std::string& active_adapter_luid) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (vsscript_module_ != nullptr || snapshot_.configured) return;
 
@@ -183,12 +197,20 @@ void VapourSynthMotionRuntime::Initialize() {
       snapshot_.error = "motion-user-data-missing-or-not-dll";
       return;
     }
-    user_data_utf8_ = WideToUtf8(user_data_path);
-    if (user_data_utf8_.empty()) {
+    const std::string user_data_path_utf8 = WideToUtf8(user_data_path);
+    if (user_data_path_utf8.empty()) {
       snapshot_.state = "invalid-user-data";
       snapshot_.error = "motion-user-data-utf8-conversion-failed";
       return;
     }
+    if (!IsNormalizedLuid(active_adapter_luid)) {
+      snapshot_.state = "invalid-user-data";
+      snapshot_.error = "motion-active-d3d11-adapter-luid-required";
+      return;
+    }
+    // Windows 文件名不能包含 `|`，因此该分隔符不会与绝对插件路径冲突。
+    user_data_utf8_ =
+        user_data_path_utf8 + "|" + active_adapter_luid;
   }
 
   const auto vsscript_path = runtime_path / L"VSScript.dll";

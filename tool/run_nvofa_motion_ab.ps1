@@ -132,6 +132,9 @@ function Get-MotionSummary {
         Where-Object { $_.videoStalled -eq $true }).Count
     audioStallSamples = @($samples |
         Where-Object { $_.audioStalled -eq $true }).Count
+    activeAdapterStatus = [string]$report.activeAdapter.probeStatus
+    activeAdapterSource = [string]$report.activeAdapter.detectionSource
+    activeAdapterLuid = [string]$report.activeAdapter.adapterLuid
     screenshot = Join-Path $modeRoot "$Mode-complete-video.png"
   }
 }
@@ -147,6 +150,15 @@ $caseSummaries = foreach ($case in $cases) {
     $on.maxTotalDroppedFrames -le $off.maxTotalDroppedFrames -and
     $on.videoStallSamples -eq 0 -and
     $on.audioStallSamples -eq 0
+  $adapterGate =
+    $off.activeAdapterStatus -eq "ready" -and
+    $on.activeAdapterStatus -eq "ready" -and
+    $off.activeAdapterSource -eq
+      "windows-native-mpv-selected-d3d11-adapter" -and
+    $on.activeAdapterSource -eq
+      "windows-native-mpv-selected-d3d11-adapter" -and
+    -not [string]::IsNullOrWhiteSpace($off.activeAdapterLuid) -and
+    $off.activeAdapterLuid -eq $on.activeAdapterLuid
   [ordered]@{
     name = $case.name
     category = $case.category
@@ -154,16 +166,17 @@ $caseSummaries = foreach ($case in $cases) {
     on = $on
     frameRateGatePassed = $fpsGate
     performanceGatePassed = $performanceGate
-    passed = $fpsGate -and $performanceGate
+    adapterLuidGatePassed = $adapterGate
+    passed = $fpsGate -and $performanceGate -and $adapterGate
   }
 }
 
 $summary = [ordered]@{
-  schemaVersion = 1
+  schemaVersion = 2
   generatedAt = (Get-Date).ToUniversalTime().ToString("o")
   runtimePolicy = "local-only VapourSynth R78 and NVOFA plugin; no install"
   interpolationPolicy =
-    "24fps to 48fps with forward/backward NVOFA and scene-cut protection"
+    "24fps to 48fps with exact D3D11/CUDA LUID, forward/backward NVOFA, D3D11 compute warp, and scene-cut protection"
   cases = @($caseSummaries)
   allGatesPassed =
     @($caseSummaries | Where-Object { -not $_.passed }).Count -eq 0

@@ -5,8 +5,8 @@
 找不到插件时静默退回线性混帧。失败由原生宿主识别并撤销当前会话滤镜。
 """
 
-if not user_data:
-    raise RuntimeError("NVOFA VapourSynth plugin path is missing")
+if not user_data or "|" not in user_data:
+    raise RuntimeError("NVOFA plugin path or active D3D11 adapter LUID is missing")
 if container_fps <= 0:
     raise RuntimeError("Source FPS is unavailable")
 
@@ -15,7 +15,10 @@ if container_fps <= 0:
 import vapoursynth as vs
 
 core = vs.core
-core.std.LoadPlugin(path=user_data, altsearchpath=True)
+plugin_path, adapter_luid = user_data.rsplit("|", 1)
+if not plugin_path or len(adapter_luid) != 17 or adapter_luid[8] != ":":
+    raise RuntimeError("NVOFA active D3D11 adapter LUID is invalid")
+core.std.LoadPlugin(path=plugin_path, altsearchpath=True)
 source_fps_den = 1000
 source_fps_num = int(round(container_fps * source_fps_den))
 
@@ -34,6 +37,7 @@ video_out = core.ltp_nvofa.Interpolate(
     clip=video_in,
     source_fps_num=source_fps_num,
     source_fps_den=source_fps_den,
+    adapter_luid=adapter_luid,
 )
 
 # mpv 0.40 通过 VSScript R78 的 output index 0 取回节点，不读取同名 Python 变量。

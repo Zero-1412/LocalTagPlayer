@@ -446,6 +446,14 @@ void main() {
     expect(finalSnapshot.videoStalled, isFalse);
     expect(finalSnapshot.audioStalled, isFalse);
     if (baselineMode.startsWith('nvofa-')) {
+      expect(activeAdapter.ready, isTrue);
+      expect(
+        activeAdapter.detectionSource,
+        'windows-native-mpv-selected-d3d11-adapter',
+      );
+      final nativeAdapterLuid =
+          await renderBoundary.getProperty('native-d3d11-adapter-luid');
+      expect(nativeAdapterLuid, activeAdapter.adapterLuid);
       final capability = await playerKey.currentState!.playerService
           .queryMotionInterpolationCapability();
       final estimatedFpsLine =

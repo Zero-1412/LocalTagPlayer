@@ -1,5 +1,20 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · NVOFA 使用同 LUID 的 D3D11 Compute 合成
+
+- Windows 原生 child HWND 现在先选择唯一 NVIDIA D3D11 适配器，并把相同 LUID
+  同时约束 mpv、CUDA/NVOFA 和 Compute 设备；不再依赖 CUDA device 0 或未创建
+  的 ANGLE 渲染设备判断活动 GPU。
+- NVOFA 中点帧的逐像素双线性采样与融合从 CPU 并行循环迁到 D3D11 Compute；
+  任一 GPU 阶段失败都会撤销实验滤镜，不静默退回 CPU。
+- 三类自然低码率 1080P 的直接实时门禁和六组 20 秒 A/B 全部通过：24→48fps、
+  off/on 总掉帧 0/0、音视频停滞 0/0，D3D11/CUDA LUID 均为
+  `00000000:00017093`。
+- 当前仍有 VapourSynth 软件帧、CUDA luma 上传、光流回读和最终平面读回，不
+  宣称全程 non-copy；插件/R78/NVIDIA 文件仍不安装、不打包，产品入口未开放。
+- 默认 MediaKit、Windows 后端选择、插件 ABI v1、filtered queue、SQLite、
+  标签、缓存与用户数据不变。
+
 ## 2026-07-28 · NVOFA 真实生成 2× 中间帧本机原型
 
 - 增加不安装、不打包的 VapourSynth R78 NVOFA 插件；实际执行前向/后向硬件光流，

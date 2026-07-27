@@ -249,6 +249,28 @@ flutter::EncodableMap NativePlayerBridge::ActiveGpuAdapterSnapshot(
           GetProcAddress(plugin, "LtpMediaKitQueryActiveAdapterLuid"));
     }
     source = "media-kit-angle-d3d11-device";
+  } else if (backend_kind == "windows-native" && native_hwnd_enabled_) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const std::string detection_source =
+        "windows-native-mpv-selected-d3d11-adapter";
+    if (d3d11_adapter_.ready()) {
+      return flutter::EncodableMap{
+          {flutter::EncodableValue("probeStatus"),
+           flutter::EncodableValue("ready")},
+          {flutter::EncodableValue("detectionSource"),
+           flutter::EncodableValue(detection_source)},
+          {flutter::EncodableValue("adapterLuid"),
+           flutter::EncodableValue(d3d11_adapter_.luid)}};
+    }
+    return flutter::EncodableMap{
+        {flutter::EncodableValue("probeStatus"),
+         flutter::EncodableValue(
+             d3d11_adapter_.state == "ambiguous" ? "ambiguous"
+                                                  : "unavailable")},
+        {flutter::EncodableValue("detectionSource"),
+         flutter::EncodableValue(detection_source)},
+        {flutter::EncodableValue("errorCode"),
+         flutter::EncodableValue(d3d11_adapter_.error)}};
   } else if (backend_kind == "windows-native") {
     query = &LtpMediaKitQueryActiveAdapterLuid;
     source = "windows-native-angle-d3d11-device";
@@ -554,8 +576,12 @@ void NativePlayerBridge::InitializePlayer() {
       native_hwnd_enabled_ ? "mpv_hwnd_initializing" : "mpv_initializing";
   // 驱动探测只读 System32 固定模块，不创建 OF 会话或占用视频纹理。
   nvofa_driver_ = ProbeNvidiaOpticalFlowDriver();
-  // 仅预加载用户显式配置的本机运行时；未配置时保持零副作用。
-  motion_runtime_.Initialize();
+  d3d11_adapter_ = D3D11AdapterSelection{};
+  if (native_hwnd_enabled_) {
+    // mpv 只公开按名称选择 D3D11 adapter；先用 DXGI 得到唯一名称和 LUID，
+    // 再把同一 LUID 交给 CUDA/NVOFA，禁止两个子系统各自使用默认设备。
+    d3d11_adapter_ = SelectNvidiaD3D11Adapter();
+  }
   player_ = mpv_create();
   if (player_ == nullptr) {
     lifecycle_ = "mpv_create_failed";
@@ -569,6 +595,15 @@ void NativePlayerBridge::InitializePlayer() {
     mpv_set_option_string(player_, "gpu-context", "d3d11");
     mpv_set_option_string(player_, "hwdec", "d3d11va");
     mpv_set_option_string(player_, "gpu-hwdec-interop", "d3d11va");
+    if (d3d11_adapter_.ready() &&
+        mpv_set_option_string(
+            player_, "d3d11-adapter",
+            d3d11_adapter_.description.c_str()) < 0) {
+      d3d11_adapter_.state = "rejected";
+      d3d11_adapter_.error = "mpv-d3d11-adapter-option-rejected";
+      d3d11_adapter_.description.clear();
+      d3d11_adapter_.luid.clear();
+    }
     mpv_set_option_string(player_, "input-default-bindings", "no");
     mpv_set_option_string(player_, "input-cursor", "no");
     int64_t window_id =
@@ -578,6 +613,11 @@ void NativePlayerBridge::InitializePlayer() {
     mpv_set_option_string(player_, "vo", "libmpv");
     mpv_set_option_string(player_, "hwdec", "d3d11va-copy");
   }
+  // 仅预加载用户显式配置的本机运行时；NVOFA 路径还必须取得同一 D3D11 LUID。
+  motion_runtime_.Initialize(
+      native_hwnd_enabled_ && d3d11_adapter_.ready()
+          ? d3d11_adapter_.luid
+          : std::string());
   mpv_set_option_string(player_, "video-sync", "display-resample");
   mpv_set_option_string(player_, "cache", "yes");
   mpv_set_option_string(player_, "demuxer-readahead-secs", "12");
@@ -1057,6 +1097,12 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
                static_cast<int64_t>(nvofa_driver_.api_version_raw))},
           {flutter::EncodableValue("native-nvofa-d3d11"),
            flutter::EncodableValue(nvofa_driver_.d3d11_available)},
+          {flutter::EncodableValue("native-d3d11-adapter-state"),
+           flutter::EncodableValue(d3d11_adapter_.state)},
+          {flutter::EncodableValue("native-d3d11-adapter-error"),
+           flutter::EncodableValue(d3d11_adapter_.error)},
+          {flutter::EncodableValue("native-d3d11-adapter-luid"),
+           flutter::EncodableValue(d3d11_adapter_.luid)},
           {flutter::EncodableValue("completedCount"),
            flutter::EncodableValue(completed_count_)},
           {flutter::EncodableValue("errorCount"),

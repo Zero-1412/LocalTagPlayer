@@ -364,10 +364,16 @@ void main() {
     final nvofaExecute = File(
       'windows/nvidia_optical_flow_probe/nvofa_cuda_execute_probe.cpp',
     ).readAsStringSync();
+    final d3d11AdapterSelector = File(
+      'windows/runner/d3d11_adapter_selector.cpp',
+    ).readAsStringSync();
     final nvofaScript =
         File('tool/run_nvofa_execute_probe.ps1').readAsStringSync();
     final nvofaInterpolation = File(
       'windows/nvidia_optical_flow_probe/nvofa_vapoursynth_plugin.cpp',
+    ).readAsStringSync();
+    final nvofaD3d11Warp = File(
+      'windows/nvidia_optical_flow_probe/d3d11_midpoint_warper.cpp',
     ).readAsStringSync();
     final nvofaInterpolationScript = File(
       'tool/vapoursynth_nvofa_interpolation.vpy',
@@ -410,6 +416,15 @@ void main() {
     expect(
       bridge,
       contains('ReapplyAfterFilterGraphChange(player_)'),
+    );
+    expect(
+      bridge,
+      contains('windows-native-mpv-selected-d3d11-adapter'),
+    );
+    expect(bridge, contains('"d3d11-adapter"'));
+    expect(
+      bridge,
+      contains('SelectNvidiaD3D11Adapter()'),
     );
     expect(
       boundary,
@@ -456,7 +471,21 @@ void main() {
     expect(nvofaExecute, contains('NvOFAPICreateInstanceCuda'));
     expect(nvofaExecute, contains('nvOFExecute'));
     expect(nvofaExecute, contains('validate-nonzero-flow'));
+    expect(nvofaExecute, contains('cuDeviceGetLuid'));
+    expect(nvofaExecute, contains('luid-match=passed'));
     expect(nvofaExecute, contains('LOAD_LIBRARY_SEARCH_SYSTEM32'));
+    expect(
+      d3d11AdapterSelector,
+      contains('DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE'),
+    );
+    expect(
+      d3d11AdapterSelector,
+      contains('duplicate-nvidia-adapter-description'),
+    );
+    expect(
+      d3d11AdapterSelector,
+      contains('LOCAL_TAG_PLAYER_NVIDIA_ADAPTER_LUID'),
+    );
     expect(
       nvofaScript,
       contains('edb50da3cf849840d680249aa6dbef248ebce2ca'),
@@ -487,14 +516,35 @@ void main() {
       nvofaInterpolation,
       contains('Execute(reference_, input_, &flow->backward)'),
     );
-    expect(nvofaInterpolation, contains('concurrency::parallel_for'));
+    expect(nvofaInterpolation, contains('cuDeviceGetLuid'));
+    expect(
+      nvofaInterpolation,
+      contains('match-cuda-device-by-d3d11-luid'),
+    );
+    expect(nvofaInterpolation, contains('adapter_luid:data'));
     expect(nvofaInterpolation, contains('LTPNVOFAInterpolated'));
+    expect(nvofaInterpolation, contains('LTPNVOFAAdapterMatched'));
+    expect(nvofaInterpolation, contains('LTPNVOFAD3D11Warp'));
     expect(nvofaInterpolation, contains('LTPNVOFASceneCut'));
+    expect(
+      nvofaInterpolation,
+      isNot(contains('concurrency::parallel_for')),
+    );
+    expect(nvofaD3d11Warp, contains('D3DCompile'));
+    expect(nvofaD3d11Warp, contains('"cs_5_0"'));
+    expect(nvofaD3d11Warp, contains('context_->Dispatch'));
+    expect(nvofaD3d11Warp, contains('DXGI_FORMAT_R16G16_SINT'));
+    expect(nvofaD3d11Warp, contains('DXGI_FORMAT_R32_FLOAT'));
+    expect(
+      nvofaInterpolationScript,
+      contains('plugin_path, adapter_luid = user_data.rsplit("|", 1)'),
+    );
     expect(nvofaInterpolationScript, contains('video_out.set_output()'));
     expect(
       nvofaInterpolationProbe,
       contains('expect-active-performance'),
     );
+    expect(nvofaInterpolationProbe, contains('d3d11-warp=passed'));
   });
 
   test('desktop startup centers size-only persisted window layouts', () {

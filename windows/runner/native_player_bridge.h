@@ -9,6 +9,7 @@
 #include <windows.h>
 
 #include "angle_surface_manager.h"
+#include "d3d11_adapter_selector.h"
 #include "local_video_enhancement_plugin.h"
 #include "nvidia_optical_flow_driver_probe.h"
 #include "vapoursynth_motion_runtime.h"
@@ -104,6 +105,8 @@ class NativePlayerBridge {
   VapourSynthMotionRuntime motion_runtime_;
   /** NVIDIA 显示驱动 OFAPI 的只读能力，不代表 FRUC 插件已经安装。 */
   NvidiaOpticalFlowDriverSnapshot nvofa_driver_;
+  /** child HWND 的 mpv D3D11 适配器选择；其 LUID 同时约束 CUDA/NVOFA。 */
+  D3D11AdapterSelection d3d11_adapter_;
   mpv_handle* player_ = nullptr;
   mpv_render_context* render_context_ = nullptr;
   FlutterDesktopPixelBuffer pixel_buffer_{};

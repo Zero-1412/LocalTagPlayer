@@ -1,4 +1,5 @@
 #include "../runner/vapoursynth_motion_runtime.h"
+#include "../runner/d3d11_adapter_selector.h"
 
 #include <mpv/client.h>
 #include <windows.h>
@@ -149,13 +150,23 @@ int wmain(int argc, wchar_t** argv) {
   const bool expect_active =
       mode == L"expect-active" || mode == L"expect-active-performance";
   const bool performance_mode = mode == L"expect-active-performance";
+  D3D11AdapterSelection d3d11_adapter;
+  if (expect_active) {
+    d3d11_adapter = SelectNvidiaD3D11Adapter();
+    if (!d3d11_adapter.ready()) {
+      std::cerr << "d3d11-adapter-selection-failed state="
+                << d3d11_adapter.state
+                << " error=" << d3d11_adapter.error << "\n";
+      return 3;
+    }
+  }
   SetEnvironmentVariableW(L"LOCAL_TAG_PLAYER_VAPOURSYNTH_RUNTIME_DIR",
                           argv[1]);
   SetEnvironmentVariableW(
       L"LOCAL_TAG_PLAYER_MOTION_INTERPOLATION_SCRIPT_PATH", argv[2]);
 
   VapourSynthMotionRuntime runtime;
-  runtime.Initialize();
+  runtime.Initialize(expect_active ? d3d11_adapter.luid : std::string());
   const auto ready = runtime.GetSnapshot();
   if (ready.state != "ready" || !ready.configured) {
     std::cerr << "runtime-not-ready state=" << ready.state
@@ -328,6 +339,7 @@ int wmain(int argc, wchar_t** argv) {
   std::cout << "real-frames=passed seek=passed reload=passed "
             << (expect_active ? "interpolation-active=passed"
                               : "passthrough-not-active=passed")
+            << (expect_active ? " d3d11-warp=passed" : "")
             << (performance_mode
                     ? " realtime-performance=passed"
                     : "")
@@ -336,6 +348,10 @@ int wmain(int argc, wchar_t** argv) {
                           std::to_string(performance_media_seconds) +
                           " wall-seconds=" +
                           std::to_string(performance_wall_seconds)
+                    : "")
+            << (expect_active
+                    ? " d3d11-luid=" + d3d11_adapter.luid +
+                          " cuda-luid-match=passed"
                     : "")
             << "\n";
   return 0;

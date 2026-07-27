@@ -1,3 +1,16 @@
+## 2026-07-28 NVOFA 同 LUID D3D11 Compute 合成
+
+- child HWND 通过 DXGI 选择唯一 NVIDIA D3D11 adapter，mpv、CUDA/NVOFA 和
+  Compute 均绑定同一 LUID；RTX 4070 SUPER 实测为 `00000000:00017093`。
+- 中间帧 warp 从 CPU 并行循环迁到 D3D11 Compute；VapourSynth 软件帧、光流
+  回读和最终输出读回仍存在，因此不标记为全程 non-copy。
+- 三类自然低码率 1080P 的直接门禁与 off/on 六组 20 秒 A/B 全部通过：
+  24/48fps、0/0 掉帧、0 音视频停滞，六组适配器 LUID 一致。
+- 任一 GPU 阶段失败会撤销实验滤镜；插件继续 QA-only、无 install、无产品入口。
+- filtered queue、当前 index、来源队列、返回状态、默认 MediaKit、插件 ABI v1
+  和用户数据不变。
+- 完整证据见 `docs/qa/nvofa_vapoursynth_interpolation_20260728.md`。
+
 ## 2026-07-28 NVOFA 2× 中间帧本机原型
 
 - 隔离 VapourSynth R78 插件实际执行前向/后向 NVOFA，并以 0.5 双向 warp 生成

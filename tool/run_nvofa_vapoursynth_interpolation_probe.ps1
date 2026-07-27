@@ -119,10 +119,17 @@ try {
   } else {
     "expect-active"
   }
-  & $probe $runtimePath $scriptPath $sample $probeMode
+  $probeResult = & $probe $runtimePath $scriptPath $sample $probeMode
   if ($LASTEXITCODE -ne 0) {
-    throw "NVOFA VapourSynth real-frame probe failed with exit code $LASTEXITCODE."
+    throw "NVOFA VapourSynth real-frame probe failed with exit code $LASTEXITCODE.`n$probeResult"
   }
+  $joinedProbeResult = @($probeResult) -join "`n"
+  if ($joinedProbeResult -notmatch "d3d11-warp=passed" -or
+      $joinedProbeResult -notmatch "cuda-luid-match=passed" -or
+      $joinedProbeResult -notmatch "d3d11-luid=([0-9a-f]{8}):([0-9a-f]{8})") {
+    throw "NVOFA VapourSynth probe did not prove D3D11 warp and exact D3D11/CUDA LUID matching.`n$probeResult"
+  }
+  $probeResult
 } finally {
   Remove-Item Env:LOCAL_TAG_PLAYER_NVOFA_VS_PLUGIN_PATH `
     -ErrorAction SilentlyContinue

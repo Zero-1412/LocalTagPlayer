@@ -1,5 +1,18 @@
 # ROADMAP.md
 
+## 2026-07-28 NVOFA 同 GPU Compute 门禁已通过
+
+- [x] child HWND 的 mpv D3D11 适配器已用 DXGI 唯一名称选择，并以 LUID 精确
+  匹配 CUDA/NVOFA；多 GPU 不再依赖默认枚举序号。
+- [x] 双向中点采样和融合已迁到同 LUID 的 D3D11 Compute，任一 GPU 阶段失败
+  会触发现有滤镜回滚，不保留隐式 CPU 慢路径。
+- [x] 真人面部、动画渐变、暗场的直接实时门禁与 off/on 六组 20 秒 A/B 全部
+  通过：24/48fps、0/0 总掉帧、0 音视频停滞、适配器 LUID 一致。
+- [ ] 移除 VapourSynth 软件帧、CUDA 光流回读和最终平面读回；在没有安全的
+  D3D11 NVOFA 公开接入边界前，不把当前实现描述成零复制硬件插帧。
+- [ ] 增加前后向一致性、遮挡 mask、显露区域处理，以及快速平移、细栅栏、
+  字幕和运动模糊的连续视频质量门禁；完成前不切换默认后端或开放持久化入口。
+
 ## 2026-07-28 NVIDIA TrueHDR 驱动路径已接入
 
 - [x] 固定 mpv 的 `nvidia-true-hdr` 已在 Windows 原生 D3D11VA 非 copy 链实际

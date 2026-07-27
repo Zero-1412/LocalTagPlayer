@@ -1,11 +1,13 @@
 #include <windows.h>
-#include <ppl.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <numeric>
@@ -13,17 +15,19 @@
 #include <vector>
 
 #include "VapourSynth4.h"
+#include "d3d11_midpoint_warper.h"
 #include "nvOpticalFlowCuda.h"
 
 namespace {
 
 using CUresult = int;
 constexpr CUresult kCudaSuccess = 0;
-constexpr float kFlowFixedPointScale = 32.0F;
 
 using CuInit = CUresult(WINAPI*)(unsigned int);
 using CuDeviceGetCount = CUresult(WINAPI*)(int*);
 using CuDeviceGet = CUresult(WINAPI*)(CUdevice*, int);
+using CuDeviceGetLuid =
+    CUresult(WINAPI*)(char*, unsigned int*, CUdevice);
 using CuCtxCreate = CUresult(WINAPI*)(CUcontext*, unsigned int, CUdevice);
 using CuCtxDestroy = CUresult(WINAPI*)(CUcontext);
 using CuCtxPushCurrent = CUresult(WINAPI*)(CUcontext);
@@ -54,6 +58,30 @@ struct BidirectionalFlow {
   std::vector<NV_OF_FLOW_VECTOR> backward;
 };
 
+/** CUDA 的 8-byte Windows LUID 与 DXGI 能力矩阵使用同一高/低位格式。 */
+std::string CudaLuidString(const char* luid) {
+  std::uint32_t low = 0;
+  std::uint32_t high = 0;
+  std::memcpy(&low, luid, sizeof(low));
+  std::memcpy(&high, luid + sizeof(low), sizeof(high));
+  std::array<char, 32> buffer{};
+  std::snprintf(buffer.data(), buffer.size(), "%08x:%08x", high, low);
+  return buffer.data();
+}
+
+/** 只接受 runner 能力矩阵输出的规范化 LUID，避免名称或枚举顺序回退。 */
+bool IsNormalizedLuid(const std::string& value) {
+  if (value.size() != 17 || value[8] != ':') return false;
+  for (std::size_t index = 0; index < value.size(); ++index) {
+    if (index == 8) continue;
+    const char current = value[index];
+    const bool decimal = current >= '0' && current <= '9';
+    const bool lower_hex = current >= 'a' && current <= 'f';
+    if (!decimal && !lower_hex) return false;
+  }
+  return true;
+}
+
 /**
  * 单个 VapourSynth 滤镜实例拥有的 CUDA/NVOFA 会话。
  *
@@ -70,9 +98,15 @@ class NvidiaOpticalFlowEngine {
   NvidiaOpticalFlowEngine& operator=(const NvidiaOpticalFlowEngine&) = delete;
 
   /** 为固定尺寸 8-bit luma 建立硬件光流会话。 */
-  bool Initialize(std::uint32_t width, std::uint32_t height) {
+  bool Initialize(
+      std::uint32_t width,
+      std::uint32_t height,
+      const std::string& expected_adapter_luid) {
     width_ = width;
     height_ = height;
+    if (!IsNormalizedLuid(expected_adapter_luid)) {
+      return Fail("invalid-d3d11-adapter-luid");
+    }
     cuda_module_ = LoadLibraryExW(
         L"nvcuda.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     nvofa_module_ = LoadLibraryExW(
@@ -86,6 +120,8 @@ class NvidiaOpticalFlowEngine {
         Resolve<CuDeviceGetCount>(cuda_module_, "cuDeviceGetCount");
     const auto cu_device_get =
         Resolve<CuDeviceGet>(cuda_module_, "cuDeviceGet");
+    const auto cu_device_get_luid =
+        Resolve<CuDeviceGetLuid>(cuda_module_, "cuDeviceGetLuid");
     const auto cu_ctx_create =
         Resolve<CuCtxCreate>(cuda_module_, "cuCtxCreate_v2");
     cu_ctx_destroy_ =
@@ -101,7 +137,8 @@ class NvidiaOpticalFlowEngine {
     cu_memcpy_d_to_h_ =
         Resolve<CuMemcpyDtoH>(cuda_module_, "cuMemcpyDtoH_v2");
     if (cu_init_ == nullptr || cu_device_get_count == nullptr ||
-        cu_device_get == nullptr || cu_ctx_create == nullptr ||
+        cu_device_get == nullptr || cu_device_get_luid == nullptr ||
+        cu_ctx_create == nullptr ||
         cu_ctx_destroy_ == nullptr || cu_ctx_push_current_ == nullptr ||
         cu_ctx_pop_current_ == nullptr || cu_ctx_synchronize_ == nullptr ||
         cu_memcpy_h_to_d_ == nullptr || cu_memcpy_d_to_h_ == nullptr) {
@@ -112,9 +149,31 @@ class NvidiaOpticalFlowEngine {
     CUdevice device = 0;
     if (cu_init_(0) != kCudaSuccess ||
         cu_device_get_count(&device_count) != kCudaSuccess ||
-        device_count < 1 ||
-        cu_device_get(&device, 0) != kCudaSuccess ||
-        cu_ctx_create(&cuda_context_, 0, device) != kCudaSuccess) {
+        device_count < 1) {
+      return Fail("enumerate-cuda-device");
+    }
+    int matching_devices = 0;
+    for (int index = 0; index < device_count; ++index) {
+      CUdevice candidate = 0;
+      std::array<char, 8> candidate_luid{};
+      unsigned int node_mask = 0;
+      if (cu_device_get(&candidate, index) != kCudaSuccess ||
+          cu_device_get_luid(
+              candidate_luid.data(), &node_mask, candidate) !=
+              kCudaSuccess ||
+          CudaLuidString(candidate_luid.data()) !=
+              expected_adapter_luid) {
+        continue;
+      }
+      device = candidate;
+      cuda_device_index_ = index;
+      ++matching_devices;
+    }
+    if (matching_devices != 1) {
+      return Fail("match-cuda-device-by-d3d11-luid");
+    }
+    adapter_luid_ = expected_adapter_luid;
+    if (cu_ctx_create(&cuda_context_, 0, device) != kCudaSuccess) {
       return Fail("create-cuda-context");
     }
     context_is_current_ = true;
@@ -237,6 +296,9 @@ class NvidiaOpticalFlowEngine {
 
   /** 返回不含路径和驱动原文的稳定失败阶段。 */
   const std::string& error() const { return error_; }
+
+  /** 返回与 mpv D3D11 选择精确匹配的 CUDA 设备索引，仅用于匿名 QA 属性。 */
+  int cuda_device_index() const { return cuda_device_index_; }
 
  private:
   /** 标记稳定错误阶段。 */
@@ -411,6 +473,8 @@ class NvidiaOpticalFlowEngine {
   std::uint32_t output_width_ = 0;
   std::uint32_t output_height_ = 0;
   bool ready_ = false;
+  int cuda_device_index_ = -1;
+  std::string adapter_luid_;
   std::string error_;
 };
 
@@ -421,6 +485,7 @@ struct InterpolationData {
   VSVideoInfo output_info{};
   double scene_threshold = 24.0;
   NvidiaOpticalFlowEngine engine;
+  D3D11MidpointWarper warper;
 };
 
 /** 估算全帧 luma 差异；明显切镜时禁止生成跨场景鬼影。 */
@@ -451,127 +516,44 @@ double MeanLumaDifference(
                    static_cast<double>(samples);
 }
 
-/** 对单平面执行边界夹取的双线性采样。 */
-float SamplePlane(
-    const std::uint8_t* source,
-    std::ptrdiff_t stride,
-    int width,
-    int height,
-    float x,
-    float y) {
-  x = std::clamp(x, 0.0F, static_cast<float>(width - 1));
-  y = std::clamp(y, 0.0F, static_cast<float>(height - 1));
-  const int x0 = static_cast<int>(std::floor(x));
-  const int y0 = static_cast<int>(std::floor(y));
-  const int x1 = std::min(x0 + 1, width - 1);
-  const int y1 = std::min(y0 + 1, height - 1);
-  const float tx = x - static_cast<float>(x0);
-  const float ty = y - static_cast<float>(y0);
-  const float top =
-      source[y0 * stride + x0] * (1.0F - tx) +
-      source[y0 * stride + x1] * tx;
-  const float bottom =
-      source[y1 * stride + x0] * (1.0F - tx) +
-      source[y1 * stride + x1] * tx;
-  return top * (1.0F - ty) + bottom * ty;
-}
-
-/** 取得目标 luma 坐标附近的硬件光流向量。 */
-const NV_OF_FLOW_VECTOR& FlowAt(
-    const std::vector<NV_OF_FLOW_VECTOR>& flow,
-    const BidirectionalFlow& metadata,
-    float luma_x,
-    float luma_y) {
-  const auto x = std::min<std::uint32_t>(
-      static_cast<std::uint32_t>(
-          std::max(0.0F, luma_x) /
-          static_cast<float>(metadata.grid)),
-      metadata.width - 1);
-  const auto y = std::min<std::uint32_t>(
-      static_cast<std::uint32_t>(
-          std::max(0.0F, luma_y) /
-          static_cast<float>(metadata.grid)),
-      metadata.height - 1);
-  return flow[static_cast<std::size_t>(y) * metadata.width + x];
-}
-
 /**
  * 用前后向 NVOFA 光流把两帧各 warp 到 0.5 时间点并融合。
  *
- * warp 在本机原型中先由 CPU 完成，光流本身真实运行在 NVIDIA OFA；后续性能
- * 门禁通过后可把相同坐标语义迁移到 D3D11 compute，接口无需泄漏到 Flutter。
+ * NVOFA 仍通过 CUDA 会话输出原始 S10.5 光流；逐像素采样和融合迁移到同一
+ * LUID 的 D3D11 Compute。VapourSynth 当前只提供软件帧，所以输入上传和最终
+ * 平面读回仍存在，不能把这条原型描述为零复制。
  */
-void WarpMidpoint(
+bool WarpMidpoint(
     const VSFrame* first,
     const VSFrame* second,
     VSFrame* destination,
     const BidirectionalFlow& flow,
+    D3D11MidpointWarper* warper,
     const VSAPI* vsapi) {
+  if (warper == nullptr ||
+      !warper->PrepareFlow(
+          flow.forward, flow.backward, flow.width, flow.height,
+          flow.grid)) {
+    return false;
+  }
   const int luma_width = vsapi->getFrameWidth(first, 0);
   const int luma_height = vsapi->getFrameHeight(first, 0);
   const auto* format = vsapi->getVideoFrameFormat(first);
   for (int plane = 0; plane < format->numPlanes; ++plane) {
-    const auto* first_ptr = vsapi->getReadPtr(first, plane);
-    const auto* second_ptr = vsapi->getReadPtr(second, plane);
-    auto* destination_ptr = vsapi->getWritePtr(destination, plane);
-    const std::ptrdiff_t first_stride = vsapi->getStride(first, plane);
-    const std::ptrdiff_t second_stride = vsapi->getStride(second, plane);
-    const std::ptrdiff_t destination_stride =
-        vsapi->getStride(destination, plane);
     const int width = vsapi->getFrameWidth(first, plane);
     const int height = vsapi->getFrameHeight(first, plane);
-    const float luma_per_plane_x =
-        static_cast<float>(luma_width) / static_cast<float>(width);
-    const float luma_per_plane_y =
-        static_cast<float>(luma_height) / static_cast<float>(height);
-    const float plane_per_luma_x = 1.0F / luma_per_plane_x;
-    const float plane_per_luma_y = 1.0F / luma_per_plane_y;
-    constexpr int kRowsPerTask = 16;
-    const int task_count = (height + kRowsPerTask - 1) / kRowsPerTask;
-    // 单个 1080P 中间帧有约三百万个采样点；按行块并行可用满 CPU，
-    // 同时仍由外层串行化 NVOFA 会话，避免多个 CUDA context 请求互相踩踏。
-    concurrency::parallel_for(0, task_count, [&](int task_index) {
-      const int first_y = task_index * kRowsPerTask;
-      const int last_y = std::min(first_y + kRowsPerTask, height);
-      for (int y = first_y; y < last_y; ++y) {
-        for (int x = 0; x < width; ++x) {
-          const float luma_x =
-              (static_cast<float>(x) + 0.5F) * luma_per_plane_x - 0.5F;
-          const float luma_y =
-              (static_cast<float>(y) + 0.5F) * luma_per_plane_y - 0.5F;
-          const auto& forward =
-              FlowAt(flow.forward, flow, luma_x, luma_y);
-          const auto& backward =
-              FlowAt(flow.backward, flow, luma_x, luma_y);
-          const float forward_x =
-              static_cast<float>(forward.flowx) /
-              kFlowFixedPointScale * plane_per_luma_x;
-          const float forward_y =
-              static_cast<float>(forward.flowy) /
-              kFlowFixedPointScale * plane_per_luma_y;
-          const float backward_x =
-              static_cast<float>(backward.flowx) /
-              kFlowFixedPointScale * plane_per_luma_x;
-          const float backward_y =
-              static_cast<float>(backward.flowy) /
-              kFlowFixedPointScale * plane_per_luma_y;
-          const float first_value = SamplePlane(
-              first_ptr, first_stride, width, height,
-              static_cast<float>(x) - 0.5F * forward_x,
-              static_cast<float>(y) - 0.5F * forward_y);
-          const float second_value = SamplePlane(
-              second_ptr, second_stride, width, height,
-              static_cast<float>(x) - 0.5F * backward_x,
-              static_cast<float>(y) - 0.5F * backward_y);
-          destination_ptr[y * destination_stride + x] =
-              static_cast<std::uint8_t>(
-                  std::clamp(
-                      std::lround((first_value + second_value) * 0.5F),
-                      0L, 255L));
-        }
-      }
-    });
+    if (!warper->WarpPlane(
+            plane, vsapi->getReadPtr(first, plane),
+            vsapi->getStride(first, plane),
+            vsapi->getReadPtr(second, plane),
+            vsapi->getStride(second, plane),
+            vsapi->getWritePtr(destination, plane),
+            vsapi->getStride(destination, plane), width, height,
+            luma_width, luma_height)) {
+      return false;
+    }
   }
+  return true;
 }
 
 /** 写入输出帧率对应的时长和匿名运行证据。 */
@@ -594,6 +576,13 @@ void SetOutputProperties(
       properties, "LTPNVOFASceneCut", scene_cut ? 1 : 0, maReplace);
   vsapi->mapSetInt(
       properties, "LTPNVOFAProcessUs", process_microseconds, maReplace);
+  vsapi->mapSetInt(
+      properties, "LTPNVOFAAdapterMatched", 1, maReplace);
+  vsapi->mapSetInt(
+      properties, "LTPNVOFACudaDeviceIndex",
+      data->engine.cuda_device_index(), maReplace);
+  vsapi->mapSetInt(
+      properties, "LTPNVOFAD3D11Warp", 1, maReplace);
 }
 
 /** VapourSynth 请求输出帧；偶数帧保留源帧，奇数帧生成 0.5 中间帧。 */
@@ -665,7 +654,16 @@ const VSFrame* VS_CC InterpolationGetFrame(
       vsapi->freeFrame(first);
       return nullptr;
     }
-    WarpMidpoint(first, second, output, flow, vsapi);
+    if (!WarpMidpoint(
+            first, second, output, flow, &data->warper, vsapi)) {
+      const std::string message =
+          "LTP NVOFA D3D11 warp failed: " + data->warper.error();
+      vsapi->setFilterError(message.c_str(), frame_context);
+      vsapi->freeFrame(output);
+      vsapi->freeFrame(second);
+      vsapi->freeFrame(first);
+      return nullptr;
+    }
   }
   const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::steady_clock::now() - started);
@@ -734,6 +732,24 @@ void VS_CC InterpolationCreate(
     data->node = nullptr;
     return;
   }
+  const char* adapter_luid_data =
+      vsapi->mapGetData(input, "adapter_luid", 0, &error);
+  const int adapter_luid_size =
+      error ? 0 : vsapi->mapGetDataSize(input, "adapter_luid", 0, &error);
+  const std::string adapter_luid =
+      error || adapter_luid_data == nullptr || adapter_luid_size <= 0
+          ? std::string()
+          : std::string(
+                adapter_luid_data,
+                static_cast<std::size_t>(adapter_luid_size));
+  if (error || !IsNormalizedLuid(adapter_luid)) {
+    vsapi->mapSetError(
+        output,
+        "NVOFAInterpolate: normalized D3D11 adapter LUID is required");
+    vsapi->freeNode(data->node);
+    data->node = nullptr;
+    return;
+  }
   data->scene_threshold =
       vsapi->mapGetFloat(input, "scene_threshold", 0, &error);
   if (error) data->scene_threshold = 24.0;
@@ -777,10 +793,20 @@ void VS_CC InterpolationCreate(
           : data->input_info.numFrames * 2 - 1;
   if (!data->engine.Initialize(
           static_cast<std::uint32_t>(data->input_info.width),
-          static_cast<std::uint32_t>(data->input_info.height))) {
+          static_cast<std::uint32_t>(data->input_info.height),
+          adapter_luid)) {
     const std::string message =
         "NVOFAInterpolate: hardware initialization failed: " +
         data->engine.error();
+    vsapi->mapSetError(output, message.c_str());
+    vsapi->freeNode(data->node);
+    data->node = nullptr;
+    return;
+  }
+  if (!data->warper.Initialize(adapter_luid)) {
+    const std::string message =
+        "NVOFAInterpolate: D3D11 warp initialization failed: " +
+        data->warper.error();
     vsapi->mapSetError(output, message.c_str());
     vsapi->freeNode(data->node);
     data->node = nullptr;
@@ -815,7 +841,7 @@ VapourSynthPluginInit2(
       VS_MAKE_VERSION(0, 1), VAPOURSYNTH_API_VERSION, 0, plugin);
   plugin_api->registerFunction(
       "Interpolate",
-      "clip:vnode;source_fps_num:int;source_fps_den:int;"
+      "clip:vnode;source_fps_num:int;source_fps_den:int;adapter_luid:data;"
       "scene_threshold:float:opt;",
       "clip:vnode;",
       InterpolationCreate, nullptr, plugin);

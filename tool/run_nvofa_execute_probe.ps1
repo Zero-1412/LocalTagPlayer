@@ -89,4 +89,10 @@ $result = & $probe
 if ($LASTEXITCODE -ne 0) {
   throw "NVOFA execute probe failed with exit code $LASTEXITCODE.`n$result"
 }
+$joinedResult = @($result) -join "`n"
+if ($joinedResult -notmatch "luid-match=passed" -or
+    $joinedResult -notmatch "d3d11-luid=([0-9a-f]{8}):([0-9a-f]{8})" -or
+    $joinedResult -notmatch "cuda-luid=([0-9a-f]{8}):([0-9a-f]{8})") {
+  throw "NVOFA execute probe did not prove exact D3D11/CUDA LUID matching.`n$result"
+}
 $result

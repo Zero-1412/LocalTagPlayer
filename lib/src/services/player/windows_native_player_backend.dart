@@ -154,6 +154,9 @@ class WindowsNativePlayerBackend
       'native-nvofa-driver-error',
       'native-nvofa-api-version',
       'native-nvofa-d3d11',
+      'native-d3d11-adapter-state',
+      'native-d3d11-adapter-error',
+      'native-d3d11-adapter-luid',
     ]) {
       final propertyValue = value[property];
       if (propertyValue != null) _properties[property] = '$propertyValue';

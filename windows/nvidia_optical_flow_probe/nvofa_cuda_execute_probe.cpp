@@ -1,12 +1,16 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
+#include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include "d3d11_adapter_selector.h"
 #include "nvOpticalFlowCuda.h"
 
 namespace {
@@ -18,6 +22,8 @@ using CuInit = CUresult(WINAPI*)(unsigned int);
 using CuDeviceGetCount = CUresult(WINAPI*)(int*);
 using CuDeviceGet = CUresult(WINAPI*)(CUdevice*, int);
 using CuDeviceGetName = CUresult(WINAPI*)(char*, int, CUdevice);
+using CuDeviceGetLuid =
+    CUresult(WINAPI*)(char*, unsigned int*, CUdevice);
 using CuCtxCreate = CUresult(WINAPI*)(CUcontext*, unsigned int, CUdevice);
 using CuCtxDestroy = CUresult(WINAPI*)(CUcontext);
 using CuCtxSynchronize = CUresult(WINAPI*)();
@@ -81,6 +87,17 @@ int Fail(const char* stage, long status) {
   std::cerr << "nvofa-execute=failed stage=" << stage
             << " status=" << status << std::endl;
   return EXIT_FAILURE;
+}
+
+/** 把 CUDA 返回的 8-byte Windows LUID 归一化为 DXGI 使用的字符串。 */
+std::string CudaLuidString(const char* luid) {
+  std::uint32_t low = 0;
+  std::uint32_t high = 0;
+  std::memcpy(&low, luid, sizeof(low));
+  std::memcpy(&high, luid + sizeof(low), sizeof(high));
+  std::array<char, 32> buffer{};
+  std::snprintf(buffer.data(), buffer.size(), "%08x:%08x", high, low);
+  return buffer.data();
 }
 
 /** 查询单值能力；宽高边界查询失败时不允许猜测默认值。 */
@@ -185,6 +202,11 @@ bool DownloadFlow(const NV_OF_CUDA_API_FUNCTION_LIST& api,
  * FRUC 插帧器，也不会进入 Local Tag Player 的正式运行时。
  */
 int main() {
+  const D3D11AdapterSelection d3d11_adapter =
+      SelectNvidiaD3D11Adapter();
+  if (!d3d11_adapter.ready()) {
+    return Fail(d3d11_adapter.error.c_str(), -1);
+  }
   ProbeResources resources;
   resources.cuda_module = LoadLibraryExW(
       L"nvcuda.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -201,6 +223,8 @@ int main() {
       Resolve<CuDeviceGet>(resources.cuda_module, "cuDeviceGet");
   const auto cu_device_get_name =
       Resolve<CuDeviceGetName>(resources.cuda_module, "cuDeviceGetName");
+  const auto cu_device_get_luid =
+      Resolve<CuDeviceGetLuid>(resources.cuda_module, "cuDeviceGetLuid");
   const auto cu_ctx_create =
       Resolve<CuCtxCreate>(resources.cuda_module, "cuCtxCreate_v2");
   resources.cu_ctx_destroy =
@@ -213,6 +237,7 @@ int main() {
       Resolve<CuMemcpyDtoH>(resources.cuda_module, "cuMemcpyDtoH_v2");
   if (cu_init == nullptr || cu_device_get_count == nullptr ||
       cu_device_get == nullptr || cu_device_get_name == nullptr ||
+      cu_device_get_luid == nullptr ||
       cu_ctx_create == nullptr || resources.cu_ctx_destroy == nullptr ||
       cu_ctx_synchronize == nullptr || cu_memcpy_h_to_d == nullptr ||
       cu_memcpy_d_to_h == nullptr) {
@@ -227,9 +252,30 @@ int main() {
   }
 
   CUdevice device = 0;
+  int matching_devices = 0;
+  std::string cuda_luid;
+  for (int index = 0; index < device_count; ++index) {
+    CUdevice candidate = 0;
+    std::array<char, 8> candidate_luid{};
+    unsigned int node_mask = 0;
+    if (cu_device_get(&candidate, index) != kCudaSuccess ||
+        cu_device_get_luid(
+            candidate_luid.data(), &node_mask, candidate) !=
+            kCudaSuccess) {
+      continue;
+    }
+    const std::string normalized =
+        CudaLuidString(candidate_luid.data());
+    if (normalized != d3d11_adapter.luid) continue;
+    device = candidate;
+    cuda_luid = normalized;
+    ++matching_devices;
+  }
+  if (matching_devices != 1) {
+    return Fail("match-cuda-device-by-d3d11-luid", matching_devices);
+  }
   char device_name[128] = {};
-  if (cu_device_get(&device, 0) != kCudaSuccess ||
-      cu_device_get_name(device_name, sizeof(device_name), device) !=
+  if (cu_device_get_name(device_name, sizeof(device_name), device) !=
           kCudaSuccess ||
       cu_ctx_create(&resources.cuda_context, 0, device) != kCudaSuccess) {
     return Fail("create-cuda-context", device);
@@ -412,6 +458,9 @@ int main() {
             << " driver-max=" << (driver_max_api >> 4) << "."
             << (driver_max_api & 0xF)
             << " device=" << device_name
+            << " d3d11-luid=" << d3d11_adapter.luid
+            << " cuda-luid=" << cuda_luid
+            << " luid-match=passed"
             << " grid=" << grid
             << " frame=" << width << "x" << height
             << " nonzero=" << nonzero_vectors

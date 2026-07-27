@@ -455,7 +455,8 @@ set(LTP_PINNED_MEDIA_KIT_VIDEO_WINDOWS_DIR
 
 add_library(ltp_native_runtime STATIC
   "${LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE}"
-  "${LTP_NATIVE_DEPS}/video/windows/utils.cc")
+  "${LTP_NATIVE_DEPS}/video/windows/utils.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../runner/d3d11_adapter_selector.cpp")
 apply_standard_settings(ltp_native_runtime)
 target_compile_options(ltp_native_runtime PRIVATE /utf-8)
 target_compile_definitions(ltp_native_runtime PRIVATE
@@ -678,14 +679,18 @@ if(LTP_BUILD_NVOFA_EXECUTE_PROBE)
   endforeach()
 
   add_executable(ltp_nvofa_cuda_execute_probe EXCLUDE_FROM_ALL
-    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe/nvofa_cuda_execute_probe.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe/nvofa_cuda_execute_probe.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner/d3d11_adapter_selector.cpp")
   apply_standard_settings(ltp_nvofa_cuda_execute_probe)
   target_compile_features(ltp_nvofa_cuda_execute_probe PRIVATE cxx_std_17)
   target_compile_options(ltp_nvofa_cuda_execute_probe PRIVATE /utf-8)
   target_compile_definitions(ltp_nvofa_cuda_execute_probe PRIVATE NOMINMAX)
   target_include_directories(ltp_nvofa_cuda_execute_probe PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner"
     "${LTP_NVOFA_PUBLIC_HEADER_DIR}")
+  target_link_libraries(ltp_nvofa_cuda_execute_probe PRIVATE
+    d3d11.lib dxgi.lib)
   set_target_properties(ltp_nvofa_cuda_execute_probe PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY
       "${CMAKE_BINARY_DIR}/nvidia_optical_flow_probe"
@@ -722,7 +727,8 @@ if(LTP_BUILD_NVOFA_VAPOURSYNTH_PLUGIN)
   endif()
 
   add_library(ltp_nvofa_vapoursynth_plugin MODULE EXCLUDE_FROM_ALL
-    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe/nvofa_vapoursynth_plugin.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe/nvofa_vapoursynth_plugin.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe/d3d11_midpoint_warper.cpp")
   apply_standard_settings(ltp_nvofa_vapoursynth_plugin)
   target_compile_features(ltp_nvofa_vapoursynth_plugin PRIVATE cxx_std_17)
   target_compile_options(ltp_nvofa_vapoursynth_plugin PRIVATE /utf-8)
@@ -731,6 +737,8 @@ if(LTP_BUILD_NVOFA_VAPOURSYNTH_PLUGIN)
     "${CMAKE_CURRENT_SOURCE_DIR}/../nvidia_optical_flow_probe"
     "${LTP_NVOFA_PUBLIC_HEADER_DIR}"
     "${LTP_VAPOURSYNTH_INCLUDE_DIR}")
+  target_link_libraries(ltp_nvofa_vapoursynth_plugin PRIVATE
+    d3d11.lib d3dcompiler.lib dxgi.lib)
   set_target_properties(ltp_nvofa_vapoursynth_plugin PROPERTIES
     PREFIX ""
     OUTPUT_NAME "ltp_nvofa_vapoursynth"

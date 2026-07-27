@@ -36,9 +36,12 @@ class VapourSynthMotionRuntime {
   /**
    * 读取本机配置并预加载 VSScript。
    *
+   * [active_adapter_luid] 必须来自当前原生 D3D11 适配器；配置 NVOFA 插件时，
+   * 它会与插件绝对路径一起作为结构化用户数据传给脚本。
+   *
    * 必须在首次挂载 VapourSynth 滤镜前调用；重复调用不会替换已经验证的运行时。
    */
-  void Initialize();
+  void Initialize(const std::string& active_adapter_luid = {});
 
   /**
    * 启用或关闭带稳定标签的 VapourSynth 滤镜。
@@ -86,7 +89,7 @@ class VapourSynthMotionRuntime {
   mutable std::mutex mutex_;
   HMODULE vsscript_module_ = nullptr;
   std::string script_path_utf8_;
-  /** 可选脚本用户数据；NVOFA 原型用它传递本机插件绝对路径。 */
+  /** 可选脚本用户数据；NVOFA 原型用它传递插件绝对路径与活动 D3D11 LUID。 */
   std::string user_data_utf8_;
   Snapshot snapshot_;
 };

@@ -1,5 +1,30 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 NVOFA 同 LUID D3D11 Compute 合成
+
+- Windows child HWND 初始化时通过 DXGI 1.6 高性能顺序选择可创建 D3D11
+  Feature Level 11+ 的 NVIDIA 适配器；mpv 用唯一适配器描述设置
+  `d3d11-adapter`，CUDA 再用 `cuDeviceGetLuid` 精确匹配同一个 LUID，不再固定
+  CUDA device 0。多块同名 NVIDIA 卡会安全拒绝，可用环境变量显式选择 LUID。
+- RTX 4070 SUPER 真机确认 mpv D3D11、CUDA/NVOFA 与新增 Compute 设备均为
+  `00000000:00017093`；活动 GPU 诊断来源改为
+  `windows-native-mpv-selected-d3d11-adapter`，不再借用尚未创建的 ANGLE 设备。
+- 中间帧的双线性采样与双向融合已从 CPU `parallel_for` 迁移到 D3D11
+  Compute Shader。输入软件平面、S10.5 双向光流和最终输出仍需上传/读回，因此
+  准确边界是“同 GPU 硬件光流 + GPU warp”，不是全程 non-copy。
+- D3D11 初始化、shader 编译、资源上传、dispatch 或读回任一步失败都会让
+  VapourSynth 滤镜报错并触发现有会话回滚；没有静默 CPU 慢路径。
+- 三类 650 kbps 1080P 的 4 秒门禁分别用时 3.996 / 3.998 / 3.995 秒，均完成
+  24→48fps、seek、reload、`d3d11-warp=passed` 且窗口内无新增掉帧。
+- 真人面部、动画渐变、暗场各 off/on 20 秒六组再次全部通过：off/on 为
+  24/48fps、总掉帧 0/0、音视频停滞 0/0，六组均使用相同精确 LUID，六张截图
+  均正常出画，进程退出生命周期完整。
+- 插件、VapourSynth R78 与 NVIDIA 公开头文件仍为 `EXCLUDE_FROM_ALL` 本机
+  QA 资产，没有 install 规则；产品入口、默认 MediaKit、Windows 后端选择、
+  插件 ABI v1、filtered queue、SQLite、标签、缓存队列和用户数据均未改变。
+- 下一阶段优先消除 VapourSynth 软件帧和光流回读，并加入前后向一致性、遮挡/
+  显露区域处理与快速运动连续视频审查；未通过前不开放默认入口。
+
 ## 2026-07-28 NVOFA 2× 中间帧本机原型
 
 - 新增显式 `EXCLUDE_FROM_ALL` 的 VapourSynth R78 插件目标。插件只从 System32
