@@ -395,7 +395,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
   /** 是否仅水平翻转视频画面。 */
   final bool mirrorVideo;
 
-  /** 是否使用仅在画面放大时运行的本地 GPU 高质量超分。 */
+  /** 是否使用仅在画面放大时运行的 libmpv GPU 高质量缩放；该能力不是 NVIDIA AI。 */
   final bool videoSuperResolutionEnabled;
 
   /** 当前压缩画质增强档位。 */
@@ -407,7 +407,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
   /** 镜像画面开关变化回调。 */
   final ValueChanged<bool> onMirrorVideoChanged;
 
-  /** GPU 画质超分开关变化回调。 */
+  /** GPU 高质量缩放开关变化回调；保留既有设置键和持久化语义。 */
   final ValueChanged<bool> onVideoSuperResolutionChanged;
 
   /** 打开压缩画质增强档位列表。 */
@@ -434,8 +434,8 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
           ),
           _PlayerSettingsToggleRow(
             key: const ValueKey('player.settings.superResolution'),
-            label: 'GPU 画质超分',
-            subtitle: '仅放大低分辨率画面',
+            label: 'GPU 高质量缩放（非 NVIDIA AI）',
+            subtitle: 'libmpv 缩放，仅在画面放大时生效',
             value: videoSuperResolutionEnabled,
             onChanged: onVideoSuperResolutionChanged,
           ),
@@ -535,7 +535,8 @@ class _PlayerSettingsToggleRow extends StatelessWidget {
         onTap: () => onChanged(!value),
         borderRadius: BorderRadius.circular(AppRadius.control),
         child: SizedBox(
-          height: subtitle == null ? 44 : 58,
+          // 带说明的长能力名称允许自然换行；72px 可完整容纳两行名称和一行边界说明。
+          height: subtitle == null ? 44 : 72,
           child: Row(
             children: [
               const SizedBox(width: 12),

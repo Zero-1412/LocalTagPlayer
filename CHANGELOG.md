@@ -1,5 +1,13 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · GPU 高质量缩放命名与 RTX Video SDK 评估
+
+- 播放器齿轮和诊断统一把现有入口标注为“GPU 高质量缩放（非 NVIDIA AI）”，不再把 libmpv `ewa_lanczossharp` 误称为画质超分。
+- 保留原设置键、默认值、持久化、mpv 属性和性能回滚，未改变解码、播放队列或画质处理行为。
+- 单独完成 RTX Video SDK 1.1 的许可、D3D11 纹理接入和非 NVIDIA 回退评估；实际下载包 EULA、MIT 排除声明和 Windows 原生同设备纹理原型未完成前，不进入产品。
+- SQLite schema、标签查询、filtered queue、`PlayerBackend` contract、缓存队列和用户数据均未改变。
+- focused test 3/3、静态分析与 Windows Debug 构建通过；真实 Debug 播放器点击到齿轮后确认新文案完整、开关未挤压、相邻入口可见且无溢出。
+
 ## 2026-07-27 · 自然片源压缩画质复核
 
 - 新增 CC BY 3.0 开放电影自然片源 A/B 工具，隔离生成真人面部、动画渐变和暗场三类低码率 1080P 样片，并汇总来源、许可、实际码率和匿名播放器诊断。

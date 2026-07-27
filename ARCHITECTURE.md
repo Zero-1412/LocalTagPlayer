@@ -1,5 +1,7 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.69` 把既有 libmpv 入口明确命名为“GPU 高质量缩放（非 NVIDIA AI）”，不改变设置键、mpv 属性、`PlayerBackend` contract 或性能回滚。RTX Video SDK 只完成许可、D3D11 纹理接入和非 NVIDIA 回退评估：未来原型必须留在 Windows 原生平台边界、精确复用活动 D3D11 LUID，并在任何能力或运行失败时回到现有 libmpv 缩放。SDK 1.1 下载包 EULA、MIT 排除声明和目标代码再分发尚未完成发布核对，因此不下载、不提交、不分发 SDK。
+
 `Architecture Baseline 0.5.68` 在不扩展 `PlayerBackend` contract 的前提下，把旧自动画质布尔配置升级为“关闭 / 自动 / 清晰增强”枚举。播放器页面仍通过既有 mpv 属性边界串行应用同一 `vf` 去块、`hqdn3d` 与 `unsharp` 图，并以 GPU renderer 的 `deband` 属性增加保守去色带；性能协调器拥有实际档位，掉帧、缓冲或停滞可覆盖用户请求并回滚。设置只表达意图，不承诺恢复源视频已丢失的细节；缩放后 GLSL 锐化在固定低码率 1080P A/B 后保持未启用。SQLite、标签查询、filtered queue、缓存队列和用户数据不变。
 
 ## 总览
@@ -55,12 +57,13 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.68`
+已完成基线：`Architecture Baseline 0.5.69`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.69`：播放器齿轮与诊断把既有 libmpv 能力统一标注为“GPU 高质量缩放（非 NVIDIA AI）”，保留 `videoSuperResolutionEnabled` 键、mpv 缩放属性和运行行为。RTX Video SDK 只形成平台评估：公开 RTX SDK 家族许可允许嵌入应用的目标代码分发但禁止 SDK 受开源许可约束，实际 SDK 1.1 下载包 EULA 仍是发布阻断；D3D11 原型必须在 Windows 原生边界拥有同一活动 LUID 的逐帧输入/输出纹理，失败回到 libmpv 缩放。未修改 PlayerBackend、SQLite、标签查询、filtered queue、缓存队列或用户数据。
 - `0.5.68`：`PlaybackSettings` 向后兼容增加压缩画质增强三档；旧布尔 `true` 迁移为自动，缺失或无效值保持关闭。`PlayerPage` 复用现有低频健康样本和 profile 上限，清晰增强只提前请求最高安全档，后续压力回滚与迟滞恢复不变。去色带通过现有 mpv 属性访问串行启停，不新增离线处理、FFmpeg 播放链或 `PlayerBackend` 方法。450 kbps 1080P Windows A/B 为 0 掉帧/0 卡顿，固定帧未见明显光晕，故缩放后 GLSL 锐化继续不启用。SQLite、标签查询、filtered queue、缓存队列和用户数据未改变。
 - `0.5.67`：`AppUpdateService` 增加当前版本读取与下载安装边界；GitHub 实现仅在 Windows 下载带 SHA-256 摘要的正式安装器，使用 `.part`、长度检查、流式摘要校验和原子改名后启动，不传递静默安装或提权参数。设置首页新增关于入口，显示版本、构建号、正式版渠道和主动检查状态。非 Windows、摘要缺失与失败路径继续使用 Release 页面，不修改 SQLite、标签语义、filtered queue、PlayerBackend、缓存队列或用户数据。
 - `0.5.66`：无效记录清理把 `FileSystemEntityType.notFound` 明确纳入删除条件，不再要求路径先由扫描标记为 missing；既有批量数据库事务、依赖备份清理和磁盘文件保护边界不变。

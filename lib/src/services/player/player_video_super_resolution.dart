@@ -4,11 +4,12 @@ import '../../core/playback_settings.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * 在现有 libmpv GPU 渲染管线内切换实时画质超分配置。
+ * 在现有 libmpv GPU 渲染管线内切换高质量缩放配置。
  *
- * 该能力不在 Flutter UI isolate 运行图像模型，也不改变解码器、播放队列或媒体
- * 缓存。`scaler-resizes-only` 保证源画面没有被放大时不执行高质量亮度缩放；关闭
- * 后恢复项目原有的 Lanczos 基线，避免历史设置残留到后续媒体。
+ * 该能力不调用 NVIDIA RTX Video AI，也不在 Flutter UI isolate 运行图像模型，
+ * 不改变解码器、播放队列或媒体缓存。`scaler-resizes-only` 保证源画面没有被放大
+ * 时不执行高质量亮度缩放；关闭后恢复项目原有的 Lanczos 基线，避免历史设置残留
+ * 到后续媒体。
  */
 class PlayerVideoSuperResolution {
   const PlayerVideoSuperResolution._();
@@ -18,7 +19,7 @@ class PlayerVideoSuperResolution {
     'player-video-super-resolution-apply-tail',
   );
 
-  /** 开启超分时交给 mpv GPU renderer 的固定、可回滚属性。 */
+  /** 开启高质量缩放时交给 mpv GPU renderer 的固定、可回滚属性。 */
   static const enabledProperties = <String, String>{
     'scale': 'ewa_lanczossharp',
     'cscale': 'lanczos',
@@ -59,7 +60,7 @@ class PlayerVideoSuperResolution {
       PlayerVideoScaler.bicubic => 'bicubic',
       PlayerVideoScaler.lanczos => 'lanczos',
     };
-    // 超分关闭时恢复用户选择的基线，避免设置页显示 Bicubic 而后端仍保留 Lanczos。
+    // 高质量缩放关闭时恢复用户选择的基线，避免设置页显示 Bicubic 而后端仍保留 Lanczos。
     final properties = enabled
         ? enabledProperties
         : <String, String>{

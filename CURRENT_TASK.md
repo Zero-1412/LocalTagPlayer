@@ -1,5 +1,13 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 GPU 高质量缩放命名与 RTX Video SDK 评估
+
+- 播放器齿轮和播放诊断把既有 libmpv 能力明确标注为“GPU 高质量缩放（非 NVIDIA AI）”；设置键、默认值、持久化、mpv 属性和性能回滚不变。
+- RTX Video SDK 1.1 公开能力覆盖 DX11、超分、伪影修复和 SDR→HDR，但下载需要 NVIDIA 登录；下载包内实际 EULA、目标代码再分发与 MIT 排除声明是发布前硬阻断。
+- 当前 `PlayerBackend.setProperty` 和 `PlayerGpuRenderBoundary` 不暴露逐帧 D3D11 纹理；未来原型只能在实验性 Windows 原生后端复用活动 device/LUID，任何失败无缝回到现有 libmpv 缩放。
+- 完整评估见 `docs/qa/rtx_video_sdk_feasibility_20260727.md`；本轮不下载、不提交、不分发 SDK，不改变 filtered queue、缓存队列或用户数据。
+- focused test 3/3、`flutter analyze` 与 Windows Debug build 通过；真实 Debug 窗口完成媒体卡片、播放器、控制条和齿轮可达性点击，长名称完整换行且无溢出或遮挡。
+
 ## 2026-07-27 三类自然低码率片源 A/B 与 NVIDIA 状态核查
 
 - `Tears of Steel` 真人面部/暗场与 `Sintel` 动画渐变均以 CC BY 3.0 开放片源隔离压制为低码率 1080P；关闭/清晰增强共六轮真实 Windows 播放均为 0 掉帧、0 音视频停滞。

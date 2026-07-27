@@ -1,3 +1,11 @@
+## 2026-07-27 GPU 高质量缩放命名与 RTX Video SDK 评估
+
+- 播放器齿轮和诊断统一显示“GPU 高质量缩放（非 NVIDIA AI）”；原 `ValueKey`、设置键、默认值、持久化、libmpv 属性与性能回滚均保留。
+- RTX Video SDK 1.1 只做独立可行性评估：公开许可与 MIT 分发必须隔离，下载包内 EULA 是发布阻断，不把 NVIDIA 二进制提交到公开仓库。
+- 当前 MediaKit 生产路径只暴露活动 D3D11 LUID，不暴露逐帧输入/输出纹理；未来原型必须放在实验性 Windows 原生边界，同设备串行执行，任一失败回到现有 libmpv 缩放。
+- 评估记录见 `docs/qa/rtx_video_sdk_feasibility_20260727.md`；本轮不修改 `PlayerBackend` contract、filtered queue、解码器、缓存队列或用户数据。
+- focused test 3/3、`flutter analyze` 与 Windows Debug build 通过；真实 Debug 产物点击到齿轮后，长名称自然换行且无重叠、遮挡或溢出，原开关与相邻入口均可达。
+
 ## 2026-07-27 三类自然片源 A/B 与 NVIDIA RTX Video 边界
 
 - 使用 CC BY 3.0 的 `Tears of Steel` 与 `Sintel` 隔离生成真人面部、动画渐变、暗场三类低码率 1080P；关闭/清晰增强六轮均为 0 掉帧、0 音视频停滞。

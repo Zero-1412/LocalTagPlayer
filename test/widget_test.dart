@@ -5191,8 +5191,9 @@ void main() {
       findsNothing,
     );
     expect(find.text('镜像画面'), findsOneWidget);
-    expect(find.text('GPU 画质超分'), findsOneWidget);
-    expect(find.text('仅放大低分辨率画面'), findsOneWidget);
+    expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsOneWidget);
+    expect(find.text('libmpv 缩放，仅在画面放大时生效'), findsOneWidget);
+    expect(find.text('GPU 画质超分'), findsNothing);
     expect(find.text('压缩画质增强'), findsOneWidget);
     expect(find.text('关闭'), findsOneWidget);
     expect(find.text('单曲循环'), findsOneWidget);

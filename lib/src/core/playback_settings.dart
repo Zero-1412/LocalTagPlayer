@@ -242,7 +242,7 @@ class PlaybackSettings {
   final double playbackRate;
   /** 快进与快退快捷键共用的全局跳转秒数。 */
   final int seekStepSeconds;
-  /** 是否启用只在画面放大时运行的 libmpv GPU 高质量超分。 */
+  /** 是否启用只在画面放大时运行的 libmpv GPU 高质量缩放；不代表厂商 AI 超分。 */
   final bool videoSuperResolutionEnabled;
   /** 压缩画质增强档位；旧布尔设置会安全迁移为关闭或自动。 */
   final PlayerCompressionEnhancementMode compressionEnhancementMode;

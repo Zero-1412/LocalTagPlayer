@@ -968,7 +968,7 @@ class PlayerPageState extends State<PlayerPage> {
   late PlayerVideoScaler _videoScaler;
   /** 当前显示输出电平策略。 */
   late PlayerVideoOutputRange _videoOutputRange;
-  /** 当前全局 GPU 画质超分开关；只影响视频渲染缩放器。 */
+  /** 当前全局 GPU 高质量缩放开关；只影响 libmpv 渲染缩放器，不调用 NVIDIA AI。 */
   late bool _videoSuperResolutionEnabled;
   /** 当前压缩画质增强档位；只控制实时滤镜与低频性能协调。 */
   late PlayerCompressionEnhancementMode _compressionEnhancementMode;
@@ -1277,7 +1277,7 @@ class PlayerPageState extends State<PlayerPage> {
   }
 
   /**
-   * 即时切换本地 GPU 画质超分并异步持久化。
+   * 即时切换 libmpv GPU 高质量缩放并异步持久化。
    *
    * Flutter 只重绘设置开关；高质量缩放留在 mpv GPU renderer，不能在 UI isolate
    * 解码或处理视频帧，也不能触发 filtered queue 与媒体详情重算。
@@ -3686,7 +3686,7 @@ class PlayerPageState extends State<PlayerPage> {
       'mpv 视频滤镜: ${mpv['vf']}',
       'mpv 去色带: ${mpv['deband']}',
       'mpv 去色带参数: iterations=${mpv['deband-iterations']} · threshold=${mpv['deband-threshold']} · range=${mpv['deband-range']} · grain=${mpv['deband-grain']}',
-      '画质超分设置: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
+      'GPU 高质量缩放（非 NVIDIA AI）: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
       'mpv GPU 缩放器: ${mpv['scale']}',
       'mpv GPU 色度缩放器: ${mpv['cscale']}',
       'mpv 仅缩放时增强: ${mpv['scaler-resizes-only']}',
