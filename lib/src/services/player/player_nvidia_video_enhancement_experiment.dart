@@ -26,6 +26,8 @@ class PlayerNvidiaVideoEnhancementCapability {
     required this.hasD3d11vpp,
     required this.hasNvidiaScalingMode,
     this.hwdecCurrent,
+    this.currentVo,
+    this.runtimeState = 'inactive',
     this.filterChainIntegrated = false,
     this.conflictingCpuFilters = false,
   });
@@ -37,6 +39,8 @@ class PlayerNvidiaVideoEnhancementCapability {
         hasD3d11vpp = false,
         hasNvidiaScalingMode = false,
         hwdecCurrent = null,
+        currentVo = null,
+        runtimeState = 'inactive',
         filterChainIntegrated = false,
         conflictingCpuFilters = false;
 
@@ -55,6 +59,16 @@ class PlayerNvidiaVideoEnhancementCapability {
   /** 当前媒体实际使用的硬解器；只有 `d3d11va` 代表非 copy 纹理链。 */
   final String? hwdecCurrent;
 
+  /** 当前实际视频输出；产品开关只允许原生 `gpu-next/D3D11` child HWND。 */
+  final String? currentVo;
+
+  /**
+   * 原生层根据固定 mpv 日志归一化的驱动状态。
+   *
+   * 只接受 `inactive/requested/active/rejected`，不携带原始日志或媒体路径。
+   */
+  final String runtimeState;
+
   /** 多片源 A/B、掉帧与回滚验证是否已覆盖当前滤镜接入。 */
   final bool filterChainIntegrated;
 
@@ -64,11 +78,15 @@ class PlayerNvidiaVideoEnhancementCapability {
   /** 当前媒体是否真实运行在 D3D11VA 非 copy 解码链。 */
   bool get usesNonCopyD3d11 => hwdecCurrent == 'd3d11va';
 
+  /** 当前会话是否绕过 Flutter Texture 并由 libmpv 直接拥有 D3D11 输出。 */
+  bool get usesNativeD3d11Output => currentVo == 'gpu-next-d3d11-child-hwnd';
+
   /** 所有可验证门槛同时满足时才允许实验开关响应点击。 */
   bool get canEnable =>
       status == PlayerNvidiaVideoEnhancementStatus.available &&
       filterChainIntegrated &&
       usesNonCopyD3d11 &&
+      usesNativeD3d11Output &&
       !conflictingCpuFilters;
 
   /** 面向设置页的边界说明，不把驱动扩展描述成 RTX Video SDK。 */
@@ -91,10 +109,22 @@ class PlayerNvidiaVideoEnhancementCapability {
     if (conflictingCpuFilters) {
       return '请先关闭压缩画质增强和暗场增强；两类滤镜不能安全串联';
     }
+    if (!usesNativeD3d11Output) {
+      return '需使用 Windows 原生 libmpv D3D11 渲染器';
+    }
     if (!usesNonCopyD3d11) {
       return '需在解码设置中选择 D3D11VA（非 copy），并重新打开视频';
     }
-    return 'mpv $mpvVersion · D3D11VA 零拷贝 · 非 RTX Video SDK';
+    if (runtimeState == 'active') {
+      return 'NVIDIA RTX Super Resolution 已由驱动确认';
+    }
+    if (runtimeState == 'requested') {
+      return '已请求 NVIDIA RTX Super Resolution，等待驱动确认';
+    }
+    if (runtimeState == 'rejected') {
+      return 'libmpv 拒绝 NVIDIA 滤镜，已保持关闭';
+    }
+    return 'mpv $mpvVersion · 原生 D3D11VA 零拷贝';
   }
 }
 
@@ -119,10 +149,7 @@ class PlayerNvidiaVideoEnhancementExperiment {
    * 该常量只证明本项目的互斥滤镜接入已验证，不代表所有 NVIDIA 驱动都会启用
    * RTX Super Resolution；最终驱动状态仍需由诊断日志和用户观感确认。
    */
-  static const filterChainValidated = bool.fromEnvironment(
-    'LTP_ENABLE_NVIDIA_SCALING_QA',
-    defaultValue: false,
-  );
+  static const filterChainValidated = true;
 
   /** NVIDIA 视频处理滤镜占用的完整 `vf` 快照。 */
   static const filterGraph = 'd3d11vpp=scale=2:scaling-mode=nvidia:format=nv12';
@@ -149,6 +176,9 @@ class PlayerNvidiaVideoEnhancementExperiment {
     }
     final reportedVersion = await backend.getProperty('mpv-version');
     final reportedHwdec = await backend.getProperty('hwdec-current');
+    final reportedVo = await backend.getProperty('current-vo');
+    final reportedRuntimeState =
+        await backend.getProperty('native-nvidia-vsr-state');
     final version = parseVersion(reportedVersion) ??
         parseVersion(PlayerNvidiaVideoEnhancementExperiment.bundledMpvVersion);
     if (version == null) {
@@ -172,6 +202,8 @@ class PlayerNvidiaVideoEnhancementExperiment {
       hasD3d11vpp: hasD3d11vpp,
       hasNvidiaScalingMode: hasNvidiaScalingMode,
       hwdecCurrent: _normalizeProperty(reportedHwdec),
+      currentVo: _normalizeProperty(reportedVo),
+      runtimeState: _normalizeRuntimeState(reportedRuntimeState),
       filterChainIntegrated: filterChainIntegrated,
       conflictingCpuFilters: conflictingCpuFilters,
     );
@@ -198,6 +230,19 @@ class PlayerNvidiaVideoEnhancementExperiment {
       return null;
     }
     return normalized;
+  }
+
+  /** 把原生状态限制在无路径、可稳定展示的枚举集合。 */
+  static String _normalizeRuntimeState(String rawValue) {
+    final normalized = rawValue.trim().toLowerCase();
+    return const <String>{
+      'inactive',
+      'requested',
+      'active',
+      'rejected',
+    }.contains(normalized)
+        ? normalized
+        : 'inactive';
   }
 
   /** 按 major/minor/patch 比较版本，忽略提交后缀。 */

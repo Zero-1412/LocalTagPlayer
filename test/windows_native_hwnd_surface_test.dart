@@ -29,6 +29,9 @@ void main() {
           'volume': 100.0,
           'lifecycle': 'mpv_hwnd_ready',
           'native-surface-kind': 'child-hwnd',
+          'mpv-version': 'mpv 0.41.0',
+          'vf': 'd3d11vpp=scale=2:scaling-mode=nvidia:format=nv12',
+          'native-nvidia-vsr-state': 'active',
         };
       }
       return null;
@@ -79,6 +82,12 @@ void main() {
     expect(arguments['visible'], isTrue);
     expect(
         await backend.getProperty('current-vo'), 'gpu-next-d3d11-child-hwnd');
+    expect(await backend.getProperty('mpv-version'), 'mpv 0.41.0');
+    expect(await backend.getProperty('vf'), contains('scaling-mode=nvidia'));
+    expect(
+      await backend.getProperty('native-nvidia-vsr-state'),
+      'active',
+    );
 
     final rectCountBeforeDpiChange =
         calls.where((call) => call.method == 'setSurfaceRect').length;

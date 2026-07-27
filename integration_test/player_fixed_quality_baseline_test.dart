@@ -12,10 +12,11 @@ import 'package:media_kit/media_kit.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * 使用仓库生成的固定 HDR/SDR/低码率样本做真实 MediaKit 长播基线。
+ * 使用仓库生成的固定 HDR/SDR/低码率样本做真实播放器长播基线。
  *
- * 测试直接构建单条来源队列，不读取用户媒体库；外部脚本负责进程 GPU、功耗和像素
- * 截图，本测试只保存匿名播放器诊断与 DXGI 输出矩阵。
+ * HDR、暗场与压缩模式继续使用 MediaKit；NVIDIA 模式使用原生 child HWND
+ * `gpu-next/D3D11VA`，确保测到驱动扩展而不是 Flutter Texture copy 路径。测试
+ * 不读取用户媒体库；外部脚本负责进程 GPU、功耗和像素截图。
  */
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -135,10 +136,12 @@ void main() {
             required bool enableHardwareAcceleration,
           }) =>
               PlayerService(
-            backend: MediaKitPlayerBackend(
-              hwdec: hwdec,
-              enableHardwareAcceleration: enableHardwareAcceleration,
-            ),
+            backend: baselineMode.startsWith('nvidia-')
+                ? WindowsNativePlayerBackend(mode: 'hwnd')
+                : MediaKitPlayerBackend(
+                    hwdec: hwdec,
+                    enableHardwareAcceleration: enableHardwareAcceleration,
+                  ),
           ),
           mediaProbeBackendFactory: () =>
               createMediaProbeBackend(ffmpegBackend),
@@ -164,8 +167,23 @@ void main() {
         ),
       );
       expect(nvidiaToggle, findsOneWidget);
-      await tester.tap(nvidiaToggle);
+      final nvidiaSwitch = tester.widget<Switch>(
+        find.descendant(
+          of: nvidiaToggle,
+          matching: find.byType(Switch),
+        ),
+      );
+      expect(nvidiaSwitch.onChanged, isNotNull);
+      // 画质 A/B 只验证滤镜、驱动与性能；child HWND 的物理鼠标命中由独立
+      // airspace 门禁负责，不能让坐标点击偶发性污染六组画质结论。
+      await playerKey.currentState!.setNvidiaVideoEnhancementForTesting(true);
       await tester.pump(const Duration(seconds: 2));
+      final requestedSnapshot =
+          await playerKey.currentState!.buildDiagnosticsSnapshot();
+      debugPrint(
+        'NVIDIA_QA_REQUEST '
+        '${requestedSnapshot.lines.where((line) => line.startsWith('NVIDIA ') || line.startsWith('mpv 视频滤镜:')).join(' | ')}',
+      );
       await tester.tapAt(const Offset(8, 8));
       await tester.pumpAndSettle();
       await _waitForSessionState(
@@ -285,6 +303,7 @@ void main() {
             'mpv 去色带:',
             'mpv 去色带参数:',
             'NVIDIA 视频增强（实验）:',
+            'NVIDIA 驱动确认:',
             'NVIDIA 压力保护:',
             'NVIDIA 自动回滚原因:',
             'HDR 动态映射会话:',
@@ -393,6 +412,7 @@ void main() {
           finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
           contains('scaling-mode=nvidia'),
         );
+        expect(finalLines, contains('NVIDIA 驱动确认: active'));
         expect(finalLines, contains('NVIDIA 自动回滚原因: 无'));
       }
     } else if (baselineMode == 'nvidia-off') {
@@ -442,14 +462,18 @@ Future<void> _waitForSessionState(
         return;
       }
     } else if (mode == 'nvidia-on') {
-      final active = snapshot.lines.any(
-        (line) => line.startsWith('NVIDIA 视频增强（实验）: 会话已请求'),
-      );
+      final active = snapshot.lines.contains('NVIDIA 驱动确认: active');
       final safelyRolledBack = snapshot.lines.any(
         (line) =>
             line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
       );
       if (active || safelyRolledBack) return;
+    } else if (mode == 'nvidia-off') {
+      final usesNativeD3d11 = snapshot.lines.contains(
+            'mpv 输出驱动: gpu-next-d3d11-child-hwnd',
+          ) &&
+          snapshot.lines.contains('mpv 实际硬解: d3d11va');
+      if (usesNativeD3d11) return;
     } else if (snapshot.lines.contains('SDR 源信号: 已检测')) {
       return;
     }

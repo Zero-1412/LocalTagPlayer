@@ -145,10 +145,22 @@ class NativePlayerBridge {
   double volume_ = 100.0;
   std::string lifecycle_ = "idle";
   std::string hwdec_ = "native-stub";
+  /** libmpv 运行时版本，只通过固定属性返回，不复制原生日志。 */
+  std::string mpv_version_ = "unavailable";
+  /** 当前完整视频滤镜图，用于确认 NVIDIA 请求是否被 libmpv 接受。 */
+  std::string video_filters_ = "";
+  /**
+   * NVIDIA RTX Super Resolution 运行状态。
+   *
+   * 只允许 `inactive/requested/active/rejected`，禁止把可能包含路径的 mpv
+   * 原始日志传回 Flutter。
+   */
+  std::string nvidia_vsr_state_ = "inactive";
   std::string video_codec_ = "unavailable";
   std::string audio_codec_ = "unavailable";
   double avsync_ = 0.0;
-  double audio_pts_ = 0.0;
+  /** 属性不可用时保留显式文本，避免把回退 0 误判成音频播放头停滞。 */
+  std::string audio_pts_ = "unavailable";
   double cache_duration_ = 0.0;
   double estimated_vf_fps_ = 0.0;
   double display_fps_ = 0.0;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -101,6 +102,9 @@ class WindowsNativePlayerBackend
     _lifecycle = value['lifecycle'] as String? ?? _lifecycle;
     for (final property in const [
       'hwdec-current',
+      'mpv-version',
+      'vf',
+      'native-nvidia-vsr-state',
       'video-codec',
       'audio-codec',
       'avsync',
@@ -291,7 +295,32 @@ class WindowsNativePlayerBackend
       benchmarkWindowsGpuComputeFrameBudget(adapterLuid);
 
   @override
-  Future<Uint8List?> screenshot({String format = 'image/jpeg'}) async => null;
+  Future<Uint8List?> screenshot({String format = 'image/jpeg'}) async {
+    if (!mode.startsWith('mpv') && mode != 'hwnd') return null;
+    final extension = format.toLowerCase().contains('png') ? 'png' : 'jpg';
+    final temporaryFile = File(
+      '${Directory.systemTemp.path}\\'
+      'local_tag_player_${pid}_${DateTime.now().microsecondsSinceEpoch}.'
+      '$extension',
+    );
+    try {
+      await _command('screenshot', text: temporaryFile.path);
+      // libmpv 命令已在原生工作线程串行完成；短暂轮询覆盖杀毒软件延迟文件可见性。
+      for (var attempt = 0; attempt < 20; attempt++) {
+        if (await temporaryFile.exists() && await temporaryFile.length() > 0) {
+          return await temporaryFile.readAsBytes();
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      return null;
+    } finally {
+      try {
+        if (await temporaryFile.exists()) await temporaryFile.delete();
+      } catch (_) {
+        // 临时截图清理失败不应改变播放会话；系统临时目录会负责后续回收。
+      }
+    }
+  }
 
   @override
   Widget buildVideoSurface({

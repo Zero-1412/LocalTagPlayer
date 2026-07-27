@@ -1,5 +1,21 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 Windows 原生 libmpv NVIDIA RTX Super Resolution
+
+- 原生 child HWND 后端现可读取 `mpv-version`、完整 `vf` 与归一化的
+  `native-nvidia-vsr-state`；只匹配 mpv verbose 的固定 NVIDIA 成功文本，
+  不把可能包含媒体路径的原始日志交给 Flutter。
+- `d3d11va → d3d11vpp scaling-mode=nvidia → gpu-next/D3D11` 已在 RTX 4070
+  SUPER 上通过真人面部、动画渐变、暗场各关闭/开启 20 秒 A/B；六组均为
+  0 掉帧、0 音视频停滞、无回滚，开启组全部由驱动确认 `active`。
+- 原生后端补齐滤镜后临时截图；12 张证据帧已生成，开启帧为 3840×2160 并带
+  驱动 `RTX VSR` 标记。产品滤镜门禁已开放，但仍只允许 Windows 原生 D3D11
+  child HWND、非 copy D3D11VA 且无 CPU `lavfi` 冲突的会话启用。
+- 默认 Windows 后端仍未切换；下一步先增加可持久化、可撤销的渲染器选择，并
+  完成普通窗口鼠标、跨 DPI 与退出门禁，再决定是否提升为默认。
+- 完整记录见 `docs/qa/mpv_nvidia_native_d3d11_20260727.md` 与
+  `docs/qa/professional_player_feature_research_20260727.md`。
+
 ## 2026-07-27 PlayerService 播放器应用层边界
 
 - 播放器依赖方向改为

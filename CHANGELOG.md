@@ -1,5 +1,16 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-27 · Windows 原生 libmpv 启用 NVIDIA RTX Super Resolution
+
+- child HWND 后端补齐 `mpv-version`、`vf` 与 NVIDIA 驱动运行状态；原生层只把
+  固定成功事件归一化为 `active`，不回传 verbose 原始日志。
+- NVIDIA 开关现在要求原生 `gpu-next/D3D11`、非 copy `d3d11va`、已验证滤镜链
+  且无 CPU 滤镜冲突；热切换使用有界写入/读回重试，失败仍清空滤镜。
+- 原生 libmpv 后端支持通过临时文件导出滤镜后视频帧，读取后立即清理。
+- 真人面部、动画渐变、暗场六组 20 秒 A/B 全部得到驱动 `active`、0 掉帧、
+  0 音视频停滞和无回滚；12 张 PNG 证据包含固定 12 秒同帧对照。
+- 默认 MediaKit、filtered queue、插件 ABI、SQLite、缓存队列和用户数据未改变。
+
 ## 2026-07-27 · PlayerService 播放器应用层解耦
 
 - 新增 Route 级 `PlayerService`，依赖方向明确为

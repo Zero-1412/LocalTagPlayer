@@ -1,3 +1,16 @@
+## 2026-07-27 Windows 原生 libmpv NVIDIA RTX Super Resolution
+
+- child HWND 后端通过 `d3d11va → d3d11vpp scaling-mode=nvidia →
+  gpu-next/D3D11` 实际启用 NVIDIA RTX Super Resolution；Flutter 只消费
+  `inactive/requested/active/rejected`，不接触 mpv verbose 原始日志。
+- 开关只允许经过 `PlayerService` 的原生 D3D11 非 copy 会话，保持与压缩/暗场
+  CPU 滤镜互斥，并沿用掉帧、停滞和回滚保护。
+- 真人面部、动画渐变、暗场六组 20 秒 A/B 全部由驱动确认 `active`，关闭/开启
+  均为 0 掉帧、0 音视频停滞、无回滚；原生截图包含固定同帧和 `RTX VSR` 标记。
+- 完整证据见 `docs/qa/mpv_nvidia_native_d3d11_20260727.md`；专业播放器功能
+  调研与后续插值/补帧/着色器路线见
+  `docs/qa/professional_player_feature_research_20260727.md`。
+
 ## 2026-07-27 PlayerService 播放器应用层边界
 
 - `PlayerPage` 不再接收 `PlayerBackendFactory`，改为只接收

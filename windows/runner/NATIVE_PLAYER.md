@@ -12,7 +12,10 @@
 - 显式 QA 开关`LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd`可创建双层
   child HWND；外层归 runner 几何/裁剪，内层只交给 libmpv `wid`。该路径不
   注册 Flutter Texture。鼠标命中、弹层显隐、全屏、快速切换和退出已通过；
-  真实跨 DPI 与后续 A/B 通过前不得替换 MediaKit。
+  三类 NVIDIA A/B 已通过，但真实跨 DPI 通过前不得替换 MediaKit。
+- child HWND 会话支持 `d3d11vpp=scale=2:scaling-mode=nvidia`。runner 只把
+  固定成功事件归一化为 `inactive/requested/active/rejected`，不把 libmpv
+  原始日志或媒体路径返回 Dart；滤镜后截图也由 runner 写入调用方指定的临时文件。
 
 假后端只显示2×2棋盘格，用于验证纹理与生命周期，不执行真实媒体解码。默认路径仍为`MediaKitPlayerBackend`。
 

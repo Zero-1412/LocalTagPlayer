@@ -4442,19 +4442,23 @@ void main() {
       _CapabilityPlayerBackend(<String, String>{
         'mpv-version': 'mpv 0.39.0',
         'hwdec-current': 'd3d11va',
+        'current-vo': 'gpu-next-d3d11-child-hwnd',
+        'native-nvidia-vsr-state': 'active',
       }),
       isWindows: true,
       filterChainIntegrated: true,
     );
     expect(newer.status, PlayerNvidiaVideoEnhancementStatus.available);
     expect(newer.usesNonCopyD3d11, isTrue);
+    expect(newer.usesNativeD3d11Output, isTrue);
     expect(newer.canEnable, isTrue);
-    expect(newer.helperText, contains('D3D11VA 零拷贝'));
+    expect(newer.helperText, contains('已由驱动确认'));
 
     final copyChain = await PlayerNvidiaVideoEnhancementExperiment.probe(
       _CapabilityPlayerBackend(<String, String>{
         'mpv-version': 'mpv 0.41.0',
         'hwdec-current': 'd3d11va-copy',
+        'current-vo': 'gpu-next-d3d11-child-hwnd',
       }),
       isWindows: true,
       filterChainIntegrated: true,
@@ -4466,6 +4470,7 @@ void main() {
       _CapabilityPlayerBackend(<String, String>{
         'mpv-version': 'mpv 0.41.0',
         'hwdec-current': 'd3d11va',
+        'current-vo': 'gpu-next-d3d11-child-hwnd',
       }),
       isWindows: true,
       conflictingCpuFilters: true,

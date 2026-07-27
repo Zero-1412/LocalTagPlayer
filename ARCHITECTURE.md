@@ -1,5 +1,15 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.77` 在 Windows 原生 child HWND 后端完成
+`d3d11va → d3d11vpp scaling-mode=nvidia → gpu-next/D3D11`。原生层订阅
+libmpv verbose 日志，但只匹配固定 NVIDIA 成功事件并向 Flutter 返回
+`inactive/requested/active/rejected`，禁止原始日志和媒体路径越过平台边界。
+`PlayerService` 继续拥有命令、状态、截图与回退；页面无法取得 mpv handle、D3D11
+资源或临时截图路径。真人面部、动画渐变、暗场六组 20 秒 A/B 均由驱动确认
+`active`，0 掉帧、0 音视频停滞且无回滚，因此原生 D3D11 会话的 NVIDIA
+滤镜门禁开放。默认 Windows 后端仍为 MediaKit，filtered queue、插件 ABI、
+SQLite、缓存队列和用户数据不变。
+
 `Architecture Baseline 0.5.76` 在现有 `PlayerBackend` 下游增加应用层
 `PlayerService`：Flutter 的 `LibraryPage` / `PlayerPage` 只接收
 `PlayerServiceFactory`，组合根先选择 `MediaKitPlayerBackend` 或显式
@@ -117,12 +127,15 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.76`
+已完成基线：`Architecture Baseline 0.5.77`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.77`：Windows 原生 libmpv 后端补齐 NVIDIA RTX Super Resolution
+  驱动确认与滤镜后截图；能力只在 child HWND、非 copy D3D11VA、无 CPU
+  滤镜冲突时开放。三类自然低码率片源六组 A/B 全部 0 掉帧、0 停滞、无回滚。
 - `0.5.76`：新增 Route 级 `PlayerService`，组合根把 MediaKit/Windows libmpv
   后端封装后再注入页面；`PlayerPage` 与 `LibraryPage` 改依赖
   `PlayerServiceFactory`，画质/诊断改依赖 `PlayerRuntimeAccess`。Windows GPU、

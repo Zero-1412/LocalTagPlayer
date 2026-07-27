@@ -16,6 +16,17 @@
   `gpu-next/D3D11/D3D11VA`。普通窗口鼠标、弹层、全屏、快速切换和退出已
   通过；真实跨 DPI 仍无物理证据，因此不能作为正式默认后端。
 
-原生模式从 1280×720 起按 Flutter 实际纹理请求量化表面，并封顶 1920×1080；只有 `mpv_render_context_update` 返回视频帧更新时才渲染。截图接口尚未实现，且 4K 长视频 A/B 中 Private/GPU committed 仍高于 MediaKit，因此仍属于实验后端。
+该 child HWND 路径已经通过 `d3d11vpp=scale=2:scaling-mode=nvidia` 的三类
+低码率片源六组 A/B。NVIDIA 开关只在非 copy `d3d11va`、原生 D3D11 输出且
+无 CPU `lavfi` 冲突时开放；驱动未确认 `active` 或命令被拒绝时立即保持关闭。
+这条路径使用 mpv/驱动能力，不是 RTX Video SDK，也不分发 NVIDIA SDK 文件。
 
-最终门槛判定中，原生 Private/GPU committed P95 分别约为 MediaKit 的 114.5%/113.8%，未达到 110% 目标；默认播放器替换路线停止，后端仅保留显式实验开关。
+原生纹理模式从 1280×720 起按 Flutter 实际纹理请求量化表面，并封顶
+1920×1080；只有 `mpv_render_context_update` 返回视频帧更新时才渲染。
+child HWND 后端已支持滤镜后临时截图，但既有 4K 长视频 A/B 中 Private/GPU
+committed 仍高于 MediaKit，因此整体仍属于实验后端。
+
+早期 ANGLE 纹理后端的 Private/GPU committed P95 分别约为 MediaKit 的
+114.5%/113.8%，未达到 110% 目标，因此该纹理替换路线停止。新的 child HWND
+路径继续保留显式实验开关；只有跨 DPI 与长期生命周期门禁补齐后，才重新评估
+Windows 默认后端。

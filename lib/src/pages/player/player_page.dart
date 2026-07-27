@@ -802,6 +802,15 @@ class PlayerPageState extends State<PlayerPage> {
   late final PlayerService _playerService;
   /** 诊断弹窗使用的只读播放服务。 */
   PlayerService get playerService => _playerService;
+  /**
+   * 真实画质集成测试使用的会话门禁入口。
+   *
+   * 测试仍先证明设置开关已挂载且可响应；实际 A/B 调用此方法并等待完整的能力复核、
+   * 滤镜写入、驱动确认或安全回滚，避免 child HWND 坐标命中偶发性污染画质结论。
+   */
+  @visibleForTesting
+  Future<void> setNvidiaVideoEnhancementForTesting(bool enabled) =>
+      _setNvidiaVideoEnhancementExperimentEnabled(enabled);
   late final FocusNode _focusNode;
   late final ScrollController _queueScrollController;
   late final ScrollController _fullscreenQueueScrollController;
@@ -1301,6 +1310,15 @@ class PlayerPageState extends State<PlayerPage> {
     }
     await _probeNvidiaVideoEnhancementCapability();
     if (!mounted) return;
+    debugPrint(
+      'NVIDIA_ENABLE_GATE enabled=$enabled '
+      'status=${_nvidiaVideoEnhancementCapability.status.name} '
+      'chain=${_nvidiaVideoEnhancementCapability.filterChainIntegrated} '
+      'hwdec=${_nvidiaVideoEnhancementCapability.hwdecCurrent} '
+      'vo=${_nvidiaVideoEnhancementCapability.currentVo} '
+      'conflict=${_nvidiaVideoEnhancementCapability.conflictingCpuFilters} '
+      'canEnable=${_nvidiaVideoEnhancementCapability.canEnable}',
+    );
     if (enabled && !_nvidiaVideoEnhancementCapability.canEnable) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -1309,12 +1327,26 @@ class PlayerPageState extends State<PlayerPage> {
         );
       return;
     }
-    await PlayerAdaptiveQualityEnhancer.apply(
-      backend: _playerService,
-      level: PlayerAdaptiveQualityLevel.off,
-      nvidiaVideoEnhancementEnabled: enabled,
-    );
-    final appliedFilter = await _getMpvProperty('vf');
+    var appliedFilter = '';
+    final attempts = enabled ? 5 : 1;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      await PlayerAdaptiveQualityEnhancer.apply(
+        backend: _playerService,
+        level: PlayerAdaptiveQualityLevel.off,
+        nvidiaVideoEnhancementEnabled: enabled,
+      );
+      if (enabled) {
+        // d3d11vpp 会触发硬件滤镜图重建；短暂等待后读回，避免把异步重建中的
+        // 临时空值误判为永久拒绝。失败仍保持有界重试和原有安全回滚。
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+      appliedFilter = await _getMpvProperty('vf');
+      if (!enabled ||
+          appliedFilter.contains('d3d11vpp') &&
+              appliedFilter.contains('scaling-mode=nvidia')) {
+        break;
+      }
+    }
     final accepted = !enabled ||
         appliedFilter.contains('d3d11vpp') &&
             appliedFilter.contains('scaling-mode=nvidia');
@@ -1339,7 +1371,24 @@ class PlayerPageState extends State<PlayerPage> {
     });
     if (enabled) {
       _nvidiaVideoSafetyCoordinator.reset();
+      await _refreshNvidiaVideoEnhancementRuntimeState();
     }
+  }
+
+  /**
+   * 等待原生 libmpv 从固定 NVIDIA 日志确认驱动扩展状态。
+   *
+   * 最多等待三秒，不读取或展示原始日志；驱动没有确认时保留 `requested`，不能把
+   * 已接受的滤镜字符串冒充为 RTX Super Resolution 已经工作。
+   */
+  Future<void> _refreshNvidiaVideoEnhancementRuntimeState() async {
+    for (var attempt = 0; attempt < 15; attempt++) {
+      final runtimeState = await _getMpvProperty('native-nvidia-vsr-state');
+      if (runtimeState == 'active' || runtimeState == 'rejected') break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      if (!mounted || !_nvidiaVideoEnhancementExperimentEnabled) return;
+    }
+    await _probeNvidiaVideoEnhancementCapability();
   }
 
   /**
@@ -3784,6 +3833,7 @@ class PlayerPageState extends State<PlayerPage> {
       'native-video-plugin-frames',
       'native-video-plugin-fallbacks',
       'native-video-plugin-error',
+      'native-nvidia-vsr-state',
     ]) {
       mpv[property] = await _getMpvProperty(property);
     }
@@ -3824,6 +3874,7 @@ class PlayerPageState extends State<PlayerPage> {
       'mpv 去色带参数: iterations=${mpv['deband-iterations']} · threshold=${mpv['deband-threshold']} · range=${mpv['deband-range']} · grain=${mpv['deband-grain']}',
       'GPU 高质量缩放（非 NVIDIA AI）: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
       'NVIDIA 视频增强（实验）: ${_nvidiaVideoEnhancementExperimentEnabled ? '会话已请求' : '关闭'} · ${_nvidiaVideoEnhancementCapability.helperText}',
+      'NVIDIA 驱动确认: ${mpv['native-nvidia-vsr-state']}',
       'NVIDIA 压力保护: ${_nvidiaVideoSafetyCoordinator.reason}',
       'NVIDIA 自动回滚原因: ${_nvidiaVideoEnhancementRollbackReason ?? '无'}',
       'NVIDIA 自动回滚时间: ${_nvidiaVideoEnhancementRollbackAt?.toIso8601String() ?? 'none'}',

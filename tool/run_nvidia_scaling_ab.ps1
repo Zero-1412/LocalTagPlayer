@@ -68,8 +68,7 @@ function Invoke-NvidiaMode {
   try {
     Push-Location $workspace
     & flutter test integration_test/player_fixed_quality_baseline_test.dart `
-      -d windows `
-      --dart-define=LTP_ENABLE_NVIDIA_SCALING_QA=true *>&1 |
+      -d windows *>&1 |
       Tee-Object -FilePath (Join-Path $modeOutput "baseline.log")
     $testExitCode = $LASTEXITCODE
   } finally {

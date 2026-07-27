@@ -585,6 +585,10 @@ void NativePlayerBridge::InitializePlayer() {
     player_ = nullptr;
     return;
   }
+  // 只消费 NVIDIA VSR 的固定状态文本；原始 mpv 日志不得跨平台通道返回。
+  // NVIDIA 扩展的成功文本位于 verbose 级别；仍只匹配固定文本并输出枚举状态，
+  // 绝不把该级别可能包含的媒体路径或滤镜参数原文传给 Flutter。
+  mpv_request_log_messages(player_, "v");
   if (native_hwnd_enabled_) {
     lifecycle_ = "mpv_hwnd_ready";
     return;
@@ -675,6 +679,12 @@ void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
   } else if (command.name == "rate") {
     double value = static_cast<double>(command.integer) / 1000.0;
     mpv_set_property(player_, "speed", MPV_FORMAT_DOUBLE, &value);
+  } else if (command.name == "screenshot") {
+    // Dart 只传入应用生成的临时路径；使用 video 模式保留滤镜输出且不包含
+    // Flutter 控制层，便于 NVIDIA/压缩增强做同帧 A/B。
+    const char* arguments[] = {"screenshot-to-file", command.text.c_str(),
+                               "video", nullptr};
+    mpv_command(player_, arguments);
   } else if (command.name == "property") {
     const auto separator = command.text.find('=');
     if (separator != std::string::npos) {
@@ -685,7 +695,15 @@ void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
         // auto-safe，但不得在会话初始化后把这个隔离实验覆盖成 copy 后端。
         value = "d3d11va";
       }
-      mpv_set_property_string(player_, property.c_str(), value.c_str());
+      const auto result =
+          mpv_set_property_string(player_, property.c_str(), value.c_str());
+      if (property == "vf") {
+        if (value.find("scaling-mode=nvidia") == std::string::npos) {
+          nvidia_vsr_state_ = "inactive";
+        } else {
+          nvidia_vsr_state_ = result >= 0 ? "requested" : "rejected";
+        }
+      }
     }
   }
 }
@@ -698,6 +716,16 @@ void NativePlayerBridge::SamplePlayerState() {
     if (event->event_id == MPV_EVENT_FILE_LOADED) {
       lifecycle_ = "media_loaded";
       last_error_.clear();
+    } else if (event->event_id == MPV_EVENT_LOG_MESSAGE) {
+      const auto* log_message =
+          static_cast<const mpv_event_log_message*>(event->data);
+      if (log_message != nullptr && log_message->text != nullptr) {
+        const std::string text(log_message->text);
+        if (text.find("NVIDIA RTX Super Resolution enabled") !=
+            std::string::npos) {
+          nvidia_vsr_state_ = "active";
+        }
+      }
     } else if (event->event_id == MPV_EVENT_END_FILE) {
       const auto* end_file = static_cast<const mpv_event_end_file*>(event->data);
       if (end_file != nullptr && end_file->reason == MPV_END_FILE_REASON_EOF) {
@@ -739,13 +767,15 @@ void NativePlayerBridge::SamplePlayerState() {
   buffering_ = buffering != 0;
   volume_ = read_double("volume", volume_);
   avsync_ = read_double("avsync", avsync_);
-  audio_pts_ = read_double("audio-pts", audio_pts_);
+  audio_pts_ = read_string("audio-pts");
   cache_duration_ = read_double("demuxer-cache-duration", cache_duration_);
   estimated_vf_fps_ = read_double("estimated-vf-fps", estimated_vf_fps_);
   display_fps_ = read_double("display-fps", display_fps_);
   frame_number_ = read_int("estimated-frame-number", frame_number_);
   dropped_frames_ = read_int("frame-drop-count", dropped_frames_);
   hwdec_ = read_string("hwdec-current");
+  mpv_version_ = read_string("mpv-version");
+  video_filters_ = read_string("vf");
   video_codec_ = read_string("video-codec");
   audio_codec_ = read_string("audio-codec");
 }
@@ -895,6 +925,12 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(native_hwnd_enabled_ ? 128 : 0)},
           {flutter::EncodableValue("hwdec-current"),
            flutter::EncodableValue(hwdec_)},
+          {flutter::EncodableValue("mpv-version"),
+           flutter::EncodableValue(mpv_version_)},
+          {flutter::EncodableValue("vf"),
+           flutter::EncodableValue(video_filters_)},
+          {flutter::EncodableValue("native-nvidia-vsr-state"),
+           flutter::EncodableValue(nvidia_vsr_state_)},
           {flutter::EncodableValue("video-codec"),
            flutter::EncodableValue(video_codec_)},
           {flutter::EncodableValue("audio-codec"),
