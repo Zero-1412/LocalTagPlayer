@@ -1,5 +1,7 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.70` 在实验性 `WindowsNativePlayerBackend` 后增加 SDK 中立的本机视频增强 ABI v1。只有同时显式选择 `LOCAL_TAG_PLAYER_BACKEND=windows-native-mpv` 并提供绝对 `LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH` 时，runner 才会加载可信本机 DLL；不扫描安装目录、不修改默认 MediaKit、不安装或分发探针/NVIDIA 文件。mpv 帧在原生工作线程从 ANGLE 内部纹理复制到同一设备的共享 D3D11 纹理，再调用插件；宿主先备份原帧，插件返回错误时恢复纹理、停用当前插件会话并继续原播放器。诊断通过既有只读属性展示插件状态、处理帧与回退数，不扩展 `PlayerBackend` contract。QA-only 往返探针和宿主自测均无 install 规则，后者已证明“无损往返”和“破坏输出后原帧恢复”。真实 RTX Video SDK、许可及发布隔离仍未进入产品。
+
 `Architecture Baseline 0.5.69` 把既有 libmpv 入口明确命名为“GPU 高质量缩放（非 NVIDIA AI）”，不改变设置键、mpv 属性、`PlayerBackend` contract 或性能回滚。RTX Video SDK 只完成许可、D3D11 纹理接入和非 NVIDIA 回退评估：未来原型必须留在 Windows 原生平台边界、精确复用活动 D3D11 LUID，并在任何能力或运行失败时回到现有 libmpv 缩放。SDK 1.1 下载包 EULA、MIT 排除声明和目标代码再分发尚未完成发布核对，因此不下载、不提交、不分发 SDK。
 
 `Architecture Baseline 0.5.68` 在不扩展 `PlayerBackend` contract 的前提下，把旧自动画质布尔配置升级为“关闭 / 自动 / 清晰增强”枚举。播放器页面仍通过既有 mpv 属性边界串行应用同一 `vf` 去块、`hqdn3d` 与 `unsharp` 图，并以 GPU renderer 的 `deband` 属性增加保守去色带；性能协调器拥有实际档位，掉帧、缓冲或停滞可覆盖用户请求并回滚。设置只表达意图，不承诺恢复源视频已丢失的细节；缩放后 GLSL 锐化在固定低码率 1080P A/B 后保持未启用。SQLite、标签查询、filtered queue、缓存队列和用户数据不变。

@@ -11,6 +11,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "gpu_capability_probe.cpp"
   "gpu_compute_frame_budget.cpp"
+  "local_video_enhancement_plugin.cpp"
   "native_player_bridge.cpp"
   "native_media_probe_bridge.cpp"
   "utils.cpp"

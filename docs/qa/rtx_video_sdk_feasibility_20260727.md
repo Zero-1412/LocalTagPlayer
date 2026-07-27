@@ -4,13 +4,61 @@
 
 ## 结论
 
-RTX Video SDK 在 Windows 与 RTX 20 系列及以上显卡上具备技术可行性，但当前不适合直接进入产品实现。现阶段只把既有入口明确标注为“GPU 高质量缩放（非 NVIDIA AI）”，继续使用 libmpv 的 `ewa_lanczossharp`、`lanczos`、sigmoid 与 resize-only 属性；不下载、不提交、不分发 NVIDIA SDK，也不修改 `PlayerBackend`。
+RTX Video SDK 在 Windows 与 RTX 20 系列及以上显卡上具备技术可行性，但当前不适合直接进入产品实现。项目已完成一个不含厂商 SDK 的本机 D3D11 插件原型，验证显式 DLL 加载、同设备共享纹理往返与返回错误后的原帧恢复；既有入口仍明确标注为“GPU 高质量缩放（非 NVIDIA AI）”。当前不下载、不提交、不分发 NVIDIA SDK，也不修改 `PlayerBackend`。
 
 正式立项前必须依次解除三个阻断：
 
 1. 登录下载 RTX Video SDK 1.1，保存下载包摘要，并由发布负责人核对包内实际 EULA、第三方声明与公开 RTX SDK 家族许可是否一致。
 2. 在隔离的 Windows 原生实验后端验证同一 D3D11 device/LUID 上的输入纹理、输出纹理、颜色格式、同步和释放；不能让 Dart 或 Flutter UI 逐帧搬运视频。
 3. 在 NVIDIA、非 NVIDIA 独显和仅核显三类机器上验证能力探测、运行失败回退、掉帧与退出资源门禁，再决定是否增加独立的 RTX Video 设置。
+
+## SDK 零分发原型状态
+
+原型只挂在显式 `WindowsNativePlayerBackend` mpv 路径：
+
+```text
+mpv OpenGL 渲染到 ANGLE 内部纹理
+-> ANGLE Read 复制到同一 D3D11 device 的共享纹理
+-> 宿主备份共享纹理
+-> 本机 ABI v1 插件原位处理
+-> 成功：Flutter 读取处理后纹理
+-> 失败：恢复备份、停用插件、Flutter 继续读取原帧
+```
+
+边界规则：
+
+- `LOCAL_TAG_PLAYER_BACKEND=windows-native-mpv` 仍是实验后端唯一入口；
+- `LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH` 必须是绝对路径，runner 不扫描应用目录；
+- ABI 只包含 `ID3D11Device`、immediate context、共享 `ID3D11Texture2D`、尺寸、格式和帧号，不引用厂商类型；
+- DLL 被视为开发者本机可信代码。宿主能处理正常错误返回，但不能隔离 DLL 内访问冲突或进程崩溃；
+- 插件处理、备份、恢复与关闭都在既有原生串行工作线程，Flutter 方法通道不传逐帧像素；
+- 插件状态只进入既有诊断属性，不新增用户设置或数据库字段。
+
+`LTP_BUILD_LOCAL_VIDEO_PLUGIN_PROBE` 默认关闭。显式构建时产生：
+
+- `ltp_local_video_plugin_probe.dll`：在同一 D3D11 设备上执行私有纹理双向复制，不改变画面；
+- `ltp_local_video_plugin_host_test.exe`：先验证无损往返，再让探针把共享纹理染色后返回错误，要求宿主恢复调用前像素。
+
+两者均无 install 规则，标准 Flutter bundle 不包含探针。可复跑：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tool\build_local_video_plugin_probe.ps1 -Configuration Debug
+```
+
+本机结果：
+
+```text
+round-trip=passed fallback=passed
+```
+
+真实页面另外使用隔离的低码率 1080P 样本运行两轮：
+
+- 正常轮：`ltp-d3d11-round-trip-probe · active`，处理帧持续增长，总掉帧 0；
+- 故障轮：第 30 帧先破坏输出并返回 21，诊断为 `process-failed`、原帧回退 1；之后播放位置继续推进，总掉帧 0；
+- 两轮均真实点击齿轮确认设置浮层可达，再通过视频右键打开正式诊断；截图位于 `.local/qa/local-video-plugin/`，弹窗和插件指标无错位、遮挡或溢出。
+
+这些结果证明宿主纹理链和正常错误返回的回退闭环，不代表 NVIDIA SDK 已接入，也不覆盖不可信 DLL 进程崩溃、10-bit/HDR 格式、跨显卡机器或长时性能。
 
 ## 官方能力边界
 

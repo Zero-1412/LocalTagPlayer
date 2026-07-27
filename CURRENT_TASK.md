@@ -1,5 +1,13 @@
 # CURRENT_TASK.md
 
+## 2026-07-27 SDK 零分发本机视频增强插件原型
+
+- 实验性 Windows 原生 mpv 后端新增 SDK 中立 ABI v1；只从 `LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH` 指定的绝对路径加载可信本机 DLL，不扫描、不安装、不分发插件或 NVIDIA 文件。
+- mpv/ANGLE 在原生工作线程完成共享 D3D11 纹理复制后调用插件；宿主先保留同设备原帧备份，插件返回错误时恢复原帧、记录回退并停用当前插件会话，播放继续。
+- 默认 MediaKit、`LOCAL_TAG_PLAYER_BACKEND` 显式门禁、`PlayerBackend` contract、filtered queue、缓存队列、SQLite 与用户数据均保持不变。
+- QA-only 往返探针和宿主自测没有 install 规则；真实结果为 `round-trip=passed fallback=passed`，标准 Debug bundle 未发现探针、NVIDIA SDK 或同名厂商文件。
+- 播放诊断增加插件状态、名称、处理帧、回退数和错误码。隔离低码率 1080P 真实 Windows 页面分别通过正常与第 30 帧故障注入：齿轮、右键诊断均可达，状态为 `active` / `process-failed`，回退后播放头继续推进且总掉帧为 0；截图位于 `.local/qa/local-video-plugin/`。
+
 ## 2026-07-27 GPU 高质量缩放命名与 RTX Video SDK 评估
 
 - 播放器齿轮和播放诊断把既有 libmpv 能力明确标注为“GPU 高质量缩放（非 NVIDIA AI）”；设置键、默认值、持久化、mpv 属性和性能回滚不变。

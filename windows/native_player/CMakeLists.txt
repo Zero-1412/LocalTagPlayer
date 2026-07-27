@@ -145,10 +145,39 @@ file(REMOVE_RECURSE
 # 不修改 Pub Cache，也不按 DXGI 枚举顺序推断活动显卡。
 set(LTP_UPSTREAM_ANGLE_SOURCE
   "${LTP_NATIVE_DEPS}/video/windows/angle_surface_manager.cc")
+set(LTP_UPSTREAM_ANGLE_HEADER
+  "${LTP_NATIVE_DEPS}/video/windows/angle_surface_manager.h")
 set(LTP_PATCHED_MEDIA_KIT_ANGLE_SOURCE
   "${CMAKE_BINARY_DIR}/ltp_generated/angle_surface_manager_ltp.cc")
+set(LTP_PATCHED_MEDIA_KIT_ANGLE_HEADER
+  "${CMAKE_BINARY_DIR}/ltp_generated/angle_surface_manager.h")
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/ltp_generated")
 file(READ "${LTP_UPSTREAM_ANGLE_SOURCE}" LTP_ANGLE_SOURCE_TEXT)
+file(READ "${LTP_UPSTREAM_ANGLE_HEADER}" LTP_ANGLE_HEADER_TEXT)
+
+# 本机视频增强原型必须复用 ANGLE 已创建的 D3D11 设备与共享输出纹理。只在固定归档
+# 生成的头文件中增加只读借用访问器；所有权仍留在 ANGLESurfaceManager，调用方不得释放。
+set(LTP_ANGLE_HEADER_MARKER [=[  const HANDLE handle() const { return handle_; }
+]=])
+set(LTP_ANGLE_HEADER_PATCH [=[  const HANDLE handle() const { return handle_; }
+  ID3D11Device* d3d_11_device() const { return d3d_11_device_; }
+  ID3D11DeviceContext* d3d_11_device_context() const {
+    return d3d_11_device_context_;
+  }
+  ID3D11Texture2D* d3d_11_texture() const {
+    return d3d_11_texture_2D_.Get();
+  }
+]=])
+string(FIND "${LTP_ANGLE_HEADER_TEXT}" "${LTP_ANGLE_HEADER_MARKER}"
+  LTP_ANGLE_HEADER_MARKER_INDEX)
+if(LTP_ANGLE_HEADER_MARKER_INDEX EQUAL -1)
+  message(FATAL_ERROR
+    "Pinned media_kit_video header no longer matches the D3D11 accessor patch")
+endif()
+string(REPLACE "${LTP_ANGLE_HEADER_MARKER}" "${LTP_ANGLE_HEADER_PATCH}"
+  LTP_ANGLE_HEADER_TEXT "${LTP_ANGLE_HEADER_TEXT}")
+file(WRITE "${LTP_PATCHED_MEDIA_KIT_ANGLE_HEADER}"
+  "${LTP_ANGLE_HEADER_TEXT}")
 
 set(LTP_ANGLE_INCLUDE_MARKER "#include <iostream>\n")
 set(LTP_ANGLE_INCLUDE_PATCH [=[#include <iostream>
@@ -361,6 +390,7 @@ target_compile_options(ltp_native_runtime PRIVATE /utf-8)
 target_compile_definitions(ltp_native_runtime PRIVATE
   NOMINMAX _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
 target_include_directories(ltp_native_runtime PUBLIC
+  "${CMAKE_BINARY_DIR}/ltp_generated"
   "${LTP_NATIVE_DEPS}/video/windows"
   "${LTP_NATIVE_DEPS}/mpv/include"
   "${LTP_NATIVE_DEPS}/angle/include"
@@ -395,3 +425,47 @@ set(LTP_NATIVE_LICENSE_FILES
   "${LTP_FFMPEG_ROOT}/LICENSE.txt"
   "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
   PARENT_SCOPE)
+
+# SDK 零分发的本机探针只在显式 QA 构建中产生。目标没有 install 规则，也不会加入
+# Flutter 默认 ALL 构建；标准应用包因此不包含探针或任何 NVIDIA 文件。
+option(LTP_BUILD_LOCAL_VIDEO_PLUGIN_PROBE
+  "Build the local D3D11 video enhancement probe DLL" OFF)
+if(LTP_BUILD_LOCAL_VIDEO_PLUGIN_PROBE)
+  add_library(ltp_local_video_plugin_probe SHARED
+    "${CMAKE_CURRENT_SOURCE_DIR}/../local_video_plugin_probe/local_video_plugin_probe.cpp")
+  apply_standard_settings(ltp_local_video_plugin_probe)
+  target_compile_options(ltp_local_video_plugin_probe PRIVATE /utf-8)
+  target_compile_definitions(ltp_local_video_plugin_probe PRIVATE NOMINMAX)
+  target_include_directories(ltp_local_video_plugin_probe PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+  set_target_properties(ltp_local_video_plugin_probe PROPERTIES
+    OUTPUT_NAME "ltp_local_video_plugin_probe"
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_BINARY_DIR}/local_video_plugin_probe"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG
+      "${CMAKE_BINARY_DIR}/local_video_plugin_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE
+      "${CMAKE_BINARY_DIR}/local_video_plugin_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+      "${CMAKE_BINARY_DIR}/local_video_plugin_probe")
+
+  add_executable(ltp_local_video_plugin_host_test
+    "${CMAKE_CURRENT_SOURCE_DIR}/../local_video_plugin_probe/local_video_plugin_host_test.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner/local_video_enhancement_plugin.cpp")
+  apply_standard_settings(ltp_local_video_plugin_host_test)
+  target_compile_options(ltp_local_video_plugin_host_test PRIVATE /utf-8)
+  target_compile_definitions(ltp_local_video_plugin_host_test PRIVATE NOMINMAX)
+  target_include_directories(ltp_local_video_plugin_host_test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../runner")
+  target_link_libraries(ltp_local_video_plugin_host_test PRIVATE d3d11.lib)
+  set_target_properties(ltp_local_video_plugin_host_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+      "${CMAKE_BINARY_DIR}/local_video_plugin_probe"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG
+      "${CMAKE_BINARY_DIR}/local_video_plugin_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE
+      "${CMAKE_BINARY_DIR}/local_video_plugin_probe"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+      "${CMAKE_BINARY_DIR}/local_video_plugin_probe")
+endif()

@@ -293,13 +293,11 @@ void NativePlayerBridge::EnsureTexture() {
                 return static_cast<FlutterDesktopGpuSurfaceDescriptor*>(
                     nullptr);
               }
-              surface_manager_->Read();
               gpu_descriptor_->handle = surface_manager_->handle();
               gpu_descriptor_->width = gpu_descriptor_->visible_width =
                   surface_manager_->width();
               gpu_descriptor_->height = gpu_descriptor_->visible_height =
                   surface_manager_->height();
-              ++texture_copy_count_;
               return gpu_descriptor_.get();
             }));
     texture_id_ = textures_->RegisterTexture(gpu_texture_.get());
@@ -384,6 +382,10 @@ void NativePlayerBridge::InitializePlayer() {
       DestroyPlayer();
       return;
     }
+    // 插件只借用 ANGLE 的活动设备；失败状态留在诊断中，不改变原生视频会话。
+    video_enhancement_plugin_.Initialize(
+        surface_manager_->d3d_11_device(),
+        surface_manager_->d3d_11_device_context());
     mpv_render_context_set_update_callback(
         render_context_,
         [](void* context) {
@@ -409,6 +411,8 @@ void NativePlayerBridge::DestroyPlayer() {
   }
   {
     std::lock_guard<std::mutex> surface_lock(surface_mutex_);
+    // 插件可能持有同设备资源，必须先关闭再销毁 ANGLE 表面。
+    video_enhancement_plugin_.Shutdown();
     surface_manager_.reset();
   }
   if (player_ != nullptr) {
@@ -539,6 +543,14 @@ void NativePlayerBridge::RenderFrame() {
         {MPV_RENDER_PARAM_INVALID, nullptr}};
     mpv_render_context_render(render_context_, parameters);
   });
+  // 在原生工作线程完成共享纹理复制和插件处理，Flutter raster 回调只读取成品描述符。
+  surface_manager_->Read();
+  ++texture_copy_count_;
+  video_enhancement_plugin_.ProcessFrame(
+      surface_manager_->d3d_11_device(),
+      surface_manager_->d3d_11_device_context(),
+      surface_manager_->d3d_11_texture(),
+      static_cast<uint64_t>(rendered_frame_count_.load() + 1));
   ++rendered_frame_count_;
   if (texture_id_ >= 0) textures_->MarkTextureFrameAvailable(texture_id_);
 }
@@ -609,6 +621,7 @@ void NativePlayerBridge::WorkerLoop() {
 
 flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
   std::lock_guard<std::mutex> lock(mutex_);
+  const auto plugin = video_enhancement_plugin_.GetSnapshot();
   return {{flutter::EncodableValue("textureId"),
            flutter::EncodableValue(texture_id_)},
           {flutter::EncodableValue("positionMs"),
@@ -657,6 +670,16 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(surface_width_.load())},
           {flutter::EncodableValue("native-surface-height"),
            flutter::EncodableValue(surface_height_.load())},
+          {flutter::EncodableValue("native-video-plugin-state"),
+           flutter::EncodableValue(plugin.state)},
+          {flutter::EncodableValue("native-video-plugin-name"),
+           flutter::EncodableValue(plugin.name)},
+          {flutter::EncodableValue("native-video-plugin-frames"),
+           flutter::EncodableValue(plugin.processed_frames)},
+          {flutter::EncodableValue("native-video-plugin-fallbacks"),
+           flutter::EncodableValue(plugin.fallback_frames)},
+          {flutter::EncodableValue("native-video-plugin-error"),
+           flutter::EncodableValue(plugin.error)},
           {flutter::EncodableValue("completedCount"),
            flutter::EncodableValue(completed_count_)},
           {flutter::EncodableValue("errorCount"),

@@ -1,3 +1,13 @@
+## 2026-07-27 SDK 零分发本机视频增强插件原型
+
+- `WindowsNativePlayerBackend` 的 mpv 模式新增 SDK 中立 ABI v1，入口仍受 `LOCAL_TAG_PLAYER_BACKEND=windows-native-mpv` 保护；DLL 还必须由 `LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH` 以绝对路径显式指定。
+- runner 不扫描应用目录，也没有插件安装/分发逻辑。QA 探针目标默认关闭、不是 `ALL` 依赖且无 install 规则，标准 bundle 不包含探针或 NVIDIA 文件。
+- 渲染顺序固定为“mpv 绘制 → ANGLE `Read` 到共享 D3D11 纹理 → 宿主备份 → 插件原位处理 → Flutter 取成品描述符”；所有逐帧动作留在现有原生工作线程。
+- 插件非零返回时，宿主把备份复制回共享纹理并永久停用本次插件会话；不重开媒体、不改用户意图、不影响 filtered queue。诊断展示状态、名称、处理帧、回退数和错误码。
+- `tool/build_local_video_plugin_probe.ps1` 构建 SDK-free 往返探针与宿主自测；自测让故障探针先把输出染色再报错，已得到 `round-trip=passed fallback=passed`。
+- 隔离低码率 1080P 真实 Windows 页面完成正常与第 30 帧故障两轮；插件状态分别为 `active` / `process-failed`，回退计数 1，之后播放头继续推进且总掉帧为 0。齿轮与右键诊断入口真实可达，滚动到插件指标后的两张截图无遮挡、错位或溢出。
+- 默认 MediaKit、队列索引/右栏/返回状态、最新请求切换、纹理注销顺序、缓存队列与用户数据均保留；真实 RTX Video SDK 与发布许可仍未接入。
+
 ## 2026-07-27 GPU 高质量缩放命名与 RTX Video SDK 评估
 
 - 播放器齿轮和诊断统一显示“GPU 高质量缩放（非 NVIDIA AI）”；原 `ValueKey`、设置键、默认值、持久化、libmpv 属性与性能回滚均保留。

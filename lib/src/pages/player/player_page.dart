@@ -3648,6 +3648,11 @@ class PlayerPageState extends State<PlayerPage> {
       'native-surface-resizes',
       'native-surface-width',
       'native-surface-height',
+      'native-video-plugin-state',
+      'native-video-plugin-name',
+      'native-video-plugin-frames',
+      'native-video-plugin-fallbacks',
+      'native-video-plugin-error',
     ]) {
       mpv[property] = await _getMpvProperty(property);
     }
@@ -3757,6 +3762,16 @@ class PlayerPageState extends State<PlayerPage> {
       '原生纹理复制: ${mpv['native-texture-copies']}',
       '原生表面重建: ${mpv['native-surface-resizes']}',
       '原生表面尺寸: ${mpv['native-surface-width']}x${mpv['native-surface-height']}',
+      if (mpv['native-video-plugin-state'] != 'unavailable')
+        '本机增强插件: ${mpv['native-video-plugin-name']} · '
+            '${mpv['native-video-plugin-state']}',
+      if (mpv['native-video-plugin-state'] != 'unavailable')
+        '本机增强插件帧: ${mpv['native-video-plugin-frames']} · '
+            '原帧回退 ${mpv['native-video-plugin-fallbacks']}',
+      if (mpv['native-video-plugin-error'] != null &&
+          mpv['native-video-plugin-error']!.isNotEmpty &&
+          mpv['native-video-plugin-error'] != 'unavailable')
+        '本机增强插件错误: ${mpv['native-video-plugin-error']}',
       '视频帧推进: $_videoProgressState',
       '视频当前帧号: ${_lastVideoFrameNumber ?? -1}',
       '视频停滞事件: $_videoStallEvents',

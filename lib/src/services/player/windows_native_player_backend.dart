@@ -113,6 +113,11 @@ class WindowsNativePlayerBackend
       'native-surface-resizes',
       'native-surface-width',
       'native-surface-height',
+      'native-video-plugin-state',
+      'native-video-plugin-name',
+      'native-video-plugin-frames',
+      'native-video-plugin-fallbacks',
+      'native-video-plugin-error',
     ]) {
       final propertyValue = value[property];
       if (propertyValue != null) _properties[property] = '$propertyValue';

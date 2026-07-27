@@ -278,6 +278,58 @@ void main() {
     );
   });
 
+  test('local video enhancement prototype is explicit and never installed', () {
+    final nativeBuild =
+        File('windows/native_player/CMakeLists.txt').readAsStringSync();
+    final runnerBuild =
+        File('windows/runner/CMakeLists.txt').readAsStringSync();
+    final bridge =
+        File('windows/runner/native_player_bridge.cpp').readAsStringSync();
+    final host = File(
+      'windows/runner/local_video_enhancement_plugin.cpp',
+    ).readAsStringSync();
+    final api = File(
+      'windows/native_player/local_video_enhancement_plugin_api.h',
+    ).readAsStringSync();
+
+    // 原型只能通过绝对路径显式加载；标准构建不启用、不安装探针，也不引用厂商 SDK。
+    expect(
+      host,
+      contains('LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH'),
+    );
+    expect(host, contains('plugin-path-must-be-absolute'));
+    expect(host, contains('LoadLibraryExW'));
+    expect(api, contains('kLtpLocalVideoPluginAbiVersion = 1'));
+    expect(
+      nativeBuild,
+      contains('option(LTP_BUILD_LOCAL_VIDEO_PLUGIN_PROBE'),
+    );
+    expect(
+      nativeBuild,
+      contains('"Build the local D3D11 video enhancement probe DLL" OFF'),
+    );
+    expect(nativeBuild, isNot(contains('install(TARGETS ltp_local_video')));
+    expect(runnerBuild, contains('local_video_enhancement_plugin.cpp'));
+    final prototypeSource =
+        '$nativeBuild$runnerBuild$bridge$host$api'.toLowerCase();
+    expect(prototypeSource, isNot(contains('#include <nvvfx')));
+    expect(prototypeSource, isNot(contains('nvvfx.dll')));
+    expect(prototypeSource, isNot(contains('maxine')));
+
+    // 共享纹理必须在工作线程复制和处理；插件失败前已有宿主备份可恢复。
+    final renderStart = bridge.indexOf('void NativePlayerBridge::RenderFrame');
+    final enqueueStart = bridge.indexOf('void NativePlayerBridge::Enqueue');
+    final renderBody = bridge.substring(renderStart, enqueueStart);
+    expect(renderBody, contains('surface_manager_->Read()'));
+    expect(renderBody, contains('video_enhancement_plugin_.ProcessFrame'));
+    expect(
+      renderBody.indexOf('surface_manager_->Read()'),
+      lessThan(renderBody.indexOf('video_enhancement_plugin_.ProcessFrame')),
+    );
+    expect(host, contains('CopyResource(backup_texture_.Get(), texture)'));
+    expect(host, contains('CopyResource(texture, backup_texture_.Get())'));
+  });
+
   test('desktop startup centers size-only persisted window layouts', () {
     final source = File(
       'lib/src/services/window/desktop_window_state_service.dart',

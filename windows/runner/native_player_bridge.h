@@ -8,6 +8,7 @@
 #include <mpv/render.h>
 
 #include "angle_surface_manager.h"
+#include "local_video_enhancement_plugin.h"
 
 #include <array>
 #include <atomic>
@@ -74,6 +75,8 @@ class NativePlayerBridge {
   std::unique_ptr<flutter::TextureVariant> gpu_texture_;
   std::unique_ptr<FlutterDesktopGpuSurfaceDescriptor> gpu_descriptor_;
   std::unique_ptr<ANGLESurfaceManager> surface_manager_;
+  /** 只服务显式本机 DLL 的 SDK 中立 D3D11 原型宿主。 */
+  LocalVideoEnhancementPlugin video_enhancement_plugin_;
   mpv_handle* player_ = nullptr;
   mpv_render_context* render_context_ = nullptr;
   FlutterDesktopPixelBuffer pixel_buffer_{};
