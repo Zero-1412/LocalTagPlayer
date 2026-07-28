@@ -1,5 +1,16 @@
 # ROADMAP.md
 
+## 2026-07-28 双后端稳定性门禁
+
+- [x] 为 MediaKit 与 Windows MPV 建立同构的全屏、DPI metrics、快速切换和长播
+  自动矩阵，并生成按后端分离的 JSON 报告。
+- [x] 快速切换使用正式 PlayerPage latest-request 链，保护 filtered queue、当前
+  index 和最终打开项。
+- [x] macOS/Linux 保持 MediaKit 回退；MPV 开放前必须先有各自原生 PlayerBackend。
+- [ ] 在至少两块不同缩放显示器间分别对 MediaKit/MPV 完成真实移窗 DPI 门禁。
+- [ ] 发布候选构建按默认参数完成每个后端 30 分钟长播；本次 15 秒短门禁只证明
+  矩阵可执行，不能替代发布长播。
+
 ## 2026-07-28 MediaKit / MPV 用户选择与自动 NVIDIA
 
 - [x] 设置页仅提供 MediaKit / MPV 两态选择，移除用户不可理解的 automatic；

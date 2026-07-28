@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 MediaKit / MPV 双后端稳定性矩阵
+
+- 新增统一 Windows 稳定性矩阵：同一组匿名真实片源分别验证 MediaKit 与 MPV 的
+  正式全屏状态机、DPI metrics、latest-request 快速切换和长播诊断，报告明确记录
+  `playerBackend`，不再混用两个后端的结论。
+- 快速切换门禁只通过 PlayerPage 正式队列跳转链发起请求；匿名快照验证 filtered
+  source queue 的身份、顺序、当前 index 与最终打开项没有漂移，不包含本地路径。
+- 默认发布门禁为每个后端长播 30 分钟、快速切换 18 次、总掉帧预算 5 帧。本机用
+  真人面部、动画渐变、暗场三段 650 kbps 1080P 完成 15 秒短门禁：两后端四类自动
+  场景均通过，5/5 长播采样推进、停滞 0、最大总掉帧 0。
+- 本机只有单显示器，真实跨显示器 DPI 未执行，因此汇总发布状态保持
+  `pending-physical-cross-dpi`；模拟 Flutter metrics 通过不能冒充真实跨屏通过。
+- macOS/Linux 继续只允许 MediaKit。两平台若要开放 MPV，必须先分别实现各自原生
+  `PlayerBackend` 并通过同类矩阵，Windows child HWND 不能作为其完成证据。
+- 证据与运行方法见
+  `docs/qa/player_backend_stability_matrix_20260728.md`。
+
 ## 2026-07-28 用户选择 MediaKit / MPV 与 NVIDIA 自动增强
 
 - 设置页“播放”新增唯一的两态渲染器选择：`MediaKit 兼容渲染` 与

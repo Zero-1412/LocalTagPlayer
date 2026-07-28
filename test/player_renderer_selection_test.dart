@@ -3,6 +3,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/app.dart';
 
 void main() {
+  test('macOS 与 Linux 未实现原生后端前不能选择 MPV', () {
+    for (final platform in <String>['macOS', 'Linux']) {
+      final selection = resolvePlayerBackendSelection(
+        isWindows: false,
+        hardwareDecodingEnabled: true,
+        rendererPreference: PlayerRendererPreference.windowsLibmpv,
+        environmentOverride: 'windows-native-hwnd',
+      );
+      expect(
+        selection,
+        PlayerBackendSelection.mediaKit,
+        reason: '$platform 必须先实现自己的原生 MPV 后端才能开放选择',
+      );
+    }
+  });
+
   test('渲染器解析保留跨平台回退与显式 QA 覆盖', () {
     expect(
       resolvePlayerBackendSelection(

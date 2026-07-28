@@ -1,3 +1,15 @@
+## 2026-07-28 MediaKit / MPV 稳定性矩阵
+
+- 同一组三段自然低码率片源分别驱动 MediaKit 与 Windows MPV，覆盖全屏往返、
+  DPI metrics、latest-request 快速切换和长播诊断。
+- 快速切换不直接调用 backend `open`，只走 PlayerPage 正式 filtered queue 链；
+  报告验证来源队列顺序、当前 index 和最终打开项。
+- 本机 15 秒短门禁两后端均为 0 停滞、0 总掉帧，但单显示器无法完成真实跨 DPI，
+  发布门禁仍待双屏不同缩放复测和每后端 30 分钟长播。
+- macOS/Linux 的 MPV 入口继续阻塞，需先实现各自原生 PlayerBackend。
+- 详细证据：
+  `docs/qa/player_backend_stability_matrix_20260728.md`。
+
 ## 2026-07-28 MediaKit / MPV 显式选择与 NVIDIA 自动增强
 
 - 设置页播放分区只展示 `MediaKit 兼容渲染` 与 `MPV 原生渲染`；切换确认、

@@ -728,4 +728,34 @@ void main() {
       isNot(contains("find.byKey(const ValueKey('player.fullscreen.toggle'))")),
     );
   });
+
+  test('双后端稳定性矩阵覆盖四类场景并保留跨平台原生门禁', () {
+    final integrationSource = File(
+      'integration_test/player_backend_stability_matrix_test.dart',
+    ).readAsStringSync();
+    final runnerSource = File(
+      'tool/run_player_backend_stability_matrix.ps1',
+    ).readAsStringSync();
+
+    expect(integrationSource, contains('_runFullscreenScenario'));
+    expect(integrationSource, contains('_runDpiScenario'));
+    expect(integrationSource, contains('_runRapidSwitchScenario'));
+    expect(integrationSource, contains('_runLongPlayScenario'));
+    expect(
+      integrationSource,
+      contains('jumpToQueueIndexForStabilityTest'),
+      reason: '快速切换必须走 PlayerPage 的 latest-request 正式链路',
+    );
+    expect(runnerSource, contains("@('mediaKit', 'mpv')"));
+    expect(
+      runnerSource,
+      contains('pending-physical-cross-dpi'),
+      reason: '模拟 metrics 不能冒充真实跨显示器 DPI 已通过',
+    );
+    expect(
+      runnerSource,
+      contains("mpv = 'blocked-native-backend-not-implemented'"),
+      reason: 'macOS/Linux 未实现各自原生后端前必须保持 MPV 门禁',
+    );
+  });
 }

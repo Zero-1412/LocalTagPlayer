@@ -727,6 +727,58 @@ class PlayerSeekFeedbackWatermark extends StatelessWidget {
   }
 }
 
+/**
+ * 双后端稳定性矩阵读取的匿名播放器快照。
+ *
+ * 快照只暴露稳定 `videoId`、队列索引与生命周期状态，不泄露本地路径，也不允许测试
+ * 绕过 [PlayerPlaybackController] 修改 filtered queue。
+ */
+@visibleForTesting
+class PlayerStabilitySnapshot {
+  const PlayerStabilitySnapshot({
+    required this.sourceVideoIds,
+    required this.queueVideoIds,
+    required this.playingIndex,
+    required this.selectedIndex,
+    required this.currentVideoId,
+    required this.openedVideoId,
+    required this.opening,
+    required this.hasPendingOpen,
+    required this.hasOpenFailure,
+    required this.windowFullscreen,
+  });
+
+  /** 媒体库传入播放器的过滤后来源队列身份。 */
+  final List<String> sourceVideoIds;
+
+  /** 当前播放器实际消费的队列身份。 */
+  final List<String> queueVideoIds;
+
+  /** 当前播放项在队列中的索引。 */
+  final int playingIndex;
+
+  /** 键盘或鼠标当前选中项在队列中的索引。 */
+  final int selectedIndex;
+
+  /** 播放器页面当前选择的视频身份。 */
+  final String currentVideoId;
+
+  /** 后端最后完成打开的视频身份；打开尚未完成时为 null。 */
+  final String? openedVideoId;
+
+  /** 串行 open worker 是否仍在处理请求。 */
+  final bool opening;
+
+  /** 是否还有被最新选择覆盖后的待处理 open 请求。 */
+  final bool hasPendingOpen;
+
+  /** 最近一次最终 open 是否失败。 */
+  final bool hasOpenFailure;
+
+  /** 正式播放器全屏状态机的当前状态。 */
+  final bool windowFullscreen;
+}
+
 class PlayerPage extends StatefulWidget {
   const PlayerPage({
     super.key,
@@ -2641,6 +2693,38 @@ class PlayerPageState extends State<PlayerPage> {
   @visibleForTesting
   Future<void> toggleWindowFullscreenForStressTest() =>
       _toggleWindowFullscreen();
+
+  /**
+   * 在双后端快速切换门禁中走正式队列跳转与 latest-request 串行链。
+   *
+   * 该入口只选择现有 filtered queue 的索引；越界语义仍由正式 [_jumpTo] 处理，
+   * 测试不能直接调用后端 `open` 绕过页面协调器。
+   */
+  @visibleForTesting
+  void jumpToQueueIndexForStabilityTest(int index) =>
+      _jumpTo(index, ignoreFollowUpSelection: true);
+
+  /**
+   * 返回不含本地路径的稳定性快照，供全屏、快速切换和长播矩阵验证队列未漂移。
+   */
+  @visibleForTesting
+  PlayerStabilitySnapshot buildStabilitySnapshotForTest() {
+    final openedPath = _openedPath;
+    final openedItem = openedPath == null ? null : _itemForPath(openedPath);
+    return PlayerStabilitySnapshot(
+      sourceVideoIds:
+          _sourcePlaylist.map((item) => item.videoId).toList(growable: false),
+      queueVideoIds: _queue.map((item) => item.videoId).toList(growable: false),
+      playingIndex: _index,
+      selectedIndex: _selectedIndex,
+      currentVideoId: _currentItem.videoId,
+      openedVideoId: openedItem?.videoId,
+      opening: _openRequests.isOpening,
+      hasPendingOpen: _openRequests.hasPending,
+      hasOpenFailure: _openRequests.hasFailure,
+      windowFullscreen: _isWindowFullscreen,
+    );
+  }
 
   /** 首帧提交后恢复当前会话记住的播放器全屏，普通最大化进入时不会调用。 */
   Future<void> _restoreSessionWindowFullscreen() async {

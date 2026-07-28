@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · MediaKit / MPV 双后端稳定性矩阵
+
+- 新增 MediaKit / Windows MPV 双后端稳定性矩阵和统一 JSON 汇总，覆盖全屏、模拟
+  DPI 变化、快速切换与默认 30 分钟长播；快速切换验证 latest-request 最终项以及
+  filtered queue 身份和顺序。
+- 矩阵把真实跨显示器 DPI 作为独立发布门禁；单显示器环境只报告
+  `pending-physical-cross-dpi`，不会把模拟 metrics 冒充物理跨屏通过。
+- 明确 macOS/Linux 的 MPV 继续阻塞，必须先实现各自原生后端才能开放选择；现有
+  MediaKit 回退和用户数据语义不变。
+
 ## 2026-07-28 · 设置页支持 MediaKit / MPV 显式切换
 
 - 设置页播放分区只展示 `MediaKit 兼容渲染` 与 `MPV 原生渲染`；切换前确认，

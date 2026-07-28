@@ -1,5 +1,20 @@
 ﻿# ARCHITECTURE.md
 
+## 播放器后端稳定性门禁
+
+`PlayerService` 继续是页面唯一可见的播放应用边界；稳定性矩阵不直接把媒体路径
+交给具体后端，而是通过 `PlayerPage` 的正式全屏和 latest-request 队列链驱动。
+测试只读取匿名 `videoId` 快照，以确认 filtered source queue、当前 index、最终
+打开项和后端生命周期一致。
+
+Windows 的 MediaKit 与原生 MPV 必须分别运行同一组全屏、DPI、快速切换和长播
+场景并分开出报告。模拟 Flutter metrics 只证明布局/表面重算，真实跨显示器 DPI
+仍是独立发布门禁。
+
+macOS/Linux 当前没有对应原生 MPV `PlayerBackend`，因此组合根必须继续解析为
+MediaKit。未来只有在各平台完成自己的原生渲染、输入、全屏、DPI 和生命周期边界，
+并通过同类矩阵后，才能在设置中开放 MPV；Windows child HWND 实现不可跨平台复用。
+
 `Architecture Baseline 0.5.92` 把播放器后端的最终选择权交给用户，同时保持
 平台能力边界诚实。设置页只提供 `MediaKit 兼容渲染` 与 `MPV 原生渲染`：
 Windows 在选择 MPV 且硬解开启时由组合根创建原生 child HWND / D3D11 后端，
