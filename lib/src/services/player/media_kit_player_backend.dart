@@ -163,6 +163,12 @@ class MediaKitPlayerBackend
       // 固定尺寸初始化可能先显示空表面，因此仍须等待本代 mpv 帧号推进才记录首帧。
       unawaited(_awaitInitialTextureReady());
     }
+    if (!await File(path).exists()) {
+      // 缺失路径在进入 libmpv 前归一化，既能快速失败，也避免底层错误正文把用户目录
+      // 带入 UI 错误流或可复制诊断。
+      _recordSafeErrorCode('missing_file');
+      throw StateError('missing_file');
+    }
     try {
       await _player.open(Media(path));
       if (_activeOpenGeneration == generation) {
@@ -430,12 +436,11 @@ class MediaKitPlayerBackend
   /** 把原始错误转换为路径无关分类码并同时写入错误流和遥测。 */
   void _handleBackendError(String error) => _recordBackendError(error);
 
-  /** 记录一个路径无关错误分类码；释放竞态期间不再向关闭的 UI 流写入。 */
-  void _recordBackendError(
-    Object error, {
+  /** 直接记录已经归一化的稳定错误码，不再接触或转换本地路径。 */
+  void _recordSafeErrorCode(
+    String code, {
     bool affectsCurrentOpen = true,
   }) {
-    final code = classifyPlayerBackendError(error);
     _telemetry.recordError(
       code,
       affectsCurrentOpen: affectsCurrentOpen,
@@ -443,6 +448,15 @@ class MediaKitPlayerBackend
     if (!_safeErrors.isClosed) {
       _safeErrors.add(code);
     }
+  }
+
+  /** 记录一个路径无关错误分类码；释放竞态期间不再向关闭的 UI 流写入。 */
+  void _recordBackendError(
+    Object error, {
+    bool affectsCurrentOpen = true,
+  }) {
+    final code = classifyPlayerBackendError(error);
+    _recordSafeErrorCode(code, affectsCurrentOpen: affectsCurrentOpen);
   }
 
   @override

@@ -1,5 +1,21 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
+
+- 使用同一机器、同一匿名样本清单和同一外部进程采集器，对 fvp、raw media-kit 与
+  当前 `PlayerService -> MediaKitPlayerBackend` 完成 Windows Release 对照；三组均
+  通过 8 个有效样本、逐样本 seek 和 30 次同实例交错切换，切换失败率均为 0%。
+- fvp 本轮在截图首帧、峰值内存与包体上占优，但截图 API 成本、单次暖态样本、
+  fvp/MDK 非默认版本组合、物理 adapter 证据和正式后端遥测能力仍不对等，因此不替换
+  media-kit；fvp 继续作为隔离的 Windows 性能专项候选。
+- `MediaKitPlayerBackend` 在进入 libmpv 前检查缺失文件，立即输出路径无关
+  `missing_file`；同一打开代次只记录一次失败。Windows 集成测试确认缺失路径约
+  8 ms 失败，遥测与错误流均不泄露本机目录。
+- 结果、硬件支持矩阵、指标限制和后续门槛见
+  `docs/qa/player_fvp_same_method_windows_ab_20260729.md`。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/
+  顺序/当前 index、`PlayerBackend` contract、缓存队列或用户数据。
+
 ## 2026-07-29 · 增加同实例 libmpv 滤镜事务
 
 - 自适应 CPU 滤镜和 NVIDIA 联合滤镜改由 `PlayerService` 的同实例事务提交：

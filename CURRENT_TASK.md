@@ -1,5 +1,28 @@
 # CURRENT_TASK.md
 
+## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
+
+- 同一台 Ryzen 9 7900X、64 GiB、AMD 核显与 RTX 4070 SUPER 机器，以同一份匿名有序
+  清单完成三组 Flutter Windows Release 实测；覆盖 8 个有效容器/编码/分辨率样本、
+  2 个异常样本、逐样本 seek 和同实例 30 次交错队列跳转。
+- 三组有效样本与 seek 均为 8/8，连续切换失败率均为 0%。fvp 的渲染帧中位数
+  149 ms、切换 P95 244 ms、峰值 Working Set 383.8 MiB、Release 目录 41.7 MiB，
+  本轮均优于 media-kit 组。
+- 截图首帧包含各后端整帧截图编码和 Dart 解码成本；当前正式后端的结构化首帧中位数
+  约 197 ms，而完整截图中位数约 731 ms，4K 样本为 191/1799 ms。该反证说明不能
+  把截图差值直接解释为用户可见首帧差值，也不能据单轮暖态运行替换内核。
+- A/B 发现缺失文件此前进入 libmpv 后约 4.4 秒才泛化失败；`MediaKitPlayerBackend`
+  现于进入 libmpv 前快速记录路径无关 `missing_file`，实测 8 ms，错误流不包含本机目录，
+  同一打开代次只计一次失败。破损但存在的文件仍由 libmpv 判断。
+- 决策：media-kit 继续作为正式播放内核；fvp 只保留 Windows 性能专项资格，不进入
+  业务代码或接管 filtered queue。完整方法、硬件支持和限制见
+  `docs/qa/player_fvp_same_method_windows_ab_20260729.md`。
+- SQLite、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序/当前 index、
+  缓存队列、用户设置语义和用户数据均未改变。
+- 遥测单测 3/3、Windows 缺失文件真实按钮点击集成、`flutter analyze` 与正式 Windows
+  Debug build 通过。额外既有队列截图用例缺少 `qa.video.play.purple-grid` 夹具，
+  渲染器设置用例仍断言旧文案，均在首次点击前失败且不属于本次改动。
+
 ## 2026-07-29 同实例 libmpv 滤镜验证、回滚与诊断
 
 - `PlayerService` 新增滤镜属性事务：写前捕获旧值、按完整快照写入、逐项读回，

@@ -21,6 +21,67 @@ void main() {
       Platform.environment['LOCAL_TAG_PLAYER_MEDIA_KIT_SAMPLE']?.trim();
 
   testWidgets(
+    'MediaKit 在进入 libmpv 前安全分类缺失文件',
+    (tester) async {
+      MediaKit.ensureInitialized();
+      final backend = MediaKitPlayerBackend(
+        hwdec: 'd3d11va-copy',
+        enableHardwareAcceleration: true,
+      );
+      final service = PlayerService(backend: backend);
+      final safeErrors = <String>[];
+      final errorSubscription = backend.errorChanges.listen(safeErrors.add);
+      addTearDown(errorSubscription.cancel);
+      addTearDown(service.dispose);
+
+      // 使用确定不存在的路径验证快速失败；诊断事件只能包含稳定错误码，不能泄露本机目录。
+      final missingPath = '${Directory.systemTemp.path}'
+          '${Platform.pathSeparator}local_tag_player_missing_media_'
+          '${DateTime.now().microsecondsSinceEpoch}.mkv';
+      expect(File(missingPath).existsSync(), isFalse);
+
+      Object? caughtError;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                key: const ValueKey('qa-open-missing-media'),
+                onPressed: () async {
+                  try {
+                    await backend.openPath(missingPath);
+                  } catch (error) {
+                    caughtError = error;
+                  }
+                },
+                child: const Text('打开缺失媒体'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('qa-open-missing-media')));
+      await tester.pumpAndSettle();
+
+      expect(
+        caughtError,
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'missing_file',
+        ),
+      );
+      expect(backend.telemetry.openGeneration, 1);
+      expect(backend.telemetry.failedOpenCount, 1);
+      expect(backend.telemetry.lastErrorCode, 'missing_file');
+      expect(backend.telemetry.errorEventCount, 1);
+      expect(safeErrors, <String>['missing_file']);
+      expect(safeErrors.single, isNot(contains(Directory.systemTemp.path)));
+    },
+    timeout: const Timeout(Duration(minutes: 1)),
+  );
+
+  testWidgets(
     'MediaKit Texture 与同实例 libmpv 高级属性共同推进',
     (tester) async {
       MediaKit.ensureInitialized();

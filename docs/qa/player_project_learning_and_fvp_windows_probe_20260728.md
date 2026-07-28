@@ -1,5 +1,10 @@
 # 播放器项目学习与 fvp Windows 首轮实测
 
+> 2026-07-29 已完成 fvp、raw media-kit 与当前后端的同机、同样本、同采集方法 A/B。
+> 本文的“进入正式 A/B”结论已由
+> [`player_fvp_same_method_windows_ab_20260729.md`](player_fvp_same_method_windows_ab_20260729.md)
+> 接续；最终决策仍是 media-kit 作为正式内核，fvp 保留 Windows 性能专项资格。
+
 日期：2026-07-28
 
 ## 1. 结论

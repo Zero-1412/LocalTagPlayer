@@ -1,5 +1,21 @@
 ﻿# ARCHITECTURE.md
 
+## Windows 候选后端同法 A/B 与缺失文件边界
+
+`Architecture Baseline 0.5.100` 保持 media-kit 为正式播放内核。fvp 只能在隔离
+Windows Release harness 中消费应用提供的有序媒体清单；它不得用自身 playlist
+重建、排序或持久化 filtered queue，也不得在没有重复实测证据时进入组合根。
+
+候选后端比较必须固定同一机器、匿名样本、跳转顺序、首帧判定和进程采集器，并分别记录
+截图首帧与后端结构化首帧。整帧截图包含后端编码和 Dart 解码成本，不能替代 Texture/
+compositor presentation 证据；CPU/GPU 均值若包含不同释放等待，也不能单独决定后端。
+
+`MediaKitPlayerBackend.openPath` 在启动当前打开代次后、进入 libmpv 前检查本地文件
+是否存在。缺失文件立即以路径无关 `missing_file` 完成该代次失败并向安全错误流广播；
+不保存或转发本机路径。存在但破损的文件仍由 libmpv 识别和分类，避免平台边界根据扩展名
+猜测格式。该快速失败不改变 `PlayerBackend` contract、latest-request、filtered queue
+或释放所有权。
+
 ## 同实例 libmpv 滤镜事务边界
 
 `Architecture Baseline 0.5.99` 在 `PlayerService` 内增加

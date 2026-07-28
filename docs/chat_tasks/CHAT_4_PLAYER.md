@@ -1,3 +1,17 @@
+## 2026-07-29 fvp / media-kit / 当前后端 Windows 同法 A/B
+
+- 三个隔离 Flutter Windows Release harness 消费同一匿名有序清单，覆盖 MKV、MP4、
+  AVI、MOV、WebM、H.264、HEVC、AV1、VP9、4K60、破损/缺失文件、seek 与同实例
+  30 次交错跳转；三组有效样本和连续切换均无失败。
+- fvp 本轮截图首帧、切换 P95、峰值内存和包体更优，但截图管线成本并不等于纯合成
+  首帧，且只有一次暖态运行、fvp/MDK 组合并非默认依赖、物理 adapter 未结构化确认。
+  因此 media-kit 继续作为正式内核，fvp 只保留 Windows 性能专项候选资格。
+- 当前后端的结构化首帧显著快于完整截图证据；A/B 同时发现缺失文件此前约 4.4 秒才
+  泛化失败，现改为进入 libmpv 前输出路径无关 `missing_file`，实测约 8 ms。
+- filtered queue 继续由 `PlaybackSession` / `PlayerPage` 拥有；实验后端只能消费
+  当前队列，不能用插件 playlist 重建或替代业务队列。
+- 证据见 `docs/qa/player_fvp_same_method_windows_ab_20260729.md`。
+
 ## 2026-07-29 同实例 libmpv 滤镜事务
 
 - `PlayerFilterTransactionBoundary` 由当前 `PlayerService` 实现，只访问现有后端；
