@@ -80,9 +80,10 @@ ltp_download(
   "https://pub.dev/api/archives/media_kit_video-2.0.1.tar.gz"
   "afaa509e7b7e0bf247557a3a740cde903a52c34ace9810f94500e127bd7b043d"
   "${LTP_VIDEO_ARCHIVE}")
+# BtbN 的普通日构建只保留 14 天；使用月末保留构建，确保固定摘要在干净环境可恢复。
 ltp_download(
-  "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-12-13-16/ffmpeg-n8.1.2-22-g94138f6973-win64-lgpl-shared-8.1.zip"
-  "08c967cc9a52e23eec43e7a50dd42b02f64e22d6ee4ef51de684fe55b7f69a75"
+  "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-30-13-34/ffmpeg-n8.1.2-21-gce3c09c101-win64-lgpl-shared-8.1.zip"
+  "27bcaf58b5140171dfe838a0b365d12c60607d71fc168424456410bad6a834da"
   "${LTP_FFMPEG_ARCHIVE}")
 ltp_download(
   "https://raw.githubusercontent.com/mpv-player/mpv/v0.41.0/LICENSE.GPL"

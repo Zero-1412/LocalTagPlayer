@@ -139,6 +139,11 @@ class WindowsNativePlayerBackend
       'native-surface-kind',
       'native-surface-visible',
       'native-surface-occluded',
+      'native-overlay-partial',
+      'native-overlay-left',
+      'native-overlay-top',
+      'native-overlay-width',
+      'native-overlay-height',
       'native-input-forwarding',
       'native-input-mode',
       'native-airspace-inset-top',
@@ -467,12 +472,14 @@ class WindowsNativePlayerBackend
     double? aspectRatio,
     bool mirror = false,
     bool reserveTopControlArea = false,
+    bool reserveBottomControlArea = false,
   }) {
     if (mode == 'hwnd') {
       return _WindowsHwndVideoSurface(
         backend: this,
         controls: controls,
         reserveTopControlArea: reserveTopControlArea,
+        reserveBottomControlArea: reserveBottomControlArea,
       );
     }
     final textureSurface = ValueListenableBuilder<int?>(
@@ -529,15 +536,16 @@ class WindowsNativePlayerBackend
 /**
  * 隔离 child HWND 的 Flutter 占位面。
  *
- * 原生窗口无法被 Flutter overlay 覆盖，因此始终保留底部 128 逻辑像素给控制条；
- * 只有全屏顶部语境实际挂载时才额外保留顶部 64。runner 再按实际父 HWND 客户区
- * 缩放该逻辑矩形，避免高 DPI 或集成测试画布尺寸与窗口尺寸不一致时发生越界。
+ * 原生窗口无法直接被 Flutter overlay 覆盖，因此视频 HWND 始终使用完整占位矩形，
+ * 再由 runner 从窗口 region 中扣除当前可见的顶部/底部控制区。这样控制条隐藏后
+ * 视频立即恢复填满，既不永久制造黑边，也不因控制条显隐反复改变 mpv 输出尺寸。
  */
 class _WindowsHwndVideoSurface extends StatefulWidget {
   const _WindowsHwndVideoSurface({
     required this.backend,
     required this.controls,
     required this.reserveTopControlArea,
+    required this.reserveBottomControlArea,
   });
 
   /** 拥有方法通道与原生会话的后端。 */
@@ -549,6 +557,9 @@ class _WindowsHwndVideoSurface extends StatefulWidget {
   /** 全屏顶部语境存在时，为它保留不可被 child HWND 覆盖的区域。 */
   final bool reserveTopControlArea;
 
+  /** 底部完整控制条可见时，为 Flutter 合成层临时让出区域。 */
+  final bool reserveBottomControlArea;
+
   @override
   State<_WindowsHwndVideoSurface> createState() =>
       _WindowsHwndVideoSurfaceState();
@@ -558,16 +569,24 @@ class _WindowsHwndVideoSurface extends StatefulWidget {
 class _WindowsHwndVideoSurfaceState extends State<_WindowsHwndVideoSurface>
     with WidgetsBindingObserver {
   static const double _fullscreenTopAirspace = 64;
-  static const double _bottomAirspace = 128;
+  static const double _visibleControlsOcclusion = 128;
+  static const double _hiddenProgressOcclusion = 3;
   final GlobalKey _placeholderKey = GlobalKey();
   Rect? _lastLogicalRect;
   Size? _lastLogicalViewSize;
   double? _lastDevicePixelRatio;
+  double? _lastTopAirspace;
+  double? _lastBottomAirspace;
   bool _syncScheduled = false;
 
   /** 普通窗口没有顶部悬浮控件，不应为历史全屏布局永久压缩视频视口。 */
   double get _topAirspace =>
       widget.reserveTopControlArea ? _fullscreenTopAirspace : 0;
+
+  /** 控制条收起后只让出常驻细进度条，不再保留整块黑色控制区。 */
+  double get _bottomAirspace => widget.reserveBottomControlArea
+      ? _visibleControlsOcclusion
+      : _hiddenProgressOcclusion;
 
   @override
   void initState() {
@@ -611,23 +630,23 @@ class _WindowsHwndVideoSurfaceState extends State<_WindowsHwndVideoSurface>
     final origin = renderObject.localToGlobal(Offset.zero);
     final viewSize = MediaQuery.sizeOf(context);
     final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
-    final logicalHeight =
-        (renderObject.size.height - _topAirspace - _bottomAirspace)
-            .clamp(0.0, double.infinity)
-            .toDouble();
     final logicalRect = Rect.fromLTWH(
       origin.dx,
-      origin.dy + _topAirspace,
+      origin.dy,
       renderObject.size.width,
-      logicalHeight,
+      renderObject.size.height,
     );
     if (_lastLogicalRect == logicalRect &&
         _lastLogicalViewSize == viewSize &&
-        _lastDevicePixelRatio == devicePixelRatio) {
+        _lastDevicePixelRatio == devicePixelRatio &&
+        _lastTopAirspace == _topAirspace &&
+        _lastBottomAirspace == _bottomAirspace) {
       return;
     }
     _lastLogicalRect = logicalRect;
     _lastLogicalViewSize = viewSize;
+    _lastTopAirspace = _topAirspace;
+    _lastBottomAirspace = _bottomAirspace;
     // 跨 DPI 移窗时逻辑尺寸可能保持不变；仍须让 runner 按新的父 HWND
     // 客户区重新计算物理矩形，避免 child HWND 沿用旧显示器的缩放比例。
     _lastDevicePixelRatio = devicePixelRatio;

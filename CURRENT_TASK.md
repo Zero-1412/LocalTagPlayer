@@ -1,5 +1,18 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 MPV HWND 单侧黑边、首入错位与右键暗框回归修复
+
+- Windows MPV child HWND 始终保持与 Flutter 视频占位区相同的完整矩形；控制条显示时通过
+  native region 让出底部 128 逻辑像素，隐藏后只保留 3 像素进度条，不再永久缩短视频窗口。
+- runner 在应用 region 前先提交本轮 surface 几何，修复初次进入或快速切换视频时使用上一帧
+  坐标造成的错位、重复条带。
+- 右键菜单按视口剩余边距定位，并在路由挂载后重试测量真实菜单项边界；弹层只裁剪覆盖区，
+  视频继续播放，不再出现纯黑暗框。
+- Windows HWND 同步缓存纳入顶部和底部动态 airspace，确保控制条 128 → 3 的变化立即下发。
+- 干净构建将 FFmpeg 固定到 BtbN 月末保留构建，版本仍为 8.1.2 LGPL shared，恢复可重复下载。
+- focused tests、`flutter analyze`、Windows Debug build、真实低码率 1080P integration test 与
+  Debug 真实窗口点击/截图均通过；MediaKit、filtered queue、SQLite、标签、缓存和用户数据未改。
+
 ## 2026-07-28 MPV 画面视口与 Flutter 弹层实时共存
 
 - 普通窗口不再沿用全屏顶部 64 逻辑像素 airspace；MPV 自动比例视口增加该高度，

@@ -60,7 +60,7 @@ class NativePlayerBridge {
   void UpdateHwndSurface(const flutter::EncodableMap& arguments);
   /** Flutter 弹层期间裁剪或隐藏 child HWND，并在弹层关闭后恢复最后矩形。 */
   void SetHwndSurfaceOccluded(const flutter::EncodableMap& arguments);
-  /** 把 Flutter 逻辑弹层矩形换算为 child HWND 本地窗口区域并执行差集裁剪。 */
+  /** 合并可见控制区与 Flutter 弹层，在 child HWND 本地窗口区域执行差集裁剪。 */
   void ApplyHwndSurfaceOcclusionRegion();
   /** 在 libmpv 会话释放后销毁 child HWND，避免悬空 wid。 */
   void DestroyHwndSurface();
@@ -137,7 +137,10 @@ class NativePlayerBridge {
   std::atomic<int32_t> surface_top_{0};
   std::atomic<int32_t> surface_width_{1280};
   std::atomic<int32_t> surface_height_{720};
-  /** Flutter 当前实际保留的顶部/底部逻辑 airspace，用于诊断而非几何计算。 */
+  /** Flutter 逻辑画布尺寸，用于把控制区高度稳定换算到当前物理 HWND。 */
+  std::atomic<int64_t> surface_view_width_{1};
+  std::atomic<int64_t> surface_view_height_{1};
+  /** Flutter 当前需要显示在视频之上的顶部/底部逻辑控制区。 */
   std::atomic<int64_t> airspace_inset_top_{0};
   std::atomic<int64_t> airspace_inset_bottom_{0};
   std::atomic<int64_t> render_request_count_{0};

@@ -84,9 +84,9 @@ abstract interface class PlayerBackend implements PlayerRuntimeAccess {
    *
    * [fit] 控制完整显示或等比裁边，[aspectRatio] 仅在用户显式选择 4:3 / 16:9
    * 时覆盖媒体宽高比；[mirror] 只水平翻转视频纹理，不能影响上层控制条。
-   * [reserveTopControlArea] 表示顶部存在必须避让的 Flutter 控制区；普通纹理
-   * 后端可忽略，存在原生 airspace 的后端必须据此调整原生表面。默认值保持现有
-   * 自动完整显示行为。
+   * [reserveTopControlArea] / [reserveBottomControlArea] 表示对应边缘存在必须
+   * 显示在原生视频之上的 Flutter 控制区；普通纹理后端可忽略，存在原生 airspace
+   * 的后端必须用窗口区域裁剪让位，不能通过永久缩小视频视口制造黑边。
    */
   Widget buildVideoSurface({
     required Widget controls,
@@ -94,6 +94,7 @@ abstract interface class PlayerBackend implements PlayerRuntimeAccess {
     double? aspectRatio,
     bool mirror = false,
     bool reserveTopControlArea = false,
+    bool reserveBottomControlArea = false,
   });
 
   Future<void> dispose();

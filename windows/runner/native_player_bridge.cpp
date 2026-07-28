@@ -433,6 +433,8 @@ void NativePlayerBridge::UpdateHwndSurface(
       0, IntegerArgument(arguments, "airspaceTop"));
   airspace_inset_bottom_ = std::max<int64_t>(
       0, IntegerArgument(arguments, "airspaceBottom"));
+  surface_view_width_ = view_width;
+  surface_view_height_ = view_height;
   RECT parent_bounds{};
   GetClientRect(flutter_view_window_, &parent_bounds);
   const double scale_x =
@@ -458,24 +460,21 @@ void NativePlayerBridge::UpdateHwndSurface(
     partial_occlusion = hwnd_surface_partial_occlusion_;
   }
   const bool visible = requested_visible && (!occluded || partial_occlusion);
+  // region 计算必须先看到本次最终矩形，不能在窗口移动后仍使用上一帧尺寸。
+  surface_left_ = left;
+  surface_top_ = top;
+  surface_width_ = width;
+  surface_height_ = height;
   if (visible) {
     SetWindowPos(video_host_window_, HWND_TOP, left, top, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     // 内层由 mpv 使用，外层始终裁剪其输出，防止媒体加载时 wid 自行扩张越界。
     SetWindowPos(mpv_render_window_, HWND_TOP, 0, 0, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    if (partial_occlusion) {
-      ApplyHwndSurfaceOcclusionRegion();
-    } else {
-      SetWindowRgn(video_host_window_, nullptr, TRUE);
-    }
+    ApplyHwndSurfaceOcclusionRegion();
   } else {
     ShowWindow(video_host_window_, SW_HIDE);
   }
-  surface_left_ = left;
-  surface_top_ = top;
-  surface_width_ = width;
-  surface_height_ = height;
   std::lock_guard<std::mutex> lock(mutex_);
   hwnd_surface_visible_ = visible;
 }
@@ -511,11 +510,7 @@ void NativePlayerBridge::SetHwndSurfaceOccluded(
     ShowWindow(video_host_window_, SW_HIDE);
     return;
   }
-  if (partial) {
-    ApplyHwndSurfaceOcclusionRegion();
-  } else {
-    SetWindowRgn(video_host_window_, nullptr, TRUE);
-  }
+  ApplyHwndSurfaceOcclusionRegion();
   // 恢复最后一次 Flutter 布局矩形，避免弹层关闭后等待下一次布局才重新出画。
   SetWindowPos(video_host_window_, HWND_TOP, surface_left_, surface_top_,
                surface_width_, surface_height_,
@@ -525,47 +520,70 @@ void NativePlayerBridge::SetHwndSurfaceOccluded(
 }
 
 void NativePlayerBridge::ApplyHwndSurfaceOcclusionRegion() {
-  if (video_host_window_ == nullptr || !hwnd_surface_partial_occlusion_) {
-    return;
-  }
+  if (video_host_window_ == nullptr) return;
   RECT parent_bounds{};
   GetClientRect(flutter_view_window_, &parent_bounds);
-  const double scale_x =
-      static_cast<double>(parent_bounds.right - parent_bounds.left) /
-      static_cast<double>(std::max<int64_t>(overlay_view_width_, 1));
-  const double scale_y =
+  const double control_scale_y =
       static_cast<double>(parent_bounds.bottom - parent_bounds.top) /
-      static_cast<double>(std::max<int64_t>(overlay_view_height_, 1));
-  const int overlay_left = static_cast<int>(
-      std::floor(overlay_left_ * scale_x)) - surface_left_;
-  const int overlay_top = static_cast<int>(
-      std::floor(overlay_top_ * scale_y)) - surface_top_;
-  const int overlay_right = static_cast<int>(
-      std::ceil((overlay_left_ + overlay_width_) * scale_x)) - surface_left_;
-  const int overlay_bottom = static_cast<int>(
-      std::ceil((overlay_top_ + overlay_height_) * scale_y)) - surface_top_;
-  const int clipped_left = std::clamp(overlay_left, 0, surface_width_.load());
-  const int clipped_top = std::clamp(overlay_top, 0, surface_height_.load());
-  const int clipped_right =
-      std::clamp(overlay_right, 0, surface_width_.load());
-  const int clipped_bottom =
-      std::clamp(overlay_bottom, 0, surface_height_.load());
-  if (clipped_left >= clipped_right || clipped_top >= clipped_bottom) {
+      static_cast<double>(std::max<int64_t>(surface_view_height_, 1));
+  const int width = surface_width_.load();
+  const int height = surface_height_.load();
+  const int top_control_height = std::clamp(
+      static_cast<int>(std::ceil(airspace_inset_top_.load() * control_scale_y)),
+      0, height);
+  const int bottom_control_height = std::clamp(
+      static_cast<int>(
+          std::ceil(airspace_inset_bottom_.load() * control_scale_y)),
+      0, height);
+  const bool has_control_occlusion =
+      top_control_height > 0 || bottom_control_height > 0;
+  if (!has_control_occlusion && !hwnd_surface_partial_occlusion_) {
     SetWindowRgn(video_host_window_, nullptr, TRUE);
     return;
   }
 
-  HRGN visible_region =
-      CreateRectRgn(0, 0, surface_width_.load(), surface_height_.load());
-  HRGN overlay_region =
-      CreateRectRgn(clipped_left, clipped_top, clipped_right, clipped_bottom);
-  if (visible_region == nullptr || overlay_region == nullptr) {
-    if (visible_region != nullptr) DeleteObject(visible_region);
-    if (overlay_region != nullptr) DeleteObject(overlay_region);
-    return;
+  HRGN visible_region = CreateRectRgn(0, 0, width, height);
+  if (visible_region == nullptr) return;
+  const auto subtract_region =
+      [visible_region, width, height](int left, int top, int right, int bottom) {
+        const int clipped_left = std::clamp(left, 0, width);
+        const int clipped_top = std::clamp(top, 0, height);
+        const int clipped_right = std::clamp(right, 0, width);
+        const int clipped_bottom = std::clamp(bottom, 0, height);
+        if (clipped_left >= clipped_right || clipped_top >= clipped_bottom) {
+          return;
+        }
+        HRGN occlusion_region = CreateRectRgn(
+            clipped_left, clipped_top, clipped_right, clipped_bottom);
+        if (occlusion_region == nullptr) return;
+        CombineRgn(visible_region, visible_region, occlusion_region, RGN_DIFF);
+        DeleteObject(occlusion_region);
+      };
+  subtract_region(0, 0, width, top_control_height);
+  subtract_region(
+      0, height - bottom_control_height, width, height);
+
+  if (hwnd_surface_partial_occlusion_) {
+    const double overlay_scale_x =
+        static_cast<double>(parent_bounds.right - parent_bounds.left) /
+        static_cast<double>(std::max<int64_t>(overlay_view_width_, 1));
+    const double overlay_scale_y =
+        static_cast<double>(parent_bounds.bottom - parent_bounds.top) /
+        static_cast<double>(std::max<int64_t>(overlay_view_height_, 1));
+    const int overlay_left = static_cast<int>(
+        std::floor(overlay_left_ * overlay_scale_x)) - surface_left_;
+    const int overlay_top = static_cast<int>(
+        std::floor(overlay_top_ * overlay_scale_y)) - surface_top_;
+    const int overlay_right = static_cast<int>(
+        std::ceil((overlay_left_ + overlay_width_) * overlay_scale_x)) -
+        surface_left_;
+    const int overlay_bottom = static_cast<int>(
+        std::ceil((overlay_top_ + overlay_height_) * overlay_scale_y)) -
+        surface_top_;
+    subtract_region(
+        overlay_left, overlay_top, overlay_right, overlay_bottom);
   }
-  CombineRgn(visible_region, visible_region, overlay_region, RGN_DIFF);
-  DeleteObject(overlay_region);
+
   // SetWindowRgn 成功后由系统接管 region；失败时仍由当前进程释放。
   if (SetWindowRgn(video_host_window_, visible_region, TRUE) == 0) {
     DeleteObject(visible_region);
@@ -1109,6 +1127,16 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(hwnd_surface_visible_)},
           {flutter::EncodableValue("native-surface-occluded"),
            flutter::EncodableValue(hwnd_surface_occluded_)},
+          {flutter::EncodableValue("native-overlay-partial"),
+           flutter::EncodableValue(hwnd_surface_partial_occlusion_)},
+          {flutter::EncodableValue("native-overlay-left"),
+           flutter::EncodableValue(overlay_left_)},
+          {flutter::EncodableValue("native-overlay-top"),
+           flutter::EncodableValue(overlay_top_)},
+          {flutter::EncodableValue("native-overlay-width"),
+           flutter::EncodableValue(overlay_width_)},
+          {flutter::EncodableValue("native-overlay-height"),
+           flutter::EncodableValue(overlay_height_)},
           {flutter::EncodableValue("native-input-forwarding"),
            flutter::EncodableValue(native_hwnd_enabled_)},
           {flutter::EncodableValue("native-input-mode"),

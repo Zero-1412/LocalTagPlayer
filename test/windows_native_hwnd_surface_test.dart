@@ -60,6 +60,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: backend.buildVideoSurface(
+            reserveBottomControlArea: true,
             controls: const Align(
               alignment: Alignment.bottomCenter,
               child: SizedBox(
@@ -88,7 +89,7 @@ void main() {
     expect(arguments['left'], 0);
     expect(arguments['top'], 0);
     expect(arguments['width'], 800);
-    expect(arguments['height'], 472);
+    expect(arguments['height'], 600);
     expect(arguments['viewWidth'], 800);
     expect(arguments['viewHeight'], 600);
     expect(arguments['airspaceTop'], 0);
@@ -115,12 +116,37 @@ void main() {
     expect(await backend.getProperty('tscale'), 'oversample');
     expect(await backend.getProperty('display-sync-active'), 'true');
 
+    // 控制条收起后 HWND 尺寸保持不变，只把窗口 region 的底部让位收窄到细进度条。
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: backend.buildVideoSurface(
+            controls: const Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                key: ValueKey<String>('protected-controls'),
+                height: 96,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+    final hiddenControlsRectCall =
+        calls.lastWhere((call) => call.method == 'setSurfaceRect');
+    final hiddenControlsArguments =
+        hiddenControlsRectCall.arguments! as Map<Object?, Object?>;
+    expect(hiddenControlsArguments['height'], 600);
+    expect(hiddenControlsArguments['airspaceBottom'], 3);
+
     // 全屏顶部队列语境仍须避让，切换状态只改变原生矩形而不重建后端。
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: backend.buildVideoSurface(
             reserveTopControlArea: true,
+            reserveBottomControlArea: true,
             controls: const Align(
               alignment: Alignment.bottomCenter,
               child: SizedBox(
@@ -137,9 +163,10 @@ void main() {
         calls.lastWhere((call) => call.method == 'setSurfaceRect');
     final fullscreenArguments =
         fullscreenRectCall.arguments! as Map<Object?, Object?>;
-    expect(fullscreenArguments['top'], 64);
-    expect(fullscreenArguments['height'], 408);
+    expect(fullscreenArguments['top'], 0);
+    expect(fullscreenArguments['height'], 600);
     expect(fullscreenArguments['airspaceTop'], 64);
+    expect(fullscreenArguments['airspaceBottom'], 128);
 
     final rectCountBeforeDpiChange =
         calls.where((call) => call.method == 'setSurfaceRect').length;

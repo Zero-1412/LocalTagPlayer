@@ -3717,14 +3717,15 @@ class PlayerPageState extends State<PlayerPage> {
   Future<void> _showPlayerContextMenu(TapDownDetails details) async {
     final infoItemKey = GlobalKey();
     final diagnosticsItemKey = GlobalKey();
+    final viewSize = MediaQuery.sizeOf(context);
     await _withPlayerOverlaySurfaceOccluded(() async {
       final actionFuture = showMenu<String>(
         context: context,
         position: RelativeRect.fromLTRB(
           details.globalPosition.dx,
           details.globalPosition.dy,
-          details.globalPosition.dx,
-          details.globalPosition.dy,
+          math.max(0.0, viewSize.width - details.globalPosition.dx),
+          math.max(0.0, viewSize.height - details.globalPosition.dy),
         ),
         items: [
           PopupMenuItem(
@@ -3747,17 +3748,9 @@ class PlayerPageState extends State<PlayerPage> {
           ),
         ],
       );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final itemRects = <Rect>[
-          if (_globalRectForKey(infoItemKey) case final rect?) rect,
-          if (_globalRectForKey(diagnosticsItemKey) case final rect?) rect,
-        ];
-        if (itemRects.isEmpty) return;
-        final menuRect = itemRects
-            .skip(1)
-            .fold(itemRects.first, (a, b) => a.expandToInclude(b));
-        _updateCurrentPlayerOverlaySurfaceRect(menuRect.inflate(10));
-      });
+      _scheduleContextMenuBoundsUpdate(
+        <GlobalKey>[infoItemKey, diagnosticsItemKey],
+      );
       final action = await actionFuture;
       if (!mounted) {
         return;
@@ -4118,6 +4111,42 @@ class PlayerPageState extends State<PlayerPage> {
     final renderObject = key.currentContext?.findRenderObject() as RenderBox?;
     if (renderObject == null || !renderObject.hasSize) return null;
     return renderObject.localToGlobal(Offset.zero) & renderObject.size;
+  }
+
+  /**
+   * PopupMenu 的 route 可能晚于调用方首个 post-frame 才挂载。
+   *
+   * 有限重试直到菜单项存在，再用真实矩形替换首帧估算；旧实现只测量一次，
+   * 未挂载时会永久保留错误的 HWND 黑洞。
+   */
+  void _scheduleContextMenuBoundsUpdate(
+    List<GlobalKey> itemKeys, {
+    int attempt = 0,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _overlaySurfaceRects.isEmpty) return;
+      final itemRects = <Rect>[
+        for (final key in itemKeys)
+          if (_globalRectForKey(key) case final rect?) rect,
+      ];
+      if (itemRects.isEmpty) {
+        if (attempt < 5) {
+          Future<void>.delayed(const Duration(milliseconds: 16), () {
+            if (mounted) {
+              _scheduleContextMenuBoundsUpdate(
+                itemKeys,
+                attempt: attempt + 1,
+              );
+            }
+          });
+        }
+        return;
+      }
+      final menuRect = itemRects
+          .skip(1)
+          .fold(itemRects.first, (a, b) => a.expandToInclude(b));
+      _updateCurrentPlayerOverlaySurfaceRect(menuRect.inflate(10));
+    });
   }
 
   /** 设置路由首帧前的保守矩形；真实面板挂载后会立即回报并收紧。 */
@@ -4925,10 +4954,13 @@ class PlayerPageState extends State<PlayerPage> {
                                                           _videoAspectMode
                                                               .surfaceAspectRatio,
                                                       mirror: _mirrorVideo,
-                                                      // child HWND 仅在全屏时需要避让顶部队列语境；
-                                                      // 普通窗口的标题栏位于视频容器之外。
+                                                      // 只裁剪当前确实可见的 Flutter 控制区；
+                                                      // 隐藏后让原生视频恢复完整视口，避免永久黑边。
                                                       reserveTopControlArea:
-                                                          _isWindowFullscreen,
+                                                          _isWindowFullscreen &&
+                                                              !_controlsVisible,
+                                                      reserveBottomControlArea:
+                                                          _controlsVisible,
                                                     ),
                                                   ),
                                                 ),

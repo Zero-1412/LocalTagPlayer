@@ -93,6 +93,7 @@ class _RecordingPlayerBackend implements PlayerBackend {
     double? aspectRatio,
     bool mirror = false,
     bool reserveTopControlArea = false,
+    bool reserveBottomControlArea = false,
   }) =>
       controls;
 

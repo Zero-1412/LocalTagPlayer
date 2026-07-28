@@ -119,7 +119,7 @@ void main() {
     expect(await backend.getProperty('native-texture-copies'), '0');
 
     final before = backend.state.position;
-    await _pumpContinuously(tester, const Duration(seconds: 3));
+    await _pumpContinuously(tester, const Duration(seconds: 2));
     expect(backend.state.position, greaterThan(before));
     expect(int.tryParse(await backend.getProperty('frame-drop-count')), 0);
 
@@ -128,11 +128,7 @@ void main() {
     final videoSurface =
         find.byKey(const ValueKey<String>('player.video.surface'));
     final videoRect = tester.getRect(videoSurface);
-    final controlsHotspot = Offset(videoRect.center.dx, videoRect.bottom - 40);
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: controlsHotspot);
-    await mouse.moveTo(controlsHotspot);
-    await tester.pump(const Duration(milliseconds: 250));
+    expect(await backend.getProperty('native-airspace-inset-bottom'), '128');
     expect(
       find.byKey(const ValueKey<String>('player.settings')).hitTestable(),
       findsOneWidget,
@@ -166,6 +162,15 @@ void main() {
     expect(find.text('视频信息'), findsOneWidget);
     expect(find.text('诊断检查'), findsOneWidget);
     expect(await backend.getProperty('native-surface-occluded'), 'true');
+    expect(await backend.getProperty('native-overlay-partial'), 'true');
+    expect(
+      int.tryParse(await backend.getProperty('native-overlay-width')),
+      greaterThan(100),
+    );
+    expect(
+      int.tryParse(await backend.getProperty('native-overlay-height')),
+      greaterThan(80),
+    );
     expect(
       await backend.getProperty('native-surface-visible'),
       'true',
@@ -176,6 +181,12 @@ void main() {
     expect(find.text('视频信息'), findsNothing);
     expect(await backend.getProperty('native-surface-occluded'), 'false');
     expect(await backend.getProperty('native-surface-visible'), 'true');
+    await _pumpContinuously(tester, const Duration(seconds: 3));
+    expect(
+      await backend.getProperty('native-airspace-inset-bottom'),
+      '3',
+      reason: '控制条自动隐藏后只保留细进度条，不能继续留下 128px 黑色空白',
+    );
 
     final readyPath = '${output.path}\\ready.json';
     File(readyPath).writeAsStringSync(
@@ -224,7 +235,6 @@ void main() {
       flush: true,
     );
 
-    await mouse.removePointer();
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
     await disposalCompleter.future.timeout(const Duration(seconds: 12));

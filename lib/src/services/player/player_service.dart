@@ -163,6 +163,7 @@ class PlayerService
     double? aspectRatio,
     bool mirror = false,
     bool reserveTopControlArea = false,
+    bool reserveBottomControlArea = false,
   }) =>
       _backend.buildVideoSurface(
         controls: controls,
@@ -170,6 +171,7 @@ class PlayerService
         aspectRatio: aspectRatio,
         mirror: mirror,
         reserveTopControlArea: reserveTopControlArea,
+        reserveBottomControlArea: reserveBottomControlArea,
       );
 
   @override

@@ -1,5 +1,17 @@
 ﻿# ARCHITECTURE.md
 
+## MPV child HWND 动态控制区与稳定 region
+
+`Architecture Baseline 0.5.94` 保持 Windows MPV child HWND 与 Flutter 视频占位区
+同尺寸。顶部全屏语境、底部控制条和弹层不再通过改变 HWND 外框实现，而由 runner
+在单个 window region 中统一扣除。控制条可见时底部让出 128 逻辑像素，隐藏时只让出
+3 像素进度条；这两个值参与平台侧同步缓存，状态变化必须立即更新 region。
+
+runner 必须先保存本轮 surface 左上角、尺寸与 view 尺寸，再移动窗口和计算 region，
+避免初次布局使用上一轮几何。Flutter 弹层仍只通过 `PlayerOverlaySurfaceBoundary`
+发送逻辑矩形；右键菜单在 Route 挂载后测量真实菜单项并有限重试。MediaKit 不消费
+这些 Windows 参数，跨平台 `PlayerBackend` 仅暴露语义化的控制区预留状态。
+
 ## MPV child HWND 弹层与视口边界
 
 `Architecture Baseline 0.5.93` 把 child HWND airspace 从“弹层出现时隐藏整个

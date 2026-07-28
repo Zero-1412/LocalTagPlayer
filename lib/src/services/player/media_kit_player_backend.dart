@@ -160,6 +160,7 @@ class MediaKitPlayerBackend implements PlayerBackend, PlayerGpuRenderBoundary {
     double? aspectRatio,
     bool mirror = false,
     bool reserveTopControlArea = false,
+    bool reserveBottomControlArea = false,
   }) {
     final videoSurface = Video(
       // media_kit 1.3.1 无法通过 copyWith 把非空 aspectRatio 清回 null；
