@@ -514,20 +514,6 @@ bool playerWindowTopBarShouldShow({
 }
 
 /**
- * 判断全屏顶部队列语境是否应显示。
- *
- * 底部控制条出现时已经包含当前进度与队列操作，顶部胶囊必须让出画面；控制条收起后
- * 才恢复最小队列语境。该判断只消费现有轻量状态，不新增计时器或队列计算。
- */
-@visibleForTesting
-bool playerFullscreenContextShouldShow({
-  required bool isFullscreen,
-  required bool controlsVisible,
-}) {
-  return isFullscreen && !controlsVisible;
-}
-
-/**
  * 判断当前焦点是否属于可编辑文本。
  *
  * 播放器快捷键位于页面祖先 Focus；EditableText 未消费的字母仍可能继续冒泡，
@@ -2279,19 +2265,12 @@ class PlayerPageState extends State<PlayerPage> {
     }
   }
 
-  /** 构建画面底部统一控制条，并在全屏顶部保留最小队列语境。 */
+  /** 构建画面底部统一浮层控制条；全屏不再额外挂载顶部队列语境。 */
   Widget _buildVideoControls() {
     final accessibility = AppAccessibilityScope.of(context);
-    final fullscreenContextVisible = playerFullscreenContextShouldShow(
-      isFullscreen: _isWindowFullscreen,
-      controlsVisible: _controlsVisible,
-    );
     // 进入稍慢以建立层级，退出更短以快速让出画面；无障碍模式由 token 自动降级。
     final fadeDuration = accessibility.fadeDuration(
       _controlsVisible ? AppMotion.popover : AppMotion.hover,
-    );
-    final fullscreenContextFadeDuration = accessibility.fadeDuration(
-      fullscreenContextVisible ? AppMotion.popover : AppMotion.hover,
     );
     final motionDuration = accessibility.motionDuration(
       _controlsVisible ? AppMotion.popover : AppMotion.hover,
@@ -2307,51 +2286,6 @@ class PlayerPageState extends State<PlayerPage> {
         _setPointerInControlBar(false);
       },
       child: Stack(children: [
-        if (_isWindowFullscreen)
-          Positioned(
-            left: 20,
-            right: 20,
-            top: 18,
-            child: SafeArea(
-              child: AnimatedOpacity(
-                // 顶部语境进入略慢、退出更快；它与底部控制条方向相反，不能共用时长。
-                duration: fullscreenContextFadeDuration,
-                opacity: fullscreenContextVisible ? 1 : 0,
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: DecoratedBox(
-                    key: const ValueKey('player.fullscreen.context'),
-                    decoration: BoxDecoration(
-                      color: playerSurface.withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(AppRadius.capsule),
-                      border: Border.all(color: playerBorder),
-                      boxShadow: playerSoftShadow,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 620),
-                        child: Text(
-                          '${_index + 1} / ${_queue.length} · $_filterSummary',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: playerText,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
         // 隐藏态进度提示必须独立于控制条树常驻；如果放进下方透明控制条，
         // 控制条收起时它会一起消失，用户也会失去当前播放位置的最低限度反馈。
         Positioned(
@@ -2698,6 +2632,14 @@ class PlayerPageState extends State<PlayerPage> {
   @visibleForTesting
   Future<void> toggleWindowFullscreenForStressTest() =>
       _toggleWindowFullscreen();
+
+  /**
+   * 稳定性矩阵通过正式队列显隐入口验证播放器容器布局。
+   *
+   * 该入口只复用生产状态机，不改变 filtered queue、当前索引或全屏覆盖层语义。
+   */
+  @visibleForTesting
+  void toggleQueueVisibilityForStressTest() => _toggleQueueVisibility();
 
   /**
    * 在双后端快速切换门禁中走正式队列跳转与 latest-request 串行链。
@@ -4954,11 +4896,9 @@ class PlayerPageState extends State<PlayerPage> {
                                                           _videoAspectMode
                                                               .surfaceAspectRatio,
                                                       mirror: _mirrorVideo,
-                                                      // 只裁剪当前确实可见的 Flutter 控制区；
-                                                      // 隐藏后让原生视频恢复完整视口，避免永久黑边。
-                                                      reserveTopControlArea:
-                                                          _isWindowFullscreen &&
-                                                              !_controlsVisible,
+                                                      // 默认 MPV 与 MediaKit 都在 Flutter
+                                                      // 容器内合成；显式 HWND QA 也不再
+                                                      // 为已删除的全屏顶部语境预留黑区。
                                                       reserveBottomControlArea:
                                                           _controlsVisible,
                                                     ),

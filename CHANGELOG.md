@@ -1,5 +1,24 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · 将默认 MPV 切换为播放器容器渲染
+
+- Windows 的 MPV 默认后端改为 libmpv Flutter Texture；MediaKit/MPV 只替换统一
+  播放器容器中的视频表面，修复 child HWND 覆盖播放列表、设置、右键菜单和控制条的
+  airspace 问题。
+- MPV Texture 将页面的 `d3d11va` 请求映射为 `d3d11va-copy`，真实读回确认硬解生效，
+  不再因非 copy 帧无法进入 ANGLE Texture 而静默软件回退。
+- 播放列表开合立即重排视频；设置与右键浮层后无黑色方框；全屏播放列表显示在视频之上，
+  并移除用户明确要求隐藏的全屏顶部队列语境条。
+- 保留 `windows-native-hwnd` 作为显式 QA 覆盖，用于隔离验证 NVIDIA VSR/HDR 与
+  原生 D3D11；产品默认 Texture 路径不再声称 NVIDIA 增强已激活。
+- focused tests、`flutter analyze`、Windows Debug build、模拟
+  100%/125%/150%/200% DPI、6 次全屏往返和真实 Debug 点击截图通过；本机单显示器
+  无法替代真实跨物理 DPI，发布状态保持 `pending-physical-cross-dpi`。
+- MediaKit/MPV 各 30 分钟长播和 18 次快速切换通过；播放推进分别为 561/561、
+  562/562，停滞均为 0，最大总掉帧分别为 0/2（预算 5），汇总自动门禁为通过。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 的来源、顺序与
+  当前 index、MediaKit、缓存队列和用户数据均未改变。
+
 ## 2026-07-28 · 修复 MPV 底部空白、首入错位与右键暗框
 
 - MPV child HWND 改为完整占位矩形，控制条改由 native region 动态让出；控制条隐藏后仅保留

@@ -26,7 +26,7 @@ void main() {
         hardwareDecodingEnabled: true,
         rendererPreference: PlayerRendererPreference.automatic,
       ),
-      PlayerBackendSelection.windowsNativeHwnd,
+      PlayerBackendSelection.windowsNativeMpv,
     );
     expect(
       resolvePlayerBackendSelection(
@@ -34,7 +34,7 @@ void main() {
         hardwareDecodingEnabled: true,
         rendererPreference: PlayerRendererPreference.windowsLibmpv,
       ),
-      PlayerBackendSelection.windowsNativeHwnd,
+      PlayerBackendSelection.windowsNativeMpv,
     );
     expect(
       resolvePlayerBackendSelection(
@@ -51,6 +51,16 @@ void main() {
         rendererPreference: PlayerRendererPreference.mediaKit,
       ),
       PlayerBackendSelection.mediaKit,
+    );
+    expect(
+      resolvePlayerBackendSelection(
+        isWindows: true,
+        hardwareDecodingEnabled: true,
+        rendererPreference: PlayerRendererPreference.windowsLibmpv,
+        environmentOverride: 'windows-native-hwnd',
+      ),
+      PlayerBackendSelection.windowsNativeHwnd,
+      reason: 'child HWND 只保留给显式 NVIDIA/airspace 隔离门禁',
     );
     expect(
       resolvePlayerBackendSelection(

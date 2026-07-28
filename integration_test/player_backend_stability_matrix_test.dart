@@ -95,7 +95,7 @@ void main() {
       hdrDynamicToneMappingExperimentEnabled: false,
     );
     final backend = usesMpv
-        ? WindowsNativePlayerBackend(mode: 'hwnd')
+        ? WindowsNativePlayerBackend(mode: 'mpv')
         : MediaKitPlayerBackend(
             hwdec: PlayerHardwareAcceleration.resolve(settings.hwdec),
             enableHardwareAcceleration: settings.hardwareDecodingEnabled,
@@ -147,6 +147,15 @@ void main() {
     );
     await backend.setProperty('loop-file', 'inf');
     await _pumpContinuously(tester, const Duration(seconds: 2));
+    if (usesMpv) {
+      await _waitForBackendProperty(
+        tester,
+        backend,
+        'hwdec-current',
+        'd3d11va-copy',
+        const Duration(seconds: 15),
+      );
+    }
     final originalQueue =
         playerKey.currentState!.buildStabilitySnapshotForTest().sourceVideoIds;
 
@@ -155,11 +164,15 @@ void main() {
       playerKey,
       backend,
     );
+    final queueComposition = await _runQueueCompositionScenario(
+      tester,
+      playerKey,
+      backend,
+    );
     final dpi = await _runDpiScenario(
       tester,
       playerKey,
       backend,
-      usesMpv: usesMpv,
       physicalStatus: physicalDpiStatus,
     );
     final rapidSwitch = await _runRapidSwitchScenario(
@@ -181,6 +194,7 @@ void main() {
 
     final automatedPass = <Map<String, Object?>>[
       fullscreen,
+      queueComposition,
       dpi,
       rapidSwitch,
       longPlay,
@@ -191,6 +205,7 @@ void main() {
       'platform': 'windows',
       'playerBackend': backendName,
       'rendererPreference': settings.rendererPreference.name,
+      'actualHwdec': await backend.getProperty('hwdec-current'),
       'sampleCount': items.length,
       'automatedPass': automatedPass,
       'releaseGate': automatedPass && physicalDpiPassed
@@ -200,6 +215,7 @@ void main() {
               : 'failed',
       'scenarios': <String, Object?>{
         'fullscreen': fullscreen,
+        'queueComposition': queueComposition,
         'crossDpi': dpi,
         'rapidSwitch': rapidSwitch,
         'longPlayback': longPlay,
@@ -218,6 +234,24 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 40)));
 }
 
+/** 等待真实后端属性达到目标值，避免把配置请求误当成硬解已经生效。 */
+Future<void> _waitForBackendProperty(
+  WidgetTester tester,
+  PlayerBackend backend,
+  String property,
+  String expected,
+  Duration timeout,
+) async {
+  final stopwatch = Stopwatch()..start();
+  while (stopwatch.elapsed < timeout) {
+    await tester.pump(const Duration(milliseconds: 100));
+    if (await backend.getProperty(property) == expected) return;
+  }
+  throw StateError(
+    '等待 $property=$expected 超时，实际 ${await backend.getProperty(property)}',
+  );
+}
+
 /**
  * 通过正式窗口状态机完成两次全屏往返，并确认后端会话与 filtered queue 均未丢失。
  */
@@ -228,24 +262,43 @@ Future<Map<String, Object?>> _runFullscreenScenario(
 ) async {
   final state = playerKey.currentState!;
   final before = backend.state.position.inMilliseconds;
-  const cycles = 2;
+  const cycles = 6;
   for (var index = 0; index < cycles; index++) {
     await state.toggleWindowFullscreenForStressTest();
-    await _pumpContinuously(tester, const Duration(milliseconds: 700));
+    await _pumpContinuously(tester, const Duration(milliseconds: 250));
     expect(state.buildStabilitySnapshotForTest().windowFullscreen, isTrue);
     expect(
       find.byKey(const ValueKey<String>('player.video.surface')),
       findsOneWidget,
     );
     await state.toggleWindowFullscreenForStressTest();
-    await _pumpContinuously(tester, const Duration(milliseconds: 700));
+    await _pumpContinuously(tester, const Duration(milliseconds: 250));
     expect(state.buildStabilitySnapshotForTest().windowFullscreen, isFalse);
   }
+  await state.toggleWindowFullscreenForStressTest();
+  await _pumpContinuously(tester, const Duration(milliseconds: 350));
+  state.toggleQueueVisibilityForStressTest();
+  await _pumpContinuously(tester, const Duration(milliseconds: 350));
+  final fullscreenQueueVisible = find
+      .byKey(const ValueKey<String>('player.fullscreenQueue.overlay'))
+      .evaluate()
+      .isNotEmpty;
+  final fullscreenQueueHitTestable = find
+      .byKey(const ValueKey<String>('player.fullscreenQueue.sidebar'))
+      .hitTestable()
+      .evaluate()
+      .isNotEmpty;
+  state.toggleQueueVisibilityForStressTest();
+  await _pumpContinuously(tester, const Duration(milliseconds: 180));
+  await state.toggleWindowFullscreenForStressTest();
+  await _pumpContinuously(tester, const Duration(milliseconds: 350));
   final after = backend.state.position.inMilliseconds;
   final snapshot = state.buildStabilitySnapshotForTest();
   final pass = !snapshot.windowFullscreen &&
       !snapshot.hasOpenFailure &&
-      snapshot.openedVideoId == snapshot.currentVideoId;
+      snapshot.openedVideoId == snapshot.currentVideoId &&
+      fullscreenQueueVisible &&
+      fullscreenQueueHitTestable;
   return <String, Object?>{
     'automatedPass': pass,
     'cycles': cycles,
@@ -253,6 +306,49 @@ Future<Map<String, Object?>> _runFullscreenScenario(
     'positionBeforeMs': before,
     'positionAfterMs': after,
     'sessionPreserved': snapshot.openedVideoId == snapshot.currentVideoId,
+    'fullscreenQueueVisible': fullscreenQueueVisible,
+    'fullscreenQueueHitTestable': fullscreenQueueHitTestable,
+  };
+}
+
+/**
+ * 在普通窗口折叠/展开右侧队列，验证 Texture 视频与列表由同一 Flutter 容器布局。
+ *
+ * child HWND 曾因独立窗口矩形滞后一帧而压住列表；本门禁要求视频宽度随动画完成
+ * 后立即扩大并恢复，同时播放头持续推进、队列身份不变。
+ */
+Future<Map<String, Object?>> _runQueueCompositionScenario(
+  WidgetTester tester,
+  GlobalKey<PlayerPageState> playerKey,
+  PlayerBackend backend,
+) async {
+  final state = playerKey.currentState!;
+  final surface = find.byKey(const ValueKey<String>('player.video.surface'));
+  final initialWidth = tester.getSize(surface).width;
+  final positionBefore = backend.state.position.inMilliseconds;
+  state.toggleQueueVisibilityForStressTest();
+  await _pumpContinuously(tester, const Duration(milliseconds: 450));
+  final collapsedWidth = tester.getSize(surface).width;
+  state.toggleQueueVisibilityForStressTest();
+  await _pumpContinuously(tester, const Duration(milliseconds: 450));
+  final restoredWidth = tester.getSize(surface).width;
+  final positionAfter = backend.state.position.inMilliseconds;
+  final snapshot = state.buildStabilitySnapshotForTest();
+  final pass = collapsedWidth > initialWidth &&
+      (restoredWidth - initialWidth).abs() <= 1 &&
+      positionAfter > positionBefore &&
+      backend.textureId.value != null &&
+      !snapshot.hasOpenFailure &&
+      snapshot.openedVideoId == snapshot.currentVideoId;
+  return <String, Object?>{
+    'automatedPass': pass,
+    'initialSurfaceWidth': initialWidth.round(),
+    'collapsedSurfaceWidth': collapsedWidth.round(),
+    'restoredSurfaceWidth': restoredWidth.round(),
+    'positionBeforeMs': positionBefore,
+    'positionAfterMs': positionAfter,
+    'textureReady': backend.textureId.value != null,
+    'queuePreserved': snapshot.openedVideoId == snapshot.currentVideoId,
   };
 }
 
@@ -265,7 +361,6 @@ Future<Map<String, Object?>> _runDpiScenario(
   WidgetTester tester,
   GlobalKey<PlayerPageState> playerKey,
   PlayerBackend backend, {
-  required bool usesMpv,
   required String physicalStatus,
 }) async {
   const scales = <double>[1, 1.25, 1.5, 2, 1];
@@ -284,15 +379,7 @@ Future<Map<String, Object?>> _runDpiScenario(
       'surfaceHeight': videoSurface.evaluate().isEmpty
           ? 0
           : tester.getSize(videoSurface).height.round(),
-      if (usesMpv)
-        'nativeSurfaceVisible':
-            await backend.getProperty('native-surface-visible'),
-      if (usesMpv)
-        'nativeSurfaceWidth': await backend.getProperty('native-surface-width'),
-      if (usesMpv)
-        'nativeSurfaceHeight':
-            await backend.getProperty('native-surface-height'),
-      if (!usesMpv) 'textureReady': backend.textureId.value != null,
+      'textureReady': backend.textureId.value != null,
     };
     observations.add(observation);
   }
@@ -305,14 +392,7 @@ Future<Map<String, Object?>> _runDpiScenario(
         (observation['surfaceHeight'] as int) < 64) {
       return false;
     }
-    if (!usesMpv) return observation['textureReady'] == true;
-    final width =
-        int.tryParse(observation['nativeSurfaceWidth']?.toString() ?? '') ?? 0;
-    final height =
-        int.tryParse(observation['nativeSurfaceHeight']?.toString() ?? '') ?? 0;
-    return observation['nativeSurfaceVisible'] == 'true' &&
-        width >= 64 &&
-        height >= 64;
+    return observation['textureReady'] == true;
   }
 
   final snapshot = playerKey.currentState!.buildStabilitySnapshotForTest();

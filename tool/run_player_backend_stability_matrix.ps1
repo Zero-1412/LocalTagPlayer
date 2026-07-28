@@ -136,7 +136,7 @@ $matrix = [ordered]@{
   platformGates = [ordered]@{
     windows = [ordered]@{
       mediaKit = 'available'
-      mpv = 'available-native-child-hwnd'
+      mpv = 'available-libmpv-flutter-texture'
     }
     macos = [ordered]@{
       mediaKit = 'available'

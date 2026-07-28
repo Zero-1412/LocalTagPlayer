@@ -3160,7 +3160,7 @@ void main() {
     expect(find.text('数据与维护'), findsOneWidget);
     expect(find.text('播放与解码'), findsOneWidget);
     expect(find.text('视频画质与增强'), findsOneWidget);
-    expect(find.text('MPV 原生渲染 · 继续观看：每次询问'), findsOneWidget);
+    expect(find.text('MPV 容器渲染 · 继续观看：每次询问'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('settings.resumeBehavior.summary')),
       findsOneWidget,
@@ -5104,31 +5104,6 @@ void main() {
     expect(layout?.width, 1440);
     expect(layout?.height, 900);
     expect(layout?.maximized, isTrue);
-  });
-
-  test('fullscreen queue context yields while playback controls are visible',
-      () {
-    expect(
-      playerFullscreenContextShouldShow(
-        isFullscreen: true,
-        controlsVisible: true,
-      ),
-      isFalse,
-    );
-    expect(
-      playerFullscreenContextShouldShow(
-        isFullscreen: true,
-        controlsVisible: false,
-      ),
-      isTrue,
-    );
-    expect(
-      playerFullscreenContextShouldShow(
-        isFullscreen: false,
-        controlsVisible: false,
-      ),
-      isFalse,
-    );
   });
 
   test('library sort helper applies to every video source list', () {

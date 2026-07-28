@@ -7,16 +7,16 @@
 
 本门禁不修改播放器选择、filtered queue、SQLite、标签或用户数据。macOS 与 Linux
 继续只允许 MediaKit；将来若要开放 MPV，必须先分别实现、接入和验证各自的原生
-`PlayerBackend`，不能复用 Windows child HWND 结论。
+`PlayerBackend`，不能复用 Windows 的 Texture 或 child HWND 结论。
 
 ## 矩阵定义
 
 | 场景 | MediaKit | Windows MPV | 自动通过条件 | 发布前附加条件 |
 | --- | --- | --- | --- | --- |
-| 全屏 | 正式窗口全屏状态机 | 正式窗口全屏状态机 + child HWND | 两次往返后视频表面、当前项和已打开项保持一致 | 人工观察无黑窗、穿透或窗口层级异常 |
-| 跨 DPI | Flutter Texture metrics 重算 | Flutter metrics + child HWND 物理矩形重算 | 100%/125%/150%/200%/100% 模拟变化期间表面持续有效 | 必须在两块不同缩放显示器间真实移窗；单显示器不得标记通过 |
+| 全屏 | 正式窗口全屏状态机 | 正式窗口全屏状态机 + libmpv Texture | 六次往返后视频表面、当前项和已打开项保持一致；全屏队列可见且可命中 | 人工观察无黑窗、穿透或窗口层级异常 |
+| 跨 DPI | Flutter Texture metrics 重算 | libmpv Texture metrics 重算 | 100%/125%/150%/200%/100% 模拟变化期间表面持续有效 | 必须在两块不同缩放显示器间真实移窗；单显示器不得标记通过 |
 | 快速切换 | latest-request 串行 open | latest-request 串行 open | 默认 18 次短间隔请求后只打开最后一次选择，来源队列身份与顺序不变 | 无 |
-| 长播 | MediaKit/libmpv Texture | Windows 原生 libmpv/D3D11 | 默认每个后端 30 分钟，持续推进、无音视频停滞、掉帧不超过预算、队列不漂移 | 发布候选机型按实际 GPU/显示器复跑 |
+| 长播 | MediaKit/libmpv Texture | Windows libmpv Texture / `d3d11va-copy` | 默认每个后端 30 分钟，持续推进、无音视频停滞、掉帧不超过预算、队列不漂移 | 发布候选机型按实际 GPU/显示器复跑 |
 
 ## 工具与证据
 
@@ -51,13 +51,33 @@ powershell -ExecutionPolicy Bypass -File tool/run_player_backend_stability_matri
 
 汇总自动门禁为 `passed`，但发布门禁保持
 `pending-physical-cross-dpi`。测试机只有一块 2560×1440 显示器，真实跨显示器
-DPI 没有执行；15 秒也只证明矩阵可运行，不替代默认 30 分钟发布长播。
+DPI 没有执行；15 秒短门禁只用于先证明矩阵可运行，正式 30 分钟结果见下一节。
+
+切换默认 MPV 表面后的补充短门禁覆盖队列宽度 `1064 → 1440 → 1064`、6 次全屏
+往返、全屏队列命中、100%/125%/150%/200%/100% metrics 和 20 秒播放推进，结果
+全部通过；MPV 实际读回 `hwdec-current=d3d11va-copy`。真实 Debug 窗口还验证了
+随机视频位置的右键菜单、设置弹层、普通/全屏队列开合和控制条浮层均无黑块、遮挡或
+stale surface，全屏顶部不再显示队列语境条。
+
+## 本机 30 分钟正式门禁结果
+
+输出目录：
+`.local/qa/player-backend-stability/texture-container-30m-20260728`。
+
+| 后端 | 实际硬解 | 全屏/队列/模拟 DPI | 快速切换 | 播放推进 | 停滞样本 | 最大总掉帧 / 预算 |
+| --- | --- | --- | --- | --- | ---: | ---: |
+| MediaKit | `d3d11va-copy` | 全部通过 | 18/18，最终项与来源队列正确 | 561/561 | 0 | 0 / 5 |
+| MPV Texture | `d3d11va-copy` | 全部通过 | 18/18，最终项与来源队列正确 | 562/562 | 0 | 2 / 5 |
+
+汇总 `automatedPass=true`。测试机只有一块 100% 缩放显示器，因此发布门禁仍为
+`pending-physical-cross-dpi`；自动 metrics 结果不能冒充两块不同缩放显示器间的
+真实移窗验证。
 
 ## 平台门禁
 
 | 平台 | MediaKit | MPV |
 | --- | --- | --- |
-| Windows | 可用，纳入本矩阵 | 可用，原生 child HWND/D3D11，纳入本矩阵 |
+| Windows | 可用，纳入本矩阵 | 可用，默认 libmpv Texture / `d3d11va-copy`；child HWND 仅作显式 NVIDIA QA 覆盖 |
 | macOS | 可用 | 阻塞：尚无 macOS 原生 MPV 后端 |
 | Linux | 可用 | 阻塞：尚无 Linux 原生 MPV 后端 |
 

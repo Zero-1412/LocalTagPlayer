@@ -609,7 +609,7 @@ class PlaybackSettings {
       switch (value) {
         PlayerRendererPreference.automatic ||
         PlayerRendererPreference.windowsLibmpv =>
-          'MPV 原生渲染',
+          'MPV 容器渲染',
         PlayerRendererPreference.mediaKit => 'MediaKit 兼容渲染',
       };
 
@@ -618,7 +618,7 @@ class PlaybackSettings {
       switch (value) {
         PlayerRendererPreference.automatic ||
         PlayerRendererPreference.windowsLibmpv =>
-          '下次进入播放器使用原生 D3D11，可启用 NVIDIA 视频增强',
+          '下次进入播放器使用 Flutter Texture；播放列表与弹层可正常覆盖',
         PlayerRendererPreference.mediaKit => '跨平台兼容性优先；Windows NVIDIA 原生增强不可用',
       };
 
@@ -627,7 +627,7 @@ class PlaybackSettings {
       switch (value) {
         PlayerRendererPreference.automatic ||
         PlayerRendererPreference.windowsLibmpv =>
-          '特色强化：原生 D3D11、NVIDIA VSR/HDR 自动增强、GPU 高质量缩放',
+          '特色强化：MPV 滤镜、GPU 高质量缩放、压缩画质增强',
         PlayerRendererPreference.mediaKit => '特色强化：跨平台兼容、镜像、压缩画质增强',
       };
 

@@ -68,7 +68,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('MPV 原生渲染'), findsOneWidget);
+    expect(find.text('MPV 容器渲染'), findsOneWidget);
     expect(find.textContaining('NVIDIA VSR/HDR 自动增强'), findsOneWidget);
     await _capture(
       captureKey,
@@ -81,7 +81,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('MediaKit 兼容渲染'), findsOneWidget);
-    expect(find.text('MPV 原生渲染'), findsWidgets);
+    expect(find.text('MPV 容器渲染'), findsWidgets);
     await tester.tap(find.text('MediaKit 兼容渲染'));
     await tester.pumpAndSettle();
 

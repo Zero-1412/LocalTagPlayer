@@ -391,6 +391,14 @@ void main() {
         'rendererPreference != PlayerRendererPreference.mediaKit',
       ),
     );
+    expect(
+      backendSelection,
+      contains('return PlayerBackendSelection.windowsNativeMpv;'),
+    );
+    expect(
+      backendSelection,
+      contains("normalizedOverride == 'windows-native-hwnd'"),
+    );
     expect(page, contains('_suspendCpuEnhancementsForNvidia'));
     expect(page, contains('_restoreCpuEnhancementsAfterNvidia'));
     expect(page, contains('NVIDIA 滤镜互斥处理:'));

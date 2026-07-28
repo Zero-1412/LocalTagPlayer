@@ -1,8 +1,27 @@
 ﻿# ARCHITECTURE.md
 
+## Windows MPV 默认容器合成边界
+
+`Architecture Baseline 0.5.95` 把 Windows MPV 的产品默认表面从 child HWND 改为
+libmpv Flutter Texture。`PlayerService` 和 `PlayerBackend` contract 不变；
+`PlayerPage` 始终只挂载一个播放器容器，由组合根在容器内部选择 MediaKit Texture
+或 MPV Texture。播放列表、控制条、设置与右键菜单继续属于同一 Flutter 合成树，
+无需按浮层坐标裁剪视频窗口。
+
+MPV Texture 不能直接消费非 copy D3D11VA 帧，因此
+`WindowsNativePlayerBackend(mode: 'mpv')` 必须在平台边界把 `hwdec=d3d11va`
+映射为 `hwdec=d3d11va-copy`。该映射只约束 Texture 表面；显式
+`windows-native-hwnd` QA 覆盖继续请求 `d3d11va`，用于隔离验证 NVIDIA VSR/HDR
+和原生 D3D11 链。产品设置与诊断必须据实际 selection 展示能力，不能把 QA-only
+HWND 的 NVIDIA 结论套用到默认 Texture。
+
+全屏右侧队列与视频是同级布局，展开时视频容器缩小，隐藏时恢复；底部控制条是覆盖视频的
+Flutter 浮层。已授权删除全屏顶部队列语境条，不改变 filtered queue、当前 index、
+队列导航、设置入口、右键菜单动作或返回路径。
+
 ## MPV child HWND 动态控制区与稳定 region
 
-`Architecture Baseline 0.5.94` 保持 Windows MPV child HWND 与 Flutter 视频占位区
+`Architecture Baseline 0.5.94` 曾保持 Windows MPV child HWND 与 Flutter 视频占位区
 同尺寸。顶部全屏语境、底部控制条和弹层不再通过改变 HWND 外框实现，而由 runner
 在单个 window region 中统一扣除。控制条可见时底部让出 128 逻辑像素，隐藏时只让出
 3 像素进度条；这两个值参与平台侧同步缓存，状态变化必须立即更新 region。
@@ -10,7 +29,8 @@
 runner 必须先保存本轮 surface 左上角、尺寸与 view 尺寸，再移动窗口和计算 region，
 避免初次布局使用上一轮几何。Flutter 弹层仍只通过 `PlayerOverlaySurfaceBoundary`
 发送逻辑矩形；右键菜单在 Route 挂载后测量真实菜单项并有限重试。MediaKit 不消费
-这些 Windows 参数，跨平台 `PlayerBackend` 仅暴露语义化的控制区预留状态。
+这些 Windows 参数，跨平台 `PlayerBackend` 仅暴露语义化的控制区预留状态。该实现
+现在只由显式 `windows-native-hwnd` QA 覆盖使用，不再是产品默认 MPV 表面。
 
 ## MPV child HWND 弹层与视口边界
 

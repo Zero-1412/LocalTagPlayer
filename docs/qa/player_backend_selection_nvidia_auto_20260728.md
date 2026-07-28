@@ -47,9 +47,10 @@ flutter test integration_test/player_renderer_settings_test.dart -d windows
 
 结果：
 
-- 下拉仅出现 `MediaKit 兼容渲染` 与 `MPV 原生渲染`。
+- 当前下拉仅出现 `MediaKit 兼容渲染` 与 `MPV 容器渲染`。
 - 从 MPV 选择 MediaKit 后出现确认弹窗，确认后内存设置更新为 MediaKit。
-- MPV 说明显示原生 D3D11、NVIDIA VSR/HDR 自动增强、GPU 高质量缩放。
+- MPV 说明显示 Flutter Texture、MPV 滤镜、GPU 高质量缩放和压缩画质增强；
+  不再把显式 child HWND QA 路径的 NVIDIA VSR/HDR 结论套用到产品默认表面。
 - MediaKit 说明显示跨平台兼容、镜像、压缩画质增强。
 - 两张 1268×714 PNG 均无遮挡、溢出、文字截断或状态歧义：
   `.local/qa/backend-choice-nvidia-auto/renderer-settings/renderer-mpv.png`
@@ -57,6 +58,11 @@ flutter test integration_test/player_renderer_settings_test.dart -d windows
 
 桌面 Computer Use 复核因检测到用户正在操作目标窗口而立即停止，未继续注入
 鼠标；上述隔离 integration test 不读取或改写用户设置。
+
+本文件后续的 NVIDIA 自动门禁结果属于
+`LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd` 显式 QA 路径。默认
+`MPV 容器渲染` 使用 `d3d11va-copy` 与 Flutter Texture，只承诺容器合成和 MPV
+通用画质能力，不承诺 VSR/HDR 驱动激活。
 
 ## 三类低码率自动门禁
 

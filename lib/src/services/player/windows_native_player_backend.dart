@@ -314,6 +314,11 @@ class WindowsNativePlayerBackend
       // `auto-safe` 配置在会话创建后把原生层重新降回 `d3d11va-copy`。
       return _command('property', text: 'hwdec=d3d11va');
     }
+    if (mode == 'mpv' && property == 'hwdec' && value == 'd3d11va') {
+      // Flutter Texture 通过 ANGLE/OpenGL 合成，不能直接消费 D3D11VA 非 copy 帧。
+      // 使用 copy-back 保留硬件解码，同时把画面交给 Flutter 统一合成弹层与队列。
+      return _command('property', text: 'hwdec=d3d11va-copy');
+    }
     // 缓存档位由播放器会话统一约束；原生 A/B 后端必须接受同一组值，避免设置页显示
     // 已关闭高质量缓存而此处仍静默覆盖为固定 64 MiB。
     return _command('property', text: '$property=$value');

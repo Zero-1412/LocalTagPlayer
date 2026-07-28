@@ -214,4 +214,35 @@ void main() {
       hasLength(1),
     );
   });
+
+  test('MPV Texture 将 D3D11VA 请求收敛为 copy-back 硬解', () async {
+    final calls = <MethodCall>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(windowsNativePlayerChannel,
+        (call) async {
+      calls.add(call);
+      if (call.method == 'create' || call.method == 'state') {
+        return <String, Object?>{
+          'textureId': 7,
+          'positionMs': 0,
+          'durationMs': 1000,
+          'playing': false,
+          'buffering': false,
+          'volume': 100.0,
+          'lifecycle': 'mpv_texture_ready',
+        };
+      }
+      return null;
+    });
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(windowsNativePlayerChannel, null);
+    });
+
+    final backend = WindowsNativePlayerBackend(mode: 'mpv');
+    await backend.setProperty('hwdec', 'd3d11va');
+    final command = calls.lastWhere((call) => call.method == 'command');
+    expect(command.arguments, containsPair('text', 'hwdec=d3d11va-copy'));
+    await backend.dispose();
+  });
 }

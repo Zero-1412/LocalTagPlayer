@@ -1,5 +1,25 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 默认 MPV 改为播放器容器 Texture 渲染
+
+- Windows 用户选择 MPV 后，默认创建 libmpv Flutter Texture 表面；MediaKit 与 MPV
+  现在只替换播放器容器内部的视频表面，不再把 child HWND 叠在整个 Flutter 页面上方。
+- MPV Texture 在后端边界把 `d3d11va` 请求收敛为 `d3d11va-copy`，避免 ANGLE 无法
+  消费非 copy D3D11VA 帧时静默回退软件解码；真实门禁已读回
+  `hwdec-current=d3d11va-copy`。
+- 播放列表收起/展开会立即重排视频表面；控制条、设置浮层和随机位置右键菜单均在同一
+  Flutter 合成树中覆盖实时视频，不再依赖 HWND region 挖洞。
+- 全屏右侧播放列表可见且可命中，画面同步缩放；删除已获授权的全屏顶部队列语境条，
+  底部控制条继续作为浮层显示。
+- `windows-native-hwnd` 环境覆盖仍保留为 NVIDIA VSR/HDR 与原生 D3D11 的显式 QA
+  路径；默认 Texture 容器不宣称 NVIDIA VSR/HDR 已激活。
+- 100%/125%/150%/200%/100% 模拟 DPI、6 次全屏往返、队列开合和短播门禁通过；
+  本机只有一块 100% 缩放显示器，真实跨物理 DPI 继续保持
+  `pending-physical-cross-dpi`。
+- MediaKit 与 MPV 各 30 分钟长播均通过：播放推进分别为 561/561、562/562 个采样，
+  停滞均为 0，最大总掉帧分别为 0 与 2（预算 5）；两后端 18 次快速切换、全屏、
+  队列开合和模拟 DPI 均通过，实际硬解均为 `d3d11va-copy`。
+
 ## 2026-07-28 MPV HWND 单侧黑边、首入错位与右键暗框回归修复
 
 - Windows MPV child HWND 始终保持与 Flutter 视频占位区相同的完整矩形；控制条显示时通过
@@ -52,14 +72,15 @@
 ## 2026-07-28 用户选择 MediaKit / MPV 与 NVIDIA 自动增强
 
 - 设置页“播放”新增唯一的两态渲染器选择：`MediaKit 兼容渲染` 与
-  `MPV 原生渲染`。高影响切换必须确认，只影响下一次进入播放器，并提供撤销；
+  `MPV 容器渲染`。高影响切换必须确认，只影响下一次进入播放器，并提供撤销；
   旧 `automatic` 设置迁移为 MPV，不再向用户显示平台自动选择。
-- Windows 在用户选择 MPV 且硬件解码开启时创建原生 child HWND / D3D11
+- Windows 在用户选择 MPV 且硬件解码开启时创建 libmpv Flutter Texture
   后端；选择 MediaKit 时明确走兼容后端。非 Windows 或关闭硬解时仍安全回退
-  MediaKit，因为当前没有对应的原生 MPV 实现，界面会解释该限制。
+  MediaKit，因为当前没有对应的平台 MPV 实现，界面会解释该限制。
 - 播放器齿轮已删除 NVIDIA VSR/HDR 两个手动开关。MPV 后端会在进入媒体后根据
   活动 NVIDIA 适配器、原生 D3D11 请求能力、源尺寸、显示分辨率、HDR 信号与
-  10-bit 输出自动决定；MediaKit 不显示 MPV 专属 GPU 高质量缩放。
+  10-bit 输出自动决定；这项结论现在只属于显式 `windows-native-hwnd` QA 路径，
+  默认 Texture 不显示或宣称 NVIDIA VSR/HDR 已激活。
 - 原生桥新增 `video-params/w` / `video-params/h` 固定快照，解决自动策略此前
   无法判断 1080P→4K 放大需求的问题；属性未就绪时归零，不沿用上一条视频。
 - 真人面部、动画渐变、暗场三类 650 kbps 1080P 实测均自动请求 VSR+HDR，

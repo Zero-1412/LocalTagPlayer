@@ -1,3 +1,18 @@
+## 2026-07-28 默认 MPV 改为播放器容器 Texture
+
+- Windows 用户选择 MPV 后默认挂载 libmpv Flutter Texture；MediaKit 与 MPV 只替换
+  同一个播放器容器内的视频表面，不再让 child HWND 覆盖 Flutter 页面。
+- Texture 后端把 `d3d11va` 收敛为 `d3d11va-copy`，真实读回确认硬解；显式
+  `windows-native-hwnd` 仍可隔离验证 NVIDIA 原生增强，但不作为产品默认能力。
+- 播放列表开合、全屏队列、底部控制浮层、设置和右键菜单均由 Flutter 正常合成；
+  真实随机右键与设置截图没有黑洞或方框。
+- 删除已授权的全屏顶部队列语境条；filtered queue、当前 index、队列导航、返回路径、
+  MediaKit 与用户数据保持不变。
+- 模拟 DPI 和快速全屏门禁已通过，真实跨物理 DPI 因单显示器继续待测；详细证据见
+  `docs/qa/player_backend_stability_matrix_20260728.md`。
+- MediaKit/MPV 各 30 分钟正式长播均通过：推进采样 561/561、562/562，停滞
+  0/0，最大总掉帧 0/2（预算 5），18 次快速切换后的来源队列和最终项一致。
+
 ## 2026-07-28 MPV HWND 动态控制区与弹层定位
 
 - Windows MPV 视频宿主始终使用完整 Flutter 占位矩形；底部控制条显示/隐藏由 native
@@ -32,10 +47,11 @@
 
 ## 2026-07-28 MediaKit / MPV 显式选择与 NVIDIA 自动增强
 
-- 设置页播放分区只展示 `MediaKit 兼容渲染` 与 `MPV 原生渲染`；切换确认、
+- 设置页播放分区现在展示 `MediaKit 兼容渲染` 与 `MPV 容器渲染`；切换确认、
   下一 Route 生效和撤销路径均已验证。旧 automatic 只承担迁移，不再成为产品
   选项。
-- 组合根按用户偏好创建后端：Windows + MPV + 硬解走 child HWND / D3D11；
+- 组合根最初让 Windows + MPV + 硬解走 child HWND / D3D11；本文件顶部记录的
+  后续修复已把产品默认改为 libmpv Texture，child HWND 只保留显式 QA 覆盖；
   显式 MediaKit、非 Windows 或关闭硬解走兼容后端。页面没有构造具体后端。
 - 播放器齿轮已删除 NVIDIA VSR/HDR 手动开关。MPV 自动策略取得原生源宽高后，
   根据 NVIDIA adapter、1080P→4K 放大、HDR 活动与 10-bit 输出自动请求

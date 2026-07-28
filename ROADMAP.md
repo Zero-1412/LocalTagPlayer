@@ -1,5 +1,18 @@
 # ROADMAP.md
 
+## 2026-07-28 默认 MPV 容器合成
+
+- [x] 默认 MPV 改为 libmpv Flutter Texture，与 MediaKit 共享同一个播放器容器；
+  child HWND 不再覆盖 Flutter 队列、控制条和弹层。
+- [x] MPV Texture 固定使用 `d3d11va-copy` 并验证真实硬解读回；非 copy
+  `windows-native-hwnd` 继续作为显式 NVIDIA QA 路径。
+- [x] 验证普通/全屏队列开合即时重排、控制条浮层、随机右键与设置弹层无黑块。
+- [x] 删除全屏顶部队列语境条；filtered queue、当前 index、导航和返回路径不变。
+- [x] 完成 100%/125%/150%/200%/100% 模拟 DPI 与 6 次全屏快速往返。
+- [ ] 在两块不同缩放显示器间补齐真实物理 DPI 门禁；当前测试机只有单块 100% 屏。
+- [x] 完成 MediaKit/MPV 各 30 分钟长播和 18 次快速切换；停滞均为 0，最大总
+  掉帧为 0/2（预算 5），自动门禁通过并归档报告。
+
 ## 2026-07-28 MPV HWND 动态控制区回归修复
 
 - [x] child HWND 使用完整视频占位矩形，控制条改为 native region 动态让出。
@@ -16,8 +29,8 @@
   index 和最终打开项。
 - [x] macOS/Linux 保持 MediaKit 回退；MPV 开放前必须先有各自原生 PlayerBackend。
 - [ ] 在至少两块不同缩放显示器间分别对 MediaKit/MPV 完成真实移窗 DPI 门禁。
-- [ ] 发布候选构建按默认参数完成每个后端 30 分钟长播；本次 15 秒短门禁只证明
-  矩阵可执行，不能替代发布长播。
+- [x] 发布候选构建按默认参数完成每个后端 30 分钟长播；MediaKit/MPV 分别
+  561/561、562/562 个采样推进，停滞 0，最大总掉帧 0/2。
 
 ## 2026-07-28 MediaKit / MPV 用户选择与自动 NVIDIA
 
