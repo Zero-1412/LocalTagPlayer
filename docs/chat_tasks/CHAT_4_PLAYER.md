@@ -1,3 +1,14 @@
+## 2026-07-28 MPV 视口与弹层实时共存
+
+- 普通窗口取消全屏专用的顶部 64 像素 airspace，自动比例画面扩大；全屏顶部
+  队列语境、底部控制条和“铺满”裁边语义保持不变。
+- 设置与右键菜单不再隐藏整个 child HWND，也不使用冻结帧。页面发送弹层逻辑
+  矩形，runner 用 Windows region 差集只裁掉覆盖区，矩形外视频继续实时播放。
+- 设置面板动态边界、右键菜单真实边界和嵌套弹层恢复均经过回归；真人低码率
+  1080P integration test 与真实 Debug 点击截图确认无黑屏、遮挡、错位或队列
+  穿透。MediaKit、filtered queue、当前 index、返回状态和用户数据不变。
+- 证据见 `docs/qa/mpv_hwnd_overlay_region_20260728.md`。
+
 ## 2026-07-28 MediaKit / MPV 稳定性矩阵
 
 - 同一组三段自然低码率片源分别驱动 MediaKit 与 Windows MPV，覆盖全屏往返、

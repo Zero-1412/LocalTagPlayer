@@ -58,8 +58,10 @@ class NativePlayerBridge {
   bool CreateHwndSurface();
   /** 同步 Flutter 视频占位区域对应的物理像素矩形与可见性。 */
   void UpdateHwndSurface(const flutter::EncodableMap& arguments);
-  /** Flutter 弹层挂载期间立即隐藏 child HWND，并在弹层关闭后恢复最后矩形。 */
+  /** Flutter 弹层期间裁剪或隐藏 child HWND，并在弹层关闭后恢复最后矩形。 */
   void SetHwndSurfaceOccluded(const flutter::EncodableMap& arguments);
+  /** 把 Flutter 逻辑弹层矩形换算为 child HWND 本地窗口区域并执行差集裁剪。 */
+  void ApplyHwndSurfaceOcclusionRegion();
   /** 在 libmpv 会话释放后销毁 child HWND，避免悬空 wid。 */
   void DestroyHwndSurface();
   void EnsureTexture();
@@ -116,8 +118,16 @@ class NativePlayerBridge {
   bool native_hwnd_enabled_ = false;
   /** Flutter 布局是否仍请求显示 child HWND；与弹层临时遮挡状态分开保存。 */
   bool hwnd_surface_requested_visible_ = false;
-  /** Flutter 弹层是否正在占用视频区域；该状态为 true 时 HWND 必须隐藏。 */
+  /** Flutter 弹层是否正在占用视频区域。 */
   bool hwnd_surface_occluded_ = false;
+  /** true 表示只裁剪弹层矩形；false 表示完整隐藏原生表面。 */
+  bool hwnd_surface_partial_occlusion_ = false;
+  int64_t overlay_left_ = 0;
+  int64_t overlay_top_ = 0;
+  int64_t overlay_width_ = 0;
+  int64_t overlay_height_ = 0;
+  int64_t overlay_view_width_ = 1;
+  int64_t overlay_view_height_ = 1;
   bool hwnd_surface_visible_ = false;
   std::atomic<bool> rendering_enabled_{false};
   std::atomic<bool> render_requested_{false};
@@ -127,6 +137,9 @@ class NativePlayerBridge {
   std::atomic<int32_t> surface_top_{0};
   std::atomic<int32_t> surface_width_{1280};
   std::atomic<int32_t> surface_height_{720};
+  /** Flutter 当前实际保留的顶部/底部逻辑 airspace，用于诊断而非几何计算。 */
+  std::atomic<int64_t> airspace_inset_top_{0};
+  std::atomic<int64_t> airspace_inset_bottom_{0};
   std::atomic<int64_t> render_request_count_{0};
   std::atomic<int64_t> rendered_frame_count_{0};
   std::atomic<int64_t> skipped_render_count_{0};

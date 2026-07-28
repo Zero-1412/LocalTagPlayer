@@ -19,6 +19,9 @@ void main() {
     messenger.setMockMethodCallHandler(windowsNativePlayerChannel,
         (call) async {
       calls.add(call);
+      if (call.method == 'command') {
+        return null;
+      }
       if (call.method == 'create' || call.method == 'state') {
         return <String, Object?>{
           'textureId': -1,
@@ -83,11 +86,13 @@ void main() {
     final rectCall = calls.lastWhere((call) => call.method == 'setSurfaceRect');
     final arguments = rectCall.arguments! as Map<Object?, Object?>;
     expect(arguments['left'], 0);
-    expect(arguments['top'], 64);
+    expect(arguments['top'], 0);
     expect(arguments['width'], 800);
-    expect(arguments['height'], 408);
+    expect(arguments['height'], 472);
     expect(arguments['viewWidth'], 800);
     expect(arguments['viewHeight'], 600);
+    expect(arguments['airspaceTop'], 0);
+    expect(arguments['airspaceBottom'], 128);
     expect(arguments['visible'], isTrue);
     expect(
         await backend.getProperty('current-vo'), 'gpu-next-d3d11-child-hwnd');
@@ -110,6 +115,32 @@ void main() {
     expect(await backend.getProperty('tscale'), 'oversample');
     expect(await backend.getProperty('display-sync-active'), 'true');
 
+    // 全屏顶部队列语境仍须避让，切换状态只改变原生矩形而不重建后端。
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: backend.buildVideoSurface(
+            reserveTopControlArea: true,
+            controls: const Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                key: ValueKey<String>('protected-controls'),
+                height: 96,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+    final fullscreenRectCall =
+        calls.lastWhere((call) => call.method == 'setSurfaceRect');
+    final fullscreenArguments =
+        fullscreenRectCall.arguments! as Map<Object?, Object?>;
+    expect(fullscreenArguments['top'], 64);
+    expect(fullscreenArguments['height'], 408);
+    expect(fullscreenArguments['airspaceTop'], 64);
+
     final rectCountBeforeDpiChange =
         calls.where((call) => call.method == 'setSurfaceRect').length;
     tester.view.devicePixelRatio = 1.5;
@@ -128,7 +159,11 @@ void main() {
       containsPair('text', 'hwdec=d3d11va'),
     );
 
-    await backend.setFlutterOverlayVisible(true);
+    await backend.setFlutterOverlayVisible(
+      true,
+      overlayRect: const Rect.fromLTWH(500, 120, 260, 240),
+      viewSize: const Size(800, 600),
+    );
     await backend.setFlutterOverlayVisible(false);
     final occlusionCalls =
         calls.where((call) => call.method == 'setSurfaceOccluded').toList();
@@ -137,6 +172,8 @@ void main() {
       (occlusionCalls.first.arguments! as Map<Object?, Object?>)['occluded'],
       isTrue,
     );
+    expect(occlusionCalls.first.arguments, containsPair('partial', true));
+    expect(occlusionCalls.first.arguments, containsPair('overlayLeft', 500));
     expect(
       (occlusionCalls.last.arguments! as Map<Object?, Object?>)['occluded'],
       isFalse,

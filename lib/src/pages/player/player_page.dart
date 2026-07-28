@@ -980,8 +980,13 @@ class PlayerPageState extends State<PlayerPage> {
   var _renamingFile = false;
   /** 原生文件对话框无法可靠暴露 Flutter Focus，使用显式深度暂停全部播放器快捷键。 */
   var _shortcutSuspensionDepth = 0;
-  /** Flutter 弹层嵌套深度；最后一层关闭前不得恢复始终置顶的原生视频表面。 */
-  var _overlaySurfaceDepth = 0;
+  /**
+   * Flutter 弹层对应的原生裁剪矩形栈。
+   *
+   * 菜单继续打开信息或诊断弹窗时，内层可临时替换外层裁剪策略；最后一层关闭后
+   * 才恢复完整 child HWND，避免嵌套路由交接时闪回并覆盖 Flutter。
+   */
+  final List<Rect?> _overlaySurfaceRects = <Rect?>[];
   late PlayerPlaybackMode _playbackMode;
   late double _playbackRate;
   /** 是否仅水平翻转当前视频画面，控制条与命中区域保持原方向。 */
@@ -2901,7 +2906,10 @@ class PlayerPageState extends State<PlayerPage> {
           onSeekStepChanged: _setSeekStepSeconds,
           onVideoSuperResolutionChanged: _setVideoSuperResolutionEnabled,
           onCompressionEnhancementModeChanged: _setCompressionEnhancementMode,
+          onBoundsChanged: (bounds) =>
+              _updateCurrentPlayerOverlaySurfaceRect(bounds.inflate(2)),
         ),
+        overlayRect: _estimatedSettingsOverlayRect(anchorRect),
       );
     } finally {
       if (mounted) {
@@ -3707,8 +3715,10 @@ class PlayerPageState extends State<PlayerPage> {
   }
 
   Future<void> _showPlayerContextMenu(TapDownDetails details) async {
+    final infoItemKey = GlobalKey();
+    final diagnosticsItemKey = GlobalKey();
     await _withPlayerOverlaySurfaceOccluded(() async {
-      final action = await showMenu<String>(
+      final actionFuture = showMenu<String>(
         context: context,
         position: RelativeRect.fromLTRB(
           details.globalPosition.dx,
@@ -3716,18 +3726,20 @@ class PlayerPageState extends State<PlayerPage> {
           details.globalPosition.dx,
           details.globalPosition.dy,
         ),
-        items: const [
+        items: [
           PopupMenuItem(
+            key: infoItemKey,
             value: 'info',
-            child: ListTile(
+            child: const ListTile(
               dense: true,
               leading: Icon(Icons.info_outline),
               title: Text('\u89c6\u9891\u4fe1\u606f'),
             ),
           ),
           PopupMenuItem(
+            key: diagnosticsItemKey,
             value: 'diagnostics',
-            child: ListTile(
+            child: const ListTile(
               dense: true,
               leading: Icon(Icons.monitor_heart_outlined),
               title: Text('\u8bca\u65ad\u68c0\u67e5'),
@@ -3735,6 +3747,18 @@ class PlayerPageState extends State<PlayerPage> {
           ),
         ],
       );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final itemRects = <Rect>[
+          if (_globalRectForKey(infoItemKey) case final rect?) rect,
+          if (_globalRectForKey(diagnosticsItemKey) case final rect?) rect,
+        ];
+        if (itemRects.isEmpty) return;
+        final menuRect = itemRects
+            .skip(1)
+            .fold(itemRects.first, (a, b) => a.expandToInclude(b));
+        _updateCurrentPlayerOverlaySurfaceRect(menuRect.inflate(10));
+      });
+      final action = await actionFuture;
       if (!mounted) {
         return;
       }
@@ -3744,7 +3768,7 @@ class PlayerPageState extends State<PlayerPage> {
         case 'diagnostics':
           await _showDiagnosticsDialog();
       }
-    });
+    }, overlayRect: _estimatedContextMenuOverlayRect(details.globalPosition));
   }
 
   Future<void> _showVideoInfoDialog() async {
@@ -4040,29 +4064,89 @@ class PlayerPageState extends State<PlayerPage> {
   }
 
   /**
-   * 在 Flutter 路由弹层显示前让可选原生视频表面退出 airspace。
+   * 在 Flutter 路由弹层显示前让可选原生视频表面退出对应 airspace。
    *
    * PlayerService 会把该意图转发给支持 airspace 的后端；普通 MediaKit/纹理后端
-   * 安全忽略。嵌套菜单继续打开诊断或信息弹窗时使用深度计数，避免中途闪回 child HWND。
+   * 安全忽略。已知弹层矩形时只裁掉被覆盖区域，让其余视频继续实时播放；未知尺寸
+   * 的模态弹窗完整让出。嵌套路由使用栈恢复上一层策略，避免中途闪回 child HWND。
    */
   Future<T> _withPlayerOverlaySurfaceOccluded<T>(
-    Future<T> Function() action,
-  ) async {
+    Future<T> Function() action, {
+    Rect? overlayRect,
+  }) async {
     final boundary = _playerService;
-    _overlaySurfaceDepth += 1;
-    var surfaceWasOccluded = false;
+    final viewSize = MediaQuery.sizeOf(context);
+    _overlaySurfaceRects.add(overlayRect);
     try {
-      if (_overlaySurfaceDepth == 1) {
-        await boundary.setFlutterOverlayVisible(true);
-        surfaceWasOccluded = true;
-      }
+      await boundary.setFlutterOverlayVisible(
+        true,
+        overlayRect: overlayRect,
+        viewSize: viewSize,
+      );
       return await action();
     } finally {
-      _overlaySurfaceDepth = math.max(0, _overlaySurfaceDepth - 1);
-      if (_overlaySurfaceDepth == 0 && surfaceWasOccluded) {
+      if (_overlaySurfaceRects.isNotEmpty) {
+        _overlaySurfaceRects.removeLast();
+      }
+      if (_overlaySurfaceRects.isEmpty) {
         await boundary.setFlutterOverlayVisible(false);
+      } else {
+        await boundary.setFlutterOverlayVisible(
+          true,
+          overlayRect: _overlaySurfaceRects.last,
+          viewSize: mounted ? MediaQuery.sizeOf(context) : viewSize,
+        );
       }
     }
+  }
+
+  /** 弹层真实布局改变时只更新栈顶矩形，不改变嵌套生命周期。 */
+  void _updateCurrentPlayerOverlaySurfaceRect(Rect rect) {
+    if (!mounted || _overlaySurfaceRects.isEmpty) return;
+    _overlaySurfaceRects[_overlaySurfaceRects.length - 1] = rect;
+    unawaited(
+      _playerService.setFlutterOverlayVisible(
+        true,
+        overlayRect: rect,
+        viewSize: MediaQuery.sizeOf(context),
+      ),
+    );
+  }
+
+  /** 获取已挂载菜单项的全局矩形，用于把估算裁剪收紧到真实 PopupMenu。 */
+  Rect? _globalRectForKey(GlobalKey key) {
+    final renderObject = key.currentContext?.findRenderObject() as RenderBox?;
+    if (renderObject == null || !renderObject.hasSize) return null;
+    return renderObject.localToGlobal(Offset.zero) & renderObject.size;
+  }
+
+  /** 设置路由首帧前的保守矩形；真实面板挂载后会立即回报并收紧。 */
+  Rect _estimatedSettingsOverlayRect(Rect anchorRect) {
+    final size = MediaQuery.sizeOf(context);
+    final right = (size.width - anchorRect.right).clamp(12.0, size.width - 220);
+    final bottom =
+        (size.height - anchorRect.top + 8).clamp(12.0, size.height - 220);
+    return Rect.fromLTWH(
+      size.width - right - 304,
+      size.height - bottom - 264,
+      308,
+      268,
+    ).intersect(Offset.zero & size);
+  }
+
+  /** 右键菜单首帧前按点击点与窗口边缘选择展开方向。 */
+  Rect _estimatedContextMenuOverlayRect(Offset position) {
+    final size = MediaQuery.sizeOf(context);
+    const menuSize = Size(300, 180);
+    final left = position.dx + menuSize.width <= size.width
+        ? position.dx
+        : position.dx - menuSize.width;
+    final top = position.dy + menuSize.height <= size.height
+        ? position.dy
+        : position.dy - menuSize.height;
+    return (Offset(left, top) & menuSize).inflate(8).intersect(
+          Offset.zero & size,
+        );
   }
 
   /** 搜索/弹窗收起后在下一帧把 PageDown、Escape 等键盘导航交还播放器。 */
@@ -4841,6 +4925,10 @@ class PlayerPageState extends State<PlayerPage> {
                                                           _videoAspectMode
                                                               .surfaceAspectRatio,
                                                       mirror: _mirrorVideo,
+                                                      // child HWND 仅在全屏时需要避让顶部队列语境；
+                                                      // 普通窗口的标题栏位于视频容器之外。
+                                                      reserveTopControlArea:
+                                                          _isWindowFullscreen,
                                                     ),
                                                   ),
                                                 ),

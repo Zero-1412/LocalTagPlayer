@@ -115,6 +115,7 @@ class _RenameSmokePlayerBackend implements PlayerBackend {
     BoxFit fit = BoxFit.contain,
     double? aspectRatio,
     bool mirror = false,
+    bool reserveTopControlArea = false,
   }) {
     return Stack(
       fit: StackFit.expand,

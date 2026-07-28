@@ -114,6 +114,8 @@ void main() {
       await backend.getProperty('native-input-mode'),
       'hit-test-transparent',
     );
+    expect(await backend.getProperty('native-airspace-inset-top'), '0');
+    expect(await backend.getProperty('native-airspace-inset-bottom'), '128');
     expect(await backend.getProperty('native-texture-copies'), '0');
 
     final before = backend.state.position;
@@ -142,13 +144,36 @@ void main() {
       findsOneWidget,
     );
     expect(await backend.getProperty('native-surface-occluded'), 'true');
-    expect(await backend.getProperty('native-surface-visible'), 'false');
+    expect(
+      await backend.getProperty('native-surface-visible'),
+      'true',
+      reason: '设置弹层只裁剪覆盖矩形，child HWND 其余区域必须继续实时显示',
+    );
+    final settingsPosition = backend.state.position;
+    await _pumpContinuously(tester, const Duration(seconds: 1));
+    expect(backend.state.position, greaterThan(settingsPosition));
     await tester.tapAt(const Offset(12, 12));
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey<String>('player.settings.dialog')),
       findsNothing,
     );
+    expect(await backend.getProperty('native-surface-occluded'), 'false');
+    expect(await backend.getProperty('native-surface-visible'), 'true');
+
+    await tester.tapAt(videoRect.center, buttons: kSecondaryMouseButton);
+    await tester.pumpAndSettle();
+    expect(find.text('视频信息'), findsOneWidget);
+    expect(find.text('诊断检查'), findsOneWidget);
+    expect(await backend.getProperty('native-surface-occluded'), 'true');
+    expect(
+      await backend.getProperty('native-surface-visible'),
+      'true',
+      reason: '右键菜单期间必须保留矩形外的实时视频，不能隐藏整个 HWND',
+    );
+    await tester.tapAt(const Offset(12, 12));
+    await tester.pumpAndSettle();
+    expect(find.text('视频信息'), findsNothing);
     expect(await backend.getProperty('native-surface-occluded'), 'false');
     expect(await backend.getProperty('native-surface-visible'), 'true');
 

@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · 修复 MPV 画面偏小与弹层黑屏
+
+- 普通窗口取消 child HWND 无用的顶部 64 像素预留，自动比例获得更大的有效
+  视口；全屏顶部语境和底部控制条 airspace 保持不变，“铺满”裁边语义未改。
+- 设置与右键菜单改为矩形级 HWND region 裁剪，不隐藏整个视频窗口、不截图、
+  不冻结帧；弹层矩形外的 MPV 视频继续实时播放，关闭后恢复完整 region。
+- 面板动态尺寸、右键菜单真实边界、嵌套弹层恢复、模拟 DPI 和普通/全屏矩形均
+  有确定性回归。真实低码率 1080P integration test 与 Debug 点击截图通过。
+- MediaKit、filtered queue、SQLite、标签、缓存队列和用户数据保持不变。
+
 ## 2026-07-28 · MediaKit / MPV 双后端稳定性矩阵
 
 - 新增 MediaKit / Windows MPV 双后端稳定性矩阵和统一 JSON 汇总，覆盖全屏、模拟

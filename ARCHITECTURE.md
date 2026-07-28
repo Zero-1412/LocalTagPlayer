@@ -1,5 +1,23 @@
 ﻿# ARCHITECTURE.md
 
+## MPV child HWND 弹层与视口边界
+
+`Architecture Baseline 0.5.93` 把 child HWND airspace 从“弹层出现时隐藏整个
+视频窗口”收敛为矩形级 region 裁剪。`PlayerPage` 只向
+`PlayerOverlaySurfaceBoundary` 发送 Flutter 逻辑弹层矩形和 view 尺寸；
+`WindowsNativePlayerBackend` 负责平台通道序列化，runner 再按真实父 HWND
+客户区换算物理坐标，并使用 `SetWindowRgn(..., RGN_DIFF)` 从外层视频宿主中
+减去覆盖矩形。libmpv 的内部 D3D11 窗口、解码和播放时钟不暂停，矩形外继续
+实时显示；未知尺寸的模态弹窗仍可要求完整隐藏。嵌套弹层在页面侧按栈恢复上一层
+策略，具体 HWND/region 不泄漏到业务层。
+
+普通窗口的标题栏位于视频容器之外，因此不再固定预留全屏顶部 64 逻辑像素；
+只有 `_isWindowFullscreen` 为 true 时通过 `reserveTopControlArea` 请求该
+airspace。底部 128 像素继续保护 Flutter 控制条。此修改不改变自动/4:3/16:9/
+铺满的比例语义，也不改变 MediaKit 表面、filtered queue、SQLite、标签、缓存
+队列或用户数据。完整证据见
+`docs/qa/mpv_hwnd_overlay_region_20260728.md`。
+
 ## 播放器后端稳定性门禁
 
 `PlayerService` 继续是页面唯一可见的播放应用边界；稳定性矩阵不直接把媒体路径

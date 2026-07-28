@@ -154,19 +154,22 @@ class PlayerService
    * 构建当前后端的视频表面。
    *
    * MediaKit Texture、Windows 原生 Texture 与 child HWND 的实现差异全部留在
-   * 后端；Flutter 页面只提供控制层及平台无关的 fit、比例和镜像意图。
+   * 后端；Flutter 页面只提供控制层及平台无关的 fit、比例、镜像与顶部控制区
+   * 避让意图。
    */
   Widget buildVideoSurface({
     required Widget controls,
     BoxFit fit = BoxFit.contain,
     double? aspectRatio,
     bool mirror = false,
+    bool reserveTopControlArea = false,
   }) =>
       _backend.buildVideoSurface(
         controls: controls,
         fit: fit,
         aspectRatio: aspectRatio,
         mirror: mirror,
+        reserveTopControlArea: reserveTopControlArea,
       );
 
   @override
@@ -202,11 +205,20 @@ class PlayerService
   }
 
   @override
-  Future<void> setFlutterOverlayVisible(bool visible) {
+  Future<void> setFlutterOverlayVisible(
+    bool visible, {
+    Rect? overlayRect,
+    Size? viewSize,
+  }) {
     final boundary = _backend is PlayerOverlaySurfaceBoundary
         ? _backend as PlayerOverlaySurfaceBoundary
         : null;
-    return boundary?.setFlutterOverlayVisible(visible) ?? Future<void>.value();
+    return boundary?.setFlutterOverlayVisible(
+          visible,
+          overlayRect: overlayRect,
+          viewSize: viewSize,
+        ) ??
+        Future<void>.value();
   }
 
   @override

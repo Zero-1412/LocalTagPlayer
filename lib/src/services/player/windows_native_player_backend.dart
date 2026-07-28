@@ -202,6 +202,8 @@ class WindowsNativePlayerBackend
     required int height,
     required int viewWidth,
     required int viewHeight,
+    required int airspaceTop,
+    required int airspaceBottom,
     required bool visible,
   }) async {
     if (_disposed || mode != 'hwnd') return;
@@ -214,24 +216,43 @@ class WindowsNativePlayerBackend
       'height': height,
       'viewWidth': viewWidth,
       'viewHeight': viewHeight,
+      'airspaceTop': airspaceTop,
+      'airspaceBottom': airspaceBottom,
       'visible': visible,
     });
   }
 
   /**
-   * 在 Flutter 弹层挂载前同步隐藏 child HWND，关闭最后一层弹层后恢复。
+   * 在 Flutter 弹层挂载前裁剪 child HWND，关闭最后一层弹层后恢复完整区域。
    *
    * 纹理与 stub 模式没有独立 airspace，因此直接返回；默认 MediaKit 也不会实现
-   * 该可选边界。原生层保存最后一个有效矩形，恢复时无需等待 Flutter 再布局。
+   * 该可选边界。提供弹层矩形时原生视频在矩形外继续实时播放；未提供矩形的模态
+   * 弹窗才完整隐藏原生表面。
    */
   @override
-  Future<void> setFlutterOverlayVisible(bool visible) async {
+  Future<void> setFlutterOverlayVisible(
+    bool visible, {
+    Rect? overlayRect,
+    Size? viewSize,
+  }) async {
     if (mode != 'hwnd' || _disposed) return;
     await _ready;
     if (_disposed) return;
+    final partial = visible && overlayRect != null && viewSize != null;
     await windowsNativePlayerChannel.invokeMethod<void>(
       'setSurfaceOccluded',
-      <String, Object?>{'occluded': visible},
+      <String, Object?>{
+        'occluded': visible,
+        'partial': partial,
+        if (partial) ...<String, Object?>{
+          'overlayLeft': overlayRect.left.round(),
+          'overlayTop': overlayRect.top.round(),
+          'overlayWidth': overlayRect.width.round(),
+          'overlayHeight': overlayRect.height.round(),
+          'viewWidth': viewSize.width.round(),
+          'viewHeight': viewSize.height.round(),
+        },
+      },
     );
     await _pollState();
   }
@@ -445,11 +466,13 @@ class WindowsNativePlayerBackend
     BoxFit fit = BoxFit.contain,
     double? aspectRatio,
     bool mirror = false,
+    bool reserveTopControlArea = false,
   }) {
     if (mode == 'hwnd') {
       return _WindowsHwndVideoSurface(
         backend: this,
         controls: controls,
+        reserveTopControlArea: reserveTopControlArea,
       );
     }
     final textureSurface = ValueListenableBuilder<int?>(
@@ -506,14 +529,15 @@ class WindowsNativePlayerBackend
 /**
  * 隔离 child HWND 的 Flutter 占位面。
  *
- * 原生窗口无法被 Flutter overlay 覆盖，因此原型固定保留顶部 64 与底部 128
- * 逻辑像素给标题语境和控制条；runner 再按实际父 HWND 客户区缩放该逻辑矩形，
- * 避免高 DPI 或集成测试画布尺寸与窗口尺寸不一致时发生越界。
+ * 原生窗口无法被 Flutter overlay 覆盖，因此始终保留底部 128 逻辑像素给控制条；
+ * 只有全屏顶部语境实际挂载时才额外保留顶部 64。runner 再按实际父 HWND 客户区
+ * 缩放该逻辑矩形，避免高 DPI 或集成测试画布尺寸与窗口尺寸不一致时发生越界。
  */
 class _WindowsHwndVideoSurface extends StatefulWidget {
   const _WindowsHwndVideoSurface({
     required this.backend,
     required this.controls,
+    required this.reserveTopControlArea,
   });
 
   /** 拥有方法通道与原生会话的后端。 */
@@ -521,6 +545,9 @@ class _WindowsHwndVideoSurface extends StatefulWidget {
 
   /** 必须继续挂载的正式播放器控制层。 */
   final Widget controls;
+
+  /** 全屏顶部语境存在时，为它保留不可被 child HWND 覆盖的区域。 */
+  final bool reserveTopControlArea;
 
   @override
   State<_WindowsHwndVideoSurface> createState() =>
@@ -530,13 +557,17 @@ class _WindowsHwndVideoSurface extends StatefulWidget {
 /** 负责把 Flutter 逻辑布局转换成 child HWND 物理像素矩形。 */
 class _WindowsHwndVideoSurfaceState extends State<_WindowsHwndVideoSurface>
     with WidgetsBindingObserver {
-  static const double _topAirspace = 64;
+  static const double _fullscreenTopAirspace = 64;
   static const double _bottomAirspace = 128;
   final GlobalKey _placeholderKey = GlobalKey();
   Rect? _lastLogicalRect;
   Size? _lastLogicalViewSize;
   double? _lastDevicePixelRatio;
   bool _syncScheduled = false;
+
+  /** 普通窗口没有顶部悬浮控件，不应为历史全屏布局永久压缩视频视口。 */
+  double get _topAirspace =>
+      widget.reserveTopControlArea ? _fullscreenTopAirspace : 0;
 
   @override
   void initState() {
@@ -607,6 +638,8 @@ class _WindowsHwndVideoSurfaceState extends State<_WindowsHwndVideoSurface>
       height: logicalRect.height.round(),
       viewWidth: viewSize.width.round(),
       viewHeight: viewSize.height.round(),
+      airspaceTop: _topAirspace.round(),
+      airspaceBottom: _bottomAirspace.round(),
       visible: logicalRect.width >= 64 && logicalRect.height >= 64,
     );
   }
@@ -640,6 +673,8 @@ class _WindowsHwndVideoSurfaceState extends State<_WindowsHwndVideoSurface>
         height: 0,
         viewWidth: 1,
         viewHeight: 1,
+        airspaceTop: 0,
+        airspaceBottom: 0,
         visible: false,
       ),
     );

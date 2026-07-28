@@ -84,13 +84,16 @@ abstract interface class PlayerBackend implements PlayerRuntimeAccess {
    *
    * [fit] 控制完整显示或等比裁边，[aspectRatio] 仅在用户显式选择 4:3 / 16:9
    * 时覆盖媒体宽高比；[mirror] 只水平翻转视频纹理，不能影响上层控制条。
-   * 默认值保持现有自动完整显示行为。
+   * [reserveTopControlArea] 表示顶部存在必须避让的 Flutter 控制区；普通纹理
+   * 后端可忽略，存在原生 airspace 的后端必须据此调整原生表面。默认值保持现有
+   * 自动完整显示行为。
    */
   Widget buildVideoSurface({
     required Widget controls,
     BoxFit fit = BoxFit.contain,
     double? aspectRatio,
     bool mirror = false,
+    bool reserveTopControlArea = false,
   });
 
   Future<void> dispose();
@@ -123,8 +126,14 @@ abstract interface class PlayerOverlaySurfaceBoundary {
    * 同步 Flutter 是否正在显示可能与原生视频表面重叠的弹层。
    *
    * [visible] 为 true 时原生后端必须先完成让出，再允许调用方挂载弹层。
+   * [overlayRect] 与 [viewSize] 同时存在时，只裁剪弹层实际覆盖的逻辑区域；
+   * 未提供矩形的模态弹窗仍可要求原生表面完整让出。
    */
-  Future<void> setFlutterOverlayVisible(bool visible);
+  Future<void> setFlutterOverlayVisible(
+    bool visible, {
+    Rect? overlayRect,
+    Size? viewSize,
+  });
 }
 
 /**

@@ -1,5 +1,24 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 MPV 画面视口与 Flutter 弹层实时共存
+
+- 普通窗口不再沿用全屏顶部 64 逻辑像素 airspace；MPV 自动比例视口增加该高度，
+  保持完整画面且不改变“铺满”会等比裁边的既有语义。全屏顶部队列语境仍保留
+  64 像素，底部控制条仍保留 128 像素。
+- 设置与右键菜单不再隐藏整个 child HWND，也不使用截图或冻结帧。PlayerPage
+  通过 `PlayerOverlaySurfaceBoundary` 发送弹层逻辑矩形，runner 使用
+  `SetWindowRgn` 只从视频 HWND 中减去实际覆盖区域；矩形外视频继续实时播放。
+- 设置面板在主页面、更多页面和内部选项切换时回报真实布局边界；右键菜单挂载后
+  用两个菜单项的真实全局矩形收紧首帧估算。未知尺寸的模态弹窗继续完整让出，
+  嵌套弹层用栈恢复上一层策略。
+- 真人低码率 1080P 的 Windows integration test 验证设置/右键期间
+  `native-surface-visible=true`、播放头推进、`d3d11va` 非 copy 与 0 Flutter
+  纹理复制；真实 Debug 点击截图确认普通画面更大，主设置、更多设置和右键菜单
+  无黑屏、遮挡、错位或队列穿透。
+- `flutter analyze`、focused tests 与 Windows Debug build 通过。SQLite、
+  `FilterQuery` / `TagQueryService`、filtered queue、MediaKit、缓存队列和用户
+  数据未改变。证据见 `docs/qa/mpv_hwnd_overlay_region_20260728.md`。
+
 ## 2026-07-28 MediaKit / MPV 双后端稳定性矩阵
 
 - 新增统一 Windows 稳定性矩阵：同一组匿名真实片源分别验证 MediaKit 与 MPV 的

@@ -5451,6 +5451,7 @@ void main() {
     int? selectedSeekStep;
     bool? superResolutionEnabled;
     PlayerCompressionEnhancementMode? selectedCompressionEnhancementMode;
+    final reportedBounds = <Rect>[];
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
@@ -5494,6 +5495,7 @@ void main() {
                   onCompressionEnhancementModeChanged: (mode) {
                     selectedCompressionEnhancementMode = mode;
                   },
+                  onBoundsChanged: reportedBounds.add,
                 ),
                 icon: const Icon(Icons.settings_outlined),
               ),
@@ -5527,6 +5529,8 @@ void main() {
         tester.getRect(find.byKey(const ValueKey('player.settings.shell')));
     expect(primaryRect.right, closeTo(760, 0.1));
     expect(primaryRect.bottom, closeTo(512, 0.1));
+    expect(reportedBounds, isNotEmpty);
+    expect(reportedBounds.last, primaryRect);
     expect(
       find.byKey(const ValueKey('player.settings.close')),
       findsNothing,

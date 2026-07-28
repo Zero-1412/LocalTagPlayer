@@ -39,8 +39,35 @@ Future<void> showPlayerSettingsDialog(
   required ValueChanged<bool> onVideoSuperResolutionChanged,
   required ValueChanged<PlayerCompressionEnhancementMode>
       onCompressionEnhancementModeChanged,
+  ValueChanged<Rect>? onBoundsChanged,
 }) async {
   final accessibility = AppAccessibilityScope.of(context);
+  Rect? lastReportedBounds;
+  /** 把真实动画后面板矩形回传给原生 airspace，避免用估算尺寸裁掉实时视频。 */
+  void reportPanelBounds(BuildContext rootContext) {
+    if (onBoundsChanged == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      RenderBox? renderObject;
+      void findPanel(Element element) {
+        if (renderObject != null) return;
+        if (element.widget.key ==
+            const ValueKey<String>('player.settings.dialog')) {
+          renderObject = element.findRenderObject() as RenderBox?;
+          return;
+        }
+        element.visitChildren(findPanel);
+      }
+
+      (rootContext as Element).visitChildren(findPanel);
+      final panel = renderObject;
+      if (panel == null || !panel.hasSize) return;
+      final bounds = panel.localToGlobal(Offset.zero) & panel.size;
+      if (bounds == lastReportedBounds) return;
+      lastReportedBounds = bounds;
+      onBoundsChanged(bounds);
+    });
+  }
+
   var localMirrorVideo = mirrorVideo;
   var localPlaybackMode = playbackMode;
   var localVideoAspectMode = videoAspectMode;
@@ -49,6 +76,7 @@ Future<void> showPlayerSettingsDialog(
   var localVideoSuperResolutionEnabled = videoSuperResolutionEnabled;
   var localCompressionEnhancementMode = compressionEnhancementMode;
   var currentPage = _PlayerSettingsPage.primary;
+  var routeBoundsListenerInstalled = false;
   await showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
@@ -56,9 +84,18 @@ Future<void> showPlayerSettingsDialog(
     barrierColor: const Color(0x33000000),
     transitionDuration: accessibility.motionDuration(AppMotion.popover),
     pageBuilder: (dialogContext, routeAnimation, secondaryAnimation) {
+      if (!routeBoundsListenerInstalled) {
+        routeBoundsListenerInstalled = true;
+        routeAnimation.addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            reportPanelBounds(dialogContext);
+          }
+        });
+      }
       return StatefulBuilder(
         builder: (context, setDialogState) => LayoutBuilder(
           builder: (context, constraints) {
+            reportPanelBounds(context);
             // 浮层右边缘与齿轮右边缘对齐，并限制高度以兼容超宽矮屏全屏布局。
             final anchoredRight = constraints.maxWidth - anchorRect.right;
             final right = anchoredRight.clamp(12.0, constraints.maxWidth - 220);
@@ -108,6 +145,7 @@ Future<void> showPlayerSettingsDialog(
                           duration:
                               accessibility.motionDuration(AppMotion.popover),
                           curve: AppMotion.standardCurve,
+                          onEnd: () => reportPanelBounds(context),
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
                               maxHeight: maxPanelHeight,
