@@ -16,7 +16,7 @@ import 'windows_gpu_capability_channel.dart';
  *
  * `stub`模式验证纹理与生命周期，`mpv`模式接入原生解码和 D3D11 共享纹理，
  * `hwnd`模式隔离验证 libmpv 直接输出到 Flutter child HWND；三者都只用于显式
- * A/B，默认生产路径继续使用 MediaKitPlayerBackend。
+ * A/B；默认生产路径由 MediaKitPlayerBackend 同时承载常规播放与高级 libmpv 属性。
  */
 class WindowsNativePlayerBackend
     implements
@@ -131,12 +131,15 @@ class WindowsNativePlayerBackend
       'tscale',
       'display-sync-active',
       'estimated-frame-number',
+      'native-frame-number-source',
       'frame-drop-count',
       'native-render-requests',
       'native-rendered-frames',
       'native-skipped-renders',
       'native-texture-copies',
       'native-surface-resizes',
+      'native-mpv-events',
+      'native-event-batch-yields',
       'native-surface-left',
       'native-surface-top',
       'native-surface-width',

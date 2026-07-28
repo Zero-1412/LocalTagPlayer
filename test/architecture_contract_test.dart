@@ -347,6 +347,67 @@ void main() {
     expect(host, contains('CopyResource(texture, backup_texture_.Get())'));
   });
 
+  test('Windows MPV 状态由事件唤醒与属性观察驱动', () {
+    final bridge =
+        File('windows/runner/native_player_bridge.cpp').readAsStringSync();
+
+    expect(bridge, contains('mpv_set_wakeup_callback('));
+    expect(bridge, contains('mpv_observe_property('));
+    expect(bridge, contains('MPV_EVENT_PROPERTY_CHANGE'));
+    expect(bridge, contains('condition_.wait(lock'));
+    expect(bridge, contains('kMaxEventsPerBatch = 128'));
+    expect(bridge, contains('event_batch_yield_count_'));
+    expect(
+      bridge,
+      contains('native_hwnd_enabled_ ? "v" : "warn"'),
+      reason: 'Texture 会话不需要为不可用的 NVIDIA 门禁持续接收 verbose 日志',
+    );
+    expect(
+      bridge,
+      isNot(contains('condition_.wait_for(lock')),
+      reason: '原生工作线程不得恢复为固定 50ms 全属性扫描',
+    );
+    expect(
+      bridge,
+      isNot(contains('void NativePlayerBridge::SamplePlayerState()')),
+      reason: '状态读取必须消费 libmpv 合并事件，而不是周期性读取全部属性',
+    );
+  });
+
+  test('生产增强配置复用 MediaKit 的同一个 NativePlayer', () {
+    final selection = File(
+      'lib/src/services/player/player_backend_selection.dart',
+    ).readAsStringSync();
+    final backend = File(
+      'lib/src/services/player/media_kit_player_backend.dart',
+    ).readAsStringSync();
+
+    expect(
+      selection,
+      contains('return PlayerBackendSelection.mediaKitLibmpvEnhanced;'),
+    );
+    expect(
+      selection,
+      contains("normalizedOverride == 'windows-native-mpv'"),
+      reason: '自研 Texture 只能由显式 QA 环境变量进入',
+    );
+    expect(backend, contains('platform is NativePlayer'));
+    expect(backend, contains('PlayerPropertyBatchBoundary'));
+    expect(backend, contains('waitForInitialization: waitForInitialization'));
+    expect(
+      backend,
+      isNot(contains('(platform as dynamic)')),
+      reason: '高级属性必须走 media_kit 公开的类型化 NativePlayer 边界',
+    );
+    expect(
+      File(
+        'integration_test/media_kit_libmpv_facade_test.dart',
+      ).existsSync(),
+      isTrue,
+      reason: '必须用真实 MediaKit Texture 会话证明同实例高级属性可用',
+    );
+  });
+
   test('NVIDIA automatic policy and fixed-frame visual gate stay explicit', () {
     final panel = File(
       'lib/src/pages/player/player_settings_panel.dart',
@@ -393,7 +454,12 @@ void main() {
     );
     expect(
       backendSelection,
-      contains('return PlayerBackendSelection.windowsNativeMpv;'),
+      contains('return PlayerBackendSelection.mediaKitLibmpvEnhanced;'),
+    );
+    expect(
+      backendSelection,
+      contains("normalizedOverride == 'windows-native-mpv'"),
+      reason: '自研 MPV Texture 只允许显式 QA 覆盖，不能恢复为生产默认后端',
     );
     expect(
       backendSelection,

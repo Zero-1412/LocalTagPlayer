@@ -770,15 +770,26 @@ void NativePlayerBridge::InitializePlayer() {
     player_ = nullptr;
     return;
   }
+  // 参考 media_kit 的 libmpv 调用边界：回调只负责唤醒，所有事件仍由本类唯一
+  // 工作线程串行消费，避免固定间隔扫描属性和跨线程读取 mpv_event。
+  mpv_set_wakeup_callback(
+      player_,
+      [](void* context) {
+        auto* bridge = static_cast<NativePlayerBridge*>(context);
+        bridge->event_requested_ = true;
+        bridge->condition_.notify_one();
+      },
+      this);
+  RegisterObservedProperties();
   if (d3d11va_zero_copy_ == "requested") {
     char* value = mpv_get_property_string(player_, "d3d11va-zero-copy");
     d3d11va_zero_copy_ = value == nullptr ? "unavailable" : value;
     if (value != nullptr) mpv_free(value);
   }
-  // 只消费 NVIDIA VSR 的固定状态文本；原始 mpv 日志不得跨平台通道返回。
-  // NVIDIA 扩展的成功文本位于 verbose 级别；仍只匹配固定文本并输出枚举状态，
-  // 绝不把该级别可能包含的媒体路径或滤镜参数原文传给 Flutter。
-  mpv_request_log_messages(player_, "v");
+  // NVIDIA 扩展的成功文本位于 verbose 级别，但只有 child HWND 能通过对应门禁。
+  // Texture 产品会话降到 warn，避免无用 verbose 日志与 60fps 状态事件争夺工作线程。
+  // 两种模式都只匹配固定文本并输出枚举，绝不把媒体路径或原始日志传给 Flutter。
+  mpv_request_log_messages(player_, native_hwnd_enabled_ ? "v" : "warn");
   if (native_hwnd_enabled_) {
     lifecycle_ = "mpv_hwnd_ready";
     return;
@@ -828,6 +839,7 @@ void NativePlayerBridge::InitializePlayer() {
 
 void NativePlayerBridge::DestroyPlayer() {
   rendering_enabled_ = false;
+  event_requested_ = false;
   if (render_context_ != nullptr) {
     mpv_render_context_set_update_callback(render_context_, nullptr, nullptr);
     mpv_render_context_free(render_context_);
@@ -842,6 +854,8 @@ void NativePlayerBridge::DestroyPlayer() {
     surface_manager_.reset();
   }
   if (player_ != nullptr) {
+    // 先断开可能来自 mpv 内部线程的唤醒，再销毁桥接对象拥有的会话状态。
+    mpv_set_wakeup_callback(player_, nullptr, nullptr);
     mpv_terminate_destroy(player_);
     player_ = nullptr;
   }
@@ -855,6 +869,17 @@ void NativePlayerBridge::DestroyPlayer() {
 void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
   if (player_ == nullptr) return;
   if (command.name == "open") {
+    // 新媒体的观察事件尚未到达前先清除旧媒体身份，避免诊断短暂引用上一条视频。
+    position_ms_ = 0;
+    duration_ms_ = 0;
+    buffering_ = true;
+    frame_number_ = 0;
+    frame_number_observed_ = false;
+    frame_number_source_ = "unavailable";
+    video_width_ = 0;
+    video_height_ = 0;
+    video_codec_ = "unavailable";
+    audio_codec_ = "unavailable";
     const char* arguments[] = {"loadfile", command.text.c_str(), "replace",
                                nullptr};
     mpv_command_async(player_, 0, arguments);
@@ -895,6 +920,7 @@ void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
       const auto result =
           mpv_set_property_string(player_, property.c_str(), value.c_str());
       if (property == "vf") {
+        if (result >= 0) video_filters_ = value;
         if (value.find("scaling-mode=nvidia") == std::string::npos) {
           nvidia_vsr_state_ = "inactive";
         } else {
@@ -914,12 +940,175 @@ void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
   }
 }
 
-void NativePlayerBridge::SamplePlayerState() {
+void NativePlayerBridge::RegisterObservedProperties() {
   if (player_ == nullptr) return;
+  struct ObservedProperty {
+    const char* name;
+    mpv_format format;
+  };
+  // 与 media_kit 一样请求属性的原生类型，让 libmpv 合并连续变化；Dart 仍只按
+  // 100ms 读取快照，避免 60fps 的 time-pos 直接触发 Flutter rebuild。
+  static constexpr ObservedProperty properties[] = {
+      {"pause", MPV_FORMAT_FLAG},
+      {"paused-for-cache", MPV_FORMAT_FLAG},
+      {"time-pos", MPV_FORMAT_DOUBLE},
+      {"duration", MPV_FORMAT_DOUBLE},
+      {"volume", MPV_FORMAT_DOUBLE},
+      {"avsync", MPV_FORMAT_DOUBLE},
+      {"audio-pts", MPV_FORMAT_DOUBLE},
+      {"demuxer-cache-duration", MPV_FORMAT_DOUBLE},
+      {"container-fps", MPV_FORMAT_DOUBLE},
+      {"estimated-vf-fps", MPV_FORMAT_DOUBLE},
+      {"display-fps", MPV_FORMAT_DOUBLE},
+      {"estimated-frame-number", MPV_FORMAT_INT64},
+      {"frame-drop-count", MPV_FORMAT_INT64},
+      {"video-params/w", MPV_FORMAT_INT64},
+      {"video-params/h", MPV_FORMAT_INT64},
+      {"interpolation", MPV_FORMAT_FLAG},
+      {"display-sync-active", MPV_FORMAT_FLAG},
+      {"hwdec-current", MPV_FORMAT_STRING},
+      {"d3d11va-zero-copy", MPV_FORMAT_STRING},
+      {"mpv-version", MPV_FORMAT_STRING},
+      {"vf", MPV_FORMAT_STRING},
+      {"video-params/primaries", MPV_FORMAT_STRING},
+      {"video-params/gamma", MPV_FORMAT_STRING},
+      {"video-params/colorlevels", MPV_FORMAT_STRING},
+      {"video-params/colormatrix", MPV_FORMAT_STRING},
+      {"video-output-levels", MPV_FORMAT_STRING},
+      {"video-target-params/colorlevels", MPV_FORMAT_STRING},
+      {"video-codec", MPV_FORMAT_STRING},
+      {"audio-codec", MPV_FORMAT_STRING},
+      {"video-sync", MPV_FORMAT_STRING},
+      {"tscale", MPV_FORMAT_STRING},
+  };
+  uint64_t reply = 1;
+  for (const auto& property : properties) {
+    mpv_observe_property(player_, reply++, property.name, property.format);
+  }
+}
+
+void NativePlayerBridge::ApplyObservedProperty(
+    const mpv_event_property& property) {
+  if (property.name == nullptr) return;
+  const std::string name(property.name);
+  if (property.format == MPV_FORMAT_NONE || property.data == nullptr) {
+    // 媒体切换期间只清除会误导诊断的媒体字段；会话级选项保留上次已确认值。
+    if (name == "time-pos") position_ms_ = 0;
+    if (name == "duration") duration_ms_ = 0;
+    if (name == "video-params/w") video_width_ = 0;
+    if (name == "video-params/h") video_height_ = 0;
+    if (name == "audio-pts") audio_pts_ = "unavailable";
+    if (name == "video-codec") video_codec_ = "unavailable";
+    if (name == "audio-codec") audio_codec_ = "unavailable";
+    return;
+  }
+  if (property.format == MPV_FORMAT_FLAG) {
+    const bool value = *static_cast<const int*>(property.data) != 0;
+    if (name == "pause") {
+      playing_ = !value;
+    } else if (name == "paused-for-cache") {
+      buffering_ = value;
+    } else if (name == "interpolation") {
+      interpolation_ = value ? "yes" : "no";
+    } else if (name == "display-sync-active") {
+      display_sync_active_ = value ? "yes" : "no";
+    }
+    return;
+  }
+  if (property.format == MPV_FORMAT_DOUBLE) {
+    const double value = *static_cast<const double*>(property.data);
+    if (name == "time-pos") {
+      position_ms_ = static_cast<int64_t>(value * 1000);
+    } else if (name == "duration") {
+      duration_ms_ = static_cast<int64_t>(value * 1000);
+    } else if (name == "volume") {
+      volume_ = value;
+    } else if (name == "avsync") {
+      avsync_ = value;
+    } else if (name == "audio-pts") {
+      audio_pts_ = std::to_string(value);
+    } else if (name == "demuxer-cache-duration") {
+      cache_duration_ = value;
+    } else if (name == "container-fps") {
+      container_fps_ = value;
+    } else if (name == "estimated-vf-fps") {
+      estimated_vf_fps_ = value;
+    } else if (name == "display-fps") {
+      display_fps_ = value;
+    }
+    return;
+  }
+  if (property.format == MPV_FORMAT_INT64) {
+    const int64_t value = *static_cast<const int64_t*>(property.data);
+    if (name == "estimated-frame-number") {
+      frame_number_ = value;
+      if (value > 0) {
+        frame_number_observed_ = true;
+        frame_number_source_ = "mpv-observed";
+      }
+    } else if (name == "frame-drop-count") {
+      dropped_frames_ = value;
+    } else if (name == "video-params/w") {
+      video_width_ = value;
+    } else if (name == "video-params/h") {
+      video_height_ = value;
+    }
+    return;
+  }
+  if (property.format != MPV_FORMAT_STRING) return;
+  const char* value = *static_cast<char* const*>(property.data);
+  const std::string text = value == nullptr ? "unavailable" : value;
+  if (name == "hwdec-current") {
+    hwdec_ = text;
+  } else if (name == "d3d11va-zero-copy") {
+    if (d3d11va_zero_copy_ != "no" && d3d11va_zero_copy_ != "rejected") {
+      d3d11va_zero_copy_ = text;
+    }
+  } else if (name == "mpv-version") {
+    mpv_version_ = text;
+  } else if (name == "vf") {
+    video_filters_ = text == "unavailable" ? "" : text;
+  } else if (name == "video-params/primaries") {
+    video_primaries_ = text;
+  } else if (name == "video-params/gamma") {
+    video_gamma_ = text;
+  } else if (name == "video-params/colorlevels") {
+    video_color_levels_ = text;
+  } else if (name == "video-params/colormatrix") {
+    video_color_matrix_ = text;
+  } else if (name == "video-output-levels") {
+    video_output_levels_ = text;
+  } else if (name == "video-target-params/colorlevels") {
+    video_target_color_levels_ = text;
+  } else if (name == "video-codec") {
+    video_codec_ = text;
+  } else if (name == "audio-codec") {
+    audio_codec_ = text;
+  } else if (name == "video-sync") {
+    video_sync_ = text;
+  } else if (name == "tscale") {
+    temporal_scaler_ = text;
+  }
+}
+
+bool NativePlayerBridge::DrainPlayerEvents() {
+  if (player_ == nullptr) return false;
   // 事件与属性在同一原生工作线程消费，避免 EOF、错误回调与控制命令交叉修改会话状态。
-  while (const mpv_event* event = mpv_wait_event(player_, 0.0)) {
+  // media_kit 的 Dart 异步处理会在事件间自然让出；这里是单一 C++ 工作线程，必须
+  // 显式限制单批数量，否则高频属性或 verbose 日志可能长期饿死 play/seek 与渲染。
+  constexpr int kMaxEventsPerBatch = 128;
+  int processed = 0;
+  while (processed < kMaxEventsPerBatch) {
+    const mpv_event* event = mpv_wait_event(player_, 0.0);
+    if (event == nullptr) break;
     if (event->event_id == MPV_EVENT_NONE) break;
-    if (event->event_id == MPV_EVENT_FILE_LOADED) {
+    ++processed;
+    ++player_event_count_;
+    if (event->event_id == MPV_EVENT_PROPERTY_CHANGE) {
+      const auto* property =
+          static_cast<const mpv_event_property*>(event->data);
+      if (property != nullptr) ApplyObservedProperty(*property);
+    } else if (event->event_id == MPV_EVENT_FILE_LOADED) {
       lifecycle_ = "media_loaded";
       last_error_.clear();
     } else if (event->event_id == MPV_EVENT_LOG_MESSAGE) {
@@ -963,65 +1152,23 @@ void NativePlayerBridge::SamplePlayerState() {
       }
     }
   }
-  auto read_double = [this](const char* name, double fallback) {
-    double value = fallback;
-    return mpv_get_property(player_, name, MPV_FORMAT_DOUBLE, &value) >= 0
-               ? value
-               : fallback;
-  };
-  auto read_int = [this](const char* name, int64_t fallback) {
-    int64_t value = fallback;
-    return mpv_get_property(player_, name, MPV_FORMAT_INT64, &value) >= 0
-               ? value
-               : fallback;
-  };
-  auto read_string = [this](const char* name) {
-    char* value = mpv_get_property_string(player_, name);
-    const std::string result = value == nullptr ? "unavailable" : value;
-    if (value != nullptr) mpv_free(value);
-    return result;
-  };
-  position_ms_ = static_cast<int64_t>(read_double("time-pos", 0.0) * 1000);
-  duration_ms_ = static_cast<int64_t>(read_double("duration", 0.0) * 1000);
-  int paused = 1;
-  mpv_get_property(player_, "pause", MPV_FORMAT_FLAG, &paused);
-  playing_ = paused == 0;
-  int buffering = 0;
-  mpv_get_property(player_, "paused-for-cache", MPV_FORMAT_FLAG, &buffering);
-  buffering_ = buffering != 0;
-  volume_ = read_double("volume", volume_);
-  avsync_ = read_double("avsync", avsync_);
-  audio_pts_ = read_string("audio-pts");
-  cache_duration_ = read_double("demuxer-cache-duration", cache_duration_);
-  container_fps_ = read_double("container-fps", container_fps_);
-  estimated_vf_fps_ = read_double("estimated-vf-fps", estimated_vf_fps_);
+  // estimated-frame-number 在当前固定 mpv 上只发送初值，不随播放持续观察。
+  // 使用同样由 mpv 观察到的播放时间与滤镜 FPS 派生诊断帧号；它只服务停滞判断，
+  // 不参与 seek、播放时钟或画面渲染。
+  if (!frame_number_observed_ && estimated_vf_fps_ > 0.0 &&
+      position_ms_ > 0) {
+    frame_number_ = static_cast<int64_t>(
+        static_cast<double>(position_ms_) * estimated_vf_fps_ / 1000.0);
+    frame_number_source_ = "time-pos-fps-derived";
+  }
+  if (processed == kMaxEventsPerBatch) {
+    ++event_batch_yield_count_;
+    event_requested_ = true;
+    condition_.notify_one();
+  }
   motion_runtime_.ConfirmFrameRateIncrease(player_, container_fps_,
                                            estimated_vf_fps_);
-  display_fps_ = read_double("display-fps", display_fps_);
-  video_sync_ = read_string("video-sync");
-  interpolation_ = read_string("interpolation");
-  temporal_scaler_ = read_string("tscale");
-  display_sync_active_ = read_string("display-sync-active");
-  frame_number_ = read_int("estimated-frame-number", frame_number_);
-  dropped_frames_ = read_int("frame-drop-count", dropped_frames_);
-  hwdec_ = read_string("hwdec-current");
-  if (d3d11va_zero_copy_ != "no" && d3d11va_zero_copy_ != "rejected") {
-    d3d11va_zero_copy_ = read_string("d3d11va-zero-copy");
-  }
-  mpv_version_ = read_string("mpv-version");
-  video_filters_ = read_string("vf");
-  video_primaries_ = read_string("video-params/primaries");
-  video_gamma_ = read_string("video-params/gamma");
-  video_color_levels_ = read_string("video-params/colorlevels");
-  video_color_matrix_ = read_string("video-params/colormatrix");
-  video_output_levels_ = read_string("video-output-levels");
-  video_target_color_levels_ =
-      read_string("video-target-params/colorlevels");
-  // 自动 VSR 只比较源尺寸与显示输出，属性未就绪时必须保守归零。
-  video_width_ = read_int("video-params/w", 0);
-  video_height_ = read_int("video-params/h", 0);
-  video_codec_ = read_string("video-codec");
-  audio_codec_ = read_string("audio-codec");
+  return processed == kMaxEventsPerBatch;
 }
 
 void NativePlayerBridge::RenderFrame() {
@@ -1087,16 +1234,24 @@ void NativePlayerBridge::WorkerLoop() {
     Command command;
     {
       std::unique_lock<std::mutex> lock(mutex_);
-      condition_.wait_for(lock, std::chrono::milliseconds(50), [this]() {
-        return shutting_down_ || !commands_.empty() || render_requested_;
+      condition_.wait(lock, [this]() {
+        return shutting_down_ || !commands_.empty() || render_requested_ ||
+               event_requested_;
       });
       if (shutting_down_) return;
       if (commands_.empty()) {
         const bool should_render = render_requested_.exchange(false);
+        const bool should_drain_events = event_requested_.exchange(false);
         lock.unlock();
         if (should_render) RenderFrame();
         lock.lock();
-        SamplePlayerState();
+        const bool batch_saturated =
+            should_drain_events && DrainPlayerEvents();
+        if (batch_saturated) {
+          // 事件风暴期间给 MethodChannel 快照与用户命令一个确定的抢锁窗口。
+          lock.unlock();
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         continue;
       }
       // libmpv 的更新回调代表有新视频帧可取；属性批次不能长期占满队列并让视频
@@ -1116,7 +1271,7 @@ void NativePlayerBridge::WorkerLoop() {
         DestroyPlayer();
       } else if (native_mpv_enabled_) {
         ExecutePlayerCommand(command);
-        if (command.sample_state) SamplePlayerState();
+        if (command.sample_state) DrainPlayerEvents();
       }
       if (!native_mpv_enabled_) {
         if (command.name == "open") {
@@ -1243,6 +1398,8 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(display_sync_active_)},
           {flutter::EncodableValue("estimated-frame-number"),
            flutter::EncodableValue(frame_number_)},
+          {flutter::EncodableValue("native-frame-number-source"),
+           flutter::EncodableValue(frame_number_source_)},
           {flutter::EncodableValue("frame-drop-count"),
            flutter::EncodableValue(dropped_frames_)},
           {flutter::EncodableValue("native-render-requests"),
@@ -1255,6 +1412,10 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(texture_copy_count_.load())},
           {flutter::EncodableValue("native-surface-resizes"),
            flutter::EncodableValue(surface_resize_count_.load())},
+          {flutter::EncodableValue("native-mpv-events"),
+           flutter::EncodableValue(player_event_count_.load())},
+          {flutter::EncodableValue("native-event-batch-yields"),
+           flutter::EncodableValue(event_batch_yield_count_.load())},
           {flutter::EncodableValue("native-surface-left"),
            flutter::EncodableValue(surface_left_.load())},
           {flutter::EncodableValue("native-surface-top"),

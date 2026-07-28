@@ -1,3 +1,15 @@
+## 2026-07-28 MediaKit Texture + 同实例 libmpv 增强
+
+- `PlayerService` 作为唯一 PlayerFacade，常规播放走 media_kit API，高级画质通过
+  `MediaKitPlayerBackend` 内同一个 `NativePlayer` 下发。
+- 用户增强配置不再创建自研 MPV Texture；兼容/增强都复用 media_kit_video
+  Texture，自研 Windows Texture 与 child HWND 只保留显式 QA 入口。
+- 类型化属性访问替代 `dynamic`，批量配置只等待一次初始化门禁；标准 MPV 滤镜、
+  GPU 高质量缩放与压缩增强继续可用。
+- 真实低码率片源验证可见视频表面、Texture、播放推进、Lanczos 同实例读回及
+  D3D11VA 硬解；首次白屏只属于未挂载 Video widget 的测试错误，已修复。
+- filtered queue、当前 index、快捷键、全屏/侧栏/弹层、返回路径和用户数据未删除。
+
 ## 2026-07-28 双后端功能与动画对抗式压测
 
 - MediaKit / MPV 各完成 6 次全屏往返、100 次正式队列快速切换和 120 秒长播；

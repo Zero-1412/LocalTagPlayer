@@ -1,5 +1,37 @@
 ﻿# ARCHITECTURE.md
 
+## MediaKit Texture 与同实例 libmpv 增强边界
+
+`Architecture Baseline 0.5.97` 将生产播放链固定为：
+
+```text
+Flutter PlayerPage
+  -> PlayerService（PlayerFacade）
+  -> MediaKitPlayerBackend
+     -> 常规命令：media_kit Player API
+     -> 高级画质：同一个 NativePlayer 属性边界
+  -> media_kit_video Texture
+  -> libmpv
+```
+
+增强配置不能创建第二个 `Player`、`mpv_handle`、Texture 或解码链。media_kit 继续
+拥有播放器初始化、事件分发、同步、VideoController 和 Texture 生命周期；
+`MediaKitPlayerBackend` 只在同实例上使用公开的类型化 `NativePlayer`
+`setProperty/getProperty`。批量属性的第一项等待 Player 与 VideoController 就绪，
+后续项复用已确认会话，但单个可选属性失败仍不能阻断完整回滚快照。
+
+`PlayerRendererPreference.windowsLibmpv` 保留原持久化名称以兼容用户设置，产品含义
+改为 `MediaKit + libmpv 增强`。该配置与 `mediaKit` 兼容配置都使用 MediaKit
+Texture，因此 macOS/Linux 也无需实现第二套原生播放器即可使用标准 libmpv 属性。
+Windows 自研 `WindowsNativePlayerBackend` 只允许显式
+`LOCAL_TAG_PLAYER_BACKEND=windows-native-mpv/windows-native-hwnd` QA 覆盖；
+原生 D3D11 纹理注入、NVIDIA VSR/HDR 等 media_kit 未暴露的能力仍留在该隔离边界。
+
+自研 MPV QA 桥接参考 media_kit 的事件模型：`mpv_set_wakeup_callback` 只唤醒唯一
+工作线程，状态由 `mpv_observe_property` 与 `MPV_EVENT_PROPERTY_CHANGE` 合并；
+单批最多消费 128 个事件并主动让出命令/渲染。它不再固定每 50ms 读取全部属性，
+但这项优化不改变其 QA-only 身份。
+
 ## Windows MPV Texture 描述符与渲染锁边界
 
 `Architecture Baseline 0.5.96` 将原生 Texture 的同步范围拆为两个责任互斥量：
@@ -76,9 +108,10 @@ Windows 的 MediaKit 与原生 MPV 必须分别运行同一组全屏、DPI、快
 场景并分开出报告。模拟 Flutter metrics 只证明布局/表面重算，真实跨显示器 DPI
 仍是独立发布门禁。
 
-macOS/Linux 当前没有对应原生 MPV `PlayerBackend`，因此组合根必须继续解析为
-MediaKit。未来只有在各平台完成自己的原生渲染、输入、全屏、DPI 和生命周期边界，
-并通过同类矩阵后，才能在设置中开放 MPV；Windows child HWND 实现不可跨平台复用。
+macOS/Linux 当前没有第二套原生 MPV `PlayerBackend`，因此不能复用 Windows
+child HWND 或自研 Texture。Baseline 0.5.97 后，标准 libmpv 高级属性通过各平台
+media_kit 已拥有的同实例 `NativePlayer` 开放；只有原生纹理注入、NVIDIA 等超出
+media_kit 属性边界的能力，才需要各平台另建并通过独立稳定性矩阵。
 
 `Architecture Baseline 0.5.92` 把播放器后端的最终选择权交给用户，同时保持
 平台能力边界诚实。设置页只提供 `MediaKit 兼容渲染` 与 `MPV 原生渲染`：

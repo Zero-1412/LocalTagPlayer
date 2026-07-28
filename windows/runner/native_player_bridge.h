@@ -49,7 +49,7 @@ class NativePlayerBridge {
     std::string text;
     int64_t integer = 0;
     std::shared_ptr<std::promise<void>> completion;
-    /** 属性批次仅在最后一项采样状态，避免配置阶段反复阻塞 60fps 渲染。 */
+    /** 属性批次仅在最后一项排空事件，避免配置阶段反复打断 60fps 渲染。 */
     bool sample_state = true;
   };
 
@@ -70,7 +70,16 @@ class NativePlayerBridge {
   void InitializePlayer();
   void DestroyPlayer();
   void ExecutePlayerCommand(const Command& command);
-  void SamplePlayerState();
+  /** 注册会话状态观察项；高频进度只由 libmpv 变化事件驱动。 */
+  void RegisterObservedProperties();
+  /**
+   * 排空一批 libmpv 事件，并把属性变化合并进轻量状态快照。
+   *
+   * 返回 true 表示批次已饱和，调用方应主动让出工作线程。
+   */
+  bool DrainPlayerEvents();
+  /** 在事件仍有效时复制观察属性，禁止跨越下一次 mpv_wait_event 保存裸指针。 */
+  void ApplyObservedProperty(const mpv_event_property& property);
   void RenderFrame();
   void DisposeSession();
   void Enqueue(Command command);
@@ -133,6 +142,12 @@ class NativePlayerBridge {
   bool hwnd_surface_visible_ = false;
   std::atomic<bool> rendering_enabled_{false};
   std::atomic<bool> render_requested_{false};
+  /**
+   * libmpv 唤醒回调只设置该标记并通知工作线程。
+   *
+   * 回调可能来自任意 mpv 线程，不能在其中读取属性、执行命令或触碰 Flutter。
+   */
+  std::atomic<bool> event_requested_{false};
   std::atomic<int32_t> desired_surface_width_{1280};
   std::atomic<int32_t> desired_surface_height_{720};
   std::atomic<int32_t> surface_left_{0};
@@ -150,6 +165,10 @@ class NativePlayerBridge {
   std::atomic<int64_t> skipped_render_count_{0};
   std::atomic<int64_t> texture_copy_count_{0};
   std::atomic<int64_t> surface_resize_count_{0};
+  /** 已消费的 mpv 事件数，用于确认事件驱动状态链持续工作。 */
+  std::atomic<int64_t> player_event_count_{0};
+  /** 单批达到上限并主动让出命令/渲染的次数。 */
+  std::atomic<int64_t> event_batch_yield_count_{0};
 
   mutable std::mutex mutex_;
   /** 串行 mpv 绘制、共享纹理复制、插件处理与表面重建。 */
@@ -239,6 +258,10 @@ class NativePlayerBridge {
   std::string temporal_scaler_ = "unavailable";
   std::string display_sync_active_ = "unavailable";
   int64_t frame_number_ = 0;
+  /** mpv 未持续推送帧号时，明确记录由播放时间和滤镜 FPS 派生。 */
+  std::string frame_number_source_ = "unavailable";
+  /** 只有收到正数原生帧号后才停止使用派生值。 */
+  bool frame_number_observed_ = false;
   int64_t dropped_frames_ = 0;
   int64_t completed_count_ = 0;
   int64_t error_count_ = 0;

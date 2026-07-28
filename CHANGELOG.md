@@ -1,5 +1,20 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · 生产播放改用 MediaKit Texture + 同实例 libmpv 增强
+
+- `PlayerService` 继续作为页面唯一 PlayerFacade；常规播放由 media_kit 管理生命周期、
+  事件和 Texture，高级画质通过同一 `NativePlayer` 提交，不再为“MPV”配置创建第二套
+  自研播放器实例。
+- 设置项更新为 `MediaKit + libmpv 增强`。兼容与增强配置共享稳定的 Flutter Texture；
+  自研 Windows MPV Texture/child HWND 仅由显式 QA 环境变量进入。
+- MediaKit 后端使用类型化 `NativePlayer` 读写属性，并支持一次初始化后的有序批量提交，
+  消除 `dynamic` 调用和重复等待播放器/VideoController 初始化。
+- 真实低码率片源验证 Texture 已挂载、播放持续推进、Lanczos 缩放属性同实例读回且
+  D3D11VA 硬解生效；白色测试窗根因是测试未挂载 Video widget，已补齐可见表面与
+  “先卸载 Texture、再释放播放器”的退出顺序。
+- 自研 MPV QA 桥接同步改为事件唤醒和属性观察，固定 50ms 全属性轮询已删除。
+- SQLite schema、标签过滤、filtered queue、缓存队列和用户数据未改变。
+
 ## 2026-07-28 · 修复 MPV 命令阻塞与自动增强振荡
 
 - Windows 原生 MPV 把成组属性合并为一次平台调用和一次状态采样；工作线程在每条

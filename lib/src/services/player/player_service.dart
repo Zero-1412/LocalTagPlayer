@@ -12,11 +12,11 @@ import 'player_video_super_resolution.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * Flutter 播放器页面唯一依赖的应用层播放服务。
+ * Flutter 播放器页面唯一依赖的 PlayerFacade。
  *
- * 服务独占一个 [PlayerBackend]，把 MediaKit 与 Windows libmpv 的选择留在组合根；
- * 页面只消费统一状态、命令和视频表面。底层属性访问仅供既有画质协调器与诊断逐步
- * 迁移，不能由此泄漏具体 Player、mpv handle、D3D11 纹理或 HWND。
+ * 服务独占一个 [PlayerBackend]，常规命令由 MediaKit 公共 API 完成，高级画质
+ * 通过后端持有的同一个 NativePlayer 提交；页面只消费统一状态、命令和视频表面。
+ * 底层属性访问不能由此泄漏具体 Player、mpv handle、D3D11 纹理或 HWND。
  */
 class PlayerService
     implements

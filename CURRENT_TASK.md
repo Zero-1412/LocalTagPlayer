@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 MediaKit Texture + 同实例 libmpv 增强架构
+
+- `PlayerService` 明确作为 Flutter 页面唯一的 PlayerFacade：常规播放继续走
+  media_kit API，高级画质属性通过 `MediaKitPlayerBackend` 持有的同一个
+  `NativePlayer` 下发，不创建第二个 mpv_handle、Texture 或解码链。
+- 设置中的增强配置改为 `MediaKit + libmpv 增强`；兼容与增强配置都复用
+  media_kit_video Texture。自研 Windows MPV Texture/child HWND 只保留为显式
+  QA 环境覆盖，用于后续原生 D3D11/NVIDIA 研究。
+- MediaKit 高级属性访问从 `dynamic` 改为类型化 `NativePlayer`，并在一次初始化
+  门禁后批量提交画面比例、缩放、输出范围与滤镜快照。
+- 真实低码率片源集成测试挂载正式视频表面，确认 Texture 创建、播放位置持续推进、
+  `scale/cscale=lanczos` 同实例读回和 D3D11VA 硬解；首次白屏来自测试未挂载
+  Video widget，已修正且 7 秒内完成释放。
+- 自研 MPV QA 后端同步参考 media_kit 改为 wakeup callback、观察属性和限额事件批次，
+  不再固定 50ms 扫描全部属性；它不再是生产默认路径。
+- SQLite、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列与用户数据未改。
+
 ## 2026-07-28 全应用功能与动画对抗式压测
 
 - 完整 307 项测试、静态分析和 Windows Debug build 通过；主窗口覆盖搜索、六种排序、

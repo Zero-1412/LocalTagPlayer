@@ -16,8 +16,9 @@ enum PlayerVideoAspectMode { automatic, ratio4x3, ratio16x9, cover }
 /**
  * 播放器渲染器偏好。
  *
- * `mediaKit` 与 `windowsLibmpv` 是设置页唯一可选的两个后端。`automatic`
- * 仅用于读取旧设置，载入时迁移为 MPV，不再展示给用户或参与新持久化。
+ * `mediaKit` 与 `windowsLibmpv` 是设置页唯一可选的两个运行配置。两者都复用
+ * media_kit_video Texture；后者额外允许 PlayerService 通过同一个 NativePlayer
+ * 使用高级 libmpv 属性。`automatic` 仅用于读取旧设置。
  */
 enum PlayerRendererPreference { automatic, mediaKit, windowsLibmpv }
 
@@ -609,7 +610,7 @@ class PlaybackSettings {
       switch (value) {
         PlayerRendererPreference.automatic ||
         PlayerRendererPreference.windowsLibmpv =>
-          'MPV 容器渲染',
+          'MediaKit + libmpv 增强',
         PlayerRendererPreference.mediaKit => 'MediaKit 兼容渲染',
       };
 
@@ -618,7 +619,7 @@ class PlaybackSettings {
       switch (value) {
         PlayerRendererPreference.automatic ||
         PlayerRendererPreference.windowsLibmpv =>
-          '下次进入播放器使用 Flutter Texture；播放列表与弹层可正常覆盖',
+          'media_kit 负责生命周期与 Texture；高级画质通过同一 libmpv 实例生效',
         PlayerRendererPreference.mediaKit => '跨平台兼容性优先；Windows NVIDIA 原生增强不可用',
       };
 
@@ -627,7 +628,7 @@ class PlaybackSettings {
       switch (value) {
         PlayerRendererPreference.automatic ||
         PlayerRendererPreference.windowsLibmpv =>
-          '特色强化：MPV 滤镜、GPU 高质量缩放、压缩画质增强',
+          '特色强化：同实例 MPV 滤镜、GPU 高质量缩放、压缩画质增强',
         PlayerRendererPreference.mediaKit => '特色强化：跨平台兼容、镜像、压缩画质增强',
       };
 

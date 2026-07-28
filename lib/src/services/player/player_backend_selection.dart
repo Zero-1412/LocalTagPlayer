@@ -9,6 +9,7 @@ import '../../core/playback_settings.dart';
  */
 enum PlayerBackendSelection {
   mediaKit,
+  mediaKitLibmpvEnhanced,
   windowsNativeMpv,
   windowsNativeHwnd,
   windowsNativeStub,
@@ -18,10 +19,11 @@ enum PlayerBackendSelection {
  * 把平台、用户偏好和显式 QA 覆盖解析为唯一后端。
  *
  * [environmentOverride] 只接受仓库已有的三个 QA 值，并且仅在 Windows 生效。
- * Windows 的 `automatic` 与显式 `windowsLibmpv` 默认使用 Flutter Texture
- * 容器合成，确保播放列表、控制条和弹层与视频处于同一 Flutter 层级。child HWND
- * 只允许显式 QA 覆盖，用来继续研究 NVIDIA 原生增强，不能再成为普通界面默认值。
- * 显式 `mediaKit`、关闭硬解或其它平台仍回退 MediaKit。
+ * Windows 的 `automatic` 与显式 `windowsLibmpv` 使用 media_kit_video 已验证的
+ * Flutter Texture 生命周期，并通过同一 NativePlayer 提交高级 libmpv 属性。
+ * 自研 Texture 与 child HWND 只允许 Windows 显式 QA 覆盖，用来继续研究原生
+ * D3D11/NVIDIA 能力，不能再成为普通界面默认值。显式 `mediaKit` 使用兼容配置；
+ * 是否开启硬解只改变 media_kit 的解码配置，不再替换播放器生命周期。
  */
 PlayerBackendSelection resolvePlayerBackendSelection({
   required bool isWindows,
@@ -29,22 +31,20 @@ PlayerBackendSelection resolvePlayerBackendSelection({
   required PlayerRendererPreference rendererPreference,
   String? environmentOverride,
 }) {
-  if (!isWindows) {
-    return PlayerBackendSelection.mediaKit;
+  if (isWindows) {
+    final normalizedOverride = environmentOverride?.trim();
+    if (normalizedOverride == 'windows-native-mpv') {
+      return PlayerBackendSelection.windowsNativeMpv;
+    }
+    if (normalizedOverride == 'windows-native-hwnd') {
+      return PlayerBackendSelection.windowsNativeHwnd;
+    }
+    if (normalizedOverride == 'windows-native-stub') {
+      return PlayerBackendSelection.windowsNativeStub;
+    }
   }
-  final normalizedOverride = environmentOverride?.trim();
-  if (normalizedOverride == 'windows-native-mpv') {
-    return PlayerBackendSelection.windowsNativeMpv;
-  }
-  if (normalizedOverride == 'windows-native-hwnd') {
-    return PlayerBackendSelection.windowsNativeHwnd;
-  }
-  if (normalizedOverride == 'windows-native-stub') {
-    return PlayerBackendSelection.windowsNativeStub;
-  }
-  if (hardwareDecodingEnabled &&
-      rendererPreference != PlayerRendererPreference.mediaKit) {
-    return PlayerBackendSelection.windowsNativeMpv;
+  if (rendererPreference != PlayerRendererPreference.mediaKit) {
+    return PlayerBackendSelection.mediaKitLibmpvEnhanced;
   }
   return PlayerBackendSelection.mediaKit;
 }

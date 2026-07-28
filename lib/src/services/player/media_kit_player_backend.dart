@@ -18,7 +18,11 @@ import 'windows_gpu_capability_channel.dart';
  * Player 与 VideoController 的所有权完全留在此类内部；页面只能通过稳定命令、
  * 轻量状态和纹理表面访问播放器，为后续 Windows C++ 后端保留可替换边界。
  */
-class MediaKitPlayerBackend implements PlayerBackend, PlayerGpuRenderBoundary {
+class MediaKitPlayerBackend
+    implements
+        PlayerBackend,
+        PlayerPropertyBatchBoundary,
+        PlayerGpuRenderBoundary {
   /**
    * media_kit 1.2.6 的 Windows NativePlayer 会在 dispose 返回 5 秒后才调用
    * `mpv_terminate_destroy`；多留 200 ms，确保 released 不早于真实原生销毁。
@@ -110,25 +114,59 @@ class MediaKitPlayerBackend implements PlayerBackend, PlayerGpuRenderBoundary {
   @override
   Future<void> playOrPause() => _player.playOrPause();
 
+  /**
+   * 返回 media_kit 当前播放器实际持有的同一个 NativePlayer。
+   *
+   * 常规播放继续走 media_kit 公共 API；只有 libmpv 高级属性通过该对象下发，
+   * 禁止再创建第二个 mpv_handle 或第二条 Texture/解码链。
+   */
+  NativePlayer? get _nativePlayer {
+    final platform = _player.platform;
+    return platform is NativePlayer ? platform : null;
+  }
+
   @override
   Future<void> setProperty(String property, String value) async {
     try {
-      final platform = _player.platform;
-      if (platform != null) {
-        await (platform as dynamic).setProperty(property, value);
-      }
+      await _nativePlayer?.setProperty(property, value);
     } catch (_) {
       // libmpv 构建可能不支持少数属性；诊断读取会反映最终实际值。
+    }
+  }
+
+  /**
+   * 在同一个 NativePlayer 初始化门禁后连续提交完整属性快照。
+   *
+   * 第一项等待 Player 与 VideoController 就绪，后续项复用已确认的会话，减少
+   * 打开媒体和切换画质档位时重复等待初始化 Future 的开销。
+   */
+  @override
+  Future<void> setProperties(Map<String, String> properties) async {
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null || properties.isEmpty) return;
+    var waitForInitialization = true;
+    for (final entry in properties.entries) {
+      try {
+        await nativePlayer.setProperty(
+          entry.key,
+          entry.value,
+          waitForInitialization: waitForInitialization,
+        );
+      } catch (_) {
+        // 单个可选属性失败不能阻断同一快照中的画面比例、输出范围或滤镜回滚。
+      } finally {
+        waitForInitialization = false;
+      }
     }
   }
 
   @override
   Future<String> getProperty(String property) async {
     try {
-      final platform = _player.platform;
-      if (platform == null) return 'unavailable';
-      final value = await (platform as dynamic).getProperty(property);
-      final text = value?.toString().trim() ?? '';
+      final nativePlayer = _nativePlayer;
+      if (nativePlayer == null) return 'unavailable';
+      final value = await nativePlayer.getProperty(property);
+      final text = value.trim();
       return text.isEmpty ? 'empty' : text;
     } catch (_) {
       return 'unavailable';

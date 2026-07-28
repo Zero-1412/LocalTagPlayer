@@ -148,6 +148,8 @@ PlayerBackend _createPlayerBackend({
     environmentOverride: Platform.environment['LOCAL_TAG_PLAYER_BACKEND'],
   );
   switch (selection) {
+    case PlayerBackendSelection.mediaKitLibmpvEnhanced:
+      break;
     case PlayerBackendSelection.windowsNativeMpv:
       return WindowsNativePlayerBackend(mode: 'mpv');
     case PlayerBackendSelection.windowsNativeHwnd:

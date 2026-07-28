@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/app.dart';
 
 void main() {
-  test('macOS 与 Linux 未实现原生后端前不能选择 MPV', () {
+  test('macOS 与 Linux 复用 MediaKit NativePlayer 增强配置', () {
     for (final platform in <String>['macOS', 'Linux']) {
       final selection = resolvePlayerBackendSelection(
         isWindows: false,
@@ -13,20 +13,20 @@ void main() {
       );
       expect(
         selection,
-        PlayerBackendSelection.mediaKit,
-        reason: '$platform 必须先实现自己的原生 MPV 后端才能开放选择',
+        PlayerBackendSelection.mediaKitLibmpvEnhanced,
+        reason: '$platform 不创建第二个原生后端，只复用 media_kit 的 libmpv 实例',
       );
     }
   });
 
-  test('渲染器解析保留跨平台回退与显式 QA 覆盖', () {
+  test('生产配置复用 MediaKit Texture 且 Windows 保留显式 QA 覆盖', () {
     expect(
       resolvePlayerBackendSelection(
         isWindows: true,
         hardwareDecodingEnabled: true,
         rendererPreference: PlayerRendererPreference.automatic,
       ),
-      PlayerBackendSelection.windowsNativeMpv,
+      PlayerBackendSelection.mediaKitLibmpvEnhanced,
     );
     expect(
       resolvePlayerBackendSelection(
@@ -34,7 +34,7 @@ void main() {
         hardwareDecodingEnabled: true,
         rendererPreference: PlayerRendererPreference.windowsLibmpv,
       ),
-      PlayerBackendSelection.windowsNativeMpv,
+      PlayerBackendSelection.mediaKitLibmpvEnhanced,
     );
     expect(
       resolvePlayerBackendSelection(
@@ -42,7 +42,7 @@ void main() {
         hardwareDecodingEnabled: false,
         rendererPreference: PlayerRendererPreference.windowsLibmpv,
       ),
-      PlayerBackendSelection.mediaKit,
+      PlayerBackendSelection.mediaKitLibmpvEnhanced,
     );
     expect(
       resolvePlayerBackendSelection(
@@ -69,7 +69,7 @@ void main() {
         rendererPreference: PlayerRendererPreference.windowsLibmpv,
         environmentOverride: 'windows-native-hwnd',
       ),
-      PlayerBackendSelection.mediaKit,
+      PlayerBackendSelection.mediaKitLibmpvEnhanced,
     );
     expect(
       resolvePlayerBackendSelection(
@@ -100,7 +100,7 @@ void main() {
     );
   });
 
-  testWidgets('MediaKit 与 MPV 切换必须确认且保存后可撤销', (tester) async {
+  testWidgets('MediaKit 兼容与同实例增强切换必须确认且保存后可撤销', (tester) async {
     var current = PlaybackSettings.defaults;
     final saved = <PlaybackSettings>[];
     var showRendererSettings = true;

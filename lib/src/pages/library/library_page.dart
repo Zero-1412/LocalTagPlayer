@@ -610,8 +610,8 @@ class _PlaybackRendererDropdownState extends State<PlaybackRendererDropdown> {
         content: Text(
           '将渲染器从 ${PlaybackSettings.rendererLabelFor(previousPreference)}'
           ' 切换为 ${PlaybackSettings.rendererLabelFor(value)}。\n\n'
-          '新渲染器在下次进入播放器时生效；如果画面、鼠标或显卡驱动出现异常，'
-          '可随时切回 MediaKit 兼容渲染。',
+          '两种配置共用 MediaKit Texture；增强配置通过同一个 libmpv 实例'
+          '应用高级画质。如果画质滤镜不适合当前设备，可随时切回兼容配置。',
         ),
         actions: [
           TextButton(
@@ -712,16 +712,7 @@ class _PlaybackRendererDropdownState extends State<PlaybackRendererDropdown> {
   @override
   Widget build(BuildContext context) {
     final selection = _settings.rendererPreference;
-    final nativeAvailable =
-        widget.windowsNativeRendererAvailable ?? Platform.isWindows;
-    final nativeBlocked =
-        !nativeAvailable || !_settings.hardwareDecodingEnabled;
-    final helper =
-        selection == PlayerRendererPreference.windowsLibmpv && nativeBlocked
-            ? nativeAvailable
-                ? '当前已关闭硬件解码，将安全回退 MediaKit；先启用硬解才能使用原生 D3D11'
-                : 'Windows 增强渲染仅在 Windows 可用，当前平台将安全回退 MediaKit'
-            : PlaybackSettings.rendererDescriptionFor(selection);
+    final helper = PlaybackSettings.rendererDescriptionFor(selection);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -739,8 +730,6 @@ class _PlaybackRendererDropdownState extends State<PlaybackRendererDropdown> {
             ])
               DropdownMenuItem(
                 value: option,
-                enabled: option != PlayerRendererPreference.windowsLibmpv ||
-                    nativeAvailable && _settings.hardwareDecodingEnabled,
                 child: Text(PlaybackSettings.rendererLabelFor(option)),
               ),
           ],
@@ -2265,7 +2254,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                 ),
                                 const SizedBox(height: 6),
                                 const Text(
-                                  '选择下一次进入播放器时使用的跨平台兼容或 Windows 增强渲染边界。',
+                                  '两种配置共用 MediaKit Texture；增强配置开放同实例 libmpv 画质能力。',
                                   style: TextStyle(color: libraryTextMuted),
                                 ),
                                 const SizedBox(height: 14),

@@ -16,6 +16,8 @@ void main() {
   const channel = MethodChannel('local_tag_player/native_player');
   final hwndSamplePath =
       Platform.environment['LOCAL_TAG_PLAYER_NATIVE_HWND_SAMPLE']?.trim();
+  final mpvTextureSamplePath =
+      Platform.environment['LOCAL_TAG_PLAYER_NATIVE_MPV_SAMPLE']?.trim();
   final hwndLifecycleIterations = int.tryParse(
         Platform.environment['LOCAL_TAG_PLAYER_NATIVE_HWND_ITERATIONS'] ?? '',
       ) ??
@@ -46,6 +48,60 @@ void main() {
     expect(disposed['textureId'], -1);
     expect(disposed['lifecycle'], 'disposed');
   });
+
+  testWidgets(
+    'native MPV texture advances through observed events without polling',
+    (tester) async {
+      final created = await channel.invokeMapMethod<String, Object?>(
+            'create',
+            const <String, Object?>{'mode': 'mpv'},
+          ) ??
+          const <String, Object?>{};
+      expect(created['backend'], 'windows-native-mpv');
+      expect(created['native-surface-kind'], 'flutter-texture');
+
+      await channel.invokeMethod<void>('command', {
+        'name': 'open',
+        'text': mpvTextureSamplePath,
+      });
+      await channel.invokeMethod<void>('command', {
+        'name': 'property',
+        'text': 'loop-file=inf',
+      });
+      await channel.invokeMethod<void>('command', const {'name': 'play'});
+      final playing = await _waitForNativeState(
+        tester,
+        channel,
+        (state) =>
+            state['hwdec-current'] == 'd3d11va-copy' &&
+            state['playing'] == true &&
+            (state['positionMs'] as int? ?? 0) >= 1000 &&
+            (state['estimated-frame-number'] as int? ?? 0) > 0 &&
+            (state['native-rendered-frames'] as int? ?? 0) > 10 &&
+            (state['native-mpv-events'] as int? ?? 0) > 0,
+        timeout: const Duration(seconds: 20),
+      );
+      final positionBefore = playing['positionMs'] as int;
+      await tester.pump(const Duration(seconds: 1));
+      final advanced =
+          await channel.invokeMapMethod<String, Object?>('state') ?? const {};
+      expect(advanced['positionMs'] as int, greaterThan(positionBefore));
+      expect(
+        advanced['native-event-batch-yields'],
+        isA<int>(),
+      );
+
+      await channel.invokeMethod<void>('dispose');
+      final disposed =
+          await channel.invokeMapMethod<String, Object?>('state') ?? const {};
+      expect(disposed['textureId'], -1);
+      expect(disposed['lifecycle'], 'mpv_disposed');
+    },
+    skip: mpvTextureSamplePath == null ||
+        mpvTextureSamplePath.isEmpty ||
+        !File(mpvTextureSamplePath).existsSync(),
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   testWidgets(
     'native child HWND survives repeated in-process sessions',
