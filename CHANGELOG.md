@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · 修复 Windows Debug 交付包无法双击启动
+
+- 确认无窗口不是产品启动崩溃，而是 Windows integration test 在 Debug 输出
+  目录留下测试入口；进程会等待测试驱动，因此存活但没有主窗口。
+- 新增 Debug 交付门禁：先重建正式 `main.dart`，再按精确 PID 启动 exe，并要求
+  在限定时间内取得非零主窗口句柄。
+- 产品启动代码、默认播放器后端、队列、数据库、标签、缓存和用户数据不变。
+- `flutter analyze`、299 项全量测试（另 3 项跳过）、最终 Debug build 和直接
+  双击窗口门禁通过。
+
 ## 2026-07-28 · 收敛 NVIDIA VSR/HDR 发布范围
 
 - NVIDIA RTX 视频超分与 RTX Video HDR 作为当前 Windows 可交付能力，产品文案

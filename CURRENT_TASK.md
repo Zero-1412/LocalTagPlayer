@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 Windows Debug 双击无窗口修复
+
+- 已稳定复现：集成测试后的 Debug exe 进程存活且响应，但
+  `MainWindowHandle=0`，应用事件中没有崩溃；经 `flutter run` 重建正式入口后
+  同一路径立即产生可见窗口。
+- 根因是 Windows integration test 复用
+  `build/windows/x64/runner/Debug` 并留下测试入口；此前验证顺序为“正式 build
+  → integration test”，导致最终交付目录不是正式 `main.dart`。
+- 新增 `tool/verify_windows_debug_package.ps1`：交付前重新执行
+  `flutter build windows --debug`，再按精确 PID 双击验证进程未退出且主窗口
+  句柄非零，最后只关闭该 QA 进程。
+- 产品启动代码、默认 MediaKit、Windows 增强后端、filtered queue、SQLite、
+  标签、缓存队列和用户数据均未修改。
+- `flutter analyze`、299 项全量测试（另 3 项按既有条件跳过）、最终 Windows
+  Debug build 和 `-SkipBuild` 双击复验均通过；最终交付目录的主窗口标题为
+  `local_tag_player`。
+
 ## 2026-07-28 NVIDIA 发布范围收敛与 VSR 日常开启结论
 
 - 固定 mpv `v0.41.0-908-g48e6c35c0` 的 NVIDIA RTX 视频超分与 RTX Video HDR

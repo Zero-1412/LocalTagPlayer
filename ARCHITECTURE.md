@@ -1,5 +1,13 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.90` 修复 Windows Debug 交付目录的启动门禁。根因
+不是 VSR/HDR 或生产启动代码：Windows integration test 会复用
+`build/windows/x64/runner/Debug` 并写入测试入口；若它是最后一条命令，双击
+`local_tag_player.exe` 时进程会等待测试驱动，表现为存活但没有主窗口。新增
+`tool/verify_windows_debug_package.ps1`，固定先重新构建正式 `main.dart`，再按
+精确 PID 启动 exe，并要求限定时间内出现非零 `MainWindowHandle`。默认后端、
+PlayerService、filtered queue、SQLite、标签、缓存队列和用户数据均不改变。
+
 `Architecture Baseline 0.5.89` 收敛 Windows NVIDIA 发布边界：固定 mpv
 `v0.41.0-908-g48e6c35c0` 的 RTX 视频超分与 RTX Video HDR 作为当前可交付
 能力，产品文案不再标记“实验”，但仍默认关闭、仅会话保存，并受原生

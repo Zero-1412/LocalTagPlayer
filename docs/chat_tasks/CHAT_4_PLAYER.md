@@ -1,3 +1,12 @@
+## 2026-07-28 Windows Debug 双击无窗口修复
+
+- 根因不是播放器运行时：Windows integration test 会覆盖 Debug 输出目录的
+  Dart 入口；若测试晚于正式 build，双击 exe 会等待测试驱动而没有窗口。
+- 新增 `tool/verify_windows_debug_package.ps1`，交付前固定重建正式入口，再按
+  精确 PID 验证主窗口句柄并关闭 QA 进程。
+- 默认 MediaKit、Windows 增强后端、filtered queue、当前 index、来源队列、
+  返回状态和用户数据不变。
+
 ## 2026-07-28 NVIDIA VSR/HDR 发布范围收敛
 
 - RTX 视频超分与 RTX Video HDR 作为现阶段 Windows 可交付能力，界面不再标记

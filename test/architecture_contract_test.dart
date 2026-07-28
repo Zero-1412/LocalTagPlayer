@@ -381,6 +381,21 @@ void main() {
     expect(roadmap, contains('非自动后续'));
   });
 
+  test('Windows debug package gate rebuilds the production entrypoint', () {
+    final verifier =
+        File('tool/verify_windows_debug_package.ps1').readAsStringSync();
+    final buildIndex = verifier.indexOf('flutter build windows --debug');
+    final launchIndex = verifier.indexOf('Start-Process');
+
+    // integration_test 会复用 Debug 目录；交付门禁必须先恢复正式 main.dart 再双击。
+    expect(buildIndex, greaterThanOrEqualTo(0));
+    expect(launchIndex, greaterThan(buildIndex));
+    expect(verifier, contains('local_tag_player.exe'));
+    expect(verifier, contains(r'$process.MainWindowHandle -ne 0'));
+    expect(verifier, contains(r'$process.HasExited'));
+    expect(verifier, contains('CloseMainWindow'));
+  });
+
   test('motion interpolation runtime uses structured vf and local-only paths',
       () {
     final runnerBuild =
