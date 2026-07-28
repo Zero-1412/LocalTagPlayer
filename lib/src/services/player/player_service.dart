@@ -21,6 +21,7 @@ import 'player_video_super_resolution.dart';
 class PlayerService
     implements
         PlayerRuntimeAccess,
+        PlayerPropertyBatchBoundary,
         PlayerGpuRenderBoundary,
         PlayerOverlaySurfaceBoundary,
         PlayerMotionInterpolationBoundary {
@@ -76,6 +77,25 @@ class PlayerService
   Future<void> setProperty(String property, String value) =>
       _backend.setProperty(property, value);
 
+  /**
+   * 优先使用后端批量边界；普通后端保持原有逐项写入顺序。
+   *
+   * 该分派只优化属性传输，不改变 PlayerBackend、filtered queue 或媒体生命周期。
+   */
+  @override
+  Future<void> setProperties(Map<String, String> properties) async {
+    final batchBoundary = _backend is PlayerPropertyBatchBoundary
+        ? _backend as PlayerPropertyBatchBoundary
+        : null;
+    if (batchBoundary != null) {
+      await batchBoundary.setProperties(properties);
+      return;
+    }
+    for (final entry in properties.entries) {
+      await _backend.setProperty(entry.key, entry.value);
+    }
+  }
+
   @override
   Future<String> getProperty(String property) => _backend.getProperty(property);
 
@@ -99,29 +119,24 @@ class PlayerService
     PlayerSmoothMotionMode smoothMotionMode = PlayerSmoothMotionMode.off,
     bool hdrDynamicToneMappingExperimentEnabled = false,
   }) async {
-    /** 单个可选属性失败时继续应用其余偏好，兼容能力较少的后端。 */
-    Future<void> setPropertySafely(String property, String value) async {
-      try {
-        await setProperty(property, value);
-      } catch (_) {
-        // 比例属性属于可选能力，不能因为后端不支持而阻止媒体打开。
-      }
+    try {
+      // 比例、平移与输出电平必须作为同一快照提交，避免打开阶段逐项平台往返。
+      await setProperties(<String, String>{
+        'video-aspect-override': videoAspectOverride,
+        'panscan': panscan,
+        // 清除历史缩放和平移，防止它们叠加到新的全局比例模式。
+        'video-zoom': '0',
+        'video-pan-x': '0',
+        'video-pan-y': '0',
+        'video-output-levels': switch (videoOutputRange) {
+          PlayerVideoOutputRange.automatic => 'auto',
+          PlayerVideoOutputRange.limited => 'limited',
+          PlayerVideoOutputRange.full => 'full',
+        },
+      });
+    } catch (_) {
+      // 比例属性属于可选能力，不能因为后端不支持而阻止媒体打开。
     }
-
-    await setPropertySafely('video-aspect-override', videoAspectOverride);
-    await setPropertySafely('panscan', panscan);
-    // 清除历史缩放和平移，防止它们叠加到新的全局比例模式。
-    await setPropertySafely('video-zoom', '0');
-    await setPropertySafely('video-pan-x', '0');
-    await setPropertySafely('video-pan-y', '0');
-    await setPropertySafely(
-      'video-output-levels',
-      switch (videoOutputRange) {
-        PlayerVideoOutputRange.automatic => 'auto',
-        PlayerVideoOutputRange.limited => 'limited',
-        PlayerVideoOutputRange.full => 'full',
-      },
-    );
     await PlayerVideoSuperResolution.apply(
       backend: this,
       enabled: videoSuperResolutionEnabled,

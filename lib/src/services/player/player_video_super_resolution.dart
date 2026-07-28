@@ -69,12 +69,19 @@ class PlayerVideoSuperResolution {
             'sigmoid-upscaling': 'no',
             'scaler-resizes-only': 'yes',
           };
-    for (final entry in properties.entries) {
-      try {
-        await backend.setProperty(entry.key, entry.value);
-      } catch (_) {
-        // 某个旧版或实验后端不支持属性时继续播放，并尝试应用剩余安全配置。
+    try {
+      final batch = backend is PlayerPropertyBatchBoundary
+          ? backend as PlayerPropertyBatchBoundary
+          : null;
+      if (batch != null) {
+        await batch.setProperties(properties);
+        return;
       }
+      for (final entry in properties.entries) {
+        await backend.setProperty(entry.key, entry.value);
+      }
+    } catch (_) {
+      // 某个旧版或实验后端不支持属性时继续播放；Windows 批量边界内部仍处理完整快照。
     }
   }
 }

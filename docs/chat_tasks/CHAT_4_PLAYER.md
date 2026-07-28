@@ -1184,3 +1184,23 @@
 - 最终 SDR 关闭/开启态各 60 秒、12 个诊断样本，均为 0 掉帧、0 停滞、GPU Engine P95 5.0%；开启态显存 P95 300.1 MiB，Limited 黑位保持 `YMIN=16`，`YAVG` 从 43.6642 提升到 45.4358。同轮 HDR 在新增 1 个总掉帧后真实回滚为 `auto`。
 - 设置页删除内部“画质增强路线”卡，展示真实暗部增强与“HDR 动态映射”开关。Debug 真实点击开启/关闭暗部增强并恢复原状态，两态截图无截断、遮挡、错位或溢出。
 - `flutter analyze`、完整 258 项测试、Windows Debug build 与三态固定样本均通过。PlayerBackend contract、filtered queue 来源/内容/顺序、SQLite schema、标签查询、缓存队列、稳定身份和用户数据未改变。
+
+## 2026-07-28 MPV 属性批处理、渲染优先级与增强回滚锁存
+
+- `PlayerBackend` 主契约保持不变；需要减少平台往返的后端可选实现
+  `PlayerPropertyBatchBoundary`。`PlayerService` 负责能力检测并为 MediaKit 等未实现
+  后端提供原顺序串行回退。
+- Windows MPV 的打开偏好、缩放、压缩增强、HDR 与平滑运动改为有序批处理。原生
+  worker 在每条命令前消费一次合并后的 render request，最后一项属性才采样完整状态，
+  避免控制突发占满队列。
+- MPV Texture 仍为 ANGLE → D3D11 纹理复制路径；本轮没有伪装成零拷贝，也没有启用
+  NVIDIA VSR/HDR。50/60fps copy-back（含 1080p60、4K60）禁用 CPU 滤镜是当前
+  最小稳定策略。
+- 自动增强在已经启用滤镜后遇到新增掉帧、缓冲或停滞时，回滚并锁存到当前媒体结束，
+  不再以健康样本重新启用。诊断同时补充总掉帧增量，并要求连续两次位置推进不足才以
+  UI 调度指标单独报警。
+- 真实 4K60 样本修复前 19 秒新增 49 个掉帧、AV 偏移约 0.35 秒；修复后连续约
+  49 秒总掉帧保持 1、AV 偏移约 0.000004 秒、表面重建保持 6。列表收放、三次连续
+  seek 和队列快速切换未再造成稳态掉帧增长。
+- filtered queue、当前 index、MediaKit、SQLite、标签查询、缓存队列与用户数据保持
+  不变。

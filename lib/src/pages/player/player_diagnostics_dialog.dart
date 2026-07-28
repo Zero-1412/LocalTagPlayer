@@ -155,6 +155,9 @@ class PlaybackDiagnosticsDialogState extends State<PlaybackDiagnosticsDialog> {
   /** 当前弹窗生命周期内的连续采样次数。 */
   var _sampleCount = 0;
 
+  /** 播放位置连续推进不足次数；单次调度抖动不能直接判成解码卡顿。 */
+  var _slowProgressStreak = 0;
+
   /** 是否正在执行采样，防止定时器重入。 */
   var _isSampling = false;
 
@@ -217,6 +220,10 @@ class PlaybackDiagnosticsDialogState extends State<PlaybackDiagnosticsDialog> {
         _previousSnapshot = _snapshot;
         _snapshot = snapshot;
         _sampleCount++;
+        _slowProgressStreak =
+            snapshot.wasPlaying && !snapshot.wasBuffering && !snapshot.smooth
+                ? _slowProgressStreak + 1
+                : 0;
         _isSampling = false;
       });
       if (snapshot.wasPlaying) {
@@ -250,8 +257,10 @@ class PlaybackDiagnosticsDialogState extends State<PlaybackDiagnosticsDialog> {
     if (snapshot.wasBuffering) {
       reasons.add('播放器正在缓冲，优先检查磁盘读取、文件源或缓存状态');
     }
-    if (!snapshot.smooth && snapshot.wasPlaying && !snapshot.wasBuffering) {
-      reasons.add('播放位置推进不足，可能存在渲染阻塞、解码跟不上或 UI 线程压力');
+    if (_slowProgressStreak >= 2 &&
+        snapshot.wasPlaying &&
+        !snapshot.wasBuffering) {
+      reasons.add('播放位置连续推进不足，可能存在渲染阻塞、解码跟不上或 UI 线程压力');
     }
     if (snapshot.videoStalled && !snapshot.audioStalled) {
       reasons.add('视频帧已停滞但音频播放头仍推进，确认存在画面冻结、声音继续');
@@ -301,6 +310,17 @@ class PlaybackDiagnosticsDialogState extends State<PlaybackDiagnosticsDialog> {
     if (mistimedDelta != null && mistimedDelta > 0) {
       reasons.add('时序异常帧增加 $mistimedDelta，可能是刷新率/同步策略不稳定');
     }
+    final totalDropDelta = _delta(
+      snapshot.totalDroppedFrames,
+      _previousSnapshot?.totalDroppedFrames,
+    );
+    if (totalDropDelta != null &&
+        totalDropDelta > 0 &&
+        decoderDelta != totalDropDelta &&
+        voDelta != totalDropDelta) {
+      // 原生 Texture 后端目前只能稳定提供总丢帧；不能因细分计数不可用而漏报。
+      reasons.add('总丢帧增加 $totalDropDelta，播放增强或渲染链可能存在瞬时压力');
+    }
     final avSync = snapshot.avSync?.abs();
     if (avSync != null && avSync > 0.08) {
       reasons.add('AV 偏移 ${snapshot.avSync!.toStringAsFixed(3)} 秒，音画同步正在明显修正');
@@ -343,6 +363,21 @@ class PlaybackDiagnosticsDialogState extends State<PlaybackDiagnosticsDialog> {
     final minute = value.minute.toString().padLeft(2, '0');
     final second = value.second.toString().padLeft(2, '0');
     return '$hour:$minute:$second';
+  }
+
+  /** 只有连续位置异常或独立播放证据异常时，才把状态徽标标为需要关注。 */
+  bool _needsAttention(PlaybackDiagnosticsSnapshot snapshot) {
+    final dropped = _delta(
+          snapshot.totalDroppedFrames,
+          _previousSnapshot?.totalDroppedFrames,
+        ) ??
+        0;
+    return snapshot.wasBuffering ||
+        snapshot.videoStalled ||
+        snapshot.audioStalled ||
+        (snapshot.avSync?.abs() ?? 0) > 0.08 ||
+        dropped > 0 ||
+        _slowProgressStreak >= 2;
   }
 
   /**
@@ -397,12 +432,11 @@ class PlaybackDiagnosticsDialogState extends State<PlaybackDiagnosticsDialog> {
                   label: snapshot == null
                       ? '采集中'
                       : snapshot.wasPlaying
-                          ? snapshot.smooth
-                              ? '播放流畅'
-                              : '需要关注'
+                          ? _needsAttention(snapshot)
+                              ? '需要关注'
+                              : '播放流畅'
                           : '已暂停',
-                  healthy: snapshot?.smooth == true &&
-                      snapshot?.wasBuffering == false,
+                  healthy: snapshot != null && !_needsAttention(snapshot),
                 ),
                 child: Column(
                   children: [

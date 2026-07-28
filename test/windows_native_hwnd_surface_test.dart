@@ -254,6 +254,20 @@ void main() {
     await backend.setProperty('hwdec', 'd3d11va');
     final command = calls.lastWhere((call) => call.method == 'command');
     expect(command.arguments, containsPair('text', 'hwdec=d3d11va-copy'));
+
+    await backend.setProperties(const <String, String>{
+      'hwdec': 'd3d11va',
+      'vf': '',
+    });
+    final batch = calls.lastWhere((call) => call.method == 'setProperties');
+    final properties = (batch.arguments as Map<Object?, Object?>)['properties']
+        as List<Object?>;
+    expect(properties, hasLength(2));
+    expect(
+      properties.first,
+      containsPair('value', 'd3d11va-copy'),
+    );
+    expect(properties.last, containsPair('property', 'vf'));
     await backend.dispose();
   });
 }

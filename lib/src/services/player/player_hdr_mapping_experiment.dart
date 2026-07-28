@@ -29,6 +29,13 @@ class PlayerHdrMappingExperiment {
             'hdr-compute-peak': 'auto',
             'allow-delayed-peak-detect': 'no',
           };
+    final batch = backend is PlayerPropertyBatchBoundary
+        ? backend as PlayerPropertyBatchBoundary
+        : null;
+    if (batch != null) {
+      await batch.setProperties(values);
+      return;
+    }
     for (final entry in values.entries) {
       await backend.setProperty(entry.key, entry.value);
     }

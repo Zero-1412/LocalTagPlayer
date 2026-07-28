@@ -21,6 +21,7 @@ import 'windows_gpu_capability_channel.dart';
 class WindowsNativePlayerBackend
     implements
         PlayerBackend,
+        PlayerPropertyBatchBoundary,
         PlayerGpuRenderBoundary,
         PlayerOverlaySurfaceBoundary,
         PlayerMotionInterpolationBoundary {
@@ -187,15 +188,46 @@ class WindowsNativePlayerBackend
     _errorCount = errorCount;
   }
 
-  /** 将所有控制动作送入同一个原生串行队列。 */
+  /** 将单个控制动作送入原生队列，并直接合并命令返回的状态快照。 */
   Future<void> _command(String name, {String? text, int? integer}) async {
     await _ready;
-    await windowsNativePlayerChannel.invokeMethod<void>('command', {
+    final value = await windowsNativePlayerChannel
+        .invokeMapMethod<String, Object?>('command', {
       'name': name,
       if (text != null) 'text': text,
       if (integer != null) 'integer': integer,
     });
-    await _pollState();
+    _applyState(value);
+  }
+
+  /** 把有序属性快照合并为一次平台调用，避免每项都触发 MethodChannel 与全量采样。 */
+  Future<void> _setProperties(Map<String, String> properties) async {
+    if (properties.isEmpty) return;
+    await _ready;
+    final values = properties.entries
+        .map(
+          (entry) => <String, Object?>{
+            'property': entry.key,
+            'value': _normalizedPropertyValue(entry.key, entry.value),
+          },
+        )
+        .toList(growable: false);
+    final state = await windowsNativePlayerChannel
+        .invokeMapMethod<String, Object?>('setProperties', {
+      'properties': values,
+    });
+    _applyState(state);
+  }
+
+  /** 保持 child HWND 非 copy 与 Flutter Texture copy-back 的既有硬解边界。 */
+  String _normalizedPropertyValue(String property, String value) {
+    if (mode == 'hwnd' && property == 'hwdec') {
+      return 'd3d11va';
+    }
+    if (mode == 'mpv' && property == 'hwdec' && value == 'd3d11va') {
+      return 'd3d11va-copy';
+    }
+    return value;
   }
 
   /**
@@ -313,20 +345,17 @@ class WindowsNativePlayerBackend
 
   @override
   Future<void> setProperty(String property, String value) {
-    if (mode == 'hwnd' && property == 'hwdec') {
-      // child HWND 实验的唯一目标是验证 D3D11VA 非 copy 纹理链；不能让通用
-      // `auto-safe` 配置在会话创建后把原生层重新降回 `d3d11va-copy`。
-      return _command('property', text: 'hwdec=d3d11va');
-    }
-    if (mode == 'mpv' && property == 'hwdec' && value == 'd3d11va') {
-      // Flutter Texture 通过 ANGLE/OpenGL 合成，不能直接消费 D3D11VA 非 copy 帧。
-      // 使用 copy-back 保留硬件解码，同时把画面交给 Flutter 统一合成弹层与队列。
-      return _command('property', text: 'hwdec=d3d11va-copy');
-    }
     // 缓存档位由播放器会话统一约束；原生 A/B 后端必须接受同一组值，避免设置页显示
     // 已关闭高质量缓存而此处仍静默覆盖为固定 64 MiB。
-    return _command('property', text: '$property=$value');
+    return _command(
+      'property',
+      text: '$property=${_normalizedPropertyValue(property, value)}',
+    );
   }
+
+  @override
+  Future<void> setProperties(Map<String, String> properties) =>
+      _setProperties(properties);
 
   @override
   Future<String> getProperty(String property) async {

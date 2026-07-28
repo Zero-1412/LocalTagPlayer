@@ -48,10 +48,12 @@ abstract final class PlayerSmoothMotion {
     }
 
     try {
-      // 最后才打开 interpolation，避免中途失败留下半配置的插值会话。
-      await backend.setProperty('video-sync', 'display-resample');
-      await backend.setProperty('tscale', 'oversample');
-      await backend.setProperty('interpolation', 'yes');
+      // 最后才打开 interpolation；支持批量边界时三项仍按插入顺序一次提交。
+      await _setProperties(backend, const <String, String>{
+        'video-sync': 'display-resample',
+        'tscale': 'oversample',
+        'interpolation': 'yes',
+      });
       final videoSync = _normalize(await backend.getProperty('video-sync'));
       final temporalScaler = _normalize(await backend.getProperty('tscale'));
       final interpolation =
@@ -109,11 +111,30 @@ abstract final class PlayerSmoothMotion {
 
   /** 尽最大努力先关闭主开关，再恢复稳定的基础同步与默认时间缩放器。 */
   static Future<void> _bestEffortDisable(PlayerRuntimeAccess backend) async {
-    for (final entry in const <MapEntry<String, String>>[
-      MapEntry('interpolation', 'no'),
-      MapEntry('tscale', 'oversample'),
-      MapEntry('video-sync', 'display-resample'),
-    ]) {
+    try {
+      await _setProperties(backend, const <String, String>{
+        'interpolation': 'no',
+        'tscale': 'oversample',
+        'video-sync': 'display-resample',
+      });
+    } catch (_) {
+      // 单个属性不支持时不能阻止媒体打开；普通后端由辅助方法保持逐项尽力写入。
+    }
+  }
+
+  /** 支持批量边界时一次提交；普通后端保持逐项尽力写入。 */
+  static Future<void> _setProperties(
+    PlayerRuntimeAccess backend,
+    Map<String, String> properties,
+  ) async {
+    final batch = backend is PlayerPropertyBatchBoundary
+        ? backend as PlayerPropertyBatchBoundary
+        : null;
+    if (batch != null) {
+      await batch.setProperties(properties);
+      return;
+    }
+    for (final entry in properties.entries) {
       try {
         await backend.setProperty(entry.key, entry.value);
       } catch (_) {

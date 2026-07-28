@@ -4250,8 +4250,8 @@ void main() {
         width: 1920,
         height: 1080,
         hwdecCurrent: 'd3d11va-copy',
-        sourceFps: 60,
-        estimatedFps: 60,
+        sourceFps: 30,
+        estimatedFps: 30,
         cacheDuration: 12,
         decoderDroppedFrames: 0,
         outputDroppedFrames: 0,
@@ -4268,7 +4268,15 @@ void main() {
     final pressured = coordinator.evaluate(sample(totalDrops: 1));
     expect(pressured.changed, isTrue);
     expect(pressured.level, PlayerAdaptiveQualityLevel.off);
-    expect(pressured.reason, contains('立即关闭增强'));
+    expect(pressured.reason, contains('本媒体保持关闭'));
+
+    // 已确认增强引起压力后，即使后续样本恢复健康也不能在同一媒体内再次升档。
+    for (var index = 0; index < 6; index++) {
+      final recovery = coordinator.evaluate(sample(totalDrops: 1));
+      expect(recovery.level, PlayerAdaptiveQualityLevel.off);
+      expect(recovery.changed, isFalse);
+      expect(recovery.reason, contains('保持关闭'));
+    }
   });
 
   test('adaptive quality baseline keeps 4K software decode disabled', () {
@@ -4278,6 +4286,32 @@ void main() {
       hwdecCurrent: 'no',
     );
     expect(profile.label, '4K · CPU 软件解码');
+    expect(profile.maximumLevel, PlayerAdaptiveQualityLevel.off);
+  });
+
+  test('adaptive quality keeps 4K60 copy-back decode disabled', () {
+    final profile = PlayerQualityBaselineProfile.resolve(
+      width: 3840,
+      height: 2160,
+      hwdecCurrent: 'd3d11va-copy',
+      sourceFps: 60,
+    );
+
+    expect(profile.label, contains('4K60'));
+    expect(profile.label, contains('copy-back'));
+    expect(profile.maximumLevel, PlayerAdaptiveQualityLevel.off);
+  });
+
+  test('adaptive quality keeps 1080p60 copy-back decode disabled', () {
+    final profile = PlayerQualityBaselineProfile.resolve(
+      width: 1920,
+      height: 1080,
+      hwdecCurrent: 'd3d11va-copy',
+      sourceFps: 60,
+    );
+
+    expect(profile.label, contains('高帧率'));
+    expect(profile.label, contains('copy-back'));
     expect(profile.maximumLevel, PlayerAdaptiveQualityLevel.off);
   });
 

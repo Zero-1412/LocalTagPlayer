@@ -814,3 +814,18 @@ lib/
 - `DesktopWindowStateService` 当前只保存普通窗口尺寸与最大化状态，不保存坐标，因此恢复时必须居中。只有未来同时持久化并校验显示器内坐标后，才允许传入非居中恢复。
 - 播放器 Route 退出与 Windows 宿主进程关闭是两条独立生命周期：前者通过页面压力门禁不代表后者安全。宿主关闭必须单独验证 registrar 销毁后不再有纹理线程调用 `FlutterDesktopTextureRegistrarMarkExternalTextureFrameAvailable`。
 - 本轮不改变 `PlayerBackend` contract、SQLite schema、标签查询、filtered queue、缓存队列或用户数据。
+
+## 2026-07-28 Windows MPV 命令与渲染调度边界补充
+
+- `PlayerBackend` 继续表达跨平台最小播放能力；`PlayerPropertyBatchBoundary` 是可选
+  性能边界，只允许把有序属性快照合并为一次平台调用。未实现该接口的后端必须由
+  `PlayerService` 按原顺序串行执行，不能改变属性语义。
+- Windows 原生 MPV 的控制命令返回同一次 worker 执行后的状态快照，Flutter 不再为
+  每条命令追加一次状态调用。属性批次只在最后一项执行完整 mpv 状态采样。
+- libmpv update callback 仍只合并为一个待渲染标志；worker 在每条控制命令前优先
+  消费该标志，防止属性或打开偏好突发饿死视频渲染。渲染上下文和所有 mpv 属性访问
+  仍由同一原生线程拥有。
+- Flutter Texture 路径继续使用 `d3d11va-copy` 与 ANGLE → D3D11 成品纹理复制；
+  真正零拷贝或 NVIDIA 原生增强仍需独立 D3D11 surface 边界，不由批处理接口推断。
+- 50/60fps copy-back 会话不自动启用 CPU 画质滤镜；低帧率会话的压力回滚锁存于
+  当前媒体，打开新媒体时重置。两者都不写入 SQLite 或用户持久设置。

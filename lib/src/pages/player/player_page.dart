@@ -3075,8 +3075,11 @@ class PlayerPageState extends State<PlayerPage> {
               ? '32MiB'
               : '8MiB',
     };
-    for (final entry in options.entries) {
-      await _setMpvProperty(entry.key, entry.value);
+    try {
+      // Windows 原生后端在一个平台事务内提交；MediaKit 仍由服务按既有顺序逐项写入。
+      await _playerService.setProperties(options);
+    } catch (_) {
+      // 某些后端缺少可选缓存属性时继续恢复其它播放偏好。
     }
     // 部分后端会在打开新媒体时重建参数；每次 open 前后恢复比例、倍速与超分。
     final smoothMotionResult = await _playerService.applyOpenPreferences(

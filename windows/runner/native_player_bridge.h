@@ -49,6 +49,8 @@ class NativePlayerBridge {
     std::string text;
     int64_t integer = 0;
     std::shared_ptr<std::promise<void>> completion;
+    /** 属性批次仅在最后一项采样状态，避免配置阶段反复阻塞 60fps 渲染。 */
+    bool sample_state = true;
   };
 
   void HandleMethodCall(

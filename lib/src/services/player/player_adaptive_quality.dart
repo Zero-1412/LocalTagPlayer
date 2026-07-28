@@ -34,6 +34,7 @@ class PlayerQualityBaselineProfile {
     required int? width,
     required int? height,
     required String? hwdecCurrent,
+    double? sourceFps,
   }) {
     if (width == null || width <= 0 || height == null || height <= 0) {
       return const PlayerQualityBaselineProfile(
@@ -51,6 +52,14 @@ class PlayerQualityBaselineProfile {
     if (is4k && !isHardware) {
       return const PlayerQualityBaselineProfile(
         label: '4K · CPU 软件解码',
+        maximumLevel: PlayerAdaptiveQualityLevel.off,
+      );
+    }
+    final isCopyBack = hwdecCurrent?.contains('-copy') ?? false;
+    if (isCopyBack && (sourceFps ?? 0) >= 50) {
+      return PlayerQualityBaselineProfile(
+        label:
+            is4k ? '4K60 · copy-back 硬解 · 保守关闭' : '高帧率 · copy-back 硬解 · 保守关闭',
         maximumLevel: PlayerAdaptiveQualityLevel.off,
       );
     }
@@ -152,6 +161,8 @@ class PlayerAdaptiveQualityCoordinator {
   int? _previousDecoderDrops;
   int? _previousOutputDrops;
   int? _previousTotalDrops;
+  /** 当前媒体一旦确认增强造成压力，就锁定关闭直到打开下一条媒体。 */
+  bool _pressureLockout = false;
   /** 清晰增强只在新媒体或用户刚切换档位后的首个稳定样本快速请求最高安全档。 */
   bool _clarityBoostPending = true;
   String _reason = '等待稳定播放样本';
@@ -174,6 +185,7 @@ class PlayerAdaptiveQualityCoordinator {
     _previousDecoderDrops = null;
     _previousOutputDrops = null;
     _previousTotalDrops = null;
+    _pressureLockout = false;
     _clarityBoostPending = true;
     _reason = '等待稳定播放样本';
     _profile = PlayerQualityBaselineProfile.resolve(
@@ -197,6 +209,7 @@ class PlayerAdaptiveQualityCoordinator {
       width: sample.width,
       height: sample.height,
       hwdecCurrent: sample.hwdecCurrent,
+      sourceFps: sample.sourceFps,
     );
     final decoderDelta = _counterDelta(
       sample.decoderDroppedFrames,
@@ -239,7 +252,13 @@ class PlayerAdaptiveQualityCoordinator {
     if (severePressure) {
       _healthySamples = 0;
       _clarityBoostPending = false;
-      _reason = '检测到掉帧、缓冲、停滞或 FPS 余量不足，立即关闭增强';
+      // 已运行增强后出现压力，不能再按健康样本自动升档，否则会形成
+      // “启用滤镜→掉帧→关闭→再次启用”的会话内振荡。
+      _pressureLockout =
+          _pressureLockout || _level != PlayerAdaptiveQualityLevel.off;
+      _reason = _pressureLockout
+          ? '增强后检测到播放压力，本媒体保持关闭'
+          : '检测到掉帧、缓冲、停滞或 FPS 余量不足，立即关闭增强';
       return _setLevel(
         PlayerAdaptiveQualityLevel.off,
         sample.sampledAt,
@@ -255,6 +274,11 @@ class PlayerAdaptiveQualityCoordinator {
       _healthySamples = 0;
       _reason = '当前媒体超过基线档位上限，回落到安全级别';
       return _setLevel(_profile.maximumLevel, sample.sampledAt);
+    }
+    if (_pressureLockout) {
+      _healthySamples = 0;
+      _reason = '本媒体曾在增强后出现播放压力，保持关闭直到切换视频';
+      return _setLevel(PlayerAdaptiveQualityLevel.off, sample.sampledAt);
     }
     if (preferClarity && _clarityBoostPending) {
       _healthySamples = 0;
@@ -414,39 +438,36 @@ class PlayerAdaptiveQualityEnhancer {
   }) {
     final previous = _applyTails[backend] ?? Future<void>.value();
     final operation = previous.then((_) async {
-      /** 单个旧后端不支持 GPU 去色带属性时仍继续应用其余画质设置。 */
-      Future<void> setPropertySafely(String property, String value) async {
-        try {
-          await backend.setProperty(property, value);
-        } catch (_) {
-          // 可选滤镜不可用时不得阻止播放；诊断读取最终属性供用户确认。
-        }
-      }
-
       final debandEnabled = !nvidiaVideoEnhancementEnabled &&
           !nvidiaVideoHdrEnabled &&
           level != PlayerAdaptiveQualityLevel.off;
-      if (!debandEnabled) {
-        // 回滚先关闭 GPU 去色带，再清理 CPU 滤镜，尽快释放额外渲染开销。
-        await setPropertySafely('deband', 'no');
-      } else {
-        for (final entry in conservativeDebandProperties.entries) {
-          await setPropertySafely(entry.key, entry.value);
-        }
-      }
-      // 当前产品没有其它视频滤镜；设置完整 `vf` 快照可确定地清除上一档。
-      await setPropertySafely(
-        'vf',
-        filterGraph(
+      final properties = <String, String>{
+        if (!debandEnabled) 'deband': 'no',
+        if (debandEnabled) ...conservativeDebandProperties,
+        // 当前产品没有其它视频滤镜；完整 `vf` 快照可确定地清除上一档。
+        'vf': filterGraph(
           level: level,
           darkSceneEnhancementEnabled: darkSceneEnhancementEnabled,
           nvidiaVideoEnhancementEnabled: nvidiaVideoEnhancementEnabled,
           nvidiaVideoHdrEnabled: nvidiaVideoHdrEnabled,
         ),
-      );
-      if (debandEnabled) {
-        // 参数完整写入后再启用，避免用户切换时短暂运行半套去色带配置。
-        await setPropertySafely('deband', 'yes');
+        if (debandEnabled)
+          // 参数完整写入后再启用，避免用户切换时短暂运行半套去色带配置。
+          'deband': 'yes',
+      };
+      try {
+        final batch = backend is PlayerPropertyBatchBoundary
+            ? backend as PlayerPropertyBatchBoundary
+            : null;
+        if (batch != null) {
+          await batch.setProperties(properties);
+        } else {
+          for (final entry in properties.entries) {
+            await backend.setProperty(entry.key, entry.value);
+          }
+        }
+      } catch (_) {
+        // 可选滤镜不可用时不得阻止播放；诊断读取最终属性供用户确认。
       }
     });
     _applyTails[backend] = operation;

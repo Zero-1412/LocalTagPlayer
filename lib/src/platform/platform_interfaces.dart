@@ -41,6 +41,22 @@ abstract interface class PlayerRuntimeAccess {
 }
 
 /**
+ * 可把一组有序属性作为一次后端事务提交的可选边界。
+ *
+ * Windows libmpv 用它减少 MethodChannel 往返和原生全量状态采样；不支持该边界的
+ * 后端仍由 [PlayerService] 逐项写入，不能因此改变 MediaKit 的既有行为。
+ */
+abstract interface class PlayerPropertyBatchBoundary {
+  /**
+   * 按 Map 插入顺序提交完整属性快照。
+   *
+   * 实现必须在 Future 完成前处理完全部属性，但单个 mpv 可选属性不支持时仍应继续
+   * 处理剩余项，避免半套画质或同步配置阻断媒体打开。
+   */
+  Future<void> setProperties(Map<String, String> properties);
+}
+
+/**
  * 单个播放会话的底层引擎和视频表面契约。
  *
  * 该接口只由 PlayerService 与组合根持有；PlayerPage 依赖应用层服务，避免把

@@ -142,6 +142,18 @@ class _RecordingMotionBackend extends _RecordingPlayerBackend
   }
 }
 
+/** 记录 PlayerService 是否优先走一次批量属性事务。 */
+class _BatchRecordingPlayerBackend extends _RecordingPlayerBackend
+    implements PlayerPropertyBatchBoundary {
+  final List<Map<String, String>> batches = <Map<String, String>>[];
+
+  @override
+  Future<void> setProperties(Map<String, String> properties) async {
+    batches.add(Map<String, String>.from(properties));
+    this.properties.addAll(properties);
+  }
+}
+
 void main() {
   test('PlayerPage 只依赖 PlayerService 工厂，不导入具体播放器后端', () {
     final source =
@@ -195,6 +207,23 @@ void main() {
     expect(backend.properties['interpolation'], 'yes');
     expect(smoothMotionResult.active, isTrue);
     expect(backend.appliedRate, 1.5);
+  });
+
+  test('PlayerService 优先使用后端批量属性边界', () async {
+    final backend = _BatchRecordingPlayerBackend();
+    final service = PlayerService(backend: backend);
+
+    await service.setProperties(const <String, String>{
+      'hwdec': 'd3d11va-copy',
+      'vf': '',
+    });
+
+    expect(backend.batches, hasLength(1));
+    expect(
+      backend.batches.single.keys,
+      orderedEquals(<String>['hwdec', 'vf']),
+    );
+    expect(backend.properties['vf'], isEmpty);
   });
 
   test('不支持 Windows 可选能力的后端由 PlayerService 安全回退', () async {

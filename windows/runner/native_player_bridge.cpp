@@ -217,7 +217,30 @@ void NativePlayerBridge::HandleMethodCall(
     EnqueueAndWait({StringArgument(values, "name"),
                     StringArgument(values, "text"),
                     IntegerArgument(values, "integer"), nullptr});
-    result->Success();
+    result->Success(flutter::EncodableValue(StateSnapshot()));
+    return;
+  }
+  if (call.method_name() == "setProperties") {
+    const auto iterator =
+        values.find(flutter::EncodableValue("properties"));
+    const auto* properties = iterator == values.end()
+                                 ? nullptr
+                                 : std::get_if<flutter::EncodableList>(
+                                       &iterator->second);
+    if (properties != nullptr) {
+      for (size_t index = 0; index < properties->size(); ++index) {
+        const auto* property =
+            std::get_if<flutter::EncodableMap>(&properties->at(index));
+        if (property == nullptr) continue;
+        const bool sample_state = index + 1 == properties->size();
+        EnqueueAndWait(
+            {"property",
+             StringArgument(*property, "property") + "=" +
+                 StringArgument(*property, "value"),
+             0, nullptr, sample_state});
+      }
+    }
+    result->Success(flutter::EncodableValue(StateSnapshot()));
     return;
   }
   result->NotImplemented();
@@ -1076,6 +1099,14 @@ void NativePlayerBridge::WorkerLoop() {
         SamplePlayerState();
         continue;
       }
+      // libmpv 的更新回调代表有新视频帧可取；属性批次不能长期占满队列并让视频
+      // 时钟在渲染前持续前进。每条控制命令前最多消费一个合并后的渲染请求。
+      const bool should_render = render_requested_.exchange(false);
+      if (should_render) {
+        lock.unlock();
+        RenderFrame();
+        lock.lock();
+      }
       command = std::move(commands_.front());
       commands_.pop();
       lifecycle_ = "command_" + command.name;
@@ -1085,7 +1116,7 @@ void NativePlayerBridge::WorkerLoop() {
         DestroyPlayer();
       } else if (native_mpv_enabled_) {
         ExecutePlayerCommand(command);
-        SamplePlayerState();
+        if (command.sample_state) SamplePlayerState();
       }
       if (!native_mpv_enabled_) {
         if (command.name == "open") {
