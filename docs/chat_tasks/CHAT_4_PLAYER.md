@@ -1,3 +1,19 @@
+## 2026-07-28 NVOFA 遮挡有效性与两级补洞
+
+- 同 LUID D3D11 Compute 改为 flow-grid 校验/矢量补洞、候选 warp/遮挡有效性、
+  图像域 hole filling 三段；这是按 NVIDIA 公布阶段实现的开放近似，不使用或
+  分发 FRUC SDK。
+- 确定性探针保持 zero=128、motion=90、unreliable-side=117，并新增
+  vector-infill=90、image-hole-fill=201；GPU 阶段失败仍触发现有滤镜回滚。
+- 新增快速横移、2px 细栅栏、固定字幕、运动模糊、重复切镜五类匿名连续压力
+  样本；与真人面部、动画渐变、暗场共 16 组 off/on 实窗均为 24/48fps、总掉帧
+  0/0、音视频停滞 0/0、LUID `00000000:00017093`。
+- 固定奇数帧未见脸部/动画/暗场回归、细线断裂、字幕漂移或跨切镜混合；一次
+  off 组 child HWND `0xc0000005` 启动崩溃未稳定复现，仍作为产品启用 blocker。
+- 产品 UI、默认 MediaKit、Windows 后端选择、插件 ABI v1、filtered queue、
+  当前 index、来源队列、返回状态和用户数据不变。
+- 完整证据见 `docs/qa/nvofa_vapoursynth_interpolation_20260728.md`。
+
 ## 2026-07-28 NVOFA 同 LUID D3D11 Compute 合成
 
 - child HWND 通过 DXGI 选择唯一 NVIDIA D3D11 adapter，mpv、CUDA/NVOFA 和

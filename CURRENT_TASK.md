@@ -1,5 +1,37 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 NVOFA 遮挡有效性与两级补洞
+
+- 参考 NVIDIA FRUC Programming Guide 的阶段顺序，把原先单段 Compute 扩展为
+  三段 QA 管线：低分辨率 flow-grid 前后向校验与局部矢量补洞、逐平面中点 warp
+  与遮挡有效性、只对低有效性像素执行的图像域 hole filling。它是仓库自研的开放
+  近似实现，不下载、不链接也不冒充 NVIDIA FRUC SDK。
+- 新增/扩展确定性 D3D11 探针，旧基线仍为 zero=128、motion=90、
+  unreliable-side=117；单个坏光流格经矢量补洞恢复为 90，高反差显露边界经
+  图像域补洞由中灰风险值修复为 201。三段任一步失败仍让整条 QA 滤镜回滚，
+  没有 CPU 静默慢路径。
+- 当前插件 SHA-256
+  `aaea83ae158818755b1ea7846a7363f3b583c8a68f6c87f6c22ea5a0fc986f31`
+  下，真人面部、动画渐变、暗场六组，以及快速横移、2px 细栅栏、固定字幕、
+  运动模糊、重复切镜十组，均为 off/on 24/48fps、总掉帧 0/0、音视频停滞
+  0/0，并命中 RTX 4070 SUPER LUID `00000000:00017093`。
+- 固定奇数帧人工 A/B 未发现新增五官撕裂、动画翼缘暗边、暗场亮斑、细线断裂或
+  字幕笔画漂移；切镜 off/on SSIM 为 0.999906，没有跨场景混合。运动模糊样本
+  本身含五帧曝光，单帧不能证明产品级稳定收益，因此产品入口继续关闭。
+- A/B schema 5 可由清单驱动匿名压力片源，明确区分“运行时门禁通过”和“产品
+  可启用”。mpv 未提供 decoder/output 分项掉帧时保留 `null`，不再把不可用
+  冒充 0；真实 `totalDroppedFrames=0` 仍是强制门禁。
+- 连续压力首轮在尚未启用插件的 off 组出现一次 child HWND 原生宿主
+  `0xc0000005` 启动崩溃；同条件最小复现与最终 16 组均通过，但该生命周期偶发
+  问题仍阻止产品开放。下一步应做多轮启动/退出与快速切换 soak，并继续去除
+  VapourSynth 软件帧、CUDA 光流回读和最终平面读回。
+- 默认 MediaKit、Windows 后端选择、产品 UI、插件 ABI v1、filtered queue、
+  SQLite、标签、缓存队列和用户数据均未改变；QA 插件、R78 与 NVIDIA 文件仍
+  无 install、无 bundle。
+- `flutter analyze`、297 项全量测试（另 3 项按既有条件跳过）、Windows Debug
+  build、三段 D3D11/真实帧探针和 PowerShell 语法均通过；正式 Debug bundle
+  48 个文件中未发现 NVOFA、CUDA、VapourSynth、VSScript 或 Optical Flow 文件。
+
 ## 2026-07-28 NVOFA cost 与前后向一致性保护
 
 - NVOFA 会话现在显式请求前向/后向 `UINT8` cost，并把两侧 cost 与 S10.5 光流

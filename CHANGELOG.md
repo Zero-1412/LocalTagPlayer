@@ -1,5 +1,25 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · NVOFA 增加遮挡有效性与两级补洞
+
+- D3D11 Compute 从单段 warp 扩展为三段：flow-grid 前后向校验/局部矢量补洞、
+  保守双向 warp/遮挡有效性、低有效性像素的图像域 hole filling。任一步失败
+  仍撤销 QA 滤镜，不静默回退 CPU。
+- 确定性探针保留 zero=128、motion=90、unreliable-side=117，并新增
+  vector-infill=90、image-hole-fill=201；前置脚本必须同时匹配新标记。
+- 新增匿名 1080P24 连续压力样本生成器；A/B runner schema 5 支持样本清单、
+  记录样本策略/质量焦点，并明确运行时通过不等于产品可启用。分项掉帧不可用时
+  记录 `null`，不伪造为 0。
+- 三类自然片源六组和快速横移、细栅栏、字幕、运动模糊、切镜十组均为
+  24→48fps、总掉帧 0、音视频停滞 0、同一 RTX 4070 SUPER LUID；固定帧视觉
+  复核未发现此前动画暗边或新增明显伪影。
+- 压力首轮记录到一次 off 组 child HWND `0xc0000005` 启动崩溃；同条件复现和
+  最终全部分组通过，但产品入口继续关闭，后续必须补多轮生命周期 soak。
+- 插件仍 QA-only、无 install、无 bundle；默认 MediaKit、Windows 后端选择、
+  产品 UI、插件 ABI v1、filtered queue、SQLite、标签、缓存和用户数据不变。
+- `flutter analyze`、297 项全量测试（另 3 项跳过）、Windows Debug build、
+  三段 D3D11/真实帧探针和正式 bundle 厂商文件审计均通过。
+
 ## 2026-07-28 · NVOFA 增加保守的一致性保护
 
 - NVOFA 前向/后向执行新增 `UINT8` 硬件 cost 输出；同 LUID D3D11 Compute

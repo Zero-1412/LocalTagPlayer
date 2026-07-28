@@ -388,6 +388,9 @@ void main() {
     final nvofaMotionAb = File(
       'tool/run_nvofa_motion_ab.ps1',
     ).readAsStringSync();
+    final nvofaMotionStress = File(
+      'tool/generate_nvofa_motion_stress_samples.ps1',
+    ).readAsStringSync();
     final nativeBuild =
         File('windows/native_player/CMakeLists.txt').readAsStringSync();
     final runtime = File(
@@ -549,12 +552,21 @@ void main() {
     expect(nvofaD3d11Warp, contains('DXGI_FORMAT_R16G16_SINT'));
     expect(nvofaD3d11Warp, contains('DXGI_FORMAT_R8_UINT'));
     expect(nvofaD3d11Warp, contains('DXGI_FORMAT_R32_FLOAT'));
+    expect(
+      nvofaD3d11Warp,
+      contains('DXGI_FORMAT_R32G32B32A32_FLOAT'),
+    );
     expect(nvofaD3d11Warp, contains('FlowConfidence'));
-    expect(nvofaD3d11Warp, contains('backward_at_forward_target'));
+    expect(nvofaD3d11Warp, contains('ResolveForward'));
+    expect(nvofaD3d11Warp, contains('ResolveBackward'));
+    expect(nvofaD3d11Warp, contains('WarpCandidate'));
+    expect(nvofaD3d11Warp, contains('kHoleFillShader'));
     expect(
       nvofaD3d11WarpProbe,
-      contains('d3d11-warp-confidence=passed'),
+      contains('d3d11-warp-occlusion=passed'),
     );
+    expect(nvofaD3d11WarpProbe, contains('vector-infill='));
+    expect(nvofaD3d11WarpProbe, contains('image-hole-fill='));
     expect(
       nativeBuild,
       contains('ltp_d3d11_midpoint_warper_probe EXCLUDE_FROM_ALL'),
@@ -577,8 +589,22 @@ void main() {
       nvofaInterpolationProbe,
       contains('consistency-protected=passed'),
     );
+    expect(
+      nvofaInterpolationProbe,
+      contains('image-hole-fill=201'),
+    );
     expect(nvofaMotionAb, contains('plugin-sha256.txt'));
     expect(nvofaMotionAb, contains('pluginSha256 = \$pluginHash'));
+    expect(nvofaMotionAb, contains('CaseManifest'));
+    expect(nvofaMotionAb, contains('allRuntimeGatesPassed'));
+    expect(nvofaMotionAb, contains('productEnablement'));
+    // 连续压力样本必须覆盖五类已知风险，且只生成到本机 QA 目录。
+    expect(nvofaMotionStress, contains('"fast-pan"'));
+    expect(nvofaMotionStress, contains('"fine-fence"'));
+    expect(nvofaMotionStress, contains('"subtitles"'));
+    expect(nvofaMotionStress, contains('"motion-blur"'));
+    expect(nvofaMotionStress, contains('"scene-cut"'));
+    expect(nvofaMotionStress, contains('.local/qa/nvofa-motion-stress'));
   });
 
   test('desktop startup centers size-only persisted window layouts', () {

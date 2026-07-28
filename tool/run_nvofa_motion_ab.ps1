@@ -4,6 +4,7 @@
   [ValidateRange(300, 1200)]
   [int]$VideoBitrateKbps = 650,
   [string]$OutputDirectory = ".local/qa/nvofa-motion-ab",
+  [string]$CaseManifest = "",
   [string]$Workspace = ""
 )
 
@@ -23,33 +24,73 @@ $plugin = Join-Path $workspace `
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 
 <#
- * 本机 NVOFA 插帧 A/B 只使用仓库生成的匿名自然片源。插件和 R78 均来自隔离
- * QA 路径；脚本不安装、不复制，也不把它们加入正式 Flutter bundle。
+ * 默认使用三类匿名自然片源；CaseManifest 可切换到隔离生成的连续运动压力集。
+ * 插件和 R78 均来自本机 QA 路径，不安装、不复制，也不进入正式 Flutter bundle。
 #>
-$cases = @(
-  [ordered]@{
-    name = "live-face"
-    category = "真人面部"
-    samplePath = Join-Path $sampleRoot "live-face-low-${VideoBitrateKbps}k.mp4"
-  },
-  [ordered]@{
-    name = "animation-gradient"
-    category = "动画渐变"
-    samplePath = Join-Path $sampleRoot "animation-gradient-low-${VideoBitrateKbps}k.mp4"
-  },
-  [ordered]@{
-    name = "dark-scene"
-    category = "暗场"
-    samplePath = Join-Path $sampleRoot "dark-scene-low-${VideoBitrateKbps}k.mp4"
+$samplePolicy = "isolated CC BY 3.0 natural low-bitrate clips"
+if ([string]::IsNullOrWhiteSpace($CaseManifest)) {
+  $cases = @(
+    [ordered]@{
+      name = "live-face"
+      category = "真人面部"
+      samplePath = Join-Path $sampleRoot "live-face-low-${VideoBitrateKbps}k.mp4"
+    },
+    [ordered]@{
+      name = "animation-gradient"
+      category = "动画渐变"
+      samplePath = Join-Path $sampleRoot "animation-gradient-low-${VideoBitrateKbps}k.mp4"
+    },
+    [ordered]@{
+      name = "dark-scene"
+      category = "暗场"
+      samplePath = Join-Path $sampleRoot "dark-scene-low-${VideoBitrateKbps}k.mp4"
+    }
+  )
+  if (@($cases |
+        Where-Object {
+          -not (Test-Path -LiteralPath $_.samplePath)
+        }).Count -gt 0) {
+    & (Join-Path $PSScriptRoot "run_natural_compression_quality_ab.ps1") `
+      -DurationSeconds $DurationSeconds `
+      -VideoBitrateKbps $VideoBitrateKbps `
+      -SkipPlayback
+    if ($LASTEXITCODE -ne 0) {
+      throw "自然低码率样本生成失败。"
+    }
   }
-)
-if (@($cases | Where-Object { -not (Test-Path -LiteralPath $_.samplePath) }).Count -gt 0) {
-  & (Join-Path $PSScriptRoot "run_natural_compression_quality_ab.ps1") `
-    -DurationSeconds $DurationSeconds `
-    -VideoBitrateKbps $VideoBitrateKbps `
-    -SkipPlayback
-  if ($LASTEXITCODE -ne 0) {
-    throw "自然低码率样本生成失败。"
+} else {
+  $manifestPath = if ([System.IO.Path]::IsPathRooted($CaseManifest)) {
+    $CaseManifest
+  } else {
+    Join-Path $workspace $CaseManifest
+  }
+  if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    throw "NVOFA A/B 样本清单不存在：$manifestPath"
+  }
+  $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 |
+    ConvertFrom-Json
+  $samplePolicy = [string]$manifest.samplePolicy
+  $manifestRoot = Split-Path -Parent $manifestPath
+  $cases = @($manifest.cases | ForEach-Object {
+      $path = [string]$_.samplePath
+      $resolvedPath = if ([System.IO.Path]::IsPathRooted($path)) {
+        $path
+      } else {
+        Join-Path $manifestRoot $path
+      }
+      [ordered]@{
+        name = [string]$_.name
+        category = [string]$_.category
+        qualityFocus = [string]$_.qualityFocus
+        samplePath = [System.IO.Path]::GetFullPath($resolvedPath)
+      }
+    })
+  if ($cases.Count -eq 0 -or
+      @($cases |
+        Where-Object {
+          -not (Test-Path -LiteralPath $_.samplePath -PathType Leaf)
+        }).Count -gt 0) {
+    throw "NVOFA A/B 样本清单为空或包含缺失文件。"
   }
 }
 
@@ -158,13 +199,26 @@ function Get-MotionSummary {
   $fpsLine = @($report.finalDiagnostics |
       Where-Object { $_ -like "mpv 估算视频 FPS:*" }) |
     Select-Object -First 1
+  $decoderDrops = @($samples |
+      ForEach-Object { $_.decoderDroppedFrames } |
+      Where-Object { $null -ne $_ })
+  $outputDrops = @($samples |
+      ForEach-Object { $_.outputDroppedFrames } |
+      Where-Object { $null -ne $_ })
   return [ordered]@{
     mode = $Mode
     estimatedFps = [double](($fpsLine -split ": ")[-1])
-    maxDecoderDroppedFrames = ($samples |
-        Measure-Object -Property decoderDroppedFrames -Maximum).Maximum
-    maxOutputDroppedFrames = ($samples |
-        Measure-Object -Property outputDroppedFrames -Maximum).Maximum
+    # 原生 mpv 某些构建不暴露分项计数；保留 null，不能把“不可用”伪装成 0。
+    maxDecoderDroppedFrames = if ($decoderDrops.Count -gt 0) {
+      ($decoderDrops | Measure-Object -Maximum).Maximum
+    } else {
+      $null
+    }
+    maxOutputDroppedFrames = if ($outputDrops.Count -gt 0) {
+      ($outputDrops | Measure-Object -Maximum).Maximum
+    } else {
+      $null
+    }
     maxTotalDroppedFrames = ($samples |
         Measure-Object -Property totalDroppedFrames -Maximum).Maximum
     videoStallSamples = @($samples |
@@ -183,9 +237,21 @@ $caseSummaries = foreach ($case in $cases) {
   $on = Get-MotionSummary -Case $case -Mode "nvofa-motion-on"
   $fpsGate = $off.estimatedFps -ge 23.5 -and $off.estimatedFps -le 24.5 -and
     $on.estimatedFps -ge 47.5
+  $decoderDropGate =
+    ($null -eq $off.maxDecoderDroppedFrames -and
+      $null -eq $on.maxDecoderDroppedFrames) -or
+    ($null -ne $off.maxDecoderDroppedFrames -and
+      $null -ne $on.maxDecoderDroppedFrames -and
+      $on.maxDecoderDroppedFrames -le $off.maxDecoderDroppedFrames)
+  $outputDropGate =
+    ($null -eq $off.maxOutputDroppedFrames -and
+      $null -eq $on.maxOutputDroppedFrames) -or
+    ($null -ne $off.maxOutputDroppedFrames -and
+      $null -ne $on.maxOutputDroppedFrames -and
+      $on.maxOutputDroppedFrames -le $off.maxOutputDroppedFrames)
   $performanceGate =
-    $on.maxDecoderDroppedFrames -le $off.maxDecoderDroppedFrames -and
-    $on.maxOutputDroppedFrames -le $off.maxOutputDroppedFrames -and
+    $decoderDropGate -and
+    $outputDropGate -and
     $on.maxTotalDroppedFrames -le $off.maxTotalDroppedFrames -and
     $on.videoStallSamples -eq 0 -and
     $on.audioStallSamples -eq 0
@@ -198,7 +264,7 @@ $caseSummaries = foreach ($case in $cases) {
       "windows-native-mpv-selected-d3d11-adapter" -and
     -not [string]::IsNullOrWhiteSpace($off.activeAdapterLuid) -and
     $off.activeAdapterLuid -eq $on.activeAdapterLuid
-  [ordered]@{
+  $caseSummary = [ordered]@{
     name = $case.name
     category = $case.category
     off = $off
@@ -208,16 +274,25 @@ $caseSummaries = foreach ($case in $cases) {
     adapterLuidGatePassed = $adapterGate
     passed = $fpsGate -and $performanceGate -and $adapterGate
   }
+  if (-not [string]::IsNullOrWhiteSpace($case.qualityFocus)) {
+    $caseSummary["qualityFocus"] = $case.qualityFocus
+  }
+  $caseSummary
 }
 
 $summary = [ordered]@{
-  schemaVersion = 4
+  schemaVersion = 5
   generatedAt = (Get-Date).ToUniversalTime().ToString("o")
   runtimePolicy = "local-only VapourSynth R78 and NVOFA plugin; no install"
+  samplePolicy = $samplePolicy
   pluginSha256 = $pluginHash
   interpolationPolicy =
-    "24fps to 48fps with exact D3D11/CUDA LUID, forward/backward NVOFA cost, average-dominant consistency protection, and scene-cut protection"
+    "24fps to 48fps with exact D3D11/CUDA LUID, forward/backward validation, local flow infill, image-domain hole fill, conservative blending, and scene-cut protection"
+  productEnablement =
+    "blocked; runtime gates do not replace multi-frame visual review"
   cases = @($caseSummaries)
+  allRuntimeGatesPassed =
+    @($caseSummaries | Where-Object { -not $_.passed }).Count -eq 0
   allGatesPassed =
     @($caseSummaries | Where-Object { -not $_.passed }).Count -eq 0
 }
@@ -226,5 +301,5 @@ $summary | ConvertTo-Json -Depth 12 |
   Set-Content -LiteralPath $summaryPath -Encoding UTF8
 Write-Host "NVOFA motion A/B summary: $summaryPath"
 if (-not $summary.allGatesPassed) {
-  throw "至少一个自然片源的 NVOFA 帧率或性能门禁未通过。"
+  throw "至少一个 NVOFA A/B 片源的帧率或性能门禁未通过。"
 }

@@ -99,8 +99,8 @@ Copy-Item -LiteralPath $mpvRuntime -Destination $probeMpvRuntime -Force
 $warperResult = & $warperProbe
 if ($LASTEXITCODE -ne 0 -or
     (@($warperResult) -join "`n") -notmatch
-      "d3d11-warp-confidence=passed") {
-  throw "D3D11 confidence warp probe failed.`n$warperResult"
+      "d3d11-warp-occlusion=passed.*vector-infill=90.*image-hole-fill=201") {
+  throw "D3D11 occlusion and hole-fill probe failed.`n$warperResult"
 }
 $warperResult
 

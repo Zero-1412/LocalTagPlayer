@@ -38,7 +38,7 @@ bool WarpCase(
 }  // namespace
 
 /**
- * 验证 D3D11 shader 的方向、等权融合及 cost/一致性保守修正。
+ * 验证 D3D11 Shader 的方向、保守融合、矢量补洞及图像域补洞。
  *
  * 该探针只运行仓库自己的 Compute 代码，不加载或分发 NVIDIA SDK DLL。
  */
@@ -129,10 +129,87 @@ int main() {
     return 7;
   }
 
-  std::cout << "d3d11-warp-confidence=passed"
+  // 单个光流格同时被高 cost 标记为无效时，应从周围一致向量补全，
+  // 而不是让局部坏向量破坏线性运动的中点亮度。
+  for (int y = 0; y < kHeight; ++y) {
+    for (int x = 0; x < kWidth; ++x) {
+      first[y * kWidth + x] = static_cast<std::uint8_t>(x * 3);
+      const int source_x = x < 4 ? 0 : x - 4;
+      second[y * kWidth + x] =
+          static_cast<std::uint8_t>(source_x * 3);
+    }
+  }
+  std::fill(forward.begin(), forward.end(), NV_OF_FLOW_VECTOR{});
+  std::fill(backward.begin(), backward.end(), NV_OF_FLOW_VECTOR{});
+  for (auto& value : forward) value.flowx = 4 * 32;
+  for (auto& value : backward) value.flowx = -4 * 32;
+  std::fill(
+      forward_cost.begin(), forward_cost.end(),
+      static_cast<std::uint8_t>(0));
+  std::fill(
+      backward_cost.begin(), backward_cost.end(),
+      static_cast<std::uint8_t>(0));
+  const std::size_t damaged_flow =
+      static_cast<std::size_t>(4) * kFlowWidth + 8;
+  forward[damaged_flow] = {};
+  backward[damaged_flow] = {};
+  forward_cost[damaged_flow] = 255;
+  backward_cost[damaged_flow] = 255;
+  if (!WarpCase(
+          &warper, first, second, forward, backward,
+          forward_cost, backward_cost, &output) ||
+      output[16 * kWidth + 32] != 90) {
+    std::cerr << "vector-infill-failed="
+              << static_cast<int>(output.empty()
+                                      ? 0
+                                      : output[16 * kWidth + 32])
+              << " error=" << warper.error() << "\n";
+    return 8;
+  }
+  const int vector_infill = output[16 * kWidth + 32];
+
+  // 让中心格保持“尚可但不够可靠”的一致向量，使它不触发矢量补洞；
+  // 高反差遮挡边界随后只能由图像域阶段从邻近有效像素修复。
+  for (int y = 0; y < kHeight; ++y) {
+    for (int x = 0; x < kWidth; ++x) {
+      first[y * kWidth + x] = x < 32 ? 32 : 224;
+      second[y * kWidth + x] = x < 36 ? 32 : 224;
+    }
+  }
+  std::fill(forward.begin(), forward.end(), NV_OF_FLOW_VECTOR{});
+  std::fill(backward.begin(), backward.end(), NV_OF_FLOW_VECTOR{});
+  for (auto& value : forward) value.flowx = 4 * 32;
+  for (auto& value : backward) value.flowx = -4 * 32;
+  std::fill(
+      forward_cost.begin(), forward_cost.end(),
+      static_cast<std::uint8_t>(0));
+  std::fill(
+      backward_cost.begin(), backward_cost.end(),
+      static_cast<std::uint8_t>(0));
+  forward[damaged_flow] = {};
+  backward[damaged_flow] = {};
+  forward_cost[damaged_flow] = 200;
+  backward_cost[damaged_flow] = 200;
+  if (!WarpCase(
+          &warper, first, second, forward, backward,
+          forward_cost, backward_cost, &output)) {
+    std::cerr << "image-hole-fill-warp-failed="
+              << warper.error() << "\n";
+    return 9;
+  }
+  const int image_hole_fill = output[16 * kWidth + 34];
+  if (image_hole_fill < 190) {
+    std::cerr << "image-hole-fill-failed="
+              << image_hole_fill << "\n";
+    return 10;
+  }
+
+  std::cout << "d3d11-warp-occlusion=passed"
             << " zero-blend=" << zero_blend
             << " consistent-motion=" << consistent_motion
             << " unreliable-side=" << unreliable_side
+            << " vector-infill=" << vector_infill
+            << " image-hole-fill=" << image_hole_fill
             << " luid=" << adapter.luid << "\n";
   return 0;
 }

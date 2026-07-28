@@ -1,5 +1,20 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.87` 在 QA-only NVOFA 原型内增加三段同 LUID
+D3D11 Compute：第一段以双向 cost 和 forward-backward residual 生成稠密 flow，
+对低置信度 flow-grid 单元从局部一致邻域补全；第二段保持 85% 等权的保守中点
+warp，并把低 flow 置信度、两侧主导差和光度分歧合成为遮挡有效性；第三段只对
+低有效性像素从 4px 邻域执行图像域 hole filling。该结构对应 NVIDIA 公布的
+“双向校验 → 无效矢量补全 → 插值 → 图像域补洞”阶段，但实现为仓库自己的开放
+近似，不使用或分发 FRUC SDK。确定性探针锁定 128/90/117 旧基线、矢量补洞 90
+和图像补洞 201。三类自然片源六组与五类连续压力片十组均为 24→48fps、0 总
+掉帧、0 音视频停滞及同一 LUID `00000000:00017093`；视觉复核未发现新增脸部
+撕裂、动画暗边、暗场污染、细线断裂、字幕漂移或跨切镜混合。一次 off 组
+child-HWND `0xc0000005` 启动崩溃虽未复现，仍作为产品启用 blocker。整链继续
+包含 VapourSynth 软件帧、CUDA 光流回读、D3D11 上传和最终读回，因此不是
+non-copy FRUC。产品入口、默认后端、插件 ABI v1、filtered queue、SQLite、
+标签、缓存队列与用户数据不变。
+
 `Architecture Baseline 0.5.86` 在同 LUID NVOFA + D3D11 Compute 原型中增加
 硬件 cost 与前后向一致性保护，但明确拒绝把“置信度加权”冒充完整遮挡处理。
 NVOFA 的 A→B/B→A 两次 execute 都请求 `UINT8` cost；shader 以
