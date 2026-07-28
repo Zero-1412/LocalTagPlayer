@@ -1,5 +1,18 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-29 · 增加同实例 libmpv 滤镜事务
+
+- 自适应 CPU 滤镜和 NVIDIA 联合滤镜改由 `PlayerService` 的同实例事务提交：
+  写前快照、写后读回，失败时恢复旧属性并验证，不创建第二个 NativePlayer。
+- 读回比较支持 libmpv 的数值小数与 lavfi 长度前缀规范化，避免真实成功写入被
+  字符串格式差异误判；真正的节点或参数差异仍会触发回滚。
+- 回滚先关闭去色带主开关，再恢复参数与 `vf`，最后恢复旧开关，避免半套配置。
+- 播放诊断新增滤镜事务序号、结果、验证数、不一致属性名和回滚状态，快照不包含
+  属性值或本地路径。
+- focused tests、静态分析、Windows Debug build 和真实 MediaKit/libmpv Texture
+  integration 通过；真实 `deblock + deband` 会话保持 D3D11VA 硬解与持续播放。
+- SQLite schema、标签过滤、filtered queue、缓存队列和用户数据未改变。
+
 ## 2026-07-29 · 完善 MediaKit 播放遥测
 
 - 增加可选的播放后端遥测边界，按媒体打开代次记录首帧耗时与证据、路径无关错误、

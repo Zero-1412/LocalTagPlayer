@@ -456,6 +456,18 @@ class PlayerAdaptiveQualityEnhancer {
           'deband': 'yes',
       };
       try {
+        final transaction = backend is PlayerFilterTransactionBoundary
+            ? backend as PlayerFilterTransactionBoundary
+            : null;
+        if (transaction != null) {
+          await transaction.applyFilterProperties(
+            label: nvidiaVideoEnhancementEnabled || nvidiaVideoHdrEnabled
+                ? 'nvidia-filter-snapshot'
+                : 'cpu-filter-snapshot',
+            properties: properties,
+          );
+          return;
+        }
         final batch = backend is PlayerPropertyBatchBoundary
             ? backend as PlayerPropertyBatchBoundary
             : null;

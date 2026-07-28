@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/models/player_filter_transaction.dart';
 import 'package:media_kit/media_kit.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -27,7 +28,8 @@ void main() {
         hwdec: 'd3d11va-copy',
         enableHardwareAcceleration: true,
       );
-      addTearDown(backend.dispose);
+      final service = PlayerService(backend: backend);
+      addTearDown(service.dispose);
 
       // 必须把正式视频表面挂入 Widget 树；只创建 VideoController 会得到白色测试窗，
       // 也无法证明 Flutter Texture 与上层控件处于同一合成层。
@@ -101,6 +103,21 @@ void main() {
       );
       expect(backend.telemetry.failedOpenCount, 0);
 
+      // 正式滤镜协调器必须通过同一个 PlayerService/NativePlayer 提交，并逐项读回。
+      await PlayerAdaptiveQualityEnhancer.apply(
+        backend: service,
+        level: PlayerAdaptiveQualityLevel.deblock,
+      );
+      expect(
+        service.filterTransaction.phase,
+        PlayerFilterTransactionPhase.applied,
+        reason: 'mismatches=${service.filterTransaction.mismatchedProperties} '
+            'failure=${service.filterTransaction.failureCode}',
+      );
+      expect(service.filterTransaction.rollbackAttempted, isFalse);
+      expect(await backend.getProperty('vf'), contains('deblock='));
+      expect(await backend.getProperty('deband'), 'yes');
+
       final before = backend.state.position;
       await tester.pump(const Duration(seconds: 1));
       expect(backend.state.position, greaterThan(before));
@@ -108,7 +125,7 @@ void main() {
       // 先解除 Video/Texture 挂载，再等待 media_kit 完成原生播放器销毁。
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      await backend.dispose();
+      await service.dispose();
       expect(
         backend.telemetry.releasePhase,
         PlayerBackendReleasePhase.released,

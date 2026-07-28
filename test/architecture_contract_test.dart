@@ -394,6 +394,17 @@ void main() {
     expect(backend, contains('platform is NativePlayer'));
     expect(backend, contains('PlayerPropertyBatchBoundary'));
     expect(backend, contains('PlayerBackendTelemetryBoundary'));
+    expect(
+      File(
+        'lib/src/services/player/player_service.dart',
+      ).readAsStringSync(),
+      allOf(
+        contains('PlayerFilterTransactionBoundary'),
+        contains('_restoreFilterProperties(previousValues)'),
+        isNot(contains('NativePlayer(')),
+      ),
+      reason: '滤镜验证和回滚必须复用当前后端，不能创建第二个 NativePlayer',
+    );
     expect(backend, contains('waitForInitialization: waitForInitialization'));
     expect(backend, contains('waitUntilFirstFrameRendered'));
     expect(backend, contains("'estimated-frame-number'"));

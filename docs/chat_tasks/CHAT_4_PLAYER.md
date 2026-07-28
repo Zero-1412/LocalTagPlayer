@@ -1,3 +1,15 @@
+## 2026-07-29 同实例 libmpv 滤镜事务
+
+- `PlayerFilterTransactionBoundary` 由当前 `PlayerService` 实现，只访问现有后端；
+  写前快照、提交、读回、回滚和诊断都不创建第二个 Player/NativePlayer/Texture。
+- 自适应 CPU `lavfi` 与 NVIDIA `d3d11vpp` 完整快照统一进入事务；libmpv 的数值
+  小数和 `lavfi=graph=%N%…` 读回格式按严格语义归一化。
+- 真正不一致时先关闭 `deband`，恢复参数与 `vf`，最后恢复旧主开关并二次读回；
+  失败分类和不一致属性名进入诊断，但属性值与媒体路径不进入快照。
+- 真实 MediaKit Texture 会话确认 `deblock + deband` 应用成功、D3D11VA 硬解和
+  播放头继续推进；注入 `vf` 拒绝的单测确认旧滤镜可完整恢复。
+- filtered queue、当前 index、来源队列、返回路径、标签、缓存和用户数据未改变。
+
 ## 2026-07-29 MediaKit 首帧、错误、解码器与释放遥测
 
 - `PlayerBackendTelemetryBoundary` 作为可选后端能力接入 `PlayerService`，按打开代次

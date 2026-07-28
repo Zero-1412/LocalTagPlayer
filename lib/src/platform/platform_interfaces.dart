@@ -7,6 +7,7 @@ import '../models/external_media_tools_state.dart';
 import '../models/media_details.dart';
 import '../models/platform_models.dart';
 import '../models/player_backend_telemetry.dart';
+import '../models/player_filter_transaction.dart';
 import '../models/player_gpu_capabilities.dart';
 import '../models/player_motion_interpolation_capability.dart';
 import '../models/video_item.dart';
@@ -55,6 +56,27 @@ abstract interface class PlayerPropertyBatchBoundary {
    * 处理剩余项，避免半套画质或同步配置阻断媒体打开。
    */
   Future<void> setProperties(Map<String, String> properties);
+}
+
+/**
+ * 在同一个播放器实例上提交滤镜快照，并在读回不一致时恢复旧值的可选边界。
+ *
+ * 该边界不拥有 Player 或 NativePlayer；实现只能使用当前 [PlayerRuntimeAccess]，
+ * 禁止为诊断、验证或回滚创建第二条播放/解码链。
+ */
+abstract interface class PlayerFilterTransactionBoundary {
+  /** 最近一次滤镜事务的路径无关诊断快照。 */
+  PlayerFilterTransactionSnapshot get filterTransaction;
+
+  /**
+   * 提交并验证一组完整滤镜属性。
+   *
+   * [label] 必须是代码内固定用途标签；[properties] 的值不进入诊断快照。
+   */
+  Future<PlayerFilterTransactionSnapshot> applyFilterProperties({
+    required String label,
+    required Map<String, String> properties,
+  });
 }
 
 /**

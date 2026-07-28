@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../core/playback_settings.dart';
 import '../../models/player_backend_telemetry.dart';
+import '../../models/player_filter_transaction.dart';
 import '../../models/player_gpu_capabilities.dart';
 import '../../models/player_motion_interpolation_capability.dart';
 import '../../platform/platform_interfaces.dart';
@@ -23,6 +24,7 @@ class PlayerService
     implements
         PlayerRuntimeAccess,
         PlayerBackendTelemetryBoundary,
+        PlayerFilterTransactionBoundary,
         PlayerPropertyBatchBoundary,
         PlayerGpuRenderBoundary,
         PlayerOverlaySurfaceBoundary,
@@ -32,6 +34,26 @@ class PlayerService
 
   /** 具体引擎只在服务内部持有，页面和业务控制器不可取得该引用。 */
   final PlayerBackend _backend;
+
+  /** 当前服务内最近一次滤镜属性事务的只读诊断快照。 */
+  PlayerFilterTransactionSnapshot _filterTransaction =
+      const PlayerFilterTransactionSnapshot(
+    supported: true,
+    sequence: 0,
+    label: 'idle',
+    phase: PlayerFilterTransactionPhase.idle,
+    requestedPropertyCount: 0,
+    verifiedPropertyCount: 0,
+    mismatchedProperties: <String>[],
+    rollbackAttempted: false,
+    rollbackVerified: false,
+    failureCode: null,
+    completedAt: null,
+    totalDuration: null,
+  );
+
+  /** 当前服务内递增的匿名滤镜事务序号。 */
+  var _filterTransactionSequence = 0;
 
   @override
   PlayerBackendState get state => _backend.state;
@@ -117,6 +139,180 @@ class PlayerService
     }
     for (final entry in properties.entries) {
       await _backend.setProperty(entry.key, entry.value);
+    }
+  }
+
+  @override
+  PlayerFilterTransactionSnapshot get filterTransaction => _filterTransaction;
+
+  /**
+   * 在当前后端实例上完成滤镜写前快照、提交、读回验证与失败回滚。
+   *
+   * 该方法只调用 [_backend]，不会创建第二个 Player、NativePlayer 或 Texture。
+   * `deband` 回滚时先关闭主开关，恢复其它参数与 `vf` 后再恢复旧开关，避免短暂运行
+   * 半套去色带参数。
+   */
+  @override
+  Future<PlayerFilterTransactionSnapshot> applyFilterProperties({
+    required String label,
+    required Map<String, String> properties,
+  }) async {
+    final sequence = ++_filterTransactionSequence;
+    final watch = Stopwatch()..start();
+    final previousValues = <String, String>{};
+    final unavailablePrevious = <String>[];
+    for (final property in properties.keys) {
+      final value = _normalizePropertyReadback(
+        await _backend.getProperty(property),
+      );
+      if (value == null) {
+        unavailablePrevious.add(property);
+      } else {
+        previousValues[property] = value;
+      }
+    }
+
+    var failureCode = 'filter_readback_mismatch';
+    var writeFailed = false;
+    try {
+      await setProperties(properties);
+    } catch (_) {
+      writeFailed = true;
+      failureCode = 'filter_write_failed';
+    }
+    final mismatches = writeFailed
+        ? properties.keys.toList(growable: false)
+        : await _mismatchedProperties(properties);
+    if (mismatches.isEmpty) {
+      watch.stop();
+      return _filterTransaction = PlayerFilterTransactionSnapshot(
+        supported: true,
+        sequence: sequence,
+        label: label,
+        phase: PlayerFilterTransactionPhase.applied,
+        requestedPropertyCount: properties.length,
+        verifiedPropertyCount: properties.length,
+        mismatchedProperties: const <String>[],
+        rollbackAttempted: false,
+        rollbackVerified: false,
+        failureCode: null,
+        completedAt: DateTime.now(),
+        totalDuration: watch.elapsed,
+      );
+    }
+
+    var rollbackWriteFailed = false;
+    try {
+      await _restoreFilterProperties(previousValues);
+    } catch (_) {
+      rollbackWriteFailed = true;
+    }
+    final rollbackMismatches = rollbackWriteFailed
+        ? previousValues.keys.toList(growable: false)
+        : await _mismatchedProperties(previousValues);
+    final rollbackVerified =
+        unavailablePrevious.isEmpty && rollbackMismatches.isEmpty;
+    if (unavailablePrevious.isNotEmpty) {
+      failureCode = '${failureCode}_snapshot_incomplete';
+    } else if (!rollbackVerified) {
+      failureCode = '${failureCode}_rollback_failed';
+    }
+    watch.stop();
+    return _filterTransaction = PlayerFilterTransactionSnapshot(
+      supported: true,
+      sequence: sequence,
+      label: label,
+      phase: rollbackVerified
+          ? PlayerFilterTransactionPhase.rolledBack
+          : PlayerFilterTransactionPhase.rollbackFailed,
+      requestedPropertyCount: properties.length,
+      verifiedPropertyCount: properties.length - mismatches.length,
+      mismatchedProperties: List<String>.unmodifiable(mismatches),
+      rollbackAttempted: true,
+      rollbackVerified: rollbackVerified,
+      failureCode: failureCode,
+      completedAt: DateTime.now(),
+      totalDuration: watch.elapsed,
+    );
+  }
+
+  /** 把 PlayerBackend 的占位读回转换为可安全写回的真实空值。 */
+  String? _normalizePropertyReadback(String value) {
+    final normalized = value.trim();
+    if (normalized == 'unavailable') {
+      return null;
+    }
+    return normalized == 'empty' ? '' : normalized;
+  }
+
+  /** 返回与目标快照不一致的属性名，不把属性值带入诊断。 */
+  Future<List<String>> _mismatchedProperties(
+    Map<String, String> expected,
+  ) async {
+    final mismatches = <String>[];
+    for (final entry in expected.entries) {
+      final actual = _normalizePropertyReadback(
+        await _backend.getProperty(entry.key),
+      );
+      if (!_propertyValuesMatch(entry.key, entry.value.trim(), actual)) {
+        mismatches.add(entry.key);
+      }
+    }
+    return mismatches;
+  }
+
+  /**
+   * 按 mpv 的规范化读回语义比较属性。
+   *
+   * 数值属性可能补齐六位小数；`lavfi=[graph]` 会读回为带长度前缀的
+   * `lavfi=graph=%N%graph`。这里只做等价归一化，不放宽滤镜节点或参数内容。
+   */
+  bool _propertyValuesMatch(
+    String property,
+    String expected,
+    String? actual,
+  ) {
+    if (actual == null) {
+      return false;
+    }
+    if (property == 'vf') {
+      return _normalizeVideoFilterValue(expected) ==
+          _normalizeVideoFilterValue(actual);
+    }
+    final expectedNumber = double.tryParse(expected);
+    final actualNumber = double.tryParse(actual);
+    if (expectedNumber != null && actualNumber != null) {
+      return (expectedNumber - actualNumber).abs() < 0.000001;
+    }
+    return expected == actual;
+  }
+
+  /** 把 libmpv 的 lavfi 长度前缀读回恢复为调用方提交的方括号形式。 */
+  String _normalizeVideoFilterValue(String value) {
+    if (value.startsWith('lavfi=[') && value.endsWith(']')) {
+      return value.substring(7, value.length - 1);
+    }
+    final match = RegExp(r'^lavfi=graph=%\d+%(.*)$').firstMatch(value);
+    return match?.group(1) ?? value;
+  }
+
+  /** 以去色带主开关最后恢复的顺序写回旧滤镜快照。 */
+  Future<void> _restoreFilterProperties(
+    Map<String, String> previousValues,
+  ) async {
+    final previousDeband = previousValues['deband'];
+    if (previousDeband != null) {
+      await setProperties(const <String, String>{'deband': 'no'});
+    }
+    final body = <String, String>{
+      for (final entry in previousValues.entries)
+        if (entry.key != 'deband') entry.key: entry.value,
+    };
+    if (body.isNotEmpty) {
+      await setProperties(body);
+    }
+    if (previousDeband != null) {
+      await setProperties(<String, String>{'deband': previousDeband});
     }
   }
 

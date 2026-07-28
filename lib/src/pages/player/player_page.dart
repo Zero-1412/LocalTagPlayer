@@ -4338,6 +4338,7 @@ class PlayerPageState extends State<PlayerPage> {
     final frameDurationMs =
         estimatedFps == null || estimatedFps <= 0 ? null : 1000 / estimatedFps;
     final backendTelemetry = _playerService.telemetry;
+    final filterTransaction = _playerService.filterTransaction;
     final lines = <String>[
       '\u5f53\u524d\u89c6\u9891: ${_currentItem.title}',
       '后端遥测: ${backendTelemetry.backendName}',
@@ -4351,6 +4352,15 @@ class PlayerPageState extends State<PlayerPage> {
       '连续切换失败率: '
           '${(backendTelemetry.openFailureRate * 100).toStringAsFixed(2)}%',
       '资源释放阶段: ${backendTelemetry.releasePhase.name}',
+      '滤镜事务: #${filterTransaction.sequence} · ${filterTransaction.label}',
+      '滤镜事务结果: ${filterTransaction.phase.name} · '
+          '${filterTransaction.verifiedPropertyCount}/'
+          '${filterTransaction.requestedPropertyCount}',
+      '滤镜读回不一致: '
+          '${filterTransaction.mismatchedProperties.isEmpty ? '无' : filterTransaction.mismatchedProperties.join(',')}',
+      '滤镜事务回滚: '
+          '${filterTransaction.rollbackAttempted ? (filterTransaction.rollbackVerified ? '已验证' : '失败') : '未触发'}',
+      '滤镜事务错误: ${filterTransaction.failureCode ?? '无'}',
       '\u64ad\u653e\u4f4d\u7f6e: ${_formatDuration(after)} / ${_formatDuration(_playerService.state.duration)}',
       '\u64ad\u653e\u72b6\u6001: ${_playerService.state.playing ? '\u64ad\u653e\u4e2d' : '\u6682\u505c'}',
       '\u7f13\u51b2\u72b6\u6001: ${_playerService.state.buffering ? '\u7f13\u51b2\u4e2d' : '\u6b63\u5e38'}',

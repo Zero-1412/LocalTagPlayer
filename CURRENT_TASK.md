@@ -1,5 +1,27 @@
 # CURRENT_TASK.md
 
+## 2026-07-29 同实例 libmpv 滤镜验证、回滚与诊断
+
+- `PlayerService` 新增滤镜属性事务：写前捕获旧值、按完整快照写入、逐项读回，
+  不一致时恢复并再次验证；全程复用当前后端和同一个 `NativePlayer`。
+- libmpv 的数值小数格式与 `lavfi=graph=%N%…` 长度前缀按语义归一化，避免把实际
+  已接受的 `deblock` / `deband` 误判为失败；滤镜节点和参数仍要求严格一致。
+- 回滚顺序先关闭 `deband`，恢复旧参数与 `vf`，最后恢复旧主开关，避免失败路径
+  短暂运行半套去色带配置。
+- 自适应 CPU 滤镜与 NVIDIA 联合滤镜统一经过事务边界；诊断页显示序号、用途、
+  验证数、不一致属性名、回滚结果和稳定错误码，不记录属性值或媒体路径。
+- 24 项 focused tests、现有自适应滤镜测试、`flutter analyze`、Windows Debug
+  build 和真实 MediaKit/libmpv Texture integration 通过；真实会话确认
+  `deblock + deband` 写入、规范化读回、D3D11VA 硬解和播放推进同时成立。
+- Debug 真窗已完成媒体打开、播放推进和 filtered queue 布局复核。当前 Computer Use
+  坐标接口未能发送 secondary mouse button，因此新增诊断行仍需人工按“视频右键 →
+  诊断检查 → 详细指标下滚”补一张弹窗截图；此前同一弹窗容器的布局已通过。
+- 调试读回格式期间首轮集成宿主曾记录一次 `0xc0000005`，修正比较逻辑后同口径连续
+  两轮完整通过并正常释放。该偶发样本保留到 fvp A/B 的切换失败率记录中，不据此
+  宣称 libmpv 或 fvp 优劣。
+- SQLite、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列、用户设置
+  语义和用户数据未改变。
+
 ## 2026-07-29 MediaKit 首帧、错误、解码器与资源释放遥测
 
 - 新增可选 `PlayerBackendTelemetryBoundary`，按媒体打开代次记录首帧时间、证据、

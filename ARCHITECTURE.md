@@ -1,5 +1,20 @@
 ﻿# ARCHITECTURE.md
 
+## 同实例 libmpv 滤镜事务边界
+
+`Architecture Baseline 0.5.99` 在 `PlayerService` 内增加
+`PlayerFilterTransactionBoundary`。滤镜协调器仍只持有当前 Route 的
+`PlayerRuntimeAccess`；事务通过现有 `PlayerBackend` 访问同一个 MediaKit
+`Player` / `NativePlayer`，禁止为写前快照、读回验证、回滚或诊断创建第二实例。
+
+事务只覆盖完整视频滤镜快照：写入前读取旧属性，按既有 Map 顺序批量提交，写入后逐项
+读回。比较遵守 libmpv 规范化语义：数值允许等价的小数格式，`lavfi=[graph]` 与
+`lavfi=graph=%N%graph` 视为同一滤镜图，但滤镜节点和参数内容不能模糊匹配。
+
+读回不一致时先关闭 `deband`，再恢复旧参数和 `vf`，最后恢复旧主开关并再次验证。
+诊断快照只保存事务序号、受控用途标签、属性名、结果和耗时，不保存属性值，避免未来
+本地滤镜资源路径进入日志。原有自适应画质、暗场增强、NVIDIA 互斥和压力回滚策略不变。
+
 ## MediaKit 路径无关播放遥测边界
 
 `Architecture Baseline 0.5.98` 在既有 `PlayerBackend` 后增加可选的
