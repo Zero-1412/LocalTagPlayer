@@ -1,5 +1,27 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 用户选择 MediaKit / MPV 与 NVIDIA 自动增强
+
+- 设置页“播放”新增唯一的两态渲染器选择：`MediaKit 兼容渲染` 与
+  `MPV 原生渲染`。高影响切换必须确认，只影响下一次进入播放器，并提供撤销；
+  旧 `automatic` 设置迁移为 MPV，不再向用户显示平台自动选择。
+- Windows 在用户选择 MPV 且硬件解码开启时创建原生 child HWND / D3D11
+  后端；选择 MediaKit 时明确走兼容后端。非 Windows 或关闭硬解时仍安全回退
+  MediaKit，因为当前没有对应的原生 MPV 实现，界面会解释该限制。
+- 播放器齿轮已删除 NVIDIA VSR/HDR 两个手动开关。MPV 后端会在进入媒体后根据
+  活动 NVIDIA 适配器、原生 D3D11 请求能力、源尺寸、显示分辨率、HDR 信号与
+  10-bit 输出自动决定；MediaKit 不显示 MPV 专属 GPU 高质量缩放。
+- 原生桥新增 `video-params/w` / `video-params/h` 固定快照，解决自动策略此前
+  无法判断 1080P→4K 放大需求的问题；属性未就绪时归零，不沿用上一条视频。
+- 真人面部、动画渐变、暗场三类 650 kbps 1080P 实测均自动请求 VSR+HDR，
+  驱动回读均为 `active`，最大总掉帧 0、音视频停滞 0。设置页 Windows
+  integration test 完成真实下拉、确认、状态切换和两张截图，未见遮挡、溢出或
+  状态歧义。
+- 画质门禁报告新增 `playerBackend` 与 `rendererPreference`，后续 MediaKit /
+  MPV 结果分开统计。filtered queue、当前 index、返回状态、SQLite、标签、
+  缓存队列和用户数据保持不变。证据见
+  `docs/qa/player_backend_selection_nvidia_auto_20260728.md`。
+
 ## 2026-07-28 NVIDIA VSR/HDR 自动让路与激活判定
 
 - 两个产品入口保留：固定 mpv 的 `d3d11vpp` 已能实际调用 NVIDIA VSR 与

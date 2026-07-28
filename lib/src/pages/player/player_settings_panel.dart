@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/playback_settings.dart'
     show PlaybackSettings, PlayerCompressionEnhancementMode;
-import '../../services/player/player_nvidia_video_enhancement_experiment.dart';
 import '../../widgets/app_theme_tokens.dart';
 import 'player_playback_mode.dart';
 import 'player_video_aspect_mode.dart';
@@ -15,9 +14,9 @@ import 'player_video_aspect_mode.dart';
  * 显示桌面播放器设置浮层。
  *
  * 使用独立路由而不是把复杂列表塞入系统 Menu，避免 Windows 上菜单获得点击
- * 高亮但自定义内容未挂载。一级保留压缩画质增强、镜像、GPU 缩放、NVIDIA
- * 会话能力门禁与循环开关，二级只承担比例/倍速导航和离散快进档位；具体选项
- * 进入三级列表或滑杆，每次变更立即回传播放器。
+ * 高亮但自定义内容未挂载。一级只保留循环开关与“更多”入口，二级承担镜像、
+ * GPU 缩放、压缩增强、比例/倍速导航和离散快进档位；NVIDIA VSR/HDR 由
+ * Windows 播放会话自动协商，不再提供不可操作的手动开关。
  */
 Future<void> showPlayerSettingsDialog(
   BuildContext context, {
@@ -27,11 +26,8 @@ Future<void> showPlayerSettingsDialog(
   required PlayerVideoAspectMode videoAspectMode,
   required double playbackRate,
   required int seekStepSeconds,
+  required bool mpvEnhancementsAvailable,
   required bool videoSuperResolutionEnabled,
-  required bool nvidiaVideoEnhancementExperimentEnabled,
-  required bool nvidiaVideoHdrExperimentEnabled,
-  required PlayerNvidiaVideoEnhancementCapability
-      nvidiaVideoEnhancementCapability,
   required PlayerCompressionEnhancementMode compressionEnhancementMode,
   required List<double> playbackRates,
   required List<int> seekStepOptions,
@@ -41,8 +37,6 @@ Future<void> showPlayerSettingsDialog(
   required ValueChanged<double> onPlaybackRateChanged,
   required ValueChanged<int> onSeekStepChanged,
   required ValueChanged<bool> onVideoSuperResolutionChanged,
-  required ValueChanged<bool> onNvidiaVideoEnhancementExperimentChanged,
-  required ValueChanged<bool> onNvidiaVideoHdrExperimentChanged,
   required ValueChanged<PlayerCompressionEnhancementMode>
       onCompressionEnhancementModeChanged,
 }) async {
@@ -53,9 +47,6 @@ Future<void> showPlayerSettingsDialog(
   var localPlaybackRate = playbackRate;
   var localSeekStepSeconds = seekStepSeconds;
   var localVideoSuperResolutionEnabled = videoSuperResolutionEnabled;
-  var localNvidiaVideoEnhancementExperimentEnabled =
-      nvidiaVideoEnhancementExperimentEnabled;
-  var localNvidiaVideoHdrExperimentEnabled = nvidiaVideoHdrExperimentEnabled;
   var localCompressionEnhancementMode = compressionEnhancementMode;
   var currentPage = _PlayerSettingsPage.primary;
   await showGeneralDialog<void>(
@@ -179,40 +170,12 @@ Future<void> showPlayerSettingsDialog(
                                           key: const ValueKey(
                                             'player.settings.primary.page',
                                           ),
-                                          nvidiaVideoEnhancementExperimentEnabled:
-                                              localNvidiaVideoEnhancementExperimentEnabled,
-                                          nvidiaVideoEnhancementCapability:
-                                              nvidiaVideoEnhancementCapability,
-                                          nvidiaVideoHdrExperimentEnabled:
-                                              localNvidiaVideoHdrExperimentEnabled,
                                           playbackMode: localPlaybackMode,
                                           onPlaybackModeChanged: (mode) {
                                             setDialogState(
                                               () => localPlaybackMode = mode,
                                             );
                                             onPlaybackModeChanged(mode);
-                                          },
-                                          onNvidiaVideoEnhancementExperimentChanged:
-                                              (enabled) {
-                                            setDialogState(
-                                              () =>
-                                                  localNvidiaVideoEnhancementExperimentEnabled =
-                                                      enabled,
-                                            );
-                                            onNvidiaVideoEnhancementExperimentChanged(
-                                              enabled,
-                                            );
-                                          },
-                                          onNvidiaVideoHdrExperimentChanged:
-                                              (enabled) {
-                                            setDialogState(
-                                              () =>
-                                                  localNvidiaVideoHdrExperimentEnabled =
-                                                      enabled,
-                                            );
-                                            onNvidiaVideoHdrExperimentChanged(
-                                              enabled,
-                                            );
                                           },
                                           onShowAdvancedSettings: () =>
                                               setDialogState(
@@ -230,6 +193,8 @@ Future<void> showPlayerSettingsDialog(
                                           seekStepSeconds: localSeekStepSeconds,
                                           seekStepOptions: seekStepOptions,
                                           mirrorVideo: localMirrorVideo,
+                                          mpvEnhancementsAvailable:
+                                              mpvEnhancementsAvailable,
                                           videoSuperResolutionEnabled:
                                               localVideoSuperResolutionEnabled,
                                           compressionEnhancementMode:
@@ -411,39 +376,19 @@ extension on _PlayerSettingsPage {
 /**
  * 播放设置一级列表。
  *
- * 一级页只保留会话级 NVIDIA 画质能力、循环方式和“更多”入口，避免打开设置
- * 时呈现过多低频画面选项。循环开关互斥，关闭当前模式会回到顺序播放。
+ * 一级页只保留循环方式和“更多”入口。NVIDIA VSR/HDR 由 Windows 原生后端
+ * 自动协商；循环开关互斥，关闭当前模式会回到顺序播放。
  */
 class PlayerSettingsPrimaryList extends StatelessWidget {
   const PlayerSettingsPrimaryList({
     super.key,
-    required this.nvidiaVideoEnhancementExperimentEnabled,
-    required this.nvidiaVideoHdrExperimentEnabled,
-    required this.nvidiaVideoEnhancementCapability,
     required this.playbackMode,
-    required this.onNvidiaVideoEnhancementExperimentChanged,
-    required this.onNvidiaVideoHdrExperimentChanged,
     required this.onPlaybackModeChanged,
     required this.onShowAdvancedSettings,
   });
 
-  /** NVIDIA RTX 视频超分的会话状态；默认关闭且不会写入全局设置。 */
-  final bool nvidiaVideoEnhancementExperimentEnabled;
-
-  /** NVIDIA RTX Video HDR 的会话状态；仅处理已确认的 SDR 源。 */
-  final bool nvidiaVideoHdrExperimentEnabled;
-
-  /** 内嵌 mpv 对 `d3d11vpp` NVIDIA 模式的只读能力快照。 */
-  final PlayerNvidiaVideoEnhancementCapability nvidiaVideoEnhancementCapability;
-
   /** 当前队列播放方式，用于计算两个循环开关的互斥状态。 */
   final PlayerPlaybackMode playbackMode;
-
-  /** NVIDIA RTX 视频超分开关变化回调；可自动暂停 CPU 滤镜冲突。 */
-  final ValueChanged<bool> onNvidiaVideoEnhancementExperimentChanged;
-
-  /** NVIDIA RTX Video HDR 会话开关；可自动暂停 CPU 滤镜冲突。 */
-  final ValueChanged<bool> onNvidiaVideoHdrExperimentChanged;
 
   /** 循环方式变化回调。 */
   final ValueChanged<PlayerPlaybackMode> onPlaybackModeChanged;
@@ -458,28 +403,6 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _PlayerSettingsToggleRow(
-            key: const ValueKey(
-              'player.settings.nvidiaVideoEnhancementExperiment',
-            ),
-            label: 'NVIDIA RTX 视频超分',
-            subtitle: nvidiaVideoEnhancementCapability.helperText,
-            value: nvidiaVideoEnhancementExperimentEnabled,
-            onChanged: nvidiaVideoEnhancementCapability.canRequest
-                ? onNvidiaVideoEnhancementExperimentChanged
-                : null,
-          ),
-          _PlayerSettingsToggleRow(
-            key: const ValueKey(
-              'player.settings.nvidiaVideoHdrExperiment',
-            ),
-            label: 'NVIDIA RTX Video HDR',
-            subtitle: nvidiaVideoEnhancementCapability.hdrHelperText,
-            value: nvidiaVideoHdrExperimentEnabled,
-            onChanged: nvidiaVideoEnhancementCapability.canRequestHdr
-                ? onNvidiaVideoHdrExperimentChanged
-                : null,
-          ),
           _PlayerSettingsToggleRow(
             key: const ValueKey('player.settings.repeatOne'),
             label: '单曲循环',
@@ -634,6 +557,7 @@ class PlayerSettingsAdvancedList extends StatelessWidget {
     required this.seekStepSeconds,
     required this.seekStepOptions,
     required this.mirrorVideo,
+    required this.mpvEnhancementsAvailable,
     required this.videoSuperResolutionEnabled,
     required this.compressionEnhancementMode,
     required this.onMirrorVideoChanged,
@@ -658,6 +582,9 @@ class PlayerSettingsAdvancedList extends StatelessWidget {
 
   /** 是否仅水平翻转视频画面。 */
   final bool mirrorVideo;
+
+  /** 当前所选后端是否允许展示 MPV 专属强化。 */
+  final bool mpvEnhancementsAvailable;
 
   /** 是否使用仅在画面放大时运行的 libmpv GPU 高质量缩放；该能力不是 NVIDIA AI。 */
   final bool videoSuperResolutionEnabled;
@@ -696,13 +623,14 @@ class PlayerSettingsAdvancedList extends StatelessWidget {
             value: mirrorVideo,
             onChanged: onMirrorVideoChanged,
           ),
-          _PlayerSettingsToggleRow(
-            key: const ValueKey('player.settings.superResolution'),
-            label: 'GPU 高质量缩放（非 NVIDIA AI）',
-            subtitle: 'libmpv 缩放，仅在画面放大时生效',
-            value: videoSuperResolutionEnabled,
-            onChanged: onVideoSuperResolutionChanged,
-          ),
+          if (mpvEnhancementsAvailable)
+            _PlayerSettingsToggleRow(
+              key: const ValueKey('player.settings.superResolution'),
+              label: 'GPU 高质量缩放（非 NVIDIA AI）',
+              subtitle: 'MPV 缩放，仅在画面放大时生效',
+              value: videoSuperResolutionEnabled,
+              onChanged: onVideoSuperResolutionChanged,
+            ),
           _PlayerSettingsNavigationRow(
             key: const ValueKey('player.settings.compression.open'),
             label: '压缩画质增强',

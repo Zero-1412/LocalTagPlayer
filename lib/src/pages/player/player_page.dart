@@ -22,6 +22,7 @@ import '../../services/player/player_adaptive_quality.dart';
 import '../../services/player/player_hdr_mapping_experiment.dart';
 import '../../services/player/player_gpu_capability_detector.dart';
 import '../../services/player/player_memory_diagnostics.dart';
+import '../../services/player/player_nvidia_video_auto_policy.dart';
 import '../../services/player/player_nvidia_video_enhancement_experiment.dart';
 import '../../services/player/player_service.dart';
 import '../../services/player/player_video_super_resolution.dart';
@@ -951,9 +952,14 @@ class PlayerPageState extends State<PlayerPage> {
   late PlayerVideoOutputRange _videoOutputRange;
   /** 当前全局 GPU 高质量缩放开关；只影响 libmpv 渲染缩放器，不调用 NVIDIA AI。 */
   late bool _videoSuperResolutionEnabled;
-  /** NVIDIA 驱动视频增强实验只在当前会话内保存，避免能力未确认时污染全局设置。 */
+  /** 当前用户选择与硬解条件是否允许 MPV 专属画质强化实际生效。 */
+  bool get _mpvEnhancementsAvailable =>
+      _effectivePlaybackSettings.rendererPreference !=
+          PlayerRendererPreference.mediaKit &&
+      _effectivePlaybackSettings.hardwareDecodingEnabled;
+  /** 当前媒体是否已经由自动策略请求 NVIDIA RTX 视频超分。 */
   var _nvidiaVideoEnhancementExperimentEnabled = false;
-  /** NVIDIA RTX Video HDR 只在当前 SDR 媒体会话保存，默认关闭且不持久化。 */
+  /** 当前 SDR 媒体是否已经由自动策略请求 NVIDIA RTX Video HDR。 */
   var _nvidiaVideoHdrExperimentEnabled = false;
   /**
    * NVIDIA 独占 `vf` 时是否暂时挂起了当前媒体的 CPU 画质增强。
@@ -967,6 +973,8 @@ class PlayerPageState extends State<PlayerPage> {
   String? _nvidiaVideoEnhancementRollbackReason;
   /** NVIDIA 视频增强自动回滚时间，用于与诊断掉帧样本对齐。 */
   DateTime? _nvidiaVideoEnhancementRollbackAt;
+  /** 当前媒体的 NVIDIA 自动决策原因；不持久化，也不依赖 NVIDIA App 状态页。 */
+  var _nvidiaVideoAutomaticReason = '等待当前媒体能力';
   /** 内嵌 mpv 的 d3d11vpp NVIDIA 模式能力；探测只读且不触碰插件 ABI。 */
   var _nvidiaVideoEnhancementCapability =
       const PlayerNvidiaVideoEnhancementCapability.probing();
@@ -1048,7 +1056,8 @@ class PlayerPageState extends State<PlayerPage> {
     _smoothMotionMode = _effectivePlaybackSettings.smoothMotionMode;
     _videoOutputRange = _effectivePlaybackSettings.videoOutputRange;
     _playbackRate = _effectivePlaybackSettings.playbackRate;
-    _videoSuperResolutionEnabled =
+    // MediaKit 不消费 MPV 专属缩放；持久偏好保留，切回 MPV 后可继续使用。
+    _videoSuperResolutionEnabled = _mpvEnhancementsAvailable &&
         _effectivePlaybackSettings.videoSuperResolutionEnabled;
     _compressionEnhancementMode =
         _effectivePlaybackSettings.compressionEnhancementMode;
@@ -1328,13 +1337,7 @@ class PlayerPageState extends State<PlayerPage> {
     });
   }
 
-  /**
-   * 更新实验入口的会话状态。
-   *
-   * 开启前重新读取真实 `hwdec-current`，并在写入完整 `vf` 后读回确认；任何
-   * 失败都会恢复空滤镜。该确认只表示 mpv 接受请求，驱动是否真正启用 RTX
-   * Super Resolution 仍以诊断日志为准。
-   */
+  /** 真实画质集成测试使用的 VSR 会话控制入口。 */
   Future<void> _setNvidiaVideoEnhancementExperimentEnabled(
     bool enabled,
   ) =>
@@ -1343,7 +1346,7 @@ class PlayerPageState extends State<PlayerPage> {
         videoHdrEnabled: _nvidiaVideoHdrExperimentEnabled,
       );
 
-  /** 切换 NVIDIA RTX Video HDR，同时保留当前 VSR 会话状态。 */
+  /** 真实画质集成测试使用的 HDR 会话控制入口。 */
   Future<void> _setNvidiaVideoHdrExperimentEnabled(bool enabled) =>
       _setNvidiaVideoFilterModes(
         videoSuperResolutionEnabled: _nvidiaVideoEnhancementExperimentEnabled,
@@ -1398,6 +1401,7 @@ class PlayerPageState extends State<PlayerPage> {
   Future<void> _setNvidiaVideoFilterModes({
     required bool videoSuperResolutionEnabled,
     required bool videoHdrEnabled,
+    bool showFailureFeedback = true,
   }) async {
     if (_nvidiaVideoEnhancementExperimentEnabled ==
             videoSuperResolutionEnabled &&
@@ -1437,17 +1441,19 @@ class PlayerPageState extends State<PlayerPage> {
         await _restoreCpuEnhancementsAfterNvidia();
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              rejectedHdr
-                  ? _nvidiaVideoEnhancementCapability.hdrHelperText
-                  : _nvidiaVideoEnhancementCapability.helperText,
+      if (showFailureFeedback) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                rejectedHdr
+                    ? _nvidiaVideoEnhancementCapability.hdrHelperText
+                    : _nvidiaVideoEnhancementCapability.helperText,
+              ),
             ),
-          ),
-        );
+          );
+      }
       return;
     }
     final previousVsr = _nvidiaVideoEnhancementExperimentEnabled;
@@ -1493,11 +1499,13 @@ class PlayerPageState extends State<PlayerPage> {
         await _restoreCpuEnhancementsAfterNvidia();
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(content: Text('mpv 未接受 NVIDIA 联合滤镜，已恢复先前状态')),
-        );
+      if (showFailureFeedback) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('mpv 未接受 NVIDIA 联合滤镜，已恢复先前状态')),
+          );
+      }
       return;
     }
     if (!mounted) return;
@@ -1512,6 +1520,58 @@ class PlayerPageState extends State<PlayerPage> {
       await _refreshNvidiaVideoEnhancementRuntimeState();
     } else {
       await _restoreCpuEnhancementsAfterNvidia();
+    }
+  }
+
+  /**
+   * 在当前媒体与活动 GPU 都完成探测后自动协商 NVIDIA VSR/HDR。
+   *
+   * 自动策略只运行一次且不显示失败 Snackbar；未知能力、非 NVIDIA、无放大空间
+   * 或 Windows HDR 未活动时静默保持原画质链。实际启用仍由驱动日志二次确认。
+   */
+  Future<void> _applyAutomaticNvidiaVideoEnhancement(
+    String openedPath,
+  ) async {
+    final snapshot = _gpuCapabilitySnapshot;
+    if (snapshot == null || _openedPath != openedPath) return;
+    if (!_mpvEnhancementsAvailable) {
+      setState(() {
+        _nvidiaVideoAutomaticReason = '当前选择 MediaKit，不请求 MPV 专属 NVIDIA 增强';
+      });
+      return;
+    }
+    await _probeNvidiaVideoEnhancementCapability();
+    if (!mounted || _openedPath != openedPath) return;
+    final decision = PlayerNvidiaVideoAutoPolicy.evaluate(
+      snapshot: snapshot,
+      capability: _nvidiaVideoEnhancementCapability,
+    );
+    debugPrint(
+      'PLAYER_NVIDIA_AUTO_DECISION '
+      'vsr=${decision.videoSuperResolutionEnabled} '
+      'hdr=${decision.videoHdrEnabled} '
+      'vendor=${snapshot.selectedAdapter?.vendorId} '
+      'source=${snapshot.sourceWidth}x${snapshot.sourceHeight} '
+      'outputs=${snapshot.selectedAdapter?.outputs.length ?? 0} '
+      'canVsr=${_nvidiaVideoEnhancementCapability.canRequest} '
+      'canHdr=${_nvidiaVideoEnhancementCapability.canRequestHdr} '
+      'reason=${decision.reason}',
+    );
+    setState(() => _nvidiaVideoAutomaticReason = decision.reason);
+    if (!decision.enabled) return;
+    await _setNvidiaVideoFilterModes(
+      videoSuperResolutionEnabled: decision.videoSuperResolutionEnabled,
+      videoHdrEnabled: decision.videoHdrEnabled,
+      showFailureFeedback: false,
+    );
+    if (!mounted || _openedPath != openedPath) return;
+    final requestAccepted = (!decision.videoSuperResolutionEnabled ||
+            _nvidiaVideoEnhancementExperimentEnabled) &&
+        (!decision.videoHdrEnabled || _nvidiaVideoHdrExperimentEnabled);
+    if (!requestAccepted) {
+      setState(() {
+        _nvidiaVideoAutomaticReason = 'NVIDIA 自动请求被后端拒绝，已安全回退';
+      });
     }
   }
 
@@ -1561,6 +1621,7 @@ class PlayerPageState extends State<PlayerPage> {
         videoHdrEnabled: false,
       );
       if (!mounted) return;
+      _nvidiaVideoAutomaticReason = '用户切换压缩画质增强，本媒体已回退 CPU 滤镜';
     }
     setState(() => _compressionEnhancementMode = mode);
     _saveGlobalPlaybackSettings(
@@ -2002,6 +2063,7 @@ class PlayerPageState extends State<PlayerPage> {
           _nvidiaVideoHdrExperimentEnabled = false;
           _nvidiaVideoEnhancementRollbackReason = nvidiaDecision.reason;
           _nvidiaVideoEnhancementRollbackAt = sampledAt;
+          _nvidiaVideoAutomaticReason = '播放压力触发 NVIDIA 自动回滚';
         });
         await _restoreCpuEnhancementsAfterNvidia();
         if (!mounted || _openedPath != guardedPath) return;
@@ -2741,11 +2803,8 @@ class PlayerPageState extends State<PlayerPage> {
           videoAspectMode: _videoAspectMode,
           playbackRate: _playbackRate,
           seekStepSeconds: _seekStepSeconds,
+          mpvEnhancementsAvailable: _mpvEnhancementsAvailable,
           videoSuperResolutionEnabled: _videoSuperResolutionEnabled,
-          nvidiaVideoEnhancementExperimentEnabled:
-              _nvidiaVideoEnhancementExperimentEnabled,
-          nvidiaVideoHdrExperimentEnabled: _nvidiaVideoHdrExperimentEnabled,
-          nvidiaVideoEnhancementCapability: _nvidiaVideoEnhancementCapability,
           compressionEnhancementMode: _compressionEnhancementMode,
           playbackRates: _playbackRates,
           seekStepOptions: _seekStepOptions,
@@ -2757,10 +2816,6 @@ class PlayerPageState extends State<PlayerPage> {
           onPlaybackRateChanged: _setPlaybackRate,
           onSeekStepChanged: _setSeekStepSeconds,
           onVideoSuperResolutionChanged: _setVideoSuperResolutionEnabled,
-          onNvidiaVideoEnhancementExperimentChanged:
-              _setNvidiaVideoEnhancementExperimentEnabled,
-          onNvidiaVideoHdrExperimentChanged:
-              _setNvidiaVideoHdrExperimentEnabled,
           onCompressionEnhancementModeChanged: _setCompressionEnhancementMode,
         ),
       );
@@ -3082,6 +3137,7 @@ class PlayerPageState extends State<PlayerPage> {
           _nvidiaVideoSafetyCoordinator.reset();
           _nvidiaVideoEnhancementRollbackReason = null;
           _nvidiaVideoEnhancementRollbackAt = null;
+          _nvidiaVideoAutomaticReason = '等待当前媒体能力';
           _smoothMotionActive = false;
           _smoothMotionApplyReason = '等待当前媒体配置';
           _smoothMotionSafetyCoordinator.reset();
@@ -3220,7 +3276,7 @@ class PlayerPageState extends State<PlayerPage> {
     _gpuCapabilitySnapshot = snapshot;
     _hdrMappingExperimentActive = experimentAllowed;
     _darkSceneEnhancementActive = darkSceneAllowed;
-    await _probeNvidiaVideoEnhancementCapability();
+    await _applyAutomaticNvidiaVideoEnhancement(openedPath);
     if (!mounted || _openedPath != openedPath) return;
     if (darkSceneAllowed) {
       // 从真实滤镜应用后再建立压力基线，媒体打开阶段不能算入暗部增强成本。
@@ -4086,6 +4142,7 @@ class PlayerPageState extends State<PlayerPage> {
       'GPU 高质量缩放（非 NVIDIA AI）: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
       'NVIDIA RTX 视频超分: ${_nvidiaVideoEnhancementExperimentEnabled ? '会话已请求' : '关闭'} · ${_nvidiaVideoEnhancementCapability.helperText}',
       'NVIDIA RTX Video HDR: ${_nvidiaVideoHdrExperimentEnabled ? '会话已请求' : '关闭'} · ${_nvidiaVideoEnhancementCapability.hdrHelperText}',
+      'NVIDIA 自动策略: $_nvidiaVideoAutomaticReason',
       'NVIDIA 滤镜互斥处理: ${_nvidiaCpuEnhancementsSuspended ? '已在当前会话暂时停用压缩画质增强和暗场增强' : '未触发'}',
       '播放渲染器偏好: ${PlaybackSettings.rendererLabelFor(_effectivePlaybackSettings.rendererPreference)}',
       'NVIDIA VSR 驱动确认: ${mpv['native-nvidia-vsr-state']}',

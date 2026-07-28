@@ -237,17 +237,14 @@ void main() {
       pageSource,
       contains('onCompressionEnhancementModeChanged:'),
     );
+    expect(pageSource, isNot(contains('nvidiaVideoEnhancementCapability:')));
     expect(
       pageSource,
-      contains('nvidiaVideoEnhancementCapability:'),
+      isNot(contains('onNvidiaVideoEnhancementExperimentChanged:')),
     );
     expect(
       pageSource,
-      contains('onNvidiaVideoEnhancementExperimentChanged:'),
-    );
-    expect(
-      pageSource,
-      contains('onNvidiaVideoHdrExperimentChanged:'),
+      isNot(contains('onNvidiaVideoHdrExperimentChanged:')),
     );
     expect(pageSource, contains('_setCompressionEnhancementMode'));
     expect(
@@ -260,13 +257,11 @@ void main() {
     );
     expect(
       panelSource,
-      contains(
-        "'player.settings.nvidiaVideoEnhancementExperiment'",
-      ),
+      isNot(contains("'player.settings.nvidiaVideoEnhancementExperiment'")),
     );
     expect(
       panelSource,
-      contains("'player.settings.nvidiaVideoHdrExperiment'"),
+      isNot(contains("'player.settings.nvidiaVideoHdrExperiment'")),
     );
   });
 
@@ -352,28 +347,55 @@ void main() {
     expect(host, contains('CopyResource(texture, backup_texture_.Get())'));
   });
 
-  test('NVIDIA release copy and fixed-frame visual gate stay explicit', () {
+  test('NVIDIA automatic policy and fixed-frame visual gate stay explicit', () {
     final panel = File(
       'lib/src/pages/player/player_settings_panel.dart',
     ).readAsStringSync();
     final page = File(
       'lib/src/pages/player/player_page.dart',
     ).readAsStringSync();
+    final autoPolicy = File(
+      'lib/src/services/player/player_nvidia_video_auto_policy.dart',
+    ).readAsStringSync();
+    final backendSelection = File(
+      'lib/src/services/player/player_backend_selection.dart',
+    ).readAsStringSync();
+    final nativeBridge = File(
+      'windows/runner/native_player_bridge.cpp',
+    ).readAsStringSync();
+    final nativeBackend = File(
+      'lib/src/services/player/windows_native_player_backend.dart',
+    ).readAsStringSync();
     final abRunner = File('tool/run_nvidia_scaling_ab.ps1').readAsStringSync();
+    final baselineGate = File(
+      'integration_test/player_fixed_quality_baseline_test.dart',
+    ).readAsStringSync();
     final roadmap = File('ROADMAP.md').readAsStringSync();
 
-    // VSR/HDR 是当前可交付能力；稳定键不改，用户文案不再把它们标成实验。
-    expect(panel, contains('NVIDIA RTX 视频超分'));
-    expect(panel, contains('NVIDIA RTX Video HDR'));
-    expect(panel, isNot(contains('NVIDIA RTX 视频超分（实验）')));
-    expect(panel, isNot(contains('NVIDIA RTX Video HDR（实验）')));
+    // 手动开关已经获授权删除；自动策略仍必须保留驱动诊断、门禁与回滚。
+    expect(panel, isNot(contains('NVIDIA RTX 视频超分')));
+    expect(panel, isNot(contains('NVIDIA RTX Video HDR')));
     expect(page, contains('NVIDIA RTX 视频超分:'));
     expect(page, contains('NVIDIA RTX Video HDR:'));
-    expect(panel, contains('nvidiaVideoEnhancementCapability.canRequest'));
-    expect(panel, contains('nvidiaVideoEnhancementCapability.canRequestHdr'));
+    expect(page, contains('_applyAutomaticNvidiaVideoEnhancement'));
+    expect(page, contains('NVIDIA 自动策略:'));
+    expect(autoPolicy, contains('PlayerNvidiaVideoAutoPolicy'));
+    expect(autoPolicy, contains('output.hdrSignalActive'));
+    expect(nativeBridge, contains('video-params/w'));
+    expect(nativeBridge, contains('video-params/h'));
+    expect(nativeBackend, contains("'video-params/w'"));
+    expect(nativeBackend, contains("'video-params/h'"));
+    expect(
+      backendSelection,
+      contains(
+        'rendererPreference != PlayerRendererPreference.mediaKit',
+      ),
+    );
     expect(page, contains('_suspendCpuEnhancementsForNvidia'));
     expect(page, contains('_restoreCpuEnhancementsAfterNvidia'));
     expect(page, contains('NVIDIA 滤镜互斥处理:'));
+    expect(baselineGate, contains("'playerBackend':"));
+    expect(baselineGate, contains("'rendererPreference':"));
 
     // 肉眼 A/B 必须锁定同一媒体时间和最终窗口尺寸，不能退回 mpv 内部截图。
     expect(abRunner, contains('fixedFrameSecond = 12'));

@@ -35,6 +35,8 @@ void main() {
           'native-nvidia-hdr-state': 'active',
           'video-params/primaries': 'bt.709',
           'video-params/gamma': 'bt.1886',
+          'video-params/w': 1920,
+          'video-params/h': 1080,
           'video-sync': 'display-resample',
           'interpolation': 'yes',
           'tscale': 'oversample',
@@ -101,6 +103,8 @@ void main() {
     );
     expect(await backend.getProperty('video-params/primaries'), 'bt.709');
     expect(await backend.getProperty('video-params/gamma'), 'bt.1886');
+    expect(await backend.getProperty('video-params/w'), '1920');
+    expect(await backend.getProperty('video-params/h'), '1080');
     expect(await backend.getProperty('video-sync'), 'display-resample');
     expect(await backend.getProperty('interpolation'), 'yes');
     expect(await backend.getProperty('tscale'), 'oversample');

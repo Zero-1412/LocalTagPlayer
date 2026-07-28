@@ -1,3 +1,19 @@
+## 2026-07-28 MediaKit / MPV 显式选择与 NVIDIA 自动增强
+
+- 设置页播放分区只展示 `MediaKit 兼容渲染` 与 `MPV 原生渲染`；切换确认、
+  下一 Route 生效和撤销路径均已验证。旧 automatic 只承担迁移，不再成为产品
+  选项。
+- 组合根按用户偏好创建后端：Windows + MPV + 硬解走 child HWND / D3D11；
+  显式 MediaKit、非 Windows 或关闭硬解走兼容后端。页面没有构造具体后端。
+- 播放器齿轮已删除 NVIDIA VSR/HDR 手动开关。MPV 自动策略取得原生源宽高后，
+  根据 NVIDIA adapter、1080P→4K 放大、HDR 活动与 10-bit 输出自动请求
+  VSR/TrueHDR；MediaKit 不展示 MPV 专属 GPU 高质量缩放。
+- 三类自然低码率片源均为 VSR/HDR 驱动 `active`、0 总掉帧、0 音视频停滞；
+  设置页真实 Windows integration 点击和截图通过。
+- 画质报告新增 `playerBackend` / `rendererPreference`。filtered queue、当前
+  index、来源队列、返回状态和用户数据不变。证据见
+  `docs/qa/player_backend_selection_nvidia_auto_20260728.md`。
+
 ## 2026-07-28 NVIDIA VSR/HDR 会话级自动让路
 
 - 保留 VSR 与 TrueHDR 产品入口；NVIDIA App 的“开、未激活”不作为删除依据，

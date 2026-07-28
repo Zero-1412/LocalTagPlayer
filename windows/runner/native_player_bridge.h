@@ -182,6 +182,14 @@ class NativePlayerBridge {
   std::string video_primaries_ = "unavailable";
   /** 当前源传递函数；只有明确的 PQ/HLG 才会被 Dart 识别为 HDR。 */
   std::string video_gamma_ = "unavailable";
+  /**
+   * 当前源画面尺寸。
+   *
+   * 只暴露 mpv 已确认的正整数，用于 Dart 判断显示输出是否实际需要 VSR；
+   * 媒体切换期间属性不可用时归零，避免沿用上一条视频尺寸。
+   */
+  int64_t video_width_ = 0;
+  int64_t video_height_ = 0;
   std::string video_codec_ = "unavailable";
   std::string audio_codec_ = "unavailable";
   double avsync_ = 0.0;

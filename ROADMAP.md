@@ -1,5 +1,20 @@
 # ROADMAP.md
 
+## 2026-07-28 MediaKit / MPV 用户选择与自动 NVIDIA
+
+- [x] 设置页仅提供 MediaKit / MPV 两态选择，移除用户不可理解的 automatic；
+  切换需要确认、下一播放器 Route 生效并可撤销。
+- [x] Windows 组合根按用户偏好创建 MediaKit 或原生 child HWND MPV；非
+  Windows 与关闭硬解继续安全回退 MediaKit，不伪造尚不存在的平台后端。
+- [x] 播放器齿轮移除 VSR/HDR 手动开关；MPV 根据 NVIDIA、D3D11、源/输出
+  尺寸、HDR 与 10-bit 条件自动请求，未知能力保守关闭。
+- [x] 原生快照补齐源宽高；三类低码率 1080P 自动会话均为 VSR/HDR
+  `active`、0 总掉帧、0 音视频停滞。
+- [x] 设置页真实 Windows integration test 完成 MediaKit / MPV 下拉、确认、
+  特色说明和截图；画质报告增加后端字段，门禁可分后端汇总。
+- [ ] 在 macOS/Linux 拥有可维护的原生 MPV 后端前，保持 MediaKit 安全回退；
+  不因设置模型已支持 MPV 就宣称跨平台实现完成。
+
 ## 2026-07-28 NVIDIA 发布范围收敛
 
 - [x] 把固定 mpv 驱动链上的 RTX 视频超分与 RTX Video HDR 定义为当前 Windows

@@ -1,5 +1,25 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.92` 把播放器后端的最终选择权交给用户，同时保持
+平台能力边界诚实。设置页只提供 `MediaKit 兼容渲染` 与 `MPV 原生渲染`：
+Windows 在选择 MPV 且硬解开启时由组合根创建原生 child HWND / D3D11 后端，
+选择 MediaKit 时明确创建兼容后端；非 Windows 或关闭硬解时仍安全回退
+MediaKit，因为对应原生实现尚不存在。旧 `automatic` 仅用于设置迁移，不再
+显示或参与新持久化。页面与业务层仍只传递 `PlayerRendererPreference`，
+`PlayerService` 继续消费抽象 `PlayerBackend`，没有取得平台纹理或自行构造
+后端。MPV 专属的 GPU 高质量缩放只在对应后端显示；镜像和压缩画质增强保留在
+两种后端。
+
+NVIDIA VSR/HDR 两个手动开关从播放器齿轮删除，改为 MPV 会话进入媒体后的自动
+策略。原生桥固定回传 `video-params/w` / `video-params/h`，Dart 同时检查活动
+NVIDIA adapter、原生 D3D11 请求能力、源/输出尺寸、HDR 活动信号和 10-bit
+输出，再原子请求 VSR/TrueHDR；未知条件继续保守关闭，性能回滚和 CPU 滤镜
+互斥恢复保持有效。三类 650 kbps 1080P 实测均为 VSR/HDR 驱动 `active`、
+0 总掉帧、0 音视频停滞。画质报告显式记录 `playerBackend` 与
+`rendererPreference`，后续门禁不混算两种后端。filtered queue、SQLite、
+标签、缓存队列和用户数据不变。完整证据见
+`docs/qa/player_backend_selection_nvidia_auto_20260728.md`。
+
 `Architecture Baseline 0.5.91` 把 NVIDIA VSR/TrueHDR 与现有 CPU 画质滤镜的
 互斥从“禁止点击”改为会话级自动让路。设置层只在固定 mpv、Windows 原生
 `gpu-next/D3D11`、`d3d11va` 和源信号等不可恢复门禁失败时禁用；若冲突仅来自

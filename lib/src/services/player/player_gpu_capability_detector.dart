@@ -100,6 +100,10 @@ class PlayerGpuCapabilityDetector {
       'video-params/gamma',
       'video-params/w',
       'video-params/h',
+      'video-out-params/w',
+      'video-out-params/h',
+      'width',
+      'height',
     ]) {
       try {
         values[property] = await runtime.getProperty(property);
@@ -166,8 +170,18 @@ class PlayerGpuCapabilityDetector {
       gpuContext: context,
       d3d11FeatureLevel: d3d11FeatureLevel,
       hwdecCurrent: values['hwdec-current'] ?? 'unavailable',
-      sourceWidth: int.tryParse(values['video-params/w'] ?? ''),
-      sourceHeight: int.tryParse(values['video-params/h'] ?? ''),
+      // 部分 Windows libmpv 构建不导出嵌套 `video-params/w/h`；按 mpv
+      // 标准只读属性降级，不以桌面分辨率或文件名猜测源尺寸。
+      sourceWidth: _firstPositiveInt(values, const <String>[
+        'video-params/w',
+        'video-out-params/w',
+        'width',
+      ]),
+      sourceHeight: _firstPositiveInt(values, const <String>[
+        'video-params/h',
+        'video-out-params/h',
+        'height',
+      ]),
       capabilityMatrix: matrix,
       activeAdapterEvidence: activeAdapter,
       selectedAdapter: selection.adapter,
@@ -213,6 +227,18 @@ class PlayerGpuCapabilityDetector {
       );
     }
     return const _AdapterSelection(null, 'active-luid-not-in-device-matrix');
+  }
+
+  /** 从同一媒体会话的等价 mpv 属性中读取首个正整数。 */
+  static int? _firstPositiveInt(
+    Map<String, String> values,
+    List<String> properties,
+  ) {
+    for (final property in properties) {
+      final value = int.tryParse(values[property] ?? '');
+      if (value != null && value > 0) return value;
+    }
+    return null;
   }
 
   static bool _available(String value) =>

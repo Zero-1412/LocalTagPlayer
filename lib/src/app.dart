@@ -86,6 +86,7 @@ export 'services/player/media_kit_initializer.dart';
 export 'services/player/player_backend_selection.dart';
 export 'services/player/player_hardware_compatibility.dart';
 export 'services/player/player_memory_diagnostics.dart';
+export 'services/player/player_nvidia_video_auto_policy.dart';
 export 'services/player/player_nvidia_video_enhancement_experiment.dart';
 export 'services/player/player_service.dart';
 export 'services/player/player_smooth_motion.dart';

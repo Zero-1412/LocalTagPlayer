@@ -18,9 +18,9 @@ enum PlayerBackendSelection {
  * 把平台、用户偏好和显式 QA 覆盖解析为唯一后端。
  *
  * [environmentOverride] 只接受仓库已有的三个 QA 值，并且仅在 Windows 生效。
- * 产品设置选择 `windowsLibmpv` 时使用已通过 NVIDIA A/B 的 child HWND 路径；
- * 关闭硬解或运行在其它平台时回退 MediaKit，避免原生后端静默覆盖用户的软解
- * 选择。`automatic` 仍保持当前稳定默认，直到跨 DPI 与长期生命周期门禁完成。
+ * Windows 的 `automatic` 与显式 `windowsLibmpv` 都使用已通过 NVIDIA A/B 的
+ * child HWND 路径；显式 `mediaKit`、关闭硬解或其它平台仍回退 MediaKit。
+ * 这样自动 NVIDIA 能力位于组合根的平台边界内，不把后端选择泄漏到页面。
  */
 PlayerBackendSelection resolvePlayerBackendSelection({
   required bool isWindows,
@@ -41,8 +41,8 @@ PlayerBackendSelection resolvePlayerBackendSelection({
   if (normalizedOverride == 'windows-native-stub') {
     return PlayerBackendSelection.windowsNativeStub;
   }
-  if (rendererPreference == PlayerRendererPreference.windowsLibmpv &&
-      hardwareDecodingEnabled) {
+  if (hardwareDecodingEnabled &&
+      rendererPreference != PlayerRendererPreference.mediaKit) {
     return PlayerBackendSelection.windowsNativeHwnd;
   }
   return PlayerBackendSelection.mediaKit;

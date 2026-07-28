@@ -193,39 +193,61 @@ void main() {
                   : baselineMode,
       timeout: const Duration(seconds: 30),
     );
+    if (baselineMode.startsWith('nvidia-')) {
+      await _waitForNvidiaAutomaticDecision(
+        tester,
+        playerKey,
+        timeout: const Duration(seconds: 20),
+      );
+    }
+    if (baselineMode == 'nvidia-off' || baselineMode == 'nvidia-hdr-off') {
+      // 自动策略默认接管正式 Windows 会话；A/B 关闭组在初次探测后显式撤销，
+      // 且不会触发第二次自动协商。
+      await playerKey.currentState!.setNvidiaVideoHdrForTesting(false);
+      await playerKey.currentState!.setNvidiaVideoEnhancementForTesting(false);
+    }
     if (nvidiaVsrOn || nvidiaHdrOn) {
       final settingsFinder =
           find.byKey(const ValueKey<String>('player.settings'));
       await tester.tap(settingsFinder);
       await tester.pumpAndSettle();
-      final nvidiaToggle = find.byKey(
-        const ValueKey<String>(
-          'player.settings.nvidiaVideoEnhancementExperiment',
+      expect(
+        find.byKey(
+          const ValueKey<String>(
+            'player.settings.nvidiaVideoEnhancementExperiment',
+          ),
         ),
+        findsNothing,
       );
-      final nvidiaHdrToggle = find.byKey(
-        const ValueKey<String>('player.settings.nvidiaVideoHdrExperiment'),
+      expect(
+        find.byKey(
+          const ValueKey<String>('player.settings.nvidiaVideoHdrExperiment'),
+        ),
+        findsNothing,
       );
-      if (nvidiaVsrOn) {
-        expect(nvidiaToggle, findsOneWidget);
-        final nvidiaSwitch = tester.widget<Switch>(
-          find.descendant(of: nvidiaToggle, matching: find.byType(Switch)),
+      expect(
+        find.byKey(const ValueKey<String>('player.settings.repeatOne')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('player.settings.advanced.open')),
+        findsOneWidget,
+      );
+      // 联合模式必须由媒体打开后的自动策略自行进入；单项 A/B 仍通过测试入口
+      // 撤销另一项，避免改变既有 VSR-only / HDR-only 对照语义。
+      if (nvidiaVsrHdrOn) {
+        await _waitForSessionState(
+          tester,
+          playerKey,
+          mode: baselineMode,
+          timeout: const Duration(seconds: 20),
         );
-        expect(nvidiaSwitch.onChanged, isNotNull);
-      }
-      if (nvidiaHdrOn) {
-        expect(nvidiaHdrToggle, findsOneWidget);
-        final nvidiaHdrSwitch = tester.widget<Switch>(
-          find.descendant(of: nvidiaHdrToggle, matching: find.byType(Switch)),
-        );
-        expect(nvidiaHdrSwitch.onChanged, isNotNull);
-      }
-      // 画质 A/B 只验证滤镜、驱动与性能；child HWND 的物理鼠标命中由独立
-      // airspace 门禁负责，不能让坐标点击偶发性污染六组画质结论。
-      if (nvidiaVsrOn) {
+      } else if (nvidiaVsrOn) {
+        await playerKey.currentState!.setNvidiaVideoHdrForTesting(false);
         await playerKey.currentState!.setNvidiaVideoEnhancementForTesting(true);
-      }
-      if (nvidiaHdrOn) {
+      } else if (nvidiaHdrOn) {
+        await playerKey.currentState!
+            .setNvidiaVideoEnhancementForTesting(false);
         await playerKey.currentState!.setNvidiaVideoHdrForTesting(true);
       }
       await tester.pump(const Duration(seconds: 2));
@@ -235,6 +257,15 @@ void main() {
         'NVIDIA_QA_REQUEST '
         '${requestedSnapshot.lines.where((line) => line.startsWith('NVIDIA ') || line.startsWith('mpv 视频滤镜:')).join(' | ')}',
       );
+      if (nvidiaVsrHdrOn) {
+        expect(
+          requestedSnapshot.lines
+              .where((line) => line.startsWith('NVIDIA 自动策略: ')),
+          contains(
+            'NVIDIA 自动策略: 已为当前低分辨率 SDR 视频自动请求 VSR + HDR',
+          ),
+        );
+      }
       if (forceNvidiaCpuFilterConflict) {
         expect(
           requestedSnapshot.lines,
@@ -442,6 +473,9 @@ void main() {
     final report = <String, Object?>{
       'schemaVersion': 1,
       'mode': baselineMode,
+      // 门禁报告显式记录后端，避免以后把 MediaKit 与原生 MPV 结果混在一起。
+      'playerBackend': usesWindowsNative ? 'mpv' : 'mediaKit',
+      'rendererPreference': settings.rendererPreference.name,
       'requestedDurationSeconds': durationSeconds,
       'actualDurationSeconds': DateTime.now().difference(startedAt).inSeconds,
       'samples': samples,
@@ -669,6 +703,29 @@ Future<void> _waitForMotionCapability(
     }
   }
   throw StateError('NVOFA 插帧未在时限内进入 ${expected.name}');
+}
+
+/** 等待媒体打开后的 NVIDIA 自动策略完成一次确定性决策。 */
+Future<void> _waitForNvidiaAutomaticDecision(
+  WidgetTester tester,
+  GlobalKey<PlayerPageState> playerKey, {
+  required Duration timeout,
+}) async {
+  final stopwatch = Stopwatch()..start();
+  while (stopwatch.elapsed < timeout) {
+    await tester.pump(const Duration(milliseconds: 100));
+    final state = playerKey.currentState;
+    if (state == null) continue;
+    final snapshot = await state.buildDiagnosticsSnapshot();
+    final lines = snapshot.lines
+        .where((value) => value.startsWith('NVIDIA 自动策略: '))
+        .toList(growable: false);
+    final line = lines.isEmpty ? null : lines.single;
+    if (line != null && line != 'NVIDIA 自动策略: 等待当前媒体能力') {
+      return;
+    }
+  }
+  throw StateError('NVIDIA 自动策略未在时限内完成当前媒体决策');
 }
 
 /** 等待真实媒体可播放，并确认 HDR/SDR 分支已经完成能力门禁。 */

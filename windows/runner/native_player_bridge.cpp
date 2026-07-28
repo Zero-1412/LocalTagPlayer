@@ -887,6 +887,9 @@ void NativePlayerBridge::SamplePlayerState() {
   video_filters_ = read_string("vf");
   video_primaries_ = read_string("video-params/primaries");
   video_gamma_ = read_string("video-params/gamma");
+  // 自动 VSR 只比较源尺寸与显示输出，属性未就绪时必须保守归零。
+  video_width_ = read_int("video-params/w", 0);
+  video_height_ = read_int("video-params/h", 0);
   video_codec_ = read_string("video-codec");
   audio_codec_ = read_string("audio-codec");
 }
@@ -1051,6 +1054,10 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(video_primaries_)},
           {flutter::EncodableValue("video-params/gamma"),
            flutter::EncodableValue(video_gamma_)},
+          {flutter::EncodableValue("video-params/w"),
+           flutter::EncodableValue(video_width_)},
+          {flutter::EncodableValue("video-params/h"),
+           flutter::EncodableValue(video_height_)},
           {flutter::EncodableValue("video-codec"),
            flutter::EncodableValue(video_codec_)},
           {flutter::EncodableValue("audio-codec"),

@@ -1,5 +1,19 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · 设置页支持 MediaKit / MPV 显式切换
+
+- 设置页播放分区只展示 `MediaKit 兼容渲染` 与 `MPV 原生渲染`；切换前确认，
+  保存后可撤销，并在下一次进入播放器时生效。
+- Windows 后端不再由隐藏的 automatic 分支替用户决定；显式 MPV 进入原生
+  child HWND / D3D11，显式 MediaKit 保持兼容路径。非 Windows 或关闭硬解时
+  仍按实际能力安全回退 MediaKit。
+- 特色强化随后端展示：MPV 提供原生 D3D11、NVIDIA VSR/HDR 自动增强和 GPU
+  高质量缩放；MediaKit 保留跨平台兼容、镜像和压缩画质增强。
+- 删除播放器齿轮中的 NVIDIA VSR/HDR 手动开关。原生 MPV 现在回传源宽高，
+  自动策略在 NVIDIA、D3D11、显示缩放、HDR 与 10-bit 门禁满足时请求增强。
+- 三类低码率 1080P 实测均得到 VSR/HDR 驱动 `active`、0 总掉帧和 0 音视频
+  停滞；Windows 设置页真实点击与截图通过。画质报告新增后端与渲染器字段。
+
 ## 2026-07-28 · NVIDIA VSR/HDR 支持会话级自动让路
 
 - 保留 NVIDIA RTX 视频超分和 RTX Video HDR；压缩画质增强/暗场增强冲突不再

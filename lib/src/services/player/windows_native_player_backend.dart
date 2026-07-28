@@ -111,6 +111,8 @@ class WindowsNativePlayerBackend
       'native-nvidia-hdr-state',
       'video-params/primaries',
       'video-params/gamma',
+      'video-params/w',
+      'video-params/h',
       'video-codec',
       'audio-codec',
       'avsync',

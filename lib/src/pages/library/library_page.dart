@@ -719,7 +719,10 @@ class _PlaybackRendererDropdownState extends State<PlaybackRendererDropdown> {
             border: OutlineInputBorder(),
           ),
           items: [
-            for (final option in PlayerRendererPreference.values)
+            for (final option in const <PlayerRendererPreference>[
+              PlayerRendererPreference.mediaKit,
+              PlayerRendererPreference.windowsLibmpv,
+            ])
               DropdownMenuItem(
                 value: option,
                 enabled: option != PlayerRendererPreference.windowsLibmpv ||
@@ -737,6 +740,12 @@ class _PlaybackRendererDropdownState extends State<PlaybackRendererDropdown> {
         Text(
           helper,
           key: const ValueKey('settings.renderer.helper'),
+          style: const TextStyle(color: libraryTextMuted, height: 1.4),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          PlaybackSettings.rendererFeaturesFor(selection),
+          key: const ValueKey('settings.renderer.features'),
           style: const TextStyle(color: libraryTextMuted, height: 1.4),
         ),
       ],

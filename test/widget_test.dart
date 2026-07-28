@@ -212,14 +212,16 @@ class _CapabilityPlayerBackend extends _PreferenceRecordingPlayerBackend
 PlayerGpuAdapterCapabilities _testGpuAdapter({
   required String name,
   required int index,
+  int vendorId = 0x10de,
   String featureLevel = '12_1',
   bool compute = true,
   bool vulkan = true,
+  List<PlayerGpuDisplayOutput> outputs = const <PlayerGpuDisplayOutput>[],
 }) =>
     PlayerGpuAdapterCapabilities(
       name: name,
       luid: '00000000:0000000$index',
-      vendorId: 0x10de,
+      vendorId: vendorId,
       deviceId: 0x2783 + index,
       enumerationIndex: index,
       isSoftware: false,
@@ -234,6 +236,7 @@ PlayerGpuAdapterCapabilities _testGpuAdapter({
       vulkanSupported: vulkan,
       vulkanApiVersion: vulkan ? '1.3.0' : null,
       vulkanDeviceName: vulkan ? name : null,
+      outputs: outputs,
     );
 
 void main() {
@@ -3157,7 +3160,7 @@ void main() {
     expect(find.text('数据与维护'), findsOneWidget);
     expect(find.text('播放与解码'), findsOneWidget);
     expect(find.text('视频画质与增强'), findsOneWidget);
-    expect(find.text('自动（推荐） · 继续观看：每次询问'), findsOneWidget);
+    expect(find.text('MPV 原生渲染 · 继续观看：每次询问'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('settings.resumeBehavior.summary')),
       findsOneWidget,
@@ -4540,36 +4543,100 @@ void main() {
     expect(hdrSource.hdrHelperText, contains('已经是 HDR'));
   });
 
-  testWidgets('NVIDIA switches can request automatic CPU filter suspension',
-      (tester) async {
-    bool? requestedVsr;
-    bool? requestedHdr;
+  test('NVIDIA auto policy requests VSR and HDR only for eligible output', () {
+    const hdrOutput = PlayerGpuDisplayOutput(
+      deviceName: r'\\.\DISPLAY1',
+      attachedToDesktop: true,
+      desktopLeft: 0,
+      desktopTop: 0,
+      desktopWidth: 3840,
+      desktopHeight: 2160,
+      bitsPerColor: 10,
+      colorSpace: 'rgb-full-pq-p2020',
+      hdrSignalActive: true,
+      minLuminanceNits: 0.01,
+      maxLuminanceNits: 417,
+      maxFullFrameLuminanceNits: 417,
+    );
+    final adapter = _testGpuAdapter(
+      name: 'NVIDIA GeForce RTX',
+      index: 1,
+      outputs: const <PlayerGpuDisplayOutput>[hdrOutput],
+    );
+    const capability = PlayerNvidiaVideoEnhancementCapability(
+      status: PlayerNvidiaVideoEnhancementStatus.available,
+      mpvVersion: '0.41.0-908-g48e6c35c0',
+      hasD3d11vpp: true,
+      hasNvidiaScalingMode: true,
+      hasNvidiaTrueHdr: true,
+      hwdecCurrent: 'd3d11va',
+      currentVo: 'gpu-next-d3d11-child-hwnd',
+      sourceGamma: 'bt.1886',
+      filterChainIntegrated: true,
+      conflictingCpuFilters: true,
+    );
+    PlayerGpuCapabilitySnapshot snapshot({
+      required int width,
+      required int height,
+      PlayerGpuAdapterCapabilities? selectedAdapter,
+    }) =>
+        PlayerGpuCapabilitySnapshot(
+          outputDriver: 'gpu-next-d3d11-child-hwnd',
+          gpuApi: 'd3d11',
+          gpuContext: 'd3d11',
+          d3d11FeatureLevel: '12_1',
+          hwdecCurrent: 'd3d11va',
+          sourceWidth: width,
+          sourceHeight: height,
+          capabilityMatrix: const PlayerGpuCapabilityMatrix.unsupported(),
+          activeAdapterEvidence: const PlayerGpuActiveAdapter.unsupported(),
+          selectedAdapter: selectedAdapter ?? adapter,
+          adapterSelectionSource: 'focused-test',
+          rendererDetected: true,
+          vulkanDetected: true,
+          computeShaderVerified: true,
+          hdrSourceDetected: false,
+          sdrSourceDetected: true,
+        );
+
+    final lowResolution = PlayerNvidiaVideoAutoPolicy.evaluate(
+      snapshot: snapshot(width: 1920, height: 1080),
+      capability: capability,
+    );
+    expect(lowResolution.videoSuperResolutionEnabled, isTrue);
+    expect(lowResolution.videoHdrEnabled, isTrue);
+    expect(lowResolution.reason, contains('VSR + HDR'));
+
+    final nativeResolution = PlayerNvidiaVideoAutoPolicy.evaluate(
+      snapshot: snapshot(width: 3840, height: 2160),
+      capability: capability,
+    );
+    expect(nativeResolution.videoSuperResolutionEnabled, isFalse);
+    expect(nativeResolution.videoHdrEnabled, isTrue);
+
+    final nonNvidia = PlayerNvidiaVideoAutoPolicy.evaluate(
+      snapshot: snapshot(
+        width: 1920,
+        height: 1080,
+        selectedAdapter: _testGpuAdapter(
+          name: 'Other GPU',
+          index: 2,
+          vendorId: 0x1002,
+          outputs: const <PlayerGpuDisplayOutput>[hdrOutput],
+        ),
+      ),
+      capability: capability,
+    );
+    expect(nonNvidia.enabled, isFalse);
+    expect(nonNvidia.reason, contains('未检测到'));
+  });
+
+  testWidgets('player settings remove manual NVIDIA switches', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: PlayerSettingsPrimaryList(
-            nvidiaVideoEnhancementExperimentEnabled: false,
-            nvidiaVideoHdrExperimentEnabled: false,
-            nvidiaVideoEnhancementCapability:
-                const PlayerNvidiaVideoEnhancementCapability(
-              status: PlayerNvidiaVideoEnhancementStatus.available,
-              mpvVersion: '0.41.0',
-              hasD3d11vpp: true,
-              hasNvidiaScalingMode: true,
-              hasNvidiaTrueHdr: true,
-              hwdecCurrent: 'd3d11va',
-              currentVo: 'gpu-next-d3d11-child-hwnd',
-              sourceGamma: 'bt.1886',
-              filterChainIntegrated: true,
-              conflictingCpuFilters: true,
-            ),
             playbackMode: PlayerPlaybackMode.sequential,
-            onNvidiaVideoEnhancementExperimentChanged: (enabled) {
-              requestedVsr = enabled;
-            },
-            onNvidiaVideoHdrExperimentChanged: (enabled) {
-              requestedHdr = enabled;
-            },
             onPlaybackModeChanged: (_) {},
             onShowAdvancedSettings: () {},
           ),
@@ -4577,43 +4644,26 @@ void main() {
       ),
     );
 
+    expect(find.text('NVIDIA RTX 视频超分'), findsNothing);
+    expect(find.text('NVIDIA RTX Video HDR'), findsNothing);
     expect(
-      find.text('开启时会在当前会话暂时停用压缩画质增强和暗场增强'),
-      findsNWidgets(2),
-    );
-    final vsrSwitch = tester.widget<Switch>(
-      find.descendant(
-        of: find.byKey(
-          const ValueKey(
-            'player.settings.nvidiaVideoEnhancementExperiment',
-          ),
-        ),
-        matching: find.byType(Switch),
-      ),
-    );
-    final hdrSwitch = tester.widget<Switch>(
-      find.descendant(
-        of: find.byKey(
-          const ValueKey('player.settings.nvidiaVideoHdrExperiment'),
-        ),
-        matching: find.byType(Switch),
-      ),
-    );
-    expect(vsrSwitch.onChanged, isNotNull);
-    expect(hdrSwitch.onChanged, isNotNull);
-
-    await tester.tap(
       find.byKey(
         const ValueKey('player.settings.nvidiaVideoEnhancementExperiment'),
       ),
+      findsNothing,
     );
-    await tester.pump();
-    await tester.tap(
-      find.byKey(const ValueKey('player.settings.nvidiaVideoHdrExperiment')),
+    expect(
+      find.byKey(
+        const ValueKey('player.settings.nvidiaVideoHdrExperiment'),
+      ),
+      findsNothing,
     );
-    await tester.pump();
-    expect(requestedVsr, isTrue);
-    expect(requestedHdr, isTrue);
+    expect(find.byKey(const ValueKey('player.settings.repeatOne')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('player.settings.repeatAll')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('player.settings.advanced.open')),
+        findsOneWidget);
   });
 
   test('adaptive quality applies one complete lavfi graph per level', () async {
@@ -4732,6 +4782,23 @@ void main() {
     expect(detected.sdrSourceDetected, isTrue);
     expect(detected.darkSceneEnhancementEligible, isTrue);
     expect(detected.readinessLabel, contains('原生设备矩阵不可用'));
+  });
+
+  test('GPU detector falls back to standard mpv source dimensions', () async {
+    final detected = await const PlayerGpuCapabilityDetector().detect(
+      _CapabilityPlayerBackend(<String, String>{
+        'current-vo': 'gpu-next-d3d11-child-hwnd',
+        'd3d11-feature-level': '12_1',
+        'hwdec-current': 'd3d11va',
+        'video-params/gamma': 'bt.1886',
+        'width': '1920',
+        'height': '1080',
+      }),
+    );
+
+    expect(detected.sourceWidth, 1920);
+    expect(detected.sourceHeight, 1080);
+    expect(detected.sdrSourceDetected, isTrue);
   });
 
   test('SDR 暗部增强拒绝 4K 或软解会话', () async {
@@ -5279,6 +5346,7 @@ void main() {
               seekStepSeconds: 5,
               seekStepOptions: const <int>[5, 10, 15, 30, 60],
               mirrorVideo: false,
+              mpvEnhancementsAvailable: true,
               videoSuperResolutionEnabled: false,
               compressionEnhancementMode: PlayerCompressionEnhancementMode.off,
               onMirrorVideoChanged: (enabled) => mirrorVideo = enabled,
@@ -5344,6 +5412,36 @@ void main() {
         closeTo(16 / 9, 0.001));
   });
 
+  testWidgets('MediaKit hides MPV-only player enhancements', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlayerSettingsAdvancedList(
+            videoAspectMode: PlayerVideoAspectMode.automatic,
+            playbackRate: 1,
+            seekStepSeconds: 5,
+            seekStepOptions: const <int>[5, 10, 15, 30, 60],
+            mirrorVideo: false,
+            mpvEnhancementsAvailable: false,
+            videoSuperResolutionEnabled: true,
+            compressionEnhancementMode:
+                PlayerCompressionEnhancementMode.automatic,
+            onMirrorVideoChanged: (_) {},
+            onVideoSuperResolutionChanged: (_) {},
+            onShowCompressionEnhancement: () {},
+            onShowVideoAspect: () {},
+            onShowPlaybackRate: () {},
+            onSeekStepChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsNothing);
+    expect(find.text('镜像画面'), findsOneWidget);
+    expect(find.text('压缩画质增强'), findsOneWidget);
+  });
+
   testWidgets('player settings use compact primary and advanced pages',
       (tester) async {
     bool? mirrorVideo;
@@ -5352,8 +5450,6 @@ void main() {
     double? selectedRate;
     int? selectedSeekStep;
     bool? superResolutionEnabled;
-    bool? nvidiaVideoEnhancementEnabled;
-    bool? nvidiaVideoHdrEnabled;
     PlayerCompressionEnhancementMode? selectedCompressionEnhancementMode;
     await tester.pumpWidget(
       MaterialApp(
@@ -5371,16 +5467,8 @@ void main() {
                   videoAspectMode: PlayerVideoAspectMode.automatic,
                   playbackRate: 1,
                   seekStepSeconds: 5,
+                  mpvEnhancementsAvailable: true,
                   videoSuperResolutionEnabled: false,
-                  nvidiaVideoEnhancementExperimentEnabled: false,
-                  nvidiaVideoHdrExperimentEnabled: false,
-                  nvidiaVideoEnhancementCapability:
-                      const PlayerNvidiaVideoEnhancementCapability(
-                    status: PlayerNvidiaVideoEnhancementStatus.available,
-                    mpvVersion: '0.41.0',
-                    hasD3d11vpp: true,
-                    hasNvidiaScalingMode: true,
-                  ),
                   compressionEnhancementMode:
                       PlayerCompressionEnhancementMode.off,
                   playbackRates: const <double>[0.5, 1, 1.5],
@@ -5402,12 +5490,6 @@ void main() {
                   },
                   onVideoSuperResolutionChanged: (enabled) {
                     superResolutionEnabled = enabled;
-                  },
-                  onNvidiaVideoEnhancementExperimentChanged: (enabled) {
-                    nvidiaVideoEnhancementEnabled = enabled;
-                  },
-                  onNvidiaVideoHdrExperimentChanged: (enabled) {
-                    nvidiaVideoHdrEnabled = enabled;
                   },
                   onCompressionEnhancementModeChanged: (mode) {
                     selectedCompressionEnhancementMode = mode;
@@ -5452,14 +5534,8 @@ void main() {
     expect(find.text('镜像画面'), findsNothing);
     expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsNothing);
     expect(find.text('libmpv 缩放，仅在画面放大时生效'), findsNothing);
-    expect(find.text('NVIDIA RTX 视频超分'), findsOneWidget);
-    expect(find.text('NVIDIA RTX Video HDR'), findsOneWidget);
-    expect(
-      find.text(
-        'mpv 0.41.0 支持该模式，但纹理/滤镜链尚未验证',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('NVIDIA RTX 视频超分'), findsNothing);
+    expect(find.text('NVIDIA RTX Video HDR'), findsNothing);
     expect(find.text('GPU 画质超分'), findsNothing);
     expect(find.text('压缩画质增强'), findsNothing);
     expect(find.text('关闭'), findsNothing);
@@ -5468,29 +5544,6 @@ void main() {
     expect(find.text('更多播放设置'), findsOneWidget);
     expect(find.text('视频比例'), findsNothing);
     expect(find.text('播放速度'), findsNothing);
-
-    final nvidiaSwitch = tester.widget<Switch>(
-      find.descendant(
-        of: find.byKey(
-          const ValueKey(
-            'player.settings.nvidiaVideoEnhancementExperiment',
-          ),
-        ),
-        matching: find.byType(Switch),
-      ),
-    );
-    expect(nvidiaSwitch.onChanged, isNull);
-    expect(nvidiaVideoEnhancementEnabled, isNull);
-    final nvidiaHdrSwitch = tester.widget<Switch>(
-      find.descendant(
-        of: find.byKey(
-          const ValueKey('player.settings.nvidiaVideoHdrExperiment'),
-        ),
-        matching: find.byType(Switch),
-      ),
-    );
-    expect(nvidiaHdrSwitch.onChanged, isNull);
-    expect(nvidiaVideoHdrEnabled, isNull);
 
     await tester.tap(
       find.byKey(const ValueKey('player.settings.repeatOne')),
@@ -5525,7 +5578,7 @@ void main() {
     expect(find.text('更多播放设置'), findsOneWidget);
     expect(find.text('镜像画面'), findsOneWidget);
     expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsOneWidget);
-    expect(find.text('libmpv 缩放，仅在画面放大时生效'), findsOneWidget);
+    expect(find.text('MPV 缩放，仅在画面放大时生效'), findsOneWidget);
     expect(find.text('压缩画质增强'), findsOneWidget);
     expect(find.text('关闭'), findsOneWidget);
     expect(find.text('视频比例'), findsOneWidget);
@@ -5620,7 +5673,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('player.settings.back')));
     await tester.pumpAndSettle();
     expect(find.text('镜像画面'), findsNothing);
-    expect(find.text('NVIDIA RTX 视频超分'), findsOneWidget);
+    expect(find.text('NVIDIA RTX 视频超分'), findsNothing);
+    expect(find.text('单曲循环'), findsOneWidget);
     expect(find.text('视频比例'), findsNothing);
 
     await tester.tapAt(const Offset(20, 20));

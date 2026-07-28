@@ -16,9 +16,8 @@ enum PlayerVideoAspectMode { automatic, ratio4x3, ratio16x9, cover }
 /**
  * 播放器渲染器偏好。
  *
- * `automatic` 保留组合根决定当前平台安全默认值；`mediaKit` 强制跨平台兼容
- * 后端；`windowsLibmpv` 只在 Windows 组合根解析为原生 child HWND/D3D11，
- * 其它平台或硬解关闭时必须安全回退 MediaKit。
+ * `mediaKit` 与 `windowsLibmpv` 是设置页唯一可选的两个后端。`automatic`
+ * 仅用于读取旧设置，载入时迁移为 MPV，不再展示给用户或参与新持久化。
  */
 enum PlayerRendererPreference { automatic, mediaKit, windowsLibmpv }
 
@@ -92,7 +91,7 @@ class PlaybackSettings {
 
   static const defaults = PlaybackSettings(
     hwdec: 'auto-safe',
-    rendererPreference: PlayerRendererPreference.automatic,
+    rendererPreference: PlayerRendererPreference.windowsLibmpv,
     resumeBehavior: PlaybackResumeBehavior.continueWatching,
     shortcuts: defaultShortcuts,
     fullscreenQueueEdgeHoverEnabled: true,
@@ -418,10 +417,8 @@ class PlaybackSettings {
     }
     return PlaybackSettings(
       hwdec: decoderOptions.contains(value) ? value! : defaults.hwdec,
-      rendererPreference: _enumByName(
-        PlayerRendererPreference.values,
+      rendererPreference: _rendererPreferenceFromJson(
         json['rendererPreference'],
-        defaults.rendererPreference,
       ),
       resumeBehavior: PlaybackResumeBehavior.values.firstWhere(
         (behavior) => behavior.name == json['resumeBehavior']?.toString(),
@@ -508,6 +505,18 @@ class PlaybackSettings {
               ? json['autoRemoveMissingOrUnreadableVideos']! as bool
               : defaults.autoRemoveMissingOrUnreadableVideos,
     );
+  }
+
+  /**
+   * 把旧三态渲染器设置迁移为用户可见的 MediaKit / MPV 两态。
+   *
+   * 历史 `automatic` 与 `windowsLibmpv` 都表示用户未强制兼容后端，因此迁移
+   * 到 MPV；只有明确保存的 `mediaKit` 保持 MediaKit。
+   */
+  static PlayerRendererPreference _rendererPreferenceFromJson(Object? value) {
+    return value?.toString() == PlayerRendererPreference.mediaKit.name
+        ? PlayerRendererPreference.mediaKit
+        : PlayerRendererPreference.windowsLibmpv;
   }
 
   /** 解析持久化枚举名称；旧文件缺字段或手工写入异常值时使用安全默认值。 */
@@ -598,18 +607,28 @@ class PlaybackSettings {
   /** 把渲染器枚举转换为面向用户的稳定名称。 */
   static String rendererLabelFor(PlayerRendererPreference value) =>
       switch (value) {
-        PlayerRendererPreference.automatic => '自动（推荐）',
+        PlayerRendererPreference.automatic ||
+        PlayerRendererPreference.windowsLibmpv =>
+          'MPV 原生渲染',
         PlayerRendererPreference.mediaKit => 'MediaKit 兼容渲染',
-        PlayerRendererPreference.windowsLibmpv => 'Windows 增强（libmpv / D3D11）',
       };
 
   /** 解释渲染器的真实能力和生效边界，避免把兼容后端描述为 NVIDIA AI。 */
   static String rendererDescriptionFor(PlayerRendererPreference value) =>
       switch (value) {
-        PlayerRendererPreference.automatic => '当前版本优先使用稳定兼容后端；后续可随平台验证结果升级',
-        PlayerRendererPreference.mediaKit => '跨平台兼容性优先；Windows NVIDIA 原生增强不可用',
+        PlayerRendererPreference.automatic ||
         PlayerRendererPreference.windowsLibmpv =>
           '下次进入播放器使用原生 D3D11，可启用 NVIDIA 视频增强',
+        PlayerRendererPreference.mediaKit => '跨平台兼容性优先；Windows NVIDIA 原生增强不可用',
+      };
+
+  /** 设置页按所选后端展示真实可用的特色强化，不把 MPV 能力归给 MediaKit。 */
+  static String rendererFeaturesFor(PlayerRendererPreference value) =>
+      switch (value) {
+        PlayerRendererPreference.automatic ||
+        PlayerRendererPreference.windowsLibmpv =>
+          '特色强化：原生 D3D11、NVIDIA VSR/HDR 自动增强、GPU 高质量缩放',
+        PlayerRendererPreference.mediaKit => '特色强化：跨平台兼容、镜像、压缩画质增强',
       };
 
   /** 设置页常用解码档位使用面向产品目标的名称。 */

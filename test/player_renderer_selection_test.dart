@@ -10,7 +10,7 @@ void main() {
         hardwareDecodingEnabled: true,
         rendererPreference: PlayerRendererPreference.automatic,
       ),
-      PlayerBackendSelection.mediaKit,
+      PlayerBackendSelection.windowsNativeHwnd,
     );
     expect(
       resolvePlayerBackendSelection(
@@ -25,6 +25,14 @@ void main() {
         isWindows: true,
         hardwareDecodingEnabled: false,
         rendererPreference: PlayerRendererPreference.windowsLibmpv,
+      ),
+      PlayerBackendSelection.mediaKit,
+    );
+    expect(
+      resolvePlayerBackendSelection(
+        isWindows: true,
+        hardwareDecodingEnabled: true,
+        rendererPreference: PlayerRendererPreference.mediaKit,
       ),
       PlayerBackendSelection.mediaKit,
     );
@@ -48,13 +56,13 @@ void main() {
     );
   });
 
-  test('旧播放设置默认迁移为自动渲染且新值可往返', () {
+  test('旧自动设置迁移为 MPV 且两个用户选项可往返', () {
     final legacy = PlaybackSettings.fromJson(<String, Object?>{
       'hwdec': 'auto-safe',
     });
     expect(
       legacy.rendererPreference,
-      PlayerRendererPreference.automatic,
+      PlayerRendererPreference.windowsLibmpv,
     );
 
     final windows = legacy.copyWith(
@@ -66,7 +74,7 @@ void main() {
     );
   });
 
-  testWidgets('Windows 渲染器切换必须确认且保存后可撤销', (tester) async {
+  testWidgets('MediaKit 与 MPV 切换必须确认且保存后可撤销', (tester) async {
     var current = PlaybackSettings.defaults;
     final saved = <PlaybackSettings>[];
     var showRendererSettings = true;
@@ -95,7 +103,7 @@ void main() {
       ),
     );
 
-    Future<void> chooseWindowsRenderer() async {
+    Future<void> chooseRenderer(PlayerRendererPreference value) async {
       await tester.tap(
         find.byType(
           DropdownButtonFormField<PlayerRendererPreference>,
@@ -106,7 +114,7 @@ void main() {
         find
             .text(
               PlaybackSettings.rendererLabelFor(
-                PlayerRendererPreference.windowsLibmpv,
+                value,
               ),
             )
             .last,
@@ -114,7 +122,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await chooseWindowsRenderer();
+    await chooseRenderer(PlayerRendererPreference.mediaKit);
     expect(find.text('切换播放渲染器'), findsOneWidget);
     // 对话框等待期间退出设置 Route 后，取消结果不能再触发已销毁 State 的 setState。
     rebuildPage(() => showRendererSettings = false);
@@ -125,19 +133,20 @@ void main() {
     expect(saved, isEmpty);
     expect(
       current.rendererPreference,
-      PlayerRendererPreference.automatic,
+      PlayerRendererPreference.windowsLibmpv,
     );
 
     rebuildPage(() => showRendererSettings = true);
     await tester.pump();
-    await chooseWindowsRenderer();
+    await chooseRenderer(PlayerRendererPreference.mediaKit);
     await tester.tap(find.text('确认切换'));
     await tester.pumpAndSettle();
     expect(
       saved.single.rendererPreference,
-      PlayerRendererPreference.windowsLibmpv,
+      PlayerRendererPreference.mediaKit,
     );
-    expect(find.textContaining('原生 D3D11'), findsOneWidget);
+    expect(find.textContaining('跨平台兼容'), findsWidgets);
+    expect(find.textContaining('压缩画质增强'), findsOneWidget);
     expect(find.text('撤销'), findsOneWidget);
 
     // 模拟用户保存后立即退出设置 Route；Snackbar 仍由上层 ScaffoldMessenger
@@ -150,7 +159,7 @@ void main() {
     expect(saved, hasLength(2));
     expect(
       saved.last.rendererPreference,
-      PlayerRendererPreference.automatic,
+      PlayerRendererPreference.windowsLibmpv,
     );
   });
 }
