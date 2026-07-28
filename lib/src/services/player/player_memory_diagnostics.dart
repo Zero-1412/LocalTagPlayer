@@ -15,15 +15,21 @@ import '../../platform/platform_interfaces.dart';
 class PlayerMemoryDiagnostics {
   const PlayerMemoryDiagnostics._();
 
-  /** 记录一个阶段；播放器已经释放时应省略 [player] 与 [controller]。 */
+  /**
+   * 记录一个阶段。
+   *
+   * [readEngineProperties] 在播放器已释放后应为 false，仍可通过 [backend] 读取最终
+   * 结构化遥测，但不再触碰已销毁的 libmpv 属性。
+   */
   static Future<void> logStage(
     String stage, {
     PlayerRuntimeAccess? backend,
+    bool readEngineProperties = true,
   }) async {
     final imageCache = PaintingBinding.instance.imageCache;
     var demuxSeconds = 'unavailable';
     var demuxState = 'unavailable';
-    if (backend != null) {
+    if (backend != null && readEngineProperties) {
       try {
         demuxSeconds = await backend.getProperty('demuxer-cache-duration');
       } catch (_) {
@@ -35,6 +41,10 @@ class PlayerMemoryDiagnostics {
         // 复杂 node 属性在部分构建中不可转换为字符串，保留 unavailable。
       }
     }
+    final telemetryBoundary = backend is PlayerBackendTelemetryBoundary
+        ? backend as PlayerBackendTelemetryBoundary
+        : null;
+    final telemetry = telemetryBoundary?.telemetry;
     debugPrint(
       'PLAYER_MEMORY_STAGE timestamp=${DateTime.now().toIso8601String()} '
       'stage=$stage rss_bytes=${ProcessInfo.currentRss} '
@@ -42,8 +52,20 @@ class PlayerMemoryDiagnostics {
       'image_cache_count=${imageCache.currentSize} '
       'image_cache_live=${imageCache.liveImageCount} '
       'image_cache_pending=${imageCache.pendingImageCount} '
-      'texture_id=${backend?.textureId.value ?? -1} '
-      'demux_seconds=$demuxSeconds demux_state=$demuxState',
+      'texture_id=${readEngineProperties ? backend?.textureId.value ?? -1 : -1} '
+      'demux_seconds=$demuxSeconds demux_state=$demuxState '
+      'backend=${telemetry?.backendName ?? 'unsupported'} '
+      'open_generation=${telemetry?.openGeneration ?? 0} '
+      'first_frame_ms=${telemetry?.firstFrameLatency?.inMilliseconds ?? -1} '
+      'first_frame_evidence=${telemetry?.firstFrameEvidence ?? 'unavailable'} '
+      'hwdec_current=${telemetry?.hwdecCurrent ?? 'unavailable'} '
+      'video_codec=${telemetry?.videoCodec ?? 'unavailable'} '
+      'error_events=${telemetry?.errorEventCount ?? 0} '
+      'failed_opens=${telemetry?.failedOpenCount ?? 0} '
+      'release_phase=${telemetry?.releasePhase.name ?? 'unsupported'} '
+      'player_dispose_ms=${telemetry?.playerDisposeDuration?.inMilliseconds ?? -1} '
+      'native_release_wait_ms=${telemetry?.nativeReleaseWait?.inMilliseconds ?? -1} '
+      'release_total_ms=${telemetry?.totalReleaseDuration?.inMilliseconds ?? -1}',
     );
   }
 }

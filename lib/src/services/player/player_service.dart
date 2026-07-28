@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../core/playback_settings.dart';
+import '../../models/player_backend_telemetry.dart';
 import '../../models/player_gpu_capabilities.dart';
 import '../../models/player_motion_interpolation_capability.dart';
 import '../../platform/platform_interfaces.dart';
@@ -21,6 +22,7 @@ import 'player_video_super_resolution.dart';
 class PlayerService
     implements
         PlayerRuntimeAccess,
+        PlayerBackendTelemetryBoundary,
         PlayerPropertyBatchBoundary,
         PlayerGpuRenderBoundary,
         PlayerOverlaySurfaceBoundary,
@@ -45,6 +47,28 @@ class PlayerService
 
   /** 不包含本地路径的播放错误流。 */
   Stream<String> get errorChanges => _backend.errorChanges;
+
+  /**
+   * 返回后端结构化遥测；普通测试后端和未实现平台使用显式 unsupported 快照。
+   */
+  @override
+  PlayerBackendTelemetrySnapshot get telemetry {
+    final boundary = _backend is PlayerBackendTelemetryBoundary
+        ? _backend as PlayerBackendTelemetryBoundary
+        : null;
+    return boundary?.telemetry ??
+        const PlayerBackendTelemetrySnapshot.unsupported();
+  }
+
+  /** 转发可选后端遥测事件；未实现后端使用空流，不改变播放行为。 */
+  @override
+  Stream<PlayerBackendTelemetryEvent> get telemetryChanges {
+    final boundary = _backend is PlayerBackendTelemetryBoundary
+        ? _backend as PlayerBackendTelemetryBoundary
+        : null;
+    return boundary?.telemetryChanges ??
+        const Stream<PlayerBackendTelemetryEvent>.empty();
+  }
 
   @override
   ValueListenable<int?> get textureId => _backend.textureId;

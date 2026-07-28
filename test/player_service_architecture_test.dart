@@ -229,6 +229,12 @@ void main() {
   test('不支持 Windows 可选能力的后端由 PlayerService 安全回退', () async {
     final service = PlayerService(backend: _RecordingPlayerBackend());
 
+    expect(service.telemetry.supported, isFalse);
+    expect(service.telemetry.backendName, 'unsupported');
+    await expectLater(
+      service.telemetryChanges,
+      emitsDone,
+    );
     expect((await service.queryActiveGpuAdapter()).probeStatus, 'unsupported');
     expect(
       (await service.benchmarkGpuComputeFrameBudget('qa-luid')).probeStatus,

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../models/external_media_tools_state.dart';
 import '../models/media_details.dart';
 import '../models/platform_models.dart';
+import '../models/player_backend_telemetry.dart';
 import '../models/player_gpu_capabilities.dart';
 import '../models/player_motion_interpolation_capability.dart';
 import '../models/video_item.dart';
@@ -54,6 +55,20 @@ abstract interface class PlayerPropertyBatchBoundary {
    * 处理剩余项，避免半套画质或同步配置阻断媒体打开。
    */
   Future<void> setProperties(Map<String, String> properties);
+}
+
+/**
+ * 后端可选的结构化播放遥测边界。
+ *
+ * 不支持该边界的 PlayerBackend 仍可正常播放；PlayerService 会返回显式 unsupported
+ * 快照。事件与快照不得包含本地媒体路径，连续切换通过打开代次关联。
+ */
+abstract interface class PlayerBackendTelemetryBoundary {
+  /** 当前后端实例的最新遥测快照。 */
+  PlayerBackendTelemetrySnapshot get telemetry;
+
+  /** 首帧、解码器、错误和释放阶段变化流。 */
+  Stream<PlayerBackendTelemetryEvent> get telemetryChanges;
 }
 
 /**

@@ -1,5 +1,24 @@
 ﻿# ARCHITECTURE.md
 
+## MediaKit 路径无关播放遥测边界
+
+`Architecture Baseline 0.5.98` 在既有 `PlayerBackend` 后增加可选的
+`PlayerBackendTelemetryBoundary`。页面与诊断层只消费结构化快照，不读取媒体路径，
+也不要求测试替身或其他后端立即实现这组能力。
+
+首帧指标按“媒体打开代次”隔离：MediaKit Texture 就绪后，优先使用同一个
+`NativePlayer` 的 `estimated-frame-number` 变化；平台未提供该事件时，可由同代次的
+视频参数与播放位置更新共同确认，最后才使用带明确证据名称的超时回退。旧代次事件
+不能完成新媒体的首帧计时。
+
+错误事件只保存分类代码、时间和所属打开代次，不写入文件路径或底层原始消息；失败率
+按每个打开代次最多记一次失败计算。`hwdec-current` 与 `video-codec` 通过同一个
+`NativePlayer` 持续观察，诊断显示实际解码结果而非配置意图。
+
+释放阶段按“事件订阅/属性观察者 → MediaKit Player → Windows 原生释放宽限 →
+遥测流”串行执行，并记录各阶段耗时。该边界不创建第二个 `Player`、`NativePlayer`、
+`mpv_handle`、Texture 或解码链，也不改变 filtered queue、SQLite、标签过滤和缓存队列。
+
 ## MediaKit Texture 与同实例 libmpv 增强边界
 
 `Architecture Baseline 0.5.97` 将生产播放链固定为：

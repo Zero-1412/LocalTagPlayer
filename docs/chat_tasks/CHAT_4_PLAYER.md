@@ -1,3 +1,18 @@
+## 2026-07-29 MediaKit 首帧、错误、解码器与释放遥测
+
+- `PlayerBackendTelemetryBoundary` 作为可选后端能力接入 `PlayerService`，按打开代次
+  记录首帧、错误、失败率、实际解码器和释放阶段，不扩大通用 `PlayerBackend` contract。
+- MediaKit 只使用现有 `Player` 与同一个 `NativePlayer`；首帧证据优先取 mpv 帧号，
+  再取 Texture、同代次视频参数和播放位置组合，超时回退会明确标记证据来源。
+- 错误只输出路径无关分类代码；同一打开代次最多记一次失败。硬解与视频编码读取
+  `hwdec-current` / `video-codec` 的实际值，而非用户配置意图。
+- 释放顺序覆盖事件订阅、属性观察、Player、Windows 原生清理宽限与遥测流；
+  重复 dispose 不会启动第二条释放链。
+- focused tests、静态分析、Windows Debug build、真实 Texture integration 与真窗
+  诊断通过；首帧 243 ms、`d3d11va-copy`、H.264、错误/失败打开 0/0。
+- filtered queue、当前 index、来源队列、返回路径、SQLite、标签、缓存和用户数据
+  均未改变。
+
 ## 2026-07-28 MediaKit Texture + 同实例 libmpv 增强
 
 - `PlayerService` 作为唯一 PlayerFacade，常规播放走 media_kit API，高级画质通过

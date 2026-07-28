@@ -6,8 +6,10 @@ import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../models/player_backend_telemetry.dart';
 import '../../models/player_gpu_capabilities.dart';
 import '../../platform/platform_interfaces.dart';
+import 'player_backend_telemetry_tracker.dart';
 import 'windows_gpu_capability_channel.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -21,6 +23,7 @@ import 'windows_gpu_capability_channel.dart';
 class MediaKitPlayerBackend
     implements
         PlayerBackend,
+        PlayerBackendTelemetryBoundary,
         PlayerPropertyBatchBoundary,
         PlayerGpuRenderBoundary {
   /**
@@ -50,6 +53,12 @@ class MediaKitPlayerBackend
       _player,
       configuration: _controllerConfiguration,
     );
+    _errorSubscription = _player.stream.error.listen(_handleBackendError);
+    _videoParamsSubscription =
+        _player.stream.videoParams.listen(_handleVideoParams);
+    _telemetryPositionSubscription =
+        _player.stream.position.listen(_handleTelemetryPosition);
+    _telemetryObserverInitialization = _attachNativeTelemetryObservers();
   }
 
   /** 当前适配器独占的 media_kit Player。 */
@@ -63,6 +72,53 @@ class MediaKitPlayerBackend
 
   /** dispose 完成信号，保证下一播放器不会越过旧原生资源释放。 */
   final Completer<void> _released = Completer<void>();
+
+  /** 只保存路径无关字段的后端遥测状态机。 */
+  final PlayerBackendTelemetryTracker _telemetry =
+      PlayerBackendTelemetryTracker(backendName: 'media-kit');
+
+  /** 向页面输出稳定错误分类码，禁止透传可能包含本地路径的原始错误正文。 */
+  final StreamController<String> _safeErrors =
+      StreamController<String>.broadcast(sync: true);
+
+  /** media_kit 原始错误订阅；后端释放前必须先取消。 */
+  late final StreamSubscription<String> _errorSubscription;
+
+  /** 每个新媒体的视频参数订阅，用于约束同实例帧号证据的打开代次。 */
+  late final StreamSubscription<VideoParams> _videoParamsSubscription;
+
+  /** 播放位置订阅；只在本代视频参数和 Texture 同时就绪后提供首帧推进证据。 */
+  late final StreamSubscription<Duration> _telemetryPositionSubscription;
+
+  /** 同一个 NativePlayer 的帧号与解码器观察器初始化任务。 */
+  late final Future<void> _telemetryObserverInitialization;
+
+  /** 是否已在同一个 NativePlayer 上观察帧号。 */
+  var _frameObserverAttached = false;
+
+  /** 是否已在同一个 NativePlayer 上观察实际硬解。 */
+  var _hwdecObserverAttached = false;
+
+  /** 是否已在同一个 NativePlayer 上观察视频编码。 */
+  var _videoCodecObserverAttached = false;
+
+  /** media_kit 当前 VideoController 的 Texture 是否已经具备渲染表面。 */
+  var _textureReady = false;
+
+  /** 当前正在打开或播放的匿名代次。 */
+  var _activeOpenGeneration = 0;
+
+  /** 最近收到有效视频参数的打开代次。 */
+  var _videoParametersGeneration = 0;
+
+  /** 最近收到有效视频参数的时间，供观察器不可用时提供诚实的降级证据。 */
+  DateTime? _videoParametersAt;
+
+  /** 后端是否已经进入释放流程。 */
+  var _disposed = false;
+
+  /** 串行化重复 dispose 调用，禁止两个释放流程并发进入 media_kit/libmpv。 */
+  Future<void>? _disposeFuture;
 
   @override
   PlayerBackendState get state => PlayerBackendState(
@@ -85,13 +141,38 @@ class MediaKitPlayerBackend
   Stream<bool> get completedChanges => _player.stream.completed;
 
   @override
-  Stream<String> get errorChanges => _player.stream.error;
+  Stream<String> get errorChanges => _safeErrors.stream;
+
+  @override
+  PlayerBackendTelemetrySnapshot get telemetry => _telemetry.snapshot;
+
+  @override
+  Stream<PlayerBackendTelemetryEvent> get telemetryChanges => _telemetry.events;
 
   @override
   ValueListenable<int?> get textureId => _controller.id;
 
   @override
-  Future<void> openPath(String path) => _player.open(Media(path));
+  Future<void> openPath(String path) async {
+    final generation = _telemetry.beginOpen();
+    _activeOpenGeneration = generation;
+    _videoParametersGeneration = 0;
+    _videoParametersAt = null;
+    if (generation == 1) {
+      // media_kit 的 Future 只证明当前 VideoController Texture 已经具备渲染表面；
+      // 固定尺寸初始化可能先显示空表面，因此仍须等待本代 mpv 帧号推进才记录首帧。
+      unawaited(_awaitInitialTextureReady());
+    }
+    try {
+      await _player.open(Media(path));
+      if (_activeOpenGeneration == generation) {
+        unawaited(_captureDecoder(generation));
+      }
+    } catch (error) {
+      _recordBackendError(error);
+      rethrow;
+    }
+  }
 
   @override
   Future<void> play() => _player.play();
@@ -123,6 +204,245 @@ class MediaKitPlayerBackend
   NativePlayer? get _nativePlayer {
     final platform = _player.platform;
     return platform is NativePlayer ? platform : null;
+  }
+
+  /**
+   * 在现有 NativePlayer 上观察帧号，作为连续切换后的首帧推进证据。
+   *
+   * 这里只注册属性观察器，不创建第二个 Player、mpv_handle、Texture 或解码链。
+   */
+  Future<void> _attachNativeTelemetryObservers() async {
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null) {
+      return;
+    }
+    try {
+      await nativePlayer.observeProperty(
+        'estimated-frame-number',
+        (value) async {
+          if (_disposed) {
+            return;
+          }
+          final generation = _activeOpenGeneration;
+          final frameNumber =
+              int.tryParse(value) ?? double.tryParse(value)?.floor();
+          if (generation == 0 ||
+              !_textureReady ||
+              generation != _videoParametersGeneration ||
+              frameNumber == null ||
+              frameNumber < 0) {
+            return;
+          }
+          _recordFirstFrame(
+            generation,
+            evidence: 'media-kit-texture+mpv-estimated-frame-number',
+          );
+        },
+      );
+      _frameObserverAttached = true;
+    } catch (_) {
+      // 个别非 libmpv 平台可能不支持属性观察；视频参数事件会保留显式降级证据。
+    }
+    try {
+      await nativePlayer.observeProperty(
+        'hwdec-current',
+        (value) async {
+          if (_disposed || _activeOpenGeneration == 0) {
+            return;
+          }
+          _telemetry.recordDecoder(
+            generation: _activeOpenGeneration,
+            hwdecCurrent: _normalizeHwdec(value),
+            videoCodec: _telemetry.snapshot.videoCodec,
+          );
+        },
+      );
+      _hwdecObserverAttached = true;
+    } catch (_) {
+      // 观察失败时仍由首帧后的显式属性读取提供兼容遥测。
+    }
+    try {
+      await nativePlayer.observeProperty(
+        'video-codec',
+        (value) async {
+          if (_disposed || _activeOpenGeneration == 0) {
+            return;
+          }
+          _telemetry.recordDecoder(
+            generation: _activeOpenGeneration,
+            hwdecCurrent: _telemetry.snapshot.hwdecCurrent,
+            videoCodec: _normalizeTelemetryValue(value),
+          );
+        },
+      );
+      _videoCodecObserverAttached = true;
+    } catch (_) {
+      // 观察失败时仍由首帧后的显式属性读取提供兼容遥测。
+    }
+  }
+
+  /**
+   * 等待 media_kit 确认当前 VideoController 的 Texture 表面已经可用。
+   *
+   * 该 Future 可能在媒体打开前因固定尺寸空表面完成，因此这里只设置门禁，不能直接
+   * 记录当前媒体首帧。
+   */
+  Future<void> _awaitInitialTextureReady() async {
+    try {
+      await _controller.waitUntilFirstFrameRendered;
+      if (_disposed) {
+        return;
+      }
+      _textureReady = true;
+    } catch (_) {
+      // 首帧等待失败不能取代正式错误流；快照保持未知，供异常文件测试识别超时。
+    }
+  }
+
+  /**
+   * 处理每个新媒体的有效视频参数。
+   *
+   * Windows/libmpv 继续等待帧号推进；观察器不可用的平台明确标记为参数就绪降级，
+   * 不把它伪装为 Texture 已渲染。
+   */
+  void _handleVideoParams(VideoParams params) {
+    if (_disposed ||
+        params.dw == null ||
+        params.dh == null ||
+        params.dw == 0 ||
+        params.dh == 0) {
+      return;
+    }
+    final generation = _activeOpenGeneration;
+    if (generation == 0) {
+      return;
+    }
+    _videoParametersGeneration = generation;
+    _videoParametersAt = DateTime.now();
+    if (_nativePlayer == null) {
+      _recordFirstFrame(
+        generation,
+        evidence: 'video-parameters-ready-fallback',
+        at: _videoParametersAt,
+      );
+      return;
+    }
+    unawaited(_recordVideoParamsFallback(generation));
+  }
+
+  /**
+   * 使用 media_kit 当前代播放头更新补充首帧证据。
+   *
+   * 位置事件只有在本代视频参数与 Texture 均已就绪后才有效，避免快速切换时把上一媒体
+   * 的迟到位置写入新代次。该证据比单纯视频参数更强，但仍保留具体来源供 A/B 口径筛选。
+   */
+  void _handleTelemetryPosition(Duration _) {
+    if (_disposed || !_textureReady) {
+      return;
+    }
+    final generation = _activeOpenGeneration;
+    if (generation == 0 || generation != _videoParametersGeneration) {
+      return;
+    }
+    _recordFirstFrame(
+      generation,
+      evidence: 'media-kit-texture+position-update',
+    );
+  }
+
+  /**
+   * 帧号观察器不可用或在有限窗口内没有推进时，保留视频参数降级证据。
+   *
+   * 等待窗口只用于让更强的帧号/Texture 证据优先；回填时间仍使用视频参数实际到达时间，
+   * 不能把诊断等待本身算入首帧耗时。
+   */
+  Future<void> _recordVideoParamsFallback(int generation) async {
+    await _telemetryObserverInitialization;
+    if (_frameObserverAttached) {
+      await Future<void>.delayed(const Duration(milliseconds: 750));
+    }
+    if (_disposed || generation != _videoParametersGeneration) {
+      return;
+    }
+    _recordFirstFrame(
+      generation,
+      evidence: _frameObserverAttached
+          ? 'texture+video-parameters-timeout-fallback'
+          : 'video-parameters-ready-fallback',
+      at: _videoParametersAt,
+    );
+  }
+
+  /** 写入首帧快照，并在同一代次异步读取实际解码器。 */
+  void _recordFirstFrame(
+    int generation, {
+    required String evidence,
+    DateTime? at,
+  }) {
+    final recorded = _telemetry.recordFirstFrame(
+      generation: generation,
+      evidence: evidence,
+      at: at,
+    );
+    if (recorded) {
+      unawaited(_captureDecoder(generation));
+    }
+  }
+
+  /**
+   * 从同一个 NativePlayer 读取当前媒体的实际硬解与视频编码。
+   *
+   * 空 `hwdec-current` 在 libmpv 中代表软件解码，统一记录为 `no`；不可用属性保持未知。
+   */
+  Future<void> _captureDecoder(int generation) async {
+    final values = await Future.wait<String>([
+      getProperty('hwdec-current'),
+      getProperty('video-codec'),
+    ]);
+    if (_disposed || generation != _activeOpenGeneration) {
+      return;
+    }
+    final hwdec = _normalizeHwdec(values[0]);
+    final codec = _normalizeTelemetryValue(values[1]);
+    _telemetry.recordDecoder(
+      generation: generation,
+      hwdecCurrent: hwdec,
+      videoCodec: codec,
+    );
+  }
+
+  /** 把 libmpv 空硬解属性归一化为明确的软件解码 `no`。 */
+  String? _normalizeHwdec(String value) =>
+      value == 'empty' || value.trim().isEmpty
+          ? 'no'
+          : _normalizeTelemetryValue(value);
+
+  /** 把不可用或空属性保留为未知，避免诊断把占位文本当成真实解码值。 */
+  String? _normalizeTelemetryValue(String value) {
+    final normalized = value.trim();
+    return normalized.isEmpty ||
+            normalized == 'empty' ||
+            normalized == 'unavailable'
+        ? null
+        : normalized;
+  }
+
+  /** 把原始错误转换为路径无关分类码并同时写入错误流和遥测。 */
+  void _handleBackendError(String error) => _recordBackendError(error);
+
+  /** 记录一个路径无关错误分类码；释放竞态期间不再向关闭的 UI 流写入。 */
+  void _recordBackendError(
+    Object error, {
+    bool affectsCurrentOpen = true,
+  }) {
+    final code = classifyPlayerBackendError(error);
+    _telemetry.recordError(
+      code,
+      affectsCurrentOpen: affectsCurrentOpen,
+    );
+    if (!_safeErrors.isClosed) {
+      _safeErrors.add(code);
+    }
   }
 
   @override
@@ -220,16 +540,58 @@ class MediaKitPlayerBackend
   }
 
   @override
-  Future<void> dispose() async {
+  Future<void> dispose() => _disposeFuture ??= _disposeOnce();
+
+  /** 串行释放订阅、Player、Texture 与延迟销毁的 Windows 原生资源。 */
+  Future<void> _disposeOnce() async {
     if (_released.isCompleted) return;
+    _disposed = true;
+    _telemetry.beginRelease();
+    final playerDisposeWatch = Stopwatch();
+    var nativeReleaseWait = Duration.zero;
     try {
+      await _errorSubscription.cancel();
+      await _videoParamsSubscription.cancel();
+      await _telemetryPositionSubscription.cancel();
+      await _telemetryObserverInitialization;
+      final nativePlayer = _nativePlayer;
+      if (nativePlayer != null) {
+        for (final property in <String>[
+          if (_frameObserverAttached) 'estimated-frame-number',
+          if (_hwdecObserverAttached) 'hwdec-current',
+          if (_videoCodecObserverAttached) 'video-codec',
+        ]) {
+          try {
+            await nativePlayer.unobserveProperty(property);
+          } catch (_) {
+            // Player 已先进入销毁时允许观察器随 NativePlayer 一起释放。
+          }
+        }
+      }
+      playerDisposeWatch.start();
       await _player.dispose();
+      playerDisposeWatch.stop();
       if (Platform.isWindows) {
         // Flutter 纹理解绑早于 libmpv 最终销毁；下一会话必须等这段依赖内置延迟结束，
         // 否则两个 mpv_handle、D3D 资源和解码缓存会在高位重叠。
+        final nativeWaitWatch = Stopwatch()..start();
         await Future<void>.delayed(_windowsNativeDestroyGracePeriod);
+        nativeWaitWatch.stop();
+        nativeReleaseWait = nativeWaitWatch.elapsed;
       }
+    } catch (error) {
+      if (playerDisposeWatch.isRunning) {
+        playerDisposeWatch.stop();
+      }
+      _recordBackendError(error, affectsCurrentOpen: false);
+      rethrow;
     } finally {
+      _telemetry.completeRelease(
+        playerDisposeDuration: playerDisposeWatch.elapsed,
+        nativeReleaseWait: nativeReleaseWait,
+      );
+      await _safeErrors.close();
+      await _telemetry.close();
       if (!_released.isCompleted) _released.complete();
     }
   }

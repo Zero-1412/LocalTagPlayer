@@ -1,5 +1,19 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-29 · 完善 MediaKit 播放遥测
+
+- 增加可选的播放后端遥测边界，按媒体打开代次记录首帧耗时与证据、路径无关错误、
+  失败打开率、实际硬解/视频编码和资源释放阶段。
+- MediaKit 复用现有 Player 与同一个 NativePlayer 观察帧号、硬解和编码属性，
+  没有创建第二个播放器实例；旧代次事件不会污染当前媒体的首帧结果。
+- 资源释放改为可重复等待的串行流程，取消事件/属性观察后再释放 Player，并记录
+  Player、Windows 原生宽限和总释放耗时。
+- 播放诊断与内存诊断接入结构化快照，错误记录不包含路径或底层原始错误消息。
+- 25 项 focused tests、静态分析、Windows Debug build、真实 Texture integration
+  和 Debug 真窗诊断复核通过；首帧 243 ms、实际硬解 `d3d11va-copy`、错误/失败
+  打开 0/0，诊断布局无可见遮挡或溢出。
+- SQLite schema、标签过滤、filtered queue、缓存队列和用户数据未改变。
+
 ## 2026-07-28 · 生产播放改用 MediaKit Texture + 同实例 libmpv 增强
 
 - `PlayerService` 继续作为页面唯一 PlayerFacade；常规播放由 media_kit 管理生命周期、

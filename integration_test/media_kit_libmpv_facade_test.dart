@@ -67,7 +67,10 @@ void main() {
       final stopwatch = Stopwatch()..start();
       while (stopwatch.elapsed < const Duration(seconds: 20) &&
           (backend.state.position < const Duration(seconds: 1) ||
-              backend.textureId.value == null)) {
+              backend.textureId.value == null ||
+              backend.telemetry.firstFrameLatency == null ||
+              backend.telemetry.hwdecCurrent == null ||
+              backend.telemetry.hwdecCurrent == 'no')) {
         await tester.pump(const Duration(milliseconds: 100));
       }
 
@@ -82,6 +85,21 @@ void main() {
         await backend.getProperty('hwdec-current'),
         anyOf('d3d11va', 'd3d11va-copy'),
       );
+      expect(backend.telemetry.openGeneration, 1);
+      expect(backend.telemetry.firstFrameLatency, isNotNull);
+      expect(
+        backend.telemetry.firstFrameEvidence,
+        anyOf(
+          'media-kit-texture+mpv-estimated-frame-number',
+          'media-kit-texture+position-update',
+          'texture+video-parameters-timeout-fallback',
+        ),
+      );
+      expect(
+        backend.telemetry.hwdecCurrent,
+        anyOf('d3d11va', 'd3d11va-copy'),
+      );
+      expect(backend.telemetry.failedOpenCount, 0);
 
       final before = backend.state.position;
       await tester.pump(const Duration(seconds: 1));
@@ -91,6 +109,13 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
       await backend.dispose();
+      expect(
+        backend.telemetry.releasePhase,
+        PlayerBackendReleasePhase.released,
+      );
+      expect(backend.telemetry.playerDisposeDuration, isNotNull);
+      expect(backend.telemetry.nativeReleaseWait, isNotNull);
+      expect(backend.telemetry.totalReleaseDuration, isNotNull);
     },
     skip: samplePath == null ||
         samplePath.isEmpty ||

@@ -393,7 +393,10 @@ void main() {
     );
     expect(backend, contains('platform is NativePlayer'));
     expect(backend, contains('PlayerPropertyBatchBoundary'));
+    expect(backend, contains('PlayerBackendTelemetryBoundary'));
     expect(backend, contains('waitForInitialization: waitForInitialization'));
+    expect(backend, contains('waitUntilFirstFrameRendered'));
+    expect(backend, contains("'estimated-frame-number'"));
     expect(
       backend,
       isNot(contains('(platform as dynamic)')),

@@ -1,5 +1,24 @@
 # CURRENT_TASK.md
 
+## 2026-07-29 MediaKit 首帧、错误、解码器与资源释放遥测
+
+- 新增可选 `PlayerBackendTelemetryBoundary`，按媒体打开代次记录首帧时间、证据、
+  路径无关错误、失败打开率、实际硬解/视频编码和资源释放阶段；其他后端与测试替身
+  无需被迫实现。
+- MediaKit 后端只复用现有 `Player` 与同一个类型化 `NativePlayer`：
+  `estimated-frame-number`、视频参数和播放位置组成分级首帧证据，
+  `hwdec-current` / `video-codec` 持续反映实际解码结果，不创建第二实例。
+- 释放流程串行取消事件与属性观察、释放 Player、等待 Windows 原生清理宽限并关闭
+  遥测流；重复释放复用同一个 Future，诊断页可直接观察阶段和各段耗时。
+- 错误遥测只暴露分类代码与时间，不保存路径或底层原始错误文本；同一打开代次最多
+  计一次失败，避免错误流与 open 异常重复抬高连续切换失败率。
+- focused tests 25 项、`flutter analyze`、Windows Debug build 和真实 Texture
+  integration test 通过。Debug 真窗首帧 243 ms，证据为
+  `media-kit-texture+position-update`，实际硬解 `d3d11va-copy`，H.264，
+  错误/失败打开为 0/0；诊断弹窗无可见遮挡或溢出。
+- SQLite、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列和用户数据
+  未改变；真实队列切换后的打开代次与来源队列保持一致。
+
 ## 2026-07-28 MediaKit Texture + 同实例 libmpv 增强架构
 
 - `PlayerService` 明确作为 Flutter 页面唯一的 PlayerFacade：常规播放继续走

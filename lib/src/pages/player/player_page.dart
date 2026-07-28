@@ -1194,7 +1194,7 @@ class PlayerPageState extends State<PlayerPage> {
    *
    * 打开 worker 运行期间由可播放性确认统一收口，避免旧媒体迟到错误覆盖快速切换后的新视频。
    */
-  void _handlePlayerError(String _) {
+  void _handlePlayerError(String code) {
     if (!mounted || _openRequests.isOpening) {
       return;
     }
@@ -1203,7 +1203,7 @@ class PlayerPageState extends State<PlayerPage> {
       return;
     }
     _openedPath = null;
-    _openRequests.markFailure(path, code: 'media_kit_error');
+    _openRequests.markFailure(path, code: code);
     unawaited(_playerService.stop());
     setState(() {});
   }
@@ -4337,8 +4337,20 @@ class PlayerPageState extends State<PlayerPage> {
     final estimatedFps = _parseMpvNumber(mpv['estimated-vf-fps']);
     final frameDurationMs =
         estimatedFps == null || estimatedFps <= 0 ? null : 1000 / estimatedFps;
+    final backendTelemetry = _playerService.telemetry;
     final lines = <String>[
       '\u5f53\u524d\u89c6\u9891: ${_currentItem.title}',
+      '后端遥测: ${backendTelemetry.backendName}',
+      '媒体打开代次: ${backendTelemetry.openGeneration}',
+      '首帧耗时: ${backendTelemetry.firstFrameLatency?.inMilliseconds ?? -1} ms',
+      '首帧证据: ${backendTelemetry.firstFrameEvidence ?? 'unavailable'}',
+      '遥测实际硬解: ${backendTelemetry.hwdecCurrent ?? 'unavailable'}',
+      '遥测视频编码: ${backendTelemetry.videoCodec ?? 'unavailable'}',
+      '后端错误事件/失败打开: ${backendTelemetry.errorEventCount} / '
+          '${backendTelemetry.failedOpenCount}',
+      '连续切换失败率: '
+          '${(backendTelemetry.openFailureRate * 100).toStringAsFixed(2)}%',
+      '资源释放阶段: ${backendTelemetry.releasePhase.name}',
       '\u64ad\u653e\u4f4d\u7f6e: ${_formatDuration(after)} / ${_formatDuration(_playerService.state.duration)}',
       '\u64ad\u653e\u72b6\u6001: ${_playerService.state.playing ? '\u64ad\u653e\u4e2d' : '\u6682\u505c'}',
       '\u7f13\u51b2\u72b6\u6001: ${_playerService.state.buffering ? '\u7f13\u51b2\u4e2d' : '\u6b63\u5e38'}',
@@ -4785,7 +4797,11 @@ class PlayerPageState extends State<PlayerPage> {
       await _playerService.dispose();
       await _playerService.released;
     } finally {
-      await PlayerMemoryDiagnostics.logStage('player_disposed');
+      await PlayerMemoryDiagnostics.logStage(
+        'player_disposed',
+        backend: _playerService,
+        readEngineProperties: false,
+      );
       debugPrint(
         'PLAYER_EXIT requested=${_exitRequestedAt?.toIso8601String()} '
         'pause_ack=${_pauseAcknowledgedAt?.toIso8601String()} '
