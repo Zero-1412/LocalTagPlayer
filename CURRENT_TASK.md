@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 child HWND 生命周期与 D3D11VA 零拷贝边界
+
+- 8 次独立进程 airspace 测试全部通过，Application Error 和孤儿进程均为 0；
+  新增同进程真实 HWND 回归，默认 4/12 轮、零拷贝 12 轮以及幂等 dispose 均通过。
+- 原始 `0xc0000005` dump 的故障地址在运行时生成代码区且栈已损坏，不能指向
+  `NativePlayerBridge`、libmpv 或 NVOFA；没有证明原生缺陷，因此未修改生产
+  销毁次序。
+- `LOCAL_TAG_PLAYER_D3D11VA_ZERO_COPY_QA=1` 才请求并读回
+  `d3d11va-zero-copy=yes`。默认正式会话保持 `no`；压缩清晰增强 `vf` 交替挂载
+  可继续出帧且输出掉帧为 0，但不代表软件滤镜内部没有下载/上传。
+- 三类片源六组零拷贝 NVOFA A/B 在前置真实帧性能门禁连续产生 140/138 新增
+  掉帧后停止，未生成可复用摘要；产品插帧入口继续关闭。
+- 公开 libmpv render API 没有 D3D11 帧接口，VapourSynth R4 只提供软件平面；
+  下一步是隔离 patched libmpv 的 D3D11 hwframe 只读钩子，不再调 NVOFA 参数。
+- 详细证据见
+  `docs/qa/windows_hwnd_lifecycle_zero_copy_boundary_20260728.md`。
+
 ## 2026-07-28 NVOFA 遮挡有效性与两级补洞
 
 - 参考 NVIDIA FRUC Programming Guide 的阶段顺序，把原先单段 Compute 扩展为

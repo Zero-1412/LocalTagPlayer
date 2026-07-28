@@ -1,5 +1,20 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · 校正 child HWND 生命周期与 D3D11VA 零拷贝边界
+
+- 新增同进程真实 child HWND 生命周期回归；8 次跨进程、12 次同进程重复会话、
+  弹层显隐、幂等 dispose 均通过，无 Application Error 或孤儿进程。
+- 原始偶发 `0xc0000005` dump 不能归因到原生桥，本轮没有以不可证实假设修改生产
+  线程和 HWND 销毁次序。
+- 新增默认关闭的 QA-only `d3d11va-zero-copy=yes` 请求与读回，明确区分
+  D3D11VA 硬件帧、mpv 内部 GPU→GPU 复制和外部插件取得 D3D11 texture。
+- 零拷贝 12 轮及交替“去块 + hqdn3d + unsharp”可继续播放且输出掉帧为 0；
+  NVOFA 六组 A/B 则在前置性能门禁连续新增 140/138 掉帧后停止，未开放产品。
+- A/B 工具支持显式零拷贝 QA 并把读回纳入门禁；下一阶段改为隔离 mpv D3D11
+  hwframe 钩子，不再继续调整滤镜参数。
+- 默认 MediaKit、产品入口、插件 ABI v1、filtered queue、SQLite、标签、缓存
+  队列和用户数据不变。
+
 ## 2026-07-28 · NVOFA 增加遮挡有效性与两级补洞
 
 - D3D11 Compute 从单段 warp 扩展为三段：flow-grid 前后向校验/局部矢量补洞、

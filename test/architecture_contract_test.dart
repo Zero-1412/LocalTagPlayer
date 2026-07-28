@@ -358,6 +358,8 @@ void main() {
         File('windows/runner/CMakeLists.txt').readAsStringSync();
     final bridge =
         File('windows/runner/native_player_bridge.cpp').readAsStringSync();
+    final bridgeHeader =
+        File('windows/runner/native_player_bridge.h').readAsStringSync();
     final nvofaDriver = File(
       'windows/runner/nvidia_optical_flow_driver_probe.cpp',
     ).readAsStringSync();
@@ -436,6 +438,14 @@ void main() {
       bridge,
       contains('SelectNvidiaD3D11Adapter()'),
     );
+    // 直接采样 D3D11VA 解码表面可能触发驱动问题，只允许显式 QA 请求，产品默认关闭。
+    expect(
+      bridge,
+      contains('LOCAL_TAG_PLAYER_D3D11VA_ZERO_COPY_QA'),
+    );
+    expect(bridge, contains('IsQaEnvironmentEnabled('));
+    expect(bridge, contains('"d3d11va-zero-copy", "yes"'));
+    expect(bridgeHeader, contains('d3d11va_zero_copy_ = "no"'));
     expect(
       boundary,
       contains('abstract interface class PlayerMotionInterpolationBoundary'),
@@ -598,6 +608,8 @@ void main() {
     expect(nvofaMotionAb, contains('CaseManifest'));
     expect(nvofaMotionAb, contains('allRuntimeGatesPassed'));
     expect(nvofaMotionAb, contains('productEnablement'));
+    expect(nvofaMotionAb, contains('D3D11VaZeroCopyQa'));
+    expect(nvofaMotionAb, contains('d3d11vaZeroCopyGatePassed'));
     // 连续压力样本必须覆盖五类已知风险，且只生成到本机 QA 目录。
     expect(nvofaMotionStress, contains('"fast-pan"'));
     expect(nvofaMotionStress, contains('"fine-fence"'));

@@ -18,6 +18,8 @@ namespace {
 constexpr char kChannelName[] = "local_tag_player/native_player";
 constexpr wchar_t kVideoHostWindowClass[] =
     L"LocalTagPlayerNativeVideoHost";
+constexpr wchar_t kD3D11VaZeroCopyQaEnvironment[] =
+    L"LOCAL_TAG_PLAYER_D3D11VA_ZERO_COPY_QA";
 
 using QueryActiveAdapterLuid = int (*)(int32_t*, uint32_t*);
 
@@ -43,6 +45,14 @@ bool BooleanArgument(const flutter::EncodableMap& arguments, const char* key) {
   if (iterator == arguments.end()) return false;
   const auto* value = std::get_if<bool>(&iterator->second);
   return value != nullptr && *value;
+}
+
+/** 只接受显式值 `1`，避免继承到含糊环境文本时误开高风险驱动路径。 */
+bool IsQaEnvironmentEnabled(const wchar_t* name) {
+  std::array<wchar_t, 2> value{};
+  const DWORD length =
+      GetEnvironmentVariableW(name, value.data(), static_cast<DWORD>(value.size()));
+  return length == 1 && value[0] == L'1';
 }
 
 /**
@@ -165,6 +175,7 @@ void NativePlayerBridge::HandleMethodCall(
     const auto mode = StringArgument(values, "mode");
     native_hwnd_enabled_ = mode == "hwnd";
     native_mpv_enabled_ = mode == "mpv" || native_hwnd_enabled_;
+    if (!native_hwnd_enabled_) d3d11va_zero_copy_ = "no";
     if (native_hwnd_enabled_ && !CreateHwndSurface()) {
       result->Error("native-hwnd-create-failed",
                     "无法创建隔离的 Windows 视频子窗口");
@@ -595,6 +606,13 @@ void NativePlayerBridge::InitializePlayer() {
     mpv_set_option_string(player_, "gpu-context", "d3d11");
     mpv_set_option_string(player_, "hwdec", "d3d11va");
     mpv_set_option_string(player_, "gpu-hwdec-interop", "d3d11va");
+    d3d11va_zero_copy_ =
+        IsQaEnvironmentEnabled(kD3D11VaZeroCopyQaEnvironment) ? "requested"
+                                                               : "no";
+    if (d3d11va_zero_copy_ == "requested" &&
+        mpv_set_option_string(player_, "d3d11va-zero-copy", "yes") < 0) {
+      d3d11va_zero_copy_ = "rejected";
+    }
     if (d3d11_adapter_.ready() &&
         mpv_set_option_string(
             player_, "d3d11-adapter",
@@ -628,6 +646,11 @@ void NativePlayerBridge::InitializePlayer() {
     mpv_terminate_destroy(player_);
     player_ = nullptr;
     return;
+  }
+  if (d3d11va_zero_copy_ == "requested") {
+    char* value = mpv_get_property_string(player_, "d3d11va-zero-copy");
+    d3d11va_zero_copy_ = value == nullptr ? "unavailable" : value;
+    if (value != nullptr) mpv_free(value);
   }
   // 只消费 NVIDIA VSR 的固定状态文本；原始 mpv 日志不得跨平台通道返回。
   // NVIDIA 扩展的成功文本位于 verbose 级别；仍只匹配固定文本并输出枚举状态，
@@ -857,6 +880,9 @@ void NativePlayerBridge::SamplePlayerState() {
   frame_number_ = read_int("estimated-frame-number", frame_number_);
   dropped_frames_ = read_int("frame-drop-count", dropped_frames_);
   hwdec_ = read_string("hwdec-current");
+  if (d3d11va_zero_copy_ != "no" && d3d11va_zero_copy_ != "rejected") {
+    d3d11va_zero_copy_ = read_string("d3d11va-zero-copy");
+  }
   mpv_version_ = read_string("mpv-version");
   video_filters_ = read_string("vf");
   video_primaries_ = read_string("video-params/primaries");
@@ -1011,6 +1037,8 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(native_hwnd_enabled_ ? 128 : 0)},
           {flutter::EncodableValue("hwdec-current"),
            flutter::EncodableValue(hwdec_)},
+          {flutter::EncodableValue("d3d11va-zero-copy"),
+           flutter::EncodableValue(d3d11va_zero_copy_)},
           {flutter::EncodableValue("mpv-version"),
            flutter::EncodableValue(mpv_version_)},
           {flutter::EncodableValue("vf"),

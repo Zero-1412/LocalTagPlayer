@@ -154,6 +154,12 @@ class NativePlayerBridge {
   double volume_ = 100.0;
   std::string lifecycle_ = "idle";
   std::string hwdec_ = "native-stub";
+  /**
+   * mpv 是否直接采样 D3D11VA 解码表面。
+   *
+   * 该选项可能触发驱动兼容问题，仅由隔离 QA 环境变量请求；默认产品会话保持关闭。
+   */
+  std::string d3d11va_zero_copy_ = "no";
   /** libmpv 运行时版本，只通过固定属性返回，不复制原生日志。 */
   std::string mpv_version_ = "unavailable";
   /** 当前完整视频滤镜图，用于确认 NVIDIA 请求是否被 libmpv 接受。 */

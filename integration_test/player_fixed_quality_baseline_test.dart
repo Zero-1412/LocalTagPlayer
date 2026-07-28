@@ -433,6 +433,9 @@ void main() {
       'finalDiagnostics': finalLines,
       'gpuMatrix': matrix.toJson(),
       'activeAdapter': activeAdapter.toJson(),
+      if (usesWindowsNative)
+        'd3d11vaZeroCopy':
+            await renderBoundary.getProperty('d3d11va-zero-copy'),
       if (angleInteropEvidence != null)
         'angleInteropEvidence': angleInteropEvidence,
     };

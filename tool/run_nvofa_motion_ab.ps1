@@ -5,7 +5,8 @@
   [int]$VideoBitrateKbps = 650,
   [string]$OutputDirectory = ".local/qa/nvofa-motion-ab",
   [string]$CaseManifest = "",
-  [string]$Workspace = ""
+  [string]$Workspace = "",
+  [switch]$D3D11VaZeroCopyQa
 )
 
 $ErrorActionPreference = "Stop"
@@ -121,6 +122,10 @@ function Invoke-MotionMode {
   $env:LOCAL_TAG_PLAYER_VAPOURSYNTH_RUNTIME_DIR = $runtime
   $env:LOCAL_TAG_PLAYER_MOTION_INTERPOLATION_SCRIPT_PATH = $motionScript
   $env:LOCAL_TAG_PLAYER_NVOFA_VS_PLUGIN_PATH = $plugin
+  if ($D3D11VaZeroCopyQa) {
+    # 仅在隔离 A/B 请求直接采样解码表面；正式播放默认保持 mpv 的兼容复制。
+    $env:LOCAL_TAG_PLAYER_D3D11VA_ZERO_COPY_QA = "1"
+  }
   try {
     Push-Location $workspace
     & flutter test integration_test/player_fixed_quality_baseline_test.dart `
@@ -136,6 +141,7 @@ function Invoke-MotionMode {
     Remove-Item Env:LOCAL_TAG_PLAYER_VAPOURSYNTH_RUNTIME_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_MOTION_INTERPOLATION_SCRIPT_PATH -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_NVOFA_VS_PLUGIN_PATH -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_D3D11VA_ZERO_COPY_QA -ErrorAction SilentlyContinue
   }
   if ($testExitCode -ne 0) {
     throw "NVOFA 插帧 A/B 失败：$($Case.name) / $Mode"
@@ -169,7 +175,12 @@ function Test-MotionModeComplete {
   # 只有同一插件二进制的完整单组证据可以复用，旧 hash、失败或不完整组仍重跑。
   $recordedHash = (Get-Content -LiteralPath $hashMarker -Raw).Trim().
     ToLowerInvariant()
+  $recordedReport = Get-Content -LiteralPath $report -Raw -Encoding UTF8 |
+    ConvertFrom-Json
+  $zeroCopyEvidenceMatches = -not $D3D11VaZeroCopyQa -or
+    [string]$recordedReport.d3d11vaZeroCopy -eq "yes"
   return $recordedHash -eq $pluginHash -and
+    $zeroCopyEvidenceMatches -and
     [bool](Select-String -LiteralPath $log `
         -SimpleMatch "All tests passed!" -Quiet)
 }
@@ -228,6 +239,7 @@ function Get-MotionSummary {
     activeAdapterStatus = [string]$report.activeAdapter.probeStatus
     activeAdapterSource = [string]$report.activeAdapter.detectionSource
     activeAdapterLuid = [string]$report.activeAdapter.adapterLuid
+    d3d11vaZeroCopy = [string]$report.d3d11vaZeroCopy
     screenshot = Join-Path $modeRoot "$Mode-complete-video.png"
   }
 }
@@ -264,6 +276,9 @@ $caseSummaries = foreach ($case in $cases) {
       "windows-native-mpv-selected-d3d11-adapter" -and
     -not [string]::IsNullOrWhiteSpace($off.activeAdapterLuid) -and
     $off.activeAdapterLuid -eq $on.activeAdapterLuid
+  $zeroCopyGate = -not $D3D11VaZeroCopyQa -or
+    ($off.d3d11vaZeroCopy -eq "yes" -and
+      $on.d3d11vaZeroCopy -eq "yes")
   $caseSummary = [ordered]@{
     name = $case.name
     category = $case.category
@@ -272,7 +287,8 @@ $caseSummaries = foreach ($case in $cases) {
     frameRateGatePassed = $fpsGate
     performanceGatePassed = $performanceGate
     adapterLuidGatePassed = $adapterGate
-    passed = $fpsGate -and $performanceGate -and $adapterGate
+    d3d11vaZeroCopyGatePassed = $zeroCopyGate
+    passed = $fpsGate -and $performanceGate -and $adapterGate -and $zeroCopyGate
   }
   if (-not [string]::IsNullOrWhiteSpace($case.qualityFocus)) {
     $caseSummary["qualityFocus"] = $case.qualityFocus
@@ -281,11 +297,12 @@ $caseSummaries = foreach ($case in $cases) {
 }
 
 $summary = [ordered]@{
-  schemaVersion = 5
+  schemaVersion = 6
   generatedAt = (Get-Date).ToUniversalTime().ToString("o")
   runtimePolicy = "local-only VapourSynth R78 and NVOFA plugin; no install"
   samplePolicy = $samplePolicy
   pluginSha256 = $pluginHash
+  d3d11vaZeroCopyQa = [bool]$D3D11VaZeroCopyQa
   interpolationPolicy =
     "24fps to 48fps with exact D3D11/CUDA LUID, forward/backward validation, local flow infill, image-domain hole fill, conservative blending, and scene-cut protection"
   productEnablement =

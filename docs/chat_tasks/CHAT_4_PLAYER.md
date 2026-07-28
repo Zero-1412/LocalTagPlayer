@@ -1,3 +1,21 @@
+## 2026-07-28 child HWND 生命周期与 D3D11VA 零拷贝边界
+
+- 8 次跨进程与 12 次同进程 child HWND 会话均通过真实出帧、弹层显隐、释放和
+  幂等 dispose；无 Application Error 或孤儿进程。原始孤例不能归因到原生桥，
+  因此没有猜测性修改生产线程次序。
+- 新增默认关闭的 QA-only `d3d11va-zero-copy=yes` 请求/读回；12 轮以及交替
+  压缩清晰增强 `vf` 均可播放且输出掉帧为 0。
+- 零拷贝不等于外部 NVOFA 已获得解码纹理。公开 libmpv render API 只有
+  OpenGL/软件输出，VapourSynth R4 只有软件平面，单帧 ABI v1 也没有双帧和
+  时间戳所有权。
+- 三类片源六组 A/B 在前置真实帧门禁连续新增 140/138 掉帧后停止；产品入口、
+  默认后端和用户设置保持不变。
+- 下一步只做隔离 patched libmpv 的 D3D11 hwframe 只读钩子；不可维护时再评估
+  独立 FFmpeg D3D11VA 后端。filtered queue、当前 index、来源队列和返回状态
+  不变。
+- 完整证据见
+  `docs/qa/windows_hwnd_lifecycle_zero_copy_boundary_20260728.md`。
+
 ## 2026-07-28 NVOFA 遮挡有效性与两级补洞
 
 - 同 LUID D3D11 Compute 改为 flow-grid 校验/矢量补洞、候选 warp/遮挡有效性、

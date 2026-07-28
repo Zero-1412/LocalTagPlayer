@@ -104,6 +104,7 @@ class WindowsNativePlayerBackend
     _lifecycle = value['lifecycle'] as String? ?? _lifecycle;
     for (final property in const [
       'hwdec-current',
+      'd3d11va-zero-copy',
       'mpv-version',
       'vf',
       'native-nvidia-vsr-state',
