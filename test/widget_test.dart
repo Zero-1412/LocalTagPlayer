@@ -4459,7 +4459,7 @@ void main() {
 
     final copyChain = await PlayerNvidiaVideoEnhancementExperiment.probe(
       _CapabilityPlayerBackend(<String, String>{
-        'mpv-version': 'mpv 0.41.0',
+        'mpv-version': 'mpv 0.41.0-908-g48e6c35c0',
         'hwdec-current': 'd3d11va-copy',
         'current-vo': 'gpu-next-d3d11-child-hwnd',
       }),
@@ -4467,20 +4467,43 @@ void main() {
       filterChainIntegrated: true,
     );
     expect(copyChain.canEnable, isFalse);
+    expect(copyChain.canRequest, isFalse);
     expect(copyChain.helperText, contains('非 copy'));
+
+    final copyChainWithConflict =
+        await PlayerNvidiaVideoEnhancementExperiment.probe(
+      _CapabilityPlayerBackend(<String, String>{
+        'mpv-version': 'mpv 0.41.0-908-g48e6c35c0',
+        'hwdec-current': 'd3d11va-copy',
+        'current-vo': 'gpu-next-d3d11-child-hwnd',
+        'video-params/gamma': 'bt.1886',
+      }),
+      isWindows: true,
+      conflictingCpuFilters: true,
+      filterChainIntegrated: true,
+    );
+    expect(copyChainWithConflict.canRequest, isFalse);
+    expect(copyChainWithConflict.canRequestHdr, isFalse);
+    expect(copyChainWithConflict.helperText, contains('非 copy'));
+    expect(copyChainWithConflict.hdrHelperText, contains('非 copy'));
 
     final conflicting = await PlayerNvidiaVideoEnhancementExperiment.probe(
       _CapabilityPlayerBackend(<String, String>{
-        'mpv-version': 'mpv 0.41.0',
+        'mpv-version': 'mpv 0.41.0-908-g48e6c35c0',
         'hwdec-current': 'd3d11va',
         'current-vo': 'gpu-next-d3d11-child-hwnd',
+        'video-params/gamma': 'bt.1886',
       }),
       isWindows: true,
       conflictingCpuFilters: true,
       filterChainIntegrated: true,
     );
     expect(conflicting.canEnable, isFalse);
-    expect(conflicting.helperText, contains('不能安全串联'));
+    expect(conflicting.canRequest, isTrue);
+    expect(conflicting.canEnableHdr, isFalse);
+    expect(conflicting.canRequestHdr, isTrue);
+    expect(conflicting.helperText, contains('当前会话暂时停用'));
+    expect(conflicting.hdrHelperText, contains('当前会话暂时停用'));
 
     final trueHdr = await PlayerNvidiaVideoEnhancementExperiment.probe(
       _CapabilityPlayerBackend(<String, String>{
@@ -4497,6 +4520,7 @@ void main() {
     expect(trueHdr.hasNvidiaTrueHdr, isTrue);
     expect(trueHdr.sourceIsHdr, isFalse);
     expect(trueHdr.canEnableHdr, isTrue);
+    expect(trueHdr.canRequestHdr, isTrue);
     expect(trueHdr.hdrHelperText, contains('驱动已启用'));
 
     final hdrSource = await PlayerNvidiaVideoEnhancementExperiment.probe(
@@ -4512,7 +4536,84 @@ void main() {
     );
     expect(hdrSource.sourceIsHdr, isTrue);
     expect(hdrSource.canEnableHdr, isFalse);
+    expect(hdrSource.canRequestHdr, isFalse);
     expect(hdrSource.hdrHelperText, contains('已经是 HDR'));
+  });
+
+  testWidgets('NVIDIA switches can request automatic CPU filter suspension',
+      (tester) async {
+    bool? requestedVsr;
+    bool? requestedHdr;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlayerSettingsPrimaryList(
+            nvidiaVideoEnhancementExperimentEnabled: false,
+            nvidiaVideoHdrExperimentEnabled: false,
+            nvidiaVideoEnhancementCapability:
+                const PlayerNvidiaVideoEnhancementCapability(
+              status: PlayerNvidiaVideoEnhancementStatus.available,
+              mpvVersion: '0.41.0',
+              hasD3d11vpp: true,
+              hasNvidiaScalingMode: true,
+              hasNvidiaTrueHdr: true,
+              hwdecCurrent: 'd3d11va',
+              currentVo: 'gpu-next-d3d11-child-hwnd',
+              sourceGamma: 'bt.1886',
+              filterChainIntegrated: true,
+              conflictingCpuFilters: true,
+            ),
+            playbackMode: PlayerPlaybackMode.sequential,
+            onNvidiaVideoEnhancementExperimentChanged: (enabled) {
+              requestedVsr = enabled;
+            },
+            onNvidiaVideoHdrExperimentChanged: (enabled) {
+              requestedHdr = enabled;
+            },
+            onPlaybackModeChanged: (_) {},
+            onShowAdvancedSettings: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.text('开启时会在当前会话暂时停用压缩画质增强和暗场增强'),
+      findsNWidgets(2),
+    );
+    final vsrSwitch = tester.widget<Switch>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey(
+            'player.settings.nvidiaVideoEnhancementExperiment',
+          ),
+        ),
+        matching: find.byType(Switch),
+      ),
+    );
+    final hdrSwitch = tester.widget<Switch>(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('player.settings.nvidiaVideoHdrExperiment'),
+        ),
+        matching: find.byType(Switch),
+      ),
+    );
+    expect(vsrSwitch.onChanged, isNotNull);
+    expect(hdrSwitch.onChanged, isNotNull);
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('player.settings.nvidiaVideoEnhancementExperiment'),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('player.settings.nvidiaVideoHdrExperiment')),
+    );
+    await tester.pump();
+    expect(requestedVsr, isTrue);
+    expect(requestedHdr, isTrue);
   });
 
   test('adaptive quality applies one complete lavfi graph per level', () async {

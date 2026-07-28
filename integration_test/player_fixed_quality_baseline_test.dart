@@ -52,6 +52,9 @@ void main() {
     final holdFixedComparisonFrame =
         Platform.environment['LOCAL_TAG_PLAYER_QUALITY_HOLD_FIXED_FRAME'] ==
             '1';
+    final forceNvidiaCpuFilterConflict = Platform.environment[
+            'LOCAL_TAG_PLAYER_QUALITY_NVIDIA_CPU_FILTER_CONFLICT'] ==
+        '1';
     if (samplePath == null ||
         samplePath.isEmpty ||
         !File(samplePath).existsSync()) {
@@ -115,10 +118,13 @@ void main() {
         baselineMode.startsWith('nvidia-') || baselineMode.startsWith('nvofa-');
     final settings = PlaybackSettings.defaults.copyWith(
       hdrDynamicToneMappingExperimentEnabled: baselineMode == 'hdr',
-      darkSceneEnhancementEnabled: baselineMode == 'sdr-dark-enhanced',
-      compressionEnhancementMode: baselineMode == 'compression-clarity'
+      darkSceneEnhancementEnabled:
+          forceNvidiaCpuFilterConflict || baselineMode == 'sdr-dark-enhanced',
+      compressionEnhancementMode: forceNvidiaCpuFilterConflict
           ? PlayerCompressionEnhancementMode.clarity
-          : PlayerCompressionEnhancementMode.off,
+          : baselineMode == 'compression-clarity'
+              ? PlayerCompressionEnhancementMode.clarity
+              : PlayerCompressionEnhancementMode.off,
       // NVIDIA 对照组和实验组都固定使用真实 D3D11VA 非 copy，避免解码链差异污染 A/B。
       hwdec: baselineMode.startsWith('nvidia-')
           ? 'd3d11va'
@@ -229,6 +235,14 @@ void main() {
         'NVIDIA_QA_REQUEST '
         '${requestedSnapshot.lines.where((line) => line.startsWith('NVIDIA ') || line.startsWith('mpv 视频滤镜:')).join(' | ')}',
       );
+      if (forceNvidiaCpuFilterConflict) {
+        expect(
+          requestedSnapshot.lines,
+          contains(
+            'NVIDIA 滤镜互斥处理: 已在当前会话暂时停用压缩画质增强和暗场增强',
+          ),
+        );
+      }
       await tester.tapAt(const Offset(8, 8));
       await tester.pumpAndSettle();
       await _waitForSessionState(
@@ -391,6 +405,7 @@ void main() {
             'mpv 去色带参数:',
             'NVIDIA RTX 视频超分:',
             'NVIDIA RTX Video HDR:',
+            'NVIDIA 滤镜互斥处理:',
             'NVIDIA VSR 驱动确认:',
             'NVIDIA HDR 驱动确认:',
             'NVIDIA 压力保护:',
@@ -593,6 +608,36 @@ void main() {
     } else {
       expect(finalLines, contains('HDR 动态映射会话: 未启用 / 门槛未通过'));
       expect(finalLines, contains('暗部细节增强设置: 关闭'));
+    }
+
+    if (forceNvidiaCpuFilterConflict && (nvidiaVsrOn || nvidiaHdrOn)) {
+      // NVIDIA 关闭后必须归还滤镜所有权，并保留用户原有的压缩增强偏好。
+      // 自适应压缩会从关闭档重新采样，因此这里不把瞬时具体档位误当成恢复条件。
+      if (nvidiaHdrOn) {
+        await playerKey.currentState!.setNvidiaVideoHdrForTesting(false);
+      }
+      if (nvidiaVsrOn) {
+        await playerKey.currentState!
+            .setNvidiaVideoEnhancementForTesting(false);
+      }
+      await tester.pump(const Duration(seconds: 2));
+      final restoredSnapshot =
+          await playerKey.currentState!.buildDiagnosticsSnapshot();
+      expect(
+        restoredSnapshot.lines,
+        contains('NVIDIA 滤镜互斥处理: 未触发'),
+      );
+      expect(
+        restoredSnapshot.lines,
+        contains('压缩画质增强设置: 清晰增强'),
+      );
+      expect(
+        restoredSnapshot.lines
+            .where((line) => line.startsWith('mpv 视频滤镜: '))
+            .single,
+        isNot(anyOf(
+            contains('scaling-mode=nvidia'), contains('nvidia-true-hdr'))),
+      );
     }
 
     await tester.pumpWidget(const SizedBox.shrink());

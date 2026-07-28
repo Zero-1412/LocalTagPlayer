@@ -1,3 +1,18 @@
+## 2026-07-28 NVIDIA VSR/HDR 会话级自动让路
+
+- 保留 VSR 与 TrueHDR 产品入口；NVIDIA App 的“开、未激活”不作为删除依据，
+  播放器以固定 mpv 归一化驱动日志确认真实 `active`。
+- 设置开关区分不可恢复门禁与可恢复滤镜冲突：固定 mpv、Windows 原生 D3D11、
+  `d3d11va` 或源信号不满足时仍禁用；只有压缩/暗场滤镜冲突时允许点击并自动
+  暂停当前会话的 CPU `lavfi`。
+- 自动暂停不写回持久偏好；关闭、驱动拒绝或性能回滚后归还滤镜所有权并重新
+  采样。诊断页明确显示是否发生 NVIDIA 滤镜互斥处理。
+- 真人面部、动画渐变、暗场三组真实低码率 1080P 联合门禁均为 VSR/HDR
+  `active`、最大总掉帧 0、音视频停滞 0、无回滚；默认仍关闭且仅会话保存。
+- filtered queue、当前 index、来源队列、返回状态、默认 MediaKit、其他平台、
+  插件 ABI v1 和用户数据不变。证据见
+  `docs/qa/nvidia_auto_activation_20260728.md`。
+
 ## 2026-07-28 Windows Debug 双击无窗口修复
 
 - 根因不是播放器运行时：Windows integration test 会覆盖 Debug 输出目录的

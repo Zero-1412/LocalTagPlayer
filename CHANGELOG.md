@@ -1,5 +1,16 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · NVIDIA VSR/HDR 支持会话级自动让路
+
+- 保留 NVIDIA RTX 视频超分和 RTX Video HDR；压缩画质增强/暗场增强冲突不再
+  直接禁用开关，改为开启时暂时释放当前会话的 CPU 滤镜。
+- 自动让路不修改持久设置；关闭 NVIDIA、驱动拒绝或性能回滚后恢复滤镜所有权，
+  压缩增强从安全关闭档重新采样。
+- 诊断新增 NVIDIA 滤镜互斥状态，实际激活继续分别要求固定 mpv 驱动日志确认
+  VSR/HDR `active`，不依赖 NVIDIA App 状态页。
+- 真人面部、动画渐变、暗场三类低码率 1080P 均通过联合激活、零掉帧、零停滞
+  和无回滚门禁；默认关闭、仅会话保存、非 NVIDIA 回退保持不变。
+
 ## 2026-07-28 · 修复 Windows Debug 交付包无法双击启动
 
 - 确认无窗口不是产品启动崩溃，而是 Windows integration test 在 Debug 输出

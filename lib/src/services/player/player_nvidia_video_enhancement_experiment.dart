@@ -17,7 +17,7 @@ enum PlayerNvidiaVideoEnhancementStatus {
  * 播放器齿轮消费的 NVIDIA 驱动视频增强只读能力快照。
  *
  * 该路径使用 mpv `d3d11vpp` 的 `scaling-mode=nvidia`，不是 RTX Video SDK。
- * 开关只有在版本、零拷贝解码链和滤镜互斥条件同时满足时才可用。
+ * 版本与零拷贝解码链属于硬门禁；CPU 滤镜冲突由播放器在当前会话自动暂停。
  */
 class PlayerNvidiaVideoEnhancementCapability {
   const PlayerNvidiaVideoEnhancementCapability({
@@ -105,16 +105,26 @@ class PlayerNvidiaVideoEnhancementCapability {
   /** 当前会话是否绕过 Flutter Texture 并由 libmpv 直接拥有 D3D11 输出。 */
   bool get usesNativeD3d11Output => currentVo == 'gpu-next-d3d11-child-hwnd';
 
-  /** VSR 与 TrueHDR 共用的 D3D11 非 copy、滤镜互斥和产品验证门禁。 */
-  bool get _passesCommonGate =>
+  /** VSR 与 TrueHDR 共用的 D3D11 非 copy 和产品验证门禁。 */
+  bool get _passesHardwareGate =>
       status == PlayerNvidiaVideoEnhancementStatus.available &&
       filterChainIntegrated &&
       usesNonCopyD3d11 &&
-      usesNativeD3d11Output &&
-      !conflictingCpuFilters;
+      usesNativeD3d11Output;
 
-  /** 所有可验证门槛同时满足时才允许会话开关响应点击。 */
+  /** 实际写入 NVIDIA 滤镜前，CPU 滤镜必须已由播放器暂停。 */
+  bool get _passesCommonGate => _passesHardwareGate && !conflictingCpuFilters;
+
+  /** CPU 滤镜已经释放且硬门禁通过时，才允许实际写入 NVIDIA 滤镜。 */
   bool get canEnable => _passesCommonGate;
+
+  /**
+   * 用户是否可以请求 VSR。
+   *
+   * 压缩与暗场滤镜冲突可由播放器在当前会话自动暂停，因此不应把开关永久禁用；
+   * D3D11VA、原生输出或版本缺失仍属于不可自动修复的硬门禁。
+   */
+  bool get canRequest => _passesHardwareGate;
 
   /**
    * 当前源是否明确为 HDR。
@@ -130,6 +140,10 @@ class PlayerNvidiaVideoEnhancementCapability {
   /** TrueHDR 只允许固定实现版本、SDR 源和共同 D3D11 门禁全部通过时开启。 */
   bool get canEnableHdr =>
       _passesCommonGate && hasNvidiaTrueHdr && sourceIsHdr == false;
+
+  /** TrueHDR 请求允许播放器先自动暂停冲突滤镜，但不猜测未知或 HDR 源。 */
+  bool get canRequestHdr =>
+      _passesHardwareGate && hasNvidiaTrueHdr && sourceIsHdr == false;
 
   /** 面向设置页的边界说明，不把驱动扩展描述成 RTX Video SDK。 */
   String get helperText {
@@ -148,14 +162,14 @@ class PlayerNvidiaVideoEnhancementCapability {
     if (!filterChainIntegrated) {
       return 'mpv $mpvVersion 支持该模式，但纹理/滤镜链尚未验证';
     }
-    if (conflictingCpuFilters) {
-      return '请先关闭压缩画质增强和暗场增强；两类滤镜不能安全串联';
-    }
     if (!usesNativeD3d11Output) {
       return '需使用 Windows 原生 libmpv D3D11 渲染器';
     }
     if (!usesNonCopyD3d11) {
       return '需在解码设置中选择 D3D11VA（非 copy），并重新打开视频';
+    }
+    if (conflictingCpuFilters) {
+      return '开启时会在当前会话暂时停用压缩画质增强和暗场增强';
     }
     if (runtimeState == 'active') {
       return '驱动已启用；低码率画面放大时建议按需开启';
@@ -183,14 +197,14 @@ class PlayerNvidiaVideoEnhancementCapability {
     if (!filterChainIntegrated) {
       return 'TrueHDR 滤镜链尚未通过本机验证';
     }
-    if (conflictingCpuFilters) {
-      return '请先关闭压缩画质增强和暗场增强';
-    }
     if (!usesNativeD3d11Output) {
       return '需使用 Windows 原生 libmpv D3D11 渲染器';
     }
     if (!usesNonCopyD3d11) {
       return '需使用 D3D11VA（非 copy）并重新打开视频';
+    }
+    if (conflictingCpuFilters) {
+      return '开启时会在当前会话暂时停用压缩画质增强和暗场增强';
     }
     if (sourceIsHdr == null) {
       return '等待当前视频的 SDR/HDR 色彩信息';

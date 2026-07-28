@@ -369,6 +369,11 @@ void main() {
     expect(panel, isNot(contains('NVIDIA RTX Video HDR（实验）')));
     expect(page, contains('NVIDIA RTX 视频超分:'));
     expect(page, contains('NVIDIA RTX Video HDR:'));
+    expect(panel, contains('nvidiaVideoEnhancementCapability.canRequest'));
+    expect(panel, contains('nvidiaVideoEnhancementCapability.canRequestHdr'));
+    expect(page, contains('_suspendCpuEnhancementsForNvidia'));
+    expect(page, contains('_restoreCpuEnhancementsAfterNvidia'));
+    expect(page, contains('NVIDIA 滤镜互斥处理:'));
 
     // 肉眼 A/B 必须锁定同一媒体时间和最终窗口尺寸，不能退回 mpv 内部截图。
     expect(abRunner, contains('fixedFrameSecond = 12'));

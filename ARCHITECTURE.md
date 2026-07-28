@@ -1,5 +1,17 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.91` 把 NVIDIA VSR/TrueHDR 与现有 CPU 画质滤镜的
+互斥从“禁止点击”改为会话级自动让路。设置层只在固定 mpv、Windows 原生
+`gpu-next/D3D11`、`d3d11va` 和源信号等不可恢复门禁失败时禁用；若冲突仅来自
+压缩画质增强或暗场增强，开启 NVIDIA 时暂时释放 CPU `lavfi`，不改持久偏好，
+关闭、驱动拒绝或性能回滚后归还滤镜所有权并重新采样。应用仍不读取或修改
+NVIDIA App 全局设置，也不把 NVIDIA App 的“未激活”当成运行时真值；实际状态
+由固定 mpv 日志归一化出的 VSR/HDR `active` 分别确认。真人面部、动画渐变、
+暗场三类低码率 1080P 联合门禁均为驱动 active、0 总掉帧、0 音视频停滞、无
+回滚。默认仍关闭且仅会话保存；默认 MediaKit、其他平台、插件 ABI v1、
+filtered queue、SQLite、标签、缓存队列和用户数据不变。完整证据见
+`docs/qa/nvidia_auto_activation_20260728.md`。
+
 `Architecture Baseline 0.5.90` 修复 Windows Debug 交付目录的启动门禁。根因
 不是 VSR/HDR 或生产启动代码：Windows integration test 会复用
 `build/windows/x64/runner/Debug` 并写入测试入口；若它是最后一条命令，双击

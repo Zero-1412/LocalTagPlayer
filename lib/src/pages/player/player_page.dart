@@ -955,6 +955,14 @@ class PlayerPageState extends State<PlayerPage> {
   var _nvidiaVideoEnhancementExperimentEnabled = false;
   /** NVIDIA RTX Video HDR 只在当前 SDR 媒体会话保存，默认关闭且不持久化。 */
   var _nvidiaVideoHdrExperimentEnabled = false;
+  /**
+   * NVIDIA 独占 `vf` 时是否暂时挂起了当前媒体的 CPU 画质增强。
+   *
+   * 这里只改变会话运行态，不覆盖压缩画质和暗场增强的持久偏好。
+   */
+  var _nvidiaCpuEnhancementsSuspended = false;
+  /** NVIDIA 开启前暗场增强是否实际活动，用于关闭或失败后恢复当前媒体。 */
+  var _nvidiaSuspendedDarkSceneEnhancement = false;
   /** NVIDIA 视频增强只回滚当前媒体，不自动切换用户选择的解码器。 */
   String? _nvidiaVideoEnhancementRollbackReason;
   /** NVIDIA 视频增强自动回滚时间，用于与诊断掉帧样本对齐。 */
@@ -1303,9 +1311,10 @@ class PlayerPageState extends State<PlayerPage> {
   Future<void> _probeNvidiaVideoEnhancementCapability() async {
     final capability = await PlayerNvidiaVideoEnhancementExperiment.probe(
       _playerService,
-      conflictingCpuFilters:
-          _compressionEnhancementMode != PlayerCompressionEnhancementMode.off ||
-              _darkSceneEnhancementActive,
+      conflictingCpuFilters: !_nvidiaCpuEnhancementsSuspended &&
+          (_compressionEnhancementMode !=
+                  PlayerCompressionEnhancementMode.off ||
+              _darkSceneEnhancementActive),
     );
     if (!mounted) return;
     setState(() {
@@ -1341,6 +1350,45 @@ class PlayerPageState extends State<PlayerPage> {
         videoHdrEnabled: enabled,
       );
 
+  /** NVIDIA 请求前暂时释放 CPU `lavfi`，但保留用户的全局增强偏好。 */
+  void _suspendCpuEnhancementsForNvidia() {
+    if (_nvidiaCpuEnhancementsSuspended) return;
+    _nvidiaSuspendedDarkSceneEnhancement = _darkSceneEnhancementActive;
+    _nvidiaCpuEnhancementsSuspended = true;
+    _darkSceneEnhancementActive = false;
+    _adaptiveQualityCoordinator.reset();
+    _adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
+    _qualityMarginSampleTick = 1;
+    if (mounted) setState(() {});
+  }
+
+  /**
+   * NVIDIA 关闭、拒绝或回滚后恢复当前媒体可安全运行的 CPU 增强。
+   *
+   * 压缩增强从关闭档重新采样，不沿用 NVIDIA 运行期间的性能判断；暗场增强只有
+   * 在开启前实际活动、持久偏好仍开启且当前媒体仍满足门槛时才恢复。
+   */
+  Future<void> _restoreCpuEnhancementsAfterNvidia() async {
+    if (!_nvidiaCpuEnhancementsSuspended) return;
+    final restoreDarkScene = _nvidiaSuspendedDarkSceneEnhancement &&
+        _effectivePlaybackSettings.darkSceneEnhancementEnabled &&
+        (_gpuCapabilitySnapshot?.darkSceneEnhancementEligible ?? false);
+    _nvidiaCpuEnhancementsSuspended = false;
+    _nvidiaSuspendedDarkSceneEnhancement = false;
+    _darkSceneEnhancementActive = restoreDarkScene;
+    _adaptiveQualityCoordinator.reset();
+    _adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
+    _qualityMarginSampleTick = 1;
+    await PlayerAdaptiveQualityEnhancer.apply(
+      backend: _playerService,
+      level: PlayerAdaptiveQualityLevel.off,
+      darkSceneEnhancementEnabled: restoreDarkScene,
+    );
+    if (!mounted) return;
+    setState(() {});
+    await _probeNvidiaVideoEnhancementCapability();
+  }
+
   /**
    * 原子更新唯一的 NVIDIA `d3d11vpp` 滤镜图。
    *
@@ -1356,6 +1404,14 @@ class PlayerPageState extends State<PlayerPage> {
         _nvidiaVideoHdrExperimentEnabled == videoHdrEnabled) {
       return;
     }
+    final targetEnabled = videoSuperResolutionEnabled || videoHdrEnabled;
+    final startedCpuSuspension = targetEnabled &&
+        !_nvidiaCpuEnhancementsSuspended &&
+        (_compressionEnhancementMode != PlayerCompressionEnhancementMode.off ||
+            _darkSceneEnhancementActive);
+    if (startedCpuSuspension) {
+      _suspendCpuEnhancementsForNvidia();
+    }
     await _probeNvidiaVideoEnhancementCapability();
     if (!mounted) return;
     debugPrint(
@@ -1368,13 +1424,19 @@ class PlayerPageState extends State<PlayerPage> {
       'sourceHdr=${_nvidiaVideoEnhancementCapability.sourceIsHdr} '
       'conflict=${_nvidiaVideoEnhancementCapability.conflictingCpuFilters} '
       'canVsr=${_nvidiaVideoEnhancementCapability.canEnable} '
-      'canHdr=${_nvidiaVideoEnhancementCapability.canEnableHdr}',
+      'canHdr=${_nvidiaVideoEnhancementCapability.canEnableHdr} '
+      'requestVsr=${_nvidiaVideoEnhancementCapability.canRequest} '
+      'requestHdr=${_nvidiaVideoEnhancementCapability.canRequestHdr}',
     );
     final rejectedVsr = videoSuperResolutionEnabled &&
         !_nvidiaVideoEnhancementCapability.canEnable;
     final rejectedHdr =
         videoHdrEnabled && !_nvidiaVideoEnhancementCapability.canEnableHdr;
     if (rejectedVsr || rejectedHdr) {
+      if (startedCpuSuspension) {
+        await _restoreCpuEnhancementsAfterNvidia();
+      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
@@ -1391,7 +1453,6 @@ class PlayerPageState extends State<PlayerPage> {
     final previousVsr = _nvidiaVideoEnhancementExperimentEnabled;
     final previousHdr = _nvidiaVideoHdrExperimentEnabled;
     var appliedFilter = '';
-    final targetEnabled = videoSuperResolutionEnabled || videoHdrEnabled;
     final attempts = targetEnabled ? 5 : 1;
     for (var attempt = 0; attempt < attempts; attempt++) {
       await PlayerAdaptiveQualityEnhancer.apply(
@@ -1428,6 +1489,9 @@ class PlayerPageState extends State<PlayerPage> {
         nvidiaVideoEnhancementEnabled: previousVsr,
         nvidiaVideoHdrEnabled: previousHdr,
       );
+      if (startedCpuSuspension && !previousVsr && !previousHdr) {
+        await _restoreCpuEnhancementsAfterNvidia();
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -1446,6 +1510,8 @@ class PlayerPageState extends State<PlayerPage> {
     if (targetEnabled) {
       _nvidiaVideoSafetyCoordinator.reset();
       await _refreshNvidiaVideoEnhancementRuntimeState();
+    } else {
+      await _restoreCpuEnhancementsAfterNvidia();
     }
   }
 
@@ -1510,6 +1576,8 @@ class PlayerPageState extends State<PlayerPage> {
       backend: _playerService,
       level: PlayerAdaptiveQualityLevel.off,
       darkSceneEnhancementEnabled: _darkSceneEnhancementActive,
+      nvidiaVideoEnhancementEnabled: _nvidiaVideoEnhancementExperimentEnabled,
+      nvidiaVideoHdrEnabled: _nvidiaVideoHdrExperimentEnabled,
     );
     await _probeNvidiaVideoEnhancementCapability();
   }
@@ -1873,7 +1941,8 @@ class PlayerPageState extends State<PlayerPage> {
       outputDroppedFrames: outputDrops,
       totalDroppedFrames: totalDrops,
     );
-    if (_compressionEnhancementMode != PlayerCompressionEnhancementMode.off) {
+    if (_compressionEnhancementMode != PlayerCompressionEnhancementMode.off &&
+        !_nvidiaCpuEnhancementsSuspended) {
       final decision = _adaptiveQualityCoordinator.evaluate(
         sample,
         preferClarity: _compressionEnhancementMode ==
@@ -1934,6 +2003,8 @@ class PlayerPageState extends State<PlayerPage> {
           _nvidiaVideoEnhancementRollbackReason = nvidiaDecision.reason;
           _nvidiaVideoEnhancementRollbackAt = sampledAt;
         });
+        await _restoreCpuEnhancementsAfterNvidia();
+        if (!mounted || _openedPath != guardedPath) return;
         await _probeNvidiaVideoEnhancementCapability();
         debugPrint(
           'PLAYER_NVIDIA_VIDEO_ENHANCEMENT rollback=true '
@@ -3006,6 +3077,8 @@ class PlayerPageState extends State<PlayerPage> {
           _darkSceneEnhancementRollbackAt = null;
           _nvidiaVideoEnhancementExperimentEnabled = false;
           _nvidiaVideoHdrExperimentEnabled = false;
+          _nvidiaCpuEnhancementsSuspended = false;
+          _nvidiaSuspendedDarkSceneEnhancement = false;
           _nvidiaVideoSafetyCoordinator.reset();
           _nvidiaVideoEnhancementRollbackReason = null;
           _nvidiaVideoEnhancementRollbackAt = null;
@@ -4013,6 +4086,7 @@ class PlayerPageState extends State<PlayerPage> {
       'GPU 高质量缩放（非 NVIDIA AI）: ${_videoSuperResolutionEnabled ? '开启' : '关闭'}',
       'NVIDIA RTX 视频超分: ${_nvidiaVideoEnhancementExperimentEnabled ? '会话已请求' : '关闭'} · ${_nvidiaVideoEnhancementCapability.helperText}',
       'NVIDIA RTX Video HDR: ${_nvidiaVideoHdrExperimentEnabled ? '会话已请求' : '关闭'} · ${_nvidiaVideoEnhancementCapability.hdrHelperText}',
+      'NVIDIA 滤镜互斥处理: ${_nvidiaCpuEnhancementsSuspended ? '已在当前会话暂时停用压缩画质增强和暗场增强' : '未触发'}',
       '播放渲染器偏好: ${PlaybackSettings.rendererLabelFor(_effectivePlaybackSettings.rendererPreference)}',
       'NVIDIA VSR 驱动确认: ${mpv['native-nvidia-vsr-state']}',
       'NVIDIA HDR 驱动确认: ${mpv['native-nvidia-hdr-state']}',

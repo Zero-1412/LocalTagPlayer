@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 NVIDIA VSR/HDR 自动让路与激活判定
+
+- 两个产品入口保留：固定 mpv 的 `d3d11vpp` 已能实际调用 NVIDIA VSR 与
+  TrueHDR；NVIDIA App 显示“开、未激活”只表示当前没有满足触发条件或没有被其
+  状态页识别，不能据此删除功能。
+- 压缩画质增强或暗场增强不再让开关不可点击。开启 NVIDIA 时只在当前播放会话
+  暂停冲突的 CPU `lavfi`，不改用户持久偏好；关闭、请求失败或性能回滚后归还
+  滤镜所有权并重新采样。
+- 不读取、不代改 NVIDIA App 的全局开关；产品以固定 mpv 日志归一化后的
+  `NVIDIA VSR/HDR 驱动确认: active` 为真实运行证据。
+- 真人面部、动画渐变、暗场三类真实低码率 1080P 联合验证均为 VSR/HDR
+  `active`、最大总掉帧 0、音视频停滞 0、无自动回滚；关闭后的偏好恢复门禁也
+  通过。证据见 `docs/qa/nvidia_auto_activation_20260728.md`。
+- 一次 Windows integration test 在播放器构造早期出现现有的原生
+  `0xc0000005` 启动抖动，同条件重跑和后续三组均通过；未把它归因于 NVIDIA
+  滤镜，继续作为 child HWND 生命周期风险记录。
+
 ## 2026-07-28 Windows Debug 双击无窗口修复
 
 - 已稳定复现：集成测试后的 Debug exe 进程存活且响应，但

@@ -16,7 +16,7 @@ import 'player_video_aspect_mode.dart';
  *
  * 使用独立路由而不是把复杂列表塞入系统 Menu，避免 Windows 上菜单获得点击
  * 高亮但自定义内容未挂载。一级保留压缩画质增强、镜像、GPU 缩放、NVIDIA
- * 实验能力门禁与循环开关，二级只承担比例/倍速导航和离散快进档位；具体选项
+ * 会话能力门禁与循环开关，二级只承担比例/倍速导航和离散快进档位；具体选项
  * 进入三级列表或滑杆，每次变更立即回传播放器。
  */
 Future<void> showPlayerSettingsDialog(
@@ -439,10 +439,10 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
   /** 当前队列播放方式，用于计算两个循环开关的互斥状态。 */
   final PlayerPlaybackMode playbackMode;
 
-  /** NVIDIA RTX 视频超分开关变化回调；不可用时整行禁用。 */
+  /** NVIDIA RTX 视频超分开关变化回调；可自动暂停 CPU 滤镜冲突。 */
   final ValueChanged<bool> onNvidiaVideoEnhancementExperimentChanged;
 
-  /** NVIDIA RTX Video HDR 会话开关；不可用时整行禁用。 */
+  /** NVIDIA RTX Video HDR 会话开关；可自动暂停 CPU 滤镜冲突。 */
   final ValueChanged<bool> onNvidiaVideoHdrExperimentChanged;
 
   /** 循环方式变化回调。 */
@@ -465,7 +465,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
             label: 'NVIDIA RTX 视频超分',
             subtitle: nvidiaVideoEnhancementCapability.helperText,
             value: nvidiaVideoEnhancementExperimentEnabled,
-            onChanged: nvidiaVideoEnhancementCapability.canEnable
+            onChanged: nvidiaVideoEnhancementCapability.canRequest
                 ? onNvidiaVideoEnhancementExperimentChanged
                 : null,
           ),
@@ -476,7 +476,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
             label: 'NVIDIA RTX Video HDR',
             subtitle: nvidiaVideoEnhancementCapability.hdrHelperText,
             value: nvidiaVideoHdrExperimentEnabled,
-            onChanged: nvidiaVideoEnhancementCapability.canEnableHdr
+            onChanged: nvidiaVideoEnhancementCapability.canRequestHdr
                 ? onNvidiaVideoHdrExperimentChanged
                 : null,
           ),
