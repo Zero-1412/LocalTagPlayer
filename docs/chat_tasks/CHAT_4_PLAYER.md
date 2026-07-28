@@ -1,3 +1,17 @@
+## 2026-07-28 NVIDIA VSR/HDR 发布范围收敛
+
+- RTX 视频超分与 RTX Video HDR 作为现阶段 Windows 可交付能力，界面不再标记
+  “实验”；仍默认关闭、仅会话保存，并由 D3D11VA/源信号/滤镜互斥/性能回滚保护。
+- 修正 A/B 工具后，真人面部、动画渐变、暗场在固定第 12 秒的同尺寸最终
+  Windows 表面完成六组对比，20 秒 off/on 均为 0 总掉帧和 0 音视频停滞。
+- 肉眼结论：VSR 对偏软真人和动画边缘有收益，但可能放大真人压缩纹理；暗场收益
+  很小。产品保持默认关闭，仅在低码率画面被放大时建议按需开启。
+- NVOFA 插帧改为独立长期研究，不进入产品、不进入安装包、不阻塞发布。patched
+  libmpv D3D11 hwframe 钩子与独立 FFmpeg 后端不再由本任务自动继续。
+- 默认 MediaKit、其他平台、插件 ABI v1、filtered queue、当前 index、来源
+  队列、返回状态和用户数据不变。证据见
+  `docs/qa/nvidia_vsr_daily_ab_20260728.md`。
+
 ## 2026-07-28 child HWND 生命周期与 D3D11VA 零拷贝边界
 
 - 8 次跨进程与 12 次同进程 child HWND 会话均通过真实出帧、弹层显隐、释放和
@@ -10,9 +24,8 @@
   时间戳所有权。
 - 三类片源六组 A/B 在前置真实帧门禁连续新增 140/138 掉帧后停止；产品入口、
   默认后端和用户设置保持不变。
-- 下一步只做隔离 patched libmpv 的 D3D11 hwframe 只读钩子；不可维护时再评估
-  独立 FFmpeg D3D11VA 后端。filtered queue、当前 index、来源队列和返回状态
-  不变。
+- 本节当时记录的 patched libmpv 下一步已被上方发布范围收敛取代，不再自动
+  继续。filtered queue、当前 index、来源队列和返回状态不变。
 - 完整证据见
   `docs/qa/windows_hwnd_lifecycle_zero_copy_boundary_20260728.md`。
 

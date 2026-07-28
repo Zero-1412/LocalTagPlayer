@@ -4421,7 +4421,7 @@ void main() {
     expect(profile.label, contains('分辨率未知'));
   });
 
-  test('NVIDIA video experiment distinguishes bundled mpv capabilities',
+  test('NVIDIA video capability distinguishes bundled mpv capabilities',
       () async {
     final bundled = await PlayerNvidiaVideoEnhancementExperiment.probe(
       _CapabilityPlayerBackend(<String, String>{
@@ -4455,7 +4455,7 @@ void main() {
     expect(newer.usesNonCopyD3d11, isTrue);
     expect(newer.usesNativeD3d11Output, isTrue);
     expect(newer.canEnable, isTrue);
-    expect(newer.helperText, contains('已由驱动确认'));
+    expect(newer.helperText, contains('低码率画面放大时建议按需开启'));
 
     final copyChain = await PlayerNvidiaVideoEnhancementExperiment.probe(
       _CapabilityPlayerBackend(<String, String>{
@@ -5351,8 +5351,8 @@ void main() {
     expect(find.text('镜像画面'), findsNothing);
     expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsNothing);
     expect(find.text('libmpv 缩放，仅在画面放大时生效'), findsNothing);
-    expect(find.text('NVIDIA RTX 视频超分（实验）'), findsOneWidget);
-    expect(find.text('NVIDIA RTX Video HDR（实验）'), findsOneWidget);
+    expect(find.text('NVIDIA RTX 视频超分'), findsOneWidget);
+    expect(find.text('NVIDIA RTX Video HDR'), findsOneWidget);
     expect(
       find.text(
         'mpv 0.41.0 支持该模式，但纹理/滤镜链尚未验证',
@@ -5519,7 +5519,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('player.settings.back')));
     await tester.pumpAndSettle();
     expect(find.text('镜像画面'), findsNothing);
-    expect(find.text('NVIDIA RTX 视频超分（实验）'), findsOneWidget);
+    expect(find.text('NVIDIA RTX 视频超分'), findsOneWidget);
     expect(find.text('视频比例'), findsNothing);
 
     await tester.tapAt(const Offset(20, 20));

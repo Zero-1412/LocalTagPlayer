@@ -411,7 +411,7 @@ extension on _PlayerSettingsPage {
 /**
  * 播放设置一级列表。
  *
- * 一级页只保留会话级 NVIDIA 实验门禁、循环方式和“更多”入口，避免打开设置
+ * 一级页只保留会话级 NVIDIA 画质能力、循环方式和“更多”入口，避免打开设置
  * 时呈现过多低频画面选项。循环开关互斥，关闭当前模式会回到顺序播放。
  */
 class PlayerSettingsPrimaryList extends StatelessWidget {
@@ -427,7 +427,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
     required this.onShowAdvancedSettings,
   });
 
-  /** NVIDIA 驱动视频增强实验的会话状态；当前不会写入全局设置。 */
+  /** NVIDIA RTX 视频超分的会话状态；默认关闭且不会写入全局设置。 */
   final bool nvidiaVideoEnhancementExperimentEnabled;
 
   /** NVIDIA RTX Video HDR 的会话状态；仅处理已确认的 SDR 源。 */
@@ -439,7 +439,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
   /** 当前队列播放方式，用于计算两个循环开关的互斥状态。 */
   final PlayerPlaybackMode playbackMode;
 
-  /** NVIDIA 驱动视频增强实验开关变化回调；不可用时整行禁用。 */
+  /** NVIDIA RTX 视频超分开关变化回调；不可用时整行禁用。 */
   final ValueChanged<bool> onNvidiaVideoEnhancementExperimentChanged;
 
   /** NVIDIA RTX Video HDR 会话开关；不可用时整行禁用。 */
@@ -462,7 +462,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
             key: const ValueKey(
               'player.settings.nvidiaVideoEnhancementExperiment',
             ),
-            label: 'NVIDIA RTX 视频超分（实验）',
+            label: 'NVIDIA RTX 视频超分',
             subtitle: nvidiaVideoEnhancementCapability.helperText,
             value: nvidiaVideoEnhancementExperimentEnabled,
             onChanged: nvidiaVideoEnhancementCapability.canEnable
@@ -473,7 +473,7 @@ class PlayerSettingsPrimaryList extends StatelessWidget {
             key: const ValueKey(
               'player.settings.nvidiaVideoHdrExperiment',
             ),
-            label: 'NVIDIA RTX Video HDR（实验）',
+            label: 'NVIDIA RTX Video HDR',
             subtitle: nvidiaVideoEnhancementCapability.hdrHelperText,
             value: nvidiaVideoHdrExperimentEnabled,
             onChanged: nvidiaVideoEnhancementCapability.canEnableHdr

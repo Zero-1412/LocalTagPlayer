@@ -1,5 +1,28 @@
 # CURRENT_TASK.md
 
+## 2026-07-28 NVIDIA 发布范围收敛与 VSR 日常开启结论
+
+- 固定 mpv `v0.41.0-908-g48e6c35c0` 的 NVIDIA RTX 视频超分与 RTX Video HDR
+  作为现阶段 Windows 可交付能力；界面移除“实验”文案，但两个能力继续默认关闭、
+  仅会话保存，并保留硬件/源信号门禁、滤镜互斥、性能回滚和非 NVIDIA 回退。
+- A/B 工具改为在固定第 12 秒通过进程绑定的
+  `PrintWindow(PW_RENDERFULLCONTENT)` 捕获最终 Windows 表面，并强制 off/on
+  同尺寸；此前不同时间、不同渲染尺寸的 `mpv screenshot video` 不再作为观感
+  证据。
+- 真人面部、动画渐变、暗场三类自然低码率 1080P 六组 20 秒 A/B 均为 0 总
+  掉帧、0 音视频停滞且 VSR 开启组由驱动确认 active。肉眼结果是：真人/动画
+  边缘有收益，但真人压缩纹理也会变硬；暗场收益很小。因此 VSR 保持默认关闭，
+  仅建议在低码率画面偏软且被放大时按需开启。
+- NVOFA 插帧降级为独立长期研究，不进入产品、不进入安装包、不再阻塞播放器
+  发布。patched libmpv D3D11 hwframe 钩子与独立 FFmpeg 后端也不再由原任务
+  自动继续；只有未来显式重启 NVOFA 研究时才重新评估。
+- 默认 MediaKit、其他平台、插件 ABI v1、filtered queue、SQLite、标签、缓存
+  队列和用户数据均未改变。证据见
+  `docs/qa/nvidia_vsr_daily_ab_20260728.md`。
+- `flutter analyze`、298 项全量测试（另 3 项按既有条件跳过）、Windows Debug
+  build、PowerShell 语法和真实播放器齿轮点击/截图均通过；VSR/HDR 标题、说明、
+  循环开关及“更多播放设置”无错位、遮挡或溢出。
+
 ## 2026-07-28 child HWND 生命周期与 D3D11VA 零拷贝边界
 
 - 8 次独立进程 airspace 测试全部通过，Application Error 和孤儿进程均为 0；
@@ -13,7 +36,7 @@
 - 三类片源六组零拷贝 NVOFA A/B 在前置真实帧性能门禁连续产生 140/138 新增
   掉帧后停止，未生成可复用摘要；产品插帧入口继续关闭。
 - 公开 libmpv render API 没有 D3D11 帧接口，VapourSynth R4 只提供软件平面；
-  下一步是隔离 patched libmpv 的 D3D11 hwframe 只读钩子，不再调 NVOFA 参数。
+  本节当时记录的 patched libmpv 下一步已被上方发布范围收敛取代，不再自动继续。
 - 详细证据见
   `docs/qa/windows_hwnd_lifecycle_zero_copy_boundary_20260728.md`。
 

@@ -1,5 +1,20 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-28 · 收敛 NVIDIA VSR/HDR 发布范围
+
+- NVIDIA RTX 视频超分与 RTX Video HDR 作为当前 Windows 可交付能力，产品文案
+  移除“实验”；默认关闭、仅会话保存、原生能力门禁和性能回滚均保持不变。
+- VSR A/B 改为固定第 12 秒、进程绑定的最终 Windows 表面捕获，并强制 off/on
+  同尺寸，避免旧 `mpv screenshot video` 的不同时间与不同渲染尺寸误导观感。
+- 真人面部、动画渐变、暗场六组 20 秒 A/B 均为 0 总掉帧、0 音视频停滞；肉眼
+  结论是低码率真人/动画可按需开启，真人压缩纹理可能变硬，暗场不值得常开。
+- NVOFA 插帧降级为独立长期研究，不阻塞发布；patched libmpv D3D11 hwframe
+  钩子和独立 FFmpeg 后端不再由原任务自动继续。
+- 默认 MediaKit、其他平台、插件 ABI v1、filtered queue、SQLite、标签、缓存
+  队列和用户数据不变。
+- `flutter analyze`、298 项全量测试（另 3 项跳过）、Windows Debug build 和
+  真实播放器齿轮点击/截图通过；新标题、说明与相邻入口无错位、遮挡或溢出。
+
 ## 2026-07-28 · 校正 child HWND 生命周期与 D3D11VA 零拷贝边界
 
 - 新增同进程真实 child HWND 生命周期回归；8 次跨进程、12 次同进程重复会话、

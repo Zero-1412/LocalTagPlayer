@@ -1,5 +1,17 @@
 # ROADMAP.md
 
+## 2026-07-28 NVIDIA 发布范围收敛
+
+- [x] 把固定 mpv 驱动链上的 RTX 视频超分与 RTX Video HDR 定义为当前 Windows
+  可交付能力；移除产品“实验”文案，但保持默认关闭、会话级和既有门禁/回滚。
+- [x] 修正 VSR A/B 为固定第 12 秒、相同最终 Windows 表面截图；真人面部、动画
+  渐变、暗场六组性能和视觉门禁全部通过。
+- [x] 明确 VSR 不作为日常默认：低码率偏软且被放大时按需开启；真人压缩纹理可能
+  变硬，暗场收益很小。
+- [x] 将 NVOFA 插帧降级为独立长期研究，不作为播放器发布门禁。
+- [x] 停止原任务自动继续 patched libmpv D3D11 hwframe 钩子或独立 FFmpeg
+  D3D11VA 后端；未来只有显式重启 NVOFA 研究时再评估。
+
 ## 2026-07-28 child HWND 生命周期通过，零拷贝 NVOFA 性能未通过
 
 - [x] 8 次跨进程与 12 次同进程 child HWND 生命周期通过；覆盖真实 D3D11VA
@@ -9,12 +21,14 @@
   12 轮会话和交替压缩 `vf` 兼容门禁通过。
 - [ ] 完成真实全屏、跨物理 DPI 与快速队列切换 soak；当前跨 DPI 仍只有确定性
   几何回归，不能把普通窗口生命周期结果扩大解释。
-- [ ] 修复 NVOFA 真实帧前置性能回归。零拷贝六组 A/B 在开始前连续记录
-  140/138 新增掉帧并停止，产品入口继续关闭。
-- [ ] 用隔离 patched libmpv 建立 D3D11 hwframe 只读钩子，先证明连续纹理、
-  subresource、LUID 和时间戳；公开 render/VapourSynth API 不提供该边界。
-- [ ] 只有 mpv 内部钩子不可维护时，才在现有 `PlayerBackend` 后评估独立 FFmpeg
-  D3D11VA 后端；不得把平台纹理暴露给 Flutter 页面或 `PlayerService`。
+- [ ] **独立长期研究、非发布门禁：**修复 NVOFA 真实帧前置性能回归。零拷贝
+  六组 A/B 在开始前连续记录 140/138 新增掉帧并停止，产品入口继续关闭。
+- [ ] **独立长期研究、非自动后续：**如未来显式重启 NVOFA 研究，再评估隔离
+  patched libmpv 的 D3D11 hwframe 只读钩子，证明连续纹理、subresource、LUID
+  和时间戳。
+- [ ] **独立长期研究、非自动后续：**只有上述钩子被证明不可维护时，才在现有
+  `PlayerBackend` 后评估独立 FFmpeg D3D11VA 后端；不得把平台纹理暴露给
+  Flutter 页面或 `PlayerService`。
 
 ## 2026-07-28 NVOFA 遮挡与连续运动门禁已通过
 

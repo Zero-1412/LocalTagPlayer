@@ -352,6 +352,35 @@ void main() {
     expect(host, contains('CopyResource(texture, backup_texture_.Get())'));
   });
 
+  test('NVIDIA release copy and fixed-frame visual gate stay explicit', () {
+    final panel = File(
+      'lib/src/pages/player/player_settings_panel.dart',
+    ).readAsStringSync();
+    final page = File(
+      'lib/src/pages/player/player_page.dart',
+    ).readAsStringSync();
+    final abRunner = File('tool/run_nvidia_scaling_ab.ps1').readAsStringSync();
+    final roadmap = File('ROADMAP.md').readAsStringSync();
+
+    // VSR/HDR 是当前可交付能力；稳定键不改，用户文案不再把它们标成实验。
+    expect(panel, contains('NVIDIA RTX 视频超分'));
+    expect(panel, contains('NVIDIA RTX Video HDR'));
+    expect(panel, isNot(contains('NVIDIA RTX 视频超分（实验）')));
+    expect(panel, isNot(contains('NVIDIA RTX Video HDR（实验）')));
+    expect(page, contains('NVIDIA RTX 视频超分:'));
+    expect(page, contains('NVIDIA RTX Video HDR:'));
+
+    // 肉眼 A/B 必须锁定同一媒体时间和最终窗口尺寸，不能退回 mpv 内部截图。
+    expect(abRunner, contains('fixedFrameSecond = 12'));
+    expect(abRunner, contains('PW_RENDERFULLCONTENT'));
+    expect(abRunner, contains('sameWindowDimensions'));
+    expect(abRunner, contains('allVisualCaptureGatesPassed'));
+
+    // NVOFA 与 patched libmpv 只保留长期研究，不得重新成为自动发布门禁。
+    expect(roadmap, contains('NVOFA 插帧降级为独立长期研究'));
+    expect(roadmap, contains('非自动后续'));
+  });
+
   test('motion interpolation runtime uses structured vf and local-only paths',
       () {
     final runnerBuild =

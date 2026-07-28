@@ -1,5 +1,17 @@
 ﻿# ARCHITECTURE.md
 
+`Architecture Baseline 0.5.89` 收敛 Windows NVIDIA 发布边界：固定 mpv
+`v0.41.0-908-g48e6c35c0` 的 RTX 视频超分与 RTX Video HDR 作为当前可交付
+能力，产品文案不再标记“实验”，但仍默认关闭、仅会话保存，并受原生
+`gpu-next/D3D11`、非 copy `d3d11va`、源信号、滤镜互斥、掉帧熔断和回滚保护。
+修正 A/B 工具后，真人面部、动画渐变、暗场在固定第 12 秒的同尺寸最终 Windows
+表面完成六组肉眼对比，20 秒两侧均为 0 总掉帧和 0 音视频停滞。VSR 对偏软真人
+和动画边缘有收益，但可能放大面部压缩纹理，暗场收益很小，因此保持默认关闭、
+按低码率放大场景启用。NVOFA 插帧降级为独立长期研究，不阻塞发布；patched
+libmpv D3D11 hwframe 钩子与独立 FFmpeg 后端不再由原任务自动继续。默认
+MediaKit、其他平台、插件 ABI v1、filtered queue、SQLite、标签、缓存队列和
+用户数据不变。完整证据见 `docs/qa/nvidia_vsr_daily_ab_20260728.md`。
+
 `Architecture Baseline 0.5.88` 校正 Windows D3D11VA 的零拷贝边界，并把偶发
 child HWND 崩溃转成可重复生命周期门禁。8 次独立 runner 与 12 次同进程
 `create/open/occlude/dispose` 均无 Application Error、孤儿进程或输出掉帧；
@@ -8,8 +20,9 @@ child HWND 崩溃转成可重复生命周期门禁。8 次独立 runner 与 12 �
 默认产品仍为 `no`；12 轮直接采样会话及交替压缩 `vf` 均可播放，但后续 NVOFA
 真实帧性能前置门禁连续产生 140/138 掉帧，六组 A/B 被阻止。公开 libmpv
 render API 只有 OpenGL/软件输出，VapourSynth R4 只有软件平面，现有单帧 ABI
-也没有时间戳和双帧所有权；下一原型必须位于隔离 mpv 构建的 D3D11 hwframe
-内部钩子，失败后才评估独立 FFmpeg D3D11VA 后端。默认 MediaKit、产品开关、
+也没有时间戳和双帧所有权；本节当时把隔离 mpv 的 D3D11 hwframe 内部钩子列为
+下一原型，该路线现已由 0.5.89 降级为独立长期研究，不再自动继续。默认
+MediaKit、产品开关、
 插件 ABI v1、filtered queue、SQLite、标签、缓存队列和用户数据不变。完整证据
 见 `docs/qa/windows_hwnd_lifecycle_zero_copy_boundary_20260728.md`。
 

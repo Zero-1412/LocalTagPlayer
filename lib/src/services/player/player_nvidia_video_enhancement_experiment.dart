@@ -4,7 +4,7 @@ import '../../platform/platform_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-/** 内嵌 mpv 的 NVIDIA 驱动视频增强实验能力状态。 */
+/** 内嵌 mpv 的 NVIDIA 驱动视频增强能力状态。 */
 enum PlayerNvidiaVideoEnhancementStatus {
   probing,
   available,
@@ -113,7 +113,7 @@ class PlayerNvidiaVideoEnhancementCapability {
       usesNativeD3d11Output &&
       !conflictingCpuFilters;
 
-  /** 所有可验证门槛同时满足时才允许实验开关响应点击。 */
+  /** 所有可验证门槛同时满足时才允许会话开关响应点击。 */
   bool get canEnable => _passesCommonGate;
 
   /**
@@ -158,7 +158,7 @@ class PlayerNvidiaVideoEnhancementCapability {
       return '需在解码设置中选择 D3D11VA（非 copy），并重新打开视频';
     }
     if (runtimeState == 'active') {
-      return 'NVIDIA RTX Super Resolution 已由驱动确认';
+      return '驱动已启用；低码率画面放大时建议按需开启';
     }
     if (runtimeState == 'requested') {
       return '已请求 NVIDIA RTX Super Resolution，等待驱动确认';
@@ -166,7 +166,7 @@ class PlayerNvidiaVideoEnhancementCapability {
     if (runtimeState == 'rejected') {
       return 'libmpv 拒绝 NVIDIA 滤镜，已保持关闭';
     }
-    return 'mpv $mpvVersion · 原生 D3D11VA 零拷贝';
+    return 'mpv $mpvVersion · 默认关闭，低码率画面放大时可按需开启';
   }
 
   /** 面向设置页的 RTX Video HDR 边界说明。 */

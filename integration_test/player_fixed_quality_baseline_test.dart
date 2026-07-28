@@ -389,8 +389,8 @@ void main() {
             'mpv 视频滤镜:',
             'mpv 去色带:',
             'mpv 去色带参数:',
-            'NVIDIA 视频增强（实验）:',
-            'NVIDIA RTX Video HDR（实验）:',
+            'NVIDIA RTX 视频超分:',
+            'NVIDIA RTX Video HDR:',
             'NVIDIA VSR 驱动确认:',
             'NVIDIA HDR 驱动确认:',
             'NVIDIA 压力保护:',
@@ -523,12 +523,12 @@ void main() {
     } else if (baselineMode == 'nvidia-vsr-hdr-on') {
       final vsrRequested = finalLines.any(
         (line) => line.startsWith(
-          'NVIDIA 视频增强（实验）: 会话已请求',
+          'NVIDIA RTX 视频超分: 会话已请求',
         ),
       );
       final hdrRequested = finalLines.any(
         (line) => line.startsWith(
-          'NVIDIA RTX Video HDR（实验）: 会话已请求',
+          'NVIDIA RTX Video HDR: 会话已请求',
         ),
       );
       final rolledBack = finalLines.any(
@@ -548,7 +548,7 @@ void main() {
       }
     } else if (baselineMode == 'nvidia-on') {
       final active = finalLines.any(
-        (line) => line.startsWith('NVIDIA 视频增强（实验）: 会话已请求'),
+        (line) => line.startsWith('NVIDIA RTX 视频超分: 会话已请求'),
       );
       final rolledBack = finalLines.any(
         (line) =>
@@ -570,7 +570,7 @@ void main() {
       );
     } else if (baselineMode == 'nvidia-hdr-on') {
       final active = finalLines.any(
-        (line) => line.startsWith('NVIDIA RTX Video HDR（实验）: 会话已请求'),
+        (line) => line.startsWith('NVIDIA RTX Video HDR: 会话已请求'),
       );
       final rolledBack = finalLines.any(
         (line) =>
