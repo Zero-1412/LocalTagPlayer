@@ -1782,64 +1782,72 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(libraryVideoCardRadius),
                 clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  key: LibrarySmokeKeys.cardOpen(item.path),
-                  borderRadius: BorderRadius.circular(libraryVideoCardRadius),
-                  hoverColor: Colors.transparent,
-                  focusColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
-                  onFocusChange: (focused) =>
-                      setState(() => _focused = focused),
-                  // 多选期间点击只更新选择；普通状态才打开完整 filtered queue。
-                  onTap: widget.selectionMode
-                      ? widget.onToggleSelected
-                      : () => unawaited(_openAfterReleasingPreview()),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      KeyedSubtree(
-                        key: LibrarySmokeKeys.cardThumbnailSurface(item.path),
-                        child: _VideoPreview(
-                          key: _previewKey,
-                          item: item,
-                          thumbnailService: widget.thumbnailService,
-                          playbackSettings: widget.playbackSettings,
-                          hovered: _hovered && !widget.selectionMode,
-                          hoverPreviewEnabled: !widget.selectionMode,
-                          onVisible: widget.onVisible,
-                          onToggleFavorite: widget.selectionMode
-                              ? null
-                              : widget.onToggleFavorite,
-                          selected:
-                              widget.selectionMode ? widget.selected : null,
-                          onToggleSelected: widget.selectionMode
-                              ? widget.onToggleSelected
-                              : null,
-                          mediaKitInitializer: widget.mediaKitInitializer,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(10, 8, 8, 6),
-                        child: SizedBox(
-                          height: libraryVideoCardMetadataHeightForTextScale(
-                            textScaleFactor,
-                          ),
-                          child: _VideoCardMetadata(
+                child: Semantics(
+                  button: true,
+                  selected: widget.selectionMode ? widget.selected : null,
+                  // 网格卡片本身就是播放/选择入口，必须给键盘、辅助技术和语义压测稳定身份。
+                  label: widget.selectionMode
+                      ? '选择视频 ${item.title}'
+                      : LibrarySmokeSemantics.videoPlay(item),
+                  child: InkWell(
+                    key: LibrarySmokeKeys.cardOpen(item.path),
+                    borderRadius: BorderRadius.circular(libraryVideoCardRadius),
+                    hoverColor: Colors.transparent,
+                    focusColor: Colors.transparent,
+                    highlightColor: Colors.transparent,
+                    onFocusChange: (focused) =>
+                        setState(() => _focused = focused),
+                    // 多选期间点击只更新选择；普通状态才打开完整 filtered queue。
+                    onTap: widget.selectionMode
+                        ? widget.onToggleSelected
+                        : () => unawaited(_openAfterReleasingPreview()),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        KeyedSubtree(
+                          key: LibrarySmokeKeys.cardThumbnailSurface(item.path),
+                          child: _VideoPreview(
+                            key: _previewKey,
                             item: item,
-                            showMore: showMore,
-                            onMoreOpened: () =>
-                                setState(() => _moreMenuOpen = true),
-                            onMoreClosed: () =>
-                                setState(() => _moreMenuOpen = false),
-                            onRevealLocation: widget.selectionMode
+                            thumbnailService: widget.thumbnailService,
+                            playbackSettings: widget.playbackSettings,
+                            hovered: _hovered && !widget.selectionMode,
+                            hoverPreviewEnabled: !widget.selectionMode,
+                            onVisible: widget.onVisible,
+                            onToggleFavorite: widget.selectionMode
                                 ? null
-                                : widget.onRevealLocation,
-                            onDelete:
-                                widget.selectionMode ? null : widget.onDelete,
+                                : widget.onToggleFavorite,
+                            selected:
+                                widget.selectionMode ? widget.selected : null,
+                            onToggleSelected: widget.selectionMode
+                                ? widget.onToggleSelected
+                                : null,
+                            mediaKitInitializer: widget.mediaKitInitializer,
                           ),
                         ),
-                      ),
-                    ],
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 8, 8, 6),
+                          child: SizedBox(
+                            height: libraryVideoCardMetadataHeightForTextScale(
+                              textScaleFactor,
+                            ),
+                            child: _VideoCardMetadata(
+                              item: item,
+                              showMore: showMore,
+                              onMoreOpened: () =>
+                                  setState(() => _moreMenuOpen = true),
+                              onMoreClosed: () =>
+                                  setState(() => _moreMenuOpen = false),
+                              onRevealLocation: widget.selectionMode
+                                  ? null
+                                  : widget.onRevealLocation,
+                              onDelete:
+                                  widget.selectionMode ? null : widget.onDelete,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

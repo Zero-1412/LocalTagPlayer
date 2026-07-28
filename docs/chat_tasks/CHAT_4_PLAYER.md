@@ -1,3 +1,17 @@
+## 2026-07-28 双后端功能与动画对抗式压测
+
+- MediaKit / MPV 各完成 6 次全屏往返、100 次正式队列快速切换和 120 秒长播；
+  两后端停滞均为 0，最大掉帧分别为 0/2，filtered queue 身份、顺序、当前 index
+  和最终打开项均一致。
+- 队列开合、设置开合和 seek 的 P95 均低于 23ms；真实窗口复核全屏、全屏队列、
+  控制层和实时视频合成。
+- 压测发现 MPV child HWND 在 Flutter 顶栏卸载帧提交前进入原生全屏时会残留顶部
+  摘要像素；现在等待 `endOfFrame` 后再调用 `setFullScreen`，最终普通全屏和队列
+  展开稳定帧均无摘要残留。
+- MediaKit、播放器后端选择、来源队列、返回路径、SQLite、标签、缓存队列和用户数据
+  均未改变。真实跨物理 DPI 继续待人工门禁，详细证据见
+  `docs/qa/adversarial_full_app_stress_20260728.md`。
+
 ## 2026-07-28 MPV Texture 交互性能收敛
 
 - 原生 Texture 描述符读取不再持有整帧渲染锁，Flutter raster 只在共享句柄

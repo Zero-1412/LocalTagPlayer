@@ -116,6 +116,9 @@ function semanticTokenFromText(text) {
     /qa\.tag\.primary\.[^\s]+/,
     /qa\.tag\.child\.[^\s]+\.[^\s]+/,
     /qa\.video\.play\.[^\s]+/,
+    /展开标签筛选/,
+    /收起标签筛选/,
+    /折叠标签筛选/,
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);
@@ -260,24 +263,38 @@ async function clickElement(element) {
   });
 }
 
+/**
+ * 点击前重新解析语义目标，并在 Flutter 重建导致索引失效时只重试一次。
+ *
+ * 辅助树索引不是稳定身份；标签展开、排序和缩略图刷新都可能在两次取样后触发
+ * Widget 重建。重试仍然按语义解析，不退回固定坐标，避免把压测脚本误点当成
+ * 业务故障。
+ */
 async function safeClickElement(element) {
-  try {
-    const token = semanticTokenFromText(element.text);
-    if (token) {
+  const token = semanticTokenFromText(element.text) ?? element.text;
+  if (isDangerousChromeElement(element)) return false;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
       const stable = await resolveStableElement(token);
       if (!stable) return false;
       await clickElement(stable);
-    } else {
-      if (isDangerousChromeElement(element)) return false;
-      await clickElement(element);
+      return true;
+    } catch (error) {
+      const message = String(error?.message ?? error);
+      if (message.includes('outside window bounds')) {
+        return false;
+      }
+      if (
+        attempt === 0 &&
+        /not available in cached app state|stale|not found/i.test(message)
+      ) {
+        await sleep(120);
+        continue;
+      }
+      throw error;
     }
-    return true;
-  } catch (error) {
-    if (String(error?.message ?? error).includes('outside window bounds')) {
-      return false;
-    }
-    throw error;
   }
+  return false;
 }
 
 async function clickSemantic(label) {
@@ -301,8 +318,61 @@ async function scrollMainViewport() {
   });
 }
 
+/**
+ * 确保标签发现面板可见。
+ *
+ * 主界面会持久化面板折叠状态，压测不能假设一级标签始终已挂载。这里先检查
+ * 现有一级标签；若不存在，再通过可访问语义展开面板并等待标签出现。
+ */
+async function ensureTagDiscoveryExpanded() {
+  const initialLines = parseIndexedLines(await snapshotText());
+  if (primaryTagCandidates(initialLines).length) return true;
+
+  const toggleLabels = ['展开标签筛选', '展开标签'];
+  for (const label of toggleLabels) {
+    const toggle = findByVisibleText(initialLines, label);
+    if (!toggle || !(await safeClickElement(toggle))) continue;
+    const expanded = await waitForSnapshotWhere((nextLines) =>
+      primaryTagCandidates(nextLines).length ? true : null,
+    );
+    if (expanded) return true;
+  }
+  return false;
+}
+
+/**
+ * 标签选择会按产品约定自动折叠发现面板；连续筛选前需要重新展开同一个父级。
+ *
+ * 结果计数刷新可能改变一级标签排序，所以先尝试当前首屏，再展开“更多一级标签”。
+ * 全程仍使用语义目标，不依赖窗口坐标。
+ */
+async function reopenPrimaryChildren(primaryLabel) {
+  if (!(await ensureTagDiscoveryExpanded())) return [];
+  let lines = parseIndexedLines(await snapshotText());
+  let primary = primaryTagCandidates(lines).find(
+    (candidate) => candidate.label === primaryLabel,
+  );
+  if (!primary) {
+    const showMore = lines.find((line) => line.text.includes('更多一级标签'));
+    if (showMore && (await safeClickElement(showMore))) {
+      await sleep(160);
+      lines = parseIndexedLines(await snapshotText());
+      primary = primaryTagCandidates(lines).find(
+        (candidate) => candidate.label === primaryLabel,
+      );
+    }
+  }
+  if (!primary || !(await safeClickElement(primary))) return [];
+  const expanded = await waitForSnapshotWhere((nextLines) => {
+    const children = childTagCandidates(nextLines, primaryLabel);
+    return children.length ? children : null;
+  });
+  return expanded?.result ?? [];
+}
+
 async function exerciseTags(round) {
   const started = Date.now();
+  await ensureTagDiscoveryExpanded();
   let tree = await snapshotText();
   let lines = parseIndexedLines(tree);
   let primary = null;
@@ -370,9 +440,9 @@ async function exerciseTags(round) {
     }
     clickedChildren.push(child.label);
     await sleep(220);
-    tree = await snapshotText();
-    lines = parseIndexedLines(tree);
-    childPool = shuffled(childTagCandidates(lines, primary.label));
+    if (index < 1) {
+      childPool = shuffled(await reopenPrimaryChildren(primary.label));
+    }
   }
 
   if (round % 2 === 0) {

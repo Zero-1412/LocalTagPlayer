@@ -514,6 +514,21 @@ bool playerWindowTopBarShouldShow({
 }
 
 /**
+ * 判断非全屏顶栏是否仍应挂载。
+ *
+ * Windows 进入全屏时，原生窗口会先于异步 Future 完成视觉切换；若继续挂载旧顶栏，
+ * 队列动画可能短暂泄露序号与筛选摘要。过渡期间先卸载顶栏，成功后再由最终全屏状态
+ * 决定是否恢复，避免在视频画面顶部留下闪烁语境。
+ */
+@visibleForTesting
+bool playerWindowTopBarShouldMount({
+  required bool isFullscreen,
+  required bool fullscreenTransitionInProgress,
+}) {
+  return !isFullscreen && !fullscreenTransitionInProgress;
+}
+
+/**
  * 判断当前焦点是否属于可编辑文本。
  *
  * 播放器快捷键位于页面祖先 Focus；EditableText 未消费的字母仍可能继续冒泡，
@@ -1045,6 +1060,8 @@ class PlayerPageState extends State<PlayerPage> {
   Future<void> _sessionFullscreenRestore = Future<void>.value();
   /** 全屏时是否在画面右侧显示不改变视频尺寸的当前筛选队列覆盖层。 */
   var _fullscreenQueueVisible = false;
+  /** 原生窗口正在切换全屏；期间先卸载旧顶栏，避免异步边界产生残留摘要。 */
+  var _fullscreenTransitionInProgress = false;
   /** 宽屏队列折叠时，指针是否进入非全屏顶部标题栏热区。 */
   var _pointerInWindowTopBarRegion = false;
   final _random = math.Random();
@@ -2645,13 +2662,31 @@ class PlayerPageState extends State<PlayerPage> {
     final target = !_isWindowFullscreen;
     _fullscreenQueueHideTimer?.cancel();
     _fullscreenQueueHideTimer = null;
-    await windowManager.setFullScreen(target);
+    setState(() {
+      _fullscreenTransitionInProgress = true;
+      _pointerInWindowTopBarRegion = false;
+    });
+    // child HWND 会在原生全屏命令返回前完成尺寸切换；必须先让 Flutter 提交一次
+    // “顶栏已卸载”的帧，否则 D3D11 子窗口可能把旧摘要像素保留在全屏画面顶部。
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) {
+      return;
+    }
+    try {
+      await windowManager.setFullScreen(target);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _fullscreenTransitionInProgress = false);
+      }
+      rethrow;
+    }
     if (!mounted) {
       return;
     }
     setState(() {
       _isWindowFullscreen = target;
       _fullscreenQueueVisible = false;
+      _fullscreenTransitionInProgress = false;
       _pointerInWindowTopBarRegion = false;
     });
     widget.fullscreenSessionController.recordPlayerFullscreen(target);
@@ -4854,7 +4889,11 @@ class PlayerPageState extends State<PlayerPage> {
                   Positioned.fill(
                     child: Column(
                       children: [
-                        if (!_isWindowFullscreen)
+                        if (playerWindowTopBarShouldMount(
+                          isFullscreen: _isWindowFullscreen,
+                          fullscreenTransitionInProgress:
+                              _fullscreenTransitionInProgress,
+                        ))
                           AnimatedSize(
                             key: const ValueKey(
                               'player.windowTopBar.visibility',

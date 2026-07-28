@@ -1169,6 +1169,11 @@ void main() {
     );
     await tester.pump();
 
+    final semantics = tester.ensureSemantics();
+    expect(
+      find.bySemanticsLabel(LibrarySmokeSemantics.videoPlay(item)),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(LibrarySmokeKeys.cardOpen(item.path)));
     await tester.pump();
 
@@ -1177,6 +1182,7 @@ void main() {
       find.byKey(LibrarySmokeKeys.cardHoverPreviewLoading(item.path)),
       findsNothing,
     );
+    semantics.dispose();
   });
 
   testWidgets('library scrolling appends ten rows and keeps full play queue',
@@ -2430,6 +2436,30 @@ void main() {
     // 用户在播放器内主动退出全屏后，后续进入恢复普通窗口路径。
     session.recordPlayerFullscreen(false);
     expect(session.shouldOpenFullscreen, isFalse);
+  });
+
+  test('player fullscreen transition unmounts stale window top bar', () {
+    expect(
+      playerWindowTopBarShouldMount(
+        isFullscreen: false,
+        fullscreenTransitionInProgress: false,
+      ),
+      isTrue,
+    );
+    expect(
+      playerWindowTopBarShouldMount(
+        isFullscreen: false,
+        fullscreenTransitionInProgress: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playerWindowTopBarShouldMount(
+        isFullscreen: true,
+        fullscreenTransitionInProgress: false,
+      ),
+      isFalse,
+    );
   });
 
   test('library excludes semantics only while player route is active', () {
