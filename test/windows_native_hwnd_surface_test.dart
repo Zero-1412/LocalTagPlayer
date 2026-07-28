@@ -38,6 +38,10 @@ void main() {
           'native-nvidia-hdr-state': 'active',
           'video-params/primaries': 'bt.709',
           'video-params/gamma': 'bt.1886',
+          'video-params/colorlevels': 'limited',
+          'video-params/colormatrix': 'bt.709',
+          'video-output-levels': 'full',
+          'video-target-params/colorlevels': 'full',
           'video-params/w': 1920,
           'video-params/h': 1080,
           'video-sync': 'display-resample',
@@ -109,6 +113,13 @@ void main() {
     );
     expect(await backend.getProperty('video-params/primaries'), 'bt.709');
     expect(await backend.getProperty('video-params/gamma'), 'bt.1886');
+    expect(await backend.getProperty('video-params/colorlevels'), 'limited');
+    expect(await backend.getProperty('video-params/colormatrix'), 'bt.709');
+    expect(await backend.getProperty('video-output-levels'), 'full');
+    expect(
+      await backend.getProperty('video-target-params/colorlevels'),
+      'full',
+    );
     expect(await backend.getProperty('video-params/w'), '1920');
     expect(await backend.getProperty('video-params/h'), '1080');
     expect(await backend.getProperty('video-sync'), 'display-resample');

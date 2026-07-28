@@ -955,6 +955,10 @@ class PlayerPageState extends State<PlayerPage> {
   DateTime? _pauseAcknowledgedAt;
   DateTime? _routePopRequestedAt;
   Duration? _pendingSeekTarget;
+  /** seek 工作器繁忙时记录用户最新目标，使连续快捷键基于尚未确认的目标累加。 */
+  Duration? _latestRequestedSeekTarget;
+  /** 每个 seek 输入递增；工作器只提交短时间内不再被替换的最新一代。 */
+  var _seekRequestGeneration = 0;
   var _seekInFlight = false;
   var _isExiting = false;
   /** 恢复选择弹窗期间暂停进度写入，避免刚打开的 0 秒覆盖稳定进度。 */
@@ -1793,13 +1797,28 @@ class PlayerPageState extends State<PlayerPage> {
       return;
     }
     // 拖动进度条时只保留最新目标，避免大量并发 seek 让视频解码停止而音频继续推进。
-    _pendingSeekTarget = target < Duration.zero ? Duration.zero : target;
+    final duration = _playerService.state.duration;
+    final clamped = target < Duration.zero
+        ? Duration.zero
+        : duration > Duration.zero && target > duration
+            ? duration
+            : target;
+    _latestRequestedSeekTarget = clamped;
+    _pendingSeekTarget = clamped;
+    _seekRequestGeneration++;
     if (_seekInFlight) {
       return;
     }
     _seekInFlight = true;
     try {
       while (!_isExiting && _pendingSeekTarget != null) {
+        final observedGeneration = _seekRequestGeneration;
+        // 拖动松手、鼠标连点或键盘连按都先进入短尾随防抖；只让停止变化的最终
+        // 目标进入解码器，界面反馈仍由本地滑块和快捷键水印即时完成。
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        if (observedGeneration != _seekRequestGeneration) {
+          continue;
+        }
         final requested = _pendingSeekTarget!;
         _pendingSeekTarget = null;
         final stopwatch = Stopwatch()..start();
@@ -1807,6 +1826,10 @@ class PlayerPageState extends State<PlayerPage> {
         // media_kit 的 seek Future 只代表命令已提交；等待位置接近目标后再记录真实延迟。
         final deadline = DateTime.now().add(const Duration(seconds: 2));
         while (!_isExiting && DateTime.now().isBefore(deadline)) {
+          // 已有更新目标时无需等待旧位置落稳，立即把解码器推进到用户最终选择。
+          if (_pendingSeekTarget != null) {
+            break;
+          }
           final delta = (_playerService.state.position - requested).abs();
           if (delta <= const Duration(milliseconds: 750)) {
             break;
@@ -1819,7 +1842,18 @@ class PlayerPageState extends State<PlayerPage> {
       }
     } finally {
       _seekInFlight = false;
+      _latestRequestedSeekTarget = null;
     }
+  }
+
+  /**
+   * 相对跳转在 seek 未完成时基于用户最新目标累加，而不是反复读取滞后的后端位置。
+   */
+  void _seekRelative(Duration delta) {
+    final base = _seekInFlight
+        ? (_latestRequestedSeekTarget ?? _playerService.state.position)
+        : _playerService.state.position;
+    unawaited(_seekWithDiagnostics(base + delta));
   }
 
   /**
@@ -1839,6 +1873,7 @@ class PlayerPageState extends State<PlayerPage> {
       backend: _playerService,
     ));
     _pendingSeekTarget = null;
+    _latestRequestedSeekTarget = null;
     _openRequests.cancel();
     _detailsService.dispose();
     _persistOpenedProgress();
@@ -2640,6 +2675,25 @@ class PlayerPageState extends State<PlayerPage> {
    */
   @visibleForTesting
   void toggleQueueVisibilityForStressTest() => _toggleQueueVisibility();
+
+  /**
+   * 交互性能矩阵通过正式齿轮入口打开设置浮层。
+   *
+   * 测试仍需从浮层 Route 正常关闭；该入口不复制设置状态，也不绕过原生 airspace
+   * 协调，确保 Texture 与显式 HWND QA 路径接受同一组压力。
+   */
+  @visibleForTesting
+  Future<void> showControlSettingsForStressTest() =>
+      _showControlSettingsDialog();
+
+  /**
+   * 交互性能矩阵通过正式 latest-seek 协调器提交目标位置。
+   *
+   * 该入口保留实际后端 seek、位置确认与延迟诊断，不允许测试直接调用后端绕过页面。
+   */
+  @visibleForTesting
+  Future<void> seekForStressTest(Duration target) =>
+      _seekWithDiagnostics(target);
 
   /**
    * 在双后端快速切换门禁中走正式队列跳转与 latest-request 串行链。
@@ -4546,8 +4600,7 @@ class PlayerPageState extends State<PlayerPage> {
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekBackward)) {
-      unawaited(_seekWithDiagnostics(
-          _playerService.state.position - Duration(seconds: _seekStepSeconds)));
+      _seekRelative(Duration(seconds: -_seekStepSeconds));
       // KeyRepeat 继续执行 seek，但同一次按住只在首次 KeyDown 展示一次反馈。
       if (playerSeekFeedbackShouldShow(isRepeat: event is KeyRepeatEvent)) {
         _showShortcutFeedback(
@@ -4559,8 +4612,7 @@ class PlayerPageState extends State<PlayerPage> {
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekForward)) {
-      unawaited(_seekWithDiagnostics(
-          _playerService.state.position + Duration(seconds: _seekStepSeconds)));
+      _seekRelative(Duration(seconds: _seekStepSeconds));
       // 与快退一致，重复键事件不重新启动居中反馈动画。
       if (playerSeekFeedbackShouldShow(isRepeat: event is KeyRepeatEvent)) {
         _showShortcutFeedback(
@@ -4996,7 +5048,9 @@ class PlayerPageState extends State<PlayerPage> {
                                           _queueSidebarCollapsed ? 0 : 1,
                                       child: IgnorePointer(
                                         ignoring: _queueSidebarCollapsed,
-                                        child: queueSidebar,
+                                        child: RepaintBoundary(
+                                          child: queueSidebar,
+                                        ),
                                       ),
                                     ),
                                   ),

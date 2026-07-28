@@ -94,6 +94,9 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
   var _requestGeneration = 0;
   var _previewLoading = false;
   File? _previewFile;
+  /** 拖动期间只更新本地视觉位置，松手后才向播放后端提交一次 seek。 */
+  double? _dragValue;
+  var _dragging = false;
 
   @override
   void didUpdateWidget(covariant PlayerProgressSlider oldWidget) {
@@ -175,6 +178,28 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
     super.dispose();
   }
 
+  /** 开始拖动时锁定本地显示值，避免后端尚未确认的位置把滑块拉回。 */
+  void _handleChangeStart(double value) {
+    setState(() {
+      _dragging = true;
+      _dragValue = value;
+    });
+  }
+
+  /** 拖动过程只刷新轻量滑块，不连续刷新解码器和原生纹理链。 */
+  void _handleChanged(double value) {
+    setState(() => _dragValue = value);
+  }
+
+  /** 松手后只提交最终目标，后续位置显示继续以播放器确认状态为准。 */
+  void _handleChangeEnd(double value) {
+    setState(() {
+      _dragging = false;
+      _dragValue = null;
+    });
+    widget.onChanged(value);
+  }
+
   @override
   Widget build(BuildContext context) {
     final thumbScale = playerProgressThumbScale(
@@ -207,9 +232,12 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
                   builder: (context, hoverProgress, child) {
                     return _PlayerSliderVisual(
                       sliderKey: widget.sliderKey,
-                      value: widget.value,
+                      value: (_dragging ? _dragValue : widget.value) ??
+                          widget.value,
                       max: widget.max,
-                      onChanged: widget.onChanged,
+                      onChanged: _handleChanged,
+                      onChangeStart: _handleChangeStart,
+                      onChangeEnd: _handleChangeEnd,
                       trackHeight: 2 + hoverProgress * 3,
                       thumbRadius: 5.5 * thumbScale,
                       overlayRadius: 14,
@@ -395,6 +423,8 @@ class _PlayerSliderVisual extends StatelessWidget {
     required this.thumbRadius,
     required this.overlayRadius,
     required this.thumbVisibility,
+    this.onChangeStart,
+    this.onChangeEnd,
     this.useCatSlimeThumb = false,
     this.catSlimeThumbScale = 1,
   });
@@ -403,6 +433,10 @@ class _PlayerSliderVisual extends StatelessWidget {
   final double value;
   final double max;
   final ValueChanged<double> onChanged;
+  /** 可选的拖动开始回调；主进度条用它隔离后端 seek。 */
+  final ValueChanged<double>? onChangeStart;
+  /** 可选的拖动结束回调；主进度条只在这里提交最终 seek。 */
+  final ValueChanged<double>? onChangeEnd;
   final double trackHeight;
   final double thumbRadius;
   final double overlayRadius;
@@ -441,6 +475,8 @@ class _PlayerSliderVisual extends StatelessWidget {
         value: value,
         max: max,
         onChanged: onChanged,
+        onChangeStart: onChangeStart,
+        onChangeEnd: onChangeEnd,
       ),
     );
   }

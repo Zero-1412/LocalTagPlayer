@@ -1,3 +1,16 @@
+## 2026-07-28 MPV Texture 交互性能收敛
+
+- 原生 Texture 描述符读取不再持有整帧渲染锁，Flutter raster 只在共享句柄
+  `SetSize` / 销毁时短暂同步；队列、设置和 seek 的 raster P95 从约 39ms
+  收敛到约 1–2ms。
+- 进度条拖动松手后只提交一次最终 seek；快捷键连按累计最新目标并做 80ms
+  尾随合并，避免解码器重复处理过期位置。
+- 渲染器切换提示四秒自动隐藏，确认与撤销路径保留；宽屏/全屏播放列表、右键菜单、
+  齿轮设置、来源队列、当前 index 与返回路径均未删除。
+- 同文件色彩回读为 limited BT.709 与 mpv auto 输出，未以 PotPlayer 的额外高光
+  抬升作为全局亮度基准。
+- 自动窗口矩阵通过；Computer Use 被用户物理 Esc 中止，真实点击截图待下一次补测。
+
 ## 2026-07-28 默认 MPV 改为播放器容器 Texture
 
 - Windows 用户选择 MPV 后默认挂载 libmpv Flutter Texture；MediaKit 与 MPV 只替换

@@ -630,7 +630,8 @@ void NativePlayerBridge::EnsureTexture() {
                   NormalizeSurfaceDimension(width, 640, 1920, 64);
               desired_surface_height_ =
                   NormalizeSurfaceDimension(height, 360, 1080, 32);
-              std::lock_guard<std::mutex> surface_lock(surface_mutex_);
+              std::lock_guard<std::mutex> descriptor_lock(
+                  surface_descriptor_mutex_);
               if (!rendering_enabled_ || surface_manager_ == nullptr) {
                 return static_cast<FlutterDesktopGpuSurfaceDescriptor*>(
                     nullptr);
@@ -813,6 +814,8 @@ void NativePlayerBridge::DestroyPlayer() {
     std::lock_guard<std::mutex> surface_lock(surface_mutex_);
     // 插件可能持有同设备资源，必须先关闭再销毁 ANGLE 表面。
     video_enhancement_plugin_.Shutdown();
+    std::lock_guard<std::mutex> descriptor_lock(
+        surface_descriptor_mutex_);
     surface_manager_.reset();
   }
   if (player_ != nullptr) {
@@ -986,6 +989,11 @@ void NativePlayerBridge::SamplePlayerState() {
   video_filters_ = read_string("vf");
   video_primaries_ = read_string("video-params/primaries");
   video_gamma_ = read_string("video-params/gamma");
+  video_color_levels_ = read_string("video-params/colorlevels");
+  video_color_matrix_ = read_string("video-params/colormatrix");
+  video_output_levels_ = read_string("video-output-levels");
+  video_target_color_levels_ =
+      read_string("video-target-params/colorlevels");
   // 自动 VSR 只比较源尺寸与显示输出，属性未就绪时必须保守归零。
   video_width_ = read_int("video-params/w", 0);
   video_height_ = read_int("video-params/h", 0);
@@ -1009,6 +1017,8 @@ void NativePlayerBridge::RenderFrame() {
   const auto desired_height = desired_surface_height_.load();
   if (desired_width != surface_manager_->width() ||
       desired_height != surface_manager_->height()) {
+    std::lock_guard<std::mutex> descriptor_lock(
+        surface_descriptor_mutex_);
     surface_manager_->SetSize(desired_width, desired_height);
     surface_width_ = surface_manager_->width();
     surface_height_ = surface_manager_->height();
@@ -1165,6 +1175,14 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(video_primaries_)},
           {flutter::EncodableValue("video-params/gamma"),
            flutter::EncodableValue(video_gamma_)},
+          {flutter::EncodableValue("video-params/colorlevels"),
+           flutter::EncodableValue(video_color_levels_)},
+          {flutter::EncodableValue("video-params/colormatrix"),
+           flutter::EncodableValue(video_color_matrix_)},
+          {flutter::EncodableValue("video-output-levels"),
+           flutter::EncodableValue(video_output_levels_)},
+          {flutter::EncodableValue("video-target-params/colorlevels"),
+           flutter::EncodableValue(video_target_color_levels_)},
           {flutter::EncodableValue("video-params/w"),
            flutter::EncodableValue(video_width_)},
           {flutter::EncodableValue("video-params/h"),

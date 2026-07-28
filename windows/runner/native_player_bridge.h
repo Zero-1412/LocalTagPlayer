@@ -150,8 +150,15 @@ class NativePlayerBridge {
   std::atomic<int64_t> surface_resize_count_{0};
 
   mutable std::mutex mutex_;
-  /** 防止 Flutter raster 读取共享纹理时与工作线程重建或绘制表面交叉。 */
+  /** 串行 mpv 绘制、共享纹理复制、插件处理与表面重建。 */
   mutable std::mutex surface_mutex_;
+  /**
+   * 只保护 ANGLE 共享句柄与尺寸重建。
+   *
+   * Flutter raster 线程读取纹理描述符时不得等待整帧 mpv 绘制、D3D 复制或插件；
+   * 只有极少发生的 SetSize/销毁可以短暂阻塞描述符读取。
+   */
+  mutable std::mutex surface_descriptor_mutex_;
   std::condition_variable condition_;
   std::queue<Command> commands_;
   std::thread worker_;
@@ -198,6 +205,14 @@ class NativePlayerBridge {
   std::string video_primaries_ = "unavailable";
   /** 当前源传递函数；只有明确的 PQ/HLG 才会被 Dart 识别为 HDR。 */
   std::string video_gamma_ = "unavailable";
+  /** 当前源量化范围，用于区分 limited/TV 与 full/PC，避免凭显示亮度猜测。 */
+  std::string video_color_levels_ = "unavailable";
+  /** 当前源色彩矩阵，用于确认 BT.601/709/2020 转换路径。 */
+  std::string video_color_matrix_ = "unavailable";
+  /** libmpv 当前请求的 RGB 输出电平策略。 */
+  std::string video_output_levels_ = "unavailable";
+  /** libmpv 渲染目标最终确认的输出范围。 */
+  std::string video_target_color_levels_ = "unavailable";
   /**
    * 当前源画面尺寸。
    *

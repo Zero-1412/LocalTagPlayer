@@ -187,5 +187,17 @@ void main() {
       saved.last.rendererPreference,
       PlayerRendererPreference.windowsLibmpv,
     );
+
+    // 再次保存后不操作撤销，提示应在短暂窗口结束后自行消失。
+    rebuildPage(() => showRendererSettings = true);
+    await tester.pump();
+    await chooseRenderer(PlayerRendererPreference.mediaKit);
+    await tester.tap(find.text('确认切换'));
+    await tester.pumpAndSettle();
+    expect(find.text('渲染器已保存，将在下次进入播放器时生效'), findsOneWidget);
+    // 入场动画完成后才开始计时，额外留出退场动画窗口。
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('渲染器已保存，将在下次进入播放器时生效'), findsNothing);
   });
 }

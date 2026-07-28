@@ -651,22 +651,36 @@ class _PlaybackRendererDropdownState extends State<PlaybackRendererDropdown> {
     // 设置页后点击“撤销”时访问已销毁 State.widget。
     final undoSettings = next.copyWith(rendererPreference: previousPreference);
     final saveSettings = widget.onChanged;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: const Text('渲染器已保存，将在下次进入播放器时生效'),
-          action: SnackBarAction(
-            label: '撤销',
-            onPressed: () => unawaited(
-              _undoRendererChange(
-                undoSettings: undoSettings,
-                saveSettings: saveSettings,
-              ),
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final controller = messenger.showSnackBar(
+      SnackBar(
+        // 切换结果只提供短暂撤销窗口，不能永久占用媒体库底部并要求用户手动关闭。
+        duration: const Duration(seconds: 4),
+        content: const Text('渲染器已保存，将在下次进入播放器时生效'),
+        action: SnackBarAction(
+          label: '撤销',
+          onPressed: () => unawaited(
+            _undoRendererChange(
+              undoSettings: undoSettings,
+              saveSettings: saveSettings,
             ),
           ),
         ),
-      );
+      ),
+    );
+    // 无障碍模式会让带操作按钮的 Snackbar 跳过系统超时；产品要求该提示始终
+    // 自动收起，因此只关闭本控制器，不能误伤之后出现的其它错误提示。
+    unawaited(
+      Future.any<bool>(<Future<bool>>[
+        Future<void>.delayed(const Duration(seconds: 4)).then((_) => true),
+        controller.closed.then((_) => false),
+      ]).then((shouldClose) {
+        if (shouldClose) {
+          controller.close();
+        }
+      }),
+    );
   }
 
   /** 即使设置 Route 已退出，也使用预先捕获的回调恢复渲染器偏好。 */

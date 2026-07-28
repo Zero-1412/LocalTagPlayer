@@ -8342,6 +8342,35 @@ void main() {
     await mouse.removePointer();
   });
 
+  testWidgets('player progress commits only the final drag target',
+      (tester) async {
+    final committed = <double>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlayerProgressSlider(
+            sliderKey: const ValueKey('test.progress.commit'),
+            value: 25000,
+            max: 100000,
+            previewIdentity: 'video-1',
+            loadPreview: (_) async => null,
+            onChanged: committed.add,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey('test.progress.commit')),
+      const Offset(260, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(committed, hasLength(1));
+    expect(committed.single, greaterThan(25000));
+  });
+
   test('fullscreen progress thumb scales only on high resolution viewports',
       () {
     expect(

@@ -84,3 +84,25 @@ stale surface，全屏顶部不再显示队列语境条。
 平台门禁由 `resolvePlayerBackendSelection` 的非 Windows 回退、focused test 和矩阵
 汇总共同保护。仅增加 UI 选项、链接 libmpv 或复用 Windows 枚举值，均不构成
 macOS/Linux 原生后端完成。
+
+## 交互压力与色彩链补测
+
+新增正式 PlayerPage 交互阶段：六轮宽屏列表显隐、六轮齿轮设置开关、十八次连续
+seek，均采集 Flutter `FrameTiming`、原生 surface resize、掉帧和队列快照。优化前后
+使用同一 Debug 构建模式、三段自然低码率 1080P 和相同循环数：
+
+| 指标 | 优化前 P95 | 优化后 P95 | 优化后最大值 |
+| --- | ---: | ---: | ---: |
+| 播放列表显隐总帧 | 47.311ms | 14.719ms | 16.911ms |
+| 设置弹层总帧 | 52.285ms | 21.391ms | 42.347ms |
+| 连续 seek 总帧 | 505.127ms | 15.636ms | 19.372ms |
+| 列表 / 设置 raster | 38.296 / 39.199ms | 1.579 / 1.645ms | — |
+
+优化后 10 秒阶段 4/4 采样推进，音视频停滞 0，最大总掉帧 2；队列来源、当前项与
+纹理均保持有效。用户指定的同一 1920×1080/60 文件也通过完整矩阵，运行时回读
+`sourceLevels=limited`、`sourceMatrix=bt.709`、`outputLevels=auto`，没有发现
+LocalTagPlayer 强制 limited RGB 或错误 BT.601 矩阵的证据。
+
+真实 UI 点击原计划由 Computer Use 补测，但目标选择阶段收到用户物理 Esc，工具按
+安全规则终止。本轮不得把自动窗口门禁冒充真实点击截图；下一次需人工进入播放器后
+依次验证列表显隐、齿轮开关、进度拖动、全屏往返及渲染器提示自动消失。

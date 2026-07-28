@@ -1,5 +1,20 @@
 ﻿# ARCHITECTURE.md
 
+## Windows MPV Texture 描述符与渲染锁边界
+
+`Architecture Baseline 0.5.96` 将原生 Texture 的同步范围拆为两个责任互斥量：
+`surface_mutex_` 只串行 MPV 绘制、共享纹理复制、插件处理和表面重建；
+`surface_descriptor_mutex_` 只保护 DXGI 共享句柄、尺寸 `SetSize` 与销毁。Flutter
+raster 回调只能获取后者，不能等待每一帧的 MPV/ANGLE/D3D11 工作。
+
+描述符锁必须始终在 surface 锁之后获取；Texture 回调只能单独获取描述符锁，
+销毁与 resize 使用相同顺序，避免锁反转。此优化不改变 `PlayerBackend` contract、
+硬解策略、滤镜、filtered queue 或视频比例，只消除平台边界中的错误锁粒度。
+
+seek 仍由 `PlayerPage` 的 latest-target 协调器拥有：拖动组件只在结束时提交目标，
+键盘连按在短尾随窗口内累计，后端不接收已经被新输入替代的位置。MediaKit 继续复用
+同一页面语义，但不消费 Windows Texture 锁。
+
 ## Windows MPV 默认容器合成边界
 
 `Architecture Baseline 0.5.95` 把 Windows MPV 的产品默认表面从 child HWND 改为

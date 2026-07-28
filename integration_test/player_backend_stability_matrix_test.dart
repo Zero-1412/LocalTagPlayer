@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -156,6 +157,15 @@ void main() {
         const Duration(seconds: 15),
       );
     }
+    // 在任何队列切换前锁定首个真实片源的色彩链，避免后续样本覆盖用户关心的
+    // source/output 范围；只记录枚举属性，不记录媒体路径或其它隐私信息。
+    final initialColorPipeline = <String, Object?>{
+      'sourceLevels': await backend.getProperty('video-params/colorlevels'),
+      'sourceMatrix': await backend.getProperty('video-params/colormatrix'),
+      'outputLevels': await backend.getProperty('video-output-levels'),
+      'targetLevels':
+          await backend.getProperty('video-target-params/colorlevels'),
+    };
     final originalQueue =
         playerKey.currentState!.buildStabilitySnapshotForTest().sourceVideoIds;
 
@@ -165,6 +175,11 @@ void main() {
       backend,
     );
     final queueComposition = await _runQueueCompositionScenario(
+      tester,
+      playerKey,
+      backend,
+    );
+    final interactionPerformance = await _runInteractionPerformanceScenario(
       tester,
       playerKey,
       backend,
@@ -195,6 +210,7 @@ void main() {
     final automatedPass = <Map<String, Object?>>[
       fullscreen,
       queueComposition,
+      interactionPerformance,
       dpi,
       rapidSwitch,
       longPlay,
@@ -206,6 +222,7 @@ void main() {
       'playerBackend': backendName,
       'rendererPreference': settings.rendererPreference.name,
       'actualHwdec': await backend.getProperty('hwdec-current'),
+      'initialColorPipeline': initialColorPipeline,
       'sampleCount': items.length,
       'automatedPass': automatedPass,
       'releaseGate': automatedPass && physicalDpiPassed
@@ -216,6 +233,7 @@ void main() {
       'scenarios': <String, Object?>{
         'fullscreen': fullscreen,
         'queueComposition': queueComposition,
+        'interactionPerformance': interactionPerformance,
         'crossDpi': dpi,
         'rapidSwitch': rapidSwitch,
         'longPlayback': longPlay,
@@ -326,12 +344,31 @@ Future<Map<String, Object?>> _runQueueCompositionScenario(
   final surface = find.byKey(const ValueKey<String>('player.video.surface'));
   final initialWidth = tester.getSize(surface).width;
   final positionBefore = backend.state.position.inMilliseconds;
+  final frameTimings = <ui.FrameTiming>[];
+  void collectFrames(List<ui.FrameTiming> timings) =>
+      frameTimings.addAll(timings);
+  WidgetsBinding.instance.addTimingsCallback(collectFrames);
+  final resizeBefore =
+      int.tryParse(await backend.getProperty('native-surface-resizes'));
   state.toggleQueueVisibilityForStressTest();
   await _pumpContinuously(tester, const Duration(milliseconds: 450));
   final collapsedWidth = tester.getSize(surface).width;
   state.toggleQueueVisibilityForStressTest();
   await _pumpContinuously(tester, const Duration(milliseconds: 450));
   final restoredWidth = tester.getSize(surface).width;
+  const cycles = 6;
+  for (var cycle = 1; cycle < cycles; cycle++) {
+    state.toggleQueueVisibilityForStressTest();
+    await _pumpContinuously(tester, const Duration(milliseconds: 450));
+    state.toggleQueueVisibilityForStressTest();
+    await _pumpContinuously(tester, const Duration(milliseconds: 450));
+  }
+  WidgetsBinding.instance.removeTimingsCallback(collectFrames);
+  final resizeAfter =
+      int.tryParse(await backend.getProperty('native-surface-resizes'));
+  final resizeDelta = resizeBefore == null || resizeAfter == null
+      ? null
+      : resizeAfter - resizeBefore;
   final positionAfter = backend.state.position.inMilliseconds;
   final snapshot = state.buildStabilitySnapshotForTest();
   final pass = collapsedWidth > initialWidth &&
@@ -345,10 +382,118 @@ Future<Map<String, Object?>> _runQueueCompositionScenario(
     'initialSurfaceWidth': initialWidth.round(),
     'collapsedSurfaceWidth': collapsedWidth.round(),
     'restoredSurfaceWidth': restoredWidth.round(),
+    'cycles': cycles,
+    'frameTiming': _summarizeFrameTimings(frameTimings),
+    'nativeSurfaceResizeDelta': resizeDelta,
     'positionBeforeMs': positionBefore,
     'positionAfterMs': positionAfter,
     'textureReady': backend.textureId.value != null,
     'queuePreserved': snapshot.openedVideoId == snapshot.currentVideoId,
+  };
+}
+
+/**
+ * 反复打开设置浮层并连续提交 seek，记录用户最容易感知的交互帧耗时与掉帧变化。
+ *
+ * 该阶段只采样正式 Route、正式 latest-seek 和真实后端属性；修改前后的报告可以直接
+ * 对比，避免用单次肉眼观察替代可重复的性能证据。
+ */
+Future<Map<String, Object?>> _runInteractionPerformanceScenario(
+  WidgetTester tester,
+  GlobalKey<PlayerPageState> playerKey,
+  PlayerBackend backend,
+) async {
+  final state = playerKey.currentState!;
+  final settingsFrames = <ui.FrameTiming>[];
+  void collectSettingsFrames(List<ui.FrameTiming> timings) =>
+      settingsFrames.addAll(timings);
+  WidgetsBinding.instance.addTimingsCallback(collectSettingsFrames);
+  const settingsCycles = 6;
+  for (var cycle = 0; cycle < settingsCycles; cycle++) {
+    final dialogFuture = state.showControlSettingsForStressTest();
+    await _pumpContinuously(tester, const Duration(milliseconds: 260));
+    final dialog = find.byKey(const ValueKey<String>('player.settings.dialog'));
+    expect(dialog, findsOneWidget);
+    Navigator.of(tester.element(dialog)).pop();
+    await _pumpContinuously(tester, const Duration(milliseconds: 260));
+    await dialogFuture;
+  }
+  WidgetsBinding.instance.removeTimingsCallback(collectSettingsFrames);
+
+  final seekFrames = <ui.FrameTiming>[];
+  void collectSeekFrames(List<ui.FrameTiming> timings) =>
+      seekFrames.addAll(timings);
+  final droppedBefore =
+      int.tryParse(await backend.getProperty('frame-drop-count')) ?? 0;
+  WidgetsBinding.instance.addTimingsCallback(collectSeekFrames);
+  final duration = backend.state.duration;
+  final safeDuration = duration > const Duration(seconds: 20)
+      ? duration
+      : const Duration(minutes: 2);
+  Future<void>? activeSeek;
+  const seekRequests = 18;
+  for (var index = 0; index < seekRequests; index++) {
+    final fraction = 0.12 + (index % 8) * 0.09;
+    final target = Duration(
+      milliseconds: (safeDuration.inMilliseconds * fraction).round(),
+    );
+    activeSeek ??= state.seekForStressTest(target);
+    if (index > 0) {
+      unawaited(state.seekForStressTest(target));
+    }
+    await tester.pump(const Duration(milliseconds: 40));
+  }
+  await activeSeek;
+  await _pumpContinuously(tester, const Duration(seconds: 2));
+  WidgetsBinding.instance.removeTimingsCallback(collectSeekFrames);
+  final droppedAfter =
+      int.tryParse(await backend.getProperty('frame-drop-count')) ??
+          droppedBefore;
+  final snapshot = state.buildStabilitySnapshotForTest();
+  final pass = find
+          .byKey(const ValueKey<String>('player.settings.dialog'))
+          .evaluate()
+          .isEmpty &&
+      !snapshot.hasOpenFailure &&
+      snapshot.openedVideoId == snapshot.currentVideoId;
+  return <String, Object?>{
+    'automatedPass': pass,
+    'settingsCycles': settingsCycles,
+    'settingsFrameTiming': _summarizeFrameTimings(settingsFrames),
+    'seekRequests': seekRequests,
+    'seekFrameTiming': _summarizeFrameTimings(seekFrames),
+    'droppedFramesDelta': droppedAfter - droppedBefore,
+    'queuePreserved': snapshot.openedVideoId == snapshot.currentVideoId,
+  };
+}
+
+/** 把原始 FrameTiming 压缩为可审查的分位数与超预算帧计数。 */
+Map<String, Object?> _summarizeFrameTimings(List<ui.FrameTiming> frames) {
+  if (frames.isEmpty) {
+    return const <String, Object?>{'frames': 0};
+  }
+  final totals = frames
+      .map((frame) => frame.totalSpan.inMicroseconds / 1000)
+      .toList()
+    ..sort();
+  final builds = frames
+      .map((frame) => frame.buildDuration.inMicroseconds / 1000)
+      .toList()
+    ..sort();
+  final rasters = frames
+      .map((frame) => frame.rasterDuration.inMicroseconds / 1000)
+      .toList()
+    ..sort();
+  double percentile(List<double> values, double fraction) =>
+      values[((values.length - 1) * fraction).round()];
+  return <String, Object?>{
+    'frames': frames.length,
+    'buildP95Ms': percentile(builds, 0.95),
+    'rasterP95Ms': percentile(rasters, 0.95),
+    'totalP95Ms': percentile(totals, 0.95),
+    'totalMaxMs': totals.last,
+    'over16Ms': totals.where((value) => value > 16.7).length,
+    'over33Ms': totals.where((value) => value > 33.3).length,
   };
 }
 
