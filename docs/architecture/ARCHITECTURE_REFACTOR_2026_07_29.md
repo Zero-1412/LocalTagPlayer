@@ -338,7 +338,7 @@ Phase 3H-2 的落地边界：
 - [x] 4B 拆出 latest-request 与 backend event bridge。
 - [x] 4C 拆出控件显隐、计时器和快捷键状态。
 - [x] 4D 最后处理 texture、native window 和全屏生命周期；每种资源只有一个 dispose owner。
-- [ ] 4E 独立迁移播放器诊断。
+- [x] 4E 独立迁移播放器诊断。
 
 Phase 4A 的落地边界：
 
@@ -385,6 +385,10 @@ Phase 4D 将全屏/过渡状态、会话恢复和退出窗口命令顺序迁入�
 listener，并串行取消 backend events、stop、dispose 与等待 released；重复释放共享
 Future，异常仍完成 Route 协调信号。页面预算降到 5,021，filtered queue、当前 index、
 后端选择、overlay airspace 和用户数据不变。
+
+Phase 4E 将不可变诊断快照迁入 player domain；诊断弹窗只接收播放状态流和只读采样
+回调，自行拥有 Timer、订阅、连续比较与 dispose，不再导入 PlayerPage 或取得
+PlayerService。诊断入口、匿名明细、复制反馈和 airspace 挂载保持不变；Phase 4 完成。
 - [ ] 画质实验只依赖 `PlayerRuntimeAccess`，不进入 Widget 状态机。
 - [ ] 保留快速切换 latest-request、纹理释放、全屏恢复和 filtered queue 合同。
 

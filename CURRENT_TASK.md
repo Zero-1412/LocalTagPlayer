@@ -307,6 +307,16 @@
   人工复测路径为“筛选并打开视频 → 全屏往返 → 返回媒体库 → 再次打开 → 返回”，核对
   顶栏无残影、音频停止、最后一帧过渡、窗口最大化恢复和队列/筛选保留。下一步进入
   Phase 4E，独立迁移播放器诊断，不把诊断状态混入会话、全屏或资源 owner。
+- Phase 4E 已完成：`PlaybackDiagnosticsSnapshot` 迁入 player domain；诊断弹窗只接收
+  `Stream<bool>` 与只读采样回调，不再导入 `player_page.dart`、持有 `PlayerPageState`
+  或通过页面取得 PlayerService。
+- 弹窗继续唯一拥有刷新 Timer、播放订阅、连续样本比较、复制反馈和 dispose；页面仍从
+  同一个当前播放器实例构建匿名快照，不创建第二个 Player。右键“诊断检查”、打开失败
+  面板入口、详细指标、隐私文案和 overlay airspace 均保留。
+- 诊断 focused widget test、架构合同与完整 441 项测试通过（3 项显式基准跳过），
+  `flutter analyze`、Windows Debug build 通过；`PlayerPage` 门禁保持 5,021。Phase 4
+  播放器 MVVM 完成，下一步进入 Phase 5：先收窄 Repository 读写接口并收集事务亲和度
+  证据，不直接物理拆分 `LibraryStore`。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

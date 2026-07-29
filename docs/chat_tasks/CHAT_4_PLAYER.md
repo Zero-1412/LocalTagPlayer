@@ -1,3 +1,11 @@
+## 2026-07-29 诊断快照与 presentation 解耦
+
+- `PlaybackDiagnosticsSnapshot` 迁入 player domain，保持匿名、不可变且不依赖 Flutter。
+- 诊断弹窗只接收播放状态流与只读采样回调；Timer、订阅、连续比较和 dispose 仍是弹窗
+  单一 owner，不再导入 PlayerPage 或取得 PlayerService。
+- 右键/失败面板诊断入口、详细指标、复制隐私反馈和 overlay airspace 均保留。完整
+  441 项测试（3 项跳过）、静态分析和 Windows Debug build 通过，Phase 4E/Phase 4 完成。
+
 ## 2026-07-29 Texture、原生表面与全屏单一生命周期 owner
 
 - `PlayerFullscreenLifecycleController` 只拥有全屏/过渡状态和窗口命令顺序；页面注入

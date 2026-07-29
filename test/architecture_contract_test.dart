@@ -1185,6 +1185,34 @@ void main() {
     );
   });
 
+  test('player diagnostics presentation only consumes snapshots and callbacks',
+      () {
+    final page = File(
+      'lib/src/pages/player/player_page.dart',
+    ).readAsStringSync();
+    final dialog = File(
+      'lib/src/pages/player/player_diagnostics_dialog.dart',
+    ).readAsStringSync();
+    final snapshot = File(
+      'lib/src/features/player/domain/playback_diagnostics_snapshot.dart',
+    ).readAsStringSync();
+
+    expect(snapshot, contains('class PlaybackDiagnosticsSnapshot'));
+    expect(snapshot, isNot(contains("import 'package:flutter")));
+    expect(snapshot, isNot(contains('/services/player/')));
+    expect(snapshot, isNot(contains('PlayerBackend ')));
+    expect(dialog, contains('final Stream<bool> playingChanges'));
+    expect(dialog, contains('final PlaybackDiagnosticsSampler sample'));
+    expect(dialog, contains('widget.playingChanges.listen'));
+    expect(dialog, contains('await widget.sample()'));
+    expect(dialog, isNot(contains("import 'player_page.dart'")));
+    expect(dialog, isNot(contains('PlayerPageState ')));
+    expect(dialog, isNot(contains('PlayerService ')));
+    expect(page, contains('playingChanges: _playerService.playingChanges'));
+    expect(page, contains('sample: buildDiagnosticsSnapshot'));
+    expect(page, isNot(contains('playerPage: this')));
+  });
+
   test('player control visibility and feedback timers have one pure owner', () {
     final page = File(
       'lib/src/pages/player/player_page.dart',

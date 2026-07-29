@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.123` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.124` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -132,6 +132,12 @@ Phase 4D 使用纯 Dart `PlayerFullscreenLifecycleController` 统一当前 Route
 dispose、released；stop/release 均幂等共享 Future，dispose 抛错仍等待 released 并发送
 媒体库 Route 完成信号。PlayerService 继续唯一持有具体 PlayerBackend，后端继续唯一持有
 Texture、NativePlayer、D3D11 和 child HWND，页面不取得任何原生句柄。
+
+Phase 4E 将 `PlaybackDiagnosticsSnapshot` 迁入 player domain，并把诊断弹窗依赖收窄为
+播放状态流与只读采样回调。弹窗继续唯一拥有刷新 Timer、播放订阅、连续样本比较和
+dispose；它不再导入 `player_page.dart` 或持有 `PlayerPageState`/PlayerService。
+页面仍用同一当前播放器实例构建匿名快照，不创建第二个 Player，也不改变诊断入口、
+详细指标、复制隐私边界或弹层 airspace。Phase 4 播放器 MVVM 迁移完成。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -619,12 +625,14 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.123`
+已完成基线：`Architecture Baseline 0.5.124`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.124`：诊断快照迁入 player domain；诊断弹窗只依赖播放状态流和采样回调，
+  不再反向持有 PlayerPageState 或播放器资源。
 - `0.5.123`：全屏状态/窗口命令顺序归纯 controller；Texture listener、事件取消、
   stop、dispose 与 released 归单一资源协调 owner，页面不再直接释放原生资源。
 - `0.5.122`：快捷键暂停深度、标签编辑门禁、命令处理与焦点恢复资格归纯应用 owner；

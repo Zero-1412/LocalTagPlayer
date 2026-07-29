@@ -51,7 +51,6 @@ import 'player_rename_file_dialog.dart';
 import 'player_resume_dialog.dart';
 import 'player_settings_panel.dart';
 import 'player_video_aspect_mode.dart';
-
 // ignore_for_file: slash_for_doc_comments
 
 /**
@@ -3803,7 +3802,8 @@ class PlayerPageState extends State<PlayerPage> {
       () => showDialog<void>(
         context: context,
         builder: (context) => PlaybackDiagnosticsDialog(
-          playerPage: this,
+          playingChanges: _playerService.playingChanges,
+          sample: buildDiagnosticsSnapshot,
           title: '\u64ad\u653e\u8bca\u65ad',
         ),
       ),

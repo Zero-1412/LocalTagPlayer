@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
-- 架构基线提升到 `0.5.123`；完整审计和 Phase 0-6 路线记录在
+- 架构基线提升到 `0.5.124`；完整审计和 Phase 0-6 路线记录在
   `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 - `main.dart`、bootstrap 组合根与 Flutter 应用壳已经分离，具体实现选择仍只发生在
   composition。
@@ -59,6 +59,8 @@
 - Phase 4C-2 将快捷键暂停与处理/焦点恢复资格迁入纯 owner；Flutter 环境探测仍在页面。
 - Phase 4D 将全屏状态/窗口命令顺序迁入纯 controller，并用单一资源协调器拥有
   Texture listener、事件取消、stop、dispose 与 released；页面不再直接释放原生资源。
+- Phase 4E 将诊断快照迁入 player domain；弹窗只消费状态流与采样回调，不再持有
+  PlayerPageState/PlayerService。Phase 4 播放器 MVVM 完成。
 - 后续按一致性边界迁移无状态诊断 UI、普通设置、媒体库和播放器；禁止一次性移动全部
   文件或改变现有业务语义。
 

@@ -160,6 +160,12 @@
   当前 index、后端选择和 overlay airspace 栈保持不变。7 项 focused tests、架构合同与
   完整 439 项测试通过（3 项显式基准跳过），静态分析、Windows Debug build 与正式入口
   可见启动通过；原生点击工具不可用，保留全屏往返和再次进入播放器的人工复测路径。
+- 完成 Phase 4E 诊断 presentation 解耦：不可变 `PlaybackDiagnosticsSnapshot` 迁入
+  player domain；弹窗只消费播放状态流和只读采样回调，不再持有 PlayerPageState 或
+  PlayerService。
+- 诊断 Timer、播放订阅、连续样本比较和 dispose 仍由弹窗唯一拥有；右键与失败面板入口、
+  匿名明细、复制反馈及 airspace 保持可达。完整 441 项测试（3 项跳过）、静态分析和
+  Windows Debug build 通过，Phase 4 播放器 MVVM 完成。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 
