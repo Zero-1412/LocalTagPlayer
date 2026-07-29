@@ -128,6 +128,13 @@
   返回、移除当前 root 后回到媒体库和当前可见队列绑定全部保留。`LibraryPage` 门禁降到
   5,748；完整 410 项测试通过（3 项显式基准跳过），静态分析、Windows Debug build 与
   正式入口可见窗口启动通过。
+- 完成 Phase 4A 播放器会话切片：来源队列、二级标签子集、播放/选择索引迁入纯 Dart
+  `PlayerSessionController`；controller 校验媒体库已接受的 stable-ID 有序快照，对外
+  仅发布不可修改列表，并按 `videoId` 保持当前媒体。
+- 二级标签空结果仍回退同一来源队列，旧 import 路径仅保留兼容导出；页面继续拥有
+  `PlayerService`、backend open、原生资源、计时器、全屏和交互反馈。`PlayerPage`
+  门禁降到 5,371；完整 416 项测试通过（3 项显式基准跳过），静态分析、Windows Debug
+  build 与正式入口可见窗口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

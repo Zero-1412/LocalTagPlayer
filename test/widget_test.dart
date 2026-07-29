@@ -5432,10 +5432,12 @@ void main() {
         'Series': {'AlbumB'},
       },
     );
-    final playback = PlayerPlaybackController(
+    final playback = PlayerSessionController(
       sourcePlaylist: [alpha, beta],
+      acceptedSourceVideoIds: [alpha.videoId, beta.videoId],
       activeParentTag: 'Series',
-      initialPath: alpha.path,
+      initialVideoId: alpha.videoId,
+      matchesChildTag: TagRules.matchesChildTag,
     );
 
     expect(playback.previousIndex, isNull);
@@ -5452,15 +5454,24 @@ void main() {
     expect(playback.selectedIndex, 1);
     playback.jumpTo(0);
 
-    playback.toggleChildTag('AlbumB', preferredPath: alpha.path);
+    playback.toggleChildTag(
+      'AlbumB',
+      preferredVideoId: alpha.videoId,
+    );
     expect(playback.queue, [beta]);
     expect(playback.currentItem, beta);
 
-    playback.toggleChildTag('AlbumB', preferredPath: beta.path);
+    playback.toggleChildTag(
+      'AlbumB',
+      preferredVideoId: beta.videoId,
+    );
     expect(playback.queue, [alpha, beta]);
     expect(playback.currentItem, beta);
 
-    playback.setPlaylistForChildTag('Missing', preferredPath: beta.path);
+    playback.setPlaylistForChildTag(
+      'Missing',
+      preferredVideoId: beta.videoId,
+    );
     expect(playback.queue, [alpha, beta]);
     expect(playback.currentItem, beta);
     expect(playback.previousIndex, 0);
@@ -5483,10 +5494,12 @@ void main() {
       tags: const {},
       addedAt: DateTime.utc(2026, 1, 2),
     );
-    final playback = PlayerPlaybackController(
+    final playback = PlayerSessionController(
       sourcePlaylist: [first, second],
+      acceptedSourceVideoIds: [first.videoId, second.videoId],
       activeParentTag: null,
-      initialPath: first.path,
+      initialVideoId: first.videoId,
+      matchesChildTag: TagRules.matchesChildTag,
     );
 
     expect(playback.nextIndex, 1);
@@ -5510,10 +5523,16 @@ void main() {
     final first = item('first');
     final second = item('second');
     final third = item('third');
-    final playback = PlayerPlaybackController(
+    final playback = PlayerSessionController(
       sourcePlaylist: [first, second, third],
+      acceptedSourceVideoIds: [
+        first.videoId,
+        second.videoId,
+        third.videoId,
+      ],
       activeParentTag: null,
-      initialPath: second.path,
+      initialVideoId: second.videoId,
+      matchesChildTag: TagRules.matchesChildTag,
     );
 
     expect(playback.removeItemAt(0), isFalse);
@@ -6145,10 +6164,12 @@ void main() {
       path: r'X:\test-media\selected.mp4',
       title: 'selected',
     );
-    final playback = PlayerPlaybackController(
+    final playback = PlayerSessionController(
       sourcePlaylist: <VideoItem>[playing, selected],
+      acceptedSourceVideoIds: [playing.videoId, selected.videoId],
       activeParentTag: null,
-      initialPath: playing.path,
+      initialVideoId: playing.videoId,
+      matchesChildTag: TagRules.matchesChildTag,
     );
 
     expect(playback.select(1), isTrue);

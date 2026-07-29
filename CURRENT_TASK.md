@@ -241,6 +241,21 @@
 - Phase 3 媒体库 MVVM 一致性边界迁移完成；下一步进入 Phase 4A，只盘点并迁移播放器
   队列、当前媒体与会话命令 owner。不得迁移 native texture/window、全屏生命周期、
   PlayerBackend contract 或 filtered queue 来源。
+- Phase 4A 已完成播放器会话 owner：`PlayerSessionController` 接受页面提供的来源对象
+  与媒体库已接受 `QueueSnapshot` stable-ID 顺序，拒绝重复身份和对象/快照错序；来源
+  队列与当前二级标签子集只通过不可修改视图发布。
+- 初始化、队列切换和删除都按 stable `videoId` 保持当前媒体，不再依赖 mutable path；
+  二级标签 matcher 由页面注入，空子集只回退同一来源队列，不会查询 Store。旧
+  `player_playback_controller.dart` 仅保留 import 路径兼容导出，不保留旧构造 API。
+- `PlayerPage` 继续唯一持有 `PlayerService`、backend open、texture/native window、
+  timer、全屏、Route 与 Widget 生命周期；页面门禁由 5,374 收紧到 5,371。
+- Phase 4A focused/widget tests 与完整 416 项测试通过（3 项显式基准跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口可见窗口启动通过。
+  Computer Use 仍不可用，无法自动点击或截图；人工复测路径为“媒体库筛选/排序 →
+  打开非首项 → 单击另一队列项（仅选择）→ 双击播放 → 切换二级标签/取消 → 队首/队尾
+  → 删除当前项前一项 → 返回媒体库”，核对 `N / total`、来源顺序和筛选保留。
+- 下一步进入 Phase 4B：拆出 latest-request 与 backend event bridge；不得改变 open
+  代次、后端选择、错误语义、播放器资源 owner 或 filtered queue 来源。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

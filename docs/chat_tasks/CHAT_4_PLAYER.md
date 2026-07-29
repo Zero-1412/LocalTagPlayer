@@ -1,3 +1,14 @@
+## 2026-07-29 PlayerSessionController stable-ID 会话边界
+
+- 来源队列、当前二级标签子集、播放索引和选择索引迁入纯 Dart
+  `PlayerSessionController`；它同时校验对象顺序与媒体库已接受队列的 stable-ID 快照。
+- 对外队列不可修改，初始化、切换和删除按 `videoId` 保持当前媒体；二级标签空结果只
+  回退同一来源队列，不查询 Store，也不使用 mutable path 重建播放会话。
+- `PlayerPage` 继续唯一拥有 `PlayerService`、backend open、texture/native window、
+  timer、全屏、Route 和 Widget 生命周期；旧文件仅保留 import 路径兼容导出。
+- 5 项会话单测、架构合同、页面/widget 回归、完整 416 项测试、静态分析、Windows
+  Debug build 和正式入口可见窗口启动通过；filtered queue 来源/顺序和用户数据未改变。
+
 ## 2026-07-29 fvp / media-kit / 当前后端 Windows 同法 A/B
 
 - 三个隔离 Flutter Windows Release harness 消费同一匿名有序清单，覆盖 MKV、MP4、

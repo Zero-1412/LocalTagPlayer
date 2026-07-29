@@ -47,6 +47,7 @@ export 'pages/player/player_open_failure_panel.dart';
 export 'pages/player/player_open_request_controller.dart';
 export 'pages/player/player_page.dart';
 export 'pages/player/player_playback_controller.dart';
+export 'features/player/application/player_session_controller.dart';
 export 'pages/player/player_playback_mode.dart';
 export 'pages/player/player_queue_sidebar.dart';
 export 'pages/player/player_rename_file_dialog.dart';

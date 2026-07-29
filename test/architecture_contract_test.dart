@@ -279,7 +279,7 @@ void main() {
 
     // 媒体库阈值随结果来源导航 owner 迁移继续下调；后续迁移只能降低，禁止为通过测试而调高。
     expect(libraryLines, lessThanOrEqualTo(5748));
-    expect(playerLines, lessThanOrEqualTo(5374));
+    expect(playerLines, lessThanOrEqualTo(5371));
   });
 
   test('settings landing is a stateless feature leaf with preserved entry keys',
@@ -957,6 +957,76 @@ void main() {
     expect(openFlow, isNot(contains('store.videos.values')));
     expect(openFlow, contains('playlist: playlist'));
     expect(player, contains('final LibraryQueueSnapshot? queueSnapshot'));
+  });
+
+  test('player session owns stable-ID queue state outside presentation', () {
+    final page = File(
+      'lib/src/pages/player/player_page.dart',
+    ).readAsStringSync();
+    final session = File(
+      'lib/src/features/player/application/player_session_controller.dart',
+    ).readAsStringSync();
+    final compatibility = File(
+      'lib/src/pages/player/player_playback_controller.dart',
+    ).readAsStringSync();
+
+    expect(session, contains('class PlayerSessionController'));
+    expect(session, contains('acceptedSourceVideoIds'));
+    expect(session, contains('UnmodifiableListView<VideoItem>'));
+    expect(
+      session,
+      contains('video.videoId == item.videoId'),
+    );
+    expect(
+      session,
+      contains('item.videoId == preferredVideoId'),
+    );
+    expect(session, isNot(contains('item.path ==')));
+    expect(session, isNot(contains('video.path ==')));
+    for (final forbidden in <String>[
+      "import 'dart:io'",
+      "import 'package:flutter/",
+      'BuildContext',
+      'Navigator',
+      'Route<',
+      'LibraryStore',
+      'LibraryApplicationFacade',
+      'FilterQuery',
+      'TagQueryService',
+      '/services/player/',
+      'TagRules',
+      'setState(',
+    ]) {
+      expect(
+        session,
+        isNot(contains(forbidden)),
+        reason: '播放器会话 owner 不得越过 UI、Store 或后端边界：$forbidden',
+      );
+    }
+    expect(page, contains('late final PlayerSessionController _playback'));
+    expect(page, contains('_playback = PlayerSessionController('));
+    expect(
+      page,
+      contains(
+        'acceptedSourceVideoIds: widget.queueSnapshot?.orderedVideoIds',
+      ),
+    );
+    expect(page, contains('initialVideoId: widget.initialItem.videoId'));
+    expect(page, contains('matchesChildTag: TagRules.matchesChildTag'));
+    expect(page, contains('sourcePlaylist: _sourcePlaylist'));
+    expect(page, contains('playingIndex: _index'));
+    expect(page, contains('selectedIndex: _selectedIndex'));
+    expect(page, contains('onChildTagSelected: _selectChildTag'));
+    expect(page, contains('onSelect: _select'));
+    expect(page, contains('onPlay: _jumpTo'));
+    expect(
+      compatibility,
+      contains(
+        "export '../../features/player/application/"
+        "player_session_controller.dart';",
+      ),
+    );
+    expect(compatibility, isNot(contains('class PlayerPlaybackController')));
   });
 
   test('scan and import lifecycle has one latest-only application owner', () {

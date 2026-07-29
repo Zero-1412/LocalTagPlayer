@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
+import '../../features/player/application/player_session_controller.dart';
 import '../../models/media_details.dart';
 import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
@@ -38,7 +39,6 @@ import 'player_dialog_content.dart';
 import 'player_hardware_decode_warning_dialog.dart';
 import 'player_open_failure_panel.dart';
 import 'player_open_request_controller.dart';
-import 'player_playback_controller.dart';
 import 'player_playback_mode.dart';
 import 'player_queue_sidebar.dart';
 import 'player_rename_file_dialog.dart';
@@ -308,10 +308,10 @@ String playerTopBarFileName(String path) => p.basename(path);
  * 返回“打开当前视频位置”动作应交给文件系统边界的路径。
  *
  * 即使键盘或鼠标把队列选择移到其它条目，也始终读取 [playingIndex] 对应的
- * [PlayerPlaybackController.currentItem]，避免定位尚未开始播放的视频。
+ * [PlayerSessionController.currentItem]，避免定位尚未开始播放的视频。
  */
 @visibleForTesting
-String playerCurrentRevealPath(PlayerPlaybackController playback) =>
+String playerCurrentRevealPath(PlayerSessionController playback) =>
     playback.currentItem.path;
 
 /** 静音时归零，恢复时回到最近一次有效的非零音量。 */
@@ -733,7 +733,7 @@ class PlayerSeekFeedbackWatermark extends StatelessWidget {
  * 双后端稳定性矩阵读取的匿名播放器快照。
  *
  * 快照只暴露稳定 `videoId`、队列索引与生命周期状态，不泄露本地路径，也不允许测试
- * 绕过 [PlayerPlaybackController] 修改 filtered queue。
+ * 绕过 [PlayerSessionController] 修改 filtered queue。
  */
 @visibleForTesting
 class PlayerStabilitySnapshot {
@@ -879,7 +879,7 @@ class PlayerPageState extends State<PlayerPage> {
   late final ScrollController _fullscreenQueueScrollController;
   late final MediaDetailsService _detailsService;
   late final String _requestedHwdec;
-  late final PlayerPlaybackController _playback;
+  late final PlayerSessionController _playback;
   final _openRequests = PlayerOpenRequestController();
   /** 用于把设置浮层右边缘锚定到齿轮按钮，而不是按整个窗口居中。 */
   final _settingsButtonAnchorKey = GlobalKey();
@@ -1091,22 +1091,17 @@ class PlayerPageState extends State<PlayerPage> {
     return value.isEmpty ? '\u5168\u90e8\u89c6\u9891' : value;
   }
 
-  String? get _activeParentTag {
-    if (widget.activeTags.length != 1) {
-      return null;
-    }
-    return widget.activeTags.first;
-  }
+  String? get _activeParentTag =>
+      widget.activeTags.length == 1 ? widget.activeTags.first : null;
 
   void _selectChildTag(String tag) {
     if (_queue.isEmpty) {
       return;
     }
     _persistOpenedProgress();
-    final preferredPath = _currentItem.path;
     setState(() {
       _queueEndReached = false;
-      _playback.toggleChildTag(tag, preferredPath: preferredPath);
+      _playback.toggleChildTag(tag, preferredVideoId: _currentItem.videoId);
     });
     _ensureQueueIndexVisible(_index, center: true);
     _requestOpenCurrent();
@@ -1140,13 +1135,15 @@ class PlayerPageState extends State<PlayerPage> {
     );
     _requestedHwdec =
         PlayerHardwareAcceleration.resolve(widget.playbackSettings.hwdec);
-    _playback = PlayerPlaybackController(
+    _playback = PlayerSessionController(
       sourcePlaylist: widget.playlist.isEmpty
           ? <VideoItem>[widget.initialItem]
           : widget.playlist,
+      acceptedSourceVideoIds: widget.queueSnapshot?.orderedVideoIds,
       activeParentTag: _activeParentTag,
       initialChildTag: widget.activeChildTag,
-      initialPath: widget.initialItem.path,
+      initialVideoId: widget.initialItem.videoId,
+      matchesChildTag: TagRules.matchesChildTag,
     );
     _playerService = widget.playerServiceFactory(
       hwdec: _requestedHwdec,

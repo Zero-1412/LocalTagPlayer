@@ -334,11 +334,22 @@ Phase 3H-2 的落地边界：
 
 ### Phase 4：播放器 MVVM
 
-- [ ] 4A 拆出 `PlayerSessionController`，只拥有队列、当前媒体与会话命令。
+- [x] 4A 拆出 `PlayerSessionController`，只拥有队列、当前媒体与会话命令。
 - [ ] 4B 拆出 latest-request 与 backend event bridge。
 - [ ] 4C 拆出控件显隐、计时器和快捷键状态。
 - [ ] 4D 最后处理 texture、native window 和全屏生命周期；每种资源只有一个 dispose owner。
 - [ ] 4E 独立迁移播放器诊断。
+
+Phase 4A 的落地边界：
+
+- `PlayerSessionController` 同时校验来源对象和已接受 `QueueSnapshot` 的 stable-ID
+  有序快照；重复 ID、对象缺失或错序立即拒绝，禁止从 Store 或 mutable path 重建队列。
+- 来源队列和二级标签子集只以不可修改视图发布；初始化、切换、过滤和删除都按
+  `videoId` 保持当前播放身份，空二级标签结果只能回退同一来源队列。
+- 标签匹配规则由页面以回调注入，controller 不导入 Flutter、Store、`TagRules`、
+  `PlayerBackend` 或平台实现。旧文件仅保留 import 路径兼容导出。
+- `PlayerPage` 继续唯一拥有 `PlayerService`、backend open、texture/native window、
+  timer、全屏、Route 与 Widget 生命周期；页面门禁降到 5,371，Phase 4A 完成。
 - [ ] 画质实验只依赖 `PlayerRuntimeAccess`，不进入 Widget 状态机。
 - [ ] 保留快速切换 latest-request、纹理释放、全屏恢复和 filtered queue 合同。
 
