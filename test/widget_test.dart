@@ -3253,7 +3253,8 @@ void main() {
     }
   });
 
-  testWidgets('settings route keeps playback and cache refresh reachable',
+  testWidgets(
+      'settings route keeps playback backup and cache refresh reachable',
       (tester) async {
     final repository = _MissingRelinkTestRepository();
     final facade = LibraryApplicationFacade(
@@ -3324,6 +3325,39 @@ void main() {
     await tester.pump();
     expect(
       find.byKey(const ValueKey('settings.category.playback')),
+      findsOneWidget,
+    );
+
+    final backupEntry = find.byKey(
+      const ValueKey('settings.category.dataBackup'),
+    );
+    await tester.ensureVisible(backupEntry);
+    await tester.pump();
+    await tester.tap(backupEntry);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.dataBackup.card')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.dataBackup.runNow')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.dataBackup.checkIntegrity')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.dataBackup.export')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings.section.back')),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.category.dataBackup')),
       findsOneWidget,
     );
 

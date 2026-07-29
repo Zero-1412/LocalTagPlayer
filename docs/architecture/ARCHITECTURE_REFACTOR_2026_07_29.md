@@ -158,8 +158,9 @@ Phase 1.5 的发布协议已经接入现有过滤和延后计数链路：
 - [x] 2C 单独迁移只读缓存诊断；读取、刷新、错误和 dispose 使用 latest-only 发布。
 - [x] 2D 迁移现有缓存维护命令、失败恢复与互斥；源码没有删除/重建入口，不新增未授权
   破坏性操作。
-- [ ] 2E 最后迁移备份/恢复；数据库关闭、替换、重开与全局失效由应用服务拥有。
-- [ ] 每一步保留确认、取消、撤销、返回和所有 `ValueKey`，增加 Route 级挂载测试。
+- [x] 2E 最后迁移现有备份设置、状态订阅和维护命令；源码没有数据库关闭、替换、重开
+  或导入恢复入口，因此不新增破坏性流程，现有跨服务补偿仍由应用服务拥有。
+- [x] 每一步保留确认、取消、撤销、返回和所有 `ValueKey`，增加 Route 级挂载测试。
 
 Phase 2B 只迁移 `PlaybackSettings` 这一致性边界：
 
@@ -191,6 +192,20 @@ Phase 2D 将现有“重试失败项”和“清除失败标记”迁入
   页面继续负责 SnackBar 和动作结束后的只读统计刷新。
 - 源码没有缓存文件删除、全量重建、确认或撤销入口；本阶段不凭路线描述新增用户未授权
   的破坏性功能。全部现有动作 Key 保留，`LibraryPage` 行数门禁降到 6,633。
+
+Phase 2E 将现有视频数据备份设置迁入独立纵向切片：
+
+- `SerialSettingsController<T>` 统一串行保存、最新失败回滚与最后成功快照；
+  `PlaybackSettingsController` 复用同一合同，不形成第二套竞态语义。
+- `DataBackupStatusController<T>` 是状态流订阅和 dispose 的唯一 owner；
+  `DataBackupMaintenanceController<TReport>` 互斥立即备份、完整性检查和导出，但不读取
+  数据库、不选择文件，也不持有 `BuildContext` 或 Route。
+- `DataBackupSettingsWorkspace` 只在备份二级页挂载，拥有 controller 生命周期、
+  Dialog 和 SnackBar。设置文件失败时恢复运行态的跨服务补偿仍在页面应用服务回调，
+  完整性检查仍在 Repository，导出仍经 `FileSystemAdapter`。
+- 当前源码没有主库关闭、文件替换、重开、全局失效或导入恢复入口；不因计划中的防护
+  描述虚构未授权流程。Route 级测试保护首页入口、卡片、三个维护动作与返回路径，
+  `LibraryPage` 行数门禁降到 6,021。
 
 ### Phase 3：媒体库 MVVM
 

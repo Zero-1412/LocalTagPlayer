@@ -277,8 +277,8 @@ void main() {
     final playerLines =
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
-    // 媒体库阈值随设置叶节点与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(6633));
+    // 媒体库阈值随备份设置纵向切片与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
+    expect(libraryLines, lessThanOrEqualTo(6021));
     expect(playerLines, lessThanOrEqualTo(5400));
   });
 
@@ -319,18 +319,28 @@ void main() {
       'lib/src/features/settings/application/'
       'playback_settings_controller.dart',
     ).readAsStringSync();
+    final serialController = File(
+      'lib/src/features/settings/application/'
+      'serial_settings_controller.dart',
+    ).readAsStringSync();
     final settingsStateStart = library.indexOf('class _CacheSettingsPageState');
-    final settingsStateEnd =
-        library.indexOf('class _DataBackupSettingsPanel', settingsStateStart);
+    final settingsStateEnd = library.indexOf(
+      'Widget playbackQualitySettingsSmokeHarness',
+      settingsStateStart,
+    );
     final settingsState =
         library.substring(settingsStateStart, settingsStateEnd);
 
     expect(
       controller,
-      contains('class PlaybackSettingsController extends ChangeNotifier'),
+      contains('extends SerialSettingsController<PlaybackSettings>'),
     );
-    expect(controller, contains('_persistedSettings'));
-    expect(controller, contains('_writeTail'));
+    expect(
+      serialController,
+      contains('class SerialSettingsController<T> extends ChangeNotifier'),
+    );
+    expect(serialController, contains('_persistedValue'));
+    expect(serialController, contains('_writeTail'));
     for (final forbidden in <String>[
       'BuildContext ',
       'Navigator.',
@@ -342,19 +352,122 @@ void main() {
       "import 'dart:io'",
       "import 'package:flutter/material.dart'",
     ]) {
-      expect(
-        controller,
-        isNot(contains(forbidden)),
-        reason: '普通播放设置 owner 不得持有跨边界资源：$forbidden',
-      );
+      for (final source in <String>[controller, serialController]) {
+        expect(
+          source,
+          isNot(contains(forbidden)),
+          reason: '普通播放设置 owner 不得持有跨边界资源：$forbidden',
+        );
+      }
     }
     expect(
       settingsState,
       contains('late final PlaybackSettingsController'),
     );
     expect(settingsState, isNot(contains('late PlaybackSettings _settings')));
-    expect(settingsState, contains('DataBackupStatus _dataBackupStatus'));
+    expect(settingsState, contains('DataBackupSettingsWorkspace('));
     expect(settingsState, contains('CacheDiagnosticsController<CacheStats>'));
+  });
+
+  test('data backup settings are a bounded vertical slice', () {
+    final library =
+        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final workspace = File(
+      'lib/src/features/settings/presentation/'
+      'data_backup_settings_workspace.dart',
+    ).readAsStringSync();
+    final serialController = File(
+      'lib/src/features/settings/application/'
+      'serial_settings_controller.dart',
+    ).readAsStringSync();
+    final controllers = File(
+      'lib/src/features/settings/application/'
+      'data_backup_controllers.dart',
+    ).readAsStringSync();
+
+    expect(
+      workspace,
+      contains('class DataBackupSettingsWorkspace extends StatefulWidget'),
+    );
+    expect(
+      workspace,
+      contains('SerialSettingsController<DataBackupSettings>'),
+    );
+    expect(
+      workspace,
+      contains('DataBackupStatusController<DataBackupStatus>'),
+    );
+    expect(
+      workspace,
+      contains(
+        'DataBackupMaintenanceController<DataBackupIntegrityReport>',
+      ),
+    );
+    expect(
+      serialController,
+      contains('class SerialSettingsController<T> extends ChangeNotifier'),
+    );
+    expect(
+      controllers,
+      contains('class DataBackupStatusController<T> extends ChangeNotifier'),
+    );
+    expect(controllers, contains('_subscription.cancel()'));
+    expect(
+      controllers,
+      contains(
+        'class DataBackupMaintenanceController<TReport> '
+        'extends ChangeNotifier',
+      ),
+    );
+    expect(controllers, contains('var _busy = false'));
+    for (final forbidden in <String>[
+      'LibraryStore ',
+      'FileSystemAdapter ',
+      'Database ',
+      'BuildContext ',
+      'Navigator.',
+      'Route<',
+      "import 'dart:io'",
+      '/services/',
+      '/repositories/',
+    ]) {
+      expect(
+        controllers,
+        isNot(contains(forbidden)),
+        reason: '备份应用 controller 不得越过资源边界：$forbidden',
+      );
+      expect(
+        serialController,
+        isNot(contains(forbidden)),
+        reason: '通用设置 owner 不得越过资源边界：$forbidden',
+      );
+    }
+    for (final key in <String>[
+      'settings.dataBackup.card',
+      'settings.dataBackup.toggle',
+      'settings.dataBackup.runNow',
+      'settings.dataBackup.checkIntegrity',
+      'settings.dataBackup.export',
+    ]) {
+      expect(workspace, contains(key), reason: '备份设置 Key 必须保留：$key');
+    }
+    expect(library, contains('DataBackupSettingsWorkspace('));
+    expect(library, isNot(contains('class _DataBackupSettingsPanel')));
+    expect(library, isNot(contains('_backupMaintenanceRunning')));
+    expect(
+      library,
+      isNot(contains('StreamSubscription<DataBackupStatus>')),
+    );
+    // 跨服务原子边界仍留在页面应用服务回调：设置文件失败恢复运行态，导出继续通过平台 adapter。
+    expect(
+      library,
+      contains('await store.setDataBackupEnabled(previous.enabled);'),
+    );
+    expect(library, contains('await _fileSystem.pickSavePath('));
+    expect(
+      library,
+      contains('await _fileSystem.writeBytes(path, bytes, flush: true);'),
+    );
   });
 
   test('cache diagnostics header is a read-only settings feature leaf', () {

@@ -86,6 +86,21 @@
   零问题，Windows Debug build 成功。Computer Use 原生管道仍不可用；需人工复测
   “设置 → 缩略图缓存 → 展开失败详情 → 重试失败项/清除失败标记 → 返回”，核对动作
   互斥禁用、成功/失败反馈和清除动作不删除视频或缓存文件。
+- Phase 2E 已完成现有备份设置纵向切片：通用 `SerialSettingsController<T>` 统一普通
+  设置的串行乐观一致性，`DataBackupStatusController<T>` 唯一拥有状态流订阅，
+  `DataBackupMaintenanceController<TReport>` 互斥立即备份、只读检查与导出。
+- `DataBackupSettingsWorkspace` 只在备份二级页挂载，统一释放 controller 并拥有
+  Dialog/SnackBar；数据库检查、运行态开关、设置文件回滚、文件选择和写出仍由既有
+  应用服务、Repository 与 `FileSystemAdapter` 执行。源码不存在关闭主库、替换、重开
+  或导入恢复入口，因此未凭架构路线新增数据库替换或破坏性恢复。
+- 备份卡片、开关、三个维护动作、设置首页入口与返回 Key 均保留；Route 级测试覆盖
+  “设置首页 → 播放设置 → 视频数据备份 → 缓存诊断 → 返回”。媒体库页面行数门禁由
+  6,633 降到 6,021，下一步进入 Phase 3A/3B，先收敛媒体库修订协议和只保存 stable ID
+  的选择/视图偏好，不碰排序、筛选和扫描生命周期。
+- Phase 2E focused tests 与完整 350 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 原生控制
+  工具仍不可用，无法自动点击或截图；仍需人工复测“设置 → 视频数据备份 → 切换开关 →
+  立即备份/检查完整性/导出后取消 → 返回”，核对互斥禁用、错误回滚与无路径泄漏反馈。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 
