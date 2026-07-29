@@ -1,5 +1,17 @@
 ﻿# ARCHITECTURE.md
 
+## 2026-07-29 渐进式整体架构重构
+
+`Architecture Baseline 0.5.101` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
+第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
+`features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
+实例化，应用壳、媒体库与关于页只依赖 `AppUpdateService`。详细审计、目标依赖方向和
+Phase 0-6 门禁见 `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
+
+SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
+PlayerBackend、缩略图/媒体队列和用户数据均未改变。
+
 ## Windows 候选后端同法 A/B 与缺失文件边界
 
 `Architecture Baseline 0.5.100` 保持 media-kit 为正式播放内核。fvp 只能在隔离
@@ -483,11 +495,15 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.78`
+已完成基线：`Architecture Baseline 0.5.101`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
+
+- `0.5.101`：建立渐进式整体重构路线与依赖合同；启动入口、应用壳和组合根分离，
+  更新功能成为首个 `domain/data/presentation` 纵向切片，具体 GitHub 客户端只在
+  组合根创建。保留 `src/app.dart` 作为测试兼容导出面，生产入口不再依赖它。
 
 - `0.5.78`：新增类型化播放器渲染器偏好和纯组合根解析器；设置切换需确认并
   可撤销，Windows 用户无需环境变量即可在下次播放时进入原生 libmpv/D3D11。

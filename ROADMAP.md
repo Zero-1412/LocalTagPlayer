@@ -1,5 +1,23 @@
 # ROADMAP.md
 
+## 2026-07-29 渐进式整体架构重构
+
+- [x] 完成外部资料研究、代码规模审计、受保护行为清单与目标依赖方向。
+- [x] 分离 `main`、bootstrap 组合根和 Flutter 应用壳。
+- [x] 以更新功能完成首个 `domain/data/presentation` 纵向切片和依赖合同。
+- [x] 完成网页端独立架构评审，建立渐进迁移 ADR 和兼容导出、跨 feature、文件预算门禁。
+- [x] Phase 2A-1：提取设置首页无状态导航叶节点，保持原状态 owner、Route 和入口 Key。
+- [ ] Phase 1.5：建立受保护交互清单、查询追踪、版本化快照协议和 11,000 条基准数据。
+- [ ] Phase 2：按无状态 UI、普通设置、只读诊断、缓存修改、备份恢复五步解耦。
+- [ ] Phase 3：按数据修订、选择/视图、排序、查询/计数、QueueSnapshot、扫描/导入六步迁移。
+- [ ] Phase 4：按会话、event bridge、控件、native 生命周期、诊断五步迁移。
+- [ ] Phase 5：先收窄 Repository 使用面，再在事务安全前提下评估 `LibraryStore`
+  物理拆分。
+- [ ] Phase 6：删除已经归零的 `src/app.dart` 兼容导出面；测试具体 import 从 Phase 2
+  起随改动持续推进。
+
+完整方案与阶段门禁见 `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
+
 ## 2026-07-28 默认 MPV 容器合成
 
 - [x] 默认 MPV 改为 libmpv Flutter Texture，与 MediaKit 共享同一个播放器容器；

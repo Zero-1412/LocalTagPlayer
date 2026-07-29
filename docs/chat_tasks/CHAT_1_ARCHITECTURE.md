@@ -1,5 +1,21 @@
 # CHAT_1_ARCHITECTURE.md
 
+## 2026-07-29 渐进式整体架构重构第一阶段
+
+- 架构基线提升到 `0.5.101`；完整审计和 Phase 0-6 路线记录在
+  `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
+- `main.dart`、bootstrap 组合根与 Flutter 应用壳已经分离，具体实现选择仍只发生在
+  composition。
+- 更新功能成为首个 `features/<name>/{domain,data,presentation}` 样板；页面不再创建
+  GitHub 客户端。
+- 网页端独立评审已完成，采纳版本化 Result/Count/Queue 快照、原子写入归应用服务、
+  native 资源唯一 owner 和 `LibraryStore` 证据驱动拆分，详见
+  `docs/architecture/ADR_001_PROGRESSIVE_ARCHITECTURE_MIGRATION.md`。
+- 设置首页导航已作为无状态叶节点迁入 `features/settings/presentation`，原页面继续拥有
+  设置状态和 Route；所有入口 Key 与回调保持不变。
+- 后续先建立交互清单、查询追踪与版本协议，再按一致性边界迁移无状态 UI、设置、诊断、
+  媒体库和播放器；禁止一次性移动全部文件或改变现有业务语义。
+
 ## 2026-07-24 正式打包分支集成边界
 
 - 发布入口统一以 `origin/master` 当前提交为基线，禁止验证一个提交却打包另一个提交。

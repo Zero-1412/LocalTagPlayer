@@ -1,5 +1,32 @@
 # CURRENT_TASK.md
 
+## 2026-07-29 渐进式整体架构重构第一阶段
+
+- 研究 Flutter 官方 Architecture Guide / Compass case study、AppFlowy、LocalSend 与
+  Very Good Ventures 分层实践，确定采用“共享 data/domain 按类型、UI 按功能”的混合
+  结构，不因重构更换状态管理库。
+- 审计发现 `library_page.dart` 约 7,472 行/52 个 import，`player_page.dart` 约
+  5,153 行/44 个 import；两者是后续主要拆分对象。已有 Repository、稳定身份、标签
+  查询和播放器后端边界继续保留。
+- 已把 `main → bootstrap → app shell` 职责分离；`src/app.dart` 降为测试兼容导出面。
+- 更新功能已迁入 `features/update/{domain,data,presentation}`，具体 GitHub 客户端只在
+  组合根创建，媒体库与关于页改为强制注入 `AppUpdateService`。
+- 新增架构合同，保护组合职责、依赖方向和旧目录清零；focused 更新、架构和真实
+  `LibraryPage` 卡片菜单测试通过。
+- 已把架构目标与审计结果提交到网页端独立评审，采纳版本化结果/计数/队列快照、跨
+  Repository 原子写入归应用服务、播放器 native 资源唯一 owner 和 `LibraryStore`
+  暂不物理拆分的建议，记录于 `docs/architecture/ADR_001_PROGRESSIVE_ARCHITECTURE_MIGRATION.md`。
+- 架构合同新增生产代码不得导入兼容 `app.dart`、feature presentation 不得跨功能互导和
+  巨型页面行数预算；阈值只能下降。
+- 设置首页导航已作为首个 Phase 2A 无状态叶节点迁入 `features/settings/presentation`；
+  原状态 owner、导航回调、Route 和全部入口 `ValueKey` 保留，媒体库巨型页面预算由
+  7,500 下调到 7,250 行。
+- focused/full tests、`flutter analyze`、Windows Debug build 已通过；真实 Windows
+  窗口完成“侧栏设置 → 设置分组 → 关于 → 返回设置 → 返回媒体库”点击与截图，未发现
+  遮挡、错位、溢出或返回状态丢失。
+- 下一阶段继续 Phase 1.5 + 2A：建立受保护交互清单、查询追踪与版本协议，再只提取缓存
+  诊断只读展示 Widget；不同时迁移状态、删除/清空、备份/恢复、筛选或播放器。
+
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 
 - 同一台 Ryzen 9 7900X、64 GiB、AMD 核显与 RTX 4070 SUPER 机器，以同一份匿名有序

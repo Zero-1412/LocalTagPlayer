@@ -1,6 +1,6 @@
 // ignore_for_file: slash_for_doc_comments
 
-import '../../models/app_release.dart';
+import 'app_release.dart';
 
 /**
  * 应用更新查询边界。

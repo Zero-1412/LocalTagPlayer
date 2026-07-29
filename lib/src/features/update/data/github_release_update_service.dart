@@ -7,8 +7,8 @@ import 'package:crypto/crypto.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 
-import '../../models/app_release.dart';
-import 'app_update_service.dart';
+import '../domain/app_release.dart';
+import '../domain/app_update_service.dart';
 
 /**
  * 通过公开 GitHub Releases API 检查 Local Tag Player 正式更新。

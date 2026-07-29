@@ -1,4 +1,5 @@
 import '../core/app_paths.dart';
+import '../features/update/domain/app_update_service.dart';
 import '../platform/file_system_adapter.dart';
 import '../platform/platform_interfaces.dart';
 import '../services/library/library_page_application_service.dart';
@@ -18,6 +19,7 @@ class LocalTagPlayerDependencies {
     required this.libraryPageApplicationService,
     required this.playerServiceFactory,
     required this.mediaProbeBackendFactory,
+    required this.updateService,
   });
 
   /** 文件选择、目录枚举、文件写入和删除的平台边界。 */
@@ -34,4 +36,7 @@ class LocalTagPlayerDependencies {
 
   /** 每个探测队列独占的媒体探测后端工厂。 */
   final MediaProbeBackendFactory mediaProbeBackendFactory;
+
+  /** 版本读取、正式更新查询和安装器校验执行边界。 */
+  final AppUpdateService updateService;
 }

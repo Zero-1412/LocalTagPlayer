@@ -1,5 +1,25 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-29 · 启动渐进式整体架构重构
+
+- 基于 Flutter 官方架构指南、Compass、AppFlowy、LocalSend 和 VGV 实践完成项目结构
+  审计，记录目标依赖方向、性能约束和六阶段迁移路线。
+- 分离 `main.dart`、bootstrap 组合根与 `LocalTagPlayerApp` 应用壳；生产入口不再依赖
+  万能 `src/app.dart`。
+- 将更新能力迁入 `features/update/{domain,data,presentation}`，具体 GitHub Release
+  实现只在组合根创建，启动提示、媒体库和关于页统一依赖 `AppUpdateService`。
+- 增加组合职责、兼容导出、跨 feature presentation 与巨型页面预算合同；SQLite、标签
+  筛选、stable identity、filtered queue、播放器和缓存队列行为不变。
+- 完成网页端独立架构评审并新增 ADR：筛选结果、标签计数和播放队列先建立版本化快照
+  协议；跨 Repository 原子写入归应用服务；播放器 native 资源保持唯一生命周期 owner；
+  `LibraryStore` 在证据充分前不做物理拆分。
+- 将后续阶段收紧为“一次迁移一个一致性边界”：先护栏和观测，再拆无状态 Widget，
+  随后分别迁移普通设置、只读诊断、破坏性缓存操作和备份/恢复。
+- 将设置首页导航提取为 `features/settings/presentation` 的无状态叶节点；数据快照和
+  导航回调仍由原页面传入，Route、入口 Key 和设置状态所有权不变。
+- focused/full tests、静态分析与 Windows Debug build 通过；真实窗口点击设置、关于页
+  及两级返回路径并截图复核，分组入口无可见遮挡、错位或溢出。
+
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 
 - 使用同一机器、同一匿名样本清单和同一外部进程采集器，对 fvp、raw media-kit 与

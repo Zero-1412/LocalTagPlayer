@@ -3,8 +3,11 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
-import 'package:local_tag_player/src/pages/settings/about_settings_page.dart';
+import 'package:local_tag_player/src/features/update/data/github_release_update_service.dart';
+import 'package:local_tag_player/src/features/update/domain/app_release.dart';
+import 'package:local_tag_player/src/features/update/domain/app_update_service.dart';
+import 'package:local_tag_player/src/features/update/presentation/about_settings_page.dart';
+import 'package:local_tag_player/src/features/update/presentation/app_update_prompt.dart';
 
 class _FakeUpdateService implements AppUpdateService {
   _FakeUpdateService({

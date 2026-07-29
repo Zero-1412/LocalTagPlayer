@@ -3,7 +3,25 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/core/data_backup_settings.dart';
+import 'package:local_tag_player/src/core/playback_settings.dart';
+import 'package:local_tag_player/src/core/tag_rules.dart';
+import 'package:local_tag_player/src/features/update/domain/app_update_service.dart';
+import 'package:local_tag_player/src/models/library_sort.dart';
+import 'package:local_tag_player/src/models/platform_models.dart';
+import 'package:local_tag_player/src/models/video_item.dart';
+import 'package:local_tag_player/src/pages/library/library_page.dart';
+import 'package:local_tag_player/src/platform/file_system_adapter.dart';
+import 'package:local_tag_player/src/platform/platform_interfaces.dart';
+import 'package:local_tag_player/src/repositories/repository_interfaces.dart';
+import 'package:local_tag_player/src/services/library/library_application_facade.dart';
+import 'package:local_tag_player/src/services/library/library_load_diagnostics.dart';
+import 'package:local_tag_player/src/services/library/library_page_application_service.dart';
+import 'package:local_tag_player/src/services/media/media_details_service.dart';
+import 'package:local_tag_player/src/services/media/thumbnail_service.dart';
+import 'package:local_tag_player/src/services/player/player_service.dart';
+import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart';
+import 'package:local_tag_player/src/widgets/library/library_video_results.dart';
 import 'package:path/path.dart' as p;
 
 // ignore_for_file: slash_for_doc_comments
@@ -127,6 +145,14 @@ class _CardFileMenuProbeBackend implements MediaProbeBackend {
 
 /** 测试不会进入播放器，只提供满足组合边界的安全占位后端。 */
 class _CardFileMenuPlayerBackend implements PlayerBackend {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/**
+ * 卡片菜单测试不会打开关于页；该假实现只用于满足页面依赖注入合同。
+ */
+class _CardFileMenuUpdateService implements AppUpdateService {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -268,6 +294,7 @@ void main() {
           }) =>
               PlayerService(backend: _CardFileMenuPlayerBackend()),
           mediaProbeBackendFactory: _CardFileMenuProbeBackend.new,
+          updateService: _CardFileMenuUpdateService(),
         ),
       ),
     );

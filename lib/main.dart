@@ -1,4 +1,4 @@
-import 'src/app.dart' as app;
-export 'src/app.dart' show LocalTagPlayerApp;
+import 'src/composition/local_tag_player_bootstrap.dart' as bootstrap;
+export 'src/app/local_tag_player_app.dart' show LocalTagPlayerApp;
 
-Future<void> main() => app.bootstrapLocalTagPlayer();
+Future<void> main() => bootstrap.bootstrapLocalTagPlayer();

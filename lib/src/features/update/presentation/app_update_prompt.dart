@@ -5,8 +5,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../models/app_release.dart';
-import '../services/update/app_update_service.dart';
+import '../domain/app_release.dart';
+import '../domain/app_update_service.dart';
 
 /**
  * 在应用首帧后执行一次非阻塞更新检查，并展示正式 Release 内容。

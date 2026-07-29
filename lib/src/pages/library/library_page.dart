@@ -11,6 +11,9 @@ import '../../core/layout_size.dart';
 import '../../core/data_backup_settings.dart';
 import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
+import '../../features/update/domain/app_update_service.dart';
+import '../../features/update/presentation/about_settings_page.dart';
+import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/data_backup_models.dart';
 import '../../models/library_sort.dart';
@@ -33,10 +36,7 @@ import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import '../../services/player/player_service.dart';
 import '../../services/tags/tag_query_service.dart';
-import '../../services/update/app_update_service.dart';
-import '../../services/update/github_release_update_service.dart';
 import '../../widgets/app_theme_tokens.dart';
-import '../../widgets/design_system/app_interaction_surface.dart';
 import '../../widgets/library/library_local_view.dart';
 import '../../widgets/library/library_smoke_keys.dart';
 import '../../widgets/library/library_tag_discovery_panel.dart';
@@ -48,7 +48,6 @@ import '../player/player_hardware_decode_warning_dialog.dart';
 import '../player/player_open_request_controller.dart';
 import '../player/player_page.dart';
 import '../tags/tag_manager_page.dart';
-import '../settings/about_settings_page.dart';
 import 'library_page_helpers.dart';
 import 'directory_manager_page.dart';
 import 'missing_relink_page.dart';
@@ -827,7 +826,7 @@ class CacheSettingsPage extends StatefulWidget {
     required this.onRunDataBackupNow,
     required this.onCheckDataBackupIntegrity,
     required this.onExportDataBackup,
-    this.updateService,
+    required this.updateService,
   });
 
   final LibraryApplicationFacade store;
@@ -856,7 +855,7 @@ class CacheSettingsPage extends StatefulWidget {
   final Future<String?> Function() onExportDataBackup;
 
   /** 关于页使用的更新边界；测试可注入，正常运行由组合根或默认实现提供。 */
-  final AppUpdateService? updateService;
+  final AppUpdateService updateService;
 
   @override
   State<CacheSettingsPage> createState() => _CacheSettingsPageState();
@@ -872,155 +871,6 @@ enum _SettingsSection {
   dataBackup,
   cache,
   about,
-}
-
-/**
- * 设置首页的分组功能列表。
- *
- * 首页只负责导航，不承载开关、滑杆或下拉框，避免用户进入设置时面对过多控件。
- */
-class SettingsLandingList extends StatelessWidget {
-  const SettingsLandingList({
-    super.key,
-    required this.resumeBehavior,
-    required this.rendererPreference,
-    required this.confirmBeforeDeletingVideo,
-    required this.moveDeletedFileToTrash,
-    this.autoRemoveMissingOrUnreadableVideos = true,
-    required this.onOpenPlayback,
-    required this.onOpenVideoQuality,
-    required this.onOpenPlayerInteraction,
-    required this.onOpenFileDeletion,
-    required this.onOpenDataBackup,
-    required this.onOpenCache,
-    required this.onOpenAbout,
-  });
-
-  /** 首页直接展示的继续观看策略，避免用户必须先进入二级页才能发现当前行为。 */
-  final PlaybackResumeBehavior resumeBehavior;
-
-  /** 当前渲染器偏好，用于首页直接显示下一次播放会话的后端策略。 */
-  final PlayerRendererPreference rendererPreference;
-
-  /** 删除动作当前是否保留确认层。 */
-  final bool confirmBeforeDeletingVideo;
-
-  /** 删除动作当前是否同步把本地文件移入回收站。 */
-  final bool moveDeletedFileToTrash;
-  /** 扫描后是否自动清理缺失/不可读数据库记录。 */
-  final bool autoRemoveMissingOrUnreadableVideos;
-
-  /** 打开播放与解码二级页。 */
-  final VoidCallback onOpenPlayback;
-
-  /** 打开视频画质与增强二级页。 */
-  final VoidCallback onOpenVideoQuality;
-
-  /** 打开播放器交互二级页。 */
-  final VoidCallback onOpenPlayerInteraction;
-
-  /** 打开删除文件与回收站二级页。 */
-  final VoidCallback onOpenFileDeletion;
-
-  /** 打开视频数据备份二级页。 */
-  final VoidCallback onOpenDataBackup;
-
-  /** 打开缩略图缓存二级页。 */
-  final VoidCallback onOpenCache;
-
-  /** 打开关于与更新二级页。 */
-  final VoidCallback onOpenAbout;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      key: const ValueKey('settings.home'),
-      padding: const EdgeInsets.all(24),
-      children: [
-        Text(
-          '按功能进入设置，当前播放与数据状态会保留在对应入口。',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: libraryTextMuted,
-              ),
-        ),
-        const SizedBox(height: 22),
-        const _SettingsGroupTitle(title: '播放设置'),
-        const SizedBox(height: 8),
-        _SettingsNavigationGroup(
-          children: [
-            _SettingsNavigationTile(
-              key: const ValueKey('settings.category.playback'),
-              icon: Icons.play_circle_outline_rounded,
-              title: '播放与解码',
-              subtitle:
-                  '${PlaybackSettings.rendererLabelFor(rendererPreference)} · 继续观看：${PlaybackSettings.resumeLabelFor(resumeBehavior)}',
-              statusLabel:
-                  PlaybackSettings.rendererLabelFor(rendererPreference),
-              onTap: onOpenPlayback,
-            ),
-            _SettingsNavigationTile(
-              key: const ValueKey('settings.category.videoQuality'),
-              icon: Icons.auto_awesome_outlined,
-              title: '视频画质与增强',
-              subtitle: '画面比例、缩放与色彩 · 自动画质、暗部增强与 HDR 映射',
-              onTap: onOpenVideoQuality,
-            ),
-            _SettingsNavigationTile(
-              key: const ValueKey('settings.category.playerInteraction'),
-              icon: Icons.tune_rounded,
-              title: '播放器交互',
-              subtitle: '全屏播放列表、播放器快捷键',
-              onTap: onOpenPlayerInteraction,
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        const _SettingsGroupTitle(title: '数据与维护'),
-        const SizedBox(height: 8),
-        _SettingsNavigationGroup(
-          children: [
-            _SettingsNavigationTile(
-              key: const ValueKey('settings.category.fileDeletion'),
-              icon: Icons.delete_outline_rounded,
-              title: '删除文件',
-              subtitle: confirmBeforeDeletingVideo
-                  ? '删除前提示 · ${moveDeletedFileToTrash ? '移入回收站' : '仅移除记录'} · ${autoRemoveMissingOrUnreadableVideos ? '自动清理无效记录' : '保留无效记录'}'
-                  : '不再提示 · ${moveDeletedFileToTrash ? '移入回收站' : '仅移除记录'} · ${autoRemoveMissingOrUnreadableVideos ? '自动清理无效记录' : '保留无效记录'}',
-              onTap: onOpenFileDeletion,
-            ),
-            _SettingsNavigationTile(
-              key: const ValueKey('settings.category.dataBackup'),
-              icon: Icons.backup_outlined,
-              title: '视频数据备份',
-              subtitle: '备份开关、同步状态、检查与导出',
-              onTap: onOpenDataBackup,
-            ),
-            _SettingsNavigationTile(
-              key: const ValueKey('settings.category.cache'),
-              icon: Icons.image_outlined,
-              title: '缩略图缓存',
-              subtitle: '缓存状态与后台任务统计',
-              onTap: onOpenCache,
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        const _SettingsGroupTitle(title: '应用'),
-        const SizedBox(height: 8),
-        _SettingsNavigationGroup(
-          children: [
-            _SettingsNavigationTile(
-              key: const ValueKey('settings.category.about'),
-              icon: Icons.info_outline_rounded,
-              title: '关于 Local Tag Player',
-              subtitle: '版本信息、正式版更新与安装',
-              onTap: onOpenAbout,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
 }
 
 /**
@@ -1518,140 +1368,6 @@ class _DeleteFileSettingsPanel extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-/** 设置首页同一语义分组中的导航入口容器。 */
-class _SettingsNavigationGroup extends StatelessWidget {
-  const _SettingsNavigationGroup({required this.children});
-
-  /** 分组内按视觉阅读顺序排列的入口。 */
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: librarySurface,
-        borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
-        border: Border.fromBorderSide(BorderSide(color: libraryBorder)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          children: [
-            for (var index = 0; index < children.length; index++) ...[
-              children[index],
-              if (index != children.length - 1) const SizedBox(height: 6),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/** 设置首页的功能分组标题。 */
-class _SettingsGroupTitle extends StatelessWidget {
-  const _SettingsGroupTitle({required this.title});
-
-  /** 分组名称。 */
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color: libraryTextMuted,
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-      ),
-    );
-  }
-}
-
-/** 设置首页中打开二级页的单个功能入口。 */
-class _SettingsNavigationTile extends StatelessWidget {
-  const _SettingsNavigationTile({
-    super.key,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    this.statusLabel,
-  });
-
-  /** 功能类型图标。 */
-  final IconData icon;
-
-  /** 功能名称。 */
-  final String title;
-
-  /** 功能范围摘要。 */
-  final String subtitle;
-
-  /** 需要在设置首屏直接暴露的关键当前状态；普通入口保持为空。 */
-  final String? statusLabel;
-
-  /** 点击后进入对应二级页。 */
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppInteractionSurface(
-      onTap: onTap,
-      semanticLabel: '打开$title',
-      backgroundColor: librarySurface,
-      borderRadius: AppRadius.card,
-      showBorder: false,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 460;
-          return Row(
-            children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: appAccentViolet.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                ),
-                child: SizedBox.square(
-                  dimension: 42,
-                  child: Icon(icon, color: appAccentViolet),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(color: libraryTextMuted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              if (statusLabel != null && !compact) ...[
-                Chip(
-                  key: const ValueKey('settings.resumeBehavior.summary'),
-                  label: Text(statusLabel!),
-                  visualDensity: VisualDensity.compact,
-                  side: BorderSide.none,
-                ),
-                const SizedBox(width: 6),
-              ],
-              const Icon(Icons.chevron_right_rounded, color: libraryTextMuted),
-            ],
-          );
-        },
       ),
     );
   }
@@ -2525,8 +2241,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                         SizedBox(
                           height: MediaQuery.sizeOf(context).height - 120,
                           child: AboutSettingsPage(
-                            updateService: widget.updateService ??
-                                GitHubReleaseUpdateService(),
+                            updateService: widget.updateService,
                           ),
                         ),
                     ],
@@ -2740,7 +2455,7 @@ class _DataBackupSettingsPanel extends StatelessWidget {
             const SizedBox(height: 14),
             const _DataBackupScopeSummary(),
             const SizedBox(height: 20),
-            const _SettingsGroupTitle(title: '同步状态'),
+            const SettingsGroupTitle(title: '同步状态'),
             const SizedBox(height: 10),
             _DataBackupMetricGrid(
               statusLabel: statusLabel,
@@ -3692,7 +3407,7 @@ class LibraryPage extends StatefulWidget {
     required this.fileSystem,
     required this.playerServiceFactory,
     required this.mediaProbeBackendFactory,
-    this.updateService,
+    required this.updateService,
   });
 
   /** facade 加载、偏好持久化、缩略图与媒体详情创建的页面应用服务。 */
@@ -3707,8 +3422,8 @@ class LibraryPage extends StatefulWidget {
   /** 仅转交播放器页面的媒体探测工厂。 */
   final MediaProbeBackendFactory mediaProbeBackendFactory;
 
-  /** 应用组合根注入的更新服务；测试或旧调用方未提供时关于页使用默认实现。 */
-  final AppUpdateService? updateService;
+  /** 应用组合根注入的更新服务；页面不创建网络或平台具体实现。 */
+  final AppUpdateService updateService;
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();

@@ -177,6 +177,172 @@ void main() {
       isA<LocalLibraryPageApplicationService>(),
     );
     expect(dependencies.paths, isA<AppPaths>());
+    expect(dependencies.updateService, isA<GitHubReleaseUpdateService>());
+  });
+
+  test(
+      'application shell and bootstrap keep composition responsibilities apart',
+      () {
+    final entry = File('lib/main.dart').readAsStringSync();
+    final shell =
+        File('lib/src/app/local_tag_player_app.dart').readAsStringSync();
+    final bootstrap = File(
+      'lib/src/composition/local_tag_player_bootstrap.dart',
+    ).readAsStringSync();
+    final compatibility = File('lib/src/app.dart').readAsStringSync();
+
+    expect(entry, contains('composition/local_tag_player_bootstrap.dart'));
+    expect(entry, isNot(contains("import 'src/app.dart'")));
+    expect(shell, contains('class LocalTagPlayerApp'));
+    expect(shell, isNot(contains('Platform.')));
+    expect(shell, isNot(contains('GitHubReleaseUpdateService')));
+    expect(bootstrap, contains('GitHubReleaseUpdateService()'));
+    expect(bootstrap, contains('createLocalTagPlayerDependencies'));
+    expect(compatibility, isNot(contains('class LocalTagPlayerApp')));
+    expect(
+        compatibility, isNot(contains('Future<void> bootstrapLocalTagPlayer')));
+  });
+
+  test('production modules do not depend on the compatibility app barrel', () {
+    final offenders = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .where(
+            (file) => !file.path.endsWith('${Platform.pathSeparator}app.dart'))
+        .where((file) {
+          final source = file.readAsStringSync();
+          return source.contains('package:local_tag_player/src/app.dart') ||
+              source.contains("import 'src/app.dart'") ||
+              source.contains("import '../app.dart'") ||
+              source.contains("import '../../app.dart'");
+        })
+        .map((file) => file.path)
+        .toList();
+
+    // 兼容导出面只服务迁移期测试；生产模块重新依赖它会让依赖方向再次失控。
+    expect(offenders, isEmpty);
+  });
+
+  test('test compatibility app barrel import budget can only shrink', () {
+    final consumers = Directory('test')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .where((file) => file
+            .readAsStringSync()
+            .contains('package:local_tag_player/src/app.dart'))
+        .map((file) => file.path)
+        .toList();
+
+    // 本批已把所改功能测试迁到具体模块；剩余兼容消费者只能随迁移减少，禁止增加。
+    expect(consumers.length, lessThanOrEqualTo(16));
+  });
+
+  test('feature presentation modules do not import another presentation layer',
+      () {
+    final presentationFiles = Directory('lib/src/features')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) =>
+            file.path.endsWith('.dart') &&
+            file.path.contains(
+                '${Platform.pathSeparator}presentation${Platform.pathSeparator}'));
+    final offenders = <String>[];
+
+    for (final file in presentationFiles) {
+      final normalizedPath = file.path.replaceAll(r'\', '/');
+      final ownFeature =
+          RegExp(r'/features/([^/]+)/presentation/').firstMatch(normalizedPath);
+      if (ownFeature == null) {
+        continue;
+      }
+      final ownFeatureName = ownFeature.group(1);
+      final imports = RegExp(
+        r'''(?:import|export) ['"][^'"]*features/([^/]+)/presentation/''',
+      ).allMatches(file.readAsStringSync());
+      if (imports.any((match) => match.group(1) != ownFeatureName)) {
+        offenders.add(file.path);
+      }
+    }
+
+    // 跨功能流程必须通过 Route 输入或应用服务协作，不能耦合另一功能的 Widget 树。
+    expect(offenders, isEmpty);
+  });
+
+  test('large page migration budgets can only shrink', () {
+    final libraryLines = File('lib/src/pages/library/library_page.dart')
+        .readAsLinesSync()
+        .length;
+    final playerLines =
+        File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
+
+    // 媒体库阈值随首个设置叶节点提取下调；后续迁移只能降低，禁止为通过测试而调高。
+    expect(libraryLines, lessThanOrEqualTo(7250));
+    expect(playerLines, lessThanOrEqualTo(5400));
+  });
+
+  test('settings landing is a stateless feature leaf with preserved entry keys',
+      () {
+    final library =
+        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final landing = File(
+      'lib/src/features/settings/presentation/settings_landing_list.dart',
+    ).readAsStringSync();
+
+    expect(library, contains('settings_landing_list.dart'));
+    expect(library, isNot(contains('class SettingsLandingList')));
+    expect(
+        landing, contains('class SettingsLandingList extends StatelessWidget'));
+    for (final key in <String>[
+      'settings.home',
+      'settings.category.playback',
+      'settings.category.videoQuality',
+      'settings.category.playerInteraction',
+      'settings.category.fileDeletion',
+      'settings.category.dataBackup',
+      'settings.category.cache',
+      'settings.category.about',
+      'settings.resumeBehavior.summary',
+    ]) {
+      expect(landing, contains(key), reason: '设置入口 Key 必须保留：$key');
+    }
+    expect(landing, isNot(contains('Navigator')));
+    expect(landing, isNot(contains('showDialog')));
+  });
+
+  test('update feature follows domain data presentation dependency direction',
+      () {
+    final domain = Directory('lib/src/features/update/domain')
+        .listSync()
+        .whereType<File>()
+        .map((file) => file.readAsStringSync())
+        .join('\n');
+    final data = File(
+      'lib/src/features/update/data/github_release_update_service.dart',
+    ).readAsStringSync();
+    final presentation = Directory('lib/src/features/update/presentation')
+        .listSync()
+        .whereType<File>()
+        .map((file) => file.readAsStringSync())
+        .join('\n');
+
+    expect(domain, isNot(contains('package:flutter/')));
+    expect(domain, isNot(contains('dart:io')));
+    expect(domain, isNot(contains('../data/')));
+    expect(data, contains('../domain/app_update_service.dart'));
+    expect(presentation, contains('../domain/app_update_service.dart'));
+    expect(
+      presentation,
+      isNot(contains('../data/github_release_update_service.dart')),
+    );
+    expect(Directory('lib/src/services/update').existsSync(), isFalse);
+    expect(
+        File('lib/src/widgets/app_update_prompt.dart').existsSync(), isFalse);
+    expect(
+      File('lib/src/pages/settings/about_settings_page.dart').existsSync(),
+      isFalse,
+    );
   });
 
   test('LibraryPage depends on page services instead of the composition root',

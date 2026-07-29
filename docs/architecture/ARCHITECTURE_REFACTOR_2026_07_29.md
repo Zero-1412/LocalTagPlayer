@@ -1,0 +1,228 @@
+# 2026-07-29 架构重构方案
+
+## 结论
+
+Local Tag Player 不需要推倒现有 Repository、稳定身份、过滤语义和播放器后端边界。
+当前主要问题是 UI 层职责膨胀、目录按技术类型横向铺开、应用壳与组合根混合，以及测试
+长期依赖万能导出文件。重构采用渐进式替换：先建立依赖方向和纵向功能样板，再拆分媒体库
+与播放器巨型页面；每一阶段都保持可运行、可回滚并有页面级可达性证据。
+
+目标不是照搬某个“Clean Architecture”模板，而是让标签闭环具备四个性质：
+
+1. Widget 只负责布局、动画和事件转发。
+2. ViewModel / 应用服务拥有页面状态、命令和跨 Repository 编排。
+3. Repository 是用户数据与会话数据的单一事实源。
+4. SQLite、文件系统、FFmpeg、播放器和网络具体实现只在组合根可见。
+
+## 调研依据
+
+- Flutter 官方 Architecture recommendations：
+  <https://docs.flutter.dev/app-architecture/recommendations>
+- Flutter 官方 Guide to app architecture：
+  <https://docs.flutter.dev/app-architecture/guide>
+- Flutter 官方 Compass case study：
+  <https://docs.flutter.dev/app-architecture/case-study>
+- Flutter Compass 示例源码：
+  <https://github.com/flutter/samples/tree/main/compass_app/app/lib>
+- AppFlowy Flutter 工程：
+  <https://github.com/AppFlowy-IO/AppFlowy/tree/main/frontend/appflowy_flutter/lib>
+- LocalSend Flutter 工程：
+  <https://github.com/localsend/localsend/tree/main/app/lib>
+- Very Good Ventures 分层架构文章：
+  <https://www.verygood.ventures/blog/very-good-flutter-architecture>
+
+共同原则是职责分离、单向数据流、依赖注入、Repository、可单测状态类和按功能组织 UI。
+不同项目对状态管理库和目录命名并不一致，因此本项目不因架构重构引入 Provider、Bloc、
+Riverpod 或代码生成；先使用 Flutter SDK 已有的 `Listenable` / `ChangeNotifier` 和明确
+接口，只有真实复杂度证明需要时才增加依赖。
+
+## 当前审计
+
+审计基线为 2026-07-29 工作树：
+
+- 103 个生产 Dart 文件、22 个测试文件，合计约 66,457 行。
+- `library_page.dart` 约 7,472 行、52 个直接 import，同时承载设置、缓存诊断、扫描、
+  筛选、文件操作和播放 Route 编排。
+- `player_page.dart` 约 5,153 行、44 个直接 import，同时承载播放状态、窗口状态、
+  画质实验、队列和大量 UI。
+- `app.dart` 同时承担 bootstrap、组合根、应用 Widget 和测试万能导出面。
+- `LibraryStore` 同时实现四个 Repository contract，但已经把扫描、标签、视频持久化和
+  备份拆到协作者；应先收紧 facade，再评估物理拆库，不能为了类数量强行拆事务。
+- `FileSystemAdapter`、`DatabaseProvider`、`FFmpegBackend`、
+  `PlayerService → PlayerBackend`、`FilterQuery / TagQueryService` 和 stable identity
+  已有正确边界，应继续保护。
+
+## 目标依赖方向
+
+```text
+main
+  -> composition/bootstrap
+       -> concrete data + platform implementations
+       -> app shell
+            -> feature presentation
+                 -> feature view model / application service
+                      -> domain contracts
+                           <- data repositories/services
+                           <- platform adapters
+```
+
+硬规则：
+
+1. `app/` 只负责主题、无障碍、路由壳和顶层 Widget 组装。
+2. `composition/` 是唯一允许实例化具体 Repository、网络客户端、播放器后端和平台
+   adapter 的位置。
+3. `features/<name>/presentation` 只能依赖 domain/application contract，不依赖同功能
+   的 concrete data 实现。
+4. feature 之间不得直接导入对方 presentation；跨功能流程通过应用服务、共享领域模型
+   或 Route 输入完成。
+5. `domain` 不导入 Flutter、`dart:io`、SQLite、FFmpeg、mpv 或平台通道。
+6. Repository 之间不互相依赖；跨 Repository 逻辑放在 ViewModel 或明确 use case。
+7. Domain / Use Case 层按复杂度启用。只代理一次方法调用的类不新增。
+8. `src/app.dart` 暂时仅作为测试兼容导出面；生产代码不得导入它。测试逐步迁到具体
+   模块 import，最终删除万能导出。
+
+## 目标目录
+
+```text
+lib/src/
+  app/
+  composition/
+  domain/{models,policies,repositories}/
+  data/{repositories,services}/
+  features/
+    library/{application,presentation}/
+    player/{application,presentation}/
+    tags/{application,presentation}/
+    diagnostics/{application,presentation}/
+    update/{domain,data,presentation}/
+  platform/
+  ui/core/
+```
+
+迁移期间允许旧 `models/`、`services/`、`pages/`、`widgets/` 与目标目录并存，但新功能
+必须进入目标边界；旧目录只能按阶段逐步减少，不能产生新的反向依赖。
+
+## 性能架构
+
+- 标签点击先提交可见结果；计数、缩略图预取和媒体解析继续使用延迟、代次取消和限流。
+- 排序只重排当前结果，不触发完整 `resultCounts`。
+- ViewModel 暴露不可变或只读快照；Widget build 不枚举磁盘、不访问 SQLite、不创建
+  FFmpeg / Player 实例。
+- 11,000 条视频规模下，页面状态拆分必须减少 rebuild 范围，不能把整个媒体库改成一个
+  高频 `notifyListeners()`。
+- 播放器 Route 继续独占 `PlayerService`，filtered queue 内容和顺序由来源页面一次性
+  传入，不在播放器重新查询全库。
+
+## 分阶段迁移
+
+### Phase 0：边界与测量
+
+- [x] 记录审计指标、受保护行为和目标依赖方向。
+- [x] 增加架构合同，阻止应用壳实例化具体更新服务和 update presentation 反向依赖 data。
+- [x] 为最大文件、生产代码导入兼容 `app.dart`、跨 feature presentation import 增加
+  渐进阈值；阈值只降不升。
+- [ ] 建立受保护交互清单、查询调用追踪器和 11,000 条生产形态基准数据生成器。
+- [ ] 在媒体库状态迁移前实现并验证 `ResultEpoch`、`CountEpoch` 与 `QueueSnapshot` 合同。
+
+### Phase 1：应用壳与纵向样板
+
+- [x] `main.dart` 只调用 bootstrap。
+- [x] `LocalTagPlayerApp` 移到 `app/`，不读取 `Platform` 或创建具体服务。
+- [x] 更新功能迁到 `features/update/{domain,data,presentation}`。
+- [x] `AppUpdateService` 由组合根创建并注入启动提示、媒体库和关于页。
+
+### Phase 2：设置与诊断从媒体库页面解耦
+
+- [x] 2A-1 把设置首页导航提取为无状态 feature 叶节点；数据与回调仍由现有 owner 传入，
+  Route 与全部 `ValueKey` 不变。
+- [ ] 2A-2 继续按同一方式提取缓存诊断只读展示 Widget，不迁移状态或命令。
+- [ ] 2B 按一致性边界拆分普通设置 controller，不建立包含备份与缓存任务的巨型
+  `SettingsViewModel`。
+- [ ] 2C 单独迁移只读缓存诊断；读取、刷新、错误和 dispose 使用 latest-only 发布。
+- [ ] 2D 单独迁移缓存删除、重建、确认、失败恢复、撤销与互斥任务。
+- [ ] 2E 最后迁移备份/恢复；数据库关闭、替换、重开与全局失效由应用服务拥有。
+- [ ] 每一步保留确认、取消、撤销、返回和所有 `ValueKey`，增加 Route 级挂载测试。
+
+### Phase 3：媒体库 MVVM
+
+- [ ] 3A 先建立数据修订与失效协议，明确排序、计数和结果快照的失效条件。
+- [ ] 3B 先迁移只保存 stable ID 的选择状态与视图偏好。
+- [ ] 3C 单独迁移排序，验证完整计数调用为 0，且不会隐式改变既有播放队列。
+- [ ] 3D 以 `LibraryQueryController` 和 `FacetCountController` 迁移筛选、搜索、结果和计数；
+  共享版本协议，但不得互相成为可写状态源。
+- [ ] 3E 只从已接受的 `ResultSnapshot` 创建 `QueueSnapshot`。
+- [ ] 3F 最后迁移扫描/导入生命周期，保留 latest-only 排队、限流和 generation cancellation。
+- [ ] 把文件菜单、标签维护、Missing/Relink 变成明确 command。
+- [ ] `LibraryPage` 只保留布局、动画、Route 跳转和命令绑定。
+
+### Phase 4：播放器 MVVM
+
+- [ ] 4A 拆出 `PlayerSessionController`，只拥有队列、当前媒体与会话命令。
+- [ ] 4B 拆出 latest-request 与 backend event bridge。
+- [ ] 4C 拆出控件显隐、计时器和快捷键状态。
+- [ ] 4D 最后处理 texture、native window 和全屏生命周期；每种资源只有一个 dispose owner。
+- [ ] 4E 独立迁移播放器诊断。
+- [ ] 画质实验只依赖 `PlayerRuntimeAccess`，不进入 Widget 状态机。
+- [ ] 保留快速切换 latest-request、纹理释放、全屏恢复和 filtered queue 合同。
+
+### Phase 5：数据层收口
+
+- [ ] 先按 facade 使用面拆分只读查询与命令接口，再评估 `LibraryStore` 物理拆分。
+- [ ] 需要同一 SQLite 事务的写入继续由同一 transaction coordinator 持有。
+- [ ] 只有 profile 证明需要时才把过滤查询下推 SQLite；不改变 AND / OR / NOT 语义。
+
+### Phase 6：测试和兼容面清理
+
+- [ ] 测试目录镜像生产模块，公共 fake 移入测试 support。
+- [ ] 测试从 Phase 2 起随所改模块逐个改为具体 import，兼容 import 数只能下降。
+- [ ] 没有消费者后删除 `src/app.dart` 兼容导出面。
+
+## 网页端独立评审采纳记录
+
+2026-07-29 已把产品目标、硬约束、审计数据、目标依赖和 Phase 1 结果提交到
+[网页端独立评审](https://chatgpt.com/c/6a6954f1-e418-83ec-bcef-09b842b0f2b4)。
+评审结论不是推翻当前方向，而是把“大页面分阶段拆分”收紧为“一次迁移一个一致性边界”。
+
+采纳：
+
+1. 在筛选与播放器重构前建立版本化发布凭证：
+   `ResultEpoch = dataRevision + filter/search/sort fingerprint`，
+   `CountEpoch = dataRevision + filter/search/tagDefinition revision`，
+   `QueueSnapshot = ResultEpoch + ordered stable media IDs`。
+2. 跨 Repository 读取可以由查询 controller 组合；跨 Repository 原子写入必须由应用服务和
+   transaction runner 持有，ViewModel 不决定事务边界。
+3. ViewModel 禁止持有 `BuildContext`、`Navigator`、`Route`、Widget 或 native 资源；
+   texture、backend handle、window handle 和 listener 必须有明确且唯一的 dispose owner。
+4. 继续使用 SDK `Listenable` / `ChangeNotifier`，按失效频率和一致性边界拆为少量 controller；
+   同一状态存在两个可写 owner 或 controller 互相监听时审查失败。
+5. `LibraryStore` 当前不做物理拆分。先让 data/composition 之外的具体类型引用归零，并记录
+   方法—数据表亲和度、跨域事务数量、测试收益和查询计划；证据不足时保留聚合实现。
+6. 测试 import 迁移不等待 Phase 6；从现在起所改测试优先改为具体模块 import，兼容面预算
+   只能下降。
+
+暂不直接照搬：
+
+- 评审给出的 P95、帧耗时和内存阈值先作为“参考机初始目标”，必须在固定 Windows 机器、
+  profile 模式和确定性 11,000 条数据集上取得基线后，才能升级为阻断式 CI 门禁。
+- 不因评审建议提前实现 schema、事务或筛选语义变更；版本协议先以行为合同和观测设施落地。
+
+详细决策、停止条件和重新评估证据见
+[`ADR_001_PROGRESSIVE_ARCHITECTURE_MIGRATION.md`](ADR_001_PROGRESSIVE_ARCHITECTURE_MIGRATION.md)。
+
+## 每阶段交付门禁
+
+```text
+schema: 默认不变；变化时必须迁移、幂等和旧库验证
+FilterQuery / TagQueryService: 行为等价测试
+filtered queue: 内容、顺序、当前 index 与返回状态等价
+thumbnail/media queue: 并发、取消、重试和播放让盘等价
+user data: 标签、收藏、播放记录、备份与设置保留
+protected behaviors: 页面/Route 级可达性证据
+performance: focused benchmark 或真实大库交互无回退
+validation: focused tests + full tests + analyze + Windows debug build + 真实点击
+```
+
+## 本阶段获授权删除
+
+无。Phase 1 只移动更新模块、分离组合职责并收紧依赖注入。所有原有入口、`ValueKey`、
+回调、Route 和降级路径均保留。

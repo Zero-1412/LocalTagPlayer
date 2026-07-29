@@ -2,10 +2,10 @@
 
 import 'package:flutter/material.dart';
 
-import '../../models/app_release.dart';
-import '../../services/update/app_update_service.dart';
-import '../../widgets/app_theme_tokens.dart';
-import '../../widgets/app_update_prompt.dart';
+import '../../../widgets/app_theme_tokens.dart';
+import '../domain/app_release.dart';
+import '../domain/app_update_service.dart';
+import 'app_update_prompt.dart';
 
 /**
  * 设置中的关于页面。
