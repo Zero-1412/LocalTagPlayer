@@ -337,6 +337,19 @@
 - Phase 0—6 的最终依赖方向、刻意保留的 Store 聚合边界、验证证据和后续治理原则已记录
   到 `docs/architecture/ARCHITECTURE_COMPLETION_2026_07_29.md`。整体架构重构收官；
   后续回到产品 vertical slice，只在需求触及的边界继续机会式降低页面预算。
+- 代码瘦身第一批完成：`RecentPlaybackView` 与 `TagEditorDialog` 从 4577 行的
+  `library_widgets.dart` 迁到 299/481 行的独立叶节点，聚合文件降到 3819 行；最近播放
+  继续只消费 stable videoId，标签编辑继续保持 folder/manual、父级作用域和键盘保存语义。
+- 对齐 Effective Dart、Flutter 职责分离和 Google 小变更/评审标准；完整来源与项目
+  落地规则见 `docs/architecture/CODE_DEVELOPMENT_STANDARDS_2026_07_29.md`。
+- 新增 presentation 行数治理合同：≤200 行为项目最佳实践，201—500 行为关注区，超过
+  500 行必须进入只降不升预算，超过 1000 行列为强制重构对象并禁止新增。外部规范没有
+  通用单文件行数硬限制；这组阈值是本项目治理线，现有 16 个超标文件已显式登记。
+- 验证：focused 架构/Widget 测试 248 项、完整测试 443 项通过（3 项显式 benchmark
+  按设计跳过），`flutter analyze` 零问题，Windows Debug build 与正式 EXE 点击启动
+  存活检查通过。Computer Use 原生管道不可用（系统找不到指定文件），因此本轮无法补做
+  “最近播放 → 标签编辑”的真实鼠标路径与截图；替代证据为页面挂载合同、对应 Widget
+  测试和真实程序启动，仍需人工复测该准确路径。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

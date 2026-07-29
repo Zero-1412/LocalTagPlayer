@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.126` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.127` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -151,6 +151,17 @@ Phase 6 将 16 个单元测试和 9 个 integration test 从万能 `src/app.dart
 integration_test，禁止重新引入 barrel；应用入口、bootstrap 和页面挂载保持不变。
 Phase 0—6 的最终结构、完成证据与后续治理原则见
 `docs/architecture/ARCHITECTURE_COMPLETION_2026_07_29.md`。
+
+后续代码瘦身采用 Effective Dart、Flutter 职责分离和 Google 小变更原则，并叠加项目
+本地 presentation 行数门禁。200 行以内是新增页面/组件最佳实践，201—500 行进入关注
+区，超过 500 行必须登记只降不升的历史预算，超过 1000 行属于强制重构对象且禁止新增。
+这些数值不是外部规范宣称的通用文件标准；行数只用于发现风险，最终仍由职责、单向依赖、
+测试和页面可达性判断是否真正解耦。完整来源和执行门禁见
+`docs/architecture/CODE_DEVELOPMENT_STANDARDS_2026_07_29.md`。
+
+首批把最近播放与标签编辑从 `library_widgets.dart` 拆为独立叶节点，聚合文件从 4577 行
+降到 3819 行，并移除其对播放设置、播放进度、缩略图和视频结果组件的无关依赖；页面仍
+通过原回调绑定，不改变筛选、队列或用户数据。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。

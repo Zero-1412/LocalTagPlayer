@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
-- 架构基线提升到 `0.5.126`；完整审计和 Phase 0-6 路线记录在
+- 架构基线提升到 `0.5.127`；完整审计和 Phase 0-6 路线记录在
   `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 - `main.dart`、bootstrap 组合根与 Flutter 应用壳已经分离，具体实现选择仍只发生在
   composition。
@@ -66,6 +66,9 @@
   不变。事务亲和度证据不支持当前物理拆分 Store。
 - Phase 6 将 16 个单元测试和 9 个 integration test 改为具体模块 import，并删除消费者
   归零的 `src/app.dart`；架构合同禁止 production/test/integration_test 回退万能导出。
+- 后续瘦身对齐 Effective Dart、Flutter 职责分离与 Google 小变更原则，并增加项目本地
+  200/500/1000 行分级门禁；首批把最近播放与标签编辑拆成独立叶节点，
+  `library_widgets.dart` 从 4577 行降到 3819 行并移除无关播放/缓存依赖。
 - 后续按一致性边界迁移无状态诊断 UI、普通设置、媒体库和播放器；禁止一次性移动全部
   文件或改变现有业务语义。
 

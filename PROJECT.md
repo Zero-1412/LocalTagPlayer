@@ -75,6 +75,9 @@ flutter build windows --debug
 
 ## 编码约定
 
+- Dart/Flutter/Google 工程标准与本项目 200/500/1000 行治理规则见
+  `docs/architecture/CODE_DEVELOPMENT_STANDARDS_2026_07_29.md`。行数只用于发现风险，
+  交付仍以职责分离、依赖方向、测试和页面可达性为准。
 - 修改前先读相关代码，不凭历史记忆改。
 - 用户工作区可能有未提交修改，不要回滚用户修改。
 - 优先保持现有架构和现有 UI 风格。

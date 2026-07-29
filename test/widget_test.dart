@@ -78,6 +78,7 @@ import 'package:local_tag_player/src/widgets/design_system/app_interaction_surfa
 import 'package:local_tag_player/src/widgets/library/library_local_view.dart';
 import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart';
 import 'package:local_tag_player/src/widgets/library/library_sort_control.dart';
+import 'package:local_tag_player/src/widgets/library/library_tag_editor_dialog.dart';
 import 'package:local_tag_player/src/widgets/library/library_video_results.dart';
 import 'package:local_tag_player/src/widgets/library/library_widgets.dart';
 import 'package:local_tag_player/src/widgets/player_shortcut_input.dart';

@@ -329,10 +329,99 @@ void main() {
         .length;
     final playerLines =
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
+    final libraryWidgetLines = File(
+      'lib/src/widgets/library/library_widgets.dart',
+    ).readAsLinesSync().length;
+    final recentPlaybackLines = File(
+      'lib/src/widgets/library/library_recent_playback_view.dart',
+    ).readAsLinesSync().length;
+    final tagEditorLines = File(
+      'lib/src/widgets/library/library_tag_editor_dialog.dart',
+    ).readAsLinesSync().length;
 
-    // 媒体库阈值随结果来源导航 owner 迁移继续下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(5748));
-    expect(playerLines, lessThanOrEqualTo(5322));
+    // 体积阈值随叶节点迁移继续下调；后续瘦身只能降低，禁止把代码塞回聚合文件。
+    expect(libraryLines, lessThanOrEqualTo(5747));
+    expect(playerLines, lessThanOrEqualTo(5226));
+    expect(libraryWidgetLines, lessThanOrEqualTo(3819));
+    expect(recentPlaybackLines, lessThanOrEqualTo(299));
+    expect(tagEditorLines, lessThanOrEqualTo(481));
+  });
+
+  test('presentation files obey 200 500 and 1000 line governance', () {
+    const bestPracticeLines = 200;
+    const warningLines = 500;
+    const refactorLines = 1000;
+    const legacyBudgets = <String, int>{
+      'lib/src/pages/library/library_page.dart': 5747,
+      'lib/src/pages/player/player_page.dart': 5226,
+      'lib/src/widgets/library/library_widgets.dart': 3819,
+      'lib/src/widgets/library/library_video_results.dart': 2808,
+      'lib/src/pages/player/player_queue_sidebar.dart': 1651,
+      'lib/src/widgets/library/library_tag_discovery_panel.dart': 1511,
+      'lib/src/pages/tags/tag_manager_page.dart': 1500,
+      'lib/src/pages/library/missing_relink_page.dart': 1142,
+      'lib/src/pages/player/player_settings_panel.dart': 985,
+      'lib/src/widgets/app_theme_tokens.dart': 823,
+      'lib/src/pages/player/player_control_slider.dart': 792,
+      'lib/src/widgets/library/library_local_view.dart': 694,
+      'lib/src/pages/player/player_context_panel.dart': 683,
+      'lib/src/features/settings/presentation/'
+          'data_backup_settings_workspace.dart': 666,
+      'lib/src/features/settings/presentation/'
+          'cache_diagnostics_snapshot_view.dart': 589,
+      'lib/src/pages/library/directory_manager_page.dart': 571,
+    };
+    final presentationFiles = <File>[
+      ...Directory('lib/src/pages')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart')),
+      ...Directory('lib/src/widgets')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart')),
+      ...Directory('lib/src/features')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) =>
+              file.path.endsWith('.dart') &&
+              file.path.replaceAll(r'\', '/').contains('/presentation/')),
+    ];
+    final activeLegacyBudgets = <String>{};
+
+    for (final file in presentationFiles) {
+      final path = file.path.replaceAll(r'\', '/');
+      final lines = file.readAsLinesSync().length;
+      if (lines <= warningLines) {
+        // 200 行是新增叶节点的最佳实践；201—500 行允许存在，但后续应优先继续拆分。
+        expect(bestPracticeLines, lessThan(warningLines));
+        continue;
+      }
+      final budget = legacyBudgets[path];
+      activeLegacyBudgets.add(path);
+      expect(
+        budget,
+        isNotNull,
+        reason: '$path 已超过 $warningLines 行，必须先拆分，禁止新增超标 presentation 文件',
+      );
+      expect(
+        lines,
+        lessThanOrEqualTo(budget!),
+        reason: '$path 的历史预算只能下降，当前 $lines 行、预算 $budget 行',
+      );
+      if (lines > refactorLines) {
+        expect(
+          legacyBudgets.containsKey(path),
+          isTrue,
+          reason: '$path 已超过 $refactorLines 行，必须列为强制重构对象',
+        );
+      }
+    }
+    expect(
+      activeLegacyBudgets,
+      legacyBudgets.keys.toSet(),
+      reason: '文件降到 $warningLines 行以内或被删除后，必须同步移除已失效的历史预算',
+    );
   });
 
   test('settings landing is a stateless feature leaf with preserved entry keys',
@@ -1106,8 +1195,8 @@ void main() {
     final libraryPage = File(
       'lib/src/pages/library/library_page.dart',
     ).readAsStringSync();
-    final libraryWidgets = File(
-      'lib/src/widgets/library/library_widgets.dart',
+    final recentPlayback = File(
+      'lib/src/widgets/library/library_recent_playback_view.dart',
     ).readAsStringSync();
 
     expect(requests, contains('class PlayerOpenRequestController'));
@@ -1152,7 +1241,7 @@ void main() {
       ),
     );
     expect(
-      libraryWidgets,
+      recentPlayback,
       contains(
         "import '../../features/player/domain/"
         "player_playback_progress.dart';",
@@ -1508,7 +1597,7 @@ void main() {
       'lib/src/pages/library/library_page.dart',
     ).readAsStringSync();
     final widgets = File(
-      'lib/src/widgets/library/library_widgets.dart',
+      'lib/src/widgets/library/library_recent_playback_view.dart',
     ).readAsStringSync();
     final executor = File(
       'lib/src/features/library/application/'

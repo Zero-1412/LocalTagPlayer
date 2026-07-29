@@ -60,8 +60,10 @@ import '../../widgets/app_theme_tokens.dart';
 import '../../widgets/library/library_local_view.dart';
 import '../../widgets/library/library_smoke_keys.dart';
 import '../../widgets/library/library_tag_discovery_panel.dart';
+import '../../widgets/library/library_tag_editor_dialog.dart';
 import '../../widgets/library/library_video_results.dart';
 import '../../widgets/library/library_widgets.dart';
+import '../../widgets/library/library_recent_playback_view.dart';
 import '../../widgets/player_shortcut_input.dart';
 import '../player/player_delete_dialog.dart';
 import '../player/player_hardware_decode_warning_dialog.dart';
@@ -71,6 +73,7 @@ import '../tags/tag_manager_page.dart';
 import 'library_page_helpers.dart';
 import 'directory_manager_page.dart';
 import 'missing_relink_page.dart';
+
 /** 标签筛选默认保持折叠，把媒体结果宽度优先留给高频浏览。 */
 const bool libraryTagDiscoveryPanelInitiallyOpen = false;
 
@@ -2090,16 +2093,12 @@ class LibraryPage extends StatefulWidget {
 
   /** facade 加载、偏好持久化、缩略图与媒体详情创建的页面应用服务。 */
   final LibraryPageApplicationService applicationService;
-
   /** 目录选择、异步枚举、文件检查和删除的平台边界。 */
   final FileSystemAdapter fileSystem;
-
   /** 仅转交播放器页面的应用层播放服务工厂。 */
   final PlayerServiceFactory playerServiceFactory;
-
   /** 仅转交播放器页面的媒体探测工厂。 */
   final MediaProbeBackendFactory mediaProbeBackendFactory;
-
   /** 应用组合根注入的更新服务；页面不创建网络或平台具体实现。 */
   final AppUpdateService updateService;
 

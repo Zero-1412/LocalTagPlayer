@@ -8,15 +8,23 @@
 - [x] 完成网页端独立架构评审，建立渐进迁移 ADR 和兼容导出、跨 feature、文件预算门禁。
 - [x] Phase 2A-1：提取设置首页无状态导航叶节点，保持原状态 owner、Route 和入口 Key。
 - [x] Phase 1.5：建立受保护交互清单、查询追踪、版本化快照协议和 11,000 条基准数据。
-- [ ] Phase 2：按无状态 UI、普通设置、只读诊断、缓存修改、备份恢复五步解耦。
-- [ ] Phase 3：按数据修订、选择/视图、排序、查询/计数、QueueSnapshot、扫描/导入六步迁移。
-- [ ] Phase 4：按会话、event bridge、控件、native 生命周期、诊断五步迁移。
-- [ ] Phase 5：先收窄 Repository 使用面，再在事务安全前提下评估 `LibraryStore`
+- [x] Phase 2：按无状态 UI、普通设置、只读诊断、缓存修改、备份恢复五步解耦。
+- [x] Phase 3：按数据修订、选择/视图、排序、查询/计数、QueueSnapshot、扫描/导入六步迁移。
+- [x] Phase 4：按会话、event bridge、控件、native 生命周期、诊断五步迁移。
+- [x] Phase 5：先收窄 Repository 使用面，再在事务安全前提下评估 `LibraryStore`
   物理拆分。
 - [x] Phase 6：删除已经归零的 `src/app.dart` 兼容导出面；测试具体 import 从 Phase 2
   起随改动持续推进。
 
 完整方案与阶段门禁见 `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
+
+## 2026-07-29 代码体积治理
+
+- [x] 对齐 Effective Dart、Flutter 职责分离与 Google 小变更/评审标准。
+- [x] 建立项目本地 200 行最佳实践、500 行警戒线和 1000 行强制重构线。
+- [x] 超过 500 行的既有 presentation 文件登记只降不升预算，禁止新增超标文件。
+- [x] 拆出最近播放与标签编辑叶节点，降低 `library_widgets.dart` 的依赖与冲突面。
+- [ ] 下一批按页面级可达性证据拆分 `library_widgets.dart` 的 sidebar 或 top bar 区域。
 
 ## 2026-07-28 默认 MPV 容器合成
 
