@@ -27,6 +27,7 @@ import 'package:local_tag_player/src/features/settings/presentation/data_backup_
 import 'package:local_tag_player/src/features/settings/presentation/delete_file_settings_panel.dart';
 import 'package:local_tag_player/src/features/settings/presentation/playback_backend_dropdowns.dart';
 import 'package:local_tag_player/src/features/settings/presentation/playback_quality_settings_panel.dart';
+import 'package:local_tag_player/src/features/settings/presentation/player_interaction_settings_panels.dart';
 import 'package:local_tag_player/src/features/settings/presentation/settings_landing_list.dart';
 import 'package:local_tag_player/src/features/settings/presentation/settings_workspace_theme.dart';
 import 'package:local_tag_player/src/features/update/domain/app_release.dart';
@@ -3521,6 +3522,66 @@ void main() {
     expect(confirmChanged, isTrue);
     expect(trashChanged, isFalse);
     expect(autoRemoveChanged, isFalse);
+  });
+
+  testWidgets('player interaction settings cards only forward page intents',
+      (tester) async {
+    bool? edgeHoverEnabled;
+    var resetCount = 0;
+    PlayerShortcutAction? capturedAction;
+    String? capturedShortcut;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: settingsWorkspaceTheme(ThemeData(useMaterial3: true)),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: Column(
+              children: [
+                FullscreenQueueSettingsCard(
+                  enabled: false,
+                  onChanged: (value) => edgeHoverEnabled = value,
+                ),
+                PlayerShortcutsSettingsCard(
+                  shortcuts: PlaybackSettings.defaultShortcuts,
+                  errors: const <PlayerShortcutAction, String?>{},
+                  onReset: () => resetCount++,
+                  onCaptured: (action, shortcut) {
+                    capturedAction = action;
+                    capturedShortcut = shortcut;
+                    return true;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('settings.fullscreenQueue.edgeHoverEnabled'),
+      ),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings.shortcuts.reset')),
+    );
+    final playPauseRecorder = tester.widget<PlayerShortcutRecorder>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is PlayerShortcutRecorder &&
+            widget.action == PlayerShortcutAction.playPause,
+      ),
+    );
+    expect(playPauseRecorder.onCaptured('Control+P'), isTrue);
+
+    expect(edgeHoverEnabled, isTrue);
+    expect(resetCount, 1);
+    expect(capturedAction, PlayerShortcutAction.playPause);
+    expect(capturedShortcut, 'Control+P');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('shortcut recorder captures keys and keeps conflicts visible',

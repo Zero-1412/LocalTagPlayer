@@ -2456,6 +2456,17 @@
 - 将现有 media_kit/libmpv 播放链路收口到完整 `PlayerBackend` 适配器，播放器页面仅负责 filtered queue 与 UI，不再直接拥有 Player、VideoController 或原生属性入口。
 - 增加可注入后端工厂、纹理/状态/诊断/释放契约，为 Windows C++ 播放后端提供不改页面的可回滚 A/B 接入点；默认播放参数与硬解行为保持不变。
 - 真实媒体库 90 秒回归完成 4 轮播放、滚动、seek 和退出，实际硬解保持 `d3d11va-copy`，独立视频帧与音频 PTS 均持续推进。
+## Architecture Baseline 0.5.131
+
+- “播放与解码”主卡及全屏队列/快捷键展示区迁为 98/168 行 settings presentation
+  叶节点，`library_page.dart` 预算从 4686 行降到 4487 行。
+- 展示叶节点只接收 `PlaybackSettings` 快照、快捷键/冲突只读映射和回调；原后端确认/
+  撤销、快捷键冲突校验、持久化、controller、全屏队列命令和 section 返回继续由页面
+  唯一拥有，原 `ValueKey` 和路由可达性保持不变。
+- focused 架构/Widget/渲染器保护测试共 254 项、完整测试 445 项通过（3 项 benchmark
+  按设计跳过）；静态分析、Windows Debug build 和 EXE 启动通过。Computer Use 原生
+  管道缺失，设置二级页真实点击与截图保留为人工复测项。
+
 ## Architecture Baseline 0.5.130
 
 - 原始码流缓存、播放画质/流畅度、删除文件设置和缓存失败状态/测试容器迁为

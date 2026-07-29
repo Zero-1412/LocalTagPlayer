@@ -19,7 +19,8 @@ import '../../features/settings/presentation/cache_diagnostics_snapshot_view.dar
 import '../../features/settings/presentation/cache_failure_actions.dart';
 import '../../features/settings/presentation/data_backup_settings_workspace.dart';
 import '../../features/settings/presentation/delete_file_settings_panel.dart';
-import '../../features/settings/presentation/playback_backend_dropdowns.dart';
+import '../../features/settings/presentation/playback_and_decoding_settings_card.dart';
+import '../../features/settings/presentation/player_interaction_settings_panels.dart';
 import '../../features/settings/presentation/playback_quality_settings_panel.dart';
 import '../../features/settings/presentation/playback_stream_cache_card.dart';
 import '../../features/settings/presentation/settings_landing_list.dart';
@@ -693,103 +694,12 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                     padding: const EdgeInsets.all(24),
                     children: [
                       if (_section == _SettingsSection.playback) ...[
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                const Text(
-                                  '继续观看',
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800),
-                                ),
-                                const SizedBox(height: 6),
-                                const Text(
-                                  '打开有未完成进度的视频时，默认执行以下操作。',
-                                  style: TextStyle(color: libraryTextMuted),
-                                ),
-                                const SizedBox(height: 14),
-                                DropdownButtonFormField<PlaybackResumeBehavior>(
-                                  key:
-                                      const ValueKey('settings.resumeBehavior'),
-                                  initialValue: _settings.resumeBehavior,
-                                  decoration: const InputDecoration(
-                                    labelText: '默认打开行为',
-                                  ),
-                                  items: [
-                                    for (final behavior
-                                        in PlaybackResumeBehavior.values)
-                                      DropdownMenuItem(
-                                        value: behavior,
-                                        child: Text(
-                                          PlaybackSettings.resumeLabelFor(
-                                            behavior,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                  onChanged: (behavior) async {
-                                    if (behavior == null) {
-                                      return;
-                                    }
-                                    final next = _settings.copyWith(
-                                      resumeBehavior: behavior,
-                                    );
-                                    await _playbackSettingsController.update(
-                                      next,
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 22),
-                                const Divider(height: 1),
-                                const SizedBox(height: 20),
-                                const Text(
-                                  '播放渲染器',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                const Text(
-                                  '两种配置共用 MediaKit Texture；增强配置开放同实例 libmpv 画质能力。',
-                                  style: TextStyle(color: libraryTextMuted),
-                                ),
-                                const SizedBox(height: 14),
-                                PlaybackRendererDropdown(
-                                  settings: _settings,
-                                  onChanged: (settings) async {
-                                    // 确认型下拉框负责展示失败并恢复自身临时选择。
-                                    await _playbackSettingsController.update(
-                                      settings,
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 22),
-                                const Divider(height: 1),
-                                const SizedBox(height: 20),
-                                const Text(
-                                  '播放解码',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                                PlaybackDecoderDropdown(
-                                  settings: _settings,
-                                  onChanged: (settings) async {
-                                    // 解码器切换必须保留子组件现有的确认与撤销路径。
-                                    await _playbackSettingsController.update(
-                                      settings,
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
+                        PlaybackAndDecodingSettingsCard(
+                          settings: _settings,
+                          onChanged: (settings) async {
+                            // 页面 controller 继续唯一负责串行持久化与失败补偿。
+                            await _playbackSettingsController.update(settings);
+                          },
                         ),
                         const SizedBox(height: 16),
                         PlaybackStreamCacheCard(
@@ -856,127 +766,18 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                         const SizedBox(height: 16),
                       ],
                       if (_section == _SettingsSection.playerInteraction) ...[
-                        Card(
-                          key: const ValueKey('settings.fullscreenQueue.card'),
-                          child: Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: SwitchListTile.adaptive(
-                              key: const ValueKey(
-                                'settings.fullscreenQueue.edgeHoverEnabled',
-                              ),
-                              contentPadding: EdgeInsets.zero,
-                              value: _settings.fullscreenQueueEdgeHoverEnabled,
-                              onChanged: (value) => unawaited(
-                                _changeFullscreenQueueEdgeHoverEnabled(value),
-                              ),
-                              secondary: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color:
-                                      appAccentViolet.withValues(alpha: 0.15),
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.control),
-                                ),
-                                child: const SizedBox.square(
-                                  dimension: 42,
-                                  child: Icon(
-                                    Icons.playlist_play_rounded,
-                                    color: libraryAccent,
-                                  ),
-                                ),
-                              ),
-                              title: const Text(
-                                '全屏边缘播放列表',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              subtitle: const Padding(
-                                padding: EdgeInsets.only(top: 5),
-                                child: Text(
-                                  '开启后将鼠标移到屏幕右侧边缘即可展开；触发范围与隐藏延迟使用流畅度验证后的默认值。',
-                                  style: TextStyle(
-                                    color: libraryTextMuted,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ),
-                            ),
+                        FullscreenQueueSettingsCard(
+                          enabled: _settings.fullscreenQueueEdgeHoverEnabled,
+                          onChanged: (value) => unawaited(
+                            _changeFullscreenQueueEdgeHoverEnabled(value),
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(children: [
-                                  const Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text('播放器快捷键',
-                                            style: TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.w800)),
-                                        SizedBox(height: 6),
-                                        Text('点击动作后直接按键；冲突时会就地提示，不会自动交换或覆盖。',
-                                            style: TextStyle(
-                                                color: libraryTextMuted)),
-                                      ],
-                                    ),
-                                  ),
-                                  TextButton.icon(
-                                    key: const ValueKey(
-                                        'settings.shortcuts.reset'),
-                                    onPressed: _resetShortcuts,
-                                    icon: const Icon(Icons.restart_alt_rounded),
-                                    label: const Text('恢复默认'),
-                                  ),
-                                ]),
-                                const SizedBox(height: 16),
-                                LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    const spacing = 14.0;
-                                    final fieldWidth = constraints.maxWidth >=
-                                            680
-                                        ? (constraints.maxWidth - spacing) / 2
-                                        : constraints.maxWidth;
-                                    return Wrap(
-                                      spacing: spacing,
-                                      runSpacing: 12,
-                                      children: [
-                                        for (final action
-                                            in PlayerShortcutAction.values)
-                                          SizedBox(
-                                            width: fieldWidth,
-                                            child: PlayerShortcutRecorder(
-                                              action: action,
-                                              shortcut:
-                                                  _settings.shortcuts[action]!,
-                                              errorText:
-                                                  _shortcutErrors[action],
-                                              onCaptured: (key) =>
-                                                  _captureShortcut(action, key),
-                                            ),
-                                          ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 14),
-                                const Text(
-                                  '支持常用单键及 Ctrl / Alt / Shift 组合键。Esc 在全屏时始终优先退出全屏，避免失去安全出口。',
-                                  style: TextStyle(
-                                    color: libraryTextMuted,
-                                    height: 1.45,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        PlayerShortcutsSettingsCard(
+                          shortcuts: _settings.shortcuts,
+                          errors: _shortcutErrors,
+                          onReset: _resetShortcuts,
+                          onCaptured: _captureShortcut,
                         ),
                         const SizedBox(height: 16),
                       ],

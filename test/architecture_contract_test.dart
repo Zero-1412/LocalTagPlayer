@@ -377,9 +377,17 @@ void main() {
     final cacheFailureActionsLines = File(
       'lib/src/features/settings/presentation/cache_failure_actions.dart',
     ).readAsLinesSync().length;
+    final playbackAndDecodingLines = File(
+      'lib/src/features/settings/presentation/'
+      'playback_and_decoding_settings_card.dart',
+    ).readAsLinesSync().length;
+    final playerInteractionLines = File(
+      'lib/src/features/settings/presentation/'
+      'player_interaction_settings_panels.dart',
+    ).readAsLinesSync().length;
 
     // 体积阈值随叶节点迁移继续下调；后续瘦身只能降低，禁止把代码塞回聚合文件。
-    expect(libraryLines, lessThanOrEqualTo(4686));
+    expect(libraryLines, lessThanOrEqualTo(4487));
     expect(playerLines, lessThanOrEqualTo(5226));
     expect(libraryWidgetLines, lessThanOrEqualTo(1917));
     expect(recentPlaybackLines, lessThanOrEqualTo(299));
@@ -397,6 +405,8 @@ void main() {
     expect(playbackQualityLines, lessThanOrEqualTo(371));
     expect(deleteFileSettingsLines, lessThanOrEqualTo(165));
     expect(cacheFailureActionsLines, lessThanOrEqualTo(158));
+    expect(playbackAndDecodingLines, lessThanOrEqualTo(98));
+    expect(playerInteractionLines, lessThanOrEqualTo(168));
   });
 
   test('presentation files obey 200 500 and 1000 line governance', () {
@@ -414,7 +424,7 @@ void main() {
       'lib/src/pages/library/missing_relink_page.dart',
     ];
     const legacyBudgets = <String, int>{
-      'lib/src/pages/library/library_page.dart': 4686,
+      'lib/src/pages/library/library_page.dart': 4487,
       'lib/src/pages/player/player_page.dart': 5226,
       'lib/src/widgets/library/library_widgets.dart': 1917,
       'lib/src/widgets/library/library_video_results.dart': 2808,
@@ -589,6 +599,8 @@ void main() {
         'lib/src/features/settings/presentation/playback_quality_settings_panel.dart',
         'lib/src/features/settings/presentation/delete_file_settings_panel.dart',
         'lib/src/features/settings/presentation/cache_failure_actions.dart',
+        'lib/src/features/settings/presentation/playback_and_decoding_settings_card.dart',
+        'lib/src/features/settings/presentation/player_interaction_settings_panels.dart',
       ])
         path: File(path).readAsStringSync(),
     };
@@ -598,6 +610,9 @@ void main() {
       'PlaybackQualitySettingsPanel(',
       'DeleteFileSettingsPanel(',
       'CacheFailureActions(',
+      'PlaybackAndDecodingSettingsCard(',
+      'FullscreenQueueSettingsCard(',
+      'PlayerShortcutsSettingsCard(',
     ]) {
       expect(library, contains(mount), reason: '设置页必须继续挂载展示叶节点：$mount');
     }
