@@ -125,7 +125,7 @@ drawer/side sheet: 240-320ms
 
 ```text
 lib/src/widgets/app_theme_tokens.dart
-lib/src/app.dart
+lib/src/app/local_tag_player_app.dart
 新建少量 lib/src/widgets/design_system/* 基础组件
 test/widget_test.dart 或对应 focused tests
 ```

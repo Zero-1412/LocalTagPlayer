@@ -5,7 +5,13 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/core/app_paths.dart';
+import 'package:local_tag_player/src/core/tag_rules.dart';
+import 'package:local_tag_player/src/models/library_scan_models.dart';
+import 'package:local_tag_player/src/platform/database_provider.dart';
+import 'package:local_tag_player/src/services/library/library_scan_backend.dart';
+import 'package:local_tag_player/src/services/library/library_scan_service.dart';
+import 'package:local_tag_player/src/services/library/library_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // ignore_for_file: slash_for_doc_comments

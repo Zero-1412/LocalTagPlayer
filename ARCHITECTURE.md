@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.125` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.126` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -145,6 +145,12 @@ Phase 5 将媒体库 Repository 使用面拆为只读 `LibraryQueryRepository` �
 复制。标签维护、扫描、root、删除和 relink 的跨表 batch 保持为粗粒度命令；事务亲和度
 审计确认当前不满足物理拆分收益门槛，证据记录于
 `docs/architecture/LIBRARY_REPOSITORY_AFFINITY_2026_07_29.md`。
+
+Phase 6 将 16 个单元测试和 9 个 integration test 从万能 `src/app.dart` 迁到实际所属
+模块，并在消费者归零后删除该兼容导出面。架构合同现在同时扫描 production、test 与
+integration_test，禁止重新引入 barrel；应用入口、bootstrap 和页面挂载保持不变。
+Phase 0—6 的最终结构、完成证据与后续治理原则见
+`docs/architecture/ARCHITECTURE_COMPLETION_2026_07_29.md`。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -682,7 +688,8 @@ lib/src/widgets/library
   保留全部设置入口和 Route 返回路径，备份与缓存生命周期未并入巨型 ViewModel。
 - `0.5.101`：建立渐进式整体重构路线与依赖合同；启动入口、应用壳和组合根分离，
   更新功能成为首个 `domain/data/presentation` 纵向切片，具体 GitHub 客户端只在
-  组合根创建。保留 `src/app.dart` 作为测试兼容导出面，生产入口不再依赖它。
+  组合根创建。当时保留 `src/app.dart` 作为测试兼容导出面，生产入口不再依赖它；
+  该兼容面已在 `0.5.126` 消费者归零后删除。
 
 - `0.5.78`：新增类型化播放器渲染器偏好和纯组合根解析器；设置切换需确认并
   可撤销，Windows 用户无需环境变量即可在下次播放时进入原生 libmpv/D3D11。
@@ -1026,7 +1033,11 @@ build\windows\x64\runner\Debug\sqlite3.dll
 lib/
   main.dart
   src/
-    app.dart
+    app/
+      local_tag_player_app.dart
+    composition/
+      local_tag_player_bootstrap.dart
+      local_tag_player_dependencies.dart
     core/
       app_paths.dart
       layout_size.dart

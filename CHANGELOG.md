@@ -2456,6 +2456,13 @@
 - 将现有 media_kit/libmpv 播放链路收口到完整 `PlayerBackend` 适配器，播放器页面仅负责 filtered queue 与 UI，不再直接拥有 Player、VideoController 或原生属性入口。
 - 增加可注入后端工厂、纹理/状态/诊断/释放契约，为 Windows C++ 播放后端提供不改页面的可回滚 A/B 接入点；默认播放参数与硬解行为保持不变。
 - 真实媒体库 90 秒回归完成 4 轮播放、滚动、seek 和退出，实际硬解保持 `d3d11va-copy`，独立视频帧与音频 PTS 均持续推进。
+## Architecture Baseline 0.5.126
+
+- 16 个单元测试和 9 个 integration test 从 `src/app.dart` 迁到具体模块 import；消费者
+  归零后删除万能兼容导出面。
+- 架构合同同时保护 production、test 与 integration_test 不得重新引入 barrel；测试
+  行为、应用入口、页面挂载、schema、筛选和播放队列均未改变。
+
 ## Architecture Baseline 0.5.125
 
 - 媒体库 Repository 使用面拆为 `LibraryQueryRepository` 与

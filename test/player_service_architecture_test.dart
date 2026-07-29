@@ -4,7 +4,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/core/playback_settings.dart';
+import 'package:local_tag_player/src/models/player_gpu_capabilities.dart';
+import 'package:local_tag_player/src/models/player_motion_interpolation_capability.dart';
+import 'package:local_tag_player/src/platform/platform_interfaces.dart';
+import 'package:local_tag_player/src/services/player/player_service.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

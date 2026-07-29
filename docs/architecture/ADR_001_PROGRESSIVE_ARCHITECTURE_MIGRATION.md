@@ -31,7 +31,7 @@ main
 - composition root 是唯一允许同时看到具体实现和应用壳的位置。
 - presentation/application 不依赖 composition、concrete data 或 concrete platform。
 - feature presentation 不导入另一 feature 的 presentation。
-- `src/app.dart` 只作为迁移期测试兼容面，生产代码不得导入；消费数量只能下降。
+- Phase 6 已删除消费者归零的 `src/app.dart`；生产、单元和集成测试均不得重新引入。
 
 ### 2. 状态按一致性边界划分
 

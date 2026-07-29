@@ -8,7 +8,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/main.dart' as app;
-import 'package:local_tag_player/src/app.dart' as ltp;
+import 'package:local_tag_player/src/models/library_scan_models.dart' as ltp;
+import 'package:local_tag_player/src/services/library/library_card_ui_diagnostics.dart'
+    as ltp;
+import 'package:local_tag_player/src/services/library/library_stress_control.dart'
+    as ltp;
+import 'package:local_tag_player/src/services/player/player_memory_diagnostics.dart'
+    as ltp;
 
 // ignore_for_file: slash_for_doc_comments
 

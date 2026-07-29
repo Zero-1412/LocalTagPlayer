@@ -2,7 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/widgets/app_theme_tokens.dart';
+import 'package:local_tag_player/src/widgets/design_system/app_interaction_surface.dart';
 
 /** 使用指定系统媒体偏好承载共享交互表面。 */
 Widget _surfaceHarness({

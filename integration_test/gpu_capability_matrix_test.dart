@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/models/player_gpu_capabilities.dart';
+import 'package:local_tag_player/src/services/player/media_kit_player_backend.dart';
+import 'package:local_tag_player/src/services/player/player_hdr_mapping_experiment.dart';
 import 'package:media_kit/media_kit.dart';
 
 // ignore_for_file: slash_for_doc_comments

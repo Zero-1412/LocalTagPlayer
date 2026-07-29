@@ -8,7 +8,8 @@
 - 审计发现 `library_page.dart` 约 7,472 行/52 个 import，`player_page.dart` 约
   5,153 行/44 个 import；两者是后续主要拆分对象。已有 Repository、稳定身份、标签
   查询和播放器后端边界继续保留。
-- 已把 `main → bootstrap → app shell` 职责分离；`src/app.dart` 降为测试兼容导出面。
+- 已把 `main → bootstrap → app shell` 职责分离；Phase 6 已将全部测试迁到具体模块并
+  删除消费者归零的 `src/app.dart` 兼容导出面。
 - 更新功能已迁入 `features/update/{domain,data,presentation}`，具体 GitHub 客户端只在
   组合根创建，媒体库与关于页改为强制注入 `AppUpdateService`。
 - 新增架构合同，保护组合职责、依赖方向和旧目录清零；focused 更新、架构和真实
@@ -16,8 +17,8 @@
 - 已把架构目标与审计结果提交到网页端独立评审，采纳版本化结果/计数/队列快照、跨
   Repository 原子写入归应用服务、播放器 native 资源唯一 owner 和 `LibraryStore`
   暂不物理拆分的建议，记录于 `docs/architecture/ADR_001_PROGRESSIVE_ARCHITECTURE_MIGRATION.md`。
-- 架构合同新增生产代码不得导入兼容 `app.dart`、feature presentation 不得跨功能互导和
-  巨型页面行数预算；阈值只能下降。
+- 架构合同禁止生产、单元和集成测试重新引入兼容 `app.dart`，并继续保护 feature
+  presentation 不得跨功能互导和巨型页面行数预算。
 - 设置首页导航已作为首个 Phase 2A 无状态叶节点迁入 `features/settings/presentation`；
   原状态 owner、导航回调、Route 和全部入口 `ValueKey` 保留，媒体库巨型页面预算由
   7,500 下调到 7,250 行；Phase 1.5 收敛重复版本构造后继续下调到 7,237 行。
@@ -327,6 +328,15 @@
   `flutter analyze` 零问题，Windows Debug build 与正式入口点击启动通过。该阶段没有
   视觉变更；Computer Use 原生管道仍不可用，因此没有使用可能捕获其它窗口的截图回退。
   下一步进入 Phase 6，只清理已经归零的兼容导入/导出并完成最终架构审查。
+- Phase 6 已完成：16 个单元测试和 9 个 integration test 全部改为具体模块 import；
+  `src/app.dart` 消费者归零后已删除。测试 support 中只有共享 benchmark/query trace，
+  没有可迁移的公共 Fake/Mock；各测试私有 fake 继续贴近其唯一消费者。
+- 架构合同改为同时扫描 production、test 与 integration_test，任何重新导入万能 barrel
+  都会失败。focused 与完整 442 项测试通过（3 项显式跳过），`flutter analyze` 零问题，
+  Windows Debug build 与正式入口点击启动通过。
+- Phase 0—6 的最终依赖方向、刻意保留的 Store 聚合边界、验证证据和后续治理原则已记录
+  到 `docs/architecture/ARCHITECTURE_COMPLETION_2026_07_29.md`。整体架构重构收官；
+  后续回到产品 vertical slice，只在需求触及的边界继续机会式降低页面预算。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

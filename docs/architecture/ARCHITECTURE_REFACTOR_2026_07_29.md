@@ -78,8 +78,8 @@ main
 5. `domain` 不导入 Flutter、`dart:io`、SQLite、FFmpeg、mpv 或平台通道。
 6. Repository 之间不互相依赖；跨 Repository 逻辑放在 ViewModel 或明确 use case。
 7. Domain / Use Case 层按复杂度启用。只代理一次方法调用的类不新增。
-8. `src/app.dart` 暂时仅作为测试兼容导出面；生产代码不得导入它。测试逐步迁到具体
-   模块 import，最终删除万能导出。
+8. Phase 6 已把单元与集成测试迁到具体模块，并删除消费者归零的 `src/app.dart`；
+   production、test 与 integration_test 均不得重新引入万能导出。
 
 ## 目标目录
 
@@ -218,7 +218,8 @@ Phase 2E 将现有视频数据备份设置迁入独立纵向切片：
 - [x] 3E 只从已接受的 `ResultSnapshot` 创建 `QueueSnapshot`。
 - [x] 3F 最后迁移扫描/导入生命周期，保留 latest-only 排队、限流和 generation cancellation。
 - [x] 3G 把文件菜单、标签维护、Missing/Relink 变成明确 command。
-- [ ] 3H `LibraryPage` 只保留布局、动画、Route 跳转和命令绑定。
+- [x] 3H `LibraryPage` 保留布局、动画、Route 跳转和命令绑定；数据修订、选择、来源、
+  排序、查询、计数、队列、扫描生命周期与可补偿命令均已有独立 owner。
 
 Phase 3A/3B 的落地边界：
 
@@ -389,20 +390,21 @@ Future，异常仍完成 Route 协调信号。页面预算降到 5,021，filtere
 Phase 4E 将不可变诊断快照迁入 player domain；诊断弹窗只接收播放状态流和只读采样
 回调，自行拥有 Timer、订阅、连续比较与 dispose，不再导入 PlayerPage 或取得
 PlayerService。诊断入口、匿名明细、复制反馈和 airspace 挂载保持不变；Phase 4 完成。
-- [ ] 画质实验只依赖 `PlayerRuntimeAccess`，不进入 Widget 状态机。
-- [ ] 保留快速切换 latest-request、纹理释放、全屏恢复和 filtered queue 合同。
+- [x] 画质实验只依赖 `PlayerRuntimeAccess`，不进入 Widget 状态机。
+- [x] 保留快速切换 latest-request、纹理释放、全屏恢复和 filtered queue 合同。
 
 ### Phase 5：数据层收口
 
-- [ ] 先按 facade 使用面拆分只读查询与命令接口，再评估 `LibraryStore` 物理拆分。
-- [ ] 需要同一 SQLite 事务的写入继续由同一 transaction coordinator 持有。
-- [ ] 只有 profile 证明需要时才把过滤查询下推 SQLite；不改变 AND / OR / NOT 语义。
+- [x] 先按 facade 使用面拆分只读查询与命令接口，再评估 `LibraryStore` 物理拆分。
+- [x] 需要同一 SQLite 事务的写入继续由同一 transaction coordinator 持有。
+- [x] profile 没有证明需要下推过滤查询；保持现有 AND / OR / NOT 语义。
 
 ### Phase 6：测试和兼容面清理
 
-- [ ] 测试目录镜像生产模块，公共 fake 移入测试 support。
-- [ ] 测试从 Phase 2 起随所改模块逐个改为具体 import，兼容 import 数只能下降。
-- [ ] 没有消费者后删除 `src/app.dart` 兼容导出面。
+- [x] 测试按生产模块使用具体 import；现有公共 support 只保留 benchmark/query trace，
+  没有跨文件公共 fake 需要迁移。
+- [x] 单元与 integration test 的兼容 import 已归零。
+- [x] 删除无消费者的 `src/app.dart` 兼容导出面，并增加零回退合同。
 
 ## 网页端独立评审采纳记录
 

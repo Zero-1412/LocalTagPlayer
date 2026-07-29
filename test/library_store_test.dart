@@ -4,7 +4,21 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/core/app_paths.dart';
+import 'package:local_tag_player/src/core/data_backup_settings.dart';
+import 'package:local_tag_player/src/core/tag_rules.dart';
+import 'package:local_tag_player/src/features/player/domain/player_playback_progress.dart';
+import 'package:local_tag_player/src/models/data_backup_models.dart';
+import 'package:local_tag_player/src/models/library_scan_models.dart';
+import 'package:local_tag_player/src/models/media_details.dart';
+import 'package:local_tag_player/src/models/platform_models.dart';
+import 'package:local_tag_player/src/models/video_item.dart';
+import 'package:local_tag_player/src/platform/database_provider.dart';
+import 'package:local_tag_player/src/services/library/library_load_diagnostics.dart';
+import 'package:local_tag_player/src/services/library/library_scan_backend.dart';
+import 'package:local_tag_player/src/services/library/library_scan_service.dart';
+import 'package:local_tag_player/src/services/library/library_store.dart';
+import 'package:local_tag_player/src/services/relink/bulk_path_relink_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 

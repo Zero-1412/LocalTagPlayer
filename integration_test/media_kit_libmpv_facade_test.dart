@@ -3,8 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:local_tag_player/src/app.dart';
 import 'package:local_tag_player/src/models/player_filter_transaction.dart';
+import 'package:local_tag_player/src/models/player_backend_telemetry.dart';
+import 'package:local_tag_player/src/services/player/media_kit_player_backend.dart';
+import 'package:local_tag_player/src/services/player/player_adaptive_quality.dart';
+import 'package:local_tag_player/src/services/player/player_service.dart';
 import 'package:media_kit/media_kit.dart';
 
 // ignore_for_file: slash_for_doc_comments

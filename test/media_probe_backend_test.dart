@@ -1,6 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
 import 'dart:async';
+
+import 'package:local_tag_player/src/features/library/presentation/library_scan_progress_labels.dart';
+import 'package:local_tag_player/src/models/media_details.dart';
+import 'package:local_tag_player/src/models/platform_models.dart';
+import 'package:local_tag_player/src/models/video_item.dart';
+import 'package:local_tag_player/src/platform/platform_interfaces.dart';
+import 'package:local_tag_player/src/services/media/media_details_service.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

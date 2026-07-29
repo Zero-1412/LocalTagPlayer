@@ -3,8 +3,18 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/core/playback_settings.dart';
 import 'package:local_tag_player/src/features/player/application/player_fullscreen_lifecycle_controller.dart';
+import 'package:local_tag_player/src/models/external_media_tools_state.dart';
+import 'package:local_tag_player/src/models/media_details.dart';
+import 'package:local_tag_player/src/models/platform_models.dart';
+import 'package:local_tag_player/src/models/player_gpu_capabilities.dart';
+import 'package:local_tag_player/src/models/video_item.dart';
+import 'package:local_tag_player/src/pages/player/player_page.dart';
+import 'package:local_tag_player/src/platform/desktop_file_system_adapter.dart';
+import 'package:local_tag_player/src/platform/platform_interfaces.dart';
+import 'package:local_tag_player/src/services/media/thumbnail_service.dart';
+import 'package:local_tag_player/src/services/player/player_service.dart';
 import 'package:path/path.dart' as p;
 
 // ignore_for_file: slash_for_doc_comments

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/models/player_backend_telemetry.dart';
+import 'package:local_tag_player/src/services/player/player_backend_telemetry_tracker.dart';
 
 void main() {
   group('PlayerBackendTelemetryTracker', () {

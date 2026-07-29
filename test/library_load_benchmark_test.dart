@@ -3,7 +3,14 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/core/app_paths.dart';
+import 'package:local_tag_player/src/features/library/domain/library_sorting.dart';
+import 'package:local_tag_player/src/models/platform_models.dart';
+import 'package:local_tag_player/src/platform/database_provider.dart';
+import 'package:local_tag_player/src/services/library/library_load_diagnostics.dart';
+import 'package:local_tag_player/src/services/library/library_page_application_service.dart';
+import 'package:local_tag_player/src/services/library/library_scan_backend.dart';
+import 'package:local_tag_player/src/services/library/library_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // ignore_for_file: avoid_print, slash_for_doc_comments

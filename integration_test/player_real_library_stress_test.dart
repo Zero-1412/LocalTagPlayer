@@ -7,8 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/main.dart' as app;
-import 'package:local_tag_player/src/app.dart' as ltp;
 import 'package:local_tag_player/src/pages/player/player_page.dart';
+import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart'
+    as ltp;
 
 // ignore_for_file: slash_for_doc_comments
 

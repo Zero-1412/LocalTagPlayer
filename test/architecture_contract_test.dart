@@ -2,7 +2,16 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/composition/local_tag_player_bootstrap.dart';
+import 'package:local_tag_player/src/core/app_paths.dart';
+import 'package:local_tag_player/src/features/update/data/github_release_update_service.dart';
+import 'package:local_tag_player/src/models/platform_models.dart';
+import 'package:local_tag_player/src/models/video_item.dart';
+import 'package:local_tag_player/src/platform/database_provider.dart';
+import 'package:local_tag_player/src/platform/desktop_file_system_adapter.dart';
+import 'package:local_tag_player/src/repositories/repository_interfaces.dart';
+import 'package:local_tag_player/src/services/library/library_application_facade.dart';
+import 'package:local_tag_player/src/services/library/library_page_application_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -227,7 +236,8 @@ void main() {
     final bootstrap = File(
       'lib/src/composition/local_tag_player_bootstrap.dart',
     ).readAsStringSync();
-    final compatibility = File('lib/src/app.dart').readAsStringSync();
+    final compatibilityPath =
+        <String>['lib', 'src', 'app.dart'].join(Platform.pathSeparator);
 
     expect(entry, contains('composition/local_tag_player_bootstrap.dart'));
     expect(entry, isNot(contains("import 'src/app.dart'")));
@@ -236,45 +246,50 @@ void main() {
     expect(shell, isNot(contains('GitHubReleaseUpdateService')));
     expect(bootstrap, contains('GitHubReleaseUpdateService()'));
     expect(bootstrap, contains('createLocalTagPlayerDependencies'));
-    expect(compatibility, isNot(contains('class LocalTagPlayerApp')));
-    expect(
-        compatibility, isNot(contains('Future<void> bootstrapLocalTagPlayer')));
+    expect(File(compatibilityPath).existsSync(), isFalse);
   });
 
-  test('production modules do not depend on the compatibility app barrel', () {
+  test('production source cannot restore the removed compatibility app barrel',
+      () {
+    final packageImport =
+        <String>['package:local_tag_player/src/', 'app.dart'].join();
+    final relativeImports = <String>[
+      <String>["import 'src/", "app.dart'"].join(),
+      <String>["import '../", "app.dart'"].join(),
+      <String>["import '../../", "app.dart'"].join(),
+    ];
     final offenders = Directory('lib')
         .listSync(recursive: true)
         .whereType<File>()
         .where((file) => file.path.endsWith('.dart'))
-        .where(
-            (file) => !file.path.endsWith('${Platform.pathSeparator}app.dart'))
         .where((file) {
           final source = file.readAsStringSync();
-          return source.contains('package:local_tag_player/src/app.dart') ||
-              source.contains("import 'src/app.dart'") ||
-              source.contains("import '../app.dart'") ||
-              source.contains("import '../../app.dart'");
+          return source.contains(packageImport) ||
+              relativeImports.any(source.contains);
         })
         .map((file) => file.path)
         .toList();
 
-    // 兼容导出面只服务迁移期测试；生产模块重新依赖它会让依赖方向再次失控。
     expect(offenders, isEmpty);
   });
 
-  test('test compatibility app barrel import budget can only shrink', () {
-    final consumers = Directory('test')
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((file) => file.path.endsWith('.dart'))
-        .where((file) => file
-            .readAsStringSync()
-            .contains('package:local_tag_player/src/app.dart'))
-        .map((file) => file.path)
-        .toList();
+  test('unit and integration tests import concrete production modules', () {
+    final packageImport =
+        <String>['package:local_tag_player/src/', 'app.dart'].join();
+    final offenders = <String>[];
+    for (final root in <String>['test', 'integration_test']) {
+      offenders.addAll(
+        Directory(root)
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.dart'))
+            .where((file) => file.readAsStringSync().contains(packageImport))
+            .map((file) => file.path),
+      );
+    }
 
-    // 本批已把所改功能测试迁到具体模块；剩余兼容消费者只能随迁移减少，禁止增加。
-    expect(consumers.length, lessThanOrEqualTo(16));
+    // Phase 6 已删除兼容导出面；测试重新依赖万能 barrel 会掩盖真实模块边界。
+    expect(offenders, isEmpty);
   });
 
   test('feature presentation modules do not import another presentation layer',

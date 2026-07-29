@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/features/library/presentation/library_scan_progress_labels.dart';
+import 'package:local_tag_player/src/models/library_scan_models.dart';
+import 'package:local_tag_player/src/services/library/library_scan_backend.dart';
+import 'package:local_tag_player/src/services/library/library_scan_service.dart';
 
 // ignore_for_file: slash_for_doc_comments
 

@@ -13,7 +13,7 @@
 - [ ] Phase 4：按会话、event bridge、控件、native 生命周期、诊断五步迁移。
 - [ ] Phase 5：先收窄 Repository 使用面，再在事务安全前提下评估 `LibraryStore`
   物理拆分。
-- [ ] Phase 6：删除已经归零的 `src/app.dart` 兼容导出面；测试具体 import 从 Phase 2
+- [x] Phase 6：删除已经归零的 `src/app.dart` 兼容导出面；测试具体 import 从 Phase 2
   起随改动持续推进。
 
 完整方案与阶段门禁见 `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。

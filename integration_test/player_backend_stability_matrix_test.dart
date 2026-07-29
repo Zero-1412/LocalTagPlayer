@@ -6,8 +6,19 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/core/playback_settings.dart';
 import 'package:local_tag_player/src/features/player/application/player_fullscreen_lifecycle_controller.dart';
+import 'package:local_tag_player/src/models/video_item.dart';
+import 'package:local_tag_player/src/pages/player/player_page.dart';
+import 'package:local_tag_player/src/platform/desktop_file_system_adapter.dart';
+import 'package:local_tag_player/src/platform/platform_interfaces.dart';
+import 'package:local_tag_player/src/services/media/external_media_tools.dart';
+import 'package:local_tag_player/src/services/media/media_probe_backend.dart';
+import 'package:local_tag_player/src/services/media/thumbnail_service.dart';
+import 'package:local_tag_player/src/services/player/media_kit_player_backend.dart';
+import 'package:local_tag_player/src/services/player/player_hardware_acceleration.dart';
+import 'package:local_tag_player/src/services/player/player_service.dart';
+import 'package:local_tag_player/src/services/player/windows_native_player_backend.dart';
 import 'package:media_kit/media_kit.dart';
 
 // ignore_for_file: slash_for_doc_comments
