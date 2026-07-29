@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
-
 import '../../core/layout_size.dart';
 import '../../core/data_backup_settings.dart';
 import '../../core/playback_settings.dart';
@@ -64,12 +62,15 @@ import '../../services/player/player_memory_diagnostics.dart';
 import '../../services/player/player_service.dart';
 import '../../services/tags/tag_query_service.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/library/library_add_tag_dialog.dart';
+import '../../widgets/library/library_confirmation_dialogs.dart';
 import '../../widgets/library/library_local_view.dart';
-import '../../widgets/library/library_desktop_scroll_behavior.dart';
+import '../../widgets/library/library_folder_tag_discovery.dart';
 import '../../widgets/library/library_panel_content_transition.dart';
 import '../../widgets/library/library_sidebar.dart';
 import '../../widgets/library/library_smoke_keys.dart';
 import '../../widgets/library/library_tag_discovery_panel.dart';
+import '../../widgets/library/library_tag_display_helpers.dart';
 import '../../widgets/library/library_tag_editor_dialog.dart';
 import '../../widgets/library/library_video_results.dart';
 import '../../widgets/library/library_widgets.dart';
@@ -818,38 +819,6 @@ String? preferredLibraryPickerDirectory({
     return current;
   }
   return roots.isEmpty ? null : roots.first;
-}
-
-/**
- * 二次确认清空全部继续观看进度。
- *
- * 文案明确只清进度、不删除视频，并提前说明可撤销窗口，避免“清空全部”被理解为
- * 删除媒体文件或永久破坏标签、收藏。
- */
-@visibleForTesting
-Future<bool?> showClearAllRecentPlaybackConfirmation(
-  BuildContext context, {
-  required int count,
-}) {
-  return showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('清空全部观看进度？'),
-      content: Text(
-        '将清除 $count 条继续观看进度，不会删除视频文件、标签或收藏。清除后可在 10 秒内撤销。',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('只清除进度'),
-        ),
-      ],
-    ),
-  );
 }
 
 class _LibraryPageState extends State<LibraryPage> {
@@ -1971,7 +1940,10 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       return;
     }
-    final confirmed = await _confirmRemoveRoot(root);
+    final confirmed = await showRemoveLibraryRootConfirmation(
+      context,
+      root: root,
+    );
     if (confirmed != true || !mounted) {
       return;
     }
@@ -3587,135 +3559,13 @@ class _LibraryPageState extends State<LibraryPage> {
     }
   }
 
-  /** 左侧 root 快捷移除继续复用原确认语义；目录管理页使用同等说明。 */
-  Future<bool?> _confirmRemoveRoot(String root) {
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => maintenanceDialogSurface(
-        context: context,
-        child: AlertDialog(
-          title: const Text('解除目录管理'),
-          content: Text(
-            '目录中的视频会从当前媒体库与播放队列隐藏，但不会删除本地文件。\n\n'
-            '标签关系、收藏、播放进度、媒体详情和稳定视频身份都会保留；'
-            '以后重新添加同一目录或匹配到相同文件时会自动恢复。\n\n$root',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xffb84d5f),
-              ),
-              child: const Text('解除管理'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ignore: unused_element
   Future<void> _addLibraryTag() async {
-    final controller = TextEditingController();
     final existingTags = _store?.allTagItems.toList() ?? const <TagItem>[];
-    existingTags.sort((a, b) => _tagLabel(a).compareTo(_tagLabel(b)));
-    final picked = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        var keyword = '';
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            /**
-             * 弹窗内搜索只影响候选展示，不改变真实标签数据。
-             */
-            final visibleTags = existingTags
-                .where((tag) {
-                  final label = _tagLabel(tag);
-                  if (keyword.trim().isEmpty) {
-                    return true;
-                  }
-                  final normalizedKeyword = keyword.toLowerCase();
-                  return label.toLowerCase().contains(normalizedKeyword) ||
-                      tag.name.toLowerCase().contains(normalizedKeyword);
-                })
-                .take(80)
-                .toList();
-            return AlertDialog(
-              title: const Text(
-                  '\u6dfb\u52a0\u5230\u6211\u7684\u6807\u7b7e\u5e93'),
-              content: SizedBox(
-                width: 460,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      controller: controller,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        labelText: '\u641c\u7d22\u6216\u65b0\u5efa\u6807\u7b7e',
-                        hintText:
-                            '\u8f93\u5165\u6807\u7b7e\u540d\uff0c\u4e0b\u65b9\u4f1a\u5373\u65f6\u8fc7\u6ee4',
-                        prefixIcon: Icon(Icons.search_rounded),
-                      ),
-                      onChanged: (value) =>
-                          setDialogState(() => keyword = value),
-                      onSubmitted: (value) =>
-                          Navigator.of(context).pop(value.trim()),
-                    ),
-                    const SizedBox(height: 12),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 240),
-                      child: visibleTags.isEmpty
-                          ? const Center(
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(vertical: 18),
-                                child: Text(
-                                    '\u6ca1\u6709\u5339\u914d\u7684\u5df2\u6709\u6807\u7b7e'),
-                              ),
-                            )
-                          : ScrollConfiguration(
-                              behavior: const DesktopDragScrollBehavior(),
-                              child: SingleChildScrollView(
-                                child: Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    for (final tag in visibleTags)
-                                      ActionChip(
-                                        label: Text(_tagLabel(tag)),
-                                        onPressed: () => Navigator.of(context)
-                                            .pop(_tagLabel(tag)),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('\u53d6\u6d88'),
-                ),
-                FilledButton(
-                  onPressed: () =>
-                      Navigator.of(context).pop(controller.text.trim()),
-                  child: const Text('\u6dfb\u52a0'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+    final picked = await showLibraryAddTagDialog(
+      context,
+      tags: existingTags,
     );
-    controller.dispose();
     final tag = picked == null ? null : TagRules.normalizeTag(picked);
     if (tag == null || tag.isEmpty || _store == null) {
       return;

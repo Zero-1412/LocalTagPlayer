@@ -393,11 +393,45 @@ void main() {
       'lib/src/features/settings/presentation/'
       'cache_diagnostics_settings_card.dart',
     ).readAsLinesSync().length;
+    final libraryTagDisplayHelpersLines = File(
+      'lib/src/widgets/library/library_tag_display_helpers.dart',
+    ).readAsLinesSync().length;
+    final libraryFolderTagDiscoveryLines = File(
+      'lib/src/widgets/library/library_folder_tag_discovery.dart',
+    ).readAsLinesSync().length;
+    final librarySelectionToolbarLines = File(
+      'lib/src/widgets/library/library_selection_toolbar.dart',
+    ).readAsLinesSync().length;
+    final libraryTopToolbarTextButtonLines = File(
+      'lib/src/widgets/library/library_top_toolbar_text_button.dart',
+    ).readAsLinesSync().length;
+    final libraryTagDiscoveryHeaderButtonLines = File(
+      'lib/src/widgets/library/library_tag_discovery_header_button.dart',
+    ).readAsLinesSync().length;
+    final libraryReferenceIconButtonLines = File(
+      'lib/src/widgets/library/library_reference_icon_button.dart',
+    ).readAsLinesSync().length;
+    final libraryCompactTopSortControlLines = File(
+      'lib/src/widgets/library/library_compact_top_sort_control.dart',
+    ).readAsLinesSync().length;
+    final referenceTopBarSmokeHarnessLines = File(
+      'lib/src/widgets/library/reference_top_bar_smoke_harness.dart',
+    ).readAsLinesSync().length;
+    final referenceTopBarResultHarnessLines = File(
+      'lib/src/widgets/library/'
+      'reference_top_bar_search_result_smoke_harness.dart',
+    ).readAsLinesSync().length;
+    final libraryAddTagDialogLines = File(
+      'lib/src/widgets/library/library_add_tag_dialog.dart',
+    ).readAsLinesSync().length;
+    final libraryConfirmationDialogsLines = File(
+      'lib/src/widgets/library/library_confirmation_dialogs.dart',
+    ).readAsLinesSync().length;
 
     // 体积阈值随叶节点迁移继续下调；后续瘦身只能降低，禁止把代码塞回聚合文件。
-    expect(libraryLines, lessThanOrEqualTo(4443));
+    expect(libraryLines, lessThanOrEqualTo(4293));
     expect(playerLines, lessThanOrEqualTo(5226));
-    expect(libraryWidgetLines, lessThanOrEqualTo(1917));
+    expect(libraryWidgetLines, lessThanOrEqualTo(962));
     expect(recentPlaybackLines, lessThanOrEqualTo(299));
     expect(tagEditorLines, lessThanOrEqualTo(481));
     expect(panelTransitionLines, lessThanOrEqualTo(52));
@@ -417,6 +451,133 @@ void main() {
     expect(playerInteractionLines, lessThanOrEqualTo(168));
     expect(settingsWorkspaceScaffoldLines, lessThanOrEqualTo(82));
     expect(cacheDiagnosticsSettingsCardLines, lessThanOrEqualTo(69));
+    expect(libraryTagDisplayHelpersLines, lessThanOrEqualTo(157));
+    expect(libraryFolderTagDiscoveryLines, lessThanOrEqualTo(153));
+    expect(librarySelectionToolbarLines, lessThanOrEqualTo(120));
+    expect(libraryTopToolbarTextButtonLines, lessThanOrEqualTo(56));
+    expect(libraryTagDiscoveryHeaderButtonLines, lessThanOrEqualTo(90));
+    expect(libraryReferenceIconButtonLines, lessThanOrEqualTo(39));
+    expect(libraryCompactTopSortControlLines, lessThanOrEqualTo(171));
+    expect(referenceTopBarSmokeHarnessLines, lessThanOrEqualTo(128));
+    expect(referenceTopBarResultHarnessLines, lessThanOrEqualTo(108));
+    expect(libraryAddTagDialogLines, lessThanOrEqualTo(126));
+    expect(libraryConfirmationDialogsLines, lessThanOrEqualTo(74));
+  });
+
+  test('library widget leaves keep presentation ownership at the caller', () {
+    final aggregate =
+        File('lib/src/widgets/library/library_widgets.dart').readAsStringSync();
+    final libraryPage =
+        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final discoveryPanel = File(
+      'lib/src/widgets/library/library_tag_discovery_panel.dart',
+    ).readAsStringSync();
+    final leafSources = <String, String>{
+      'library_tag_display_helpers.dart': File(
+        'lib/src/widgets/library/library_tag_display_helpers.dart',
+      ).readAsStringSync(),
+      'library_folder_tag_discovery.dart': File(
+        'lib/src/widgets/library/library_folder_tag_discovery.dart',
+      ).readAsStringSync(),
+      'library_selection_toolbar.dart': File(
+        'lib/src/widgets/library/library_selection_toolbar.dart',
+      ).readAsStringSync(),
+      'library_top_toolbar_text_button.dart': File(
+        'lib/src/widgets/library/library_top_toolbar_text_button.dart',
+      ).readAsStringSync(),
+      'library_tag_discovery_header_button.dart': File(
+        'lib/src/widgets/library/library_tag_discovery_header_button.dart',
+      ).readAsStringSync(),
+      'library_reference_icon_button.dart': File(
+        'lib/src/widgets/library/library_reference_icon_button.dart',
+      ).readAsStringSync(),
+      'library_compact_top_sort_control.dart': File(
+        'lib/src/widgets/library/library_compact_top_sort_control.dart',
+      ).readAsStringSync(),
+    };
+
+    // 聚合层保留顶栏编排，只把可复用的纯展示叶子改为直接依赖。
+    for (final importName in <String>[
+      'library_selection_toolbar.dart',
+      'library_top_toolbar_text_button.dart',
+      'library_tag_discovery_header_button.dart',
+      'library_reference_icon_button.dart',
+      'library_compact_top_sort_control.dart',
+    ]) {
+      expect(aggregate, contains(importName));
+    }
+    expect(aggregate, isNot(contains('class _LibrarySelectionToolbar')));
+    expect(aggregate, isNot(contains('class _CompactTopSortControl')));
+    expect(aggregate, isNot(contains('Color libraryGroupColor(')));
+    expect(
+      aggregate,
+      isNot(contains('List<TagGroup> folderTagGroupsFromLibraryPaths(')),
+    );
+
+    // 页面与标签发现面板直接依赖 helper，禁止经由旧聚合文件形成隐式耦合。
+    for (final source in <String>[libraryPage, discoveryPanel]) {
+      expect(source, contains('library_folder_tag_discovery.dart'));
+      expect(source, contains('library_tag_display_helpers.dart'));
+    }
+
+    // 展示叶子只接收快照和回调，不能接管筛选、队列、缓存或应用 owner。
+    for (final entry in leafSources.entries) {
+      for (final forbiddenOwner in <String>[
+        'FilterQuery',
+        'TagQueryService',
+        'PlaybackSession',
+        'PlayerBackend',
+        'ThumbnailService',
+        'LibraryApplicationFacade',
+        'setState(',
+      ]) {
+        expect(
+          entry.value,
+          isNot(contains(forbiddenOwner)),
+          reason: '${entry.key} 不得接管 $forbiddenOwner',
+        );
+      }
+    }
+  });
+
+  test('library dialogs return intents without taking page command ownership',
+      () {
+    final page =
+        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final addTagDialog = File(
+      'lib/src/widgets/library/library_add_tag_dialog.dart',
+    ).readAsStringSync();
+    final confirmationDialogs = File(
+      'lib/src/widgets/library/library_confirmation_dialogs.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('showLibraryAddTagDialog('));
+    expect(page, contains('showRemoveLibraryRootConfirmation('));
+    expect(page, contains('showClearAllRecentPlaybackConfirmation('));
+    expect(page, isNot(contains('Future<String?> showLibraryAddTagDialog(')));
+    expect(
+      page,
+      isNot(contains('Future<bool?> showRemoveLibraryRootConfirmation(')),
+    );
+    expect(
+      page,
+      isNot(contains('Future<bool?> showClearAllRecentPlaybackConfirmation(')),
+    );
+
+    // 叶子只返回用户意图，创建标签、移除目录和清理进度仍由页面 owner 执行。
+    for (final source in <String>[addTagDialog, confirmationDialogs]) {
+      for (final forbiddenCommand in <String>[
+        'createManualTag(',
+        'addFavoriteTag(',
+        'removeLibraryRoot(',
+        'clearPlaybackProgress(',
+        'LibraryApplicationFacade',
+        'FilterQuery',
+        'PlaybackSession',
+      ]) {
+        expect(source, isNot(contains(forbiddenCommand)));
+      }
+    }
   });
 
   test('presentation files obey 200 500 and 1000 line governance', () {
@@ -424,7 +585,6 @@ void main() {
     const warningLines = 500;
     const refactorLines = 1000;
     const mandatoryRefactorOrder = <String>[
-      'lib/src/widgets/library/library_widgets.dart',
       'lib/src/pages/library/library_page.dart',
       'lib/src/pages/player/player_page.dart',
       'lib/src/widgets/library/library_video_results.dart',
@@ -434,9 +594,9 @@ void main() {
       'lib/src/pages/library/missing_relink_page.dart',
     ];
     const legacyBudgets = <String, int>{
-      'lib/src/pages/library/library_page.dart': 4443,
+      'lib/src/pages/library/library_page.dart': 4293,
       'lib/src/pages/player/player_page.dart': 5226,
-      'lib/src/widgets/library/library_widgets.dart': 1917,
+      'lib/src/widgets/library/library_widgets.dart': 962,
       'lib/src/widgets/library/library_video_results.dart': 2808,
       'lib/src/pages/player/player_queue_sidebar.dart': 1651,
       'lib/src/widgets/library/library_tag_discovery_panel.dart': 1511,

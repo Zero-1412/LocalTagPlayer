@@ -2,6 +2,14 @@
 
 ## 2026-07-29 · 启动渐进式整体架构重构
 
+- Architecture Baseline 提升到 `0.5.133`：拆出标签 helper、选择工具栏、顶栏附件控件
+  与 focused harness，`library_widgets.dart` 从 1917 行降到 962 行；全部新叶子保持
+  200 行以内，聚合文件退出 1000 行强制重构清单。
+- `library_page.dart` 继续迁出添加标签及清空进度/解除目录确认对话框，预算从 4443
+  行降到 4293 行。展示叶子只返回意图，标签、目录和进度命令 owner 与用户数据不变。
+- focused 261 项与完整 451 项测试通过（3 项显式基准跳过），静态分析、Windows Debug
+  构建及打包启动门禁通过；Computer Use 原生管道不可用，精确人工点击路径记录于
+  `CURRENT_TASK.md`。
 - 基于 Flutter 官方架构指南、Compass、AppFlowy、LocalSend 和 VGV 实践完成项目结构
   审计，记录目标依赖方向、性能约束和六阶段迁移路线。
 - 分离 `main.dart`、bootstrap 组合根与 `LocalTagPlayerApp` 应用壳；生产入口不再依赖

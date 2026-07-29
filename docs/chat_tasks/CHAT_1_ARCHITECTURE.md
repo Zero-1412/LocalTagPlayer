@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
-- 架构基线提升到 `0.5.132`；完整审计和 Phase 0-6 路线记录在
+- 架构基线提升到 `0.5.133`；完整审计和 Phase 0-6 路线记录在
   `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 - `main.dart`、bootstrap 组合根与 Flutter 应用壳已经分离，具体实现选择仍只发生在
   composition。
@@ -85,6 +85,11 @@
 - 第六批把设置 Route 外壳和缓存诊断卡装配迁为 82/69 行叶节点，
   `library_page.dart` 预算继续降到 4443 行；section 状态、缓存 controller、维护命令、
   Repository 写入和反馈仍由页面唯一拥有。
+- 第七批把标签 helper、选择工具栏、顶栏附件控件和 focused harness 迁为 200 行内
+  叶子，`library_widgets.dart` 从 1917 行降到 962 行；随后迁出添加标签与两类确认
+  对话框，`library_page.dart` 预算降到 4293 行。所有命令 owner 与数据语义保持原位。
+- focused 261 项、完整 451 项测试（3 项显式基准跳过）、静态分析、Windows Debug
+  构建和打包启动门禁通过；真实点击受 Computer Use 原生管道不可用阻塞。
 - 后续按一致性边界迁移无状态诊断 UI、普通设置、媒体库和播放器；禁止一次性移动全部
   文件或改变现有业务语义。
 

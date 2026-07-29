@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/widgets/app_theme_tokens.dart';
 import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart';
-import 'package:local_tag_player/src/widgets/library/library_widgets.dart';
+import 'package:local_tag_player/src/widgets/library/reference_top_bar_smoke_harness.dart';
 
 /** 为媒体库顶部组件提供稳定桌面尺寸，避免测试受默认窄视口影响。 */
 void _useDesktopViewport(WidgetTester tester) {

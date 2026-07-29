@@ -82,6 +82,7 @@ import 'package:local_tag_player/src/services/tags/tag_query_service.dart';
 import 'package:local_tag_player/src/services/window/desktop_window_state_service.dart';
 import 'package:local_tag_player/src/widgets/app_theme_tokens.dart';
 import 'package:local_tag_player/src/widgets/design_system/app_interaction_surface.dart';
+import 'package:local_tag_player/src/widgets/library/library_confirmation_dialogs.dart';
 import 'package:local_tag_player/src/widgets/library/library_local_view.dart';
 import 'package:local_tag_player/src/widgets/library/library_panel_content_transition.dart';
 import 'package:local_tag_player/src/widgets/library/library_result_view_toggle.dart';
@@ -91,6 +92,10 @@ import 'package:local_tag_player/src/widgets/library/library_sort_control.dart';
 import 'package:local_tag_player/src/widgets/library/library_tag_editor_dialog.dart';
 import 'package:local_tag_player/src/widgets/library/library_video_results.dart';
 import 'package:local_tag_player/src/widgets/library/library_widgets.dart';
+import 'package:local_tag_player/src/widgets/library/library_folder_tag_discovery.dart';
+import 'package:local_tag_player/src/widgets/library/library_tag_display_helpers.dart';
+import 'package:local_tag_player/src/widgets/library/reference_top_bar_search_result_smoke_harness.dart';
+import 'package:local_tag_player/src/widgets/library/reference_top_bar_smoke_harness.dart';
 import 'package:local_tag_player/src/widgets/player_shortcut_input.dart';
 import 'package:path/path.dart' as p;
 

@@ -2,6 +2,20 @@
 
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
+- 代码体积治理第七批完成：标签展示/目录发现 helper、批量选择工具栏、顶栏附件控件和
+  focused harness 迁为 157/153/120/56/90/39/171/128/108 行独立叶子，
+  `library_widgets.dart` 从 1917 行降到 962 行，明确达到 1000 行以内交付目标。
+- `library_page.dart` 随后迁出 126 行添加标签对话框与 74 行清空进度/解除目录确认
+  对话框，预算从 4443 行降到 4293 行。对话框只消费标签/路径/数量快照并返回意图；
+  创建标签、收藏、移除目录和清理进度仍由页面 owner 执行。
+- 新门禁锁定各叶子预算、聚合文件 962 行预算与页面 4293 行预算，并禁止展示叶子接管
+  `FilterQuery`、`TagQueryService`、filtered queue、缓存命令或应用 Store。
+- focused 261 项、完整 451 项测试通过（3 项显式基准跳过），`flutter analyze` 零问题，
+  Windows Debug build 与打包启动门禁通过。Computer Use 初始化仍返回原生管道
+  “系统找不到指定的文件（os error 2）”，无法真实点击或截图；仍需人工复测：
+  “搜索输入/清空 → 展开标签并切换一级/二级 → 排序字段/方向 → 多选/全选/取消 →
+  网格/列表 → 添加标签对话框过滤/取消 → 解除目录管理确认取消 → 清空观看进度确认取消”，
+  核对位置、遮挡、溢出、状态反馈、结果计数和返回筛选状态。
 - 研究 Flutter 官方 Architecture Guide / Compass case study、AppFlowy、LocalSend 与
   Very Good Ventures 分层实践，确定采用“共享 data/domain 按类型、UI 按功能”的混合
   结构，不因重构更换状态管理库。

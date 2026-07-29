@@ -1,5 +1,19 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
+## 2026-07-29 媒体库聚合组件千行门禁与页面对话框拆分
+
+- 标签展示/目录发现 helper、批量选择工具栏、顶栏排序与附件控件、focused harness
+  改为直接依赖的 200 行内叶子，`library_widgets.dart` 从 1917 行降到 962 行。
+- `ReferenceTopBar` 继续编排稳定 `TextField`、筛选状态、排序、批量选择和视图切换；
+  全部既有 Key、结果计数和回调路径保留。
+- `library_page.dart` 的添加标签与清空进度/解除目录确认迁为 126/74 行对话框叶子，
+  页面仍执行创建标签、收藏、目录移除和进度清理，预算降到 4293 行。
+- SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图队列和用户
+  数据均未改变。
+- focused 261 项、完整 451 项测试（3 项显式基准跳过）、静态分析、Windows Debug
+  构建和启动门禁通过；Computer Use 原生管道不可用，精确人工复测路径见
+  `CURRENT_TASK.md`。
+
 ## 2026-07-28 主窗口语义与动画对抗式压测
 
 - 主窗口语义脚本连续覆盖搜索、六种排序、标签父子选择、标签面板与网格/列表切换；

@@ -37,6 +37,10 @@
   `library_page.dart` 预算降到 4487 行，controller、确认、冲突校验与业务命令不迁移。
 - [x] 迁出设置 Route 外壳与缓存诊断卡装配；两个叶节点分别为 82/69 行，
   `library_page.dart` 预算降到 4443 行，section 状态和缓存命令 owner 不迁移。
+- [x] 将标签 helper、选择工具栏、顶栏附件控件和 focused harness 拆为 200 行内叶子；
+  `library_widgets.dart` 从 1917 行降到 962 行，退出 1000 行强制重构清单。
+- [x] 继续迁出添加标签与清空进度/解除目录确认对话框；只返回用户意图，
+  `library_page.dart` 预算降到 4293 行，标签与目录命令 owner 不迁移。
 - [ ] 下一批继续按只读状态/纯展示一致性边界拆分 `library_page.dart`，随后依次治理播放器页面、
   视频结果、播放器队列侧栏、标签发现面板、
   标签管理页和 missing/relink 页面。
