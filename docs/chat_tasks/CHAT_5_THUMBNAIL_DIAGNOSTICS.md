@@ -1,5 +1,12 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
+## 2026-07-29 缓存诊断展示文件警戒线治理
+
+- 加载/错误/data 分派与覆盖率、指标、任务、失败语义和失败详情拆为 171/428 行两个
+  presentation 文件；快照区继续只接收 `CacheStats` 与注入动作。
+- `ThumbnailService`、MediaDetailsService、FFmpegBackend、失败重试/清理互斥、持久化
+  恢复和后台队列没有迁移或改写；架构合同与完整测试通过。
+
 ## 2026-07-29 缓存诊断架构迁移第一叶节点
 
 - 缓存诊断标题与健康状态迁入 `features/settings/presentation` 的无状态叶节点，只接收

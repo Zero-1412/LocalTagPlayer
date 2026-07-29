@@ -12,6 +12,7 @@ import 'tag_manager_create_dialog.dart';
 import 'tag_manager_detail.dart';
 import 'tag_manager_detail_sections.dart';
 import 'tag_manager_list_widgets.dart';
+import 'tag_manager_workspace_app_bar.dart';
 
 export 'tag_manager_blocked_dialog.dart'
     show tagManagerBlockedOperationSmokeHarness;
@@ -25,6 +26,7 @@ export 'tag_manager_list_widgets.dart'
         tagManagerDedupeKeyForTesting,
         tagManagerDisplayRowsForTesting,
         tagManagerSearchSmokeHarness;
+export 'tag_manager_workspace_app_bar.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -76,7 +78,7 @@ class _TagManagerPageState extends State<TagManagerPage> {
     final token = _searchController.text.trim().toLowerCase();
     final grouped = <String, List<TagItem>>{};
     for (final tag in widget.store.allTagItems) {
-      (grouped[_tagDedupeKey(tag)] ??= <TagItem>[]).add(tag);
+      (grouped[tagManagerDedupeKey(tag)] ??= <TagItem>[]).add(tag);
     }
     final rows = [
       for (final items in grouped.values)
@@ -106,15 +108,11 @@ class _TagManagerPageState extends State<TagManagerPage> {
     }).toList();
   }
 
-  String _tagDedupeKey(TagItem tag) {
-    return tagManagerDedupeKey(tag);
-  }
-
   TagManagerTagRow _rowFor(TagItem tag, Map<String, TagUsageSummary> usage) {
     return TagManagerTagRow.fromItems(
       [
         for (final item in widget.store.allTagItems)
-          if (_tagDedupeKey(item) == _tagDedupeKey(tag)) item,
+          if (tagManagerDedupeKey(item) == tagManagerDedupeKey(tag)) item,
       ],
       usage,
     );
@@ -370,28 +368,10 @@ class _TagManagerPageState extends State<TagManagerPage> {
   }) {
     return Scaffold(
       backgroundColor: libraryBackground,
-      appBar: AppBar(
-        title: const Text('标签管理'),
-        actions: [
-          IconButton(
-            tooltip: '刷新',
-            onPressed: _refreshUsage,
-            icon: const Icon(Icons.refresh),
-          ),
-          if (compact)
-            IconButton(
-              tooltip: '新建标签',
-              onPressed: _createTag,
-              icon: const Icon(Icons.add),
-            )
-          else
-            FilledButton.icon(
-              onPressed: _createTag,
-              icon: const Icon(Icons.add),
-              label: const Text('新建标签'),
-            ),
-          const SizedBox(width: 12),
-        ],
+      appBar: TagManagerWorkspaceAppBar(
+        compact: compact,
+        onRefresh: _refreshUsage,
+        onCreate: _createTag,
       ),
       body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),

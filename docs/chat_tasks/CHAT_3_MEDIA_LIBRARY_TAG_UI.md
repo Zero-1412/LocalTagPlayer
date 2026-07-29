@@ -1,5 +1,15 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
+## 2026-07-29 媒体库 500 行警戒线治理
+
+- `library_widgets.dart` 962→350，Smart List 草稿、滚动响应标题和顶栏响应式布局迁为
+  独立展示组件；稳定 `TextField`、`Ctrl+K`、筛选状态、多选与结果计数入口保持可达。
+- `library_video_grid.dart` 降到 500 行，网格/列表挂载、回到顶部动画与窗口宽度合并
+  协调器独立；完整过滤结果和增量批次仍由原 State owner 持有，打开播放器继续传递
+  filtered queue。`library_video_hover_preview.dart` 同步降到 500 行。
+- 顶栏、搜索、滚动标题和批量选择 focused tests、架构合同及完整测试通过；没有修改
+  `FilterQuery`、`TagQueryService`、缩略图优先队列或用户数据。
+
 ## 2026-07-29 媒体结果与标签发现面板千行治理
 
 - `library_video_results.dart` 2808→322，网格、列表行、卡片、悬停预览、占位交互和导入

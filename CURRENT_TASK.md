@@ -1,5 +1,27 @@
 # CURRENT_TASK.md
 
+## 2026-07-29 500 行警戒线治理第一批
+
+- 三个优先文件完成：`player_settings_panel.dart` 降至 417 行，一级/高级/选项展示拆为
+  175/230/191 行；`library_widgets.dart` 962→350，Smart List、滚动标题和顶栏响应式
+  布局拆为 191/137/459 行；`player_control_slider.dart` 收敛为 10 行兼容入口，主进度
+  交互、通用滑条、绘制形状与指标分别为 331/182/263/39 行。
+- 当前 510—662 行展示模块已全部降到 500 行以内：数据备份 workspace 377、视频结果
+  网格 500、队列条目 497、缓存诊断加载分派 171、目录管理页 231、Missing/Relink 页
+  225、标签管理页 499、悬停预览 500 行。拆出的新文件最高 459 行，没有新增警戒线文件。
+- 设置确认、搜索 `TextField` / `Ctrl+K`、筛选状态、多选、网格增量加载、filtered queue、
+  拖动结束 seek、缓存失败动作、stable `videoId` relink、manual-only 标签命令及用户数据
+  owner 均保持原位；schema、`FilterQuery` / `TagQueryService`、PlayerBackend、
+  FFmpegBackend 和缓存队列未改变。获授权删除清单为空，未授权功能删除为零。
+- 验证：`flutter analyze` 零问题；架构合同 51 项通过；完整 452 项测试通过、3 项按既有
+  benchmark 条件跳过；Windows Debug build 成功。构建后的真实 EXE 已创建响应窗口并
+  稳定运行。Computer Use 原生 pipe 仍因 `os error 2` 不可用，无法执行真实点击与截图；
+  需人工复测“媒体库搜索/筛选/多选/网格滚动回顶 → 设置播放页各层返回 → 打开任一视频
+  拖动进度并滑开队列条目 → 返回媒体库”，核对布局、回调和 filtered queue 不变。
+- 下一步计划：继续处理仍高于 500 行的 `app_theme_tokens.dart`、`library_page.dart`、
+  `library_local_view.dart` 与 `player_context_panel.dart`；优先把主题 token 按领域拆分，
+  再按相同快照/回调边界收敛页面展示，避免为追求行数迁移业务 owner。
+
 ## 2026-07-29 八个超长 presentation 文件一次降到千行以内
 
 - 代码体积治理第九批完成：`player_page.dart` 5226→424、`library_video_results.dart`

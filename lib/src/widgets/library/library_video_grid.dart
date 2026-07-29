@@ -10,8 +10,9 @@ import '../../models/video_item.dart';
 import '../../services/library/library_card_ui_diagnostics.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../app_theme_tokens.dart';
-import '../design_system/app_interaction_surface.dart';
-import 'library_smoke_keys.dart';
+import 'library_video_grid_results_view.dart';
+import 'library_video_grid_return_to_top.dart';
+import 'library_video_grid_resize_coordinator.dart';
 import 'library_video_results.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -104,14 +105,8 @@ class _VideoGridState extends State<VideoGrid> {
   var _indexedItemCount = -1;
   Map<String, int> _visibleIndexByVideoId = const <String, int>{};
 
-  /** 最近一次用于确定响应式断点和列数的稳定窗口基准宽度。 */
-  double? _settledViewportWidth;
-
-  /** 拖动窗口时当前正在趋近的最新列数基准宽度。 */
-  double? _pendingViewportWidth;
-
-  /** 窗口宽度停止变化后提交唯一一次网格重排。 */
-  Timer? _viewportResizeTimer;
+  /** 合并窗口拖动期间的响应式列数变化，不接触结果或筛选 owner。 */
+  final _resizeCoordinator = LibraryVideoGridResizeCoordinator();
 
   /** 回到结果绝对顶部后的短暂稳定计时，避免惯性边界轻微抖动造成闪回。 */
   Timer? _headerRestoreTimer;
@@ -372,67 +367,9 @@ class _VideoGridState extends State<VideoGrid> {
     _scheduleHeaderRestore();
   }
 
-  /** 构建不遮挡滚动条的右下角回到顶部浮动入口。 */
-  Widget _buildReturnToTopButton(BuildContext context) {
-    final accessibility = AppAccessibilityScope.of(context);
-    final motionDuration =
-        accessibility.motionDuration(const Duration(milliseconds: 180));
-    final fadeDuration =
-        accessibility.fadeDuration(const Duration(milliseconds: 160));
-    return Positioned(
-      right: 20,
-      bottom: 20,
-      child: ExcludeFocus(
-        excluding: !_showReturnToTop,
-        child: ExcludeSemantics(
-          excluding: !_showReturnToTop,
-          child: IgnorePointer(
-            ignoring: !_showReturnToTop,
-            child: AnimatedSlide(
-              offset: _showReturnToTop ? Offset.zero : const Offset(0, 0.28),
-              duration: motionDuration,
-              curve: Curves.easeOutCubic,
-              child: AnimatedOpacity(
-                opacity: _showReturnToTop ? 1 : 0,
-                duration: fadeDuration,
-                curve: Curves.easeOutCubic,
-                child: Tooltip(
-                  message: '回到顶部',
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: librarySoftShadow,
-                    ),
-                    child: AppInteractionSurface(
-                      key: LibrarySmokeKeys.returnToTopButton,
-                      onTap: _scrollToTop,
-                      semanticLabel: '回到媒体库顶部',
-                      padding: EdgeInsets.zero,
-                      borderRadius: 22,
-                      backgroundColor: librarySurface,
-                      showBorder: false,
-                      child: const SizedBox.square(
-                        dimension: 44,
-                        child: Icon(
-                          Icons.keyboard_arrow_up_rounded,
-                          size: 28,
-                          color: libraryAccent,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   void dispose() {
-    _viewportResizeTimer?.cancel();
+    _resizeCoordinator.dispose();
     _headerRestoreTimer?.cancel();
     if (LibraryCardUiDiagnostics.scrollStatsEnabled) {
       LibraryCardUiDiagnostics.finishScrollSample();
@@ -450,34 +387,14 @@ class _VideoGridState extends State<VideoGrid> {
    * 该基准，因此只缩放卡片而不换列；视频顺序、滚动控制器和缩略图 Future 均保持不变。
    */
   double _stableViewportWidth(double measuredWidth) {
-    final normalizedWidth =
-        measuredWidth.isFinite && measuredWidth > 0 ? measuredWidth : 1.0;
-    final settledWidth = _settledViewportWidth;
-    if (settledWidth == null) {
-      _settledViewportWidth = normalizedWidth;
-      return normalizedWidth;
-    }
-    if ((normalizedWidth - settledWidth).abs() <= 0.5) {
-      _pendingViewportWidth = null;
-      _viewportResizeTimer?.cancel();
-      return settledWidth;
-    }
-    if (_pendingViewportWidth == null ||
-        (normalizedWidth - _pendingViewportWidth!).abs() > 0.5) {
-      _pendingViewportWidth = normalizedWidth;
-      _viewportResizeTimer?.cancel();
-      _viewportResizeTimer = Timer(libraryResultsResizeSettleDuration, () {
-        final targetWidth = _pendingViewportWidth;
-        if (!mounted || targetWidth == null) {
-          return;
+    return _resizeCoordinator.resolve(
+      measuredWidth,
+      onSettled: () {
+        if (mounted) {
+          setState(() {});
         }
-        setState(() {
-          _settledViewportWidth = targetWidth;
-          _pendingViewportWidth = null;
-        });
-      });
-    }
-    return settledWidth;
+      },
+    );
   }
 
   @override
@@ -533,106 +450,30 @@ class _VideoGridState extends State<VideoGrid> {
         // 同步真实首批数量，供预加载阈值和显式压测统计使用；不触发额外 build。
         _loadedItemCount = visibleItemCount;
         final visibleIndexByVideoId = _visibleIndexMap(visibleItemCount);
-        final Widget results;
-        if (widget.dense) {
-          results = ListView.builder(
-            key: LibrarySmokeKeys.incrementalResults,
-            controller: _scrollController,
-            padding: EdgeInsets.fromLTRB(
-              compact ? 14 : 22,
-              2,
-              compact ? 14 : 22,
-              12,
-            ),
-            itemExtent: narrow ? 132 : 120,
-            scrollCacheExtent: const ScrollCacheExtent.pixels(720),
-            itemCount: visibleItemCount,
-            findChildIndexCallback: (key) {
-              if (key case ValueKey<String>(value: final value)) {
-                return visibleIndexByVideoId[value];
-              }
-              return null;
-            },
-            itemBuilder: (context, index) {
-              final item = widget.videos[index];
-              return Padding(
-                key: ValueKey<String>(item.videoId),
-                padding: const EdgeInsets.only(bottom: 8),
-                child: InteractiveVideoListRow(
-                  item: item,
-                  thumbnailService: widget.thumbnailService,
-                  playbackSettings: widget.playbackSettings,
-                  onVisible: widget.onVisible,
-                  onOpen: () => widget.onOpen(item, widget.videos),
-                  onRevealLocation: widget.onRevealLocation == null
-                      ? null
-                      : () => widget.onRevealLocation!(item),
-                  onToggleFavorite: () => widget.onToggleFavorite(item),
-                  onDelete: () => widget.onDelete(item),
-                  selectionMode: widget.selectionMode,
-                  selected: widget.selectedVideoIds.contains(item.videoId),
-                  onToggleSelected: widget.onToggleSelected == null
-                      ? null
-                      : () => widget.onToggleSelected!(item),
-                ),
-              );
-            },
-          );
-        } else {
-          results = GridView.builder(
-            key: LibrarySmokeKeys.incrementalResults,
-            controller: _scrollController,
-            padding: EdgeInsets.fromLTRB(
-              compact ? 14 : 22,
-              2,
-              compact ? 14 : 22,
-              12,
-            ),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columnCount,
-              mainAxisExtent: libraryVideoCardMainAxisExtentForColumnCount(
-                gridWidth: measuredWidth,
-                compact: compact,
-                columnCount: columnCount,
-                crossAxisSpacing: crossAxisSpacing,
-                textScaleFactor: textScaleFactor,
-              ),
-              mainAxisSpacing: mainAxisSpacing,
-              crossAxisSpacing: crossAxisSpacing,
-            ),
-            itemCount: visibleItemCount,
-            scrollCacheExtent: const ScrollCacheExtent.pixels(720),
-            findChildIndexCallback: (key) {
-              if (key case ValueKey<String>(value: final value)) {
-                return visibleIndexByVideoId[value];
-              }
-              return null;
-            },
-            itemBuilder: (context, index) {
-              final item = widget.videos[index];
-              return KeyedSubtree(
-                key: ValueKey<String>(item.videoId),
-                child: InteractiveVideoCard(
-                  item: item,
-                  thumbnailService: widget.thumbnailService,
-                  playbackSettings: widget.playbackSettings,
-                  onVisible: widget.onVisible,
-                  onOpen: () => widget.onOpen(item, widget.videos),
-                  onRevealLocation: widget.onRevealLocation == null
-                      ? null
-                      : () => widget.onRevealLocation!(item),
-                  onToggleFavorite: () => widget.onToggleFavorite(item),
-                  onDelete: () => widget.onDelete(item),
-                  selectionMode: widget.selectionMode,
-                  selected: widget.selectedVideoIds.contains(item.videoId),
-                  onToggleSelected: widget.onToggleSelected == null
-                      ? null
-                      : () => widget.onToggleSelected!(item),
-                ),
-              );
-            },
-          );
-        }
+        final results = LibraryVideoGridResultsView(
+          dense: widget.dense,
+          narrow: narrow,
+          compact: compact,
+          scrollController: _scrollController,
+          visibleItemCount: visibleItemCount,
+          visibleIndexByVideoId: visibleIndexByVideoId,
+          videos: widget.videos,
+          thumbnailService: widget.thumbnailService,
+          playbackSettings: widget.playbackSettings,
+          onVisible: widget.onVisible,
+          onOpen: widget.onOpen,
+          onRevealLocation: widget.onRevealLocation,
+          onToggleFavorite: widget.onToggleFavorite,
+          onDelete: widget.onDelete,
+          selectionMode: widget.selectionMode,
+          selectedVideoIds: widget.selectedVideoIds,
+          onToggleSelected: widget.onToggleSelected,
+          columnCount: columnCount,
+          measuredWidth: measuredWidth,
+          crossAxisSpacing: crossAxisSpacing,
+          mainAxisSpacing: mainAxisSpacing,
+          textScaleFactor: textScaleFactor,
+        );
         return Stack(
           children: [
             Positioned.fill(
@@ -646,17 +487,14 @@ class _VideoGridState extends State<VideoGrid> {
                 ),
               ),
             ),
-            if (widget.scrollChromeEnabled) _buildReturnToTopButton(context),
+            if (widget.scrollChromeEnabled)
+              LibraryVideoGridReturnToTop(
+                visible: _showReturnToTop,
+                onTap: _scrollToTop,
+              ),
           ],
         );
       },
     );
   }
 }
-
-/**
- * 列表模式下的单条视频结果。
- *
- * 行内容限制在可读宽度内，避免超宽桌面窗口把“播放 / 收藏 / 更多”
- * 操作区推到视线外，导致入口存在但真实点击和视觉发现都不稳定。
- */

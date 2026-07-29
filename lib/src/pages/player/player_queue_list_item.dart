@@ -8,6 +8,7 @@ import '../../services/media/media_details_service.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../../widgets/app_theme_tokens.dart';
 import 'player_queue_metadata_widgets.dart';
+import 'player_queue_list_item_actions.dart';
 import 'player_queue_sidebar.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -421,7 +422,7 @@ class QueueListItemState extends State<QueueListItem>
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                _detailsLine(details),
+                                queueListItemDetailsLine(widget.item, details),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -464,7 +465,13 @@ class QueueListItemState extends State<QueueListItem>
                 children: [
                   if (revealProgress > 0.001)
                     // 完全收起时卸载隐藏操作层，避免真实窗口的像素舍入让图标从卡片右缘泄出。
-                    _buildActionBackground(),
+                    QueueListItemActionBackground(
+                      item: widget.item,
+                      width: _actionRevealWidth,
+                      onToggleFavorite: () =>
+                          _runAction(widget.onToggleFavorite),
+                      onDelete: () => _runAction(widget.onDelete),
+                    ),
                   Transform.translate(
                     offset: Offset(
                       -_actionRevealWidth * revealProgress,
@@ -486,113 +493,5 @@ class QueueListItemState extends State<QueueListItem>
         ),
       ),
     );
-  }
-
-  /** 构建折叠在卡片后的收藏与删除操作区，颜色沿用播放器深色主题。 */
-  Widget _buildActionBackground() {
-    return DecoratedBox(
-      decoration: const BoxDecoration(color: playerSurface),
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: SizedBox(
-          width: _actionRevealWidth,
-          height: double.infinity,
-          child: Padding(
-            // 操作面板与前景卡片共享 Stack 的完整高度，只保留横向呼吸空间。
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: DecoratedBox(
-              key: ValueKey(
-                'player.queue.actionPanel.${widget.item.videoId}',
-              ),
-              decoration: BoxDecoration(
-                color: playerSurfaceRaised,
-                borderRadius: BorderRadius.circular(AppRadius.card),
-                border: Border.all(color: playerBorder),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Tooltip(
-                        message: widget.item.isFavorite ? '取消收藏' : '收藏',
-                        child: Material(
-                          key: ValueKey(
-                            'player.queue.favoriteActionSurface.'
-                            '${widget.item.videoId}',
-                          ),
-                          // 红心本身已明确表达收藏状态，不再叠加发光式色块。
-                          color: Colors.transparent,
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.control),
-                          child: InkWell(
-                            key: ValueKey(
-                              'player.queue.favoriteAction.'
-                              '${widget.item.videoId}',
-                            ),
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.control),
-                            onTap: () => _runAction(widget.onToggleFavorite),
-                            child: Icon(
-                              widget.item.isFavorite
-                                  ? Icons.favorite_rounded
-                                  : Icons.favorite_border_rounded,
-                              color: playerDanger,
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 7),
-                      child: VerticalDivider(
-                        width: 1,
-                        thickness: 1,
-                        color: playerBorder,
-                      ),
-                    ),
-                    Expanded(
-                      child: Tooltip(
-                        message: '删除',
-                        child: Material(
-                          color: Colors.transparent,
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.control),
-                          child: InkWell(
-                            key: ValueKey(
-                              'player.queue.deleteAction.'
-                              '${widget.item.videoId}',
-                            ),
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.control),
-                            onTap: () => _runAction(widget.onDelete),
-                            child: const Icon(
-                              Icons.delete_outline_rounded,
-                              color: playerDanger,
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _detailsLine(MediaDetails? details) {
-    if (widget.item.isMissing) {
-      return '路径失效 · 可重新关联';
-    }
-    if (details == null) {
-      return '\u5a92\u4f53\u4fe1\u606f\u8bfb\u53d6\u4e2d';
-    }
-    return '${details.videoLabel}  |  ${details.audioLabel}';
   }
 }

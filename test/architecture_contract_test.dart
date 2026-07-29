@@ -75,6 +75,22 @@ String _readPlayerPageCluster() {
   return paths.map((path) => File(path).readAsStringSync()).join('\n');
 }
 
+/**
+ * 读取播放设置浮层与其纯展示子组件。
+ *
+ * 设置状态和业务命令仍由播放器页面持有；该聚合仅让架构门禁覆盖拆分后的真实可达组件，
+ * 防止入口或关键设置项在文件瘦身时被孤立。
+ */
+String _readPlayerSettingsPanelCluster() {
+  const paths = <String>[
+    'lib/src/pages/player/player_settings_panel.dart',
+    'lib/src/pages/player/player_settings_primary_list.dart',
+    'lib/src/pages/player/player_settings_advanced_list.dart',
+    'lib/src/pages/player/player_settings_option_list.dart',
+  ];
+  return paths.map((path) => File(path).readAsStringSync()).join('\n');
+}
+
 /** 读取标签发现面板及其只读展示分区，覆盖拆分后的真实组件边界。 */
 String _readLibraryTagDiscoveryCluster() {
   const paths = <String>[
@@ -84,6 +100,52 @@ String _readLibraryTagDiscoveryCluster() {
     'lib/src/widgets/library/library_tag_discovery_group.dart',
     'lib/src/widgets/library/library_tag_discovery_rows.dart',
     'lib/src/widgets/library/library_collapsed_tag_discovery_rail.dart',
+  ];
+  return paths.map((path) => File(path).readAsStringSync()).join('\n');
+}
+
+/**
+ * 读取媒体库顶栏聚合与拆分后的展示边界。
+ *
+ * 该聚合用于验证顶栏叶子仍只接收快照和回调，同时覆盖搜索快捷键、响应式布局、
+ * 草稿弹窗与滚动标题的真实挂载关系。
+ */
+String _readLibraryWidgetsCluster() {
+  const paths = <String>[
+    'lib/src/widgets/library/library_widgets.dart',
+    'lib/src/widgets/library/library_reference_top_bar_layout.dart',
+    'lib/src/widgets/library/library_scroll_responsive_header.dart',
+    'lib/src/widgets/library/library_smart_list_draft_dialog.dart',
+  ];
+  return paths.map((path) => File(path).readAsStringSync()).join('\n');
+}
+
+/** 读取数据备份状态 owner 与拆分后的纯展示面板。 */
+String _readDataBackupSettingsCluster() {
+  const paths = <String>[
+    'lib/src/features/settings/presentation/'
+        'data_backup_settings_workspace.dart',
+    'lib/src/features/settings/presentation/data_backup_settings_panel.dart',
+  ];
+  return paths.map((path) => File(path).readAsStringSync()).join('\n');
+}
+
+/** 读取缓存诊断加载分派与拆分后的只读快照区。 */
+String _readCacheDiagnosticsSnapshotCluster() {
+  const paths = <String>[
+    'lib/src/features/settings/presentation/'
+        'cache_diagnostics_snapshot_view.dart',
+    'lib/src/features/settings/presentation/'
+        'cache_diagnostics_snapshot_sections.dart',
+  ];
+  return paths.map((path) => File(path).readAsStringSync()).join('\n');
+}
+
+/** 读取 Missing/Relink 页面 owner 与稳定身份只读展示区。 */
+String _readMissingRelinkCluster() {
+  const paths = <String>[
+    'lib/src/pages/library/missing_relink_page.dart',
+    'lib/src/pages/library/missing_relink_sections.dart',
   ];
   return paths.map((path) => File(path).readAsStringSync()).join('\n');
 }
@@ -599,8 +661,7 @@ void main() {
   });
 
   test('library widget leaves keep presentation ownership at the caller', () {
-    final aggregate =
-        File('lib/src/widgets/library/library_widgets.dart').readAsStringSync();
+    final aggregate = _readLibraryWidgetsCluster();
     final libraryPage = _readLibraryPageCluster();
     final discoveryPanel = _readLibraryTagDiscoveryCluster();
     final leafSources = <String, String>{
@@ -717,22 +778,9 @@ void main() {
     const mandatoryRefactorOrder = <String>[];
     const legacyBudgets = <String, int>{
       'lib/src/pages/library/library_page.dart': 750,
-      'lib/src/widgets/library/library_widgets.dart': 962,
-      'lib/src/widgets/library/library_video_grid.dart': 662,
-      'lib/src/widgets/library/library_video_hover_preview.dart': 510,
-      'lib/src/pages/player/player_queue_list_item.dart': 598,
-      'lib/src/pages/tags/tag_manager_page.dart': 519,
-      'lib/src/pages/library/missing_relink_page.dart': 539,
-      'lib/src/pages/player/player_settings_panel.dart': 985,
       'lib/src/widgets/app_theme_tokens.dart': 823,
-      'lib/src/pages/player/player_control_slider.dart': 792,
       'lib/src/widgets/library/library_local_view.dart': 694,
       'lib/src/pages/player/player_context_panel.dart': 683,
-      'lib/src/features/settings/presentation/'
-          'data_backup_settings_workspace.dart': 666,
-      'lib/src/features/settings/presentation/'
-          'cache_diagnostics_snapshot_view.dart': 589,
-      'lib/src/pages/library/directory_manager_page.dart': 571,
     };
     final presentationFiles = <File>[
       ...Directory('lib/src/pages')
@@ -936,10 +984,7 @@ void main() {
 
   test('data backup settings are a bounded vertical slice', () {
     final library = _readLibraryPageCluster();
-    final workspace = File(
-      'lib/src/features/settings/presentation/'
-      'data_backup_settings_workspace.dart',
-    ).readAsStringSync();
+    final workspace = _readDataBackupSettingsCluster();
     final serialController = File(
       'lib/src/features/settings/application/'
       'serial_settings_controller.dart',
@@ -1043,10 +1088,7 @@ void main() {
     final header = File(
       'lib/src/features/settings/presentation/cache_diagnostics_header.dart',
     ).readAsStringSync();
-    final snapshot = File(
-      'lib/src/features/settings/presentation/'
-      'cache_diagnostics_snapshot_view.dart',
-    ).readAsStringSync();
+    final snapshot = _readCacheDiagnosticsSnapshotCluster();
     final failureActions = File(
       'lib/src/features/settings/presentation/cache_failure_actions.dart',
     ).readAsStringSync();
@@ -1081,10 +1123,7 @@ void main() {
       'lib/src/features/settings/application/'
       'cache_diagnostics_maintenance_controller.dart',
     ).readAsStringSync();
-    final snapshot = File(
-      'lib/src/features/settings/presentation/'
-      'cache_diagnostics_snapshot_view.dart',
-    ).readAsStringSync();
+    final snapshot = _readCacheDiagnosticsSnapshotCluster();
     final settingsCard = File(
       'lib/src/features/settings/presentation/'
       'cache_diagnostics_settings_card.dart',
@@ -1976,9 +2015,7 @@ void main() {
   });
 
   test('single missing relink is a stale-safe UI-independent command', () {
-    final page = File(
-      'lib/src/pages/library/missing_relink_page.dart',
-    ).readAsStringSync();
+    final page = _readMissingRelinkCluster();
     final libraryPage = _readLibraryPageCluster();
     final executor = File(
       'lib/src/features/library/application/'
@@ -2073,9 +2110,7 @@ void main() {
   test('PlayerPage gear keeps compression enhancement mounted and reachable',
       () {
     final pageSource = _readPlayerPageCluster();
-    final panelSource = File(
-      'lib/src/pages/player/player_settings_panel.dart',
-    ).readAsStringSync();
+    final panelSource = _readPlayerSettingsPanelCluster();
 
     // 同时保护齿轮按钮、页面回调和三档入口，避免组件仍存在但从真实播放器孤立。
     expect(pageSource, contains("'player.settings'"));
@@ -2274,9 +2309,7 @@ void main() {
   });
 
   test('NVIDIA automatic policy and fixed-frame visual gate stay explicit', () {
-    final panel = File(
-      'lib/src/pages/player/player_settings_panel.dart',
-    ).readAsStringSync();
+    final panel = _readPlayerSettingsPanelCluster();
     final page = _readPlayerPageCluster();
     final autoPolicy = File(
       'lib/src/services/player/player_nvidia_video_auto_policy.dart',

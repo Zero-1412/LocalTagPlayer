@@ -2,6 +2,17 @@
 
 ## 2026-07-29 · 启动渐进式整体架构重构
 
+- Architecture Baseline 提升到 `0.5.136`：完成首批 500 行警戒线治理，
+  `player_settings_panel.dart`、`library_widgets.dart`、`player_control_slider.dart`
+  及当前全部 510—662 行展示模块均降到 500 行以内。
+- 播放设置、媒体库顶栏/网格、播放器滑条/队列条目、数据备份、缓存诊断、目录管理、
+  Missing/Relink 和标签管理只迁出展示组件及轻量布局协调器；筛选、扫描、filtered queue、
+  seek、缓存命令、稳定身份、标签命令和用户数据 owner 不变。
+- 架构合同改为读取拆分后的真实协作簇，并移除已失效的警戒预算。完整 452 项测试通过、
+  3 项 benchmark 跳过，静态分析与 Windows Debug build 通过；真实 EXE 可创建响应窗口。
+  自动点击/截图仍受 Computer Use 原生 pipe `os error 2` 阻塞，人工路径记录于
+  `CURRENT_TASK.md`。
+
 - Architecture Baseline 提升到 `0.5.135`：用户指定的八个超长 presentation 文件全部
   降到 1000 行以内；`player_page.dart` 5226→424，媒体结果、播放器队列、标签发现、
   标签管理与 missing/relink 页面分别迁入职责单一的独立 Dart library。

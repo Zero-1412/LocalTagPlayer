@@ -41,13 +41,10 @@ class VideoPreview extends StatefulWidget {
   final bool hoverPreviewEnabled;
   /** 只通知页面提升媒体详情任务；缩略图仍由共享服务自身的优先队列处理。 */
   final ValueChanged<VideoItem>? onVisible;
-
   /** 网格卡片传入时在缩略图左上角显示收藏入口；列表预览保持原有紧凑动作区。 */
   final VoidCallback? onToggleFavorite;
-
   /** 非 null 表示多选模式，并作为圆形复选框当前值。 */
   final bool? selected;
-
   /** 多选模式切换回调；与 [selected] 同时存在时替换收藏红心。 */
   final VoidCallback? onToggleSelected;
 
@@ -501,10 +498,3 @@ class VideoPreviewState extends State<VideoPreview> {
     );
   }
 }
-
-/**
- * 媒体库结果区的桌面文件拖放边界。
- *
- * 组件只负责接收路径和提供轻量覆盖反馈；目录识别、视频扩展名校验和扫描由页面应用链路负责，
- * 避免拖动经过 UI 时触发文件系统访问或全列表 rebuild。
- */
