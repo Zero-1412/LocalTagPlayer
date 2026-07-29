@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.117` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.118` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -92,6 +92,12 @@ Phase 3H-1 把继续观看清理/撤销迁入 `LibraryContinueWatchingCommandExe
 executor 捕获精确播放快照、注入批量 Repository 提交，并在失败时恢复或重新清空同一
 `VideoItem`；确认、10 秒撤销入口、SnackBar 与刷新仍在 presentation。最近播放临时
 多选复用 `LibrarySelectionController`，只保存 stable videoId，不再绑定 mutable path。
+
+Phase 3H-2 把媒体库、继续观看、收藏和本地目录的来源模式、当前路径与返回栈迁入
+`LibrarySourceNavigationController`。页面注入现有路径规范化/比较策略，因此 controller
+不依赖 Flutter、`dart:io Platform`、Store、筛选服务或媒体对象。标签/搜索切回普通媒体库
+仍保留本地历史，主媒体库/最近播放/收藏/root 入口仍按原规则结束或重建本地浏览会话；
+页面继续拥有筛选清理、选择清理、Route、动画和播放队列绑定。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -579,12 +585,14 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.117`
+已完成基线：`Architecture Baseline 0.5.118`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.118`：媒体库四类结果来源、当前本地路径与 LIFO 返回栈归单一纯应用 owner；
+  路径策略由页面注入，筛选清理、入口可达性、filtered queue 和平台边界保持不变。
 - `0.5.117`：继续观看清理/撤销快照、批量提交与失败补偿迁入无 UI executor；最近播放
   临时选择改为 stable videoId，页面保留确认、反馈与刷新绑定。
 - `0.5.116`：单条 Missing/Relink 使用捕获 stable identity/path/fingerprint 的显式

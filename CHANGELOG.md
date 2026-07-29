@@ -121,6 +121,13 @@
   stable ID 集合；单条、已选、全部和撤销后新播放保护语义不变。`LibraryPage` 门禁降到
   5,796，完整 403 项测试通过（3 项显式基准跳过），静态分析、Windows Debug build 与
   正式入口启动通过。
+- 完成 Phase 3H-2 来源导航切片：媒体库、继续观看、收藏和本地目录模式，以及当前路径和
+  LIFO 返回栈迁入 `LibrarySourceNavigationController`；页面注入现有路径规范化/比较
+  策略，controller 不依赖 Flutter、Store、媒体对象或平台运行态。
+- 侧栏四类入口、标签/搜索切回普通媒体库、root 入口重置历史、文件夹进入/按钮与鼠标
+  返回、移除当前 root 后回到媒体库和当前可见队列绑定全部保留。`LibraryPage` 门禁降到
+  5,748；完整 410 项测试通过（3 项显式基准跳过），静态分析、Windows Debug build 与
+  正式入口可见窗口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

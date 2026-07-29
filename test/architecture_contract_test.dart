@@ -277,8 +277,8 @@ void main() {
     final playerLines =
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
-    // 媒体库阈值随扫描生命周期与进度展示叶节点收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(5796));
+    // 媒体库阈值随结果来源导航 owner 迁移继续下调；后续迁移只能降低，禁止为通过测试而调高。
+    expect(libraryLines, lessThanOrEqualTo(5748));
     expect(playerLines, lessThanOrEqualTo(5374));
   });
 
@@ -717,6 +717,78 @@ void main() {
     expect(page, contains('onToggleSelectAll:'));
     expect(page, contains('onDeleteSelected:'));
     expect(page, contains('onCancelSelectionMode:'));
+  });
+
+  test(
+      'library result sources and local history have one pure application owner',
+      () {
+    final page = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final controller = File(
+      'lib/src/features/library/application/'
+      'library_source_navigation_controller.dart',
+    ).readAsStringSync();
+
+    expect(
+      controller,
+      contains('class LibrarySourceNavigationController'),
+    );
+    expect(controller, contains('enum LibraryResultMode'));
+    expect(controller, contains('void showLibraryResults()'));
+    expect(controller, contains('void resetToLibrary()'));
+    expect(controller, contains('void showLocalRoot(String rootPath)'));
+    expect(controller, contains('void openLocalFolder(String folderPath)'));
+    expect(controller, contains('bool goBack()'));
+    expect(controller, contains('bool leaveRemovedRoot(String rootPath)'));
+    for (final forbidden in <String>[
+      "import 'dart:io'",
+      "import 'package:flutter/",
+      "import '../../../core/tag_rules.dart'",
+      'BuildContext',
+      'Navigator',
+      'Route<',
+      'LibraryStore',
+      'LibraryApplicationFacade',
+      'FilterQuery',
+      'TagQueryService',
+      'VideoItem',
+      'ThumbnailService',
+      'setState(',
+    ]) {
+      expect(
+        controller,
+        isNot(contains(forbidden)),
+        reason: '来源导航 owner 不得越过页面、数据或平台边界：$forbidden',
+      );
+    }
+    expect(
+      page,
+      contains('final _sourceNavigation = LibrarySourceNavigationController('),
+    );
+    expect(page, contains('normalizePath: TagRules.normalizeRootPath'));
+    expect(page, contains('pathKey: TagRules.pathKey'));
+    expect(page, contains('_sourceNavigation.showLibraryResults()'));
+    expect(page, contains('_sourceNavigation.resetToLibrary()'));
+    expect(page, contains('_sourceNavigation.showRecent()'));
+    expect(page, contains('_sourceNavigation.showFavorites()'));
+    expect(page, contains('_sourceNavigation.showLocalRoot(rootPath)'));
+    expect(page, contains('_sourceNavigation.openLocalFolder(folderPath)'));
+    expect(page, contains('_sourceNavigation.leaveRemovedRoot(root)'));
+    expect(page, isNot(contains('enum _LibraryResultMode')));
+    expect(page, isNot(contains('var _resultMode =')));
+    expect(page, isNot(contains('String? _localLibraryPath;')));
+    expect(page, isNot(contains('final _localLibraryBackStack =')));
+    // 页面仍负责入口与复合筛选清理，controller 不吞掉可达性或标签语义。
+    expect(page, contains('onShowAllLibrary: _showAllLibraryVideos'));
+    expect(page, contains('onFavoritesToggle: _showFavoriteVideos'));
+    expect(
+      page,
+      contains('onOpenRecentPlayback: _showRecentPlaybackVideos'),
+    );
+    expect(page, contains('onOpenLocalLibraryRoot: _showLocalLibraryPath'));
+    expect(page, contains('onBack: _goBackLocalLibraryPath'));
+    expect(page, contains('onOpenFolder: _openLocalLibraryFolder'));
   });
 
   test('library sorting is a pure owner and never re-runs filter or counts',

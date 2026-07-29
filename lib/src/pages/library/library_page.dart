@@ -28,6 +28,7 @@ import '../../features/library/application/library_query_controller.dart';
 import '../../features/library/application/library_revision_tracker.dart';
 import '../../features/library/application/library_scan_lifecycle_controller.dart';
 import '../../features/library/application/library_selection_controller.dart';
+import '../../features/library/application/library_source_navigation_controller.dart';
 import '../../features/library/application/library_sort_controller.dart';
 import '../../features/library/application/library_view_preferences_controller.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
@@ -2107,25 +2108,6 @@ class LibraryPage extends StatefulWidget {
 }
 
 /**
- * 媒体库主结果区当前展示的数据来源。
- *
- * 这里只控制页面展示列表，不改变底层标签筛选语义；播放时仍把当前可见结果作为播放队列传入播放器。
- */
-enum _LibraryResultMode {
-  /** 全量媒体库结果，受搜索、标签和收藏筛选影响。 */
-  library,
-
-  /** 继续观看结果，只展示具有有效未完成进度的视频。 */
-  recent,
-
-  /** 本地收藏结果，只展示用户收藏的视频。 */
-  favorites,
-
-  /** 本地媒体库路径浏览，按文件系统层级展示文件夹和视频。 */
-  local,
-}
-
-/**
  * 选择添加目录或文件时使用的媒体上下文起点。
  *
  * 当前正在浏览的本地目录优先，其次使用首个已管理 root；两者都不存在时返回 null，
@@ -2274,10 +2256,16 @@ class _LibraryPageState extends State<LibraryPage> {
   /**
    * expanded 结果滚动时的顶部信息区目标状态。
    *
-   * 使用独立 notifier 只重建顶部动效边界，不让滚动方向变化触发整个媒体库页面重建。
-   */
+  * 使用独立 notifier 只重建顶部动效边界，不让滚动方向变化触发整个媒体库页面重建。
+  */
   final _libraryHeaderVisible = ValueNotifier<bool>(true);
-  var _resultMode = _LibraryResultMode.library;
+  /** 结果来源与本地目录返回栈的纯应用状态 owner。 */
+  final _sourceNavigation = LibrarySourceNavigationController(
+    normalizePath: TagRules.normalizeRootPath,
+    pathKey: TagRules.pathKey,
+  );
+  LibraryResultMode get _resultMode => _sourceNavigation.mode;
+  String? get _localLibraryPath => _sourceNavigation.localPath;
   Object? _recentVideoCacheKey;
   Object? _favoriteVideoCacheKey;
   Object? _localEntryCacheKey;
@@ -2305,20 +2293,6 @@ class _LibraryPageState extends State<LibraryPage> {
   bool get _librarySelectionMode => _librarySelection.selectionMode;
   Set<String> get _selectedLibraryVideoIds =>
       _librarySelection.selectedVideoIds;
-
-  /**
-   * 本地媒体库当前浏览路径。
-   *
-   * 该路径来自已配置 root 或其子目录，只用于文件系统式浏览，不改变扫描和标签规则。
-   */
-  String? _localLibraryPath;
-
-  /**
-   * 本地媒体库文件夹浏览返回栈。
-   *
-   * 从侧栏 root 入口进入时清空；从文件夹项进入时记录上一级路径，让返回按钮和鼠标侧键能回到上一层。
-   */
-  final _localLibraryBackStack = <String>[];
 
   @override
   void initState() {
@@ -3108,7 +3082,7 @@ class _LibraryPageState extends State<LibraryPage> {
   }) {
     setState(() {
       _clearLibrarySelectionState();
-      _resultMode = _LibraryResultMode.library;
+      _sourceNavigation.showLibraryResults();
       mutation();
       _viewPreferences.setTagDiscoveryPanelOpen(
         libraryTagDiscoveryPanelOpenAfterMutation(
@@ -3143,7 +3117,7 @@ class _LibraryPageState extends State<LibraryPage> {
         direction: _sortDirection,
         denseResultGrid: _denseResultGrid,
       );
-      if (_resultMode != _LibraryResultMode.library ||
+      if (_resultMode != LibraryResultMode.library ||
           _queryController.state == null) {
         return;
       }
@@ -3195,9 +3169,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final store = _store;
     setState(() {
       _clearLibrarySelectionState();
-      _resultMode = _LibraryResultMode.library;
-      _localLibraryPath = null;
-      _localLibraryBackStack.clear();
+      _sourceNavigation.resetToLibrary();
       _recentPlaybackSelection.clear();
       _clearSearchSilently();
       _selectedTags.clear();
@@ -3220,9 +3192,7 @@ class _LibraryPageState extends State<LibraryPage> {
   void _showRecentPlaybackVideos() {
     setState(() {
       _clearLibrarySelectionState();
-      _resultMode = _LibraryResultMode.recent;
-      _localLibraryPath = null;
-      _localLibraryBackStack.clear();
+      _sourceNavigation.showRecent();
       _recentPlaybackSelection.clear();
       _clearSearchSilently();
       _selectedTags.clear();
@@ -3242,9 +3212,7 @@ class _LibraryPageState extends State<LibraryPage> {
   void _showFavoriteVideos() {
     setState(() {
       _clearLibrarySelectionState();
-      _resultMode = _LibraryResultMode.favorites;
-      _localLibraryPath = null;
-      _localLibraryBackStack.clear();
+      _sourceNavigation.showFavorites();
       _recentPlaybackSelection.clear();
       _clearSearchSilently();
       _selectedTags.clear();
@@ -3263,9 +3231,7 @@ class _LibraryPageState extends State<LibraryPage> {
   void _showLocalLibraryPath(String rootPath) {
     setState(() {
       _clearLibrarySelectionState();
-      _resultMode = _LibraryResultMode.local;
-      _localLibraryPath = TagRules.normalizeRootPath(rootPath);
-      _localLibraryBackStack.clear();
+      _sourceNavigation.showLocalRoot(rootPath);
       _recentPlaybackSelection.clear();
       _clearSearchSilently();
       _selectedTags.clear();
@@ -3282,13 +3248,8 @@ class _LibraryPageState extends State<LibraryPage> {
    * 该操作只改变 UI 浏览路径，不触发扫描，也不改变 root 配置或视频索引。
    */
   void _openLocalLibraryFolder(String folderPath) {
-    final currentPath = _localLibraryPath;
     setState(() {
-      if (currentPath != null && currentPath.isNotEmpty) {
-        _localLibraryBackStack.add(currentPath);
-      }
-      _resultMode = _LibraryResultMode.local;
-      _localLibraryPath = TagRules.normalizeRootPath(folderPath);
+      _sourceNavigation.openLocalFolder(folderPath);
     });
   }
 
@@ -3298,13 +3259,10 @@ class _LibraryPageState extends State<LibraryPage> {
    * 返回按钮和鼠标侧键共用该方法，保证两种入口的历史栈行为一致。
    */
   void _goBackLocalLibraryPath() {
-    if (_localLibraryBackStack.isEmpty) {
+    if (!_sourceNavigation.canGoBack) {
       return;
     }
-    setState(() {
-      _resultMode = _LibraryResultMode.local;
-      _localLibraryPath = _localLibraryBackStack.removeLast();
-    });
+    setState(() => _sourceNavigation.goBack());
   }
 
   /**
@@ -3351,12 +3309,7 @@ class _LibraryPageState extends State<LibraryPage> {
         LibraryDataChangeKind.tagDefinitions,
       );
       _invalidateDerivedCaches();
-      if (_localLibraryPath != null &&
-          TagRules.pathKey(_localLibraryPath!) == TagRules.pathKey(root)) {
-        _resultMode = _LibraryResultMode.library;
-        _localLibraryPath = null;
-        _localLibraryBackStack.clear();
-      }
+      _sourceNavigation.leaveRemovedRoot(root);
       _refreshStableTagCountsNow(store);
     });
     _scheduleFilterRefresh(refreshCounts: true);
@@ -3555,15 +3508,15 @@ class _LibraryPageState extends State<LibraryPage> {
    */
   void _markPlaybackTimestampChanged(VideoItem item) {
     _playbackDataRevision += 1;
-    if (_resultMode == _LibraryResultMode.library) {
+    if (_resultMode == LibraryResultMode.library) {
       // 主媒体库默认排序使用添加时间，播放时间更新不再改变当前结果顺序。
       return;
     }
 
     // 最近播放、本地收藏和本地路径浏览只依赖当前内存对象重建轻量列表。
-    if (_resultMode == _LibraryResultMode.recent ||
-        (_resultMode == _LibraryResultMode.favorites && item.isFavorite) ||
-        _resultMode == _LibraryResultMode.local) {
+    if (_resultMode == LibraryResultMode.recent ||
+        (_resultMode == LibraryResultMode.favorites && item.isFavorite) ||
+        _resultMode == LibraryResultMode.local) {
       setState(() {});
     }
   }
@@ -3633,7 +3586,7 @@ class _LibraryPageState extends State<LibraryPage> {
           }
           if (mounted &&
               _store == store &&
-              _resultMode == _LibraryResultMode.local) {
+              _resultMode == LibraryResultMode.local) {
             final currentKey = (
               'local',
               _libraryDataRevision,
@@ -4217,12 +4170,12 @@ class _LibraryPageState extends State<LibraryPage> {
     final recentVideos = _sortedRecentVideos(store);
     final favoriteVideos = _sortedFavoriteVideos(store);
     final videos = switch (_resultMode) {
-      _LibraryResultMode.recent => recentVideos,
-      _LibraryResultMode.favorites => favoriteVideos,
-      _LibraryResultMode.local => const <VideoItem>[],
-      _LibraryResultMode.library => filteredVideos,
+      LibraryResultMode.recent => recentVideos,
+      LibraryResultMode.favorites => favoriteVideos,
+      LibraryResultMode.local => const <VideoItem>[],
+      LibraryResultMode.library => filteredVideos,
     };
-    final localEntries = _resultMode == _LibraryResultMode.local
+    final localEntries = _resultMode == LibraryResultMode.local
         ? _cachedLocalLibraryEntries(store)
         : const <LocalLibraryEntry>[];
     final localVideos = <VideoItem>[
@@ -4231,7 +4184,7 @@ class _LibraryPageState extends State<LibraryPage> {
     ];
     final localVideoCount = localVideos.length;
     final displayedQueueVideos =
-        _resultMode == _LibraryResultMode.local ? localVideos : videos;
+        _resultMode == LibraryResultMode.local ? localVideos : videos;
     final playbackBinding = bindDisplayedPlaybackResult(
       controller: _playbackQueueController,
       sourceName: _resultMode.name,
@@ -4258,19 +4211,19 @@ class _LibraryPageState extends State<LibraryPage> {
           ),
         );
     final displayResultCount = switch (_resultMode) {
-      _LibraryResultMode.recent => videos.length,
-      _LibraryResultMode.favorites => videos.length,
-      _LibraryResultMode.local => localVideoCount,
-      _LibraryResultMode.library => filterState.resultCount,
+      LibraryResultMode.recent => videos.length,
+      LibraryResultMode.favorites => videos.length,
+      LibraryResultMode.local => localVideoCount,
+      LibraryResultMode.library => filterState.resultCount,
     };
-    final resultCountLabel = _resultMode == _LibraryResultMode.local
+    final resultCountLabel = _resultMode == LibraryResultMode.local
         ? localLibraryEntrySummary(localEntries)
         : null;
     final defaultResultLabel = switch (_resultMode) {
-      _LibraryResultMode.recent => '继续观看',
-      _LibraryResultMode.favorites => '\u672c\u5730\u6536\u85cf',
-      _LibraryResultMode.local => '\u672c\u5730\u5a92\u4f53\u5e93',
-      _LibraryResultMode.library => '\u5168\u90e8\u89c6\u9891',
+      LibraryResultMode.recent => '继续观看',
+      LibraryResultMode.favorites => '\u672c\u5730\u6536\u85cf',
+      LibraryResultMode.local => '\u672c\u5730\u5a92\u4f53\u5e93',
+      LibraryResultMode.library => '\u5168\u90e8\u89c6\u9891',
     };
     final tags = store.allTags.toList()..sort();
     final tagGroups = _tagGroupsForSidebar(store);
@@ -4291,8 +4244,8 @@ class _LibraryPageState extends State<LibraryPage> {
     final selectedGroupTags = _selectedGroupTagItems(store);
     final excludedTags = _excludedTagItems(store);
     final supportsLibrarySelection =
-        (_resultMode == _LibraryResultMode.library ||
-                _resultMode == _LibraryResultMode.favorites) &&
+        (_resultMode == LibraryResultMode.library ||
+                _resultMode == LibraryResultMode.favorites) &&
             videos.isNotEmpty;
     final allLibraryVideosSelected =
         videos.isNotEmpty && _selectedLibraryVideoIds.length == videos.length;
@@ -4327,9 +4280,9 @@ class _LibraryPageState extends State<LibraryPage> {
         favoriteCount: favoriteCount,
         missingCount: missingCount,
         favoriteVideosSelected:
-            _resultMode == _LibraryResultMode.favorites || _showFavoritesOnly,
-        recentPlaybackSelected: _resultMode == _LibraryResultMode.recent,
-        localLibrarySelected: _resultMode == _LibraryResultMode.local,
+            _resultMode == LibraryResultMode.favorites || _showFavoritesOnly,
+        recentPlaybackSelected: _resultMode == LibraryResultMode.recent,
+        localLibrarySelected: _resultMode == LibraryResultMode.local,
         selectedTags: _selectedTags,
         isScanning: _isScanning,
         dense: dense,
@@ -4419,18 +4372,17 @@ class _LibraryPageState extends State<LibraryPage> {
           if (topBar != null) topBar,
           Expanded(
             child: LibraryImportDropRegion(
-              enabled:
-                  _resultMode == _LibraryResultMode.library && !_isScanning,
+              enabled: _resultMode == LibraryResultMode.library && !_isScanning,
               onDropPaths: (paths) => unawaited(_importLibraryPaths(paths)),
               child: RepaintBoundary(
                 child: switch (_resultMode) {
-                  _LibraryResultMode.local => LocalLibraryView(
+                  LibraryResultMode.local => LocalLibraryView(
                       currentPath: _localLibraryPath,
                       entries: localEntries,
                       thumbnailService: thumbnailService,
                       playbackSettings: _playbackSettings,
                       dense: _denseResultGrid,
-                      canGoBack: _localLibraryBackStack.isNotEmpty,
+                      canGoBack: _sourceNavigation.canGoBack,
                       onBack: _goBackLocalLibraryPath,
                       onOpenFolder: _openLocalLibraryFolder,
                       onOpenVideo: openAcceptedVideo,
@@ -4438,7 +4390,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       onToggleFavorite: _toggleFavorite,
                       onDelete: _requestDeleteVideo,
                     ),
-                  _LibraryResultMode.recent => videos.isEmpty
+                  LibraryResultMode.recent => videos.isEmpty
                       ? EmptyState(
                           hasLibrary: store.videos.isNotEmpty,
                           message: '当前没有未完成的观看记录',
@@ -4471,11 +4423,11 @@ class _LibraryPageState extends State<LibraryPage> {
                   _ => videos.isEmpty
                       ? EmptyState(
                           hasLibrary: store.videos.isNotEmpty,
-                          message: _resultMode == _LibraryResultMode.favorites
+                          message: _resultMode == LibraryResultMode.favorites
                               ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u89c6\u9891'
                               : null,
                           onAddFiles:
-                              _resultMode == _LibraryResultMode.library &&
+                              _resultMode == LibraryResultMode.library &&
                                       store.videos.isEmpty
                                   ? _pickVideoFiles
                                   : null,
@@ -4526,7 +4478,7 @@ class _LibraryPageState extends State<LibraryPage> {
         defaultChipLabel: defaultResultLabel,
         showFavoritesOnly: _showFavoritesOnly,
         refreshing: _isRefreshingVideos || _isRefreshingCounts,
-        progressLabel: _resultMode != _LibraryResultMode.library
+        progressLabel: _resultMode != LibraryResultMode.library
             ? null
             : _isScanning
                 ? _isCancellingScan
@@ -4537,7 +4489,7 @@ class _LibraryPageState extends State<LibraryPage> {
                     : libraryMediaImportProgressLabel(
                         _mediaImportProgress!,
                       ),
-        progressValue: _resultMode != _LibraryResultMode.library
+        progressValue: _resultMode != LibraryResultMode.library
             ? null
             : _isScanning
                 ? _scanProgress?.fraction
@@ -4545,14 +4497,14 @@ class _LibraryPageState extends State<LibraryPage> {
         progressPaused: _isScanning
             ? (_scanProgress?.isPaused ?? false)
             : (_mediaImportProgress?.isPaused ?? false),
-        onToggleProgressPaused: _resultMode != _LibraryResultMode.library
+        onToggleProgressPaused: _resultMode != LibraryResultMode.library
             ? null
             : _isScanning
                 ? (_scanProgress == null ? null : _toggleScanPaused)
                 : _mediaImportProgress == null
                     ? null
                     : _toggleMediaImportPaused,
-        onCancelProgress: _resultMode == _LibraryResultMode.library &&
+        onCancelProgress: _resultMode == LibraryResultMode.library &&
                 _isScanning &&
                 !_isCancellingScan
             ? _cancelScan

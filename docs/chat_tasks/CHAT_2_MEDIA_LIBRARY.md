@@ -44,6 +44,15 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-29 媒体库来源导航 owner
+
+- 媒体库、继续观看、收藏、本地目录四类来源，以及当前路径和 LIFO 返回栈迁入
+  `LibrarySourceNavigationController`；controller 不持有 Flutter、Store、筛选或媒体对象。
+- 页面注入既有路径规范化/比较策略；标签/搜索只切回普通媒体库并保留本地历史，侧栏
+  主入口和 root 入口仍按原规则重置浏览会话。
+- 本地目录进入、按钮/鼠标返回、文件选择器上下文、root 移除和当前可见播放队列保持
+  原页面绑定；SQLite schema、标签查询、stable identity、filtered queue 和缓存均未改变。
+
 ## 2026-07-29 继续观看稳定身份命令
 
 - 清理/撤销的精确播放快照、批量 Repository 提交与失败补偿迁入无 UI executor；只修改

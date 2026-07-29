@@ -320,6 +320,18 @@ Phase 3H-1 的落地边界：
 - 清理单条/已选/全部、确认弹窗、10 秒撤销、新播放不覆盖、SnackBar、刷新和 Route
   全部保留；`LibraryPage` 门禁由 5,913 降到 5,796。
 
+Phase 3H-2 的落地边界：
+
+- `LibrarySourceNavigationController` 唯一持有四类结果来源、当前本地路径和 LIFO
+  返回栈；不持有 Widget、Route、Store、筛选查询、VideoItem 或播放队列。
+- 路径规范化与平台等价比较由页面注入现有 `TagRules` 策略，controller 不直接依赖
+  `dart:io Platform` 或文件系统。标签/搜索只切换来源的旧行为与主入口完整重置行为
+  分成两个显式命令，避免“统一实现”误改历史栈语义。
+- 页面继续在一次 `setState` 中复合清理搜索、标签、收藏和临时选择；侧栏四入口、本地
+  文件夹进入、按钮/鼠标返回、root 移除、文件选择器上下文和 filtered queue 绑定保留。
+- 6 项纯状态测试、页面/widget 回归、架构合同和全量门禁通过；`LibraryPage` 预算降到
+  5,748，Phase 3 媒体库 MVVM 一致性边界迁移完成。
+
 ### Phase 4：播放器 MVVM
 
 - [ ] 4A 拆出 `PlayerSessionController`，只拥有队列、当前媒体与会话命令。

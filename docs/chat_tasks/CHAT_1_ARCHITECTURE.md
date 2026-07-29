@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
-- 架构基线提升到 `0.5.117`；完整审计和 Phase 0-6 路线记录在
+- 架构基线提升到 `0.5.118`；完整审计和 Phase 0-6 路线记录在
   `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 - `main.dart`、bootstrap 组合根与 Flutter 应用壳已经分离，具体实现选择仍只发生在
   composition。
@@ -48,6 +48,8 @@
   播放器入口与批量路径替换保持原 owner。
 - Phase 3H-1 将继续观看清理/撤销快照、批量提交与失败补偿迁入无 UI executor；最近
   播放临时选择改为 stable videoId，确认、10 秒撤销、反馈和刷新继续留在 presentation。
+- Phase 3H-2 将四类结果来源、当前本地路径和 LIFO 返回栈迁入纯应用 owner；页面注入
+  平台路径策略，并继续拥有筛选清理、Route、动画、入口挂载和 filtered queue 绑定。
 - 后续按一致性边界迁移无状态诊断 UI、普通设置、媒体库和播放器；禁止一次性移动全部
   文件或改变现有业务语义。
 

@@ -225,6 +225,22 @@
   删除已选/清空全部 → 取消/确认 → 10 秒撤销”，并在撤销窗口内重新播放验证不覆盖新进度。
 - 下一步进入 Phase 3H-2，继续从页面迁出非布局的来源切换/派生状态编排；Route、动画、
   command 绑定和所有既有入口继续留在页面，页面预算只降不升。
+- Phase 3H-2 已完成来源导航 owner：`LibrarySourceNavigationController` 唯一持有普通
+  媒体库、继续观看、收藏、本地目录模式，以及当前本地路径和 LIFO 返回栈；不持有
+  BuildContext、Route、Store、FilterQuery、VideoItem 或平台资源。
+- 页面以回调注入 `TagRules.normalizeRootPath/pathKey`，controller 不直接依赖
+  `dart:io Platform`。标签/搜索动作仍只切回普通媒体库并保留旧本地历史；媒体库主入口、
+  最近播放、收藏和 root 入口仍按原规则结束或重建本地浏览会话。
+- 侧栏四类入口、文件选择器当前目录、目录进入、返回按钮/鼠标侧键、移除当前 root、
+  收藏筛选叠加和当前可见 filtered queue 绑定均保持页面级可达。`LibraryPage` 门禁由
+  5,796 降到 5,748。
+- Phase 3H-2 focused/widget tests 与完整 410 项测试通过（3 项显式基准跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口可见窗口启动通过。
+  Computer Use 仍不可用，无法截图；人工复测路径为“媒体库 → 继续观看 → 收藏 →
+  任一 root → 进入两层目录 → 返回按钮/鼠标侧键 → 点击标签 → 回到媒体库”。
+- Phase 3 媒体库 MVVM 一致性边界迁移完成；下一步进入 Phase 4A，只盘点并迁移播放器
+  队列、当前媒体与会话命令 owner。不得迁移 native texture/window、全屏生命周期、
+  PlayerBackend contract 或 filtered queue 来源。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 
