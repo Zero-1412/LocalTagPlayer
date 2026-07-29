@@ -1,3 +1,10 @@
+## 2026-07-29 Missing/Relink 页面千行治理
+
+- `missing_relink_page.dart` 1142→539，批量路径替换对话框与预览行拆为只读展示模块。
+- `videoId`、fingerprint、路径占用校验、预览、确认、失败重试及 root 更新仍由原页面与
+  application owner 协调；没有 schema、稳定身份或用户标签/收藏/播放记录迁移。
+- focused、全量测试与 Windows Debug build 通过，未授权删除项为零。
+
 ## 2026-07-18 Apple UI Phase 3 目录管理与 Missing/Relink
 
 - 目录管理改为独立维护工作区，但添加、扫描和解除 root 仍只委托既有 application facade 与页面回调；UI 不直接访问磁盘、SQLite 或平台命令。

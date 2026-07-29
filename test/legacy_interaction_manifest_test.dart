@@ -3,6 +3,28 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+// ignore_for_file: slash_for_doc_comments
+
+/**
+ * 读取清单入口对应的真实可达组件边界。
+ *
+ * 播放器页面拆为独立 library 后，清单仍以 Route 文件作为 owner，但挂载证据需要覆盖
+ * 由该入口直接导出并调用的视图、控制条和顶栏模块。
+ */
+String _readReachableSource(String sourcePath) {
+  if (sourcePath != 'lib/src/pages/player/player_page.dart') {
+    return File(sourcePath).readAsStringSync();
+  }
+  const playerPaths = <String>[
+    'lib/src/pages/player/player_page.dart',
+    'lib/src/pages/player/player_state_controls.dart',
+    'lib/src/pages/player/player_state_resources.dart',
+    'lib/src/pages/player/player_state_view.dart',
+    'lib/src/pages/player/player_top_bar.dart',
+  ];
+  return playerPaths.map((path) => File(path).readAsStringSync()).join('\n');
+}
+
 void main() {
   test('旧交互清单中的页面入口、返回路径和关键挂载仍可达', () {
     final manifest = jsonDecode(
@@ -22,7 +44,7 @@ void main() {
       final source = File(sourcePath);
       expect(source.existsSync(), isTrue, reason: '$id 的挂载源文件必须存在');
       expect(
-        source.readAsStringSync(),
+        _readReachableSource(sourcePath),
         contains(needle),
         reason: '$id 必须继续在真实页面或组件中挂载',
       );

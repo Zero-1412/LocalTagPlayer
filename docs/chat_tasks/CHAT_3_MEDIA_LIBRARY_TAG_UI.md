@@ -1,5 +1,15 @@
 # CHAT_3_MEDIA_LIBRARY_TAG_UI.md
 
+## 2026-07-29 媒体结果与标签发现面板千行治理
+
+- `library_video_results.dart` 2808→322，网格、列表行、卡片、悬停预览、占位交互和导入
+  空态成为独立展示模块；完整 filtered result 仍由调用方传入，打开播放器时仍传递完整
+  队列，不因增量挂载截断。
+- `library_tag_discovery_panel.dart` 1511→327，chip、上下文、分组、父子行与收起 rail
+  按只读展示边界拆开；一级/二级 folder tag 层级、计数快照和选择回调没有迁移或改写。
+- `library_widgets.dart` 保持 962 行、`library_page.dart` 保持 750 行；媒体库相关 widget
+  与完整测试通过，正式窗口截图未见搜索框、侧栏或卡片网格遮挡和溢出。
+
 ## 2026-07-29 媒体库聚合组件千行门禁与页面对话框拆分
 
 - `library_page.dart` 已从 4293 行一次收敛到 750 行：Widget 编排留在外壳，生命周期、

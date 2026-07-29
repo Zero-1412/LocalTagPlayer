@@ -1,5 +1,13 @@
 # CHAT_6_TAG_MANAGER.md
 
+## 2026-07-29 标签管理页面千行治理
+
+- `tag_manager_page.dart` 1500→519，创建/阻止对话框、列表、详情和详情分区迁为独立
+  presentation 组件；主页面继续持有标签管理协调状态。
+- manual-only 批量打标、folder 来源保护、引用检查、合并/删除语义与稳定 `tagId`
+  路径保持不变；拆出的叶子只接收快照与回调。
+- 架构合同、完整 widget smoke 与全量测试通过，未授权删除项为零。
+
 ## 2026-07-18 Apple UI Phase 3 标签中心
 
 - 标签中心使用 18px 圆角双栏维护工作区，左侧搜索改为唯一稳定 `TextField`、controller 与统一刷新回调；清除、分组 chip、来源图标、收藏/隐藏状态和选择行为保持。

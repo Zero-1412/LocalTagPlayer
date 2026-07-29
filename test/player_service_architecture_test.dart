@@ -158,10 +158,27 @@ class _BatchRecordingPlayerBackend extends _RecordingPlayerBackend
   }
 }
 
+/**
+ * 读取播放器页面及其同库状态分区，确保服务边界契约覆盖真实 Route 挂载。
+ */
+String _readPlayerPageCluster() {
+  final directory = Directory('lib/src/pages/player');
+  final paths = <String>[
+    'lib/src/pages/player/player_page.dart',
+    ...directory
+        .listSync()
+        .whereType<File>()
+        .map((file) => file.path.replaceAll(r'\', '/'))
+        .where((path) => path.contains('/player_state_'))
+        .toList()
+      ..sort(),
+  ];
+  return paths.map((path) => File(path).readAsStringSync()).join('\n');
+}
+
 void main() {
   test('PlayerPage 只依赖 PlayerService 工厂，不导入具体播放器后端', () {
-    final source =
-        File('lib/src/pages/player/player_page.dart').readAsStringSync();
+    final source = _readPlayerPageCluster();
 
     expect(
         source, contains('final PlayerServiceFactory playerServiceFactory;'));
@@ -172,7 +189,7 @@ void main() {
     expect(
       source,
       contains(
-        'rendererPreference: widget.playbackSettings.rendererPreference',
+        'rendererPreference: pageWidget.playbackSettings.rendererPreference',
       ),
     );
   });

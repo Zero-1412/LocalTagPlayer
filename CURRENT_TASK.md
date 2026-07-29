@@ -1,5 +1,28 @@
 # CURRENT_TASK.md
 
+## 2026-07-29 八个超长 presentation 文件一次降到千行以内
+
+- 代码体积治理第九批完成：`player_page.dart` 5226→424、`library_video_results.dart`
+  2808→322、`player_queue_sidebar.dart` 1651→399、`library_tag_discovery_panel.dart`
+  1511→327、`tag_manager_page.dart` 1500→519、`missing_relink_page.dart` 1142→539；
+  已完成的 `library_page.dart` 750 与 `library_widgets.dart` 962 同步纳入硬门禁。用户指定
+  的八个文件全部低于 1000 行，强制重构清单清零。
+- 播放器按打开、事件、NVIDIA、传输、健康采样、控制条、窗口 chrome、性能、队列、
+  对话框、文件动作、诊断、资源和视图边界拆为独立 Dart library；`PlayerPageState`
+  仍是 controller、filtered queue 与 native 资源生命周期 owner。媒体结果按网格、列表
+  行、卡片、悬停预览和导入空态拆分；标签发现、标签管理及批量 relink 只迁移展示与
+  对话框实现，不迁移筛选、标签、扫描、队列或稳定身份命令。
+- 架构合同补充完整协作簇读取与 200/500/1000 行预算，继续禁止 `part`、跨 feature
+  presentation 依赖及未授权功能删除。旧交互清单改为检查真实 Route 导出的播放器视图
+  分区，`player.back`、队列、设置和隐藏进度条仍有页面级可达证据。
+- 验证：`flutter analyze` 零问题；完整 452 项测试通过、3 项按既有 benchmark 条件跳过；
+  Windows Debug build 成功。正式 EXE 已创建可见窗口并保存媒体库截图，未见遮挡、错位、
+  溢出或状态断裂。Computer Use 原生 pipe 仍不可用；播放器队列集成点击脚本又因固定
+  fixture 缺少 `qa.video.play.purple-grid` 在进入播放器前失败，需人工复测“打开任一
+  当前筛选结果 → 折叠/恢复队列 → 全屏边缘队列 → 返回媒体库”，确认筛选与队列不变。
+- 下一步优先继续治理 500 行警戒线文件：`player_settings_panel.dart`、`library_widgets.dart`
+  及本批 510—662 行展示模块；每次只拆一个只读边界，并保持现有 owner 与可达性门禁。
+
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
 - 代码体积治理第八批完成：`library_page.dart` 从 4293 行一步降到 750 行，明确退出

@@ -42,6 +42,52 @@ String _readLibraryPageCluster() {
   return paths.map((path) => File(path).readAsStringSync()).join('\n');
 }
 
+/**
+ * 读取播放器页面的完整同库协作边界。
+ *
+ * `player_page.dart` 只保留 State owner 与生命周期入口；架构契约必须同时审查所有
+ * `part`，避免受保护行为被藏进拆分文件后脱离门禁。
+ */
+String _readPlayerPageCluster() {
+  const paths = <String>[
+    'lib/src/pages/player/player_page.dart',
+    'lib/src/pages/player/player_opening_widgets.dart',
+    'lib/src/pages/player/player_chrome_widgets.dart',
+    'lib/src/pages/player/player_stability_snapshot.dart',
+    'lib/src/pages/player/player_state_initialization.dart',
+    'lib/src/pages/player/player_state_events.dart',
+    'lib/src/pages/player/player_state_nvidia.dart',
+    'lib/src/pages/player/player_state_transport.dart',
+    'lib/src/pages/player/player_state_health.dart',
+    'lib/src/pages/player/player_state_controls.dart',
+    'lib/src/pages/player/player_state_chrome.dart',
+    'lib/src/pages/player/player_state_performance.dart',
+    'lib/src/pages/player/player_state_opening.dart',
+    'lib/src/pages/player/player_state_queue.dart',
+    'lib/src/pages/player/player_state_dialogs.dart',
+    'lib/src/pages/player/player_state_item_actions.dart',
+    'lib/src/pages/player/player_state_diagnostics.dart',
+    'lib/src/pages/player/player_state_helpers.dart',
+    'lib/src/pages/player/player_state_resources.dart',
+    'lib/src/pages/player/player_state_view.dart',
+    'lib/src/pages/player/player_top_bar.dart',
+  ];
+  return paths.map((path) => File(path).readAsStringSync()).join('\n');
+}
+
+/** 读取标签发现面板及其只读展示分区，覆盖拆分后的真实组件边界。 */
+String _readLibraryTagDiscoveryCluster() {
+  const paths = <String>[
+    'lib/src/widgets/library/library_tag_discovery_panel.dart',
+    'lib/src/widgets/library/library_tag_discovery_chip.dart',
+    'lib/src/widgets/library/library_tag_discovery_context.dart',
+    'lib/src/widgets/library/library_tag_discovery_group.dart',
+    'lib/src/widgets/library/library_tag_discovery_rows.dart',
+    'lib/src/widgets/library/library_collapsed_tag_discovery_rail.dart',
+  ];
+  return paths.map((path) => File(path).readAsStringSync()).join('\n');
+}
+
 class _FakeLibraryRepository implements LibraryRepository {
   @override
   final List<String> roots = <String>['root'];
@@ -456,7 +502,7 @@ void main() {
 
     // 体积阈值随叶节点迁移继续下调；后续瘦身只能降低，禁止把代码塞回聚合文件。
     expect(libraryLines, lessThanOrEqualTo(750));
-    expect(playerLines, lessThanOrEqualTo(5226));
+    expect(playerLines, lessThanOrEqualTo(444));
     expect(libraryWidgetLines, lessThanOrEqualTo(962));
     expect(recentPlaybackLines, lessThanOrEqualTo(299));
     expect(tagEditorLines, lessThanOrEqualTo(481));
@@ -556,9 +602,7 @@ void main() {
     final aggregate =
         File('lib/src/widgets/library/library_widgets.dart').readAsStringSync();
     final libraryPage = _readLibraryPageCluster();
-    final discoveryPanel = File(
-      'lib/src/widgets/library/library_tag_discovery_panel.dart',
-    ).readAsStringSync();
+    final discoveryPanel = _readLibraryTagDiscoveryCluster();
     final leafSources = <String, String>{
       'library_tag_display_helpers.dart': File(
         'lib/src/widgets/library/library_tag_display_helpers.dart',
@@ -670,23 +714,15 @@ void main() {
     const bestPracticeLines = 200;
     const warningLines = 500;
     const refactorLines = 1000;
-    const mandatoryRefactorOrder = <String>[
-      'lib/src/pages/player/player_page.dart',
-      'lib/src/widgets/library/library_video_results.dart',
-      'lib/src/pages/player/player_queue_sidebar.dart',
-      'lib/src/widgets/library/library_tag_discovery_panel.dart',
-      'lib/src/pages/tags/tag_manager_page.dart',
-      'lib/src/pages/library/missing_relink_page.dart',
-    ];
+    const mandatoryRefactorOrder = <String>[];
     const legacyBudgets = <String, int>{
       'lib/src/pages/library/library_page.dart': 750,
-      'lib/src/pages/player/player_page.dart': 5226,
       'lib/src/widgets/library/library_widgets.dart': 962,
-      'lib/src/widgets/library/library_video_results.dart': 2808,
-      'lib/src/pages/player/player_queue_sidebar.dart': 1651,
-      'lib/src/widgets/library/library_tag_discovery_panel.dart': 1511,
-      'lib/src/pages/tags/tag_manager_page.dart': 1500,
-      'lib/src/pages/library/missing_relink_page.dart': 1142,
+      'lib/src/widgets/library/library_video_grid.dart': 662,
+      'lib/src/widgets/library/library_video_hover_preview.dart': 510,
+      'lib/src/pages/player/player_queue_list_item.dart': 598,
+      'lib/src/pages/tags/tag_manager_page.dart': 519,
+      'lib/src/pages/library/missing_relink_page.dart': 539,
       'lib/src/pages/player/player_settings_panel.dart': 985,
       'lib/src/widgets/app_theme_tokens.dart': 823,
       'lib/src/pages/player/player_control_slider.dart': 792,
@@ -1460,9 +1496,7 @@ void main() {
   test('playback queue only comes from an accepted stable-ID result snapshot',
       () {
     final page = _readLibraryPageCluster();
-    final player = File(
-      'lib/src/pages/player/player_page.dart',
-    ).readAsStringSync();
+    final player = _readPlayerPageCluster();
     final controller = File(
       'lib/src/features/library/application/'
       'library_playback_queue_controller.dart',
@@ -1508,9 +1542,7 @@ void main() {
   });
 
   test('player session owns stable-ID queue state outside presentation', () {
-    final page = File(
-      'lib/src/pages/player/player_page.dart',
-    ).readAsStringSync();
+    final page = _readPlayerPageCluster();
     final session = File(
       'lib/src/features/player/application/player_session_controller.dart',
     ).readAsStringSync();
@@ -1551,22 +1583,22 @@ void main() {
         reason: '播放器会话 owner 不得越过 UI、Store 或后端边界：$forbidden',
       );
     }
-    expect(page, contains('late final PlayerSessionController _playback'));
-    expect(page, contains('_playback = PlayerSessionController('));
+    expect(page, contains('late final PlayerSessionController playback'));
+    expect(page, contains('playback = PlayerSessionController('));
     expect(
       page,
       contains(
-        'acceptedSourceVideoIds: widget.queueSnapshot?.orderedVideoIds',
+        'acceptedSourceVideoIds: pageWidget.queueSnapshot?.orderedVideoIds',
       ),
     );
-    expect(page, contains('initialVideoId: widget.initialItem.videoId'));
+    expect(page, contains('initialVideoId: pageWidget.initialItem.videoId'));
     expect(page, contains('matchesChildTag: TagRules.matchesChildTag'));
-    expect(page, contains('sourcePlaylist: _sourcePlaylist'));
-    expect(page, contains('playingIndex: _index'));
-    expect(page, contains('selectedIndex: _selectedIndex'));
-    expect(page, contains('onChildTagSelected: _selectChildTag'));
-    expect(page, contains('onSelect: _select'));
-    expect(page, contains('onPlay: _jumpTo'));
+    expect(page, contains('sourcePlaylist: sourcePlaylist'));
+    expect(page, contains('playingIndex: index'));
+    expect(page, contains('selectedIndex: selectedIndex'));
+    expect(page, contains('onChildTagSelected: selectChildTag'));
+    expect(page, contains('onSelect: select'));
+    expect(page, contains('onPlay: jumpTo'));
     expect(
       compatibility,
       contains(
@@ -1579,9 +1611,7 @@ void main() {
 
   test('player open requests and backend events have pure lifecycle owners',
       () {
-    final page = File(
-      'lib/src/pages/player/player_page.dart',
-    ).readAsStringSync();
+    final page = _readPlayerPageCluster();
     final requests = File(
       'lib/src/features/player/application/'
       'player_open_request_controller.dart',
@@ -1614,9 +1644,8 @@ void main() {
     expect(events, isNot(contains("import 'package:flutter")));
     expect(events, isNot(contains('../services/')));
     expect(progress, contains('bool videoIsContinueWatching(VideoItem item)'));
-    expect(
-        page, contains('late final PlayerBackendEventBridge _backendEvents'));
-    expect(page, contains('cancelBackendEvents: _backendEvents.dispose'));
+    expect(page, contains('late final PlayerBackendEventBridge backendEvents'));
+    expect(page, contains('cancelBackendEvents: backendEvents.dispose'));
     expect(page, isNot(contains('StreamSubscription<bool>?')));
     expect(
       resources.indexOf('await _cancelBackendEvents();'),
@@ -1655,9 +1684,7 @@ void main() {
 
   test('player native resources and fullscreen have single lifecycle owners',
       () {
-    final page = File(
-      'lib/src/pages/player/player_page.dart',
-    ).readAsStringSync();
+    final page = _readPlayerPageCluster();
     final fullscreen = File(
       'lib/src/features/player/application/'
       'player_fullscreen_lifecycle_controller.dart',
@@ -1708,22 +1735,22 @@ void main() {
     expect(
       page,
       contains(
-        'late final PlayerResourceLifecycleCoordinator _playerResources',
+        'late final PlayerResourceLifecycleCoordinator playerResources',
       ),
     );
     expect(
       page,
       contains(
-        'late final PlayerFullscreenLifecycleController _windowFullscreen',
+        'late final PlayerFullscreenLifecycleController windowFullscreen',
       ),
     );
-    expect(page, contains('unawaited(_playerResources.release())'));
-    expect(page, isNot(contains('_playerService.dispose()')));
-    expect(page, contains('awaitReleased: () => _playerService.released'));
-    expect(page, isNot(contains('await _playerService.released')));
+    expect(page, contains('unawaited(playerResources.release())'));
+    expect(page, isNot(contains('playerService.dispose()')));
+    expect(page, contains('awaitReleased: () => playerService.released'));
+    expect(page, isNot(contains('await playerService.released')));
     expect(page, isNot(contains('textureId.addListener')));
     expect(page, isNot(contains('textureId.removeListener')));
-    expect(page, contains('await _windowFullscreen.toggle('));
+    expect(page, contains('await windowFullscreen.toggle('));
     expect(page, contains('canExecuteWindowCommand: () => mounted'));
     expect(
       page,
@@ -1733,9 +1760,7 @@ void main() {
 
   test('player diagnostics presentation only consumes snapshots and callbacks',
       () {
-    final page = File(
-      'lib/src/pages/player/player_page.dart',
-    ).readAsStringSync();
+    final page = _readPlayerPageCluster();
     final dialog = File(
       'lib/src/pages/player/player_diagnostics_dialog.dart',
     ).readAsStringSync();
@@ -1754,15 +1779,13 @@ void main() {
     expect(dialog, isNot(contains("import 'player_page.dart'")));
     expect(dialog, isNot(contains('PlayerPageState ')));
     expect(dialog, isNot(contains('PlayerService ')));
-    expect(page, contains('playingChanges: _playerService.playingChanges'));
+    expect(page, contains('playingChanges: playerService.playingChanges'));
     expect(page, contains('sample: buildDiagnosticsSnapshot'));
     expect(page, isNot(contains('playerPage: this')));
   });
 
   test('player control visibility and feedback timers have one pure owner', () {
-    final page = File(
-      'lib/src/pages/player/player_page.dart',
-    ).readAsStringSync();
+    final page = _readPlayerPageCluster();
     final controller = File(
       'lib/src/features/player/application/'
       'player_interaction_state_controller.dart',
@@ -1778,20 +1801,18 @@ void main() {
     expect(controller, isNot(contains('BuildContext ')));
     expect(controller, isNot(contains('FocusNode')));
     expect(page, contains('PlayerInteractionStateController<IconData>'));
-    expect(page, contains('_interaction.openSettings();'));
-    expect(page, contains('_interaction.closeSettings();'));
-    expect(page, contains('_interaction.dispose();'));
+    expect(page, contains('interaction.openSettings();'));
+    expect(page, contains('interaction.closeSettings();'));
+    expect(page, contains('interaction.dispose();'));
     expect(page, isNot(contains('Timer? _controlsHideTimer')));
     expect(page, isNot(contains('Timer? _shortcutFeedbackTimer')));
-    expect(page, contains('Timer? _fullscreenQueueHideTimer'));
+    expect(page, contains('Timer? fullscreenQueueHideTimer'));
     expect(page, contains("FocusNode(debugLabel: 'player-shortcuts')"));
   });
 
   test('player shortcut suspension and focus eligibility have one pure owner',
       () {
-    final page = File(
-      'lib/src/pages/player/player_page.dart',
-    ).readAsStringSync();
+    final page = _readPlayerPageCluster();
     final gate = File(
       'lib/src/features/player/application/'
       'player_shortcut_gate_controller.dart',
@@ -1803,12 +1824,11 @@ void main() {
     expect(gate, contains('bool canHandle('));
     expect(gate, contains('bool canRestoreFocus('));
     expect(gate, isNot(contains("import 'package:flutter")));
-    expect(
-        page, contains('final _shortcutGate = PlayerShortcutGateController'));
-    expect(page, contains('_shortcutGate.beginSuspension();'));
-    expect(page, contains('_shortcutGate.endSuspension();'));
-    expect(page, contains('_shortcutGate.canHandle('));
-    expect(page, contains('_shortcutGate.canRestoreFocus('));
+    expect(page, contains('final shortcutGate = PlayerShortcutGateController'));
+    expect(page, contains('shortcutGate.beginSuspension();'));
+    expect(page, contains('shortcutGate.endSuspension();'));
+    expect(page, contains('shortcutGate.canHandle('));
+    expect(page, contains('shortcutGate.canRestoreFocus('));
     expect(page, isNot(contains('var _shortcutSuspensionDepth')));
     expect(page, isNot(contains('var _editingManualTags')));
     expect(page, contains('FocusManager.instance.primaryFocus'));
@@ -2028,9 +2048,7 @@ void main() {
   });
 
   test('PlayerPage keeps hidden progress mounted before the full controls', () {
-    final source = File(
-      'lib/src/pages/player/player_page.dart',
-    ).readAsStringSync();
+    final source = _readPlayerPageCluster();
     final hiddenLayerIndex = source.indexOf(
       "key: const ValueKey('player.controls.hiddenProgress')",
     );
@@ -2048,25 +2066,23 @@ void main() {
     expect(fullControlsIndex, greaterThan(hiddenWidgetIndex));
     expect(
       source.substring(hiddenLayerIndex, fullControlsIndex),
-      contains('opacity: _controlsVisible ? 0 : 1'),
+      contains('opacity: controlsVisible ? 0 : 1'),
     );
   });
 
   test('PlayerPage gear keeps compression enhancement mounted and reachable',
       () {
-    final pageSource = File(
-      'lib/src/pages/player/player_page.dart',
-    ).readAsStringSync();
+    final pageSource = _readPlayerPageCluster();
     final panelSource = File(
       'lib/src/pages/player/player_settings_panel.dart',
     ).readAsStringSync();
 
     // 同时保护齿轮按钮、页面回调和三档入口，避免组件仍存在但从真实播放器孤立。
     expect(pageSource, contains("'player.settings'"));
-    expect(pageSource, contains('_showControlSettingsDialog()'));
+    expect(pageSource, contains('showControlSettingsDialog()'));
     expect(
       pageSource,
-      contains('compressionEnhancementMode: _compressionEnhancementMode'),
+      contains('compressionEnhancementMode: compressionEnhancementMode'),
     );
     expect(
       pageSource,
@@ -2081,7 +2097,7 @@ void main() {
       pageSource,
       isNot(contains('onNvidiaVideoHdrExperimentChanged:')),
     );
-    expect(pageSource, contains('_setCompressionEnhancementMode'));
+    expect(pageSource, contains('setCompressionEnhancementMode'));
     expect(
       panelSource,
       contains("ValueKey('player.settings.compression.open')"),
@@ -2261,9 +2277,7 @@ void main() {
     final panel = File(
       'lib/src/pages/player/player_settings_panel.dart',
     ).readAsStringSync();
-    final page = File(
-      'lib/src/pages/player/player_page.dart',
-    ).readAsStringSync();
+    final page = _readPlayerPageCluster();
     final autoPolicy = File(
       'lib/src/services/player/player_nvidia_video_auto_policy.dart',
     ).readAsStringSync();
@@ -2287,7 +2301,7 @@ void main() {
     expect(panel, isNot(contains('NVIDIA RTX Video HDR')));
     expect(page, contains('NVIDIA RTX 视频超分:'));
     expect(page, contains('NVIDIA RTX Video HDR:'));
-    expect(page, contains('_applyAutomaticNvidiaVideoEnhancement'));
+    expect(page, contains('applyAutomaticNvidiaVideoEnhancement'));
     expect(page, contains('NVIDIA 自动策略:'));
     expect(autoPolicy, contains('PlayerNvidiaVideoAutoPolicy'));
     expect(autoPolicy, contains('output.hdrSignalActive'));
@@ -2314,8 +2328,8 @@ void main() {
       backendSelection,
       contains("normalizedOverride == 'windows-native-hwnd'"),
     );
-    expect(page, contains('_suspendCpuEnhancementsForNvidia'));
-    expect(page, contains('_restoreCpuEnhancementsAfterNvidia'));
+    expect(page, contains('suspendCpuEnhancementsForNvidia'));
+    expect(page, contains('restoreCpuEnhancementsAfterNvidia'));
     expect(page, contains('NVIDIA 滤镜互斥处理:'));
     expect(baselineGate, contains("'playerBackend':"));
     expect(baselineGate, contains("'rendererPreference':"));
@@ -2625,8 +2639,7 @@ void main() {
 
   test('player stress fullscreen uses the production state machine directly',
       () {
-    final playerSource =
-        File('lib/src/pages/player/player_page.dart').readAsStringSync();
+    final playerSource = _readPlayerPageCluster();
     final stressSource = File(
       'integration_test/player_real_library_stress_test.dart',
     ).readAsStringSync();

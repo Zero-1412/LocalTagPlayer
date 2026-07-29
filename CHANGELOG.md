@@ -2,6 +2,18 @@
 
 ## 2026-07-29 · 启动渐进式整体架构重构
 
+- Architecture Baseline 提升到 `0.5.135`：用户指定的八个超长 presentation 文件全部
+  降到 1000 行以内；`player_page.dart` 5226→424，媒体结果、播放器队列、标签发现、
+  标签管理与 missing/relink 页面分别迁入职责单一的独立 Dart library。
+- 播放器拆分保留 `PlayerPageState`、`PlayerSessionController`、filtered queue、后端事件
+  和 native 资源唯一 owner；媒体库拆分保留筛选、扫描、缩略图队列、标签层级、稳定身份
+  与用户数据所有权。本批没有 schema、`FilterQuery`、`TagQueryService` 或缓存失效变更。
+- 行数合同清空 1000 行强制重构清单，继续执行 200 行最佳实践与 500 行警戒预算；同时
+  保持独立 library 门禁，未引入 `part`。旧交互清单与架构合同改为审查完整页面协作簇。
+- 完整 452 项测试通过、3 项 benchmark 跳过，`flutter analyze` 与 Windows Debug build
+  通过；正式 EXE 可见窗口截图无明显布局回归。播放器队列集成截图脚本因缺少固定 QA
+  fixture 在进入播放器前失败，精确人工复测路径记录于 `CURRENT_TASK.md`。
+
 - Architecture Baseline 提升到 `0.5.134`：`library_page.dart` 从 4293 行拆到 750 行，
   生命周期、扫描、导航、最近播放、查询、筛选、Route、播放和用户命令成为九个独立
   协调边界；设置状态 owner 与纯展示工作区同步拆开。全部新文件低于 500 行，页面退出

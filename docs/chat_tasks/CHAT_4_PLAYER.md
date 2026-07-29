@@ -1,3 +1,13 @@
+## 2026-07-29 播放器页面与队列千行治理
+
+- `player_page.dart` 5226→424，页面状态实现按打开请求、后端事件、传输、健康采样、
+  控制条、窗口 chrome、性能、filtered queue、对话框、文件动作、诊断、资源和视图拆为
+  独立 library；项目禁止 `part` 的架构合同继续通过。
+- `player_queue_sidebar.dart` 1651→399，标题、视口、条目与元数据成为独立展示组件；
+  来源队列、当前/选中索引、子标签、收藏、删除和返回媒体库状态仍由原 owner 管理。
+- 播放器架构、服务、重命名和页面挂载回归通过。真实队列截图脚本因固定 QA fixture
+  缺少 `qa.video.play.purple-grid` 在进入播放器前失败，未据此宣称真实点击完成。
+
 ## 2026-07-29 诊断快照与 presentation 解耦
 
 - `PlaybackDiagnosticsSnapshot` 迁入 player domain，保持匿名、不可变且不依赖 Flutter。
