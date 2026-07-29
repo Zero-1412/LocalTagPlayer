@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/core/playback_settings.dart';
+import 'package:local_tag_player/src/features/settings/presentation/playback_quality_settings_panel.dart';
 import 'package:local_tag_player/src/models/player_gpu_capabilities.dart';
-import 'package:local_tag_player/src/pages/library/library_page.dart';
 import 'package:local_tag_player/src/platform/platform_interfaces.dart';
 import 'package:local_tag_player/src/services/player/player_smooth_motion.dart';
 

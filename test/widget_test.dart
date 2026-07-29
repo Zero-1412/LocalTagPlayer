@@ -21,9 +21,12 @@ import 'package:local_tag_player/src/features/player/application/player_open_req
 import 'package:local_tag_player/src/features/player/application/player_session_controller.dart';
 import 'package:local_tag_player/src/features/player/application/player_fullscreen_lifecycle_controller.dart';
 import 'package:local_tag_player/src/features/player/domain/player_playback_progress.dart';
+import 'package:local_tag_player/src/features/settings/presentation/cache_failure_actions.dart';
 import 'package:local_tag_player/src/features/settings/presentation/cache_diagnostics_snapshot_view.dart';
-import 'package:local_tag_player/src/features/settings/presentation/playback_backend_dropdowns.dart';
 import 'package:local_tag_player/src/features/settings/presentation/data_backup_settings_workspace.dart';
+import 'package:local_tag_player/src/features/settings/presentation/delete_file_settings_panel.dart';
+import 'package:local_tag_player/src/features/settings/presentation/playback_backend_dropdowns.dart';
+import 'package:local_tag_player/src/features/settings/presentation/playback_quality_settings_panel.dart';
 import 'package:local_tag_player/src/features/settings/presentation/settings_landing_list.dart';
 import 'package:local_tag_player/src/features/settings/presentation/settings_workspace_theme.dart';
 import 'package:local_tag_player/src/features/update/domain/app_release.dart';

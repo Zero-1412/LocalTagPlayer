@@ -379,6 +379,19 @@
 - 下一步继续治理 `library_page.dart`，优先选择可独立挂载、可直接测试且不取得筛选、
   队列、扫描或用户数据所有权的 UI 一致性边界；仍按所有 1000+ presentation 文件的
   既定顺序推进。
+- 代码瘦身第四批：原始码流缓存卡、播放画质/流畅度面板、删除文件设置和缓存失败
+  状态/测试容器迁到 47/371/165/158 行的 settings presentation 叶节点；
+  `library_page.dart` 只降不升预算由 5391 行收紧到 4686 行。
+- 四个叶节点只接收 `PlaybackSettings` 快照、布尔状态和回调；设置 section、返回路径、
+  `PlaybackSettingsController`、缓存诊断/维护 controller、持久化、删除与失败补偿命令
+  仍由原页面 owner 管理。架构合同新增挂载和禁止依赖守卫。
+- 第四批验证：focused 架构/Widget/流畅度测试共 254 项、完整测试 444 项通过（3 项
+  benchmark 按设计跳过），`flutter analyze` 零问题，Windows Debug build 与 EXE 点击
+  启动存活检查通过。Computer Use 仍因原生管道缺失（os error 2）无法点击或截图；
+  人工复测路径为“设置 → 播放与解码 → 原始码流缓存 → 视频画质与增强（含 HDR 确认、
+  流畅度撤销）→ 删除文件危险提示 → 缩略图缓存失败动作及返回设置首页”。
+- 下一步继续盘点 `library_page.dart` 中不持有筛选、扫描、队列或用户数据的只读状态/
+  纯展示区域；任何需要迁移共享语义或命令 owner 的候选都停止并另立 Level 3 任务。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

@@ -365,9 +365,21 @@ void main() {
     final playbackBackendDropdownLines = File(
       'lib/src/features/settings/presentation/playback_backend_dropdowns.dart',
     ).readAsLinesSync().length;
+    final playbackStreamCacheLines = File(
+      'lib/src/features/settings/presentation/playback_stream_cache_card.dart',
+    ).readAsLinesSync().length;
+    final playbackQualityLines = File(
+      'lib/src/features/settings/presentation/playback_quality_settings_panel.dart',
+    ).readAsLinesSync().length;
+    final deleteFileSettingsLines = File(
+      'lib/src/features/settings/presentation/delete_file_settings_panel.dart',
+    ).readAsLinesSync().length;
+    final cacheFailureActionsLines = File(
+      'lib/src/features/settings/presentation/cache_failure_actions.dart',
+    ).readAsLinesSync().length;
 
     // 体积阈值随叶节点迁移继续下调；后续瘦身只能降低，禁止把代码塞回聚合文件。
-    expect(libraryLines, lessThanOrEqualTo(5391));
+    expect(libraryLines, lessThanOrEqualTo(4686));
     expect(playerLines, lessThanOrEqualTo(5226));
     expect(libraryWidgetLines, lessThanOrEqualTo(1917));
     expect(recentPlaybackLines, lessThanOrEqualTo(299));
@@ -381,6 +393,10 @@ void main() {
     expect(searchSurfaceLines, lessThanOrEqualTo(241));
     expect(filterStatusLines, lessThanOrEqualTo(464));
     expect(playbackBackendDropdownLines, lessThanOrEqualTo(367));
+    expect(playbackStreamCacheLines, lessThanOrEqualTo(47));
+    expect(playbackQualityLines, lessThanOrEqualTo(371));
+    expect(deleteFileSettingsLines, lessThanOrEqualTo(165));
+    expect(cacheFailureActionsLines, lessThanOrEqualTo(158));
   });
 
   test('presentation files obey 200 500 and 1000 line governance', () {
@@ -398,7 +414,7 @@ void main() {
       'lib/src/pages/library/missing_relink_page.dart',
     ];
     const legacyBudgets = <String, int>{
-      'lib/src/pages/library/library_page.dart': 5391,
+      'lib/src/pages/library/library_page.dart': 4686,
       'lib/src/pages/player/player_page.dart': 5226,
       'lib/src/widgets/library/library_widgets.dart': 1917,
       'lib/src/widgets/library/library_video_results.dart': 2808,
@@ -520,7 +536,7 @@ void main() {
     ).readAsStringSync();
     final settingsStateStart = library.indexOf('class _CacheSettingsPageState');
     final settingsStateEnd = library.indexOf(
-      'Widget playbackQualitySettingsSmokeHarness',
+      'class LibraryPage',
       settingsStateStart,
     );
     final settingsState =
@@ -562,6 +578,47 @@ void main() {
     expect(settingsState, isNot(contains('late PlaybackSettings _settings')));
     expect(settingsState, contains('DataBackupSettingsWorkspace('));
     expect(settingsState, contains('CacheDiagnosticsController<CacheStats>'));
+  });
+
+  test('settings display leaves only emit intents to the page owner', () {
+    final library =
+        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final leaves = <String, String>{
+      for (final path in <String>[
+        'lib/src/features/settings/presentation/playback_stream_cache_card.dart',
+        'lib/src/features/settings/presentation/playback_quality_settings_panel.dart',
+        'lib/src/features/settings/presentation/delete_file_settings_panel.dart',
+        'lib/src/features/settings/presentation/cache_failure_actions.dart',
+      ])
+        path: File(path).readAsStringSync(),
+    };
+
+    for (final mount in <String>[
+      'PlaybackStreamCacheCard(',
+      'PlaybackQualitySettingsPanel(',
+      'DeleteFileSettingsPanel(',
+      'CacheFailureActions(',
+    ]) {
+      expect(library, contains(mount), reason: '设置页必须继续挂载展示叶节点：$mount');
+    }
+    for (final entry in leaves.entries) {
+      for (final forbidden in <String>[
+        'PlaybackSettingsController',
+        'CacheDiagnosticsController',
+        'LibraryApplicationFacade',
+        'ThumbnailService ',
+        'TagQueryService',
+        'FilterQuery',
+        'PlayerPage',
+        'Navigator.push',
+      ]) {
+        expect(
+          entry.value,
+          isNot(contains(forbidden)),
+          reason: '${entry.key} 不得取得页面状态或业务命令所有权：$forbidden',
+        );
+      }
+    }
   });
 
   test('data backup settings are a bounded vertical slice', () {
@@ -675,8 +732,13 @@ void main() {
       'lib/src/features/settings/presentation/'
       'cache_diagnostics_snapshot_view.dart',
     ).readAsStringSync();
+    final failureActions = File(
+      'lib/src/features/settings/presentation/cache_failure_actions.dart',
+    ).readAsStringSync();
 
-    expect(library, contains('CacheDiagnosticsSnapshotView('));
+    expect(library, contains('CacheDiagnosticsLoadStateView('));
+    expect(library, contains('CacheFailureActions('));
+    expect(failureActions, contains('CacheDiagnosticsSnapshotView('));
     expect(library, isNot(contains('class _CacheDiagnosticsHeader')));
     expect(snapshot, contains('CacheDiagnosticsHeader('));
     expect(header,
@@ -693,6 +755,9 @@ void main() {
       () {
     final library =
         File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final failureActions = File(
+      'lib/src/features/settings/presentation/cache_failure_actions.dart',
+    ).readAsStringSync();
     final controller = File(
       'lib/src/features/settings/application/'
       'cache_diagnostics_controller.dart',
@@ -770,7 +835,10 @@ void main() {
     expect(library, contains('_cacheMaintenanceController.retry('));
     expect(library, contains('_cacheMaintenanceController.clear('));
     expect(library, contains('CacheDiagnosticsLoadStateView('));
-    expect(library, contains('class _CacheFailureActions'));
+    expect(failureActions, contains('class CacheFailureActions'));
+    expect(failureActions, isNot(contains('ThumbnailService ')));
+    expect(failureActions, isNot(contains('_retryFailedThumbnails')));
+    expect(failureActions, isNot(contains('_clearThumbnailFailureMarkers')));
     expect(library, contains('_retryFailedThumbnails(stats)'));
     expect(library, contains('_clearThumbnailFailureMarkers(stats)'));
   });
