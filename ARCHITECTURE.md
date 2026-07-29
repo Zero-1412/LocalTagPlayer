@@ -2,12 +2,18 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.133` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.134` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
 实例化，应用壳、媒体库与关于页只依赖 `AppUpdateService`。详细审计、目标依赖方向和
 Phase 0-6 门禁见 `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
+
+代码体积治理把 `LibraryPage` 收敛为 750 行 Route/Widget 编排外壳。生命周期、扫描、
+导航、最近播放、查询、筛选、Route、播放和用户命令分别由独立 mixin 协调，所有状态与
+服务仍引用同一个页面运行时，未创建第二个可写 owner。设置页保留 controller、缓存维护
+和业务命令 owner，纯展示工作区只接收快照与回调。架构合同要求外壳低于 1000 行、所有
+新协调文件低于 500 行；schema、标签查询、filtered queue、缓存队列与用户数据不变。
 
 Phase 1.5 在 `features/library/domain` 建立纯 Dart 的查询指纹、结果/计数 epoch 和不可变
 结果/播放队列快照。媒体库过滤与延后计数发布使用同一版本身份；排序改变结果 epoch，

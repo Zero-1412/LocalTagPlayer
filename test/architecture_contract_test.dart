@@ -16,6 +16,32 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/**
+ * 读取媒体库页面的完整协作边界。
+ *
+ * 页面外壳低于千行后，生命周期、查询、筛选、导航、播放和命令仍属于同一个 Route
+ * 协作边界。架构契约需要检查整个边界，避免把 owner 或受保护行为藏进拆分文件。
+ */
+String _readLibraryPageCluster() {
+  const paths = <String>[
+    'lib/src/pages/library/cache_settings_page.dart',
+    'lib/src/pages/library/cache_settings_workspace.dart',
+    'lib/src/pages/library/library_page.dart',
+    'lib/src/pages/library/library_page_runtime.dart',
+    'lib/src/pages/library/library_page_state_host.dart',
+    'lib/src/pages/library/library_page_lifecycle_mixin.dart',
+    'lib/src/pages/library/library_page_scan_mixin.dart',
+    'lib/src/pages/library/library_page_navigation_mixin.dart',
+    'lib/src/pages/library/library_page_recent_mixin.dart',
+    'lib/src/pages/library/library_page_query_mixin.dart',
+    'lib/src/pages/library/library_page_filter_mixin.dart',
+    'lib/src/pages/library/library_page_routes_mixin.dart',
+    'lib/src/pages/library/library_page_playback_mixin.dart',
+    'lib/src/pages/library/library_page_commands_mixin.dart',
+  ];
+  return paths.map((path) => File(path).readAsStringSync()).join('\n');
+}
+
 class _FakeLibraryRepository implements LibraryRepository {
   @override
   final List<String> roots = <String>['root'];
@@ -429,7 +455,7 @@ void main() {
     ).readAsLinesSync().length;
 
     // 体积阈值随叶节点迁移继续下调；后续瘦身只能降低，禁止把代码塞回聚合文件。
-    expect(libraryLines, lessThanOrEqualTo(4293));
+    expect(libraryLines, lessThanOrEqualTo(750));
     expect(playerLines, lessThanOrEqualTo(5226));
     expect(libraryWidgetLines, lessThanOrEqualTo(962));
     expect(recentPlaybackLines, lessThanOrEqualTo(299));
@@ -464,11 +490,72 @@ void main() {
     expect(libraryConfirmationDialogsLines, lessThanOrEqualTo(74));
   });
 
+  test('LibraryPage shell stays below 1000 while coordinators stay below 500',
+      () {
+    final shell =
+        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    const coordinatorPaths = <String>[
+      'lib/src/pages/library/cache_settings_page.dart',
+      'lib/src/pages/library/cache_settings_workspace.dart',
+      'lib/src/pages/library/library_page_commands_mixin.dart',
+      'lib/src/pages/library/library_page_filter_mixin.dart',
+      'lib/src/pages/library/library_page_lifecycle_mixin.dart',
+      'lib/src/pages/library/library_page_navigation_mixin.dart',
+      'lib/src/pages/library/library_page_playback_mixin.dart',
+      'lib/src/pages/library/library_page_query_mixin.dart',
+      'lib/src/pages/library/library_page_recent_mixin.dart',
+      'lib/src/pages/library/library_page_routes_mixin.dart',
+      'lib/src/pages/library/library_page_runtime.dart',
+      'lib/src/pages/library/library_page_scan_mixin.dart',
+      'lib/src/pages/library/library_page_state_host.dart',
+    ];
+
+    // 外壳只保留 Route 注入与 Widget 编排；迁出的协调域必须各自低于警戒线。
+    expect(shell.split('\n').length, lessThanOrEqualTo(1000));
+    for (final path in coordinatorPaths) {
+      expect(
+        File(path).readAsLinesSync().length,
+        lessThanOrEqualTo(500),
+        reason: '$path 超过 500 行警戒线，禁止形成新的聚合文件',
+      );
+    }
+    for (final mixinName in <String>[
+      'LibraryPageLifecycleMixin',
+      'LibraryPageScanMixin',
+      'LibraryPageNavigationMixin',
+      'LibraryPageRecentMixin',
+      'LibraryPageQueryMixin',
+      'LibraryPageFilterMixin',
+      'LibraryPageRoutesMixin',
+      'LibraryPagePlaybackMixin',
+      'LibraryPageCommandsMixin',
+    ]) {
+      expect(shell, contains(mixinName));
+    }
+
+    final settingsWorkspace = File(
+      'lib/src/pages/library/cache_settings_workspace.dart',
+    ).readAsStringSync();
+    for (final forbiddenOwner in <String>[
+      'PlaybackSettingsController',
+      'CacheDiagnosticsController',
+      'LibraryApplicationFacade',
+      'ThumbnailService',
+      'Navigator.',
+      'setState(',
+    ]) {
+      expect(
+        settingsWorkspace,
+        isNot(contains(forbiddenOwner)),
+        reason: '设置展示工作区只能接收快照与回调，不得接管 $forbiddenOwner',
+      );
+    }
+  });
+
   test('library widget leaves keep presentation ownership at the caller', () {
     final aggregate =
         File('lib/src/widgets/library/library_widgets.dart').readAsStringSync();
-    final libraryPage =
-        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final libraryPage = _readLibraryPageCluster();
     final discoveryPanel = File(
       'lib/src/widgets/library/library_tag_discovery_panel.dart',
     ).readAsStringSync();
@@ -542,8 +629,7 @@ void main() {
 
   test('library dialogs return intents without taking page command ownership',
       () {
-    final page =
-        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final page = _readLibraryPageCluster();
     final addTagDialog = File(
       'lib/src/widgets/library/library_add_tag_dialog.dart',
     ).readAsStringSync();
@@ -585,7 +671,6 @@ void main() {
     const warningLines = 500;
     const refactorLines = 1000;
     const mandatoryRefactorOrder = <String>[
-      'lib/src/pages/library/library_page.dart',
       'lib/src/pages/player/player_page.dart',
       'lib/src/widgets/library/library_video_results.dart',
       'lib/src/pages/player/player_queue_sidebar.dart',
@@ -594,7 +679,7 @@ void main() {
       'lib/src/pages/library/missing_relink_page.dart',
     ];
     const legacyBudgets = <String, int>{
-      'lib/src/pages/library/library_page.dart': 4293,
+      'lib/src/pages/library/library_page.dart': 750,
       'lib/src/pages/player/player_page.dart': 5226,
       'lib/src/widgets/library/library_widgets.dart': 962,
       'lib/src/widgets/library/library_video_results.dart': 2808,
@@ -675,8 +760,7 @@ void main() {
 
   test('settings landing is a stateless feature leaf with preserved entry keys',
       () {
-    final library =
-        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final library = _readLibraryPageCluster();
     final landing = File(
       'lib/src/features/settings/presentation/settings_landing_list.dart',
     ).readAsStringSync();
@@ -704,8 +788,7 @@ void main() {
 
   test('ordinary playback settings use one UI-independent consistency owner',
       () {
-    final library =
-        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final library = _readLibraryPageCluster();
     final controller = File(
       'lib/src/features/settings/application/'
       'playback_settings_controller.dart',
@@ -761,8 +844,7 @@ void main() {
   });
 
   test('settings display leaves only emit intents to the page owner', () {
-    final library =
-        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final library = _readLibraryPageCluster();
     final leaves = <String, String>{
       for (final path in <String>[
         'lib/src/features/settings/presentation/playback_stream_cache_card.dart',
@@ -817,8 +899,7 @@ void main() {
   });
 
   test('data backup settings are a bounded vertical slice', () {
-    final library =
-        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final library = _readLibraryPageCluster();
     final workspace = File(
       'lib/src/features/settings/presentation/'
       'data_backup_settings_workspace.dart',
@@ -910,16 +991,15 @@ void main() {
       library,
       contains('await store.setDataBackupEnabled(previous.enabled);'),
     );
-    expect(library, contains('await _fileSystem.pickSavePath('));
+    expect(library, contains('await fileSystem.pickSavePath('));
     expect(
       library,
-      contains('await _fileSystem.writeBytes(path, bytes, flush: true);'),
+      contains('await fileSystem.writeBytes(path, bytes, flush: true);'),
     );
   });
 
   test('cache diagnostics header is a read-only settings feature leaf', () {
-    final library =
-        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final library = _readLibraryPageCluster();
     final settingsCard = File(
       'lib/src/features/settings/presentation/'
       'cache_diagnostics_settings_card.dart',
@@ -953,8 +1033,7 @@ void main() {
 
   test('cache diagnostics snapshot is read-only while commands stay mounted',
       () {
-    final library =
-        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final library = _readLibraryPageCluster();
     final failureActions = File(
       'lib/src/features/settings/presentation/cache_failure_actions.dart',
     ).readAsStringSync();
@@ -1085,9 +1164,7 @@ void main() {
 
   test('LibraryPage depends on page services instead of the composition root',
       () {
-    final source = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final source = _readLibraryPageCluster();
 
     expect(source, isNot(contains('local_tag_player_dependencies.dart')));
     expect(source, isNot(contains('LocalTagPlayerDependencies')));
@@ -1106,9 +1183,7 @@ void main() {
     final filterSource = File(
       'lib/src/services/tags/tag_query_service.dart',
     ).readAsStringSync();
-    final pageSource = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final pageSource = _readLibraryPageCluster();
 
     expect(source, isNot(contains('package:flutter/')));
     expect(source, isNot(contains('dart:io')));
@@ -1126,10 +1201,11 @@ void main() {
     expect(filterSource, contains('LibraryResultEpoch'));
     expect(filterSource, isNot(contains('_querySignature')));
     expect(pageSource, contains('LibraryCountEpoch.fromQuery'));
-    expect(pageSource, contains('final _libraryRevisionTracker'));
+    expect(pageSource,
+        contains('final LibraryRevisionTracker libraryRevisionTracker'));
     expect(
       pageSource,
-      contains('tagDefinitionRevision: _tagDefinitionRevision'),
+      contains('tagDefinitionRevision: runtime.tagDefinitionRevision'),
     );
     expect(pageSource, isNot(contains('_libraryDataRevision += 1')));
     expect(
@@ -1142,9 +1218,7 @@ void main() {
 
   test('library selection and view preferences are bounded application owners',
       () {
-    final page = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final page = _readLibraryPageCluster();
     final selection = File(
       'lib/src/features/library/application/'
       'library_selection_controller.dart',
@@ -1175,8 +1249,11 @@ void main() {
       expect(selection, isNot(contains(forbidden)));
       expect(viewPreferences, isNot(contains(forbidden)));
     }
-    expect(page, contains('final _librarySelection ='));
-    expect(page, contains('final _viewPreferences ='));
+    expect(page, contains('final LibrarySelectionController librarySelection'));
+    expect(
+      page,
+      contains('final LibraryViewPreferencesController viewPreferences'),
+    );
     expect(page, isNot(contains('var _librarySelectionMode =')));
     expect(page, isNot(contains('final _selectedLibraryVideoIds =')));
     expect(page, isNot(contains('var _denseResultGrid =')));
@@ -1191,9 +1268,7 @@ void main() {
   test(
       'library result sources and local history have one pure application owner',
       () {
-    final page = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final page = _readLibraryPageCluster();
     final controller = File(
       'lib/src/features/library/application/'
       'library_source_navigation_controller.dart',
@@ -1233,47 +1308,46 @@ void main() {
     }
     expect(
       page,
-      contains('final _sourceNavigation = LibrarySourceNavigationController('),
+      contains('final LibrarySourceNavigationController sourceNavigation ='),
     );
     expect(page, contains('normalizePath: TagRules.normalizeRootPath'));
     expect(page, contains('pathKey: TagRules.pathKey'));
-    expect(page, contains('_sourceNavigation.showLibraryResults()'));
-    expect(page, contains('_sourceNavigation.resetToLibrary()'));
-    expect(page, contains('_sourceNavigation.showRecent()'));
-    expect(page, contains('_sourceNavigation.showFavorites()'));
-    expect(page, contains('_sourceNavigation.showLocalRoot(rootPath)'));
-    expect(page, contains('_sourceNavigation.openLocalFolder(folderPath)'));
-    expect(page, contains('_sourceNavigation.leaveRemovedRoot(root)'));
+    expect(page, contains('runtime.sourceNavigation.showLibraryResults()'));
+    expect(page, contains('runtime.sourceNavigation.resetToLibrary()'));
+    expect(page, contains('runtime.sourceNavigation.showRecent()'));
+    expect(page, contains('runtime.sourceNavigation.showFavorites()'));
+    expect(page, contains('runtime.sourceNavigation.showLocalRoot(rootPath)'));
+    expect(
+        page, contains('runtime.sourceNavigation.openLocalFolder(folderPath)'));
+    expect(page, contains('runtime.sourceNavigation.leaveRemovedRoot(root)'));
     expect(page, isNot(contains('enum _LibraryResultMode')));
     expect(page, isNot(contains('var _resultMode =')));
     expect(page, isNot(contains('String? _localLibraryPath;')));
     expect(page, isNot(contains('final _localLibraryBackStack =')));
     // 页面仍负责入口与复合筛选清理，controller 不吞掉可达性或标签语义。
-    expect(page, contains('onShowAllLibrary: _showAllLibraryVideos'));
-    expect(page, contains('onFavoritesToggle: _showFavoriteVideos'));
+    expect(page, contains('onShowAllLibrary: showAllLibraryVideos'));
+    expect(page, contains('onFavoritesToggle: showFavoriteVideos'));
     expect(
       page,
-      contains('onOpenRecentPlayback: _showRecentPlaybackVideos'),
+      contains('onOpenRecentPlayback: showRecentPlaybackVideos'),
     );
-    expect(page, contains('onOpenLocalLibraryRoot: _showLocalLibraryPath'));
-    expect(page, contains('onBack: _goBackLocalLibraryPath'));
-    expect(page, contains('onOpenFolder: _openLocalLibraryFolder'));
+    expect(page, contains('onOpenLocalLibraryRoot: showLocalLibraryPath'));
+    expect(page, contains('onBack: goBackLocalLibraryPath'));
+    expect(page, contains('onOpenFolder: openLocalLibraryFolder'));
   });
 
   test('library sorting is a pure owner and never re-runs filter or counts',
       () {
-    final page = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final page = _readLibraryPageCluster();
     final controller = File(
       'lib/src/features/library/application/library_sort_controller.dart',
     ).readAsStringSync();
     final domain = File(
       'lib/src/features/library/domain/library_sorting.dart',
     ).readAsStringSync();
-    final applyStart = page.indexOf('void _applySortChange({');
+    final applyStart = page.indexOf('void applySortChange({');
     final applyEnd = page.indexOf(
-      'void _setResultView(bool dense)',
+      'void setResultView(bool dense)',
       applyStart,
     );
     final applySort = page.substring(applyStart, applyEnd);
@@ -1282,8 +1356,8 @@ void main() {
     expect(controller, contains('String get fingerprint'));
     expect(controller, contains('List<VideoItem> sort('));
     expect(domain, contains('List<VideoItem> sortedLibraryVideos('));
-    expect(page, contains('final _sortController = LibrarySortController()'));
-    expect(page, contains('sortVideos: _sortController.sort'));
+    expect(page, contains('final LibrarySortController sortController'));
+    expect(page, contains('sortVideos: runtime.sortController.sort'));
     expect(page, isNot(contains('var _sortMode =')));
     expect(page, isNot(contains('var _sortDirection =')));
     for (final forbidden in <String>[
@@ -1303,15 +1377,13 @@ void main() {
     expect(applySort, isNot(contains('_scheduleFilterRefresh(')));
     expect(applySort, isNot(contains('.resultCounts(')));
     expect(applySort, isNot(contains('LibraryQueueSnapshot(')));
-    expect(applySort, contains('_sortController.sort'));
+    expect(applySort, contains('runtime.sortController.sort'));
     expect(applySort, contains('saveSortPreferences'));
   });
 
   test('library query and facet counts have independent latest-only owners',
       () {
-    final page = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final page = _readLibraryPageCluster();
     final query = File(
       'lib/src/features/library/application/library_query_controller.dart',
     ).readAsStringSync();
@@ -1319,9 +1391,10 @@ void main() {
       'lib/src/features/library/application/'
       'library_facet_count_controller.dart',
     ).readAsStringSync();
-    final refreshStart = page.indexOf('void _scheduleFilterRefresh({');
+    final refreshStart =
+        page.indexOf('@override\n  void scheduleFilterRefresh({');
     final refreshEnd = page.indexOf(
-      'LibraryResultEpoch _resultEpoch',
+      'LibraryResultEpoch resultEpoch',
       refreshStart,
     );
     final refresh = page.substring(refreshStart, refreshEnd);
@@ -1360,8 +1433,11 @@ void main() {
         expect(source, isNot(contains(forbidden)));
       }
     }
-    expect(page, contains('final _queryController ='));
-    expect(page, contains('final _facetCountController ='));
+    expect(page, contains('final LibraryQueryController queryController'));
+    expect(
+      page,
+      contains('final LibraryFacetCountController facetCountController'),
+    );
     expect(page, isNot(contains('final _filterStateSource =')));
     expect(page, isNot(contains('final _countRefreshCoordinator =')));
     expect(page, isNot(contains('FilterState? _filterState;')));
@@ -1371,19 +1447,19 @@ void main() {
       isNot(contains('Map<String, int> _visibleResultCounts =')),
     );
     expect(page, isNot(contains('Map<String, int> _stableTagCounts =')));
-    expect(refresh, contains('_queryController.schedule('));
-    expect(refresh, contains('_facetCountController.scheduleVisible('));
+    expect(refresh, contains('runtime.queryController.schedule('));
+    expect(refresh, contains('runtime.facetCountController.scheduleVisible('));
     expect(
-      refresh.indexOf('_queryController.schedule('),
-      lessThan(refresh.indexOf('_facetCountController.scheduleVisible(')),
+      refresh.indexOf('runtime.queryController.schedule('),
+      lessThan(
+        refresh.indexOf('runtime.facetCountController.scheduleVisible('),
+      ),
     );
   });
 
   test('playback queue only comes from an accepted stable-ID result snapshot',
       () {
-    final page = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final page = _readLibraryPageCluster();
     final player = File(
       'lib/src/pages/player/player_page.dart',
     ).readAsStringSync();
@@ -1394,9 +1470,9 @@ void main() {
     final binding = File(
       'lib/src/features/library/presentation/library_queue_title.dart',
     ).readAsStringSync();
-    final openStart = page.indexOf('Future<void> _openVideo(');
+    final openStart = page.indexOf('Future<void> openVideo(');
     final openEnd = page.indexOf(
-      'Future<MediaDetails> _probeSelectedVideoBeforePlayback(',
+      'Future<MediaDetails> probeSelectedVideoBeforePlayback(',
       openStart,
     );
     final openFlow = page.substring(openStart, openEnd);
@@ -1417,7 +1493,10 @@ void main() {
     expect(binding, isNot(contains('LibraryStore')));
     expect(binding, isNot(contains('TagQueryService')));
     expect(page, contains('bindDisplayedPlaybackResult('));
-    expect(page, contains('_playbackQueueController.prepareSelection('));
+    expect(
+      page,
+      contains('runtime.playbackQueueController.prepareSelection('),
+    );
     expect(page, contains('queueSnapshot: preparedQueue.snapshot'));
     expect(page, isNot(contains('onOpen: _openVideo')));
     expect(page, isNot(contains('onOpenVideo: _openVideo')));
@@ -1519,9 +1598,7 @@ void main() {
     final compatibility = File(
       'lib/src/pages/player/player_open_request_controller.dart',
     ).readAsStringSync();
-    final libraryPage = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final libraryPage = _readLibraryPageCluster();
     final recentPlayback = File(
       'lib/src/widgets/library/library_recent_playback_view.dart',
     ).readAsStringSync();
@@ -1739,9 +1816,7 @@ void main() {
   });
 
   test('scan and import lifecycle has one latest-only application owner', () {
-    final page = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final page = _readLibraryPageCluster();
     final controller = File(
       'lib/src/features/library/application/'
       'library_scan_lifecycle_controller.dart',
@@ -1779,25 +1854,26 @@ void main() {
     expect(
         page, contains('LibraryScanLifecycleController<MediaDetailsProgress>'));
     expect(page, contains('beginPathImportInspection()'));
-    expect(page, contains('_scanLifecycleController.run('));
-    expect(page, contains('_scanLifecycleController.toggleScanPaused('));
-    expect(page, contains('_scanLifecycleController.cancelScan('));
+    expect(page, contains('runtime.scanLifecycleController.run('));
+    expect(
+      page,
+      contains('runtime.scanLifecycleController.toggleScanPaused('),
+    );
+    expect(page, contains('runtime.scanLifecycleController.cancelScan('));
     expect(page, contains('publishPlaybackPause('));
     expect(page, contains('publishMediaImportProgress('));
     expect(page, isNot(contains('var _isScanning =')));
     expect(page, isNot(contains('var _isCancellingScan =')));
     expect(page, isNot(contains('LibraryScanProgress? _scanProgress;')));
     expect(page, contains('LibraryImportDropRegion('));
-    expect(page, contains('Future<void> _pickFolder()'));
-    expect(page, contains('Future<void> _pickVideoFiles()'));
-    expect(page, contains('Future<void> _rescan()'));
+    expect(page, contains('Future<void> pickFolder()'));
+    expect(page, contains('Future<void> pickVideoFiles()'));
+    expect(page, contains('Future<void> rescan()'));
     expect(page, contains('setPaused: store.setScanPaused'));
   });
 
   test('library file actions are explicit UI-independent commands', () {
-    final page = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final page = _readLibraryPageCluster();
     final executor = File(
       'lib/src/features/library/application/'
       'library_file_command_executor.dart',
@@ -1826,10 +1902,10 @@ void main() {
     expect(executor, isNot(contains('Navigator.')));
     expect(executor, isNot(contains('ScaffoldMessenger')));
     expect(page, contains('const LibraryFileCommandExecutor()'));
-    expect(page, contains('_fileCommandExecutor.reveal('));
-    expect(page, contains('_fileCommandExecutor.rename('));
-    expect(page, contains('_fileCommandExecutor.delete('));
-    expect(page, contains('_fileCommandExecutor.deleteAll('));
+    expect(page, contains('runtime.fileCommandExecutor.reveal('));
+    expect(page, contains('runtime.fileCommandExecutor.rename('));
+    expect(page, contains('runtime.fileCommandExecutor.delete('));
+    expect(page, contains('runtime.fileCommandExecutor.deleteAll('));
     expect(page, contains('showPlayerDeleteConfirmationDialog('));
     expect(page, contains('showBatchVideoDeleteConfirmationDialog('));
     expect(deleteDialog, contains("ValueKey('deleteDialog.moveToTrash')"));
@@ -1837,9 +1913,7 @@ void main() {
   });
 
   test('manual tag replacement is an explicit compensating command', () {
-    final page = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final page = _readLibraryPageCluster();
     final executor = File(
       'lib/src/features/library/application/'
       'library_manual_tag_command_executor.dart',
@@ -1867,7 +1941,7 @@ void main() {
     expect(executor, isNot(contains('TagQueryService')));
     expect(executor, isNot(contains('Navigator.')));
     expect(page, contains('const LibraryManualTagCommandExecutor()'));
-    expect(page, contains('_manualTagCommandExecutor.replace('));
+    expect(page, contains('runtime.manualTagCommandExecutor.replace('));
     expect(page, contains('ReplaceVideoManualTagsCommand('));
     expect(page, contains('lockedTags: lockedTags'));
     expect(page, contains('TagEditorDialog('));
@@ -1885,9 +1959,7 @@ void main() {
     final page = File(
       'lib/src/pages/library/missing_relink_page.dart',
     ).readAsStringSync();
-    final libraryPage = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final libraryPage = _readLibraryPageCluster();
     final executor = File(
       'lib/src/features/library/application/'
       'library_missing_relink_command_executor.dart',
@@ -1920,9 +1992,7 @@ void main() {
 
   test('continue watching commands use stable identity outside LibraryPage',
       () {
-    final page = File(
-      'lib/src/pages/library/library_page.dart',
-    ).readAsStringSync();
+    final page = _readLibraryPageCluster();
     final widgets = File(
       'lib/src/widgets/library/library_recent_playback_view.dart',
     ).readAsStringSync();
@@ -1945,9 +2015,12 @@ void main() {
     expect(executor, isNot(contains('LibraryStore')));
     expect(executor, isNot(contains('BuildContext context')));
     expect(executor, isNot(contains('ScaffoldMessenger')));
-    expect(page, contains('_continueWatchingCommands.clear('));
-    expect(page, contains('_continueWatchingCommands.undo('));
-    expect(page, contains('_recentPlaybackSelection.selectedVideoIds'));
+    expect(page, contains('runtime.continueWatchingCommands.clear('));
+    expect(page, contains('runtime.continueWatchingCommands.undo('));
+    expect(
+      page,
+      contains('runtime.recentPlaybackSelection.selectedVideoIds'),
+    );
     expect(page, isNot(contains('_selectedRecentPathKeys')));
     expect(page, isNot(contains('class ContinueWatchingClearSnapshot')));
     expect(widgets, contains('selectedVideoIds.contains(item.videoId)'));

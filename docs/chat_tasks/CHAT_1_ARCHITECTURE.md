@@ -2,7 +2,10 @@
 
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
-- 架构基线提升到 `0.5.133`；完整审计和 Phase 0-6 路线记录在
+- 架构基线提升到 `0.5.134`；`library_page.dart` 从 4293 行降到 750 行，页面外壳、
+  九个协调 mixin、共享运行时/host 以及设置状态/展示边界均受 1000/500 行门禁保护。
+  没有迁移筛选、扫描、队列、缓存或用户数据的业务 owner。
+- 前一批架构基线 `0.5.133` 的完整审计和 Phase 0-6 路线记录在
   `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 - `main.dart`、bootstrap 组合根与 Flutter 应用壳已经分离，具体实现选择仍只发生在
   composition。

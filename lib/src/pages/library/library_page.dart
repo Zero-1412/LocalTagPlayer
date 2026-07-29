@@ -1,89 +1,41 @@
 import 'dart:async';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path/path.dart' as p;
 import '../../core/layout_size.dart';
-import '../../core/data_backup_settings.dart';
-import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
 import '../../features/update/domain/app_update_service.dart';
-import '../../features/update/presentation/about_settings_page.dart';
-import '../../features/settings/application/cache_diagnostics_controller.dart';
-import '../../features/settings/application/cache_diagnostics_maintenance_controller.dart';
-import '../../features/settings/application/playback_settings_controller.dart';
-import '../../features/settings/presentation/cache_diagnostics_settings_card.dart';
-import '../../features/settings/presentation/cache_diagnostics_snapshot_view.dart';
-import '../../features/settings/presentation/data_backup_settings_workspace.dart';
-import '../../features/settings/presentation/delete_file_settings_panel.dart';
-import '../../features/settings/presentation/playback_and_decoding_settings_card.dart';
-import '../../features/settings/presentation/player_interaction_settings_panels.dart';
-import '../../features/settings/presentation/playback_quality_settings_panel.dart';
-import '../../features/settings/presentation/playback_stream_cache_card.dart';
-import '../../features/settings/presentation/settings_landing_list.dart';
-import '../../features/settings/presentation/settings_workspace_scaffold.dart';
-import '../../features/settings/presentation/settings_workspace_theme.dart';
-import '../../features/library/application/library_continue_watching_command_executor.dart';
-import '../../features/library/application/library_facet_count_controller.dart';
-import '../../features/library/application/library_file_command_executor.dart';
-import '../../features/library/application/library_manual_tag_command_executor.dart';
-import '../../features/library/application/library_playback_queue_controller.dart';
-import '../../features/library/application/library_query_controller.dart';
-import '../../features/library/application/library_revision_tracker.dart';
-import '../../features/library/application/library_scan_lifecycle_controller.dart';
-import '../../features/library/application/library_selection_controller.dart';
 import '../../features/library/application/library_source_navigation_controller.dart';
-import '../../features/library/application/library_sort_controller.dart';
-import '../../features/library/application/library_view_preferences_controller.dart';
-import '../../features/library/domain/library_query_snapshot.dart';
 import '../../features/library/presentation/library_queue_title.dart';
 import '../../features/library/presentation/library_scan_progress_labels.dart';
-import '../../features/player/application/player_fullscreen_lifecycle_controller.dart';
-import '../../models/library_scan_models.dart';
-import '../../models/data_backup_models.dart';
-import '../../models/library_sort.dart';
-import '../../models/media_details.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
 import '../../platform/platform_interfaces.dart';
-import '../../services/library/library_application_facade.dart';
-import '../../services/library/library_load_diagnostics.dart';
 import '../../services/library/library_page_application_service.dart';
-import '../../services/library/library_scan_ui_diagnostics.dart';
-import '../../services/library/library_scan_playback_gate.dart';
-import '../../services/library/library_stress_control.dart';
-import '../../services/media/media_details_service.dart';
-import '../../services/media/thumbnail_service.dart';
-import '../../services/player/playback_snapshot_write_queue.dart';
-import '../../services/player/player_hardware_compatibility.dart';
-import '../../services/player/player_memory_diagnostics.dart';
 import '../../services/player/player_service.dart';
-import '../../services/tags/tag_query_service.dart';
 import '../../widgets/app_theme_tokens.dart';
-import '../../widgets/library/library_add_tag_dialog.dart';
-import '../../widgets/library/library_confirmation_dialogs.dart';
 import '../../widgets/library/library_local_view.dart';
-import '../../widgets/library/library_folder_tag_discovery.dart';
 import '../../widgets/library/library_panel_content_transition.dart';
 import '../../widgets/library/library_sidebar.dart';
 import '../../widgets/library/library_smoke_keys.dart';
 import '../../widgets/library/library_tag_discovery_panel.dart';
 import '../../widgets/library/library_tag_display_helpers.dart';
-import '../../widgets/library/library_tag_editor_dialog.dart';
 import '../../widgets/library/library_video_results.dart';
 import '../../widgets/library/library_widgets.dart';
 import '../../widgets/library/library_recent_playback_view.dart';
-import '../../widgets/player_shortcut_input.dart';
-import '../player/player_delete_dialog.dart';
-import '../player/player_hardware_decode_warning_dialog.dart';
-import '../../features/player/domain/player_playback_progress.dart';
-import '../player/player_page.dart';
-import '../tags/tag_manager_page.dart';
-import 'library_page_helpers.dart';
-import 'directory_manager_page.dart';
-import 'missing_relink_page.dart';
+import 'library_page_state_host.dart';
+import 'library_page_lifecycle_mixin.dart';
+import 'library_page_scan_mixin.dart';
+import 'library_page_navigation_mixin.dart';
+import 'library_page_recent_mixin.dart';
+import 'library_page_query_mixin.dart';
+import 'library_page_filter_mixin.dart';
+import 'library_page_routes_mixin.dart';
+import 'library_page_playback_mixin.dart';
+import 'library_page_commands_mixin.dart';
+
+export 'cache_settings_page.dart'
+    show CacheSettingsPage, playerShortcutConflictMessage;
 
 /** 标签筛选默认保持折叠，把媒体结果宽度优先留给高频浏览。 */
 const bool libraryTagDiscoveryPanelInitiallyOpen = false;
@@ -116,667 +68,13 @@ Set<String> tagEditorCandidates(
   };
 }
 
-/** 为页面切换提供统一的轻量淡入与横向位移动画。 */
-Route<T> _smoothRoute<T>(
-  Widget page, {
-  String Function()? backShortcutProvider,
-}) {
-  return PageRouteBuilder<T>(
-    transitionDuration: const Duration(milliseconds: 220),
-    reverseTransitionDuration: const Duration(milliseconds: 160),
-    pageBuilder: (routeContext, __, ___) => backShortcutProvider == null
-        ? page
-        : AppRouteBackInputRegion(
-            shortcutProvider: backShortcutProvider,
-            onBack: () {
-              unawaited(Navigator.of(routeContext).maybePop());
-            },
-            child: page,
-          ),
-    transitionsBuilder: (_, animation, __, child) {
-      final curved = CurvedAnimation(parent: animation, curve: appMotionCurve);
-      return FadeTransition(
-        opacity: curved,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0.018, 0),
-            end: Offset.zero,
-          ).animate(curved),
-          child: child,
-        ),
-      );
-    },
-  );
-}
-
 /** 播放器 Route 挂载期间排除媒体库语义，防止 Windows UIA 保留旧页面节点。 */
 @visibleForTesting
 bool libraryRouteShouldExcludeSemantics({required bool playerRouteActive}) {
   return playerRouteActive;
 }
 
-/** 返回快捷键冲突说明；null 表示可安全保存且不会覆盖其它动作。 */
-@visibleForTesting
-String? playerShortcutConflictMessage({
-  required PlayerShortcutAction action,
-  required String shortcut,
-  required Map<PlayerShortcutAction, String> bindings,
-}) {
-  final reservedAction = PlaybackSettings.reservedShortcuts[shortcut];
-  if (reservedAction != null) {
-    return '与系统保留操作“$reservedAction”冲突，请按其它按键';
-  }
-  for (final entry in bindings.entries) {
-    if (entry.key != action && entry.value == shortcut) {
-      return '与“${PlaybackSettings.shortcutActionLabel(entry.key)}”冲突，请按其它按键';
-    }
-  }
-  return null;
-}
-
-/**
- * LibraryPage 的派生显示和排序逻辑。
- *
- * 这里不持有状态、不触发数据库访问，只读取 `_LibraryPageState` 已有状态生成摘要、排序和队列标题，
- * 让页面主体专注生命周期、交互入口和布局组装。
- */
-extension _LibraryPageDerivedState on _LibraryPageState {
-  /**
-   * 构建用于诊断和播放器队列标题的完整筛选表达式。
-   */
-  String _filterExpression({
-    required LibraryApplicationFacade store,
-    required int resultCount,
-    required int totalCount,
-  }) {
-    final parts = <String>[];
-    final keyword = _searchController.text.trim();
-    if (keyword.isNotEmpty) {
-      parts.add('keyword:"$keyword"');
-    }
-    final primaryTags = _selectedTags.toList()..sort();
-    parts.addAll(primaryTags.map((tag) => 'legacy:$tag'));
-    final childTags = _selectedChildTags.toList()..sort();
-    if (childTags.isNotEmpty) {
-      parts.add('child:(${childTags.join('|')})');
-    }
-    final groupsById = {
-      for (final group in _tagGroupsForSidebar(store)) group.id: group
-    };
-    final selectedEntries = _selectedGroupTagIds.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-    for (final entry in selectedEntries) {
-      final tagLabels = [
-        for (final id in entry.value)
-          if (store.tagsById[id] != null) _tagLabel(store.tagsById[id]!),
-      ]..sort();
-      if (tagLabels.isEmpty) {
-        continue;
-      }
-      final group = groupsById[entry.key];
-      parts.add(
-        '${group == null ? entry.key : _groupLabel(group)}:(${tagLabels.join('|')})',
-      );
-    }
-    parts.addAll(_excludedTagItems(store).map((tag) => '-${_tagLabel(tag)}'));
-    if (_showFavoritesOnly) {
-      parts.add('favorite');
-    }
-    final expression =
-        parts.isEmpty ? '\u5168\u90e8\u89c6\u9891' : parts.join(' AND ');
-    return '$expression  |  $resultCount / $totalCount';
-  }
-
-  /**
-   * 构建面向用户的短筛选摘要。
-   */
-  String _filterSummary({
-    required LibraryApplicationFacade store,
-    required int resultCount,
-    required int totalCount,
-  }) {
-    final parts = <String>[];
-    final hierarchyParts = <String>[];
-    final keyword = _searchController.text.trim();
-    hierarchyParts.addAll(_selectedTags.toList()..sort());
-    hierarchyParts.addAll(_selectedChildTags.toList()..sort());
-    final selectedItems = _selectedGroupTagItems(store);
-    hierarchyParts.addAll([
-      for (final tag in selectedItems)
-        if (tag.groupId == 'folder.primary' || tag.groupId == 'folder.child')
-          tag.displayName ?? tag.name,
-    ]);
-    if (hierarchyParts.isNotEmpty) {
-      parts.add(hierarchyParts.toSet().join(' / '));
-    }
-    final otherLabels = [
-      for (final tag in selectedItems)
-        if (tag.groupId != 'folder.primary' && tag.groupId != 'folder.child')
-          tag.displayName ?? tag.name,
-    ]..sort();
-    parts.addAll(otherLabels);
-    if (keyword.isNotEmpty) {
-      parts.add('关键词 $keyword');
-    }
-    final excludedCount = _excludedTagIds.length;
-    if (excludedCount > 0) {
-      parts.add('NOT $excludedCount');
-    }
-    if (_showFavoritesOnly) {
-      parts.add('favorite');
-    }
-    final label = parts.isEmpty ? '全部视频' : parts.join(' + ');
-    return '$label · $resultCount 个结果';
-  }
-
-  /**
-   * 切换排序方向，并只重排当前结果。
-   */
-  void _toggleSortDirection() {
-    _applySortChange(
-      sortDirection: _sortController.oppositeDirection,
-    );
-  }
-}
-
 // ignore_for_file: slash_for_doc_comments
-
-class CacheSettingsPage extends StatefulWidget {
-  const CacheSettingsPage({
-    super.key,
-    required this.store,
-    required this.thumbnailService,
-    required this.playbackSettings,
-    required this.onPlaybackSettingsChanged,
-    required this.dataBackupSettings,
-    required this.onDataBackupSettingsChanged,
-    required this.onRunDataBackupNow,
-    required this.onCheckDataBackupIntegrity,
-    required this.onExportDataBackup,
-    required this.updateService,
-  });
-
-  final LibraryApplicationFacade store;
-
-  final ThumbnailService thumbnailService;
-
-  final PlaybackSettings playbackSettings;
-
-  final Future<void> Function(PlaybackSettings settings)
-      onPlaybackSettingsChanged;
-
-  /** 当前视频依赖备份开关。 */
-  final DataBackupSettings dataBackupSettings;
-
-  /** 保存开关并同步后台服务。 */
-  final Future<void> Function(DataBackupSettings settings)
-      onDataBackupSettingsChanged;
-
-  /** 用户显式启动新一轮全量核对。 */
-  final Future<void> Function() onRunDataBackupNow;
-
-  /** 用户显式执行只读完整性检查。 */
-  final Future<DataBackupIntegrityReport> Function() onCheckDataBackupIntegrity;
-
-  /** 选择目标并写出便携备份；取消选择时返回 null。 */
-  final Future<String?> Function() onExportDataBackup;
-
-  /** 关于页使用的更新边界；测试可注入，正常运行由组合根或默认实现提供。 */
-  final AppUpdateService updateService;
-
-  @override
-  State<CacheSettingsPage> createState() => _CacheSettingsPageState();
-}
-
-/** 设置页可进入的功能分区。 */
-enum _SettingsSection {
-  home,
-  playback,
-  videoQuality,
-  playerInteraction,
-  fileDeletion,
-  dataBackup,
-  cache,
-  about,
-}
-
-class _CacheSettingsPageState extends State<CacheSettingsPage> {
-  /** 当前显示的设置首页或功能二级页。 */
-  _SettingsSection _section = _SettingsSection.home;
-  /** 普通播放设置的唯一可写 owner；不包含备份或缓存任务状态。 */
-  late final PlaybackSettingsController _playbackSettingsController;
-  PlaybackSettings get _settings => _playbackSettingsController.settings;
-  /** 缓存统计读取的 latest-only owner；不包含重试或清理命令。 */
-  late final CacheDiagnosticsController<CacheStats> _cacheDiagnosticsController;
-  /** 缓存重试/清理与 Repository 写入的互斥 owner。 */
-  late final CacheDiagnosticsMaintenanceController<VideoItem>
-      _cacheMaintenanceController;
-  /** 自动清理运行期间锁定开关，避免重复删除同一批稳定身份。 */
-  bool _unavailableCleanupRunning = false;
-
-  /** 快捷键录制冲突按动作就地展示，成功保存或恢复默认后清除。 */
-  final Map<PlayerShortcutAction, String> _shortcutErrors = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _playbackSettingsController = PlaybackSettingsController(
-      initialSettings: widget.playbackSettings,
-      // 通过当前 widget 转发，避免父级重建并替换回调后继续调用旧闭包。
-      save: (settings) => widget.onPlaybackSettingsChanged(settings),
-    )..addListener(_handleSettingsStateChanged);
-    _cacheDiagnosticsController = CacheDiagnosticsController<CacheStats>(
-      load: () => widget.thumbnailService.statsFor(widget.store.videos.values),
-    )..addListener(_handleSettingsStateChanged);
-    unawaited(_cacheDiagnosticsController.refresh());
-    _cacheMaintenanceController =
-        CacheDiagnosticsMaintenanceController<VideoItem>(
-      retryFailures: widget.thumbnailService.retryFailed,
-      clearFailures: widget.thumbnailService.clearFailures,
-      persistChanges: widget.store.upsertVideos,
-      isFailureResolved: (item) => item.thumbnailError == null,
-      restoreFailure: (item, reason) => item.thumbnailError = reason,
-    )..addListener(_handleSettingsStateChanged);
-  }
-
-  @override
-  void dispose() {
-    _playbackSettingsController
-      ..removeListener(_handleSettingsStateChanged)
-      ..dispose();
-    _cacheDiagnosticsController
-      ..removeListener(_handleSettingsStateChanged)
-      ..dispose();
-    _cacheMaintenanceController
-      ..removeListener(_handleSettingsStateChanged)
-      ..dispose();
-    super.dispose();
-  }
-
-  /** settings controller 发布快照时只重建当前设置 Route。 */
-  void _handleSettingsStateChanged() {
-    if (mounted) setState(() {});
-  }
-
-  void _refreshStats() {
-    unawaited(_cacheDiagnosticsController.refresh());
-  }
-
-  /** 定向重试当前统计快照中的失败项，并持久化已清理的旧失败标记。 */
-  Future<void> _retryFailedThumbnails(CacheStats stats) async {
-    if (_cacheMaintenanceController.busy || stats.failures.isEmpty) {
-      return;
-    }
-    try {
-      final outcome = await _cacheMaintenanceController.retry(
-        stats.failures.map(
-          (failure) => CacheFailureCommandTarget<VideoItem>(
-            item: failure.item,
-            reason: failure.reason,
-          ),
-        ),
-      );
-      if (outcome == null || !mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(cacheRetryOutcomeLabel(outcome))),
-      );
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('重试失败项时出错：$error')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        unawaited(_cacheDiagnosticsController.refresh());
-      }
-    }
-  }
-
-  /** 清除当前失败标记但不删除视频或缓存文件，并通过 Repository 保存结果。 */
-  Future<void> _clearThumbnailFailureMarkers(CacheStats stats) async {
-    if (_cacheMaintenanceController.busy || stats.failures.isEmpty) {
-      return;
-    }
-    try {
-      final outcome = await _cacheMaintenanceController.clear(
-        stats.failures.map(
-          (failure) => CacheFailureCommandTarget<VideoItem>(
-            item: failure.item,
-            reason: failure.reason,
-          ),
-        ),
-      );
-      if (outcome == null || !mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(cacheClearOutcomeLabel(outcome))),
-      );
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('清除失败标记时出错：$error')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        unawaited(_cacheDiagnosticsController.refresh());
-      }
-    }
-  }
-
-  /**
-   * 校验并保存录制到的快捷键。
-   *
-   * 冲突时不交换、不覆盖任何现有绑定，返回 false 让录制框保持焦点继续等待输入。
-   */
-  bool _captureShortcut(
-    PlayerShortcutAction action,
-    String key,
-  ) {
-    final shortcuts = Map<PlayerShortcutAction, String>.of(_settings.shortcuts);
-    final conflictMessage = playerShortcutConflictMessage(
-      action: action,
-      shortcut: key,
-      bindings: shortcuts,
-    );
-    if (conflictMessage != null) {
-      setState(() {
-        _shortcutErrors[action] = conflictMessage;
-      });
-      return false;
-    }
-    shortcuts[action] = key;
-    final next = _settings.copyWith(shortcuts: Map.unmodifiable(shortcuts));
-    setState(() {
-      _shortcutErrors.remove(action);
-    });
-    unawaited(_saveCapturedShortcut(action, next));
-    return true;
-  }
-
-  /** 异步保存录制结果；controller 只在该结果仍为最新版本时回滚。 */
-  Future<void> _saveCapturedShortcut(
-    PlayerShortcutAction action,
-    PlaybackSettings next,
-  ) async {
-    final requestRevision = _playbackSettingsController.revision + 1;
-    try {
-      await _playbackSettingsController.update(next);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      if (requestRevision == _playbackSettingsController.revision) {
-        setState(() => _shortcutErrors[action] = '保存失败，请重新录入');
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存快捷键失败：$error')),
-      );
-    }
-  }
-
-  /** 恢复项目默认快捷键，并立即持久化。 */
-  Future<void> _resetShortcuts() async {
-    final next = _settings.copyWith(
-      shortcuts: PlaybackSettings.defaultShortcuts,
-    );
-    setState(_shortcutErrors.clear);
-    await _playbackSettingsController.update(next);
-  }
-
-  /** 更新删除确认与回收站偏好，并立即写入现有设置文件。 */
-  Future<void> _changeDeletePreferences({
-    bool? confirmBeforeDeletingVideo,
-    bool? moveDeletedFileToTrash,
-    bool? autoRemoveMissingOrUnreadableVideos,
-  }) async {
-    final next = _settings.copyWith(
-      confirmBeforeDeletingVideo: confirmBeforeDeletingVideo,
-      moveDeletedFileToTrash: moveDeletedFileToTrash,
-      autoRemoveMissingOrUnreadableVideos: autoRemoveMissingOrUnreadableVideos,
-    );
-    try {
-      await _playbackSettingsController.update(next);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存删除设置失败：$error')),
-      );
-      return;
-    }
-    if (autoRemoveMissingOrUnreadableVideos == true) {
-      await _removeMissingOrUnreadableVideos(showFeedback: true);
-    }
-  }
-
-  /** 即时执行数据库清理；失败时保留已保存的开启状态，供后续扫描继续重试。 */
-  Future<int> _removeMissingOrUnreadableVideos({
-    required bool showFeedback,
-  }) async {
-    if (_unavailableCleanupRunning) {
-      return 0;
-    }
-    setState(() => _unavailableCleanupRunning = true);
-    try {
-      final removed = await widget.store.removeMissingOrUnreadableVideos();
-      if (mounted && showFeedback) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              removed == 0 ? '没有需要清理的缺失或不可读记录' : '已从数据库移除 $removed 条记录；磁盘文件未删除',
-            ),
-          ),
-        );
-      }
-      return removed;
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('清理缺失或不可读记录失败：$error')),
-        );
-      }
-      return 0;
-    } finally {
-      if (mounted) {
-        setState(() => _unavailableCleanupRunning = false);
-      }
-    }
-  }
-
-  /** 切换全屏右缘自动队列并立即持久化；失败时恢复界面旧值。 */
-  Future<void> _changeFullscreenQueueEdgeHoverEnabled(bool enabled) async {
-    final next = _settings.copyWith(fullscreenQueueEdgeHoverEnabled: enabled);
-    try {
-      await _playbackSettingsController.update(next);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存全屏播放列表设置失败：$error')),
-      );
-    }
-  }
-
-  /** 当前层级的页面标题。 */
-  String get _sectionTitle => switch (_section) {
-        _SettingsSection.home => '设置',
-        _SettingsSection.playback => '播放与解码',
-        _SettingsSection.videoQuality => '视频画质与增强',
-        _SettingsSection.playerInteraction => '播放器交互',
-        _SettingsSection.fileDeletion => '删除文件',
-        _SettingsSection.dataBackup => '视频数据备份',
-        _SettingsSection.cache => '缩略图缓存',
-        _SettingsSection.about => '关于',
-      };
-
-  /** 从设置首页进入指定功能二级页。 */
-  void _openSection(_SettingsSection section) {
-    setState(() => _section = section);
-  }
-
-  /** 二级页返回设置功能列表。 */
-  void _returnToSettingsHome() {
-    setState(() => _section = _SettingsSection.home);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Theme(
-      data: settingsWorkspaceTheme(Theme.of(context)),
-      child: _buildSettingsWorkspace(context),
-    );
-  }
-
-  /** 构建已由深色维护主题包裹的设置内容，避免额外嵌套导致大范围无意义缩进。 */
-  Widget _buildSettingsWorkspace(BuildContext context) {
-    final isHome = _section == _SettingsSection.home;
-    return SettingsWorkspaceScaffold(
-      isHome: isHome,
-      title: _sectionTitle,
-      showRefreshAction: _section == _SettingsSection.cache,
-      onBack: _returnToSettingsHome,
-      onRefresh: _refreshStats,
-      child: isHome
-          ? SettingsLandingList(
-              resumeBehavior: _settings.resumeBehavior,
-              rendererPreference: _settings.rendererPreference,
-              confirmBeforeDeletingVideo: _settings.confirmBeforeDeletingVideo,
-              moveDeletedFileToTrash: _settings.moveDeletedFileToTrash,
-              autoRemoveMissingOrUnreadableVideos:
-                  _settings.autoRemoveMissingOrUnreadableVideos,
-              onOpenPlayback: () => _openSection(_SettingsSection.playback),
-              onOpenVideoQuality: () =>
-                  _openSection(_SettingsSection.videoQuality),
-              onOpenPlayerInteraction: () =>
-                  _openSection(_SettingsSection.playerInteraction),
-              onOpenFileDeletion: () =>
-                  _openSection(_SettingsSection.fileDeletion),
-              onOpenDataBackup: () => _openSection(_SettingsSection.dataBackup),
-              onOpenCache: () => _openSection(_SettingsSection.cache),
-              onOpenAbout: () => _openSection(_SettingsSection.about),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                if (_section == _SettingsSection.playback) ...[
-                  PlaybackAndDecodingSettingsCard(
-                    settings: _settings,
-                    onChanged: (settings) async {
-                      // 页面 controller 继续唯一负责串行持久化与失败补偿。
-                      await _playbackSettingsController.update(settings);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  PlaybackStreamCacheCard(
-                    settings: _settings,
-                    onChanged: (settings) {
-                      unawaited(
-                        _playbackSettingsController.update(settings),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                if (_section == _SettingsSection.videoQuality) ...[
-                  PlaybackQualitySettingsPanel(
-                    settings: _settings,
-                    onChanged: (settings) {
-                      unawaited(
-                        _playbackSettingsController.update(settings),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                if (_section == _SettingsSection.dataBackup) ...[
-                  DataBackupSettingsWorkspace(
-                    initialSettings: widget.dataBackupSettings,
-                    initialStatus: widget.store.dataBackupStatus,
-                    statuses: widget.store.dataBackupStatusStream,
-                    onSettingsChanged: widget.onDataBackupSettingsChanged,
-                    onRunNow: widget.onRunDataBackupNow,
-                    onCheckIntegrity: widget.onCheckDataBackupIntegrity,
-                    onExport: widget.onExportDataBackup,
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                if (_section == _SettingsSection.fileDeletion) ...[
-                  DeleteFileSettingsPanel(
-                    confirmBeforeDeletingVideo:
-                        _settings.confirmBeforeDeletingVideo,
-                    moveDeletedFileToTrash: _settings.moveDeletedFileToTrash,
-                    autoRemoveMissingOrUnreadableVideos:
-                        _settings.autoRemoveMissingOrUnreadableVideos,
-                    onConfirmChanged: (value) {
-                      unawaited(_changeDeletePreferences(
-                        confirmBeforeDeletingVideo: value,
-                      ));
-                    },
-                    onMoveToTrashChanged: (value) {
-                      unawaited(_changeDeletePreferences(
-                        moveDeletedFileToTrash: value,
-                      ));
-                    },
-                    onAutoRemoveMissingOrUnreadableChanged:
-                        _unavailableCleanupRunning
-                            ? null
-                            : (value) {
-                                unawaited(_changeDeletePreferences(
-                                  autoRemoveMissingOrUnreadableVideos: value,
-                                ));
-                              },
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                if (_section == _SettingsSection.playerInteraction) ...[
-                  FullscreenQueueSettingsCard(
-                    enabled: _settings.fullscreenQueueEdgeHoverEnabled,
-                    onChanged: (value) => unawaited(
-                      _changeFullscreenQueueEdgeHoverEnabled(value),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  PlayerShortcutsSettingsCard(
-                    shortcuts: _settings.shortcuts,
-                    errors: _shortcutErrors,
-                    onReset: _resetShortcuts,
-                    onCaptured: _captureShortcut,
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                if (_section == _SettingsSection.cache) ...[
-                  CacheDiagnosticsSettingsCard(
-                    loading: _cacheDiagnosticsController.loading,
-                    hasError: _cacheDiagnosticsController.error != null,
-                    stats: _cacheDiagnosticsController.stats,
-                    cacheActionRunning: _cacheMaintenanceController.busy,
-                    onRetry: _refreshStats,
-                    onRetryFailures: (stats) =>
-                        unawaited(_retryFailedThumbnails(stats)),
-                    onClearFailures: (stats) => unawaited(
-                      _clearThumbnailFailureMarkers(stats),
-                    ),
-                  ),
-                ],
-                if (_section == _SettingsSection.about)
-                  SizedBox(
-                    height: MediaQuery.sizeOf(context).height - 120,
-                    child: AboutSettingsPage(
-                      updateService: widget.updateService,
-                    ),
-                  ),
-              ],
-            ),
-    );
-  }
-}
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({
@@ -821,2029 +119,56 @@ String? preferredLibraryPickerDirectory({
   return roots.isEmpty ? null : roots.first;
 }
 
-class _LibraryPageState extends State<LibraryPage> {
-  LibraryApplicationFacade? _store;
-  PlaybackSnapshotWriteQueue? _playbackSnapshotQueue;
-  ThumbnailService? _thumbnailService;
-  MediaDetailsService? _libraryMediaDetailsService;
-  PlaybackSettings _playbackSettings = PlaybackSettings.defaults;
-  /** 当前自动清理任务；启动与扫描完成阶段共享，避免重复遍历大型媒体库。 */
-  Future<int>? _unavailableCleanupFuture;
-  DataBackupSettings _dataBackupSettings = DataBackupSettings.defaults;
-  /** 筛选、搜索、结果缓存与 latest-only 发布的唯一 owner。 */
-  final _queryController = LibraryQueryController();
-  /** 当前候选计数与全库稳定计数的唯一 owner。 */
-  final _facetCountController = LibraryFacetCountController();
-  /** 已接受结果到 filtered playback queue 的唯一转换 owner。 */
-  final _playbackQueueController = LibraryPlaybackQueueController();
-  /** 定位、改名与删除的平台/Repository 编排命令执行器。 */
-  final _fileCommandExecutor = const LibraryFileCommandExecutor();
-  /** 单视频 manual 标签替换与失败回滚命令执行器。 */
-  final _manualTagCommandExecutor = const LibraryManualTagCommandExecutor();
-  /** 扫描、路径导入检查与扫描后解析状态的 latest-only 生命周期 owner。 */
-  final _scanLifecycleController =
-      LibraryScanLifecycleController<MediaDetailsProgress>();
-  final _searchController = TextEditingController();
-  /**
-   * 主搜索框焦点节点。
-   *
-   * `Ctrl+K`、真实键盘输入和桌面自动化都必须落到同一个 EditableText，
-   * 否则搜索文字不会进入 controller，也就不会触发 `onChanged` 筛选链路。
-   */
-  final _searchFocusNode = FocusNode(debugLabel: 'library-search-field');
-  final _selectedTags = <String>{};
-  final _selectedChildTags = <String>{};
-  final _selectedGroupTagIds = <String, Set<String>>{};
-  final _excludedTagIds = <String>{};
-
-  /**
-   * 右侧标签发现面板使用的全库稳定计数。
-   *
-   * 当前筛选会改变视频结果，但标签面板中的其它标签数量不能因为当前筛选被压缩到 0，
-   * 否则用户无法判断原始标签规模。
-   */
-  var _playbackDataRevision = 0;
-  var _suppressSearchControllerChange = false;
-  var _searchControllerChangeQueued = false;
-  var _lastObservedSearchText = '';
-
-  /** 播放器内单条修改延后到返回媒体库时刷新可见结果，不刷新全库计数。 */
-  var _playerScopedLibraryDataChanged = false;
-  /** 播放器内 relink 会改变 folder 标签，需要在返回后低频刷新标签计数。 */
-  var _playerScopedNeedsCountRefresh = false;
-  /** 播放器内 relink、删除或标签编辑可能改变标签候选与 folder 层级。 */
-  var _playerScopedTagDefinitionsChanged = false;
-  /** 最近一次播放器的原生释放信号；专项压测必须等它完成再开始下一会话。 */
-  Future<void> _latestPlayerRelease = Future<void>.value();
-  /** 播放器 Route 存续期间只隐藏媒体库语义，不卸载列表或丢失筛选状态。 */
-  var _playerRouteActive = false;
-  /** 当前应用会话内保留播放器全屏偏好，媒体库和其他页面本身始终使用普通窗口状态。 */
-  final _playerFullscreenSession = PlayerFullscreenSessionController();
-
-  var _isRefreshingVideos = false;
-
-  var _isRefreshingCounts = false;
-
-  /** 结果数据与标签定义的独立修订 owner。 */
-  final _libraryRevisionTracker = LibraryRevisionTracker();
-  int get _libraryDataRevision => _libraryRevisionTracker.dataRevision;
-  int get _tagDefinitionRevision =>
-      _libraryRevisionTracker.tagDefinitionRevision;
-  var _showFavoritesOnly = false;
-  bool get _isScanning => _scanLifecycleController.state.isScanning;
-  bool get _isCancellingScan => _scanLifecycleController.state.isCancelling;
-  LibraryScanProgress? get _scanProgress =>
-      _scanLifecycleController.state.scanProgress;
-  /**
-   * 当前扫描后媒体信息解析进度。
-   *
-   * 扫描提交后视频列表立即可用；该状态来自独立 generation，只描述仍在后台补齐的
-   * 媒体详情，不阻塞筛选、滚动或播放。
-   */
-  MediaDetailsProgress? get _mediaImportProgress =>
-      _scanLifecycleController.state.mediaImportProgress;
-  /** debug 扫描帧采样器；发布构建始终为 null。 */
-  LibraryScanUiDiagnostics? _activeScanUiDiagnostics;
-  /** 排序字段、方向、稳定指纹与纯内存重排的唯一 owner。 */
-  final _sortController = LibrarySortController();
-  SortMode get _sortMode => _sortController.mode;
-  SortDirection get _sortDirection => _sortController.direction;
-  /** 网格密度、主侧栏和标签面板显隐的纯展示 owner。 */
-  final _viewPreferences = LibraryViewPreferencesController(
-    denseResultGrid: false,
-    mainSidebarCollapsed: false,
-    tagDiscoveryPanelOpen: libraryTagDiscoveryPanelInitiallyOpen,
-  );
-  bool get _denseResultGrid => _viewPreferences.denseResultGrid;
-  bool get _isMainSidebarCollapsed => _viewPreferences.mainSidebarCollapsed;
-  bool get _isTagDiscoveryPanelOpen => _viewPreferences.tagDiscoveryPanelOpen;
-  /**
-   * expanded 结果滚动时的顶部信息区目标状态。
-   *
-  * 使用独立 notifier 只重建顶部动效边界，不让滚动方向变化触发整个媒体库页面重建。
-  */
-  final _libraryHeaderVisible = ValueNotifier<bool>(true);
-  /** 结果来源与本地目录返回栈的纯应用状态 owner。 */
-  final _sourceNavigation = LibrarySourceNavigationController(
-    normalizePath: TagRules.normalizeRootPath,
-    pathKey: TagRules.pathKey,
-  );
-  LibraryResultMode get _resultMode => _sourceNavigation.mode;
-  String? get _localLibraryPath => _sourceNavigation.localPath;
-  Object? _recentVideoCacheKey;
-  Object? _favoriteVideoCacheKey;
-  Object? _localEntryCacheKey;
-  Object? _tagGroupsCacheKey;
-  List<VideoItem> _recentVideoCache = const <VideoItem>[];
-  List<VideoItem> _favoriteVideoCache = const <VideoItem>[];
-  List<LocalLibraryEntry> _localEntryCache = const <LocalLibraryEntry>[];
-  final _localEntryCacheByKey = <Object, List<LocalLibraryEntry>>{};
-  /** 正在后台枚举的本地路径缓存键，避免每次 build 重复发起目录读取。 */
-  final _localEntryLoads = <Object>{};
-  List<TagGroup> _tagGroupsCache = const <TagGroup>[];
-
-  /** 当前页面共享的文件系统平台边界。 */
-  FileSystemAdapter get _fileSystem => widget.fileSystem;
-
-  /** 最近播放临时多选复用 stable videoId owner，不绑定 mutable path。 */
-  final _recentPlaybackSelection = LibrarySelectionController();
-
-  /** 继续观看清理/撤销与 Repository 失败补偿的无 UI owner。 */
-  final _continueWatchingCommands =
-      const LibraryContinueWatchingCommandExecutor();
-
-  /** 主结果多选只保存 stable `videoId`，不持有可变路径或 VideoItem。 */
-  final _librarySelection = LibrarySelectionController();
-  bool get _librarySelectionMode => _librarySelection.selectionMode;
-  Set<String> get _selectedLibraryVideoIds =>
-      _librarySelection.selectedVideoIds;
+class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
+    with
+        LibraryPageLifecycleMixin<LibraryPage>,
+        LibraryPageScanMixin<LibraryPage>,
+        LibraryPageNavigationMixin<LibraryPage>,
+        LibraryPageRecentMixin<LibraryPage>,
+        LibraryPageQueryMixin<LibraryPage>,
+        LibraryPageFilterMixin<LibraryPage>,
+        LibraryPageRoutesMixin<LibraryPage>,
+        LibraryPagePlaybackMixin<LibraryPage>,
+        LibraryPageCommandsMixin<LibraryPage> {
+  @override
+  LibraryPageApplicationService get applicationService =>
+      (widget).applicationService;
 
   @override
-  void initState() {
-    super.initState();
-    HardwareKeyboard.instance.addHandler(_handleGlobalSearchShortcut);
-    _searchController.addListener(_handleSearchControllerChanged);
-    _load();
-  }
+  FileSystemAdapter get fileSystem => (widget).fileSystem;
 
   @override
-  void dispose() {
-    LibraryStressControl.unregister(this);
-    unawaited(_playbackSnapshotQueue?.dispose());
-    _libraryMediaDetailsService?.dispose();
-    _activeScanUiDiagnostics?.abort();
-    HardwareKeyboard.instance.removeHandler(_handleGlobalSearchShortcut);
-    _searchController.removeListener(_handleSearchControllerChanged);
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _libraryHeaderVisible.dispose();
-    _queryController.dispose();
-    _facetCountController.dispose();
-    _playbackQueueController.clear();
-    _scanLifecycleController.dispose();
-    super.dispose();
-  }
-
-  /**
-   * 在媒体库页面处于最上层时稳定处理 Ctrl+K。
-   *
-   * Windows 真实窗口中焦点可能停在页面容器而不进入局部 Shortcuts 焦点链，
-   * 因此页面生命周期内补充全局键盘处理；弹窗或播放器路由位于上层时不抢焦点。
-   */
-  bool _handleGlobalSearchShortcut(KeyEvent event) {
-    if (event is! KeyDownEvent ||
-        event.logicalKey != LogicalKeyboardKey.keyK ||
-        !HardwareKeyboard.instance.isControlPressed ||
-        ModalRoute.of(context)?.isCurrent != true) {
-      return false;
-    }
-    _focusSearchField();
-    return true;
-  }
-
-  void _handleSearchControllerChanged() {
-    if (_suppressSearchControllerChange) {
-      return;
-    }
-    final keyword = _searchController.text;
-    if (keyword == _lastObservedSearchText || _searchControllerChangeQueued) {
-      return;
-    }
-    _lastObservedSearchText = keyword;
-    _searchControllerChangeQueued = true;
-    scheduleMicrotask(() {
-      _searchControllerChangeQueued = false;
-      if (!mounted || _searchController.text != _lastObservedSearchText) {
-        return;
-      }
-      _mutateFilters(() {}, refreshCounts: false);
-    });
-  }
-
-  void _setSearchTextSilently(String value) {
-    if (_searchController.text == value) {
-      _lastObservedSearchText = value;
-      return;
-    }
-    _suppressSearchControllerChange = true;
-    _searchController.text = value;
-    _lastObservedSearchText = value;
-    _suppressSearchControllerChange = false;
-  }
-
-  void _clearSearchSilently() => _setSearchTextSilently('');
-
-  /**
-   * 聚焦主搜索框并选中已有关键字。
-   *
-   * 该方法只处理焦点，不直接触发筛选；真实键盘或自动化输入随后写入
-   * `TextEditingController`，再由统一的监听链路刷新结果。
-   */
-  void _focusSearchField() {
-    _searchFocusNode.requestFocus();
-    _searchController.selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: _searchController.text.length,
-    );
-    // Windows 全局快捷键可能与本帧的页面 Focus 重建竞争；下一帧再次确认焦点，
-    // 让真实键盘和自动化输入稳定落到同一个 EditableText。
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      _searchFocusNode.requestFocus();
-      _searchController.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: _searchController.text.length,
-      );
-    });
-  }
-
-  Future<void> _load() async {
-    final diagnostics = kDebugMode ? LibraryLoadDiagnostics() : null;
-    final startupWatch = Stopwatch()..start();
-    final startupData = await widget.applicationService.load(
-      diagnostics: diagnostics,
-    );
-    final store = startupData.store;
-    final thumbnailService = startupData.thumbnailService;
-    final playbackSettings = startupData.playbackSettings;
-    final dataBackupSettings = startupData.dataBackupSettings;
-    final sortPreferences = startupData.sortPreferences;
-    if (!mounted) {
-      await store.close();
-      return;
-    }
-    _playbackSnapshotQueue = PlaybackSnapshotWriteQueue(
-      writer: (snapshot) async {
-        snapshot.item
-          ..playbackPosition = snapshot.position
-          ..playbackDuration = snapshot.duration
-          ..playbackCompleted = snapshot.completed
-          ..playbackPositionUpdatedAt = snapshot.updatedAt
-          ..lastPlayedAt = snapshot.updatedAt;
-        await store.savePlaybackPosition(
-          videoId: snapshot.item.videoId,
-          position: snapshot.position,
-          duration: snapshot.duration,
-          completed: snapshot.completed,
-          updatedAt: snapshot.updatedAt,
-        );
-      },
-    );
-    final firstFrameWatch = Stopwatch()..start();
-    void applyHydratedState() => setState(() {
-          _sortController.restore(sortPreferences);
-          _viewPreferences.setDenseResultGrid(
-            sortPreferences.denseResultGrid,
-          );
-          _store = store;
-          _thumbnailService = thumbnailService;
-          _playbackSettings = playbackSettings;
-          _dataBackupSettings = dataBackupSettings;
-          _lastObservedSearchText = _searchController.text;
-          _queryController.seed(_buildImmediateFilterState(store));
-          _facetCountController.seedVisible(
-            _facetCountController.fallbackCounts(store.allTagItems),
-          );
-          _facetCountController.clearStable();
-        });
-    if (diagnostics == null) {
-      applyHydratedState();
-    } else {
-      diagnostics.measureSync(
-        'ui.hydrated_state_prepare',
-        applyHydratedState,
-      );
-      unawaited(widget.applicationService.writeStartupDiagnostics(
-        diagnostics: diagnostics,
-        totalElapsed: startupWatch.elapsed,
-        marker: 'hydrated_state_ready',
-      ));
-    }
-    _registerLibraryStressControl(store, thumbnailService);
-    // 首帧只消费 SQLite 已恢复的对象和持久化 usageCount；目录扫描与全库计数不得阻塞首屏。
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _store != store) {
-        return;
-      }
-      firstFrameWatch.stop();
-      if (diagnostics != null) {
-        diagnostics.record(
-            'ui.first_frame_build_and_layout', firstFrameWatch.elapsed);
-        unawaited(widget.applicationService.writeStartupDiagnostics(
-          diagnostics: diagnostics,
-          totalElapsed: startupWatch.elapsed,
-          marker: 'first_frame_ready',
-        ));
-      }
-      _scheduleFilterRefresh();
-      _scheduleInitialStableTagCounts(store);
-      unawaited(() async {
-        if (playbackSettings.autoRemoveMissingOrUnreadableVideos) {
-          await _cleanupMissingOrUnreadableVideos(store);
-        }
-        if (mounted && identical(_store, store)) {
-          await _promptForNewVideos(store);
-        }
-      }());
-    });
-  }
-
-  /** 串行清理无效数据库记录，完成后统一刷新筛选结果与标签计数。 */
-  Future<int> _cleanupMissingOrUnreadableVideos(
-    LibraryApplicationFacade store,
-  ) {
-    final active = _unavailableCleanupFuture;
-    if (active != null) {
-      return active;
-    }
-    final task = store.removeMissingOrUnreadableVideos();
-    _unavailableCleanupFuture = task;
-    return task.whenComplete(() {
-      if (identical(_unavailableCleanupFuture, task)) {
-        _unavailableCleanupFuture = null;
-      }
-      if (mounted && identical(_store, store)) {
-        _markLibraryDataChanged(tagDefinitionsChanged: true);
-      }
-    });
-  }
-
-  /**
-   * 为显式隔离 profile 注册真实窗口专项压测入口。
-   *
-   * 环境变量缺失时不注册；回调固定使用同一个 root，防止测试代码把任意路径
-   * 传入生产页面。添加仍经过 `_scan`，移除仍经过 SQLite 单事务和 UI 差量刷新。
-   */
-  void _registerLibraryStressControl(
-    LibraryApplicationFacade store,
-    ThumbnailService thumbnailService,
-  ) {
-    final root = widget.applicationService.stressRoot;
-    if (!kDebugMode || root == null || root.isEmpty) {
-      return;
-    }
-    LibraryStressControl.register(
-      owner: this,
-      addRoot: () async {
-        LibraryScanCommitResult? captured;
-        await _scan((onProgress) async {
-          final result = await store.addRootAndScanWithChanges(
-            root,
-            onProgress: onProgress,
-          );
-          captured = result;
-          return result;
-        });
-        final result = captured;
-        if (result == null || result.cancelled) {
-          throw StateError('专项压测添加目录未完成');
-        }
-        return result;
-      },
-      removeRoot: () => _removeLibraryRootData(root),
-      waitForPlayerRelease: () => _latestPlayerRelease,
-      snapshot: () {
-        final probes = _libraryMediaDetailsService;
-        return LibraryStressSnapshot(
-          videoCount: store.videos.length,
-          visibleCount: _queryController.state?.filteredVideos.length ?? 0,
-          roots: List<String>.unmodifiable(store.roots),
-          thumbnailQueued: thumbnailService.queuedJobs,
-          thumbnailActive: thumbnailService.activeJobs,
-          probeQueued: probes?.queuedReads ?? 0,
-          probeActive: probes?.activeReads ?? 0,
-          probeCompleted: probes?.completedThisRun ?? 0,
-          probeFailed: probes?.failedThisRun ?? 0,
-        );
-      },
-    );
-  }
-
-  /** 在首帧之后的空闲窗口刷新稳定标签计数，过期页面结果会被丢弃。 */
-  void _scheduleInitialStableTagCounts(LibraryApplicationFacade store) {
-    const query = FilterQuery();
-    final epoch = _countEpoch(query);
-    _facetCountController.scheduleStable(
-      epoch: epoch,
-      query: query,
-      compute: store.resultCounts,
-      isStillCurrent: (candidate) =>
-          mounted && _store == store && candidate == _countEpoch(query),
-      onAccepted: (candidate, counts) {
-        if (!mounted || _store != store || candidate != epoch) {
-          return;
-        }
-        setState(() {});
-      },
-    );
-  }
-
-  Future<void> _promptForNewVideos(LibraryApplicationFacade store) async {
-    if (store.roots.isEmpty) {
-      return;
-    }
-    final count = await store.countUntrackedVideos();
-    if (!mounted || count == 0 || _store != store) {
-      return;
-    }
-    final shouldScan = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('\u53d1\u73b0\u65b0\u589e\u89c6\u9891'),
-        content: Text(
-            '\u5f53\u524d\u76ee\u5f55\u53d1\u73b0 $count \u4e2a\u672a\u5165\u5e93\u89c6\u9891\uff0c\u662f\u5426\u73b0\u5728\u91cd\u65b0\u626b\u63cf\uff1f'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('\u7a0d\u540e'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('\u91cd\u65b0\u626b\u63cf'),
-          ),
-        ],
-      ),
-    );
-    if (shouldScan == true && mounted && _store == store) {
-      await _rescan();
-    }
-  }
-
-  Future<void> _pickFolder() async {
-    final store = _store;
-    final paths = await _fileSystem.pickDirectories(
-      dialogTitle: '\u9009\u62e9\u89c6\u9891\u76ee\u5f55',
-      initialDirectory: preferredLibraryPickerDirectory(
-        currentPath: _localLibraryPath,
-        roots: store?.roots ?? const <String>[],
-      ),
-    );
-    final path = paths.isEmpty ? null : paths.first;
-    if (path == null || _store == null) {
-      return;
-    }
-    await _scan(
-      (onProgress) => _store!.addRootAndScanWithChanges(
-        path,
-        onProgress: onProgress,
-      ),
-    );
-  }
-
-  /**
-   * 打开系统多文件选择器，并把所选视频的父目录交给统一扫描链路。
-   *
-   * 选择器只允许视频扩展名；文件不会被复制或移动，应用仅注册其所在目录并建立索引。
-   */
-  Future<void> _pickVideoFiles() async {
-    final store = _store;
-    final paths = await _fileSystem.pickFiles(
-      dialogTitle: '选择要添加的视频文件',
-      initialDirectory: preferredLibraryPickerDirectory(
-        currentPath: _localLibraryPath,
-        roots: store?.roots ?? const <String>[],
-      ),
-      allowedExtensions: TagRules.videoExtensions
-          .map((extension) => extension.substring(1))
-          .toList(),
-    );
-    await _importLibraryPaths(paths);
-  }
-
-  /**
-   * 校验选择器或资源管理器拖入的路径，并以最少 root 数量触发一轮扫描。
-   *
-   * 已受现有 root 管理的文件只触发重新扫描；目录和视频文件之外的项目会被忽略。文件
-   * stat 通过 [FileSystemAdapter] 异步执行，不在 build 或拖动悬停阶段访问磁盘。
-   */
-  Future<void> _importLibraryPaths(Iterable<String> rawPaths) async {
-    final store = _store;
-    if (store == null || _isScanning) {
-      return;
-    }
-    final importRevision = _scanLifecycleController.beginPathImportInspection();
-    final normalizedPaths = <String>[];
-    final pathKeys = <String>{};
-    for (final rawPath in rawPaths) {
-      final normalized = _fileSystem.normalizePath(rawPath);
-      if (normalized.trim().isNotEmpty &&
-          pathKeys.add(TagRules.pathKey(normalized))) {
-        normalizedPaths.add(normalized);
-      }
-    }
-    final inspected = await Future.wait<LibraryImportPath?>(
-      normalizedPaths.map((path) async {
-        if (await _fileSystem.directoryExists(path)) {
-          return (path: path, isDirectory: true);
-        }
-        if (TagRules.isVideoPath(path) && await _fileSystem.fileExists(path)) {
-          return (path: path, isDirectory: false);
-        }
-        return null;
-      }),
-    );
-    if (!mounted ||
-        _store != store ||
-        !_scanLifecycleController.isCurrentPathImport(importRevision)) {
-      return;
-    }
-    final imports = inspected.whereType<LibraryImportPath>().toList();
-    if (imports.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('未发现可添加的视频文件或目录')),
-      );
-      return;
-    }
-    final newRoots = libraryImportRoots(
-      imports: imports,
-      existingRoots: store.roots,
-    );
-    await _scan(
-      newRoots.isEmpty
-          ? (onProgress) => store.scanWithChanges(onProgress: onProgress)
-          : (onProgress) => store.addRootsAndScanWithChanges(
-                newRoots,
-                onProgress: onProgress,
-              ),
-    );
-  }
-
-  Future<void> _rescan() async {
-    if (_store == null) {
-      return;
-    }
-    await _scan(
-      (onProgress) => _store!.scanWithChanges(onProgress: onProgress),
-    );
-  }
-
-  Future<void> _scan(
-    Future<LibraryScanCommitResult> Function(
-      LibraryScanProgressCallback onProgress,
-    ) action,
-  ) async {
-    if (_isScanning) {
-      return;
-    }
-    // 新扫描优先使用磁盘；取消上一轮后台媒体探测，避免两类顺序读取互相争抢。
-    _libraryMediaDetailsService?.dispose();
-    _libraryMediaDetailsService = null;
-    _activeScanUiDiagnostics?.abort();
-    final diagnostics = kDebugMode ? LibraryScanUiDiagnostics() : null;
-    diagnostics?.start();
-    _activeScanUiDiagnostics = diagnostics;
-    var diagnosticsWillFinish = false;
-    final started = await _scanLifecycleController.run(
-      action: (onProgress) async {
-        final actionWatch = Stopwatch()..start();
-        final result = await action(onProgress);
-        actionWatch.stop();
-        diagnostics?.markScanComplete();
-        diagnostics?.recordStage(
-          'scan.backend_and_commit',
-          actionWatch.elapsed,
-          itemCount: result.changedVideos.length,
-        );
-        return result;
-      },
-      onAccepted: (result) {
-        if (!mounted) {
-          return;
-        }
-        // 只为新增或内容变化项目进入缓存队列，避免每次扫描重新排队整个媒体库。
-        _thumbnailService?.prefetchAll(result.probeCandidates);
-        _startLibraryMediaProbes(result);
-        diagnostics?.markPostApply();
-        final applyWatch = Stopwatch()..start();
-        _applyLibraryScanDelta(result);
-        final store = _store;
-        if (store != null &&
-            _playbackSettings.autoRemoveMissingOrUnreadableVideos) {
-          // 先反馈扫描完成，再异步串行清理；不可读探测不得阻塞 UI。
-          unawaited(_cleanupMissingOrUnreadableVideos(store));
-        }
-        applyWatch.stop();
-        diagnostics?.recordStage(
-          'ui.delta_schedule',
-          applyWatch.elapsed,
-          itemCount: result.changedVideos.length,
-        );
-        if (diagnostics != null) {
-          diagnosticsWillFinish = true;
-          unawaited(diagnostics.finish(result).whenComplete(() {
-            if (identical(_activeScanUiDiagnostics, diagnostics)) {
-              _activeScanUiDiagnostics = null;
-            }
-          }));
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  '扫描完成：新增 ${result.addedCount}，修改 ${result.modifiedCount}，'
-                  '移动 ${result.relinkedCount}，缺失 ${result.missingCount}')),
-        );
-      },
-      onFailure: (error, _) {
-        if (!mounted) {
-          return;
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('\u626b\u63cf\u5931\u8d25\uff1a$error')),
-        );
-      },
-      onChanged: (state) {
-        if (!mounted) {
-          return;
-        }
-        final progress = state.scanProgress;
-        if (state.isScanning && progress != null) {
-          diagnostics?.recordProgress(progress);
-        }
-        setState(() {});
-      },
-    );
-    if (!started || !diagnosticsWillFinish) {
-      diagnostics?.abort();
-      if (identical(_activeScanUiDiagnostics, diagnostics)) {
-        _activeScanUiDiagnostics = null;
-      }
-    }
-  }
-
-  /** 用户显式暂停/继续扫描；活动 sidecar 从当前候选位置恢复，不重新遍历目录。 */
-  Future<void> _toggleScanPaused() async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    await _scanLifecycleController.toggleScanPaused(
-      setPaused: store.setScanPaused,
-      onChanged: (_) {
-        if (mounted) {
-          setState(() {});
-        }
-      },
-    );
-  }
-
-  /**
-   * 请求取消当前扫描，并保留取消前已经存在的媒体库数据。
-   *
-   * UI 保持“正在取消”直到扫描 Future 真正退出，避免用户重复启动并发扫描。
-   */
-  Future<void> _cancelScan() async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    try {
-      await _scanLifecycleController.cancelScan(
-        cancel: store.cancelActiveScan,
-        onChanged: (_) {
-          if (mounted) {
-            setState(() {});
-          }
-        },
-      );
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取消扫描失败：$error')),
-      );
-    }
-  }
-
-  /**
-   * 仅把本轮新增或内容变化项目送入串行媒体探测队列。
-   *
-   * 新扫描会先 dispose 旧服务并取消其 generation；回调还会校验 store 与 fingerprint，
-   * 防止旧文件结果覆盖新内容。SQLite 写入继续由 Dart Repository 完成。
-   */
-  void _startLibraryMediaProbes(LibraryScanCommitResult result) {
-    _libraryMediaDetailsService?.dispose();
-    _libraryMediaDetailsService = null;
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final probeCandidatesById = <String, VideoItem>{
-      for (final item in result.probeCandidates) item.videoId: item,
-    };
-    // 旧版媒体详情没有保存总时长。扫描完成后只把仍缺少可靠时长的活动视频
-    // 合并进既有有限批次队列，卡片 build 不访问磁盘，完成后复用现有播放时长列。
-    for (final item in store.videos.values) {
-      if (!item.isMissing &&
-          item.playbackDuration <= Duration.zero &&
-          item.mediaDetails != null &&
-          item.mediaDetailsError == null) {
-        probeCandidatesById[item.videoId] = item;
-      }
-    }
-    final probeCandidates = probeCandidatesById.values.toList(growable: false);
-    if (probeCandidates.isEmpty) {
-      return;
-    }
-    final mediaImportGeneration = _scanLifecycleController.beginMediaImport(
-      onChanged: (_) {
-        if (mounted) {
-          setState(() {});
-        }
-      },
-    );
-    final service = _createLibraryMediaDetailsService(
-      store,
-      mediaImportGeneration: mediaImportGeneration,
-    );
-    _libraryMediaDetailsService = service;
-    // 新增项和旧版缺时长项统一登记为有限批次；真实进入视口仍可提升同一路径任务，
-    // 服务通过 videoId/路径去重，不扩大并发。
-    service.prefetchAll(probeCandidates);
-  }
-
-  /** 创建媒体库详情会话；所有写回继续校验当前 Store、videoId 与 fingerprint。 */
-  MediaDetailsService _createLibraryMediaDetailsService(
-    LibraryApplicationFacade store, {
-    int? mediaImportGeneration,
-  }) {
-    return widget.applicationService.createMediaDetailsService(
-      onBatchUpdated: (updates) async {
-        final validUpdates = <VideoItem>[];
-        for (final update in updates) {
-          final item = update.item;
-          final current = store.videos[TagRules.pathKey(item.path)];
-          if (_store != store ||
-              current == null ||
-              current.videoId != item.videoId ||
-              current.mediaFingerprint != update.fingerprint) {
-            continue;
-          }
-          // 探测完成可能晚于 root 移除或下一轮扫描；只更新 Store 中仍然有效的当前对象，
-          // 禁止旧回调通过 upsert 把已删除记录重新插回 SQLite 和内存索引。
-          current.mediaDetails = update.details;
-          current.mediaDetailsError = item.mediaDetailsError;
-          final duration = update.details.duration;
-          if (duration != null && duration > Duration.zero) {
-            // 总时长复用稳定 videoId 上已有的持久化列，不新增 schema 或路径绑定。
-            current.playbackDuration = duration;
-          }
-          validUpdates.add(current);
-        }
-        await store.upsertVideos(validUpdates);
-        if (mediaImportGeneration == null &&
-            validUpdates.isNotEmpty &&
-            mounted &&
-            _store == store) {
-          // 可见项补齐总时长后只刷新现有视图，不提升媒体库 revision，也不重算筛选或标签计数。
-          setState(() {});
-        }
-      },
-      onProgress: mediaImportGeneration != null
-          ? (progress) {
-              if (!mounted || _store != store) {
-                return;
-              }
-              _scanLifecycleController.publishMediaImportProgress(
-                generation: mediaImportGeneration,
-                progress: progress,
-                isComplete: progress.isComplete,
-                onChanged: (_) {
-                  if (mounted) {
-                    setState(() {});
-                  }
-                },
-              );
-            }
-          : null,
-    );
-  }
-
-  /** 在不影响已显示列表的前提下暂停或继续当前后台媒体解析队列。 */
-  void _toggleMediaImportPaused() {
-    final service = _libraryMediaDetailsService;
-    final progress = _mediaImportProgress;
-    if (service == null || progress == null) {
-      return;
-    }
-    if (progress.isPaused) {
-      service.resume();
-    } else {
-      service.pause();
-    }
-  }
-
-  /**
-   * 把媒体库当前可视卡片的详情提升到扫描后台队列之前。
-   *
-   * Widget 只报告真实构建项；服务继续串行探测并丢弃过期代次，不在 UI 线程等待。
-   */
-  void _prioritizeVisibleLibraryItem(VideoItem item) {
-    if (item.isMissing) {
-      return;
-    }
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    var service = _libraryMediaDetailsService;
-    if (service == null || service.isDisposed) {
-      service = _createLibraryMediaDetailsService(store);
-      _libraryMediaDetailsService = service;
-    }
-    unawaited(service.detailsFor(
-      item,
-      // 正常启动不会全量重扫；旧缓存缺时长时只提升真实可见项，继续复用有限批次队列。
-      refreshIncomplete: item.playbackDuration <= Duration.zero,
-      priority: true,
-    ));
-  }
-
-  FilterState _buildImmediateFilterState(LibraryApplicationFacade store) {
-    final query = _currentFilterQuery();
-    return FilterState(
-      epoch: _resultEpoch(query),
-      query: query,
-      filteredVideos: _sortController.sort(store.videos.values),
-      resultCount: store.videos.length,
-      totalCount: store.videos.length,
-    );
-  }
-
-  /** 在低频标签维护完成后同步刷新全库稳定计数快照。 */
-  void _refreshStableTagCountsNow(LibraryApplicationFacade store) {
-    _facetCountController.refreshStableNow(
-      query: const FilterQuery(),
-      compute: store.resultCounts,
-    );
-  }
-
-  /**
-   * 构建本地媒体库当前路径的直接子项。
-   *
-   * 文件夹从磁盘目录读取；视频只取已入库项目，确保播放、缩略图、收藏和更多操作继续复用现有 VideoItem 管线。
-   */
-  Future<List<LocalLibraryEntry>> _localLibraryEntries(
-    LibraryApplicationFacade store,
-  ) async {
-    final currentPath = _localLibraryPath;
-    if (currentPath == null || currentPath.isEmpty) {
-      return const <LocalLibraryEntry>[];
-    }
-    if (!await _fileSystem.directoryExists(currentPath)) {
-      return const <LocalLibraryEntry>[];
-    }
-    final folders = <LocalLibraryEntry>[];
-    final videos = <VideoItem>[];
-    final children = await _fileSystem.listFiles(
-      currentPath,
-      recursive: false,
-    );
-    children.sort((a, b) {
-      final aIsDirectory = a.isDirectory;
-      final bIsDirectory = b.isDirectory;
-      if (aIsDirectory != bIsDirectory) {
-        return aIsDirectory ? -1 : 1;
-      }
-      return p.basename(a.path).compareTo(p.basename(b.path));
-    });
-    for (final child in children) {
-      if (child.isDirectory) {
-        folders.add(LocalLibraryEntry.folder(child.path));
-        continue;
-      }
-      if (TagRules.isVideoPath(child.path)) {
-        final video = store.videos[TagRules.pathKey(child.path)];
-        if (video != null) {
-          videos.add(video);
-        }
-      }
-    }
-    return [
-      ...folders,
-      for (final video in _sortController.sort(videos))
-        LocalLibraryEntry.video(video),
-    ];
-  }
-
-  /** 在现有 setState 中退出主媒体多选并清空临时选择。 */
-  void _clearLibrarySelectionState() {
-    _librarySelection.clear();
-  }
-
-  /**
-   * 修改筛选条件并刷新当前可见结果。
-   *
-   * 高频交互（标签点击、搜索输入）默认只刷新视频列表，标签计数这类重任务
-   * 只在库结构变化、扫描、标签管理返回等低频路径显式开启，避免大媒体库下点击卡顿。
-   */
-  void _mutateFilters(
-    VoidCallback mutation, {
-    bool refreshCounts = false,
-    bool collapseTagPanel = false,
-  }) {
-    setState(() {
-      _clearLibrarySelectionState();
-      _sourceNavigation.showLibraryResults();
-      mutation();
-      _viewPreferences.setTagDiscoveryPanelOpen(
-        libraryTagDiscoveryPanelOpenAfterMutation(
-          currentOpen: _isTagDiscoveryPanelOpen,
-          collapseAfterMutation: collapseTagPanel,
-        ),
-      );
-    });
-    _scheduleFilterRefresh(refreshCounts: refreshCounts);
-  }
-
-  /**
-   * 应用排序字段或方向变更。
-   *
-   * 排序只改变当前结果的展示顺序，不改变筛选条件、标签数量或收藏状态；
-   * 这里直接重排内存中的 `FilterState`，避免切换排序时触发完整过滤和 resultCounts 统计。
-   */
-  void _applySortChange({
-    SortMode? sortMode,
-    SortDirection? sortDirection,
-  }) {
-    LibrarySortPreferences? preferences;
-    setState(() {
-      if (!_sortController.apply(
-        mode: sortMode,
-        direction: sortDirection,
-      )) {
-        return;
-      }
-      preferences = LibrarySortPreferences(
-        mode: _sortMode,
-        direction: _sortDirection,
-        denseResultGrid: _denseResultGrid,
-      );
-      if (_resultMode != LibraryResultMode.library ||
-          _queryController.state == null) {
-        return;
-      }
-      final currentState = _queryController.state!;
-      final sortedState = FilterState(
-        epoch: _resultEpoch(currentState.query),
-        query: currentState.query,
-        filteredVideos: _sortController.sort(currentState.filteredVideos),
-        resultCount: currentState.resultCount,
-        totalCount: currentState.totalCount,
-      );
-      _queryController.publish(
-        sortedState,
-        expectedEpoch: sortedState.epoch,
-      );
-    });
-    final changedPreferences = preferences;
-    if (changedPreferences != null) {
-      unawaited(
-        widget.applicationService.saveSortPreferences(changedPreferences),
-      );
-    }
-  }
-
-  /**
-   * 切换网格/列表并复用展示偏好文件持久化，不触发过滤、计数或缩略图全量刷新。
-   */
-  void _setResultView(bool dense) {
-    if (_denseResultGrid == dense) {
-      return;
-    }
-    setState(() => _viewPreferences.setDenseResultGrid(dense));
-    unawaited(widget.applicationService.saveSortPreferences(
-      LibrarySortPreferences(
-        mode: _sortMode,
-        direction: _sortDirection,
-        denseResultGrid: dense,
-      ),
-    ));
-  }
-
-  /**
-   * 回到媒体库全量视图。
-   *
-   * 侧栏“媒体库”应像重置入口：清空搜索、一级/二级/分组/排除/收藏筛选，并展示全量视频，
-   * 避免用户从最近播放或某个标签视图返回时仍被旧条件限制。
-   */
-  void _showAllLibraryVideos() {
-    final store = _store;
-    setState(() {
-      _clearLibrarySelectionState();
-      _sourceNavigation.resetToLibrary();
-      _recentPlaybackSelection.clear();
-      _clearSearchSilently();
-      _selectedTags.clear();
-      _selectedChildTags.clear();
-      _selectedGroupTagIds.clear();
-      _excludedTagIds.clear();
-      _showFavoritesOnly = false;
-      if (store != null) {
-        _queryController.seed(_buildImmediateFilterState(store));
-      }
-    });
-    _scheduleFilterRefresh();
-  }
-
-  /**
-   * 切换到最近播放结果视图。
-   *
-   * 最近播放是主结果区的一种数据源，不再用弹窗承载；切换时清空筛选条件，让用户看到的列表只由播放记录决定。
-   */
-  void _showRecentPlaybackVideos() {
-    setState(() {
-      _clearLibrarySelectionState();
-      _sourceNavigation.showRecent();
-      _recentPlaybackSelection.clear();
-      _clearSearchSilently();
-      _selectedTags.clear();
-      _selectedChildTags.clear();
-      _selectedGroupTagIds.clear();
-      _excludedTagIds.clear();
-      _showFavoritesOnly = false;
-    });
-  }
-
-  /**
-   * 切换到收藏结果视图。
-   *
-   * 该入口直接从当前内存视频集合筛选收藏项，同时保留 favoriteOnly 状态；
-   * 后续再点击右侧标签时会切回普通媒体库筛选，但收藏条件仍会作为 AND 条件叠加。
-   */
-  void _showFavoriteVideos() {
-    setState(() {
-      _clearLibrarySelectionState();
-      _sourceNavigation.showFavorites();
-      _recentPlaybackSelection.clear();
-      _clearSearchSilently();
-      _selectedTags.clear();
-      _selectedChildTags.clear();
-      _selectedGroupTagIds.clear();
-      _excludedTagIds.clear();
-      _showFavoritesOnly = true;
-    });
-  }
-
-  /**
-   * 打开本地媒体库路径。
-   *
-   * 只切换当前浏览路径和结果模式；实际文件扫描仍由添加目录/重新扫描负责。
-   */
-  void _showLocalLibraryPath(String rootPath) {
-    setState(() {
-      _clearLibrarySelectionState();
-      _sourceNavigation.showLocalRoot(rootPath);
-      _recentPlaybackSelection.clear();
-      _clearSearchSilently();
-      _selectedTags.clear();
-      _selectedChildTags.clear();
-      _selectedGroupTagIds.clear();
-      _excludedTagIds.clear();
-      _showFavoritesOnly = false;
-    });
-  }
-
-  /**
-   * 从当前本地媒体库路径进入子文件夹。
-   *
-   * 该操作只改变 UI 浏览路径，不触发扫描，也不改变 root 配置或视频索引。
-   */
-  void _openLocalLibraryFolder(String folderPath) {
-    setState(() {
-      _sourceNavigation.openLocalFolder(folderPath);
-    });
-  }
-
-  /**
-   * 回到本地媒体库上一个浏览路径。
-   *
-   * 返回按钮和鼠标侧键共用该方法，保证两种入口的历史栈行为一致。
-   */
-  void _goBackLocalLibraryPath() {
-    if (!_sourceNavigation.canGoBack) {
-      return;
-    }
-    setState(() => _sourceNavigation.goBack());
-  }
-
-  /**
-   * 从侧栏解除一个 root 的媒体库管理状态。
-   *
-   * 本地文件、稳定视频身份、用户数据和可复用缓存保持不动；仍被其它重叠 root 覆盖的
-   * 视频继续 active，仅不再受任何 root 覆盖的条目进入 detached 归档。
-   */
-  Future<void> _removeLocalLibraryRoot(String root) async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final confirmed = await showRemoveLibraryRootConfirmation(
-      context,
-      root: root,
-    );
-    if (confirmed != true || !mounted) {
-      return;
-    }
-    await _removeLibraryRootData(root);
-  }
-
-  /**
-   * 提交 root 解除管理并把 active 结果差量应用到当前媒体库。
-   *
-   * 系统确认弹窗和隔离压测共用此方法；Store 只切换 detached 状态，绝不删除 root
-   * 下的本地媒体文件、稳定身份或用户维护数据。
-   */
-  Future<int> _removeLibraryRootData(String root) async {
-    final store = _store;
-    if (store == null) {
-      return 0;
-    }
-    // root 移除会使大批 probe candidate 失效。先推进 generation 并丢弃排队回调，
-    // 避免删除事务期间旧 FFmpeg 结果重新 upsert 已移除的视频。
-    _libraryMediaDetailsService?.dispose();
-    _libraryMediaDetailsService = null;
-    final removedVideos = await store.removeRoot(root);
-    if (!mounted) {
-      return removedVideos.length;
-    }
-    setState(() {
-      // 解除管理改变了 active 数据源；必须提升 revision，禁止 FilterStateSource 复用
-      // 操作前的 11k 列表缓存，否则 SQLite 已完成但 UI 总量会长期停留在旧值。
-      _libraryRevisionTracker.record(
-        LibraryDataChangeKind.tagDefinitions,
-      );
-      _invalidateDerivedCaches();
-      _sourceNavigation.leaveRemovedRoot(root);
-      _refreshStableTagCountsNow(store);
-    });
-    _scheduleFilterRefresh(refreshCounts: true);
-    // 缩略图与媒体详情均可在 root 重新加入时复用，解除管理不能把缓存当作垃圾清除。
-    return removedVideos.length;
-  }
-
-  /**
-   * 清理最近播放记录。
-   *
-   * 该动作清空继续观看状态，但不删除视频、收藏或标签。
-   */
-  Future<void> _clearRecentPlayback({required bool selectedOnly}) async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final targets = recentPlaybackClearTargets(
-      store.videos.values,
-      selectedVideoIds: _recentPlaybackSelection.selectedVideoIds,
-      selectedOnly: selectedOnly,
-    );
-    if (targets.isEmpty) {
-      return;
-    }
-
-    if (!selectedOnly) {
-      final confirmed = await showClearAllRecentPlaybackConfirmation(
-        context,
-        count: targets.length,
-      );
-      if (confirmed != true || !mounted) {
-        return;
-      }
-    }
-    await _clearRecentPlaybackTargets(targets);
-  }
-
-  /**
-   * 批量清理播放状态并提供 10 秒精确 Undo。
-   *
-   * SQLite 使用既有批量视频行写入，避免逐条 await 放大交互等待；失败时先恢复内存
-   * 快照，保证界面不会宣称已清理但数据库仍保留旧状态。
-   */
-  Future<void> _clearRecentPlaybackTargets(List<VideoItem> targets) async {
-    final store = _store;
-    if (store == null || targets.isEmpty) {
-      return;
-    }
-    final result = await _continueWatchingCommands.clear(
-      targets,
-      commit: store.upsertPlaybackStates,
-    );
-    if (!mounted) {
-      return;
-    }
-    if (!result.succeeded) {
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('清除观看进度失败，原记录已保留')),
-      );
-      return;
-    }
-    setState(_recentPlaybackSelection.clear);
-    _markLibraryDataChanged();
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 10),
-          content: Text('已清除 ${targets.length} 条观看进度，视频文件未删除'),
-          action: SnackBarAction(
-            label: '撤销',
-            onPressed: () =>
-                unawaited(_undoRecentPlaybackClear(result.snapshots)),
-          ),
-        ),
-      );
-  }
-
-  /**
-   * 清理单个最近播放记录。
-   *
-   * 单条删除不能依赖“先选中再批量删除”的状态刷新顺序，否则真实鼠标快速点击时会出现命中但未删除。
-   */
-  Future<void> _clearOneRecentPlayback(VideoItem item) async {
-    await _clearRecentPlaybackTargets(<VideoItem>[item]);
-  }
-
-  /**
-   * 恢复仍处于本次清理空状态的记录；已产生新播放进度的条目保持新值。
-   */
-  Future<void> _undoRecentPlaybackClear(
-    List<ContinueWatchingClearSnapshot> snapshots,
-  ) async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final result = await _continueWatchingCommands.undo(
-      snapshots,
-      commit: store.upsertPlaybackStates,
-    );
-    if (!mounted) {
-      return;
-    }
-    if (result.nothingToRestore) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('记录已产生新的播放进度，未覆盖新状态')),
-      );
-      return;
-    }
-    if (!result.succeeded) {
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('撤销失败，请重试播放以重新生成进度')),
-      );
-      return;
-    }
-    _markLibraryDataChanged();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已恢复 ${result.snapshots.length} 条观看进度')),
-    );
-  }
-
-  /**
-   * 切换最近播放清理选择状态。
-   */
-  void _toggleRecentSelection(VideoItem item) {
-    setState(() => _recentPlaybackSelection.toggle(item.videoId));
-  }
-
-  void _markLibraryDataChanged({
-    bool tagDefinitionsChanged = false,
-  }) {
-    _libraryRevisionTracker.record(
-      tagDefinitionsChanged
-          ? LibraryDataChangeKind.tagDefinitions
-          : LibraryDataChangeKind.content,
-    );
-    _invalidateDerivedCaches();
-    final store = _store;
-    if (store != null) {
-      // 数据变化后先回退到持久化 usageCount，精确计数由延后刷新任务更新。
-      _facetCountController.clearStable();
-    }
-    _scheduleFilterRefresh(refreshCounts: true);
-  }
-
-  /**
-   * 把扫描层输出的不可变差量应用到当前界面。
-   *
-   * 主结果列表只重新评估变化的 stable `videoId`；路径或 folder 标签
-   * 可能影响本地目录与侧边栏，因此只定向失效这两类派生缓存。
-   */
-  void _applyLibraryScanDelta(LibraryScanCommitResult result) {
-    if (result.changedVideos.isEmpty) {
-      // 零差量不得提升 revision 或失效 folder 侧边栏，否则每次点击重新扫描
-      // 都会无意义地重算整个媒体库。
-      return;
-    }
-    _libraryRevisionTracker.record(
-      LibraryDataChangeKind.tagDefinitions,
-    );
-    _tagGroupsCacheKey = null;
-    _localEntryCacheKey = null;
-    _localEntryCacheByKey.clear();
-    if (result.changedVideos.any((item) => item.lastPlayedAt != null)) {
-      _recentVideoCacheKey = null;
-    }
-    if (result.changedVideos.any((item) => item.isFavorite)) {
-      _favoriteVideoCacheKey = null;
-    }
-    _facetCountController.clearStable();
-    _scheduleFilterRefresh(
-      refreshCounts: true,
-      changedVideos: result.changedVideos,
-    );
-  }
-
-  void _invalidateDerivedCaches() {
-    _tagGroupsCacheKey = null;
-    _localEntryCacheKey = null;
-    _localEntryCacheByKey.clear();
-    _recentVideoCacheKey = null;
-    _favoriteVideoCacheKey = null;
-  }
-
-  /**
-   * 播放器返回后只更新播放时间相关的可见状态。
-   *
-   * `lastPlayedAt` 不会改变标签、收藏、路径或筛选命中集合；因此不能复用
-   * `_markLibraryDataChanged` 的全库标签计数与完整筛选刷新路径，否则从播放器
-   * 返回主界面会在大媒体库上产生明显卡顿。
-   */
-  void _markPlaybackTimestampChanged(VideoItem item) {
-    _playbackDataRevision += 1;
-    if (_resultMode == LibraryResultMode.library) {
-      // 主媒体库默认排序使用添加时间，播放时间更新不再改变当前结果顺序。
-      return;
-    }
-
-    // 最近播放、本地收藏和本地路径浏览只依赖当前内存对象重建轻量列表。
-    if (_resultMode == LibraryResultMode.recent ||
-        (_resultMode == LibraryResultMode.favorites && item.isFavorite) ||
-        _resultMode == LibraryResultMode.local) {
-      setState(() {});
-    }
-  }
-
-  List<VideoItem> _sortedRecentVideos(LibraryApplicationFacade store) {
-    final key = (
-      'recent',
-      _libraryDataRevision,
-      _playbackDataRevision,
-      _sortMode,
-      _sortDirection,
-    );
-    if (_recentVideoCacheKey == key) {
-      return _recentVideoCache;
-    }
-    _recentVideoCacheKey = key;
-    _recentVideoCache = _sortController.sort(
-      store.videos.values.where(videoIsContinueWatching),
-    );
-    return _recentVideoCache;
-  }
-
-  List<VideoItem> _sortedFavoriteVideos(LibraryApplicationFacade store) {
-    final key = (
-      'favorites',
-      _libraryDataRevision,
-      _sortMode,
-      _sortDirection,
-    );
-    if (_favoriteVideoCacheKey == key) {
-      return _favoriteVideoCache;
-    }
-    _favoriteVideoCacheKey = key;
-    _favoriteVideoCache = _sortController.sort(
-      store.videos.values.where((item) => item.isFavorite),
-    );
-    return _favoriteVideoCache;
-  }
-
-  List<LocalLibraryEntry> _cachedLocalLibraryEntries(
-    LibraryApplicationFacade store,
-  ) {
-    final key = (
-      'local',
-      _libraryDataRevision,
-      _localLibraryPath,
-      _sortMode,
-      _sortDirection,
-    );
-    if (_localEntryCacheKey == key) {
-      return _localEntryCache;
-    }
-    final cached = _localEntryCacheByKey[key];
-    if (cached != null) {
-      _localEntryCacheKey = key;
-      _localEntryCache = cached;
-      return cached;
-    }
-    if (_localEntryLoads.add(key)) {
-      // 目录枚举放到异步平台边界，build 只消费缓存，避免大目录阻塞 UI 线程。
-      unawaited(() async {
-        try {
-          final entries = await _localLibraryEntries(store);
-          _localEntryCacheByKey[key] = entries;
-          while (_localEntryCacheByKey.length > 24) {
-            _localEntryCacheByKey.remove(_localEntryCacheByKey.keys.first);
-          }
-          if (mounted &&
-              _store == store &&
-              _resultMode == LibraryResultMode.local) {
-            final currentKey = (
-              'local',
-              _libraryDataRevision,
-              _localLibraryPath,
-              _sortMode,
-              _sortDirection,
-            );
-            if (currentKey == key) {
-              setState(() {
-                _localEntryCacheKey = key;
-                _localEntryCache = entries;
-              });
-            }
-          }
-        } finally {
-          _localEntryLoads.remove(key);
-        }
-      }());
-    }
-    return const <LocalLibraryEntry>[];
-  }
-
-  void _scheduleFilterRefresh({
-    bool refreshCounts = false,
-    Iterable<VideoItem>? changedVideos,
-  }) {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    if (!refreshCounts) {
-      _facetCountController.cancelPending();
-    }
-    final query = _currentFilterQuery();
-    final resultEpoch = _resultEpoch(query);
-    final countEpoch = _countEpoch(query);
-    _queryController.configure(
-      engine: TagQueryService(
-        videos: store.videos.values,
-        tagContext: store.tagQueryContext,
-      ),
-      totalCount: store.videos.length,
-      dataRevision: _libraryDataRevision,
-      sortFingerprint: _sortController.fingerprint,
-      compare: _sortController.compare,
-      sortVideos: _sortController.sort,
-    );
-    _queryController.schedule(
-      query: query,
-      expectedEpoch: resultEpoch,
-      changedVideos: changedVideos,
-      isStillCurrent: (candidate) =>
-          mounted &&
-          _store == store &&
-          candidate == _resultEpoch(_currentFilterQuery()),
-      onMeasured: changedVideos == null
-          ? null
-          : (elapsed) => _activeScanUiDiagnostics?.recordStage(
-                'ui.filter_delta_apply',
-                elapsed,
-                itemCount: changedVideos.length,
-              ),
-      onAccepted: (nextState) {
-        if (!mounted || _store != store) {
-          return;
-        }
-        setState(() {
-          _isRefreshingVideos = false;
-        });
-        // 真正的可见窗口由虚拟列表滚动停止后驱动；固定取结果前 36 条会在深度滚动时
-        // 抢占错误项目，因此这里不再猜测可见范围。
-        if (!refreshCounts) {
-          return;
-        }
-        _facetCountController.scheduleVisible(
-          epoch: countEpoch,
-          query: query,
-          compute: store.resultCounts,
-          isStillCurrent: (epoch) =>
-              mounted &&
-              _store == store &&
-              epoch == _countEpoch(_currentFilterQuery()),
-          onAccepted: (epoch, nextCounts) {
-            if (!mounted || epoch != countEpoch || _store != store) {
-              return;
-            }
-            setState(() {
-              _isRefreshingCounts = false;
-            });
-          },
-        );
-      },
-    );
-  }
-
-  /** 返回当前查询可发布的结果版本。 */
-  LibraryResultEpoch _resultEpoch(FilterQuery query) =>
-      LibraryResultEpoch.fromQuery(
-        dataRevision: _libraryDataRevision,
-        query: query,
-        presentationSort: _sortController.fingerprint,
-      );
-
-  /** 返回当前查询可发布的计数版本；标签定义使用独立代次。 */
-  LibraryCountEpoch _countEpoch(FilterQuery query) =>
-      LibraryCountEpoch.fromQuery(
-        dataRevision: _libraryDataRevision,
-        tagDefinitionRevision: _tagDefinitionRevision,
-        query: query,
-      );
-
-  FilterQuery _currentFilterQuery() {
-    final store = _store;
-    final parentTag = _activeChildParentTag;
-    final selectedChildTag = _activeChildTagName;
-    return FilterQuery(
-      keyword: _searchController.text,
-      primaryTagId: parentTag,
-      childTagId: parentTag == null ? null : selectedChildTag,
-      folderRoots: parentTag == null
-          ? const <String>[]
-          : store?.roots ?? const <String>[],
-      selectedGroupTagIds: {
-        for (final entry in _selectedGroupTagIds.entries)
-          if (entry.value.isNotEmpty &&
-              entry.key != 'folder.primary' &&
-              entry.key != 'folder.child')
-            entry.key: {...entry.value},
-      },
-      excludeTagIds: {..._excludedTagIds},
-      favoriteOnly: _showFavoritesOnly,
-    );
-  }
-
-  List<TagGroup> _tagGroupsForSidebar(LibraryApplicationFacade store) {
-    final cacheKey = (
-      _libraryDataRevision,
-      store.tagsById.length,
-      _rootsSignature(store.roots),
-    );
-    if (_tagGroupsCacheKey == cacheKey) {
-      return _tagGroupsCache;
-    }
-    final rebuildWatch = Stopwatch()..start();
-    final folderGroups = folderTagGroupsFromLibraryPaths(
-      videos: store.videos.values,
-      roots: store.roots,
-      templates: store.tagGroups,
-    );
-    final folderGroupById = {for (final group in folderGroups) group.id: group};
-    final itemsByGroup = <String, List<TagItem>>{};
-    for (final tag in store.allTagItems.where((tag) => !tag.isHidden)) {
-      final groupId = tag.groupId ?? 'manual';
-      if (groupId == 'folder.primary' || groupId == 'folder.child') {
-        continue;
-      }
-      (itemsByGroup[groupId] ??= <TagItem>[]).add(tag);
-    }
-    final groups = <TagGroup>[];
-    final knownGroupIds = <String>{};
-    for (final group in store.tagGroups) {
-      knownGroupIds.add(group.id);
-      final folderGroup = folderGroupById[group.id];
-      if (folderGroup != null) {
-        groups.add(folderGroup);
-        continue;
-      }
-      final items = itemsByGroup[group.id] ?? const <TagItem>[];
-      groups.add(_copyGroupWithItems(group, items));
-    }
-    for (final folderGroup in folderGroups) {
-      if (!knownGroupIds.contains(folderGroup.id)) {
-        groups.add(folderGroup);
-        knownGroupIds.add(folderGroup.id);
-      }
-    }
-    for (final entry in itemsByGroup.entries) {
-      if (knownGroupIds.contains(entry.key)) {
-        continue;
-      }
-      groups.add(
-        TagGroup(
-          id: entry.key,
-          name: entry.key,
-          displayName: entry.key,
-          sortOrder: 999,
-          items: _sortedTagItems(entry.value),
-        ),
-      );
-    }
-    groups.removeWhere((group) => group.items.isEmpty);
-    groups.sort((a, b) {
-      final byOrder = a.sortOrder.compareTo(b.sortOrder);
-      if (byOrder != 0) {
-        return byOrder;
-      }
-      return _groupLabel(a).compareTo(_groupLabel(b));
-    });
-    _tagGroupsCacheKey = cacheKey;
-    _tagGroupsCache = List<TagGroup>.unmodifiable(groups);
-    rebuildWatch.stop();
-    _activeScanUiDiagnostics?.recordStage(
-      'ui.folder_sidebar_rebuild',
-      rebuildWatch.elapsed,
-      itemCount: store.videos.length,
-    );
-    return _tagGroupsCache;
-  }
-
-  String _rootsSignature(Iterable<String> roots) {
-    final normalized = [
-      for (final root in roots) TagRules.pathKey(root),
-    ]..sort();
-    return normalized.join('|');
-  }
-
-  TagGroup _copyGroupWithItems(TagGroup group, Iterable<TagItem> items) {
-    return TagGroup(
-      id: group.id,
-      name: group.name,
-      displayName: group.displayName,
-      sortOrder: group.sortOrder,
-      allowMultiSelect: group.allowMultiSelect,
-      defaultLogic: group.defaultLogic,
-      items: _sortedTagItems(items),
-      excludedItems: group.excludedItems,
-    );
-  }
-
-  List<TagItem> _sortedTagItems(Iterable<TagItem> items) {
-    final sorted = items.toList();
-    sorted.sort((a, b) {
-      final byOrder = a.sortOrder.compareTo(b.sortOrder);
-      if (byOrder != 0) {
-        return byOrder;
-      }
-      final byUsage = b.usageCount.compareTo(a.usageCount);
-      if (byUsage != 0) {
-        return byUsage;
-      }
-      return _tagLabel(a).compareTo(_tagLabel(b));
-    });
-    return sorted;
-  }
-
-  String _groupLabel(TagGroup group) => group.displayName ?? group.name;
-
-  String _tagLabel(TagItem tag) => tag.displayName ?? tag.name;
-
-  bool get _hasActiveFilters => !_currentFilterQuery().isEmpty;
-
-  void _toggleGroupTag(TagItem tag) {
-    final groupId = tag.groupId ?? 'manual';
-    if (groupId == 'folder.child') {
-      _toggleFolderChildTag(tag);
-      return;
-    }
-    final selected = _selectedGroupTagIds[groupId] ?? <String>{};
-    _mutateFilters(() {
-      _removeEquivalentLegacySelection(tag);
-      _excludedTagIds.remove(tag.id);
-      if (selected.contains(tag.id)) {
-        selected.remove(tag.id);
-      } else {
-        if (groupId == 'folder.primary' || groupId == 'folder.child') {
-          selected.clear();
-        }
-        selected.add(tag.id);
-      }
-      if (groupId == 'folder.primary') {
-        _selectedChildTags.clear();
-        _selectedGroupTagIds.remove('folder.child');
-      }
-      if (selected.isEmpty) {
-        _selectedGroupTagIds.remove(groupId);
-      } else {
-        _selectedGroupTagIds[groupId] = selected;
-      }
-    }, collapseTagPanel: true);
-  }
-
-  void _toggleFolderChildTag(TagItem child) {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final primary = _folderPrimaryForChild(store, child);
-    if (primary == null) {
-      return;
-    }
-    _mutateFilters(() {
-      _removeEquivalentLegacySelection(primary);
-      _removeEquivalentLegacySelection(child);
-      _excludedTagIds
-        ..remove(primary.id)
-        ..remove(child.id);
-      _selectedTags.clear();
-      _selectedChildTags.clear();
-      _selectedGroupTagIds['folder.primary'] = <String>{primary.id};
-      final selectedChildIds =
-          _selectedGroupTagIds['folder.child'] ?? const <String>{};
-      if (selectedChildIds.length == 1 && selectedChildIds.contains(child.id)) {
-        _selectedGroupTagIds.remove('folder.child');
-      } else {
-        _selectedGroupTagIds['folder.child'] = <String>{child.id};
-      }
-    }, collapseTagPanel: true);
-  }
-
-  TagItem? _folderPrimaryForChild(
-    LibraryApplicationFacade store,
-    TagItem child,
-  ) {
-    final parent = child.parentId?.trim();
-    if (parent == null || parent.isEmpty) {
-      return null;
-    }
-    for (final group in _tagGroupsForSidebar(store)) {
-      if (group.id != 'folder.primary') {
-        continue;
-      }
-      for (final primary in group.items) {
-        if (primary.id == parent || TagRules.sameTag(primary.name, parent)) {
-          return primary;
-        }
-      }
-    }
-    return null;
-  }
-
-  void _selectFolderPrimaryChild(TagItem primary, TagItem? child) {
-    _mutateFilters(() {
-      _removeEquivalentLegacySelection(primary);
-      if (child != null) {
-        _removeEquivalentLegacySelection(child);
-      }
-      _excludedTagIds
-        ..remove(primary.id)
-        ..remove(child?.id);
-      _selectedTags.clear();
-      _selectedChildTags.clear();
-      _selectedGroupTagIds['folder.primary'] = <String>{primary.id};
-      if (child == null) {
-        _selectedGroupTagIds.remove('folder.child');
-        return;
-      }
-      final selectedChildIds =
-          _selectedGroupTagIds['folder.child'] ?? const <String>{};
-      if (selectedChildIds.length == 1 && selectedChildIds.contains(child.id)) {
-        _selectedGroupTagIds.remove('folder.child');
-      } else {
-        _selectedGroupTagIds['folder.child'] = <String>{child.id};
-      }
-    }, collapseTagPanel: true);
-  }
-
-  void _toggleExcludedTag(TagItem tag) {
-    _mutateFilters(() {
-      for (final selected in _selectedGroupTagIds.values) {
-        selected.remove(tag.id);
-      }
-      _selectedGroupTagIds.removeWhere((_, selected) => selected.isEmpty);
-      if (!_excludedTagIds.remove(tag.id)) {
-        _excludedTagIds.add(tag.id);
-      }
-    }, collapseTagPanel: true);
-  }
-
-  void _removeGroupTag(TagItem tag) {
-    final groupId = tag.groupId ?? 'manual';
-    _mutateFilters(() {
-      _selectedGroupTagIds[groupId]?.remove(tag.id);
-      _selectedGroupTagIds.removeWhere((_, selected) => selected.isEmpty);
-    });
-  }
-
-  void _removeExcludedTag(TagItem tag) {
-    _mutateFilters(() => _excludedTagIds.remove(tag.id));
-  }
-
-  void _clearAllFilters() {
-    _mutateFilters(() {
-      _clearSearchSilently();
-      _selectedTags.clear();
-      _selectedChildTags.clear();
-      _selectedGroupTagIds.clear();
-      _excludedTagIds.clear();
-      _showFavoritesOnly = false;
-    });
-  }
-
-  void _removeEquivalentLegacySelection(TagItem tag) {
-    if (tag.parentId == null) {
-      _selectedTags
-          .removeWhere((selected) => TagRules.sameTag(selected, tag.name));
-      if (_selectedTags.isEmpty) {
-        _selectedChildTags.clear();
-      }
-      return;
-    }
-    if (_selectedTags
-        .any((selected) => TagRules.sameTag(selected, tag.parentId!))) {
-      _selectedChildTags
-          .removeWhere((selected) => TagRules.sameTag(selected, tag.name));
-    }
-  }
-
-  void _removeEquivalentGroupSelection({
-    required String tagName,
-    String? parentTag,
-  }) {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final removedIds = <String>{};
-    for (final tag in store.allTagItems) {
-      if (!TagRules.sameTag(tag.name, tagName)) {
-        continue;
-      }
-      if (parentTag == null) {
-        if (tag.parentId != null) {
-          continue;
-        }
-      } else if (tag.parentId == null ||
-          !TagRules.sameTag(tag.parentId!, parentTag)) {
-        continue;
-      }
-      removedIds.add(tag.id);
-    }
-    if (removedIds.isEmpty) {
-      return;
-    }
-    for (final selected in _selectedGroupTagIds.values) {
-      selected.removeAll(removedIds);
-    }
-    _selectedGroupTagIds.removeWhere((_, selected) => selected.isEmpty);
-    _excludedTagIds.removeAll(removedIds);
-  }
-
-  // ignore: unused_element
-  void _showSaveSmartListTodo() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          '\u4fdd\u5b58\u5f53\u524d\u7b5b\u9009 / Smart List \u5c06\u5728\u540e\u7eed\u9636\u6bb5\u63a5\u5165\u6301\u4e45\u5316\u3002',
-        ),
-      ),
-    );
-  }
-
-  // ignore: unused_element
-  void _showSmartListDraftDialog() {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final filterState =
-        _queryController.state ?? _buildImmediateFilterState(store);
-    final querySummary = _filterSummary(
-      store: store,
-      resultCount: filterState.resultCount,
-      totalCount: filterState.totalCount,
-    );
-    final queryExpression = _filterExpression(
-      store: store,
-      resultCount: filterState.resultCount,
-      totalCount: filterState.totalCount,
-    );
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => SmartListDraftDialog(
-        suggestedName: querySummary,
-        querySummary: querySummary,
-        queryExpression: queryExpression,
-        resultCount: filterState.resultCount,
-        totalCount: filterState.totalCount,
-        onConfirmDraft: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Smart List \u6301\u4e45\u5316\u5c06\u5728\u540e\u7eed\u63a5\u5165\u3002',
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  List<TagItem> _selectedGroupTagItems(LibraryApplicationFacade store) {
-    final selectedIds =
-        _selectedGroupTagIds.values.expand((ids) => ids).toSet();
-    final folderTagsById = {
-      for (final group in _tagGroupsForSidebar(store))
-        for (final tag in group.items) tag.id: tag,
-    };
-    return [
-      for (final id in selectedIds)
-        if (folderTagsById[id] != null)
-          folderTagsById[id]!
-        else if (store.tagsById[id] != null)
-          store.tagsById[id]!,
-    ]..sort((a, b) => _tagLabel(a).compareTo(_tagLabel(b)));
-  }
-
-  List<TagItem> _excludedTagItems(LibraryApplicationFacade store) {
-    return [
-      for (final id in _excludedTagIds)
-        if (store.tagsById[id] != null) store.tagsById[id]!,
-    ]..sort((a, b) => _tagLabel(a).compareTo(_tagLabel(b)));
-  }
-
-  void _toggleSingleSelection(Set<String> target, String tag) {
-    final wasSelected = target.contains(tag);
-    target.clear();
-    if (!wasSelected) {
-      target.add(tag);
-    }
-  }
-
-  String? get _activeChildParentTag {
-    if (_selectedTags.length == 1) {
-      return _selectedTags.first;
-    }
-    final store = _store;
-    final selectedFolderIds =
-        _selectedGroupTagIds['folder.primary'] ?? const <String>{};
-    if (store == null || selectedFolderIds.length != 1) {
-      return null;
-    }
-    return _folderDiscoveryTagById(store, selectedFolderIds.first)?.name ??
-        store.tagQueryContext.findTag(selectedFolderIds.first)?.name;
-  }
-
-  String? get _activeChildTagName {
-    if (_selectedChildTags.length == 1) {
-      return _selectedChildTags.first;
-    }
-    final store = _store;
-    final selectedChildIds =
-        _selectedGroupTagIds['folder.child'] ?? const <String>{};
-    if (store == null || selectedChildIds.length != 1) {
-      return null;
-    }
-    return _folderDiscoveryTagById(store, selectedChildIds.first)?.name ??
-        store.tagQueryContext.findTag(selectedChildIds.first)?.name;
-  }
-
-  /**
-   * 从真实路径派生的 folder 标签候选中按 id 查找标签。
-   *
-   * 该查找用于把 UI 选中态转换回 `primaryTagId/childTagId`，避免历史 SQLite tag id
-   * 与当前文件树 root 不一致时影响筛选结果。
-   */
-  TagItem? _folderDiscoveryTagById(
-    LibraryApplicationFacade store,
-    String tagId,
-  ) {
-    for (final group in _tagGroupsForSidebar(store)) {
-      for (final tag in group.items) {
-        if (tag.id == tagId) {
-          return tag;
-        }
-      }
-    }
-    return null;
-  }
+  PlayerServiceFactory get playerServiceFactory =>
+      (widget).playerServiceFactory;
+
+  @override
+  MediaProbeBackendFactory get mediaProbeBackendFactory =>
+      (widget).mediaProbeBackendFactory;
+
+  @override
+  AppUpdateService get updateService => (widget).updateService;
 
   @override
   Widget build(BuildContext context) {
-    final store = _store;
-    final thumbnailService = _thumbnailService;
+    final store = runtime.store;
+    final thumbnailService = runtime.thumbnailService;
     if (store == null || thumbnailService == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final filterState =
-        _queryController.state ?? _buildImmediateFilterState(store);
+        runtime.queryController.state ?? buildImmediateFilterState(store);
     final filteredVideos = filterState.filteredVideos;
-    final recentVideos = _sortedRecentVideos(store);
-    final favoriteVideos = _sortedFavoriteVideos(store);
-    final videos = switch (_resultMode) {
+    final recentVideos = sortedRecentVideos(store);
+    final favoriteVideos = sortedFavoriteVideos(store);
+    final videos = switch (runtime.resultMode) {
       LibraryResultMode.recent => recentVideos,
       LibraryResultMode.favorites => favoriteVideos,
       LibraryResultMode.local => const <VideoItem>[],
       LibraryResultMode.library => filteredVideos,
     };
-    final localEntries = _resultMode == LibraryResultMode.local
-        ? _cachedLocalLibraryEntries(store)
+    final localEntries = runtime.resultMode == LibraryResultMode.local
+        ? cachedLocalLibraryEntries(store)
         : const <LocalLibraryEntry>[];
     final localVideos = <VideoItem>[
       for (final entry in localEntries)
@@ -2851,18 +176,18 @@ class _LibraryPageState extends State<LibraryPage> {
     ];
     final localVideoCount = localVideos.length;
     final displayedQueueVideos =
-        _resultMode == LibraryResultMode.local ? localVideos : videos;
+        runtime.resultMode == LibraryResultMode.local ? localVideos : videos;
     final playbackBinding = bindDisplayedPlaybackResult(
-      controller: _playbackQueueController,
-      sourceName: _resultMode.name,
+      controller: runtime.playbackQueueController,
+      sourceName: runtime.resultMode.name,
       acceptedLibraryEpoch: filterState.epoch,
       displayedVideos: displayedQueueVideos,
       totalCount: store.videos.length,
-      dataRevision: _libraryDataRevision,
-      playbackDataRevision: _playbackDataRevision,
-      sortFingerprint: _sortController.fingerprint,
-      localPath: _localLibraryPath,
-      libraryTitle: _filterSummary(
+      dataRevision: runtime.libraryDataRevision,
+      playbackDataRevision: runtime.playbackDataRevision,
+      sortFingerprint: runtime.sortController.fingerprint,
+      localPath: runtime.localLibraryPath,
+      libraryTitle: filterSummary(
         store: store,
         resultCount: displayedQueueVideos.length,
         totalCount: store.videos.length,
@@ -2870,53 +195,53 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     void openAcceptedVideo(VideoItem item, List<VideoItem> playlist) =>
         unawaited(
-          _openVideo(
+          openVideo(
             item,
             playlist,
             playbackBinding.result,
             playbackBinding.queueTitle,
           ),
         );
-    final displayResultCount = switch (_resultMode) {
+    final displayResultCount = switch (runtime.resultMode) {
       LibraryResultMode.recent => videos.length,
       LibraryResultMode.favorites => videos.length,
       LibraryResultMode.local => localVideoCount,
       LibraryResultMode.library => filterState.resultCount,
     };
-    final resultCountLabel = _resultMode == LibraryResultMode.local
+    final resultCountLabel = runtime.resultMode == LibraryResultMode.local
         ? localLibraryEntrySummary(localEntries)
         : null;
-    final defaultResultLabel = switch (_resultMode) {
+    final defaultResultLabel = switch (runtime.resultMode) {
       LibraryResultMode.recent => '继续观看',
       LibraryResultMode.favorites => '\u672c\u5730\u6536\u85cf',
       LibraryResultMode.local => '\u672c\u5730\u5a92\u4f53\u5e93',
       LibraryResultMode.library => '\u5168\u90e8\u89c6\u9891',
     };
     final tags = store.allTags.toList()..sort();
-    final tagGroups = _tagGroupsForSidebar(store);
-    final resultCounts = _facetCountController.visibleCounts.isEmpty
-        ? _facetCountController.fallbackCounts(store.allTagItems)
-        : _facetCountController.visibleCounts;
+    final tagGroups = tagGroupsForSidebar(store);
+    final resultCounts = runtime.facetCountController.visibleCounts.isEmpty
+        ? runtime.facetCountController.fallbackCounts(store.allTagItems)
+        : runtime.facetCountController.visibleCounts;
     final pathDerivedTagCounts = {
       for (final group in tagGroups)
         if (group.id == 'folder.primary' || group.id == 'folder.child')
           for (final tag in group.items) tag.id: tag.usageCount,
     };
     final stableTagCounts = {
-      ...(_facetCountController.stableCounts.isEmpty
-          ? _facetCountController.fallbackCounts(store.allTagItems)
-          : _facetCountController.stableCounts),
+      ...(runtime.facetCountController.stableCounts.isEmpty
+          ? runtime.facetCountController.fallbackCounts(store.allTagItems)
+          : runtime.facetCountController.stableCounts),
       ...pathDerivedTagCounts,
     };
-    final selectedGroupTags = _selectedGroupTagItems(store);
-    final excludedTags = _excludedTagItems(store);
+    final selectedGroupTags = selectedGroupTagItems(store);
+    final excludedTags = excludedTagItems(store);
     final supportsLibrarySelection =
-        (_resultMode == LibraryResultMode.library ||
-                _resultMode == LibraryResultMode.favorites) &&
+        (runtime.resultMode == LibraryResultMode.library ||
+                runtime.resultMode == LibraryResultMode.favorites) &&
             videos.isNotEmpty;
-    final allLibraryVideosSelected =
-        videos.isNotEmpty && _selectedLibraryVideoIds.length == videos.length;
-    final childParentTag = _activeChildParentTag;
+    final allLibraryVideosSelected = videos.isNotEmpty &&
+        runtime.selectedLibraryVideoIds.length == videos.length;
+    final childParentTag = activeChildParentTag;
     final childTags = childParentTag == null
         ? <String>[]
         : TagRules.sortedChildTags(store.childTagsFor(childParentTag))
@@ -2938,47 +263,49 @@ class _LibraryPageState extends State<LibraryPage> {
         tags: tags,
         tagGroups: tagGroups,
         resultCounts: resultCounts,
-        selectedLocalLibraryPath: _localLibraryPath,
+        selectedLocalLibraryPath: runtime.localLibraryPath,
         childParentTag: childParentTag,
         childTags: childTags,
-        selectedChildTags: _selectedChildTags,
-        selectedGroupTagIds: _selectedGroupTagIds,
-        excludedTagIds: _excludedTagIds,
+        selectedChildTags: runtime.selectedChildTags,
+        selectedGroupTagIds: runtime.selectedGroupTagIds,
+        excludedTagIds: runtime.excludedTagIds,
         favoriteCount: favoriteCount,
         missingCount: missingCount,
         favoriteVideosSelected:
-            _resultMode == LibraryResultMode.favorites || _showFavoritesOnly,
-        recentPlaybackSelected: _resultMode == LibraryResultMode.recent,
-        localLibrarySelected: _resultMode == LibraryResultMode.local,
-        selectedTags: _selectedTags,
-        isScanning: _isScanning,
+            runtime.resultMode == LibraryResultMode.favorites ||
+                runtime.showFavoritesOnly,
+        recentPlaybackSelected: runtime.resultMode == LibraryResultMode.recent,
+        localLibrarySelected: runtime.resultMode == LibraryResultMode.local,
+        selectedTags: runtime.selectedTags,
+        isScanning: runtime.isScanning,
         dense: dense,
-        collapsed: _isMainSidebarCollapsed,
+        collapsed: runtime.isMainSidebarCollapsed,
         width: width,
-        onToggleCollapsed: () => setState(_viewPreferences.toggleMainSidebar),
-        onPickFolder: _pickFolder,
-        onShowAllLibrary: _showAllLibraryVideos,
-        onRescan: _rescan,
-        onRemoveLocalLibraryRoot: _removeLocalLibraryRoot,
-        onFavoritesToggle: _showFavoriteVideos,
-        onOpenRecentPlayback: _showRecentPlaybackVideos,
-        onOpenLocalLibraryRoot: _showLocalLibraryPath,
-        onOpenDirectoryManager: _openDirectoryManager,
-        onOpenMissingRelink: _openMissingRelink,
-        onOpenTagManager: () => _openTagManager(videos),
-        onOpenSettings: _openSettings,
+        onToggleCollapsed: () =>
+            setState(runtime.viewPreferences.toggleMainSidebar),
+        onPickFolder: pickFolder,
+        onShowAllLibrary: showAllLibraryVideos,
+        onRescan: rescan,
+        onRemoveLocalLibraryRoot: removeLocalLibraryRoot,
+        onFavoritesToggle: showFavoriteVideos,
+        onOpenRecentPlayback: showRecentPlaybackVideos,
+        onOpenLocalLibraryRoot: showLocalLibraryPath,
+        onOpenDirectoryManager: openDirectoryManager,
+        onOpenMissingRelink: openMissingRelink,
+        onOpenTagManager: () => openTagManager(videos),
+        onOpenSettings: openSettings,
         onChildTagToggle: (tag) {
-          _mutateFilters(() {
-            _removeEquivalentGroupSelection(
+          mutateFilters(() {
+            removeEquivalentGroupSelection(
               tagName: tag,
-              parentTag: _activeChildParentTag,
+              parentTag: activeChildParentTag,
             );
-            _toggleSingleSelection(_selectedChildTags, tag);
+            toggleSingleSelection(runtime.selectedChildTags, tag);
           }, collapseTagPanel: true);
         },
-        onClearChildTags: () => _mutateFilters(_selectedChildTags.clear),
-        onGroupTagToggle: _toggleGroupTag,
-        onGroupTagExcludeToggle: _toggleExcludedTag,
+        onClearChildTags: () => mutateFilters(runtime.selectedChildTags.clear),
+        onGroupTagToggle: toggleGroupTag,
+        onGroupTagExcludeToggle: toggleExcludedTag,
       );
     }
 
@@ -2987,44 +314,44 @@ class _LibraryPageState extends State<LibraryPage> {
         tagGroups: tagGroups,
         resultCounts: stableTagCounts,
         favoriteTags: store.favoriteTags,
-        selectedTags: _selectedTags,
-        selectedChildTags: _selectedChildTags,
-        selectedGroupTagIds: _selectedGroupTagIds,
-        excludedTagIds: _excludedTagIds,
+        selectedTags: runtime.selectedTags,
+        selectedChildTags: runtime.selectedChildTags,
+        selectedGroupTagIds: runtime.selectedGroupTagIds,
+        excludedTagIds: runtime.excludedTagIds,
         childParentTag: childParentTag,
         childTags: childTags,
         childTagItemsByParent: childTagItemsByParent,
         favoriteCount: favoriteCount,
-        showFavoritesOnly: _showFavoritesOnly,
+        showFavoritesOnly: runtime.showFavoritesOnly,
         dense: dense,
         panelWidth: panelWidth,
-        onFavoritesToggle: () => _mutateFilters(
-          () => _showFavoritesOnly = !_showFavoritesOnly,
+        onFavoritesToggle: () => mutateFilters(
+          () => runtime.showFavoritesOnly = !runtime.showFavoritesOnly,
           collapseTagPanel: true,
         ),
         onTagToggle: (tag) {
-          _mutateFilters(() {
-            _removeEquivalentGroupSelection(tagName: tag);
-            _toggleSingleSelection(_selectedTags, tag);
-            _selectedChildTags.clear();
+          mutateFilters(() {
+            removeEquivalentGroupSelection(tagName: tag);
+            toggleSingleSelection(runtime.selectedTags, tag);
+            runtime.selectedChildTags.clear();
           }, collapseTagPanel: true);
         },
         onChildTagToggle: (tag) {
-          _mutateFilters(() {
-            _removeEquivalentGroupSelection(
+          mutateFilters(() {
+            removeEquivalentGroupSelection(
               tagName: tag,
-              parentTag: _activeChildParentTag,
+              parentTag: activeChildParentTag,
             );
-            _toggleSingleSelection(_selectedChildTags, tag);
+            toggleSingleSelection(runtime.selectedChildTags, tag);
           }, collapseTagPanel: true);
         },
-        onGroupTagToggle: _toggleGroupTag,
-        onFolderPrimaryChildSelected: _selectFolderPrimaryChild,
-        onGroupTagExcludeToggle: _toggleExcludedTag,
+        onGroupTagToggle: toggleGroupTag,
+        onFolderPrimaryChildSelected: selectFolderPrimaryChild,
+        onGroupTagExcludeToggle: toggleExcludedTag,
         onCollapse: dense
             ? null
             : () => setState(
-                  () => _viewPreferences.setTagDiscoveryPanelOpen(false),
+                  () => runtime.viewPreferences.setTagDiscoveryPanelOpen(false),
                 ),
       );
     }
@@ -3039,23 +366,24 @@ class _LibraryPageState extends State<LibraryPage> {
           if (topBar != null) topBar,
           Expanded(
             child: LibraryImportDropRegion(
-              enabled: _resultMode == LibraryResultMode.library && !_isScanning,
-              onDropPaths: (paths) => unawaited(_importLibraryPaths(paths)),
+              enabled: runtime.resultMode == LibraryResultMode.library &&
+                  !runtime.isScanning,
+              onDropPaths: (paths) => unawaited(importLibraryPaths(paths)),
               child: RepaintBoundary(
-                child: switch (_resultMode) {
+                child: switch (runtime.resultMode) {
                   LibraryResultMode.local => LocalLibraryView(
-                      currentPath: _localLibraryPath,
+                      currentPath: runtime.localLibraryPath,
                       entries: localEntries,
                       thumbnailService: thumbnailService,
-                      playbackSettings: _playbackSettings,
-                      dense: _denseResultGrid,
-                      canGoBack: _sourceNavigation.canGoBack,
-                      onBack: _goBackLocalLibraryPath,
-                      onOpenFolder: _openLocalLibraryFolder,
+                      playbackSettings: runtime.playbackSettings,
+                      dense: runtime.denseResultGrid,
+                      canGoBack: runtime.sourceNavigation.canGoBack,
+                      onBack: goBackLocalLibraryPath,
+                      onOpenFolder: openLocalLibraryFolder,
                       onOpenVideo: openAcceptedVideo,
-                      onRevealLocation: _revealVideoLocation,
-                      onToggleFavorite: _toggleFavorite,
-                      onDelete: _requestDeleteVideo,
+                      onRevealLocation: revealVideoLocation,
+                      onToggleFavorite: toggleFavorite,
+                      onDelete: requestDeleteVideo,
                     ),
                   LibraryResultMode.recent => videos.isEmpty
                       ? EmptyState(
@@ -3065,61 +393,62 @@ class _LibraryPageState extends State<LibraryPage> {
                       : RecentPlaybackView(
                           videos: videos,
                           selectedVideoIds:
-                              _recentPlaybackSelection.selectedVideoIds,
+                              runtime.recentPlaybackSelection.selectedVideoIds,
                           thumbnailService: thumbnailService,
-                          playbackSettings: _playbackSettings,
-                          dense: _denseResultGrid,
+                          playbackSettings: runtime.playbackSettings,
+                          dense: runtime.denseResultGrid,
                           onOpen: openAcceptedVideo,
-                          onRevealLocation: _revealVideoLocation,
-                          onToggleFavorite: _toggleFavorite,
-                          onDeleteVideo: _requestDeleteVideo,
-                          onToggleSelected: _toggleRecentSelection,
+                          onRevealLocation: revealVideoLocation,
+                          onToggleFavorite: toggleFavorite,
+                          onDeleteVideo: requestDeleteVideo,
+                          onToggleSelected: toggleRecentSelection,
                           onSelectAll: () => setState(() {
-                            _recentPlaybackSelection.toggleAll(
+                            runtime.recentPlaybackSelection.toggleAll(
                               videos.map((item) => item.videoId),
                             );
                           }),
                           onClearSelection: () =>
-                              setState(_recentPlaybackSelection.clear),
-                          onDeleteOne: _clearOneRecentPlayback,
+                              setState(runtime.recentPlaybackSelection.clear),
+                          onDeleteOne: clearOneRecentPlayback,
                           onDeleteSelected: () =>
-                              _clearRecentPlayback(selectedOnly: true),
+                              clearRecentPlayback(selectedOnly: true),
                           onDeleteAll: () =>
-                              _clearRecentPlayback(selectedOnly: false),
+                              clearRecentPlayback(selectedOnly: false),
                         ),
                   _ => videos.isEmpty
                       ? EmptyState(
                           hasLibrary: store.videos.isNotEmpty,
-                          message: _resultMode == LibraryResultMode.favorites
-                              ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u89c6\u9891'
-                              : null,
+                          message:
+                              runtime.resultMode == LibraryResultMode.favorites
+                                  ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u89c6\u9891'
+                                  : null,
                           onAddFiles:
-                              _resultMode == LibraryResultMode.library &&
+                              runtime.resultMode == LibraryResultMode.library &&
                                       store.videos.isEmpty
-                                  ? _pickVideoFiles
+                                  ? pickVideoFiles
                                   : null,
                         )
                       : VideoGrid(
                           videos: videos,
                           thumbnailService: thumbnailService,
-                          playbackSettings: _playbackSettings,
-                          dense: _denseResultGrid,
+                          playbackSettings: runtime.playbackSettings,
+                          dense: runtime.denseResultGrid,
                           columnReferenceWidth: gridColumnReferenceWidth,
-                          onVisible: _prioritizeVisibleLibraryItem,
+                          onVisible: prioritizeVisibleLibraryItem,
                           onOpen: openAcceptedVideo,
-                          onRevealLocation: _revealVideoLocation,
-                          onToggleFavorite: _toggleFavorite,
-                          onDelete: _requestDeleteVideo,
-                          selectionMode: _librarySelectionMode,
-                          selectedVideoIds: _selectedLibraryVideoIds,
+                          onRevealLocation: revealVideoLocation,
+                          onToggleFavorite: toggleFavorite,
+                          onDelete: requestDeleteVideo,
+                          selectionMode: runtime.librarySelectionMode,
+                          selectedVideoIds: runtime.selectedLibraryVideoIds,
                           onToggleSelected: (item) => setState(
-                            () => _librarySelection.toggle(item.videoId),
+                            () => runtime.librarySelection.toggle(item.videoId),
                           ),
                           scrollChromeEnabled:
                               layoutSize == LayoutSize.expanded,
                           onHeaderVisibilityChanged: (visible) {
-                            if (_libraryHeaderVisible.value != visible) {
-                              _libraryHeaderVisible.value = visible;
+                            if (runtime.libraryHeaderVisible.value != visible) {
+                              runtime.libraryHeaderVisible.value = visible;
                             }
                           },
                         ),
@@ -3133,94 +462,94 @@ class _LibraryPageState extends State<LibraryPage> {
 
     Widget buildTopBar(LayoutSize layoutSize) {
       return ReferenceTopBar(
-        controller: _searchController,
+        controller: runtime.searchController,
         videoCount: displayResultCount,
         resultCountLabel: resultCountLabel,
-        keyword: _searchController.text,
-        searchFocusNode: _searchFocusNode,
-        selectedTags: _selectedTags.toList()..sort(),
-        selectedChildTags: _selectedChildTags.toList()..sort(),
+        keyword: runtime.searchController.text,
+        searchFocusNode: runtime.searchFocusNode,
+        selectedTags: runtime.selectedTags.toList()..sort(),
+        selectedChildTags: runtime.selectedChildTags.toList()..sort(),
         selectedGroupTags: selectedGroupTags,
         excludedTags: excludedTags,
         defaultChipLabel: defaultResultLabel,
-        showFavoritesOnly: _showFavoritesOnly,
-        refreshing: _isRefreshingVideos || _isRefreshingCounts,
-        progressLabel: _resultMode != LibraryResultMode.library
+        showFavoritesOnly: runtime.showFavoritesOnly,
+        refreshing: runtime.isRefreshingVideos || runtime.isRefreshingCounts,
+        progressLabel: runtime.resultMode != LibraryResultMode.library
             ? null
-            : _isScanning
-                ? _isCancellingScan
+            : runtime.isScanning
+                ? runtime.isCancellingScan
                     ? '正在取消扫描…'
-                    : libraryScanProgressLabel(_scanProgress)
-                : _mediaImportProgress == null
+                    : libraryScanProgressLabel(runtime.scanProgress)
+                : runtime.mediaImportProgress == null
                     ? null
                     : libraryMediaImportProgressLabel(
-                        _mediaImportProgress!,
+                        runtime.mediaImportProgress!,
                       ),
-        progressValue: _resultMode != LibraryResultMode.library
+        progressValue: runtime.resultMode != LibraryResultMode.library
             ? null
-            : _isScanning
-                ? _scanProgress?.fraction
-                : _mediaImportProgress?.fraction,
-        progressPaused: _isScanning
-            ? (_scanProgress?.isPaused ?? false)
-            : (_mediaImportProgress?.isPaused ?? false),
-        onToggleProgressPaused: _resultMode != LibraryResultMode.library
+            : runtime.isScanning
+                ? runtime.scanProgress?.fraction
+                : runtime.mediaImportProgress?.fraction,
+        progressPaused: runtime.isScanning
+            ? (runtime.scanProgress?.isPaused ?? false)
+            : (runtime.mediaImportProgress?.isPaused ?? false),
+        onToggleProgressPaused: runtime.resultMode != LibraryResultMode.library
             ? null
-            : _isScanning
-                ? (_scanProgress == null ? null : _toggleScanPaused)
-                : _mediaImportProgress == null
+            : runtime.isScanning
+                ? (runtime.scanProgress == null ? null : toggleScanPaused)
+                : runtime.mediaImportProgress == null
                     ? null
-                    : _toggleMediaImportPaused,
-        onCancelProgress: _resultMode == LibraryResultMode.library &&
-                _isScanning &&
-                !_isCancellingScan
-            ? _cancelScan
+                    : toggleMediaImportPaused,
+        onCancelProgress: runtime.resultMode == LibraryResultMode.library &&
+                runtime.isScanning &&
+                !runtime.isCancellingScan
+            ? cancelScan
             : null,
-        sortMode: _sortMode,
-        sortDirection: _sortDirection,
+        sortMode: runtime.sortMode,
+        sortDirection: runtime.sortDirection,
         layoutSize: layoutSize,
-        hasActiveFilters: _hasActiveFilters,
-        onSearchChanged: (_) => _handleSearchControllerChanged(),
-        onSortChanged: (mode) => _applySortChange(sortMode: mode),
-        onSortDirectionToggle: _toggleSortDirection,
-        denseResultGrid: _denseResultGrid,
-        onResultViewChanged: _setResultView,
-        onOpenTagManager: () => _openTagManager(videos),
-        tagPanelOpen: _isTagDiscoveryPanelOpen,
+        hasActiveFilters: hasActiveFilters,
+        onSearchChanged: (_) => handleSearchControllerChanged(),
+        onSortChanged: (mode) => applySortChange(sortMode: mode),
+        onSortDirectionToggle: toggleSortDirection,
+        denseResultGrid: runtime.denseResultGrid,
+        onResultViewChanged: setResultView,
+        onOpenTagManager: () => openTagManager(videos),
+        tagPanelOpen: runtime.isTagDiscoveryPanelOpen,
         onToggleTagPanel: layoutSize == LayoutSize.expanded
-            ? () => setState(_viewPreferences.toggleTagDiscoveryPanel)
+            ? () => setState(runtime.viewPreferences.toggleTagDiscoveryPanel)
             : null,
-        onRemovePrimaryTag: (tag) => _mutateFilters(() {
-          _selectedTags.remove(tag);
-          _selectedChildTags.clear();
+        onRemovePrimaryTag: (tag) => mutateFilters(() {
+          runtime.selectedTags.remove(tag);
+          runtime.selectedChildTags.clear();
         }),
         onRemoveChildTag: (tag) =>
-            _mutateFilters(() => _selectedChildTags.remove(tag)),
-        onRemoveGroupTag: _removeGroupTag,
-        onRemoveExcludedTag: _removeExcludedTag,
-        onClearKeyword: () => _mutateFilters(_clearSearchSilently),
+            mutateFilters(() => runtime.selectedChildTags.remove(tag)),
+        onRemoveGroupTag: removeGroupTag,
+        onRemoveExcludedTag: removeExcludedTag,
+        onClearKeyword: () => mutateFilters(clearSearchSilently),
         onClearFavoritesOnly: () =>
-            _mutateFilters(() => _showFavoritesOnly = false),
-        onClearAll: _hasActiveFilters ? _clearAllFilters : null,
-        selectionMode: _librarySelectionMode,
-        selectedCount: _selectedLibraryVideoIds.length,
+            mutateFilters(() => runtime.showFavoritesOnly = false),
+        onClearAll: hasActiveFilters ? clearAllFilters : null,
+        selectionMode: runtime.librarySelectionMode,
+        selectedCount: runtime.selectedLibraryVideoIds.length,
         allSelected: allLibraryVideosSelected,
         onEnterSelectionMode: supportsLibrarySelection
-            ? () => setState(_librarySelection.enter)
+            ? () => setState(runtime.librarySelection.enter)
             : null,
-        onToggleSelectAll: _librarySelectionMode
+        onToggleSelectAll: runtime.librarySelectionMode
             ? () => setState(
-                  () => _librarySelection.toggleAll(
+                  () => runtime.librarySelection.toggleAll(
                     videos.map((item) => item.videoId),
                   ),
                 )
             : null,
-        onDeleteSelected:
-            _librarySelectionMode && _selectedLibraryVideoIds.isNotEmpty
-                ? () => _requestDeleteSelectedVideos(videos)
-                : null,
-        onCancelSelectionMode: _librarySelectionMode
-            ? () => setState(_librarySelection.clear)
+        onDeleteSelected: runtime.librarySelectionMode &&
+                runtime.selectedLibraryVideoIds.isNotEmpty
+            ? () => requestDeleteSelectedVideos(videos)
+            : null,
+        onCancelSelectionMode: runtime.librarySelectionMode
+            ? () => setState(runtime.librarySelection.clear)
             : null,
         onOpenFilters: () {
           showModalBottomSheet<void>(
@@ -3252,7 +581,7 @@ class _LibraryPageState extends State<LibraryPage> {
         children: [
           LibraryScrollResponsiveHeader(
             key: LibrarySmokeKeys.scrollResponsiveHeader,
-            visibleListenable: _libraryHeaderVisible,
+            visibleListenable: runtime.libraryHeaderVisible,
             child: buildTopBar(LayoutSize.expanded),
           ),
           Expanded(
@@ -3267,11 +596,11 @@ class _LibraryPageState extends State<LibraryPage> {
                 AnimatedContainer(
                   duration: panelDuration,
                   curve: libraryPanelMotionCurve,
-                  width: _isTagDiscoveryPanelOpen
+                  width: runtime.isTagDiscoveryPanelOpen
                       ? layoutSlots.filterPanelWidth
                       : collapsedFilterWidth,
                   // 外框只承担稳定分隔；面板和折叠入口各自表达层级，避免出现双重阴影。
-                  decoration: _isTagDiscoveryPanelOpen
+                  decoration: runtime.isTagDiscoveryPanelOpen
                       ? BoxDecoration(
                           border: Border(
                             left: BorderSide(
@@ -3283,7 +612,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   child: ClipRect(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final childWidth = _isTagDiscoveryPanelOpen
+                        final childWidth = runtime.isTagDiscoveryPanelOpen
                             ? layoutSlots.filterPanelWidth
                             : collapsedFilterWidth;
                         return AnimatedSwitcher(
@@ -3310,7 +639,8 @@ class _LibraryPageState extends State<LibraryPage> {
                             );
                           },
                           child: OverflowBox(
-                            key: ValueKey<bool>(_isTagDiscoveryPanelOpen),
+                            key:
+                                ValueKey<bool>(runtime.isTagDiscoveryPanelOpen),
                             alignment: Alignment.centerRight,
                             minWidth: childWidth,
                             maxWidth: childWidth,
@@ -3319,7 +649,7 @@ class _LibraryPageState extends State<LibraryPage> {
                             child: SizedBox(
                               width: childWidth,
                               height: constraints.maxHeight,
-                              child: _isTagDiscoveryPanelOpen
+                              child: runtime.isTagDiscoveryPanelOpen
                                   ? buildFilterPanel(
                                       dense: false,
                                       panelWidth: layoutSlots.filterPanelWidth,
@@ -3348,7 +678,7 @@ class _LibraryPageState extends State<LibraryPage> {
         actions: <Type, Action<Intent>>{
           FocusLibrarySearchIntent: CallbackAction<FocusLibrarySearchIntent>(
             onInvoke: (_) {
-              _focusSearchField();
+              focusSearchField();
               return null;
             },
           ),
@@ -3381,7 +711,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       if (showMainSidebar)
                         buildSidebar(
                           dense: layoutSize != LayoutSize.expanded,
-                          width: _isMainSidebarCollapsed
+                          width: runtime.isMainSidebarCollapsed
                               ? 76
                               : layoutSize == LayoutSize.expanded
                                   ? expandedSlots.sidebarWidth
@@ -3412,882 +742,9 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     return ExcludeSemantics(
       excluding: libraryRouteShouldExcludeSemantics(
-        playerRouteActive: _playerRouteActive,
+        playerRouteActive: runtime.playerRouteActive,
       ),
       child: page,
     );
-  }
-
-  Future<void> _openSettings() async {
-    final store = _store;
-    final thumbnailService = _thumbnailService;
-    if (store == null || thumbnailService == null) {
-      return;
-    }
-    await Navigator.of(context).push(
-      _smoothRoute<void>(
-        CacheSettingsPage(
-          store: store,
-          thumbnailService: thumbnailService,
-          playbackSettings: _playbackSettings,
-          dataBackupSettings: _dataBackupSettings,
-          updateService: widget.updateService,
-          onPlaybackSettingsChanged: (settings) async {
-            await widget.applicationService.savePlaybackSettings(settings);
-            if (mounted) {
-              setState(() => _playbackSettings = settings);
-            }
-          },
-          onDataBackupSettingsChanged: (settings) async {
-            final previous = _dataBackupSettings;
-            await store.setDataBackupEnabled(settings.enabled);
-            try {
-              await widget.applicationService.saveDataBackupSettings(settings);
-            } catch (_) {
-              // 设置文件失败时恢复运行态，避免界面、当前服务与下次启动值分叉。
-              await store.setDataBackupEnabled(previous.enabled);
-              rethrow;
-            }
-            if (mounted) {
-              setState(() => _dataBackupSettings = settings);
-            }
-          },
-          onRunDataBackupNow: store.runDataBackupNow,
-          onCheckDataBackupIntegrity: store.checkDataBackupIntegrity,
-          onExportDataBackup: () async {
-            final now = DateTime.now();
-            String two(int value) => value.toString().padLeft(2, '0');
-            final suggestedName = 'LocalTagPlayer-视频数据备份-'
-                '${now.year}${two(now.month)}${two(now.day)}-'
-                '${two(now.hour)}${two(now.minute)}.json';
-            final path = await _fileSystem.pickSavePath(
-              suggestedName: suggestedName,
-              dialogTitle: '导出视频依赖备份',
-              allowedExtensions: const <String>['json'],
-            );
-            if (path == null) {
-              return null;
-            }
-            final bytes = await store.createDataBackupExport();
-            await _fileSystem.writeBytes(path, bytes, flush: true);
-            return path;
-          },
-        ),
-        backShortcutProvider: () =>
-            _playbackSettings.shortcuts[PlayerShortcutAction.navigateBack]!,
-      ),
-    );
-    if (mounted) {
-      _markLibraryDataChanged();
-    }
-  }
-
-  Future<void> _openTagManager(List<VideoItem> currentResults) async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    await Navigator.of(context).push(
-      _smoothRoute<void>(
-        TagManagerPage(
-          store: store,
-          currentResults: List<VideoItem>.of(currentResults),
-        ),
-        backShortcutProvider: () =>
-            _playbackSettings.shortcuts[PlayerShortcutAction.navigateBack]!,
-      ),
-    );
-    if (mounted) {
-      setState(() {
-        _libraryRevisionTracker.record(
-          LibraryDataChangeKind.tagDefinitions,
-        );
-        _invalidateDerivedCaches();
-        _refreshStableTagCountsNow(store);
-      });
-      _scheduleFilterRefresh(refreshCounts: true);
-    }
-  }
-
-  Future<void> _openDirectoryManager() async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    await Navigator.of(context).push<void>(
-      _smoothRoute<void>(
-        DirectoryManagerPage(
-          store: store,
-          scanning: _isScanning,
-          onAddDirectory: _pickFolder,
-          onRescan: _rescan,
-          onRemoveRoot: _removeLibraryRootData,
-        ),
-        backShortcutProvider: () =>
-            _playbackSettings.shortcuts[PlayerShortcutAction.navigateBack]!,
-      ),
-    );
-  }
-
-  /**
-   * 打开缺失视频管理页；返回后只在确有 relink 时刷新派生缓存与标签计数。
-   */
-  Future<void> _openMissingRelink() async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final changed = await Navigator.of(context).push<bool>(
-      _smoothRoute<bool>(
-        MissingRelinkPage(
-          store: store,
-          fileSystem: _fileSystem,
-        ),
-        backShortcutProvider: () =>
-            _playbackSettings.shortcuts[PlayerShortcutAction.navigateBack]!,
-      ),
-    );
-    if (changed == true && mounted) {
-      setState(() {
-        _libraryRevisionTracker.record(
-          LibraryDataChangeKind.tagDefinitions,
-        );
-        _invalidateDerivedCaches();
-        _refreshStableTagCountsNow(store);
-      });
-      _scheduleFilterRefresh(refreshCounts: true);
-    }
-  }
-
-  // ignore: unused_element
-  Future<void> _addLibraryTag() async {
-    final existingTags = _store?.allTagItems.toList() ?? const <TagItem>[];
-    final picked = await showLibraryAddTagDialog(
-      context,
-      tags: existingTags,
-    );
-    final tag = picked == null ? null : TagRules.normalizeTag(picked);
-    if (tag == null || tag.isEmpty || _store == null) {
-      return;
-    }
-    try {
-      if (!_store!.allTagItems.any(
-        (existing) =>
-            (existing.groupId ?? 'manual') == 'manual' &&
-            TagRules.sameTag(existing.name, tag),
-      )) {
-        await _store!.createManualTag(name: tag, groupId: 'manual');
-      }
-      if (!_store!.favoriteTags
-          .any((existing) => TagRules.sameTag(existing, tag))) {
-        await _store!.addFavoriteTag(tag);
-        setState(() {
-          _libraryRevisionTracker.record(
-            LibraryDataChangeKind.tagDefinitions,
-          );
-          _invalidateDerivedCaches();
-          _refreshStableTagCountsNow(_store!);
-        });
-      }
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('\u6dfb\u52a0\u6807\u7b7e\u5931\u8d25\uff1a$error')),
-      );
-    }
-  }
-
-  // ignore: unused_element
-  Future<void> _removeLibraryTag(String tag) async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    await store.removeFavoriteTag(tag);
-    _mutateFilters(() {
-      _invalidateDerivedCaches();
-      _selectedTags.remove(tag);
-      _selectedChildTags.clear();
-      _refreshStableTagCountsNow(store);
-    });
-  }
-
-  Future<void> _openVideo(
-    VideoItem item,
-    List<VideoItem> playlist,
-    LibraryResultSnapshot acceptedResult,
-    String acceptedQueueTitle,
-  ) async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final selection = _playbackQueueController.prepareSelection(
-      result: acceptedResult,
-      acceptedVideos: playlist,
-      selectedVideoId: item.videoId,
-    );
-    if (selection == null) {
-      debugPrint('PLAYER_QUEUE_REJECTED reason=stale_result');
-      return;
-    }
-    final preparedQueue = selection.queue;
-    final selectedItem = selection.selectedItem;
-    if (_playbackSettings.autoRemoveMissingOrUnreadableVideos &&
-        !await _fileSystem.fileExists(selectedItem.path)) {
-      // 点击与后台清理可能竞态；播放前再次确认路径，失效时只删数据库记录并阻止进入错误页。
-      await store.deleteVideo(selectedItem.path);
-      if (mounted) {
-        _markLibraryDataChanged(tagDefinitionsChanged: true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('路径已失效，已从媒体库移除记录')),
-        );
-      }
-      return;
-    }
-    final scanWasActive = _isScanning;
-    final scanWasAlreadyPaused = _scanProgress?.isPaused ?? false;
-    await const LibraryScanPlaybackGate().run<void>(
-      scanActive: scanWasActive,
-      scanAlreadyPaused: scanWasAlreadyPaused,
-      setPaused: store.setScanPaused,
-      onPauseChanged: (paused) {
-        _scanLifecycleController.publishPlaybackPause(
-          paused: paused,
-          onChanged: (_) {
-            if (mounted) {
-              setState(() {});
-            }
-          },
-        );
-      },
-      // 在预检、缩略图预热和播放器解码开始前先让 sidecar 停在文件边界，避免
-      // 机械盘随机 fingerprint 读取与当前视频顺序读取互相拖死。
-      action: () => _openVideoAfterScanYield(
-        selectedItem,
-        preparedQueue,
-        acceptedQueueTitle,
-      ),
-    );
-  }
-
-  /** 在扫描已让出磁盘后执行既有预检、队列预热和 filtered queue 播放链路。 */
-  Future<void> _openVideoAfterScanYield(
-    VideoItem item,
-    LibraryPlaybackQueue preparedQueue,
-    String queueTitle,
-  ) async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-    final playlist = preparedQueue.videos;
-    var playbackDetails = item.mediaDetails;
-    if (Platform.isWindows &&
-        _playbackSettings.hardwareDecodingEnabled &&
-        (playbackDetails?.videoCodec == null ||
-            playbackDetails?.width == null ||
-            playbackDetails?.height == null)) {
-      playbackDetails = await _probeSelectedVideoBeforePlayback(item, store);
-      if (!mounted) {
-        return;
-      }
-      if (playbackDetails.videoCodec == null ||
-          playbackDetails.width == null ||
-          playbackDetails.height == null) {
-        // 未知超规格媒体曾绕过兼容矩阵并在创建 8K 纹理时推高内存甚至崩溃。
-        // 规格未确认前宁可让用户稍后重试，也不创建不可控的原生播放器会话。
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('尚未取得视频编码和分辨率，已暂缓播放；请等待解析完成后重试。'),
-          ),
-        );
-        return;
-      }
-    }
-    final compatibility = PlayerHardwareCompatibility.assess(
-      details: playbackDetails,
-      settings: _playbackSettings,
-    );
-    if (compatibility.status == HardwareDecodeCompatibilityStatus.unsupported) {
-      // 兼容结论来自 hydration 缓存或当前点击项的单次预检；取消前不创建播放器或预热队列。
-      debugPrint(
-        'PLAYER_PREFLIGHT_BLOCKED video_id=${item.videoId} '
-        'spec=${compatibility.specification}',
-      );
-      final confirmed = await showPlayerHardwareDecodeWarningDialog(
-        context,
-        compatibility,
-      );
-      if (!confirmed || !mounted) {
-        return;
-      }
-    }
-    final thumbnailService = _thumbnailService!;
-    final activeChildTag =
-        _selectedChildTags.isEmpty ? null : _selectedChildTags.first;
-    // 在路由切换前把当前项附近已经生成的缩略图提升到同步内存视图，播放器队列
-    // 首帧可直接复用，不需要先绘制占位底色再等待异步 Future 完成。
-    await _playbackQueueController.warmNearby(
-      queue: preparedQueue,
-      selectedVideoId: item.videoId,
-      load: thumbnailService.thumbnailFor,
-    );
-    if (!mounted) {
-      return;
-    }
-    final wasPaused = thumbnailService.isPaused;
-    if (!wasPaused) {
-      // 播放期间冻结后台补全，但允许实际可视的播放器队列项以单并发补齐缩略图。
-      thumbnailService.pause(allowPriorityRequests: true);
-    }
-    _playerScopedLibraryDataChanged = false;
-    _playerScopedNeedsCountRefresh = false;
-    _playerScopedTagDefinitionsChanged = false;
-    final playerDisposed = Completer<void>();
-    _latestPlayerRelease = playerDisposed.future;
-    // 备份只做 SQLite 小批次，但播放器仍优先；等待当前批次结束后再创建解码会话。
-    await store.pauseDataBackupForPlayback();
-    if (!mounted) {
-      store.resumeDataBackupAfterPlayback();
-      return;
-    }
-    setState(() => _playerRouteActive = true);
-    // 先让媒体库提交 ExcludeSemantics，再压入不透明播放器 Route；否则底层 Route
-    // 可能在本次 rebuild 前进入 offstage，让 Windows UIA 继续缓存旧页面节点。
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) {
-      if (!wasPaused) {
-        thumbnailService.resume();
-      }
-      store.resumeDataBackupAfterPlayback();
-      return;
-    }
-    try {
-      await Navigator.of(context).push(
-        _smoothRoute<void>(
-          PlayerPage(
-            initialItem: item,
-            playlist: playlist,
-            queueSnapshot: preparedQueue.snapshot,
-            thumbnailService: thumbnailService,
-            playbackSettings: _playbackSettings,
-            onPlaybackSettingsChanged: (settings) async {
-              // 播放器内先更新应用级快照，使下一次进入立即沿用，再写入持久化文件。
-              if (mounted) {
-                setState(() => _playbackSettings = settings);
-              }
-              await widget.applicationService.savePlaybackSettings(settings);
-            },
-            activeTags: _selectedTags.toList()..sort(),
-            activeChildTag: activeChildTag,
-            queueTitle: queueTitle,
-            onDeleteVideo: _deleteVideoFromPlayer,
-            onToggleFavorite: _toggleFavoriteFromPlayer,
-            onRenameFile: _renameVideoFromPlayer,
-            onEditManualTags: _editManualTagsFromPlayer,
-            onRelinkMissing: _relinkMissingFromPlayer,
-            onPlaybackProgressUpdated: _updatePlaybackProgress,
-            onMediaDetailsUpdated: _updateMediaDetails,
-            disposalCompleter: playerDisposed,
-            fileSystem: _fileSystem,
-            playerServiceFactory: widget.playerServiceFactory,
-            mediaProbeBackendFactory: widget.mediaProbeBackendFactory,
-            fullscreenSessionController: _playerFullscreenSession,
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        // 反向 Route 已完成后立即恢复媒体库语义，不等待原生资源释放尾部。
-        setState(() => _playerRouteActive = false);
-      }
-      // 路由返回不代表 media_kit 原生线程已释放；等待完成信号再恢复后台任务。
-      await playerDisposed.future.timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {},
-      );
-      unawaited(_sampleMemoryAfterPlayerRelease());
-      await _playbackSnapshotQueue?.flush();
-      final snapshotError = _playbackSnapshotQueue?.takeLastError();
-      if (snapshotError != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('部分播放进度保存失败，请稍后重试')),
-        );
-      }
-      if (!wasPaused) {
-        thumbnailService.resume();
-      }
-      store.resumeDataBackupAfterPlayback();
-    }
-    if (mounted && _playerScopedLibraryDataChanged) {
-      _libraryRevisionTracker.record(
-        _playerScopedTagDefinitionsChanged
-            ? LibraryDataChangeKind.tagDefinitions
-            : LibraryDataChangeKind.content,
-      );
-      _invalidateDerivedCaches();
-      _scheduleFilterRefresh(refreshCounts: _playerScopedNeedsCountRefresh);
-      _playerScopedLibraryDataChanged = false;
-      _playerScopedNeedsCountRefresh = false;
-      _playerScopedTagDefinitionsChanged = false;
-    }
-  }
-
-  /**
-   * 为用户刚点击且详情未知的视频执行一次独立高优先级预检。
-   *
-   * 后台批量探测可能排在数千条记录之后，不能让未知 8K 媒体绕过播放前兼容矩阵。
-   * 该服务只处理当前一项并在返回后取消代次；播放器页面和右侧队列仍只读缓存详情。
-   */
-  Future<MediaDetails> _probeSelectedVideoBeforePlayback(
-    VideoItem item,
-    LibraryApplicationFacade store,
-  ) async {
-    final service = widget.applicationService.createMediaDetailsService(
-      onUpdated: (updated, details, fingerprint) async {
-        final current = store.videos[TagRules.pathKey(updated.path)];
-        if (_store != store ||
-            current == null ||
-            current.videoId != updated.videoId ||
-            current.mediaFingerprint != fingerprint) {
-          return;
-        }
-        current.mediaDetails = details;
-        final duration = details.duration;
-        if (duration != null && duration > Duration.zero) {
-          current.playbackDuration = duration;
-        }
-        await store.upsertVideo(current);
-      },
-    );
-    try {
-      return await service.detailsFor(item, refreshIncomplete: true).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => const MediaDetails(),
-          );
-    } finally {
-      service.dispose();
-    }
-  }
-
-  /** 返回媒体库后分三次采样，观察原生纹理释放与 Flutter ImageCache 的衰减是否同步。 */
-  Future<void> _sampleMemoryAfterPlayerRelease() async {
-    await PlayerMemoryDiagnostics.logStage('library_after_release_0ms');
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    await PlayerMemoryDiagnostics.logStage('library_after_release_500ms');
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    await PlayerMemoryDiagnostics.logStage('library_after_release_2000ms');
-  }
-
-  /** 播放器内收藏只写当前视频，返回媒体库后再做一次无计数轻刷新。 */
-  Future<void> _toggleFavoriteFromPlayer(VideoItem item) async {
-    item.isFavorite = !item.isFavorite;
-    await _store?.upsertVideo(item);
-    _playerScopedLibraryDataChanged = true;
-  }
-
-  /** 将播放位置和最近播放时间写入稳定 videoId 对应的视频记录。 */
-  Future<void> _updatePlaybackProgress(
-    VideoItem item,
-    Duration position,
-    Duration duration,
-    bool completed,
-  ) async {
-    item.playbackPosition = position;
-    if (duration > Duration.zero) {
-      // 播放内核偶发的临时 0 时长不能覆盖已经持久化的可靠总时长与完成判断。
-      item.playbackDuration = duration;
-      item.playbackCompleted = completed;
-    }
-    final updatedAt = DateTime.now();
-    item.playbackPositionUpdatedAt = updatedAt;
-    item.lastPlayedAt = updatedAt;
-    _playbackSnapshotQueue?.enqueue(PlaybackSnapshot(
-      item: item,
-      position: item.playbackPosition,
-      duration: item.playbackDuration,
-      completed: item.playbackCompleted,
-      updatedAt: updatedAt,
-    ));
-    if (mounted) {
-      _markPlaybackTimestampChanged(item);
-    }
-  }
-
-  /** 播放器错误面板复用 missing 管理页的安全 picker 与 fingerprint 校验。 */
-  Future<bool> _relinkMissingFromPlayer(VideoItem item) async {
-    final store = _store;
-    if (store == null) {
-      return false;
-    }
-    final result = await pickAndRelinkMissingVideo(
-      context,
-      store: store,
-      fileSystem: _fileSystem,
-      item: item,
-    );
-    if (result?.changed == true) {
-      _playerScopedLibraryDataChanged = true;
-      _playerScopedNeedsCountRefresh = true;
-      _playerScopedTagDefinitionsChanged = true;
-    }
-    return result?.changed ?? false;
-  }
-
-  /** 播放器内改名成功后延迟到 Route 返回再刷新媒体库，避免后台页面重建。 */
-  Future<void> _renameVideoFromPlayer(
-    VideoItem item,
-    String newBaseName,
-  ) async {
-    await _renameVideoPath(item, newBaseName);
-    _playerScopedLibraryDataChanged = true;
-  }
-
-  /**
-   * 执行同目录文件重命名，并以同一 videoId 提交新的 mutable path。
-   *
-   * 文件系统先拒绝覆盖并完成物理改名；SQLite 提交失败时立即尝试恢复原名，避免磁盘与
-   * 媒体库索引分叉。调用方只负责选择立即刷新或延迟到播放器 Route 返回后刷新。
-   */
-  Future<void> _renameVideoPath(
-    VideoItem item,
-    String newBaseName,
-  ) async {
-    final store = _store;
-    if (store == null) {
-      throw StateError('媒体库尚未就绪，请稍后重试');
-    }
-    await _fileCommandExecutor.rename(
-      RenameVideoFileCommand(
-        item: item,
-        newBaseName: newBaseName,
-      ),
-      normalizePath: _fileSystem.normalizePath,
-      parentPath: _fileSystem.parentPath,
-      joinPath: _fileSystem.joinPath,
-      fileExists: _fileSystem.fileExists,
-      renameFile: _fileSystem.renameFile,
-      commitRenamedPath: store.renameVideoPath,
-    );
-  }
-
-  Future<void> _toggleFavorite(VideoItem item) async {
-    setState(() => item.isFavorite = !item.isFavorite);
-    await _store?.upsertVideo(item);
-    if (mounted) {
-      _markLibraryDataChanged();
-    }
-  }
-
-  /** 通过共享文件系统平台边界定位视频；页面不拼接 Windows 或其它平台命令。 */
-  Future<void> _revealVideoLocation(VideoItem item) async {
-    final revealed = await _fileCommandExecutor.reveal(
-      RevealVideoLocationCommand(item),
-      revealInFileManager: _fileSystem.revealInFileManager,
-    );
-    if (!revealed && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('无法打开文件位置，请确认文件仍然存在')),
-      );
-    }
-  }
-
-  Future<void> _updateMediaDetails(
-    VideoItem item,
-    MediaDetails details,
-    String? fingerprint,
-  ) async {
-    item.mediaDetails = details;
-    final duration = details.duration;
-    if (duration != null && duration > Duration.zero) {
-      item.playbackDuration = duration;
-    }
-    item.mediaFingerprint = fingerprint ?? item.mediaFingerprint;
-    await _store?.upsertVideo(item);
-    if (mounted) {
-      _markLibraryDataChanged();
-    }
-  }
-
-  /** 执行播放器弹窗已经确认的删除选择，真实文件删除始终留在平台边界内。 */
-  Future<void> _deleteVideoFromPlayer(
-    VideoItem item,
-    bool moveLocalFileToTrash,
-  ) async {
-    await _deleteConfirmedLibraryVideo(item, moveLocalFileToTrash);
-    // 播放器路由仍在前台时不重建媒体库；返回后统一刷新可见结果和标签计数。
-    _playerScopedLibraryDataChanged = true;
-    _playerScopedNeedsCountRefresh = true;
-    _playerScopedTagDefinitionsChanged = true;
-  }
-
-  /**
-   * 处理媒体卡片删除动作，并把移入系统回收站保持为显式可选项。
-   *
-   * 数据库事务会一并删除标签关系、收藏、播放进度、媒体详情和稳定身份记录；选择仅移出
-   * 媒体库时，仍位于受监控 root 的文件会在下次扫描时作为新条目重新出现。
-   */
-  Future<void> _requestDeleteVideo(VideoItem item) async {
-    final decision = await _resolveSingleVideoDeleteDecision(item);
-    if (decision == null || !mounted) {
-      return;
-    }
-    try {
-      await _deleteConfirmedLibraryVideo(
-        item,
-        decision.moveLocalFileToTrash,
-      );
-      if (mounted) {
-        _markLibraryDataChanged(tagDefinitionsChanged: true);
-      }
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      final message =
-          error is FileSystemException ? error.message : '当前平台暂不支持移入回收站';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('移除失败：$message；媒体库记录未删除')),
-      );
-    }
-  }
-
-  /**
-   * 执行已经由用户确认的单条媒体库删除。
-   *
-   * 该方法不刷新页面，便于批量删除在全部条目处理完后只触发一次筛选和计数更新。
-   */
-  Future<void> _deleteConfirmedLibraryVideo(
-    VideoItem item,
-    bool moveLocalFileToTrash,
-  ) async {
-    await _fileCommandExecutor.delete(
-      DeleteVideoCommand(
-        item: item,
-        moveLocalFileToTrash: moveLocalFileToTrash,
-      ),
-      moveFileToTrash: _fileSystem.moveFileToTrash,
-      deleteRecord: (path) async {
-        await _store?.deleteVideo(path);
-      },
-      deleteThumbnail: (target) async {
-        await _thumbnailService?.deleteThumbnailFor(target);
-      },
-    );
-  }
-
-  /**
-   * 删除当前完整筛选结果中已选择的视频。
-   *
-   * 每条记录继续走与单条删除一致的平台边界；成功项立即从选择集移除，失败项保留选择，
-   * 最后只刷新一次筛选和标签计数，避免大媒体库中每删一条都全量重算。
-   */
-  Future<void> _requestDeleteSelectedVideos(
-    List<VideoItem> currentVideos,
-  ) async {
-    final targets = [
-      for (final item in currentVideos)
-        if (_selectedLibraryVideoIds.contains(item.videoId)) item,
-    ];
-    if (targets.isEmpty) {
-      return;
-    }
-    final decision = await _resolveBatchVideoDeleteDecision(targets.length);
-    if (decision == null || !mounted) {
-      return;
-    }
-
-    final result = await _fileCommandExecutor.deleteAll(
-      targets.map(
-        (item) => DeleteVideoCommand(
-          item: item,
-          moveLocalFileToTrash: decision.moveLocalFileToTrash,
-        ),
-      ),
-      moveFileToTrash: _fileSystem.moveFileToTrash,
-      deleteRecord: (path) async {
-        await _store?.deleteVideo(path);
-      },
-      deleteThumbnail: (target) async {
-        await _thumbnailService?.deleteThumbnailFor(target);
-      },
-    );
-    if (!mounted) {
-      return;
-    }
-    setState(
-      () => _librarySelection.removeAll(result.deletedVideoIds),
-    );
-    if (result.deletedVideoIds.isNotEmpty) {
-      _markLibraryDataChanged(tagDefinitionsChanged: true);
-    }
-    if (result.failedItems.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '已删除 ${result.deletedVideoIds.length} 个，'
-            '${result.failedItems.length} 个失败；失败项仍保持选中',
-          ),
-        ),
-      );
-    }
-  }
-
-  /** 单条删除按当前偏好决定直接执行或展示统一确认层。 */
-  Future<VideoDeleteDecision?> _resolveSingleVideoDeleteDecision(
-    VideoItem item,
-  ) async {
-    final settings = _playbackSettings;
-    final immediate = videoDeleteDecisionWithoutPrompt(settings);
-    if (immediate != null) {
-      return immediate;
-    }
-    final decision = await showPlayerDeleteConfirmationDialog(
-      context,
-      item,
-      initialMoveLocalFileToTrash: settings.moveDeletedFileToTrash,
-    );
-    return _rememberDeleteDecision(decision);
-  }
-
-  /** 批量删除与单条删除共享确认显示和回收站默认值。 */
-  Future<VideoDeleteDecision?> _resolveBatchVideoDeleteDecision(
-    int count,
-  ) async {
-    final settings = _playbackSettings;
-    final immediate = videoDeleteDecisionWithoutPrompt(settings);
-    if (immediate != null) {
-      return immediate;
-    }
-    final decision = await showBatchVideoDeleteConfirmationDialog(
-      context,
-      count: count,
-      initialMoveLocalFilesToTrash: settings.moveDeletedFileToTrash,
-    );
-    return _rememberDeleteDecision(decision);
-  }
-
-  /**
-   * 只在用户确认删除后保存弹窗选择；设置写入失败时中止删除，避免界面记忆与
-   * 后续真实文件动作分叉。
-   */
-  Future<VideoDeleteDecision?> _rememberDeleteDecision(
-    VideoDeleteDecision? decision,
-  ) async {
-    if (decision == null || !mounted) {
-      return null;
-    }
-    final next = _playbackSettings.copyWith(
-      moveDeletedFileToTrash: decision.moveLocalFileToTrash,
-      confirmBeforeDeletingVideo: !decision.dontAskAgain,
-    );
-    try {
-      await widget.applicationService.savePlaybackSettings(next);
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存删除偏好失败：$error；本次未执行删除')),
-        );
-      }
-      return null;
-    }
-    if (mounted) {
-      setState(() => _playbackSettings = next);
-    }
-    return decision;
-  }
-
-  /**
-   * 使用统一弹窗编辑视频在当前标签层级下的 manual 标签。
-   *
-   * [deferLibraryRefresh] 仅供播放器前台路由使用，保存后延迟到返回媒体库再刷新结果，
-   * 避免隐藏页面在播放期间执行标签计数重算。
-   */
-  Future<void> _editTags(
-    VideoItem item, {
-    bool deferLibraryRefresh = false,
-  }) async {
-    final childParentTag = _activeChildParentTag;
-    final editingChildTags = childParentTag != null;
-    final lockedTags = editingChildTags
-        ? _folderChildTagsForItem(item, childParentTag)
-        : _folderTagsForItem(item);
-    final updated = await showDialog<Set<String>>(
-      context: context,
-      builder: (_) => TagEditorDialog(
-        title:
-            editingChildTags ? '${item.title} / $childParentTag' : item.title,
-        initialTags: editingChildTags
-            ? (item.childTags[childParentTag] ?? const <String>{})
-            : item.tags,
-        existingTags: tagEditorCandidates(
-          _store?.allTagItems ?? const <TagItem>[],
-          parentTag: editingChildTags ? childParentTag : null,
-        ),
-        lockedTags: lockedTags,
-      ),
-    );
-    if (updated == null) {
-      return;
-    }
-    final replacement = _manualTagCommandExecutor.replace(
-      ReplaceVideoManualTagsCommand(
-        item: item,
-        selectedTags: updated,
-        lockedFolderTags: lockedTags,
-        parentTag: editingChildTags ? childParentTag : null,
-      ),
-      commit: (target, parentTag) async {
-        await _store?.replaceManualTags(target, parentTag: parentTag);
-      },
-    );
-    if (mounted) {
-      setState(() {});
-    }
-    try {
-      await replacement;
-    } catch (_) {
-      if (mounted) {
-        // command 已恢复一级/二级模型；同步重建当前卡片，避免继续展示未持久化选择。
-        setState(() {});
-      }
-      rethrow;
-    }
-    if (mounted && deferLibraryRefresh) {
-      _playerScopedLibraryDataChanged = true;
-      _playerScopedTagDefinitionsChanged = true;
-    } else if (mounted) {
-      _markLibraryDataChanged(tagDefinitionsChanged: true);
-    }
-  }
-
-  /**
-   * 播放器继续复用媒体库页面的统一标签编辑入口。
-   *
-   * 当前一级标签、folder 锁定项、manual 候选集合和保存语义全部由 [_editTags] 统一决定，
-   * 防止播放器与批量维护入口随时间演化成不同的数据视图。
-   */
-  Future<void> _editManualTagsFromPlayer(VideoItem item) =>
-      _editTags(item, deferLibraryRefresh: true);
-
-  Set<String> _folderTagsForItem(VideoItem item) {
-    final rootPath = item.rootPath;
-    if (rootPath == null || rootPath.isEmpty) {
-      return const <String>{};
-    }
-    return TagRules.parentTagsFor(rootPath, item.path);
-  }
-
-  Set<String> _folderChildTagsForItem(VideoItem item, String parentTag) {
-    final rootPath = item.rootPath;
-    if (rootPath == null || rootPath.isEmpty) {
-      return const <String>{};
-    }
-    return TagRules.childTagsFor(rootPath, item.path)[parentTag] ??
-        const <String>{};
   }
 }

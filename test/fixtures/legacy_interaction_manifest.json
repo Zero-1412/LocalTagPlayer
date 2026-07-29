@@ -18,7 +18,7 @@
     {
       "id": "library.player.route",
       "kind": "route",
-      "source": "lib/src/pages/library/library_page.dart",
+      "source": "lib/src/pages/library/library_page_playback_mixin.dart",
       "needle": "PlayerPage("
     },
     {
