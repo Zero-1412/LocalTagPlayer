@@ -35,6 +35,14 @@
   遮挡、错位、溢出或返回状态丢失。
 - 下一阶段继续 Phase 2A-2：只提取缓存诊断只读展示 Widget；不同时迁移状态、删除/清空、
   备份/恢复、筛选 controller 或播放器。
+- Phase 2A-2 已开始：缓存诊断标题与健康状态叶节点迁入
+  `features/settings/presentation/cache_diagnostics_header.dart`；它不读取 `CacheStats`、
+  不持有异步状态或命令。原页面继续拥有统计 Future、刷新、重试、清理与 dispose。
+- 两项缓存诊断 focused widget tests 通过；`LibraryPage` 行数门禁由 7,237 下调到 7,125。
+  完整 332 项测试通过（3 项显式基准跳过），静态分析和 Windows Debug build 通过。
+  真实窗口截图仍受同一 Computer Use 原生管道与用户活动阻塞；需人工复测“设置 → 缩略图
+  缓存 → 刷新统计 → 返回”，确认标题、状态角标和加载/终态无跳位。下一批继续迁移覆盖率、
+  指标、后台任务与失败详情的只读展示，动作 owner 保持不变。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

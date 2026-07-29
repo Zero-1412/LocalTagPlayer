@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.102` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.103` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -13,6 +13,9 @@ Phase 1.5 在 `features/library/domain` 建立纯 Dart 的查询指纹、结果/
 结果/播放队列快照。媒体库过滤与延后计数发布使用同一版本身份；排序改变结果 epoch，
 但不改变计数 epoch。受保护交互清单、测试期查询追踪器和 11,000 项确定性 fixture
 作为后续 MVVM 迁移的前置护栏。
+
+Phase 2A-2 先把缓存诊断标题与健康状态迁为 `features/settings/presentation` 的无状态
+叶节点；统计 Future、刷新、失败重试、清理和生命周期仍由原页面唯一拥有。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。

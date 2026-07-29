@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随设置叶节点与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(7237));
+    expect(libraryLines, lessThanOrEqualTo(7125));
     expect(playerLines, lessThanOrEqualTo(5400));
   });
 
@@ -309,6 +309,25 @@ void main() {
     }
     expect(landing, isNot(contains('Navigator')));
     expect(landing, isNot(contains('showDialog')));
+  });
+
+  test('cache diagnostics header is a read-only settings feature leaf', () {
+    final library =
+        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final header = File(
+      'lib/src/features/settings/presentation/cache_diagnostics_header.dart',
+    ).readAsStringSync();
+
+    expect(library, contains('CacheDiagnosticsHeader('));
+    expect(library, isNot(contains('class _CacheDiagnosticsHeader')));
+    expect(header,
+        contains('class CacheDiagnosticsHeader extends StatelessWidget'));
+    expect(header, isNot(contains('ThumbnailService')));
+    expect(header, isNot(contains('CacheStats')));
+    expect(header, isNot(contains('FutureBuilder')));
+    expect(header, isNot(contains('setState')));
+    expect(header, isNot(contains('onRetry')));
+    expect(header, isNot(contains('onClear')));
   });
 
   test('update feature follows domain data presentation dependency direction',

@@ -149,6 +149,8 @@ Phase 1.5 的发布协议已经接入现有过滤和延后计数链路：
 
 - [x] 2A-1 把设置首页导航提取为无状态 feature 叶节点；数据与回调仍由现有 owner 传入，
   Route 与全部 `ValueKey` 不变。
+- [x] 2A-2a 把缓存诊断标题与健康状态提取为纯展示 feature 叶节点；不读取 `CacheStats`，
+  不持有 Future、刷新、重试或清理命令。
 - [ ] 2A-2 继续按同一方式提取缓存诊断只读展示 Widget，不迁移状态或命令。
 - [ ] 2B 按一致性边界拆分普通设置 controller，不建立包含备份与缓存任务的巨型
   `SettingsViewModel`。

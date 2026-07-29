@@ -26,6 +26,11 @@
   窗口后停止抢占；未保留该截图，精确人工复测路径记录于 `CURRENT_TASK.md`。
 - focused/full tests、静态分析与 Windows Debug build 通过；真实窗口点击设置、关于页
   及两级返回路径并截图复核，分组入口无可见遮挡、错位或溢出。
+- Phase 2A-2 首个缓存诊断叶节点迁入 `features/settings/presentation`：标题与健康状态
+  只接收文字和颜色，不读取缓存快照、不持有异步状态或重试/清理命令；两项 focused
+  widget tests、完整 332 项测试、静态分析与 Windows Debug build 通过，媒体库页面行数
+  门禁降到 7,125。真实截图受已记录的应用控制阻塞，精确人工复测路径见
+  `CURRENT_TASK.md`。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

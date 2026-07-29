@@ -1,5 +1,14 @@
 # CHAT_5_THUMBNAIL_DIAGNOSTICS.md
 
+## 2026-07-29 缓存诊断架构迁移第一叶节点
+
+- 缓存诊断标题与健康状态迁入 `features/settings/presentation` 的无状态叶节点，只接收
+  状态文字与颜色，不读取缓存、磁盘或 `CacheStats`。
+- 统计 Future、刷新、失败重试、失败标记清理、队列互斥和 dispose 继续由现有设置页面
+  拥有；JPEG 有效性、ThumbnailService 调度和 FFmpegBackend 均未改变。
+- 两项 focused widget tests 通过；后续继续迁移覆盖率、指标、任务与失败详情只读展示，
+  最后才评估只读诊断 controller。
+
 ## 2026-07-24 FFmpeg 8.1.2 缩略图 GPU A/B
 
 - `tool/benchmark_thumbnail_gpu_paths.ps1` 对现有软件缩略图、D3D11 硬解后回读、D3D12 硬缩放执行独立进程预热后多轮采样；输出不记录媒体路径。
