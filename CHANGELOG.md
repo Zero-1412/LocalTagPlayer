@@ -36,6 +36,12 @@
   Future、刷新、重试、清理、互斥和 dispose 均未迁移。全部缓存 Key 与显示语义保留，
   `LibraryPage` 行数门禁降到 6,642。两项 focused、完整 333 项测试、静态分析和 Windows
   Debug build 通过；真实窗口控制管道仍不可用，人工复测路径记录于 `CURRENT_TASK.md`。
+- 完成 Phase 2B 普通播放设置一致性迁移：新增 `PlaybackSettingsController`，统一乐观
+  发布、串行持久化、旧失败抑制及最后成功快照回滚；备份、缓存任务、Route 与平台资源
+  明确保留在边界外。播放设置全部入口继续挂载在原 Route，确认/取消/撤销/返回与 Key
+  不变；新增竞态单测、架构合同和页面级修改/返回回归，页面预算降到 6,640。完整
+  339 项测试通过（3 项显式基准跳过），静态分析与 Windows Debug build 通过；真实点击
+  仍受 Computer Use 原生管道不可用阻塞，人工路径记录于 `CURRENT_TASK.md`。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

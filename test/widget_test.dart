@@ -72,7 +72,36 @@ class _MissingRelinkTestRepository
   Set<String> get allTags => const <String>{};
 
   @override
+  DataBackupStatus get dataBackupStatus => const DataBackupStatus(
+        enabled: true,
+        phase: DataBackupPhase.idle,
+      );
+
+  @override
+  Stream<DataBackupStatus> get dataBackupStatusStream =>
+      const Stream<DataBackupStatus>.empty();
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/** 设置 Route 测试不访问网络，仅满足关于页的应用更新边界。 */
+class _SettingsRouteUpdateService implements AppUpdateService {
+  @override
+  Future<AppVersionInfo> currentVersion() async => const AppVersionInfo(
+        appName: 'Local Tag Player',
+        version: '0.0.0',
+        buildNumber: '0',
+      );
+
+  @override
+  Future<AppRelease?> checkForUpdate() async => null;
+
+  @override
+  Future<void> downloadAndLaunch(
+    AppRelease release, {
+    void Function(AppUpdateDownloadProgress progress)? onProgress,
+  }) async {}
 }
 
 /** 模拟用户取消原生文件选择器，不执行任何磁盘操作。 */
@@ -3221,6 +3250,81 @@ void main() {
       await tester.pump();
       expect(openedSections.last, entry.$2);
     }
+  });
+
+  testWidgets('settings route keeps playback update and return path reachable',
+      (tester) async {
+    final repository = _MissingRelinkTestRepository();
+    final facade = LibraryApplicationFacade(
+      libraryRepository: repository,
+      tagRepository: repository,
+      cacheRepository: repository,
+      playbackRepository: repository,
+    );
+    final cacheDirectory =
+        Directory.systemTemp.createTempSync('ltp_settings_route_');
+    addTearDown(() => cacheDirectory.deleteSync(recursive: true));
+    final savedSettings = <PlaybackSettings>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CacheSettingsPage(
+          store: facade,
+          thumbnailService: ThumbnailService.forDirectory(
+            cacheDirectory,
+            _PreviewFFmpegBackend(),
+          ),
+          playbackSettings: PlaybackSettings.defaults,
+          onPlaybackSettingsChanged: (settings) async {
+            savedSettings.add(settings);
+          },
+          dataBackupSettings: DataBackupSettings.defaults,
+          onDataBackupSettingsChanged: (_) async {},
+          onRunDataBackupNow: () async {},
+          onCheckDataBackupIntegrity: () async => throw UnsupportedError(
+            '播放设置 Route 不执行备份检查',
+          ),
+          onExportDataBackup: () async => null,
+          updateService: _SettingsRouteUpdateService(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings.category.playback')),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.resumeBehavior')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings.resumeBehavior')),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    final restartLabel = PlaybackSettings.resumeLabelFor(
+      PlaybackResumeBehavior.restart,
+    );
+    await tester.tap(find.text(restartLabel).last);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(savedSettings, hasLength(1));
+    expect(
+      savedSettings.single.resumeBehavior,
+      PlaybackResumeBehavior.restart,
+    );
+    expect(find.text(restartLabel), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings.section.back')),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.category.playback')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('delete file settings remain readable at 150 percent',

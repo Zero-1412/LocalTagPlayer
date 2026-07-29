@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.104` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.105` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -18,6 +18,10 @@ Phase 2A-2 先把缓存诊断标题与健康状态迁为 `features/settings/pres
 叶节点；统计 Future、刷新、失败重试、清理和生命周期仍由原页面唯一拥有。
 随后加载、覆盖率、指标、后台任务和失败详情也迁入只读快照视图，动作区继续由原 owner
 注入，不形成第二个可写状态源。
+
+Phase 2B 将普通 `PlaybackSettings` 收口到 `PlaybackSettingsController`。它立即发布
+UI 快照、串行执行持久化，并只把仍为最新的失败请求回滚到最后成功落盘快照；备份状态、
+缓存 Future/命令、Route、`BuildContext` 和平台资源继续由各自 owner 管理。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -505,12 +509,14 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.101`
+已完成基线：`Architecture Baseline 0.5.105`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.105`：普通播放设置迁入单一一致性 controller；串行保存并抑制旧失败回滚，页面
+  保留全部设置入口和 Route 返回路径，备份与缓存生命周期未并入巨型 ViewModel。
 - `0.5.101`：建立渐进式整体重构路线与依赖合同；启动入口、应用壳和组合根分离，
   更新功能成为首个 `domain/data/presentation` 纵向切片，具体 GitHub 客户端只在
   组合根创建。保留 `src/app.dart` 作为测试兼容导出面，生产入口不再依赖它。

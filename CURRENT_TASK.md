@@ -50,6 +50,18 @@
   Debug build 通过。Computer Use 原生管道再次返回“找不到指定文件”，未再使用可能捕获
   其他窗口的截图回退；仍需人工复测“设置 → 缩略图缓存 → 刷新统计 → 展开失败详情 →
   返回”，核对 Key 对应入口、150% 文字、按钮禁用态和加载/终态布局。
+- Phase 2B 已完成：`PlaybackSettingsController` 成为普通播放设置唯一可写 owner，负责
+  乐观发布、串行持久化、旧失败抑制和向最后成功快照回滚；备份状态、缓存 Future/命令、
+  Route、`BuildContext` 与平台资源均未进入 controller。
+- 播放行为、渲染器、解码器、流缓存、画质、播放器交互、删除偏好和快捷键均接入同一
+  设置快照；确认、取消、撤销、返回路径和既有 `ValueKey` 保留。新增 controller 竞态
+  单测、架构边界合同及真实 `CacheSettingsPage` 挂载测试，媒体库页面行数门禁降到 6,640。
+- 下一步进入 Phase 2C：只迁移缓存诊断读取、刷新、错误和 dispose 的 latest-only 生命周期；
+  重试、清理、删除、重建、确认与互斥任务继续留给 Phase 2D。
+- Phase 2B focused tests 与完整 339 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 成功。Computer Use 初始化仍因原生管道“找不到指定文件”
+  不可用，未使用截图回退；仍需人工复测“设置 → 播放与解码 → 默认打开行为 → 修改 →
+  返回设置首页”，核对选中值、返回路径和失败时的设置回滚反馈。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

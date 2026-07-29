@@ -13,6 +13,7 @@ import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
 import '../../features/update/domain/app_update_service.dart';
 import '../../features/update/presentation/about_settings_page.dart';
+import '../../features/settings/application/playback_settings_controller.dart';
 import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/cache_diagnostics_snapshot_view.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
@@ -1382,7 +1383,9 @@ class _DeleteFileSettingsPanel extends StatelessWidget {
 class _CacheSettingsPageState extends State<CacheSettingsPage> {
   /** 当前显示的设置首页或功能二级页。 */
   _SettingsSection _section = _SettingsSection.home;
-  late PlaybackSettings _settings = widget.playbackSettings;
+  /** 普通播放设置的唯一可写 owner；不包含备份或缓存任务状态。 */
+  late final PlaybackSettingsController _playbackSettingsController;
+  PlaybackSettings get _settings => _playbackSettingsController.settings;
   late DataBackupSettings _dataBackupSettings = widget.dataBackupSettings;
   late DataBackupStatus _dataBackupStatus = widget.store.dataBackupStatus;
   StreamSubscription<DataBackupStatus>? _dataBackupSubscription;
@@ -1401,6 +1404,11 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   @override
   void initState() {
     super.initState();
+    _playbackSettingsController = PlaybackSettingsController(
+      initialSettings: widget.playbackSettings,
+      // 通过当前 widget 转发，避免父级重建并替换回调后继续调用旧闭包。
+      save: (settings) => widget.onPlaybackSettingsChanged(settings),
+    )..addListener(_handlePlaybackSettingsChanged);
     _dataBackupSubscription = widget.store.dataBackupStatusStream.listen(
       (status) {
         if (mounted) {
@@ -1413,7 +1421,15 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   @override
   void dispose() {
     unawaited(_dataBackupSubscription?.cancel());
+    _playbackSettingsController
+      ..removeListener(_handlePlaybackSettingsChanged)
+      ..dispose();
     super.dispose();
+  }
+
+  /** controller 发布普通设置快照时只重建当前设置 Route。 */
+  void _handlePlaybackSettingsChanged() {
+    if (mounted) setState(() {});
   }
 
   /** 切换备份开关并立即持久化；失败时恢复界面旧值。 */
@@ -1678,7 +1694,6 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     PlayerShortcutAction action,
     String key,
   ) {
-    final previous = _settings;
     final shortcuts = Map<PlayerShortcutAction, String>.of(_settings.shortcuts);
     final conflictMessage = playerShortcutConflictMessage(
       action: action,
@@ -1694,30 +1709,26 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     shortcuts[action] = key;
     final next = _settings.copyWith(shortcuts: Map.unmodifiable(shortcuts));
     setState(() {
-      _settings = next;
       _shortcutErrors.remove(action);
     });
-    unawaited(_saveCapturedShortcut(action, previous, next));
+    unawaited(_saveCapturedShortcut(action, next));
     return true;
   }
 
-  /** 异步保存录制结果；写入失败且期间没有新改动时恢复旧绑定。 */
+  /** 异步保存录制结果；controller 只在该结果仍为最新版本时回滚。 */
   Future<void> _saveCapturedShortcut(
     PlayerShortcutAction action,
-    PlaybackSettings previous,
     PlaybackSettings next,
   ) async {
+    final requestRevision = _playbackSettingsController.revision + 1;
     try {
-      await widget.onPlaybackSettingsChanged(next);
+      await _playbackSettingsController.update(next);
     } catch (error) {
       if (!mounted) {
         return;
       }
-      if (identical(_settings, next)) {
-        setState(() {
-          _settings = previous;
-          _shortcutErrors[action] = '保存失败，请重新录入';
-        });
+      if (requestRevision == _playbackSettingsController.revision) {
+        setState(() => _shortcutErrors[action] = '保存失败，请重新录入');
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('保存快捷键失败：$error')),
@@ -1730,11 +1741,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     final next = _settings.copyWith(
       shortcuts: PlaybackSettings.defaultShortcuts,
     );
-    setState(() {
-      _settings = next;
-      _shortcutErrors.clear();
-    });
-    await widget.onPlaybackSettingsChanged(next);
+    setState(_shortcutErrors.clear);
+    await _playbackSettingsController.update(next);
   }
 
   /** 更新删除确认与回收站偏好，并立即写入现有设置文件。 */
@@ -1743,21 +1751,16 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     bool? moveDeletedFileToTrash,
     bool? autoRemoveMissingOrUnreadableVideos,
   }) async {
-    final previous = _settings;
-    final next = previous.copyWith(
+    final next = _settings.copyWith(
       confirmBeforeDeletingVideo: confirmBeforeDeletingVideo,
       moveDeletedFileToTrash: moveDeletedFileToTrash,
       autoRemoveMissingOrUnreadableVideos: autoRemoveMissingOrUnreadableVideos,
     );
-    setState(() => _settings = next);
     try {
-      await widget.onPlaybackSettingsChanged(next);
+      await _playbackSettingsController.update(next);
     } catch (error) {
       if (!mounted) {
         return;
-      }
-      if (identical(_settings, next)) {
-        setState(() => _settings = previous);
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('保存删除设置失败：$error')),
@@ -1805,17 +1808,12 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
 
   /** 切换全屏右缘自动队列并立即持久化；失败时恢复界面旧值。 */
   Future<void> _changeFullscreenQueueEdgeHoverEnabled(bool enabled) async {
-    final previous = _settings;
-    final next = previous.copyWith(fullscreenQueueEdgeHoverEnabled: enabled);
-    setState(() => _settings = next);
+    final next = _settings.copyWith(fullscreenQueueEdgeHoverEnabled: enabled);
     try {
-      await widget.onPlaybackSettingsChanged(next);
+      await _playbackSettingsController.update(next);
     } catch (error) {
       if (!mounted) {
         return;
-      }
-      if (identical(_settings, next)) {
-        setState(() => _settings = previous);
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('保存全屏播放列表设置失败：$error')),
@@ -1959,9 +1957,9 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                     final next = _settings.copyWith(
                                       resumeBehavior: behavior,
                                     );
-                                    setState(() => _settings = next);
-                                    await widget
-                                        .onPlaybackSettingsChanged(next);
+                                    await _playbackSettingsController.update(
+                                      next,
+                                    );
                                   },
                                 ),
                                 const SizedBox(height: 22),
@@ -1983,9 +1981,10 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                 PlaybackRendererDropdown(
                                   settings: _settings,
                                   onChanged: (settings) async {
-                                    setState(() => _settings = settings);
-                                    await widget
-                                        .onPlaybackSettingsChanged(settings);
+                                    // 确认型下拉框负责展示失败并恢复自身临时选择。
+                                    await _playbackSettingsController.update(
+                                      settings,
+                                    );
                                   },
                                 ),
                                 const SizedBox(height: 22),
@@ -2002,9 +2001,10 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                                 PlaybackDecoderDropdown(
                                   settings: _settings,
                                   onChanged: (settings) async {
-                                    setState(() => _settings = settings);
-                                    await widget
-                                        .onPlaybackSettingsChanged(settings);
+                                    // 解码器切换必须保留子组件现有的确认与撤销路径。
+                                    await _playbackSettingsController.update(
+                                      settings,
+                                    );
                                   },
                                 ),
                               ],
@@ -2015,9 +2015,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                         _PlaybackStreamCacheCard(
                           settings: _settings,
                           onChanged: (settings) {
-                            setState(() => _settings = settings);
                             unawaited(
-                              widget.onPlaybackSettingsChanged(settings),
+                              _playbackSettingsController.update(settings),
                             );
                           },
                         ),
@@ -2027,9 +2026,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                         _PlaybackQualitySettingsPanel(
                           settings: _settings,
                           onChanged: (settings) {
-                            setState(() => _settings = settings);
                             unawaited(
-                              widget.onPlaybackSettingsChanged(settings),
+                              _playbackSettingsController.update(settings),
                             );
                           },
                         ),

@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随设置叶节点与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(6642));
+    expect(libraryLines, lessThanOrEqualTo(6640));
     expect(playerLines, lessThanOrEqualTo(5400));
   });
 
@@ -309,6 +309,52 @@ void main() {
     }
     expect(landing, isNot(contains('Navigator')));
     expect(landing, isNot(contains('showDialog')));
+  });
+
+  test('ordinary playback settings use one UI-independent consistency owner',
+      () {
+    final library =
+        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final controller = File(
+      'lib/src/features/settings/application/'
+      'playback_settings_controller.dart',
+    ).readAsStringSync();
+    final settingsStateStart = library.indexOf('class _CacheSettingsPageState');
+    final settingsStateEnd =
+        library.indexOf('class _DataBackupSettingsPanel', settingsStateStart);
+    final settingsState =
+        library.substring(settingsStateStart, settingsStateEnd);
+
+    expect(
+      controller,
+      contains('class PlaybackSettingsController extends ChangeNotifier'),
+    );
+    expect(controller, contains('_persistedSettings'));
+    expect(controller, contains('_writeTail'));
+    for (final forbidden in <String>[
+      'BuildContext ',
+      'Navigator.',
+      'Route<',
+      'ThumbnailService ',
+      'CacheStats ',
+      'DataBackupStatus ',
+      'LibraryStore ',
+      "import 'dart:io'",
+      "import 'package:flutter/material.dart'",
+    ]) {
+      expect(
+        controller,
+        isNot(contains(forbidden)),
+        reason: '普通播放设置 owner 不得持有跨边界资源：$forbidden',
+      );
+    }
+    expect(
+      settingsState,
+      contains('late final PlaybackSettingsController'),
+    );
+    expect(settingsState, isNot(contains('late PlaybackSettings _settings')));
+    expect(settingsState, contains('DataBackupStatus _dataBackupStatus'));
+    expect(settingsState, contains('FutureBuilder<CacheStats>'));
   });
 
   test('cache diagnostics header is a read-only settings feature leaf', () {
