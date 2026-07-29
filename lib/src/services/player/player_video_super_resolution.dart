@@ -1,5 +1,7 @@
 import '../../platform/platform_interfaces.dart';
 import '../../core/playback_settings.dart';
+import '../../models/player_feature_apply_result.dart';
+import 'player_property_verifier.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -15,7 +17,7 @@ class PlayerVideoSuperResolution {
   const PlayerVideoSuperResolution._();
 
   /** 按后端隔离的属性应用队尾，避免媒体 open 与用户点击交错写入半套配置。 */
-  static final _applyTails = Expando<Future<void>>(
+  static final _applyTails = Expando<Future<PlayerFeatureApplyResult>>(
     'player-video-super-resolution-apply-tail',
   );
 
@@ -33,12 +35,15 @@ class PlayerVideoSuperResolution {
    * 属性数量固定且很小；串行顺序避免原生后端在媒体 open 前后交错处理半套配置。
    * 不支持某项属性的后端按 `PlayerBackend` 契约安全忽略，不能阻止视频继续播放。
    */
-  static Future<void> apply({
+  static Future<PlayerFeatureApplyResult> apply({
     required PlayerRuntimeAccess backend,
     required bool enabled,
     PlayerVideoScaler baseScaler = PlayerVideoScaler.lanczos,
   }) {
-    final previous = _applyTails[backend] ?? Future<void>.value();
+    final previous = _applyTails[backend] ??
+        Future<PlayerFeatureApplyResult>.value(
+          const PlayerFeatureApplyResult.notRequested('gpu-scaling'),
+        );
     final operation = previous.then(
       (_) => _applyProperties(
         backend: backend,
@@ -51,7 +56,7 @@ class PlayerVideoSuperResolution {
   }
 
   /** 按固定顺序应用单次完整属性快照；调用方负责同一后端的串行化。 */
-  static Future<void> _applyProperties({
+  static Future<PlayerFeatureApplyResult> _applyProperties({
     required PlayerRuntimeAccess backend,
     required bool enabled,
     required PlayerVideoScaler baseScaler,
@@ -69,19 +74,25 @@ class PlayerVideoSuperResolution {
             'sigmoid-upscaling': 'no',
             'scaler-resizes-only': 'yes',
           };
-    try {
-      final batch = backend is PlayerPropertyBatchBoundary
-          ? backend as PlayerPropertyBatchBoundary
-          : null;
-      if (batch != null) {
-        await batch.setProperties(properties);
-        return;
-      }
-      for (final entry in properties.entries) {
-        await backend.setProperty(entry.key, entry.value);
-      }
-    } catch (_) {
-      // 某个旧版或实验后端不支持属性时继续播放；Windows 批量边界内部仍处理完整快照。
+    final result = await PlayerPropertyVerifier.apply(
+      backend: backend,
+      label: enabled ? 'gpu-high-quality-scaling' : 'gpu-scaling-baseline',
+      properties: properties,
+    );
+    if (!enabled || result.applied) {
+      return result;
     }
+    // 高质量档位未完整确认时恢复用户的基础缩放器，避免诊断与实际状态分裂。
+    await PlayerPropertyVerifier.apply(
+      backend: backend,
+      label: 'gpu-scaling-fallback',
+      properties: <String, String>{
+        'scale': scaler,
+        'cscale': scaler,
+        'sigmoid-upscaling': 'no',
+        'scaler-resizes-only': 'yes',
+      },
+    );
+    return result;
   }
 }

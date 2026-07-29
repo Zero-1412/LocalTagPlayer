@@ -27,7 +27,12 @@ abstract interface class PlayerRuntimeAccess {
   /** 纹理标识变化通知；原生后端可据此报告纹理挂载与解绑。 */
   ValueListenable<int?> get textureId;
 
-  /** 设置底层引擎属性；不存在的属性允许被实现安全忽略。 */
+  /**
+   * 设置底层引擎属性。
+   *
+   * 实现必须把初始化失败或属性拒绝返回给调用方；可选功能协调器负责降级，不能静默吞错
+   * 后把用户请求冒充为已生效。
+   */
   Future<void> setProperty(String property, String value);
 
   /** 查询底层诊断属性；不可用时返回统一占位文本。 */
@@ -167,6 +172,17 @@ abstract interface class PlayerGpuRenderBoundary {
   Future<PlayerGpuComputeFrameBudget> benchmarkGpuComputeFrameBudget(
     String adapterLuid,
   );
+}
+
+/**
+ * 仅由 Windows 原生 child HWND/D3D11 QA 后端实现的 NVIDIA 实验边界。
+ *
+ * MediaKit Texture 与普通原生纹理后端不得实现该接口，避免正式播放误发
+ * `d3d11vpp scaling-mode=nvidia` 探测或请求。
+ */
+abstract interface class PlayerNativeNvidiaVideoEnhancementBoundary {
+  /** 当前后端是否拥有经过隔离门禁的原生 D3D11 输出链。 */
+  bool get supportsNativeNvidiaVideoEnhancement;
 }
 
 /**

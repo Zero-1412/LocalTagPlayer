@@ -1,5 +1,32 @@
 ﻿# ARCHITECTURE.md
 
+## 2026-07-30 正式播放边界与属性一致性
+
+`Architecture Baseline 0.5.137` 把正式播放拓扑固定为：
+
+```text
+Flutter PlayerPage
+-> PlayerService
+-> MediaKitPlayerBackend
+-> media_kit / NativePlayer / libmpv
+-> media_kit_video Flutter Texture
+```
+
+产品设置不再暴露“MediaKit / MPV”二选一，因为两个旧选项最终创建的是同一个
+`MediaKitPlayerBackend`。`PlayerRendererPreference` 只作为旧设置文件的兼容读取面；
+读取后的运行值和保存值统一规范化为 `mediaKit`。`windows-native-hwnd` 仍属于显式 QA
+组合根覆盖，不是用户设置，也不得把它的 NVIDIA 激活证据套用到正式 Texture 路径。
+
+媒体打开以单一 latest-request worker 串行协调。open 前只提交解码与缓存引擎快照，
+open 后恢复一次滤镜基线并提交一次显示快照。GPU 能力探测可以异步执行，但下一媒体
+open 必须先等待上一任务结束，再由新媒体基线覆盖共享 libmpv 属性；结果发布同时校验
+打开代次和路径。
+
+设置意图与会话终态严格分离。GPU 缩放、滤镜和 HDR→SDR 色调映射使用固定属性集合，
+写入后最多等待 200 ms 逐项读回；只有全部一致才是 `applied`。门槛未通过、属性不可用、
+写入/读回不一致和探测异常均为非活动终态。正式 MediaKit 路径不运行 NVIDIA 原生探测，
+NVIDIA VSR/HDR 诊断只允许出现在带“原生 QA”前缀的可选平台边界。
+
 ## 2026-07-30 Windows 原生滤镜事务与 MediaKit SDK 边界
 
 正式应用继续以 MediaKit + `media_kit_video` Texture 为默认播放边界。Windows 原生

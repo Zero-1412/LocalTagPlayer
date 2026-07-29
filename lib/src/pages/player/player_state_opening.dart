@@ -7,9 +7,9 @@ import '../../core/playback_settings.dart';
 import '../../features/player/application/player_open_request_controller.dart';
 import '../../features/player/domain/player_playback_progress.dart';
 import '../../models/video_item.dart';
+import '../../models/player_feature_apply_result.dart';
 import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_adaptive_quality.dart';
-import '../../services/player/player_hdr_mapping_experiment.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import 'player_hardware_decode_warning_dialog.dart';
 import 'player_resume_dialog.dart';
@@ -146,6 +146,13 @@ extension PlayerStateOpening on PlayerPageState {
         if (request == null) {
           break;
         }
+        final previousGpuTask = gpuCapabilityDetectionTask;
+        if (previousGpuTask != null) {
+          // libmpv 属性属于共享实例；旧媒体任务结束后再开始新 open，保证最后写入者是新媒体。
+          await previousGpuTask;
+          if (!mounted) return;
+          if (openRequests.hasSuperseded(request)) continue;
+        }
         final path = request.path;
         try {
           // 每个新媒体独立判断实际解码器，不能沿用上一条视频的 no/恢复状态。
@@ -154,10 +161,27 @@ extension PlayerStateOpening on PlayerPageState {
           softwareDecodeConfirmed = false;
           adaptiveQualityCoordinator.reset();
           adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
+          adaptiveQualitySessionBlocked = false;
+          adaptiveQualityApplyResult =
+              const PlayerFeatureApplyResult.notRequested(
+            'compression-filter-snapshot',
+          );
           qualityMarginSampleTick = 0;
           gpuCapabilitySnapshot = null;
           hdrMappingExperimentActive = false;
+          hdrMappingApplyResult = const PlayerFeatureApplyResult.notRequested(
+            'hdr-to-sdr-tone-mapping',
+          );
+          darkSceneEnhancementApplyResult =
+              const PlayerFeatureApplyResult.notRequested(
+            'dark-scene-enhancement',
+          );
           darkSceneEnhancementActive = false;
+          videoSuperResolutionActive = false;
+          videoSuperResolutionApplyResult =
+              const PlayerFeatureApplyResult.notRequested(
+            'gpu-high-quality-scaling',
+          );
           darkSceneSafetyCoordinator.reset();
           darkSceneEnhancementRollbackReason = null;
           darkSceneEnhancementRollbackAt = null;
@@ -177,17 +201,7 @@ extension PlayerStateOpening on PlayerPageState {
           hdrMappingSafetyCoordinator.reset();
           hdrMappingRollbackReason = null;
           hdrMappingRollbackAt = null;
-          // 新媒体必须先清除上一条的滤镜，再从本条稳定样本逐级恢复。
-          await PlayerAdaptiveQualityEnhancer.apply(
-            backend: playerService,
-            level: PlayerAdaptiveQualityLevel.off,
-            darkSceneEnhancementEnabled: false,
-          );
-          if (openRequests.hasSuperseded(request)) {
-            // 新选择已经覆盖旧路径时，不再为旧媒体执行后续配置或 open。
-            continue;
-          }
-          await applyPlaybackPerformanceProfile();
+          await applyPlaybackEngineProfile();
           if (!mounted) {
             return;
           }
@@ -202,7 +216,17 @@ extension PlayerStateOpening on PlayerPageState {
             // open 本身无法中断，但返回后立即消费最新路径，不等待旧媒体首帧。
             continue;
           }
-          await applyPlaybackPerformanceProfile();
+          // 新媒体打开后清除上一条滤镜；不再在 open 前额外执行一次完整滤镜事务。
+          adaptiveQualityApplyResult =
+              await PlayerAdaptiveQualityEnhancer.apply(
+            backend: playerService,
+            level: PlayerAdaptiveQualityLevel.off,
+            darkSceneEnhancementEnabled: false,
+          );
+          if (openRequests.hasSuperseded(request)) {
+            continue;
+          }
+          await applyMediaPresentationProfile();
           if (openRequests.hasSuperseded(request)) {
             continue;
           }
@@ -226,7 +250,23 @@ extension PlayerStateOpening on PlayerPageState {
             continue;
           }
           openedPath = path;
-          unawaited(detectCurrentGpuCapabilities(path));
+          final requiresGpuCapabilityDetection =
+              effectivePlaybackSettings.darkSceneEnhancementEnabled ||
+                  effectivePlaybackSettings
+                      .hdrDynamicToneMappingExperimentEnabled ||
+                  playerService.supportsNativeNvidiaVideoEnhancement;
+          if (requiresGpuCapabilityDetection) {
+            final task = detectCurrentGpuCapabilities(request);
+            gpuCapabilityDetectionTask = task;
+            unawaited(task.whenComplete(() {
+              if (identical(gpuCapabilityDetectionTask, task)) {
+                gpuCapabilityDetectionTask = null;
+              }
+            }));
+          } else {
+            nvidiaVideoAutomaticReason =
+                '正式 MediaKit Texture 不运行 NVIDIA 原生增强探测';
+          }
           unawaited(PlayerMemoryDiagnostics.logStage(
             'media_opened',
             backend: playerService,
@@ -264,66 +304,6 @@ extension PlayerStateOpening on PlayerPageState {
     if (shouldContinue) {
       unawaited(drainOpenRequests());
     }
-  }
-
-  /**
-   * 媒体确认可播放后检测当前 GPU 渲染会话；过期 open 的结果不得覆盖新媒体。
-   */
-  Future<void> detectCurrentGpuCapabilities(String openedPathCandidate) async {
-    final snapshot = await gpuCapabilityDetector.detect(playerService);
-    if (!mounted || openedPathCandidate != openedPath) return;
-    final experimentAllowed =
-        effectivePlaybackSettings.hdrDynamicToneMappingExperimentEnabled &&
-            snapshot.selectedAdapter != null &&
-            snapshot.computeShaderVerified &&
-            snapshot.hdrSourceDetected;
-    final darkSceneAllowed =
-        effectivePlaybackSettings.darkSceneEnhancementEnabled &&
-            snapshot.darkSceneEnhancementEligible;
-    await PlayerAdaptiveQualityEnhancer.apply(
-      backend: playerService,
-      level: adaptiveQualityLevel,
-      darkSceneEnhancementEnabled: darkSceneAllowed,
-      nvidiaVideoEnhancementEnabled: nvidiaVideoEnhancementExperimentEnabled,
-      nvidiaVideoHdrEnabled: nvidiaVideoHdrExperimentEnabled,
-    );
-    await PlayerHdrMappingExperiment.apply(
-      backend: playerService,
-      enabled: experimentAllowed,
-    );
-    if (!mounted || openedPathCandidate != openedPath) {
-      // 能力查询期间若已切换媒体，不允许旧 HDR 结论泄漏到新会话。
-      await PlayerHdrMappingExperiment.apply(
-        backend: playerService,
-        enabled: false,
-      );
-      await PlayerAdaptiveQualityEnhancer.apply(
-        backend: playerService,
-        level: adaptiveQualityLevel,
-        darkSceneEnhancementEnabled: false,
-        nvidiaVideoEnhancementEnabled: false,
-        nvidiaVideoHdrEnabled: false,
-      );
-      return;
-    }
-    gpuCapabilitySnapshot = snapshot;
-    hdrMappingExperimentActive = experimentAllowed;
-    darkSceneEnhancementActive = darkSceneAllowed;
-    await applyAutomaticNvidiaVideoEnhancement(openedPathCandidate);
-    if (!mounted || openedPathCandidate != openedPath) return;
-    if (darkSceneAllowed) {
-      // 从真实滤镜应用后再建立压力基线，媒体打开阶段不能算入暗部增强成本。
-      darkSceneSafetyCoordinator.reset();
-    }
-    if (experimentAllowed) {
-      // 从实验真正启用后再建立累计掉帧基线，避免把媒体打开阶段算作 HDR 成本。
-      hdrMappingSafetyCoordinator.reset();
-    }
-    debugPrint(
-      'PLAYER_GPU_CAPABILITY renderer=${snapshot.rendererDetected} '
-      'api=${snapshot.gpuApi} context=${snapshot.gpuContext} '
-      'vulkan=${snapshot.vulkanDetected} compute=${snapshot.computeShaderVerified}',
-    );
   }
 
   /**

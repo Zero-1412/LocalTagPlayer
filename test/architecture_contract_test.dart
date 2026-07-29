@@ -2268,9 +2268,11 @@ void main() {
       'lib/src/services/player/media_kit_player_backend.dart',
     ).readAsStringSync();
 
+    expect(selection, contains('return PlayerBackendSelection.mediaKit;'));
     expect(
       selection,
-      contains('return PlayerBackendSelection.mediaKitLibmpvEnhanced;'),
+      isNot(contains('mediaKitLibmpvEnhanced')),
+      reason: '正式设置不能再伪装成两个实际相同的播放器后端',
     );
     expect(
       selection,
@@ -2308,7 +2310,7 @@ void main() {
     );
   });
 
-  test('NVIDIA automatic policy and fixed-frame visual gate stay explicit', () {
+  test('NVIDIA 自动策略只留在显式原生 QA 边界', () {
     final panel = _readPlayerSettingsPanelCluster();
     final page = _readPlayerPageCluster();
     final autoPolicy = File(
@@ -2329,13 +2331,13 @@ void main() {
     ).readAsStringSync();
     final roadmap = File('ROADMAP.md').readAsStringSync();
 
-    // 手动开关已经获授权删除；自动策略仍必须保留驱动诊断、门禁与回滚。
+    // 手动开关已删除；正式 MediaKit 不探测，原生 QA 仍保留驱动门禁与回滚。
     expect(panel, isNot(contains('NVIDIA RTX 视频超分')));
     expect(panel, isNot(contains('NVIDIA RTX Video HDR')));
-    expect(page, contains('NVIDIA RTX 视频超分:'));
-    expect(page, contains('NVIDIA RTX Video HDR:'));
+    expect(page, contains('原生 QA · NVIDIA RTX 视频超分:'));
+    expect(page, contains('原生 QA · NVIDIA RTX Video HDR:'));
     expect(page, contains('applyAutomaticNvidiaVideoEnhancement'));
-    expect(page, contains('NVIDIA 自动策略:'));
+    expect(page, contains('supportsNativeNvidiaVideoEnhancement'));
     expect(autoPolicy, contains('PlayerNvidiaVideoAutoPolicy'));
     expect(autoPolicy, contains('output.hdrSignalActive'));
     expect(nativeBridge, contains('video-params/w'));
@@ -2343,14 +2345,11 @@ void main() {
     expect(nativeBackend, contains("'video-params/w'"));
     expect(nativeBackend, contains("'video-params/h'"));
     expect(
-      backendSelection,
-      contains(
-        'rendererPreference != PlayerRendererPreference.mediaKit',
-      ),
-    );
+        backendSelection, contains('return PlayerBackendSelection.mediaKit;'));
     expect(
       backendSelection,
-      contains('return PlayerBackendSelection.mediaKitLibmpvEnhanced;'),
+      isNot(
+          contains('rendererPreference != PlayerRendererPreference.mediaKit')),
     );
     expect(
       backendSelection,
@@ -2363,7 +2362,7 @@ void main() {
     );
     expect(page, contains('suspendCpuEnhancementsForNvidia'));
     expect(page, contains('restoreCpuEnhancementsAfterNvidia'));
-    expect(page, contains('NVIDIA 滤镜互斥处理:'));
+    expect(page, contains('原生 QA · NVIDIA 滤镜互斥处理:'));
     expect(baselineGate, contains("'playerBackend':"));
     expect(baselineGate, contains("'rendererPreference':"));
 

@@ -1,5 +1,25 @@
 # CURRENT_TASK.md
 
+## 2026-07-30 播放调用与文案对抗式修复
+
+- 正式播放路径统一为 `MediaKit Texture -> media_kit/libmpv`；历史
+  `mediaKitLibmpvEnhanced` / MPV 容器偏好读取后立即迁移为 `mediaKit`。设置页只展示
+  一个只读后端说明，不再提供两个实际创建同一后端的伪切换入口。
+- 媒体打开属性拆为 open 前一次解码/缓存引擎快照和 open 后一次显示快照；滤镜基线只在
+  新媒体打开后恢复一次。旧媒体 GPU 能力任务必须结束后才能开始下一次 open，随后由新
+  媒体基线覆盖，避免迟到任务改写共享 libmpv 实例。
+- GPU 缩放、压缩/暗部滤镜及 HDR→SDR 色调映射增加有界属性回读；设置开关只表示请求，
+  只有全部属性读回一致才显示“已生效”。能力门槛未通过、属性不支持、写入/读回失败均
+  使用不同诊断终态，可选增强异常不再逃逸并打断正式播放。
+- 正式 MediaKit Texture 不运行 NVIDIA 原生增强探测，也不显示 NVIDIA VSR/HDR 运行项；
+  `windows-native-hwnd` 仅可由显式 QA 环境变量进入并保留“原生 QA”诊断前缀。
+- filtered queue、当前 index、返回筛选状态、控制条、快捷键、设置持久化兼容、schema、
+  `FilterQuery` / `TagQueryService`、缩略图/media queue 和用户数据均未改变。
+- 验证状态：`flutter analyze` 零问题；完整测试 459 项通过、3 项按既有 benchmark
+  条件跳过；Windows Debug build 成功。真实 Debug 窗口已点击设置、播放与诊断入口，
+  确认首帧 157 ms、属性回读一致、正式诊断仅显示 `MediaKit Texture`；连续 seek、
+  快速切片和侧栏连续收放 4 次后画面、控制栏与播放推进均保持正常。
+
 ## 2026-07-30 NVIDIA 原生激活门禁与 MediaKit SDK 评估
 
 - 正式默认后端继续保持 MediaKit；Windows 原生 child HWND/libmpv D3D11 后端仅作为

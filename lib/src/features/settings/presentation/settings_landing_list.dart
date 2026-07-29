@@ -32,7 +32,7 @@ class SettingsLandingList extends StatelessWidget {
   /** 首页直接展示的继续观看策略，避免用户必须先进入二级页才能发现当前行为。 */
   final PlaybackResumeBehavior resumeBehavior;
 
-  /** 当前渲染器偏好，用于首页直接显示下一次播放会话的后端策略。 */
+  /** 兼容旧页面调用的历史字段；正式后端名称始终显示 MediaKit Texture。 */
   final PlayerRendererPreference rendererPreference;
 
   /** 删除动作当前是否保留确认层。 */
@@ -96,7 +96,7 @@ class SettingsLandingList extends StatelessWidget {
               key: const ValueKey('settings.category.videoQuality'),
               icon: Icons.auto_awesome_outlined,
               title: '视频画质与增强',
-              subtitle: '画面比例、缩放与色彩 · 自动画质、暗部增强与 HDR 映射',
+              subtitle: '画面比例、缩放与色彩 · 自动画质、暗部增强与 HDR 转 SDR',
               onTap: onOpenVideoQuality,
             ),
             _SettingsNavigationTile(

@@ -14,11 +14,10 @@ enum PlayerPlaybackMode { sequential, shuffle, repeatOne, repeatAll }
 enum PlayerVideoAspectMode { automatic, ratio4x3, ratio16x9, cover }
 
 /**
- * 播放器渲染器偏好。
+ * 历史播放器渲染器设置。
  *
- * `mediaKit` 与 `windowsLibmpv` 是设置页唯一可选的两个运行配置。两者都复用
- * media_kit_video Texture；后者额外允许 PlayerService 通过同一个 NativePlayer
- * 使用高级 libmpv 属性。`automatic` 仅用于读取旧设置。
+ * 正式产品已经统一使用 MediaKit Texture；三个值只用于读取旧设置与调用方二进制兼容，
+ * 保存和运行时均归一为 [mediaKit]。Windows 原生后端只能由组合根的显式 QA 环境变量选择。
  */
 enum PlayerRendererPreference { automatic, mediaKit, windowsLibmpv }
 
@@ -92,7 +91,7 @@ class PlaybackSettings {
 
   static const defaults = PlaybackSettings(
     hwdec: 'auto-safe',
-    rendererPreference: PlayerRendererPreference.windowsLibmpv,
+    rendererPreference: PlayerRendererPreference.mediaKit,
     resumeBehavior: PlaybackResumeBehavior.continueWatching,
     shortcuts: defaultShortcuts,
     fullscreenQueueEdgeHoverEnabled: true,
@@ -237,7 +236,7 @@ class PlaybackSettings {
   ];
 
   final String hwdec;
-  /** 下一次创建播放器 Route 时使用的渲染器偏好；当前会话不热拆后端。 */
+  /** 兼容旧设置文件的历史字段；正式运行时始终为 MediaKit Texture。 */
   final PlayerRendererPreference rendererPreference;
   /** 用户在设置页选择的继续观看默认策略。 */
   final PlaybackResumeBehavior resumeBehavior;
@@ -508,16 +507,9 @@ class PlaybackSettings {
     );
   }
 
-  /**
-   * 把旧三态渲染器设置迁移为用户可见的 MediaKit / MPV 两态。
-   *
-   * 历史 `automatic` 与 `windowsLibmpv` 都表示用户未强制兼容后端，因此迁移
-   * 到 MPV；只有明确保存的 `mediaKit` 保持 MediaKit。
-   */
+  /** 把全部历史渲染器值迁移到唯一正式 MediaKit Texture 后端。 */
   static PlayerRendererPreference _rendererPreferenceFromJson(Object? value) {
-    return value?.toString() == PlayerRendererPreference.mediaKit.name
-        ? PlayerRendererPreference.mediaKit
-        : PlayerRendererPreference.windowsLibmpv;
+    return PlayerRendererPreference.mediaKit;
   }
 
   /** 解析持久化枚举名称；旧文件缺字段或手工写入异常值时使用安全默认值。 */
@@ -605,32 +597,17 @@ class PlaybackSettings {
     };
   }
 
-  /** 把渲染器枚举转换为面向用户的稳定名称。 */
+  /** 历史枚举统一显示唯一正式视频表面，不能再暗示存在播放器切换。 */
   static String rendererLabelFor(PlayerRendererPreference value) =>
-      switch (value) {
-        PlayerRendererPreference.automatic ||
-        PlayerRendererPreference.windowsLibmpv =>
-          'MediaKit + libmpv 增强',
-        PlayerRendererPreference.mediaKit => 'MediaKit 兼容渲染',
-      };
+      'MediaKit Texture';
 
   /** 解释渲染器的真实能力和生效边界，避免把兼容后端描述为 NVIDIA AI。 */
   static String rendererDescriptionFor(PlayerRendererPreference value) =>
-      switch (value) {
-        PlayerRendererPreference.automatic ||
-        PlayerRendererPreference.windowsLibmpv =>
-          'media_kit 负责生命周期与 Texture；高级画质通过同一 libmpv 实例生效',
-        PlayerRendererPreference.mediaKit => '跨平台兼容性优先；Windows NVIDIA 原生增强不可用',
-      };
+      'MediaKit 负责生命周期与 Texture；高级画质通过同一个 libmpv 实例按能力应用';
 
   /** 设置页按所选后端展示真实可用的特色强化，不把 MPV 能力归给 MediaKit。 */
   static String rendererFeaturesFor(PlayerRendererPreference value) =>
-      switch (value) {
-        PlayerRendererPreference.automatic ||
-        PlayerRendererPreference.windowsLibmpv =>
-          '特色强化：同实例 MPV 滤镜、GPU 高质量缩放、压缩画质增强',
-        PlayerRendererPreference.mediaKit => '特色强化：跨平台兼容、镜像、压缩画质增强',
-      };
+      '可用能力：镜像、libmpv 滤镜、GPU 高质量缩放与压缩画质增强';
 
   /** 设置页常用解码档位使用面向产品目标的名称。 */
   static String commonLabelFor(String value) => switch (value) {

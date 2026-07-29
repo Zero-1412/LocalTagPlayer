@@ -52,7 +52,7 @@ class PlayerSettingsAdvancedList extends StatelessWidget {
   /** 是否仅水平翻转视频画面。 */
   final bool mirrorVideo;
 
-  /** 当前所选后端是否允许展示 MPV 专属强化。 */
+  /** 当前正式后端是否提供同实例 libmpv 高级属性。 */
   final bool mpvEnhancementsAvailable;
 
   /** 是否使用仅在画面放大时运行的 libmpv GPU 高质量缩放；该能力不是 NVIDIA AI。 */
@@ -96,7 +96,7 @@ class PlayerSettingsAdvancedList extends StatelessWidget {
             PlayerSettingsToggleRow(
               key: const ValueKey('player.settings.superResolution'),
               label: 'GPU 高质量缩放（非 NVIDIA AI）',
-              subtitle: 'MPV 缩放，仅在画面放大时生效',
+              subtitle: 'libmpv 缩放，仅在画面放大时生效',
               value: videoSuperResolutionEnabled,
               onChanged: onVideoSuperResolutionChanged,
             ),

@@ -13,6 +13,7 @@ import '../../features/player/application/player_open_request_controller.dart';
 import '../../features/player/application/player_session_controller.dart';
 import '../../features/player/application/player_shortcut_gate_controller.dart';
 import '../../models/media_details.dart';
+import '../../models/player_feature_apply_result.dart';
 import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
 import '../../platform/platform_interfaces.dart';
@@ -40,6 +41,7 @@ export 'player_state_controls.dart';
 export 'player_state_chrome.dart';
 import 'player_state_performance.dart';
 export 'player_state_performance.dart';
+export 'player_state_gpu_capabilities.dart';
 import 'player_state_opening.dart';
 export 'player_state_opening.dart';
 import 'player_state_queue.dart';
@@ -200,14 +202,11 @@ class PlayerPageState extends State<PlayerPage> {
   Timer? playbackHealthTimer;
   var playbackHealthSampling = false;
   /** 第二阶段自动画质协调器；只消费低频诊断样本，不创建额外定时器。 */
-  final PlayerAdaptiveQualityCoordinator adaptiveQualityCoordinator =
-      PlayerAdaptiveQualityCoordinator();
+  final adaptiveQualityCoordinator = PlayerAdaptiveQualityCoordinator();
   /** 第三阶段能力检测器；只通过 PlayerService 查询当前引擎的真实运行属性。 */
-  final PlayerGpuCapabilityDetector gpuCapabilityDetector =
-      const PlayerGpuCapabilityDetector();
+  final gpuCapabilityDetector = const PlayerGpuCapabilityDetector();
   /** HDR 映射复用播放健康样本，并在压力出现后锁存关闭到下一媒体。 */
-  final PlayerHdrMappingSafetyCoordinator hdrMappingSafetyCoordinator =
-      PlayerHdrMappingSafetyCoordinator();
+  final hdrMappingSafetyCoordinator = PlayerHdrMappingSafetyCoordinator();
   /** 暗部增强复用同一低频压力判定，但拥有独立计数与会话回滚锁存。 */
   final PlayerHdrMappingSafetyCoordinator darkSceneSafetyCoordinator =
       PlayerHdrMappingSafetyCoordinator(featureLabel: '暗部增强');
@@ -217,13 +216,26 @@ class PlayerPageState extends State<PlayerPage> {
   /** 显示同步插值复用同一播放压力熔断，但不与 AI 补帧或 NVIDIA 能力混淆。 */
   final PlayerHdrMappingSafetyCoordinator smoothMotionSafetyCoordinator =
       PlayerHdrMappingSafetyCoordinator(featureLabel: '显示同步插值');
-  /** 当前会话已经实际送入后端的自动增强档位。 */
+  /** 当前会话已经由滤镜事务读回确认的自动增强档位。 */
   PlayerAdaptiveQualityLevel adaptiveQualityLevel =
       PlayerAdaptiveQualityLevel.off;
+  /** 最近一次压缩/暗部滤镜快照的真实应用终态。 */
+  PlayerFeatureApplyResult adaptiveQualityApplyResult =
+      const PlayerFeatureApplyResult.notRequested(
+    'compression-filter-snapshot',
+  );
+  /** 当前媒体滤镜属性失败后停止自动重试，避免健康采样持续制造平台压力。 */
+  var adaptiveQualitySessionBlocked = false;
   /** 最近一次播放器会话能力检测结果；新媒体打开时作废并重新检测。 */
   PlayerGpuCapabilitySnapshot? gpuCapabilitySnapshot;
-  /** HDR 映射只有在当前媒体与实际活动 LUID 均通过门槛后才对本会话生效。 */
+  /** HDR 转 SDR 色调映射只有属性读回确认后才对本会话生效。 */
   var hdrMappingExperimentActive = false;
+  /** HDR 转 SDR 色调映射最近一次属性提交终态。 */
+  PlayerFeatureApplyResult hdrMappingApplyResult =
+      const PlayerFeatureApplyResult.notRequested('hdr-to-sdr-tone-mapping');
+  /** 暗部增强最近一次属性提交终态，不与压缩增强的档位状态混用。 */
+  PlayerFeatureApplyResult darkSceneEnhancementApplyResult =
+      const PlayerFeatureApplyResult.notRequested('dark-scene-enhancement');
   /** 当前 SDR 会话已经通过分辨率、硬解和传递函数门槛并启用暗部增强。 */
   var darkSceneEnhancementActive = false;
   /** 暗部增强只回滚当前媒体，不改写用户的持久开关。 */
@@ -234,6 +246,12 @@ class PlayerPageState extends State<PlayerPage> {
   String? hdrMappingRollbackReason;
   /** 当前媒体 HDR 自动回滚发生时间，用于与掉帧和功耗基线对齐。 */
   DateTime? hdrMappingRollbackAt;
+  /**
+   * 正在运行的 GPU 能力应用任务。
+   * 新媒体打开前必须等待旧任务结束，再用新媒体基线覆盖其属性，防止共享 libmpv
+   * 实例被上一媒体的迟到任务改写。
+   */
+  Future<void>? gpuCapabilityDetectionTask;
   /** 画质余量扩展采样每两秒执行一次，供自动增强与 HDR 压力保护共享。 */
   var qualityMarginSampleTick = 0;
   DateTime? lastProgressWriteAt;
@@ -304,11 +322,13 @@ class PlayerPageState extends State<PlayerPage> {
   late PlayerVideoOutputRange videoOutputRange;
   /** 当前全局 GPU 高质量缩放开关；只影响 libmpv 渲染缩放器，不调用 NVIDIA AI。 */
   late bool videoSuperResolutionEnabled;
-  /** 当前用户选择与硬解条件是否允许 MPV 专属画质强化实际生效。 */
-  bool get mpvEnhancementsAvailable =>
-      effectivePlaybackSettings.rendererPreference !=
-          PlayerRendererPreference.mediaKit &&
-      effectivePlaybackSettings.hardwareDecodingEnabled;
+  /** 当前媒体的 GPU 高质量缩放是否已经由属性读回确认。 */
+  var videoSuperResolutionActive = false;
+  /** GPU 高质量缩放最近一次属性提交终态。 */
+  PlayerFeatureApplyResult videoSuperResolutionApplyResult =
+      const PlayerFeatureApplyResult.notRequested('gpu-high-quality-scaling');
+  /** 正式 MediaKit 后端通过同一 libmpv 实例提供这些属性，无需伪渲染器开关。 */
+  bool get mpvEnhancementsAvailable => true;
   /** 当前媒体是否已经由自动策略请求 NVIDIA RTX 视频超分。 */
   var nvidiaVideoEnhancementExperimentEnabled = false;
   /** 当前 SDR 媒体是否已经由自动策略请求 NVIDIA RTX Video HDR。 */

@@ -160,7 +160,12 @@ extension PlayerStatePerformance on PlayerPageState {
     });
   }
 
-  Future<void> applyPlaybackPerformanceProfile() async {
+  /**
+   * 在打开媒体前提交解码与缓存配置。
+   *
+   * 这些属性不依赖媒体元数据；同一次 open 只提交一次，避免打开后再次重复平台往返。
+   */
+  Future<void> applyPlaybackEngineProfile() async {
     final options = <String, String>{
       // 固定解码并发，避免 FFmpeg 在高核心数机器上为单个视频扩张大量工作线程。
       'vd-lavc-threads': '4',
@@ -189,8 +194,15 @@ extension PlayerStatePerformance on PlayerPageState {
     } catch (_) {
       // 某些后端缺少可选缓存属性时继续恢复其它播放偏好。
     }
-    // 部分后端会在打开新媒体时重建参数；每次 open 前后恢复比例、倍速与超分。
-    final smoothMotionResult = await playerService.applyOpenPreferences(
+  }
+
+  /**
+   * 媒体打开后恢复比例、缩放、输出范围、倍速和显示同步。
+   *
+   * 返回值中的增强状态均来自属性读回；持久开关本身不能冒充当前会话已经生效。
+   */
+  Future<void> applyMediaPresentationProfile() async {
+    final result = await playerService.applyOpenPreferences(
       videoAspectOverride: videoAspectMode.mpvAspectOverride,
       panscan: videoAspectMode.mpvPanscan,
       videoScaler: videoScaler,
@@ -202,8 +214,12 @@ extension PlayerStatePerformance on PlayerPageState {
       // Compute 与 HDR 源信号检测会在 `detectCurrentGpuCapabilities` 中解锁。
       hdrDynamicToneMappingExperimentEnabled: false,
     );
-    smoothMotionActive = smoothMotionResult.active;
-    smoothMotionApplyReason = smoothMotionResult.reason;
+    videoSuperResolutionApplyResult = result.scaling;
+    videoSuperResolutionActive =
+        videoSuperResolutionEnabled && result.scaling.applied;
+    hdrMappingApplyResult = result.hdrToneMapping;
+    smoothMotionActive = result.smoothMotion.active;
+    smoothMotionApplyReason = result.smoothMotion.reason;
   }
 
   Future<void> setMpvProperty(String property, String value) async {

@@ -154,9 +154,9 @@ class PlaybackQualitySettingsPanel extends StatelessWidget {
               ),
               contentPadding: EdgeInsets.zero,
               value: settings.hdrDynamicToneMappingExperimentEnabled,
-              title: const Text('HDR 动态映射'),
+              title: const Text('HDR 转 SDR 色调映射（兼容显示）'),
               subtitle: const Text(
-                '仅对 HDR 视频在活动 GPU LUID 与 Compute 门槛通过后启用；播放压力会自动回滚，关闭即恢复自动映射',
+                '把 HDR 视频映射到兼容显示输出；不会开启 Windows HDR 或 NVIDIA RTX Video HDR，播放压力出现时自动回滚',
               ),
               onChanged: (value) async {
                 if (!value) {
@@ -170,9 +170,9 @@ class PlaybackQualitySettingsPanel extends StatelessWidget {
                 final confirmed = await showDialog<bool>(
                   context: context,
                   builder: (dialogContext) => AlertDialog(
-                    title: const Text('开启 HDR 动态映射？'),
+                    title: const Text('开启 HDR 转 SDR 色调映射？'),
                     content: const Text(
-                      '该功能会为通过能力门槛的 HDR 视频启用 Hable 映射与逐帧峰值 Compute。若出现掉帧、功耗升高或观感异常，可随时关闭并恢复 mpv 自动值。',
+                      '该功能会为通过能力门槛的 HDR 视频启用 Hable 映射与逐帧峰值检测，以适配兼容显示输出。它不会开启 Windows HDR，也不是 NVIDIA RTX Video HDR；若出现掉帧或观感异常，可关闭并恢复 mpv 自动值。',
                     ),
                     actions: [
                       TextButton(

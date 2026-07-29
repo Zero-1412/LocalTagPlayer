@@ -1,5 +1,21 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-30 · 收敛正式播放边界并修复属性竞态
+
+- Architecture Baseline 提升到 `0.5.137`：正式应用统一使用 MediaKit Texture 管理
+  生命周期、事件和视频纹理；删除未挂载的伪渲染器选择控件，历史偏好自动迁移且不影响
+  硬解、画质、快捷键或 filtered queue 设置。
+- 媒体打开不再前后重复提交完整属性集。解码/缓存快照在 open 前一次应用，显示与画质
+  偏好在 open 后一次应用；跨媒体 GPU 能力任务串行结束并由新媒体基线覆盖，阻止旧异步
+  结果成为共享 libmpv 的最后写入者。
+- GPU 高质量缩放、压缩/暗部滤镜及 HDR→SDR 色调映射以写入后的逐项读回为生效证据；
+  能力门槛、后端不支持和读回失败分别显示，MediaKit 可选增强异常不会打断播放。
+- 正式诊断不再探测或展示 NVIDIA VSR/HDR；原生 child HWND 仅保留显式 QA 门禁。设置
+  文案明确区分 HDR→SDR 兼容映射、Windows HDR 和 NVIDIA RTX Video HDR。
+- `flutter analyze`、完整 459 项测试与 Windows Debug build 通过，3 项既有 benchmark
+  跳过。真实 Debug 窗口验证首帧 157 ms、属性读回一致、连续 seek、快速切片及侧栏连续
+  收放 4 次；正式诊断只显示 `MediaKit Texture`，未宣称 NVIDIA VSR/HDR 已激活。
+
 ## 2026-07-30 · 修复 NVIDIA 原生滤镜激活回读
 
 - 保持 MediaKit 为正式默认后端，Windows 原生 D3D11 后端继续只用于 NVIDIA

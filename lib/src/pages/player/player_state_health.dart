@@ -212,14 +212,15 @@ extension PlayerStateHealth on PlayerPageState {
       totalDroppedFrames: totalDrops,
     );
     if (compressionEnhancementMode != PlayerCompressionEnhancementMode.off &&
-        !nvidiaCpuEnhancementsSuspended) {
+        !nvidiaCpuEnhancementsSuspended &&
+        !adaptiveQualitySessionBlocked) {
       final decision = adaptiveQualityCoordinator.evaluate(
         sample,
         preferClarity: compressionEnhancementMode ==
             PlayerCompressionEnhancementMode.clarity,
       );
       if (decision.changed && !isExiting) {
-        await PlayerAdaptiveQualityEnhancer.apply(
+        final result = await PlayerAdaptiveQualityEnhancer.apply(
           backend: playerService,
           level: decision.level,
           darkSceneEnhancementEnabled: darkSceneEnhancementActive,
@@ -227,7 +228,13 @@ extension PlayerStateHealth on PlayerPageState {
               nvidiaVideoEnhancementExperimentEnabled,
           nvidiaVideoHdrEnabled: nvidiaVideoHdrExperimentEnabled,
         );
-        adaptiveQualityLevel = decision.level;
+        adaptiveQualityApplyResult = result;
+        if (result.applied) {
+          adaptiveQualityLevel = decision.level;
+        } else {
+          adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
+          adaptiveQualitySessionBlocked = true;
+        }
         debugPrint(
           'PLAYER_ADAPTIVE_QUALITY level=${decision.level.name} '
           'profile=${decision.profile.label} reason=${decision.reason}',
@@ -238,7 +245,7 @@ extension PlayerStateHealth on PlayerPageState {
       final darkDecision = darkSceneSafetyCoordinator.evaluate(sample);
       if (darkDecision.shouldRollback) {
         final guardedPath = openedPath;
-        await PlayerAdaptiveQualityEnhancer.apply(
+        final result = await PlayerAdaptiveQualityEnhancer.apply(
           backend: playerService,
           level: adaptiveQualityLevel,
           darkSceneEnhancementEnabled: false,
@@ -247,8 +254,12 @@ extension PlayerStateHealth on PlayerPageState {
           nvidiaVideoHdrEnabled: nvidiaVideoHdrExperimentEnabled,
         );
         if (!mounted || openedPath != guardedPath) return;
-        darkSceneEnhancementActive = false;
-        darkSceneEnhancementRollbackReason = darkDecision.reason;
+        adaptiveQualityApplyResult = result;
+        darkSceneEnhancementApplyResult = result;
+        darkSceneEnhancementActive = !result.applied;
+        darkSceneEnhancementRollbackReason = result.applied
+            ? darkDecision.reason
+            : '${darkDecision.reason}；回滚属性未确认';
         darkSceneEnhancementRollbackAt = sampledAt;
         debugPrint(
           'PLAYER_DARK_SCENE_ENHANCEMENT rollback=true '
@@ -306,13 +317,15 @@ extension PlayerStateHealth on PlayerPageState {
     final hdrDecision = hdrMappingSafetyCoordinator.evaluate(sample);
     if (!hdrDecision.shouldRollback) return;
     final guardedPath = openedPath;
-    await PlayerHdrMappingExperiment.apply(
+    final result = await PlayerHdrMappingExperiment.apply(
       backend: playerService,
       enabled: false,
     );
     if (!mounted || openedPath != guardedPath) return;
-    hdrMappingExperimentActive = false;
-    hdrMappingRollbackReason = hdrDecision.reason;
+    hdrMappingApplyResult = result;
+    hdrMappingExperimentActive = !result.applied;
+    hdrMappingRollbackReason =
+        result.applied ? hdrDecision.reason : '${hdrDecision.reason}；回滚属性未确认';
     hdrMappingRollbackAt = sampledAt;
     debugPrint(
       'PLAYER_HDR_MAPPING rollback=true reason=${hdrDecision.reason}',

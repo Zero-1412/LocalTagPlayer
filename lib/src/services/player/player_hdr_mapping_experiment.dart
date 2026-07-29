@@ -1,10 +1,12 @@
+import '../../models/player_feature_apply_result.dart';
 import '../../platform/platform_interfaces.dart';
 import 'player_adaptive_quality.dart';
+import 'player_property_verifier.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * 第三阶段唯一启用的可回滚实验：HDR 动态映射。
+ * HDR 源到兼容显示输出的可回滚色调映射。
  *
  * 实验复用 mpv GPU renderer 的 Hable 曲线和逐帧峰值 Compute；关闭时逐项恢复
  * `auto` / `no`，不修改视频文件、显示器系统设置或其它画质增强档位。
@@ -13,7 +15,7 @@ class PlayerHdrMappingExperiment {
   const PlayerHdrMappingExperiment._();
 
   /** 把实验开关完整应用到当前播放会话。 */
-  static Future<void> apply({
+  static Future<PlayerFeatureApplyResult> apply({
     required PlayerRuntimeAccess backend,
     required bool enabled,
   }) async {
@@ -29,16 +31,25 @@ class PlayerHdrMappingExperiment {
             'hdr-compute-peak': 'auto',
             'allow-delayed-peak-detect': 'no',
           };
-    final batch = backend is PlayerPropertyBatchBoundary
-        ? backend as PlayerPropertyBatchBoundary
-        : null;
-    if (batch != null) {
-      await batch.setProperties(values);
-      return;
+    final result = await PlayerPropertyVerifier.apply(
+      backend: backend,
+      label: enabled ? 'hdr-to-sdr-tone-mapping' : 'hdr-tone-mapping-reset',
+      properties: values,
+    );
+    if (!enabled || result.applied) {
+      return result;
     }
-    for (final entry in values.entries) {
-      await backend.setProperty(entry.key, entry.value);
-    }
+    // 部分 HDR 属性失败时完整恢复自动策略，不能留下半套色调映射。
+    await PlayerPropertyVerifier.apply(
+      backend: backend,
+      label: 'hdr-tone-mapping-fallback',
+      properties: const <String, String>{
+        'tone-mapping': 'auto',
+        'hdr-compute-peak': 'auto',
+        'allow-delayed-peak-detect': 'no',
+      },
+    );
+    return result;
   }
 }
 
@@ -71,7 +82,7 @@ class PlayerHdrMappingSafetyDecision {
 class PlayerHdrMappingSafetyCoordinator {
   PlayerHdrMappingSafetyCoordinator({
     this.pressureSamplesToRollback = 2,
-    this.featureLabel = 'HDR 动态映射',
+    this.featureLabel = 'HDR 转 SDR 色调映射',
   }) : _reason = '等待 $featureLabel 播放健康样本';
 
   /** 轻度压力触发回滚所需的连续样本数。 */

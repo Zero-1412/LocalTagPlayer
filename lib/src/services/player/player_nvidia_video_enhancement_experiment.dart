@@ -231,14 +231,11 @@ class PlayerNvidiaVideoEnhancementCapability {
 /**
  * 检测 mpv NVIDIA 驱动视频增强路径，不改插件 ABI 或播放器属性。
  *
- * 固定版本仅用于后端尚未就绪时的保守回退；实际媒体打开后必须再次读取
- * `hwdec-current`，不能用用户选择的解码器名称代替真实纹理链证据。
+ * 版本必须来自当前后端实例；实际媒体打开后还必须读取 `hwdec-current`，
+ * 不能用其它固定构建或用户选择的解码器名称代替真实纹理链证据。
  */
 class PlayerNvidiaVideoEnhancementExperiment {
   const PlayerNvidiaVideoEnhancementExperiment._();
-
-  /** 当前 Windows 构建脚本固定下载的 mpv 版本。 */
-  static const bundledMpvVersion = '0.41.0';
 
   /** `scaling-mode=nvidia` 首次进入 mpv 正式版本的最低版本。 */
   static const minimumNvidiaScalingModeVersion = '0.39.0';
@@ -305,8 +302,8 @@ class PlayerNvidiaVideoEnhancementExperiment {
     final reportedPrimaries =
         await backend.getProperty('video-params/primaries');
     final reportedGamma = await backend.getProperty('video-params/gamma');
-    final version = parseVersion(reportedVersion) ??
-        parseVersion(PlayerNvidiaVideoEnhancementExperiment.bundledMpvVersion);
+    // MediaKit 与原生 QA 可能打包不同 libmpv，不能用原生固定版本替当前实例声明能力。
+    final version = parseVersion(reportedVersion);
     if (version == null) {
       return const PlayerNvidiaVideoEnhancementCapability(
         status: PlayerNvidiaVideoEnhancementStatus.unavailable,

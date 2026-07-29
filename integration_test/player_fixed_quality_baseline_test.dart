@@ -268,14 +268,14 @@ void main() {
           await playerKey.currentState!.buildDiagnosticsSnapshot();
       debugPrint(
         'NVIDIA_QA_REQUEST '
-        '${requestedSnapshot.lines.where((line) => line.startsWith('NVIDIA ') || line.startsWith('mpv 视频滤镜:')).join(' | ')}',
+        '${requestedSnapshot.lines.where((line) => line.contains('NVIDIA ') || line.startsWith('mpv 视频滤镜:')).join(' | ')}',
       );
       if (nvidiaVsrHdrOn) {
         expect(
           requestedSnapshot.lines
-              .where((line) => line.startsWith('NVIDIA 自动策略: ')),
+              .where((line) => line.startsWith('原生 QA · NVIDIA 自动策略: ')),
           contains(
-            'NVIDIA 自动策略: 已为当前低分辨率 SDR 视频自动请求 VSR + HDR',
+            '原生 QA · NVIDIA 自动策略: 已为当前低分辨率 SDR 视频自动请求 VSR + HDR',
           ),
         );
       }
@@ -283,7 +283,7 @@ void main() {
         expect(
           requestedSnapshot.lines,
           contains(
-            'NVIDIA 滤镜互斥处理: 已在当前会话暂时停用压缩画质增强和暗场增强',
+            '原生 QA · NVIDIA 滤镜互斥处理: 已在当前会话暂时停用压缩画质增强和暗场增强',
           ),
         );
       }
@@ -447,16 +447,16 @@ void main() {
             'mpv 视频滤镜:',
             'mpv 去色带:',
             'mpv 去色带参数:',
-            'NVIDIA RTX 视频超分:',
-            'NVIDIA RTX Video HDR:',
-            'NVIDIA 滤镜互斥处理:',
-            'NVIDIA VSR 驱动确认:',
-            'NVIDIA HDR 驱动确认:',
-            'NVIDIA 压力保护:',
-            'NVIDIA 自动回滚原因:',
-            'HDR 动态映射会话:',
-            'HDR 会话压力保护:',
-            'HDR 自动回滚原因:',
+            '原生 QA · NVIDIA RTX 视频超分:',
+            '原生 QA · NVIDIA RTX Video HDR:',
+            '原生 QA · NVIDIA 滤镜互斥处理:',
+            '原生 QA · NVIDIA VSR 驱动确认:',
+            '原生 QA · NVIDIA HDR 驱动确认:',
+            '原生 QA · NVIDIA 压力保护:',
+            '原生 QA · NVIDIA 自动回滚原因:',
+            'HDR 转 SDR 色调映射会话:',
+            'HDR 转 SDR 压力保护:',
+            'HDR 转 SDR 自动回滚原因:',
             'mpv HDR 映射曲线:',
             'mpv HDR 动态峰值:',
             '活动 GPU:',
@@ -541,16 +541,20 @@ void main() {
         expect(estimatedFps, closeTo(24, 0.5));
       }
     } else if (baselineMode == 'hdr') {
-      final experimentStillActive = finalLines.contains('HDR 动态映射会话: 已通过门槛并启用');
+      final experimentStillActive =
+          finalLines.contains('HDR 转 SDR 色调映射会话: 属性已读回确认');
       if (experimentStillActive) {
-        expect(finalLines, contains('HDR 自动回滚原因: 无'));
+        expect(finalLines, contains('HDR 转 SDR 自动回滚原因: 无'));
         expect(finalLines, contains('mpv HDR 映射曲线: hable'));
       } else {
         // 真实压力可以合法触发本次会话熔断；此时必须恢复自动映射并留下诊断原因。
-        expect(finalLines, contains('HDR 动态映射会话: 未启用 / 门槛未通过'));
         expect(
-          finalLines.where((line) => line.startsWith('HDR 自动回滚原因: ')),
-          isNot(contains('HDR 自动回滚原因: 无')),
+          finalLines,
+          contains('HDR 转 SDR 色调映射会话: 当前媒体或设备未通过能力门槛'),
+        );
+        expect(
+          finalLines.where((line) => line.startsWith('HDR 转 SDR 自动回滚原因: ')),
+          isNot(contains('HDR 转 SDR 自动回滚原因: 无')),
         );
         expect(finalLines, contains('mpv HDR 映射曲线: auto'));
         expect(finalLines, contains('mpv HDR 动态峰值: auto'));
@@ -585,17 +589,18 @@ void main() {
     } else if (baselineMode == 'nvidia-vsr-hdr-on') {
       final vsrRequested = finalLines.any(
         (line) => line.startsWith(
-          'NVIDIA RTX 视频超分: 会话已请求',
+          '原生 QA · NVIDIA RTX 视频超分: 会话已请求',
         ),
       );
       final hdrRequested = finalLines.any(
         (line) => line.startsWith(
-          'NVIDIA RTX Video HDR: 会话已请求',
+          '原生 QA · NVIDIA RTX Video HDR: 会话已请求',
         ),
       );
       final rolledBack = finalLines.any(
         (line) =>
-            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+            line.startsWith('原生 QA · NVIDIA 自动回滚原因: ') &&
+            line != '原生 QA · NVIDIA 自动回滚原因: 无',
       );
       expect((vsrRequested && hdrRequested) || rolledBack, isTrue);
       if (vsrRequested && hdrRequested) {
@@ -604,17 +609,18 @@ void main() {
         expect(filterLine, contains('scaling-mode=nvidia'));
         expect(filterLine, contains('nvidia-true-hdr'));
         expect(filterLine, isNot(contains('format=nv12')));
-        expect(finalLines, contains('NVIDIA VSR 驱动确认: active'));
-        expect(finalLines, contains('NVIDIA HDR 驱动确认: active'));
-        expect(finalLines, contains('NVIDIA 自动回滚原因: 无'));
+        expect(finalLines, contains('原生 QA · NVIDIA VSR 驱动确认: active'));
+        expect(finalLines, contains('原生 QA · NVIDIA HDR 驱动确认: active'));
+        expect(finalLines, contains('原生 QA · NVIDIA 自动回滚原因: 无'));
       }
     } else if (baselineMode == 'nvidia-on') {
       final active = finalLines.any(
-        (line) => line.startsWith('NVIDIA RTX 视频超分: 会话已请求'),
+        (line) => line.startsWith('原生 QA · NVIDIA RTX 视频超分: 会话已请求'),
       );
       final rolledBack = finalLines.any(
         (line) =>
-            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+            line.startsWith('原生 QA · NVIDIA 自动回滚原因: ') &&
+            line != '原生 QA · NVIDIA 自动回滚原因: 无',
       );
       expect(active || rolledBack, isTrue);
       if (active) {
@@ -622,8 +628,8 @@ void main() {
           finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
           contains('scaling-mode=nvidia'),
         );
-        expect(finalLines, contains('NVIDIA VSR 驱动确认: active'));
-        expect(finalLines, contains('NVIDIA 自动回滚原因: 无'));
+        expect(finalLines, contains('原生 QA · NVIDIA VSR 驱动确认: active'));
+        expect(finalLines, contains('原生 QA · NVIDIA 自动回滚原因: 无'));
       }
     } else if (baselineMode == 'nvidia-off') {
       expect(
@@ -632,11 +638,12 @@ void main() {
       );
     } else if (baselineMode == 'nvidia-hdr-on') {
       final active = finalLines.any(
-        (line) => line.startsWith('NVIDIA RTX Video HDR: 会话已请求'),
+        (line) => line.startsWith('原生 QA · NVIDIA RTX Video HDR: 会话已请求'),
       );
       final rolledBack = finalLines.any(
         (line) =>
-            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+            line.startsWith('原生 QA · NVIDIA 自动回滚原因: ') &&
+            line != '原生 QA · NVIDIA 自动回滚原因: 无',
       );
       expect(active || rolledBack, isTrue);
       if (active) {
@@ -644,8 +651,8 @@ void main() {
             finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single;
         expect(filterLine, contains('nvidia-true-hdr'));
         expect(filterLine, isNot(contains('format=nv12')));
-        expect(finalLines, contains('NVIDIA HDR 驱动确认: active'));
-        expect(finalLines, contains('NVIDIA 自动回滚原因: 无'));
+        expect(finalLines, contains('原生 QA · NVIDIA HDR 驱动确认: active'));
+        expect(finalLines, contains('原生 QA · NVIDIA 自动回滚原因: 无'));
       }
     } else if (baselineMode == 'nvidia-hdr-off') {
       expect(
@@ -653,7 +660,10 @@ void main() {
         isNot(contains('nvidia-true-hdr')),
       );
     } else {
-      expect(finalLines, contains('HDR 动态映射会话: 未启用 / 门槛未通过'));
+      expect(
+        finalLines,
+        contains('HDR 转 SDR 色调映射会话: 当前媒体或设备未通过能力门槛'),
+      );
       expect(finalLines, contains('暗部细节增强设置: 关闭'));
     }
 
@@ -672,7 +682,7 @@ void main() {
           await playerKey.currentState!.buildDiagnosticsSnapshot();
       expect(
         restoredSnapshot.lines,
-        contains('NVIDIA 滤镜互斥处理: 未触发'),
+        contains('原生 QA · NVIDIA 滤镜互斥处理: 未触发'),
       );
       expect(
         restoredSnapshot.lines,
@@ -731,10 +741,10 @@ Future<void> _waitForNvidiaAutomaticDecision(
     if (state == null) continue;
     final snapshot = await state.buildDiagnosticsSnapshot();
     final lines = snapshot.lines
-        .where((value) => value.startsWith('NVIDIA 自动策略: '))
+        .where((value) => value.startsWith('原生 QA · NVIDIA 自动策略: '))
         .toList(growable: false);
     final line = lines.isEmpty ? null : lines.single;
-    if (line != null && line != 'NVIDIA 自动策略: 等待当前媒体能力') {
+    if (line != null && line != '原生 QA · NVIDIA 自动策略: 等待当前媒体能力') {
       return;
     }
   }
@@ -760,18 +770,20 @@ Future<void> _waitForSessionState(
         .where(
           (line) =>
               line.startsWith('mpv 视频滤镜: ') ||
-              line.startsWith('NVIDIA RTX 视频超分: ') ||
-              line.startsWith('NVIDIA RTX Video HDR: ') ||
-              line.startsWith('NVIDIA 自动策略: ') ||
-              line.startsWith('NVIDIA VSR 驱动确认: ') ||
-              line.startsWith('NVIDIA HDR 驱动确认: ') ||
+              line.startsWith('原生 QA · NVIDIA RTX 视频超分: ') ||
+              line.startsWith('原生 QA · NVIDIA RTX Video HDR: ') ||
+              line.startsWith('原生 QA · NVIDIA 自动策略: ') ||
+              line.startsWith('原生 QA · NVIDIA VSR 驱动确认: ') ||
+              line.startsWith('原生 QA · NVIDIA HDR 驱动确认: ') ||
               line.startsWith('原生表面尺寸: '),
         )
         .join(' | ');
     if (mode == 'hdr') {
-      final active = snapshot.lines.contains('HDR 动态映射会话: 已通过门槛并启用');
+      final active = snapshot.lines.contains('HDR 转 SDR 色调映射会话: 属性已读回确认');
       final safelyRolledBack = snapshot.lines.any(
-        (line) => line.startsWith('HDR 自动回滚原因: ') && line != 'HDR 自动回滚原因: 无',
+        (line) =>
+            line.startsWith('HDR 转 SDR 自动回滚原因: ') &&
+            line != 'HDR 转 SDR 自动回滚原因: 无',
       );
       if (active || safelyRolledBack) return;
     } else if (mode == 'sdr-dark-enhanced') {
@@ -786,25 +798,30 @@ Future<void> _waitForSessionState(
         return;
       }
     } else if (mode == 'nvidia-on') {
-      final active = snapshot.lines.contains('NVIDIA VSR 驱动确认: active');
+      final active = snapshot.lines.contains('原生 QA · NVIDIA VSR 驱动确认: active');
       final safelyRolledBack = snapshot.lines.any(
         (line) =>
-            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+            line.startsWith('原生 QA · NVIDIA 自动回滚原因: ') &&
+            line != '原生 QA · NVIDIA 自动回滚原因: 无',
       );
       if (active || safelyRolledBack) return;
     } else if (mode == 'nvidia-hdr-on') {
-      final active = snapshot.lines.contains('NVIDIA HDR 驱动确认: active');
+      final active = snapshot.lines.contains('原生 QA · NVIDIA HDR 驱动确认: active');
       final safelyRolledBack = snapshot.lines.any(
         (line) =>
-            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+            line.startsWith('原生 QA · NVIDIA 自动回滚原因: ') &&
+            line != '原生 QA · NVIDIA 自动回滚原因: 无',
       );
       if (active || safelyRolledBack) return;
     } else if (mode == 'nvidia-vsr-hdr-on') {
-      final vsrActive = snapshot.lines.contains('NVIDIA VSR 驱动确认: active');
-      final hdrActive = snapshot.lines.contains('NVIDIA HDR 驱动确认: active');
+      final vsrActive =
+          snapshot.lines.contains('原生 QA · NVIDIA VSR 驱动确认: active');
+      final hdrActive =
+          snapshot.lines.contains('原生 QA · NVIDIA HDR 驱动确认: active');
       final safelyRolledBack = snapshot.lines.any(
         (line) =>
-            line.startsWith('NVIDIA 自动回滚原因: ') && line != 'NVIDIA 自动回滚原因: 无',
+            line.startsWith('原生 QA · NVIDIA 自动回滚原因: ') &&
+            line != '原生 QA · NVIDIA 自动回滚原因: 无',
       );
       if ((vsrActive && hdrActive) || safelyRolledBack) return;
     } else if (mode == 'nvofa-motion-off') {

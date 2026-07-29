@@ -6,6 +6,7 @@ import '../../models/player_backend_telemetry.dart';
 import '../../models/player_filter_transaction.dart';
 import '../../models/player_gpu_capabilities.dart';
 import '../../models/player_motion_interpolation_capability.dart';
+import '../../models/player_feature_apply_result.dart';
 import '../../platform/platform_interfaces.dart';
 import 'player_hdr_mapping_experiment.dart';
 import 'player_smooth_motion.dart';
@@ -34,6 +35,18 @@ class PlayerService
 
   /** 具体引擎只在服务内部持有，页面和业务控制器不可取得该引用。 */
   final PlayerBackend _backend;
+
+  /**
+   * 只有隔离 Windows child HWND QA 后端返回 true。
+   *
+   * 正式 MediaKit Texture 即使底层也是 libmpv，也不能据此宣称 NVIDIA 原生增强可用。
+   */
+  bool get supportsNativeNvidiaVideoEnhancement {
+    final boundary = _backend is PlayerNativeNvidiaVideoEnhancementBoundary
+        ? _backend as PlayerNativeNvidiaVideoEnhancementBoundary
+        : null;
+    return boundary?.supportsNativeNvidiaVideoEnhancement ?? false;
+  }
 
   /** 当前服务内最近一次滤镜属性事务的只读诊断快照。 */
   PlayerFilterTransactionSnapshot _filterTransaction =
@@ -342,7 +355,7 @@ class PlayerService
    * [videoAspectOverride] 与 [panscan] 由平台无关的画面比例模型计算；服务负责把
    * 它们与缩放、输出范围、HDR 和倍速按稳定顺序送入当前引擎。
    */
-  Future<PlayerSmoothMotionApplyResult> applyOpenPreferences({
+  Future<PlayerOpenPreferencesApplyResult> applyOpenPreferences({
     required String videoAspectOverride,
     required String panscan,
     required PlayerVideoScaler videoScaler,
@@ -370,17 +383,22 @@ class PlayerService
     } catch (_) {
       // 比例属性属于可选能力，不能因为后端不支持而阻止媒体打开。
     }
-    await PlayerVideoSuperResolution.apply(
+    final scalingResult = await PlayerVideoSuperResolution.apply(
       backend: this,
       enabled: videoSuperResolutionEnabled,
       baseScaler: videoScaler,
     );
-    await PlayerHdrMappingExperiment.apply(
+    final hdrResult = await PlayerHdrMappingExperiment.apply(
       backend: this,
       enabled: hdrDynamicToneMappingExperimentEnabled,
     );
     await setRate(playbackRate);
-    return applySmoothMotion(smoothMotionMode);
+    final smoothMotionResult = await applySmoothMotion(smoothMotionMode);
+    return PlayerOpenPreferencesApplyResult(
+      scaling: scalingResult,
+      hdrToneMapping: hdrResult,
+      smoothMotion: smoothMotionResult,
+    );
   }
 
   /**
@@ -504,6 +522,28 @@ class PlayerService
 
   /** 等待底层 Player、纹理、D3D11/HWND 资源完成释放。 */
   Future<void> get released => _backend.released;
+}
+
+/**
+ * 一次媒体级显示偏好恢复的可验证结果。
+ *
+ * 页面用它区分持久设置请求与当前会话实际状态，不能再仅凭开关显示“已启用”。
+ */
+class PlayerOpenPreferencesApplyResult {
+  const PlayerOpenPreferencesApplyResult({
+    required this.scaling,
+    required this.hdrToneMapping,
+    required this.smoothMotion,
+  });
+
+  /** GPU 缩放属性的读回结果。 */
+  final PlayerFeatureApplyResult scaling;
+
+  /** HDR 转 SDR 色调映射属性的读回结果。 */
+  final PlayerFeatureApplyResult hdrToneMapping;
+
+  /** 显示同步插值的既有类型化结果。 */
+  final PlayerSmoothMotionApplyResult smoothMotion;
 }
 
 /**

@@ -21,10 +21,8 @@ class PlaybackAndDecodingSettingsCard extends StatelessWidget {
 
   /** 当前设置快照。 */
   final PlaybackSettings settings;
-
   /** 提交用户确认后的完整设置快照。 */
   final Future<void> Function(PlaybackSettings settings) onChanged;
-
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -65,18 +63,22 @@ class PlaybackAndDecodingSettingsCard extends StatelessWidget {
             const Divider(height: 1),
             const SizedBox(height: 20),
             const Text(
-              '播放渲染器',
+              '播放后端',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
             const Text(
-              '两种配置共用 MediaKit Texture；增强配置开放同实例 libmpv 画质能力。',
+              '正式播放统一使用 MediaKit Texture；高级画质由同一个 libmpv 实例按能力应用。',
               style: TextStyle(color: libraryTextMuted),
             ),
             const SizedBox(height: 14),
-            PlaybackRendererDropdown(
-              settings: settings,
-              onChanged: onChanged,
+            const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.video_settings_outlined),
+              title: Text('MediaKit Texture'),
+              subtitle: Text(
+                '生命周期、事件和 Flutter Texture 由 MediaKit 管理；不会自动激活 NVIDIA VSR/HDR',
+              ),
             ),
             const SizedBox(height: 22),
             const Divider(height: 1),
@@ -86,10 +88,7 @@ class PlaybackAndDecodingSettingsCard extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 14),
-            PlaybackDecoderDropdown(
-              settings: settings,
-              onChanged: onChanged,
-            ),
+            PlaybackDecoderDropdown(settings: settings, onChanged: onChanged),
           ],
         ),
       ),

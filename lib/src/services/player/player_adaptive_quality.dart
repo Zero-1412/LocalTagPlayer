@@ -1,5 +1,8 @@
+import '../../models/player_feature_apply_result.dart';
+import '../../models/player_filter_transaction.dart';
 import '../../platform/platform_interfaces.dart';
 import 'player_nvidia_video_enhancement_experiment.dart';
+import 'player_property_verifier.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -367,8 +370,10 @@ class PlayerAdaptiveQualityCoordinator {
 class PlayerAdaptiveQualityEnhancer {
   const PlayerAdaptiveQualityEnhancer._();
 
-  static final Expando<Future<void>> _applyTails =
-      Expando<Future<void>>('player-adaptive-quality-tail');
+  static final Expando<Future<PlayerFeatureApplyResult>> _applyTails =
+      Expando<Future<PlayerFeatureApplyResult>>(
+    'player-adaptive-quality-tail',
+  );
 
   /** 官方 FFmpeg 滤镜使用保守参数，锐化只处理亮度且不增强色度噪点。 */
   static const _filters = <PlayerAdaptiveQualityLevel, List<String>>{
@@ -429,14 +434,19 @@ class PlayerAdaptiveQualityEnhancer {
   }
 
   /** 同一后端上的 open 重放和动态切换按调用顺序串行执行。 */
-  static Future<void> apply({
+  static Future<PlayerFeatureApplyResult> apply({
     required PlayerRuntimeAccess backend,
     required PlayerAdaptiveQualityLevel level,
     bool darkSceneEnhancementEnabled = false,
     bool nvidiaVideoEnhancementEnabled = false,
     bool nvidiaVideoHdrEnabled = false,
   }) {
-    final previous = _applyTails[backend] ?? Future<void>.value();
+    final previous = _applyTails[backend] ??
+        Future<PlayerFeatureApplyResult>.value(
+          const PlayerFeatureApplyResult.notRequested(
+            'compression-filter-snapshot',
+          ),
+        );
     final operation = previous.then((_) async {
       final debandEnabled = !nvidiaVideoEnhancementEnabled &&
           !nvidiaVideoHdrEnabled &&
@@ -460,26 +470,42 @@ class PlayerAdaptiveQualityEnhancer {
             ? backend as PlayerFilterTransactionBoundary
             : null;
         if (transaction != null) {
-          await transaction.applyFilterProperties(
+          final snapshot = await transaction.applyFilterProperties(
             label: nvidiaVideoEnhancementEnabled || nvidiaVideoHdrEnabled
                 ? 'nvidia-filter-snapshot'
                 : 'cpu-filter-snapshot',
             properties: properties,
           );
-          return;
+          return PlayerFeatureApplyResult(
+            label: snapshot.label,
+            requested: true,
+            supported: snapshot.supported,
+            applied: snapshot.phase == PlayerFilterTransactionPhase.applied,
+            requestedPropertyCount: snapshot.requestedPropertyCount,
+            verifiedPropertyCount: snapshot.verifiedPropertyCount,
+            mismatchedProperties: snapshot.mismatchedProperties,
+            failureCode: snapshot.failureCode,
+          );
         }
-        final batch = backend is PlayerPropertyBatchBoundary
-            ? backend as PlayerPropertyBatchBoundary
-            : null;
-        if (batch != null) {
-          await batch.setProperties(properties);
-        } else {
-          for (final entry in properties.entries) {
-            await backend.setProperty(entry.key, entry.value);
-          }
-        }
+        return PlayerPropertyVerifier.apply(
+          backend: backend,
+          label: nvidiaVideoEnhancementEnabled || nvidiaVideoHdrEnabled
+              ? 'nvidia-filter-snapshot'
+              : 'cpu-filter-snapshot',
+          properties: properties,
+        );
       } catch (_) {
-        // 可选滤镜不可用时不得阻止播放；诊断读取最终属性供用户确认。
+        // 可选滤镜不可用时不得阻止播放，但失败必须保留给运行态与诊断。
+        return const PlayerFeatureApplyResult(
+          label: 'cpu-filter-snapshot',
+          requested: true,
+          supported: false,
+          applied: false,
+          requestedPropertyCount: 0,
+          verifiedPropertyCount: 0,
+          mismatchedProperties: <String>[],
+          failureCode: 'filter_apply_failed',
+        );
       }
     });
     _applyTails[backend] = operation;

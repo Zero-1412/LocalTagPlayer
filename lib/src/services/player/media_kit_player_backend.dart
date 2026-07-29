@@ -461,11 +461,12 @@ class MediaKitPlayerBackend
 
   @override
   Future<void> setProperty(String property, String value) async {
-    try {
-      await _nativePlayer?.setProperty(property, value);
-    } catch (_) {
-      // libmpv 构建可能不支持少数属性；诊断读取会反映最终实际值。
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null) {
+      throw StateError('player_not_initialized');
     }
+    // 错误必须返回给事务或功能协调器，不能让上层把失败请求标记为已启用。
+    await nativePlayer.setProperty(property, value);
   }
 
   /**
@@ -477,8 +478,13 @@ class MediaKitPlayerBackend
   @override
   Future<void> setProperties(Map<String, String> properties) async {
     final nativePlayer = _nativePlayer;
-    if (nativePlayer == null || properties.isEmpty) return;
+    if (properties.isEmpty) return;
+    if (nativePlayer == null) {
+      throw StateError('player_not_initialized');
+    }
     var waitForInitialization = true;
+    Object? firstError;
+    StackTrace? firstStackTrace;
     for (final entry in properties.entries) {
       try {
         await nativePlayer.setProperty(
@@ -486,11 +492,16 @@ class MediaKitPlayerBackend
           entry.value,
           waitForInitialization: waitForInitialization,
         );
-      } catch (_) {
-        // 单个可选属性失败不能阻断同一快照中的画面比例、输出范围或滤镜回滚。
+      } catch (error, stackTrace) {
+        // 继续处理快照剩余项，最后再把首个失败交给上层统一读回与安全回退。
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
       } finally {
         waitForInitialization = false;
       }
+    }
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError, firstStackTrace!);
     }
   }
 

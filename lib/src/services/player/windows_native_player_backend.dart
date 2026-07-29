@@ -24,7 +24,8 @@ class WindowsNativePlayerBackend
         PlayerPropertyBatchBoundary,
         PlayerGpuRenderBoundary,
         PlayerOverlaySurfaceBoundary,
-        PlayerMotionInterpolationBoundary {
+        PlayerMotionInterpolationBoundary,
+        PlayerNativeNvidiaVideoEnhancementBoundary {
   WindowsNativePlayerBackend({this.mode = 'stub'})
       : _positionChanges = StreamController<Duration>.broadcast(),
         _playingChanges = StreamController<bool>.broadcast(),
@@ -36,6 +37,8 @@ class WindowsNativePlayerBackend
   final StreamController<Duration> _positionChanges;
   /** 原生创建模式：`stub`验证纹理，`mpv`验证 ANGLE，`hwnd`验证 D3D11VA。 */
   final String mode;
+  @override
+  bool get supportsNativeNvidiaVideoEnhancement => mode == 'hwnd';
   final StreamController<bool> _playingChanges;
   final StreamController<bool> _completedChanges;
   final StreamController<String> _errorChanges;

@@ -1,3 +1,17 @@
+## 2026-07-30 播放调用与文案对抗式修复
+
+- 正式后端只保留 MediaKit Texture；旧 MPV/增强偏好兼容迁移，设置页删除没有真实边界
+  差异的切换控件。显式 `windows-native-hwnd` 继续只作为原生 QA 组合根覆盖。
+- open 前后属性提交去重，跨媒体 GPU 能力任务与新 open 串行；旧任务结束后新媒体基线
+  必须覆盖共享 libmpv 属性，且过期代次不得发布 UI/诊断状态。
+- 所有可选画质增强将“用户请求”和“属性已读回确认”分开；暗部增强不再复用压缩增强
+  的诊断结果，HDR 功能统一称为“HDR 转 SDR 色调映射（兼容显示）”。
+- 正式 MediaKit 不运行 NVIDIA VSR/HDR 原生探测；相关运行项只在显式 QA 后端显示并
+  标注“原生 QA”，不再以系统存在 NVIDIA GPU 推断驱动增强已激活。
+- 验证完成：`flutter analyze` 零问题，完整 459 项测试与 Windows Debug build 通过，
+  3 项既有 benchmark 跳过。真实 Debug 窗口验证设置、播放与诊断可达；首帧 157 ms，
+  连续 seek、快速切片、侧栏连续收放 4 次均正常，正式诊断未显示 NVIDIA 激活项。
+
 ## 2026-07-30 NVIDIA 原生激活门禁
 
 - MediaKit 保持正式默认后端；原生 child HWND/libmpv D3D11 后端仅用于 QA 覆盖和

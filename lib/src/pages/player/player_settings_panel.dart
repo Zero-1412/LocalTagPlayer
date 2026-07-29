@@ -20,8 +20,8 @@ export 'player_settings_primary_list.dart';
  *
  * 使用独立路由而不是把复杂列表塞入系统 Menu，避免 Windows 上菜单获得点击
  * 高亮但自定义内容未挂载。一级只保留循环开关与“更多”入口，二级承担镜像、
- * GPU 缩放、压缩增强、比例/倍速导航和离散快进档位；NVIDIA VSR/HDR 由
- * Windows 播放会话自动协商，不再提供不可操作的手动开关。
+ * GPU 缩放、压缩增强、比例/倍速导航和离散快进档位。正式 MediaKit Texture
+ * 不宣称或自动协商 NVIDIA VSR/HDR；原生 D3D11 能力只留在隔离 QA 后端。
  */
 Future<void> showPlayerSettingsDialog(
   BuildContext context, {

@@ -9,7 +9,6 @@ import '../../core/playback_settings.dart';
  */
 enum PlayerBackendSelection {
   mediaKit,
-  mediaKitLibmpvEnhanced,
   windowsNativeMpv,
   windowsNativeHwnd,
   windowsNativeStub,
@@ -19,11 +18,11 @@ enum PlayerBackendSelection {
  * 把平台、用户偏好和显式 QA 覆盖解析为唯一后端。
  *
  * [environmentOverride] 只接受仓库已有的三个 QA 值，并且仅在 Windows 生效。
- * Windows 的 `automatic` 与显式 `windowsLibmpv` 使用 media_kit_video 已验证的
- * Flutter Texture 生命周期，并通过同一 NativePlayer 提交高级 libmpv 属性。
+ * 全部历史渲染器偏好统一使用 media_kit_video 已验证的 Flutter Texture 生命周期，
+ * 并通过同一 NativePlayer 提交可验证的高级 libmpv 属性。
  * 自研 Texture 与 child HWND 只允许 Windows 显式 QA 覆盖，用来继续研究原生
- * D3D11/NVIDIA 能力，不能再成为普通界面默认值。显式 `mediaKit` 使用兼容配置；
- * 是否开启硬解只改变 media_kit 的解码配置，不再替换播放器生命周期。
+ * D3D11/NVIDIA 能力，不能再成为普通界面默认值。是否开启硬解只改变 media_kit
+ * 的解码配置，不再替换播放器生命周期。
  */
 PlayerBackendSelection resolvePlayerBackendSelection({
   required bool isWindows,
@@ -42,9 +41,6 @@ PlayerBackendSelection resolvePlayerBackendSelection({
     if (normalizedOverride == 'windows-native-stub') {
       return PlayerBackendSelection.windowsNativeStub;
     }
-  }
-  if (rendererPreference != PlayerRendererPreference.mediaKit) {
-    return PlayerBackendSelection.mediaKitLibmpvEnhanced;
   }
   return PlayerBackendSelection.mediaKit;
 }

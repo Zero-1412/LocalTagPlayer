@@ -44,8 +44,8 @@ extension PlayerStateInitialization on PlayerPageState {
     smoothMotionMode = effectivePlaybackSettings.smoothMotionMode;
     videoOutputRange = effectivePlaybackSettings.videoOutputRange;
     playbackRate = effectivePlaybackSettings.playbackRate;
-    // MediaKit 不消费 MPV 专属缩放；持久偏好保留，切回 MPV 后可继续使用。
-    videoSuperResolutionEnabled = mpvEnhancementsAvailable &&
+    // MediaKit 的同一 NativePlayer 直接消费 libmpv 缩放属性，不再受历史渲染器值限制。
+    videoSuperResolutionEnabled =
         effectivePlaybackSettings.videoSuperResolutionEnabled;
     compressionEnhancementMode =
         effectivePlaybackSettings.compressionEnhancementMode;
@@ -75,7 +75,12 @@ extension PlayerStateInitialization on PlayerPageState {
           pageWidget.playbackSettings.hardwareDecodingEnabled,
       rendererPreference: pageWidget.playbackSettings.rendererPreference,
     );
-    unawaited(probeNvidiaVideoEnhancementCapability());
+    if (playerService.supportsNativeNvidiaVideoEnhancement) {
+      // NVIDIA 实验只允许显式 child HWND QA 后端探测，正式 Texture 路径不付出该开销。
+      unawaited(probeNvidiaVideoEnhancementCapability());
+    } else {
+      nvidiaVideoAutomaticReason = '正式 MediaKit Texture 不运行 NVIDIA 原生增强探测';
+    }
     volume = playerService.state.volume.clamp(0, 100).toDouble();
     if (volume > 0) {
       lastAudibleVolume = volume;

@@ -129,8 +129,9 @@ extension PlayerStateItemActions on PlayerPageState {
     required bool wasPlaying,
   }) async {
     openRequests.clearFailure();
+    await applyPlaybackEngineProfile();
     await playerService.openPath(path);
-    await applyPlaybackPerformanceProfile();
+    await applyMediaPresentationProfile();
     if (position > Duration.zero) {
       await playerService.seek(position);
     }

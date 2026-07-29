@@ -1,5 +1,9 @@
 # MediaKit / MPV 用户选择与 NVIDIA 自动增强验证
 
+> 2026-07-30：本文的后端选择与自动增强属于历史 QA 实验。正式播放路径统一为
+> MediaKit Texture，不运行 NVIDIA 原生增强探测；child HWND 的 VSR/HDR 只保留显式
+> QA 门禁，不能作为正式应用已激活 NVIDIA 增强的证据。
+
 日期：2026-07-28
 
 ## 目标

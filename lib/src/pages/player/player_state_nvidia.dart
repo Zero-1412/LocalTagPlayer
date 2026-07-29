@@ -18,6 +18,10 @@ import 'player_page.dart';
  */
 extension PlayerStateNvidia on PlayerPageState {
   Future<void> probeNvidiaVideoEnhancementCapability() async {
+    if (!playerService.supportsNativeNvidiaVideoEnhancement) {
+      nvidiaVideoAutomaticReason = '正式 MediaKit Texture 不运行 NVIDIA 原生增强探测';
+      return;
+    }
     final capability = await PlayerNvidiaVideoEnhancementExperiment.probe(
       playerService,
       conflictingCpuFilters: !nvidiaCpuEnhancementsSuspended &&
@@ -60,6 +64,7 @@ extension PlayerStateNvidia on PlayerPageState {
     darkSceneEnhancementActive = false;
     adaptiveQualityCoordinator.reset();
     adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
+    adaptiveQualitySessionBlocked = false;
     qualityMarginSampleTick = 1;
     if (mounted) rebuild(() {});
   }
@@ -81,7 +86,7 @@ extension PlayerStateNvidia on PlayerPageState {
     adaptiveQualityCoordinator.reset();
     adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
     qualityMarginSampleTick = 1;
-    await PlayerAdaptiveQualityEnhancer.apply(
+    adaptiveQualityApplyResult = await PlayerAdaptiveQualityEnhancer.apply(
       backend: playerService,
       level: PlayerAdaptiveQualityLevel.off,
       darkSceneEnhancementEnabled: restoreDarkScene,
@@ -233,9 +238,9 @@ extension PlayerStateNvidia on PlayerPageState {
   ) async {
     final snapshot = gpuCapabilitySnapshot;
     if (snapshot == null || openedPathCandidate != openedPath) return;
-    if (!mpvEnhancementsAvailable) {
+    if (!playerService.supportsNativeNvidiaVideoEnhancement) {
       rebuild(() {
-        nvidiaVideoAutomaticReason = '当前选择 MediaKit，不请求 MPV 专属 NVIDIA 增强';
+        nvidiaVideoAutomaticReason = '正式 MediaKit Texture 不运行 NVIDIA 原生增强探测';
       });
       return;
     }
@@ -330,16 +335,19 @@ extension PlayerStateNvidia on PlayerPageState {
     );
     adaptiveQualityCoordinator.reset();
     adaptiveQualityLevel = PlayerAdaptiveQualityLevel.off;
+    adaptiveQualitySessionBlocked = false;
     // 下一次一秒健康采样即进入画质判定，避免用户切档后等待完整两秒周期。
     qualityMarginSampleTick = 1;
-    await PlayerAdaptiveQualityEnhancer.apply(
+    adaptiveQualityApplyResult = await PlayerAdaptiveQualityEnhancer.apply(
       backend: playerService,
       level: PlayerAdaptiveQualityLevel.off,
       darkSceneEnhancementEnabled: darkSceneEnhancementActive,
       nvidiaVideoEnhancementEnabled: nvidiaVideoEnhancementExperimentEnabled,
       nvidiaVideoHdrEnabled: nvidiaVideoHdrExperimentEnabled,
     );
-    await probeNvidiaVideoEnhancementCapability();
+    if (playerService.supportsNativeNvidiaVideoEnhancement) {
+      await probeNvidiaVideoEnhancementCapability();
+    }
   }
 
   /**

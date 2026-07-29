@@ -275,6 +275,11 @@ class _PreferenceRecordingPlayerBackend implements PlayerBackend {
     properties[property] = value;
   }
 
+  /** 返回测试后端刚写入的属性，使增强功能必须经过与生产一致的读回确认。 */
+  @override
+  Future<String> getProperty(String property) async =>
+      properties[property] ?? 'unavailable';
+
   @override
   Future<void> setRate(double rate) async {
     rates.add(rate);
@@ -3309,7 +3314,7 @@ void main() {
     expect(find.text('播放与解码'), findsOneWidget);
     expect(find.text('视频画质与增强'), findsOneWidget);
     expect(
-      find.text('MediaKit + libmpv 增强 · 继续观看：每次询问'),
+      find.text('MediaKit Texture · 继续观看：每次询问'),
       findsOneWidget,
     );
     expect(
@@ -4415,7 +4420,7 @@ void main() {
     await tester.ensureVisible(switchFinder);
     await tester.tap(switchFinder);
     await tester.pumpAndSettle();
-    expect(find.text('开启 HDR 动态映射？'), findsOneWidget);
+    expect(find.text('开启 HDR 转 SDR 色调映射？'), findsOneWidget);
     expect(changes, isEmpty);
 
     await tester.tap(
@@ -4439,7 +4444,7 @@ void main() {
     await tester.tap(switchFinder);
     await tester.pump();
     expect(changes.single.hdrDynamicToneMappingExperimentEnabled, isFalse);
-    expect(find.text('开启 HDR 动态映射？'), findsNothing);
+    expect(find.text('开启 HDR 转 SDR 色调映射？'), findsNothing);
   });
 
   testWidgets('dark scene enhancement is actionable and roadmap is removed',
@@ -6089,7 +6094,7 @@ void main() {
     expect(find.text('更多播放设置'), findsOneWidget);
     expect(find.text('镜像画面'), findsOneWidget);
     expect(find.text('GPU 高质量缩放（非 NVIDIA AI）'), findsOneWidget);
-    expect(find.text('MPV 缩放，仅在画面放大时生效'), findsOneWidget);
+    expect(find.text('libmpv 缩放，仅在画面放大时生效'), findsOneWidget);
     expect(find.text('压缩画质增强'), findsOneWidget);
     expect(find.text('关闭'), findsOneWidget);
     expect(find.text('视频比例'), findsOneWidget);

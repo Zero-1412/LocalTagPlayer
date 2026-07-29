@@ -6,28 +6,27 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/src/core/playback_settings.dart';
-import 'package:local_tag_player/src/features/settings/presentation/playback_backend_dropdowns.dart';
+import 'package:local_tag_player/src/features/settings/presentation/playback_and_decoding_settings_card.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * 在真实 Windows Flutter 窗口验证设置页的 MediaKit / MPV 显式选择。
+ * 在真实 Windows Flutter 窗口验证正式播放后端只展示 MediaKit Texture。
  *
- * 测试只修改隔离内存设置，不读写用户偏好；截图用于复核下拉入口、确认反馈和
- * 两种后端的特色强化说明，后续门禁可据此明确归属播放器后端。
+ * 历史渲染器偏好已统一迁移，设置页不得继续提供两个实际相同的伪切换入口；
+ * 原生 Windows 后端仅由显式 QA 环境变量进入，不属于正式设置。
  */
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('设置页显式切换 MediaKit 与 MPV 并展示对应强化', (tester) async {
+  testWidgets('播放设置只展示唯一正式 MediaKit Texture 后端', (tester) async {
     final outputPath =
         Platform.environment['LOCAL_TAG_PLAYER_RENDERER_QA_OUTPUT']?.trim();
     if (outputPath == null || outputPath.isEmpty) {
-      throw StateError('缺少隔离渲染器设置截图目录');
+      throw StateError('缺少隔离播放后端设置截图目录');
     }
     final outputDirectory = Directory(outputPath)..createSync(recursive: true);
     final captureKey = GlobalKey();
-    var settings = PlaybackSettings.defaults;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -40,25 +39,9 @@ void main() {
               child: Center(
                 child: SizedBox(
                   width: 620,
-                  child: StatefulBuilder(
-                    builder: (context, setState) => Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Text(
-                          '设置 · 播放',
-                          style: TextStyle(fontSize: 30),
-                        ),
-                        const SizedBox(height: 24),
-                        PlaybackRendererDropdown(
-                          settings: settings,
-                          windowsNativeRendererAvailable: true,
-                          onChanged: (next) async {
-                            setState(() => settings = next);
-                          },
-                        ),
-                      ],
-                    ),
+                  child: PlaybackAndDecodingSettingsCard(
+                    settings: PlaybackSettings.defaults,
+                    onChanged: (_) async {},
                   ),
                 ),
               ),
@@ -69,35 +52,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('MPV 容器渲染'), findsOneWidget);
-    expect(find.textContaining('NVIDIA VSR/HDR 自动增强'), findsOneWidget);
-    await _capture(
-      captureKey,
-      outputDirectory,
-      'renderer-mpv.png',
-    );
-
-    await tester.tap(
+    expect(find.text('MediaKit Texture'), findsOneWidget);
+    expect(find.textContaining('不会自动激活 NVIDIA VSR/HDR'), findsOneWidget);
+    expect(
       find.byType(DropdownButtonFormField<PlayerRendererPreference>),
+      findsNothing,
     );
-    await tester.pumpAndSettle();
-    expect(find.text('MediaKit 兼容渲染'), findsOneWidget);
-    expect(find.text('MPV 容器渲染'), findsWidgets);
-    await tester.tap(find.text('MediaKit 兼容渲染'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('切换播放渲染器'), findsOneWidget);
-    await tester.tap(find.text('确认切换'));
-    await tester.pumpAndSettle();
-
-    expect(settings.rendererPreference, PlayerRendererPreference.mediaKit);
-    expect(find.textContaining('跨平台兼容'), findsWidgets);
-    expect(find.textContaining('镜像、压缩画质增强'), findsOneWidget);
-    await _capture(
-      captureKey,
-      outputDirectory,
-      'renderer-mediakit.png',
-    );
+    expect(find.text('切换播放渲染器'), findsNothing);
+    await _capture(captureKey, outputDirectory, 'backend-mediakit-texture.png');
   });
 }
 

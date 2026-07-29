@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../core/tag_rules.dart';
 import '../../features/player/domain/player_playback_progress.dart';
+import '../../models/player_feature_apply_result.dart';
 import '../../models/video_item.dart';
 import '../../services/player/player_video_super_resolution.dart';
 import 'player_playback_mode.dart';
@@ -189,23 +190,47 @@ extension PlayerStateEvents on PlayerPageState {
    */
   void setVideoSuperResolutionEnabled(bool enabled) {
     if (videoSuperResolutionEnabled == enabled) return;
-    rebuild(() => videoSuperResolutionEnabled = enabled);
+    rebuild(() {
+      videoSuperResolutionEnabled = enabled;
+      videoSuperResolutionActive = false;
+      videoSuperResolutionApplyResult =
+          const PlayerFeatureApplyResult.notRequested(
+        'gpu-high-quality-scaling',
+      );
+    });
     saveGlobalPlaybackSettings(
       effectivePlaybackSettings.copyWith(
         videoSuperResolutionEnabled: enabled,
       ),
     );
-    unawaited(
-      PlayerVideoSuperResolution.apply(
-        backend: playerService,
-        enabled: enabled,
-        baseScaler: videoScaler,
-      ),
-    );
+    unawaited(applyVideoSuperResolutionSetting(enabled));
   }
 
   /**
-   * 只读检测当前内嵌 mpv 的 NVIDIA scaling mode。
+   * 提交 GPU 缩放并只在当前媒体仍匹配时发布读回结果。
+   *
+   * 用户开关表达请求，诊断中的“已生效”必须来自属性回读，不能在点击瞬间乐观冒充。
+   */
+  Future<void> applyVideoSuperResolutionSetting(bool enabled) async {
+    final guardedPath = openedPath;
+    final result = await PlayerVideoSuperResolution.apply(
+      backend: playerService,
+      enabled: enabled,
+      baseScaler: videoScaler,
+    );
+    if (!mounted ||
+        guardedPath != openedPath ||
+        videoSuperResolutionEnabled != enabled) {
+      return;
+    }
+    rebuild(() {
+      videoSuperResolutionApplyResult = result;
+      videoSuperResolutionActive = enabled && result.applied;
+    });
+  }
+
+  /**
+   * 只读检测隔离原生 QA 后端的 NVIDIA scaling mode。
    *
    * 检测不加载 NVIDIA 文件、不写 `vf`，也不经过本机视频增强插件 ABI；媒体
    * 打开后会再次读取实际 `hwdec-current`，避免把配置值误当成零拷贝证据。
