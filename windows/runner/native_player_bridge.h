@@ -209,6 +209,17 @@ class NativePlayerBridge {
   /** 当前完整视频滤镜图，用于确认 NVIDIA 请求是否被 libmpv 接受。 */
   std::string video_filters_ = "";
   /**
+   * 当前去色带属性快照。
+   *
+   * PlayerService 会把这些属性与 `vf` 作为同一事务提交；原生后端必须完整回读，
+   * 否则一个已经成功的 D3D11 滤镜会因旁路属性不可见而被错误回滚。
+   */
+  std::string deband_ = "unavailable";
+  std::string deband_iterations_ = "unavailable";
+  std::string deband_threshold_ = "unavailable";
+  std::string deband_range_ = "unavailable";
+  std::string deband_grain_ = "unavailable";
+  /**
    * NVIDIA RTX Super Resolution 运行状态。
    *
    * 只允许 `inactive/requested/active/rejected`，禁止把可能包含路径的 mpv

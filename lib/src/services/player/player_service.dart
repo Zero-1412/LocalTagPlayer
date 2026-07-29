@@ -245,20 +245,33 @@ class PlayerService
     return normalized == 'empty' ? '' : normalized;
   }
 
-  /** 返回与目标快照不一致的属性名，不把属性值带入诊断。 */
+  /**
+   * 返回与目标快照不一致的属性名，不把属性值带入诊断。
+   *
+   * libmpv 的属性写入完成早于观察事件回送，Windows 原生后端可能在批量提交后的
+   * 首次读回仍暴露旧快照。这里只对实际不一致项提供最多 200ms 的有界收敛窗口；
+   * 首次一致时没有额外等待，持续不一致仍进入原有回滚，不能把旧值冒充成功。
+   */
   Future<List<String>> _mismatchedProperties(
     Map<String, String> expected,
   ) async {
-    final mismatches = <String>[];
-    for (final entry in expected.entries) {
-      final actual = _normalizePropertyReadback(
-        await _backend.getProperty(entry.key),
-      );
-      if (!_propertyValuesMatch(entry.key, entry.value.trim(), actual)) {
-        mismatches.add(entry.key);
+    const maximumAttempts = 5;
+    for (var attempt = 0; attempt < maximumAttempts; attempt++) {
+      final mismatches = <String>[];
+      for (final entry in expected.entries) {
+        final actual = _normalizePropertyReadback(
+          await _backend.getProperty(entry.key),
+        );
+        if (!_propertyValuesMatch(entry.key, entry.value.trim(), actual)) {
+          mismatches.add(entry.key);
+        }
       }
+      if (mismatches.isEmpty || attempt == maximumAttempts - 1) {
+        return mismatches;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
     }
-    return mismatches;
+    return const <String>[];
   }
 
   /**

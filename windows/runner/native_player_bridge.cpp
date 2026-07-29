@@ -919,6 +919,13 @@ void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
       }
       const auto result =
           mpv_set_property_string(player_, property.c_str(), value.c_str());
+      if (result >= 0) {
+        if (property == "deband") deband_ = value;
+        if (property == "deband-iterations") deband_iterations_ = value;
+        if (property == "deband-threshold") deband_threshold_ = value;
+        if (property == "deband-range") deband_range_ = value;
+        if (property == "deband-grain") deband_grain_ = value;
+      }
       if (property == "vf") {
         if (result >= 0) video_filters_ = value;
         if (value.find("scaling-mode=nvidia") == std::string::npos) {
@@ -970,6 +977,11 @@ void NativePlayerBridge::RegisterObservedProperties() {
       {"d3d11va-zero-copy", MPV_FORMAT_STRING},
       {"mpv-version", MPV_FORMAT_STRING},
       {"vf", MPV_FORMAT_STRING},
+      {"deband", MPV_FORMAT_STRING},
+      {"deband-iterations", MPV_FORMAT_STRING},
+      {"deband-threshold", MPV_FORMAT_STRING},
+      {"deband-range", MPV_FORMAT_STRING},
+      {"deband-grain", MPV_FORMAT_STRING},
       {"video-params/primaries", MPV_FORMAT_STRING},
       {"video-params/gamma", MPV_FORMAT_STRING},
       {"video-params/colorlevels", MPV_FORMAT_STRING},
@@ -1068,6 +1080,16 @@ void NativePlayerBridge::ApplyObservedProperty(
     mpv_version_ = text;
   } else if (name == "vf") {
     video_filters_ = text == "unavailable" ? "" : text;
+  } else if (name == "deband") {
+    deband_ = text;
+  } else if (name == "deband-iterations") {
+    deband_iterations_ = text;
+  } else if (name == "deband-threshold") {
+    deband_threshold_ = text;
+  } else if (name == "deband-range") {
+    deband_range_ = text;
+  } else if (name == "deband-grain") {
+    deband_grain_ = text;
   } else if (name == "video-params/primaries") {
     video_primaries_ = text;
   } else if (name == "video-params/gamma") {
@@ -1353,6 +1375,16 @@ flutter::EncodableMap NativePlayerBridge::StateSnapshot() const {
            flutter::EncodableValue(mpv_version_)},
           {flutter::EncodableValue("vf"),
            flutter::EncodableValue(video_filters_)},
+          {flutter::EncodableValue("deband"),
+           flutter::EncodableValue(deband_)},
+          {flutter::EncodableValue("deband-iterations"),
+           flutter::EncodableValue(deband_iterations_)},
+          {flutter::EncodableValue("deband-threshold"),
+           flutter::EncodableValue(deband_threshold_)},
+          {flutter::EncodableValue("deband-range"),
+           flutter::EncodableValue(deband_range_)},
+          {flutter::EncodableValue("deband-grain"),
+           flutter::EncodableValue(deband_grain_)},
           {flutter::EncodableValue("native-nvidia-vsr-state"),
            flutter::EncodableValue(nvidia_vsr_state_)},
           {flutter::EncodableValue("native-nvidia-hdr-state"),

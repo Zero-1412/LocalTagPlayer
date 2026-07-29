@@ -749,11 +749,25 @@ Future<void> _waitForSessionState(
   required Duration timeout,
 }) async {
   final stopwatch = Stopwatch()..start();
+  var lastEvidence = '尚未取得播放器诊断';
   while (stopwatch.elapsed < timeout) {
     await tester.pump(const Duration(milliseconds: 100));
     final state = playerKey.currentState;
     if (state == null) continue;
     final snapshot = await state.buildDiagnosticsSnapshot();
+    // 超时必须携带匿名门禁字段，避免把驱动拒绝、滤镜回滚与单纯等待不足混为一谈。
+    lastEvidence = snapshot.lines
+        .where(
+          (line) =>
+              line.startsWith('mpv 视频滤镜: ') ||
+              line.startsWith('NVIDIA RTX 视频超分: ') ||
+              line.startsWith('NVIDIA RTX Video HDR: ') ||
+              line.startsWith('NVIDIA 自动策略: ') ||
+              line.startsWith('NVIDIA VSR 驱动确认: ') ||
+              line.startsWith('NVIDIA HDR 驱动确认: ') ||
+              line.startsWith('原生表面尺寸: '),
+        )
+        .join(' | ');
     if (mode == 'hdr') {
       final active = snapshot.lines.contains('HDR 动态映射会话: 已通过门槛并启用');
       final safelyRolledBack = snapshot.lines.any(
@@ -813,7 +827,9 @@ Future<void> _waitForSessionState(
       return;
     }
   }
-  throw StateError('固定 $mode 样本未在时限内进入预期播放状态');
+  throw StateError(
+    '固定 $mode 样本未在时限内进入预期播放状态；$lastEvidence',
+  );
 }
 
 /** 把可比较的只读诊断字段保存为匿名时间序列。 */

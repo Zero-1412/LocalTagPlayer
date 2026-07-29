@@ -1,5 +1,16 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-30 · 修复 NVIDIA 原生滤镜激活回读
+
+- 保持 MediaKit 为正式默认后端，Windows 原生 D3D11 后端继续只用于 NVIDIA
+  VSR/HDR 激活门禁与平台增强实验。
+- 原生 libmpv 桥接补齐 `deband` 及四个参数的观察、缓存和诊断回读；播放设置事务允许
+  异步属性短时收敛，避免 NVIDIA 滤镜已经成功启用后因状态暂不可见而被误回滚。
+- 真人低码率单次 20 秒门禁中，VSR/HDR 均为 `active`，总丢帧、视频停滞和音频停滞
+  均为 0；三类片源六组 runner 的第二进程发现问题仍单独保留，不扩大通过结论。
+- 记录 `media_kit_video 2.0.1` Windows D3D11 Texture 扩展点和 RTX Video SDK
+  发布许可门禁；取得具体 SDK 包授权与可再分发清单前保持零 NVIDIA SDK 文件分发。
+
 ## 2026-07-29 · 启动渐进式整体架构重构
 
 - Architecture Baseline 提升到 `0.5.136`：完成首批 500 行警戒线治理，

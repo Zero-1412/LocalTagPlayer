@@ -1,5 +1,26 @@
 # CURRENT_TASK.md
 
+## 2026-07-30 NVIDIA 原生激活门禁与 MediaKit SDK 评估
+
+- 正式默认后端继续保持 MediaKit；Windows 原生 child HWND/libmpv D3D11 后端仅作为
+  NVIDIA VSR/HDR 激活门禁和后续平台增强实验边界。
+- 修复原生滤镜事务的状态回读：补齐 `deband` 及四个去色带参数，并允许异步
+  libmpv 属性最多用 200 ms 收敛，避免已成功启用
+  `d3d11vpp=scale=2:scaling-mode=nvidia:nvidia-true-hdr=yes` 后被误判并回滚。
+- 单次 20 秒真人低码率门禁通过：VSR/HDR 均为 `active`，总丢帧、视频停滞和音频停滞
+  均为 0。三类片源六组脚本的第二进程仍出现 `No tests were found`，因此本轮只确认
+  明确的单次激活门禁，不宣称六组矩阵完成。
+- `media_kit_video 2.0.1` 的 Windows Texture 链内部已持有同一 D3D11
+  device/context/texture，但没有稳定的公开逐帧处理扩展契约。未来原型应放在原生
+  `Read()` 后、Flutter texture descriptor 返回前，并先补齐格式、同步、重建、设备丢失、
+  回退和性能门禁。
+- RTX Video SDK 下载需要 NVIDIA 登录并接受具体包许可；在未由有权人员核对实际包内
+  可再分发文件前，项目保持零 SDK 文件分发。当前 mpv 驱动扩展门禁不携带 NVIDIA SDK。
+- 真实 Debug 主窗口与媒体库已成功启动和截图；Computer Use 对该窗口后续激活失败，
+  因此设置页与播放器入口的自动点击仍需人工按文档中的准确路径复测。
+- 下一步计划：先修复三类片源六组 runner 的第二进程发现问题；取得 SDK 包与许可授权后，
+  再做不分发 NVIDIA 文件、默认关闭且可即时回退的 MediaKit Texture 本机原型。
+
 ## 2026-07-29 500 行警戒线治理第一批
 
 - 三个优先文件完成：`player_settings_panel.dart` 降至 417 行，一级/高级/选项展示拆为

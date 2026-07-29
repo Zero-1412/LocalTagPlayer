@@ -34,6 +34,11 @@ void main() {
           'native-surface-kind': 'child-hwnd',
           'mpv-version': 'mpv 0.41.0',
           'vf': 'd3d11vpp=scale=2:scaling-mode=nvidia:format=nv12',
+          'deband': 'no',
+          'deband-iterations': '1',
+          'deband-threshold': '24',
+          'deband-range': '12',
+          'deband-grain': '8',
           'native-nvidia-vsr-state': 'active',
           'native-nvidia-hdr-state': 'active',
           'video-params/primaries': 'bt.709',
@@ -103,6 +108,11 @@ void main() {
         await backend.getProperty('current-vo'), 'gpu-next-d3d11-child-hwnd');
     expect(await backend.getProperty('mpv-version'), 'mpv 0.41.0');
     expect(await backend.getProperty('vf'), contains('scaling-mode=nvidia'));
+    expect(await backend.getProperty('deband'), 'no');
+    expect(await backend.getProperty('deband-iterations'), '1');
+    expect(await backend.getProperty('deband-threshold'), '24');
+    expect(await backend.getProperty('deband-range'), '12');
+    expect(await backend.getProperty('deband-grain'), '8');
     expect(
       await backend.getProperty('native-nvidia-vsr-state'),
       'active',

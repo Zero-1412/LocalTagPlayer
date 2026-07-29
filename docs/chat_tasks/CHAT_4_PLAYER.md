@@ -1,3 +1,14 @@
+## 2026-07-30 NVIDIA 原生激活门禁
+
+- MediaKit 保持正式默认后端；原生 child HWND/libmpv D3D11 后端仅用于 QA 覆盖和
+  NVIDIA 平台增强实验。
+- 补齐 `deband`、`deband-iterations`、`deband-threshold`、`deband-range`、
+  `deband-grain` 的原生观察与 Dart 回读，避免成功启用的 NVIDIA `d3d11vpp` 被事务误回滚。
+- 真人低码率 20 秒门禁确认 VSR/HDR 同时 `active`，总丢帧与音视频停滞为 0；六组矩阵
+  因测试 runner 第二进程未发现测试而未宣称完成。
+- MediaKit Texture 未来 SDK hook 只评估为原生逐帧边界；取得 SDK 具体许可和可再分发
+  清单前不分发 NVIDIA 文件，也不宣称该路径已激活 VSR/HDR。
+
 ## 2026-07-29 播放器 500 行警戒线治理
 
 - `player_settings_panel.dart` 降至 417 行，一级、高级与选项展示分别独立；设置确认、

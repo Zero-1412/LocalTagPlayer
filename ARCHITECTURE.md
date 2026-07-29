@@ -1,5 +1,26 @@
 ﻿# ARCHITECTURE.md
 
+## 2026-07-30 Windows 原生滤镜事务与 MediaKit SDK 边界
+
+正式应用继续以 MediaKit + `media_kit_video` Texture 为默认播放边界。Windows 原生
+child HWND/libmpv D3D11 后端是可选平台实现，只用于 NVIDIA 激活门禁和后续原生增强，
+不得反向成为页面或业务层的隐式默认。
+
+原生滤镜设置由 `PlayerService` 的事务层统一提交、回读和回滚。libmpv/原生后端必须为
+事务涉及的每个属性提供可收敛的 observed state；短暂异步不一致最多等待 200 ms，持续
+不一致仍原子回滚。`deband` 与四个参数属于该 contract，不能只在 `vf` 中隐式生效。
+
+MediaKit Windows 输出目前仍是：
+
+```text
+libmpv OpenGL Render API -> ANGLE EGL -> D3D11 texture -> Flutter Texture
+```
+
+固定补丁只提供 D3D11 device/context/texture 的原生只读访问，不构成稳定的逐帧插件 ABI。
+未来 RTX Video SDK 原型只能放在原生 `Read()` 后、Flutter descriptor 返回前，并必须具备
+格式/色彩、GPU 同步、surface 重建、device-loss、生命周期、原帧回退和帧预算 contract。
+在具体 SDK 许可与可再分发清单完成审查前，该接口不得承载随包发布的 NVIDIA 文件。
+
 ## 2026-07-29 渐进式整体架构重构
 
 `Architecture Baseline 0.5.134` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域

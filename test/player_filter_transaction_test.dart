@@ -20,6 +20,7 @@ class _FilterTransactionBackend
     this.rejectedProperty,
     this.rejectedValue,
     this.normalizeMpvReadback = false,
+    this.delayedReadbackCount = 0,
   }) : properties = <String, String>{...?initialProperties};
 
   /** 当前唯一后端实例持有的属性。 */
@@ -33,6 +34,15 @@ class _FilterTransactionBackend
 
   /** 是否模拟 libmpv 对数值与 lavfi 图的规范化输出。 */
   final bool normalizeMpvReadback;
+
+  /** 每次成功写入后继续返回旧快照的次数，用于模拟 libmpv 异步属性事件。 */
+  final int delayedReadbackCount;
+
+  /** 延迟读回期间按属性保留的写前值。 */
+  final Map<String, String?> _staleReadbacks = <String, String?>{};
+
+  /** 每个属性还应返回旧快照的次数。 */
+  final Map<String, int> _remainingStaleReads = <String, int>{};
 
   /** 记录批量提交顺序，验证去色带主开关最后恢复。 */
   final List<Map<String, String>> batches = <Map<String, String>>[];
@@ -78,12 +88,21 @@ class _FilterTransactionBackend
     if (property == rejectedProperty && value == rejectedValue) {
       return;
     }
+    if (delayedReadbackCount > 0) {
+      _staleReadbacks[property] = properties[property];
+      _remainingStaleReads[property] = delayedReadbackCount;
+    }
     properties[property] = value;
   }
 
   @override
   Future<String> getProperty(String property) async {
-    final value = properties[property];
+    final staleReads = _remainingStaleReads[property] ?? 0;
+    final value =
+        staleReads > 0 ? _staleReadbacks[property] : properties[property];
+    if (staleReads > 0) {
+      _remainingStaleReads[property] = staleReads - 1;
+    }
     if (value == null) return 'unavailable';
     if (normalizeMpvReadback) {
       final number = double.tryParse(value);
@@ -181,6 +200,33 @@ void main() {
     expect(result.rollbackAttempted, isFalse);
     expect(backend.properties['vf'], 'lavfi=[deblock]');
     expect(service.filterTransaction.sequence, 1);
+  });
+
+  test('libmpv 异步属性事件在有界窗口内收敛时不误回滚', () async {
+    final backend = _FilterTransactionBackend(
+      initialProperties: const <String, String>{
+        'deband': 'no',
+        'vf': '',
+      },
+      delayedReadbackCount: 2,
+    );
+    final service = PlayerService(backend: backend);
+
+    final result = await service.applyFilterProperties(
+      label: 'nvidia-filter-snapshot',
+      properties: const <String, String>{
+        'deband': 'no',
+        'vf': 'd3d11vpp=scale=2:scaling-mode=nvidia:nvidia-true-hdr=yes',
+      },
+    );
+
+    expect(result.phase, PlayerFilterTransactionPhase.applied);
+    expect(result.mismatchedProperties, isEmpty);
+    expect(result.rollbackAttempted, isFalse);
+    expect(
+      backend.properties['vf'],
+      'd3d11vpp=scale=2:scaling-mode=nvidia:nvidia-true-hdr=yes',
+    );
   });
 
   test('滤镜读回不一致时恢复旧快照并验证回滚', () async {
