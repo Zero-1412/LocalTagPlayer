@@ -17,6 +17,13 @@
   随后分别迁移普通设置、只读诊断、破坏性缓存操作和备份/恢复。
 - 将设置首页导航提取为 `features/settings/presentation` 的无状态叶节点；数据快照和
   导航回调仍由原页面传入，Route、入口 Key 和设置状态所有权不变。
+- 完成 Phase 1.5 版本化发布护栏：过滤结果由 `LibraryResultEpoch` 校验，延后标签计数由
+  不含排序的 `LibraryCountEpoch` 校验；旧数据、筛选、搜索、排序或标签定义版本不能回写。
+- 新增只保存有序 stable `videoId` 的不可变结果/队列快照、11,000 项确定性媒体 fixture、
+  测试期查询追踪器和旧交互挂载清单；本阶段没有获授权删除项。
+- 新增 focused tests 与完整 331 项测试通过（3 项显式基准跳过），静态分析和 Windows
+  Debug build 通过。真实点击自动化原生管道不可用，且备用截图检测到用户正在操作其他
+  窗口后停止抢占；未保留该截图，精确人工复测路径记录于 `CURRENT_TASK.md`。
 - focused/full tests、静态分析与 Windows Debug build 通过；真实窗口点击设置、关于页
   及两级返回路径并截图复核，分组入口无可见遮挡、错位或溢出。
 

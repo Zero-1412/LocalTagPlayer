@@ -1,8 +1,19 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
+import '../../features/library/domain/library_query_snapshot.dart';
 import '../../models/platform_models.dart';
+
+// ignore_for_file: slash_for_doc_comments
+
+/**
+ * 计数刷新成功后的版本化回调。
+ *
+ * [epoch] 允许调用方在发布前再次校验结果身份，[counts] 是该版本对应的标签计数。
+ */
+typedef LibraryCountCompleted = void Function(
+  LibraryCountEpoch epoch,
+  Map<String, int> counts,
+);
 
 /// 媒体库标签计数刷新协调器。
 ///
@@ -43,23 +54,24 @@ class LibraryCountRefreshCoordinator {
   /// [isStillCurrent] 用于让页面确认 store、筛选版本和 widget 生命周期仍然有效；
   /// [onComplete] 只会收到最新且仍有效的计数结果。
   void schedule({
+    required LibraryCountEpoch epoch,
     required FilterQuery query,
     required Map<String, int> Function(FilterQuery query) compute,
-    required bool Function(int revision) isStillCurrent,
-    required ValueChanged<Map<String, int>> onComplete,
+    required bool Function(LibraryCountEpoch epoch) isStillCurrent,
+    required LibraryCountCompleted onComplete,
   }) {
     final requestRevision = ++_revision;
     _timer?.cancel();
     _timer = Timer(idleDelay, () {
       _timer = null;
-      if (requestRevision != _revision || !isStillCurrent(requestRevision)) {
+      if (requestRevision != _revision || !isStillCurrent(epoch)) {
         return;
       }
       final counts = compute(query);
-      if (requestRevision != _revision || !isStillCurrent(requestRevision)) {
+      if (requestRevision != _revision || !isStillCurrent(epoch)) {
         return;
       }
-      onComplete(counts);
+      onComplete(epoch, counts);
     });
   }
 

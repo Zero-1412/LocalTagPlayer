@@ -121,8 +121,22 @@ lib/src/
 - [x] 增加架构合同，阻止应用壳实例化具体更新服务和 update presentation 反向依赖 data。
 - [x] 为最大文件、生产代码导入兼容 `app.dart`、跨 feature presentation import 增加
   渐进阈值；阈值只降不升。
-- [ ] 建立受保护交互清单、查询调用追踪器和 11,000 条生产形态基准数据生成器。
-- [ ] 在媒体库状态迁移前实现并验证 `ResultEpoch`、`CountEpoch` 与 `QueueSnapshot` 合同。
+- [x] 建立受保护交互清单、测试期查询调用追踪器和 11,000 条确定性生产形态基准数据生成器。
+- [x] 在媒体库状态迁移前实现并验证 `LibraryResultEpoch`、`LibraryCountEpoch`、
+  `LibraryResultSnapshot` 与 `LibraryQueueSnapshot` 合同。
+
+Phase 1.5 的发布协议已经接入现有过滤和延后计数链路：
+
+- `LibraryResultEpoch = dataRevision + filterFingerprint + searchFingerprint + sortFingerprint`；
+  页面只接受与调度时完整版本一致的结果。
+- `LibraryCountEpoch = dataRevision + filterFingerprint + searchFingerprint +
+  tagDefinitionRevision`；排序不进入计数版本，也不触发 `resultCounts`。
+- `LibraryResultSnapshot` 与 `LibraryQueueSnapshot` 只复制有序 stable `videoId`，不保存
+  可变路径，也不包裹调用方仍可修改的列表。
+- 标签定义暂与现有媒体库提交共用 `_libraryDataRevision`；Phase 3A 引入明确 change set
+  后再拆出独立 `tagDefinitionRevision`，当前保守失效不会发布旧计数。
+- `test/fixtures/legacy_interaction_manifest.json` 是只增不减的页面/Route 挂载基线；
+  本阶段获授权删除仍为空。
 
 ### Phase 1：应用壳与纵向样板
 
@@ -224,5 +238,6 @@ validation: focused tests + full tests + analyze + Windows debug build + 真实�
 
 ## 本阶段获授权删除
 
-无。Phase 1 只移动更新模块、分离组合职责并收紧依赖注入。所有原有入口、`ValueKey`、
-回调、Route 和降级路径均保留。
+无。Phase 1 只移动更新模块、分离组合职责并收紧依赖注入；Phase 1.5 只新增版本发布
+护栏并替换重复的私有查询签名实现。所有原有入口、`ValueKey`、回调、Route 和降级路径
+均由交互清单保护。

@@ -13,8 +13,10 @@
   `docs/architecture/ADR_001_PROGRESSIVE_ARCHITECTURE_MIGRATION.md`。
 - 设置首页导航已作为无状态叶节点迁入 `features/settings/presentation`，原页面继续拥有
   设置状态和 Route；所有入口 Key 与回调保持不变。
-- 后续先建立交互清单、查询追踪与版本协议，再按一致性边界迁移无状态 UI、设置、诊断、
-  媒体库和播放器；禁止一次性移动全部文件或改变现有业务语义。
+- Phase 1.5 已建立旧交互挂载清单、测试期查询追踪、11,000 项确定性 fixture，以及
+  Result/Count/Queue 版本化快照；现有筛选与计数发布链路已拒绝旧 epoch。
+- 后续按一致性边界迁移无状态诊断 UI、普通设置、媒体库和播放器；禁止一次性移动全部
+  文件或改变现有业务语义。
 
 ## 2026-07-24 正式打包分支集成边界
 

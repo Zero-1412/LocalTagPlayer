@@ -20,12 +20,21 @@
   巨型页面行数预算；阈值只能下降。
 - 设置首页导航已作为首个 Phase 2A 无状态叶节点迁入 `features/settings/presentation`；
   原状态 owner、导航回调、Route 和全部入口 `ValueKey` 保留，媒体库巨型页面预算由
-  7,500 下调到 7,250 行。
+  7,500 下调到 7,250 行；Phase 1.5 收敛重复版本构造后继续下调到 7,237 行。
+- Phase 1.5 已完成：新增纯 Dart 查询指纹与 `LibraryResultEpoch` / `LibraryCountEpoch`，
+  现有过滤和延后计数链路只发布完整版本一致的结果；排序仍只重排当前结果，不触发计数。
+- `LibraryResultSnapshot` / `LibraryQueueSnapshot` 固化有序 stable `videoId`；新增
+  11,000 项确定性 fixture、测试期查询追踪器和零授权删除的旧交互挂载清单。
+- 新增 focused tests 与完整 331 项测试通过（3 项显式基准跳过），`flutter analyze` 和
+  Windows Debug build 通过。真实点击自动化因 Computer Use 原生管道不可用而无法执行；
+  备用截图发现用户正在操作其他窗口后立即停止，截图已删除且未作为证据。仍需人工复测：
+  “展开标签 → 一级/二级标签连续切换 → 排序字段/方向 → 打开首个结果 → 返回媒体库”，
+  核对结果计数、顺序、filtered queue 与返回筛选状态。
 - focused/full tests、`flutter analyze`、Windows Debug build 已通过；真实 Windows
   窗口完成“侧栏设置 → 设置分组 → 关于 → 返回设置 → 返回媒体库”点击与截图，未发现
   遮挡、错位、溢出或返回状态丢失。
-- 下一阶段继续 Phase 1.5 + 2A：建立受保护交互清单、查询追踪与版本协议，再只提取缓存
-  诊断只读展示 Widget；不同时迁移状态、删除/清空、备份/恢复、筛选或播放器。
+- 下一阶段继续 Phase 2A-2：只提取缓存诊断只读展示 Widget；不同时迁移状态、删除/清空、
+  备份/恢复、筛选 controller 或播放器。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

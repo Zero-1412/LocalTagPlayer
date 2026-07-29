@@ -1,4 +1,5 @@
 import '../../core/tag_rules.dart';
+import '../../features/library/domain/library_query_snapshot.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 
@@ -9,12 +10,15 @@ typedef VideoItemSorter = List<VideoItem> Function(Iterable<VideoItem> videos);
 
 class FilterState {
   const FilterState({
+    required this.epoch,
     required this.query,
     required this.filteredVideos,
     required this.resultCount,
     required this.totalCount,
   });
 
+  /** 该结果可被页面接受的完整版本身份。 */
+  final LibraryResultEpoch epoch;
   final FilterQuery query;
   final List<VideoItem> filteredVideos;
   final int resultCount;
@@ -29,8 +33,8 @@ class FilterStateSource {
     tagContext: TagQueryContext(),
   );
   int _totalCount = 0;
-  Object? _sourceKey;
-  Object? _sortKey;
+  int _dataRevision = 0;
+  String _sortFingerprint = '';
   VideoItemComparator? _compare;
   VideoItemSorter? _sortVideos;
 
@@ -45,25 +49,26 @@ class FilterStateSource {
   void configure({
     required TagQueryService engine,
     required int totalCount,
-    Object? sourceKey,
-    Object? sortKey,
+    required int dataRevision,
+    String sortFingerprint = '',
     VideoItemComparator? compare,
     VideoItemSorter? sortVideos,
   }) {
     _engine = engine;
     _totalCount = totalCount;
-    _sourceKey = sourceKey ?? engine.sourceSignature;
-    _sortKey = sortKey;
+    _dataRevision = dataRevision;
+    _sortFingerprint = sortFingerprint;
     _compare = compare;
     _sortVideos = sortVideos;
   }
 
   FilterState update(FilterQuery query) {
-    final signature = _signature(
+    final epoch = LibraryResultEpoch.fromQuery(
+      dataRevision: _dataRevision,
       query: query,
-      sourceKey: _sourceKey,
-      sortKey: _sortKey,
+      presentationSort: _sortFingerprint,
     );
+    final signature = epoch.toString();
     final cachedState = _cachedState;
     if (cachedState != null && _cachedSignature == signature) {
       return cachedState;
@@ -79,6 +84,7 @@ class FilterStateSource {
       filteredVideos.sort(compare);
     }
     final state = FilterState(
+      epoch: epoch,
       query: query,
       filteredVideos: List<VideoItem>.unmodifiable(filteredVideos),
       resultCount: filteredVideos.length,
@@ -101,22 +107,31 @@ class FilterStateSource {
   ) {
     final cachedState = _cachedState;
     if (cachedState == null ||
-        _querySignature(cachedState.query) != _querySignature(query)) {
+        LibraryQueryFingerprint.result(
+              cachedState.query,
+              presentationSort: _sortFingerprint,
+            ) !=
+            LibraryQueryFingerprint.result(
+              query,
+              presentationSort: _sortFingerprint,
+            )) {
       return update(query);
     }
+    final epoch = LibraryResultEpoch.fromQuery(
+      dataRevision: _dataRevision,
+      query: query,
+      presentationSort: _sortFingerprint,
+    );
     final changed = changedVideos.toList(growable: false);
     if (changed.isEmpty) {
       final state = FilterState(
+        epoch: epoch,
         query: query,
         filteredVideos: cachedState.filteredVideos,
         resultCount: cachedState.resultCount,
         totalCount: _totalCount,
       );
-      _cachedSignature = _signature(
-        query: query,
-        sourceKey: _sourceKey,
-        sortKey: _sortKey,
-      );
+      _cachedSignature = epoch.toString();
       _cachedState = state;
       return state;
     }
@@ -136,65 +151,15 @@ class FilterStateSource {
       sortedVideos.sort(compare);
     }
     final state = FilterState(
+      epoch: epoch,
       query: query,
       filteredVideos: List<VideoItem>.unmodifiable(sortedVideos),
       resultCount: sortedVideos.length,
       totalCount: _totalCount,
     );
-    _cachedSignature = _signature(
-      query: query,
-      sourceKey: _sourceKey,
-      sortKey: _sortKey,
-    );
+    _cachedSignature = epoch.toString();
     _cachedState = state;
     return state;
-  }
-
-  String _signature({
-    required FilterQuery query,
-    Object? sourceKey,
-    Object? sortKey,
-  }) {
-    final buffer = StringBuffer()
-      ..write(_querySignature(query))
-      ..write('|source:')
-      ..write(sourceKey)
-      ..write('|sort:')
-      ..write(sortKey);
-    return buffer.toString();
-  }
-
-  String _sortedStrings(Iterable<String> values) {
-    return (values.toList()..sort()).join(',');
-  }
-
-  String _querySignature(FilterQuery query) {
-    String sortedGroups(Map<String, Set<String>> values) {
-      final entries = values.entries.toList()
-        ..sort((a, b) => a.key.compareTo(b.key));
-      return entries
-          .map((entry) => '${entry.key}:${_sortedStrings(entry.value)}')
-          .join(';');
-    }
-
-    return [
-      query.keyword ?? '',
-      query.primaryTagId ?? '',
-      query.childTagId ?? '',
-      _sortedStrings(query.folderRoots),
-      _sortedStrings(query.includeTagIds),
-      _sortedStrings(query.excludeTagIds),
-      sortedGroups(query.selectedGroupTagIds),
-      query.sortRule.name,
-      query.favoriteOnly,
-      query.unplayedOnly,
-      query.errorOnly,
-      query.groups
-          .map((group) =>
-              '${group.id}:${group.items.map((tag) => tag.id).join(',')}')
-          .join(';'),
-      query.excludedItems.map((tag) => tag.id).join(','),
-    ].join('|');
   }
 }
 

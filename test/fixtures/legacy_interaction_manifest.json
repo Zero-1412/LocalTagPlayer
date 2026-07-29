@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "description": "架构迁移期间必须保持可达的旧交互入口；未列入授权删除清单的项目不得移除。",
+  "authorizedDeletions": [],
+  "entries": [
+    {
+      "id": "app.library.home",
+      "kind": "mount",
+      "source": "lib/src/app/local_tag_player_app.dart",
+      "needle": "child: LibraryPage("
+    },
+    {
+      "id": "library.search.field",
+      "kind": "key",
+      "source": "lib/src/widgets/library/library_smoke_keys.dart",
+      "needle": "smoke.top.search-field"
+    },
+    {
+      "id": "library.player.route",
+      "kind": "route",
+      "source": "lib/src/pages/library/library_page.dart",
+      "needle": "PlayerPage("
+    },
+    {
+      "id": "settings.home",
+      "kind": "key",
+      "source": "lib/src/features/settings/presentation/settings_landing_list.dart",
+      "needle": "settings.home"
+    },
+    {
+      "id": "settings.cache.entry",
+      "kind": "key",
+      "source": "lib/src/features/settings/presentation/settings_landing_list.dart",
+      "needle": "settings.category.cache"
+    },
+    {
+      "id": "settings.about.entry",
+      "kind": "key",
+      "source": "lib/src/features/settings/presentation/settings_landing_list.dart",
+      "needle": "settings.category.about"
+    },
+    {
+      "id": "settings.section.back",
+      "kind": "back",
+      "source": "lib/src/pages/library/library_page.dart",
+      "needle": "settings.section.back"
+    },
+    {
+      "id": "settings.cache.retry",
+      "kind": "action",
+      "source": "lib/src/pages/library/library_page.dart",
+      "needle": "settings.cache.retryFailures"
+    },
+    {
+      "id": "player.back",
+      "kind": "back",
+      "source": "lib/src/pages/player/player_page.dart",
+      "needle": "player.back"
+    },
+    {
+      "id": "player.queue",
+      "kind": "mount",
+      "source": "lib/src/pages/player/player_page.dart",
+      "needle": "player.queue.sidebar"
+    },
+    {
+      "id": "player.settings",
+      "kind": "mount",
+      "source": "lib/src/pages/player/player_settings_panel.dart",
+      "needle": "player.settings.dialog"
+    },
+    {
+      "id": "player.hidden.progress",
+      "kind": "mount",
+      "source": "lib/src/pages/player/player_page.dart",
+      "needle": "player.controls.hiddenProgress"
+    }
+  ]
+}

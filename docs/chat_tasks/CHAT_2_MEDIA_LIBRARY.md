@@ -44,6 +44,17 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-29 媒体库查询版本协议
+
+- `LibraryResultEpoch` 统一描述数据、筛选、搜索和排序版本，`FilterStateSource` 与页面发布
+  使用同一身份，扫描差量或异步过滤的旧结果不得覆盖新状态。
+- `LibraryCountEpoch` 刻意排除排序维度；标签计数继续延后、latest-only 执行，并在计算前后
+  校验数据、筛选、搜索和标签定义版本。
+- `LibraryResultSnapshot` / `LibraryQueueSnapshot` 仅复制有序 stable `videoId`；
+  `QueueSnapshot` 当前先完成领域合同，Phase 3E 才替换播放器 Route 的兼容列表输入。
+- focused tests 使用确定性 11,000 项 fixture 和查询追踪器验证旧 epoch 丢弃；SQLite
+  schema、`FilterQuery` / `TagQueryService` 匹配语义、filtered queue 内容/顺序和用户数据不变。
+
 ## 2026-07-15 冷扫描阶段进度与可暂停 sidecar
 
 - `LibraryScanBackend` 只读边界新增阶段进度和暂停/恢复；目录发现完成后才公布 fingerprint 总量和百分比，不在未知阶段伪造进度。

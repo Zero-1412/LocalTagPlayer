@@ -14,6 +14,7 @@ import '../../core/tag_rules.dart';
 import '../../features/update/domain/app_update_service.dart';
 import '../../features/update/presentation/about_settings_page.dart';
 import '../../features/settings/presentation/settings_landing_list.dart';
+import '../../features/library/domain/library_query_snapshot.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/data_backup_models.dart';
 import '../../models/library_sort.dart';
@@ -3974,12 +3975,16 @@ class _LibraryPageState extends State<LibraryPage> {
 
   /** 在首帧之后的空闲窗口刷新稳定标签计数，过期页面结果会被丢弃。 */
   void _scheduleInitialStableTagCounts(LibraryApplicationFacade store) {
+    const query = FilterQuery();
+    final epoch = _countEpoch(query);
     _countRefreshCoordinator.schedule(
-      query: const FilterQuery(),
+      epoch: epoch,
+      query: query,
       compute: store.resultCounts,
-      isStillCurrent: (_) => mounted && _store == store,
-      onComplete: (counts) {
-        if (!mounted || _store != store) {
+      isStillCurrent: (candidate) =>
+          mounted && _store == store && candidate == _countEpoch(query),
+      onComplete: (candidate, counts) {
+        if (!mounted || _store != store || candidate != epoch) {
           return;
         }
         setState(() => _stableTagCounts = counts);
@@ -4399,8 +4404,8 @@ class _LibraryPageState extends State<LibraryPage> {
         tagContext: store.tagQueryContext,
       ),
       totalCount: store.videos.length,
-      sourceKey: _libraryDataRevision,
-      sortKey: (_sortMode, _sortDirection),
+      dataRevision: _libraryDataRevision,
+      sortFingerprint: _librarySortFingerprint,
       compare: _compareVideos,
       sortVideos: (videos) => sortedLibraryVideos(
         videos,
@@ -4424,8 +4429,8 @@ class _LibraryPageState extends State<LibraryPage> {
         tagContext: store.tagQueryContext,
       ),
       totalCount: store.videos.length,
-      sourceKey: _libraryDataRevision,
-      sortKey: (_sortMode, _sortDirection),
+      dataRevision: _libraryDataRevision,
+      sortFingerprint: _librarySortFingerprint,
       sortVideos: (videos) => sortedLibraryVideos(
         videos,
         sortMode: _sortMode,
@@ -4443,8 +4448,10 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   FilterState _buildImmediateFilterState(LibraryApplicationFacade store) {
+    final query = _currentFilterQuery();
     return FilterState(
-      query: _currentFilterQuery(),
+      epoch: _resultEpoch(query),
+      query: query,
       filteredVideos: sortedLibraryVideos(
         store.videos.values,
         sortMode: _sortMode,
@@ -4606,6 +4613,7 @@ class _LibraryPageState extends State<LibraryPage> {
       }
       final currentState = _filterState!;
       _filterState = FilterState(
+        epoch: _resultEpoch(currentState.query),
         query: currentState.query,
         filteredVideos: sortedLibraryVideos(
           currentState.filteredVideos,
@@ -5150,6 +5158,9 @@ class _LibraryPageState extends State<LibraryPage> {
       _countRefreshCoordinator.cancelPending();
     }
     final query = _currentFilterQuery();
+    final resultEpoch = _resultEpoch(query);
+    // 标签定义目前与媒体库数据在同一提交边界内更新；后续引入 ChangeSet 后可独立提升该代次。
+    final countEpoch = _countEpoch(query);
     Future<void>.delayed(Duration.zero, () {
       if (!mounted || revision != _filterRevision || _store != store) {
         return;
@@ -5157,7 +5168,10 @@ class _LibraryPageState extends State<LibraryPage> {
       final nextState = changedVideos == null
           ? _computeFilterState(store, query)
           : _computeFilterStateFromDelta(store, query, changedVideos);
-      if (!mounted || revision != _filterRevision || _store != store) {
+      if (!mounted ||
+          revision != _filterRevision ||
+          _store != store ||
+          nextState.epoch != resultEpoch) {
         return;
       }
       setState(() {
@@ -5170,11 +5184,21 @@ class _LibraryPageState extends State<LibraryPage> {
         return;
       }
       _countRefreshCoordinator.schedule(
+        epoch: countEpoch,
         query: query,
         compute: store.resultCounts,
-        isStillCurrent: (_) =>
-            mounted && revision == _filterRevision && _store == store,
-        onComplete: (nextCounts) {
+        isStillCurrent: (epoch) =>
+            mounted &&
+            revision == _filterRevision &&
+            _store == store &&
+            epoch == _countEpoch(_currentFilterQuery()),
+        onComplete: (epoch, nextCounts) {
+          if (!mounted ||
+              epoch != countEpoch ||
+              revision != _filterRevision ||
+              _store != store) {
+            return;
+          }
           setState(() {
             _visibleResultCounts = nextCounts;
             _isRefreshingCounts = false;
@@ -5183,6 +5207,26 @@ class _LibraryPageState extends State<LibraryPage> {
       );
     });
   }
+
+  /** 返回当前查询可发布的结果版本。 */
+  LibraryResultEpoch _resultEpoch(FilterQuery query) =>
+      LibraryResultEpoch.fromQuery(
+        dataRevision: _libraryDataRevision,
+        query: query,
+        presentationSort: _librarySortFingerprint,
+      );
+
+  /** 返回当前查询可发布的计数版本；标签定义暂与数据提交共用代次。 */
+  LibraryCountEpoch _countEpoch(FilterQuery query) =>
+      LibraryCountEpoch.fromQuery(
+        dataRevision: _libraryDataRevision,
+        tagDefinitionRevision: _libraryDataRevision,
+        query: query,
+      );
+
+  /** 返回显式、跨运行稳定的页面排序指纹，避免对象默认字符串导致缓存身份漂移。 */
+  String get _librarySortFingerprint =>
+      '${_sortMode.name}:${_sortDirection.name}';
 
   FilterQuery _currentFilterQuery() {
     final store = _store;

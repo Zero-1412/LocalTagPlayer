@@ -277,8 +277,8 @@ void main() {
     final playerLines =
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
-    // 媒体库阈值随首个设置叶节点提取下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(7250));
+    // 媒体库阈值随设置叶节点与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
+    expect(libraryLines, lessThanOrEqualTo(7237));
     expect(playerLines, lessThanOrEqualTo(5400));
   });
 
@@ -356,6 +356,28 @@ void main() {
     expect(source, contains('LibraryPageApplicationService'));
     expect(source, contains('PlayerServiceFactory'));
     expect(source, contains('MediaProbeBackendFactory'));
+  });
+
+  test('library query epochs remain pure domain contracts', () {
+    final source = File(
+      'lib/src/features/library/domain/library_query_snapshot.dart',
+    ).readAsStringSync();
+    final filterSource = File(
+      'lib/src/services/tags/tag_query_service.dart',
+    ).readAsStringSync();
+    final pageSource = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+
+    expect(source, isNot(contains('package:flutter/')));
+    expect(source, isNot(contains('dart:io')));
+    expect(source, isNot(contains('BuildContext')));
+    expect(source, isNot(contains('sqlite')));
+    expect(filterSource, contains('LibraryResultEpoch'));
+    expect(filterSource, isNot(contains('_querySignature')));
+    expect(pageSource, contains('LibraryCountEpoch.fromQuery'));
+    expect(pageSource, isNot(contains('sourceKey:')));
+    expect(pageSource, isNot(contains('sortKey:')));
   });
 
   test('PlayerPage keeps hidden progress mounted before the full controls', () {

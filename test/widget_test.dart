@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/features/library/domain/library_query_snapshot.dart';
 import 'package:path/path.dart' as p;
 
 // ignore_for_file: slash_for_doc_comments
@@ -7432,23 +7433,33 @@ void main() {
     var computeCalls = 0;
 
     coordinator.schedule(
+      epoch: LibraryCountEpoch.fromQuery(
+        dataRevision: 0,
+        tagDefinitionRevision: 0,
+        query: const FilterQuery(keyword: 'old'),
+      ),
       query: const FilterQuery(keyword: 'old'),
       compute: (_) {
         computeCalls++;
         return {'old': 1};
       },
       isStillCurrent: (_) => true,
-      onComplete: completed.add,
+      onComplete: (_, counts) => completed.add(counts),
     );
     coordinator.cancelPending();
     coordinator.schedule(
+      epoch: LibraryCountEpoch.fromQuery(
+        dataRevision: 1,
+        tagDefinitionRevision: 1,
+        query: const FilterQuery(keyword: 'new'),
+      ),
       query: const FilterQuery(keyword: 'new'),
       compute: (_) {
         computeCalls++;
         return {'new': 2};
       },
       isStillCurrent: (_) => true,
-      onComplete: completed.add,
+      onComplete: (_, counts) => completed.add(counts),
     );
 
     await Future<void>.delayed(const Duration(milliseconds: 80));
@@ -8022,7 +8033,7 @@ void main() {
           tagContext: const TagQueryContext(),
         ),
         totalCount: 3,
-        sourceKey: 0,
+        dataRevision: 0,
       );
     const query = FilterQuery(keyword: 'target');
     expect(
@@ -8042,7 +8053,7 @@ void main() {
         tagContext: const TagQueryContext(),
       ),
       totalCount: 4,
-      sourceKey: 1,
+      dataRevision: 1,
     );
     final next = source.applyVideoDelta(query, [changedOut, changedIn, added]);
 
@@ -8063,7 +8074,7 @@ void main() {
         tagContext: const TagQueryContext(),
       ),
       totalCount: 4,
-      sourceKey: 2,
+      dataRevision: 2,
     );
     final zeroDelta = source.applyVideoDelta(query, const <VideoItem>[]);
     expect(zeroDelta.filteredVideos, same(next.filteredVideos));
@@ -8086,7 +8097,7 @@ void main() {
           tagContext: const TagQueryContext(),
         ),
         totalCount: 2,
-        sourceKey: 0,
+        dataRevision: 0,
       );
     expect(source.update(const FilterQuery()).resultCount, 2);
 
@@ -8096,7 +8107,7 @@ void main() {
         tagContext: const TagQueryContext(),
       ),
       totalCount: 1,
-      sourceKey: 1,
+      dataRevision: 1,
     );
 
     final refreshed = source.update(const FilterQuery());
