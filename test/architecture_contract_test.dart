@@ -279,7 +279,7 @@ void main() {
 
     // 媒体库阈值随结果来源导航 owner 迁移继续下调；后续迁移只能降低，禁止为通过测试而调高。
     expect(libraryLines, lessThanOrEqualTo(5748));
-    expect(playerLines, lessThanOrEqualTo(5325));
+    expect(playerLines, lessThanOrEqualTo(5322));
   });
 
   test('settings landing is a stateless feature leaf with preserved entry keys',
@@ -1130,6 +1130,34 @@ void main() {
     expect(page, isNot(contains('Timer? _shortcutFeedbackTimer')));
     expect(page, contains('Timer? _fullscreenQueueHideTimer'));
     expect(page, contains("FocusNode(debugLabel: 'player-shortcuts')"));
+  });
+
+  test('player shortcut suspension and focus eligibility have one pure owner',
+      () {
+    final page = File(
+      'lib/src/pages/player/player_page.dart',
+    ).readAsStringSync();
+    final gate = File(
+      'lib/src/features/player/application/'
+      'player_shortcut_gate_controller.dart',
+    ).readAsStringSync();
+
+    expect(gate, contains('class PlayerShortcutGateController'));
+    expect(gate, contains('void beginSuspension()'));
+    expect(gate, contains('void endSuspension()'));
+    expect(gate, contains('bool canHandle('));
+    expect(gate, contains('bool canRestoreFocus('));
+    expect(gate, isNot(contains("import 'package:flutter")));
+    expect(
+        page, contains('final _shortcutGate = PlayerShortcutGateController'));
+    expect(page, contains('_shortcutGate.beginSuspension();'));
+    expect(page, contains('_shortcutGate.endSuspension();'));
+    expect(page, contains('_shortcutGate.canHandle('));
+    expect(page, contains('_shortcutGate.canRestoreFocus('));
+    expect(page, isNot(contains('var _shortcutSuspensionDepth')));
+    expect(page, isNot(contains('var _editingManualTags')));
+    expect(page, contains('FocusManager.instance.primaryFocus'));
+    expect(page, contains('HardwareKeyboard.instance'));
   });
 
   test('scan and import lifecycle has one latest-only application owner', () {

@@ -15,6 +15,7 @@ import '../../features/player/application/player_backend_event_bridge.dart';
 import '../../features/player/application/player_interaction_state_controller.dart';
 import '../../features/player/application/player_open_request_controller.dart';
 import '../../features/player/application/player_session_controller.dart';
+import '../../features/player/application/player_shortcut_gate_controller.dart';
 import '../../features/player/domain/player_playback_progress.dart';
 import '../../models/media_details.dart';
 import '../../models/video_item.dart';
@@ -887,6 +888,8 @@ class PlayerPageState extends State<PlayerPage> {
   late final PlayerBackendEventBridge _backendEvents;
   /** 主控制条与短时快捷键反馈的纯状态及 Timer owner。 */
   late final PlayerInteractionStateController<IconData> _interaction;
+  /** 快捷键暂停深度与处理/焦点恢复资格的纯状态 owner。 */
+  final _shortcutGate = PlayerShortcutGateController();
   Timer? _queuePrefetchTimer;
   Timer? _fullscreenQueueHideTimer;
   Timer? _playbackHealthTimer;
@@ -968,12 +971,8 @@ class PlayerPageState extends State<PlayerPage> {
   /** 恢复选择弹窗期间暂停进度写入，避免刚打开的 0 秒覆盖稳定进度。 */
   var _choosingPlaybackStart = false;
   var _queueEndReached = false;
-  /** 标签弹窗打开期间阻止底层播放器重复消费 Escape，避免意外返回媒体库。 */
-  var _editingManualTags = false;
   /** 文件重命名事务期间阻止重复点击和播放器快捷键并发操作。 */
   var _renamingFile = false;
-  /** 原生文件对话框无法可靠暴露 Flutter Focus，使用显式深度暂停全部播放器快捷键。 */
-  var _shortcutSuspensionDepth = 0;
   /**
    * Flutter 弹层对应的原生裁剪矩形栈。
    *
@@ -3889,7 +3888,7 @@ class PlayerPageState extends State<PlayerPage> {
 
   /** 打开当前视频的 manual 标签编辑器，并在保存后刷新播放器上下文。 */
   Future<void> _editManualTags() async {
-    _editingManualTags = true;
+    _shortcutGate.setManualTagEditorOpen(true);
     try {
       await _withPlayerOverlaySurfaceOccluded(
         () => widget.onEditManualTags(_currentItem),
@@ -3898,7 +3897,7 @@ class PlayerPageState extends State<PlayerPage> {
         setState(() {});
       }
     } finally {
-      _editingManualTags = false;
+      _shortcutGate.setManualTagEditorOpen(false);
       _restorePlayerShortcutFocus();
     }
   }
@@ -4044,11 +4043,11 @@ class PlayerPageState extends State<PlayerPage> {
    */
   Future<T> _withPlayerShortcutsSuspended<T>(
       Future<T> Function() action) async {
-    _shortcutSuspensionDepth += 1;
+    _shortcutGate.beginSuspension();
     try {
       return await action();
     } finally {
-      _shortcutSuspensionDepth = math.max(0, _shortcutSuspensionDepth - 1);
+      _shortcutGate.endSuspension();
       _restorePlayerShortcutFocus();
     }
   }
@@ -4178,17 +4177,15 @@ class PlayerPageState extends State<PlayerPage> {
   /** 搜索/弹窗收起后在下一帧把 PageDown、Escape 等键盘导航交还播放器。 */
   void _restorePlayerShortcutFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          _shortcutSuspensionDepth > 0 ||
-          _editingManualTags ||
-          _settingsDialogOpen) {
-        return;
-      }
+      if (!mounted) return;
       final primaryFocus = FocusManager.instance.primaryFocus;
-      if (playerFocusIsOnDifferentRoute(
-        playerContext: context,
-        focus: primaryFocus,
+      final focusOnDifferentRoute = playerFocusIsOnDifferentRoute(
+          playerContext: context, focus: primaryFocus);
+      if (!_shortcutGate.canRestoreFocus(
+        settingsOpen: _settingsDialogOpen,
+        focusOnDifferentRoute: focusOnDifferentRoute,
       )) {
+        // 其它输入上下文仍有效时不得抢回播放器焦点。
         return;
       }
       _focusNode.requestFocus();
@@ -4567,15 +4564,15 @@ class PlayerPageState extends State<PlayerPage> {
       return KeyEventResult.ignored;
     }
     final primaryFocus = FocusManager.instance.primaryFocus;
-    if (_shortcutSuspensionDepth > 0 ||
-        _editingManualTags ||
-        _settingsDialogOpen ||
-        playerFocusIsEditable(primaryFocus) ||
-        playerFocusIsOnDifferentRoute(
-          playerContext: context,
-          focus: primaryFocus,
-        ) ||
-        playerRouteHasBlockingOverlay(context)) {
+    if (!_shortcutGate.canHandle(
+      settingsOpen: _settingsDialogOpen,
+      focusEditable: playerFocusIsEditable(primaryFocus),
+      focusOnDifferentRoute: playerFocusIsOnDifferentRoute(
+        playerContext: context,
+        focus: primaryFocus,
+      ),
+      blockingOverlay: playerRouteHasBlockingOverlay(context),
+    )) {
       // 输入框、弹窗、菜单和原生文件对话框统一暂停所有单键及组合播放器动作。
       return KeyEventResult.ignored;
     }

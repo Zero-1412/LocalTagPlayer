@@ -1,3 +1,9 @@
+## 2026-07-29 快捷键暂停与焦点资格 owner
+
+- `PlayerShortcutGateController` 统一嵌套暂停深度、manual 标签编辑、命令处理和焦点恢复资格。
+- FocusNode、HardwareKeyboard、Route/Overlay 探测与具体命令仍在页面；Phase 4C 完成。
+- 完整 431 项测试、静态分析、Windows Debug build 和正式入口启动通过；页面降到 5,322 行。
+
 ## 2026-07-29 控制条与快捷键反馈 Timer owner
 
 - 泛型纯 Dart `PlayerInteractionStateController<TIcon>` 唯一持有主控制条显隐、设置/

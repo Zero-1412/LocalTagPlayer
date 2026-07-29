@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.121` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.122` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -117,6 +117,10 @@ Phase 4C-1 将主控制条显隐、设置锁定、控制区悬停与短时快捷
 `PlayerInteractionStateController<TIcon>`。controller 唯一持有控制条/反馈两只 Timer，
 更新会取消旧 Timer，dispose 后拒绝迟到回调；页面只注入无上下文刷新回调和 `IconData`。
 Focus、键位解析、Overlay、全屏队列 Timer、窗口状态与播放器资源仍留在原 owner。
+
+Phase 4C-2 使用纯 Dart `PlayerShortcutGateController` 统一嵌套暂停深度、标签编辑门禁、
+命令处理资格与焦点恢复资格。页面继续采集 Focus/Route/Overlay/Keyboard 环境事实并执行
+具体命令，controller 不依赖 Flutter。Phase 4C 完成。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -604,12 +608,14 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.121`
+已完成基线：`Architecture Baseline 0.5.122`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.122`：快捷键暂停深度、标签编辑门禁、命令处理与焦点恢复资格归纯应用 owner；
+  Focus/Keyboard/Route/Overlay 探测和命令执行保持 presentation owner。
 - `0.5.121`：主控制条与快捷键反馈状态及两只短时 Timer 归单一纯应用 owner；
   设置/悬停锁定、latest Timer 覆盖和 dispose 后拒绝回调成为确定性状态合同。
 - `0.5.120`：播放器打开意图使用 revision/stable-ID/path 快照拒绝旧异步结果；四类

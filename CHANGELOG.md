@@ -148,6 +148,9 @@
 - 新交互会取消旧 Timer，dispose 后拒绝迟到刷新；Focus、键位解析、Overlay、全屏队列
   Timer、窗口和播放器资源 owner 未改变。`PlayerPage` 门禁降到 5,325；完整 426 项
   测试通过（3 项显式基准跳过），静态分析、Windows Debug build 与正式入口启动通过。
+- 完成 Phase 4C-2 快捷键门禁：嵌套暂停、标签编辑、命令处理和焦点恢复资格迁入纯
+  controller；Flutter 环境探测与命令执行留在页面。页面降到 5,322 行，完整 431 项测试、
+  静态分析、Windows Debug build 与正式入口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

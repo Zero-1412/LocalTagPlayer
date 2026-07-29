@@ -286,6 +286,10 @@
   关闭设置 → 连续触发快进与播放快捷键”，核对透明度、位置、遮挡和反馈覆盖。
 - 下一步进入 Phase 4C-2：只迁移快捷键暂停深度、焦点恢复资格与命令匹配纯状态；
   FocusNode、HardwareKeyboard、Route/Overlay 探测和具体播放器命令继续留在页面。
+- Phase 4C-2 已完成：`PlayerShortcutGateController` 统一嵌套暂停、manual 标签编辑、
+  命令处理和焦点恢复资格；页面继续采集 Focus/Route/Overlay/Keyboard 并执行命令。
+- 完整 431 项测试通过（3 项跳过），静态分析、Windows Debug build 与正式入口启动通过；
+  `PlayerPage` 门禁降到 5,322。Phase 4C 完成，下一步进入 Phase 4D 原生资源单一 owner。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 
