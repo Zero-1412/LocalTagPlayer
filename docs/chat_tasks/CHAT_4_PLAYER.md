@@ -1,3 +1,14 @@
+## 2026-07-29 控制条与快捷键反馈 Timer owner
+
+- 泛型纯 Dart `PlayerInteractionStateController<TIcon>` 唯一持有主控制条显隐、设置/
+  悬停锁定、快捷键反馈内容和两只短时 Timer；新显示意图会取消旧 Timer。
+- 设置浮层/控制区悬停继续锁定可见，关闭/离开恢复 3 秒倒计时；快捷键反馈继续保持
+  850ms、seek 左上角水印与普通居中样式，dispose 后拒绝迟到回调。
+- Focus、键位解析、Overlay、全屏队列 Timer、窗口/texture 与播放器命令均未迁移；
+  `PlayerPage` 门禁由 5,370 降到 5,325。
+- focused/页面/旧交互/架构合同与完整 426 项测试通过（3 项跳过），静态分析、Windows
+  Debug build 和正式入口可见窗口启动通过。
+
 ## 2026-07-29 latest-only open 与 backend event bridge
 
 - `PlayerOpenRequestController` 以 `revision + videoId + path` 捕获打开意图；更新选择、

@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.120` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.121` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -112,6 +112,11 @@ Phase 4B 使用 `revision + videoId + path` 不可变快照表达 latest-only �
 error、position、playing 四类 Stream 订阅，并在 backend stop/dispose 前幂等取消；
 页面继续解释 EOF、进度节流、错误面板与播放图标。继续观看与恢复位置纯函数迁入
 player domain，媒体库不再反向导入播放器 presentation。
+
+Phase 4C-1 将主控制条显隐、设置锁定、控制区悬停与短时快捷键反馈迁入泛型纯 Dart
+`PlayerInteractionStateController<TIcon>`。controller 唯一持有控制条/反馈两只 Timer，
+更新会取消旧 Timer，dispose 后拒绝迟到回调；页面只注入无上下文刷新回调和 `IconData`。
+Focus、键位解析、Overlay、全屏队列 Timer、窗口状态与播放器资源仍留在原 owner。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -599,12 +604,14 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.120`
+已完成基线：`Architecture Baseline 0.5.121`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.121`：主控制条与快捷键反馈状态及两只短时 Timer 归单一纯应用 owner；
+  设置/悬停锁定、latest Timer 覆盖和 dispose 后拒绝回调成为确定性状态合同。
 - `0.5.120`：播放器打开意图使用 revision/stable-ID/path 快照拒绝旧异步结果；四类
   backend Stream 归单一纯事件 bridge，并在 PlayerService 释放前统一幂等取消。
 - `0.5.119`：播放器来源队列、二级标签子集与播放/选择索引迁入纯应用会话 owner；

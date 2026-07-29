@@ -279,7 +279,7 @@ void main() {
 
     // 媒体库阈值随结果来源导航 owner 迁移继续下调；后续迁移只能降低，禁止为通过测试而调高。
     expect(libraryLines, lessThanOrEqualTo(5748));
-    expect(playerLines, lessThanOrEqualTo(5370));
+    expect(playerLines, lessThanOrEqualTo(5325));
   });
 
   test('settings landing is a stateless feature leaf with preserved entry keys',
@@ -1102,6 +1102,34 @@ void main() {
         "player_playback_progress.dart';",
       ),
     );
+  });
+
+  test('player control visibility and feedback timers have one pure owner', () {
+    final page = File(
+      'lib/src/pages/player/player_page.dart',
+    ).readAsStringSync();
+    final controller = File(
+      'lib/src/features/player/application/'
+      'player_interaction_state_controller.dart',
+    ).readAsStringSync();
+
+    expect(controller, contains('class PlayerInteractionStateController'));
+    expect(controller, contains('Timer? _controlsHideTimer'));
+    expect(controller, contains('Timer? _feedbackHideTimer'));
+    expect(controller, contains('void showControls('));
+    expect(controller, contains('void showFeedback('));
+    expect(controller, contains('void dispose()'));
+    expect(controller, isNot(contains("import 'package:flutter")));
+    expect(controller, isNot(contains('BuildContext ')));
+    expect(controller, isNot(contains('FocusNode')));
+    expect(page, contains('PlayerInteractionStateController<IconData>'));
+    expect(page, contains('_interaction.openSettings();'));
+    expect(page, contains('_interaction.closeSettings();'));
+    expect(page, contains('_interaction.dispose();'));
+    expect(page, isNot(contains('Timer? _controlsHideTimer')));
+    expect(page, isNot(contains('Timer? _shortcutFeedbackTimer')));
+    expect(page, contains('Timer? _fullscreenQueueHideTimer'));
+    expect(page, contains("FocusNode(debugLabel: 'player-shortcuts')"));
   });
 
   test('scan and import lifecycle has one latest-only application owner', () {

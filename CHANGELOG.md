@@ -143,6 +143,11 @@
   播放进度纯函数迁入 player domain，媒体库不再导入播放器 presentation。`PlayerPage`
   门禁降到 5,370；完整 421 项测试通过（3 项显式基准跳过），静态分析、Windows Debug
   build 与正式入口可见窗口启动通过。
+- 完成 Phase 4C-1 控制条/反馈状态切片：主控制条显隐、设置与悬停锁定、快捷键反馈
+  文案/图标/水印类型，以及两只短时 Timer 迁入泛型纯 Dart interaction controller。
+- 新交互会取消旧 Timer，dispose 后拒绝迟到刷新；Focus、键位解析、Overlay、全屏队列
+  Timer、窗口和播放器资源 owner 未改变。`PlayerPage` 门禁降到 5,325；完整 426 项
+  测试通过（3 项显式基准跳过），静态分析、Windows Debug build 与正式入口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

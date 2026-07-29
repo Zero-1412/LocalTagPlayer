@@ -363,6 +363,17 @@ Phase 4B 的落地边界：
   `PlayerBackend`、后端选择、texture/native window 和全屏 owner 均未改变。
 - 4 项 request/event focused tests、页面回归、架构合同和全量门禁通过；`PlayerPage`
   预算降到 5,370，Phase 4B 完成。
+
+Phase 4C-1 的落地边界：
+
+- `PlayerInteractionStateController<TIcon>` 唯一持有主控制条显隐、设置/悬停锁定、
+  快捷键反馈内容，以及控制条/反馈两只可取消 Timer。
+- 新显示意图覆盖旧 Timer；设置或悬停期间不隐藏，关闭/离开恢复统一倒计时，dispose
+  后不再调用 presentation 回调。
+- controller 不导入 Flutter、Focus、Overlay、Route、窗口或播放器资源；页面注入
+  `IconData` 与无上下文刷新回调。
+- FocusNode、键位解析、全屏队列 Timer、窗口/texture 和快捷键命令执行保持原 owner；
+  4 项 focused tests、页面回归和全量门禁通过，页面预算降到 5,325。
 - [ ] 画质实验只依赖 `PlayerRuntimeAccess`，不进入 Widget 状态机。
 - [ ] 保留快速切换 latest-request、纹理释放、全屏恢复和 filtered queue 合同。
 

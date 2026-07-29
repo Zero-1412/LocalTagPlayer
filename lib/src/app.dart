@@ -48,6 +48,7 @@ export 'pages/player/player_open_request_controller.dart';
 export 'pages/player/player_page.dart';
 export 'pages/player/player_playback_controller.dart';
 export 'features/player/application/player_backend_event_bridge.dart';
+export 'features/player/application/player_interaction_state_controller.dart';
 export 'features/player/application/player_open_request_controller.dart';
 export 'features/player/application/player_session_controller.dart';
 export 'features/player/domain/player_playback_progress.dart';

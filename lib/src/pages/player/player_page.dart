@@ -12,6 +12,7 @@ import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
 import '../../features/player/application/player_backend_event_bridge.dart';
+import '../../features/player/application/player_interaction_state_controller.dart';
 import '../../features/player/application/player_open_request_controller.dart';
 import '../../features/player/application/player_session_controller.dart';
 import '../../features/player/domain/player_playback_progress.dart';
@@ -49,13 +50,6 @@ import 'player_settings_panel.dart';
 import 'player_video_aspect_mode.dart';
 
 // ignore_for_file: slash_for_doc_comments
-
-/** 设置浮层或控制条鼠标驻留期间必须阻止播放控制条自动隐藏。 */
-bool playerControlsShouldAutoHide({
-  required bool settingsOpen,
-  required bool pointerInControlBar,
-}) =>
-    !settingsOpen && !pointerInControlBar;
 
 /**
  * 本地视频打开超过该时长后才展示加载遮罩。
@@ -891,8 +885,8 @@ class PlayerPageState extends State<PlayerPage> {
   String? _compatibilityPromptPath;
   /** 集中持有四类后端事件订阅，并在 PlayerService 释放前统一取消。 */
   late final PlayerBackendEventBridge _backendEvents;
-  Timer? _controlsHideTimer;
-  Timer? _shortcutFeedbackTimer;
+  /** 主控制条与短时快捷键反馈的纯状态及 Timer owner。 */
+  late final PlayerInteractionStateController<IconData> _interaction;
   Timer? _queuePrefetchTimer;
   Timer? _fullscreenQueueHideTimer;
   Timer? _playbackHealthTimer;
@@ -934,16 +928,6 @@ class PlayerPageState extends State<PlayerPage> {
   DateTime? _hdrMappingRollbackAt;
   /** 画质余量扩展采样每两秒执行一次，供自动增强与 HDR 压力保护共享。 */
   var _qualityMarginSampleTick = 0;
-  var _controlsVisible = true;
-  var _shortcutFeedbackVisible = false;
-  String? _shortcutFeedbackLabel;
-  IconData _shortcutFeedbackIcon = Icons.keyboard_rounded;
-  /** 当前快捷键反馈是否应显示为左上角快进/快退文字水印。 */
-  var _shortcutFeedbackIsSeekWatermark = false;
-  /** 鼠标停留在底部进度与控制区时暂停自动隐藏计时。 */
-  var _pointerInControlBar = false;
-  /** 设置浮层展开期间锁定底部进度与控制区为可见。 */
-  var _settingsDialogOpen = false;
   DateTime? _lastProgressWriteAt;
   Duration _lastPersistedPosition = Duration.zero;
   DateTime? _ignoreQueueSelectionBefore;
@@ -1089,6 +1073,19 @@ class PlayerPageState extends State<PlayerPage> {
   PlayerOpenTarget get _currentOpenTarget =>
       (videoId: _currentItem.videoId, path: _currentItem.path);
 
+  bool get _controlsVisible => _interaction.controlsVisible;
+
+  bool get _shortcutFeedbackVisible => _interaction.feedbackVisible;
+
+  String? get _shortcutFeedbackLabel => _interaction.feedbackLabel;
+
+  IconData get _shortcutFeedbackIcon => _interaction.feedbackIcon;
+
+  bool get _shortcutFeedbackIsSeekWatermark =>
+      _interaction.feedbackIsSeekWatermark;
+
+  bool get _settingsDialogOpen => _interaction.settingsOpen;
+
   String get _filterSummary {
     final value = widget.queueTitle.trim();
     return value.isEmpty ? '\u5168\u90e8\u89c6\u9891' : value;
@@ -1113,6 +1110,12 @@ class PlayerPageState extends State<PlayerPage> {
   @override
   void initState() {
     super.initState();
+    _interaction = PlayerInteractionStateController<IconData>(
+      initialFeedbackIcon: Icons.keyboard_rounded,
+      onChanged: () {
+        if (mounted) setState(() {});
+      },
+    );
     _isWindowFullscreen =
         widget.fullscreenSessionController.shouldOpenFullscreen;
     _effectivePlaybackSettings = widget.playbackSettings;
@@ -2211,26 +2214,7 @@ class PlayerPageState extends State<PlayerPage> {
     );
   }
 
-  void _showVideoControls() {
-    _controlsHideTimer?.cancel();
-    if (!_controlsVisible && mounted) {
-      setState(() => _controlsVisible = true);
-    }
-    if (playerControlsShouldAutoHide(
-      settingsOpen: _settingsDialogOpen,
-      pointerInControlBar: _pointerInControlBar,
-    )) {
-      _controlsHideTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted &&
-            playerControlsShouldAutoHide(
-              settingsOpen: _settingsDialogOpen,
-              pointerInControlBar: _pointerInControlBar,
-            )) {
-          setState(() => _controlsVisible = false);
-        }
-      });
-    }
-  }
+  void _showVideoControls() => _interaction.showControls();
 
   /** 显示短时快捷键结果；控制条仍只由底部热区或设置入口唤出。 */
   void _showShortcutFeedback(
@@ -2238,37 +2222,16 @@ class PlayerPageState extends State<PlayerPage> {
     IconData icon, {
     bool isSeekWatermark = false,
   }) {
-    _shortcutFeedbackTimer?.cancel();
-    if (mounted) {
-      setState(() {
-        _shortcutFeedbackLabel = label;
-        _shortcutFeedbackIcon = icon;
-        _shortcutFeedbackIsSeekWatermark = isSeekWatermark;
-        _shortcutFeedbackVisible = true;
-      });
-    }
-    _shortcutFeedbackTimer = Timer(const Duration(milliseconds: 850), () {
-      if (mounted) {
-        setState(() => _shortcutFeedbackVisible = false);
-      }
-    });
+    _interaction.showFeedback(
+      label: label,
+      icon: icon,
+      isSeekWatermark: isSeekWatermark,
+    );
   }
 
   /** 控制条进出状态只协调计时，不触发播放、筛选队列或媒体后台任务。 */
-  void _setPointerInControlBar(bool inside) {
-    if (_pointerInControlBar == inside) {
-      return;
-    }
-    _pointerInControlBar = inside;
-    if (inside) {
-      _controlsHideTimer?.cancel();
-      if (!_controlsVisible && mounted) {
-        setState(() => _controlsVisible = true);
-      }
-      return;
-    }
-    _showVideoControls();
-  }
+  void _setPointerInControlBar(bool inside) =>
+      _interaction.setPointerInControlBar(inside);
 
   /** 根据画面局部坐标识别底部 112px 控制区；画面其它区域不得唤出控制条。 */
   void _handleVideoControlsPointer(PointerEvent event) {
@@ -2912,13 +2875,7 @@ class PlayerPageState extends State<PlayerPage> {
   Future<void> _showControlSettingsDialog() async {
     if (_settingsDialogOpen) return;
     final anchorRect = _settingsButtonRect();
-    _controlsHideTimer?.cancel();
-    if (mounted) {
-      setState(() {
-        _settingsDialogOpen = true;
-        _controlsVisible = true;
-      });
-    }
+    _interaction.openSettings();
     try {
       await _withPlayerOverlaySurfaceOccluded(
         () => showPlayerSettingsDialog(
@@ -2950,8 +2907,7 @@ class PlayerPageState extends State<PlayerPage> {
       );
     } finally {
       if (mounted) {
-        setState(() => _settingsDialogOpen = false);
-        _showVideoControls();
+        _interaction.closeSettings();
         _restorePlayerShortcutFocus();
       }
     }
@@ -4776,8 +4732,7 @@ class PlayerPageState extends State<PlayerPage> {
     // 路由或测试直接卸载播放器时同样进入退出态，禁止尚未结束的健康采样把释放期停顿误判为 HDR 压力。
     _isExiting = true;
     _openRequests.cancel();
-    _controlsHideTimer?.cancel();
-    _shortcutFeedbackTimer?.cancel();
+    _interaction.dispose();
     _queuePrefetchTimer?.cancel();
     _fullscreenQueueHideTimer?.cancel();
     _playbackHealthTimer?.cancel();

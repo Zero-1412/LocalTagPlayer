@@ -272,6 +272,20 @@
   遮罩、错误面板、`N / total`、来源顺序和筛选保留。
 - 下一步进入 Phase 4C：只拆控件显隐、计时器和快捷键的纯状态/调度边界；不得迁移
   texture/native window、全屏资源、PlayerBackend、诊断采样或 filtered queue。
+- Phase 4C-1 已完成交互显隐 owner：泛型纯 Dart
+  `PlayerInteractionStateController<TIcon>` 唯一持有主控制条与快捷键反馈状态，以及
+  两只可取消 Timer；新显示意图覆盖旧 Timer，dispose 后不再发布迟到回调。
+- 设置浮层和控制区悬停继续按原规则锁定控制条；关闭/离开后恢复 3 秒自动隐藏，快捷键
+  反馈继续显示 850ms，并保留 seek 左上角水印与普通居中反馈。页面只注入 `IconData`
+  和无上下文重建回调。
+- Focus、键位解析、Overlay、全屏队列 Timer、窗口/texture 生命周期和快捷键命令执行
+  均保持原 owner；`PlayerPage` 门禁由 5,370 降到 5,325。
+- Phase 4C-1 focused/widget tests 与完整 426 项测试通过（3 项显式基准跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口可见窗口启动通过。
+  Computer Use 仍不可用；人工复测路径为“进入/离开底部控制区 → 等待 3 秒 → 打开/
+  关闭设置 → 连续触发快进与播放快捷键”，核对透明度、位置、遮挡和反馈覆盖。
+- 下一步进入 Phase 4C-2：只迁移快捷键暂停深度、焦点恢复资格与命令匹配纯状态；
+  FocusNode、HardwareKeyboard、Route/Overlay 探测和具体播放器命令继续留在页面。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 
