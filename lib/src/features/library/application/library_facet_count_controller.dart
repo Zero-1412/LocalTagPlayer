@@ -48,6 +48,13 @@ class LibraryFacetCountController {
     _visibleCounts = _freeze(counts);
   }
 
+  /** 从 Repository 已水合的 usageCount 构造无需全量扫描的回退计数。 */
+  Map<String, int> fallbackCounts(Iterable<TagItem> tags) {
+    return Map<String, int>.unmodifiable(<String, int>{
+      for (final tag in tags) tag.id: tag.usageCount,
+    });
+  }
+
   /** 清空稳定计数，让页面暂时回退到持久化 usageCount。 */
   void clearStable() {
     if (_disposed) {

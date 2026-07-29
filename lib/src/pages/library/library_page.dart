@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -21,12 +20,14 @@ import '../../features/settings/presentation/data_backup_settings_workspace.dart
 import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/settings_workspace_theme.dart';
 import '../../features/library/application/library_facet_count_controller.dart';
+import '../../features/library/application/library_playback_queue_controller.dart';
 import '../../features/library/application/library_query_controller.dart';
 import '../../features/library/application/library_revision_tracker.dart';
 import '../../features/library/application/library_selection_controller.dart';
 import '../../features/library/application/library_sort_controller.dart';
 import '../../features/library/application/library_view_preferences_controller.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
+import '../../features/library/presentation/library_queue_title.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/data_backup_models.dart';
 import '../../models/library_sort.dart';
@@ -323,51 +324,12 @@ extension _LibraryPageDerivedState on _LibraryPageState {
   }
 
   /**
-   * 当前排序控件对应的视频比较器。
-   */
-  int _compareVideos(VideoItem a, VideoItem b) {
-    return _sortController.compare(a, b);
-  }
-
-  /**
-   * 切换排序字段，并只重排当前结果。
-   *
-   * 排序不改变筛选命中集合和标签计数，因此不能复用完整筛选刷新路径；
-   * 否则大媒体库会在每次切换字段时额外触发 resultCounts 重算。
-   */
-  void _setSortMode(SortMode mode) {
-    _applySortChange(sortMode: mode);
-  }
-
-  /**
    * 切换排序方向，并只重排当前结果。
    */
   void _toggleSortDirection() {
     _applySortChange(
       sortDirection: _sortController.oppositeDirection,
     );
-  }
-
-  /**
-   * 播放器过滤队列标题。
-   */
-  String _queueTitle({
-    required LibraryApplicationFacade store,
-    required int playlistLength,
-  }) {
-    return switch (_resultMode) {
-      _LibraryResultMode.recent =>
-        '\u6700\u8fd1\u64ad\u653e  |  $playlistLength / ${store.videos.length}',
-      _LibraryResultMode.favorites =>
-        '\u672c\u5730\u6536\u85cf  |  $playlistLength / ${store.videos.length}',
-      _LibraryResultMode.local =>
-        '${_localLibraryPath ?? '\u672c\u5730\u5a92\u4f53\u5e93'}  |  $playlistLength / ${store.videos.length}',
-      _LibraryResultMode.library => _filterSummary(
-          store: store,
-          resultCount: playlistLength,
-          totalCount: store.videos.length,
-        ),
-    };
   }
 }
 
@@ -2376,6 +2338,8 @@ class _LibraryPageState extends State<LibraryPage> {
   final _queryController = LibraryQueryController();
   /** 当前候选计数与全库稳定计数的唯一 owner。 */
   final _facetCountController = LibraryFacetCountController();
+  /** 已接受结果到 filtered playback queue 的唯一转换 owner。 */
+  final _playbackQueueController = LibraryPlaybackQueueController();
   final _searchController = TextEditingController();
   /**
    * 主搜索框焦点节点。
@@ -2388,9 +2352,6 @@ class _LibraryPageState extends State<LibraryPage> {
   final _selectedChildTags = <String>{};
   final _selectedGroupTagIds = <String, Set<String>>{};
   final _excludedTagIds = <String>{};
-  FilterState? get _filterState => _queryController.state;
-  Map<String, int> get _visibleResultCounts =>
-      _facetCountController.visibleCounts;
 
   /**
    * 右侧标签发现面板使用的全库稳定计数。
@@ -2398,7 +2359,6 @@ class _LibraryPageState extends State<LibraryPage> {
    * 当前筛选会改变视频结果，但标签面板中的其它标签数量不能因为当前筛选被压缩到 0，
    * 否则用户无法判断原始标签规模。
    */
-  Map<String, int> get _stableTagCounts => _facetCountController.stableCounts;
   var _playbackDataRevision = 0;
   var _suppressSearchControllerChange = false;
   var _searchControllerChangeQueued = false;
@@ -2523,6 +2483,7 @@ class _LibraryPageState extends State<LibraryPage> {
     _libraryHeaderVisible.dispose();
     _queryController.dispose();
     _facetCountController.dispose();
+    _playbackQueueController.clear();
     super.dispose();
   }
 
@@ -2645,7 +2606,9 @@ class _LibraryPageState extends State<LibraryPage> {
           _dataBackupSettings = dataBackupSettings;
           _lastObservedSearchText = _searchController.text;
           _queryController.seed(_buildImmediateFilterState(store));
-          _facetCountController.seedVisible(_fallbackResultCounts(store));
+          _facetCountController.seedVisible(
+            _facetCountController.fallbackCounts(store.allTagItems),
+          );
           _facetCountController.clearStable();
         });
     if (diagnostics == null) {
@@ -2748,7 +2711,7 @@ class _LibraryPageState extends State<LibraryPage> {
         final probes = _libraryMediaDetailsService;
         return LibraryStressSnapshot(
           videoCount: store.videos.length,
-          visibleCount: _filterState?.filteredVideos.length ?? 0,
+          visibleCount: _queryController.state?.filteredVideos.length ?? 0,
           roots: List<String>.unmodifiable(store.roots),
           thumbnailQueued: thumbnailService.queuedJobs,
           thumbnailActive: thumbnailService.activeJobs,
@@ -3193,12 +3156,6 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  Map<String, int> _fallbackResultCounts(LibraryApplicationFacade store) {
-    return {
-      for (final tag in store.allTagItems) tag.id: tag.usageCount,
-    };
-  }
-
   /** 在低频标签维护完成后同步刷新全库稳定计数快照。 */
   void _refreshStableTagCountsNow(LibraryApplicationFacade store) {
     _facetCountController.refreshStableNow(
@@ -3308,10 +3265,11 @@ class _LibraryPageState extends State<LibraryPage> {
         direction: _sortDirection,
         denseResultGrid: _denseResultGrid,
       );
-      if (_resultMode != _LibraryResultMode.library || _filterState == null) {
+      if (_resultMode != _LibraryResultMode.library ||
+          _queryController.state == null) {
         return;
       }
-      final currentState = _filterState!;
+      final currentState = _queryController.state!;
       final sortedState = FilterState(
         epoch: _resultEpoch(currentState.query),
         query: currentState.query,
@@ -3877,8 +3835,8 @@ class _LibraryPageState extends State<LibraryPage> {
       ),
       totalCount: store.videos.length,
       dataRevision: _libraryDataRevision,
-      sortFingerprint: _librarySortFingerprint,
-      compare: _compareVideos,
+      sortFingerprint: _sortController.fingerprint,
+      compare: _sortController.compare,
       sortVideos: _sortController.sort,
     );
     _queryController.schedule(
@@ -3934,7 +3892,7 @@ class _LibraryPageState extends State<LibraryPage> {
       LibraryResultEpoch.fromQuery(
         dataRevision: _libraryDataRevision,
         query: query,
-        presentationSort: _librarySortFingerprint,
+        presentationSort: _sortController.fingerprint,
       );
 
   /** 返回当前查询可发布的计数版本；标签定义使用独立代次。 */
@@ -3944,9 +3902,6 @@ class _LibraryPageState extends State<LibraryPage> {
         tagDefinitionRevision: _tagDefinitionRevision,
         query: query,
       );
-
-  /** 返回显式、跨运行稳定的页面排序指纹，避免对象默认字符串导致缓存身份漂移。 */
-  String get _librarySortFingerprint => _sortController.fingerprint;
 
   FilterQuery _currentFilterQuery() {
     final store = _store;
@@ -4294,7 +4249,8 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       return;
     }
-    final filterState = _filterState ?? _buildImmediateFilterState(store);
+    final filterState =
+        _queryController.state ?? _buildImmediateFilterState(store);
     final querySummary = _filterSummary(
       store: store,
       resultCount: filterState.resultCount,
@@ -4413,7 +4369,8 @@ class _LibraryPageState extends State<LibraryPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final filterState = _filterState ?? _buildImmediateFilterState(store);
+    final filterState =
+        _queryController.state ?? _buildImmediateFilterState(store);
     final filteredVideos = filterState.filteredVideos;
     final recentVideos = _sortedRecentVideos(store);
     final favoriteVideos = _sortedFavoriteVideos(store);
@@ -4426,8 +4383,38 @@ class _LibraryPageState extends State<LibraryPage> {
     final localEntries = _resultMode == _LibraryResultMode.local
         ? _cachedLocalLibraryEntries(store)
         : const <LocalLibraryEntry>[];
-    final localVideoCount =
-        localEntries.where((entry) => !entry.isFolder).length;
+    final localVideos = <VideoItem>[
+      for (final entry in localEntries)
+        if (entry.video != null) entry.video!,
+    ];
+    final localVideoCount = localVideos.length;
+    final displayedQueueVideos =
+        _resultMode == _LibraryResultMode.local ? localVideos : videos;
+    final playbackBinding = bindDisplayedPlaybackResult(
+      controller: _playbackQueueController,
+      sourceName: _resultMode.name,
+      acceptedLibraryEpoch: filterState.epoch,
+      displayedVideos: displayedQueueVideos,
+      totalCount: store.videos.length,
+      dataRevision: _libraryDataRevision,
+      playbackDataRevision: _playbackDataRevision,
+      sortFingerprint: _sortController.fingerprint,
+      localPath: _localLibraryPath,
+      libraryTitle: _filterSummary(
+        store: store,
+        resultCount: displayedQueueVideos.length,
+        totalCount: store.videos.length,
+      ),
+    );
+    void openAcceptedVideo(VideoItem item, List<VideoItem> playlist) =>
+        unawaited(
+          _openVideo(
+            item,
+            playlist,
+            playbackBinding.result,
+            playbackBinding.queueTitle,
+          ),
+        );
     final displayResultCount = switch (_resultMode) {
       _LibraryResultMode.recent => videos.length,
       _LibraryResultMode.favorites => videos.length,
@@ -4445,18 +4432,18 @@ class _LibraryPageState extends State<LibraryPage> {
     };
     final tags = store.allTags.toList()..sort();
     final tagGroups = _tagGroupsForSidebar(store);
-    final resultCounts = _visibleResultCounts.isEmpty
-        ? _fallbackResultCounts(store)
-        : _visibleResultCounts;
+    final resultCounts = _facetCountController.visibleCounts.isEmpty
+        ? _facetCountController.fallbackCounts(store.allTagItems)
+        : _facetCountController.visibleCounts;
     final pathDerivedTagCounts = {
       for (final group in tagGroups)
         if (group.id == 'folder.primary' || group.id == 'folder.child')
           for (final tag in group.items) tag.id: tag.usageCount,
     };
     final stableTagCounts = {
-      ...(_stableTagCounts.isEmpty
-          ? _fallbackResultCounts(store)
-          : _stableTagCounts),
+      ...(_facetCountController.stableCounts.isEmpty
+          ? _facetCountController.fallbackCounts(store.allTagItems)
+          : _facetCountController.stableCounts),
       ...pathDerivedTagCounts,
     };
     final selectedGroupTags = _selectedGroupTagItems(store);
@@ -4604,7 +4591,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       canGoBack: _localLibraryBackStack.isNotEmpty,
                       onBack: _goBackLocalLibraryPath,
                       onOpenFolder: _openLocalLibraryFolder,
-                      onOpenVideo: _openVideo,
+                      onOpenVideo: openAcceptedVideo,
                       onRevealLocation: _revealVideoLocation,
                       onToggleFavorite: _toggleFavorite,
                       onDelete: _requestDeleteVideo,
@@ -4620,7 +4607,7 @@ class _LibraryPageState extends State<LibraryPage> {
                           thumbnailService: thumbnailService,
                           playbackSettings: _playbackSettings,
                           dense: _denseResultGrid,
-                          onOpen: _openVideo,
+                          onOpen: openAcceptedVideo,
                           onRevealLocation: _revealVideoLocation,
                           onToggleFavorite: _toggleFavorite,
                           onDeleteVideo: _requestDeleteVideo,
@@ -4658,7 +4645,7 @@ class _LibraryPageState extends State<LibraryPage> {
                           dense: _denseResultGrid,
                           columnReferenceWidth: gridColumnReferenceWidth,
                           onVisible: _prioritizeVisibleLibraryItem,
-                          onOpen: _openVideo,
+                          onOpen: openAcceptedVideo,
                           onRevealLocation: _revealVideoLocation,
                           onToggleFavorite: _toggleFavorite,
                           onDelete: _requestDeleteVideo,
@@ -4733,7 +4720,7 @@ class _LibraryPageState extends State<LibraryPage> {
         layoutSize: layoutSize,
         hasActiveFilters: _hasActiveFilters,
         onSearchChanged: (_) => _handleSearchControllerChanged(),
-        onSortChanged: _setSortMode,
+        onSortChanged: (mode) => _applySortChange(sortMode: mode),
         onSortDirectionToggle: _toggleSortDirection,
         denseResultGrid: _denseResultGrid,
         onResultViewChanged: _setResultView,
@@ -4920,16 +4907,13 @@ class _LibraryPageState extends State<LibraryPage> {
                       mainLibraryLayoutSlotsForWidth(constraints.maxWidth);
                   // 列数使用默认侧栏占位后的窗口基准宽度。左右侧栏开合不会改变该值，
                   // 因此只会让结果区里的卡片缩放；只有窗口尺寸改变才可能跨越列数断点。
-                  final gridColumnReferenceWidth = math
-                      .max(
-                        1.0,
-                        switch (layoutSize) {
-                          LayoutSize.compact => constraints.maxWidth,
-                          LayoutSize.medium => constraints.maxWidth - 248,
-                          LayoutSize.expanded =>
-                            constraints.maxWidth - expandedSlots.sidebarWidth,
-                        },
-                      )
+                  final gridColumnReferenceWidth = (switch (layoutSize) {
+                    LayoutSize.compact => constraints.maxWidth,
+                    LayoutSize.medium => constraints.maxWidth - 248,
+                    LayoutSize.expanded =>
+                      constraints.maxWidth - expandedSlots.sidebarWidth,
+                  })
+                      .clamp(1.0, double.infinity)
                       .toDouble();
                   return Row(
                     children: [
@@ -5292,15 +5276,31 @@ class _LibraryPageState extends State<LibraryPage> {
     });
   }
 
-  Future<void> _openVideo(VideoItem item, List<VideoItem> playlist) async {
+  Future<void> _openVideo(
+    VideoItem item,
+    List<VideoItem> playlist,
+    LibraryResultSnapshot acceptedResult,
+    String acceptedQueueTitle,
+  ) async {
     final store = _store;
     if (store == null) {
       return;
     }
+    final selection = _playbackQueueController.prepareSelection(
+      result: acceptedResult,
+      acceptedVideos: playlist,
+      selectedVideoId: item.videoId,
+    );
+    if (selection == null) {
+      debugPrint('PLAYER_QUEUE_REJECTED reason=stale_result');
+      return;
+    }
+    final preparedQueue = selection.queue;
+    final selectedItem = selection.selectedItem;
     if (_playbackSettings.autoRemoveMissingOrUnreadableVideos &&
-        !await _fileSystem.fileExists(item.path)) {
+        !await _fileSystem.fileExists(selectedItem.path)) {
       // 点击与后台清理可能竞态；播放前再次确认路径，失效时只删数据库记录并阻止进入错误页。
-      await store.deleteVideo(item.path);
+      await store.deleteVideo(selectedItem.path);
       if (mounted) {
         _markLibraryDataChanged(tagDefinitionsChanged: true);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -5323,19 +5323,25 @@ class _LibraryPageState extends State<LibraryPage> {
       },
       // 在预检、缩略图预热和播放器解码开始前先让 sidecar 停在文件边界，避免
       // 机械盘随机 fingerprint 读取与当前视频顺序读取互相拖死。
-      action: () => _openVideoAfterScanYield(item, playlist),
+      action: () => _openVideoAfterScanYield(
+        selectedItem,
+        preparedQueue,
+        acceptedQueueTitle,
+      ),
     );
   }
 
   /** 在扫描已让出磁盘后执行既有预检、队列预热和 filtered queue 播放链路。 */
   Future<void> _openVideoAfterScanYield(
     VideoItem item,
-    List<VideoItem> playlist,
+    LibraryPlaybackQueue preparedQueue,
+    String queueTitle,
   ) async {
     final store = _store;
     if (store == null) {
       return;
     }
+    final playlist = preparedQueue.videos;
     var playbackDetails = item.mediaDetails;
     if (Platform.isWindows &&
         _playbackSettings.hardwareDecodingEnabled &&
@@ -5380,21 +5386,12 @@ class _LibraryPageState extends State<LibraryPage> {
     final thumbnailService = _thumbnailService!;
     final activeChildTag =
         _selectedChildTags.isEmpty ? null : _selectedChildTags.first;
-    final queueTitle = _queueTitle(
-      store: store,
-      playlistLength: playlist.length,
-    );
     // 在路由切换前把当前项附近已经生成的缩略图提升到同步内存视图，播放器队列
     // 首帧可直接复用，不需要先绘制占位底色再等待异步 Future 完成。
-    final initialIndex =
-        playlist.indexWhere((video) => video.path == item.path);
-    final warmStart = math.max(0, initialIndex - 2);
-    final warmEnd = math.min(playlist.length, initialIndex + 7);
-    await Future.wait(
-      playlist
-          .sublist(warmStart, warmEnd)
-          .where((video) => !video.isMissing)
-          .map(thumbnailService.thumbnailFor),
+    await _playbackQueueController.warmNearby(
+      queue: preparedQueue,
+      selectedVideoId: item.videoId,
+      load: thumbnailService.thumbnailFor,
     );
     if (!mounted) {
       return;
@@ -5431,7 +5428,8 @@ class _LibraryPageState extends State<LibraryPage> {
         _smoothRoute<void>(
           PlayerPage(
             initialItem: item,
-            playlist: List<VideoItem>.of(playlist),
+            playlist: playlist,
+            queueSnapshot: preparedQueue.snapshot,
             thumbnailService: thumbnailService,
             playbackSettings: _playbackSettings,
             onPlaybackSettingsChanged: (settings) async {

@@ -278,8 +278,8 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随备份设置纵向切片与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(5977));
-    expect(playerLines, lessThanOrEqualTo(5400));
+    expect(libraryLines, lessThanOrEqualTo(5975));
+    expect(playerLines, lessThanOrEqualTo(5374));
   });
 
   test('settings landing is a stateless feature leaf with preserved entry keys',
@@ -836,6 +836,55 @@ void main() {
       refresh.indexOf('_queryController.schedule('),
       lessThan(refresh.indexOf('_facetCountController.scheduleVisible(')),
     );
+  });
+
+  test('playback queue only comes from an accepted stable-ID result snapshot',
+      () {
+    final page = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final player = File(
+      'lib/src/pages/player/player_page.dart',
+    ).readAsStringSync();
+    final controller = File(
+      'lib/src/features/library/application/'
+      'library_playback_queue_controller.dart',
+    ).readAsStringSync();
+    final binding = File(
+      'lib/src/features/library/presentation/library_queue_title.dart',
+    ).readAsStringSync();
+    final openStart = page.indexOf('Future<void> _openVideo(');
+    final openEnd = page.indexOf(
+      'Future<MediaDetails> _probeSelectedVideoBeforePlayback(',
+      openStart,
+    );
+    final openFlow = page.substring(openStart, openEnd);
+
+    expect(controller, contains('class LibraryPlaybackQueueController'));
+    expect(controller, contains('LibraryQueueSnapshot.fromResult(result)'));
+    expect(controller, contains('prepareSelection({'));
+    expect(controller, contains('Future<void> warmNearby<T>({'));
+    expect(controller, contains('video.videoId'));
+    expect(controller, isNot(contains('TagQueryService')));
+    expect(controller, isNot(contains('resultCounts(')));
+    expect(controller, isNot(contains('sortedLibraryVideos')));
+    expect(controller, isNot(contains('LibraryApplicationFacade')));
+    expect(controller, isNot(contains('BuildContext ')));
+    expect(controller, isNot(contains('Navigator.')));
+    expect(controller, isNot(contains('PlayerPage(')));
+    expect(binding, contains('class LibraryDisplayedPlaybackBinding'));
+    expect(binding, isNot(contains('LibraryStore')));
+    expect(binding, isNot(contains('TagQueryService')));
+    expect(page, contains('bindDisplayedPlaybackResult('));
+    expect(page, contains('_playbackQueueController.prepareSelection('));
+    expect(page, contains('queueSnapshot: preparedQueue.snapshot'));
+    expect(page, isNot(contains('onOpen: _openVideo')));
+    expect(page, isNot(contains('onOpenVideo: _openVideo')));
+    expect(page, isNot(contains('LibraryQueueSnapshot(')));
+    expect(page, isNot(contains('LibraryResultSnapshot(')));
+    expect(openFlow, isNot(contains('store.videos.values')));
+    expect(openFlow, contains('playlist: playlist'));
+    expect(player, contains('final LibraryQueueSnapshot? queueSnapshot'));
   });
 
   test('PlayerPage keeps hidden progress mounted before the full controls', () {

@@ -10,6 +10,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
+import '../../features/library/domain/library_query_snapshot.dart';
 import '../../models/media_details.dart';
 import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
@@ -785,6 +786,7 @@ class PlayerPage extends StatefulWidget {
     super.key,
     required this.initialItem,
     required this.playlist,
+    this.queueSnapshot,
     required this.thumbnailService,
     required this.playbackSettings,
     required this.onPlaybackSettingsChanged,
@@ -806,6 +808,9 @@ class PlayerPage extends StatefulWidget {
   });
 
   final VideoItem initialItem;
+  /** 已接受媒体库结果对应的队列版本；独立播放器测试可不提供。 */
+  final LibraryQueueSnapshot? queueSnapshot;
+  /** 与 [queueSnapshot] stable-ID 顺序一致的不可变来源队列。 */
   final List<VideoItem> playlist;
   final ThumbnailService thumbnailService;
   final PlaybackSettings playbackSettings;

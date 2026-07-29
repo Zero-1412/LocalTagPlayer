@@ -215,7 +215,7 @@ Phase 2E 将现有视频数据备份设置迁入独立纵向切片：
 - [x] 3C 单独迁移排序，验证完整计数调用为 0，且不会隐式改变既有播放队列。
 - [x] 3D 以 `LibraryQueryController` 和 `LibraryFacetCountController` 迁移筛选、搜索、结果和计数；
   共享版本协议，但不得互相成为可写状态源。
-- [ ] 3E 只从已接受的 `ResultSnapshot` 创建 `QueueSnapshot`。
+- [x] 3E 只从已接受的 `ResultSnapshot` 创建 `QueueSnapshot`。
 - [ ] 3F 最后迁移扫描/导入生命周期，保留 latest-only 排队、限流和 generation cancellation。
 - [ ] 把文件菜单、标签维护、Missing/Relink 变成明确 command。
 - [ ] `LibraryPage` 只保留布局、动画、Route 跳转和命令绑定。
@@ -252,6 +252,16 @@ Phase 3D 的落地边界：
 - 页面只协调输入快照与发布后的局部重建，先更新可见视频，再安排非关键计数。页面级
   搜索/清空/排序回归证明 stable-ID 成员和顺序正确，高频交互完整计数调用零增长。
 - QueueSnapshot 与扫描生命周期继续留给 3E-3F；页面行数门禁降到 5,977。
+
+Phase 3E 的落地边界：
+
+- `LibraryPlaybackQueueController` 只验证已接受结果与展示视频的 stable-ID 成员/顺序，
+  唯一通过 `LibraryQueueSnapshot.fromResult` 转换；不读取 Store、不筛选、不排序。
+- 主筛选复用 query owner 的 result epoch；最近、收藏和本地目录使用显式来源 epoch。
+  结果快照与队列标题在一次 build 中绑定，旧 Widget 回调无法借当前页面状态换源。
+- `PlayerPage` 同时接收同序不可变 playlist 与 queue snapshot；邻近预热只消费该队列并
+  跳过 missing。生产页面不直接构造 Result/Queue snapshot，也不从 Store 重建 playlist。
+- 扫描/导入生命周期继续留给 3F；媒体库/播放器页面门禁分别降到 5,975 / 5,374。
 
 ### Phase 4：播放器 MVVM
 

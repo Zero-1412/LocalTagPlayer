@@ -140,6 +140,22 @@
   零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 仍不可用，
   无法自动点击或截图；下一步进入 Phase 3E，只允许从已接受的 `ResultSnapshot` 创建
   `QueueSnapshot`，不得由原始 Store 或过期筛选重建播放器队列。
+- Phase 3E 已完成：`LibraryPlaybackQueueController` 只接受已捕获的
+  `LibraryResultSnapshot` 与对应展示视频，以 stable `videoId` 一一校验成员和顺序后，
+  唯一通过 `LibraryQueueSnapshot.fromResult` 创建不可变播放队列。
+- 主媒体库复用 query owner 已接受的 result epoch；最近播放、收藏和本地目录以来源、
+  路径、播放数据代次和排序指纹建立独立 epoch。结果快照与队列标题在同一次 build 输入
+  上绑定，旧 Widget 回调、缺失/额外/重复成员或越界选中项均不能从 Store 重建替代队列。
+- `PlayerPage` 新增可选 `queueSnapshot` 输入，生产 `LibraryPage` 同时传递该快照与同序
+  不可变 playlist；邻近缩略图预热也只消费该队列并跳过 missing。页面源码合同确认
+  不再直接构造 Result/Queue snapshot，也不把 `_openVideo` 作为未绑定的原始回调。
+- Phase 3E focused tests 与完整 372 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。媒体库/播放器页面预算分别
+  收紧到 5,975 / 5,374。Computer Use 仍不可用；空后端 Widget 环境无法在可控时间穿过
+  既有“预览释放 → 缩略图预热 → 备份让盘 → endOfFrame”链，因此真实点击仍需人工复测：
+  “筛选并排序 → 打开非首项 → 核对队列成员/顺序和当前 index → 返回保留筛选”。
+- 下一步进入 Phase 3F，只迁移扫描/导入的 latest-only、限流、暂停/取消与 generation
+  生命周期；不得改变 folder/manual 标签来源、扫描提交事务或播放器让盘语义。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

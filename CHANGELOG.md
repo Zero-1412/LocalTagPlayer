@@ -82,6 +82,13 @@
   排序、搜索、清空和卡片菜单，确认结果成员/顺序正确且高频交互不增加完整计数调用。
   页面预算降到 5,977，完整 368 项测试通过（3 项显式基准跳过），静态分析、Windows
   Debug build 与正式入口可见窗口启动通过。
+- 完成 Phase 3E 已接受结果到播放队列的单向边界：新 controller 只按
+  `LibraryResultSnapshot` stable-ID 顺序解析展示视频，并唯一调用
+  `LibraryQueueSnapshot.fromResult`；缺失、重复、额外或越界成员全部拒绝。
+- 最近/收藏/本地目录使用独立来源 epoch，结果快照和队列标题在同一次 build 捕获；
+  `PlayerPage` 同时接收不可变 playlist 与对应 queue snapshot，邻近预热不再读取原始
+  Store。媒体库/播放器页面预算降到 5,975 / 5,374，完整 372 项测试通过（3 项显式
+  基准跳过），静态分析、Windows Debug build 与正式入口可见窗口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 
