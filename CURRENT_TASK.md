@@ -182,6 +182,21 @@
   以及播放器“重命名 → 返回”，核对弹窗位置、遮挡和错误反馈。
 - 下一步进入 Phase 3G-2，只迁移 manual 标签编辑/批量维护命令；folder/locked 标签、
   tagId、当前一级父级、确认与 Tag Manager Route 均必须保留。
+- Phase 3G-2 已完成单视频手动标签替换 command：不可变输入显式携带当前媒体、
+  已选择标签、locked folder 标签与可选一级父级；executor 统一大小写去重、父级作用域
+  和失败补偿，不持有 Store、Flutter、Route 或具体 Repository。
+- `LibraryTagMaintenance` 在批量写入失败时恢复当前视频的 tagId 关系，并移除本次新建但
+  未提交的标签索引；上层 command 同步恢复 `VideoItem.tags` 与完整 `childTags`，避免
+  内存模型和 Repository 索引在失败后分叉。Tag Manager 的创建、改名、合并、删除与
+  批量操作仍由原页面/Repository 唯一拥有，没有在媒体库页面复制。
+- 独立审查补齐“主库已提交、备份入队失败”边界：该故障只发布备份 failed 诊断并等待
+  后续全量核对，不能让上层 command 错误恢复已经提交前的标签模型。
+- Phase 3G-2 focused tests 与完整 392 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口启动通过；媒体库页面门禁降到 5,913。
+  Computer Use 仍不可用，无法截图；人工复测路径为“卡片更多 → 编辑标签 → 切换/保存/
+  取消”，并覆盖二级标签父级与播放器编辑标签返回，核对弹窗位置、锁定反馈和刷新状态。
+- 下一步进入 Phase 3G-3，只收口 Missing/Relink 命令边界；stable videoId、mutable path、
+  missing 记录保留、确认/返回路径和现有 Repository 事务语义不得改变。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

@@ -21,6 +21,7 @@ import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/settings_workspace_theme.dart';
 import '../../features/library/application/library_facet_count_controller.dart';
 import '../../features/library/application/library_file_command_executor.dart';
+import '../../features/library/application/library_manual_tag_command_executor.dart';
 import '../../features/library/application/library_playback_queue_controller.dart';
 import '../../features/library/application/library_query_controller.dart';
 import '../../features/library/application/library_revision_tracker.dart';
@@ -2272,6 +2273,8 @@ class _LibraryPageState extends State<LibraryPage> {
   final _playbackQueueController = LibraryPlaybackQueueController();
   /** 定位、改名与删除的平台/Repository 编排命令执行器。 */
   final _fileCommandExecutor = const LibraryFileCommandExecutor();
+  /** 单视频 manual 标签替换与失败回滚命令执行器。 */
+  final _manualTagCommandExecutor = const LibraryManualTagCommandExecutor();
   /** 扫描、路径导入检查与扫描后解析状态的 latest-only 生命周期 owner。 */
   final _scanLifecycleController =
       LibraryScanLifecycleController<MediaDetailsProgress>();
@@ -5830,6 +5833,9 @@ class _LibraryPageState extends State<LibraryPage> {
   }) async {
     final childParentTag = _activeChildParentTag;
     final editingChildTags = childParentTag != null;
+    final lockedTags = editingChildTags
+        ? _folderChildTagsForItem(item, childParentTag)
+        : _folderTagsForItem(item);
     final updated = await showDialog<Set<String>>(
       context: context,
       builder: (_) => TagEditorDialog(
@@ -5842,32 +5848,35 @@ class _LibraryPageState extends State<LibraryPage> {
           _store?.allTagItems ?? const <TagItem>[],
           parentTag: editingChildTags ? childParentTag : null,
         ),
-        lockedTags: editingChildTags
-            ? _folderChildTagsForItem(item, childParentTag)
-            : _folderTagsForItem(item),
+        lockedTags: lockedTags,
       ),
     );
     if (updated == null) {
       return;
     }
-    setState(() {
-      final normalized = _normalizeTagSet(updated);
-      if (editingChildTags) {
-        item.childTags[childParentTag] = {
-          ..._folderChildTagsForItem(item, childParentTag),
-          ...normalized,
-        };
-      } else {
-        item.tags
-          ..clear()
-          ..addAll({
-            ..._folderTagsForItem(item),
-            ...normalized,
-          });
+    final replacement = _manualTagCommandExecutor.replace(
+      ReplaceVideoManualTagsCommand(
+        item: item,
+        selectedTags: updated,
+        lockedFolderTags: lockedTags,
+        parentTag: editingChildTags ? childParentTag : null,
+      ),
+      commit: (target, parentTag) async {
+        await _store?.replaceManualTags(target, parentTag: parentTag);
+      },
+    );
+    if (mounted) {
+      setState(() {});
+    }
+    try {
+      await replacement;
+    } catch (_) {
+      if (mounted) {
+        // command 已恢复一级/二级模型；同步重建当前卡片，避免继续展示未持久化选择。
+        setState(() {});
       }
-    });
-    await _store?.replaceManualTags(item,
-        parentTag: editingChildTags ? childParentTag : null);
+      rethrow;
+    }
     if (mounted && deferLibraryRefresh) {
       _playerScopedLibraryDataChanged = true;
       _playerScopedTagDefinitionsChanged = true;
@@ -5900,20 +5909,5 @@ class _LibraryPageState extends State<LibraryPage> {
     }
     return TagRules.childTagsFor(rootPath, item.path)[parentTag] ??
         const <String>{};
-  }
-
-  Set<String> _normalizeTagSet(Iterable<String> tags) {
-    final seen = <String>{};
-    final normalized = <String>{};
-    for (final raw in tags) {
-      final tag = TagRules.normalizeTag(raw);
-      if (tag.isEmpty) {
-        continue;
-      }
-      if (seen.add(tag.toLowerCase())) {
-        normalized.add(tag);
-      }
-    }
-    return normalized;
   }
 }

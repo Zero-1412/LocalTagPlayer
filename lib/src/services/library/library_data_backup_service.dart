@@ -206,6 +206,28 @@ class LibraryDataBackupService {
   /** 在主库提交后把单个稳定身份加入去重增量队列。 */
   Future<void> enqueueVideo(String videoId) => enqueueVideos(<String>[videoId]);
 
+  /**
+   * 主库已经提交后，以诊断可见但不反向失败的方式加入增量队列。
+   *
+   * 该入口只用于无法回滚的主库提交之后：备份库故障会进入 failed 状态，由设置页诊断和
+   * 下次全量核对修复，但不能把已经成功的业务写入向调用方伪装成失败。
+   */
+  Future<void> enqueueVideoBestEffort(String videoId) async {
+    try {
+      await enqueueVideo(videoId);
+    } catch (error) {
+      _emitStatus(DataBackupStatus(
+        enabled: _enabled,
+        phase: DataBackupPhase.failed,
+        processed: _status.processed,
+        total: _status.total,
+        pending: _status.pending,
+        lastCompletedAt: _status.lastCompletedAt,
+        error: error.runtimeType.toString(),
+      ));
+    }
+  }
+
   /** 批量加入增量队列；只写短小 videoId，不复制路径或标签内容。 */
   Future<void> enqueueVideos(Iterable<String> videoIds) async {
     if (!_enabled || _disposed) {

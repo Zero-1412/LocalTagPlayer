@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随扫描生命周期与进度展示叶节点收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(5919));
+    expect(libraryLines, lessThanOrEqualTo(5913));
     expect(playerLines, lessThanOrEqualTo(5374));
   });
 
@@ -983,6 +983,51 @@ void main() {
     expect(page, contains('showBatchVideoDeleteConfirmationDialog('));
     expect(deleteDialog, contains("ValueKey('deleteDialog.moveToTrash')"));
     expect(deleteDialog, contains("ValueKey('deleteDialog.dontAskAgain')"));
+  });
+
+  test('manual tag replacement is an explicit compensating command', () {
+    final page = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final executor = File(
+      'lib/src/features/library/application/'
+      'library_manual_tag_command_executor.dart',
+    ).readAsStringSync();
+    final maintenance = File(
+      'lib/src/services/library/library_tag_maintenance.dart',
+    ).readAsStringSync();
+    final store = File(
+      'lib/src/services/library/library_store.dart',
+    ).readAsStringSync();
+    final backup = File(
+      'lib/src/services/library/library_data_backup_service.dart',
+    ).readAsStringSync();
+
+    expect(executor, contains('class ReplaceVideoManualTagsCommand'));
+    expect(executor, contains('class LibraryManualTagCommandExecutor'));
+    expect(executor, contains('..._normalize(command.lockedFolderTags)'));
+    expect(executor, contains('..._normalize(command.selectedTags)'));
+    expect(executor, contains('await commit(item, parentTag)'));
+    expect(executor, contains('..addAll(previousTags)'));
+    expect(executor, contains('..addAll(previousChildTags)'));
+    expect(executor, isNot(contains("import 'package:flutter/")));
+    expect(executor, isNot(contains('LibraryApplicationFacade')));
+    expect(executor, isNot(contains('LibraryStore')));
+    expect(executor, isNot(contains('TagQueryService')));
+    expect(executor, isNot(contains('Navigator.')));
+    expect(page, contains('const LibraryManualTagCommandExecutor()'));
+    expect(page, contains('_manualTagCommandExecutor.replace('));
+    expect(page, contains('ReplaceVideoManualTagsCommand('));
+    expect(page, contains('lockedTags: lockedTags'));
+    expect(page, contains('TagEditorDialog('));
+    expect(page, isNot(contains('Set<String> _normalizeTagSet(')));
+    expect(maintenance, contains('final previousLinks ='));
+    expect(maintenance, contains('final previousTagIds ='));
+    expect(maintenance, contains('_store.videoTagIdsByPathKey[pathKey] ='));
+    expect(maintenance, contains('_store.tagsById.removeWhere('));
+    expect(store, contains('enqueueVideoBestEffort(item.videoId)'));
+    expect(backup, contains('Future<void> enqueueVideoBestEffort('));
+    expect(backup, contains('phase: DataBackupPhase.failed'));
   });
 
   test('PlayerPage keeps hidden progress mounted before the full controls', () {

@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
-- 架构基线提升到 `0.5.114`；完整审计和 Phase 0-6 路线记录在
+- 架构基线提升到 `0.5.115`；完整审计和 Phase 0-6 路线记录在
   `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 - `main.dart`、bootstrap 组合根与 Flutter 应用壳已经分离，具体实现选择仍只发生在
   composition。
@@ -40,6 +40,9 @@
   状态归单一泛型 owner；实际限流、扫描事务、标签语义和媒体服务仍在原边界。
 - Phase 3G-1 将定位、改名、单条/批量删除迁为显式 command；改名补偿与删除顺序集中
   到无 UI executor，确认、偏好、反馈和页面刷新继续留在原 presentation。
+- Phase 3G-2 将单视频 manual 标签替换迁为显式不可变 command；locked folder、当前
+  一级父级与失败补偿集中到无 UI executor，Repository 失败同步恢复关系和新建索引，
+  主库成功后的备份故障只进入诊断；Tag Manager、确认、反馈与刷新仍留在原 owner。
 - 后续按一致性边界迁移无状态诊断 UI、普通设置、媒体库和播放器；禁止一次性移动全部
   文件或改变现有业务语义。
 

@@ -101,6 +101,13 @@
 - 改名保留文件先行、Repository 提交与原路径补偿；删除保留回收站、记录删除及可重建
   缓存清理顺序，批量部分失败按 stable ID 返回。页面预算降到 5,919，完整 386 项测试
   通过（3 项显式基准跳过），静态分析、Windows Debug build 与正式入口启动通过。
+- 完成 Phase 3G-2 单视频手动标签 command：不可变输入明确 selected、locked folder 与
+  当前一级父级，统一大小写归一、二级作用域和失败时完整 `VideoItem` 标签快照恢复。
+- Repository 批量替换失败时同步补偿 video-tag 关系与本次新建标签索引；Tag Manager
+  的管理/批量能力、folder 标签锁定、播放器延迟刷新和确认反馈入口保持原 owner。
+  主库成功后的备份入队失败只发布诊断，不再反向触发已提交标签模型的错误回滚。
+  页面预算降到 5,913，完整 392 项测试通过（3 项显式基准跳过），静态分析、Windows
+  Debug build 与正式入口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

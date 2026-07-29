@@ -984,7 +984,8 @@ class LibraryStore
     String? parentTag,
   }) async {
     await _tagMaintenance.replaceManualTags(item, parentTag: parentTag);
-    await dataBackupService.enqueueVideo(item.videoId);
+    // 主库提交已不可回滚；备份入队失败只能进入诊断，不能诱导上层恢复旧标签模型。
+    await dataBackupService.enqueueVideoBestEffort(item.videoId);
   }
 
   Future<void> saveTag(TagItem tag) async {

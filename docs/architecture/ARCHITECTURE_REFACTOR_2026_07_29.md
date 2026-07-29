@@ -284,6 +284,20 @@ Phase 3G-1 的落地边界：
   删除偏好、SnackBar、播放器延迟刷新和全部菜单入口仍由原 presentation owner 管理。
 - 文件命令 focused/页面/播放器回归及全量门禁通过；媒体库页面预算降到 5,919。
 
+Phase 3G-2 的落地边界：
+
+- 单视频手动标签替换使用显式不可变 command；输入独立携带 selected、locked folder、
+  可选一级父级和目标媒体，不从页面或 Store 隐式读取第二份状态。
+- `LibraryManualTagCommandExecutor` 负责大小写归一、folder 标签保留、二级标签父级隔离
+  与失败时 `VideoItem.tags/childTags` 完整恢复；它不导入 Flutter、Route、Store 或
+  具体 Repository。
+- `LibraryTagMaintenance` 的批量提交失败会恢复当前视频的 tagId 关系，并清除本次新建
+  但未提交的标签索引；SQLite schema、tagId 语义与 Tag Manager 管理/批量入口未改变。
+- 主库提交后的备份入队是不可反向补偿的次级副作用；失败只发布备份诊断并由后续全量
+  核对修复，不能向 command 抛出并恢复旧 `VideoItem`。
+- TagEditor 的确认/取消、播放器延迟刷新、反馈和 Tag Manager Route 仍由原 presentation
+  owner 管理；focused/页面回归及全量门禁通过，媒体库页面预算降到 5,913。
+
 ### Phase 4：播放器 MVVM
 
 - [ ] 4A 拆出 `PlayerSessionController`，只拥有队列、当前媒体与会话命令。

@@ -33,10 +33,28 @@ class LibraryTagMaintenance {
     VideoItem item, {
     String? parentTag,
   }) async {
+    final pathKey = TagRules.pathKey(item.path);
+    final previousLinks = _store.videoTagIdsByPathKey[pathKey] == null
+        ? null
+        : <String>{..._store.videoTagIdsByPathKey[pathKey]!};
+    final previousTagIds = <String>{..._store.tagsById.keys};
     final batch = _store.database.batch();
-    syncManualTagsInBatch(batch, item, parentTag: parentTag);
-    _store.videoPersistence.insertInBatch(batch, item);
-    await batch.commit(noResult: true);
+    try {
+      syncManualTagsInBatch(batch, item, parentTag: parentTag);
+      _store.videoPersistence.insertInBatch(batch, item);
+      await batch.commit(noResult: true);
+    } catch (_) {
+      // batch 失败时恢复同步阶段提前维护的内存索引；VideoItem 由上层 command 恢复。
+      if (previousLinks == null) {
+        _store.videoTagIdsByPathKey.remove(pathKey);
+      } else {
+        _store.videoTagIdsByPathKey[pathKey] = previousLinks;
+      }
+      _store.tagsById.removeWhere(
+        (tagId, _) => !previousTagIds.contains(tagId),
+      );
+      rethrow;
+    }
   }
 
   /**

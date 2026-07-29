@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.114` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.115` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -74,6 +74,13 @@ Phase 3G-1 把定位、改名和删除表达为显式文件 command，并由
 `LibraryFileCommandExecutor` 编排注入的平台/Repository 回调。executor 不持有 Store、
 具体文件系统、缓存服务或 UI；改名的跨边界补偿和删除的回收站/记录/可重建缓存顺序
 保持不变。Dialog、偏好保存、SnackBar、Route 和页面刷新仍由 presentation owner 管理。
+
+Phase 3G-2 把单视频手动标签替换表达为显式不可变 command。
+`LibraryManualTagCommandExecutor` 只拥有标签归一、locked folder 保留、当前一级父级
+作用域与内存模型失败补偿；Repository 批量写入仍由 `LibraryTagMaintenance` 唯一负责，
+并在失败时恢复 video-tag 关系和本次新建的标签索引。主库提交后的备份入队不可反向
+回滚，失败只发布诊断并由后续全量核对修复。Tag Manager 的管理/批量命令、Dialog、
+Route、反馈和刷新时机仍由原 owner 管理。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -561,12 +568,15 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.114`
+已完成基线：`Architecture Baseline 0.5.115`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.115`：单视频手动标签替换成为显式不可变 command；folder 锁定、一级父级作用域
+  与内存模型补偿集中到无 UI executor，Repository 失败同步恢复标签关系和新建索引；
+  主库提交后的备份故障只进入诊断，不再诱导业务模型错误回滚。
 - `0.5.114`：文件定位、同目录改名和删除成为显式 command；跨文件系统/Repository
   补偿顺序集中到无 UI executor，确认、偏好与反馈仍留在 presentation。
 - `0.5.113`：扫描、路径导入检查和扫描后媒体解析状态归单一泛型 lifecycle owner；
