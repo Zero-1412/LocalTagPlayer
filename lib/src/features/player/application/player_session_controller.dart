@@ -103,6 +103,14 @@ class PlayerSessionController {
   /** 当前正在播放的视频。 */
   VideoItem get currentItem => _queue[playingIndex];
 
+  /** 按 stable ID 解析来源媒体；请求期间路径变化不能影响身份匹配。 */
+  VideoItem? sourceItemForVideoId(String videoId) {
+    for (final item in _sourcePlaylist) {
+      if (item.videoId == videoId) return item;
+    }
+    return null;
+  }
+
   /** 当前播放项之前是否还有可播放视频。 */
   bool get hasPrevious => _queue.isNotEmpty && playingIndex > 0;
 

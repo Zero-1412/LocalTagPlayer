@@ -335,7 +335,7 @@ Phase 3H-2 的落地边界：
 ### Phase 4：播放器 MVVM
 
 - [x] 4A 拆出 `PlayerSessionController`，只拥有队列、当前媒体与会话命令。
-- [ ] 4B 拆出 latest-request 与 backend event bridge。
+- [x] 4B 拆出 latest-request 与 backend event bridge。
 - [ ] 4C 拆出控件显隐、计时器和快捷键状态。
 - [ ] 4D 最后处理 texture、native window 和全屏生命周期；每种资源只有一个 dispose owner。
 - [ ] 4E 独立迁移播放器诊断。
@@ -350,6 +350,19 @@ Phase 4A 的落地边界：
   `PlayerBackend` 或平台实现。旧文件仅保留 import 路径兼容导出。
 - `PlayerPage` 继续唯一拥有 `PlayerService`、backend open、texture/native window、
   timer、全屏、Route 与 Widget 生命周期；页面门禁降到 5,371，Phase 4A 完成。
+
+Phase 4B 的落地边界：
+
+- `PlayerOpenRequestController` 用 `revision + videoId + path` 捕获不可变打开意图；
+  stable ID 决定媒体身份，path 只是本次 `openPath` 快照，旧代次不能发布成功或错误。
+- 新选择、missing 前置拒绝和页面取消都会推进代次；重试从安全失败快照恢复同一
+  stable ID/path，错误码不携带本地路径。
+- `PlayerBackendEventBridge` 只绑定四类 Stream 与页面回调，统一持有订阅并幂等取消；
+  页面在 stop/dispose backend 前等待 bridge，仍唯一解释 EOF、进度、错误和播放反馈。
+- 播放进度纯函数迁入 player domain，媒体库不再导入播放器 presentation；
+  `PlayerBackend`、后端选择、texture/native window 和全屏 owner 均未改变。
+- 4 项 request/event focused tests、页面回归、架构合同和全量门禁通过；`PlayerPage`
+  预算降到 5,370，Phase 4B 完成。
 - [ ] 画质实验只依赖 `PlayerRuntimeAccess`，不进入 Widget 状态机。
 - [ ] 保留快速切换 latest-request、纹理释放、全屏恢复和 filtered queue 合同。
 

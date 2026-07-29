@@ -11,7 +11,10 @@ import 'package:window_manager/window_manager.dart';
 import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
+import '../../features/player/application/player_backend_event_bridge.dart';
+import '../../features/player/application/player_open_request_controller.dart';
 import '../../features/player/application/player_session_controller.dart';
+import '../../features/player/domain/player_playback_progress.dart';
 import '../../models/media_details.dart';
 import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
@@ -38,7 +41,6 @@ import 'player_diagnostics_dialog.dart';
 import 'player_dialog_content.dart';
 import 'player_hardware_decode_warning_dialog.dart';
 import 'player_open_failure_panel.dart';
-import 'player_open_request_controller.dart';
 import 'player_playback_mode.dart';
 import 'player_queue_sidebar.dart';
 import 'player_rename_file_dialog.dart';
@@ -887,10 +889,8 @@ class PlayerPageState extends State<PlayerPage> {
   final _videoControlsRegionKey = GlobalKey();
   /** 正在等待兼容性确认的路径；避免快速点击叠加多个警告弹窗。 */
   String? _compatibilityPromptPath;
-  StreamSubscription<bool>? _completedSubscription;
-  StreamSubscription<String>? _playerErrorSubscription;
-  StreamSubscription<Duration>? _positionSubscription;
-  StreamSubscription<bool>? _playingSubscription;
+  /** 集中持有四类后端事件订阅，并在 PlayerService 释放前统一取消。 */
+  late final PlayerBackendEventBridge _backendEvents;
   Timer? _controlsHideTimer;
   Timer? _shortcutFeedbackTimer;
   Timer? _queuePrefetchTimer;
@@ -1086,6 +1086,9 @@ class PlayerPageState extends State<PlayerPage> {
 
   VideoItem get _currentItem => _playback.currentItem;
 
+  PlayerOpenTarget get _currentOpenTarget =>
+      (videoId: _currentItem.videoId, path: _currentItem.path);
+
   String get _filterSummary {
     final value = widget.queueTitle.trim();
     return value.isEmpty ? '\u5168\u90e8\u89c6\u9891' : value;
@@ -1161,17 +1164,18 @@ class PlayerPageState extends State<PlayerPage> {
       'player_constructed',
       backend: _playerService,
     ));
-    _completedSubscription =
-        _playerService.completedChanges.listen(_handlePlaybackCompleted);
-    _playerErrorSubscription =
-        _playerService.errorChanges.listen(_handlePlayerError);
-    _positionSubscription =
-        _playerService.positionChanges.listen(_handlePosition);
-    _playingSubscription = _playerService.playingChanges.listen((_) {
-      if (!mounted) return;
-      // 播放状态只同步图标；隐藏后的控制条只能由底部热区重新唤出。
-      setState(() {});
-    });
+    _backendEvents = PlayerBackendEventBridge(
+      completedChanges: _playerService.completedChanges,
+      errorChanges: _playerService.errorChanges,
+      positionChanges: _playerService.positionChanges,
+      playingChanges: _playerService.playingChanges,
+      onCompleted: _handlePlaybackCompleted,
+      onError: _handlePlayerError,
+      onPosition: _handlePosition,
+      onPlayingChanged: (_) {
+        if (mounted) setState(() {});
+      },
+    );
     _requestOpenCurrent();
     // 诊断弹窗关闭时仍持续独立观察视频帧与音频播放头，避免瞬时 AV offset 掩盖单路停滞。
     _playbackHealthTimer = Timer.periodic(
@@ -1205,7 +1209,7 @@ class PlayerPageState extends State<PlayerPage> {
       return;
     }
     _openedPath = null;
-    _openRequests.markFailure(path, code: code);
+    _openRequests.markImmediateFailure(_currentOpenTarget, code: code);
     unawaited(_playerService.stop());
     setState(() {});
   }
@@ -3131,10 +3135,8 @@ class PlayerPageState extends State<PlayerPage> {
     }
     if (_currentItem.isMissing) {
       _openedPath = null;
-      _openRequests.markFailure(
-        _currentItem.path,
-        code: 'missing_media',
-      );
+      _openRequests.markImmediateFailure(_currentOpenTarget,
+          code: 'missing_media');
       if (mounted) {
         setState(() {});
       }
@@ -3154,7 +3156,7 @@ class PlayerPageState extends State<PlayerPage> {
       ));
       return;
     }
-    if (_openRequests.request(_currentItem.path)) {
+    if (_openRequests.request(_currentOpenTarget)) {
       unawaited(_drainOpenRequests());
     }
   }
@@ -3240,10 +3242,11 @@ class PlayerPageState extends State<PlayerPage> {
     var shouldContinue = false;
     try {
       while (mounted) {
-        final path = _openRequests.takePendingPath();
-        if (path == null) {
+        final request = _openRequests.takePending();
+        if (request == null) {
           break;
         }
+        final path = request.path;
         try {
           // 每个新媒体独立判断实际解码器，不能沿用上一条视频的 no/恢复状态。
           _lastHwdecCurrent = null;
@@ -3280,7 +3283,7 @@ class PlayerPageState extends State<PlayerPage> {
             level: PlayerAdaptiveQualityLevel.off,
             darkSceneEnhancementEnabled: false,
           );
-          if (_openRequests.hasPending) {
+          if (_openRequests.hasSuperseded(request)) {
             // 新选择已经覆盖旧路径时，不再为旧媒体执行后续配置或 open。
             continue;
           }
@@ -3288,35 +3291,38 @@ class PlayerPageState extends State<PlayerPage> {
           if (!mounted) {
             return;
           }
-          if (_openRequests.hasPending) {
+          if (_openRequests.hasSuperseded(request)) {
             continue;
           }
           await _playerService.openPath(path);
           if (!mounted) {
             return;
           }
-          if (_openRequests.hasPending) {
+          if (_openRequests.hasSuperseded(request)) {
             // open 本身无法中断，但返回后立即消费最新路径，不等待旧媒体首帧。
             continue;
           }
           await _applyPlaybackPerformanceProfile();
-          if (_openRequests.hasPending) {
+          if (_openRequests.hasSuperseded(request)) {
             continue;
           }
-          final playable = await _waitForPlayableMedia();
+          final playable = await _waitForPlayableMedia(request);
           if (!playable) {
             // 快速切换已有更新请求时只放弃旧验证，不展示过时错误。
-            if (!_openRequests.hasPending) {
+            if (!_openRequests.hasSuperseded(request)) {
               _openedPath = null;
               _openRequests.markFailure(
-                path,
+                request,
                 code: 'unplayable_media',
               );
               await _playerService.stop();
             }
             continue;
           }
-          if (_openRequests.hasPending) {
+          if (_openRequests.hasSuperseded(request)) {
+            continue;
+          }
+          if (!_openRequests.markSuccess(request)) {
             continue;
           }
           _openedPath = path;
@@ -3325,9 +3331,8 @@ class PlayerPageState extends State<PlayerPage> {
             'media_opened',
             backend: _playerService,
           ));
-          _openRequests.markSuccess();
           _scheduleQueuePrefetch();
-          final openedItem = _itemForPath(path);
+          final openedItem = _playback.sourceItemForVideoId(request.videoId);
           if (openedItem != null) {
             _lastPersistedPosition = Duration.zero;
             _lastProgressWriteAt = null;
@@ -3344,7 +3349,7 @@ class PlayerPageState extends State<PlayerPage> {
           }
           // 只记录错误类型，避免异常正文中的本地路径进入 UI 或可复制诊断摘要。
           _openRequests.markFailure(
-            path,
+            request,
             code: error.runtimeType.toString(),
           );
         }
@@ -3427,15 +3432,15 @@ class PlayerPageState extends State<PlayerPage> {
    * 0 字节/损坏 MP4 的 `Player.open` 可能成功返回却永久停在 00:00；限定等待窗口后将其
    * 归入稳定错误面板。检测期间如出现更新 open 请求则立即放弃旧验证，保护快速切换流畅度。
    */
-  Future<bool> _waitForPlayableMedia() async {
+  Future<bool> _waitForPlayableMedia(PlayerOpenRequest request) async {
     // 保持约 1.5 秒损坏媒体判定窗口，但把新请求响应粒度从 250ms 缩短到 80ms。
     const attempts = 19;
     for (var attempt = 0; attempt < attempts; attempt++) {
-      if (_openRequests.hasPending) {
+      if (_openRequests.hasSuperseded(request)) {
         return false;
       }
       final videoCodec = await _getMpvProperty('video-codec');
-      if (_openRequests.hasPending) {
+      if (_openRequests.hasSuperseded(request)) {
         return false;
       }
       final audioCodec = await _getMpvProperty('audio-codec');
@@ -4052,7 +4057,7 @@ class PlayerPageState extends State<PlayerPage> {
       await _playerService.pause();
     }
     _openedPath = path;
-    _openRequests.markSuccess();
+    _openRequests.clearFailure();
     _lastPersistedPosition = position;
     _lastProgressWriteAt = DateTime.now();
     if (mounted) {
@@ -4796,13 +4801,7 @@ class PlayerPageState extends State<PlayerPage> {
       backend: _playerService,
     );
     try {
-      await Future.wait<void>([
-        if (_completedSubscription != null) _completedSubscription!.cancel(),
-        if (_playerErrorSubscription != null)
-          _playerErrorSubscription!.cancel(),
-        if (_positionSubscription != null) _positionSubscription!.cancel(),
-        if (_playingSubscription != null) _playingSubscription!.cancel(),
-      ]);
+      await _backendEvents.dispose();
       // stop 与 dispose 必须串行；此前路由 pop 后两者可能并发进入 media_kit/libmpv，
       // 导致纹理解绑完成但解码池和驱动缓存更晚才释放。
       await (_exitStopFuture ??= _stopForExitDiagnostics());

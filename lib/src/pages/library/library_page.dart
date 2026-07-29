@@ -64,7 +64,7 @@ import '../../widgets/library/library_widgets.dart';
 import '../../widgets/player_shortcut_input.dart';
 import '../player/player_delete_dialog.dart';
 import '../player/player_hardware_decode_warning_dialog.dart';
-import '../player/player_open_request_controller.dart';
+import '../../features/player/domain/player_playback_progress.dart';
 import '../player/player_page.dart';
 import '../tags/tag_manager_page.dart';
 import 'library_page_helpers.dart';

@@ -256,6 +256,22 @@
   → 删除当前项前一项 → 返回媒体库”，核对 `N / total`、来源顺序和筛选保留。
 - 下一步进入 Phase 4B：拆出 latest-request 与 backend event bridge；不得改变 open
   代次、后端选择、错误语义、播放器资源 owner 或 filtered queue 来源。
+- Phase 4B 已完成版本化 open owner：`PlayerOpenRequestController` 以
+  `revision + videoId + path` 捕获不可变意图；更新选择、missing 前置拒绝和 cancel
+  都会推进代次，旧 open Future 不能发布成功、错误或恢复位置。
+- `PlayerBackendEventBridge` 集中持有 completed/error/position/playing 四类订阅，
+  不依赖 Flutter、`PlayerService` 或 `PlayerBackend`；页面继续解释 EOF、进度节流、
+  安全错误面板与播放图标，并在 stop/dispose backend 前等待 bridge 幂等取消。
+- 播放可用性、完成阈值、恢复位置与继续观看纯函数迁入 player domain；媒体库页面和
+  library widgets 不再反向导入播放器 presentation。兼容文件只保留旧 import 路径导出。
+- Phase 4B focused/widget tests 与完整 421 项测试通过（3 项显式基准跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口可见窗口启动通过；
+  `PlayerPage` 门禁由 5,371 降到 5,370。
+  Computer Use 仍不可用，无法自动点击或截图；人工复测路径为“快速连续点选三条队列项
+  → 最后一条成功打开 → missing/重试/跳过 → 播放到 EOF → 返回媒体库”，核对 opening
+  遮罩、错误面板、`N / total`、来源顺序和筛选保留。
+- 下一步进入 Phase 4C：只拆控件显隐、计时器和快捷键的纯状态/调度边界；不得迁移
+  texture/native window、全屏资源、PlayerBackend、诊断采样或 filtered queue。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

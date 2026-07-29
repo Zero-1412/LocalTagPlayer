@@ -135,6 +135,14 @@
   `PlayerService`、backend open、原生资源、计时器、全屏和交互反馈。`PlayerPage`
   门禁降到 5,371；完整 416 项测试通过（3 项显式基准跳过），静态分析、Windows Debug
   build 与正式入口可见窗口启动通过。
+- 完成 Phase 4B latest-request 与事件订阅切片：open 请求改为
+  `revision + videoId + path` 不可变快照，更新选择、missing 和取消都会拒绝旧异步
+  成功/错误；安全失败仍可按同一稳定身份重试。
+- 四类 backend Stream 由纯 Dart `PlayerBackendEventBridge` 统一持有，并在 backend
+  释放前幂等取消；EOF、进度节流、错误面板、播放反馈和 stop/dispose 顺序保持不变。
+  播放进度纯函数迁入 player domain，媒体库不再导入播放器 presentation。`PlayerPage`
+  门禁降到 5,370；完整 421 项测试通过（3 项显式基准跳过），静态分析、Windows Debug
+  build 与正式入口可见窗口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

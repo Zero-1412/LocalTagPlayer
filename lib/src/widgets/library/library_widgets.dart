@@ -12,7 +12,7 @@ import '../../core/tag_rules.dart';
 import '../../models/library_sort.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
-import '../../pages/player/player_open_request_controller.dart';
+import '../../features/player/domain/player_playback_progress.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../app_theme_tokens.dart';
 import '../design_system/app_interaction_surface.dart';

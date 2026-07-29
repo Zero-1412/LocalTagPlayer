@@ -6500,15 +6500,21 @@ void main() {
   test('player open request controller keeps latest request after failure', () {
     final requests = PlayerOpenRequestController();
 
-    expect(requests.request('first.mp4'), isTrue);
+    expect(
+      requests.request((videoId: 'video-1', path: 'first.mp4')),
+      isTrue,
+    );
     requests.beginDrain();
-    expect(requests.takePendingPath(), 'first.mp4');
-    expect(requests.request('second.mp4'), isFalse);
+    expect(requests.takePending()?.path, 'first.mp4');
+    expect(
+      requests.request((videoId: 'video-2', path: 'second.mp4')),
+      isFalse,
+    );
     expect(requests.hasPending, isTrue);
 
     requests.finishDrain(keepOpening: true);
     expect(requests.isOpening, isTrue);
-    expect(requests.takePendingPath(), 'second.mp4');
+    expect(requests.takePending()?.path, 'second.mp4');
 
     requests.finishDrain(keepOpening: false);
     expect(requests.isOpening, isFalse);
@@ -6519,16 +6525,21 @@ void main() {
       () {
     final requests = PlayerOpenRequestController();
 
-    requests.markFailure('D:\\private\\broken.mp4', code: 'StateError');
+    requests.markImmediateFailure(
+      (videoId: 'broken-id', path: 'D:\\private\\broken.mp4'),
+      code: 'StateError',
+    );
     expect(requests.hasFailure, isTrue);
     expect(requests.failureCode, 'StateError');
+    expect(requests.failedVideoId, 'broken-id');
 
     expect(requests.retryFailure(), isTrue);
     expect(requests.hasFailure, isFalse);
     requests.beginDrain();
-    expect(requests.takePendingPath(), 'D:\\private\\broken.mp4');
-    requests.markFailure('D:\\private\\broken.mp4', code: 'StateError');
-    requests.markSuccess();
+    final retry = requests.takePending()!;
+    expect(retry.path, 'D:\\private\\broken.mp4');
+    requests.markFailure(retry, code: 'StateError');
+    requests.clearFailure();
     requests.finishDrain(keepOpening: false);
 
     expect(requests.hasFailure, isFalse);

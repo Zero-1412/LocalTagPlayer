@@ -279,7 +279,7 @@ void main() {
 
     // 媒体库阈值随结果来源导航 owner 迁移继续下调；后续迁移只能降低，禁止为通过测试而调高。
     expect(libraryLines, lessThanOrEqualTo(5748));
-    expect(playerLines, lessThanOrEqualTo(5371));
+    expect(playerLines, lessThanOrEqualTo(5370));
   });
 
   test('settings landing is a stateless feature leaf with preserved entry keys',
@@ -1027,6 +1027,81 @@ void main() {
       ),
     );
     expect(compatibility, isNot(contains('class PlayerPlaybackController')));
+  });
+
+  test('player open requests and backend events have pure lifecycle owners',
+      () {
+    final page = File(
+      'lib/src/pages/player/player_page.dart',
+    ).readAsStringSync();
+    final requests = File(
+      'lib/src/features/player/application/'
+      'player_open_request_controller.dart',
+    ).readAsStringSync();
+    final events = File(
+      'lib/src/features/player/application/player_backend_event_bridge.dart',
+    ).readAsStringSync();
+    final progress = File(
+      'lib/src/features/player/domain/player_playback_progress.dart',
+    ).readAsStringSync();
+    final compatibility = File(
+      'lib/src/pages/player/player_open_request_controller.dart',
+    ).readAsStringSync();
+    final libraryPage = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final libraryWidgets = File(
+      'lib/src/widgets/library/library_widgets.dart',
+    ).readAsStringSync();
+
+    expect(requests, contains('class PlayerOpenRequestController'));
+    expect(requests, contains('final int revision'));
+    expect(requests, contains('final String videoId'));
+    expect(requests, contains('final String path'));
+    expect(requests, contains('bool hasSuperseded(PlayerOpenRequest request)'));
+    expect(requests, isNot(contains("import 'package:flutter")));
+    expect(events, contains('class PlayerBackendEventBridge'));
+    expect(events, contains('Future<void> dispose()'));
+    expect(events, isNot(contains("import 'package:flutter")));
+    expect(events, isNot(contains('../services/')));
+    expect(progress, contains('bool videoIsContinueWatching(VideoItem item)'));
+    expect(
+        page, contains('late final PlayerBackendEventBridge _backendEvents'));
+    expect(page, contains('await _backendEvents.dispose();'));
+    expect(page, isNot(contains('StreamSubscription<bool>?')));
+    expect(
+      page.indexOf('await _backendEvents.dispose();'),
+      lessThan(page.indexOf('await _playerService.dispose();')),
+    );
+    expect(
+      compatibility,
+      contains(
+        "export '../../features/player/application/"
+        "player_open_request_controller.dart';",
+      ),
+    );
+    expect(
+      compatibility,
+      contains(
+        "export '../../features/player/domain/"
+        "player_playback_progress.dart';",
+      ),
+    );
+    expect(compatibility, isNot(contains('class PlayerOpenRequestController')));
+    expect(
+      libraryPage,
+      contains(
+        "import '../../features/player/domain/"
+        "player_playback_progress.dart';",
+      ),
+    );
+    expect(
+      libraryWidgets,
+      contains(
+        "import '../../features/player/domain/"
+        "player_playback_progress.dart';",
+      ),
+    );
   });
 
   test('scan and import lifecycle has one latest-only application owner', () {

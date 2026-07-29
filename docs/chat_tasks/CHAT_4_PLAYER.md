@@ -1,3 +1,14 @@
+## 2026-07-29 latest-only open 与 backend event bridge
+
+- `PlayerOpenRequestController` 以 `revision + videoId + path` 捕获打开意图；更新选择、
+  missing 前置拒绝和取消都会使旧 open Future 失效，安全错误仍可按稳定身份重试。
+- completed/error/position/playing 四类订阅迁入纯 Dart `PlayerBackendEventBridge`；
+  页面仍解释 EOF、进度节流、错误面板和播放反馈，并在 backend 释放前统一取消订阅。
+- 播放可用性、完成阈值、恢复位置与继续观看纯函数迁入 player domain；媒体库不再导入
+  播放器 presentation，兼容文件仅保留旧 import 路径导出。
+- focused/页面/旧交互/架构合同与完整 421 项测试通过（3 项跳过），静态分析、Windows
+  Debug build 和正式入口可见窗口启动通过；`PlayerPage` 门禁降到 5,370。
+
 ## 2026-07-29 PlayerSessionController stable-ID 会话边界
 
 - 来源队列、当前二级标签子集、播放索引和选择索引迁入纯 Dart
