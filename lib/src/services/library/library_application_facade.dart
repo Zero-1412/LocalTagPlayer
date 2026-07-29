@@ -19,25 +19,28 @@ import '../../repositories/repository_interfaces.dart';
  */
 class LibraryApplicationFacade implements LibraryRelinkRepository {
   LibraryApplicationFacade({
-    required LibraryRepository libraryRepository,
+    required LibraryQueryRepository queryRepository,
+    required LibraryCommandRepository commandRepository,
     required TagRepository tagRepository,
     required CacheRepository cacheRepository,
     required PlaybackRepository playbackRepository,
-  })  : _repository = libraryRepository,
+  })  : _queries = queryRepository,
+        _commands = commandRepository,
         _tagRepository = tagRepository,
         _cacheRepository = cacheRepository,
         _playbackRepository = playbackRepository,
-        roots = UnmodifiableListView<String>(libraryRepository.roots),
-        videos =
-            UnmodifiableMapView<String, VideoItem>(libraryRepository.videos),
+        roots = UnmodifiableListView<String>(queryRepository.roots),
+        videos = UnmodifiableMapView<String, VideoItem>(queryRepository.videos),
         favoriteTags =
-            UnmodifiableListView<String>(libraryRepository.favoriteTags),
-        tagGroups = UnmodifiableListView<TagGroup>(libraryRepository.tagGroups),
+            UnmodifiableListView<String>(queryRepository.favoriteTags),
+        tagGroups = UnmodifiableListView<TagGroup>(queryRepository.tagGroups),
         tagsById =
-            UnmodifiableMapView<String, TagItem>(libraryRepository.tagsById);
+            UnmodifiableMapView<String, TagItem>(queryRepository.tagsById);
 
-  /** 由组合根注入的 Dart Repository。 */
-  final LibraryRepository _repository;
+  /** 由组合根注入的只读查询端口，页面无法通过该引用发起写入。 */
+  final LibraryQueryRepository _queries;
+  /** 由组合根注入的命令端口；跨表事务仍由其单一实现原子提交。 */
+  final LibraryCommandRepository _commands;
   final TagRepository _tagRepository;
   final CacheRepository _cacheRepository;
   final PlaybackRepository _playbackRepository;
@@ -55,7 +58,7 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
 
   /** 返回同时冻结外层索引和每个 tagId 集合的只读快照。 */
   Map<String, Set<String>> get videoTagIdsByPathKey => Map.unmodifiable(
-        _repository.videoTagIdsByPathKey.map(
+        _queries.videoTagIdsByPathKey.map(
           (key, value) => MapEntry(key, Set<String>.unmodifiable(value)),
         ),
       );
@@ -64,26 +67,26 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
         videoTagIdsByPathKey: videoTagIdsByPathKey,
       );
   Iterable<TagItem> get allTagItems => tagsById.values;
-  Set<String> get allTags => Set<String>.unmodifiable(_repository.allTags);
+  Set<String> get allTags => Set<String>.unmodifiable(_queries.allTags);
 
   Map<String, int> resultCounts(FilterQuery query) =>
-      _repository.resultCounts(query);
+      _queries.resultCounts(query);
 
   Future<Map<String, TagUsageSummary>> tagUsageSummaries() =>
-      _repository.tagUsageSummaries();
+      _queries.tagUsageSummaries();
 
   Future<void> replaceManualTags(
     VideoItem item, {
     String? parentTag,
   }) =>
-      _repository.replaceManualTags(item, parentTag: parentTag);
+      _commands.replaceManualTags(item, parentTag: parentTag);
 
   Future<TagItem> createManualTag({
     required String name,
     required String groupId,
     String? displayName,
   }) =>
-      _repository.createManualTag(
+      _commands.createManualTag(
         name: name,
         groupId: groupId,
         displayName: displayName,
@@ -98,7 +101,7 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
     bool? isFavorite,
     int? sortOrder,
   }) =>
-      _repository.updateTagDetails(
+      _commands.updateTagDetails(
         tag,
         displayName: displayName,
         aliases: aliases,
@@ -109,20 +112,20 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
       );
 
   Future<int> countTagReferences(TagItem tag) =>
-      _repository.countTagReferences(tag);
+      _queries.countTagReferences(tag);
 
   Future<int> batchAddManualTag(TagItem tag, Iterable<VideoItem> items) =>
-      _repository.batchAddManualTag(tag, items);
+      _commands.batchAddManualTag(tag, items);
 
   Future<int> batchRemoveManualTag(TagItem tag, Iterable<VideoItem> items) =>
-      _repository.batchRemoveManualTag(tag, items);
+      _commands.batchRemoveManualTag(tag, items);
 
-  Future<void> saveMetadata() => _repository.saveMetadata();
-  Future<void> addFavoriteTag(String tag) => _repository.addFavoriteTag(tag);
+  Future<void> saveMetadata() => _commands.saveMetadata();
+  Future<void> addFavoriteTag(String tag) => _commands.addFavoriteTag(tag);
   Future<void> removeFavoriteTag(String tag) =>
-      _repository.removeFavoriteTag(tag);
+      _commands.removeFavoriteTag(tag);
   Future<void> replaceRoot(String oldRoot, String newRoot) =>
-      _repository.replaceRoot(oldRoot, newRoot);
+      _commands.replaceRoot(oldRoot, newRoot);
 
   /** 以 stable videoId 建立来源明确的标签关联。 */
   Future<void> attachTag({
@@ -155,25 +158,25 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
         completed: completed,
         updatedAt: updatedAt,
       );
-  Future<void> upsertVideo(VideoItem item) => _repository.upsertVideo(item);
+  Future<void> upsertVideo(VideoItem item) => _commands.upsertVideo(item);
 
   /** 把后台媒体解析产生的多条视频字段更新合并为一次 Repository 批量写入。 */
   Future<void> upsertVideos(Iterable<VideoItem> items) =>
-      _repository.upsertVideos(items);
+      _commands.upsertVideos(items);
 
   /** 批量保存用户播放状态，并同步排入稳定身份备份。 */
   Future<void> upsertPlaybackStates(Iterable<VideoItem> items) =>
-      _repository.upsertPlaybackStates(items);
-  Future<VideoItem?> deleteVideo(String path) => _repository.deleteVideo(path);
+      _commands.upsertPlaybackStates(items);
+  Future<VideoItem?> deleteVideo(String path) => _commands.deleteVideo(path);
   /** 执行设置页授权的数据库清理，不向 UI 暴露 SQLite 或文件删除能力。 */
   Future<int> removeMissingOrUnreadableVideos() =>
-      _repository.removeMissingOrUnreadableVideos();
+      _commands.removeMissingOrUnreadableVideos();
 
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(
     String rootPath, {
     LibraryScanProgressCallback? onProgress,
   }) =>
-      _repository.addRootAndScanWithChanges(
+      _commands.addRootAndScanWithChanges(
         rootPath,
         onProgress: onProgress,
       );
@@ -182,65 +185,65 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
   Future<LibraryScanCommitResult> addRootsAndScanWithChanges(
           Iterable<String> rootPaths,
           {LibraryScanProgressCallback? onProgress}) =>
-      _repository.addRootsAndScanWithChanges(
+      _commands.addRootsAndScanWithChanges(
         rootPaths,
         onProgress: onProgress,
       );
 
   Future<List<VideoItem>> removeRoot(String rootPath) =>
-      _repository.removeRoot(rootPath);
+      _commands.removeRoot(rootPath);
 
   Future<LibraryScanCommitResult> scanWithChanges({
     LibraryScanProgressCallback? onProgress,
   }) =>
-      _repository.scanWithChanges(onProgress: onProgress);
+      _commands.scanWithChanges(onProgress: onProgress);
 
   /** 播放器进入/退出时只通过 Repository 协调扫描让盘，不暴露具体 sidecar。 */
-  Future<void> setScanPaused(bool paused) => _repository.setScanPaused(paused);
+  Future<void> setScanPaused(bool paused) => _commands.setScanPaused(paused);
 
   /** 用户从进度区取消当前扫描；已持久化的媒体库数据保持不变。 */
-  Future<void> cancelActiveScan() => _repository.cancelActiveScan();
+  Future<void> cancelActiveScan() => _commands.cancelActiveScan();
 
   /** 当前独立备份状态快照。 */
-  DataBackupStatus get dataBackupStatus => _repository.dataBackupStatus;
+  DataBackupStatus get dataBackupStatus => _queries.dataBackupStatus;
 
   /** 设置页订阅的独立备份状态流。 */
   Stream<DataBackupStatus> get dataBackupStatusStream =>
-      _repository.dataBackupStatusStream;
+      _queries.dataBackupStatusStream;
 
   Future<void> setDataBackupEnabled(bool enabled) =>
-      _repository.setDataBackupEnabled(enabled);
+      _commands.setDataBackupEnabled(enabled);
 
-  Future<void> runDataBackupNow() => _repository.runDataBackupNow();
+  Future<void> runDataBackupNow() => _commands.runDataBackupNow();
 
   Future<DataBackupIntegrityReport> checkDataBackupIntegrity() =>
-      _repository.checkDataBackupIntegrity();
+      _queries.checkDataBackupIntegrity();
 
   Future<Uint8List> createDataBackupExport() =>
-      _repository.createDataBackupExport();
+      _queries.createDataBackupExport();
 
   Future<void> pauseDataBackupForPlayback() =>
-      _repository.pauseDataBackupForPlayback();
+      _commands.pauseDataBackupForPlayback();
 
   void resumeDataBackupAfterPlayback() =>
-      _repository.resumeDataBackupAfterPlayback();
+      _commands.resumeDataBackupAfterPlayback();
 
-  Future<int> countUntrackedVideos() => _repository.countUntrackedVideos();
+  Future<int> countUntrackedVideos() => _queries.countUntrackedVideos();
 
   Set<String> childTagsFor(String parentTag) =>
-      _repository.childTagsFor(parentTag);
+      _queries.childTagsFor(parentTag);
 
   /** 提交同一稳定视频在物理重命名后的 mutable path。 */
   Future<void> renameVideoPath(VideoItem item, String newPath) =>
-      _repository.renameVideoPath(item, newPath);
+      _commands.renameVideoPath(item, newPath);
 
   Future<void> relinkMissingVideo(VideoItem item, String newPath) =>
-      _repository.relinkMissingVideo(item, newPath);
+      _commands.relinkMissingVideo(item, newPath);
 
   Future<Set<String>> relinkMissingVideosInBatch(
     Map<VideoItem, String> targets,
   ) =>
-      _repository.relinkMissingVideosInBatch(targets);
+      _commands.relinkMissingVideosInBatch(targets);
 
-  Future<void> close() => _repository.close();
+  Future<void> close() => _commands.close();
 }

@@ -18,13 +18,17 @@ abstract interface class LibraryRelinkRepository {
   Future<void> replaceRoot(String oldRoot, String newRoot);
 }
 
-abstract interface class LibraryRepository implements LibraryRelinkRepository {
+/**
+ * 媒体库只读查询能力。
+ *
+ * 调用方只能读取当前内存快照或发起不改变主库状态的查询；具体 SQLite 实现、索引维护和
+ * 缓存策略仍由 data 层拥有。该接口与命令接口分离，避免只读消费者获得写入能力。
+ */
+abstract interface class LibraryQueryRepository {
   /** 当前受管理的媒体库根目录；具体集合由 Dart Repository 独占维护。 */
-  @override
   List<String> get roots;
 
   /** 以内存 pathKey 索引保存的稳定视频记录。 */
-  @override
   Map<String, VideoItem> get videos;
 
   /** 用户固定的常用标签名称。 */
@@ -49,6 +53,32 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
 
   Future<Map<String, TagUsageSummary>> tagUsageSummaries();
 
+  Future<int> countTagReferences(TagItem tag);
+
+  /** 当前视频依赖备份状态。 */
+  DataBackupStatus get dataBackupStatus;
+
+  /** 设置页订阅的无隐私进度流。 */
+  Stream<DataBackupStatus> get dataBackupStatusStream;
+
+  /** 用户显式检查独立备份的结构和当前数据覆盖情况。 */
+  Future<DataBackupIntegrityReport> checkDataBackupIntegrity();
+
+  /** 创建不含本地路径和媒体文件内容的便携导出。 */
+  Future<Uint8List> createDataBackupExport();
+
+  Future<int> countUntrackedVideos();
+
+  Set<String> childTagsFor(String parentTag);
+}
+
+/**
+ * 媒体库写入与运行时命令能力。
+ *
+ * 跨 videos、tags、metadata 或备份队列的原子操作继续以单个粗粒度方法暴露，并由同一
+ * Repository 实现持有 SQLite transaction。接口拆分不得把一个既有事务拆成多个调用。
+ */
+abstract interface class LibraryCommandRepository {
   Future<void> replaceManualTags(
     VideoItem item, {
     String? parentTag,
@@ -69,8 +99,6 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
     bool? isFavorite,
     int? sortOrder,
   });
-
-  Future<int> countTagReferences(TagItem tag);
 
   Future<int> batchAddManualTag(TagItem tag, Iterable<VideoItem> items);
 
@@ -134,33 +162,17 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
    */
   Future<void> cancelActiveScan();
 
-  /** 当前视频依赖备份状态。 */
-  DataBackupStatus get dataBackupStatus;
-
-  /** 设置页订阅的无隐私进度流。 */
-  Stream<DataBackupStatus> get dataBackupStatusStream;
-
   /** 切换后台备份；关闭时保留既有快照。 */
   Future<void> setDataBackupEnabled(bool enabled);
 
   /** 从头启动一轮独立备份核对。 */
   Future<void> runDataBackupNow();
 
-  /** 用户显式检查独立备份的结构和当前数据覆盖情况。 */
-  Future<DataBackupIntegrityReport> checkDataBackupIntegrity();
-
-  /** 创建不含本地路径和媒体文件内容的便携导出。 */
-  Future<Uint8List> createDataBackupExport();
-
   /** 播放前等待当前小批次结束并暂停。 */
   Future<void> pauseDataBackupForPlayback();
 
   /** 播放器释放后恢复未完成任务。 */
   void resumeDataBackupAfterPlayback();
-
-  Future<int> countUntrackedVideos();
-
-  Set<String> childTagsFor(String parentTag);
 
   /**
    * 在物理文件已完成同目录重命名后，把同一稳定 videoId 提交到 [newPath]。
@@ -171,16 +183,26 @@ abstract interface class LibraryRepository implements LibraryRelinkRepository {
 
   Future<void> relinkMissingVideo(VideoItem item, String newPath);
 
-  @override
   Future<Set<String>> relinkMissingVideosInBatch(
     Map<VideoItem, String> targets,
   );
 
-  @override
   Future<void> replaceRoot(String oldRoot, String newRoot);
 
   Future<void> close();
 }
+
+/**
+ * 组合根与完整 Store 实现使用的兼容聚合契约。
+ *
+ * 新的应用服务应优先依赖 [LibraryQueryRepository] 或 [LibraryCommandRepository]；
+ * 只有需要同时装配两种能力的 composition/data 边界才应引用此接口。
+ */
+abstract interface class LibraryRepository
+    implements
+        LibraryQueryRepository,
+        LibraryCommandRepository,
+        LibraryRelinkRepository {}
 
 abstract interface class TagRepository {
   Future<List<TagGroup>> loadGroups();

@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.124` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.125` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -138,6 +138,13 @@ Phase 4E 将 `PlaybackDiagnosticsSnapshot` 迁入 player domain，并把诊断�
 dispose；它不再导入 `player_page.dart` 或持有 `PlayerPageState`/PlayerService。
 页面仍用同一当前播放器实例构建匿名快照，不创建第二个 Player，也不改变诊断入口、
 详细指标、复制隐私边界或弹层 airspace。Phase 4 播放器 MVVM 迁移完成。
+
+Phase 5 将媒体库 Repository 使用面拆为只读 `LibraryQueryRepository` 与写入/运行时
+`LibraryCommandRepository`。`LibraryApplicationFacade` 分别持有两个能力端口，组合根
+仍把同一个 `LibraryStore` 实例注入两侧，因此 SQLite 连接、内存索引和事务 owner 没有
+复制。标签维护、扫描、root、删除和 relink 的跨表 batch 保持为粗粒度命令；事务亲和度
+审计确认当前不满足物理拆分收益门槛，证据记录于
+`docs/architecture/LIBRARY_REPOSITORY_AFFINITY_2026_07_29.md`。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。

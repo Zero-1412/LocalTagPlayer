@@ -3259,7 +3259,8 @@ void main() {
       (tester) async {
     final repository = _MissingRelinkTestRepository();
     final facade = LibraryApplicationFacade(
-      libraryRepository: repository,
+      queryRepository: repository,
+      commandRepository: repository,
       tagRepository: repository,
       cacheRepository: repository,
       playbackRepository: repository,
@@ -6705,7 +6706,8 @@ void main() {
     )..isMissing = true;
     repository.videos[TagRules.pathKey(item.path)] = item;
     final store = LibraryApplicationFacade(
-      libraryRepository: repository,
+      queryRepository: repository,
+      commandRepository: repository,
       tagRepository: repository,
       cacheRepository: repository,
       playbackRepository: repository,
@@ -6745,7 +6747,8 @@ void main() {
     final repository = _MissingRelinkTestRepository()
       ..roots.addAll(<String>[r'X:\test-media', r'E:\archive\media']);
     final store = LibraryApplicationFacade(
-      libraryRepository: repository,
+      queryRepository: repository,
+      commandRepository: repository,
       tagRepository: repository,
       cacheRepository: repository,
       playbackRepository: repository,
@@ -6819,7 +6822,8 @@ void main() {
       repository.videos[TagRules.pathKey(item.path)] = item;
     }
     final store = LibraryApplicationFacade(
-      libraryRepository: repository,
+      queryRepository: repository,
+      commandRepository: repository,
       tagRepository: repository,
       cacheRepository: repository,
       playbackRepository: repository,

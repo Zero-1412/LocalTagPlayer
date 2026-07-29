@@ -313,7 +313,8 @@ void main() {
       TagRules.pathKey(charlie.path): charlie,
     });
     final store = LibraryApplicationFacade(
-      libraryRepository: repository,
+      queryRepository: repository,
+      commandRepository: repository,
       tagRepository: repository,
       cacheRepository: repository,
       playbackRepository: repository,

@@ -126,7 +126,8 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies({
       dataBackupEnabled: dataBackupEnabled,
     );
     return LibraryApplicationFacade(
-      libraryRepository: repository,
+      queryRepository: repository,
+      commandRepository: repository,
       tagRepository: repository,
       cacheRepository: repository,
       playbackRepository: repository,

@@ -2456,3 +2456,10 @@
 - 将现有 media_kit/libmpv 播放链路收口到完整 `PlayerBackend` 适配器，播放器页面仅负责 filtered queue 与 UI，不再直接拥有 Player、VideoController 或原生属性入口。
 - 增加可注入后端工厂、纹理/状态/诊断/释放契约，为 Windows C++ 播放后端提供不改页面的可回滚 A/B 接入点；默认播放参数与硬解行为保持不变。
 - 真实媒体库 90 秒回归完成 4 轮播放、滚动、seek 和退出，实际硬解保持 `d3d11va-copy`，独立视频帧与音频 PTS 均持续推进。
+## Architecture Baseline 0.5.125
+
+- 媒体库 Repository 使用面拆为 `LibraryQueryRepository` 与
+  `LibraryCommandRepository`；facade 不再依赖大而全的聚合接口，组合根仍用同一
+  `LibraryStore` 实例维持唯一 SQLite/内存/事务 owner。
+- 新增 Library Repository 事务亲和度审计。标签、扫描、root、删除和 relink 的跨表
+  写入继续使用原粗粒度 batch；不修改 schema、筛选语义、播放队列、缓存队列或用户数据。

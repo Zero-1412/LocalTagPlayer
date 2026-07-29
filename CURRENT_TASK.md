@@ -317,6 +317,16 @@
   `flutter analyze`、Windows Debug build 通过；`PlayerPage` 门禁保持 5,021。Phase 4
   播放器 MVVM 完成，下一步进入 Phase 5：先收窄 Repository 读写接口并收集事务亲和度
   证据，不直接物理拆分 `LibraryStore`。
+- Phase 5 已完成代码与事务证据收口：新增 `LibraryQueryRepository` 和
+  `LibraryCommandRepository`，facade 不再持有完整 `LibraryRepository`；组合根仍把
+  同一个 `LibraryStore` 实例注入两个端口，SQLite、内存索引和事务 owner 保持唯一。
+- 标签维护、扫描/root、删除、稳定身份 relink 等跨域写入继续以粗粒度命令在同一 batch
+  提交；审计确认当前不满足物理拆分的收益门槛，完整矩阵见
+  `docs/architecture/LIBRARY_REPOSITORY_AFFINITY_2026_07_29.md`。
+- Phase 5 focused 架构/真实媒体库页面测试与完整 442 项测试通过（3 项显式跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口点击启动通过。该阶段没有
+  视觉变更；Computer Use 原生管道仍不可用，因此没有使用可能捕获其它窗口的截图回退。
+  下一步进入 Phase 6，只清理已经归零的兼容导入/导出并完成最终架构审查。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

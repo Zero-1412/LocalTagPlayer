@@ -104,7 +104,8 @@ void main() {
     final cache = _FakeCacheRepository();
     final playback = _FakePlaybackRepository();
     final facade = LibraryApplicationFacade(
-      libraryRepository: library,
+      queryRepository: library,
+      commandRepository: library,
       tagRepository: tags,
       cacheRepository: cache,
       playbackRepository: playback,
@@ -131,6 +132,43 @@ void main() {
     expect(playback.savedVideoId, 'video-1');
     expect(
         (await facade.thumbnailStatus('video-1')).kind, CacheStatusKind.ready);
+  });
+
+  test('library facade depends on split query and command capabilities', () {
+    final contracts = File('lib/src/repositories/repository_interfaces.dart')
+        .readAsStringSync();
+    final facade = File(
+      'lib/src/services/library/library_application_facade.dart',
+    ).readAsStringSync();
+    final bootstrap = File(
+      'lib/src/composition/local_tag_player_bootstrap.dart',
+    ).readAsStringSync();
+
+    expect(
+      contracts,
+      contains('abstract interface class LibraryQueryRepository'),
+    );
+    expect(
+      contracts,
+      contains('abstract interface class LibraryCommandRepository'),
+    );
+    final normalizedContracts = contracts.replaceAll('\r\n', '\n');
+    expect(
+      normalizedContracts,
+      contains('LibraryQueryRepository,\n'
+          '        LibraryCommandRepository,\n'
+          '        LibraryRelinkRepository'),
+    );
+    expect(facade, contains('required LibraryQueryRepository queryRepository'));
+    expect(
+      facade,
+      contains('required LibraryCommandRepository commandRepository'),
+    );
+    expect(facade, contains('final LibraryQueryRepository _queries'));
+    expect(facade, contains('final LibraryCommandRepository _commands'));
+    expect(facade, isNot(contains('final LibraryRepository _repository')));
+    expect(bootstrap, contains('queryRepository: repository'));
+    expect(bootstrap, contains('commandRepository: repository'));
   });
 
   test('sqflite provider owns factory and paths while Dart owns schema writes',
