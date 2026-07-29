@@ -13,6 +13,7 @@ import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
 import '../../features/update/domain/app_update_service.dart';
 import '../../features/update/presentation/about_settings_page.dart';
+import '../../features/settings/application/cache_diagnostics_controller.dart';
 import '../../features/settings/application/playback_settings_controller.dart';
 import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/cache_diagnostics_snapshot_view.dart';
@@ -1386,6 +1387,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   /** 普通播放设置的唯一可写 owner；不包含备份或缓存任务状态。 */
   late final PlaybackSettingsController _playbackSettingsController;
   PlaybackSettings get _settings => _playbackSettingsController.settings;
+  /** 缓存统计读取的 latest-only owner；不包含重试或清理命令。 */
+  late final CacheDiagnosticsController<CacheStats> _cacheDiagnosticsController;
   late DataBackupSettings _dataBackupSettings = widget.dataBackupSettings;
   late DataBackupStatus _dataBackupStatus = widget.store.dataBackupStatus;
   StreamSubscription<DataBackupStatus>? _dataBackupSubscription;
@@ -1398,9 +1401,6 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   /** 快捷键录制冲突按动作就地展示，成功保存或恢复默认后清除。 */
   final Map<PlayerShortcutAction, String> _shortcutErrors = {};
 
-  late Future<CacheStats> _statsFuture =
-      widget.thumbnailService.statsFor(widget.store.videos.values);
-
   @override
   void initState() {
     super.initState();
@@ -1409,6 +1409,10 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       // 通过当前 widget 转发，避免父级重建并替换回调后继续调用旧闭包。
       save: (settings) => widget.onPlaybackSettingsChanged(settings),
     )..addListener(_handlePlaybackSettingsChanged);
+    _cacheDiagnosticsController = CacheDiagnosticsController<CacheStats>(
+      load: () => widget.thumbnailService.statsFor(widget.store.videos.values),
+    )..addListener(_handleCacheDiagnosticsChanged);
+    unawaited(_cacheDiagnosticsController.refresh());
     _dataBackupSubscription = widget.store.dataBackupStatusStream.listen(
       (status) {
         if (mounted) {
@@ -1424,11 +1428,19 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     _playbackSettingsController
       ..removeListener(_handlePlaybackSettingsChanged)
       ..dispose();
+    _cacheDiagnosticsController
+      ..removeListener(_handleCacheDiagnosticsChanged)
+      ..dispose();
     super.dispose();
   }
 
   /** controller 发布普通设置快照时只重建当前设置 Route。 */
   void _handlePlaybackSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /** 缓存只读快照发布时只重建当前设置 Route。 */
+  void _handleCacheDiagnosticsChanged() {
     if (mounted) setState(() {});
   }
 
@@ -1597,10 +1609,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   }
 
   void _refreshStats() {
-    setState(() {
-      _statsFuture =
-          widget.thumbnailService.statsFor(widget.store.videos.values);
-    });
+    unawaited(_cacheDiagnosticsController.refresh());
   }
 
   /** 定向重试当前统计快照中的失败项，并持久化已清理的旧失败标记。 */
@@ -1640,10 +1649,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       if (mounted) {
         setState(() {
           _cacheActionRunning = false;
-          _statsFuture = widget.thumbnailService.statsFor(
-            widget.store.videos.values,
-          );
         });
+        unawaited(_cacheDiagnosticsController.refresh());
       }
     }
   }
@@ -1677,10 +1684,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       if (mounted) {
         setState(() {
           _cacheActionRunning = false;
-          _statsFuture = widget.thumbnailService.statsFor(
-            widget.store.videos.values,
-          );
         });
+        unawaited(_cacheDiagnosticsController.refresh());
       }
     }
   }
@@ -2218,30 +2223,21 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                         Card(
                           child: Padding(
                             padding: const EdgeInsets.all(18),
-                            child: FutureBuilder<CacheStats>(
-                              future: _statsFuture,
-                              builder: (context, snapshot) {
-                                final stats = snapshot.data;
-                                final cacheBusy = _cacheActionRunning ||
-                                    (stats?.active ?? 0) > 0 ||
-                                    (stats?.queued ?? 0) > 0 ||
-                                    (stats?.pendingBackgroundRequests ?? 0) > 0;
-                                if (stats == null) {
-                                  return const CacheDiagnosticsLoading();
-                                }
-                                return CacheDiagnosticsSnapshotView(
-                                  stats: stats,
-                                  cacheBusy: cacheBusy,
-                                  failureActions: _CacheFailureActions(
-                                    hasFailures: stats.failures.isNotEmpty,
-                                    cacheBusy: cacheBusy,
-                                    onRetry: () =>
-                                        _retryFailedThumbnails(stats),
-                                    onClear: () =>
-                                        _clearThumbnailFailureMarkers(stats),
-                                  ),
-                                );
-                              },
+                            child: CacheDiagnosticsLoadStateView(
+                              loading: _cacheDiagnosticsController.loading,
+                              hasError:
+                                  _cacheDiagnosticsController.error != null,
+                              stats: _cacheDiagnosticsController.stats,
+                              cacheActionRunning: _cacheActionRunning,
+                              onRetry: _refreshStats,
+                              failureActionsBuilder: (stats, cacheBusy) =>
+                                  _CacheFailureActions(
+                                hasFailures: stats.failures.isNotEmpty,
+                                cacheBusy: cacheBusy,
+                                onRetry: () => _retryFailedThumbnails(stats),
+                                onClear: () =>
+                                    _clearThumbnailFailureMarkers(stats),
+                              ),
                             ),
                           ),
                         ),

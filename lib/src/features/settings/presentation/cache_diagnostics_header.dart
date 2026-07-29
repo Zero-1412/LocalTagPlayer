@@ -8,7 +8,7 @@ import '../../../widgets/app_theme_tokens.dart';
  * 缓存诊断页的只读标题与健康状态叶节点。
  *
  * 该组件只渲染调用方传入的状态快照，不读取磁盘、不创建缓存任务，也不拥有刷新、重试或
- * 清理命令；状态所有权和生命周期继续留在设置页面。
+ * 清理命令；状态所有权和生命周期由外部只读 controller 管理。
  */
 class CacheDiagnosticsHeader extends StatelessWidget {
   const CacheDiagnosticsHeader({

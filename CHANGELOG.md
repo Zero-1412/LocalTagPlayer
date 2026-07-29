@@ -42,6 +42,12 @@
   不变；新增竞态单测、架构合同和页面级修改/返回回归，页面预算降到 6,640。完整
   339 项测试通过（3 项显式基准跳过），静态分析与 Windows Debug build 通过；真实点击
   仍受 Computer Use 原生管道不可用阻塞，人工路径记录于 `CURRENT_TASK.md`。
+- 完成 Phase 2C 缓存诊断只读生命周期迁移：泛型 `CacheDiagnosticsController<T>` 使用
+  generation 实现 latest-only 读取、错误和 dispose 后失效，不依赖缓存具体实现。
+  presentation 新增安全错误态与重新读取入口；失败重试、标记清理、Repository 写入和
+  动作互斥仍在页面，留给 Phase 2D。页面预算降到 6,636；完整 343 项测试通过（3 项
+  显式基准跳过），静态分析与 Windows Debug build 通过，真实点击阻塞记录于
+  `CURRENT_TASK.md`。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

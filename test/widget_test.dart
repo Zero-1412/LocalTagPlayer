@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:local_tag_player/src/app.dart';
 import 'package:local_tag_player/src/features/library/domain/library_query_snapshot.dart';
+import 'package:local_tag_player/src/features/settings/presentation/cache_diagnostics_snapshot_view.dart';
 import 'package:path/path.dart' as p;
 
 // ignore_for_file: slash_for_doc_comments
@@ -3252,7 +3253,7 @@ void main() {
     }
   });
 
-  testWidgets('settings route keeps playback update and return path reachable',
+  testWidgets('settings route keeps playback and cache refresh reachable',
       (tester) async {
     final repository = _MissingRelinkTestRepository();
     final facade = LibraryApplicationFacade(
@@ -3323,6 +3324,42 @@ void main() {
     await tester.pump();
     expect(
       find.byKey(const ValueKey('settings.category.playback')),
+      findsOneWidget,
+    );
+
+    final cacheEntry = find.byKey(
+      const ValueKey('settings.category.cache'),
+    );
+    await tester.ensureVisible(cacheEntry);
+    await tester.pump();
+    await tester.tap(cacheEntry);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.refreshCacheStats')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.cache.coverage')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings.refreshCacheStats')),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.cache.coverage')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings.section.back')),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.category.cache')),
       findsOneWidget,
     );
   });
@@ -3582,6 +3619,33 @@ void main() {
       await tester.pump();
       expect(actions.last, entry.$2);
     }
+  });
+
+  testWidgets('cache diagnostics load failure exposes a safe retry entry',
+      (tester) async {
+    var retries = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CacheDiagnosticsLoadStateView(
+            loading: false,
+            hasError: true,
+            stats: null,
+            cacheActionRunning: false,
+            onRetry: () => retries += 1,
+            failureActionsBuilder: (_, __) => const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('读取失败'), findsOneWidget);
+    expect(find.textContaining('缓存文件和后台任务未被修改'), findsOneWidget);
+    expect(find.textContaining('StateError'), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey('settings.cache.loadError.retry')),
+    );
+    expect(retries, 1);
   });
 
   testWidgets('cache diagnostics groups stats at 150 percent text scale',

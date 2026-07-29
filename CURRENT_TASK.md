@@ -62,6 +62,18 @@
   零问题，Windows Debug build 成功。Computer Use 初始化仍因原生管道“找不到指定文件”
   不可用，未使用截图回退；仍需人工复测“设置 → 播放与解码 → 默认打开行为 → 修改 →
   返回设置首页”，核对选中值、返回路径和失败时的设置回滚反馈。
+- Phase 2C 已完成：泛型 `CacheDiagnosticsController<CacheStats>` 只拥有统计读取、
+  generation、loading/error/data 与 dispose；旧刷新或离开页面后的异步结果不能发布。
+  controller 不导入 `ThumbnailService`、Repository、文件系统、Route 或平台实现。
+- 缓存 loading/error/data 分派迁入只读 settings presentation；错误态不展示原始异常，
+  只提供重新读取统计入口。页面继续拥有失败项重试、失败标记清理、Repository 写入、
+  动作互斥和反馈，媒体库页面行数门禁由 6,640 降到 6,636。
+- 页面级测试覆盖“设置首页 → 播放设置修改/返回 → 缓存诊断 → 刷新 → 返回”；下一步
+  进入 Phase 2D，单独迁移重试、清理、确认、失败恢复和互斥命令。
+- Phase 2C focused tests 与完整 343 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 成功。Computer Use 原生管道仍返回“找不到指定文件”，
+  未使用截图回退；仍需人工复测“设置 → 缩略图缓存 → 刷新统计 → 返回”，并在可构造
+  读取失败时核对安全错误文案与“重新读取”入口。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

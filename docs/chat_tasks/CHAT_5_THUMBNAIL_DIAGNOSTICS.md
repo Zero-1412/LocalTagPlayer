@@ -13,6 +13,12 @@
   互斥和 dispose 仍留在设置页面。
 - 两项 focused、完整 333 项测试、静态分析和 Windows Debug build 通过；Computer Use
   原生管道不可用，未使用会捕获其它窗口的截图回退，人工路径见 `CURRENT_TASK.md`。
+- Phase 2C 把统计读取、刷新、错误和 dispose 迁入泛型 latest-only controller；旧代次和
+  dispose 后 Future 不得发布。controller 不依赖 `ThumbnailService` 或 Repository。
+- loading/error/data 分派迁入只读 presentation，错误态不展示原始异常；失败项重试、
+  标记清理、Repository 写入和动作互斥仍由页面拥有，等待 Phase 2D。
+- Phase 2C focused 与完整 343 项测试通过（3 项显式基准跳过），静态分析和 Windows
+  Debug build 通过；Computer Use 原生管道仍不可用，人工复测路径见 `CURRENT_TASK.md`。
 
 ## 2026-07-24 FFmpeg 8.1.2 缩略图 GPU A/B
 

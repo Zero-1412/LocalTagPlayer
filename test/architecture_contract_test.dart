@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随设置叶节点与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(6640));
+    expect(libraryLines, lessThanOrEqualTo(6636));
     expect(playerLines, lessThanOrEqualTo(5400));
   });
 
@@ -354,7 +354,7 @@ void main() {
     );
     expect(settingsState, isNot(contains('late PlaybackSettings _settings')));
     expect(settingsState, contains('DataBackupStatus _dataBackupStatus'));
-    expect(settingsState, contains('FutureBuilder<CacheStats>'));
+    expect(settingsState, contains('CacheDiagnosticsController<CacheStats>'));
   });
 
   test('cache diagnostics header is a read-only settings feature leaf', () {
@@ -385,6 +385,10 @@ void main() {
       () {
     final library =
         File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final controller = File(
+      'lib/src/features/settings/application/'
+      'cache_diagnostics_controller.dart',
+    ).readAsStringSync();
     final snapshot = File(
       'lib/src/features/settings/presentation/'
       'cache_diagnostics_snapshot_view.dart',
@@ -402,6 +406,12 @@ void main() {
     expect(snapshot, isNot(contains('clearFailures')));
     expect(snapshot, isNot(contains('setState')));
     expect(snapshot, isNot(contains('dart:io')));
+    expect(
+      snapshot,
+      contains('class CacheDiagnosticsLoadStateView extends StatelessWidget'),
+    );
+    expect(snapshot, contains('class CacheDiagnosticsLoadError'));
+    expect(snapshot, contains('failureActionsBuilder(stats, cacheBusy)'));
     for (final key in <String>[
       'settings.cache.coverage',
       'settings.cache.metric.',
@@ -411,11 +421,24 @@ void main() {
     ]) {
       expect(snapshot, contains(key), reason: '缓存只读 Key 必须保留：$key');
     }
-    expect(library, contains('FutureBuilder<CacheStats>'));
+    expect(
+      controller,
+      contains('class CacheDiagnosticsController<T> extends ChangeNotifier'),
+    );
+    expect(controller, contains('_generation'));
+    expect(controller, contains('_canPublish'));
+    expect(controller, isNot(contains('services/')));
+    expect(controller, isNot(contains('ThumbnailService ')));
+    expect(controller, isNot(contains('BuildContext ')));
+    expect(controller, isNot(contains('retryFailed')));
+    expect(controller, isNot(contains('clearFailures')));
+    expect(controller, isNot(contains('dart:io')));
+    expect(library, isNot(contains('FutureBuilder<CacheStats>')));
+    expect(library, contains('CacheDiagnosticsController<CacheStats>'));
+    expect(library, contains('CacheDiagnosticsLoadStateView('));
     expect(library, contains('class _CacheFailureActions'));
     expect(library, contains('_retryFailedThumbnails(stats)'));
     expect(library, contains('_clearThumbnailFailureMarkers(stats)'));
-    expect(library, contains('CacheDiagnosticsSnapshotView('));
   });
 
   test('update feature follows domain data presentation dependency direction',

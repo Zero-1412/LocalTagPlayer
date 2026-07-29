@@ -43,6 +43,119 @@ class CacheDiagnosticsLoading extends StatelessWidget {
 }
 
 /**
+ * 缓存统计读取失败时的安全恢复入口。
+ *
+ * 展示层不接收原始异常，避免文件系统错误把本机路径带入 UI；[onRetry] 只重新请求只读
+ * 快照，不执行失败项重试、清理或缓存删除。
+ */
+class CacheDiagnosticsLoadError extends StatelessWidget {
+  const CacheDiagnosticsLoadError({
+    super.key,
+    required this.onRetry,
+  });
+
+  /** 重新读取缓存统计的只读命令。 */
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      label: '缩略图缓存统计读取失败',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const CacheDiagnosticsHeader(
+            statusLabel: '读取失败',
+            statusColor: Colors.orangeAccent,
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            '暂时无法读取缓存统计。缓存文件和后台任务未被修改，可以稍后重试。',
+            style: TextStyle(color: libraryTextMuted, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const ValueKey('settings.cache.loadError.retry'),
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('重新读取'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/** 由页面命令 owner 为当前缓存快照构建失败动作区。 */
+typedef CacheFailureActionsBuilder = Widget Function(
+  CacheStats stats,
+  bool cacheBusy,
+);
+
+/**
+ * 缓存诊断只读加载状态的展示分派。
+ *
+ * 该组件只解释 controller 已发布的 loading/error/data 快照；缓存动作仍由
+ * [failureActionsBuilder] 回传给页面 owner 构造，不在 presentation 发起服务调用。
+ */
+class CacheDiagnosticsLoadStateView extends StatelessWidget {
+  const CacheDiagnosticsLoadStateView({
+    super.key,
+    required this.loading,
+    required this.hasError,
+    required this.stats,
+    required this.cacheActionRunning,
+    required this.onRetry,
+    required this.failureActionsBuilder,
+  });
+
+  /** 最新只读请求是否仍在加载。 */
+  final bool loading;
+
+  /** 最新读取是否失败；原始异常不会进入展示层。 */
+  final bool hasError;
+
+  /** 最新成功读取的缓存快照。 */
+  final CacheStats? stats;
+
+  /** 页面命令 owner 是否正在执行重试或清理。 */
+  final bool cacheActionRunning;
+
+  /** 只重新读取统计的恢复入口。 */
+  final VoidCallback onRetry;
+
+  /** 为成功快照构建仍由页面拥有的失败动作区。 */
+  final CacheFailureActionsBuilder failureActionsBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const CacheDiagnosticsLoading();
+    }
+    if (hasError) {
+      return CacheDiagnosticsLoadError(onRetry: onRetry);
+    }
+    final stats = this.stats;
+    if (stats == null) {
+      return const CacheDiagnosticsLoading();
+    }
+    final cacheBusy = cacheActionRunning ||
+        stats.active > 0 ||
+        stats.queued > 0 ||
+        stats.pendingBackgroundRequests > 0;
+    return CacheDiagnosticsSnapshotView(
+      stats: stats,
+      cacheBusy: cacheBusy,
+      failureActions: failureActionsBuilder(stats, cacheBusy),
+    );
+  }
+}
+
+/**
  * 缓存诊断只读快照视图。
  *
  * [stats] 由外部 owner 完成读取并发布；[failureActions] 由命令 owner 构造后注入。组件只

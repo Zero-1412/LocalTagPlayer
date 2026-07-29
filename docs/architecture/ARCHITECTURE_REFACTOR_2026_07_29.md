@@ -155,7 +155,7 @@ Phase 1.5 的发布协议已经接入现有过滤和延后计数链路：
   Future、动作区、刷新、重试和清理命令仍由原页面拥有。
 - [x] 2B 按一致性边界拆分普通设置 controller，不建立包含备份与缓存任务的巨型
   `SettingsViewModel`。
-- [ ] 2C 单独迁移只读缓存诊断；读取、刷新、错误和 dispose 使用 latest-only 发布。
+- [x] 2C 单独迁移只读缓存诊断；读取、刷新、错误和 dispose 使用 latest-only 发布。
 - [ ] 2D 单独迁移缓存删除、重建、确认、失败恢复、撤销与互斥任务。
 - [ ] 2E 最后迁移备份/恢复；数据库关闭、替换、重开与全局失效由应用服务拥有。
 - [ ] 每一步保留确认、取消、撤销、返回和所有 `ValueKey`，增加 Route 级挂载测试。
@@ -169,6 +169,16 @@ Phase 2B 只迁移 `PlaybackSettings` 这一致性边界：
 - 设置首页、播放行为、渲染器、解码器、画质、播放器交互、删除设置和快捷键入口均保留；
   页面级测试覆盖“首页 → 播放设置 → 修改 → 返回首页”的真实挂载路径。
 - `LibraryPage` 行数门禁由 6,642 下调到 6,640；后续 Phase 2C 不得为迁移方便调高。
+
+Phase 2C 将缓存统计读取迁入泛型 `CacheDiagnosticsController<CacheStats>`：
+
+- controller 只依赖 Flutter foundation 和注入的异步 loader，不导入 `ThumbnailService`、
+  Repository、文件系统或平台实现；页面仍负责组合当前媒体集合与缓存服务。
+- 每次刷新递增 generation，旧结果、旧错误和 dispose 后完成的 Future 均不得发布。
+- loading/error/data 分派由只读 presentation 处理；错误态不展示原始异常，避免本机路径
+  泄漏，并提供只重新读取统计的恢复入口。
+- 失败项重试、失败标记清理、Repository 写入、动作互斥与反馈仍由页面拥有，留给
+  Phase 2D；`LibraryPage` 行数门禁继续下调到 6,636。
 
 ### Phase 3：媒体库 MVVM
 
