@@ -22,6 +22,7 @@ import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/settings_workspace_theme.dart';
 import '../../features/library/application/library_revision_tracker.dart';
 import '../../features/library/application/library_selection_controller.dart';
+import '../../features/library/application/library_sort_controller.dart';
 import '../../features/library/application/library_view_preferences_controller.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
 import '../../models/library_scan_models.dart';
@@ -324,12 +325,7 @@ extension _LibraryPageDerivedState on _LibraryPageState {
    * 当前排序控件对应的视频比较器。
    */
   int _compareVideos(VideoItem a, VideoItem b) {
-    return compareLibraryVideosForSort(
-      a,
-      b,
-      sortMode: _sortMode,
-      sortDirection: _sortDirection,
-    );
+    return _sortController.compare(a, b);
   }
 
   /**
@@ -347,9 +343,7 @@ extension _LibraryPageDerivedState on _LibraryPageState {
    */
   void _toggleSortDirection() {
     _applySortChange(
-      sortDirection: _sortDirection == SortDirection.descending
-          ? SortDirection.ascending
-          : SortDirection.descending,
+      sortDirection: _sortController.oppositeDirection,
     );
   }
 
@@ -2445,8 +2439,10 @@ class _LibraryPageState extends State<LibraryPage> {
   MediaDetailsProgress? _mediaImportProgress;
   /** debug 扫描帧采样器；发布构建始终为 null。 */
   LibraryScanUiDiagnostics? _activeScanUiDiagnostics;
-  var _sortMode = SortMode.recent;
-  var _sortDirection = SortDirection.descending;
+  /** 排序字段、方向、稳定指纹与纯内存重排的唯一 owner。 */
+  final _sortController = LibrarySortController();
+  SortMode get _sortMode => _sortController.mode;
+  SortDirection get _sortDirection => _sortController.direction;
   /** 网格密度、主侧栏和标签面板显隐的纯展示 owner。 */
   final _viewPreferences = LibraryViewPreferencesController(
     denseResultGrid: false,
@@ -2637,8 +2633,7 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     final firstFrameWatch = Stopwatch()..start();
     void applyHydratedState() => setState(() {
-          _sortMode = sortPreferences.mode;
-          _sortDirection = sortPreferences.direction;
+          _sortController.restore(sortPreferences);
           _viewPreferences.setDenseResultGrid(
             sortPreferences.denseResultGrid,
           );
@@ -3198,11 +3193,7 @@ class _LibraryPageState extends State<LibraryPage> {
       dataRevision: _libraryDataRevision,
       sortFingerprint: _librarySortFingerprint,
       compare: _compareVideos,
-      sortVideos: (videos) => sortedLibraryVideos(
-        videos,
-        sortMode: _sortMode,
-        sortDirection: _sortDirection,
-      ),
+      sortVideos: _sortController.sort,
     );
     return _filterStateSource.update(query);
   }
@@ -3222,11 +3213,7 @@ class _LibraryPageState extends State<LibraryPage> {
       totalCount: store.videos.length,
       dataRevision: _libraryDataRevision,
       sortFingerprint: _librarySortFingerprint,
-      sortVideos: (videos) => sortedLibraryVideos(
-        videos,
-        sortMode: _sortMode,
-        sortDirection: _sortDirection,
-      ),
+      sortVideos: _sortController.sort,
     );
     final state = _filterStateSource.applyVideoDelta(query, changedVideos);
     watch.stop();
@@ -3243,11 +3230,7 @@ class _LibraryPageState extends State<LibraryPage> {
     return FilterState(
       epoch: _resultEpoch(query),
       query: query,
-      filteredVideos: sortedLibraryVideos(
-        store.videos.values,
-        sortMode: _sortMode,
-        sortDirection: _sortDirection,
-      ),
+      filteredVideos: _sortController.sort(store.videos.values),
       resultCount: store.videos.length,
       totalCount: store.videos.length,
     );
@@ -3302,11 +3285,7 @@ class _LibraryPageState extends State<LibraryPage> {
     }
     return [
       ...folders,
-      for (final video in sortedLibraryVideos(
-        videos,
-        sortMode: _sortMode,
-        sortDirection: _sortDirection,
-      ))
+      for (final video in _sortController.sort(videos))
         LocalLibraryEntry.video(video),
     ];
   }
@@ -3351,10 +3330,14 @@ class _LibraryPageState extends State<LibraryPage> {
     SortMode? sortMode,
     SortDirection? sortDirection,
   }) {
-    late final LibrarySortPreferences preferences;
+    LibrarySortPreferences? preferences;
     setState(() {
-      _sortMode = sortMode ?? _sortMode;
-      _sortDirection = sortDirection ?? _sortDirection;
+      if (!_sortController.apply(
+        mode: sortMode,
+        direction: sortDirection,
+      )) {
+        return;
+      }
       preferences = LibrarySortPreferences(
         mode: _sortMode,
         direction: _sortDirection,
@@ -3367,16 +3350,17 @@ class _LibraryPageState extends State<LibraryPage> {
       _filterState = FilterState(
         epoch: _resultEpoch(currentState.query),
         query: currentState.query,
-        filteredVideos: sortedLibraryVideos(
-          currentState.filteredVideos,
-          sortMode: _sortMode,
-          sortDirection: _sortDirection,
-        ),
+        filteredVideos: _sortController.sort(currentState.filteredVideos),
         resultCount: currentState.resultCount,
         totalCount: currentState.totalCount,
       );
     });
-    unawaited(widget.applicationService.saveSortPreferences(preferences));
+    final changedPreferences = preferences;
+    if (changedPreferences != null) {
+      unawaited(
+        widget.applicationService.saveSortPreferences(changedPreferences),
+      );
+    }
   }
 
   /**
@@ -3827,10 +3811,8 @@ class _LibraryPageState extends State<LibraryPage> {
       return _recentVideoCache;
     }
     _recentVideoCacheKey = key;
-    _recentVideoCache = sortedLibraryVideos(
+    _recentVideoCache = _sortController.sort(
       store.videos.values.where(videoIsContinueWatching),
-      sortMode: _sortMode,
-      sortDirection: _sortDirection,
     );
     return _recentVideoCache;
   }
@@ -3846,10 +3828,8 @@ class _LibraryPageState extends State<LibraryPage> {
       return _favoriteVideoCache;
     }
     _favoriteVideoCacheKey = key;
-    _favoriteVideoCache = sortedLibraryVideos(
+    _favoriteVideoCache = _sortController.sort(
       store.videos.values.where((item) => item.isFavorite),
-      sortMode: _sortMode,
-      sortDirection: _sortDirection,
     );
     return _favoriteVideoCache;
   }
@@ -3987,8 +3967,7 @@ class _LibraryPageState extends State<LibraryPage> {
       );
 
   /** 返回显式、跨运行稳定的页面排序指纹，避免对象默认字符串导致缓存身份漂移。 */
-  String get _librarySortFingerprint =>
-      '${_sortMode.name}:${_sortDirection.name}';
+  String get _librarySortFingerprint => _sortController.fingerprint;
 
   FilterQuery _currentFilterQuery() {
     final store = _store;

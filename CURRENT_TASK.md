@@ -107,13 +107,26 @@
 - `LibrarySelectionController` 只保存 stable `videoId` 的只读视图，统一进入、单选、全选、
   清空和删除后失败项保留；`LibraryViewPreferencesController` 只拥有网格密度、主侧栏
   折叠和标签面板显隐。页面继续唯一协调筛选来源、排序持久化、批量删除与复合 rebuild。
-- 排序、筛选、计数算法、播放队列和扫描生命周期均未迁移；媒体库页面行数门禁由 6,021
-  降到 6,019。下一步进入 Phase 3C，只迁移排序 controller 并证明切换排序不会调用完整
-  标签计数，也不会改变 filtered queue 的来源集合。
+- Phase 3A/3B 未迁移排序、筛选、计数算法、播放队列和扫描生命周期；媒体库页面行数
+  门禁由 6,021 降到 6,019。
 - Phase 3A/3B focused tests 与完整 359 项测试通过（3 项显式基准跳过），`flutter analyze`
   零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 仍不可用；
   需人工复测“进入多选 → 选择/全选 → 取消 → 网格/列表切换 → 折叠/展开侧栏 → 标签面板
   展开后点击标签”，核对选择只跟随 stable id、筛选后退出多选且交互无卡顿。
+- Phase 3C 已完成：`LibrarySortController` 成为排序字段、方向、稳定 fingerprint 与纯
+  内存重排的唯一 owner；自然排序算法迁入纯 domain 文件，页面只在状态真实变化后重排
+  当前已接受 `FilterState` 并经应用服务保存偏好。
+- 排序 controller 不持有 Store、筛选服务、计数查询、持久化或播放队列；页面级回归确认
+  正序切换倒序后两个 stable `videoId` 成员不变、卡片顺序反转且 `resultCountsCalls`
+  零增长。最近播放、收藏、本地目录和筛选结果继续复用同一纯排序入口。
+- helper 兼容导出保留，排序按钮、六项字段、方向回调、菜单、filtered queue 来源与
+  返回路径均未删除；媒体库页面行数门禁由 6,019 降到 5,998。下一步进入 Phase 3D，
+  分离 `LibraryQueryController` 与 `FacetCountController`，共享 epoch 协议但不得互为
+  可写状态源。
+- Phase 3C focused tests 与完整 363 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 仍不可用，
+  无法自动点击或截图；需人工复测“切换名称/日期等字段 → 切换正倒序 → 打开首项 →
+  返回”，核对排序持久化、队列成员和筛选状态不变。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

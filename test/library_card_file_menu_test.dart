@@ -170,6 +170,8 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
   final LibraryApplicationFacade store;
   /** 使用隔离目录和空 FFmpeg 后端的缩略图服务。 */
   final ThumbnailService thumbnailService;
+  /** 最近一次保存的展示偏好，用于确认排序由页面持久化而非 controller 越界写盘。 */
+  LibrarySortPreferences? savedSortPreferences;
 
   @override
   Future<LibraryPageStartupData> load({
@@ -196,7 +198,9 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
   @override
   Future<void> saveSortPreferences(
     LibrarySortPreferences preferences,
-  ) async {}
+  ) async {
+    savedSortPreferences = preferences;
+  }
 
   @override
   MediaDetailsService createMediaDetailsService({
@@ -224,7 +228,7 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
 }
 
 void main() {
-  testWidgets('媒体卡片菜单只保留当前文件定位与删除', (tester) async {
+  testWidgets('媒体卡片菜单可达且排序只重排已接受结果', (tester) async {
     tester.view.physicalSize = const Size(1248, 714);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -314,6 +318,25 @@ void main() {
       lessThan(tester.getTopLeft(cardTitle('charlie')).dx),
     );
     expect(repository.resultCountsCalls, greaterThan(0));
+
+    final countCallsBeforeSort = repository.resultCountsCalls;
+    await tester.tap(
+      find.byKey(LibrarySmokeKeys.topSortDirectionButton),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      applicationService.savedSortPreferences?.direction,
+      SortDirection.descending,
+    );
+    expect(repository.resultCountsCalls, countCallsBeforeSort);
+    expect(
+      tester.getTopLeft(cardTitle('charlie')).dx,
+      lessThan(tester.getTopLeft(cardTitle('bravo')).dx),
+    );
+    expect(cardTitle('bravo'), findsOneWidget);
+    expect(cardTitle('charlie'), findsOneWidget);
 
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);

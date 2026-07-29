@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随备份设置纵向切片与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(6019));
+    expect(libraryLines, lessThanOrEqualTo(5998));
     expect(playerLines, lessThanOrEqualTo(5400));
   });
 
@@ -717,6 +717,53 @@ void main() {
     expect(page, contains('onToggleSelectAll:'));
     expect(page, contains('onDeleteSelected:'));
     expect(page, contains('onCancelSelectionMode:'));
+  });
+
+  test('library sorting is a pure owner and never re-runs filter or counts',
+      () {
+    final page = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final controller = File(
+      'lib/src/features/library/application/library_sort_controller.dart',
+    ).readAsStringSync();
+    final domain = File(
+      'lib/src/features/library/domain/library_sorting.dart',
+    ).readAsStringSync();
+    final applyStart = page.indexOf('void _applySortChange({');
+    final applyEnd = page.indexOf(
+      'void _setResultView(bool dense)',
+      applyStart,
+    );
+    final applySort = page.substring(applyStart, applyEnd);
+
+    expect(controller, contains('class LibrarySortController'));
+    expect(controller, contains('String get fingerprint'));
+    expect(controller, contains('List<VideoItem> sort('));
+    expect(domain, contains('List<VideoItem> sortedLibraryVideos('));
+    expect(page, contains('final _sortController = LibrarySortController()'));
+    expect(page, contains('sortVideos: _sortController.sort'));
+    expect(page, isNot(contains('var _sortMode =')));
+    expect(page, isNot(contains('var _sortDirection =')));
+    for (final forbidden in <String>[
+      'BuildContext',
+      'Navigator',
+      'Route<',
+      'TagQueryService',
+      '.resultCounts(',
+      'LibraryStore',
+      'saveSortPreferences',
+      'LibraryQueueSnapshot(',
+      'dart:io',
+    ]) {
+      expect(controller, isNot(contains(forbidden)));
+      expect(domain, isNot(contains(forbidden)));
+    }
+    expect(applySort, isNot(contains('_scheduleFilterRefresh(')));
+    expect(applySort, isNot(contains('.resultCounts(')));
+    expect(applySort, isNot(contains('LibraryQueueSnapshot(')));
+    expect(applySort, contains('_sortController.sort'));
+    expect(applySort, contains('saveSortPreferences'));
   });
 
   test('PlayerPage keeps hidden progress mounted before the full controls', () {

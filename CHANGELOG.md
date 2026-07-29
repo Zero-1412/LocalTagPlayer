@@ -68,6 +68,13 @@
 - 多选、全选、删除后失败项保留、批量工具栏、侧栏折叠和标签面板 focused tests 通过；
   页面预算降到 6,019。完整 359 项测试通过（3 项显式基准跳过），静态分析、Windows
   Debug build 与正式入口可见窗口启动通过；真实点击阻塞与人工路径见 `CURRENT_TASK.md`。
+- 完成 Phase 3C 排序一致性边界迁移：`LibrarySortController` 唯一拥有字段、方向、
+  fingerprint 与纯内存重排，原自然排序 helper 迁入纯 domain；页面仍负责把新顺序发布
+  到已接受结果并通过应用服务持久化，controller 不依赖筛选、计数、Store 或播放队列。
+- 页面级回归确认方向切换只反转展示顺序，stable `videoId` 成员和
+  `resultCountsCalls` 保持不变；所有排序入口、菜单、回调、最近/收藏/本地来源与
+  filtered queue 行为保留。页面预算降到 5,998，完整 363 项测试通过（3 项显式基准
+  跳过），静态分析、Windows Debug build 与正式入口可见窗口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 
