@@ -24,7 +24,12 @@
 - [x] 建立项目本地 200 行最佳实践、500 行警戒线和 1000 行强制重构线。
 - [x] 超过 500 行的既有 presentation 文件登记只降不升预算，禁止新增超标文件。
 - [x] 拆出最近播放与标签编辑叶节点，降低 `library_widgets.dart` 的依赖与冲突面。
-- [ ] 下一批按页面级可达性证据拆分 `library_widgets.dart` 的 sidebar 或 top bar 区域。
+- [x] 拆出 sidebar 通用条目、左右面板转场与 top bar 结果视图切换器；
+  `library_widgets.dart` 降到 3348 行。
+- [x] 把全部 8 个超过 1000 行的 presentation 文件纳入有序强制治理清单。
+- [ ] 下一批继续拆分 `library_widgets.dart` 的 sidebar 容器与 top bar 搜索/状态区域。
+- [ ] 随后依次治理媒体库页面、播放器页面、视频结果、播放器队列侧栏、标签发现面板、
+  标签管理页和 missing/relink 页面。
 
 ## 2026-07-28 默认 MPV 容器合成
 

@@ -351,6 +351,18 @@
   “媒体库 → 最近播放”以及“媒体卡片更多 → 编辑标签”两个入口的真实鼠标路径与截图；
   替代证据为页面挂载合同、对应 Widget 测试和真实程序启动，仍需人工复测这两个准确
   路径。
+- 代码瘦身第二批：侧栏通用条目、左右面板转场和结果视图切换器迁到 237/52/221 行
+  独立叶节点，`library_widgets.dart` 从 3819 行继续降到 3348 行。原 `ValueKey`、
+  tooltip、无障碍语义、点击回调、动画 controller 和页面状态 owner 均保留。
+- 超过 1000 行的 8 个 presentation 文件已进入有序强制治理清单：当前先完成
+  `library_widgets.dart` 的 sidebar/top bar，再依次治理 `library_page.dart`、
+  `player_page.dart`、`library_video_results.dart`、`player_queue_sidebar.dart`、
+  `library_tag_discovery_panel.dart`、`tag_manager_page.dart` 和
+  `missing_relink_page.dart`。
+- 第二批验证：focused 架构/Widget 测试 248 项、完整测试 443 项通过（3 项显式
+  benchmark 按设计跳过），`flutter analyze` 零问题，Windows Debug build 与正式 EXE
+  点击启动通过。Computer Use 原生管道仍不可用（系统找不到指定文件），因此侧栏
+  展开/折叠、资料库入口和网格/列表切换的真实鼠标点击及截图保留为人工复测路径。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

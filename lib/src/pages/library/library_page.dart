@@ -58,6 +58,7 @@ import '../../services/player/player_service.dart';
 import '../../services/tags/tag_query_service.dart';
 import '../../widgets/app_theme_tokens.dart';
 import '../../widgets/library/library_local_view.dart';
+import '../../widgets/library/library_panel_content_transition.dart';
 import '../../widgets/library/library_smoke_keys.dart';
 import '../../widgets/library/library_tag_discovery_panel.dart';
 import '../../widgets/library/library_tag_editor_dialog.dart';
@@ -76,7 +77,6 @@ import 'missing_relink_page.dart';
 
 /** 标签筛选默认保持折叠，把媒体结果宽度优先留给高频浏览。 */
 const bool libraryTagDiscoveryPanelInitiallyOpen = false;
-
 /** 计算筛选动作后的面板状态；只有真实标签选择要求自动收起。 */
 bool libraryTagDiscoveryPanelOpenAfterMutation({
   required bool currentOpen,

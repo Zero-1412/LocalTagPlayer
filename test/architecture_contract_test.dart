@@ -338,23 +338,45 @@ void main() {
     final tagEditorLines = File(
       'lib/src/widgets/library/library_tag_editor_dialog.dart',
     ).readAsLinesSync().length;
+    final panelTransitionLines = File(
+      'lib/src/widgets/library/library_panel_content_transition.dart',
+    ).readAsLinesSync().length;
+    final sidebarItemLines = File(
+      'lib/src/widgets/library/library_sidebar_items.dart',
+    ).readAsLinesSync().length;
+    final resultViewToggleLines = File(
+      'lib/src/widgets/library/library_result_view_toggle.dart',
+    ).readAsLinesSync().length;
 
     // 体积阈值随叶节点迁移继续下调；后续瘦身只能降低，禁止把代码塞回聚合文件。
     expect(libraryLines, lessThanOrEqualTo(5747));
     expect(playerLines, lessThanOrEqualTo(5226));
-    expect(libraryWidgetLines, lessThanOrEqualTo(3819));
+    expect(libraryWidgetLines, lessThanOrEqualTo(3348));
     expect(recentPlaybackLines, lessThanOrEqualTo(299));
     expect(tagEditorLines, lessThanOrEqualTo(481));
+    expect(panelTransitionLines, lessThanOrEqualTo(52));
+    expect(sidebarItemLines, lessThanOrEqualTo(237));
+    expect(resultViewToggleLines, lessThanOrEqualTo(221));
   });
 
   test('presentation files obey 200 500 and 1000 line governance', () {
     const bestPracticeLines = 200;
     const warningLines = 500;
     const refactorLines = 1000;
+    const mandatoryRefactorOrder = <String>[
+      'lib/src/widgets/library/library_widgets.dart',
+      'lib/src/pages/library/library_page.dart',
+      'lib/src/pages/player/player_page.dart',
+      'lib/src/widgets/library/library_video_results.dart',
+      'lib/src/pages/player/player_queue_sidebar.dart',
+      'lib/src/widgets/library/library_tag_discovery_panel.dart',
+      'lib/src/pages/tags/tag_manager_page.dart',
+      'lib/src/pages/library/missing_relink_page.dart',
+    ];
     const legacyBudgets = <String, int>{
       'lib/src/pages/library/library_page.dart': 5747,
       'lib/src/pages/player/player_page.dart': 5226,
-      'lib/src/widgets/library/library_widgets.dart': 3819,
+      'lib/src/widgets/library/library_widgets.dart': 3348,
       'lib/src/widgets/library/library_video_results.dart': 2808,
       'lib/src/pages/player/player_queue_sidebar.dart': 1651,
       'lib/src/widgets/library/library_tag_discovery_panel.dart': 1511,
@@ -388,6 +410,7 @@ void main() {
               file.path.replaceAll(r'\', '/').contains('/presentation/')),
     ];
     final activeLegacyBudgets = <String>{};
+    final activeMandatoryRefactors = <String>{};
 
     for (final file in presentationFiles) {
       final path = file.path.replaceAll(r'\', '/');
@@ -410,10 +433,11 @@ void main() {
         reason: '$path 的历史预算只能下降，当前 $lines 行、预算 $budget 行',
       );
       if (lines > refactorLines) {
+        activeMandatoryRefactors.add(path);
         expect(
-          legacyBudgets.containsKey(path),
+          mandatoryRefactorOrder.contains(path),
           isTrue,
-          reason: '$path 已超过 $refactorLines 行，必须列为强制重构对象',
+          reason: '$path 已超过 $refactorLines 行，必须列入有序强制重构清单',
         );
       }
     }
@@ -421,6 +445,11 @@ void main() {
       activeLegacyBudgets,
       legacyBudgets.keys.toSet(),
       reason: '文件降到 $warningLines 行以内或被删除后，必须同步移除已失效的历史预算',
+    );
+    expect(
+      activeMandatoryRefactors,
+      mandatoryRefactorOrder.toSet(),
+      reason: '所有超过 $refactorLines 行的 presentation 文件都必须进入有序治理清单',
     );
   });
 

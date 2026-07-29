@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.127` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.128` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -162,6 +162,13 @@ Phase 0—6 的最终结构、完成证据与后续治理原则见
 首批把最近播放与标签编辑从 `library_widgets.dart` 拆为独立叶节点，聚合文件从 4577 行
 降到 3819 行，并移除其对播放设置、播放进度、缩略图和视频结果组件的无关依赖；页面仍
 通过原回调绑定，不改变筛选、队列或用户数据。
+
+第二批把侧栏通用条目、左右面板转场和结果视图切换器迁为 237/52/221 行独立叶节点，
+`library_widgets.dart` 继续从 3819 行降到 3348 行。转场和切换器继续由原
+`AnimatedSwitcher`、页面状态 owner 与 `ValueKey` 驱动；侧栏条目只转发导航与移除
+意图，不取得筛选、目录或用户数据所有权。所有超过 1000 行的 presentation 文件已进入
+有序强制治理清单，当前顺序为媒体库聚合 Widget、媒体库页面、播放器页面、视频结果、
+播放器队列侧栏、标签发现面板、标签管理页和 missing/relink 页面。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。

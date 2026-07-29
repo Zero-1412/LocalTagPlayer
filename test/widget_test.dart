@@ -76,6 +76,8 @@ import 'package:local_tag_player/src/services/window/desktop_window_state_servic
 import 'package:local_tag_player/src/widgets/app_theme_tokens.dart';
 import 'package:local_tag_player/src/widgets/design_system/app_interaction_surface.dart';
 import 'package:local_tag_player/src/widgets/library/library_local_view.dart';
+import 'package:local_tag_player/src/widgets/library/library_panel_content_transition.dart';
+import 'package:local_tag_player/src/widgets/library/library_result_view_toggle.dart';
 import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart';
 import 'package:local_tag_player/src/widgets/library/library_sort_control.dart';
 import 'package:local_tag_player/src/widgets/library/library_tag_editor_dialog.dart';
