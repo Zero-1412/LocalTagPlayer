@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/tag_rules.dart';
+import '../../features/library/application/library_missing_relink_command_executor.dart';
 import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
 import '../../services/library/library_application_facade.dart';
@@ -41,37 +42,31 @@ Future<String?> pickMissingVideoReplacementFile({
   );
 }
 
-/** 对已选择路径执行稳定身份和 fingerprint 校验，并统一展示结果。 */
-Future<bool> relinkMissingVideoToPath(
+/** 由 presentation 统一展示单条 relink 结果，不参与路径或身份校验。 */
+void showMissingRelinkCommandResult(
   BuildContext context, {
-  required LibraryApplicationFacade store,
   required VideoItem item,
-  required String path,
-}) async {
-  try {
-    await store.relinkMissingVideo(item, path);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已重新关联：${item.title}')),
-      );
-    }
-    return true;
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$error')),
-      );
-    }
-    return false;
+  required RelinkMissingVideoCommandResult result,
+}) {
+  if (!context.mounted) {
+    return;
   }
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        result.changed ? '已重新关联：${item.title}' : '${result.error}',
+      ),
+    ),
+  );
 }
 
 /**
- * 选择并安全重新关联单个 missing 视频；播放器复用该组合入口。
+ * presentation 复用的“选择 → 显式 command → 反馈”编排。
  *
- * missing 管理页会拆开“选择”和“校验”两步，只在已经选中文件后显示行级忙碌态。
+ * 文件选择仍经过平台 adapter，稳定身份与 Repository 提交仍由注入的 executor/callback
+ * 负责；取消或 Route 已卸载时返回 null，不制造失败反馈。
  */
-Future<bool> pickAndRelinkMissingVideo(
+Future<RelinkMissingVideoCommandResult?> pickAndRelinkMissingVideo(
   BuildContext context, {
   required LibraryApplicationFacade store,
   required FileSystemAdapter fileSystem,
@@ -82,18 +77,18 @@ Future<bool> pickAndRelinkMissingVideo(
     item: item,
     fallbackDirectory: store.roots.isEmpty ? null : store.roots.first,
   );
-  if (path == null) {
-    return false;
+  if (path == null || !context.mounted) {
+    return null;
   }
-  if (!context.mounted) {
-    return false;
-  }
-  return relinkMissingVideoToPath(
-    context,
-    store: store,
-    item: item,
-    path: path,
+  final result = await LibraryMissingRelinkCommandExecutor().execute(
+    RelinkMissingVideoCommand(item: item, newPath: path),
+    commit: store.relinkMissingVideo,
   );
+  if (!context.mounted) {
+    return result;
+  }
+  showMissingRelinkCommandResult(context, item: item, result: result);
+  return result;
 }
 
 /**
@@ -118,7 +113,7 @@ class MissingRelinkPage extends StatefulWidget {
 
 /** 维护正在处理的 videoId，防止同一条目被重复提交。 */
 class _MissingRelinkPageState extends State<MissingRelinkPage> {
-  final Set<String> _relinkingVideoIds = <String>{};
+  final _relinkCommandExecutor = LibraryMissingRelinkCommandExecutor();
   var _changed = false;
 
   List<VideoItem> get _missingVideos => widget.store.videos.values
@@ -128,7 +123,6 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
 
   /** 选择新文件并请求 store 做稳定身份与 fingerprint 校验。 */
   Future<void> _relink(VideoItem item) async {
-    final videoId = item.videoId;
     final path = await pickMissingVideoReplacementFile(
       fileSystem: widget.fileSystem,
       item: item,
@@ -139,25 +133,17 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
       return;
     }
     // 原生文件选择器打开期间不显示行级 spinner；只有选中候选后才锁定该行进入校验。
-    setState(() => _relinkingVideoIds.add(videoId));
-    try {
-      final changed = await relinkMissingVideoToPath(
-        context,
-        store: widget.store,
-        item: item,
-        path: path,
-      );
-      if (!mounted) {
-        return;
-      }
-      if (changed) {
-        setState(() => _changed = true);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _relinkingVideoIds.remove(videoId));
-      }
+    final operation = _relinkCommandExecutor.execute(
+      RelinkMissingVideoCommand(item: item, newPath: path),
+      commit: widget.store.relinkMissingVideo,
+    );
+    setState(() {});
+    final result = await operation;
+    if (!mounted) {
+      return;
     }
+    showMissingRelinkCommandResult(context, item: item, result: result);
+    setState(() => _changed = _changed || result.changed);
   }
 
   /** 返回媒体库时报告是否有单条索引发生变化。 */
@@ -222,7 +208,7 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
                 Expanded(
                   child: _MissingVideoList(
                     missing: missing,
-                    relinkingVideoIds: _relinkingVideoIds,
+                    relinkingVideoIds: _relinkCommandExecutor.runningVideoIds,
                     onRelink: _relink,
                   ),
                 ),

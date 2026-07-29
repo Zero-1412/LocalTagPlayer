@@ -5544,18 +5544,18 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       return false;
     }
-    final changed = await pickAndRelinkMissingVideo(
+    final result = await pickAndRelinkMissingVideo(
       context,
       store: store,
       fileSystem: _fileSystem,
       item: item,
     );
-    if (changed) {
+    if (result?.changed == true) {
       _playerScopedLibraryDataChanged = true;
       _playerScopedNeedsCountRefresh = true;
       _playerScopedTagDefinitionsChanged = true;
     }
-    return changed;
+    return result?.changed ?? false;
   }
 
   /** 播放器内改名成功后延迟到 Route 返回再刷新媒体库，避免后台页面重建。 */

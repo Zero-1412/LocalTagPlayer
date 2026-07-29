@@ -197,6 +197,21 @@
   取消”，并覆盖二级标签父级与播放器编辑标签返回，核对弹窗位置、锁定反馈和刷新状态。
 - 下一步进入 Phase 3G-3，只收口 Missing/Relink 命令边界；stable videoId、mutable path、
   missing 记录保留、确认/返回路径和现有 Repository 事务语义不得改变。
+- Phase 3G-3 已完成单条 Missing/Relink command：不可变命令捕获 stable videoId、
+  picker 前 mutable path 与 fingerprint，拒绝过期、空路径和同一身份重复提交；executor
+  不导入 Flutter、Store、FileSystemAdapter、Route 或具体 Repository。
+- Missing 页面和播放器错误面板继续复用相同 picker、SnackBar 与返回刷新语义；批量路径
+  预览、执行失败定向重试和 root 更新仍由既有 `BulkPathRelinkService` 唯一负责，没有
+  复制 fingerprint、路径占用或 SQLite 逻辑。
+- 独立审查补齐单条 relink 的 batch 失败补偿：同一 `VideoItem` 引用、旧 mutable path、
+  missing 状态、active/detached 索引和 tagId 关系全部恢复。确定性关闭数据库测试证明
+  提交失败不会留下新路径内存假象。
+- Phase 3G-3 focused tests 与完整 398 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口启动通过；`LibraryPage` 门禁保持 5,913。
+  Computer Use 仍不可用，无法截图；人工复测路径为“更多 → 缺失与重新关联 → 单条取消/
+  选择/失败反馈 → 返回”，再覆盖批量预览/重试和播放器错误面板 Relink。
+- 下一步进入 Phase 3H：只拆 `LibraryPage` 的布局、动画、Route 与 command 绑定，不迁移
+  Repository 语义，不删除任何现有入口，并保持页面预算只降不升。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

@@ -44,6 +44,16 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-29 Missing/Relink 显式命令与失败补偿
+
+- 单条 Relink command 在 picker 前捕获 stable videoId、旧 mutable path 与 fingerprint，
+  拒绝过期、空路径和同一身份重复提交；不读取文件、不持有 Store 或 Flutter 上下文。
+- 页面/播放器继续拥有 picker、spinner、SnackBar 与返回刷新，批量路径替换继续由
+  `BulkPathRelinkService` 负责预览、定向重试和 root 更新。
+- Repository 仍唯一校验路径占用、可读性与 fingerprint；单条 batch 失败恢复同一
+  `VideoItem`、旧 path、missing、active/detached 与 tagId 索引。SQLite schema、
+  FilterQuery、filtered queue、缓存队列和用户数据语义不变。
+
 ## 2026-07-29 媒体库查询版本协议
 
 - `LibraryResultEpoch` 统一描述数据、筛选、搜索和排序版本，`FilterStateSource` 与页面发布

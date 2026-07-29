@@ -217,7 +217,7 @@ Phase 2E 将现有视频数据备份设置迁入独立纵向切片：
   共享版本协议，但不得互相成为可写状态源。
 - [x] 3E 只从已接受的 `ResultSnapshot` 创建 `QueueSnapshot`。
 - [x] 3F 最后迁移扫描/导入生命周期，保留 latest-only 排队、限流和 generation cancellation。
-- [ ] 3G 把文件菜单、标签维护、Missing/Relink 变成明确 command。
+- [x] 3G 把文件菜单、标签维护、Missing/Relink 变成明确 command。
 - [ ] 3H `LibraryPage` 只保留布局、动画、Route 跳转和命令绑定。
 
 Phase 3A/3B 的落地边界：
@@ -297,6 +297,19 @@ Phase 3G-2 的落地边界：
   核对修复，不能向 command 抛出并恢复旧 `VideoItem`。
 - TagEditor 的确认/取消、播放器延迟刷新、反馈和 Tag Manager Route 仍由原 presentation
   owner 管理；focused/页面回归及全量门禁通过，媒体库页面预算降到 5,913。
+
+Phase 3G-3 的落地边界：
+
+- 单条 Missing/Relink 使用显式不可变 command，创建时捕获 stable videoId、旧 mutable
+  path 与 fingerprint；picker 返回后的过期身份、空路径和同一身份重复提交会被拒绝。
+- `LibraryMissingRelinkCommandExecutor` 不导入 Flutter、Store、FileSystemAdapter、
+  Route 或具体 Repository；最终路径占用、可读性、fingerprint 和 SQLite 仍由原
+  Repository 唯一校验。
+- picker 初始目录、取消不忙碌、行级 spinner、SnackBar、返回布尔值、播放器原地重试、
+  批量预览/定向重试/root 更新全部保留在原 presentation/service owner。
+- 单条 Repository batch 失败会恢复同一 `VideoItem` 引用、旧 path、missing、
+  active/detached 与 tagId 索引；确定性数据库关闭测试覆盖补偿。`LibraryPage` 门禁保持
+  5,913，Phase 3G 完成。
 
 ### Phase 4：播放器 MVVM
 

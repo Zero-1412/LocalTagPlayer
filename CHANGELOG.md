@@ -108,6 +108,13 @@
   主库成功后的备份入队失败只发布诊断，不再反向触发已提交标签模型的错误回滚。
   页面预算降到 5,913，完整 392 项测试通过（3 项显式基准跳过），静态分析、Windows
   Debug build 与正式入口启动通过。
+- 完成 Phase 3G-3 单条 Missing/Relink command：不可变输入捕获 stable videoId、旧
+  mutable path 与 fingerprint，拒绝 picker 返回后的过期状态和同一身份重复提交。
+- picker、行级 spinner、SnackBar、返回刷新、播放器错误入口和批量路径替换服务保持
+  原 owner；Repository 仍唯一执行路径占用、可读性、fingerprint 和 SQLite 校验。
+- 单条 batch 失败现在恢复同一 `VideoItem`、旧 path、missing、active/detached 与标签
+  索引；关闭数据库的确定性测试覆盖补偿。`LibraryPage` 维持 5,913 行，完整 398 项测试
+  通过（3 项显式基准跳过），静态分析、Windows Debug build 与正式入口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

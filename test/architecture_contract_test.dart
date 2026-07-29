@@ -1030,6 +1030,43 @@ void main() {
     expect(backup, contains('phase: DataBackupPhase.failed'));
   });
 
+  test('single missing relink is a stale-safe UI-independent command', () {
+    final page = File(
+      'lib/src/pages/library/missing_relink_page.dart',
+    ).readAsStringSync();
+    final libraryPage = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final executor = File(
+      'lib/src/features/library/application/'
+      'library_missing_relink_command_executor.dart',
+    ).readAsStringSync();
+    final coordinator = File(
+      'lib/src/services/library/library_scan_coordinator.dart',
+    ).readAsStringSync();
+
+    expect(executor, contains('class RelinkMissingVideoCommand'));
+    expect(executor, contains('class LibraryMissingRelinkCommandExecutor'));
+    expect(executor, contains('item.path != command.previousPath'));
+    expect(executor, contains('item.mediaFingerprint !='));
+    expect(executor, contains('_runningVideoIds.add(command.videoId)'));
+    expect(executor, isNot(contains("import 'package:flutter/")));
+    expect(executor, isNot(contains('LibraryApplicationFacade')));
+    expect(executor, isNot(contains('LibraryStore')));
+    expect(executor, isNot(contains('FileSystemAdapter')));
+    expect(executor, isNot(contains('BuildContext context')));
+    expect(executor, isNot(contains('Navigator.')));
+    expect(page, contains('pickMissingVideoReplacementFile('));
+    expect(page, contains('_relinkCommandExecutor.execute('));
+    expect(page, contains('showMissingRelinkCommandResult('));
+    expect(page, contains("ValueKey('missingRelink.bulkPreview')"));
+    expect(page, contains("ValueKey('missingRelink.list')"));
+    expect(page, contains('pickAndRelinkMissingVideo('));
+    expect(libraryPage, contains('pickAndRelinkMissingVideo('));
+    expect(coordinator, contains('final itemSnapshot ='));
+    expect(coordinator, contains('_restoreVideoItem(missing, itemSnapshot)'));
+  });
+
   test('PlayerPage keeps hidden progress mounted before the full controls', () {
     final source = File(
       'lib/src/pages/player/player_page.dart',

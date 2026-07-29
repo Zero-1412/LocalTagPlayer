@@ -60,9 +60,35 @@ class LibraryScanCoordinator {
         missing.mediaFingerprint != scanned.mediaFingerprint) {
       throw StateError('文件指纹不一致，已拒绝重新关联以避免串档');
     }
+    final itemSnapshot = VideoItem.fromJson(missing.toJson());
+    final videosSnapshot = Map<String, VideoItem>.of(_store.videos);
+    final detachedSnapshot = Map<String, VideoItem>.of(_store.detachedVideos);
+    final tagIdsSnapshot = {
+      for (final entry in _store.videoTagIdsByPathKey.entries)
+        entry.key: <String>{...entry.value},
+    };
+    final tagsSnapshot = Map<String, TagItem>.of(_store.tagsById);
     final batch = _store.database.batch();
-    _relinkScannedVideo(batch, missing, scanned, newKey);
-    await batch.commit(noResult: true);
+    try {
+      _relinkScannedVideo(batch, missing, scanned, newKey);
+      await batch.commit(noResult: true);
+    } catch (_) {
+      // 单条 relink 与批量路径替换共享同一补偿标准，提交失败不能留下新 path 的内存假象。
+      _store.videos
+        ..clear()
+        ..addAll(videosSnapshot);
+      _store.detachedVideos
+        ..clear()
+        ..addAll(detachedSnapshot);
+      _store.videoTagIdsByPathKey
+        ..clear()
+        ..addAll(tagIdsSnapshot);
+      _store.tagsById
+        ..clear()
+        ..addAll(tagsSnapshot);
+      _restoreVideoItem(missing, itemSnapshot);
+      rethrow;
+    }
   }
 
   /**
@@ -500,6 +526,37 @@ class LibraryScanCoordinator {
     _store.videoPersistence.relinkInBatch(batch, oldPath, existing);
     _store.tagPersistence.relinkVideoPathInBatch(batch, existing);
     LibraryTagMaintenance(_store).syncFolderTagsInBatch(batch, existing);
+  }
+
+  /** 从失败前快照恢复同一对象，保护播放器和维护页仍持有的引用。 */
+  void _restoreVideoItem(VideoItem target, VideoItem snapshot) {
+    target
+      ..path = snapshot.path
+      ..title = snapshot.title
+      ..folder = snapshot.folder
+      ..rootPath = snapshot.rootPath
+      ..relativePath = snapshot.relativePath
+      ..fileSize = snapshot.fileSize
+      ..modifiedMs = snapshot.modifiedMs
+      ..isFavorite = snapshot.isFavorite
+      ..mediaDetails = snapshot.mediaDetails
+      ..mediaFingerprint = snapshot.mediaFingerprint
+      ..thumbnailError = snapshot.thumbnailError
+      ..mediaDetailsError = snapshot.mediaDetailsError
+      ..lastPlayedAt = snapshot.lastPlayedAt
+      ..isMissing = snapshot.isMissing
+      ..playbackPosition = snapshot.playbackPosition
+      ..playbackDuration = snapshot.playbackDuration
+      ..playbackCompleted = snapshot.playbackCompleted
+      ..playbackPositionUpdatedAt = snapshot.playbackPositionUpdatedAt;
+    target.tags
+      ..clear()
+      ..addAll(snapshot.tags);
+    target.childTags
+      ..clear()
+      ..addAll(snapshot.childTags.map(
+        (parent, children) => MapEntry(parent, <String>{...children}),
+      ));
   }
 
   /**

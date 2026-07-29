@@ -1436,6 +1436,51 @@ void main() {
         contains(manual.id));
   });
 
+  test('single relink commit failure restores mutable path and tag indexes',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('manual_relink_rollback');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final original =
+        await _writeVideoPlaceholder(mediaRoot, ['Series', 'original.mp4']);
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, original.path);
+    final stableVideoId = item.videoId;
+    final oldPath = item.path;
+    final oldKey = TagRules.pathKey(oldPath);
+    final manual =
+        await store.createManualTag(name: 'rollback-keep', groupId: 'manual');
+    await store.batchAddManualTag(manual, [item]);
+    await original.delete();
+    await store.scan();
+    final replacement = await _writeVideoPlaceholder(
+      Directory('${dataDir.path}${Platform.pathSeparator}replacement'),
+      ['renamed.mp4'],
+    );
+    final newKey = TagRules.pathKey(replacement.path);
+
+    // 关闭主库连接制造确定性 batch 失败；Relink 必须恢复仍被页面/播放器持有的同一对象。
+    await store.close();
+    stores.remove(store);
+    await expectLater(
+      store.relinkMissingVideo(item, replacement.path),
+      throwsA(anything),
+    );
+
+    expect(item.videoId, stableVideoId);
+    expect(item.path, oldPath);
+    expect(item.isMissing, isTrue);
+    expect(store.videos[oldKey], same(item));
+    expect(store.videos.containsKey(newKey), isFalse);
+    expect(store.videoTagIdsByPathKey[oldKey], contains(manual.id));
+  });
+
   test('cross-drive bulk relink soak preserves stable user data', () async {
     if (!Platform.isWindows || !await Directory('E:\\').exists()) {
       return;
