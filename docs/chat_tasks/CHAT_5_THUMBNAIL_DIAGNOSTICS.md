@@ -8,6 +8,11 @@
   拥有；JPEG 有效性、ThumbnailService 调度和 FFmpegBackend 均未改变。
 - 两项 focused widget tests 通过；后续继续迁移覆盖率、指标、任务与失败详情只读展示，
   最后才评估只读诊断 controller。
+- Phase 2A-2 只读展示随后完成：加载占位、覆盖率、四项指标、后台任务和失败详情迁入
+  `CacheDiagnosticsSnapshotView`，动作区由原 owner 注入；Future、刷新、重试、清理、
+  互斥和 dispose 仍留在设置页面。
+- 两项 focused、完整 333 项测试、静态分析和 Windows Debug build 通过；Computer Use
+  原生管道不可用，未使用会捕获其它窗口的截图回退，人工路径见 `CURRENT_TASK.md`。
 
 ## 2026-07-24 FFmpeg 8.1.2 缩略图 GPU A/B
 

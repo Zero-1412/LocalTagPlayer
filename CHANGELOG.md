@@ -31,6 +31,11 @@
   widget tests、完整 332 项测试、静态分析与 Windows Debug build 通过，媒体库页面行数
   门禁降到 7,125。真实截图受已记录的应用控制阻塞，精确人工复测路径见
   `CURRENT_TASK.md`。
+- 完成 Phase 2A-2 缓存诊断只读展示迁移：加载、覆盖率、指标、后台任务和失败详情由
+  `CacheDiagnosticsSnapshotView` 解释，命令 owner 通过 Widget 槽位注入动作区；统计
+  Future、刷新、重试、清理、互斥和 dispose 均未迁移。全部缓存 Key 与显示语义保留，
+  `LibraryPage` 行数门禁降到 6,642。两项 focused、完整 333 项测试、静态分析和 Windows
+  Debug build 通过；真实窗口控制管道仍不可用，人工复测路径记录于 `CURRENT_TASK.md`。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

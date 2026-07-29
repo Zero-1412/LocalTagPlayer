@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随设置叶节点与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(7125));
+    expect(libraryLines, lessThanOrEqualTo(6642));
     expect(playerLines, lessThanOrEqualTo(5400));
   });
 
@@ -317,9 +317,14 @@ void main() {
     final header = File(
       'lib/src/features/settings/presentation/cache_diagnostics_header.dart',
     ).readAsStringSync();
+    final snapshot = File(
+      'lib/src/features/settings/presentation/'
+      'cache_diagnostics_snapshot_view.dart',
+    ).readAsStringSync();
 
-    expect(library, contains('CacheDiagnosticsHeader('));
+    expect(library, contains('CacheDiagnosticsSnapshotView('));
     expect(library, isNot(contains('class _CacheDiagnosticsHeader')));
+    expect(snapshot, contains('CacheDiagnosticsHeader('));
     expect(header,
         contains('class CacheDiagnosticsHeader extends StatelessWidget'));
     expect(header, isNot(contains('ThumbnailService')));
@@ -328,6 +333,43 @@ void main() {
     expect(header, isNot(contains('setState')));
     expect(header, isNot(contains('onRetry')));
     expect(header, isNot(contains('onClear')));
+  });
+
+  test('cache diagnostics snapshot is read-only while commands stay mounted',
+      () {
+    final library =
+        File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final snapshot = File(
+      'lib/src/features/settings/presentation/'
+      'cache_diagnostics_snapshot_view.dart',
+    ).readAsStringSync();
+
+    expect(
+      snapshot,
+      contains('class CacheDiagnosticsSnapshotView extends StatelessWidget'),
+    );
+    expect(snapshot, contains('final CacheStats stats'));
+    expect(snapshot, contains('final Widget failureActions'));
+    expect(snapshot, isNot(contains('FutureBuilder')));
+    expect(snapshot, isNot(contains('ThumbnailService')));
+    expect(snapshot, isNot(contains('retryFailed')));
+    expect(snapshot, isNot(contains('clearFailures')));
+    expect(snapshot, isNot(contains('setState')));
+    expect(snapshot, isNot(contains('dart:io')));
+    for (final key in <String>[
+      'settings.cache.coverage',
+      'settings.cache.metric.',
+      'settings.cache.taskSummary',
+      'settings.cache.failureSemantics',
+      'settings.cache.failureDetails',
+    ]) {
+      expect(snapshot, contains(key), reason: '缓存只读 Key 必须保留：$key');
+    }
+    expect(library, contains('FutureBuilder<CacheStats>'));
+    expect(library, contains('class _CacheFailureActions'));
+    expect(library, contains('_retryFailedThumbnails(stats)'));
+    expect(library, contains('_clearThumbnailFailureMarkers(stats)'));
+    expect(library, contains('CacheDiagnosticsSnapshotView('));
   });
 
   test('update feature follows domain data presentation dependency direction',

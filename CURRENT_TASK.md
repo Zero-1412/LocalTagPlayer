@@ -33,16 +33,23 @@
 - focused/full tests、`flutter analyze`、Windows Debug build 已通过；真实 Windows
   窗口完成“侧栏设置 → 设置分组 → 关于 → 返回设置 → 返回媒体库”点击与截图，未发现
   遮挡、错位、溢出或返回状态丢失。
-- 下一阶段继续 Phase 2A-2：只提取缓存诊断只读展示 Widget；不同时迁移状态、删除/清空、
-  备份/恢复、筛选 controller 或播放器。
 - Phase 2A-2 已开始：缓存诊断标题与健康状态叶节点迁入
   `features/settings/presentation/cache_diagnostics_header.dart`；它不读取 `CacheStats`、
   不持有异步状态或命令。原页面继续拥有统计 Future、刷新、重试、清理与 dispose。
 - 两项缓存诊断 focused widget tests 通过；`LibraryPage` 行数门禁由 7,237 下调到 7,125。
   完整 332 项测试通过（3 项显式基准跳过），静态分析和 Windows Debug build 通过。
   真实窗口截图仍受同一 Computer Use 原生管道与用户活动阻塞；需人工复测“设置 → 缩略图
-  缓存 → 刷新统计 → 返回”，确认标题、状态角标和加载/终态无跳位。下一批继续迁移覆盖率、
-  指标、后台任务与失败详情的只读展示，动作 owner 保持不变。
+  缓存 → 刷新统计 → 返回”，确认标题、状态角标和加载/终态无跳位。
+- Phase 2A-2 已完成：加载占位、覆盖率、四项指标、后台任务和失败详情迁入
+  `cache_diagnostics_snapshot_view.dart`。新视图只解释 `CacheStats` 并接收外部动作槽位；
+  原页面继续唯一拥有 Future、刷新、重试、清理、互斥和 dispose。
+- 缓存页面全部既有 `ValueKey`、失败属于缺失子集、50 项展示上限和窄窗布局保留；
+  `LibraryPage` 行数门禁继续由 7,125 下调到 6,642。下一步进入 Phase 2B，先按一致性
+  边界盘点普通设置状态，不把备份和缓存任务塞进巨型 SettingsViewModel。
+- 两项缓存 focused tests、完整 333 项测试通过（3 项显式基准跳过），静态分析和 Windows
+  Debug build 通过。Computer Use 原生管道再次返回“找不到指定文件”，未再使用可能捕获
+  其他窗口的截图回退；仍需人工复测“设置 → 缩略图缓存 → 刷新统计 → 展开失败详情 →
+  返回”，核对 Key 对应入口、150% 文字、按钮禁用态和加载/终态布局。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 
