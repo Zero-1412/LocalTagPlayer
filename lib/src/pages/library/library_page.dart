@@ -15,8 +15,8 @@ import '../../features/update/presentation/about_settings_page.dart';
 import '../../features/settings/application/cache_diagnostics_controller.dart';
 import '../../features/settings/application/cache_diagnostics_maintenance_controller.dart';
 import '../../features/settings/application/playback_settings_controller.dart';
+import '../../features/settings/presentation/cache_diagnostics_settings_card.dart';
 import '../../features/settings/presentation/cache_diagnostics_snapshot_view.dart';
-import '../../features/settings/presentation/cache_failure_actions.dart';
 import '../../features/settings/presentation/data_backup_settings_workspace.dart';
 import '../../features/settings/presentation/delete_file_settings_panel.dart';
 import '../../features/settings/presentation/playback_and_decoding_settings_card.dart';
@@ -24,6 +24,7 @@ import '../../features/settings/presentation/player_interaction_settings_panels.
 import '../../features/settings/presentation/playback_quality_settings_panel.dart';
 import '../../features/settings/presentation/playback_stream_cache_card.dart';
 import '../../features/settings/presentation/settings_landing_list.dart';
+import '../../features/settings/presentation/settings_workspace_scaffold.dart';
 import '../../features/settings/presentation/settings_workspace_theme.dart';
 import '../../features/library/application/library_continue_watching_command_executor.dart';
 import '../../features/library/application/library_facet_count_controller.dart';
@@ -634,189 +635,144 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
 
   /** 构建已由深色维护主题包裹的设置内容，避免额外嵌套导致大范围无意义缩进。 */
   Widget _buildSettingsWorkspace(BuildContext context) {
-    return PopScope<void>(
-      canPop: _section == _SettingsSection.home,
-      onPopInvokedWithResult: (didPop, result) {
-        // 系统返回键在二级页优先返回设置首页，不直接退出整个设置路由。
-        if (!didPop && _section != _SettingsSection.home) {
-          _returnToSettingsHome();
-        }
-      },
-      child: Scaffold(
-        backgroundColor: libraryBackground,
-        appBar: AppBar(
-          leading: _section == _SettingsSection.home
-              ? null
-              : BackButton(
-                  key: const ValueKey('settings.section.back'),
-                  onPressed: _returnToSettingsHome,
-                ),
-          title: Text(_sectionTitle),
-          actions: [
-            if (_section == _SettingsSection.cache)
-              TextButton.icon(
-                key: const ValueKey('settings.refreshCacheStats'),
-                style: TextButton.styleFrom(foregroundColor: libraryText),
-                onPressed: _refreshStats,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('刷新统计'),
-              ),
-          ],
-        ),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: _section == _SettingsSection.home ? 760 : 920,
-            ),
-            child: _section == _SettingsSection.home
-                ? SettingsLandingList(
-                    resumeBehavior: _settings.resumeBehavior,
-                    rendererPreference: _settings.rendererPreference,
+    final isHome = _section == _SettingsSection.home;
+    return SettingsWorkspaceScaffold(
+      isHome: isHome,
+      title: _sectionTitle,
+      showRefreshAction: _section == _SettingsSection.cache,
+      onBack: _returnToSettingsHome,
+      onRefresh: _refreshStats,
+      child: isHome
+          ? SettingsLandingList(
+              resumeBehavior: _settings.resumeBehavior,
+              rendererPreference: _settings.rendererPreference,
+              confirmBeforeDeletingVideo: _settings.confirmBeforeDeletingVideo,
+              moveDeletedFileToTrash: _settings.moveDeletedFileToTrash,
+              autoRemoveMissingOrUnreadableVideos:
+                  _settings.autoRemoveMissingOrUnreadableVideos,
+              onOpenPlayback: () => _openSection(_SettingsSection.playback),
+              onOpenVideoQuality: () =>
+                  _openSection(_SettingsSection.videoQuality),
+              onOpenPlayerInteraction: () =>
+                  _openSection(_SettingsSection.playerInteraction),
+              onOpenFileDeletion: () =>
+                  _openSection(_SettingsSection.fileDeletion),
+              onOpenDataBackup: () => _openSection(_SettingsSection.dataBackup),
+              onOpenCache: () => _openSection(_SettingsSection.cache),
+              onOpenAbout: () => _openSection(_SettingsSection.about),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                if (_section == _SettingsSection.playback) ...[
+                  PlaybackAndDecodingSettingsCard(
+                    settings: _settings,
+                    onChanged: (settings) async {
+                      // 页面 controller 继续唯一负责串行持久化与失败补偿。
+                      await _playbackSettingsController.update(settings);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  PlaybackStreamCacheCard(
+                    settings: _settings,
+                    onChanged: (settings) {
+                      unawaited(
+                        _playbackSettingsController.update(settings),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (_section == _SettingsSection.videoQuality) ...[
+                  PlaybackQualitySettingsPanel(
+                    settings: _settings,
+                    onChanged: (settings) {
+                      unawaited(
+                        _playbackSettingsController.update(settings),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (_section == _SettingsSection.dataBackup) ...[
+                  DataBackupSettingsWorkspace(
+                    initialSettings: widget.dataBackupSettings,
+                    initialStatus: widget.store.dataBackupStatus,
+                    statuses: widget.store.dataBackupStatusStream,
+                    onSettingsChanged: widget.onDataBackupSettingsChanged,
+                    onRunNow: widget.onRunDataBackupNow,
+                    onCheckIntegrity: widget.onCheckDataBackupIntegrity,
+                    onExport: widget.onExportDataBackup,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (_section == _SettingsSection.fileDeletion) ...[
+                  DeleteFileSettingsPanel(
                     confirmBeforeDeletingVideo:
                         _settings.confirmBeforeDeletingVideo,
                     moveDeletedFileToTrash: _settings.moveDeletedFileToTrash,
                     autoRemoveMissingOrUnreadableVideos:
                         _settings.autoRemoveMissingOrUnreadableVideos,
-                    onOpenPlayback: () =>
-                        _openSection(_SettingsSection.playback),
-                    onOpenVideoQuality: () =>
-                        _openSection(_SettingsSection.videoQuality),
-                    onOpenPlayerInteraction: () =>
-                        _openSection(_SettingsSection.playerInteraction),
-                    onOpenFileDeletion: () =>
-                        _openSection(_SettingsSection.fileDeletion),
-                    onOpenDataBackup: () =>
-                        _openSection(_SettingsSection.dataBackup),
-                    onOpenCache: () => _openSection(_SettingsSection.cache),
-                    onOpenAbout: () => _openSection(_SettingsSection.about),
-                  )
-                : ListView(
-                    padding: const EdgeInsets.all(24),
-                    children: [
-                      if (_section == _SettingsSection.playback) ...[
-                        PlaybackAndDecodingSettingsCard(
-                          settings: _settings,
-                          onChanged: (settings) async {
-                            // 页面 controller 继续唯一负责串行持久化与失败补偿。
-                            await _playbackSettingsController.update(settings);
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        PlaybackStreamCacheCard(
-                          settings: _settings,
-                          onChanged: (settings) {
-                            unawaited(
-                              _playbackSettingsController.update(settings),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (_section == _SettingsSection.videoQuality) ...[
-                        PlaybackQualitySettingsPanel(
-                          settings: _settings,
-                          onChanged: (settings) {
-                            unawaited(
-                              _playbackSettingsController.update(settings),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (_section == _SettingsSection.dataBackup) ...[
-                        DataBackupSettingsWorkspace(
-                          initialSettings: widget.dataBackupSettings,
-                          initialStatus: widget.store.dataBackupStatus,
-                          statuses: widget.store.dataBackupStatusStream,
-                          onSettingsChanged: widget.onDataBackupSettingsChanged,
-                          onRunNow: widget.onRunDataBackupNow,
-                          onCheckIntegrity: widget.onCheckDataBackupIntegrity,
-                          onExport: widget.onExportDataBackup,
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (_section == _SettingsSection.fileDeletion) ...[
-                        DeleteFileSettingsPanel(
-                          confirmBeforeDeletingVideo:
-                              _settings.confirmBeforeDeletingVideo,
-                          moveDeletedFileToTrash:
-                              _settings.moveDeletedFileToTrash,
-                          autoRemoveMissingOrUnreadableVideos:
-                              _settings.autoRemoveMissingOrUnreadableVideos,
-                          onConfirmChanged: (value) {
-                            unawaited(_changeDeletePreferences(
-                              confirmBeforeDeletingVideo: value,
-                            ));
-                          },
-                          onMoveToTrashChanged: (value) {
-                            unawaited(_changeDeletePreferences(
-                              moveDeletedFileToTrash: value,
-                            ));
-                          },
-                          onAutoRemoveMissingOrUnreadableChanged:
-                              _unavailableCleanupRunning
-                                  ? null
-                                  : (value) {
-                                      unawaited(_changeDeletePreferences(
-                                        autoRemoveMissingOrUnreadableVideos:
-                                            value,
-                                      ));
-                                    },
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (_section == _SettingsSection.playerInteraction) ...[
-                        FullscreenQueueSettingsCard(
-                          enabled: _settings.fullscreenQueueEdgeHoverEnabled,
-                          onChanged: (value) => unawaited(
-                            _changeFullscreenQueueEdgeHoverEnabled(value),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        PlayerShortcutsSettingsCard(
-                          shortcuts: _settings.shortcuts,
-                          errors: _shortcutErrors,
-                          onReset: _resetShortcuts,
-                          onCaptured: _captureShortcut,
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (_section == _SettingsSection.cache) ...[
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: CacheDiagnosticsLoadStateView(
-                              loading: _cacheDiagnosticsController.loading,
-                              hasError:
-                                  _cacheDiagnosticsController.error != null,
-                              stats: _cacheDiagnosticsController.stats,
-                              cacheActionRunning:
-                                  _cacheMaintenanceController.busy,
-                              onRetry: _refreshStats,
-                              failureActionsBuilder: (stats, cacheBusy) =>
-                                  CacheFailureActions(
-                                hasFailures: stats.failures.isNotEmpty,
-                                cacheBusy: cacheBusy,
-                                onRetry: () => _retryFailedThumbnails(stats),
-                                onClear: () =>
-                                    _clearThumbnailFailureMarkers(stats),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (_section == _SettingsSection.about)
-                        SizedBox(
-                          height: MediaQuery.sizeOf(context).height - 120,
-                          child: AboutSettingsPage(
-                            updateService: widget.updateService,
-                          ),
-                        ),
-                    ],
+                    onConfirmChanged: (value) {
+                      unawaited(_changeDeletePreferences(
+                        confirmBeforeDeletingVideo: value,
+                      ));
+                    },
+                    onMoveToTrashChanged: (value) {
+                      unawaited(_changeDeletePreferences(
+                        moveDeletedFileToTrash: value,
+                      ));
+                    },
+                    onAutoRemoveMissingOrUnreadableChanged:
+                        _unavailableCleanupRunning
+                            ? null
+                            : (value) {
+                                unawaited(_changeDeletePreferences(
+                                  autoRemoveMissingOrUnreadableVideos: value,
+                                ));
+                              },
                   ),
-          ),
-        ),
-      ),
+                  const SizedBox(height: 16),
+                ],
+                if (_section == _SettingsSection.playerInteraction) ...[
+                  FullscreenQueueSettingsCard(
+                    enabled: _settings.fullscreenQueueEdgeHoverEnabled,
+                    onChanged: (value) => unawaited(
+                      _changeFullscreenQueueEdgeHoverEnabled(value),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  PlayerShortcutsSettingsCard(
+                    shortcuts: _settings.shortcuts,
+                    errors: _shortcutErrors,
+                    onReset: _resetShortcuts,
+                    onCaptured: _captureShortcut,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (_section == _SettingsSection.cache) ...[
+                  CacheDiagnosticsSettingsCard(
+                    loading: _cacheDiagnosticsController.loading,
+                    hasError: _cacheDiagnosticsController.error != null,
+                    stats: _cacheDiagnosticsController.stats,
+                    cacheActionRunning: _cacheMaintenanceController.busy,
+                    onRetry: _refreshStats,
+                    onRetryFailures: (stats) =>
+                        unawaited(_retryFailedThumbnails(stats)),
+                    onClearFailures: (stats) => unawaited(
+                      _clearThumbnailFailureMarkers(stats),
+                    ),
+                  ),
+                ],
+                if (_section == _SettingsSection.about)
+                  SizedBox(
+                    height: MediaQuery.sizeOf(context).height - 120,
+                    child: AboutSettingsPage(
+                      updateService: widget.updateService,
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }

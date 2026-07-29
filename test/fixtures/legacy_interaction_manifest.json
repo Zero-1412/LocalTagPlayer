@@ -42,8 +42,14 @@
     {
       "id": "settings.section.back",
       "kind": "back",
-      "source": "lib/src/pages/library/library_page.dart",
+      "source": "lib/src/features/settings/presentation/settings_workspace_scaffold.dart",
       "needle": "settings.section.back"
+    },
+    {
+      "id": "settings.cache.refresh",
+      "kind": "action",
+      "source": "lib/src/features/settings/presentation/settings_workspace_scaffold.dart",
+      "needle": "settings.refreshCacheStats"
     },
     {
       "id": "settings.cache.retry",

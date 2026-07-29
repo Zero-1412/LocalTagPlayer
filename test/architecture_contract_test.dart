@@ -385,9 +385,17 @@ void main() {
       'lib/src/features/settings/presentation/'
       'player_interaction_settings_panels.dart',
     ).readAsLinesSync().length;
+    final settingsWorkspaceScaffoldLines = File(
+      'lib/src/features/settings/presentation/'
+      'settings_workspace_scaffold.dart',
+    ).readAsLinesSync().length;
+    final cacheDiagnosticsSettingsCardLines = File(
+      'lib/src/features/settings/presentation/'
+      'cache_diagnostics_settings_card.dart',
+    ).readAsLinesSync().length;
 
     // 体积阈值随叶节点迁移继续下调；后续瘦身只能降低，禁止把代码塞回聚合文件。
-    expect(libraryLines, lessThanOrEqualTo(4487));
+    expect(libraryLines, lessThanOrEqualTo(4443));
     expect(playerLines, lessThanOrEqualTo(5226));
     expect(libraryWidgetLines, lessThanOrEqualTo(1917));
     expect(recentPlaybackLines, lessThanOrEqualTo(299));
@@ -407,6 +415,8 @@ void main() {
     expect(cacheFailureActionsLines, lessThanOrEqualTo(158));
     expect(playbackAndDecodingLines, lessThanOrEqualTo(98));
     expect(playerInteractionLines, lessThanOrEqualTo(168));
+    expect(settingsWorkspaceScaffoldLines, lessThanOrEqualTo(82));
+    expect(cacheDiagnosticsSettingsCardLines, lessThanOrEqualTo(69));
   });
 
   test('presentation files obey 200 500 and 1000 line governance', () {
@@ -424,7 +434,7 @@ void main() {
       'lib/src/pages/library/missing_relink_page.dart',
     ];
     const legacyBudgets = <String, int>{
-      'lib/src/pages/library/library_page.dart': 4487,
+      'lib/src/pages/library/library_page.dart': 4443,
       'lib/src/pages/player/player_page.dart': 5226,
       'lib/src/widgets/library/library_widgets.dart': 1917,
       'lib/src/widgets/library/library_video_results.dart': 2808,
@@ -601,6 +611,8 @@ void main() {
         'lib/src/features/settings/presentation/cache_failure_actions.dart',
         'lib/src/features/settings/presentation/playback_and_decoding_settings_card.dart',
         'lib/src/features/settings/presentation/player_interaction_settings_panels.dart',
+        'lib/src/features/settings/presentation/settings_workspace_scaffold.dart',
+        'lib/src/features/settings/presentation/cache_diagnostics_settings_card.dart',
       ])
         path: File(path).readAsStringSync(),
     };
@@ -609,13 +621,21 @@ void main() {
       'PlaybackStreamCacheCard(',
       'PlaybackQualitySettingsPanel(',
       'DeleteFileSettingsPanel(',
-      'CacheFailureActions(',
       'PlaybackAndDecodingSettingsCard(',
       'FullscreenQueueSettingsCard(',
       'PlayerShortcutsSettingsCard(',
+      'SettingsWorkspaceScaffold(',
+      'CacheDiagnosticsSettingsCard(',
     ]) {
       expect(library, contains(mount), reason: '设置页必须继续挂载展示叶节点：$mount');
     }
+    final cacheCard = leaves.entries
+        .singleWhere(
+          (entry) => entry.key.endsWith('cache_diagnostics_settings_card.dart'),
+        )
+        .value;
+    expect(cacheCard, contains('CacheDiagnosticsLoadStateView('));
+    expect(cacheCard, contains('CacheFailureActions('));
     for (final entry in leaves.entries) {
       for (final forbidden in <String>[
         'PlaybackSettingsController',
@@ -740,6 +760,10 @@ void main() {
   test('cache diagnostics header is a read-only settings feature leaf', () {
     final library =
         File('lib/src/pages/library/library_page.dart').readAsStringSync();
+    final settingsCard = File(
+      'lib/src/features/settings/presentation/'
+      'cache_diagnostics_settings_card.dart',
+    ).readAsStringSync();
     final header = File(
       'lib/src/features/settings/presentation/cache_diagnostics_header.dart',
     ).readAsStringSync();
@@ -751,8 +775,9 @@ void main() {
       'lib/src/features/settings/presentation/cache_failure_actions.dart',
     ).readAsStringSync();
 
-    expect(library, contains('CacheDiagnosticsLoadStateView('));
-    expect(library, contains('CacheFailureActions('));
+    expect(library, contains('CacheDiagnosticsSettingsCard('));
+    expect(settingsCard, contains('CacheDiagnosticsLoadStateView('));
+    expect(settingsCard, contains('CacheFailureActions('));
     expect(failureActions, contains('CacheDiagnosticsSnapshotView('));
     expect(library, isNot(contains('class _CacheDiagnosticsHeader')));
     expect(snapshot, contains('CacheDiagnosticsHeader('));
@@ -784,6 +809,10 @@ void main() {
     final snapshot = File(
       'lib/src/features/settings/presentation/'
       'cache_diagnostics_snapshot_view.dart',
+    ).readAsStringSync();
+    final settingsCard = File(
+      'lib/src/features/settings/presentation/'
+      'cache_diagnostics_settings_card.dart',
     ).readAsStringSync();
 
     expect(
@@ -849,7 +878,9 @@ void main() {
     expect(library, isNot(contains('bool _cacheActionRunning')));
     expect(library, contains('_cacheMaintenanceController.retry('));
     expect(library, contains('_cacheMaintenanceController.clear('));
-    expect(library, contains('CacheDiagnosticsLoadStateView('));
+    expect(library, contains('CacheDiagnosticsSettingsCard('));
+    expect(settingsCard, contains('CacheDiagnosticsLoadStateView('));
+    expect(settingsCard, contains('CacheFailureActions('));
     expect(failureActions, contains('class CacheFailureActions'));
     expect(failureActions, isNot(contains('ThumbnailService ')));
     expect(failureActions, isNot(contains('_retryFailedThumbnails')));

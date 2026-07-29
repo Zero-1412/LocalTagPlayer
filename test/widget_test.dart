@@ -23,12 +23,14 @@ import 'package:local_tag_player/src/features/player/application/player_fullscre
 import 'package:local_tag_player/src/features/player/domain/player_playback_progress.dart';
 import 'package:local_tag_player/src/features/settings/presentation/cache_failure_actions.dart';
 import 'package:local_tag_player/src/features/settings/presentation/cache_diagnostics_snapshot_view.dart';
+import 'package:local_tag_player/src/features/settings/presentation/cache_diagnostics_settings_card.dart';
 import 'package:local_tag_player/src/features/settings/presentation/data_backup_settings_workspace.dart';
 import 'package:local_tag_player/src/features/settings/presentation/delete_file_settings_panel.dart';
 import 'package:local_tag_player/src/features/settings/presentation/playback_backend_dropdowns.dart';
 import 'package:local_tag_player/src/features/settings/presentation/playback_quality_settings_panel.dart';
 import 'package:local_tag_player/src/features/settings/presentation/player_interaction_settings_panels.dart';
 import 'package:local_tag_player/src/features/settings/presentation/settings_landing_list.dart';
+import 'package:local_tag_player/src/features/settings/presentation/settings_workspace_scaffold.dart';
 import 'package:local_tag_player/src/features/settings/presentation/settings_workspace_theme.dart';
 import 'package:local_tag_player/src/features/update/domain/app_release.dart';
 import 'package:local_tag_player/src/features/update/domain/app_update_service.dart';
@@ -3821,6 +3823,101 @@ void main() {
       find.byKey(const ValueKey('settings.cache.loadError.retry')),
     );
     expect(retries, 1);
+  });
+
+  testWidgets('settings workspace scaffold only forwards chrome intents',
+      (tester) async {
+    var backCount = 0;
+    var refreshCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsWorkspaceScaffold(
+          isHome: false,
+          title: '缩略图缓存',
+          showRefreshAction: true,
+          onBack: () => backCount++,
+          onRefresh: () => refreshCount++,
+          child: const Text('缓存内容'),
+        ),
+      ),
+    );
+
+    expect(find.text('缩略图缓存'), findsOneWidget);
+    expect(find.text('缓存内容'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('settings.refreshCacheStats')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings.section.back')),
+    );
+
+    expect(refreshCount, 1);
+    expect(backCount, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cache diagnostics settings card only forwards snapshot actions',
+      (tester) async {
+    final item = _testVideo(
+      path: r'C:\cache\card-broken.mp4',
+      title: 'card broken thumbnail',
+    );
+    final stats = CacheStats(
+      total: 1,
+      cached: 0,
+      missing: 1,
+      errors: 1,
+      queued: 0,
+      pendingBackgroundRequests: 0,
+      active: 0,
+      activeBackground: 0,
+      maxConcurrent: 4,
+      maxBackground: 2,
+      maxBackgroundQueued: 500,
+      paused: false,
+      completedThisRun: 0,
+      failedThisRun: 1,
+      ffmpegCompleted: 0,
+      fallbackCompleted: 0,
+      averageMs: 12,
+      failures: <CacheFailureDetail>[
+        CacheFailureDetail(item: item, reason: 'ffmpeg: card test failure'),
+      ],
+    );
+    CacheStats? retried;
+    CacheStats? cleared;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: CacheDiagnosticsSettingsCard(
+              loading: false,
+              hasError: false,
+              stats: stats,
+              cacheActionRunning: false,
+              onRetry: () {},
+              onRetryFailures: (snapshot) => retried = snapshot,
+              onClearFailures: (snapshot) => cleared = snapshot,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final retryButton =
+        find.byKey(const ValueKey('settings.cache.retryFailures'));
+    await tester.ensureVisible(retryButton);
+    await tester.tap(retryButton);
+    final clearButton =
+        find.byKey(const ValueKey('settings.cache.clearFailures'));
+    await tester.ensureVisible(clearButton);
+    await tester.tap(clearButton);
+
+    expect(retried, same(stats));
+    expect(cleared, same(stats));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('cache diagnostics groups stats at 150 percent text scale',
