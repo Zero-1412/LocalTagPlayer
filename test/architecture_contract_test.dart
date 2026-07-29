@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随扫描生命周期与进度展示叶节点收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(5932));
+    expect(libraryLines, lessThanOrEqualTo(5919));
     expect(playerLines, lessThanOrEqualTo(5374));
   });
 
@@ -941,6 +941,48 @@ void main() {
     expect(page, contains('Future<void> _pickVideoFiles()'));
     expect(page, contains('Future<void> _rescan()'));
     expect(page, contains('setPaused: store.setScanPaused'));
+  });
+
+  test('library file actions are explicit UI-independent commands', () {
+    final page = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final executor = File(
+      'lib/src/features/library/application/'
+      'library_file_command_executor.dart',
+    ).readAsStringSync();
+    final deleteDialog = File(
+      'lib/src/pages/player/player_delete_dialog.dart',
+    ).readAsStringSync();
+
+    expect(executor, contains('class RevealVideoLocationCommand'));
+    expect(executor, contains('class RenameVideoFileCommand'));
+    expect(executor, contains('class DeleteVideoCommand'));
+    expect(executor, contains('class LibraryFileCommandExecutor'));
+    expect(executor, contains('Future<LibraryBatchDeleteResult> deleteAll('));
+    expect(executor, contains('await commitRenamedPath(item, renamedPath)'));
+    expect(executor, contains('await renameFile(renamedPath, oldPath)'));
+    expect(executor, contains('await moveFileToTrash(item.path)'));
+    expect(executor, contains('await deleteRecord(item.path)'));
+    expect(executor, isNot(contains("import 'package:flutter/")));
+    expect(executor, isNot(contains('LibraryApplicationFacade')));
+    expect(executor, isNot(contains('LibraryStore')));
+    expect(
+      executor,
+      isNot(contains("import '../../../platform/file_system_adapter.dart'")),
+    );
+    expect(executor, isNot(contains('ThumbnailService')));
+    expect(executor, isNot(contains('Navigator.')));
+    expect(executor, isNot(contains('ScaffoldMessenger')));
+    expect(page, contains('const LibraryFileCommandExecutor()'));
+    expect(page, contains('_fileCommandExecutor.reveal('));
+    expect(page, contains('_fileCommandExecutor.rename('));
+    expect(page, contains('_fileCommandExecutor.delete('));
+    expect(page, contains('_fileCommandExecutor.deleteAll('));
+    expect(page, contains('showPlayerDeleteConfirmationDialog('));
+    expect(page, contains('showBatchVideoDeleteConfirmationDialog('));
+    expect(deleteDialog, contains("ValueKey('deleteDialog.moveToTrash')"));
+    expect(deleteDialog, contains("ValueKey('deleteDialog.dontAskAgain')"));
   });
 
   test('PlayerPage keeps hidden progress mounted before the full controls', () {

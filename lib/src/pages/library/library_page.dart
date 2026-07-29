@@ -20,6 +20,7 @@ import '../../features/settings/presentation/data_backup_settings_workspace.dart
 import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/settings_workspace_theme.dart';
 import '../../features/library/application/library_facet_count_controller.dart';
+import '../../features/library/application/library_file_command_executor.dart';
 import '../../features/library/application/library_playback_queue_controller.dart';
 import '../../features/library/application/library_query_controller.dart';
 import '../../features/library/application/library_revision_tracker.dart';
@@ -2269,6 +2270,8 @@ class _LibraryPageState extends State<LibraryPage> {
   final _facetCountController = LibraryFacetCountController();
   /** 已接受结果到 filtered playback queue 的唯一转换 owner。 */
   final _playbackQueueController = LibraryPlaybackQueueController();
+  /** 定位、改名与删除的平台/Repository 编排命令执行器。 */
+  final _fileCommandExecutor = const LibraryFileCommandExecutor();
   /** 扫描、路径导入检查与扫描后解析状态的 latest-only 生命周期 owner。 */
   final _scanLifecycleController =
       LibraryScanLifecycleController<MediaDetailsProgress>();
@@ -5575,35 +5578,18 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       throw StateError('媒体库尚未就绪，请稍后重试');
     }
-    final oldPath = item.path;
-    final extension = p.extension(oldPath);
-    final targetPath = _fileSystem.joinPath(<String>[
-      _fileSystem.parentPath(oldPath),
-      '$newBaseName$extension',
-    ]);
-    if (TagRules.pathKey(oldPath) == TagRules.pathKey(targetPath)) {
-      if (_fileSystem.normalizePath(oldPath) ==
-          _fileSystem.normalizePath(targetPath)) {
-        return;
-      }
-      throw StateError('当前暂不支持仅修改文件名大小写，请换一个不同名称');
-    }
-    if (await _fileSystem.fileExists(targetPath)) {
-      throw StateError('同名文件已存在，请换一个名称');
-    }
-
-    final renamedPath = await _fileSystem.renameFile(oldPath, targetPath);
-    try {
-      await store.renameVideoPath(item, renamedPath);
-    } catch (error) {
-      try {
-        await _fileSystem.renameFile(renamedPath, oldPath);
-      } catch (_) {
-        // 回滚失败表示磁盘已改名但数据库仍指向旧路径，必须要求返回媒体库重新扫描修复。
-        throw StateError('文件已改名，但媒体库更新失败；请返回媒体库后重新扫描');
-      }
-      rethrow;
-    }
+    await _fileCommandExecutor.rename(
+      RenameVideoFileCommand(
+        item: item,
+        newBaseName: newBaseName,
+      ),
+      normalizePath: _fileSystem.normalizePath,
+      parentPath: _fileSystem.parentPath,
+      joinPath: _fileSystem.joinPath,
+      fileExists: _fileSystem.fileExists,
+      renameFile: _fileSystem.renameFile,
+      commitRenamedPath: store.renameVideoPath,
+    );
   }
 
   Future<void> _toggleFavorite(VideoItem item) async {
@@ -5616,14 +5602,14 @@ class _LibraryPageState extends State<LibraryPage> {
 
   /** 通过共享文件系统平台边界定位视频；页面不拼接 Windows 或其它平台命令。 */
   Future<void> _revealVideoLocation(VideoItem item) async {
-    try {
-      await _fileSystem.revealInFileManager(item.path);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法打开文件位置，请确认文件仍然存在')),
-        );
-      }
+    final revealed = await _fileCommandExecutor.reveal(
+      RevealVideoLocationCommand(item),
+      revealInFileManager: _fileSystem.revealInFileManager,
+    );
+    if (!revealed && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法打开文件位置，请确认文件仍然存在')),
+      );
     }
   }
 
@@ -5649,15 +5635,7 @@ class _LibraryPageState extends State<LibraryPage> {
     VideoItem item,
     bool moveLocalFileToTrash,
   ) async {
-    if (moveLocalFileToTrash) {
-      await _fileSystem.moveFileToTrash(item.path);
-    }
-    await _store?.deleteVideo(item.path);
-    try {
-      await _thumbnailService?.deleteThumbnailFor(item);
-    } catch (_) {
-      // 视频记录已经提交删除，缓存清理失败不能把成功的业务动作误报为失败。
-    }
+    await _deleteConfirmedLibraryVideo(item, moveLocalFileToTrash);
     // 播放器路由仍在前台时不重建媒体库；返回后统一刷新可见结果和标签计数。
     _playerScopedLibraryDataChanged = true;
     _playerScopedNeedsCountRefresh = true;
@@ -5704,15 +5682,19 @@ class _LibraryPageState extends State<LibraryPage> {
     VideoItem item,
     bool moveLocalFileToTrash,
   ) async {
-    if (moveLocalFileToTrash) {
-      await _fileSystem.moveFileToTrash(item.path);
-    }
-    await _store?.deleteVideo(item.path);
-    try {
-      await _thumbnailService?.deleteThumbnailFor(item);
-    } catch (_) {
-      // 缩略图是可重建缓存；数据库删除成功后不再因缓存异常误导用户重复删除。
-    }
+    await _fileCommandExecutor.delete(
+      DeleteVideoCommand(
+        item: item,
+        moveLocalFileToTrash: moveLocalFileToTrash,
+      ),
+      moveFileToTrash: _fileSystem.moveFileToTrash,
+      deleteRecord: (path) async {
+        await _store?.deleteVideo(path);
+      },
+      deleteThumbnail: (target) async {
+        await _thumbnailService?.deleteThumbnailFor(target);
+      },
+    );
   }
 
   /**
@@ -5736,31 +5718,36 @@ class _LibraryPageState extends State<LibraryPage> {
       return;
     }
 
-    final deletedIds = <String>{};
-    final failedTitles = <String>[];
-    for (final item in targets) {
-      try {
-        await _deleteConfirmedLibraryVideo(
-          item,
-          decision.moveLocalFileToTrash,
-        );
-        deletedIds.add(item.videoId);
-      } catch (_) {
-        failedTitles.add(item.title);
-      }
-    }
+    final result = await _fileCommandExecutor.deleteAll(
+      targets.map(
+        (item) => DeleteVideoCommand(
+          item: item,
+          moveLocalFileToTrash: decision.moveLocalFileToTrash,
+        ),
+      ),
+      moveFileToTrash: _fileSystem.moveFileToTrash,
+      deleteRecord: (path) async {
+        await _store?.deleteVideo(path);
+      },
+      deleteThumbnail: (target) async {
+        await _thumbnailService?.deleteThumbnailFor(target);
+      },
+    );
     if (!mounted) {
       return;
     }
-    setState(() => _librarySelection.removeAll(deletedIds));
-    if (deletedIds.isNotEmpty) {
+    setState(
+      () => _librarySelection.removeAll(result.deletedVideoIds),
+    );
+    if (result.deletedVideoIds.isNotEmpty) {
       _markLibraryDataChanged(tagDefinitionsChanged: true);
     }
-    if (failedTitles.isNotEmpty) {
+    if (result.failedItems.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '已删除 ${deletedIds.length} 个，${failedTitles.length} 个失败；失败项仍保持选中',
+            '已删除 ${result.deletedVideoIds.length} 个，'
+            '${result.failedItems.length} 个失败；失败项仍保持选中',
           ),
         ),
       );

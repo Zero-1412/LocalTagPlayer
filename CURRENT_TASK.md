@@ -170,6 +170,18 @@
   遮挡、对齐和暂停/取消反馈。
 - 下一步进入 Phase 3G：把现有文件菜单、标签维护与 Missing/Relink 页面编排迁为明确
   command；获授权删除清单仍为空，不改变确认、撤销、返回、stable identity 或事务边界。
+- Phase 3G-1 已完成文件菜单 command：`RevealVideoLocationCommand`、
+  `RenameVideoFileCommand`、`DeleteVideoCommand` 与无 UI executor 明确区分只读定位、
+  文件系统/Repository 改名补偿和可选回收站删除；页面只绑定确认、反馈与刷新。
+- 改名继续保留扩展名、拒绝覆盖和仅大小写改名，Repository 失败后按原路径补偿；补偿
+  失败只返回固定“重新扫描”错误。删除继续保持“回收站 → Repository → best-effort
+  缓存清理”，批量部分失败只移除成功 stable ID，失败项保持选中。
+- Phase 3G-1 focused tests 与完整 386 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口启动通过；媒体库页面门禁降到 5,919。
+  Computer Use 仍不可用，无法截图；人工复测路径为“更多 → 打开位置 / 删除确认取消”，
+  以及播放器“重命名 → 返回”，核对弹窗位置、遮挡和错误反馈。
+- 下一步进入 Phase 3G-2，只迁移 manual 标签编辑/批量维护命令；folder/locked 标签、
+  tagId、当前一级父级、确认与 Tag Manager Route 均必须保留。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.113` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.114` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -69,6 +69,11 @@ Phase 3F 使用泛型 `LibraryScanLifecycleController<TMediaProgress>` 收口扫
 共同拒绝旧进度/结果/错误；路径检查和媒体解析各自使用 latest-only generation。
 controller 不导入 Store、文件系统、具体媒体服务、Flutter 或平台实现，实际扫描限流、
 SQLite 事务、folder/manual 标签提交、缩略图和媒体探测仍由既有边界唯一拥有。
+
+Phase 3G-1 把定位、改名和删除表达为显式文件 command，并由
+`LibraryFileCommandExecutor` 编排注入的平台/Repository 回调。executor 不持有 Store、
+具体文件系统、缓存服务或 UI；改名的跨边界补偿和删除的回收站/记录/可重建缓存顺序
+保持不变。Dialog、偏好保存、SnackBar、Route 和页面刷新仍由 presentation owner 管理。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -556,12 +561,14 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.113`
+已完成基线：`Architecture Baseline 0.5.114`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.114`：文件定位、同目录改名和删除成为显式 command；跨文件系统/Repository
+  补偿顺序集中到无 UI executor，确认、偏好与反馈仍留在 presentation。
 - `0.5.113`：扫描、路径导入检查和扫描后媒体解析状态归单一泛型 lifecycle owner；
   operation/Repository/media generation 拒绝旧发布，暂停/取消保持既有后端与事务边界。
 - `0.5.112`：已接受 ResultSnapshot 成为 QueueSnapshot 的唯一来源；stable-ID 成员/

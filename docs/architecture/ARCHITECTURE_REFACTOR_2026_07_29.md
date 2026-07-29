@@ -274,6 +274,16 @@ Phase 3F 的落地边界：
 - 扫描进度文案迁入只读 presentation 叶节点；真实页面回归覆盖重新扫描、暂停、继续、
   取消和相邻搜索/排序/更多菜单。媒体库页面门禁降到 5,932。
 
+Phase 3G-1 的落地边界：
+
+- 定位、同目录改名和删除分别使用显式 command；`LibraryFileCommandExecutor` 只编排
+  注入回调，不导入 Store、FileSystemAdapter、ThumbnailService、Flutter 或 Route。
+- 改名保持“物理文件 → Repository mutable path → 失败时原路径补偿”；删除保持“可选
+  回收站 → Repository 记录 → best-effort 缓存”，不新增永久删除或静默降级。
+- 批量删除返回不可变成功 stable-ID 与失败对象，页面只清除成功选择并统一刷新；Dialog、
+  删除偏好、SnackBar、播放器延迟刷新和全部菜单入口仍由原 presentation owner 管理。
+- 文件命令 focused/页面/播放器回归及全量门禁通过；媒体库页面预算降到 5,919。
+
 ### Phase 4：播放器 MVVM
 
 - [ ] 4A 拆出 `PlayerSessionController`，只拥有队列、当前媒体与会话命令。
