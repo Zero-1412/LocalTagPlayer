@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../../core/tag_rules.dart';
 import '../../models/platform_models.dart';
 import '../app_theme_tokens.dart';
+import 'library_desktop_scroll_behavior.dart';
 import 'library_smoke_keys.dart';
 import 'library_widgets.dart';
 
 // ignore_for_file: use_key_in_widget_constructors
-
 // ignore_for_file: slash_for_doc_comments
 
 enum _TagDiscoveryMode { primary, secondary }

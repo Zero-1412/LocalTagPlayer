@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/core/playback_settings.dart';
-import 'package:local_tag_player/src/pages/library/library_page.dart';
+import 'package:local_tag_player/src/features/settings/presentation/playback_backend_dropdowns.dart';
 import 'package:local_tag_player/src/services/player/player_backend_selection.dart';
 
 void main() {

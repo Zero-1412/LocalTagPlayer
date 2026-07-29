@@ -27,8 +27,12 @@
 - [x] 拆出 sidebar 通用条目、左右面板转场与 top bar 结果视图切换器；
   `library_widgets.dart` 降到 3348 行。
 - [x] 把全部 8 个超过 1000 行的 presentation 文件纳入有序强制治理清单。
-- [ ] 下一批继续拆分 `library_widgets.dart` 的 sidebar 容器与 top bar 搜索/状态区域。
-- [ ] 随后依次治理媒体库页面、播放器页面、视频结果、播放器队列侧栏、标签发现面板、
+- [x] 拆分 `library_widgets.dart` 的 sidebar 容器与 top bar 搜索/筛选状态区域；
+  聚合文件降到 1917 行，全部新组件低于 500 行。
+- [x] 启动 `library_page.dart` 治理，先迁出播放解码器/渲染器设置叶节点；
+  页面预算从 5747 行降到 5391 行。
+- [ ] 下一批继续按一致性边界拆分 `library_page.dart`，随后依次治理播放器页面、
+  视频结果、播放器队列侧栏、标签发现面板、
   标签管理页和 missing/relink 页面。
 
 ## 2026-07-28 默认 MPV 容器合成

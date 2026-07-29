@@ -363,6 +363,22 @@
   benchmark 按设计跳过），`flutter analyze` 零问题，Windows Debug build 与正式 EXE
   点击启动通过。Computer Use 原生管道仍不可用（系统找不到指定文件），因此侧栏
   展开/折叠、资料库入口和网格/列表切换的真实鼠标点击及截图保留为人工复测路径。
+- 代码瘦身第三批：sidebar 容器、折叠轨道、品牌区和桌面拖拽滚动行为迁到
+  418/213/121/16 行独立组件，top bar 搜索与筛选状态区域迁到 241/464 行组件；
+  `library_widgets.dart` 从 3348 行降到 1917 行。搜索继续使用同一 controller 链，
+  筛选、导航、动画和页面状态 owner 不变。
+- `library_page.dart` 治理已启动：播放解码器/渲染器下拉迁到 367 行的
+  `features/settings/presentation` 叶节点，页面从 5747 行降到 5391 行；确认、取消、
+  持久化和撤销路径不变，页面与测试直接导入具体组件。
+- 第三批验证：focused 架构/Widget/渲染设置测试 252 项、完整测试 443 项通过（3 项
+  显式 benchmark 按设计跳过），`flutter analyze` 零问题，Windows Debug build 与
+  EXE 点击启动存活检查通过。Computer Use 初始化仍失败：
+  `failed to connect native pipe: 系统找不到指定的文件 (os error 2)`，无法自动点击或
+  截图；人工复测路径为“展开/折叠侧栏并进入各入口 → 顶栏输入/清除搜索与切换筛选 →
+  设置 → 播放设置 → 解码器/渲染器确认、取消与撤销”。
+- 下一步继续治理 `library_page.dart`，优先选择可独立挂载、可直接测试且不取得筛选、
+  队列、扫描或用户数据所有权的 UI 一致性边界；仍按所有 1000+ presentation 文件的
+  既定顺序推进。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
-- 架构基线提升到 `0.5.128`；完整审计和 Phase 0-6 路线记录在
+- 架构基线提升到 `0.5.129`；完整审计和 Phase 0-6 路线记录在
   `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 - `main.dart`、bootstrap 组合根与 Flutter 应用壳已经分离，具体实现选择仍只发生在
   composition。
@@ -71,6 +71,11 @@
   `library_widgets.dart` 从 4577 行降到 3819 行并移除无关播放/缓存依赖。
 - 第二批抽出 sidebar 通用条目、左右面板转场与 top bar 结果视图切换器，聚合文件继续
   降到 3348 行；全部 8 个 1000+ 行 presentation 文件进入有序强制治理清单。
+- 第三批把 sidebar 容器/折叠轨道/品牌区/滚动行为与 top bar 搜索/筛选状态拆为
+  418/213/121/16/241/464 行组件，`library_widgets.dart` 降到 1917 行；随后从
+  `library_page.dart` 迁出 367 行播放后端设置叶节点，页面由 5747 行降到 5391 行。
+- 搜索 controller、筛选状态、导航回调、播放设置确认/撤销和页面挂载路径均保持原 owner；
+  schema、标签筛选、filtered queue、缓存队列和用户数据不变。
 - 后续按一致性边界迁移无状态诊断 UI、普通设置、媒体库和播放器；禁止一次性移动全部
   文件或改变现有业务语义。
 

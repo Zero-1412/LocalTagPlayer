@@ -347,16 +347,40 @@ void main() {
     final resultViewToggleLines = File(
       'lib/src/widgets/library/library_result_view_toggle.dart',
     ).readAsLinesSync().length;
+    final sidebarLines = File(
+      'lib/src/widgets/library/library_sidebar.dart',
+    ).readAsLinesSync().length;
+    final collapsedSidebarLines = File(
+      'lib/src/widgets/library/library_collapsed_sidebar.dart',
+    ).readAsLinesSync().length;
+    final sidebarBrandLines = File(
+      'lib/src/widgets/library/library_sidebar_brand.dart',
+    ).readAsLinesSync().length;
+    final searchSurfaceLines = File(
+      'lib/src/widgets/library/library_top_bar_search_surface.dart',
+    ).readAsLinesSync().length;
+    final filterStatusLines = File(
+      'lib/src/widgets/library/library_top_bar_filter_status.dart',
+    ).readAsLinesSync().length;
+    final playbackBackendDropdownLines = File(
+      'lib/src/features/settings/presentation/playback_backend_dropdowns.dart',
+    ).readAsLinesSync().length;
 
     // 体积阈值随叶节点迁移继续下调；后续瘦身只能降低，禁止把代码塞回聚合文件。
-    expect(libraryLines, lessThanOrEqualTo(5747));
+    expect(libraryLines, lessThanOrEqualTo(5391));
     expect(playerLines, lessThanOrEqualTo(5226));
-    expect(libraryWidgetLines, lessThanOrEqualTo(3348));
+    expect(libraryWidgetLines, lessThanOrEqualTo(1917));
     expect(recentPlaybackLines, lessThanOrEqualTo(299));
     expect(tagEditorLines, lessThanOrEqualTo(481));
     expect(panelTransitionLines, lessThanOrEqualTo(52));
     expect(sidebarItemLines, lessThanOrEqualTo(237));
     expect(resultViewToggleLines, lessThanOrEqualTo(221));
+    expect(sidebarLines, lessThanOrEqualTo(418));
+    expect(collapsedSidebarLines, lessThanOrEqualTo(213));
+    expect(sidebarBrandLines, lessThanOrEqualTo(121));
+    expect(searchSurfaceLines, lessThanOrEqualTo(241));
+    expect(filterStatusLines, lessThanOrEqualTo(464));
+    expect(playbackBackendDropdownLines, lessThanOrEqualTo(367));
   });
 
   test('presentation files obey 200 500 and 1000 line governance', () {
@@ -374,9 +398,9 @@ void main() {
       'lib/src/pages/library/missing_relink_page.dart',
     ];
     const legacyBudgets = <String, int>{
-      'lib/src/pages/library/library_page.dart': 5747,
+      'lib/src/pages/library/library_page.dart': 5391,
       'lib/src/pages/player/player_page.dart': 5226,
-      'lib/src/widgets/library/library_widgets.dart': 3348,
+      'lib/src/widgets/library/library_widgets.dart': 1917,
       'lib/src/widgets/library/library_video_results.dart': 2808,
       'lib/src/pages/player/player_queue_sidebar.dart': 1651,
       'lib/src/widgets/library/library_tag_discovery_panel.dart': 1511,

@@ -6,7 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/src/core/playback_settings.dart';
-import 'package:local_tag_player/src/pages/library/library_page.dart';
+import 'package:local_tag_player/src/features/settings/presentation/playback_backend_dropdowns.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
