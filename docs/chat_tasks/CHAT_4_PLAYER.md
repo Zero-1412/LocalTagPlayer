@@ -1,3 +1,15 @@
+## 2026-07-29 Texture、原生表面与全屏单一生命周期 owner
+
+- `PlayerFullscreenLifecycleController` 只拥有全屏/过渡状态和窗口命令顺序；页面注入
+  `endOfFrame` 与 `window_manager`，controller 不持有 UI、Route、后端或窗口句柄。
+- `PlayerResourceLifecycleCoordinator` 唯一绑定 Texture listener，并按“事件取消 →
+  stop → dispose → released”幂等释放 PlayerService 下游的 Texture、D3D11/HWND 与引擎。
+- pause 后最后一帧、全屏恢复/退出最大化、child HWND 顶栏卸载、filtered queue、当前
+  index 和 overlay airspace 栈全部保留；Route 卸载后不执行迟到窗口命令。
+- 7 项 focused tests、架构合同和完整 439 项测试通过（3 项跳过），静态分析、Windows
+  Debug build 与正式入口启动通过；原生点击工具不可用，保留全屏往返人工路径。
+  `PlayerPage` 门禁由 5,322 降到 5,021，Phase 4D 完成。
+
 ## 2026-07-29 快捷键暂停与焦点资格 owner
 
 - `PlayerShortcutGateController` 统一嵌套暂停深度、manual 标签编辑、命令处理和焦点恢复资格。

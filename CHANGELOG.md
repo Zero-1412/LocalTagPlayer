@@ -151,6 +151,15 @@
 - 完成 Phase 4C-2 快捷键门禁：嵌套暂停、标签编辑、命令处理和焦点恢复资格迁入纯
   controller；Flutter 环境探测与命令执行留在页面。页面降到 5,322 行，完整 431 项测试、
   静态分析、Windows Debug build 与正式入口启动通过。
+- 完成 Phase 4D 原生资源生命周期收口：纯 Dart 全屏 controller 统一会话恢复、帧边界
+  过渡、实际窗口状态兜底和退出最大化顺序；Route 卸载后拒绝迟到原生命令。
+- Texture listener、backend events、stop、dispose、released 迁入单一资源协调器；
+  重复释放共享 Future，dispose 异常仍等待原生 released 并完成 Route 协调信号。页面
+  不再直接解绑纹理或调用 dispose/released，`PlayerPage` 门禁降到 5,021。
+- pause 后保留最后一帧、child HWND `endOfFrame`、全屏会话偏好、filtered queue、
+  当前 index、后端选择和 overlay airspace 栈保持不变。7 项 focused tests、架构合同与
+  完整 439 项测试通过（3 项显式基准跳过），静态分析、Windows Debug build 与正式入口
+  可见启动通过；原生点击工具不可用，保留全屏往返和再次进入播放器的人工复测路径。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

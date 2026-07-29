@@ -290,6 +290,23 @@
   命令处理和焦点恢复资格；页面继续采集 Focus/Route/Overlay/Keyboard 并执行命令。
 - 完整 431 项测试通过（3 项跳过），静态分析、Windows Debug build 与正式入口启动通过；
   `PlayerPage` 门禁降到 5,322。Phase 4C 完成，下一步进入 Phase 4D 原生资源单一 owner。
+- Phase 4D 已完成：纯 Dart `PlayerFullscreenLifecycleController` 唯一持有当前 Route
+  的全屏/过渡状态、会话恢复与退出窗口命令顺序；页面只注入 `endOfFrame`、
+  `window_manager` 命令和无上下文刷新回调，不向 controller 泄漏 `BuildContext`、
+  Route、PlayerBackend 或窗口句柄。
+- `PlayerResourceLifecycleCoordinator` 成为 Texture listener 与 backend/native surface
+  释放的唯一协调 owner，固定执行“解绑 listener → 取消四类事件订阅 → stop → dispose →
+  released”；重复 stop/release 共享 Future，dispose 抛错仍等待 released 并完成媒体库
+  Route 信号。
+- pause 确认后保留最后一帧、child HWND 全屏前 `endOfFrame`、全屏退出后最大化、会话
+  恢复与匿名生命周期诊断均保留；Route 卸载后拒绝迟到窗口命令。filtered queue、当前
+  index、backend 选择、overlay airspace 栈和返回筛选状态均未改变。
+- 7 项原生资源/全屏 focused tests、架构合同与完整 439 项测试通过（3 项显式基准跳过），
+  `flutter analyze`、Windows Debug build 与正式入口可见启动通过；`PlayerPage` 门禁
+  降到 5,021。Computer Use 原生管道仍不可用，未使用可能捕获其它窗口的截图回退；
+  人工复测路径为“筛选并打开视频 → 全屏往返 → 返回媒体库 → 再次打开 → 返回”，核对
+  顶栏无残影、音频停止、最后一帧过渡、窗口最大化恢复和队列/筛选保留。下一步进入
+  Phase 4E，独立迁移播放器诊断，不把诊断状态混入会话、全屏或资源 owner。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

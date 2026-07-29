@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:local_tag_player/src/app.dart';
 import 'package:local_tag_player/src/features/library/domain/library_query_snapshot.dart';
+import 'package:local_tag_player/src/features/player/application/player_fullscreen_lifecycle_controller.dart';
 import 'package:local_tag_player/src/features/settings/presentation/cache_diagnostics_snapshot_view.dart';
 import 'package:path/path.dart' as p;
 

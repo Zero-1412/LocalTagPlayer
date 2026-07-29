@@ -337,7 +337,7 @@ Phase 3H-2 的落地边界：
 - [x] 4A 拆出 `PlayerSessionController`，只拥有队列、当前媒体与会话命令。
 - [x] 4B 拆出 latest-request 与 backend event bridge。
 - [x] 4C 拆出控件显隐、计时器和快捷键状态。
-- [ ] 4D 最后处理 texture、native window 和全屏生命周期；每种资源只有一个 dispose owner。
+- [x] 4D 最后处理 texture、native window 和全屏生命周期；每种资源只有一个 dispose owner。
 - [ ] 4E 独立迁移播放器诊断。
 
 Phase 4A 的落地边界：
@@ -378,6 +378,13 @@ Phase 4C-1 的落地边界：
 Phase 4C-2 将嵌套暂停深度、标签编辑门禁、命令处理和焦点恢复资格迁入纯 Dart
 `PlayerShortcutGateController`；Focus/Keyboard/Route/Overlay 探测与命令执行仍在页面。
 4 项 focused tests 与全量门禁通过，页面预算降到 5,322，Phase 4C 完成。
+
+Phase 4D 将全屏/过渡状态、会话恢复和退出窗口命令顺序迁入纯 Dart
+`PlayerFullscreenLifecycleController`；`endOfFrame`、`window_manager` 与 mounted
+事实仍由 presentation 注入。`PlayerResourceLifecycleCoordinator` 唯一绑定 Texture
+listener，并串行取消 backend events、stop、dispose 与等待 released；重复释放共享
+Future，异常仍完成 Route 协调信号。页面预算降到 5,021，filtered queue、当前 index、
+后端选择、overlay airspace 和用户数据不变。
 - [ ] 画质实验只依赖 `PlayerRuntimeAccess`，不进入 Widget 状态机。
 - [ ] 保留快速切换 latest-request、纹理释放、全屏恢复和 filtered queue 合同。
 

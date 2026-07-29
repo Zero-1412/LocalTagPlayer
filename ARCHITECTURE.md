@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.122` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.123` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -121,6 +121,17 @@ Focus、键位解析、Overlay、全屏队列 Timer、窗口状态与播放器�
 Phase 4C-2 使用纯 Dart `PlayerShortcutGateController` 统一嵌套暂停深度、标签编辑门禁、
 命令处理资格与焦点恢复资格。页面继续采集 Focus/Route/Overlay/Keyboard 环境事实并执行
 具体命令，controller 不依赖 Flutter。Phase 4C 完成。
+
+Phase 4D 使用纯 Dart `PlayerFullscreenLifecycleController` 统一当前 Route 的全屏状态、
+过渡状态、会话恢复与退出窗口命令顺序。页面只注入 `endOfFrame`、`window_manager`
+命令和无上下文刷新回调；controller 不持有 `BuildContext`、Route、PlayerBackend 或窗口
+句柄。帧边界后会重新检查 Route 是否仍挂载，避免迟到命令污染下一次会话全屏偏好。
+
+`PlayerResourceLifecycleCoordinator` 是 Texture listener 与 PlayerService 下游原生资源
+释放的唯一协调 owner。释放顺序固定为 listener 解绑、backend event bridge 取消、stop、
+dispose、released；stop/release 均幂等共享 Future，dispose 抛错仍等待 released 并发送
+媒体库 Route 完成信号。PlayerService 继续唯一持有具体 PlayerBackend，后端继续唯一持有
+Texture、NativePlayer、D3D11 和 child HWND，页面不取得任何原生句柄。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -608,12 +619,14 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.122`
+已完成基线：`Architecture Baseline 0.5.123`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.123`：全屏状态/窗口命令顺序归纯 controller；Texture listener、事件取消、
+  stop、dispose 与 released 归单一资源协调 owner，页面不再直接释放原生资源。
 - `0.5.122`：快捷键暂停深度、标签编辑门禁、命令处理与焦点恢复资格归纯应用 owner；
   Focus/Keyboard/Route/Overlay 探测和命令执行保持 presentation owner。
 - `0.5.121`：主控制条与快捷键反馈状态及两只短时 Timer 归单一纯应用 owner；

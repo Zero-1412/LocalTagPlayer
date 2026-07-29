@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/app.dart';
+import 'package:local_tag_player/src/features/player/application/player_fullscreen_lifecycle_controller.dart';
 import 'package:path/path.dart' as p;
 
 // ignore_for_file: slash_for_doc_comments

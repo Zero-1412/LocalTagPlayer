@@ -12,6 +12,7 @@ import '../../core/playback_settings.dart';
 import '../../core/tag_rules.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
 import '../../features/player/application/player_backend_event_bridge.dart';
+import '../../features/player/application/player_fullscreen_lifecycle_controller.dart';
 import '../../features/player/application/player_interaction_state_controller.dart';
 import '../../features/player/application/player_open_request_controller.dart';
 import '../../features/player/application/player_session_controller.dart';
@@ -31,6 +32,7 @@ import '../../services/player/player_gpu_capability_detector.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import '../../services/player/player_nvidia_video_auto_policy.dart';
 import '../../services/player/player_nvidia_video_enhancement_experiment.dart';
+import '../../services/player/player_resource_lifecycle_coordinator.dart';
 import '../../services/player/player_service.dart';
 import '../../services/player/player_video_super_resolution.dart';
 import '../../widgets/app_theme_tokens.dart';
@@ -227,36 +229,6 @@ class _PlayerOpeningOverlayState extends State<PlayerOpeningOverlay> {
       color: Color(0x66000000),
       child: Center(child: CircularProgressIndicator()),
     );
-  }
-}
-
-/**
- * 媒体库与播放器 Route 共享的全屏会话状态。
- *
- * 该状态只在当前应用会话内记住“下次进入播放器是否恢复全屏”，不写入播放设置或
- * 桌面窗口布局。用户主动退出播放器全屏时立即清除，避免普通最大化窗口误走恢复路径。
- */
-class PlayerFullscreenSessionController {
-  bool _shouldOpenFullscreen = false;
-
-  /** 新播放器 Route 是否需要恢复上一次播放器全屏状态。 */
-  bool get shouldOpenFullscreen => _shouldOpenFullscreen;
-
-  /** 记录用户在播放器内完成的全屏切换。 */
-  void recordPlayerFullscreen(bool fullscreen) {
-    _shouldOpenFullscreen = fullscreen;
-  }
-
-  /**
-   * 判断返回前是否需要把系统窗口恢复为最大化。
-   *
-   * 从全屏返回时保留播放器偏好，非全屏返回则不改变窗口，也不凭空创建全屏偏好。
-   */
-  bool prepareForPlayerExit({required bool currentlyFullscreen}) {
-    if (currentlyFullscreen) {
-      _shouldOpenFullscreen = true;
-    }
-    return currentlyFullscreen;
   }
 }
 
@@ -854,7 +826,7 @@ class PlayerPage extends StatefulWidget {
 }
 
 class PlayerPageState extends State<PlayerPage> {
-  /** 页面独占的应用层播放服务；具体后端仅由该服务内部持有。 */
+  /** 页面独占的应用层播放服务；资源释放只允许由 [_playerResources] 调用。 */
   late final PlayerService _playerService;
   /** 诊断弹窗使用的只读播放服务。 */
   PlayerService get playerService => _playerService;
@@ -886,6 +858,10 @@ class PlayerPageState extends State<PlayerPage> {
   String? _compatibilityPromptPath;
   /** 集中持有四类后端事件订阅，并在 PlayerService 释放前统一取消。 */
   late final PlayerBackendEventBridge _backendEvents;
+  /** Texture listener 与 backend/native surface 串行释放的唯一 owner。 */
+  late final PlayerResourceLifecycleCoordinator _playerResources;
+  /** 桌面全屏状态与窗口命令顺序的唯一 owner。 */
+  late final PlayerFullscreenLifecycleController _windowFullscreen;
   /** 主控制条与短时快捷键反馈的纯状态及 Timer owner。 */
   late final PlayerInteractionStateController<IconData> _interaction;
   /** 快捷键暂停深度与处理/焦点恢复资格的纯状态 owner。 */
@@ -955,10 +931,7 @@ class PlayerPageState extends State<PlayerPage> {
   var _audioProgressState = '等待首个音频样本';
   var _videoStallEvents = 0;
   var _audioStallEvents = 0;
-  var _textureReadyLogged = false;
   DateTime? _exitRequestedAt;
-  /** 路由退出后继续执行的原生 stop；dispose 必须等待它结束，禁止两条命令并发释放。 */
-  Future<void>? _exitStopFuture;
   DateTime? _pauseAcknowledgedAt;
   DateTime? _routePopRequestedAt;
   Duration? _pendingSeekTarget;
@@ -1042,14 +1015,8 @@ class PlayerPageState extends State<PlayerPage> {
   Future<void> _playbackSettingsSaveTail = Future<void>.value();
   /** 用户主动折叠宽屏右侧队列时保持当前页面内的显示状态。 */
   var _queueSidebarCollapsed = false;
-  /** 是否由播放器页面进入桌面窗口全屏。 */
-  var _isWindowFullscreen = false;
-  /** 会话全屏恢复只执行一次；返回流程等待它结束，避免首帧后立即返回造成窗口命令交错。 */
-  Future<void> _sessionFullscreenRestore = Future<void>.value();
   /** 全屏时是否在画面右侧显示不改变视频尺寸的当前筛选队列覆盖层。 */
   var _fullscreenQueueVisible = false;
-  /** 原生窗口正在切换全屏；期间先卸载旧顶栏，避免异步边界产生残留摘要。 */
-  var _fullscreenTransitionInProgress = false;
   /** 宽屏队列折叠时，指针是否进入非全屏顶部标题栏热区。 */
   var _pointerInWindowTopBarRegion = false;
   final _random = math.Random();
@@ -1085,6 +1052,11 @@ class PlayerPageState extends State<PlayerPage> {
 
   bool get _settingsDialogOpen => _interaction.settingsOpen;
 
+  bool get _isWindowFullscreen => _windowFullscreen.isFullscreen;
+
+  bool get _fullscreenTransitionInProgress =>
+      _windowFullscreen.transitionInProgress;
+
   String get _filterSummary {
     final value = widget.queueTitle.trim();
     return value.isEmpty ? '\u5168\u90e8\u89c6\u9891' : value;
@@ -1115,8 +1087,12 @@ class PlayerPageState extends State<PlayerPage> {
         if (mounted) setState(() {});
       },
     );
-    _isWindowFullscreen =
-        widget.fullscreenSessionController.shouldOpenFullscreen;
+    _windowFullscreen = PlayerFullscreenLifecycleController(
+      session: widget.fullscreenSessionController,
+      onChanged: () {
+        if (mounted) setState(() {});
+      },
+    );
     _effectivePlaybackSettings = widget.playbackSettings;
     _mirrorVideo = _effectivePlaybackSettings.mirrorVideo;
     _playbackMode = _effectivePlaybackSettings.playbackMode;
@@ -1161,7 +1137,6 @@ class PlayerPageState extends State<PlayerPage> {
     if (_volume > 0) {
       _lastAudibleVolume = _volume;
     }
-    _playerService.textureId.addListener(_handleTextureReadyForDiagnostics);
     unawaited(PlayerMemoryDiagnostics.logStage(
       'player_constructed',
       backend: _playerService,
@@ -1178,6 +1153,30 @@ class PlayerPageState extends State<PlayerPage> {
         if (mounted) setState(() {});
       },
     );
+    _playerResources = PlayerResourceLifecycleCoordinator(
+      textureId: _playerService.textureId,
+      cancelBackendEvents: _backendEvents.dispose,
+      stop: _playerService.stop,
+      disposeResource: _playerService.dispose,
+      awaitReleased: () => _playerService.released,
+      logStage: (
+        stage, {
+        required readEngineProperties,
+      }) =>
+          PlayerMemoryDiagnostics.logStage(
+        stage,
+        backend: _playerService,
+        readEngineProperties: readEngineProperties,
+      ),
+      onTextureReady: () => unawaited(PlayerMemoryDiagnostics.logStage(
+        'texture_ready',
+        backend: _playerService,
+      )),
+      onStopFailed: (_) {
+        debugPrint('PLAYER_MEMORY_STAGE stage=stop_timeout');
+      },
+      onReleased: _handlePlayerResourcesReleased,
+    );
     _requestOpenCurrent();
     // 诊断弹窗关闭时仍持续独立观察视频帧与音频播放头，避免瞬时 AV offset 掩盖单路停滞。
     _playbackHealthTimer = Timer.periodic(
@@ -1187,7 +1186,10 @@ class PlayerPageState extends State<PlayerPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         if (_isWindowFullscreen) {
-          _sessionFullscreenRestore = _restoreSessionWindowFullscreen();
+          unawaited(_windowFullscreen.restoreSession(
+            enterFullscreen: () => windowManager.setFullScreen(true),
+            reportError: _reportFullscreenLifecycleError,
+          ));
         }
         _focusNode.requestFocus();
         _ensureQueueIndexVisible(_index, center: true, animated: false);
@@ -1918,46 +1920,22 @@ class PlayerPageState extends State<PlayerPage> {
     if (playerExitStopShouldStartBeforePop(
       pauseAcknowledged: pauseAcknowledged,
     )) {
-      _exitStopFuture ??= _stopForExitDiagnostics();
+      unawaited(_playerResources.stopForExit());
     }
     // 返回媒体库前等待最后一次全局设置写入，避免用户改完立即退出时丢失配置。
     await _playbackSettingsSaveTail;
-    await _sessionFullscreenRestore;
-    final actuallyFullscreen = await _isActuallyWindowFullscreen();
-    if (widget.fullscreenSessionController.prepareForPlayerExit(
-      currentlyFullscreen: actuallyFullscreen,
-    )) {
-      await _restoreMaximizedWindowForRouteExit();
-    }
+    await _windowFullscreen.prepareForExit(
+      queryFullscreen: windowManager.isFullScreen,
+      setWindowed: () => windowManager.setFullScreen(false),
+      maximize: windowManager.maximize,
+      reportError: _reportFullscreenLifecycleError,
+    );
+    _fullscreenQueueVisible = false;
+    _pointerInWindowTopBarRegion = false;
     if (mounted) {
       _routePopRequestedAt = DateTime.now();
       Navigator.of(context).maybePop();
     }
-  }
-
-  /** 原生 stop 不阻塞路由退出，但完成时必须留下可与 GPU 计数器对齐的阶段标记。 */
-  Future<void> _stopForExitDiagnostics() async {
-    try {
-      await _playerService.stop().timeout(const Duration(seconds: 3));
-      await PlayerMemoryDiagnostics.logStage(
-        'stop_acknowledged',
-        backend: _playerService,
-      );
-    } catch (_) {
-      debugPrint('PLAYER_MEMORY_STAGE stage=stop_timeout');
-    }
-  }
-
-  /** 首个有效纹理ID只记录一次，避免每次尺寸变化污染阶段日志。 */
-  void _handleTextureReadyForDiagnostics() {
-    if (_textureReadyLogged || _playerService.textureId.value == null) {
-      return;
-    }
-    _textureReadyLogged = true;
-    unawaited(PlayerMemoryDiagnostics.logStage(
-      'texture_ready',
-      backend: _playerService,
-    ));
   }
 
   /**
@@ -2627,38 +2605,25 @@ class PlayerPageState extends State<PlayerPage> {
 
   /** 切换桌面窗口全屏，并让页面布局与窗口状态同步更新。 */
   Future<void> _toggleWindowFullscreen() async {
-    final target = !_isWindowFullscreen;
     _fullscreenQueueHideTimer?.cancel();
     _fullscreenQueueHideTimer = null;
     setState(() {
-      _fullscreenTransitionInProgress = true;
       _pointerInWindowTopBarRegion = false;
     });
-    // child HWND 会在原生全屏命令返回前完成尺寸切换；必须先让 Flutter 提交一次
-    // “顶栏已卸载”的帧，否则 D3D11 子窗口可能把旧摘要像素保留在全屏画面顶部。
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) {
-      return;
+    await _windowFullscreen.toggle(
+      // child HWND 会在原生全屏命令返回前完成尺寸切换；先提交“顶栏已卸载”的帧，
+      // 防止 D3D11 子窗口把旧摘要像素保留在全屏画面顶部。
+      beforeWindowCommand: () => WidgetsBinding.instance.endOfFrame,
+      canExecuteWindowCommand: () => mounted,
+      setFullscreen: windowManager.setFullScreen,
+    );
+    if (mounted) {
+      setState(() {
+        _fullscreenQueueVisible = false;
+        _pointerInWindowTopBarRegion = false;
+      });
+      _showVideoControls();
     }
-    try {
-      await windowManager.setFullScreen(target);
-    } catch (_) {
-      if (mounted) {
-        setState(() => _fullscreenTransitionInProgress = false);
-      }
-      rethrow;
-    }
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _isWindowFullscreen = target;
-      _fullscreenQueueVisible = false;
-      _fullscreenTransitionInProgress = false;
-      _pointerInWindowTopBarRegion = false;
-    });
-    widget.fullscreenSessionController.recordPlayerFullscreen(target);
-    _showVideoControls();
   }
 
   /**
@@ -2730,56 +2695,15 @@ class PlayerPageState extends State<PlayerPage> {
     );
   }
 
-  /** 首帧提交后恢复当前会话记住的播放器全屏，普通最大化进入时不会调用。 */
-  Future<void> _restoreSessionWindowFullscreen() async {
-    try {
-      await windowManager.setFullScreen(true);
-    } catch (error) {
-      // 平台边界拒绝全屏时回退为普通窗口，并清除会话标记，避免后续每次进入重复失败。
-      widget.fullscreenSessionController.recordPlayerFullscreen(false);
-      if (mounted) {
-        setState(() => _isWindowFullscreen = false);
-      }
-      debugPrint('PLAYER_FULLSCREEN_RESTORE_FAILED error=$error');
-    }
-  }
-
-  /** 退出 Route 前以插件实际状态兜底，防止异步窗口回调与页面布尔值短暂不同步。 */
-  Future<bool> _isActuallyWindowFullscreen() async {
-    if (_isWindowFullscreen) {
-      return true;
-    }
-    try {
-      return await windowManager.isFullScreen();
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /**
-   * 全屏播放器返回时先退出系统全屏，再最大化底层应用窗口。
-   *
-   * 此处故意不清除会话全屏标记：媒体库保持最大化，下一次进入播放器才恢复全屏。
-   */
-  Future<void> _restoreMaximizedWindowForRouteExit() async {
-    try {
-      await windowManager.setFullScreen(false);
-    } catch (error) {
-      debugPrint('PLAYER_FULLSCREEN_EXIT_FAILED error=$error');
-    }
-    try {
-      await windowManager.maximize();
-    } catch (error) {
-      // 窗口恢复失败不能阻塞播放器释放与 Route 返回，保留日志供真实桌面诊断。
-      debugPrint('PLAYER_FULLSCREEN_EXIT_MAXIMIZE_FAILED error=$error');
-    }
-    if (mounted) {
-      setState(() {
-        _isWindowFullscreen = false;
-        _fullscreenQueueVisible = false;
-        _pointerInWindowTopBarRegion = false;
-      });
-    }
+  /** 把全屏状态机的稳定错误码映射为既有桌面诊断，不泄漏窗口对象。 */
+  void _reportFullscreenLifecycleError(String code, Object error) {
+    final stage = switch (code) {
+      'restore_failed' => 'PLAYER_FULLSCREEN_RESTORE_FAILED',
+      'exit_failed' => 'PLAYER_FULLSCREEN_EXIT_FAILED',
+      'exit_maximize_failed' => 'PLAYER_FULLSCREEN_EXIT_MAXIMIZE_FAILED',
+      _ => 'PLAYER_FULLSCREEN_LIFECYCLE_FAILED',
+    };
+    debugPrint('$stage error=$error');
   }
 
   /** 鼠标进入右侧热区或队列时展示全屏侧栏，并取消待执行的自动隐藏。 */
@@ -4733,48 +4657,28 @@ class PlayerPageState extends State<PlayerPage> {
     _queuePrefetchTimer?.cancel();
     _fullscreenQueueHideTimer?.cancel();
     _playbackHealthTimer?.cancel();
-    _playerService.textureId.removeListener(_handleTextureReadyForDiagnostics);
     _detailsService.dispose();
     _persistOpenedProgress();
     _queueScrollController.dispose();
     _fullscreenQueueScrollController.dispose();
     _focusNode.dispose();
-    unawaited(_releaseAsyncResources());
+    unawaited(_playerResources.release());
     super.dispose();
   }
 
   /**
-   * 等待流订阅和 media_kit 原生播放器真正释放，再通知媒体库允许下一次进入。
+   * 资源协调器完成唯一释放链后，记录退出时序并通知媒体库允许下一次进入。
    */
-  Future<void> _releaseAsyncResources() async {
-    final releaseStartedAt = DateTime.now();
-    await PlayerMemoryDiagnostics.logStage(
-      'dispose_started',
-      backend: _playerService,
+  void _handlePlayerResourcesReleased(DateTime releaseStartedAt) {
+    debugPrint(
+      'PLAYER_EXIT requested=${_exitRequestedAt?.toIso8601String()} '
+      'pause_ack=${_pauseAcknowledgedAt?.toIso8601String()} '
+      'pop=${_routePopRequestedAt?.toIso8601String()} '
+      'dispose_start=${releaseStartedAt.toIso8601String()} '
+      'dispose_end=${DateTime.now().toIso8601String()}',
     );
-    try {
-      await _backendEvents.dispose();
-      // stop 与 dispose 必须串行；此前路由 pop 后两者可能并发进入 media_kit/libmpv，
-      // 导致纹理解绑完成但解码池和驱动缓存更晚才释放。
-      await (_exitStopFuture ??= _stopForExitDiagnostics());
-      await _playerService.dispose();
-      await _playerService.released;
-    } finally {
-      await PlayerMemoryDiagnostics.logStage(
-        'player_disposed',
-        backend: _playerService,
-        readEngineProperties: false,
-      );
-      debugPrint(
-        'PLAYER_EXIT requested=${_exitRequestedAt?.toIso8601String()} '
-        'pause_ack=${_pauseAcknowledgedAt?.toIso8601String()} '
-        'pop=${_routePopRequestedAt?.toIso8601String()} '
-        'dispose_start=${releaseStartedAt.toIso8601String()} '
-        'dispose_end=${DateTime.now().toIso8601String()}',
-      );
-      if (!widget.disposalCompleter.isCompleted) {
-        widget.disposalCompleter.complete();
-      }
+    if (!widget.disposalCompleter.isCompleted) {
+      widget.disposalCompleter.complete();
     }
   }
 

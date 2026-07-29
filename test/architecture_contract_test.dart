@@ -1041,6 +1041,9 @@ void main() {
     final events = File(
       'lib/src/features/player/application/player_backend_event_bridge.dart',
     ).readAsStringSync();
+    final resources = File(
+      'lib/src/services/player/player_resource_lifecycle_coordinator.dart',
+    ).readAsStringSync();
     final progress = File(
       'lib/src/features/player/domain/player_playback_progress.dart',
     ).readAsStringSync();
@@ -1067,11 +1070,11 @@ void main() {
     expect(progress, contains('bool videoIsContinueWatching(VideoItem item)'));
     expect(
         page, contains('late final PlayerBackendEventBridge _backendEvents'));
-    expect(page, contains('await _backendEvents.dispose();'));
+    expect(page, contains('cancelBackendEvents: _backendEvents.dispose'));
     expect(page, isNot(contains('StreamSubscription<bool>?')));
     expect(
-      page.indexOf('await _backendEvents.dispose();'),
-      lessThan(page.indexOf('await _playerService.dispose();')),
+      resources.indexOf('await _cancelBackendEvents();'),
+      lessThan(resources.indexOf('await _disposeResource();')),
     );
     expect(
       compatibility,
@@ -1101,6 +1104,84 @@ void main() {
         "import '../../features/player/domain/"
         "player_playback_progress.dart';",
       ),
+    );
+  });
+
+  test('player native resources and fullscreen have single lifecycle owners',
+      () {
+    final page = File(
+      'lib/src/pages/player/player_page.dart',
+    ).readAsStringSync();
+    final fullscreen = File(
+      'lib/src/features/player/application/'
+      'player_fullscreen_lifecycle_controller.dart',
+    ).readAsStringSync();
+    final resources = File(
+      'lib/src/services/player/player_resource_lifecycle_coordinator.dart',
+    ).readAsStringSync();
+
+    expect(
+      fullscreen,
+      contains('class PlayerFullscreenLifecycleController'),
+    );
+    expect(fullscreen, contains('Future<void> restoreSession('));
+    expect(fullscreen, contains('Future<void> toggle('));
+    expect(fullscreen, contains('Future<void> prepareForExit('));
+    for (final forbidden in <String>[
+      "import 'package:flutter",
+      'BuildContext ',
+      'Navigator.',
+      'Route<',
+      'PlayerBackend ',
+      'PlayerService ',
+      'window_manager',
+      'setState(',
+    ]) {
+      expect(
+        fullscreen,
+        isNot(contains(forbidden)),
+        reason: '全屏状态机不得持有 UI、后端或原生窗口资源：$forbidden',
+      );
+    }
+
+    expect(
+      resources,
+      contains('class PlayerResourceLifecycleCoordinator'),
+    );
+    expect(resources, contains('Future<void> stopForExit()'));
+    expect(resources, contains('Future<void> release()'));
+    final cancelIndex = resources.indexOf('await _cancelBackendEvents();');
+    final stopIndex = resources.indexOf('await stopForExit();');
+    final disposeIndex = resources.indexOf('await _disposeResource();');
+    final releasedIndex = resources.indexOf('await _awaitReleased();');
+    expect(cancelIndex, greaterThanOrEqualTo(0));
+    expect(cancelIndex, lessThan(stopIndex));
+    expect(stopIndex, lessThan(disposeIndex));
+    expect(disposeIndex, lessThan(releasedIndex));
+
+    expect(
+      page,
+      contains(
+        'late final PlayerResourceLifecycleCoordinator _playerResources',
+      ),
+    );
+    expect(
+      page,
+      contains(
+        'late final PlayerFullscreenLifecycleController _windowFullscreen',
+      ),
+    );
+    expect(page, contains('unawaited(_playerResources.release())'));
+    expect(page, isNot(contains('_playerService.dispose()')));
+    expect(page, contains('awaitReleased: () => _playerService.released'));
+    expect(page, isNot(contains('await _playerService.released')));
+    expect(page, isNot(contains('textureId.addListener')));
+    expect(page, isNot(contains('textureId.removeListener')));
+    expect(page, contains('await _windowFullscreen.toggle('));
+    expect(page, contains('canExecuteWindowCommand: () => mounted'));
+    expect(
+      page,
+      contains('setFullscreen: windowManager.setFullScreen'),
     );
   });
 

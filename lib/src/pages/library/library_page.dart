@@ -34,6 +34,7 @@ import '../../features/library/application/library_view_preferences_controller.d
 import '../../features/library/domain/library_query_snapshot.dart';
 import '../../features/library/presentation/library_queue_title.dart';
 import '../../features/library/presentation/library_scan_progress_labels.dart';
+import '../../features/player/application/player_fullscreen_lifecycle_controller.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/data_backup_models.dart';
 import '../../models/library_sort.dart';
@@ -70,7 +71,6 @@ import '../tags/tag_manager_page.dart';
 import 'library_page_helpers.dart';
 import 'directory_manager_page.dart';
 import 'missing_relink_page.dart';
-
 /** 标签筛选默认保持折叠，把媒体结果宽度优先留给高频浏览。 */
 const bool libraryTagDiscoveryPanelInitiallyOpen = false;
 
