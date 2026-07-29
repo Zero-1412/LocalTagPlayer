@@ -277,8 +277,8 @@ void main() {
     final playerLines =
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
-    // 媒体库阈值随备份设置纵向切片与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(5975));
+    // 媒体库阈值随扫描生命周期与进度展示叶节点收敛下调；后续迁移只能降低，禁止为通过测试而调高。
+    expect(libraryLines, lessThanOrEqualTo(5932));
     expect(playerLines, lessThanOrEqualTo(5374));
   });
 
@@ -885,6 +885,62 @@ void main() {
     expect(openFlow, isNot(contains('store.videos.values')));
     expect(openFlow, contains('playlist: playlist'));
     expect(player, contains('final LibraryQueueSnapshot? queueSnapshot'));
+  });
+
+  test('scan and import lifecycle has one latest-only application owner', () {
+    final page = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final controller = File(
+      'lib/src/features/library/application/'
+      'library_scan_lifecycle_controller.dart',
+    ).readAsStringSync();
+    final labels = File(
+      'lib/src/features/library/presentation/'
+      'library_scan_progress_labels.dart',
+    ).readAsStringSync();
+
+    expect(
+      controller,
+      contains('class LibraryScanLifecycleController<TMediaProgress>'),
+    );
+    expect(controller, contains('_scanOperationRevision'));
+    expect(controller, contains('_activeScanGeneration'));
+    expect(controller, contains('beginPathImportInspection()'));
+    expect(controller, contains('toggleScanPaused({'));
+    expect(controller, contains('cancelScan({'));
+    expect(controller, contains('beginMediaImport({'));
+    expect(controller, contains('publishMediaImportProgress({'));
+    expect(controller, isNot(contains('LibraryApplicationFacade')));
+    expect(controller, isNot(contains('LibraryStore')));
+    expect(
+      controller,
+      isNot(contains("import '../../../platform/file_system_adapter.dart'")),
+    );
+    expect(controller, isNot(contains('MediaDetailsService')));
+    expect(controller, isNot(contains('ThumbnailService')));
+    expect(controller, isNot(contains("import 'package:flutter/")));
+    expect(controller, isNot(contains('Navigator.')));
+    expect(controller, isNot(contains('setState(')));
+    expect(labels, contains('libraryScanProgressLabel('));
+    expect(labels, contains('libraryMediaImportProgressLabel('));
+    expect(labels, isNot(contains('BuildContext')));
+    expect(
+        page, contains('LibraryScanLifecycleController<MediaDetailsProgress>'));
+    expect(page, contains('beginPathImportInspection()'));
+    expect(page, contains('_scanLifecycleController.run('));
+    expect(page, contains('_scanLifecycleController.toggleScanPaused('));
+    expect(page, contains('_scanLifecycleController.cancelScan('));
+    expect(page, contains('publishPlaybackPause('));
+    expect(page, contains('publishMediaImportProgress('));
+    expect(page, isNot(contains('var _isScanning =')));
+    expect(page, isNot(contains('var _isCancellingScan =')));
+    expect(page, isNot(contains('LibraryScanProgress? _scanProgress;')));
+    expect(page, contains('LibraryImportDropRegion('));
+    expect(page, contains('Future<void> _pickFolder()'));
+    expect(page, contains('Future<void> _pickVideoFiles()'));
+    expect(page, contains('Future<void> _rescan()'));
+    expect(page, contains('setPaused: store.setScanPaused'));
   });
 
   test('PlayerPage keeps hidden progress mounted before the full controls', () {

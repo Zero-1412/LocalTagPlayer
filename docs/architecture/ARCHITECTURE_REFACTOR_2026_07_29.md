@@ -216,9 +216,9 @@ Phase 2E 将现有视频数据备份设置迁入独立纵向切片：
 - [x] 3D 以 `LibraryQueryController` 和 `LibraryFacetCountController` 迁移筛选、搜索、结果和计数；
   共享版本协议，但不得互相成为可写状态源。
 - [x] 3E 只从已接受的 `ResultSnapshot` 创建 `QueueSnapshot`。
-- [ ] 3F 最后迁移扫描/导入生命周期，保留 latest-only 排队、限流和 generation cancellation。
-- [ ] 把文件菜单、标签维护、Missing/Relink 变成明确 command。
-- [ ] `LibraryPage` 只保留布局、动画、Route 跳转和命令绑定。
+- [x] 3F 最后迁移扫描/导入生命周期，保留 latest-only 排队、限流和 generation cancellation。
+- [ ] 3G 把文件菜单、标签维护、Missing/Relink 变成明确 command。
+- [ ] 3H `LibraryPage` 只保留布局、动画、Route 跳转和命令绑定。
 
 Phase 3A/3B 的落地边界：
 
@@ -262,6 +262,17 @@ Phase 3E 的落地边界：
 - `PlayerPage` 同时接收同序不可变 playlist 与 queue snapshot；邻近预热只消费该队列并
   跳过 missing。生产页面不直接构造 Result/Queue snapshot，也不从 Store 重建 playlist。
 - 扫描/导入生命周期继续留给 3F；媒体库/播放器页面门禁分别降到 5,975 / 5,374。
+
+Phase 3F 的落地边界：
+
+- `LibraryScanLifecycleController<TMediaProgress>` 保存扫描 operation revision、首次接受的
+  Repository generation、路径检查 revision 与媒体解析 generation；四类旧回调均拒绝。
+- controller 互斥扫描，暂停失败只回滚同一代次，取消状态保持到扫描 Future 退出；
+  播放器让盘只镜像同一快照，不建立第二套扫描状态。
+- 页面继续注入 `FileSystemAdapter` 检查、Repository 扫描/暂停/取消与既有媒体服务；
+  后端限流、SQLite 提交、folder/manual 标签、缓存队列和用户数据均未迁入 controller。
+- 扫描进度文案迁入只读 presentation 叶节点；真实页面回归覆盖重新扫描、暂停、继续、
+  取消和相邻搜索/排序/更多菜单。媒体库页面门禁降到 5,932。
 
 ### Phase 4：播放器 MVVM
 

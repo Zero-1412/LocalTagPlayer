@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -7,6 +8,7 @@ import 'package:local_tag_player/src/core/data_backup_settings.dart';
 import 'package:local_tag_player/src/core/playback_settings.dart';
 import 'package:local_tag_player/src/core/tag_rules.dart';
 import 'package:local_tag_player/src/features/update/domain/app_update_service.dart';
+import 'package:local_tag_player/src/models/library_scan_models.dart';
 import 'package:local_tag_player/src/models/library_sort.dart';
 import 'package:local_tag_player/src/models/platform_models.dart';
 import 'package:local_tag_player/src/models/video_item.dart';
@@ -56,6 +58,14 @@ class _CardFileMenuRepository
 
   /** 页面空闲期执行全库标签计数的次数。 */
   var resultCountsCalls = 0;
+  /** 页面级扫描可达性回归记录的启动次数。 */
+  var scanCalls = 0;
+  /** 页面暂停/继续按钮发给 Repository 的顺序。 */
+  final pausedStates = <bool>[];
+  /** 页面取消按钮发给 Repository 的次数。 */
+  var cancelCalls = 0;
+  /** 当前由测试控制退出时机的扫描 Future。 */
+  Completer<LibraryScanCommitResult>? activeScan;
 
   @override
   Set<String> get allTags => const <String>{};
@@ -74,6 +84,37 @@ class _CardFileMenuRepository
    */
   @override
   Future<int> removeMissingOrUnreadableVideos() async => 0;
+
+  @override
+  Future<LibraryScanCommitResult> scanWithChanges({
+    LibraryScanProgressCallback? onProgress,
+  }) {
+    scanCalls += 1;
+    final completer = Completer<LibraryScanCommitResult>();
+    activeScan = completer;
+    onProgress?.call(const LibraryScanProgress(
+      generationId: 41,
+      phase: LibraryScanPhase.fingerprinting,
+      processed: 1,
+      discovered: 2,
+      total: 2,
+    ));
+    return completer.future;
+  }
+
+  @override
+  Future<void> setScanPaused(bool paused) async {
+    pausedStates.add(paused);
+  }
+
+  @override
+  Future<void> cancelActiveScan() async {
+    cancelCalls += 1;
+    final completer = activeScan;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(LibraryScanCommitResult.cancelled(41));
+    }
+  }
 
   @override
   Future<void> close() async {}
@@ -266,6 +307,7 @@ void main() {
       addedAt: DateTime.utc(2026, 7, 21),
     );
     final repository = _CardFileMenuRepository();
+    repository.roots.add(root.path);
     repository.videos.addAll(<String, VideoItem>{
       TagRules.pathKey(bravo.path): bravo,
       TagRules.pathKey(charlie.path): charlie,
@@ -318,6 +360,23 @@ void main() {
       lessThan(tester.getTopLeft(cardTitle('charlie')).dx),
     );
     expect(repository.resultCountsCalls, greaterThan(0));
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.rescanButton));
+    await tester.pump();
+    expect(repository.scanCalls, 1);
+    expect(find.byKey(const ValueKey('qa.media_import.pause')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('qa.media_import.pause')));
+    await tester.pump();
+    expect(repository.pausedStates, <bool>[true]);
+    expect(
+        find.byKey(const ValueKey('qa.media_import.resume')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('qa.media_import.resume')));
+    await tester.pump();
+    expect(repository.pausedStates, <bool>[true, false]);
+    await tester.tap(find.byKey(const ValueKey('qa.library_scan.cancel')));
+    await tester.pump();
+    expect(repository.cancelCalls, 1);
+    expect(find.byKey(LibrarySmokeKeys.rescanButton), findsOneWidget);
 
     final countCallsBeforeSort = repository.resultCountsCalls;
     await tester.tap(

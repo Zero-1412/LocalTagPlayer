@@ -156,6 +156,20 @@
   “筛选并排序 → 打开非首项 → 核对队列成员/顺序和当前 index → 返回保留筛选”。
 - 下一步进入 Phase 3F，只迁移扫描/导入的 latest-only、限流、暂停/取消与 generation
   生命周期；不得改变 folder/manual 标签来源、扫描提交事务或播放器让盘语义。
+- Phase 3F 已完成：泛型 `LibraryScanLifecycleController<TMediaProgress>` 成为扫描操作、
+  路径导入检查与扫描后媒体解析状态的唯一 application owner；它以操作 revision、
+  Repository generation 和媒体解析 generation 拒绝旧 Future、旧进度与旧错误。
+- 并发扫描继续互斥；暂停失败只回滚同一代次，取消状态保持到扫描 Future 真正退出。
+  文件/目录 stat、扫描后端限流、SQLite 单事务提交、folder/manual 标签和媒体服务创建
+  仍留在原平台/Repository 边界。纯进度文案迁入 library presentation 叶节点。
+- 真实 `LibraryPage` Widget 回归点击“重新扫描 → 暂停 → 继续 → 取消”，随后继续覆盖
+  搜索、排序和“更多”菜单，证明扫描状态 owner 与相邻入口均保持页面级可达。
+- Phase 3F focused tests 与完整 378 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。媒体库页面门禁降到 5,932。
+  Computer Use 仍不可用，无法截图；生产窗口仍需人工复测同一点击路径并核对进度位置、
+  遮挡、对齐和暂停/取消反馈。
+- 下一步进入 Phase 3G：把现有文件菜单、标签维护与 Missing/Relink 页面编排迁为明确
+  command；获授权删除清单仍为空，不改变确认、撤销、返回、stable identity 或事务边界。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

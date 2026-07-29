@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
-- 架构基线提升到 `0.5.112`；完整审计和 Phase 0-6 路线记录在
+- 架构基线提升到 `0.5.113`；完整审计和 Phase 0-6 路线记录在
   `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 - `main.dart`、bootstrap 组合根与 Flutter 应用壳已经分离，具体实现选择仍只发生在
   composition。
@@ -36,6 +36,8 @@
   全库稳定计数归 facet owner；二者互不写入，页面继续保证先发布视频、后延后计数。
 - Phase 3E 将已接受 ResultSnapshot 固化为 filtered queue 的唯一来源；stable-ID 成员
   和顺序不一致时拒绝，生产 PlayerPage 同时接收不可变 playlist 与 queue epoch 快照。
+- Phase 3F 将扫描 operation、Repository generation、路径检查与媒体解析 latest-only
+  状态归单一泛型 owner；实际限流、扫描事务、标签语义和媒体服务仍在原边界。
 - 后续按一致性边界迁移无状态诊断 UI、普通设置、媒体库和播放器；禁止一次性移动全部
   文件或改变现有业务语义。
 

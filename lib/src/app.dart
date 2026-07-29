@@ -33,6 +33,7 @@ export 'models/video_item.dart';
 export 'pages/library/directory_manager_page.dart';
 export 'pages/library/library_page.dart';
 export 'pages/library/library_page_helpers.dart';
+export 'features/library/presentation/library_scan_progress_labels.dart';
 export 'pages/library/missing_relink_page.dart';
 export 'pages/player/player_context_panel.dart';
 export 'pages/player/player_control_slider.dart';

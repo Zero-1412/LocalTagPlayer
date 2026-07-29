@@ -23,11 +23,13 @@ import '../../features/library/application/library_facet_count_controller.dart';
 import '../../features/library/application/library_playback_queue_controller.dart';
 import '../../features/library/application/library_query_controller.dart';
 import '../../features/library/application/library_revision_tracker.dart';
+import '../../features/library/application/library_scan_lifecycle_controller.dart';
 import '../../features/library/application/library_selection_controller.dart';
 import '../../features/library/application/library_sort_controller.dart';
 import '../../features/library/application/library_view_preferences_controller.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
 import '../../features/library/presentation/library_queue_title.dart';
+import '../../features/library/presentation/library_scan_progress_labels.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/data_backup_models.dart';
 import '../../models/library_sort.dart';
@@ -153,79 +155,6 @@ String? playerShortcutConflictMessage({
     }
   }
   return null;
-}
-
-/** 把后台媒体解析快照转换为结果区的稳定短文案。 */
-String libraryMediaImportProgressLabel(MediaDetailsProgress progress) {
-  final percent = (progress.fraction * 100).floor();
-  final parts = <String>[
-    '媒体解析 ${progress.processed}/${progress.total}',
-    '$percent%',
-  ];
-  if (progress.isPaused) {
-    parts.add('已暂停');
-    return parts.join(' · ');
-  }
-  final speed = progress.itemsPerSecond;
-  if (speed != null && speed > 0) {
-    parts.add(
-        speed >= 10 ? '${speed.round()}个/秒' : '${speed.toStringAsFixed(1)}个/秒');
-  }
-  final remaining = progress.estimatedRemaining;
-  if (remaining != null) {
-    parts.add('剩余${_libraryImportDurationLabel(remaining)}');
-  }
-  return parts.join(' · ');
-}
-
-/** 把目录发现、指纹校验和提交进度压缩为结果区短文案。 */
-String libraryScanProgressLabel(LibraryScanProgress? progress) {
-  if (progress == null) {
-    return '正在发现视频…';
-  }
-  if (progress.phase == LibraryScanPhase.discovering) {
-    return progress.discovered == 0
-        ? '正在发现视频…'
-        : '正在发现视频 · 已找到 ${progress.discovered} 个';
-  }
-  final total = progress.total ?? progress.discovered;
-  final percent = ((progress.fraction ?? 0) * 100).floor();
-  final parts = <String>[
-    progress.phase == LibraryScanPhase.fingerprinting
-        ? '校验文件 ${progress.processed}/$total'
-        : '提交索引 ${progress.processed}/$total',
-    '$percent%',
-  ];
-  if (progress.isPaused) {
-    parts.add('播放期间已暂停');
-    return parts.join(' · ');
-  }
-  final speed = progress.itemsPerSecond;
-  if (speed != null && speed > 0) {
-    parts.add(
-        speed >= 10 ? '${speed.round()}个/秒' : '${speed.toStringAsFixed(1)}个/秒');
-  }
-  final remaining = progress.estimatedRemaining;
-  if (remaining != null && remaining > Duration.zero) {
-    parts.add('剩余${_libraryImportDurationLabel(remaining)}');
-  }
-  return parts.join(' · ');
-}
-
-/** 把 ETA 压缩为适合当前筛选结果行的一到两个时间单位。 */
-String _libraryImportDurationLabel(Duration duration) {
-  final seconds = duration.inSeconds.clamp(1, 359999);
-  if (seconds < 60) {
-    return '$seconds秒';
-  }
-  final minutes = seconds ~/ 60;
-  if (minutes < 60) {
-    final remainder = seconds % 60;
-    return remainder == 0 ? '$minutes分钟' : '$minutes分$remainder秒';
-  }
-  final hours = minutes ~/ 60;
-  final remainder = minutes % 60;
-  return remainder == 0 ? '$hours小时' : '$hours小时$remainder分';
 }
 
 /**
@@ -2340,6 +2269,9 @@ class _LibraryPageState extends State<LibraryPage> {
   final _facetCountController = LibraryFacetCountController();
   /** 已接受结果到 filtered playback queue 的唯一转换 owner。 */
   final _playbackQueueController = LibraryPlaybackQueueController();
+  /** 扫描、路径导入检查与扫描后解析状态的 latest-only 生命周期 owner。 */
+  final _scanLifecycleController =
+      LibraryScanLifecycleController<MediaDetailsProgress>();
   final _searchController = TextEditingController();
   /**
    * 主搜索框焦点节点。
@@ -2387,17 +2319,18 @@ class _LibraryPageState extends State<LibraryPage> {
   int get _tagDefinitionRevision =>
       _libraryRevisionTracker.tagDefinitionRevision;
   var _showFavoritesOnly = false;
-  var _isScanning = false;
-  /** 用户已请求取消扫描，但后端仍在退出当前系统调用。 */
-  var _isCancellingScan = false;
-  LibraryScanProgress? _scanProgress;
+  bool get _isScanning => _scanLifecycleController.state.isScanning;
+  bool get _isCancellingScan => _scanLifecycleController.state.isCancelling;
+  LibraryScanProgress? get _scanProgress =>
+      _scanLifecycleController.state.scanProgress;
   /**
-   * 当前目录导入的后台媒体信息解析进度。
+   * 当前扫描后媒体信息解析进度。
    *
-   * 扫描提交后视频列表立即可用；该状态只描述仍在后台补齐的媒体详情，不阻塞筛选、
-   * 滚动或播放。全部成功或失败后自动清空并恢复正常结果摘要。
+   * 扫描提交后视频列表立即可用；该状态来自独立 generation，只描述仍在后台补齐的
+   * 媒体详情，不阻塞筛选、滚动或播放。
    */
-  MediaDetailsProgress? _mediaImportProgress;
+  MediaDetailsProgress? get _mediaImportProgress =>
+      _scanLifecycleController.state.mediaImportProgress;
   /** debug 扫描帧采样器；发布构建始终为 null。 */
   LibraryScanUiDiagnostics? _activeScanUiDiagnostics;
   /** 排序字段、方向、稳定指纹与纯内存重排的唯一 owner。 */
@@ -2484,6 +2417,7 @@ class _LibraryPageState extends State<LibraryPage> {
     _queryController.dispose();
     _facetCountController.dispose();
     _playbackQueueController.clear();
+    _scanLifecycleController.dispose();
     super.dispose();
   }
 
@@ -2826,6 +2760,7 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null || _isScanning) {
       return;
     }
+    final importRevision = _scanLifecycleController.beginPathImportInspection();
     final normalizedPaths = <String>[];
     final pathKeys = <String>{};
     for (final rawPath in rawPaths) {
@@ -2846,7 +2781,9 @@ class _LibraryPageState extends State<LibraryPage> {
         return null;
       }),
     );
-    if (!mounted || _store != store) {
+    if (!mounted ||
+        _store != store ||
+        !_scanLifecycleController.isCurrentPathImport(importRevision)) {
       return;
     }
     final imports = inspected.whereType<LibraryImportPath>().toList();
@@ -2895,86 +2832,79 @@ class _LibraryPageState extends State<LibraryPage> {
     diagnostics?.start();
     _activeScanUiDiagnostics = diagnostics;
     var diagnosticsWillFinish = false;
-    setState(() {
-      _isScanning = true;
-      _isCancellingScan = false;
-      _scanProgress = null;
-      _mediaImportProgress = null;
-    });
-    try {
-      final actionWatch = Stopwatch()..start();
-      final result = await action((progress) {
-        if (!mounted || !_isScanning) {
+    final started = await _scanLifecycleController.run(
+      action: (onProgress) async {
+        final actionWatch = Stopwatch()..start();
+        final result = await action(onProgress);
+        actionWatch.stop();
+        diagnostics?.markScanComplete();
+        diagnostics?.recordStage(
+          'scan.backend_and_commit',
+          actionWatch.elapsed,
+          itemCount: result.changedVideos.length,
+        );
+        return result;
+      },
+      onAccepted: (result) {
+        if (!mounted) {
           return;
         }
-        diagnostics?.recordProgress(progress);
-        setState(() => _scanProgress = progress);
-      });
-      actionWatch.stop();
-      diagnostics?.markScanComplete();
-      diagnostics?.recordStage(
-        'scan.backend_and_commit',
-        actionWatch.elapsed,
-        itemCount: result.changedVideos.length,
-      );
-      if (!mounted) {
-        return;
-      }
-      if (result.cancelled) {
-        return;
-      }
-      // 只为新增或内容变化项目进入缓存队列，避免每次扫描重新排队整个媒体库。
-      _thumbnailService?.prefetchAll(result.probeCandidates);
-      _startLibraryMediaProbes(result);
-      diagnostics?.markPostApply();
-      final applyWatch = Stopwatch()..start();
-      _applyLibraryScanDelta(result);
-      final store = _store;
-      if (store != null &&
-          _playbackSettings.autoRemoveMissingOrUnreadableVideos) {
-        // 先反馈扫描完成，再异步串行清理；不可读探测不得阻塞 UI。
-        unawaited(_cleanupMissingOrUnreadableVideos(store));
-      }
-      applyWatch.stop();
-      diagnostics?.recordStage(
-        'ui.delta_schedule',
-        applyWatch.elapsed,
-        itemCount: result.changedVideos.length,
-      );
-      if (diagnostics != null) {
-        diagnosticsWillFinish = true;
-        unawaited(diagnostics.finish(result).whenComplete(() {
-          if (identical(_activeScanUiDiagnostics, diagnostics)) {
-            _activeScanUiDiagnostics = null;
-          }
-        }));
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content:
-                Text('扫描完成：新增 ${result.addedCount}，修改 ${result.modifiedCount}，'
-                    '移动 ${result.relinkedCount}，缺失 ${result.missingCount}')),
-      );
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('\u626b\u63cf\u5931\u8d25\uff1a$error')),
-      );
-    } finally {
-      if (!diagnosticsWillFinish) {
-        diagnostics?.abort();
-        if (identical(_activeScanUiDiagnostics, diagnostics)) {
-          _activeScanUiDiagnostics = null;
+        // 只为新增或内容变化项目进入缓存队列，避免每次扫描重新排队整个媒体库。
+        _thumbnailService?.prefetchAll(result.probeCandidates);
+        _startLibraryMediaProbes(result);
+        diagnostics?.markPostApply();
+        final applyWatch = Stopwatch()..start();
+        _applyLibraryScanDelta(result);
+        final store = _store;
+        if (store != null &&
+            _playbackSettings.autoRemoveMissingOrUnreadableVideos) {
+          // 先反馈扫描完成，再异步串行清理；不可读探测不得阻塞 UI。
+          unawaited(_cleanupMissingOrUnreadableVideos(store));
         }
-      }
-      if (mounted) {
-        setState(() {
-          _isScanning = false;
-          _isCancellingScan = false;
-          _scanProgress = null;
-        });
+        applyWatch.stop();
+        diagnostics?.recordStage(
+          'ui.delta_schedule',
+          applyWatch.elapsed,
+          itemCount: result.changedVideos.length,
+        );
+        if (diagnostics != null) {
+          diagnosticsWillFinish = true;
+          unawaited(diagnostics.finish(result).whenComplete(() {
+            if (identical(_activeScanUiDiagnostics, diagnostics)) {
+              _activeScanUiDiagnostics = null;
+            }
+          }));
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  '扫描完成：新增 ${result.addedCount}，修改 ${result.modifiedCount}，'
+                  '移动 ${result.relinkedCount}，缺失 ${result.missingCount}')),
+        );
+      },
+      onFailure: (error, _) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('\u626b\u63cf\u5931\u8d25\uff1a$error')),
+        );
+      },
+      onChanged: (state) {
+        if (!mounted) {
+          return;
+        }
+        final progress = state.scanProgress;
+        if (state.isScanning && progress != null) {
+          diagnostics?.recordProgress(progress);
+        }
+        setState(() {});
+      },
+    );
+    if (!started || !diagnosticsWillFinish) {
+      diagnostics?.abort();
+      if (identical(_activeScanUiDiagnostics, diagnostics)) {
+        _activeScanUiDiagnostics = null;
       }
     }
   }
@@ -2982,13 +2912,17 @@ class _LibraryPageState extends State<LibraryPage> {
   /** 用户显式暂停/继续扫描；活动 sidecar 从当前候选位置恢复，不重新遍历目录。 */
   Future<void> _toggleScanPaused() async {
     final store = _store;
-    final progress = _scanProgress;
-    if (store == null || !_isScanning || progress == null) {
+    if (store == null) {
       return;
     }
-    final paused = !progress.isPaused;
-    setState(() => _scanProgress = progress.copyWith(isPaused: paused));
-    await store.setScanPaused(paused);
+    await _scanLifecycleController.toggleScanPaused(
+      setPaused: store.setScanPaused,
+      onChanged: (_) {
+        if (mounted) {
+          setState(() {});
+        }
+      },
+    );
   }
 
   /**
@@ -2998,17 +2932,22 @@ class _LibraryPageState extends State<LibraryPage> {
    */
   Future<void> _cancelScan() async {
     final store = _store;
-    if (store == null || !_isScanning || _isCancellingScan) {
+    if (store == null) {
       return;
     }
-    setState(() => _isCancellingScan = true);
     try {
-      await store.cancelActiveScan();
+      await _scanLifecycleController.cancelScan(
+        cancel: store.cancelActiveScan,
+        onChanged: (_) {
+          if (mounted) {
+            setState(() {});
+          }
+        },
+      );
     } catch (error) {
       if (!mounted) {
         return;
       }
-      setState(() => _isCancellingScan = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('取消扫描失败：$error')),
       );
@@ -3045,9 +2984,16 @@ class _LibraryPageState extends State<LibraryPage> {
     if (probeCandidates.isEmpty) {
       return;
     }
+    final mediaImportGeneration = _scanLifecycleController.beginMediaImport(
+      onChanged: (_) {
+        if (mounted) {
+          setState(() {});
+        }
+      },
+    );
     final service = _createLibraryMediaDetailsService(
       store,
-      trackImportProgress: true,
+      mediaImportGeneration: mediaImportGeneration,
     );
     _libraryMediaDetailsService = service;
     // 新增项和旧版缺时长项统一登记为有限批次；真实进入视口仍可提升同一路径任务，
@@ -3058,7 +3004,7 @@ class _LibraryPageState extends State<LibraryPage> {
   /** 创建媒体库详情会话；所有写回继续校验当前 Store、videoId 与 fingerprint。 */
   MediaDetailsService _createLibraryMediaDetailsService(
     LibraryApplicationFacade store, {
-    bool trackImportProgress = false,
+    int? mediaImportGeneration,
   }) {
     return widget.applicationService.createMediaDetailsService(
       onBatchUpdated: (updates) async {
@@ -3084,7 +3030,7 @@ class _LibraryPageState extends State<LibraryPage> {
           validUpdates.add(current);
         }
         await store.upsertVideos(validUpdates);
-        if (!trackImportProgress &&
+        if (mediaImportGeneration == null &&
             validUpdates.isNotEmpty &&
             mounted &&
             _store == store) {
@@ -3092,14 +3038,21 @@ class _LibraryPageState extends State<LibraryPage> {
           setState(() {});
         }
       },
-      onProgress: trackImportProgress
+      onProgress: mediaImportGeneration != null
           ? (progress) {
               if (!mounted || _store != store) {
                 return;
               }
-              setState(() {
-                _mediaImportProgress = progress.isComplete ? null : progress;
-              });
+              _scanLifecycleController.publishMediaImportProgress(
+                generation: mediaImportGeneration,
+                progress: progress,
+                isComplete: progress.isComplete,
+                onChanged: (_) {
+                  if (mounted) {
+                    setState(() {});
+                  }
+                },
+              );
             }
           : null,
     );
@@ -5316,10 +5269,14 @@ class _LibraryPageState extends State<LibraryPage> {
       scanAlreadyPaused: scanWasAlreadyPaused,
       setPaused: store.setScanPaused,
       onPauseChanged: (paused) {
-        final progress = _scanProgress;
-        if (mounted && _isScanning && progress != null) {
-          setState(() => _scanProgress = progress.copyWith(isPaused: paused));
-        }
+        _scanLifecycleController.publishPlaybackPause(
+          paused: paused,
+          onChanged: (_) {
+            if (mounted) {
+              setState(() {});
+            }
+          },
+        );
       },
       // 在预检、缩略图预热和播放器解码开始前先让 sidecar 停在文件边界，避免
       // 机械盘随机 fingerprint 读取与当前视频顺序读取互相拖死。

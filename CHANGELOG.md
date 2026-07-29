@@ -89,6 +89,13 @@
   `PlayerPage` 同时接收不可变 playlist 与对应 queue snapshot，邻近预热不再读取原始
   Store。媒体库/播放器页面预算降到 5,975 / 5,374，完整 372 项测试通过（3 项显式
   基准跳过），静态分析、Windows Debug build 与正式入口可见窗口启动通过。
+- 完成 Phase 3F 扫描/导入生命周期收口：泛型 controller 统一扫描 operation revision、
+  Repository generation、路径检查 latest-only token、暂停/取消互斥和媒体解析
+  generation；旧 Future、旧进度、旧错误及 dispose 后回调均不得发布。
+- 文件系统检查、扫描限流、SQLite 事务、folder/manual 标签、缩略图与媒体探测服务仍由
+  原边界负责；进度文案迁入只读 presentation 叶节点。真实页面测试点击重新扫描、暂停、
+  继续和取消，并继续覆盖搜索/排序/更多菜单。媒体库页面预算降到 5,932，完整 378 项
+  测试通过（3 项显式基准跳过），静态分析、Windows Debug build 与正式入口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 
