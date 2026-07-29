@@ -3825,13 +3825,13 @@ class _TopViewIcon extends StatelessWidget {
 /**
  * 继续观看结果视图。
  *
- * 这里的删除只清理播放记录，不删除视频文件；选择状态由 LibraryPage 保存，
+ * 这里的删除只清理播放记录，不删除视频文件；stable videoId 选择状态由 LibraryPage 保存，
  * 避免滚动重建时丢失用户正在批量清理的选择。
  */
 class RecentPlaybackView extends StatelessWidget {
   const RecentPlaybackView({
     required this.videos,
-    required this.selectedPathKeys,
+    required this.selectedVideoIds,
     required this.thumbnailService,
     required this.playbackSettings,
     required this.dense,
@@ -3848,7 +3848,8 @@ class RecentPlaybackView extends StatelessWidget {
   });
 
   final List<VideoItem> videos;
-  final Set<String> selectedPathKeys;
+  /** 临时选择只绑定 stable videoId，不随 mutable path 变化。 */
+  final Set<String> selectedVideoIds;
   final ThumbnailService thumbnailService;
   final PlaybackSettings playbackSettings;
   final bool dense;
@@ -3874,7 +3875,7 @@ class RecentPlaybackView extends StatelessWidget {
           child: Row(
             children: [
               Text(
-                '\u5df2\u9009 ${selectedPathKeys.length} / ${videos.length}',
+                '\u5df2\u9009 ${selectedVideoIds.length} / ${videos.length}',
                 style: const TextStyle(
                   color: libraryTextMuted,
                   fontWeight: FontWeight.w800,
@@ -3882,16 +3883,16 @@ class RecentPlaybackView extends StatelessWidget {
               ),
               const Spacer(),
               TextButton(
-                onPressed: selectedPathKeys.length == videos.length
+                onPressed: selectedVideoIds.length == videos.length
                     ? onClearSelection
                     : onSelectAll,
-                child: Text(selectedPathKeys.length == videos.length
+                child: Text(selectedVideoIds.length == videos.length
                     ? '\u53d6\u6d88\u5168\u9009'
                     : '\u5168\u9009'),
               ),
               const SizedBox(width: 8),
               OutlinedButton.icon(
-                onPressed: selectedPathKeys.isEmpty ? null : onDeleteSelected,
+                onPressed: selectedVideoIds.isEmpty ? null : onDeleteSelected,
                 icon: const Icon(Icons.delete_outline_rounded, size: 18),
                 label: const Text('\u5220\u9664\u5df2\u9009'),
               ),
@@ -3924,8 +3925,7 @@ class RecentPlaybackView extends StatelessWidget {
                     final item = videos[index];
                     return _RecentPlaybackRow(
                       item: item,
-                      selected: selectedPathKeys
-                          .contains(TagRules.pathKey(item.path)),
+                      selected: selectedVideoIds.contains(item.videoId),
                       thumbnailService: thumbnailService,
                       playbackSettings: playbackSettings,
                       onOpen: () => onOpen(item, videos),
@@ -3958,8 +3958,7 @@ class RecentPlaybackView extends StatelessWidget {
                   final item = videos[index];
                   return _RecentPlaybackCard(
                     item: item,
-                    selected:
-                        selectedPathKeys.contains(TagRules.pathKey(item.path)),
+                    selected: selectedVideoIds.contains(item.videoId),
                     thumbnailService: thumbnailService,
                     playbackSettings: playbackSettings,
                     onOpen: () => onOpen(item, videos),

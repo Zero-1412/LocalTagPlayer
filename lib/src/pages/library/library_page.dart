@@ -19,6 +19,7 @@ import '../../features/settings/presentation/cache_diagnostics_snapshot_view.dar
 import '../../features/settings/presentation/data_backup_settings_workspace.dart';
 import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/settings_workspace_theme.dart';
+import '../../features/library/application/library_continue_watching_command_executor.dart';
 import '../../features/library/application/library_facet_count_controller.dart';
 import '../../features/library/application/library_file_command_executor.dart';
 import '../../features/library/application/library_manual_tag_command_executor.dart';
@@ -2142,20 +2143,6 @@ String? preferredLibraryPickerDirectory({
   return roots.isEmpty ? null : roots.first;
 }
 
-List<VideoItem> recentPlaybackClearTargets(
-  Iterable<VideoItem> videos, {
-  required Set<String> selectedPathKeys,
-  required bool selectedOnly,
-}) {
-  return videos.where((item) {
-    if (item.lastPlayedAt == null) {
-      return false;
-    }
-    return !selectedOnly ||
-        selectedPathKeys.contains(TagRules.pathKey(item.path));
-  }).toList();
-}
-
 /**
  * 二次确认清空全部继续观看进度。
  *
@@ -2186,74 +2173,6 @@ Future<bool?> showClearAllRecentPlaybackConfirmation(
       ],
     ),
   );
-}
-
-/**
- * 清理继续观看前保存的完整播放状态。
- *
- * Undo 必须恢复原来的最近播放时间、精确位置、完成态和位置更新时间，不能依赖重新播放
- * 生成近似记录；[videoId] 只用于诊断和稳定识别，不以可变路径作为恢复身份。
- */
-@visibleForTesting
-class ContinueWatchingClearSnapshot {
-  const ContinueWatchingClearSnapshot._({
-    required this.item,
-    required this.videoId,
-    required this.lastPlayedAt,
-    required this.playbackPosition,
-    required this.playbackCompleted,
-    required this.playbackPositionUpdatedAt,
-  });
-
-  /** 捕获一次清理动作之前的用户播放状态。 */
-  factory ContinueWatchingClearSnapshot.capture(VideoItem item) =>
-      ContinueWatchingClearSnapshot._(
-        item: item,
-        videoId: item.videoId,
-        lastPlayedAt: item.lastPlayedAt,
-        playbackPosition: item.playbackPosition,
-        playbackCompleted: item.playbackCompleted,
-        playbackPositionUpdatedAt: item.playbackPositionUpdatedAt,
-      );
-
-  /** 当前内存中的稳定视频对象；恢复时不替换对象，避免列表和播放器持有旧引用。 */
-  final VideoItem item;
-
-  /** 清理时的视频稳定身份。 */
-  final String videoId;
-
-  /** 清理前用于继续观看排序的最近播放时间。 */
-  final DateTime? lastPlayedAt;
-
-  /** 清理前的精确播放位置。 */
-  final Duration playbackPosition;
-
-  /** 清理前的播放完成态。 */
-  final bool playbackCompleted;
-
-  /** 清理前用于解决异步写入先后顺序的位置更新时间。 */
-  final DateTime? playbackPositionUpdatedAt;
-
-  /**
-   * 仅当记录仍保持本次清理后的空状态时允许 Undo。
-   *
-   * 如果用户在 10 秒窗口内重新播放了视频，旧快照不得覆盖刚产生的新进度。
-   */
-  bool get canRestoreWithoutOverwritingNewPlayback =>
-      item.videoId == videoId &&
-      item.lastPlayedAt == null &&
-      item.playbackPosition == Duration.zero &&
-      !item.playbackCompleted &&
-      item.playbackPositionUpdatedAt == null;
-
-  /** 把捕获的精确播放状态恢复到原稳定视频对象。 */
-  void restore() {
-    item
-      ..lastPlayedAt = lastPlayedAt
-      ..playbackPosition = playbackPosition
-      ..playbackCompleted = playbackCompleted
-      ..playbackPositionUpdatedAt = playbackPositionUpdatedAt;
-  }
 }
 
 class _LibraryPageState extends State<LibraryPage> {
@@ -2374,12 +2293,12 @@ class _LibraryPageState extends State<LibraryPage> {
   /** 当前页面共享的文件系统平台边界。 */
   FileSystemAdapter get _fileSystem => widget.fileSystem;
 
-  /**
-   * 最近播放清理时的临时选择集。
-   *
-   * 只保存 pathKey，不新增数据库字段；确认删除时把对应视频的 lastPlayedAt 清空。
-   */
-  final _selectedRecentPathKeys = <String>{};
+  /** 最近播放临时多选复用 stable videoId owner，不绑定 mutable path。 */
+  final _recentPlaybackSelection = LibrarySelectionController();
+
+  /** 继续观看清理/撤销与 Repository 失败补偿的无 UI owner。 */
+  final _continueWatchingCommands =
+      const LibraryContinueWatchingCommandExecutor();
 
   /** 主结果多选只保存 stable `videoId`，不持有可变路径或 VideoItem。 */
   final _librarySelection = LibrarySelectionController();
@@ -3279,7 +3198,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _resultMode = _LibraryResultMode.library;
       _localLibraryPath = null;
       _localLibraryBackStack.clear();
-      _selectedRecentPathKeys.clear();
+      _recentPlaybackSelection.clear();
       _clearSearchSilently();
       _selectedTags.clear();
       _selectedChildTags.clear();
@@ -3304,7 +3223,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _resultMode = _LibraryResultMode.recent;
       _localLibraryPath = null;
       _localLibraryBackStack.clear();
-      _selectedRecentPathKeys.clear();
+      _recentPlaybackSelection.clear();
       _clearSearchSilently();
       _selectedTags.clear();
       _selectedChildTags.clear();
@@ -3326,7 +3245,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _resultMode = _LibraryResultMode.favorites;
       _localLibraryPath = null;
       _localLibraryBackStack.clear();
-      _selectedRecentPathKeys.clear();
+      _recentPlaybackSelection.clear();
       _clearSearchSilently();
       _selectedTags.clear();
       _selectedChildTags.clear();
@@ -3347,7 +3266,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _resultMode = _LibraryResultMode.local;
       _localLibraryPath = TagRules.normalizeRootPath(rootPath);
       _localLibraryBackStack.clear();
-      _selectedRecentPathKeys.clear();
+      _recentPlaybackSelection.clear();
       _clearSearchSilently();
       _selectedTags.clear();
       _selectedChildTags.clear();
@@ -3457,7 +3376,7 @@ class _LibraryPageState extends State<LibraryPage> {
     }
     final targets = recentPlaybackClearTargets(
       store.videos.values,
-      selectedPathKeys: _selectedRecentPathKeys,
+      selectedVideoIds: _recentPlaybackSelection.selectedVideoIds,
       selectedOnly: selectedOnly,
     );
     if (targets.isEmpty) {
@@ -3487,30 +3406,21 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null || targets.isEmpty) {
       return;
     }
-    final snapshots = targets
-        .map(ContinueWatchingClearSnapshot.capture)
-        .toList(growable: false);
-    for (final item in targets) {
-      _resetContinueWatchingState(item);
-    }
-    try {
-      await store.upsertPlaybackStates(targets);
-    } catch (_) {
-      for (final snapshot in snapshots) {
-        snapshot.restore();
-      }
-      if (mounted) {
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('清除观看进度失败，原记录已保留')),
-        );
-      }
-      return;
-    }
+    final result = await _continueWatchingCommands.clear(
+      targets,
+      commit: store.upsertPlaybackStates,
+    );
     if (!mounted) {
       return;
     }
-    setState(_selectedRecentPathKeys.clear);
+    if (!result.succeeded) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('清除观看进度失败，原记录已保留')),
+      );
+      return;
+    }
+    setState(_recentPlaybackSelection.clear);
     _markLibraryDataChanged();
     final messenger = ScaffoldMessenger.of(context);
     messenger
@@ -3521,7 +3431,8 @@ class _LibraryPageState extends State<LibraryPage> {
           content: Text('已清除 ${targets.length} 条观看进度，视频文件未删除'),
           action: SnackBarAction(
             label: '撤销',
-            onPressed: () => unawaited(_undoRecentPlaybackClear(snapshots)),
+            onPressed: () =>
+                unawaited(_undoRecentPlaybackClear(result.snapshots)),
           ),
         ),
       );
@@ -3546,65 +3457,37 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       return;
     }
-    final restorable = snapshots
-        .where((snapshot) => snapshot.canRestoreWithoutOverwritingNewPlayback)
-        .toList(growable: false);
-    if (restorable.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('记录已产生新的播放进度，未覆盖新状态')),
-        );
-      }
-      return;
-    }
-    for (final snapshot in restorable) {
-      snapshot.restore();
-    }
-    try {
-      await store.upsertPlaybackStates(
-        restorable.map((snapshot) => snapshot.item),
-      );
-    } catch (_) {
-      // 数据库仍保持已清理状态时，内存必须同步回到相同状态，避免重启前后显示分裂。
-      for (final snapshot in restorable) {
-        _resetContinueWatchingState(snapshot.item);
-      }
-      if (mounted) {
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('撤销失败，请重试播放以重新生成进度')),
-        );
-      }
-      return;
-    }
+    final result = await _continueWatchingCommands.undo(
+      snapshots,
+      commit: store.upsertPlaybackStates,
+    );
     if (!mounted) {
+      return;
+    }
+    if (result.nothingToRestore) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('记录已产生新的播放进度，未覆盖新状态')),
+      );
+      return;
+    }
+    if (!result.succeeded) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('撤销失败，请重试播放以重新生成进度')),
+      );
       return;
     }
     _markLibraryDataChanged();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已恢复 ${restorable.length} 条观看进度')),
+      SnackBar(content: Text('已恢复 ${result.snapshots.length} 条观看进度')),
     );
-  }
-
-  /** 清空单条播放进度；保留媒体总时长、videoId 和其它用户维护数据。 */
-  void _resetContinueWatchingState(VideoItem item) {
-    item
-      ..lastPlayedAt = null
-      ..playbackPosition = Duration.zero
-      ..playbackCompleted = false
-      ..playbackPositionUpdatedAt = null;
   }
 
   /**
    * 切换最近播放清理选择状态。
    */
   void _toggleRecentSelection(VideoItem item) {
-    final key = TagRules.pathKey(item.path);
-    setState(() {
-      if (!_selectedRecentPathKeys.remove(key)) {
-        _selectedRecentPathKeys.add(key);
-      }
-    });
+    setState(() => _recentPlaybackSelection.toggle(item.videoId));
   }
 
   void _markLibraryDataChanged({
@@ -4562,7 +4445,8 @@ class _LibraryPageState extends State<LibraryPage> {
                         )
                       : RecentPlaybackView(
                           videos: videos,
-                          selectedPathKeys: _selectedRecentPathKeys,
+                          selectedVideoIds:
+                              _recentPlaybackSelection.selectedVideoIds,
                           thumbnailService: thumbnailService,
                           playbackSettings: _playbackSettings,
                           dense: _denseResultGrid,
@@ -4572,13 +4456,12 @@ class _LibraryPageState extends State<LibraryPage> {
                           onDeleteVideo: _requestDeleteVideo,
                           onToggleSelected: _toggleRecentSelection,
                           onSelectAll: () => setState(() {
-                            _selectedRecentPathKeys
-                              ..clear()
-                              ..addAll(videos
-                                  .map((item) => TagRules.pathKey(item.path)));
+                            _recentPlaybackSelection.toggleAll(
+                              videos.map((item) => item.videoId),
+                            );
                           }),
                           onClearSelection: () =>
-                              setState(_selectedRecentPathKeys.clear),
+                              setState(_recentPlaybackSelection.clear),
                           onDeleteOne: _clearOneRecentPlayback,
                           onDeleteSelected: () =>
                               _clearRecentPlayback(selectedOnly: true),

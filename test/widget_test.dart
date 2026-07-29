@@ -7285,7 +7285,7 @@ void main() {
     expect(
       recentPlaybackClearTargets(
         [playedA, playedB, neverPlayed],
-        selectedPathKeys: {TagRules.pathKey(playedB.path)},
+        selectedVideoIds: {playedB.videoId},
         selectedOnly: true,
       ),
       [playedB],
@@ -7293,7 +7293,7 @@ void main() {
     expect(
       recentPlaybackClearTargets(
         [playedA, playedB, neverPlayed],
-        selectedPathKeys: const {},
+        selectedVideoIds: const {},
         selectedOnly: false,
       ),
       [playedA, playedB],

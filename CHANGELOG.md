@@ -115,6 +115,12 @@
 - 单条 batch 失败现在恢复同一 `VideoItem`、旧 path、missing、active/detached 与标签
   索引；关闭数据库的确定性测试覆盖补偿。`LibraryPage` 维持 5,913 行，完整 398 项测试
   通过（3 项显式基准跳过），静态分析、Windows Debug build 与正式入口启动通过。
+- 完成 Phase 3H-1 继续观看纵向切片：清理/撤销的精确快照、批量提交和失败补偿迁入
+  无 UI executor，页面只保留确认、10 秒撤销入口、SnackBar 与刷新绑定。
+- 最近播放临时选择从 mutable pathKey 改为 stable videoId，列表/网格统一消费同一只读
+  stable ID 集合；单条、已选、全部和撤销后新播放保护语义不变。`LibraryPage` 门禁降到
+  5,796，完整 403 项测试通过（3 项显式基准跳过），静态分析、Windows Debug build 与
+  正式入口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

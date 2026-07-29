@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随扫描生命周期与进度展示叶节点收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(5913));
+    expect(libraryLines, lessThanOrEqualTo(5796));
     expect(playerLines, lessThanOrEqualTo(5374));
   });
 
@@ -1065,6 +1065,42 @@ void main() {
     expect(libraryPage, contains('pickAndRelinkMissingVideo('));
     expect(coordinator, contains('final itemSnapshot ='));
     expect(coordinator, contains('_restoreVideoItem(missing, itemSnapshot)'));
+  });
+
+  test('continue watching commands use stable identity outside LibraryPage',
+      () {
+    final page = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final widgets = File(
+      'lib/src/widgets/library/library_widgets.dart',
+    ).readAsStringSync();
+    final executor = File(
+      'lib/src/features/library/application/'
+      'library_continue_watching_command_executor.dart',
+    ).readAsStringSync();
+
+    expect(executor, contains('class ContinueWatchingClearSnapshot'));
+    expect(
+      executor,
+      contains('class LibraryContinueWatchingCommandExecutor'),
+    );
+    expect(executor, contains('selectedVideoIds.contains(item.videoId)'));
+    expect(
+        executor, contains('snapshot.canRestoreWithoutOverwritingNewPlayback'));
+    expect(executor, contains('await commit('));
+    expect(executor, isNot(contains("import 'package:flutter/")));
+    expect(executor, isNot(contains('LibraryApplicationFacade')));
+    expect(executor, isNot(contains('LibraryStore')));
+    expect(executor, isNot(contains('BuildContext context')));
+    expect(executor, isNot(contains('ScaffoldMessenger')));
+    expect(page, contains('_continueWatchingCommands.clear('));
+    expect(page, contains('_continueWatchingCommands.undo('));
+    expect(page, contains('_recentPlaybackSelection.selectedVideoIds'));
+    expect(page, isNot(contains('_selectedRecentPathKeys')));
+    expect(page, isNot(contains('class ContinueWatchingClearSnapshot')));
+    expect(widgets, contains('selectedVideoIds.contains(item.videoId)'));
+    expect(widgets, isNot(contains('selectedPathKeys')));
   });
 
   test('PlayerPage keeps hidden progress mounted before the full controls', () {

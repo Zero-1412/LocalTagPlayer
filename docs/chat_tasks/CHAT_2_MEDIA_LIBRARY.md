@@ -44,6 +44,15 @@
 
 # CHAT_2_MEDIA_LIBRARY.md
 
+## 2026-07-29 继续观看稳定身份命令
+
+- 清理/撤销的精确播放快照、批量 Repository 提交与失败补偿迁入无 UI executor；只修改
+  lastPlayedAt、position、completed 与更新时间，保留总时长、标签、收藏和其它用户数据。
+- 最近播放临时选择改为 stable videoId，路径变化不再丢失选择；列表和网格使用同一
+  stable ID 集合。
+- 确认、单条/已选/全部、10 秒撤销、新播放不覆盖和反馈保持原 presentation；SQLite
+  schema、筛选、filtered queue、播放器后端和缓存队列未改变。
+
 ## 2026-07-29 Missing/Relink 显式命令与失败补偿
 
 - 单条 Relink command 在 picker 前捕获 stable videoId、旧 mutable path 与 fingerprint，

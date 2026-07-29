@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.116` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.117` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -87,6 +87,11 @@ fingerprint 的不可变 command。`LibraryMissingRelinkCommandExecutor` 只拒�
 空路径和同一身份重复提交；picker、spinner、SnackBar、Route 和批量前缀替换仍在原
 presentation/service owner。Repository 继续唯一负责路径占用、文件可读性、fingerprint
 和 SQLite；单条 batch 失败会恢复同一 `VideoItem` 引用及 active/detached/tagId 索引。
+
+Phase 3H-1 把继续观看清理/撤销迁入 `LibraryContinueWatchingCommandExecutor`。
+executor 捕获精确播放快照、注入批量 Repository 提交，并在失败时恢复或重新清空同一
+`VideoItem`；确认、10 秒撤销入口、SnackBar 与刷新仍在 presentation。最近播放临时
+多选复用 `LibrarySelectionController`，只保存 stable videoId，不再绑定 mutable path。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -574,12 +579,14 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.116`
+已完成基线：`Architecture Baseline 0.5.117`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.117`：继续观看清理/撤销快照、批量提交与失败补偿迁入无 UI executor；最近播放
+  临时选择改为 stable videoId，页面保留确认、反馈与刷新绑定。
 - `0.5.116`：单条 Missing/Relink 使用捕获 stable identity/path/fingerprint 的显式
   command；过期/重复提交被拒绝，Repository batch 失败补偿同一对象和全部路径/标签索引。
 - `0.5.115`：单视频手动标签替换成为显式不可变 command；folder 锁定、一级父级作用域

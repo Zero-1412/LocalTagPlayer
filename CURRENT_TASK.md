@@ -212,6 +212,19 @@
   选择/失败反馈 → 返回”，再覆盖批量预览/重试和播放器错误面板 Relink。
 - 下一步进入 Phase 3H：只拆 `LibraryPage` 的布局、动画、Route 与 command 绑定，不迁移
   Repository 语义，不删除任何现有入口，并保持页面预算只降不升。
+- Phase 3H-1 已迁移继续观看清理/撤销命令：`LibraryContinueWatchingCommandExecutor`
+  捕获精确播放快照、批量提交并在清理或撤销失败时补偿同一 `VideoItem`；不持有 Store、
+  BuildContext、Route、SnackBar、筛选结果或播放器资源。
+- 最近播放临时选择由第二个 `LibrarySelectionController` 按 stable videoId 持有，不再
+  绑定 mutable path；`RecentPlaybackView` 也只消费 stable ID。确认弹窗、清理单条/
+  已选/全部、10 秒撤销、新播放不覆盖和全部反馈文案保持可达。
+- Phase 3H-1 focused/widget tests 与完整 403 项测试通过（3 项显式基准跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口启动通过；`LibraryPage`
+  门禁由 5,913 降到 5,796。
+  Computer Use 仍不可用，无法截图；人工复测路径为“侧栏 → 最近播放 → 单选/全选 →
+  删除已选/清空全部 → 取消/确认 → 10 秒撤销”，并在撤销窗口内重新播放验证不覆盖新进度。
+- 下一步进入 Phase 3H-2，继续从页面迁出非布局的来源切换/派生状态编排；Route、动画、
+  command 绑定和所有既有入口继续留在页面，页面预算只降不升。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

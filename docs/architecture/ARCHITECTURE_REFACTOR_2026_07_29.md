@@ -311,6 +311,15 @@ Phase 3G-3 的落地边界：
   active/detached 与 tagId 索引；确定性数据库关闭测试覆盖补偿。`LibraryPage` 门禁保持
   5,913，Phase 3G 完成。
 
+Phase 3H-1 的落地边界：
+
+- 继续观看清理/撤销使用无 UI executor；精确快照、同一对象修改、批量提交、清理失败
+  恢复和撤销失败重新清空由单一 owner 管理。
+- 最近播放选择复用 `LibrarySelectionController` 并只保存 stable videoId；路径变化不能
+  丢失或串用临时选择，`RecentPlaybackView` 不再按 pathKey 判断选中。
+- 清理单条/已选/全部、确认弹窗、10 秒撤销、新播放不覆盖、SnackBar、刷新和 Route
+  全部保留；`LibraryPage` 门禁由 5,913 降到 5,796。
+
 ### Phase 4：播放器 MVVM
 
 - [ ] 4A 拆出 `PlayerSessionController`，只拥有队列、当前媒体与会话命令。
