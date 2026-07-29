@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随备份设置纵向切片与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(6021));
+    expect(libraryLines, lessThanOrEqualTo(6019));
     expect(playerLines, lessThanOrEqualTo(5400));
   });
 
@@ -631,6 +631,9 @@ void main() {
     final source = File(
       'lib/src/features/library/domain/library_query_snapshot.dart',
     ).readAsStringSync();
+    final revisions = File(
+      'lib/src/features/library/application/library_revision_tracker.dart',
+    ).readAsStringSync();
     final filterSource = File(
       'lib/src/services/tags/tag_query_service.dart',
     ).readAsStringSync();
@@ -642,11 +645,78 @@ void main() {
     expect(source, isNot(contains('dart:io')));
     expect(source, isNot(contains('BuildContext')));
     expect(source, isNot(contains('sqlite')));
+    expect(
+      revisions,
+      contains('class LibraryRevisionTracker'),
+    );
+    expect(revisions, contains('LibraryDataChangeKind.tagDefinitions'));
+    expect(revisions, isNot(contains('package:flutter/')));
+    expect(revisions, isNot(contains('dart:io')));
+    expect(revisions, isNot(contains('LibraryStore')));
+    expect(revisions, isNot(contains('FilterQuery')));
     expect(filterSource, contains('LibraryResultEpoch'));
     expect(filterSource, isNot(contains('_querySignature')));
     expect(pageSource, contains('LibraryCountEpoch.fromQuery'));
+    expect(pageSource, contains('final _libraryRevisionTracker'));
+    expect(
+      pageSource,
+      contains('tagDefinitionRevision: _tagDefinitionRevision'),
+    );
+    expect(pageSource, isNot(contains('_libraryDataRevision += 1')));
+    expect(
+      pageSource,
+      isNot(contains('tagDefinitionRevision: _libraryDataRevision')),
+    );
     expect(pageSource, isNot(contains('sourceKey:')));
     expect(pageSource, isNot(contains('sortKey:')));
+  });
+
+  test('library selection and view preferences are bounded application owners',
+      () {
+    final page = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final selection = File(
+      'lib/src/features/library/application/'
+      'library_selection_controller.dart',
+    ).readAsStringSync();
+    final viewPreferences = File(
+      'lib/src/features/library/application/'
+      'library_view_preferences_controller.dart',
+    ).readAsStringSync();
+
+    expect(selection, contains('class LibrarySelectionController'));
+    expect(selection, contains('UnmodifiableSetView<String>'));
+    expect(selection, contains('toggle(String videoId)'));
+    expect(
+        selection, isNot(contains("import '../../../models/video_item.dart'")));
+    expect(selection, isNot(contains('final VideoItem')));
+    expect(selection, isNot(contains('String path')));
+    expect(viewPreferences, contains('class LibraryViewPreferencesController'));
+    for (final forbidden in <String>[
+      'BuildContext',
+      'Navigator',
+      'Route<',
+      'FilterQuery',
+      'TagQueryService',
+      'ThumbnailService',
+      'LibraryStore',
+      'dart:io',
+    ]) {
+      expect(selection, isNot(contains(forbidden)));
+      expect(viewPreferences, isNot(contains(forbidden)));
+    }
+    expect(page, contains('final _librarySelection ='));
+    expect(page, contains('final _viewPreferences ='));
+    expect(page, isNot(contains('var _librarySelectionMode =')));
+    expect(page, isNot(contains('final _selectedLibraryVideoIds =')));
+    expect(page, isNot(contains('var _denseResultGrid =')));
+    expect(page, isNot(contains('var _isMainSidebarCollapsed =')));
+    expect(page, isNot(contains('var _isTagDiscoveryPanelOpen =')));
+    expect(page, contains('onEnterSelectionMode:'));
+    expect(page, contains('onToggleSelectAll:'));
+    expect(page, contains('onDeleteSelected:'));
+    expect(page, contains('onCancelSelectionMode:'));
   });
 
   test('PlayerPage keeps hidden progress mounted before the full controls', () {

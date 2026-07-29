@@ -209,8 +209,9 @@ Phase 2E 将现有视频数据备份设置迁入独立纵向切片：
 
 ### Phase 3：媒体库 MVVM
 
-- [ ] 3A 先建立数据修订与失效协议，明确排序、计数和结果快照的失效条件。
-- [ ] 3B 先迁移只保存 stable ID 的选择状态与视图偏好。
+- [x] 3A 建立独立结果数据/标签定义修订 tracker；排序不提交数据变化，普通内容变化不再
+  误推进标签定义代次，root、扫描、relink、删除和标签维护仍同时失效两者。
+- [x] 3B 迁移只保存 stable ID 的主结果选择状态，以及网格密度、侧栏和标签面板显隐。
 - [ ] 3C 单独迁移排序，验证完整计数调用为 0，且不会隐式改变既有播放队列。
 - [ ] 3D 以 `LibraryQueryController` 和 `FacetCountController` 迁移筛选、搜索、结果和计数；
   共享版本协议，但不得互相成为可写状态源。
@@ -218,6 +219,18 @@ Phase 2E 将现有视频数据备份设置迁入独立纵向切片：
 - [ ] 3F 最后迁移扫描/导入生命周期，保留 latest-only 排队、限流和 generation cancellation。
 - [ ] 把文件菜单、标签维护、Missing/Relink 变成明确 command。
 - [ ] `LibraryPage` 只保留布局、动画、Route 跳转和命令绑定。
+
+Phase 3A/3B 的落地边界：
+
+- `LibraryRevisionTracker` 每次真实内容提交推进 data revision；只有可能改变标签候选、
+  folder 层级、定义或关系的提交推进 tag definition revision。`LibraryCountEpoch`
+  使用独立标签代次，不再让收藏、播放进度或媒体详情把标签结构误判为变化。
+- `LibrarySelectionController` 通过复用的 `UnmodifiableSetView` 暴露 stable `videoId`
+  集合，统一进入、切换、全选、清空和删除成功项；不持有 `VideoItem` 或 mutable path。
+- `LibraryViewPreferencesController` 只拥有网格密度、主侧栏折叠和标签发现面板显隐，
+  不触发筛选、计数或缩略图工作。页面仍用一次复合 `setState` 协调来源切换，并继续通过
+  应用服务持久化网格/排序偏好。
+- 排序、筛选/计数、QueueSnapshot 和扫描生命周期留给 3C-3F；页面行数门禁降到 6,019。
 
 ### Phase 4：播放器 MVVM
 

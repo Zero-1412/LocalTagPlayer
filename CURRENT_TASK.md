@@ -101,6 +101,19 @@
   零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 原生控制
   工具仍不可用，无法自动点击或截图；仍需人工复测“设置 → 视频数据备份 → 切换开关 →
   立即备份/检查完整性/导出后取消 → 返回”，核对互斥禁用、错误回滚与无路径泄漏反馈。
+- Phase 3A/3B 已完成：`LibraryRevisionTracker` 分离结果数据和标签定义代次；普通收藏、
+  播放进度与媒体详情只推进数据代次，root、扫描、relink、删除和标签维护同时推进标签
+  定义代次，`LibraryCountEpoch` 不再把所有数据提交误判为标签结构变化。
+- `LibrarySelectionController` 只保存 stable `videoId` 的只读视图，统一进入、单选、全选、
+  清空和删除后失败项保留；`LibraryViewPreferencesController` 只拥有网格密度、主侧栏
+  折叠和标签面板显隐。页面继续唯一协调筛选来源、排序持久化、批量删除与复合 rebuild。
+- 排序、筛选、计数算法、播放队列和扫描生命周期均未迁移；媒体库页面行数门禁由 6,021
+  降到 6,019。下一步进入 Phase 3C，只迁移排序 controller 并证明切换排序不会调用完整
+  标签计数，也不会改变 filtered queue 的来源集合。
+- Phase 3A/3B focused tests 与完整 359 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 仍不可用；
+  需人工复测“进入多选 → 选择/全选 → 取消 → 网格/列表切换 → 折叠/展开侧栏 → 标签面板
+  展开后点击标签”，核对选择只跟随 stable id、筛选后退出多选且交互无卡顿。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

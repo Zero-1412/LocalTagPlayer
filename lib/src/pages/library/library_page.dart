@@ -20,6 +20,9 @@ import '../../features/settings/presentation/cache_diagnostics_snapshot_view.dar
 import '../../features/settings/presentation/data_backup_settings_workspace.dart';
 import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/settings_workspace_theme.dart';
+import '../../features/library/application/library_revision_tracker.dart';
+import '../../features/library/application/library_selection_controller.dart';
+import '../../features/library/application/library_view_preferences_controller.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/data_backup_models.dart';
@@ -2410,6 +2413,8 @@ class _LibraryPageState extends State<LibraryPage> {
   var _playerScopedLibraryDataChanged = false;
   /** 播放器内 relink 会改变 folder 标签，需要在返回后低频刷新标签计数。 */
   var _playerScopedNeedsCountRefresh = false;
+  /** 播放器内 relink、删除或标签编辑可能改变标签候选与 folder 层级。 */
+  var _playerScopedTagDefinitionsChanged = false;
   /** 最近一次播放器的原生释放信号；专项压测必须等它完成再开始下一会话。 */
   Future<void> _latestPlayerRelease = Future<void>.value();
   /** 播放器 Route 存续期间只隐藏媒体库语义，不卸载列表或丢失筛选状态。 */
@@ -2421,7 +2426,11 @@ class _LibraryPageState extends State<LibraryPage> {
 
   var _isRefreshingCounts = false;
 
-  var _libraryDataRevision = 0;
+  /** 结果数据与标签定义的独立修订 owner。 */
+  final _libraryRevisionTracker = LibraryRevisionTracker();
+  int get _libraryDataRevision => _libraryRevisionTracker.dataRevision;
+  int get _tagDefinitionRevision =>
+      _libraryRevisionTracker.tagDefinitionRevision;
   var _showFavoritesOnly = false;
   var _isScanning = false;
   /** 用户已请求取消扫描，但后端仍在退出当前系统调用。 */
@@ -2438,10 +2447,15 @@ class _LibraryPageState extends State<LibraryPage> {
   LibraryScanUiDiagnostics? _activeScanUiDiagnostics;
   var _sortMode = SortMode.recent;
   var _sortDirection = SortDirection.descending;
-  var _denseResultGrid = false;
-  /** 主功能栏折叠态只影响当前页面布局，不写入媒体库数据或筛选状态。 */
-  var _isMainSidebarCollapsed = false;
-  var _isTagDiscoveryPanelOpen = libraryTagDiscoveryPanelInitiallyOpen;
+  /** 网格密度、主侧栏和标签面板显隐的纯展示 owner。 */
+  final _viewPreferences = LibraryViewPreferencesController(
+    denseResultGrid: false,
+    mainSidebarCollapsed: false,
+    tagDiscoveryPanelOpen: libraryTagDiscoveryPanelInitiallyOpen,
+  );
+  bool get _denseResultGrid => _viewPreferences.denseResultGrid;
+  bool get _isMainSidebarCollapsed => _viewPreferences.mainSidebarCollapsed;
+  bool get _isTagDiscoveryPanelOpen => _viewPreferences.tagDiscoveryPanelOpen;
   /**
    * expanded 结果滚动时的顶部信息区目标状态。
    *
@@ -2471,20 +2485,11 @@ class _LibraryPageState extends State<LibraryPage> {
    */
   final _selectedRecentPathKeys = <String>{};
 
-  /**
-   * 主媒体结果区是否处于多选模式。
-   *
-   * 该状态只改变工具栏和卡片点击语义，不写入数据库，也不改变当前筛选结果或播放队列。
-   */
-  var _librarySelectionMode = false;
-
-  /**
-   * 主媒体结果区已选择的稳定 videoId。
-   *
-   * 使用 videoId 而不是可变路径，保证同一会话内排序变化不会丢失选择；筛选或切换结果
-   * 来源时统一退出多选，避免保留不可见选择。
-   */
-  final _selectedLibraryVideoIds = <String>{};
+  /** 主结果多选只保存 stable `videoId`，不持有可变路径或 VideoItem。 */
+  final _librarySelection = LibrarySelectionController();
+  bool get _librarySelectionMode => _librarySelection.selectionMode;
+  Set<String> get _selectedLibraryVideoIds =>
+      _librarySelection.selectedVideoIds;
 
   /**
    * 本地媒体库当前浏览路径。
@@ -2634,7 +2639,9 @@ class _LibraryPageState extends State<LibraryPage> {
     void applyHydratedState() => setState(() {
           _sortMode = sortPreferences.mode;
           _sortDirection = sortPreferences.direction;
-          _denseResultGrid = sortPreferences.denseResultGrid;
+          _viewPreferences.setDenseResultGrid(
+            sortPreferences.denseResultGrid,
+          );
           _store = store;
           _thumbnailService = thumbnailService;
           _playbackSettings = playbackSettings;
@@ -2701,7 +2708,7 @@ class _LibraryPageState extends State<LibraryPage> {
         _unavailableCleanupFuture = null;
       }
       if (mounted && identical(_store, store)) {
-        _markLibraryDataChanged();
+        _markLibraryDataChanged(tagDefinitionsChanged: true);
       }
     });
   }
@@ -3306,48 +3313,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   /** 在现有 setState 中退出主媒体多选并清空临时选择。 */
   void _clearLibrarySelectionState() {
-    _librarySelectionMode = false;
-    _selectedLibraryVideoIds.clear();
-  }
-
-  /** 进入多选模式；首次进入不预选任何视频。 */
-  void _enterLibrarySelectionMode() {
-    setState(() {
-      _librarySelectionMode = true;
-      _selectedLibraryVideoIds.clear();
-    });
-  }
-
-  /** 退出多选模式并恢复普通筛选工具栏和卡片播放语义。 */
-  void _cancelLibrarySelectionMode() {
-    setState(_clearLibrarySelectionState);
-  }
-
-  /** 切换单个视频的多选状态，卡片点击和圆形复选框共用该入口。 */
-  void _toggleLibraryVideoSelection(VideoItem item) {
-    setState(() {
-      if (!_selectedLibraryVideoIds.remove(item.videoId)) {
-        _selectedLibraryVideoIds.add(item.videoId);
-      }
-    });
-  }
-
-  /**
-   * 对完整当前筛选结果执行全选或取消全选。
-   *
-   * 这里只更新稳定 id 集合；Sliver 仍只重建视口附近卡片，不会一次创建全部视频 Widget。
-   */
-  void _toggleAllLibraryVideoSelection(List<VideoItem> videos) {
-    setState(() {
-      if (videos.isNotEmpty &&
-          _selectedLibraryVideoIds.length == videos.length) {
-        _selectedLibraryVideoIds.clear();
-        return;
-      }
-      _selectedLibraryVideoIds
-        ..clear()
-        ..addAll(videos.map((item) => item.videoId));
-    });
+    _librarySelection.clear();
   }
 
   /**
@@ -3365,9 +3331,11 @@ class _LibraryPageState extends State<LibraryPage> {
       _clearLibrarySelectionState();
       _resultMode = _LibraryResultMode.library;
       mutation();
-      _isTagDiscoveryPanelOpen = libraryTagDiscoveryPanelOpenAfterMutation(
-        currentOpen: _isTagDiscoveryPanelOpen,
-        collapseAfterMutation: collapseTagPanel,
+      _viewPreferences.setTagDiscoveryPanelOpen(
+        libraryTagDiscoveryPanelOpenAfterMutation(
+          currentOpen: _isTagDiscoveryPanelOpen,
+          collapseAfterMutation: collapseTagPanel,
+        ),
       );
     });
     _scheduleFilterRefresh(refreshCounts: refreshCounts);
@@ -3418,7 +3386,7 @@ class _LibraryPageState extends State<LibraryPage> {
     if (_denseResultGrid == dense) {
       return;
     }
-    setState(() => _denseResultGrid = dense);
+    setState(() => _viewPreferences.setDenseResultGrid(dense));
     unawaited(widget.applicationService.saveSortPreferences(
       LibrarySortPreferences(
         mode: _sortMode,
@@ -3590,7 +3558,9 @@ class _LibraryPageState extends State<LibraryPage> {
     setState(() {
       // 解除管理改变了 active 数据源；必须提升 revision，禁止 FilterStateSource 复用
       // 操作前的 11k 列表缓存，否则 SQLite 已完成但 UI 总量会长期停留在旧值。
-      _libraryDataRevision += 1;
+      _libraryRevisionTracker.record(
+        LibraryDataChangeKind.tagDefinitions,
+      );
       _invalidateDerivedCaches();
       if (_localLibraryPath != null &&
           TagRules.pathKey(_localLibraryPath!) == TagRules.pathKey(root)) {
@@ -3767,8 +3737,14 @@ class _LibraryPageState extends State<LibraryPage> {
     });
   }
 
-  void _markLibraryDataChanged() {
-    _libraryDataRevision += 1;
+  void _markLibraryDataChanged({
+    bool tagDefinitionsChanged = false,
+  }) {
+    _libraryRevisionTracker.record(
+      tagDefinitionsChanged
+          ? LibraryDataChangeKind.tagDefinitions
+          : LibraryDataChangeKind.content,
+    );
     _invalidateDerivedCaches();
     final store = _store;
     if (store != null) {
@@ -3790,7 +3766,9 @@ class _LibraryPageState extends State<LibraryPage> {
       // 都会无意义地重算整个媒体库。
       return;
     }
-    _libraryDataRevision += 1;
+    _libraryRevisionTracker.record(
+      LibraryDataChangeKind.tagDefinitions,
+    );
     _tagGroupsCacheKey = null;
     _localEntryCacheKey = null;
     _localEntryCacheByKey.clear();
@@ -4000,11 +3978,11 @@ class _LibraryPageState extends State<LibraryPage> {
         presentationSort: _librarySortFingerprint,
       );
 
-  /** 返回当前查询可发布的计数版本；标签定义暂与数据提交共用代次。 */
+  /** 返回当前查询可发布的计数版本；标签定义使用独立代次。 */
   LibraryCountEpoch _countEpoch(FilterQuery query) =>
       LibraryCountEpoch.fromQuery(
         dataRevision: _libraryDataRevision,
-        tagDefinitionRevision: _libraryDataRevision,
+        tagDefinitionRevision: _tagDefinitionRevision,
         query: query,
       );
 
@@ -4570,9 +4548,7 @@ class _LibraryPageState extends State<LibraryPage> {
         dense: dense,
         collapsed: _isMainSidebarCollapsed,
         width: width,
-        onToggleCollapsed: () => setState(
-          () => _isMainSidebarCollapsed = !_isMainSidebarCollapsed,
-        ),
+        onToggleCollapsed: () => setState(_viewPreferences.toggleMainSidebar),
         onPickFolder: _pickFolder,
         onShowAllLibrary: _showAllLibraryVideos,
         onRescan: _rescan,
@@ -4640,7 +4616,9 @@ class _LibraryPageState extends State<LibraryPage> {
         onGroupTagExcludeToggle: _toggleExcludedTag,
         onCollapse: dense
             ? null
-            : () => setState(() => _isTagDiscoveryPanelOpen = false),
+            : () => setState(
+                  () => _viewPreferences.setTagDiscoveryPanelOpen(false),
+                ),
       );
     }
 
@@ -4728,7 +4706,9 @@ class _LibraryPageState extends State<LibraryPage> {
                           onDelete: _requestDeleteVideo,
                           selectionMode: _librarySelectionMode,
                           selectedVideoIds: _selectedLibraryVideoIds,
-                          onToggleSelected: _toggleLibraryVideoSelection,
+                          onToggleSelected: (item) => setState(
+                            () => _librarySelection.toggle(item.videoId),
+                          ),
                           scrollChromeEnabled:
                               layoutSize == LayoutSize.expanded,
                           onHeaderVisibilityChanged: (visible) {
@@ -4802,9 +4782,7 @@ class _LibraryPageState extends State<LibraryPage> {
         onOpenTagManager: () => _openTagManager(videos),
         tagPanelOpen: _isTagDiscoveryPanelOpen,
         onToggleTagPanel: layoutSize == LayoutSize.expanded
-            ? () => setState(
-                  () => _isTagDiscoveryPanelOpen = !_isTagDiscoveryPanelOpen,
-                )
+            ? () => setState(_viewPreferences.toggleTagDiscoveryPanel)
             : null,
         onRemovePrimaryTag: (tag) => _mutateFilters(() {
           _selectedTags.remove(tag);
@@ -4821,17 +4799,23 @@ class _LibraryPageState extends State<LibraryPage> {
         selectionMode: _librarySelectionMode,
         selectedCount: _selectedLibraryVideoIds.length,
         allSelected: allLibraryVideosSelected,
-        onEnterSelectionMode:
-            supportsLibrarySelection ? _enterLibrarySelectionMode : null,
+        onEnterSelectionMode: supportsLibrarySelection
+            ? () => setState(_librarySelection.enter)
+            : null,
         onToggleSelectAll: _librarySelectionMode
-            ? () => _toggleAllLibraryVideoSelection(videos)
+            ? () => setState(
+                  () => _librarySelection.toggleAll(
+                    videos.map((item) => item.videoId),
+                  ),
+                )
             : null,
         onDeleteSelected:
             _librarySelectionMode && _selectedLibraryVideoIds.isNotEmpty
                 ? () => _requestDeleteSelectedVideos(videos)
                 : null,
-        onCancelSelectionMode:
-            _librarySelectionMode ? _cancelLibrarySelectionMode : null,
+        onCancelSelectionMode: _librarySelectionMode
+            ? () => setState(_librarySelection.clear)
+            : null,
         onOpenFilters: () {
           showModalBottomSheet<void>(
             context: context,
@@ -5112,6 +5096,9 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     if (mounted) {
       setState(() {
+        _libraryRevisionTracker.record(
+          LibraryDataChangeKind.tagDefinitions,
+        );
         _invalidateDerivedCaches();
         _stableTagCounts = store.resultCounts(const FilterQuery());
       });
@@ -5159,6 +5146,9 @@ class _LibraryPageState extends State<LibraryPage> {
     );
     if (changed == true && mounted) {
       setState(() {
+        _libraryRevisionTracker.record(
+          LibraryDataChangeKind.tagDefinitions,
+        );
         _invalidateDerivedCaches();
         _stableTagCounts = store.resultCounts(const FilterQuery());
       });
@@ -5311,6 +5301,9 @@ class _LibraryPageState extends State<LibraryPage> {
           .any((existing) => TagRules.sameTag(existing, tag))) {
         await _store!.addFavoriteTag(tag);
         setState(() {
+          _libraryRevisionTracker.record(
+            LibraryDataChangeKind.tagDefinitions,
+          );
           _invalidateDerivedCaches();
           _stableTagCounts = _store!.resultCounts(const FilterQuery());
         });
@@ -5351,7 +5344,7 @@ class _LibraryPageState extends State<LibraryPage> {
       // 点击与后台清理可能竞态；播放前再次确认路径，失效时只删数据库记录并阻止进入错误页。
       await store.deleteVideo(item.path);
       if (mounted) {
-        _markLibraryDataChanged();
+        _markLibraryDataChanged(tagDefinitionsChanged: true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('路径已失效，已从媒体库移除记录')),
         );
@@ -5455,6 +5448,7 @@ class _LibraryPageState extends State<LibraryPage> {
     }
     _playerScopedLibraryDataChanged = false;
     _playerScopedNeedsCountRefresh = false;
+    _playerScopedTagDefinitionsChanged = false;
     final playerDisposed = Completer<void>();
     _latestPlayerRelease = playerDisposed.future;
     // 备份只做 SQLite 小批次，但播放器仍优先；等待当前批次结束后再创建解码会话。
@@ -5531,10 +5525,16 @@ class _LibraryPageState extends State<LibraryPage> {
       store.resumeDataBackupAfterPlayback();
     }
     if (mounted && _playerScopedLibraryDataChanged) {
+      _libraryRevisionTracker.record(
+        _playerScopedTagDefinitionsChanged
+            ? LibraryDataChangeKind.tagDefinitions
+            : LibraryDataChangeKind.content,
+      );
       _invalidateDerivedCaches();
       _scheduleFilterRefresh(refreshCounts: _playerScopedNeedsCountRefresh);
       _playerScopedLibraryDataChanged = false;
       _playerScopedNeedsCountRefresh = false;
+      _playerScopedTagDefinitionsChanged = false;
     }
   }
 
@@ -5634,6 +5634,7 @@ class _LibraryPageState extends State<LibraryPage> {
     if (changed) {
       _playerScopedLibraryDataChanged = true;
       _playerScopedNeedsCountRefresh = true;
+      _playerScopedTagDefinitionsChanged = true;
     }
     return changed;
   }
@@ -5747,6 +5748,7 @@ class _LibraryPageState extends State<LibraryPage> {
     // 播放器路由仍在前台时不重建媒体库；返回后统一刷新可见结果和标签计数。
     _playerScopedLibraryDataChanged = true;
     _playerScopedNeedsCountRefresh = true;
+    _playerScopedTagDefinitionsChanged = true;
   }
 
   /**
@@ -5766,7 +5768,7 @@ class _LibraryPageState extends State<LibraryPage> {
         decision.moveLocalFileToTrash,
       );
       if (mounted) {
-        _markLibraryDataChanged();
+        _markLibraryDataChanged(tagDefinitionsChanged: true);
       }
     } catch (error) {
       if (!mounted) {
@@ -5837,14 +5839,9 @@ class _LibraryPageState extends State<LibraryPage> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _selectedLibraryVideoIds.removeAll(deletedIds);
-      if (_selectedLibraryVideoIds.isEmpty) {
-        _librarySelectionMode = false;
-      }
-    });
+    setState(() => _librarySelection.removeAll(deletedIds));
     if (deletedIds.isNotEmpty) {
-      _markLibraryDataChanged();
+      _markLibraryDataChanged(tagDefinitionsChanged: true);
     }
     if (failedTitles.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -5973,8 +5970,9 @@ class _LibraryPageState extends State<LibraryPage> {
         parentTag: editingChildTags ? childParentTag : null);
     if (mounted && deferLibraryRefresh) {
       _playerScopedLibraryDataChanged = true;
+      _playerScopedTagDefinitionsChanged = true;
     } else if (mounted) {
-      _markLibraryDataChanged();
+      _markLibraryDataChanged(tagDefinitionsChanged: true);
     }
   }
 
