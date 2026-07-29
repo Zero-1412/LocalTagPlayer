@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构第一阶段
 
-- 架构基线提升到 `0.5.106`；完整审计和 Phase 0-6 路线记录在
+- 架构基线提升到 `0.5.107`；完整审计和 Phase 0-6 路线记录在
   `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 - `main.dart`、bootstrap 组合根与 Flutter 应用壳已经分离，具体实现选择仍只发生在
   composition。
@@ -23,6 +23,8 @@
   最新失败回滚到最后成功快照。备份、缓存、Route 和平台资源继续由原 owner 管理。
 - Phase 2C 将缓存统计读取收口到泛型 latest-only controller；错误态安全展示，重试、
   清理、Repository 写入和互斥命令继续留给 Phase 2D。
+- Phase 2D 将现有重试/清除和 Repository 写入收口到泛型维护 controller；清除写入失败
+  恢复原错误。源码没有缓存删除/重建入口，因此未新增破坏性操作。
 - 后续按一致性边界迁移无状态诊断 UI、普通设置、媒体库和播放器；禁止一次性移动全部
   文件或改变现有业务语义。
 

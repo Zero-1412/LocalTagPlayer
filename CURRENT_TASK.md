@@ -74,6 +74,18 @@
   零问题，Windows Debug build 成功。Computer Use 原生管道仍返回“找不到指定文件”，
   未使用截图回退；仍需人工复测“设置 → 缩略图缓存 → 刷新统计 → 返回”，并在可构造
   读取失败时核对安全错误文案与“重新读取”入口。
+- Phase 2D 已完成现有缓存维护命令迁移：泛型
+  `CacheDiagnosticsMaintenanceController<T>` 互斥执行失败项重试和失败标记清除，
+  编排缓存命令与 Repository 写入；清除持久化失败会恢复全部原失败原因。
+- 源码没有缓存文件删除、全量重建、确认或撤销入口，因此没有凭架构路线新增破坏性功能。
+  页面继续拥有 SnackBar 和动作结束后的统计刷新；既有重试/清除 Key、禁用态和文案
+  保留，媒体库页面预算由 6,636 降到 6,633。
+- 新增互斥、选择性持久化、失败补偿和 dispose focused tests；下一步进入 Phase 2E，
+  单独评估备份/恢复的一致性与数据库替换边界。
+- Phase 2D focused tests 与完整 346 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 成功。Computer Use 原生管道仍不可用；需人工复测
+  “设置 → 缩略图缓存 → 展开失败详情 → 重试失败项/清除失败标记 → 返回”，核对动作
+  互斥禁用、成功/失败反馈和清除动作不删除视频或缓存文件。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

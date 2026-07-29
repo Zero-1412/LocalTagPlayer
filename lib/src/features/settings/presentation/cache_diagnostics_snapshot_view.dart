@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
 
+import '../application/cache_diagnostics_maintenance_controller.dart';
 import '../../../services/media/thumbnail_service.dart';
 import '../../../widgets/app_theme_tokens.dart';
 import 'cache_diagnostics_header.dart';
 
 // ignore_for_file: slash_for_doc_comments
+
+/** 格式化失败项重试结果，不改变队列或持久化状态。 */
+String cacheRetryOutcomeLabel(CacheRetryOutcome outcome) =>
+    outcome.retried == outcome.requested
+        ? '已重新排队 ${outcome.retried} 个失败缩略图'
+        : '已重新排队 ${outcome.retried} 个；'
+            '另有 ${outcome.requested - outcome.retried} 个仍待处理';
+
+/** 格式化失败标记清除结果，明确不会删除视频或缓存文件。 */
+String cacheClearOutcomeLabel(CacheClearOutcome outcome) =>
+    '已清除 ${outcome.cleared} 条失败标记；视频和缓存文件未删除';
 
 /**
  * 缓存统计读取期间的只读结构占位。

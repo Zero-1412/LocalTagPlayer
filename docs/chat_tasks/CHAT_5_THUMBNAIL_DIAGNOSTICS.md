@@ -19,6 +19,12 @@
   标记清理、Repository 写入和动作互斥仍由页面拥有，等待 Phase 2D。
 - Phase 2C focused 与完整 343 项测试通过（3 项显式基准跳过），静态分析和 Windows
   Debug build 通过；Computer Use 原生管道仍不可用，人工复测路径见 `CURRENT_TASK.md`。
+- Phase 2D 将现有失败项重试、失败标记清除和 Repository 写入迁入泛型维护 controller；
+  两类命令互斥，清除持久化失败恢复原错误。页面继续负责反馈和统计刷新。
+- 当前源码没有缓存文件删除、全量重建、确认或撤销入口，因此没有新增未授权破坏性操作；
+  JPEG 有效性、队列限流、FFmpegBackend 和缓存文件均未改变。
+- Phase 2D focused 与完整 346 项测试通过（3 项显式基准跳过），静态分析和 Windows
+  Debug build 通过；Computer Use 原生管道仍不可用，人工复测路径见 `CURRENT_TASK.md`。
 
 ## 2026-07-24 FFmpeg 8.1.2 缩略图 GPU A/B
 

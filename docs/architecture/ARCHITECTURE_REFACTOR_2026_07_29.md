@@ -156,7 +156,8 @@ Phase 1.5 的发布协议已经接入现有过滤和延后计数链路：
 - [x] 2B 按一致性边界拆分普通设置 controller，不建立包含备份与缓存任务的巨型
   `SettingsViewModel`。
 - [x] 2C 单独迁移只读缓存诊断；读取、刷新、错误和 dispose 使用 latest-only 发布。
-- [ ] 2D 单独迁移缓存删除、重建、确认、失败恢复、撤销与互斥任务。
+- [x] 2D 迁移现有缓存维护命令、失败恢复与互斥；源码没有删除/重建入口，不新增未授权
+  破坏性操作。
 - [ ] 2E 最后迁移备份/恢复；数据库关闭、替换、重开与全局失效由应用服务拥有。
 - [ ] 每一步保留确认、取消、撤销、返回和所有 `ValueKey`，增加 Route 级挂载测试。
 
@@ -179,6 +180,17 @@ Phase 2C 将缓存统计读取迁入泛型 `CacheDiagnosticsController<CacheStat
   泄漏，并提供只重新读取统计的恢复入口。
 - 失败项重试、失败标记清理、Repository 写入、动作互斥与反馈仍由页面拥有，留给
   Phase 2D；`LibraryPage` 行数门禁继续下调到 6,636。
+
+Phase 2D 将现有“重试失败项”和“清除失败标记”迁入
+`CacheDiagnosticsMaintenanceController<T>`：
+
+- controller 通过注入命令编排缓存服务与 Repository，互斥执行重试/清除；重试只持久化
+  已清除旧错误的条目。
+- 清除标记后 Repository 写入失败会恢复全部原失败原因，避免内存 UI 与持久化状态分裂。
+- controller 不持有具体缓存实现、`BuildContext`、Route、Widget 或读取 controller；
+  页面继续负责 SnackBar 和动作结束后的只读统计刷新。
+- 源码没有缓存文件删除、全量重建、确认或撤销入口；本阶段不凭路线描述新增用户未授权
+  的破坏性功能。全部现有动作 Key 保留，`LibraryPage` 行数门禁降到 6,633。
 
 ### Phase 3：媒体库 MVVM
 

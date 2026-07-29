@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随设置叶节点与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(6636));
+    expect(libraryLines, lessThanOrEqualTo(6633));
     expect(playerLines, lessThanOrEqualTo(5400));
   });
 
@@ -389,6 +389,10 @@ void main() {
       'lib/src/features/settings/application/'
       'cache_diagnostics_controller.dart',
     ).readAsStringSync();
+    final maintenance = File(
+      'lib/src/features/settings/application/'
+      'cache_diagnostics_maintenance_controller.dart',
+    ).readAsStringSync();
     final snapshot = File(
       'lib/src/features/settings/presentation/'
       'cache_diagnostics_snapshot_view.dart',
@@ -433,8 +437,30 @@ void main() {
     expect(controller, isNot(contains('retryFailed')));
     expect(controller, isNot(contains('clearFailures')));
     expect(controller, isNot(contains('dart:io')));
+    expect(
+      maintenance,
+      contains(
+        'class CacheDiagnosticsMaintenanceController<T> '
+        'extends ChangeNotifier',
+      ),
+    );
+    expect(maintenance, contains('await _persistChanges(changed)'));
+    expect(
+        maintenance, contains('_restoreFailure(target.item, target.reason)'));
+    expect(maintenance, isNot(contains('services/')));
+    expect(maintenance, isNot(contains('BuildContext ')));
+    expect(maintenance, isNot(contains('Navigator.')));
+    expect(maintenance, isNot(contains('Route<')));
+    expect(maintenance, isNot(contains('dart:io')));
     expect(library, isNot(contains('FutureBuilder<CacheStats>')));
     expect(library, contains('CacheDiagnosticsController<CacheStats>'));
+    expect(
+      library,
+      contains('CacheDiagnosticsMaintenanceController<VideoItem>'),
+    );
+    expect(library, isNot(contains('bool _cacheActionRunning')));
+    expect(library, contains('_cacheMaintenanceController.retry('));
+    expect(library, contains('_cacheMaintenanceController.clear('));
     expect(library, contains('CacheDiagnosticsLoadStateView('));
     expect(library, contains('class _CacheFailureActions'));
     expect(library, contains('_retryFailedThumbnails(stats)'));

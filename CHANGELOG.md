@@ -48,6 +48,11 @@
   动作互斥仍在页面，留给 Phase 2D。页面预算降到 6,636；完整 343 项测试通过（3 项
   显式基准跳过），静态分析与 Windows Debug build 通过，真实点击阻塞记录于
   `CURRENT_TASK.md`。
+- 完成 Phase 2D 现有缓存维护命令迁移：泛型
+  `CacheDiagnosticsMaintenanceController<T>` 互斥编排失败项重试、失败标记清除和
+  Repository 写入；清除写入失败会恢复原错误。源码不存在删除/重建入口，本阶段未新增
+  破坏性功能；动作反馈和统计刷新仍由页面负责，页面预算降到 6,633。完整 346 项测试
+  通过（3 项显式基准跳过），静态分析与 Windows Debug build 通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 

@@ -14,6 +14,7 @@ import '../../core/tag_rules.dart';
 import '../../features/update/domain/app_update_service.dart';
 import '../../features/update/presentation/about_settings_page.dart';
 import '../../features/settings/application/cache_diagnostics_controller.dart';
+import '../../features/settings/application/cache_diagnostics_maintenance_controller.dart';
 import '../../features/settings/application/playback_settings_controller.dart';
 import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/cache_diagnostics_snapshot_view.dart';
@@ -1389,12 +1390,13 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   PlaybackSettings get _settings => _playbackSettingsController.settings;
   /** 缓存统计读取的 latest-only owner；不包含重试或清理命令。 */
   late final CacheDiagnosticsController<CacheStats> _cacheDiagnosticsController;
+  /** 缓存重试/清理与 Repository 写入的互斥 owner。 */
+  late final CacheDiagnosticsMaintenanceController<VideoItem>
+      _cacheMaintenanceController;
   late DataBackupSettings _dataBackupSettings = widget.dataBackupSettings;
   late DataBackupStatus _dataBackupStatus = widget.store.dataBackupStatus;
   StreamSubscription<DataBackupStatus>? _dataBackupSubscription;
   bool _backupMaintenanceRunning = false;
-  /** 缓存诊断动作串行执行，避免重试、清理与统计刷新互相覆盖。 */
-  bool _cacheActionRunning = false;
   /** 自动清理运行期间锁定开关，避免重复删除同一批稳定身份。 */
   bool _unavailableCleanupRunning = false;
 
@@ -1408,11 +1410,19 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       initialSettings: widget.playbackSettings,
       // 通过当前 widget 转发，避免父级重建并替换回调后继续调用旧闭包。
       save: (settings) => widget.onPlaybackSettingsChanged(settings),
-    )..addListener(_handlePlaybackSettingsChanged);
+    )..addListener(_handleSettingsStateChanged);
     _cacheDiagnosticsController = CacheDiagnosticsController<CacheStats>(
       load: () => widget.thumbnailService.statsFor(widget.store.videos.values),
-    )..addListener(_handleCacheDiagnosticsChanged);
+    )..addListener(_handleSettingsStateChanged);
     unawaited(_cacheDiagnosticsController.refresh());
+    _cacheMaintenanceController =
+        CacheDiagnosticsMaintenanceController<VideoItem>(
+      retryFailures: widget.thumbnailService.retryFailed,
+      clearFailures: widget.thumbnailService.clearFailures,
+      persistChanges: widget.store.upsertVideos,
+      isFailureResolved: (item) => item.thumbnailError == null,
+      restoreFailure: (item, reason) => item.thumbnailError = reason,
+    )..addListener(_handleSettingsStateChanged);
     _dataBackupSubscription = widget.store.dataBackupStatusStream.listen(
       (status) {
         if (mounted) {
@@ -1426,21 +1436,19 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   void dispose() {
     unawaited(_dataBackupSubscription?.cancel());
     _playbackSettingsController
-      ..removeListener(_handlePlaybackSettingsChanged)
+      ..removeListener(_handleSettingsStateChanged)
       ..dispose();
     _cacheDiagnosticsController
-      ..removeListener(_handleCacheDiagnosticsChanged)
+      ..removeListener(_handleSettingsStateChanged)
+      ..dispose();
+    _cacheMaintenanceController
+      ..removeListener(_handleSettingsStateChanged)
       ..dispose();
     super.dispose();
   }
 
-  /** controller 发布普通设置快照时只重建当前设置 Route。 */
-  void _handlePlaybackSettingsChanged() {
-    if (mounted) setState(() {});
-  }
-
-  /** 缓存只读快照发布时只重建当前设置 Route。 */
-  void _handleCacheDiagnosticsChanged() {
+  /** settings controller 发布快照时只重建当前设置 Route。 */
+  void _handleSettingsStateChanged() {
     if (mounted) setState(() {});
   }
 
@@ -1614,30 +1622,23 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
 
   /** 定向重试当前统计快照中的失败项，并持久化已清理的旧失败标记。 */
   Future<void> _retryFailedThumbnails(CacheStats stats) async {
-    if (_cacheActionRunning || stats.failures.isEmpty) {
+    if (_cacheMaintenanceController.busy || stats.failures.isEmpty) {
       return;
     }
-    final items = stats.failures.map((failure) => failure.item).toList();
-    setState(() => _cacheActionRunning = true);
     try {
-      final retried = await widget.thumbnailService.retryFailed(items);
-      final updated = items
-          .where((item) => item.thumbnailError == null)
-          .toList(growable: false);
-      if (updated.isNotEmpty) {
-        await widget.store.upsertVideos(updated);
-      }
-      if (!mounted) {
+      final outcome = await _cacheMaintenanceController.retry(
+        stats.failures.map(
+          (failure) => CacheFailureCommandTarget<VideoItem>(
+            item: failure.item,
+            reason: failure.reason,
+          ),
+        ),
+      );
+      if (outcome == null || !mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            retried == items.length
-                ? '已重新排队 $retried 个失败缩略图'
-                : '已重新排队 $retried 个；另有 ${items.length - retried} 个仍待处理',
-          ),
-        ),
+        SnackBar(content: Text(cacheRetryOutcomeLabel(outcome))),
       );
     } catch (error) {
       if (mounted) {
@@ -1647,9 +1648,6 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _cacheActionRunning = false;
-        });
         unawaited(_cacheDiagnosticsController.refresh());
       }
     }
@@ -1657,24 +1655,25 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
 
   /** 清除当前失败标记但不删除视频或缓存文件，并通过 Repository 保存结果。 */
   Future<void> _clearThumbnailFailureMarkers(CacheStats stats) async {
-    if (_cacheActionRunning || stats.failures.isEmpty) {
+    if (_cacheMaintenanceController.busy || stats.failures.isEmpty) {
       return;
     }
-    final items = stats.failures.map((failure) => failure.item).toList();
-    setState(() => _cacheActionRunning = true);
     try {
-      final cleared = widget.thumbnailService.clearFailures(items);
-      await widget.store.upsertVideos(items);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已清除 $cleared 条失败标记；视频和缓存文件未删除')),
-        );
+      final outcome = await _cacheMaintenanceController.clear(
+        stats.failures.map(
+          (failure) => CacheFailureCommandTarget<VideoItem>(
+            item: failure.item,
+            reason: failure.reason,
+          ),
+        ),
+      );
+      if (outcome == null || !mounted) {
+        return;
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(cacheClearOutcomeLabel(outcome))),
+      );
     } catch (error) {
-      // Repository 写入失败时恢复内存诊断原因，避免 UI 与持久化状态分裂。
-      for (final failure in stats.failures) {
-        failure.item.thumbnailError = failure.reason;
-      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('清除失败标记时出错：$error')),
@@ -1682,9 +1681,6 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _cacheActionRunning = false;
-        });
         unawaited(_cacheDiagnosticsController.refresh());
       }
     }
@@ -2228,7 +2224,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
                               hasError:
                                   _cacheDiagnosticsController.error != null,
                               stats: _cacheDiagnosticsController.stats,
-                              cacheActionRunning: _cacheActionRunning,
+                              cacheActionRunning:
+                                  _cacheMaintenanceController.busy,
                               onRetry: _refreshStats,
                               failureActionsBuilder: (stats, cacheBusy) =>
                                   _CacheFailureActions(
