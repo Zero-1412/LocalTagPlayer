@@ -213,7 +213,7 @@ Phase 2E 将现有视频数据备份设置迁入独立纵向切片：
   误推进标签定义代次，root、扫描、relink、删除和标签维护仍同时失效两者。
 - [x] 3B 迁移只保存 stable ID 的主结果选择状态，以及网格密度、侧栏和标签面板显隐。
 - [x] 3C 单独迁移排序，验证完整计数调用为 0，且不会隐式改变既有播放队列。
-- [ ] 3D 以 `LibraryQueryController` 和 `FacetCountController` 迁移筛选、搜索、结果和计数；
+- [x] 3D 以 `LibraryQueryController` 和 `LibraryFacetCountController` 迁移筛选、搜索、结果和计数；
   共享版本协议，但不得互相成为可写状态源。
 - [ ] 3E 只从已接受的 `ResultSnapshot` 创建 `QueueSnapshot`。
 - [ ] 3F 最后迁移扫描/导入生命周期，保留 latest-only 排队、限流和 generation cancellation。
@@ -241,6 +241,17 @@ Phase 3C 的落地边界：
 - 页面级回归从名称正序切换为倒序，确认 stable `videoId` 成员不变且完整计数调用零增长；
   排序入口、菜单、回调、最近播放、收藏、本地目录和 filtered queue 均保留。
 - 筛选/计数、QueueSnapshot 和扫描生命周期继续留给 3D-3F；页面行数门禁降到 5,998。
+
+Phase 3D 的落地边界：
+
+- `LibraryQueryController` 保存最近请求的 `FilterQuery`、已接受 `FilterState` 与
+  `FilterStateSource` 缓存；自增 revision、`LibraryResultEpoch` 和页面当前输入三重
+  校验共同拒绝旧搜索、旧筛选、旧排序或旧数据结果。
+- `LibraryFacetCountController` 分别保存当前候选计数和全库稳定计数的不可变 Map，
+  复用原空闲调度与 `LibraryCountEpoch`；它不读取或写入 query owner。
+- 页面只协调输入快照与发布后的局部重建，先更新可见视频，再安排非关键计数。页面级
+  搜索/清空/排序回归证明 stable-ID 成员和顺序正确，高频交互完整计数调用零增长。
+- QueueSnapshot 与扫描生命周期继续留给 3E-3F；页面行数门禁降到 5,977。
 
 ### Phase 4：播放器 MVVM
 

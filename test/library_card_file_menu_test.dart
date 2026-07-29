@@ -228,7 +228,7 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
 }
 
 void main() {
-  testWidgets('媒体卡片菜单可达且排序只重排已接受结果', (tester) async {
+  testWidgets('媒体卡片菜单可达且查询与排序只发布最新结果', (tester) async {
     tester.view.physicalSize = const Size(1248, 714);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -337,6 +337,30 @@ void main() {
     );
     expect(cardTitle('bravo'), findsOneWidget);
     expect(cardTitle('charlie'), findsOneWidget);
+
+    final countCallsBeforeSearch = repository.resultCountsCalls;
+    await tester.enterText(
+      find.byKey(LibrarySmokeKeys.searchField),
+      'bravo',
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(cardTitle('bravo'), findsOneWidget);
+    expect(cardTitle('charlie'), findsNothing);
+    expect(repository.resultCountsCalls, countCallsBeforeSearch);
+
+    await tester.enterText(
+      find.byKey(LibrarySmokeKeys.searchField),
+      '',
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(cardTitle('bravo'), findsOneWidget);
+    expect(cardTitle('charlie'), findsOneWidget);
+    expect(
+      tester.getTopLeft(cardTitle('charlie')).dx,
+      lessThan(tester.getTopLeft(cardTitle('bravo')).dx),
+    );
 
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);

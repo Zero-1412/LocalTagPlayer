@@ -127,6 +127,19 @@
   零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 仍不可用，
   无法自动点击或截图；需人工复测“切换名称/日期等字段 → 切换正倒序 → 打开首项 →
   返回”，核对排序持久化、队列成员和筛选状态不变。
+- Phase 3D 已完成：`LibraryQueryController` 唯一拥有最近请求的 `FilterQuery`、已接受
+  `FilterState`、`FilterStateSource` 缓存和 latest-only revision；候选结果必须同时
+  匹配当前请求代次、`LibraryResultEpoch` 与页面提供的 store/输入身份才会发布。
+- `LibraryFacetCountController` 分别持有可见候选计数与全库稳定计数的只读快照，并复用
+  原空闲调度器；它不读取 query controller，query controller 也不读取 facet owner。
+  页面只先发布可见视频，再延后安排计数，保持搜索和标签点击的主界面优先级。
+- 真实 `LibraryPage` 回归覆盖“名称正序 → 倒序 → 输入搜索 → 清空搜索 → 卡片菜单”，
+  搜索只显示匹配 stable `videoId`，清空后恢复原成员与倒序状态，且高频搜索/排序期间
+  `resultCountsCalls` 零增长。页面行数门禁由 5,998 降到 5,977。
+- Phase 3D focused tests 与完整 368 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 仍不可用，
+  无法自动点击或截图；下一步进入 Phase 3E，只允许从已接受的 `ResultSnapshot` 创建
+  `QueueSnapshot`，不得由原始 Store 或过期筛选重建播放器队列。
 
 ## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
 

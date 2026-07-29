@@ -2,7 +2,7 @@
 
 ## 2026-07-29 渐进式整体架构重构
 
-`Architecture Baseline 0.5.110` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
+`Architecture Baseline 0.5.111` 采用 Flutter 官方推荐的混合分层路线：共享数据和领域
 contract 按类型组织，UI 按功能组织；不引入新的状态管理依赖，也不采用一次性重写。
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
@@ -51,6 +51,12 @@ Phase 3C 将排序字段、方向、稳定 fingerprint 和纯内存重排收口�
 `TagQueryService`、计数查询、持久化或队列；页面只对已接受的 `FilterState` 原地换序并
 通过应用服务保存偏好。排序不会触发完整筛选或标签计数，也不会改变 filtered queue 的
 stable-ID 成员集合。
+
+Phase 3D 使用两个互不写入的 application owner。`LibraryQueryController` 持有最近提交
+的 `FilterQuery`、已接受 `FilterState`、查询缓存和 latest-only revision；只有请求代次、
+`LibraryResultEpoch` 与页面当前输入都一致时才发布。`LibraryFacetCountController`
+分别持有当前筛选候选计数和全库稳定计数的只读快照，继续通过空闲窗口延后计算。
+页面负责按“先视频结果、后非关键计数”的顺序协调，两个 controller 不互相监听或导入。
 
 SQLite schema、`FilterQuery` / `TagQueryService`、stable identity、filtered queue、
 PlayerBackend、缩略图/媒体队列和用户数据均未改变。
@@ -538,12 +544,14 @@ lib/src/widgets/library
 
 ## 架构基线版本
 
-已完成基线：`Architecture Baseline 0.5.110`
+已完成基线：`Architecture Baseline 0.5.111`
 
 当前推进中：通过 macOS/Linux runner 持续验证 adapter、原生构建和启动；不扩大 SQLite 双写边界或改变业务语义。
 
 变更点：
 
+- `0.5.111`：筛选/搜索结果与 facet 计数拆成两个互不写入的 latest-only owner；
+  结果按 `LibraryResultEpoch` 发布，候选/稳定计数保持独立只读快照，高频交互先更新视频。
 - `0.5.110`：排序字段、方向、fingerprint 与纯内存重排归单一 application owner，
   自然排序算法迁入纯 domain；切换排序不重新筛选、不刷新标签计数，也不改变现有队列成员。
 - `0.5.109`：媒体库结果数据与标签定义修订分离；主结果多选只保存 stable videoId，

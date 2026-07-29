@@ -278,7 +278,7 @@ void main() {
         File('lib/src/pages/player/player_page.dart').readAsLinesSync().length;
 
     // 媒体库阈值随备份设置纵向切片与查询版本入口收敛下调；后续迁移只能降低，禁止为通过测试而调高。
-    expect(libraryLines, lessThanOrEqualTo(5998));
+    expect(libraryLines, lessThanOrEqualTo(5977));
     expect(playerLines, lessThanOrEqualTo(5400));
   });
 
@@ -764,6 +764,78 @@ void main() {
     expect(applySort, isNot(contains('LibraryQueueSnapshot(')));
     expect(applySort, contains('_sortController.sort'));
     expect(applySort, contains('saveSortPreferences'));
+  });
+
+  test('library query and facet counts have independent latest-only owners',
+      () {
+    final page = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final query = File(
+      'lib/src/features/library/application/library_query_controller.dart',
+    ).readAsStringSync();
+    final facets = File(
+      'lib/src/features/library/application/'
+      'library_facet_count_controller.dart',
+    ).readAsStringSync();
+    final refreshStart = page.indexOf('void _scheduleFilterRefresh({');
+    final refreshEnd = page.indexOf(
+      'LibraryResultEpoch _resultEpoch',
+      refreshStart,
+    );
+    final refresh = page.substring(refreshStart, refreshEnd);
+
+    expect(query, contains('class LibraryQueryController'));
+    expect(query, contains('FilterState? _state'));
+    expect(query, contains('FilterQuery? _requestedQuery'));
+    expect(query, contains('requestRevision != _revision'));
+    expect(query, contains('candidate.epoch != expectedEpoch'));
+    expect(facets, contains('class LibraryFacetCountController'));
+    expect(facets, contains('Map<String, int> _visibleCounts'));
+    expect(facets, contains('Map<String, int> _stableCounts'));
+    expect(facets, contains('Map<String, int>.unmodifiable'));
+    expect(
+      query,
+      isNot(contains('library_facet_count_controller.dart')),
+    );
+    expect(
+      facets,
+      isNot(contains('library_query_controller.dart')),
+    );
+    expect(query, isNot(contains('LibraryCountEpoch')));
+    expect(facets, isNot(contains('LibraryResultEpoch')));
+    for (final source in <String>[query, facets]) {
+      for (final forbidden in <String>[
+        "import 'dart:io'",
+        "import 'package:flutter/",
+        'BuildContext ',
+        'Navigator.',
+        'Route<',
+        'LibraryStore ',
+        'ThumbnailService ',
+        'MediaDetailsService ',
+        'LibraryQueueSnapshot(',
+      ]) {
+        expect(source, isNot(contains(forbidden)));
+      }
+    }
+    expect(page, contains('final _queryController ='));
+    expect(page, contains('final _facetCountController ='));
+    expect(page, isNot(contains('final _filterStateSource =')));
+    expect(page, isNot(contains('final _countRefreshCoordinator =')));
+    expect(page, isNot(contains('FilterState? _filterState;')));
+    expect(page, isNot(contains('var _filterRevision =')));
+    expect(
+      page,
+      isNot(contains('Map<String, int> _visibleResultCounts =')),
+    );
+    expect(page, isNot(contains('Map<String, int> _stableTagCounts =')));
+    expect(refresh, contains('_queryController.schedule('));
+    expect(refresh, contains('_facetCountController.scheduleVisible('));
+    expect(
+      refresh.indexOf('_queryController.schedule('),
+      lessThan(refresh.indexOf('_facetCountController.scheduleVisible(')),
+    );
   });
 
   test('PlayerPage keeps hidden progress mounted before the full controls', () {

@@ -20,6 +20,8 @@ import '../../features/settings/presentation/cache_diagnostics_snapshot_view.dar
 import '../../features/settings/presentation/data_backup_settings_workspace.dart';
 import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/settings_workspace_theme.dart';
+import '../../features/library/application/library_facet_count_controller.dart';
+import '../../features/library/application/library_query_controller.dart';
 import '../../features/library/application/library_revision_tracker.dart';
 import '../../features/library/application/library_selection_controller.dart';
 import '../../features/library/application/library_sort_controller.dart';
@@ -34,7 +36,6 @@ import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
 import '../../platform/platform_interfaces.dart';
 import '../../services/library/library_application_facade.dart';
-import '../../services/library/library_count_refresh_coordinator.dart';
 import '../../services/library/library_load_diagnostics.dart';
 import '../../services/library/library_page_application_service.dart';
 import '../../services/library/library_scan_ui_diagnostics.dart';
@@ -2371,8 +2372,10 @@ class _LibraryPageState extends State<LibraryPage> {
   /** 当前自动清理任务；启动与扫描完成阶段共享，避免重复遍历大型媒体库。 */
   Future<int>? _unavailableCleanupFuture;
   DataBackupSettings _dataBackupSettings = DataBackupSettings.defaults;
-  final _filterStateSource = FilterStateSource();
-  final _countRefreshCoordinator = LibraryCountRefreshCoordinator();
+  /** 筛选、搜索、结果缓存与 latest-only 发布的唯一 owner。 */
+  final _queryController = LibraryQueryController();
+  /** 当前候选计数与全库稳定计数的唯一 owner。 */
+  final _facetCountController = LibraryFacetCountController();
   final _searchController = TextEditingController();
   /**
    * 主搜索框焦点节点。
@@ -2385,9 +2388,9 @@ class _LibraryPageState extends State<LibraryPage> {
   final _selectedChildTags = <String>{};
   final _selectedGroupTagIds = <String, Set<String>>{};
   final _excludedTagIds = <String>{};
-  FilterState? _filterState;
-
-  Map<String, int> _visibleResultCounts = const <String, int>{};
+  FilterState? get _filterState => _queryController.state;
+  Map<String, int> get _visibleResultCounts =>
+      _facetCountController.visibleCounts;
 
   /**
    * 右侧标签发现面板使用的全库稳定计数。
@@ -2395,9 +2398,7 @@ class _LibraryPageState extends State<LibraryPage> {
    * 当前筛选会改变视频结果，但标签面板中的其它标签数量不能因为当前筛选被压缩到 0，
    * 否则用户无法判断原始标签规模。
    */
-  Map<String, int> _stableTagCounts = const <String, int>{};
-
-  var _filterRevision = 0;
+  Map<String, int> get _stableTagCounts => _facetCountController.stableCounts;
   var _playbackDataRevision = 0;
   var _suppressSearchControllerChange = false;
   var _searchControllerChangeQueued = false;
@@ -2520,7 +2521,8 @@ class _LibraryPageState extends State<LibraryPage> {
     _searchController.dispose();
     _searchFocusNode.dispose();
     _libraryHeaderVisible.dispose();
-    _countRefreshCoordinator.dispose();
+    _queryController.dispose();
+    _facetCountController.dispose();
     super.dispose();
   }
 
@@ -2642,9 +2644,9 @@ class _LibraryPageState extends State<LibraryPage> {
           _playbackSettings = playbackSettings;
           _dataBackupSettings = dataBackupSettings;
           _lastObservedSearchText = _searchController.text;
-          _filterState = _buildImmediateFilterState(store);
-          _visibleResultCounts = _fallbackResultCounts(store);
-          _stableTagCounts = const <String, int>{};
+          _queryController.seed(_buildImmediateFilterState(store));
+          _facetCountController.seedVisible(_fallbackResultCounts(store));
+          _facetCountController.clearStable();
         });
     if (diagnostics == null) {
       applyHydratedState();
@@ -2763,17 +2765,17 @@ class _LibraryPageState extends State<LibraryPage> {
   void _scheduleInitialStableTagCounts(LibraryApplicationFacade store) {
     const query = FilterQuery();
     final epoch = _countEpoch(query);
-    _countRefreshCoordinator.schedule(
+    _facetCountController.scheduleStable(
       epoch: epoch,
       query: query,
       compute: store.resultCounts,
       isStillCurrent: (candidate) =>
           mounted && _store == store && candidate == _countEpoch(query),
-      onComplete: (candidate, counts) {
+      onAccepted: (candidate, counts) {
         if (!mounted || _store != store || candidate != epoch) {
           return;
         }
-        setState(() => _stableTagCounts = counts);
+        setState(() {});
       },
     );
   }
@@ -3180,51 +3182,6 @@ class _LibraryPageState extends State<LibraryPage> {
     ));
   }
 
-  FilterState _computeFilterState(
-    LibraryApplicationFacade store,
-    FilterQuery query,
-  ) {
-    _filterStateSource.configure(
-      engine: TagQueryService(
-        videos: store.videos.values,
-        tagContext: store.tagQueryContext,
-      ),
-      totalCount: store.videos.length,
-      dataRevision: _libraryDataRevision,
-      sortFingerprint: _librarySortFingerprint,
-      compare: _compareVideos,
-      sortVideos: _sortController.sort,
-    );
-    return _filterStateSource.update(query);
-  }
-
-  /** 使用扫描差量替换已缓存结果中的变化视频。 */
-  FilterState _computeFilterStateFromDelta(
-    LibraryApplicationFacade store,
-    FilterQuery query,
-    Iterable<VideoItem> changedVideos,
-  ) {
-    final watch = Stopwatch()..start();
-    _filterStateSource.configure(
-      engine: TagQueryService(
-        videos: store.videos.values,
-        tagContext: store.tagQueryContext,
-      ),
-      totalCount: store.videos.length,
-      dataRevision: _libraryDataRevision,
-      sortFingerprint: _librarySortFingerprint,
-      sortVideos: _sortController.sort,
-    );
-    final state = _filterStateSource.applyVideoDelta(query, changedVideos);
-    watch.stop();
-    _activeScanUiDiagnostics?.recordStage(
-      'ui.filter_delta_apply',
-      watch.elapsed,
-      itemCount: changedVideos.length,
-    );
-    return state;
-  }
-
   FilterState _buildImmediateFilterState(LibraryApplicationFacade store) {
     final query = _currentFilterQuery();
     return FilterState(
@@ -3240,6 +3197,14 @@ class _LibraryPageState extends State<LibraryPage> {
     return {
       for (final tag in store.allTagItems) tag.id: tag.usageCount,
     };
+  }
+
+  /** 在低频标签维护完成后同步刷新全库稳定计数快照。 */
+  void _refreshStableTagCountsNow(LibraryApplicationFacade store) {
+    _facetCountController.refreshStableNow(
+      query: const FilterQuery(),
+      compute: store.resultCounts,
+    );
   }
 
   /**
@@ -3347,12 +3312,16 @@ class _LibraryPageState extends State<LibraryPage> {
         return;
       }
       final currentState = _filterState!;
-      _filterState = FilterState(
+      final sortedState = FilterState(
         epoch: _resultEpoch(currentState.query),
         query: currentState.query,
         filteredVideos: _sortController.sort(currentState.filteredVideos),
         resultCount: currentState.resultCount,
         totalCount: currentState.totalCount,
+      );
+      _queryController.publish(
+        sortedState,
+        expectedEpoch: sortedState.epoch,
       );
     });
     final changedPreferences = preferences;
@@ -3401,7 +3370,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _excludedTagIds.clear();
       _showFavoritesOnly = false;
       if (store != null) {
-        _filterState = _buildImmediateFilterState(store);
+        _queryController.seed(_buildImmediateFilterState(store));
       }
     });
     _scheduleFilterRefresh();
@@ -3552,7 +3521,7 @@ class _LibraryPageState extends State<LibraryPage> {
         _localLibraryPath = null;
         _localLibraryBackStack.clear();
       }
-      _stableTagCounts = store.resultCounts(const FilterQuery());
+      _refreshStableTagCountsNow(store);
     });
     _scheduleFilterRefresh(refreshCounts: true);
     // 缩略图与媒体详情均可在 root 重新加入时复用，解除管理不能把缓存当作垃圾清除。
@@ -3733,7 +3702,7 @@ class _LibraryPageState extends State<LibraryPage> {
     final store = _store;
     if (store != null) {
       // 数据变化后先回退到持久化 usageCount，精确计数由延后刷新任务更新。
-      _stableTagCounts = const <String, int>{};
+      _facetCountController.clearStable();
     }
     _scheduleFilterRefresh(refreshCounts: true);
   }
@@ -3762,7 +3731,7 @@ class _LibraryPageState extends State<LibraryPage> {
     if (result.changedVideos.any((item) => item.isFavorite)) {
       _favoriteVideoCacheKey = null;
     }
-    _stableTagCounts = const <String, int>{};
+    _facetCountController.clearStable();
     _scheduleFilterRefresh(
       refreshCounts: true,
       changedVideos: result.changedVideos,
@@ -3895,59 +3864,69 @@ class _LibraryPageState extends State<LibraryPage> {
     if (store == null) {
       return;
     }
-    final revision = ++_filterRevision;
     if (!refreshCounts) {
-      _countRefreshCoordinator.cancelPending();
+      _facetCountController.cancelPending();
     }
     final query = _currentFilterQuery();
     final resultEpoch = _resultEpoch(query);
-    // 标签定义目前与媒体库数据在同一提交边界内更新；后续引入 ChangeSet 后可独立提升该代次。
     final countEpoch = _countEpoch(query);
-    Future<void>.delayed(Duration.zero, () {
-      if (!mounted || revision != _filterRevision || _store != store) {
-        return;
-      }
-      final nextState = changedVideos == null
-          ? _computeFilterState(store, query)
-          : _computeFilterStateFromDelta(store, query, changedVideos);
-      if (!mounted ||
-          revision != _filterRevision ||
-          _store != store ||
-          nextState.epoch != resultEpoch) {
-        return;
-      }
-      setState(() {
-        _filterState = nextState;
-        _isRefreshingVideos = false;
-      });
-      // 真正的可见窗口由虚拟列表滚动停止后驱动；固定取结果前 36 条会在深度滚动时
-      // 抢占错误项目，因此这里不再猜测可见范围。
-      if (!refreshCounts) {
-        return;
-      }
-      _countRefreshCoordinator.schedule(
-        epoch: countEpoch,
-        query: query,
-        compute: store.resultCounts,
-        isStillCurrent: (epoch) =>
-            mounted &&
-            revision == _filterRevision &&
-            _store == store &&
-            epoch == _countEpoch(_currentFilterQuery()),
-        onComplete: (epoch, nextCounts) {
-          if (!mounted ||
-              epoch != countEpoch ||
-              revision != _filterRevision ||
-              _store != store) {
-            return;
-          }
-          setState(() {
-            _visibleResultCounts = nextCounts;
-            _isRefreshingCounts = false;
-          });
-        },
-      );
-    });
+    _queryController.configure(
+      engine: TagQueryService(
+        videos: store.videos.values,
+        tagContext: store.tagQueryContext,
+      ),
+      totalCount: store.videos.length,
+      dataRevision: _libraryDataRevision,
+      sortFingerprint: _librarySortFingerprint,
+      compare: _compareVideos,
+      sortVideos: _sortController.sort,
+    );
+    _queryController.schedule(
+      query: query,
+      expectedEpoch: resultEpoch,
+      changedVideos: changedVideos,
+      isStillCurrent: (candidate) =>
+          mounted &&
+          _store == store &&
+          candidate == _resultEpoch(_currentFilterQuery()),
+      onMeasured: changedVideos == null
+          ? null
+          : (elapsed) => _activeScanUiDiagnostics?.recordStage(
+                'ui.filter_delta_apply',
+                elapsed,
+                itemCount: changedVideos.length,
+              ),
+      onAccepted: (nextState) {
+        if (!mounted || _store != store) {
+          return;
+        }
+        setState(() {
+          _isRefreshingVideos = false;
+        });
+        // 真正的可见窗口由虚拟列表滚动停止后驱动；固定取结果前 36 条会在深度滚动时
+        // 抢占错误项目，因此这里不再猜测可见范围。
+        if (!refreshCounts) {
+          return;
+        }
+        _facetCountController.scheduleVisible(
+          epoch: countEpoch,
+          query: query,
+          compute: store.resultCounts,
+          isStillCurrent: (epoch) =>
+              mounted &&
+              _store == store &&
+              epoch == _countEpoch(_currentFilterQuery()),
+          onAccepted: (epoch, nextCounts) {
+            if (!mounted || epoch != countEpoch || _store != store) {
+              return;
+            }
+            setState(() {
+              _isRefreshingCounts = false;
+            });
+          },
+        );
+      },
+    );
   }
 
   /** 返回当前查询可发布的结果版本。 */
@@ -5079,7 +5058,7 @@ class _LibraryPageState extends State<LibraryPage> {
           LibraryDataChangeKind.tagDefinitions,
         );
         _invalidateDerivedCaches();
-        _stableTagCounts = store.resultCounts(const FilterQuery());
+        _refreshStableTagCountsNow(store);
       });
       _scheduleFilterRefresh(refreshCounts: true);
     }
@@ -5129,7 +5108,7 @@ class _LibraryPageState extends State<LibraryPage> {
           LibraryDataChangeKind.tagDefinitions,
         );
         _invalidateDerivedCaches();
-        _stableTagCounts = store.resultCounts(const FilterQuery());
+        _refreshStableTagCountsNow(store);
       });
       _scheduleFilterRefresh(refreshCounts: true);
     }
@@ -5284,7 +5263,7 @@ class _LibraryPageState extends State<LibraryPage> {
             LibraryDataChangeKind.tagDefinitions,
           );
           _invalidateDerivedCaches();
-          _stableTagCounts = _store!.resultCounts(const FilterQuery());
+          _refreshStableTagCountsNow(_store!);
         });
       }
     } catch (error) {
@@ -5309,7 +5288,7 @@ class _LibraryPageState extends State<LibraryPage> {
       _invalidateDerivedCaches();
       _selectedTags.remove(tag);
       _selectedChildTags.clear();
-      _stableTagCounts = store.resultCounts(const FilterQuery());
+      _refreshStableTagCountsNow(store);
     });
   }
 

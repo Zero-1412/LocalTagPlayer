@@ -75,6 +75,13 @@
   `resultCountsCalls` 保持不变；所有排序入口、菜单、回调、最近/收藏/本地来源与
   filtered queue 行为保留。页面预算降到 5,998，完整 363 项测试通过（3 项显式基准
   跳过），静态分析、Windows Debug build 与正式入口可见窗口启动通过。
+- 完成 Phase 3D 查询/计数双 owner：`LibraryQueryController` 持有当前筛选/搜索请求、
+  已接受结果、查询缓存和 latest-only revision，并以 `LibraryResultEpoch` 拒绝旧结果；
+  `LibraryFacetCountController` 独立持有可见候选与全库稳定计数只读快照。
+- 两个 controller 不互相导入或写入，页面先发布视频结果再延后计数。真实页面回归覆盖
+  排序、搜索、清空和卡片菜单，确认结果成员/顺序正确且高频交互不增加完整计数调用。
+  页面预算降到 5,977，完整 368 项测试通过（3 项显式基准跳过），静态分析、Windows
+  Debug build 与正式入口可见窗口启动通过。
 
 ## 2026-07-29 · 完成 fvp / media-kit / 当前后端 Windows 同法 A/B
 
