@@ -2363,6 +2363,10 @@ void main() {
   test('player queue sidebar preserves Apple-style video-first proportions',
       () {
     expect(playerQueueLocatorHeight, 48);
+    expect(playerHasWideQueueSidebar(1099), isFalse);
+    expect(playerHasWideQueueSidebar(1100), isTrue);
+    expect(playerCompactQueueSidebarWidth(960), 420);
+    expect(playerCompactQueueSidebarWidth(360), 336);
     expect(playerQueueSidebarWidthForWindow(960), 360);
     expect(playerQueueSidebarWidthForWindow(1280), 360);
     expect(playerQueueSidebarWidthForWindow(1600), closeTo(448, 0.001));
@@ -6452,7 +6456,6 @@ void main() {
   testWidgets('player top bar shows current file name without search field',
       (tester) async {
     var backCount = 0;
-    var queueCount = 0;
     const currentPath = r'X:\test-media\原神\雷神\当前播放.mp4';
 
     await tester.pumpWidget(
@@ -6463,7 +6466,6 @@ void main() {
             currentFileName: playerTopBarFileName(currentPath),
             contextLabel: '3 / 120 · 原神 / 雷神',
             onBack: () => backCount++,
-            onOpenQueue: () => queueCount++,
           ),
         ),
       ),
@@ -6473,7 +6475,7 @@ void main() {
     expect(find.text('3 / 120 · 原神 / 雷神'), findsOneWidget);
     expect(
       tester.getSize(find.byType(PlayerTopBar)).height,
-      64,
+      playerTopBarHeight,
     );
     expect(find.text('local_tag_player'), findsNothing);
     expect(find.byType(TextField), findsNothing);
@@ -6485,9 +6487,8 @@ void main() {
     );
 
     await tester.tap(find.byKey(const ValueKey('player.back')));
-    await tester.tap(find.byTooltip('播放队列'));
     expect(backCount, 1);
-    expect(queueCount, 1);
+    expect(find.byTooltip('播放队列'), findsNothing);
   });
 
   testWidgets('player volume button toggles icon tooltip and callback',

@@ -1,5 +1,27 @@
 # CURRENT_TASK.md
 
+## 2026-07-30 小窗口播放器队列入口与 NativePlayer 画质审计
+
+- 删除普通播放器顶栏重复的队列按钮；底部控制条成为普通/紧凑/全屏布局的统一队列
+  入口。逻辑宽度低于 1100 时不再打开 Material 居中 `BottomSheet`，改为从播放器右侧
+  展开覆盖队列，并提供遮罩与显式关闭入口。
+- 根因是高 DPI 或小窗口会进入紧凑分支，但原底部按钮仍只切换未挂载的宽屏侧栏状态；
+  新分支复用覆盖队列状态，列表/详情、搜索、删除、收藏、当前索引与来源 filtered queue
+  均保持原 owner 和语义。
+- 新增页面挂载合同，固定“顶部无重复入口、底部按钮可达、紧凑队列右对齐、禁止退回
+  `showModalBottomSheet`”；宽度与顶部安全区使用单一 helper/token，未新增队列重算。
+- 只读审计本机设置与运行时诊断：MediaKit 同一个 NativePlayer 已确认
+  `scale=ewa_lanczossharp`、`cscale=lanczos`、`scaler-resizes-only=yes`，实际硬解为
+  `d3d11va-copy`。当前 1920×1080/60 fps SDR 样本在 988×694 窗口中属于缩小显示，
+  GPU 高质量“上采样”不会产生明显变化；压缩增强因“高帧率 · copy-back 硬解”基线
+  保守关闭，HDR→SDR 因 SDR 源未过门槛，流畅度插值和暗部增强也由用户设置关闭。
+- 验证：focused widget/架构测试与完整 460 项测试通过，3 项既有 benchmark 跳过；
+  `flutter analyze` 零问题，Windows Debug build 成功。真实 Debug 窗口缩至 988×694
+  后点击底部队列，右侧列表与顶部内容起点对齐，关闭入口可用，未见居中、遮挡、溢出、
+  错位或状态反馈缺失；队列仍显示 `1 / 11233`，视频与用户数据未被队列操作改写。
+- 下一步计划：单独评估小窗口下 `dscale` / `correct-downscaling` 等 GPU 缩小属性，
+  并用同一低码率样本做关闭/开启 A/B；在读回、掉帧和色彩门禁通过前不默认叠加。
+
 ## 2026-07-30 播放调用与文案对抗式修复
 
 - 正式播放路径统一为 `MediaKit Texture -> media_kit/libmpv`；历史

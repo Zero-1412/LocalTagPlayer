@@ -364,7 +364,7 @@ class PlayerPageState extends State<PlayerPage> {
   Future<void> playbackSettingsSaveTail = Future<void>.value();
   /** 用户主动折叠宽屏右侧队列时保持当前页面内的显示状态。 */
   var queueSidebarCollapsed = false;
-  /** 全屏时是否在画面右侧显示不改变视频尺寸的当前筛选队列覆盖层。 */
+  /** 全屏或中窄窗口是否在画面右侧显示不改变队列语义的覆盖层。 */
   var fullscreenQueueVisible = false;
   /** 宽屏队列折叠时，指针是否进入非全屏顶部标题栏热区。 */
   var pointerInWindowTopBarRegion = false;

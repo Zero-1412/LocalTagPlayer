@@ -8,6 +8,25 @@ import 'player_page.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/** 播放器可同时容纳视频与常驻右侧队列的最小逻辑宽度。 */
+const playerWideQueueSidebarBreakpoint = 1100.0;
+
+/** 判断当前窗口是否应使用常驻右侧队列，统一布局、按钮与指针热区的分支。 */
+bool playerHasWideQueueSidebar(double windowWidth) =>
+    windowWidth >= playerWideQueueSidebarBreakpoint;
+
+/**
+ * 计算中窄窗口右侧覆盖队列宽度。
+ *
+ * 保留至少 24 逻辑像素的画面退出命中区；极窄窗口则允许队列占满可用宽度，避免溢出。
+ */
+double playerCompactQueueSidebarWidth(double windowWidth) {
+  if (windowWidth <= 320) {
+    return windowWidth;
+  }
+  return (windowWidth - 24).clamp(320.0, 420.0).toDouble();
+}
+
 /**
  * 协调队列显隐、全屏状态与窗口顶栏反馈。
  *
@@ -24,6 +43,10 @@ extension PlayerStateChrome on PlayerPageState {
       } else {
         showFullscreenQueueSidebar();
       }
+      return;
+    }
+    if (!playerHasWideQueueSidebar(MediaQuery.sizeOf(context).width)) {
+      rebuild(() => fullscreenQueueVisible = !fullscreenQueueVisible);
       return;
     }
     rebuild(() {
@@ -170,7 +193,8 @@ extension PlayerStateChrome on PlayerPageState {
     if (!isWindowFullscreen) {
       final inTopBarZone = playerPointerInWindowTopBarActivationZone(
         localY: event.localPosition.dy,
-        hasWideQueueSidebar: MediaQuery.sizeOf(context).width >= 1100,
+        hasWideQueueSidebar:
+            playerHasWideQueueSidebar(MediaQuery.sizeOf(context).width),
         queueCollapsed: queueSidebarCollapsed,
       );
       if (inTopBarZone) {

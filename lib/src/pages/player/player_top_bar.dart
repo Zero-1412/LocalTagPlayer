@@ -5,6 +5,9 @@ import '../../widgets/design_system/app_interaction_surface.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/** 普通窗口播放器顶栏的固定高度，供右侧覆盖队列保持同一内容起点。 */
+const playerTopBarHeight = 64.0;
+
 /**
  * Apple 式播放器顶栏。
  *
@@ -17,7 +20,6 @@ class PlayerTopBar extends StatelessWidget {
     required this.currentFileName,
     this.contextLabel,
     required this.onBack,
-    required this.onOpenQueue,
   });
 
   /** 当前实际播放视频的完整文件名，包含扩展名。 */
@@ -29,13 +31,10 @@ class PlayerTopBar extends StatelessWidget {
   /** 返回媒体库并释放当前播放器会话。 */
   final VoidCallback onBack;
 
-  /** 紧凑窗口打开队列的入口；宽屏常驻队列时为空。 */
-  final VoidCallback? onOpenQueue;
-
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 64,
+      height: playerTopBarHeight,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       decoration: const BoxDecoration(
         color: playerSurface,
@@ -98,16 +97,6 @@ class PlayerTopBar extends StatelessWidget {
               ),
             ),
           ),
-          if (onOpenQueue != null)
-            Align(
-              alignment: Alignment.centerRight,
-              child: PlayerTopBarAction(
-                tooltip: '播放队列',
-                semanticLabel: '打开播放队列',
-                onPressed: onOpenQueue!,
-                icon: Icons.playlist_play_rounded,
-              ),
-            ),
         ],
       ),
     );

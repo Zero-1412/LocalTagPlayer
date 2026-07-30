@@ -243,9 +243,16 @@ extension PlayerStateControls on PlayerPageState {
                                                         'player.queue.toggle'),
                                                     tooltip: isWindowFullscreen
                                                         ? '播放列表'
-                                                        : queueSidebarCollapsed
-                                                            ? '展开筛选结果队列'
-                                                            : '折叠筛选结果队列',
+                                                        : playerHasWideQueueSidebar(
+                                                                MediaQuery.sizeOf(
+                                                                        context)
+                                                                    .width)
+                                                            ? queueSidebarCollapsed
+                                                                ? '展开筛选结果队列'
+                                                                : '折叠筛选结果队列'
+                                                            : fullscreenQueueVisible
+                                                                ? '关闭筛选结果队列'
+                                                                : '展开筛选结果队列',
                                                     icon: Icons
                                                         .playlist_play_rounded,
                                                     onPressed:

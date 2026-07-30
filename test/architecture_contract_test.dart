@@ -1849,6 +1849,28 @@ void main() {
     expect(page, contains("FocusNode(debugLabel: 'player-shortcuts')"));
   });
 
+  test('中窄窗口队列只由底部控制条挂载到播放器右侧', () {
+    final view = File(
+      'lib/src/pages/player/player_state_view.dart',
+    ).readAsStringSync();
+    final controls = File(
+      'lib/src/pages/player/player_state_controls.dart',
+    ).readAsStringSync();
+    final topBar = File(
+      'lib/src/pages/player/player_top_bar.dart',
+    ).readAsStringSync();
+
+    expect(controls, contains("'player.queue.toggle'"));
+    expect(controls, contains('toggleQueueVisibility'));
+    expect(view, contains("'player.compactQueue.overlay'"));
+    expect(view, contains("'player.compactQueue.sidebar'"));
+    expect(view, contains('PlayerCompactQueueOverlay('));
+    expect(view, contains('onDismiss: () => rebuild('));
+    expect(view, isNot(contains('showModalBottomSheet<void>')));
+    expect(topBar, isNot(contains('onOpenQueue')));
+    expect(topBar, isNot(contains("tooltip: '播放队列'")));
+  });
+
   test('player shortcut suspension and focus eligibility have one pure owner',
       () {
     final page = _readPlayerPageCluster();

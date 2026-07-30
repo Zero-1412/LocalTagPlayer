@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../widgets/app_theme_tokens.dart';
+import 'player_compact_queue_overlay.dart';
 import 'player_open_failure_panel.dart';
 import 'player_video_aspect_mode.dart';
 import 'player_page.dart';
@@ -16,10 +17,12 @@ import 'player_page.dart';
  */
 extension PlayerStateView on PlayerPageState {
   Widget buildPlayerPage(BuildContext context) {
-    // 中窄窗口改用底部队列，避免侧栏挤压蓝图式横向控制层。
-    final hasWideQueueSidebar = MediaQuery.sizeOf(context).width >= 1100;
+    final windowWidth = MediaQuery.sizeOf(context).width;
+    // 中窄窗口改用右侧覆盖队列，避免侧栏挤压蓝图式横向控制层。
+    final hasWideQueueSidebar = playerHasWideQueueSidebar(windowWidth);
     final accessibility = AppAccessibilityScope.of(context);
-    final queueSidebar = buildQueueSidebar();
+    final queueSidebar =
+        hasWideQueueSidebar ? buildQueueSidebar() : const SizedBox.shrink();
     final fullscreenQueueWidth =
         playerFullscreenQueueWidth(MediaQuery.sizeOf(context).width);
     final windowQueueCollapsed = hasWideQueueSidebar && queueSidebarCollapsed;
@@ -84,21 +87,6 @@ extension PlayerStateView on PlayerPageState {
                                     contextLabel:
                                         '${index + 1} / ${queue.length} · $filterSummary',
                                     onBack: () => unawaited(exitPlayer()),
-                                    onOpenQueue: hasWideQueueSidebar
-                                        ? null
-                                        : () {
-                                            showModalBottomSheet<void>(
-                                              context: context,
-                                              isScrollControlled: true,
-                                              backgroundColor: playerSurface,
-                                              showDragHandle: true,
-                                              builder: (_) =>
-                                                  FractionallySizedBox(
-                                                heightFactor: 0.82,
-                                                child: queueSidebar,
-                                              ),
-                                            );
-                                          },
                                   ),
                                 ),
                               ),
@@ -264,6 +252,67 @@ extension PlayerStateView on PlayerPageState {
                       ],
                     ),
                   ),
+                  if (!isWindowFullscreen && !hasWideQueueSidebar)
+                    Positioned.fill(
+                      top: playerTopBarHeight,
+                      child: IgnorePointer(
+                        ignoring: !fullscreenQueueVisible,
+                        child: AnimatedSwitcher(
+                          key: const ValueKey(
+                            'player.compactQueue.overlayMotion',
+                          ),
+                          duration: accessibility.motionDuration(
+                            AppMotion.panel,
+                          ),
+                          reverseDuration: accessibility.motionDuration(
+                            AppMotion.popover,
+                          ),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (child, animation) {
+                            final begin = accessibility.reduceMotion
+                                ? Offset.zero
+                                : const Offset(0.04, 0);
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: begin,
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: fullscreenQueueVisible
+                              ? PlayerCompactQueueOverlay(
+                                  key: const ValueKey(
+                                    'player.compactQueue.overlay',
+                                  ),
+                                  sidebarWidth: playerCompactQueueSidebarWidth(
+                                    windowWidth,
+                                  ),
+                                  onDismiss: () => rebuild(
+                                    () => fullscreenQueueVisible = false,
+                                  ),
+                                  sidebar: buildQueueSidebar(
+                                    key: const ValueKey(
+                                      'player.compactQueue.sidebar',
+                                    ),
+                                    edgeToEdge: true,
+                                    width: playerCompactQueueSidebarWidth(
+                                      windowWidth,
+                                    ),
+                                  ),
+                                )
+                              : const SizedBox.shrink(
+                                  key: ValueKey(
+                                    'player.compactQueue.hidden',
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
                   if (isWindowFullscreen)
                     Positioned.fill(
                       child: IgnorePointer(
