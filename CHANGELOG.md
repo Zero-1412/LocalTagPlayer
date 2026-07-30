@@ -1,5 +1,21 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-30 · 修复小窗口控制条并启用稳定 Texture 输出
+
+- 900 dp 以下播放器控制条采用三层紧凑布局，保留全部既有入口；设置浮层增加可视区
+  边界，真实点击不再从左侧裁切。
+- MediaKit Texture 默认按 Widget 的 BoxFit 物理目标选择五档稳定输出；去抖、滞回、
+  最小间隔、原生尺寸确认和超时状态阻止快速缩放时反复重建。
+- 三类低码率 fixed/adaptive A/B 均为 0 掉帧、0 停滞、0 未响应，GPU committed
+  P95 下降 18.3–21.5 MiB，视频区 SSIM 保持 0.9887 以上。
+- 两次 DPR 往返与快速缩放门禁均为 0 重建失败、0 掉帧，请求数与 Texture 代数一致，
+  最终恢复初始尺寸；生产因此启用稳定档位，`FilterQuality.low` 和 mpv
+  `bilinear/no` 不变。
+- 471 项测试通过、3 项既有 benchmark 跳过；静态分析零问题，Windows Debug build
+  与 899 dp 真实设置点击截图通过。
+- filtered queue、PlayerBackend 基础 contract、SQLite、标签、缓存队列和用户数据
+  均未改变。详细记录：`docs/qa/player_native_output_size_gate_20260730.md`。
+
 ## 2026-07-30 · 完成 Flutter Texture 尺寸采集与采样 A/B
 
 - 播放诊断新增原生 Texture、Widget 逻辑/物理尺寸、DPR、BoxFit 目标、合成倍率与

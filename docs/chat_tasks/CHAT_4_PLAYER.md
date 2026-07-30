@@ -1,3 +1,18 @@
+## 2026-07-30 小窗口控制条与稳定 Texture 输出
+
+- 900 dp 以下控制区改为进度、传输、功能入口三层布局；全部原按钮、隐藏进度条和
+  filtered queue 入口保留。700×520 与 899×650 真实会话不再溢出。
+- 899 dp 真实点击设置时发现左侧裁切，并为固定宽度面板增加可视区上界；复测确认
+  一级设置完整显示且可达。
+- MediaKit 后端新增稳定档位尺寸协调器，按 Widget、DPR 和 BoxFit 物理目标选择
+  640×360 至 1920×1080；去抖、间隔、滞回、原生确认和超时共同限制 Texture 重建。
+- 三类内容 A/B 和两次 DPI/快速缩放门禁均通过，掉帧、停滞、未响应和重建失败为 0；
+  GPU committed P95 下降 18.3–21.5 MiB，最终窗口 SSIM 保持 0.9887 以上。
+- 生产默认启用稳定输出，`FilterQuality.low` 与 mpv `bilinear/no` 不变。471 项测试、
+  静态分析、Windows Debug build 和真实设置点击通过。
+- 完整证据见 `docs/qa/player_native_output_size_gate_20260730.md`；队列来源、当前
+  index、返回路径、标签、缓存和用户数据未改变。
+
 ## 2026-07-30 Texture 尺寸、DPI 与 Flutter 采样 A/B
 
 - 正式 MediaKit 后端通过可选只读边界采集 `VideoController.rect`、Widget 逻辑尺寸、

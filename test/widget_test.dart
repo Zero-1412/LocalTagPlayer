@@ -1845,6 +1845,25 @@ void main() {
       playerControlsShowTime(availableWidth: 900, textScaleFactor: 1.5),
       isTrue,
     );
+    expect(playerControlsUseCompactStack(719), isTrue);
+    expect(playerControlsUseCompactStack(720), isFalse);
+  });
+
+  test('compact player settings panel stays fully inside the viewport', () {
+    expect(
+      playerSettingsPanelRight(
+        availableWidth: 899,
+        anchorRect: const Rect.fromLTWH(120, 700, 40, 40),
+      ),
+      587,
+    );
+    expect(
+      playerSettingsPanelRight(
+        availableWidth: 899,
+        anchorRect: const Rect.fromLTWH(820, 700, 40, 40),
+      ),
+      39,
+    );
   });
 
   testWidgets('library panel motion combines visible slide fade and scale',

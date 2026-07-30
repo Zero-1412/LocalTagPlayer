@@ -1,5 +1,17 @@
 # ROADMAP.md
 
+## 2026-07-30 小窗口播放与原生输出尺寸
+
+- [x] 修复 900 dp 以下控制条溢出，保留全部播放、文件、设置、全屏与队列入口。
+- [x] 修复紧凑控制条设置面板左侧裁切，并以真实 Windows 点击截图验证可达性。
+- [x] 按 Widget、DPR 与 BoxFit 物理目标建立稳定 Texture 输出档位和重建协调器。
+- [x] 完成三类低码率 fixed/adaptive A/B、两次 DPI 往返、快速缩放、掉帧、GPU
+  committed/private memory 与 Texture 代数门禁。
+- [ ] 在 adaptive 默认路径重新评估 `dscale` / `correct-downscaling` 的最终窗口
+  画质和资源收益；旧固定 1920×1080 Texture 结论不能直接复用。
+- [ ] 在两块不同缩放显示器之间补做真实物理 DPI 移窗；当前只完成 Flutter View
+  1.50↔2.00 模拟往返。
+
 ## 2026-07-30 正式播放调用收敛
 
 - [x] 正式应用统一为 MediaKit Texture，旧渲染器偏好自动迁移并删除伪切换入口。

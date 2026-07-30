@@ -10,6 +10,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/src/core/playback_settings.dart';
 import 'package:local_tag_player/src/features/player/application/player_fullscreen_lifecycle_controller.dart';
 import 'package:local_tag_player/src/models/player_motion_interpolation_capability.dart';
+import 'package:local_tag_player/src/models/player_video_surface_diagnostics.dart';
 import 'package:local_tag_player/src/models/video_item.dart';
 import 'package:local_tag_player/src/pages/player/player_diagnostics_dialog.dart';
 import 'package:local_tag_player/src/pages/player/player_page.dart';
@@ -73,6 +74,8 @@ void main() {
     final holdFixedComparisonFrame =
         Platform.environment['LOCAL_TAG_PLAYER_QUALITY_HOLD_FIXED_FRAME'] ==
             '1';
+    final runNativeOutputResizeGate =
+        Platform.environment['LOCAL_TAG_PLAYER_NATIVE_OUTPUT_GATE'] == '1';
     final forceNvidiaCpuFilterConflict = Platform.environment[
             'LOCAL_TAG_PLAYER_QUALITY_NVIDIA_CPU_FILTER_CONFLICT'] ==
         '1';
@@ -95,6 +98,8 @@ void main() {
         mode != 'texture-low' &&
         mode != 'texture-medium' &&
         mode != 'texture-high' &&
+        mode != 'native-output-fixed' &&
+        mode != 'native-output-adaptive' &&
         mode != 'nvidia-off' &&
         mode != 'nvidia-on' &&
         mode != 'nvidia-hdr-off' &&
@@ -103,7 +108,7 @@ void main() {
         mode != 'nvofa-motion-off' &&
         mode != 'nvofa-motion-on') {
       throw StateError(
-        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、downscale-current、downscale-lanczos、downscale-lanczos-uncorrected、texture-low、texture-medium、texture-high、nvidia-off、nvidia-on、nvidia-hdr-off、nvidia-hdr-on、nvidia-vsr-hdr-on、nvofa-motion-off 或 nvofa-motion-on',
+        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、downscale-current、downscale-lanczos、downscale-lanczos-uncorrected、texture-low、texture-medium、texture-high、native-output-fixed、native-output-adaptive、nvidia-off、nvidia-on、nvidia-hdr-off、nvidia-hdr-on、nvidia-vsr-hdr-on、nvofa-motion-off 或 nvofa-motion-on',
       );
     }
     final baselineMode = mode!;
@@ -131,6 +136,8 @@ void main() {
         'texture-low' ||
         'texture-medium' ||
         'texture-high' ||
+        'native-output-fixed' ||
+        'native-output-adaptive' ||
         'nvidia-off' ||
         'nvidia-on' ||
         'nvidia-hdr-off' ||
@@ -210,6 +217,9 @@ void main() {
                       'texture-high' => FilterQuality.high,
                       _ => FilterQuality.low,
                     },
+                    // 原生输出 A/B 只让实验组启用稳定档位；对照组保持固定 1080p。
+                    adaptiveTextureSizingEnabled:
+                        baselineMode == 'native-output-adaptive',
                   ),
           ),
           mediaProbeBackendFactory: () =>
@@ -436,6 +446,14 @@ void main() {
       );
       await tester.pumpAndSettle();
     }
+    final nativeOutputResizeGate =
+        baselineMode == 'native-output-adaptive' && runNativeOutputResizeGate
+            ? await _runNativeOutputResizeGate(
+                tester,
+                playerKey,
+                originalSurface: Size(surfaceWidth, surfaceHeight),
+              )
+            : null;
     final samples = <Map<String, Object?>>[];
     final startedAt = DateTime.now();
     var nextSampleAt = startedAt;
@@ -513,6 +531,10 @@ void main() {
             'BoxFit 视频物理目标:',
             'Texture 合成倍率:',
             'Flutter Texture 采样:',
+            '原生 Texture 输出策略:',
+            '稳定 Texture 目标:',
+            '最近 Texture 请求:',
+            'Texture 尺寸协调:',
             '原生 QA · NVIDIA RTX 视频超分:',
             '原生 QA · NVIDIA RTX Video HDR:',
             '原生 QA · NVIDIA 滤镜互斥处理:',
@@ -563,6 +585,8 @@ void main() {
       'samples': samples,
       'finalDiagnostics': finalLines,
       'videoSurfaceDiagnostics': videoSurfaceDiagnostics.toJson(),
+      if (nativeOutputResizeGate != null)
+        'nativeOutputResizeGate': nativeOutputResizeGate,
       'gpuMatrix': matrix.toJson(),
       'activeAdapter': activeAdapter.toJson(),
       if (usesWindowsNative)
@@ -578,6 +602,9 @@ void main() {
     );
 
     expect(samples, isNotEmpty);
+    if (nativeOutputResizeGate != null) {
+      expect(nativeOutputResizeGate['automatedPass'], isTrue);
+    }
     expect(finalSnapshot.videoStalled, isFalse);
     expect(finalSnapshot.audioStalled, isFalse);
     if (baselineMode.startsWith('nvofa-')) {
@@ -681,6 +708,29 @@ void main() {
         finalLines,
         contains('Flutter Texture 采样: $expectedQuality'),
       );
+    } else if (baselineMode.startsWith('native-output-')) {
+      final adaptive = baselineMode == 'native-output-adaptive';
+      expect(
+        videoSurfaceDiagnostics.adaptiveTextureSizingEnabled,
+        adaptive,
+      );
+      expect(videoSurfaceDiagnostics.textureResizeFailureCount, 0);
+      if (adaptive) {
+        expect(videoSurfaceDiagnostics.textureWidthPx, lessThan(1920));
+        expect(videoSurfaceDiagnostics.textureHeightPx, lessThan(1080));
+        expect(
+          videoSurfaceDiagnostics.textureResizeRequestCount,
+          greaterThanOrEqualTo(1),
+        );
+        expect(
+          videoSurfaceDiagnostics.textureGenerationCount,
+          greaterThanOrEqualTo(2),
+        );
+      } else {
+        expect(videoSurfaceDiagnostics.textureWidthPx, 1920);
+        expect(videoSurfaceDiagnostics.textureHeightPx, 1080);
+        expect(videoSurfaceDiagnostics.textureResizeRequestCount, 0);
+      }
     } else if (baselineMode == 'nvidia-vsr-hdr-on') {
       final vsrRequested = finalLines.any(
         (line) => line.startsWith(
@@ -799,6 +849,191 @@ void main() {
 }
 
 /** 等待原生运行时以实际滤镜输出帧率确认运动补偿插帧状态。 */
+/**
+ * 在真实 Windows Texture 后端执行 DPI 往返与快速缩放门禁。
+ *
+ * 门禁只改变测试 View 的 DPR 和逻辑表面尺寸；每一轮都要求尺寸协调器回到稳定态，
+ * 并用请求数、Texture 代数、播放推进、掉帧和 Flutter 帧耗时共同阻止抖动式重建。
+ */
+Future<Map<String, Object?>> _runNativeOutputResizeGate(
+  WidgetTester tester,
+  GlobalKey<PlayerPageState> playerKey, {
+  required Size originalSurface,
+}) async {
+  final state = playerKey.currentState;
+  if (state == null) {
+    throw StateError('原生输出缩放门禁启动时 PlayerPage 已卸载');
+  }
+  final initialSurface = await _waitForTextureOutputSettled(tester, playerKey);
+  final playbackBefore = await state.buildDiagnosticsSnapshot();
+  final positionBefore = state.playerService.state.position;
+  final initialDpr = tester.view.devicePixelRatio;
+  final initialRequests = initialSurface.textureResizeRequestCount;
+  final initialGenerations = initialSurface.textureGenerationCount;
+  final frameTimings = <ui.FrameTiming>[];
+
+  void collectTimings(List<ui.FrameTiming> timings) {
+    frameTimings.addAll(timings);
+  }
+
+  tester.binding.addTimingsCallback(collectTimings);
+  try {
+    // 选择足以跨越稳定尺寸档位的 DPR，再返回真实初始值。
+    final roundTripDpr = initialDpr < 1.75 ? 2.0 : 1.0;
+    tester.view.devicePixelRatio = roundTripDpr;
+    await tester.pump(const Duration(milliseconds: 450));
+    final highDpiSurface =
+        await _waitForTextureOutputSettled(tester, playerKey);
+    tester.view.devicePixelRatio = initialDpr;
+    await tester.pump(const Duration(milliseconds: 450));
+    final afterDpi = await _waitForTextureOutputSettled(tester, playerKey);
+
+    final requestsAfterDpi =
+        afterDpi.textureResizeRequestCount - initialRequests;
+    final generationsAfterDpi =
+        afterDpi.textureGenerationCount - initialGenerations;
+
+    // 高频中间尺寸必须被 debounce 合并，只允许最终放大和返回各形成一次请求。
+    final outwardBurst = <Size>[
+      originalSurface + const Offset(120, 70),
+      originalSurface + const Offset(260, 130),
+      originalSurface + const Offset(380, 190),
+      originalSurface + const Offset(500, 260),
+    ];
+    for (final size in outwardBurst) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    final enlargedSurface =
+        await _waitForTextureOutputSettled(tester, playerKey);
+
+    final returnBurst = <Size>[
+      originalSurface + const Offset(360, 180),
+      originalSurface + const Offset(220, 110),
+      originalSurface + const Offset(100, 50),
+      originalSurface,
+    ];
+    for (final size in returnBurst) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    final finalSurface = await _waitForTextureOutputSettled(tester, playerKey);
+    final playbackAfter = await state.buildDiagnosticsSnapshot();
+    final positionAfter = state.playerService.state.position;
+    final totalRequestDelta =
+        finalSurface.textureResizeRequestCount - initialRequests;
+    final totalGenerationDelta =
+        finalSurface.textureGenerationCount - initialGenerations;
+    final rapidRequestDelta = totalRequestDelta - requestsAfterDpi;
+    final rapidGenerationDelta = totalGenerationDelta - generationsAfterDpi;
+    final droppedBefore = playbackBefore.totalDroppedFrames ?? 0;
+    final droppedAfter = playbackAfter.totalDroppedFrames ?? 0;
+    final droppedDelta = droppedAfter - droppedBefore;
+    final frameSummary = _summarizeNativeOutputFrameTimings(frameTimings);
+    final p95TotalMs = frameSummary['p95TotalMs'] as double?;
+    final finalMatchesInitial =
+        finalSurface.textureWidthPx == initialSurface.textureWidthPx &&
+            finalSurface.textureHeightPx == initialSurface.textureHeightPx;
+    final dpiReturned =
+        finalSurface.devicePixelRatio == initialSurface.devicePixelRatio;
+    final playbackAdvanced = positionAfter > positionBefore;
+    final automatedPass = highDpiSurface.textureResizeState == 'idle' &&
+        requestsAfterDpi <= 2 &&
+        generationsAfterDpi == requestsAfterDpi &&
+        rapidRequestDelta <= 2 &&
+        rapidGenerationDelta == rapidRequestDelta &&
+        finalSurface.textureResizeFailureCount == 0 &&
+        finalMatchesInitial &&
+        dpiReturned &&
+        playbackAdvanced &&
+        droppedDelta <= 1 &&
+        !playbackAfter.videoStalled &&
+        !playbackAfter.audioStalled &&
+        (p95TotalMs == null || p95TotalMs <= 80);
+
+    return <String, Object?>{
+      'automatedPass': automatedPass,
+      'initialDpr': initialDpr,
+      'roundTripDpr': roundTripDpr,
+      'initialTexture':
+          '${initialSurface.textureWidthPx}x${initialSurface.textureHeightPx}',
+      'highDpiTexture':
+          '${highDpiSurface.textureWidthPx}x${highDpiSurface.textureHeightPx}',
+      'enlargedTexture':
+          '${enlargedSurface.textureWidthPx}x${enlargedSurface.textureHeightPx}',
+      'finalTexture':
+          '${finalSurface.textureWidthPx}x${finalSurface.textureHeightPx}',
+      'dpiRequestDelta': requestsAfterDpi,
+      'dpiGenerationDelta': generationsAfterDpi,
+      'rapidResizeRequestDelta': rapidRequestDelta,
+      'rapidResizeGenerationDelta': rapidGenerationDelta,
+      'textureResizeFailureCount': finalSurface.textureResizeFailureCount,
+      'finalMatchesInitial': finalMatchesInitial,
+      'dpiReturned': dpiReturned,
+      'playbackProgressMs':
+          positionAfter.inMilliseconds - positionBefore.inMilliseconds,
+      'droppedFramesDelta': droppedDelta,
+      'videoStalled': playbackAfter.videoStalled,
+      'audioStalled': playbackAfter.audioStalled,
+      'flutterFrames': frameSummary,
+    };
+  } finally {
+    tester.binding.removeTimingsCallback(collectTimings);
+    tester.view.devicePixelRatio = initialDpr;
+    await tester.binding.setSurfaceSize(originalSurface);
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
+/** 等待协调器完成请求，并确认原生回报尺寸与稳定目标一致。 */
+Future<PlayerVideoSurfaceDiagnostics> _waitForTextureOutputSettled(
+  WidgetTester tester,
+  GlobalKey<PlayerPageState> playerKey,
+) async {
+  final stopwatch = Stopwatch()..start();
+  PlayerVideoSurfaceDiagnostics? latest;
+  while (stopwatch.elapsed < const Duration(seconds: 8)) {
+    await tester.pump(const Duration(milliseconds: 100));
+    latest = playerKey.currentState?.playerService.videoSurfaceDiagnostics;
+    if (latest == null) continue;
+    final matchesDesired =
+        latest.textureWidthPx == latest.desiredTextureWidthPx &&
+            latest.textureHeightPx == latest.desiredTextureHeightPx;
+    if (latest.textureResizeState == 'idle' && matchesDesired) {
+      return latest;
+    }
+  }
+  throw StateError(
+    'Texture 尺寸未在时限内稳定：'
+    '${latest?.textureResizeState}/'
+    '${latest?.textureWidthPx}x${latest?.textureHeightPx} -> '
+    '${latest?.desiredTextureWidthPx}x${latest?.desiredTextureHeightPx}',
+  );
+}
+
+/** 汇总门禁期间 Flutter 合成帧耗时，避免快速缩放只看播放侧指标。 */
+Map<String, Object?> _summarizeNativeOutputFrameTimings(
+  List<ui.FrameTiming> timings,
+) {
+  if (timings.isEmpty) {
+    return <String, Object?>{
+      'sampleCount': 0,
+      'p95TotalMs': null,
+      'maxTotalMs': null,
+    };
+  }
+  final totalMs = timings
+      .map((timing) => timing.totalSpan.inMicroseconds / 1000)
+      .toList(growable: false)
+    ..sort();
+  final p95Index = ((totalMs.length - 1) * 0.95).round();
+  return <String, Object?>{
+    'sampleCount': totalMs.length,
+    'p95TotalMs': totalMs[p95Index],
+    'maxTotalMs': totalMs.last,
+  };
+}
+
 Future<void> _waitForMotionCapability(
   WidgetTester tester,
   GlobalKey<PlayerPageState> playerKey,
@@ -892,7 +1127,9 @@ Future<void> _waitForSessionState(
           snapshot.lines.contains('mpv 去色带: yes')) {
         return;
       }
-    } else if (mode.startsWith('downscale-') || mode.startsWith('texture-')) {
+    } else if (mode.startsWith('downscale-') ||
+        mode.startsWith('texture-') ||
+        mode.startsWith('native-output-')) {
       // 缩小与采样 A/B 不依赖增强能力门禁；真实播放推进且解码器已读回即可采样。
       final decoderReady = snapshot.lines.any(
         (line) =>
@@ -900,12 +1137,13 @@ Future<void> _waitForSessionState(
             !line.endsWith('empty') &&
             !line.endsWith('unavailable'),
       );
-      final surfaceReady = !mode.startsWith('texture-') ||
-          snapshot.lines.any(
-            (line) =>
-                line.startsWith('Texture 合成倍率: ') &&
-                !line.endsWith('unavailable'),
-          );
+      final surfaceReady =
+          !(mode.startsWith('texture-') || mode.startsWith('native-output-')) ||
+              snapshot.lines.any(
+                (line) =>
+                    line.startsWith('Texture 合成倍率: ') &&
+                    !line.endsWith('unavailable'),
+              );
       if (decoderReady && surfaceReady && snapshot.progressMs >= 900) return;
     } else if (mode == 'nvidia-on') {
       final active = snapshot.lines.contains('原生 QA · NVIDIA VSR 驱动确认: active');

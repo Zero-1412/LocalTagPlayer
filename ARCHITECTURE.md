@@ -1,5 +1,23 @@
 ﻿# ARCHITECTURE.md
 
+## 2026-07-30 原生 Texture 稳定尺寸协调边界
+
+`Architecture Baseline 0.5.140` 将上一版只读尺寸证据收敛为
+`PlayerTextureOutputSizeCoordinator`。正式 MediaKit 后端仍是唯一拥有
+`VideoController` 的平台边界，也只有该后端可以调用 `setSize`；页面只上报 Widget
+逻辑尺寸、DPR 和 BoxFit，不能直接触发 Texture 重建。
+
+协调器把物理目标映射到 640×360、960×540、1280×720、1600×900、1920×1080
+五档，使用 420 ms 去抖、1100 ms 最小请求间隔、90% 降档滞回和 3000 ms 原生确认
+超时。前一请求未由 `VideoController.rect` 确认前不会继续下发；Texture ID 只用于
+匿名代数统计，不进入诊断文本或报告。两次 DPI/快速缩放门禁确认请求数与 Texture
+代数一致、失败和掉帧为 0，三类 A/B 的 GPU committed P95 下降 18.3–21.5 MiB，
+因此生产默认启用稳定档位。
+
+`FilterQuality.low`、mpv `dscale=bilinear` / `correct-downscaling=no` 暂不改变。
+稳定输出可能让 libmpv 真正参与缩小，后续必须在该默认路径重新做最终窗口 A/B，
+不得沿用固定 1920×1080 Texture 时“属性读回但像素不变”的旧结论。
+
 ## 2026-07-30 Flutter Texture 尺寸与采样边界
 
 `Architecture Baseline 0.5.139` 增加可选

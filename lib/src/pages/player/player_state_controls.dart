@@ -140,126 +140,68 @@ extension PlayerStateControls on PlayerPageState {
                                       final volumeWidth =
                                           constraints.maxWidth >= 780
                                               ? 112.0
-                                              : 76.0;
+                                              : constraints.maxWidth >= 520
+                                                  ? 76.0
+                                                  : 54.0;
+                                      final leadingControls =
+                                          buildLeadingPlayerControls(
+                                        position: position,
+                                        duration: duration,
+                                        showTime: showTime,
+                                        volumeWidth: volumeWidth,
+                                      );
+                                      final transportControls =
+                                          buildTransportControls(
+                                        accessibility,
+                                      );
+                                      final trailingControls =
+                                          buildTrailingPlayerControls();
+                                      if (playerControlsUseCompactStack(
+                                          constraints.maxWidth)) {
+                                        // 紧窄视频表面不能继续把三组动作压进同一 Row；
+                                        // 三行仍保留全部入口，并让中央传输组保持视觉中心。
+                                        return Column(
+                                          key: const ValueKey(
+                                            'player.controls.compactLayout',
+                                          ),
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            KeyedSubtree(
+                                              key: const ValueKey(
+                                                'player.controls.compact.transport',
+                                              ),
+                                              child: transportControls,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            KeyedSubtree(
+                                              key: const ValueKey(
+                                                'player.controls.compact.leading',
+                                              ),
+                                              child: leadingControls,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            KeyedSubtree(
+                                              key: const ValueKey(
+                                                'player.controls.compact.trailing',
+                                              ),
+                                              child: trailingControls,
+                                            ),
+                                          ],
+                                        );
+                                      }
                                       return Row(
                                         children: [
                                           Expanded(
                                             child: Align(
                                               alignment: Alignment.centerLeft,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  PlayerRevealFileButton(
-                                                    onPressed: () => unawaited(
-                                                        revealCurrentFile()),
-                                                  ),
-                                                  const SizedBox(width: 2),
-                                                  PlayerVolumeButton(
-                                                    volume: volume,
-                                                    onPressed: togglePlayerMute,
-                                                  ),
-                                                  SizedBox(
-                                                    width: volumeWidth,
-                                                    child: PlayerControlSlider(
-                                                      sliderKey: const ValueKey(
-                                                          'player.volume'),
-                                                      value: volume,
-                                                      max: 100,
-                                                      trackHeight: 3,
-                                                      thumbRadius: 4.5,
-                                                      overlayRadius: 11,
-                                                      onChanged:
-                                                          setPlayerVolume,
-                                                    ),
-                                                  ),
-                                                  if (showTime) ...[
-                                                    const SizedBox(width: 14),
-                                                    Text(
-                                                      '${formatControlDuration(position)} / '
-                                                      '${formatControlDuration(duration)}',
-                                                      style: const TextStyle(
-                                                        color: playerTextMuted,
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        fontFeatures: [
-                                                          FontFeature
-                                                              .tabularFigures(),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ],
-                                              ),
+                                              child: leadingControls,
                                             ),
                                           ),
-                                          buildTransportControls(
-                                            accessibility,
-                                          ),
+                                          transportControls,
                                           Expanded(
                                             child: Align(
                                               alignment: Alignment.centerRight,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  PlayerChromeButton(
-                                                    key: const ValueKey(
-                                                        'player.screenshot'),
-                                                    tooltip: '当前帧截图',
-                                                    icon: Icons
-                                                        .photo_camera_outlined,
-                                                    onPressed: () => unawaited(
-                                                        saveCurrentFrameScreenshot()),
-                                                  ),
-                                                  KeyedSubtree(
-                                                    key:
-                                                        settingsButtonAnchorKey,
-                                                    child: PlayerChromeButton(
-                                                      key: const ValueKey(
-                                                          'player.settings'),
-                                                      tooltip: '播放设置',
-                                                      icon: Icons
-                                                          .settings_outlined,
-                                                      onPressed: () => unawaited(
-                                                          showControlSettingsDialog()),
-                                                    ),
-                                                  ),
-                                                  PlayerChromeButton(
-                                                    key: const ValueKey(
-                                                        'player.fullscreen.toggle'),
-                                                    tooltip: isWindowFullscreen
-                                                        ? '退出全屏'
-                                                        : '全屏',
-                                                    icon: isWindowFullscreen
-                                                        ? Icons
-                                                            .fullscreen_exit_rounded
-                                                        : Icons
-                                                            .fullscreen_rounded,
-                                                    onPressed: () => unawaited(
-                                                        toggleWindowFullscreen()),
-                                                  ),
-                                                  PlayerChromeButton(
-                                                    key: const ValueKey(
-                                                        'player.queue.toggle'),
-                                                    tooltip: isWindowFullscreen
-                                                        ? '播放列表'
-                                                        : playerHasWideQueueSidebar(
-                                                                MediaQuery.sizeOf(
-                                                                        context)
-                                                                    .width)
-                                                            ? queueSidebarCollapsed
-                                                                ? '展开筛选结果队列'
-                                                                : '折叠筛选结果队列'
-                                                            : fullscreenQueueVisible
-                                                                ? '关闭筛选结果队列'
-                                                                : '展开筛选结果队列',
-                                                    icon: Icons
-                                                        .playlist_play_rounded,
-                                                    onPressed:
-                                                        toggleQueueVisibility,
-                                                  ),
-                                                ],
-                                              ),
+                                              child: trailingControls,
                                             ),
                                           ),
                                         ],
@@ -278,6 +220,99 @@ extension PlayerStateControls on PlayerPageState {
           ),
         ),
       ]),
+    );
+  }
+
+  /** 构建文件、音量与可选时间文本；紧窄布局会整组移到独立一行。 */
+  Widget buildLeadingPlayerControls({
+    required Duration position,
+    required Duration duration,
+    required bool showTime,
+    required double volumeWidth,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PlayerRevealFileButton(
+          onPressed: () => unawaited(revealCurrentFile()),
+        ),
+        const SizedBox(width: 2),
+        PlayerVolumeButton(
+          volume: volume,
+          onPressed: togglePlayerMute,
+        ),
+        SizedBox(
+          width: volumeWidth,
+          child: PlayerControlSlider(
+            sliderKey: const ValueKey('player.volume'),
+            value: volume,
+            max: 100,
+            trackHeight: 3,
+            thumbRadius: 4.5,
+            overlayRadius: 11,
+            onChanged: setPlayerVolume,
+          ),
+        ),
+        if (showTime) ...[
+          const SizedBox(width: 14),
+          Text(
+            '${formatControlDuration(position)} / '
+            '${formatControlDuration(duration)}',
+            style: const TextStyle(
+              color: playerTextMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /** 构建截图、设置、全屏和队列动作；任何响应式分支都不得删除这些既有入口。 */
+  Widget buildTrailingPlayerControls() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PlayerChromeButton(
+          key: const ValueKey('player.screenshot'),
+          tooltip: '当前帧截图',
+          icon: Icons.photo_camera_outlined,
+          onPressed: () => unawaited(saveCurrentFrameScreenshot()),
+        ),
+        KeyedSubtree(
+          key: settingsButtonAnchorKey,
+          child: PlayerChromeButton(
+            key: const ValueKey('player.settings'),
+            tooltip: '播放设置',
+            icon: Icons.settings_outlined,
+            onPressed: () => unawaited(showControlSettingsDialog()),
+          ),
+        ),
+        PlayerChromeButton(
+          key: const ValueKey('player.fullscreen.toggle'),
+          tooltip: isWindowFullscreen ? '退出全屏' : '全屏',
+          icon: isWindowFullscreen
+              ? Icons.fullscreen_exit_rounded
+              : Icons.fullscreen_rounded,
+          onPressed: () => unawaited(toggleWindowFullscreen()),
+        ),
+        PlayerChromeButton(
+          key: const ValueKey('player.queue.toggle'),
+          tooltip: isWindowFullscreen
+              ? '播放列表'
+              : playerHasWideQueueSidebar(MediaQuery.sizeOf(context).width)
+                  ? queueSidebarCollapsed
+                      ? '展开筛选结果队列'
+                      : '折叠筛选结果队列'
+                  : fullscreenQueueVisible
+                      ? '关闭筛选结果队列'
+                      : '展开筛选结果队列',
+          icon: Icons.playlist_play_rounded,
+          onPressed: toggleQueueVisibility,
+        ),
+      ],
     );
   }
 

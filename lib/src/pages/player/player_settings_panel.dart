@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/playback_settings.dart'
@@ -14,6 +16,28 @@ export 'player_settings_option_list.dart';
 export 'player_settings_primary_list.dart';
 
 // ignore_for_file: slash_for_doc_comments
+
+/** 播放设置浮层的固定内容宽度。 */
+const double playerSettingsPanelWidth = 300;
+
+/**
+ * 计算设置浮层距窗口右边缘的位置，并保证整个固定宽度面板留在可视区。
+ *
+ * 紧凑控制条会把齿轮移到靠左的第三行；只对齐齿轮右边缘会产生负 left，
+ * 因此这里同时限制右侧偏移的上界。
+ */
+double playerSettingsPanelRight({
+  required double availableWidth,
+  required Rect anchorRect,
+}) {
+  const margin = 12.0;
+  final anchoredRight = availableWidth - anchorRect.right;
+  final maximumRight = math.max(
+    margin,
+    availableWidth - playerSettingsPanelWidth - margin,
+  );
+  return anchoredRight.clamp(margin, maximumRight);
+}
 
 /**
  * 显示桌面播放器设置浮层。
@@ -102,8 +126,10 @@ Future<void> showPlayerSettingsDialog(
           builder: (context, constraints) {
             reportPanelBounds(context);
             // 浮层右边缘与齿轮右边缘对齐，并限制高度以兼容超宽矮屏全屏布局。
-            final anchoredRight = constraints.maxWidth - anchorRect.right;
-            final right = anchoredRight.clamp(12.0, constraints.maxWidth - 220);
+            final right = playerSettingsPanelRight(
+              availableWidth: constraints.maxWidth,
+              anchorRect: anchorRect,
+            );
             final anchoredBottom = constraints.maxHeight - anchorRect.top + 8;
             final bottom =
                 anchoredBottom.clamp(12.0, constraints.maxHeight - 220);
@@ -146,7 +172,7 @@ Future<void> showPlayerSettingsDialog(
                         clipBehavior: Clip.antiAlias,
                         child: AnimatedContainer(
                           key: const ValueKey('player.settings.shell'),
-                          width: 300,
+                          width: playerSettingsPanelWidth,
                           duration:
                               accessibility.motionDuration(AppMotion.popover),
                           curve: AppMotion.standardCurve,

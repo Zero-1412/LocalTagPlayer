@@ -9,8 +9,9 @@
   [string]$OutputDirectory = ".local/qa/downscale-quality-ab",
   [string]$OnlyCase = "",
   [string]$OnlyMode = "",
-  [ValidateSet("mpv-downscale", "flutter-texture")]
+  [ValidateSet("mpv-downscale", "flutter-texture", "native-output")]
   [string]$Experiment = "mpv-downscale",
+  [switch]$RunNativeOutputGate,
   [switch]$SkipPlayback
 )
 
@@ -49,10 +50,13 @@ foreach ($case in $cases) {
 
 <#
  * mpv-downscale 保留既有缩小属性实验；flutter-texture 只改变 Flutter Texture
- * 的 FilterQuality。两类实验复用相同片源、窗口、时点与进程指标口径。
+ * 的 FilterQuality；native-output 比较固定 1080p 与稳定档位输出。三类实验
+ * 复用相同片源、窗口、时点与进程指标口径。
 #>
 $modes = if ($Experiment -eq "flutter-texture") {
   @("texture-low", "texture-medium", "texture-high")
+} elseif ($Experiment -eq "native-output") {
+  @("native-output-fixed", "native-output-adaptive")
 } else {
   @(
     "downscale-current",
@@ -198,6 +202,9 @@ public static class LtpDownscaleWindowCapture {
   $env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_SECONDS = $DurationSeconds.ToString()
   $env:LOCAL_TAG_PLAYER_QUALITY_SURFACE_WIDTH = $SurfaceWidth.ToString()
   $env:LOCAL_TAG_PLAYER_QUALITY_SURFACE_HEIGHT = $SurfaceHeight.ToString()
+  if ($RunNativeOutputGate) {
+    $env:LOCAL_TAG_PLAYER_NATIVE_OUTPUT_GATE = "1"
+  }
   $logPath = Join-Path $modeOutput "baseline.log"
   try {
     Push-Location $workspace
@@ -221,6 +228,8 @@ public static class LtpDownscaleWindowCapture {
     Remove-Item Env:LOCAL_TAG_PLAYER_QUALITY_SURFACE_WIDTH `
       -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QUALITY_SURFACE_HEIGHT `
+      -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_NATIVE_OUTPUT_GATE `
       -ErrorAction SilentlyContinue
   }
   if ($testExitCode -ne 0) {
@@ -287,6 +296,7 @@ $caseSummaries = foreach ($case in $cases) {
       unresponsiveSamples = @($rows | Where-Object responding -ne "True").Count
       finalDiagnostics = $report.finalDiagnostics
       videoSurfaceDiagnostics = $report.videoSurfaceDiagnostics
+      nativeOutputResizeGate = $report.nativeOutputResizeGate
       fixedFrameWindow = $fixedFrameWindow
       fixedFrameSha256 =
         (Get-FileHash -Algorithm SHA256 -LiteralPath $fixedFrameWindow).Hash
@@ -305,17 +315,94 @@ $caseSummaries = foreach ($case in $cases) {
   }
 }
 
-$summaryName = if ($Experiment -eq "flutter-texture") {
-  "texture-sampling-ab-summary.json"
-} else {
-  "downscale-ab-summary.json"
+$nativeOutputPerformanceGate = $null
+if ($Experiment -eq "native-output") {
+  $nativeOutputCaseGates = @(
+    foreach ($caseSummary in $caseSummaries) {
+      $fixed = @($caseSummary.modes |
+          Where-Object mode -eq "native-output-fixed")
+      $adaptive = @($caseSummary.modes |
+          Where-Object mode -eq "native-output-adaptive")
+      # 单模式断点执行没有完整对照组，不应伪造 A/B 结论。
+      if ($fixed.Count -ne 1 -or $adaptive.Count -ne 1) { continue }
+      $fixedMode = $fixed[0]
+      $adaptiveMode = $adaptive[0]
+      $surface = $adaptiveMode.videoSurfaceDiagnostics
+      $droppedFramesPass =
+        [int]$adaptiveMode.maxTotalDroppedFrames -le
+        ([int]$fixedMode.maxTotalDroppedFrames + 1)
+      $stallPass =
+        [int]$adaptiveMode.videoStallSamples -eq 0 -and
+        [int]$adaptiveMode.audioStallSamples -eq 0 -and
+        [int]$adaptiveMode.unresponsiveSamples -eq 0
+      $gpuPass =
+        [double]$adaptiveMode.gpuUtilPercent.p95 -le
+        ([double]$fixedMode.gpuUtilPercent.p95 + 2.0)
+      # 32 MiB 容差覆盖 Windows 进程采样噪声，但禁止新策略显著扩大显存或私有内存。
+      $memoryPass =
+        [double]$adaptiveMode.gpuCommittedMiB.p95 -le
+          ([double]$fixedMode.gpuCommittedMiB.p95 + 32.0) -and
+        [double]$adaptiveMode.privateMiB.p95 -le
+          ([double]$fixedMode.privateMiB.p95 + 32.0)
+      $texturePass =
+        $surface.textureResizeState -eq "idle" -and
+        [int]$surface.textureResizeFailureCount -eq 0 -and
+        [int]$surface.textureResizeRequestCount -ge 1 -and
+        [int]$surface.textureGenerationCount -eq
+          ([int]$surface.textureResizeRequestCount + 1) -and
+        [double]$surface.textureWidthPx -le
+          [double]$fixedMode.videoSurfaceDiagnostics.textureWidthPx -and
+        [double]$surface.textureHeightPx -le
+          [double]$fixedMode.videoSurfaceDiagnostics.textureHeightPx
+      [ordered]@{
+        name = $caseSummary.name
+        automatedPass =
+          $droppedFramesPass -and $stallPass -and $gpuPass -and
+          $memoryPass -and $texturePass
+        droppedFramesPass = $droppedFramesPass
+        stallAndResponsivenessPass = $stallPass
+        gpuP95WithinTwoPoints = $gpuPass
+        memoryP95Within32MiB = $memoryPass
+        textureLifecyclePass = $texturePass
+        gpuCommittedP95DeltaMiB = [Math]::Round(
+          [double]$adaptiveMode.gpuCommittedMiB.p95 -
+          [double]$fixedMode.gpuCommittedMiB.p95,
+          2)
+        privateP95DeltaMiB = [Math]::Round(
+          [double]$adaptiveMode.privateMiB.p95 -
+          [double]$fixedMode.privateMiB.p95,
+          2)
+      }
+    }
+  )
+  if ($nativeOutputCaseGates.Count -gt 0) {
+    $nativeOutputPerformanceGate = [ordered]@{
+      automatedPass =
+        @($nativeOutputCaseGates | Where-Object automatedPass -ne $true).Count -eq 0
+      scope =
+        "A/B performance only; visual quality and DPI/rapid-resize gate are reported separately"
+      cases = $nativeOutputCaseGates
+    }
+  }
 }
-$samplePolicy = if ($Experiment -eq "flutter-texture") {
-  "fixed natural 650 kbps clips; same MediaKit Texture size and fixed 12-second frame; only Flutter FilterQuality changes"
-} else {
-  "fixed natural 650 kbps clips; same MediaKit Texture and fixed 12-second frame"
+
+$summaryName = switch ($Experiment) {
+  "flutter-texture" { "texture-sampling-ab-summary.json" }
+  "native-output" { "native-output-size-ab-summary.json" }
+  default { "downscale-ab-summary.json" }
 }
-[ordered]@{
+$samplePolicy = switch ($Experiment) {
+  "flutter-texture" {
+    "fixed natural 650 kbps clips; same MediaKit Texture size and fixed 12-second frame; only Flutter FilterQuality changes"
+  }
+  "native-output" {
+    "fixed natural 650 kbps clips; fixed 12-second frame; compare fixed 1080p Texture with debounced stable output buckets"
+  }
+  default {
+    "fixed natural 650 kbps clips; same MediaKit Texture and fixed 12-second frame"
+  }
+}
+$summary = [ordered]@{
   schemaVersion = 1
   experiment = $Experiment
   samplePolicy = $samplePolicy
@@ -324,7 +411,11 @@ $samplePolicy = if ($Experiment -eq "flutter-texture") {
   requestedSurfaceLogicalHeight = $SurfaceHeight
   modes = $modes
   cases = @($caseSummaries)
-} | ConvertTo-Json -Depth 12 |
+}
+if ($null -ne $nativeOutputPerformanceGate) {
+  $summary.Add("nativeOutputPerformanceGate", $nativeOutputPerformanceGate)
+}
+$summary | ConvertTo-Json -Depth 12 |
   Set-Content -LiteralPath (Join-Path $output $summaryName) `
     -Encoding utf8
 

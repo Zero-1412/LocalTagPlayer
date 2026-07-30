@@ -1939,6 +1939,50 @@ void main() {
     expect(script, contains('"flutter-texture"'));
   });
 
+  test('原生 Texture 输出只经稳定档位协调器重建且紧窄控制入口完整', () {
+    final backend = File(
+      'lib/src/services/player/media_kit_player_backend.dart',
+    ).readAsStringSync();
+    final coordinator = File(
+      'lib/src/services/player/player_texture_output_size_coordinator.dart',
+    ).readAsStringSync();
+    final controls = File(
+      'lib/src/pages/player/player_state_controls.dart',
+    ).readAsStringSync();
+    final integration = File(
+      'integration_test/player_fixed_quality_baseline_test.dart',
+    ).readAsStringSync();
+    final script = File(
+      'tool/run_native_output_size_ab.ps1',
+    ).readAsStringSync();
+
+    expect(coordinator, contains('stableOutputSizes'));
+    expect(coordinator, contains('minimumRequestInterval'));
+    expect(coordinator, contains('confirmationTimeout'));
+    expect(coordinator, contains('recordActualTextureSize'));
+    expect(backend, contains('adaptiveTextureSizingEnabled = true'));
+    expect(backend, contains('_textureSizeCoordinator'));
+    expect(backend, contains('_requestTextureOutputSize'));
+    expect(backend, contains('_controller.setSize('));
+    expect(
+      RegExp(r'\.setSize\(').allMatches(backend).length,
+      1,
+      reason: '原生 Texture 重建只能存在于协调器保护的单一后端入口',
+    );
+    expect(controls, contains("'player.controls.compactLayout'"));
+    expect(controls, contains("'player.controls.compact.leading'"));
+    expect(controls, contains("'player.controls.compact.transport'"));
+    expect(controls, contains("'player.controls.compact.trailing'"));
+    expect(controls, contains('PlayerRevealFileButton('));
+    expect(controls, contains("'player.screenshot'"));
+    expect(controls, contains("'player.settings'"));
+    expect(controls, contains("'player.fullscreen.toggle'"));
+    expect(controls, contains("'player.queue.toggle'"));
+    expect(integration, contains("'native-output-fixed'"));
+    expect(integration, contains("'native-output-adaptive'"));
+    expect(script, contains('Experiment = "native-output"'));
+  });
+
   test('player shortcut suspension and focus eligibility have one pure owner',
       () {
     final page = _readPlayerPageCluster();

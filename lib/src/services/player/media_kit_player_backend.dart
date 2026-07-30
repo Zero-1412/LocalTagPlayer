@@ -11,6 +11,7 @@ import '../../models/player_gpu_capabilities.dart';
 import '../../models/player_video_surface_diagnostics.dart';
 import '../../platform/platform_interfaces.dart';
 import 'player_backend_telemetry_tracker.dart';
+import 'player_texture_output_size_coordinator.dart';
 import 'player_video_surface_metrics.dart';
 import 'windows_gpu_capability_channel.dart';
 
@@ -37,10 +38,17 @@ class MediaKitPlayerBackend
     milliseconds: 5200,
   );
 
+  /**
+   * 创建 MediaKit 播放后端。
+   *
+   * Texture 输出默认采用经过 A/B 与重建门禁验证的稳定档位；固定 1920×1080
+   * 只保留给显式关闭该参数的 QA 对照，避免小 Widget 长期合成超额像素。
+   */
   MediaKitPlayerBackend({
     required String hwdec,
     required bool enableHardwareAcceleration,
     FilterQuality textureFilterQuality = FilterQuality.low,
+    bool adaptiveTextureSizingEnabled = true,
   })  : _player = Player(
           // 4K 长视频需要稳定输入窗口；该预算只属于当前播放会话，
           // 不扩大缩略图或媒体详情后台任务的内存占用。
@@ -61,7 +69,12 @@ class MediaKitPlayerBackend
       _player,
       configuration: _controllerConfiguration,
     );
+    _textureSizeCoordinator = PlayerTextureOutputSizeCoordinator(
+      enabled: adaptiveTextureSizingEnabled,
+      requestSize: _requestTextureOutputSize,
+    );
     _controller.rect.addListener(_handleTextureRectChanged);
+    _controller.id.addListener(_handleTextureIdChanged);
     _errorSubscription = _player.stream.error.listen(_handleBackendError);
     _videoParamsSubscription =
         _player.stream.videoParams.listen(_handleVideoParams);
@@ -73,7 +86,7 @@ class MediaKitPlayerBackend
   /** 当前适配器独占的 media_kit Player。 */
   final Player _player;
 
-  /** 创建纹理控制器使用的固定配置。 */
+  /** 创建纹理控制器使用的初始配置；稳定布局后可由协调器切换输出档位。 */
   final VideoControllerConfiguration _controllerConfiguration;
 
   /** 当前适配器独占的视频纹理控制器。 */
@@ -88,6 +101,15 @@ class MediaKitPlayerBackend
 
   /** Texture 与 Flutter 布局尺寸的纯诊断汇总器。 */
   final PlayerVideoSurfaceMetricsTracker _surfaceMetrics;
+
+  /** 把高频布局变化收敛为稳定档位的原生 Texture 尺寸协调器。 */
+  late final PlayerTextureOutputSizeCoordinator _textureSizeCoordinator;
+
+  /** 最近一次非空 Texture ID，仅用于统计代次，不进入诊断正文。 */
+  int? _lastTextureId;
+
+  /** 本会话收到的非空 Texture ID 代次数。 */
+  var _textureGenerationCount = 0;
 
   /** dispose 完成信号，保证下一播放器不会越过旧原生资源释放。 */
   final Completer<void> _released = Completer<void>();
@@ -166,8 +188,20 @@ class MediaKitPlayerBackend
   PlayerBackendTelemetrySnapshot get telemetry => _telemetry.snapshot;
 
   @override
-  PlayerVideoSurfaceDiagnostics get videoSurfaceDiagnostics =>
-      _surfaceMetrics.snapshot;
+  PlayerVideoSurfaceDiagnostics get videoSurfaceDiagnostics {
+    final sizing = _textureSizeCoordinator.snapshot;
+    return _surfaceMetrics.snapshot.withTextureSizing(
+      enabled: sizing.enabled,
+      desiredWidth: sizing.desiredSize?.width,
+      desiredHeight: sizing.desiredSize?.height,
+      requestedWidth: sizing.requestedSize?.width,
+      requestedHeight: sizing.requestedSize?.height,
+      state: sizing.state,
+      requestCount: sizing.requestCount,
+      failureCount: sizing.failureCount,
+      generationCount: _textureGenerationCount,
+    );
+  }
 
   @override
   Stream<PlayerBackendTelemetryEvent> get telemetryChanges => _telemetry.events;
@@ -566,6 +600,57 @@ class MediaKitPlayerBackend
       return;
     }
     _surfaceMetrics.recordTextureSize(rect.size);
+    _textureSizeCoordinator.recordActualTextureSize(rect.size);
+    _observeCurrentFittedTarget();
+  }
+
+  /** 统计 Texture 注册代次；ID 本身属于原生句柄，不写入任何报告。 */
+  void _handleTextureIdChanged() {
+    final textureId = _controller.id.value;
+    if (textureId == null || textureId == _lastTextureId) {
+      return;
+    }
+    _lastTextureId = textureId;
+    _textureGenerationCount += 1;
+  }
+
+  /** 记录 Flutter 表面指标，并把有效物理画面尺寸交给稳定档位协调器。 */
+  void _handleWidgetSurfaceMetrics(
+    Size logicalSize,
+    double devicePixelRatio,
+    BoxFit fit,
+    double? aspectRatio,
+  ) {
+    _surfaceMetrics.recordWidgetSurfaceMetrics(
+      logicalSize,
+      devicePixelRatio,
+      fit,
+      aspectRatio,
+    );
+    _observeCurrentFittedTarget();
+  }
+
+  /** Texture 与 Widget 任一侧晚到时都重新合并，避免首次布局丢失自适应目标。 */
+  void _observeCurrentFittedTarget() {
+    final snapshot = _surfaceMetrics.snapshot;
+    final width = snapshot.fittedVideoPhysicalWidthPx;
+    final height = snapshot.fittedVideoPhysicalHeightPx;
+    if (width == null || height == null) {
+      return;
+    }
+    _textureSizeCoordinator.observeFittedPhysicalTarget(Size(width, height));
+  }
+
+  /**
+   * 向同一 VideoController 下发稳定档位。
+   *
+   * 调用只可能来自带去抖和确认门禁的协调器；页面与布局观察器不得直接调用 setSize。
+   */
+  Future<void> _requestTextureOutputSize(Size size) {
+    return _controller.setSize(
+      width: size.width.round(),
+      height: size.height.round(),
+    );
   }
 
   @override
@@ -590,7 +675,7 @@ class MediaKitPlayerBackend
     return PlayerVideoSurfaceMetricsObserver(
       fit: fit,
       aspectRatio: aspectRatio,
-      onMetricsChanged: _surfaceMetrics.recordWidgetSurfaceMetrics,
+      onMetricsChanged: _handleWidgetSurfaceMetrics,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -617,7 +702,9 @@ class MediaKitPlayerBackend
       await _videoParamsSubscription.cancel();
       await _telemetryPositionSubscription.cancel();
       await _telemetryObserverInitialization;
+      _textureSizeCoordinator.dispose();
       _controller.rect.removeListener(_handleTextureRectChanged);
+      _controller.id.removeListener(_handleTextureIdChanged);
       final nativePlayer = _nativePlayer;
       if (nativePlayer != null) {
         for (final property in <String>[

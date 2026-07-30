@@ -227,6 +227,16 @@ bool playerControlsShowTime({
   return availableWidth >= scaledThreshold;
 }
 
+/**
+ * 判断底部控制条是否需要把三段横排改为紧凑纵向分组。
+ *
+ * 队列、DPI 与窗口边框会共同压缩视频表面的真实可用宽度；直接按窗口宽度判断会让左右
+ * 动作组各只得到约 50 dp 并溢出。720 dp 以下把传输、音量和页面动作拆为三行，所有
+ * 既有入口仍保留且中央播放按钮不偏移。
+ */
+bool playerControlsUseCompactStack(double availableWidth) =>
+    availableWidth < 720;
+
 /** 从当前视频路径提取播放器顶栏文件名，避免标题继续显示固定应用名称。 */
 String playerTopBarFileName(String path) => p.basename(path);
 

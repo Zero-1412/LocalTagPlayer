@@ -123,6 +123,13 @@ extension PlayerStateDiagnostics on PlayerPageState {
       'BoxFit 视频物理目标: ${formatDiagnosticSize(videoSurface.fittedVideoPhysicalWidthPx, videoSurface.fittedVideoPhysicalHeightPx, 'px')}',
       'Texture 合成倍率: ${formatDiagnosticScale(videoSurface.horizontalScale, videoSurface.verticalScale)}',
       'Flutter Texture 采样: ${videoSurface.filterQuality ?? 'unavailable'}',
+      '原生 Texture 输出策略: ${videoSurface.adaptiveTextureSizingEnabled ? '稳定档位自适应' : '固定 1920×1080'}',
+      '稳定 Texture 目标: ${formatDiagnosticSize(videoSurface.desiredTextureWidthPx, videoSurface.desiredTextureHeightPx, 'px')}',
+      '最近 Texture 请求: ${formatDiagnosticSize(videoSurface.requestedTextureWidthPx, videoSurface.requestedTextureHeightPx, 'px')}',
+      'Texture 尺寸协调: ${videoSurface.textureResizeState} · '
+          '请求 ${videoSurface.textureResizeRequestCount} · '
+          '失败 ${videoSurface.textureResizeFailureCount} · '
+          '代次 ${videoSurface.textureGenerationCount}',
       '连续切换失败率: '
           '${(backendTelemetry.openFailureRate * 100).toStringAsFixed(2)}%',
       '资源释放阶段: ${backendTelemetry.releasePhase.name}',

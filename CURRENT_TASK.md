@@ -1,5 +1,25 @@
 # CURRENT_TASK.md
 
+## 2026-07-30 小窗口控制条与原生 Texture 稳定尺寸
+
+- 900 dp 以下播放器控制区改为三层紧凑布局，保留文件定位、音量、传输、截图、设置、
+  全屏和队列入口；700×520 修复前左右分别溢出 104/102 px，修复后 700×520 和
+  899×650 真实 Windows 会话均无溢出。
+- 899 dp 真实点击发现并修复设置面板左侧裁切；固定 300 dp 面板现在会约束在可视区内，
+  标题、循环开关与“更多播放设置”完整可达。
+- MediaKit Texture 默认根据 Widget BoxFit 物理目标选择 640×360 至 1920×1080
+  的五档稳定输出，并以去抖、最小请求间隔、降档滞回、原生确认和超时状态限制重建。
+- 三类低码率 fixed/adaptive A/B 均为 0 掉帧、0 停滞、0 未响应；adaptive 的 GPU
+  committed P95 下降 18.3–21.5 MiB，视频区 SSIM 为 0.988722–0.999943。
+- 两次 1.50↔2.00 DPR 往返与快速缩放门禁均通过：每阶段请求/Texture 代数 2/2，
+  重建失败和掉帧均为 0，Flutter 帧耗时 P95 为 38.529/49.256 ms，最终回到 640×360。
+- 生产继续使用 `FilterQuality.low` 与打包 mpv 的 `bilinear/no`；本任务不改变
+  `FilterQuery`、`TagQueryService`、filtered queue、标签、缓存队列、schema 或用户数据。
+- 验证：471 项测试通过、3 项既有 benchmark 跳过，静态分析零问题，Windows Debug
+  build 成功。完整证据：`docs/qa/player_native_output_size_gate_20260730.md`。
+- 下一步计划：在 adaptive 默认路径重新做 `dscale` / `correct-downscaling` 最终窗口
+  A/B；只有像素、画质和资源门禁同时证明收益才调整默认值。
+
 ## 2026-07-30 原生 Texture / Widget / DPI 采集与 Flutter 采样 A/B
 
 - 新增可选只读视频表面诊断边界：正式 MediaKit 后端采集原生 Texture、Widget 逻辑
