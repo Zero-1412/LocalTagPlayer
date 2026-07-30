@@ -9,6 +9,17 @@ import '../../core/app_paths.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/**
+ * 首次启动或窗口快照失效时使用的桌面窗口尺寸。
+ *
+ * 1600 dp 宽度可同时容纳播放器、完整单行控制条和右侧队列；用户主动调整后的有效
+ * 尺寸仍按原逻辑恢复，不会被默认值覆盖。
+ */
+const Size desktopDefaultWindowSize = Size(1600, 900);
+
+/** 用户仍可主动缩小到的桌面窗口下限，紧凑布局负责该范围内的功能可达性。 */
+const Size desktopMinimumWindowSize = Size(1000, 650);
+
 /** 桌面窗口尺寸快照，只保存用户可感知的大小和最大化状态。 */
 class DesktopWindowLayout {
   const DesktopWindowLayout({
@@ -74,11 +85,13 @@ class DesktopWindowStateService with WindowListener {
     if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) return;
     await windowManager.ensureInitialized();
     final layout = await _load();
-    final initialSize = Size(layout?.width ?? 1280, layout?.height ?? 720);
+    final initialSize = layout == null
+        ? desktopDefaultWindowSize
+        : Size(layout.width, layout.height);
     _lastNormalSize = initialSize;
     final options = WindowOptions(
       size: initialSize,
-      minimumSize: const Size(1000, 650),
+      minimumSize: desktopMinimumWindowSize,
       // 当前快照只保存尺寸和最大化状态，不保存坐标；恢复时仍需居中，
       // 否则 Windows 插件会收到“非居中但无位置”的不完整布局并可能一直不显示窗口。
       center: true,

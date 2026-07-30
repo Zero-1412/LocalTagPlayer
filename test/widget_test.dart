@@ -5633,6 +5633,16 @@ void main() {
   });
 
   test('desktop window layout rejects unsafe tiny snapshots', () {
+    expect(desktopDefaultWindowSize, const Size(1600, 900));
+    expect(desktopMinimumWindowSize, const Size(1000, 650));
+    final defaultPlayerWidth = desktopDefaultWindowSize.width -
+        playerQueueSidebarWidthForWindow(desktopDefaultWindowSize.width) -
+        72;
+    expect(
+      playerControlsUseCompactStack(defaultPlayerWidth),
+      isFalse,
+      reason: '默认窗口同时展开右侧队列时仍应使用完整单行控制条',
+    );
     expect(
       DesktopWindowLayout.fromJson(
         <String, Object?>{'width': 640, 'height': 480, 'maximized': false},
