@@ -1,20 +1,18 @@
 # Local Tag Player
 
-**以标签驱动本地视频发现，而不是让你继续在文件夹树里翻找。**
+**用标签发现本地视频，并直接播放当前筛选结果。**
 
-Local Tag Player 是一款使用 Flutter 构建的跨平台桌面本地视频管理播放器。它面向“本地视频很多、目录分类已经不够用”的场景，把目录扫描、分组标签、组合筛选、收藏、搜索和筛选结果播放队列串成一个完整工作流。
+Local Tag Player 面向“本地视频很多、仅靠文件夹已经难以整理”的用户。它把目录扫描、分组标签、组合筛选、收藏、搜索和筛选结果播放队列串成一个完整工作流，让你先找到想看的内容，再连续播放当前结果。
 
-它不是 PotPlayer、VLC 或专业剪辑播放器的替代品。项目更关注一件事：**快速找到想看的本地视频，并从当前筛选结果连续播放。**
+它不是 PotPlayer、VLC 或专业剪辑播放器的替代品。它专注补足大型本地视频库在发现、整理和连续浏览上的缺口，并把数据库、标签和观看记录保留在本机。
 
 [下载最新版本](https://github.com/Zero-1412/LocalTagPlayer/releases/latest) · [查看更新记录](CHANGELOG.md) · [阅读架构说明](ARCHITECTURE.md)
+
+> 当前发布版为 `v0.2.4`。提供 Windows x64 安装器与 macOS DMG，两者当前均未签名；Linux 暂时支持源码构建。安装前请核对 Release 页面随附的 SHA-256。
 
 ## 产品预览
 
 以下画面使用隔离 profile 与程序生成的演示视频制作，不包含真实媒体、个人路径、观看记录或用户标签。
-
-### 媒体库与缩略图
-
-![脱敏演示媒体库](docs/assets/screenshots/media-library-demo.jpg)
 
 ### 分层标签筛选
 
@@ -23,6 +21,10 @@ Local Tag Player 是一款使用 Flutter 构建的跨平台桌面本地视频管
 ### 当前筛选结果播放队列
 
 ![脱敏播放器筛选结果队列](docs/assets/screenshots/player-queue-demo.jpg)
+
+### 媒体库与缩略图
+
+![脱敏演示媒体库](docs/assets/screenshots/media-library-demo.jpg)
 
 ## 为什么创建这个项目
 
@@ -117,11 +119,11 @@ flowchart LR
 
 | 平台 | 产物 | 当前状态 |
 | --- | --- | --- |
-| Windows x64 | `.exe` 安装器 | `v0.1.0` 未签名；后续标签发布已设置 Authenticode 必过门禁，等待配置证书 |
-| macOS | `.dmg` | `v0.1.0` 未签名、未公证；后续标签发布已设置 Developer ID 与 notarization 必过门禁，等待配置凭据 |
+| Windows x64 | `.exe` 安装器 | `v0.2.4` 已发布；当前未进行 Authenticode 签名 |
+| macOS | `.dmg` | `v0.2.4` 已发布；当前未进行 Developer ID 签名或 Apple 公证 |
 | Linux | 源码构建 | CI 验证 adapter、构建与启动，暂未提供正式安装包 |
 
-> 历史未签名版本可能触发 Windows SmartScreen 或 macOS Gatekeeper。请核对 Release 页面提供的 SHA-256；新的正式标签在签名或公证凭据缺失时会构建失败，不会发布未签名包。
+> 当前 Windows 与 macOS 安装包可能触发 Windows SmartScreen 或 macOS Gatekeeper。请核对 Release 页面随附的 `SHA256SUMS` 文件；在平台签名与公证完成前，不应把安装包描述为受信任签名产物。
 
 ## 从源码运行
 
@@ -155,7 +157,7 @@ flutter build windows --debug
 
 ## 项目状态与边界
 
-- 当前版本：`0.1.0+1`。
+- 当前发布版本：`v0.2.4`（应用构建号 `6`）。
 - 当前优先级：标签发现、稳定身份、标签维护、筛选队列、缓存诊断与跨平台发布。
 - 暂不优先：字幕、音轨、逐帧、A-B loop 等专业播放器能力。
 - 项目源代码采用 [MIT License](LICENSE)；第三方组件与随包工具仍分别受其原始许可证约束。
