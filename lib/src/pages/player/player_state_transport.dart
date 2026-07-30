@@ -116,64 +116,14 @@ extension PlayerStateTransport on PlayerPageState {
     if (isExiting) {
       return;
     }
-    // 拖动进度条时只保留最新目标，避免大量并发 seek 让视频解码停止而音频继续推进。
-    final duration = playerService.state.duration;
-    final clamped = target < Duration.zero
-        ? Duration.zero
-        : duration > Duration.zero && target > duration
-            ? duration
-            : target;
-    latestRequestedSeekTarget = clamped;
-    pendingSeekTarget = clamped;
-    seekRequestGeneration++;
-    if (seekInFlight) {
-      return;
-    }
-    seekInFlight = true;
-    try {
-      while (!isExiting && pendingSeekTarget != null) {
-        final observedGeneration = seekRequestGeneration;
-        // 拖动松手、鼠标连点或键盘连按都先进入短尾随防抖；只让停止变化的最终
-        // 目标进入解码器，界面反馈仍由本地滑块和快捷键水印即时完成。
-        await Future<void>.delayed(const Duration(milliseconds: 80));
-        if (observedGeneration != seekRequestGeneration) {
-          continue;
-        }
-        final requested = pendingSeekTarget!;
-        pendingSeekTarget = null;
-        final stopwatch = Stopwatch()..start();
-        await playerService.seek(requested);
-        // media_kit 的 seek Future 只代表命令已提交；等待位置接近目标后再记录真实延迟。
-        final deadline = DateTime.now().add(const Duration(seconds: 2));
-        while (!isExiting && DateTime.now().isBefore(deadline)) {
-          // 已有更新目标时无需等待旧位置落稳，立即把解码器推进到用户最终选择。
-          if (pendingSeekTarget != null) {
-            break;
-          }
-          final delta = (playerService.state.position - requested).abs();
-          if (delta <= const Duration(milliseconds: 750)) {
-            break;
-          }
-          await Future<void>.delayed(const Duration(milliseconds: 25));
-        }
-        stopwatch.stop();
-        lastSeekLatencyMs = stopwatch.elapsedMilliseconds;
-        lastSeekAt = DateTime.now();
-      }
-    } finally {
-      seekInFlight = false;
-      latestRequestedSeekTarget = null;
-    }
+    await seekCoordinator.request(target);
   }
 
   /**
    * 相对跳转在 seek 未完成时基于用户最新目标累加，而不是反复读取滞后的后端位置。
    */
   void seekRelative(Duration delta) {
-    final base = seekInFlight
-        ? (latestRequestedSeekTarget ?? playerService.state.position)
-        : playerService.state.position;
-    unawaited(seekWithDiagnostics(base + delta));
+    unawaited(seekCoordinator.requestRelative(delta));
   }
 
   /**

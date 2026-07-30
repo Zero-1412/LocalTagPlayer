@@ -7,6 +7,7 @@ import '../../core/tag_rules.dart';
 import '../../features/player/application/player_backend_event_bridge.dart';
 import '../../features/player/application/player_fullscreen_lifecycle_controller.dart';
 import '../../features/player/application/player_interaction_state_controller.dart';
+import '../../features/player/application/player_seek_coordinator.dart';
 import '../../features/player/application/player_session_controller.dart';
 import '../../models/video_item.dart';
 import '../../services/media/media_details_service.dart';
@@ -74,6 +75,16 @@ extension PlayerStateInitialization on PlayerPageState {
       enableHardwareAcceleration:
           pageWidget.playbackSettings.hardwareDecodingEnabled,
       rendererPreference: pageWidget.playbackSettings.rendererPreference,
+    );
+    seekCoordinator = PlayerSeekCoordinator(
+      submit: playerService.seek,
+      readPosition: () => playerService.state.position,
+      readDuration: () => playerService.state.duration,
+      isExiting: () => isExiting,
+      onLatency: (milliseconds) {
+        lastSeekLatencyMs = milliseconds;
+        lastSeekAt = DateTime.now();
+      },
     );
     if (playerService.supportsNativeNvidiaVideoEnhancement) {
       // NVIDIA 实验只允许显式 child HWND QA 后端探测，正式 Texture 路径不付出该开销。

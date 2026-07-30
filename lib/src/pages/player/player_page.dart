@@ -10,6 +10,7 @@ import '../../features/player/application/player_backend_event_bridge.dart';
 import '../../features/player/application/player_fullscreen_lifecycle_controller.dart';
 import '../../features/player/application/player_interaction_state_controller.dart';
 import '../../features/player/application/player_open_request_controller.dart';
+import '../../features/player/application/player_seek_coordinator.dart';
 import '../../features/player/application/player_session_controller.dart';
 import '../../features/player/application/player_shortcut_gate_controller.dart';
 import '../../models/media_details.dart';
@@ -281,12 +282,8 @@ class PlayerPageState extends State<PlayerPage> {
   DateTime? exitRequestedAt;
   DateTime? pauseAcknowledgedAt;
   DateTime? routePopRequestedAt;
-  Duration? pendingSeekTarget;
-  /** seek 工作器繁忙时记录用户最新目标，使连续快捷键基于尚未确认的目标累加。 */
-  Duration? latestRequestedSeekTarget;
-  /** 每个 seek 输入递增；工作器只提交短时间内不再被替换的最新一代。 */
-  var seekRequestGeneration = 0;
-  var seekInFlight = false;
+  /** 首次立即提交、连续输入节流追踪最新目标的页面级 seek 协调器。 */
+  late final PlayerSeekCoordinator seekCoordinator;
   var isExiting = false;
   /** 恢复选择弹窗期间暂停进度写入，避免刚打开的 0 秒覆盖稳定进度。 */
   var choosingPlaybackStart = false;

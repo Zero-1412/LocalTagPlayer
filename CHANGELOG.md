@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-30 · 中文安装器与连续 seek 画面跟随
+
+- Windows 安装器固定使用简体中文语言，关闭旧英文语言复用；CI 固定并校验 Inno Setup
+  官方中文语言文件后才编译。
+- 连续快进/快退从 80ms 纯尾随防抖改为首次立即提交、后续每 80ms 串行刷新最新累计
+  目标；停止输入后仍提交最终位置，不增加并发 seek。
+- 真实 MediaKit Texture 以 40ms 间隔交错 seek 后最终位置、前后帧摘要与掉帧门禁通过。
+- 479 项测试通过、3 项既有 benchmark 跳过；静态分析零问题，Windows Debug build
+  成功。`PlayerBackend` contract、filtered queue、标签、缓存队列和用户数据均未改变。
+
 ## 2026-07-30 · 提速应用内安装包下载
 
 - GitHub Release 支持 Range 时采用四段并行下载，八连接因实测出现连接重置而未启用；服务端忽略

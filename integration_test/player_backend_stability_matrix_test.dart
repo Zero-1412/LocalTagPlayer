@@ -455,7 +455,12 @@ Future<Map<String, Object?>> _runInteractionPerformanceScenario(
     }
     await tester.pump(const Duration(milliseconds: 40));
   }
-  await activeSeek;
+  await _pumpFutureUntilComplete(
+    tester,
+    activeSeek!,
+    const Duration(seconds: 10),
+    operation: '连续 seek',
+  );
   await _pumpContinuously(tester, const Duration(seconds: 2));
   WidgetsBinding.instance.removeTimingsCallback(collectSeekFrames);
   final droppedAfter =
@@ -477,6 +482,42 @@ Future<Map<String, Object?>> _runInteractionPerformanceScenario(
     'droppedFramesDelta': droppedAfter - droppedBefore,
     'queuePreserved': snapshot.openedVideoId == snapshot.currentVideoId,
   };
+}
+
+/**
+ * 等待依赖 Flutter 帧时钟的异步操作完成，避免测试直接 await 后停止推进节流 Timer。
+ *
+ * [operation] 只用于隔离 QA 失败信息，不包含媒体路径或用户数据。
+ */
+Future<void> _pumpFutureUntilComplete(
+  WidgetTester tester,
+  Future<void> future,
+  Duration timeout, {
+  required String operation,
+}) async {
+  var completed = false;
+  Object? failure;
+  StackTrace? failureStack;
+  unawaited(
+    future.then<void>(
+      (_) => completed = true,
+      onError: (Object error, StackTrace stackTrace) {
+        failure = error;
+        failureStack = stackTrace;
+        completed = true;
+      },
+    ),
+  );
+  final stopwatch = Stopwatch()..start();
+  while (!completed && stopwatch.elapsed < timeout) {
+    await tester.pump(const Duration(milliseconds: 25));
+  }
+  if (!completed) {
+    throw TimeoutException('$operation 未在门禁时限内完成', timeout);
+  }
+  if (failure != null) {
+    Error.throwWithStackTrace(failure!, failureStack!);
+  }
 }
 
 /** 把原始 FrameTiming 压缩为可审查的分位数与超预算帧计数。 */

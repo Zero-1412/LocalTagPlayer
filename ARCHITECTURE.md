@@ -1,5 +1,22 @@
 ﻿# ARCHITECTURE.md
 
+## 2026-07-30 中文安装器与连续 seek 协调边界
+
+`Architecture Baseline 0.5.141` 将连续 seek 从页面字段与尾随防抖收敛为纯应用层
+`PlayerSeekCoordinator`。每轮首次目标立即提交；连续输入以 80ms 最小间隔串行刷新
+最新累计目标，后端繁忙时不并发，用户停止后仍提交最后目标。位置确认、两秒超时和诊断
+耗时继续保留，页面退出只取消尚未提交的目标。
+
+`PlayerPage → PlayerService → PlayerBackend` contract、MediaKit/Windows MPV 的 seek
+实现和组合根选择均未改变。协调器只读取通用位置/时长并调用既有绝对 seek；相对快进
+基于尚未确认的最新目标累计，不能回退到滞后的后端位置。真实 MediaKit Texture 门禁
+必须比较 seek 前后帧摘要与最终位置，不能只验证命令调用次数。
+
+Windows 安装器本地化继续属于 `packaging/windows` 与发布工作流边界。Inno Setup 只声明
+简体中文语言，关闭语言选择和旧语言复用；CI 从 Inno Setup 官方仓库固定提交取得
+`ChineseSimplified.isl` 并校验 SHA-256 后才编译，避免 runner 缺语言文件时静默回退英文。
+该变化不触及应用运行时、SQLite、标签、filtered queue、缓存队列或用户数据。
+
 ## 2026-07-30 原生 Texture 稳定尺寸协调边界
 
 `Architecture Baseline 0.5.140` 将上一版只读尺寸证据收敛为

@@ -1,5 +1,25 @@
 # CURRENT_TASK.md
 
+## 2026-07-30 中文安装器与连续快进画面跟随
+
+- Windows Inno Setup 安装器现在只声明简体中文，关闭语言选择和旧安装语言复用；桌面
+  快捷方式与安装后启动文案改用语言包常量，安装、覆盖、关闭应用、完成和卸载页统一
+  使用 `ChineseSimplified.isl`。
+- GitHub Actions 从 Inno Setup 官方仓库固定提交下载中文语言文件，并核对固定
+  SHA-256 后才编译安装器，避免构建机缺文件时回退英文。本机没有 ISCC，因此正式安装
+  页面的真实中文截图必须在下一次 Windows Release 构建后补做。
+- 连续 seek 移入纯应用层 `PlayerSeekCoordinator`：首次目标立即下发，后续输入按
+  80ms 最小间隔串行刷新最新累计目标；不再要求用户停手 80ms 才让解码器开始响应。
+- 相对快进/快退继续基于尚未确认的最新目标累计；工作器不并发，停止输入后保证最后目标
+  被提交，退出时只取消尚未提交的目标。`PlayerBackend` contract 与两种后端实现未改。
+- 真实 MediaKit Texture 专项门禁以 40ms 间隔交错提交 8 次目标；最终位置进入 750ms
+  容差、前后 PNG 帧 SHA-256 不同且新增掉帧不超过 5，证明画面实际跟随目标。
+- 479 项完整测试通过、3 项既有 benchmark 跳过；静态分析零问题，Windows Debug build
+  成功。既有全稳定性矩阵两次超过外层 7 分钟且未生成报告，未冒充通过；新增轻量真实
+  seek 门禁在 38.6 秒内通过。
+- schema、`FilterQuery`、`TagQueryService`、filtered queue 来源/顺序、播放器索引、
+  缩略图/媒体缓存队列、标签和用户数据均未改变。
+
 ## 2026-07-30 应用内安装包下载提速
 
 - GitHub Release 下载在服务端支持 Range 时改为四段并行，聚合进度后按顺序合并；四连接实测样本约

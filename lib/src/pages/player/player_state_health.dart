@@ -29,8 +29,7 @@ extension PlayerStateHealth on PlayerPageState {
       'exit_requested',
       backend: playerService,
     ));
-    pendingSeekTarget = null;
-    latestRequestedSeekTarget = null;
+    seekCoordinator.cancelPending();
     openRequests.cancel();
     detailsService.dispose();
     persistOpenedProgress();

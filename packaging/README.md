@@ -56,6 +56,11 @@ iscc /DMyAppVersion=0.1.0 /DMySourceDir=<Release绝对路径> /DMyOutputDir=<产
 
 安装器采用当前用户目录安装，不要求管理员权限。卸载只移除安装文件和快捷方式，不清理用户数据库、标签、收藏或播放记录。
 
+Windows 安装器只提供简体中文界面。脚本引用 Inno Setup 的
+`Languages\ChineseSimplified.isl`；正式工作流从 Inno Setup 官方仓库固定提交下载并校验
+SHA-256，避免构建机缺少语言文件时回退英文。本地 Inno Setup 如果未包含该文件，需要先从
+同一固定来源放入编译器的 `Languages` 目录。
+
 标签发布需要以下 GitHub Actions secrets：
 
 | Secret | 用途 |
