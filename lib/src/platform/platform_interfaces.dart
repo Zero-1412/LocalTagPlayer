@@ -111,6 +111,17 @@ abstract interface class PlayerVideoSurfaceDiagnosticsBoundary {
 }
 
 /**
+ * 为进度条点击和连续快进提供关键帧优先随机跳转的可选后端边界。
+ *
+ * 交互式跳转先缩短新画面出现时间，再由后端把最后一次有效请求精确收敛到目标。
+ * 不支持该边界的后端由 [PlayerService] 安全回退到普通 seek，页面不得感知 mpv 参数。
+ */
+abstract interface class PlayerInteractiveSeekBoundary {
+  /** 先显示 [position] 附近关键帧再精确收敛，并保持后端原有播放/暂停意图。 */
+  Future<void> seekInteractive(Duration position);
+}
+
+/**
  * 单个播放会话的底层引擎和视频表面契约。
  *
  * 该接口只由 PlayerService 与组合根持有；PlayerPage 依赖应用层服务，避免把

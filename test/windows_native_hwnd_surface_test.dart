@@ -136,6 +136,24 @@ void main() {
     expect(await backend.getProperty('interpolation'), 'yes');
     expect(await backend.getProperty('tscale'), 'oversample');
     expect(await backend.getProperty('display-sync-active'), 'true');
+    await backend.seekInteractive(const Duration(seconds: 18));
+    final interactiveSeekCall = calls.lastWhere(
+      (call) =>
+          call.method == 'command' &&
+          (call.arguments! as Map<Object?, Object?>)['name'] == 'seek-fast',
+    );
+    final interactiveSeekArguments =
+        interactiveSeekCall.arguments! as Map<Object?, Object?>;
+    expect(interactiveSeekArguments['integer'], 18000);
+    await tester.pump(const Duration(milliseconds: 130));
+    final exactSeekCall = calls.lastWhere(
+      (call) =>
+          call.method == 'command' &&
+          (call.arguments! as Map<Object?, Object?>)['name'] == 'seek',
+    );
+    final exactSeekArguments =
+        exactSeekCall.arguments! as Map<Object?, Object?>;
+    expect(exactSeekArguments['integer'], 18000);
 
     // 控制条收起后 HWND 尺寸保持不变，只把窗口 region 的底部让位收窄到细进度条。
     await tester.pumpWidget(

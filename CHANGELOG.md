@@ -1,5 +1,15 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-30 · 进度条随机点击即时响应
+
+- 将进度条和连续快进/快退从精确 `absolute` seek 路由到关键帧优先的
+  `absolute+keyframes` 交互式边界，降低长 GOP 视频随机点击后的新画面等待；关键帧
+  反馈后只让最后一代请求精确收敛，避免时间位置长期停在相邻关键帧。
+- 继续观看恢复仍使用原有精确 seek；播放/暂停意图、filtered queue、当前 index、
+  `PlayerBackend` 基础 contract、SQLite、标签、缓存队列和用户数据均保持不变。
+- 增加服务边界回退、页面挂载、Windows 原生命令和真实 MediaKit Texture 回归；真实
+  门禁确认随机 seek 后最终位置、帧变化与持续播放推进。
+
 ## 2026-07-30 · 发布 Local Tag Player 0.2.4
 
 - GitHub 正式 Release 已公开 Windows x64 安装器、macOS 未公证 DMG 和双平台

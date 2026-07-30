@@ -892,6 +892,13 @@ void NativePlayerBridge::ExecutePlayerCommand(const Command& command) {
   } else if (command.name == "seek") {
     double seconds = static_cast<double>(command.integer) / 1000.0;
     mpv_set_property(player_, "time-pos", MPV_FORMAT_DOUBLE, &seconds);
+  } else if (command.name == "seek-fast") {
+    // 进度条随机点击优先从目标附近关键帧立即恢复画面；精确恢复位置仍走 time-pos。
+    const auto seconds =
+        std::to_string(static_cast<double>(command.integer) / 1000.0);
+    const char* arguments[] = {"seek", seconds.c_str(), "absolute+keyframes",
+                               nullptr};
+    mpv_command_async(player_, 0, arguments);
   } else if (command.name == "volume") {
     double value = static_cast<double>(command.integer) / 1000.0;
     mpv_set_property(player_, "volume", MPV_FORMAT_DOUBLE, &value);
@@ -1305,7 +1312,7 @@ void NativePlayerBridge::WorkerLoop() {
         } else if (command.name == "pause" || command.name == "stop" ||
                    command.name == "dispose") {
           playing_ = false;
-        } else if (command.name == "seek") {
+        } else if (command.name == "seek" || command.name == "seek-fast") {
           position_ms_ = command.integer;
         } else if (command.name == "volume") {
           volume_ = static_cast<double>(command.integer) / 1000.0;

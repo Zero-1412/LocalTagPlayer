@@ -139,6 +139,19 @@ class PlayerService
   /** 跳转到指定媒体位置。 */
   Future<void> seek(Duration position) => _backend.seek(position);
 
+  /**
+   * 执行用户进度条或连续按键触发的低延迟随机跳转。
+   *
+   * 支持交互式边界的后端可先落到目标附近关键帧，再把最后请求精确收敛；其它后端复用精确 seek，
+   * 因而不会为了性能优化扩大通用 [PlayerBackend] 契约或破坏跨平台回退。
+   */
+  Future<void> seekInteractive(Duration position) {
+    final boundary = _backend is PlayerInteractiveSeekBoundary
+        ? _backend as PlayerInteractiveSeekBoundary
+        : null;
+    return boundary?.seekInteractive(position) ?? _backend.seek(position);
+  }
+
   /** 设置当前会话倍速。 */
   Future<void> setRate(double rate) => _backend.setRate(rate);
 

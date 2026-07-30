@@ -29,6 +29,7 @@ class MediaKitPlayerBackend
         PlayerBackendTelemetryBoundary,
         PlayerVideoSurfaceDiagnosticsBoundary,
         PlayerPropertyBatchBoundary,
+        PlayerInteractiveSeekBoundary,
         PlayerGpuRenderBoundary {
   /**
    * media_kit 1.2.6 的 Windows NativePlayer 会在 dispose 返回 5 秒后才调用
@@ -37,6 +38,9 @@ class MediaKitPlayerBackend
   static const _windowsNativeDestroyGracePeriod = Duration(
     milliseconds: 5200,
   );
+
+  /** 先展示关键帧，再给连续输入留下一个节流周期，最后精确收敛到用户目标。 */
+  static const _interactiveSeekConvergenceDelay = Duration(milliseconds: 120);
 
   /**
    * 创建 MediaKit 播放后端。
@@ -158,6 +162,9 @@ class MediaKitPlayerBackend
   /** 后端是否已经进入释放流程。 */
   var _disposed = false;
 
+  /** 每次交互式或精确跳转递增；延迟收敛只允许最后一代写入播放位置。 */
+  var _interactiveSeekGeneration = 0;
+
   /** 串行化重复 dispose 调用，禁止两个释放流程并发进入 media_kit/libmpv。 */
   Future<void>? _disposeFuture;
 
@@ -211,6 +218,7 @@ class MediaKitPlayerBackend
 
   @override
   Future<void> openPath(String path) async {
+    _interactiveSeekGeneration += 1;
     final generation = _telemetry.beginOpen();
     _activeOpenGeneration = generation;
     _videoParametersGeneration = 0;
@@ -247,7 +255,52 @@ class MediaKitPlayerBackend
   Future<void> stop() => _player.stop();
 
   @override
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) {
+    _interactiveSeekGeneration += 1;
+    return _player.seek(position);
+  }
+
+  @override
+  Future<void> seekInteractive(Duration position) async {
+    final generation = ++_interactiveSeekGeneration;
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null || _player.state.completed) {
+      // 非原生平台继续使用公共 API；EOF 必须由 media_kit 清除 completed 状态。
+      await _player.seek(position);
+      return;
+    }
+    // media_kit 的公共 seek 使用 absolute 精确定位，长 GOP 随机点击时可能等待较长解码。
+    // 交互式入口只要求尽快出现目标附近画面，因此显式选择关键帧；沿用 NativePlayer
+    // 的传输锁保证与用户紧邻触发的 play/pause 顺序一致，不绕过既有播放意图。
+    await NativePlayer.lock.synchronized(
+      () => nativePlayer.command(<String>[
+        'seek',
+        (position.inMilliseconds / 1000).toStringAsFixed(4),
+        'absolute+keyframes',
+      ]),
+    );
+    // 关键帧先提供即时视觉反馈；延迟精确跳转只保留最后一代，连续点击不会被旧目标拉回。
+    unawaited(_convergeInteractiveSeek(generation, position));
+  }
+
+  /** 在关键帧已经可见后精确收敛；释放、打开新媒体或新 seek 会取消旧代次。 */
+  Future<void> _convergeInteractiveSeek(
+    int generation,
+    Duration position,
+  ) async {
+    await Future<void>.delayed(_interactiveSeekConvergenceDelay);
+    if (_disposed || generation != _interactiveSeekGeneration) {
+      return;
+    }
+    try {
+      await _player.seek(position);
+    } catch (error) {
+      // 延迟任务不能泄漏未处理异常；仍有效的后端错误沿用安全分类流。
+      if (!_disposed && generation == _interactiveSeekGeneration) {
+        _recordBackendError(error);
+      }
+    }
+  }
 
   @override
   Future<void> setRate(double rate) => _player.setRate(rate);
@@ -694,6 +747,7 @@ class MediaKitPlayerBackend
   Future<void> _disposeOnce() async {
     if (_released.isCompleted) return;
     _disposed = true;
+    _interactiveSeekGeneration += 1;
     _telemetry.beginRelease();
     final playerDisposeWatch = Stopwatch();
     var nativeReleaseWait = Duration.zero;

@@ -1,3 +1,18 @@
+## 2026-07-30 进度条随机点击低延迟 seek
+
+- 根因是 media_kit 公共 seek 的 `absolute` 精确定位在长 GOP 跨段随机访问时需要额外
+  解码，现有“最终位置到达”门禁无法证明新画面立即出现。
+- 新增可选 `PlayerInteractiveSeekBoundary`：正式 MediaKit Texture 使用
+  `absolute+keyframes`，Windows 原生 QA 桥使用 `seek-fast`；120ms 后只让最后一代
+  有效请求精确收敛，不支持后端回退普通 seek。
+- 页面 `PlayerSeekCoordinator` 只把进度条和连续按键提交到交互式边界；继续观看恢复
+  显式保留精确 seek。播放态继续推进，暂停态保持暂停。
+- focused、完整测试、静态分析、Windows Debug build 与真实 Texture 帧门禁通过。
+  自动真实进度条点击因检测到用户正在操作同一窗口而停止，人工复测路径记录在
+  `CURRENT_TASK.md`。
+- filtered queue 来源/顺序、当前 index、返回筛选状态、基础 `PlayerBackend` contract、
+  缓存队列、标签和用户数据未改变。
+
 ## 2026-07-30 播放器提示半透明材质
 
 - `PlayerShortcutFeedback` 的实色浮层改为 38% 不透明黑色背景、18% 白色描边和纯白前景，

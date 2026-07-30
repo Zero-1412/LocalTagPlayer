@@ -158,6 +158,14 @@ class _BatchRecordingPlayerBackend extends _RecordingPlayerBackend
   }
 }
 
+/** 记录低延迟随机跳转是否命中可选后端边界。 */
+class _InteractiveSeekRecordingBackend extends _RecordingPlayerBackend
+    implements PlayerInteractiveSeekBoundary {
+  @override
+  Future<void> seekInteractive(Duration position) async =>
+      commands.add('seek-interactive');
+}
+
 /**
  * 读取播放器页面及其同库状态分区，确保服务边界契约覆盖真实 Route 挂载。
  */
@@ -192,6 +200,9 @@ void main() {
         'rendererPreference: pageWidget.playbackSettings.rendererPreference',
       ),
     );
+    expect(source, contains('submit: playerService.seekInteractive'));
+    expect(source, contains('await seekExactlyWithDiagnostics(start);'));
+    expect(source, contains('submit: playerService.seek'));
   });
 
   test('PlayerService 统一转发播放命令并应用类型化打开偏好', () async {
@@ -246,6 +257,19 @@ void main() {
       orderedEquals(<String>['hwdec', 'vf']),
     );
     expect(backend.properties['vf'], isEmpty);
+  });
+
+  test('PlayerService 交互式 seek 优先走低延迟边界并保留安全回退', () async {
+    final interactiveBackend = _InteractiveSeekRecordingBackend();
+    final interactiveService = PlayerService(backend: interactiveBackend);
+    final fallbackBackend = _RecordingPlayerBackend();
+    final fallbackService = PlayerService(backend: fallbackBackend);
+
+    await interactiveService.seekInteractive(const Duration(seconds: 28));
+    await fallbackService.seekInteractive(const Duration(seconds: 28));
+
+    expect(interactiveBackend.commands, <String>['seek-interactive']);
+    expect(fallbackBackend.commands, <String>['seek']);
   });
 
   test('不支持 Windows 可选能力的后端由 PlayerService 安全回退', () async {

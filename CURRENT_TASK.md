@@ -1,5 +1,26 @@
 # CURRENT_TASK.md
 
+## 2026-07-30 · 进度条随机点击低延迟 seek
+
+- 根因确认：media_kit 公共 `seek` 使用 libmpv `absolute` 精确随机定位；长 GOP 视频跨段
+  点击时会从前一关键帧解码到目标时间，命令已经提交但新画面不能立即出现。
+- 新增可选 `PlayerInteractiveSeekBoundary`。进度条点击和连续快进/快退通过
+  `PlayerService.seekInteractive` 请求 `absolute+keyframes`；不支持该边界的后端安全
+  回退普通 seek。120ms 后只让最后一代有效交互请求精确收敛到点击时间，避免长 GOP
+  关键帧产生数秒位置偏差；继续观看恢复仍走原有精确 `PlayerBackend.seek`。
+- MediaKit Texture 与 Windows 原生 QA 后端均实现交互式随机跳转；播放态保持继续推进，
+  暂停态不被擅自改成播放。`PlayerBackend` 基础 contract、filtered queue 和当前 index
+  均未改变。
+- 服务/协调器/Windows 原生 focused tests 通过；完整 486 项测试通过、3 项既有 benchmark
+  跳过；静态分析零问题，Windows Debug build 成功。真实 MediaKit Texture 门禁交错提交
+  8 个目标，最终位置进入 750ms 容差、前后帧不同且位置继续推进。
+- 最终 Debug 已启动到真实播放器页；准备自动点击进度条时检测到用户正在操作同一窗口，
+  安全互锁停止抢占，因此不冒充已完成点击后截图。人工复测路径：播放任一视频 → 连续在
+  进度条 20% / 75% / 40% 三处单击 → 确认画面立即切换并持续播放 → 暂停后再单击一次，
+  确认只更新画面且保持暂停。
+- 下一步计划：用两条长 GOP 素材各执行 20 次交错随机点击，分别记录点击到首个新帧 P95
+  与最终位置误差；只在门禁证据显示收益时微调 120ms 收敛窗口，不增加第三段跳转。
+
 ## 2026-07-30 · Local Tag Player 0.2.4 正式发布
 
 - 正式版已发布到 `https://github.com/Zero-1412/LocalTagPlayer/releases/tag/v0.2.4`；

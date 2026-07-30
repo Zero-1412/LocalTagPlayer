@@ -372,7 +372,8 @@ extension PlayerStateOpening on PlayerPageState {
     }
     final start =
         choice == PlayerResumeChoice.continueWatching ? saved : Duration.zero;
-    await seekWithDiagnostics(start);
+    // 继续观看需要恢复到已保存的精确时间，不能复用进度条的关键帧优先随机跳转。
+    await seekExactlyWithDiagnostics(start);
     await playerService.play();
     lastPersistedPosition = start;
     lastProgressWriteAt = DateTime.now();

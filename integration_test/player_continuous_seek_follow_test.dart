@@ -98,7 +98,8 @@ void main() {
         _fractionOf(duration, fraction),
     ];
     final coordinator = PlayerSeekCoordinator(
-      submit: backend.seek,
+      // 模拟正式页面的进度条/连续按键路径，必须走关键帧优先的交互式随机跳转。
+      submit: backend.seekInteractive,
       readPosition: () => backend.state.position,
       readDuration: () => backend.state.duration,
       isExiting: () => false,
@@ -135,6 +136,35 @@ void main() {
     expect(
       (backend.state.position - finalTarget).abs(),
       lessThanOrEqualTo(const Duration(milliseconds: 750)),
+    );
+    final advancingPosition = backend.state.position;
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(
+      backend.state.position,
+      greaterThan(advancingPosition),
+      reason: '播放态随机 seek 后应立即继续推进，不能只停在已确认目标',
+    );
+    await backend.pause();
+    await _pumpUntil(
+      tester,
+      () => !backend.state.playing,
+      const Duration(seconds: 2),
+      operation: '暂停状态确认',
+    );
+    final pausedTarget = _fractionOf(duration, 0.36);
+    await backend.seekInteractive(pausedTarget);
+    await _pumpUntil(
+      tester,
+      () =>
+          (backend.state.position - advancingPosition).abs() >
+          const Duration(seconds: 1),
+      const Duration(seconds: 8),
+      operation: '暂停态交互式 seek 位置变化',
+    );
+    expect(
+      backend.state.playing,
+      isFalse,
+      reason: '交互式 seek 只优化随机访问延迟，不能擅自改变用户暂停意图',
     );
     final droppedAfter =
         int.tryParse(await backend.getProperty('frame-drop-count')) ??

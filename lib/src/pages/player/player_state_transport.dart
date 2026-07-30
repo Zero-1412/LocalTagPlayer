@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/playback_settings.dart';
+import '../../features/player/application/player_seek_coordinator.dart';
 import 'player_video_aspect_mode.dart';
 import 'player_page.dart';
 
@@ -117,6 +118,26 @@ extension PlayerStateTransport on PlayerPageState {
       return;
     }
     await seekCoordinator.request(target);
+  }
+
+  /**
+   * 执行继续观看所需的精确 seek，并保留既有位置确认与延迟诊断语义。
+   *
+   * 该协调器只服务单次恢复，不与进度条的关键帧优先工作器共享待提交目标，
+   * 避免恢复播放被随后到达的交互式请求改写。
+   */
+  Future<void> seekExactlyWithDiagnostics(Duration target) async {
+    final exactCoordinator = PlayerSeekCoordinator(
+      submit: playerService.seek,
+      readPosition: () => playerService.state.position,
+      readDuration: () => playerService.state.duration,
+      isExiting: () => isExiting,
+      onLatency: (milliseconds) {
+        lastSeekLatencyMs = milliseconds;
+        lastSeekAt = DateTime.now();
+      },
+    );
+    await exactCoordinator.request(target);
   }
 
   /**

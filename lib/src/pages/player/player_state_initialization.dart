@@ -77,7 +77,8 @@ extension PlayerStateInitialization on PlayerPageState {
       rendererPreference: pageWidget.playbackSettings.rendererPreference,
     );
     seekCoordinator = PlayerSeekCoordinator(
-      submit: playerService.seek,
+      // 进度条和连续按键使用关键帧优先的交互式跳转；继续观看恢复仍显式走精确 seek。
+      submit: playerService.seekInteractive,
       readPosition: () => playerService.state.position,
       readDuration: () => playerService.state.duration,
       isExiting: () => isExiting,

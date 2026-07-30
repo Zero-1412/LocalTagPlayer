@@ -1,5 +1,26 @@
 ﻿# ARCHITECTURE.md
 
+## 2026-07-30 交互式与精确 seek 边界
+
+`Architecture Baseline 0.5.143` 在既有 `PlayerBackend.seek` 精确定位之外增加可选
+`PlayerInteractiveSeekBoundary`。进度条点击和连续快进/快退由
+`PlayerService.seekInteractive` 分派；MediaKit 原生平台使用 libmpv
+`absolute+keyframes`，Windows 原生 QA 桥使用对应 `seek-fast` 命令，不支持的后端
+安全回退基础 seek。MediaKit 的交互命令继续复用同一 `NativePlayer` 传输锁，避免与
+紧邻发生的 play/pause 乱序。
+
+关键帧命令先提供即时画面；120ms 后仅最后一代有效请求使用基础精确 seek 收敛到用户
+目标。打开新媒体、显式精确 seek、新一代交互请求或释放后端都会取消旧代次，防止连续
+随机点击被过期目标拉回。
+
+继续观看恢复仍显式调用 `PlayerBackend.seek`，避免关键帧优先路径降低已保存进度精度。
+交互式 seek 不改变 pause 属性：播放态随机跳转后继续推进，暂停态只更新画面位置。
+页面不得取得 `NativePlayer` 或 mpv 参数，关键帧策略只属于后端可选平台边界。
+
+`PlayerSeekCoordinator` 的首次立即提交、80ms 连续节流、最新目标覆盖、750ms 位置确认
+与退出取消语义均未改变。filtered queue、当前 index、SQLite、标签、缓存队列与用户
+数据保持不变。
+
 ## 2026-07-30 播放器重复输入与 Debug 交付边界
 
 `Architecture Baseline 0.5.142` 在既有 `PlayerSeekCoordinator` 内把最近一次后端提交

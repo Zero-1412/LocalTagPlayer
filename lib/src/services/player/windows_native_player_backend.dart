@@ -25,7 +25,11 @@ class WindowsNativePlayerBackend
         PlayerGpuRenderBoundary,
         PlayerOverlaySurfaceBoundary,
         PlayerMotionInterpolationBoundary,
+        PlayerInteractiveSeekBoundary,
         PlayerNativeNvidiaVideoEnhancementBoundary {
+  /** 关键帧即时反馈后，只对最后一次交互请求执行精确收敛。 */
+  static const _interactiveSeekConvergenceDelay = Duration(milliseconds: 120);
+
   WindowsNativePlayerBackend({this.mode = 'stub'})
       : _positionChanges = StreamController<Duration>.broadcast(),
         _playingChanges = StreamController<bool>.broadcast(),
@@ -61,6 +65,8 @@ class WindowsNativePlayerBackend
   int _errorCount = 0;
   bool _polling = false;
   bool _disposed = false;
+  /** 延迟精确 seek 的代次；打开媒体、精确 seek 和释放都会让旧任务失效。 */
+  int _interactiveSeekGeneration = 0;
 
   /** 创建指定原生会话并启动低频状态轮询。 */
   Future<void> _initialize() async {
@@ -328,7 +334,10 @@ class WindowsNativePlayerBackend
   ValueListenable<int?> get textureId => _textureId;
 
   @override
-  Future<void> openPath(String path) => _command('open', text: path);
+  Future<void> openPath(String path) {
+    _interactiveSeekGeneration += 1;
+    return _command('open', text: path);
+  }
 
   @override
   Future<void> play() => _command('play');
@@ -340,8 +349,35 @@ class WindowsNativePlayerBackend
   Future<void> stop() => _command('stop');
 
   @override
-  Future<void> seek(Duration position) =>
-      _command('seek', integer: position.inMilliseconds);
+  Future<void> seek(Duration position) {
+    _interactiveSeekGeneration += 1;
+    return _command('seek', integer: position.inMilliseconds);
+  }
+
+  @override
+  Future<void> seekInteractive(Duration position) async {
+    final generation = ++_interactiveSeekGeneration;
+    await _command('seek-fast', integer: position.inMilliseconds);
+    unawaited(_convergeInteractiveSeek(generation, position));
+  }
+
+  /** 关键帧显示后精确对齐最终目标；连续输入期间的旧代次不会回写位置。 */
+  Future<void> _convergeInteractiveSeek(
+    int generation,
+    Duration position,
+  ) async {
+    await Future<void>.delayed(_interactiveSeekConvergenceDelay);
+    if (_disposed || generation != _interactiveSeekGeneration) {
+      return;
+    }
+    try {
+      await _command('seek', integer: position.inMilliseconds);
+    } catch (error) {
+      if (!_disposed && generation == _interactiveSeekGeneration) {
+        _errorChanges.add(error.runtimeType.toString());
+      }
+    }
+  }
 
   @override
   Future<void> setRate(double rate) =>
@@ -561,6 +597,7 @@ class WindowsNativePlayerBackend
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _interactiveSeekGeneration += 1;
     _pollTimer?.cancel();
     try {
       await _ready;
