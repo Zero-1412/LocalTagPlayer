@@ -65,6 +65,7 @@ class AppUpdateDownloadProgress {
   const AppUpdateDownloadProgress({
     required this.receivedBytes,
     required this.totalBytes,
+    this.bytesPerSecond = 0,
   });
 
   /** 已写入临时文件的字节数。 */
@@ -73,7 +74,20 @@ class AppUpdateDownloadProgress {
   /** 服务端声明的总字节数；未知时为 -1。 */
   final int totalBytes;
 
+  /** 聚合后的实时下载速度；尚无稳定样本时为 0。 */
+  final double bytesPerSecond;
+
   /** 总大小可用时返回 0 到 1 的进度，否则返回 null。 */
   double? get fraction =>
       totalBytes > 0 ? (receivedBytes / totalBytes).clamp(0.0, 1.0) : null;
+
+  /** 总大小和速度都有效时估算剩余时间；完成或未知时返回 null。 */
+  Duration? get estimatedRemaining {
+    if (totalBytes <= receivedBytes || totalBytes <= 0 || bytesPerSecond <= 0) {
+      return null;
+    }
+    final seconds =
+        ((totalBytes - receivedBytes) / bytesPerSecond).ceil().clamp(1, 86400);
+    return Duration(seconds: seconds.toInt());
+  }
 }

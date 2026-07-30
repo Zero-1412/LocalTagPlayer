@@ -1,3 +1,6 @@
+// ignore_for_file: slash_for_doc_comments
+
+import 'dart:async';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -13,10 +16,12 @@ class _FakeUpdateService implements AppUpdateService {
   _FakeUpdateService({
     this.release,
     this.checkError,
-  });
+    bool holdDownload = false,
+  }) : _downloadGate = holdDownload ? Completer<void>() : null;
 
   final AppRelease? release;
   final Object? checkError;
+  final Completer<void>? _downloadGate;
   static const AppVersionInfo version = AppVersionInfo(
     appName: 'Local Tag Player',
     version: '0.2.1',
@@ -44,9 +49,16 @@ class _FakeUpdateService implements AppUpdateService {
       const AppUpdateDownloadProgress(
         receivedBytes: 50,
         totalBytes: 100,
+        bytesPerSecond: 25 * 1024,
       ),
     );
+    await _downloadGate?.future;
     launched = true;
+  }
+
+  /** 仅供弹窗测试在检查下载中状态后结束模拟下载。 */
+  void completeDownload() {
+    _downloadGate?.complete();
   }
 }
 
@@ -119,8 +131,58 @@ void main() {
     }
   });
 
+  test('下载进度按聚合速度估算剩余时间', () {
+    const progress = AppUpdateDownloadProgress(
+      receivedBytes: 50,
+      totalBytes: 100,
+      bytesPerSecond: 25,
+    );
+
+    expect(progress.fraction, 0.5);
+    expect(progress.estimatedRemaining, const Duration(seconds: 2));
+  });
+
+  test(
+    '已经通过摘要校验的同版本安装包直接复用',
+    () async {
+      final payload = List<int>.generate(4096, (index) => index % 241);
+      final temporaryDirectory =
+          await Directory.systemTemp.createTemp('ltp-update-reuse-test-');
+      final name = 'LocalTagPlayer-0.3.0-windows-x64-setup.exe';
+      final installer = File(
+        '${temporaryDirectory.path}${Platform.pathSeparator}$name',
+      );
+      await installer.writeAsBytes(payload, flush: true);
+      String? launchedPath;
+      final service = GitHubReleaseUpdateService(
+        updateDirectory: temporaryDirectory,
+        launchInstaller: (path) async => launchedPath = path,
+      );
+      final release = AppRelease(
+        version: '0.3.0',
+        title: 'Local Tag Player 0.3.0',
+        notes: '更新',
+        pageUrl: Uri.parse('https://example.invalid/release'),
+        downloadUrl: Uri.parse('https://example.invalid/$name'),
+        downloadName: name,
+        downloadSha256: sha256.convert(payload).toString(),
+      );
+
+      try {
+        await service.downloadAndLaunch(release);
+        expect(launchedPath, installer.path);
+      } finally {
+        await temporaryDirectory.delete(recursive: true);
+      }
+    },
+    skip: !Platform.isWindows,
+  );
+
   testWidgets('启动检查发现新版本后在应用内下载并启动安装器', (tester) async {
-    final service = _FakeUpdateService(release: _release());
+    final service = _FakeUpdateService(
+      release: _release(),
+      holdDownload: true,
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: AppUpdatePrompt(
@@ -135,6 +197,10 @@ void main() {
     expect(find.text('新增应用内更新\n增加关于页面'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('app.update.download')));
+    await tester.pump();
+
+    expect(find.text('正在下载 50% · 25 KB/s · 约 1 秒'), findsOneWidget);
+    service.completeDownload();
     await tester.pumpAndSettle();
 
     expect(service.launched, isTrue);

@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 
 import '../domain/app_release.dart';
 import '../domain/app_update_service.dart';
+import 'release_asset_downloader.dart';
 
 /**
  * 通过公开 GitHub Releases API 检查 Local Tag Player 正式更新。
@@ -23,13 +24,18 @@ class GitHubReleaseUpdateService implements AppUpdateService {
     Directory? updateDirectory,
   })  : _httpClient = httpClient ?? HttpClient(),
         _launchInstaller = launchInstaller ?? _launchWindowsInstaller,
-        _updateDirectory = updateDirectory;
+        _updateDirectory = updateDirectory {
+    _assetDownloader = ReleaseAssetDownloader(httpClient: _httpClient);
+  }
 
   /** GitHub `owner/repository` 标识。 */
   final String repository;
 
   /** 独立网络客户端，便于测试且不与媒体探测任务共享连接状态。 */
   final HttpClient _httpClient;
+
+  /** 正式安装包下载器；Range 不可用时自动保留单流兼容路径。 */
+  late final ReleaseAssetDownloader _assetDownloader;
 
   /** 已通过摘要校验的安装器启动器；测试可替换但生产默认走分离进程。 */
   final Future<void> Function(String path) _launchInstaller;
@@ -102,53 +108,25 @@ class GitHubReleaseUpdateService implements AppUpdateService {
     await updateDirectory.create(recursive: true);
     final completedFile = File(p.join(updateDirectory.path, name));
     final partialFile = File('${completedFile.path}.part');
+    if (await completedFile.exists()) {
+      if (await installerSha256Matches(completedFile, expectedSha256)) {
+        // 用户重复点击或安装器首次启动失败时复用已经校验的版本文件，避免再次下载。
+        await _launchInstaller(completedFile.path);
+        return;
+      }
+      await completedFile.delete();
+    }
     if (await partialFile.exists()) {
       await partialFile.delete();
     }
 
     try {
-      final request = await _httpClient.getUrl(url).timeout(
-            const Duration(seconds: 10),
-          );
-      request.headers.set(
-        HttpHeaders.userAgentHeader,
-        'LocalTagPlayer/${release.version}',
+      await _assetDownloader.download(
+        url: url,
+        partialFile: partialFile,
+        userAgent: 'LocalTagPlayer/${release.version}',
+        onProgress: onProgress,
       );
-      final response = await request.close().timeout(
-            const Duration(seconds: 15),
-          );
-      if (response.statusCode != HttpStatus.ok) {
-        await response.drain<void>();
-        throw HttpException(
-          '安装包下载失败：HTTP ${response.statusCode}',
-          uri: url,
-        );
-      }
-
-      final totalBytes = response.contentLength;
-      var receivedBytes = 0;
-      final sink = partialFile.openWrite();
-      try {
-        await for (final chunk in response.timeout(
-          const Duration(seconds: 30),
-        )) {
-          sink.add(chunk);
-          receivedBytes += chunk.length;
-          onProgress?.call(
-            AppUpdateDownloadProgress(
-              receivedBytes: receivedBytes,
-              totalBytes: totalBytes,
-            ),
-          );
-        }
-        await sink.flush();
-      } finally {
-        await sink.close();
-      }
-
-      if (totalBytes > 0 && receivedBytes != totalBytes) {
-        throw const FileSystemException('安装包下载不完整');
-      }
       if (!await installerSha256Matches(partialFile, expectedSha256)) {
         throw const FormatException('安装包 SHA-256 校验失败');
       }

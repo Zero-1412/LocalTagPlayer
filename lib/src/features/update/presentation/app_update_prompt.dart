@@ -205,9 +205,9 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
               const SizedBox(height: 8),
               Text(
                 _error ??
-                    (percent == null
+                    (progress == null
                         ? '正在下载并校验安装包…'
-                        : '正在下载 ${(percent * 100).toStringAsFixed(0)}%'),
+                        : _formatDownloadStatus(progress)),
                 key: const ValueKey('app.update.status'),
                 style: TextStyle(
                   color: _error == null
@@ -250,4 +250,44 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
       ],
     );
   }
+}
+
+/** 把轻量进度快照格式化为百分比、聚合速度和预计剩余时间。 */
+String _formatDownloadStatus(AppUpdateDownloadProgress progress) {
+  final parts = <String>[];
+  final percent = progress.fraction;
+  parts.add(
+    percent == null ? '正在下载' : '正在下载 ${(percent * 100).toStringAsFixed(0)}%',
+  );
+  if (progress.bytesPerSecond > 0) {
+    parts.add(_formatDownloadRate(progress.bytesPerSecond));
+  }
+  final remaining = progress.estimatedRemaining;
+  if (remaining != null) {
+    parts.add('约 ${_formatDuration(remaining)}');
+  }
+  return parts.join(' · ');
+}
+
+/** 使用用户熟悉的 KB/s 或 MB/s 显示聚合下载速度。 */
+String _formatDownloadRate(double bytesPerSecond) {
+  const bytesPerMegabyte = 1024 * 1024;
+  if (bytesPerSecond >= bytesPerMegabyte) {
+    return '${(bytesPerSecond / bytesPerMegabyte).toStringAsFixed(1)} MB/s';
+  }
+  return '${(bytesPerSecond / 1024).toStringAsFixed(0)} KB/s';
+}
+
+/** 剩余时间采用短中文单位，避免状态行挤压弹窗操作按钮。 */
+String _formatDuration(Duration duration) {
+  if (duration.inHours > 0) {
+    final minutes = duration.inMinutes.remainder(60);
+    return minutes == 0
+        ? '${duration.inHours} 小时'
+        : '${duration.inHours} 小时 $minutes 分钟';
+  }
+  if (duration.inMinutes > 0) {
+    return '${duration.inMinutes} 分钟';
+  }
+  return '${duration.inSeconds} 秒';
 }
