@@ -1,5 +1,25 @@
 # CURRENT_TASK.md
 
+## 2026-07-30 原生 Texture / Widget / DPI 采集与 Flutter 采样 A/B
+
+- 新增可选只读视频表面诊断边界：正式 MediaKit 后端采集原生 Texture、Widget 逻辑
+  尺寸、DPR、BoxFit 物理目标、合成倍率与 `FilterQuality`，不泄漏 Texture ID 或路径，
+  不调用 `VideoController.setSize`。
+- 本机 1.50 DPR 下确认 1920×1080 Texture 在 1440×900 窗口缩为 1545×869
+  （0.805×），在通过布局门禁的 920×650 窗口缩为 765×430（0.398×）。
+- 两档倍率、三类自然低码率片源、`low/medium/high` 共 18 次真实会话全部为 0 掉帧、
+  0 音视频停滞、0 无响应。low↔high SSIM 始终高于 0.99967；medium 在 0.398×
+  抗混叠更强但边缘方差降低 16.6%–42.1%。
+- `medium` 稳定增加约 100 MiB GPU committed 和约 300 MiB private memory；
+  `high` 没有形成可见收益。生产继续显式使用 `FilterQuality.low`，不新增用户设置或
+  高频自适应切换。
+- 700×520 与 900×650 触发现有控制条横向溢出，未拿无效布局做画质结论；本任务不扩大
+  为控制条重构。详细证据：`docs/qa/player_texture_sampling_ab_20260730.md`。
+- 完整 466 项测试、静态分析与 Windows Debug build 通过，3 项既有 benchmark 跳过；
+  真实 Debug 诊断点击确认 1920×1080 Texture、951.33×568.67 dp Widget、DPR 1.50、
+  1427×803 px BoxFit 目标、0.743× 合成倍率与 `low` 采样均可见且无布局异常。
+- 下一步计划：单独修复 900 dp 以下控制条布局，再评估按稳定档位收敛原生输出尺寸。
+
 ## 2026-07-30 低码率缩小画质 dscale / correct-downscaling A/B
 
 - 新增三模式、三类自然低码率片源的真实 MediaKit Texture A/B：当前

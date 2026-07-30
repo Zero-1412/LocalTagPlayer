@@ -1,5 +1,21 @@
 ﻿# ARCHITECTURE.md
 
+## 2026-07-30 Flutter Texture 尺寸与采样边界
+
+`Architecture Baseline 0.5.139` 增加可选
+`PlayerVideoSurfaceDiagnosticsBoundary`。正式 MediaKit 后端只读
+`VideoController.rect`，并通过独立 helper 在布局帧末采集视频 Widget 逻辑尺寸、
+DPR、BoxFit 物理目标与 `FilterQuality`；快照不包含 Texture ID、媒体路径或原生句柄，
+读取和更新均不得调用 `VideoController.setSize` 或触发页面 rebuild。
+
+本机 1920×1080 Texture 在 1.50 DPR 下分别以 0.805× 与 0.398× 合成。18 次
+`low/medium/high` 会话均为 0 掉帧、0 音视频停滞。`medium` 在小于 0.5× 时更接近
+抗混叠参考，但稳定增加约 100 MiB GPU committed 与约 300 MiB private memory，
+并进一步软化低码率素材；`high` 与 `low` 的最终窗口 SSIM 仍高于 0.9997。
+因此生产显式保持 Flutter 默认 `FilterQuality.low`，QA 可以构造三档后端做固定帧
+A/B，但页面不新增设置或自适应切换。filtered queue、PlayerBackend 基础 contract、
+SQLite、标签、缓存队列与用户数据不变。
+
 ## 2026-07-30 Texture 缩小所有权与 dscale 门禁
 
 `Architecture Baseline 0.5.138` 明确区分“libmpv 属性已读回”和“属性参与最终画面”。

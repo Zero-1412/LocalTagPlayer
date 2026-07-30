@@ -1893,6 +1893,52 @@ void main() {
     expect(script, contains('fixedFrameSha256'));
   });
 
+  test('Texture 合成诊断保持只读边界并提供三档固定帧 A/B', () {
+    final model = File(
+      'lib/src/models/player_video_surface_diagnostics.dart',
+    ).readAsStringSync();
+    final platform = File(
+      'lib/src/platform/platform_interfaces.dart',
+    ).readAsStringSync();
+    final backend = File(
+      'lib/src/services/player/media_kit_player_backend.dart',
+    ).readAsStringSync();
+    final metrics = File(
+      'lib/src/services/player/player_video_surface_metrics.dart',
+    ).readAsStringSync();
+    final diagnostics = File(
+      'lib/src/pages/player/player_state_diagnostics.dart',
+    ).readAsStringSync();
+    final integration = File(
+      'integration_test/player_fixed_quality_baseline_test.dart',
+    ).readAsStringSync();
+    final script = File(
+      'tool/run_texture_sampling_ab.ps1',
+    ).readAsStringSync();
+
+    expect(model, contains('class PlayerVideoSurfaceDiagnostics'));
+    expect(model, contains('bool get isDownscaling'));
+    expect(platform, contains('PlayerVideoSurfaceDiagnosticsBoundary'));
+    expect(backend, contains('_controller.rect.addListener'));
+    expect(backend, contains('filterQuality: _textureFilterQuality'));
+    expect(metrics, contains('MediaQuery.devicePixelRatioOf(context)'));
+    expect(metrics, contains('applyBoxFit('));
+    expect(
+      metrics,
+      isNot(contains('.setSize(')),
+      reason: '只读诊断不得借采集尺寸动态重建 NativePlayer Texture',
+    );
+    expect(diagnostics, contains('原生 Texture 尺寸:'));
+    expect(diagnostics, contains('视频 Widget 逻辑尺寸:'));
+    expect(diagnostics, contains('窗口 DPR:'));
+    expect(diagnostics, contains('Texture 合成倍率:'));
+    expect(diagnostics, contains('Flutter Texture 采样:'));
+    expect(integration, contains("'texture-low'"));
+    expect(integration, contains("'texture-medium'"));
+    expect(integration, contains("'texture-high'"));
+    expect(script, contains('"flutter-texture"'));
+  });
+
   test('player shortcut suspension and focus eligibility have one pure owner',
       () {
     final page = _readPlayerPageCluster();

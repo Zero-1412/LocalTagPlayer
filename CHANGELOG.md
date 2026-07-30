@@ -1,5 +1,19 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-30 · 完成 Flutter Texture 尺寸采集与采样 A/B
+
+- 播放诊断新增原生 Texture、Widget 逻辑/物理尺寸、DPR、BoxFit 目标、合成倍率与
+  `FilterQuality`；可选边界不泄漏原生句柄，也不触发纹理重建。
+- 0.805× 与 0.398× 两档、三类低码率片源、三种采样共 18 次真实会话均为 0 掉帧、
+  0 音视频停滞和 0 无响应。
+- `medium` 在强缩小时抗混叠更好，但软化低码率细节并稳定增加约 100 MiB GPU /
+  300 MiB private memory；`high` 与 `low` SSIM 高于 0.9997，没有稳定可见收益。
+- 生产显式保持 `FilterQuality.low`；未增加用户设置或动态采样切换。filtered queue、
+  PlayerBackend 基础 contract、SQLite、标签、缓存队列和用户数据不变。
+- 完整 466 项测试、静态分析与 Windows Debug build 通过，3 项既有 benchmark 跳过；
+  真实 Debug 诊断点击确认新增尺寸、DPR、BoxFit、倍率与采样字段可见且无布局异常。
+- 详细记录：`docs/qa/player_texture_sampling_ab_20260730.md`。
+
 ## 2026-07-30 · 完成低码率缩小画质 A/B
 
 - 播放诊断增加 `dscale` 与 `correct-downscaling` 实际读回；新增可复现的三类自然

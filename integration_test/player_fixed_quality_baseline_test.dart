@@ -48,6 +48,14 @@ void main() {
               '',
         ) ??
         300;
+    final surfaceWidth = double.tryParse(
+          Platform.environment['LOCAL_TAG_PLAYER_QUALITY_SURFACE_WIDTH'] ?? '',
+        ) ??
+        1440;
+    final surfaceHeight = double.tryParse(
+          Platform.environment['LOCAL_TAG_PLAYER_QUALITY_SURFACE_HEIGHT'] ?? '',
+        ) ??
+        900;
     final keepSettingsControlVisible = Platform
             .environment['LOCAL_TAG_PLAYER_QUALITY_KEEP_SETTINGS_VISIBLE'] ==
         '1';
@@ -84,6 +92,9 @@ void main() {
         mode != 'downscale-current' &&
         mode != 'downscale-lanczos' &&
         mode != 'downscale-lanczos-uncorrected' &&
+        mode != 'texture-low' &&
+        mode != 'texture-medium' &&
+        mode != 'texture-high' &&
         mode != 'nvidia-off' &&
         mode != 'nvidia-on' &&
         mode != 'nvidia-hdr-off' &&
@@ -92,7 +103,7 @@ void main() {
         mode != 'nvofa-motion-off' &&
         mode != 'nvofa-motion-on') {
       throw StateError(
-        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、downscale-current、downscale-lanczos、downscale-lanczos-uncorrected、nvidia-off、nvidia-on、nvidia-hdr-off、nvidia-hdr-on、nvidia-vsr-hdr-on、nvofa-motion-off 或 nvofa-motion-on',
+        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、downscale-current、downscale-lanczos、downscale-lanczos-uncorrected、texture-low、texture-medium、texture-high、nvidia-off、nvidia-on、nvidia-hdr-off、nvidia-hdr-on、nvidia-vsr-hdr-on、nvofa-motion-off 或 nvofa-motion-on',
       );
     }
     final baselineMode = mode!;
@@ -117,6 +128,9 @@ void main() {
         'downscale-current' ||
         'downscale-lanczos' ||
         'downscale-lanczos-uncorrected' ||
+        'texture-low' ||
+        'texture-medium' ||
+        'texture-high' ||
         'nvidia-off' ||
         'nvidia-on' ||
         'nvidia-hdr-off' ||
@@ -153,7 +167,10 @@ void main() {
       highQualityStreamCacheEnabled: true,
     );
 
-    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    if (surfaceWidth < 640 || surfaceHeight < 480) {
+      throw StateError('画质基线窗口不得小于 640×480 逻辑像素');
+    }
+    await tester.binding.setSurfaceSize(Size(surfaceWidth, surfaceHeight));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
@@ -187,6 +204,12 @@ void main() {
                 : MediaKitPlayerBackend(
                     hwdec: hwdec,
                     enableHardwareAcceleration: enableHardwareAcceleration,
+                    // 三档只改变 Flutter Texture 的采样参数，底层 Player 与纹理尺寸不变。
+                    textureFilterQuality: switch (baselineMode) {
+                      'texture-medium' => FilterQuality.medium,
+                      'texture-high' => FilterQuality.high,
+                      _ => FilterQuality.low,
+                    },
                   ),
           ),
           mediaProbeBackendFactory: () =>
@@ -443,6 +466,7 @@ void main() {
     await playerKey.currentState!.playerService.pause();
     if (baselineMode.startsWith('compression-') ||
         baselineMode.startsWith('downscale-') ||
+        baselineMode.startsWith('texture-') ||
         baselineMode.startsWith('nvidia-') ||
         baselineMode.startsWith('nvofa-')) {
       // 压缩修复 A/B 固定回到同一时间点，避免移动测试图的内容差异污染像素对比。
@@ -482,6 +506,13 @@ void main() {
             'mpv 去色带参数:',
             'mpv GPU 缩小器:',
             'mpv 缩小校正:',
+            '原生 Texture 尺寸:',
+            '视频 Widget 逻辑尺寸:',
+            '窗口 DPR:',
+            '视频 Widget 物理尺寸:',
+            'BoxFit 视频物理目标:',
+            'Texture 合成倍率:',
+            'Flutter Texture 采样:',
             '原生 QA · NVIDIA RTX 视频超分:',
             '原生 QA · NVIDIA RTX Video HDR:',
             '原生 QA · NVIDIA 滤镜互斥处理:',
@@ -501,6 +532,7 @@ void main() {
         )
         .toList(growable: false);
     final renderBoundary = playerKey.currentState!.playerService;
+    final videoSurfaceDiagnostics = renderBoundary.videoSurfaceDiagnostics;
     final gpuBoundary = renderBoundary as PlayerGpuRenderBoundary;
     final matrix = await renderBoundary.queryGpuCapabilities();
     final activeAdapter = await gpuBoundary.queryActiveGpuAdapter();
@@ -525,9 +557,12 @@ void main() {
       'playerBackend': usesWindowsNative ? 'mpv' : 'mediaKit',
       'rendererPreference': settings.rendererPreference.name,
       'requestedDurationSeconds': durationSeconds,
+      'requestedSurfaceLogicalWidth': surfaceWidth,
+      'requestedSurfaceLogicalHeight': surfaceHeight,
       'actualDurationSeconds': DateTime.now().difference(startedAt).inSeconds,
       'samples': samples,
       'finalDiagnostics': finalLines,
+      'videoSurfaceDiagnostics': videoSurfaceDiagnostics.toJson(),
       'gpuMatrix': matrix.toJson(),
       'activeAdapter': activeAdapter.toJson(),
       if (usesWindowsNative)
@@ -628,6 +663,24 @@ void main() {
           baselineMode == 'downscale-lanczos' ? 'yes' : 'no';
       expect(finalLines, contains('mpv GPU 缩小器: $expectedDscale'));
       expect(finalLines, contains('mpv 缩小校正: $expectedCorrection'));
+    } else if (baselineMode.startsWith('texture-')) {
+      final expectedQuality = baselineMode.substring('texture-'.length);
+      expect(videoSurfaceDiagnostics.supported, isTrue);
+      expect(videoSurfaceDiagnostics.textureWidthPx, 1920);
+      expect(videoSurfaceDiagnostics.textureHeightPx, 1080);
+      expect(videoSurfaceDiagnostics.widgetLogicalWidth, greaterThan(0));
+      expect(videoSurfaceDiagnostics.widgetLogicalHeight, greaterThan(0));
+      expect(videoSurfaceDiagnostics.devicePixelRatio, greaterThan(0));
+      expect(
+          videoSurfaceDiagnostics.fittedVideoPhysicalWidthPx, greaterThan(0));
+      expect(
+          videoSurfaceDiagnostics.fittedVideoPhysicalHeightPx, greaterThan(0));
+      expect(videoSurfaceDiagnostics.isDownscaling, isTrue);
+      expect(videoSurfaceDiagnostics.filterQuality, expectedQuality);
+      expect(
+        finalLines,
+        contains('Flutter Texture 采样: $expectedQuality'),
+      );
     } else if (baselineMode == 'nvidia-vsr-hdr-on') {
       final vsrRequested = finalLines.any(
         (line) => line.startsWith(
@@ -839,15 +892,21 @@ Future<void> _waitForSessionState(
           snapshot.lines.contains('mpv 去色带: yes')) {
         return;
       }
-    } else if (mode.startsWith('downscale-')) {
-      // 缩小 A/B 不依赖 HDR/SDR 增强能力门禁；真实播放推进且解码器已读回即可采样。
+    } else if (mode.startsWith('downscale-') || mode.startsWith('texture-')) {
+      // 缩小与采样 A/B 不依赖增强能力门禁；真实播放推进且解码器已读回即可采样。
       final decoderReady = snapshot.lines.any(
         (line) =>
             line.startsWith('mpv 实际硬解: ') &&
             !line.endsWith('empty') &&
             !line.endsWith('unavailable'),
       );
-      if (decoderReady && snapshot.progressMs >= 900) return;
+      final surfaceReady = !mode.startsWith('texture-') ||
+          snapshot.lines.any(
+            (line) =>
+                line.startsWith('Texture 合成倍率: ') &&
+                !line.endsWith('unavailable'),
+          );
+      if (decoderReady && surfaceReady && snapshot.progressMs >= 900) return;
     } else if (mode == 'nvidia-on') {
       final active = snapshot.lines.contains('原生 QA · NVIDIA VSR 驱动确认: active');
       final safelyRolledBack = snapshot.lines.any(

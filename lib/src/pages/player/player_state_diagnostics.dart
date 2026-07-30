@@ -104,6 +104,7 @@ extension PlayerStateDiagnostics on PlayerPageState {
     final frameDurationMs =
         estimatedFps == null || estimatedFps <= 0 ? null : 1000 / estimatedFps;
     final backendTelemetry = playerService.telemetry;
+    final videoSurface = playerService.videoSurfaceDiagnostics;
     final filterTransaction = playerService.filterTransaction;
     final lines = <String>[
       '\u5f53\u524d\u89c6\u9891: ${currentItem.title}',
@@ -115,6 +116,13 @@ extension PlayerStateDiagnostics on PlayerPageState {
       '遥测视频编码: ${backendTelemetry.videoCodec ?? 'unavailable'}',
       '后端错误事件/失败打开: ${backendTelemetry.errorEventCount} / '
           '${backendTelemetry.failedOpenCount}',
+      '原生 Texture 尺寸: ${formatDiagnosticSize(videoSurface.textureWidthPx, videoSurface.textureHeightPx, 'px')}',
+      '视频 Widget 逻辑尺寸: ${formatDiagnosticSize(videoSurface.widgetLogicalWidth, videoSurface.widgetLogicalHeight, 'dp')}',
+      '窗口 DPR: ${videoSurface.devicePixelRatio?.toStringAsFixed(2) ?? 'unavailable'}',
+      '视频 Widget 物理尺寸: ${formatDiagnosticSize(videoSurface.widgetPhysicalWidthPx, videoSurface.widgetPhysicalHeightPx, 'px')}',
+      'BoxFit 视频物理目标: ${formatDiagnosticSize(videoSurface.fittedVideoPhysicalWidthPx, videoSurface.fittedVideoPhysicalHeightPx, 'px')}',
+      'Texture 合成倍率: ${formatDiagnosticScale(videoSurface.horizontalScale, videoSurface.verticalScale)}',
+      'Flutter Texture 采样: ${videoSurface.filterQuality ?? 'unavailable'}',
       '连续切换失败率: '
           '${(backendTelemetry.openFailureRate * 100).toStringAsFixed(2)}%',
       '资源释放阶段: ${backendTelemetry.releasePhase.name}',
@@ -313,4 +321,29 @@ extension PlayerStateDiagnostics on PlayerPageState {
       audioStalled: audioProgressState == '音频播放头停滞',
     );
   }
+}
+
+/** 把诊断尺寸统一格式化为整数像素或两位逻辑像素，缺失值保持明确占位。 */
+String formatDiagnosticSize(
+  double? width,
+  double? height,
+  String unit,
+) {
+  if (width == null || height == null) {
+    return 'unavailable';
+  }
+  final formattedWidth =
+      unit == 'px' ? width.round().toString() : width.toStringAsFixed(2);
+  final formattedHeight =
+      unit == 'px' ? height.round().toString() : height.toStringAsFixed(2);
+  return '$formattedWidth×$formattedHeight $unit';
+}
+
+/** 把 Texture 到物理目标的横纵倍率保留三位，避免把轻微 DPI 差异隐藏为 1.0。 */
+String formatDiagnosticScale(double? horizontal, double? vertical) {
+  if (horizontal == null || vertical == null) {
+    return 'unavailable';
+  }
+  return '${horizontal.toStringAsFixed(3)}×'
+      '${vertical.toStringAsFixed(3)}';
 }

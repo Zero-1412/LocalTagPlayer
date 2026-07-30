@@ -7,6 +7,7 @@ import '../../models/player_filter_transaction.dart';
 import '../../models/player_gpu_capabilities.dart';
 import '../../models/player_motion_interpolation_capability.dart';
 import '../../models/player_feature_apply_result.dart';
+import '../../models/player_video_surface_diagnostics.dart';
 import '../../platform/platform_interfaces.dart';
 import 'player_hdr_mapping_experiment.dart';
 import 'player_smooth_motion.dart';
@@ -25,6 +26,7 @@ class PlayerService
     implements
         PlayerRuntimeAccess,
         PlayerBackendTelemetryBoundary,
+        PlayerVideoSurfaceDiagnosticsBoundary,
         PlayerFilterTransactionBoundary,
         PlayerPropertyBatchBoundary,
         PlayerGpuRenderBoundary,
@@ -103,6 +105,20 @@ class PlayerService
         : null;
     return boundary?.telemetryChanges ??
         const Stream<PlayerBackendTelemetryEvent>.empty();
+  }
+
+  /**
+   * 返回后端最近一次视频表面尺寸快照。
+   *
+   * 不支持的测试或平台后端返回显式 unsupported，不扩大通用 PlayerBackend contract。
+   */
+  @override
+  PlayerVideoSurfaceDiagnostics get videoSurfaceDiagnostics {
+    final boundary = _backend is PlayerVideoSurfaceDiagnosticsBoundary
+        ? _backend as PlayerVideoSurfaceDiagnosticsBoundary
+        : null;
+    return boundary?.videoSurfaceDiagnostics ??
+        const PlayerVideoSurfaceDiagnostics.unsupported();
   }
 
   @override

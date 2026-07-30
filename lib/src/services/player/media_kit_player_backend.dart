@@ -8,8 +8,10 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../models/player_backend_telemetry.dart';
 import '../../models/player_gpu_capabilities.dart';
+import '../../models/player_video_surface_diagnostics.dart';
 import '../../platform/platform_interfaces.dart';
 import 'player_backend_telemetry_tracker.dart';
+import 'player_video_surface_metrics.dart';
 import 'windows_gpu_capability_channel.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -24,6 +26,7 @@ class MediaKitPlayerBackend
     implements
         PlayerBackend,
         PlayerBackendTelemetryBoundary,
+        PlayerVideoSurfaceDiagnosticsBoundary,
         PlayerPropertyBatchBoundary,
         PlayerGpuRenderBoundary {
   /**
@@ -37,6 +40,7 @@ class MediaKitPlayerBackend
   MediaKitPlayerBackend({
     required String hwdec,
     required bool enableHardwareAcceleration,
+    FilterQuality textureFilterQuality = FilterQuality.low,
   })  : _player = Player(
           // 4K 长视频需要稳定输入窗口；该预算只属于当前播放会话，
           // 不扩大缩略图或媒体详情后台任务的内存占用。
@@ -48,11 +52,16 @@ class MediaKitPlayerBackend
           height: 1080,
           hwdec: hwdec,
           enableHardwareAcceleration: enableHardwareAcceleration,
+        ),
+        _textureFilterQuality = textureFilterQuality,
+        _surfaceMetrics = PlayerVideoSurfaceMetricsTracker(
+          filterQuality: textureFilterQuality,
         ) {
     _controller = VideoController(
       _player,
       configuration: _controllerConfiguration,
     );
+    _controller.rect.addListener(_handleTextureRectChanged);
     _errorSubscription = _player.stream.error.listen(_handleBackendError);
     _videoParamsSubscription =
         _player.stream.videoParams.listen(_handleVideoParams);
@@ -69,6 +78,16 @@ class MediaKitPlayerBackend
 
   /** 当前适配器独占的视频纹理控制器。 */
   late final VideoController _controller;
+
+  /**
+   * Flutter Texture 的合成采样档位。
+   *
+   * 生产默认保持 media_kit_video 的 `low`（双线性）；只有隔离 QA 会话显式注入其它值。
+   */
+  final FilterQuality _textureFilterQuality;
+
+  /** Texture 与 Flutter 布局尺寸的纯诊断汇总器。 */
+  final PlayerVideoSurfaceMetricsTracker _surfaceMetrics;
 
   /** dispose 完成信号，保证下一播放器不会越过旧原生资源释放。 */
   final Completer<void> _released = Completer<void>();
@@ -145,6 +164,10 @@ class MediaKitPlayerBackend
 
   @override
   PlayerBackendTelemetrySnapshot get telemetry => _telemetry.snapshot;
+
+  @override
+  PlayerVideoSurfaceDiagnostics get videoSurfaceDiagnostics =>
+      _surfaceMetrics.snapshot;
 
   @override
   Stream<PlayerBackendTelemetryEvent> get telemetryChanges => _telemetry.events;
@@ -536,6 +559,15 @@ class MediaKitPlayerBackend
   Future<Uint8List?> screenshot({String format = 'image/jpeg'}) =>
       _player.screenshot(format: format);
 
+  /** 接收原生插件回传的 Texture 像素矩形并刷新同口径缩放诊断。 */
+  void _handleTextureRectChanged() {
+    final rect = _controller.rect.value;
+    if (rect == null || rect.width <= 1 || rect.height <= 1) {
+      return;
+    }
+    _surfaceMetrics.recordTextureSize(rect.size);
+  }
+
   @override
   Widget buildVideoSurface({
     required Widget controls,
@@ -553,14 +585,20 @@ class MediaKitPlayerBackend
       controls: (_) => const SizedBox.shrink(),
       fit: fit,
       aspectRatio: aspectRatio,
+      filterQuality: _textureFilterQuality,
     );
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // 镜像只作用于视频表面；Flutter 控制条保持原方向与点击坐标。
-        Transform.flip(flipX: mirror, child: videoSurface),
-        controls,
-      ],
+    return PlayerVideoSurfaceMetricsObserver(
+      fit: fit,
+      aspectRatio: aspectRatio,
+      onMetricsChanged: _surfaceMetrics.recordWidgetSurfaceMetrics,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 镜像只作用于视频表面；Flutter 控制条保持原方向与点击坐标。
+          Transform.flip(flipX: mirror, child: videoSurface),
+          controls,
+        ],
+      ),
     );
   }
 
@@ -579,6 +617,7 @@ class MediaKitPlayerBackend
       await _videoParamsSubscription.cancel();
       await _telemetryPositionSubscription.cancel();
       await _telemetryObserverInitialization;
+      _controller.rect.removeListener(_handleTextureRectChanged);
       final nativePlayer = _nativePlayer;
       if (nativePlayer != null) {
         for (final property in <String>[

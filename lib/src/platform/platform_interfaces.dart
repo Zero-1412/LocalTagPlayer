@@ -10,6 +10,7 @@ import '../models/player_backend_telemetry.dart';
 import '../models/player_filter_transaction.dart';
 import '../models/player_gpu_capabilities.dart';
 import '../models/player_motion_interpolation_capability.dart';
+import '../models/player_video_surface_diagnostics.dart';
 import '../models/video_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -96,6 +97,17 @@ abstract interface class PlayerBackendTelemetryBoundary {
 
   /** 首帧、解码器、错误和释放阶段变化流。 */
   Stream<PlayerBackendTelemetryEvent> get telemetryChanges;
+}
+
+/**
+ * 后端可选的视频表面尺寸与 Flutter 采样诊断边界。
+ *
+ * 该边界只暴露匿名尺寸、DPR 与采样档位，不泄漏 Texture ID、原生句柄或媒体路径，
+ * 也不得因读取快照触发纹理重建。
+ */
+abstract interface class PlayerVideoSurfaceDiagnosticsBoundary {
+  /** 当前视频表面的最近一次只读采样快照。 */
+  PlayerVideoSurfaceDiagnostics get videoSurfaceDiagnostics;
 }
 
 /**

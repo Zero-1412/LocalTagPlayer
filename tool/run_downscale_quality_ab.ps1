@@ -1,10 +1,16 @@
 ﻿param(
   [ValidateRange(10, 120)]
   [int]$DurationSeconds = 20,
+  [ValidateRange(640, 3840)]
+  [int]$SurfaceWidth = 1440,
+  [ValidateRange(480, 2160)]
+  [int]$SurfaceHeight = 900,
   [string]$SampleDirectory = ".local/qa/natural-compression-ab/samples",
   [string]$OutputDirectory = ".local/qa/downscale-quality-ab",
   [string]$OnlyCase = "",
   [string]$OnlyMode = "",
+  [ValidateSet("mpv-downscale", "flutter-texture")]
+  [string]$Experiment = "mpv-downscale",
   [switch]$SkipPlayback
 )
 
@@ -42,14 +48,18 @@ foreach ($case in $cases) {
 }
 
 <#
- * A 是打包 mpv 0.36 的真实当前行为；B 评估高质量卷积缩小；C 关闭 correct-downscaling，
- * 用于隔离滤镜半径校正的画质与性能影响。
+ * mpv-downscale 保留既有缩小属性实验；flutter-texture 只改变 Flutter Texture
+ * 的 FilterQuality。两类实验复用相同片源、窗口、时点与进程指标口径。
 #>
-$modes = @(
-  "downscale-current",
-  "downscale-lanczos",
-  "downscale-lanczos-uncorrected"
-)
+$modes = if ($Experiment -eq "flutter-texture") {
+  @("texture-low", "texture-medium", "texture-high")
+} else {
+  @(
+    "downscale-current",
+    "downscale-lanczos",
+    "downscale-lanczos-uncorrected"
+  )
+}
 
 <# 返回稳定的中位数、P95 与最大值，空样本保持 null。 #>
 function Get-MetricSummary {
@@ -73,7 +83,7 @@ function Get-MetricSummary {
  * 进程指标与窗口截图均绑定 integration test 写出的 PID；窗口截图只在固定 12 秒
  * 标记出现后采集，避免运动内容差异伪装成缩小算法差异。
 #>
-function Invoke-DownscaleMode {
+function Invoke-QualityMode {
   param(
     [Parameter(Mandatory = $true)][System.Collections.IDictionary]$Case,
     [Parameter(Mandatory = $true)][string]$Mode
@@ -172,7 +182,7 @@ public static class LtpDownscaleWindowCapture {
         $graphics.Dispose()
         if (-not $capturedWindow) {
           $bitmap.Dispose()
-          throw "固定缩小 A/B 的 PrintWindow 失败。"
+          throw "固定画质 A/B 的 PrintWindow 失败。"
         }
         $bitmap.Save((Join-Path $Output "$($marker.BaseName)-window.png"))
         $bitmap.Dispose()
@@ -186,6 +196,8 @@ public static class LtpDownscaleWindowCapture {
   $env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_OUTPUT = $modeOutput
   $env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_MODE = $Mode
   $env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_SECONDS = $DurationSeconds.ToString()
+  $env:LOCAL_TAG_PLAYER_QUALITY_SURFACE_WIDTH = $SurfaceWidth.ToString()
+  $env:LOCAL_TAG_PLAYER_QUALITY_SURFACE_HEIGHT = $SurfaceHeight.ToString()
   $logPath = Join-Path $modeOutput "baseline.log"
   try {
     Push-Location $workspace
@@ -206,10 +218,14 @@ public static class LtpDownscaleWindowCapture {
       -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QUALITY_BASELINE_SECONDS `
       -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_QUALITY_SURFACE_WIDTH `
+      -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_QUALITY_SURFACE_HEIGHT `
+      -ErrorAction SilentlyContinue
   }
   if ($testExitCode -ne 0) {
     Get-Content -LiteralPath $logPath -Tail 80
-    throw "缩小 A/B 失败：$($Case.name) / $Mode"
+    throw "画质 A/B 失败：$($Case.name) / $Mode"
   }
 }
 
@@ -220,8 +236,8 @@ if (-not $SkipPlayback) {
     foreach ($mode in $modes |
         Where-Object { [string]::IsNullOrWhiteSpace($OnlyMode) -or
           $_ -eq $OnlyMode }) {
-      Write-Host "运行缩小 A/B：$($case.name) / $mode"
-      Invoke-DownscaleMode -Case $case -Mode $mode
+      Write-Host "运行画质 A/B：$($case.name) / $mode"
+      Invoke-QualityMode -Case $case -Mode $mode
       # Windows integration runner 偶发延迟释放 NativeReference；组间留出短暂收敛窗口。
       Start-Sleep -Seconds 2
     }
@@ -231,8 +247,14 @@ if (-not $SkipPlayback) {
 $caseSummaries = foreach ($case in $cases) {
   $modeSummaries = @(foreach ($mode in $modes) {
     $modeOutput = Join-Path (Join-Path $output $case.name) $mode
-    $report = Get-Content -LiteralPath `
-      (Join-Path $modeOutput "$mode-player-baseline.json") -Raw -Encoding utf8 |
+    $reportPath = Join-Path $modeOutput "$mode-player-baseline.json"
+    $fixedFrameWindow = Join-Path $modeOutput "$mode-complete-window.png"
+    # 单组门禁与断点续跑只汇总已经完整产出的模式，不能要求其它组合预先存在。
+    if (-not (Test-Path -LiteralPath $reportPath) -or
+        -not (Test-Path -LiteralPath $fixedFrameWindow)) {
+      continue
+    }
+    $report = Get-Content -LiteralPath $reportPath -Raw -Encoding utf8 |
       ConvertFrom-Json
     $rows = @(Import-Csv -LiteralPath (Join-Path $modeOutput "system-metrics.csv"))
     # 进程退出时 Get-Process 可能留下一个空 CPU 尾样本；空值不能按 0 参与差值。
@@ -244,7 +266,6 @@ $caseSummaries = foreach ($case in $cases) {
     } else {
       0
     }
-    $fixedFrameWindow = Join-Path $modeOutput "$mode-complete-window.png"
     [ordered]@{
       mode = $mode
       diagnosticSamples = @($report.samples).Count
@@ -265,11 +286,15 @@ $caseSummaries = foreach ($case in $cases) {
       privateMiB = Get-MetricSummary $rows "private_mb"
       unresponsiveSamples = @($rows | Where-Object responding -ne "True").Count
       finalDiagnostics = $report.finalDiagnostics
+      videoSurfaceDiagnostics = $report.videoSurfaceDiagnostics
       fixedFrameWindow = $fixedFrameWindow
       fixedFrameSha256 =
         (Get-FileHash -Algorithm SHA256 -LiteralPath $fixedFrameWindow).Hash
     }
   })
+  if ($modeSummaries.Count -eq 0) {
+    continue
+  }
   $uniqueFrameHashes =
     @($modeSummaries.fixedFrameSha256 | Select-Object -Unique)
   [ordered]@{
@@ -280,14 +305,27 @@ $caseSummaries = foreach ($case in $cases) {
   }
 }
 
+$summaryName = if ($Experiment -eq "flutter-texture") {
+  "texture-sampling-ab-summary.json"
+} else {
+  "downscale-ab-summary.json"
+}
+$samplePolicy = if ($Experiment -eq "flutter-texture") {
+  "fixed natural 650 kbps clips; same MediaKit Texture size and fixed 12-second frame; only Flutter FilterQuality changes"
+} else {
+  "fixed natural 650 kbps clips; same MediaKit Texture and fixed 12-second frame"
+}
 [ordered]@{
   schemaVersion = 1
-  samplePolicy = "fixed natural 650 kbps clips; same MediaKit Texture and fixed 12-second frame"
+  experiment = $Experiment
+  samplePolicy = $samplePolicy
   requestedDurationSecondsPerMode = $DurationSeconds
+  requestedSurfaceLogicalWidth = $SurfaceWidth
+  requestedSurfaceLogicalHeight = $SurfaceHeight
   modes = $modes
   cases = @($caseSummaries)
 } | ConvertTo-Json -Depth 12 |
-  Set-Content -LiteralPath (Join-Path $output "downscale-ab-summary.json") `
+  Set-Content -LiteralPath (Join-Path $output $summaryName) `
     -Encoding utf8
 
-Write-Host "缩小画质 A/B 完成：$output"
+Write-Host "画质 A/B 完成：$output"

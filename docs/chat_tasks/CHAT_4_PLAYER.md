@@ -1,3 +1,19 @@
+## 2026-07-30 Texture 尺寸、DPI 与 Flutter 采样 A/B
+
+- 正式 MediaKit 后端通过可选只读边界采集 `VideoController.rect`、Widget 逻辑尺寸、
+  DPR、BoxFit 物理目标、缩放倍率与 `FilterQuality`；采集不重建 Texture。
+- 本机 1.50 DPR 下确认固定 1920×1080 Texture 分别以 0.805× 与 0.398× 由
+  Flutter/Windows 合成层缩小；18 次 low/medium/high 会话均为 0 掉帧和 0 停滞。
+- medium 在强缩小时抗混叠有效，但稳定增加约 100 MiB GPU committed 与约
+  300 MiB private memory，并软化低码率细节；high 与 low 像素高度接近。
+- 生产显式保持 `FilterQuality.low`，不新增设置或动态切换。700/900 dp 窗口暴露的
+  既有控制条溢出留给独立布局任务，未污染画质结论。
+- 完整 466 项测试、静态分析与 Windows Debug build 通过，3 项既有 benchmark 跳过；
+  真实 Debug 诊断点击确认 1920×1080 Texture、951.33×568.67 dp Widget、DPR 1.50、
+  1427×803 px BoxFit 目标、0.743× 合成倍率与 `low` 采样均可见且无布局异常。
+- 完整口径见 `docs/qa/player_texture_sampling_ab_20260730.md`；filtered queue、
+  当前 index、返回路径、标签、缓存和用户数据均未改变。
+
 ## 2026-07-30 低码率缩小画质 A/B
 
 - 对当前 `bilinear/no`、候选 `lanczos/yes` 和隔离 `lanczos/no` 完成三类自然
