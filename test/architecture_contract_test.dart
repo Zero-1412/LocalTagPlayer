@@ -1466,11 +1466,25 @@ void main() {
       'lib/src/features/library/application/'
       'library_facet_count_controller.dart',
     ).readAsStringSync();
-    final refreshStart =
-        page.indexOf('@override\n  void scheduleFilterRefresh({');
+    // GitHub Windows 检出文件时可能使用 CRLF；用跨空白匹配定位 override 实现，
+    // 同时避开同文件中更靠前的接口声明。
+    final refreshMatch = RegExp(
+      r'@override\s+void scheduleFilterRefresh\(\{',
+    ).firstMatch(page);
+    final refreshStart = refreshMatch?.start ?? -1;
+    expect(
+      refreshStart,
+      greaterThanOrEqualTo(0),
+      reason: '必须能定位媒体库筛选刷新入口',
+    );
     final refreshEnd = page.indexOf(
       'LibraryResultEpoch resultEpoch',
       refreshStart,
+    );
+    expect(
+      refreshEnd,
+      greaterThan(refreshStart),
+      reason: '必须能定位筛选刷新入口之后的结果代际字段',
     );
     final refresh = page.substring(refreshStart, refreshEnd);
 

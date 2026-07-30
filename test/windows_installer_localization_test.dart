@@ -39,4 +39,46 @@ void main() {
       ),
     );
   });
+
+  test('正式发布业务门禁不会吞掉 Flutter 原生命令失败', () {
+    // 先统一换行符，确保本测试在 GitHub Windows 的 CRLF 检出下仍验证同一语义。
+    final workflow = File(
+      '.github/workflows/release-packages.yml',
+    ).readAsStringSync().replaceAll('\r\n', '\n');
+    final integrationGateStart = workflow.indexOf('integration_gate:');
+    final windowsJobStart = workflow.indexOf(
+      '\n  windows:',
+      integrationGateStart,
+    );
+
+    expect(
+      integrationGateStart,
+      greaterThanOrEqualTo(0),
+      reason: '必须能定位正式发布的集成门禁',
+    );
+    expect(
+      windowsJobStart,
+      greaterThan(integrationGateStart),
+      reason: '必须能隔离集成门禁，避免误匹配后续构建任务',
+    );
+
+    final integrationGate =
+        workflow.substring(integrationGateStart, windowsJobStart);
+    const exitOnNativeFailure =
+        r'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }';
+
+    // pwsh 不会默认把所有原生命令的非零退出码提升为步骤失败，因此逐项保护。
+    for (final command in <String>[
+      'flutter pub get',
+      'flutter test',
+      'flutter analyze',
+      'flutter build windows --debug',
+    ]) {
+      expect(
+        integrationGate,
+        contains('$command\n          $exitOnNativeFailure'),
+        reason: '$command 失败后必须立即终止正式发布门禁',
+      );
+    }
+  });
 }
