@@ -2535,6 +2535,16 @@ void main() {
 
     final feedback = find.byKey(const ValueKey('player.shortcutFeedback'));
     final topLeft = tester.getTopLeft(feedback);
+    final decoration = tester
+        .widget<DecoratedBox>(
+          find.descendant(
+            of: feedback,
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .decoration as BoxDecoration;
+    final icon = tester.widget<Icon>(find.byIcon(Icons.volume_up_rounded));
+    final label = tester.widget<Text>(find.text('音量 100%'));
     final semantics = tester.widget<Semantics>(
       find
           .ancestor(
@@ -2548,10 +2558,49 @@ void main() {
     expect(topLeft.dy, 16);
     expect(find.text('音量 100%'), findsOneWidget);
     expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
+    expect(decoration.color, Colors.black.withValues(alpha: 0.38));
+    expect(
+      decoration.border,
+      Border.all(color: Colors.white.withValues(alpha: 0.18)),
+    );
+    expect(icon.color, Colors.white);
+    expect(label.style?.color, Colors.white);
     expect(semantics.properties.liveRegion, isTrue);
     expect(semantics.properties.label, '快捷键反馈：音量 100%');
     expect(find.byKey(const ValueKey('player.seekFeedback.watermark')),
         findsNothing);
+  });
+
+  testWidgets('player shortcut feedback strengthens high contrast surface',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(highContrast: true),
+          child: PlayerShortcutFeedback(
+            visible: true,
+            label: '暂停',
+            icon: Icons.pause_rounded,
+          ),
+        ),
+      ),
+    );
+
+    final feedback = find.byKey(const ValueKey('player.shortcutFeedback'));
+    final decoration = tester
+        .widget<DecoratedBox>(
+          find.descendant(
+            of: feedback,
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .decoration as BoxDecoration;
+
+    expect(decoration.color, Colors.black.withValues(alpha: 0.78));
+    expect(
+      decoration.border,
+      Border.all(color: Colors.white.withValues(alpha: 0.52)),
+    );
   });
 
   testWidgets('player shortcut feedback hidden state keeps the same mount',

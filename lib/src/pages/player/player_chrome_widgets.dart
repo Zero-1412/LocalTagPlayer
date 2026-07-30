@@ -282,7 +282,12 @@ class PlayerRouteSemantics extends StatelessWidget {
   }
 }
 
-/** 画面左上角的统一短时操作反馈，不拦截视频或控制条的鼠标命中。 */
+/**
+ * 画面左上角的统一短时操作反馈。
+ *
+ * 默认使用轻量半透明深色底与高亮前景，减少对视频内容的遮挡；高对比度模式会提高
+ * 表面和描边的不透明度。组件始终忽略指针，不拦截视频或控制条的鼠标命中。
+ */
 class PlayerShortcutFeedback extends StatelessWidget {
   const PlayerShortcutFeedback({
     super.key,
@@ -303,6 +308,14 @@ class PlayerShortcutFeedback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accessibility = AppAccessibilityScope.of(context);
+    final highContrast = MediaQuery.highContrastOf(context);
+    // 普通模式尽量露出视频内容；高对比度模式保留更实的底色，避免亮画面吞没文字。
+    final surfaceColor = Colors.black.withValues(
+      alpha: highContrast ? 0.78 : 0.38,
+    );
+    final borderColor = Colors.white.withValues(
+      alpha: highContrast ? 0.52 : 0.18,
+    );
     return IgnorePointer(
       child: Align(
         alignment: Alignment.topLeft,
@@ -319,9 +332,9 @@ class PlayerShortcutFeedback extends StatelessWidget {
               duration: accessibility.fadeDuration(AppMotion.hover),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: playerSurfaceRaised.withValues(alpha: 0.94),
+                  color: surfaceColor,
                   borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(color: playerBorder),
+                  border: Border.all(color: borderColor),
                   boxShadow: playerSoftShadow,
                 ),
                 child: Padding(
@@ -332,12 +345,12 @@ class PlayerShortcutFeedback extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(icon, size: 22, color: playerText),
+                      Icon(icon, size: 22, color: Colors.white),
                       const SizedBox(width: 9),
                       Text(
                         label,
                         style: const TextStyle(
-                          color: playerText,
+                          color: Colors.white,
                           fontSize: 14,
                           fontWeight: AppTypography.strong,
                         ),
