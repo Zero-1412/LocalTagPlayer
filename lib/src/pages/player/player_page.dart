@@ -393,9 +393,6 @@ class PlayerPageState extends State<PlayerPage> {
 
   IconData get shortcutFeedbackIcon => interaction.feedbackIcon;
 
-  bool get shortcutFeedbackIsSeekWatermark =>
-      interaction.feedbackIsSeekWatermark;
-
   bool get settingsDialogOpen => interaction.settingsOpen;
 
   bool get isWindowFullscreen => windowFullscreen.isFullscreen;

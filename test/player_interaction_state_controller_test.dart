@@ -51,7 +51,7 @@ void main() {
     expect(controller.controlsVisible, isFalse);
   });
 
-  testWidgets('新快捷键反馈覆盖旧 Timer 且保留最新图标和水印类型', (tester) async {
+  testWidgets('新快捷键反馈覆盖旧 Timer 且保留最新图标', (tester) async {
     final controller = PlayerInteractionStateController<String>(
       initialFeedbackIcon: 'idle',
       onChanged: () {},
@@ -67,7 +67,6 @@ void main() {
     controller.showFeedback(
       label: '前进 5 秒',
       icon: 'forward',
-      isSeekWatermark: true,
       visibleFor: const Duration(milliseconds: 20),
     );
     await tester.pump(const Duration(milliseconds: 10));
@@ -75,7 +74,6 @@ void main() {
     expect(controller.feedbackVisible, isTrue);
     expect(controller.feedbackLabel, '前进 5 秒');
     expect(controller.feedbackIcon, 'forward');
-    expect(controller.feedbackIsSeekWatermark, isTrue);
 
     await tester.pump(const Duration(milliseconds: 10));
     expect(controller.feedbackVisible, isFalse);

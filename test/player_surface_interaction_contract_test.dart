@@ -49,4 +49,30 @@ void main() {
     // 队列条目原有双击播放入口属于受保护行为，不能被画面手势替换。
     expect(queue, contains('onDoubleTap: () => onPlay(index)'));
   });
+
+  test('播放器所有短时反馈只挂载一个左上角组件', () {
+    final view =
+        File('lib/src/pages/player/player_state_view.dart').readAsStringSync();
+    final chrome = File('lib/src/pages/player/player_chrome_widgets.dart')
+        .readAsStringSync();
+    final page =
+        File('lib/src/pages/player/player_page.dart').readAsStringSync();
+
+    expect(
+      RegExp(r'PlayerShortcutFeedback\(').allMatches(view),
+      hasLength(1),
+    );
+    expect(
+      view,
+      matches(
+        RegExp(
+          r'if \(shortcutFeedbackLabel != null\)\s+'
+          r'Positioned\.fill\(\s+child: PlayerShortcutFeedback',
+        ),
+      ),
+    );
+    expect(view, isNot(contains('PlayerSeekFeedbackWatermark')));
+    expect(chrome, isNot(contains('class PlayerSeekFeedbackWatermark')));
+    expect(page, isNot(contains('shortcutFeedbackIsSeekWatermark')));
+  });
 }

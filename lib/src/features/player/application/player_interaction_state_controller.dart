@@ -58,9 +58,6 @@ class PlayerInteractionStateController<TIcon> {
   /** 当前快捷键反馈图标。 */
   TIcon feedbackIcon;
 
-  /** 当前反馈是否使用左上角 seek 文字水印。 */
-  var feedbackIsSeekWatermark = false;
-
   /**
    * 立即显示控制条，并在允许时重新开始自动隐藏倒计时。
    *
@@ -133,14 +130,12 @@ class PlayerInteractionStateController<TIcon> {
   void showFeedback({
     required String label,
     required TIcon icon,
-    bool isSeekWatermark = false,
     Duration visibleFor = const Duration(milliseconds: 850),
   }) {
     if (_disposed) return;
     _feedbackHideTimer?.cancel();
     feedbackLabel = label;
     feedbackIcon = icon;
-    feedbackIsSeekWatermark = isSeekWatermark;
     feedbackVisible = true;
     _publish();
     _feedbackHideTimer = Timer(visibleFor, () {

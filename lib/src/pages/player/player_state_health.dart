@@ -334,15 +334,10 @@ extension PlayerStateHealth on PlayerPageState {
   void showVideoControls() => interaction.showControls();
 
   /** 显示短时快捷键结果；控制条仍只由底部热区或设置入口唤出。 */
-  void showShortcutFeedback(
-    String label,
-    IconData icon, {
-    bool isSeekWatermark = false,
-  }) {
+  void showShortcutFeedback(String label, IconData icon) {
     interaction.showFeedback(
       label: label,
       icon: icon,
-      isSeekWatermark: isSeekWatermark,
     );
   }
 

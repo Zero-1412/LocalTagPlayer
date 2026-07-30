@@ -119,24 +119,22 @@ extension PlayerStateHelpers on PlayerPageState {
     }
     if (matches(PlayerShortcutAction.seekBackward)) {
       seekRelative(Duration(seconds: -seekStepSeconds));
-      // KeyRepeat 继续执行 seek，但同一次按住只在首次 KeyDown 展示一次反馈。
+      // KeyRepeat 继续执行 seek，但同一次按住只在首次 KeyDown 展示一次左上角反馈。
       if (playerSeekFeedbackShouldShow(isRepeat: event is KeyRepeatEvent)) {
         showShortcutFeedback(
           '后退 $seekStepSeconds 秒',
           Icons.fast_rewind_rounded,
-          isSeekWatermark: true,
         );
       }
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekForward)) {
       seekRelative(Duration(seconds: seekStepSeconds));
-      // 与快退一致，重复键事件不重新启动居中反馈动画。
+      // 与快退一致，重复键事件不重新启动左上角反馈动画。
       if (playerSeekFeedbackShouldShow(isRepeat: event is KeyRepeatEvent)) {
         showShortcutFeedback(
           '前进 $seekStepSeconds 秒',
           Icons.fast_forward_rounded,
-          isSeekWatermark: true,
         );
       }
       return KeyEventResult.handled;

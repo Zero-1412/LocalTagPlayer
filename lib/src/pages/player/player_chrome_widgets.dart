@@ -282,7 +282,7 @@ class PlayerRouteSemantics extends StatelessWidget {
   }
 }
 
-/** 画面中央的短时快捷键反馈，不拦截视频或控制条的鼠标命中。 */
+/** 画面左上角的统一短时操作反馈，不拦截视频或控制条的鼠标命中。 */
 class PlayerShortcutFeedback extends StatelessWidget {
   const PlayerShortcutFeedback({
     super.key,
@@ -304,90 +304,46 @@ class PlayerShortcutFeedback extends StatelessWidget {
   Widget build(BuildContext context) {
     final accessibility = AppAccessibilityScope.of(context);
     return IgnorePointer(
-      child: Semantics(
-        liveRegion: true,
-        label: visible ? '快捷键反馈：$label' : null,
-        excludeSemantics: !visible,
-        child: AnimatedOpacity(
-          key: const ValueKey('player.shortcutFeedback'),
-          opacity: visible ? 1 : 0,
-          duration: accessibility.fadeDuration(AppMotion.hover),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: playerSurfaceRaised.withValues(alpha: 0.94),
-              borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(color: playerBorder),
-              boxShadow: playerSoftShadow,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 12,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 22, color: playerText),
-                  const SizedBox(width: 9),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: playerText,
-                      fontSize: 14,
-                      fontWeight: AppTypography.strong,
-                    ),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Padding(
+          // 所有动作共用同一视频安全区，首次触发也不能回退到中央挂载。
+          padding: const EdgeInsets.all(16),
+          child: Semantics(
+            liveRegion: true,
+            label: visible ? '快捷键反馈：$label' : null,
+            excludeSemantics: !visible,
+            child: AnimatedOpacity(
+              key: const ValueKey('player.shortcutFeedback'),
+              opacity: visible ? 1 : 0,
+              duration: accessibility.fadeDuration(AppMotion.hover),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: playerSurfaceRaised.withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  border: Border.all(color: playerBorder),
+                  boxShadow: playerSoftShadow,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 12,
                   ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/** 画面左上角的快进/快退文字水印，避免中心反馈反复遮挡主体内容。 */
-class PlayerSeekFeedbackWatermark extends StatelessWidget {
-  const PlayerSeekFeedbackWatermark({
-    super.key,
-    required this.visible,
-    required this.label,
-  });
-
-  /** 当前水印是否处于短时可见阶段。 */
-  final bool visible;
-
-  /** 本次快进或快退动作及其秒数。 */
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final accessibility = AppAccessibilityScope.of(context);
-    return IgnorePointer(
-      child: Semantics(
-        liveRegion: true,
-        label: visible ? '播放跳转：$label' : null,
-        excludeSemantics: !visible,
-        child: AnimatedOpacity(
-          key: const ValueKey('player.seekFeedback.watermark'),
-          opacity: visible ? 1 : 0,
-          duration: accessibility.fadeDuration(AppMotion.hover),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.58),
-              borderRadius: BorderRadius.circular(AppRadius.capsule),
-              border: Border.all(color: playerBorder.withValues(alpha: 0.7)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: playerText,
-                  fontSize: 12,
-                  fontWeight: AppTypography.strong,
-                  fontFeatures: [FontFeature.tabularFigures()],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 22, color: playerText),
+                      const SizedBox(width: 9),
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          color: playerText,
+                          fontSize: 14,
+                          fontWeight: AppTypography.strong,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

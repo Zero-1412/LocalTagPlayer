@@ -1,3 +1,16 @@
+## 2026-07-30 播放器操作提示统一到左上角
+
+- 播放器反馈由两条视觉路径收敛为一个 `PlayerShortcutFeedback` 挂载点：所有操作提示
+  固定在视频左上角 16 dp，中央不再创建反馈组件，首次音量或 seek 触发也不例外。
+- 删除 seek 专用水印组件、状态标志和页面 getter；快进/快退的目标累计、重复事件消费、
+  提交节流及最终目标保证没有迁移或改变。
+- 保留提示的 `IgnorePointer`、实时语义、图标/文案、850ms Timer 和无障碍淡入淡出，
+  因此反馈不抢占播放器输入，也没有增加媒体库或队列计算。
+- focused controller/widget/page mount 合同和完整 483 项测试通过，3 项既有 benchmark
+  跳过；静态分析、Windows Debug build、可见窗口启动门禁通过。
+- 真实 Debug 窗口分别触发音量和首次快进，截图确认两类提示均在左上角且中央为空；
+  filtered queue、当前 index、PlayerBackend、缓存队列和用户数据未改变。
+
 ## 2026-07-30 画面双击、回车全屏与长按 seek
 
 - 视频画面 `GestureDetector` 新增双击播放/暂停，复用键盘动作的同一反馈方法；

@@ -2515,37 +2515,73 @@ void main() {
     );
   });
 
-  testWidgets('player seek feedback uses a compact text watermark',
+  testWidgets('player shortcut feedback always stays in top left safe area',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: Align(
-          alignment: Alignment.topLeft,
-          child: PlayerSeekFeedbackWatermark(
-            visible: true,
-            label: '前进 15 秒',
-          ),
+        home: Stack(
+          children: [
+            Positioned.fill(
+              child: PlayerShortcutFeedback(
+                visible: true,
+                label: '音量 100%',
+                icon: Icons.volume_up_rounded,
+              ),
+            ),
+          ],
         ),
       ),
     );
 
-    final opacity = tester.widget<AnimatedOpacity>(
-      find.byKey(const ValueKey('player.seekFeedback.watermark')),
-    );
+    final feedback = find.byKey(const ValueKey('player.shortcutFeedback'));
+    final topLeft = tester.getTopLeft(feedback);
     final semantics = tester.widget<Semantics>(
       find
           .ancestor(
-            of: find.byKey(const ValueKey('player.seekFeedback.watermark')),
+            of: feedback,
             matching: find.byType(Semantics),
           )
           .first,
     );
 
-    expect(find.text('前进 15 秒'), findsOneWidget);
-    expect(find.byType(Icon), findsNothing);
-    expect(opacity.opacity, 1);
+    expect(topLeft.dx, 16);
+    expect(topLeft.dy, 16);
+    expect(find.text('音量 100%'), findsOneWidget);
+    expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
     expect(semantics.properties.liveRegion, isTrue);
-    expect(semantics.properties.label, '播放跳转：前进 15 秒');
+    expect(semantics.properties.label, '快捷键反馈：音量 100%');
+    expect(find.byKey(const ValueKey('player.seekFeedback.watermark')),
+        findsNothing);
+  });
+
+  testWidgets('player shortcut feedback hidden state keeps the same mount',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Stack(
+          children: [
+            Positioned.fill(
+              child: PlayerShortcutFeedback(
+                visible: false,
+                label: '前进 15 秒',
+                icon: Icons.fast_forward_rounded,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final opacity = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey('player.shortcutFeedback')),
+    );
+    expect(opacity.opacity, 0);
+    expect(
+      tester.getTopLeft(
+        find.byKey(const ValueKey('player.shortcutFeedback')),
+      ),
+      const Offset(16, 16),
+    );
   });
 
   test('player exit preserves texture after acknowledged pause', () {

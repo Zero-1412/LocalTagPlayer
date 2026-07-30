@@ -196,32 +196,14 @@ extension PlayerStateView on PlayerPageState {
                                                 ),
                                               ),
                                             if (shortcutFeedbackLabel != null)
-                                              if (shortcutFeedbackIsSeekWatermark)
-                                                Positioned(
-                                                  left: 16,
-                                                  top: 16,
-                                                  child:
-                                                      PlayerSeekFeedbackWatermark(
-                                                    visible:
-                                                        shortcutFeedbackVisible,
-                                                    label:
-                                                        shortcutFeedbackLabel!,
-                                                  ),
-                                                )
-                                              else
-                                                Positioned.fill(
-                                                  child: Center(
-                                                    child:
-                                                        PlayerShortcutFeedback(
-                                                      visible:
-                                                          shortcutFeedbackVisible,
-                                                      label:
-                                                          shortcutFeedbackLabel!,
-                                                      icon:
-                                                          shortcutFeedbackIcon,
-                                                    ),
-                                                  ),
+                                              Positioned.fill(
+                                                child: PlayerShortcutFeedback(
+                                                  visible:
+                                                      shortcutFeedbackVisible,
+                                                  label: shortcutFeedbackLabel!,
+                                                  icon: shortcutFeedbackIcon,
                                                 ),
+                                              ),
                                           ],
                                         ),
                                       ),
