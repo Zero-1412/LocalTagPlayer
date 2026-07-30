@@ -8,7 +8,7 @@
 正式打包前先运行与 CI 相同的弹窗文案预览门禁：
 
 ```powershell
-./tool/check_release_notes_preview.ps1 -Version 0.2.3
+./tool/check_release_notes_preview.ps1 -Version 0.2.4
 ```
 
 脚本按应用当前的纯文本弹窗结构输出标题、正文和操作按钮，并拒绝 Markdown 标题、
