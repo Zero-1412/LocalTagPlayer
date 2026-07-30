@@ -1,5 +1,18 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-30 · 发布 Local Tag Player 0.2.4
+
+- GitHub 正式 Release 已公开 Windows x64 安装器、macOS 未公证 DMG 和双平台
+  SHA256SUMS；公网回读摘要与 GitHub 资产摘要一致。
+- 发布前应用内更新弹窗文案预览通过；Windows 简体中文安装器和 macOS DMG 均由
+  GitHub Actions 完成 Release 构建，双平台启动门禁通过。
+- 修复 Windows CRLF 让架构合同测试误匹配接口声明的问题；正式发布工作流现在会在
+  任一 Flutter 原生命令失败后立即退出，不再允许后续成功命令掩盖失败。
+- 修复后完整复验通过：485 项测试通过、3 项既有 benchmark 跳过，静态分析零问题，
+  Windows Debug/Release、简体中文安装器与 macOS Release/DMG 全部成功。
+- 本次门禁修复只涉及测试和发布工作流；PlayerBackend、filtered queue、SQLite、标签、
+  缓存队列和用户数据均未改变。
+
 ## 2026-07-30 · 播放器提示改为半透明亮色
 
 - 左上角操作提示改用 38% 不透明黑色背景、弱白色描边和纯白文字/图标，降低对视频内容

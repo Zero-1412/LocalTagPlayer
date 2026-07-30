@@ -1,5 +1,20 @@
 # CHAT_1_ARCHITECTURE.md
 
+## 2026-07-30 v0.2.4 正式发布与交付门禁修复
+
+- v0.2.4 正式 Release 已公开 Windows x64 安装器、macOS 未公证 DMG 和各自
+  SHA256SUMS；更新弹窗文案预览、Release 构建与双平台启动均完成。
+- 首次公开流水线显示绿色，但 Windows annotation 暴露一条架构合同测试失败：测试使用
+  LF 字面量定位页面 override，Actions 的 CRLF 检出导致起始位置为 `-1`；pwsh 又继续
+  执行后续成功命令，最终掩盖了该非零退出码。
+- 测试现以跨空白正则精确定位 override，并在 substring 前验证两个边界；发布工作流对
+  `flutter pub get/test/analyze/build` 逐项检查 `$LASTEXITCODE`，回归测试同时保护这一
+  fail-fast 合同。
+- 修复后的不发布工作流 `30537456609` 完整通过 Windows 与 macOS 构建链，且发布任务
+  按预期跳过，没有覆盖 v0.2.4 的公开资产。
+- 修复只属于测试可移植性和交付门禁，不改变 composition、平台 contract、数据库、
+  filtered queue、缓存或用户数据边界。
+
 ## 2026-07-30 Debug 正式入口交付复核
 
 - 再次复现资源管理器双击 Debug EXE 后进程存活但无主窗口；VM 根库明确为

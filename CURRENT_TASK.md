@@ -1,5 +1,28 @@
 # CURRENT_TASK.md
 
+## 2026-07-30 · Local Tag Player 0.2.4 正式发布
+
+- 正式版已发布到 `https://github.com/Zero-1412/LocalTagPlayer/releases/tag/v0.2.4`；
+  Windows x64 安装器为 133,361,258 bytes，SHA-256 为
+  `07e7a31275e6a85199a1b342fbbf0c4486a01e2e66bee148d32372819c8999bf`；
+  macOS 未公证 DMG 为 43,259,811 bytes，SHA-256 为
+  `592c97ded974ff784c724e8af6d2f3ab744a3b78d27b14cde667d3bf0cdcc22c`。
+- 公网回读 `SHA256SUMS-windows.txt` 与 `SHA256SUMS-macos.txt`，内容和 GitHub
+  资产摘要一致；Release 非草稿、非预发布，应用内更新弹窗文案预览通过。
+- 首次公开发布流水线 `30535910612` 成功构建、启动并上传双平台产物，但暴露一条
+  Windows CRLF 敏感的架构合同测试；同时发现 pwsh 会让后续成功命令掩盖此前原生命令
+  的非零退出码。问题只影响测试/交付门禁，不影响 v0.2.4 运行时代码或安装包。
+- 提交 `59c99e2` 改用跨空白正则定位 override 实现，为关键定位增加可读断言，并让
+  `pub get`、测试、分析和 Debug build 任一步失败后立即退出；对应工作流回归测试同步
+  防止门禁再次失效。
+- 不发布复验流水线 `30537456609` 全部通过：分支集成、485 项测试、静态分析、Windows
+  Debug build/启动、Windows Release/简体中文安装器、macOS Release/启动/DMG 均为绿色；
+  3 项既有 benchmark 按设计跳过，公开 Release 未被覆盖。
+- schema、`FilterQuery`、`TagQueryService`、PlayerBackend、filtered queue、缓存队列、
+  标签和用户数据均未改变。
+- 下一步计划：配置 Windows Authenticode 与 macOS Developer ID/公证密钥；随后在
+  已安装的 0.2.3 上走一次应用内升级到 0.2.4，复测下载速度、中文安装流程和数据保留。
+
 ## 2026-07-30 播放器提示半透明材质
 
 - 左上角操作提示由 94% 不透明结构表面改为 38% 不透明黑色浮动表面，视频内容可以透出；
