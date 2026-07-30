@@ -46,15 +46,11 @@ jobs:
             exit 1
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
-      - name: 检查用户可读发布说明
-        shell: bash
-        run: |
-          set -euo pipefail
-          notes_path="docs/RELEASE_NOTES_${{ steps.version.outputs.value }}.md"
-          test -s "$notes_path" || {
-            echo "缺少用户可读发布说明：$notes_path" >&2
-            exit 1
-          }
+      - name: 预览并检查应用内更新弹窗文案
+        shell: pwsh
+        run: >-
+          ./tool/check_release_notes_preview.ps1
+          -Version "${{ steps.version.outputs.value }}"
 
   integration_gate:
     name: 分支集成与 Debug 业务门禁

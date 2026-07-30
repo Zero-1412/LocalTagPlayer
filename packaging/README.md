@@ -5,6 +5,16 @@
 更新弹窗和 GitHub Release 正文，必须优先描述用户能感知的变化；签名、校验与内部
 实现信息只能放在主要更新之后。缺少或为空时，发布工作流会在构建前失败。
 
+正式打包前先运行与 CI 相同的弹窗文案预览门禁：
+
+```powershell
+./tool/check_release_notes_preview.ps1 -Version 0.2.3
+```
+
+脚本按应用当前的纯文本弹窗结构输出标题、正文和操作按钮，并拒绝 Markdown 标题、
+强调/代码标记、裸链接、自动 Changelog、章节顺序错误、少于三条用户更新或过长正文。
+GitHub Actions 会把同一份预览写入运行摘要；只有预览通过后，平台构建才会开始。
+
 ## GitHub Release
 
 向远程推送符合 `vX.Y.Z` 形式的标签后，`.github/workflows/release-packages.yml` 会执行以下流程：
