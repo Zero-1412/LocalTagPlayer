@@ -6,7 +6,7 @@ Local Tag Player 面向“本地视频很多、仅靠文件夹已经难以整理
 
 它不是 PotPlayer、VLC 或专业剪辑播放器的替代品。它专注补足大型本地视频库在发现、整理和连续浏览上的缺口，并把数据库、标签和观看记录保留在本机。
 
-[下载最新版本](https://github.com/Zero-1412/LocalTagPlayer/releases/latest) · [查看更新记录](CHANGELOG.md) · [阅读架构说明](ARCHITECTURE.md)
+[下载最新版本](https://github.com/Zero-1412/LocalTagPlayer/releases/latest) · [安装指南](INSTALL.md) · [查看更新记录](CHANGELOG.md) · [阅读架构说明](ARCHITECTURE.md)
 
 > 当前发布版为 `v0.2.4`。提供 Windows x64 安装器与 macOS DMG，两者当前均未签名；Linux 暂时支持源码构建。安装前请核对 Release 页面随附的 SHA-256。
 

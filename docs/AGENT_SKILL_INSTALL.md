@@ -1,4 +1,4 @@
-# Local Tag Player Codex 技能 v2
+# Local Tag Player Agent 技能安装
 
 安装到项目根目录：
 
