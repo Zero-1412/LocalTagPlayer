@@ -1,5 +1,25 @@
 # CURRENT_TASK.md
 
+## 2026-07-30 低码率缩小画质 dscale / correct-downscaling A/B
+
+- 新增三模式、三类自然低码率片源的真实 MediaKit Texture A/B：当前
+  `bilinear/no`、候选 `lanczos/yes`、隔离组 `lanczos/no`；九次会话均由同一
+  NativePlayer 写入并读回，不读取用户媒体库。
+- 九组均为 0 解码/总掉帧、0 音视频停滞、0 无响应；GPU P95 分别为当前
+  4.5%–4.6%、候选 4.5%–4.8%、隔离组 4.6%–4.8%。GPU committed P95 从当前
+  322.1 MiB 增加到候选 381.2–440.2 MiB，卷积缩小存在真实资源成本。
+- 三类内容的 A/B/C 固定窗口 PNG 在各自内容内 SHA-256 完全一致，视频区域两两
+  SSIM 均为 1.0。正式 NativePlayer 输出仍是源尺寸 Texture，窗口缩小由 Flutter/
+  Windows 合成层完成，所以 `dscale` 读回成功但没有参与最终窗口缩小。
+- 决策：生产默认保持打包 mpv 0.36 的实际 `bilinear/no`，不改成
+  `dscale=lanczos + correct-downscaling=yes`。播放诊断新增缩小器与缩小校正读回，
+  QA 脚本和集成模式保留为可复测证据。
+- 完整 461 项测试通过，3 项既有 benchmark 跳过；静态分析与 Windows Debug build
+  通过。真实 Debug 诊断窗口已确认 `bilinear/no` 读回可见，新增字段无截断或溢出。
+- 详细记录：`docs/qa/player_downscale_quality_ab_20260730.md`。
+- 下一步计划：同时采集原生 Texture 尺寸、视频 Widget 目标尺寸和 DPI，先确认正式
+  缩小所有权；只在 NativePlayer 真正承担缩小时重跑算法 A/B。
+
 ## 2026-07-30 小窗口播放器队列入口与 NativePlayer 画质审计
 
 - 删除普通播放器顶栏重复的队列按钮；底部控制条成为普通/紧凑/全屏布局的统一队列

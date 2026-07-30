@@ -1,3 +1,19 @@
+## 2026-07-30 低码率缩小画质 A/B
+
+- 对当前 `bilinear/no`、候选 `lanczos/yes` 和隔离 `lanczos/no` 完成三类自然
+  650 kbps 片源、九次真实 MediaKit Texture 会话；属性均由同一 NativePlayer 读回。
+- 九组均为 0 掉帧、0 音视频停滞，Lanczos 候选未见性能回归；但三类 A/B/C 固定窗口
+  分别逐字节相同，视频区域 SSIM 均为 1.0。
+- 根因是正式 NativePlayer 输出源尺寸 Texture，窗口内缩小由 Flutter/Windows 合成层
+  承担。候选卷积缩小增加 GPU committed 但没有改变最终像素，生产默认保持打包
+  mpv 0.36 的 `bilinear/no`。
+- 播放诊断补充缩小器/缩小校正读回；可复测脚本、集成模式与完整口径见
+  `docs/qa/player_downscale_quality_ab_20260730.md`。
+- 完整 461 项测试通过，3 项既有 benchmark 跳过；静态分析、Windows Debug build
+  与真实诊断窗口点击检查通过。
+- filtered queue、当前 index、返回路径、PlayerBackend contract、标签、缓存和用户数据
+  均未改变。
+
 ## 2026-07-30 小窗口队列入口与画质生效审计
 
 - 播放器顶栏删除重复队列按钮；底部控制条统一控制宽屏、紧凑和全屏队列。紧凑布局由

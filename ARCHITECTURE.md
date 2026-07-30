@@ -1,5 +1,19 @@
 ﻿# ARCHITECTURE.md
 
+## 2026-07-30 Texture 缩小所有权与 dscale 门禁
+
+`Architecture Baseline 0.5.138` 明确区分“libmpv 属性已读回”和“属性参与最终画面”。
+正式 MediaKit Texture 路径当前保持源分辨率纹理；视频区域变小时，最终缩小由
+Flutter/Windows 合成层完成。本项目打包 mpv 0.36 的真实运行基线为
+`dscale=bilinear`、`correct-downscaling=no`。两项可以由同一 NativePlayer
+成功写入和读回，但在纹理没有缩小时不能据此宣称缩小画质已增强。
+
+三类低码率自然片源的 `bilinear/no`、`lanczos/yes`、`lanczos/no` 九组真实 A/B 均为
+0 掉帧、0 音视频停滞；各内容的三张固定窗口证据逐字节相同，视频区域 SSIM 为 1.0。
+候选卷积缩小还增加 GPU committed；因此生产默认不显式覆盖两项属性。
+未来若让 NativePlayer 输出尺寸跟随 Widget，必须先增加纹理重建、DPI、掉帧和颜色门禁，
+再重新评估缩小算法，不能把属性接受状态当作视觉生效状态。
+
 ## 2026-07-30 正式播放边界与属性一致性
 
 `Architecture Baseline 0.5.137` 把正式播放拓扑固定为：

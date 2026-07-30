@@ -81,6 +81,9 @@ void main() {
         mode != 'sdr-dark-enhanced' &&
         mode != 'compression-off' &&
         mode != 'compression-clarity' &&
+        mode != 'downscale-current' &&
+        mode != 'downscale-lanczos' &&
+        mode != 'downscale-lanczos-uncorrected' &&
         mode != 'nvidia-off' &&
         mode != 'nvidia-on' &&
         mode != 'nvidia-hdr-off' &&
@@ -89,7 +92,7 @@ void main() {
         mode != 'nvofa-motion-off' &&
         mode != 'nvofa-motion-on') {
       throw StateError(
-        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、nvidia-off、nvidia-on、nvidia-hdr-off、nvidia-hdr-on、nvidia-vsr-hdr-on、nvofa-motion-off 或 nvofa-motion-on',
+        '基线模式必须是 hdr、sdr-dark、sdr-dark-enhanced、compression-off、compression-clarity、downscale-current、downscale-lanczos、downscale-lanczos-uncorrected、nvidia-off、nvidia-on、nvidia-hdr-off、nvidia-hdr-on、nvidia-vsr-hdr-on、nvofa-motion-off 或 nvofa-motion-on',
       );
     }
     final baselineMode = mode!;
@@ -111,6 +114,9 @@ void main() {
         'hdr' => '固定 HDR10 样本',
         'compression-off' ||
         'compression-clarity' ||
+        'downscale-current' ||
+        'downscale-lanczos' ||
+        'downscale-lanczos-uncorrected' ||
         'nvidia-off' ||
         'nvidia-on' ||
         'nvidia-hdr-off' ||
@@ -206,6 +212,32 @@ void main() {
                   : baselineMode,
       timeout: const Duration(seconds: 30),
     );
+    final downscaleProperties = switch (baselineMode) {
+      'downscale-current' => const <String, String>{
+          'dscale': 'bilinear',
+          'correct-downscaling': 'no',
+        },
+      'downscale-lanczos' => const <String, String>{
+          'dscale': 'lanczos',
+          'correct-downscaling': 'yes',
+        },
+      'downscale-lanczos-uncorrected' => const <String, String>{
+          'dscale': 'lanczos',
+          'correct-downscaling': 'no',
+        },
+      _ => null,
+    };
+    if (downscaleProperties != null) {
+      // 缩小 A/B 只覆盖两项 GPU renderer 属性；同一 Player、媒体和队列保持不变。
+      await playerKey.currentState!.playerService
+          .setProperties(downscaleProperties);
+      for (final entry in downscaleProperties.entries) {
+        expect(
+          await playerKey.currentState!.playerService.getProperty(entry.key),
+          entry.value,
+        );
+      }
+    }
     if (baselineMode.startsWith('nvidia-')) {
       await _waitForNvidiaAutomaticDecision(
         tester,
@@ -410,6 +442,7 @@ void main() {
     // 结束帧导出可能短暂占用渲染队列；先暂停可确保采证动作不被误计为长播压力。
     await playerKey.currentState!.playerService.pause();
     if (baselineMode.startsWith('compression-') ||
+        baselineMode.startsWith('downscale-') ||
         baselineMode.startsWith('nvidia-') ||
         baselineMode.startsWith('nvofa-')) {
       // 压缩修复 A/B 固定回到同一时间点，避免移动测试图的内容差异污染像素对比。
@@ -447,6 +480,8 @@ void main() {
             'mpv 视频滤镜:',
             'mpv 去色带:',
             'mpv 去色带参数:',
+            'mpv GPU 缩小器:',
+            'mpv 缩小校正:',
             '原生 QA · NVIDIA RTX 视频超分:',
             '原生 QA · NVIDIA RTX Video HDR:',
             '原生 QA · NVIDIA 滤镜互斥处理:',
@@ -586,6 +621,13 @@ void main() {
         finalLines.where((line) => line.startsWith('mpv 视频滤镜: ')).single,
         isNot(contains('deblock=')),
       );
+    } else if (baselineMode.startsWith('downscale-')) {
+      final expectedDscale =
+          baselineMode == 'downscale-current' ? 'bilinear' : 'lanczos';
+      final expectedCorrection =
+          baselineMode == 'downscale-lanczos' ? 'yes' : 'no';
+      expect(finalLines, contains('mpv GPU 缩小器: $expectedDscale'));
+      expect(finalLines, contains('mpv 缩小校正: $expectedCorrection'));
     } else if (baselineMode == 'nvidia-vsr-hdr-on') {
       final vsrRequested = finalLines.any(
         (line) => line.startsWith(
@@ -797,6 +839,15 @@ Future<void> _waitForSessionState(
           snapshot.lines.contains('mpv 去色带: yes')) {
         return;
       }
+    } else if (mode.startsWith('downscale-')) {
+      // 缩小 A/B 不依赖 HDR/SDR 增强能力门禁；真实播放推进且解码器已读回即可采样。
+      final decoderReady = snapshot.lines.any(
+        (line) =>
+            line.startsWith('mpv 实际硬解: ') &&
+            !line.endsWith('empty') &&
+            !line.endsWith('unavailable'),
+      );
+      if (decoderReady && snapshot.progressMs >= 900) return;
     } else if (mode == 'nvidia-on') {
       final active = snapshot.lines.contains('原生 QA · NVIDIA VSR 驱动确认: active');
       final safelyRolledBack = snapshot.lines.any(

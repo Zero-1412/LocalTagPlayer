@@ -1,5 +1,20 @@
 ﻿# CHANGELOG.md
 
+## 2026-07-30 · 完成低码率缩小画质 A/B
+
+- 播放诊断增加 `dscale` 与 `correct-downscaling` 实际读回；新增可复现的三类自然
+  低码率片源、三档真实 MediaKit Texture A/B 工具和集成测试模式。
+- 九次 20 秒会话全部 0 掉帧、0 音视频停滞；候选 Lanczos 无可测性能回归，但三类
+  A/B/C 固定窗口在各自内容内逐字节相同，视频区域 SSIM 全为 1.0。
+- 确认正式 NativePlayer 保持源尺寸 Texture，窗口缩小由 Flutter/Windows 合成层执行；
+  因此不把读回成功但没有视觉作用的 `dscale=lanczos` 设为默认。
+- 真实 Debug 诊断确认打包 mpv 0.36 当前为 `bilinear/no`；候选 `lanczos/yes`
+  增加 GPU committed 却没有改变最终像素，因此生产默认保持不变。
+- 完整 461 项测试通过，3 项既有 benchmark 跳过；静态分析、Windows Debug build
+  与真实诊断窗口点击检查通过。
+- filtered queue、PlayerBackend contract、SQLite、标签语义、缓存队列和用户数据
+  均未改变。
+
 ## 2026-07-30 · 修复小窗口播放器队列入口
 
 - 删除播放器顶栏重复的播放队列按钮；底部控制条统一控制宽屏常驻侧栏、紧凑右侧覆盖层

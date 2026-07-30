@@ -1871,6 +1871,28 @@ void main() {
     expect(topBar, isNot(contains("tooltip: '播放队列'")));
   });
 
+  test('缩小画质诊断区分属性读回与最终窗口视觉证据', () {
+    final diagnostics = File(
+      'lib/src/pages/player/player_state_diagnostics.dart',
+    ).readAsStringSync();
+    final integration = File(
+      'integration_test/player_fixed_quality_baseline_test.dart',
+    ).readAsStringSync();
+    final script = File(
+      'tool/run_downscale_quality_ab.ps1',
+    ).readAsStringSync();
+
+    expect(diagnostics, contains("'dscale'"));
+    expect(diagnostics, contains("'correct-downscaling'"));
+    expect(diagnostics, contains('mpv GPU 缩小器:'));
+    expect(diagnostics, contains('mpv 缩小校正:'));
+    expect(integration, contains("'downscale-current'"));
+    expect(integration, contains("'downscale-lanczos'"));
+    expect(integration, contains("'downscale-lanczos-uncorrected'"));
+    expect(script, contains('fixedWindowFramesByteIdentical'));
+    expect(script, contains('fixedFrameSha256'));
+  });
+
   test('player shortcut suspension and focus eligibility have one pure owner',
       () {
     final page = _readPlayerPageCluster();
