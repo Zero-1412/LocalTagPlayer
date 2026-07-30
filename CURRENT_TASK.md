@@ -1,5 +1,28 @@
 # CURRENT_TASK.md
 
+## 2026-07-30 播放器双击、回车全屏与长按 seek
+
+- 视频画面区域双击复用既有 `playOrPause` 和居中反馈，只切换播放/暂停，不改变当前
+  filtered queue、选中项、比例或控制条。队列条目的单击选择、双击播放仍保持原入口。
+- 播放器主焦点下的回车与小键盘回车切换进入/退出全屏；可配置全屏快捷键继续保留。
+  输入框、弹窗、菜单、其它 Route 和用户显式自定义快捷键仍先由原门禁消费。
+- 播放/暂停、全屏和固定回车忽略 `KeyRepeatEvent`，避免长按导致状态连续反转；
+  快进/快退继续消费重复事件。
+- `PlayerSeekCoordinator` 跨短工作器保留最近后端提交间隔。10 次、每 15ms 的长按模拟
+  会按 60ms 测试门槛合并中间目标并最终累计到 50 秒，证明后端快速确认时也不会绕过
+  节流或丢失松键前最终目标；生产间隔仍为 80ms。
+- “Debug 双击无窗口”再次确认是 integration test 把 Debug 目录入口覆盖为
+  `flutter_test_listener`，不是 Windows runner 或应用启动崩溃。全部测试后重新执行
+  正式 Debug build，精确 PID 双击门禁已取得可见 `local_tag_player` 主窗口。
+- 完整 481 项测试通过、3 项既有 benchmark 跳过，静态分析零问题，Windows Debug
+  build 与双击启动门禁通过。
+- 真实点击准备阶段检测到用户正在操作目标窗口，Computer Use 安全互锁停止抢占，因而
+  没有伪造截图结论。人工复测路径：双击最终 Debug EXE → 打开任一视频 → 双击画面两次
+  确认暂停/播放各切换一次 → 长按当前快进/快退键（默认 J/L）确认画面连续跟随 →
+  回车进入全屏、再次回车退出，并确认长按回车不会反复闪烁。
+- schema、`FilterQuery`、`TagQueryService`、PlayerBackend、filtered queue 来源/顺序、
+  缩略图/媒体缓存队列、标签和用户数据均未改变。
+
 ## 2026-07-30 中文安装器与连续快进画面跟随
 
 - Windows Inno Setup 安装器现在只声明简体中文，关闭语言选择和旧安装语言复用；桌面

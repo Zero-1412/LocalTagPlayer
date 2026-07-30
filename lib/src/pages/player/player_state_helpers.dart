@@ -111,12 +111,10 @@ extension PlayerStateHelpers on PlayerPageState {
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.playPause)) {
-      final playing = playerService.state.playing;
-      unawaited(playerService.playOrPause());
-      showShortcutFeedback(
-        playing ? '暂停' : '播放',
-        playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-      );
+      if (event is KeyRepeatEvent) {
+        return KeyEventResult.handled;
+      }
+      togglePlaybackWithFeedback();
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekBackward)) {
@@ -170,13 +168,10 @@ extension PlayerStateHelpers on PlayerPageState {
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.fullscreen)) {
-      unawaited(toggleWindowFullscreen());
-      showShortcutFeedback(
-        isWindowFullscreen ? '退出全屏' : '进入全屏',
-        isWindowFullscreen
-            ? Icons.fullscreen_exit_rounded
-            : Icons.fullscreen_rounded,
-      );
+      if (event is KeyRepeatEvent) {
+        return KeyEventResult.handled;
+      }
+      toggleFullscreenWithFeedback();
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.speedDown)) {
@@ -212,10 +207,35 @@ extension PlayerStateHelpers on PlayerPageState {
         return KeyEventResult.handled;
       case LogicalKeyboardKey.enter:
       case LogicalKeyboardKey.numpadEnter:
-        jumpTo(selectedIndex, ignoreFollowUpSelection: true);
+        // 未被用户自定义快捷键消费的回车固定作为全屏快速开关。
+        if (event is KeyRepeatEvent) {
+          return KeyEventResult.handled;
+        }
+        toggleFullscreenWithFeedback();
         return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  /** 统一处理画面双击与键盘动作，保证播放状态反馈文案一致。 */
+  void togglePlaybackWithFeedback() {
+    final playing = playerService.state.playing;
+    unawaited(playerService.playOrPause());
+    showShortcutFeedback(
+      playing ? '暂停' : '播放',
+      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+    );
+  }
+
+  /** 统一处理回车与可配置全屏快捷键，保留既有窗口生命周期边界。 */
+  void toggleFullscreenWithFeedback() {
+    unawaited(toggleWindowFullscreen());
+    showShortcutFeedback(
+      isWindowFullscreen ? '退出全屏' : '进入全屏',
+      isWindowFullscreen
+          ? Icons.fullscreen_exit_rounded
+          : Icons.fullscreen_rounded,
+    );
   }
 
   void handlePointerDown(PointerDownEvent event) {

@@ -1,5 +1,14 @@
 # CHAT_1_ARCHITECTURE.md
 
+## 2026-07-30 Debug 正式入口交付复核
+
+- 再次复现资源管理器双击 Debug EXE 后进程存活但无主窗口；VM 根库明确为
+  `flutter_test_listener` 与连续 seek integration test，不是产品 `main.dart`。
+- 既有 `verify_windows_debug_package.ps1` 仍是正确交付边界：全部 Windows 集成测试
+  结束后重新构建正式 Debug 入口，再按脚本创建的精确 PID 验证可见主窗口。
+- 本轮最终顺序已修正，门禁取得 `local_tag_player` 主窗口；Windows runner、应用数据
+  路径、SQLite、窗口布局持久化和正式安装包均无需修改。
+
 ## 2026-07-30 Windows 安装器简体中文边界
 
 - Inno Setup 只声明简体中文，关闭语言选择与旧安装语言复用，避免历史英文安装记录影响

@@ -65,6 +65,8 @@ class PlayerSeekCoordinator {
   Duration? _pendingTarget;
   Duration? _latestRequestedTarget;
   Future<void>? _worker;
+  /** 跨工作器保留最近一次提交间隔，避免长按重复事件在快速确认后绕过节流。 */
+  Stopwatch? _sinceLastDispatch;
   var _running = false;
 
   /** 连续输入尚未落稳时的最新累计目标。 */
@@ -108,10 +110,9 @@ class PlayerSeekCoordinator {
   }
 
   Future<void> _run() async {
-    Stopwatch? sinceLastDispatch;
     try {
       while (!_isExiting() && _pendingTarget != null) {
-        final elapsed = sinceLastDispatch?.elapsed;
+        final elapsed = _sinceLastDispatch?.elapsed;
         if (elapsed != null && elapsed < minimumDispatchInterval) {
           // 等待期间新输入继续覆盖 _pendingTarget；到点后读取的始终是最新累计位置。
           await _delay(minimumDispatchInterval - elapsed);
@@ -126,7 +127,7 @@ class PlayerSeekCoordinator {
         _pendingTarget = null;
         final latency = Stopwatch()..start();
         await _submit(requested);
-        sinceLastDispatch = Stopwatch()..start();
+        _sinceLastDispatch = Stopwatch()..start();
 
         final confirmation = Stopwatch()..start();
         while (!_isExiting() && confirmation.elapsed < confirmationTimeout) {

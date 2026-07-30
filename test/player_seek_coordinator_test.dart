@@ -81,4 +81,41 @@ void main() {
       ],
     );
   });
+
+  test('长按快进跨短工作器持续节流并提交最终累计目标', () async {
+    final submitted = <Duration>[];
+    final submittedAt = <Duration>[];
+    final clock = Stopwatch()..start();
+    var position = Duration.zero;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async {
+        submitted.add(target);
+        submittedAt.add(clock.elapsed);
+        position = target;
+      },
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 3),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: const Duration(milliseconds: 60),
+    );
+
+    Future<void> latest =
+        coordinator.requestRelative(const Duration(seconds: 5));
+    for (var index = 1; index < 10; index++) {
+      await Future<void>.delayed(const Duration(milliseconds: 15));
+      latest = coordinator.requestRelative(const Duration(seconds: 5));
+    }
+    await latest;
+
+    expect(submitted.first, const Duration(seconds: 5));
+    expect(submitted.last, const Duration(seconds: 50));
+    expect(submitted.length, lessThan(10));
+    for (var index = 1; index < submittedAt.length; index++) {
+      expect(
+        submittedAt[index] - submittedAt[index - 1],
+        greaterThanOrEqualTo(const Duration(milliseconds: 50)),
+      );
+    }
+  });
 }

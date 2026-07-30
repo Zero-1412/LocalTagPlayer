@@ -1,5 +1,20 @@
 ﻿# ARCHITECTURE.md
 
+## 2026-07-30 播放器重复输入与 Debug 交付边界
+
+`Architecture Baseline 0.5.142` 在既有 `PlayerSeekCoordinator` 内把最近一次后端提交
+间隔提升为协调器实例状态。Windows 长按键产生的 `KeyRepeatEvent` 即使遇到后端快速
+确认、旧工作器提前结束，下一工作器也不能绕过 80ms 节流；最新累计目标持续替换等待
+目标，松键后的最终目标仍保证提交。该调整不改变 `PlayerBackend` contract 或后端实现。
+
+播放器页面的画面双击与键盘回车只复用既有播放/暂停和全屏生命周期命令。输入框、
+弹窗、菜单与其它 Route 的快捷键门禁保持不变；用户显式自定义动作先于固定回车别名，
+长按播放/暂停或全屏键不会重复翻转状态。
+
+Windows integration test 仍可能覆盖 Debug 目录的 Dart 入口。最终可双击交付物必须在
+全部测试后通过 `verify_windows_debug_package.ps1` 重建 `main.dart` 并按精确 PID 验证
+可见主窗口；不能把存活但加载 `flutter_test_listener` 的测试宿主视为应用启动成功。
+
 ## 2026-07-30 中文安装器与连续 seek 协调边界
 
 `Architecture Baseline 0.5.141` 将连续 seek 从页面字段与尾随防抖收敛为纯应用层

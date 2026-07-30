@@ -128,6 +128,9 @@ extension PlayerStateView on PlayerPageState {
                                                       HitTestBehavior.opaque,
                                                   onTapDown: (_) =>
                                                       focusNode.requestFocus(),
+                                                  // 双击只切换播放状态，不改变当前队列或画面比例。
+                                                  onDoubleTap:
+                                                      togglePlaybackWithFeedback,
                                                   onSecondaryTapDown:
                                                       showPlayerContextMenu,
                                                   child: Center(
