@@ -212,11 +212,17 @@ def _write_json(path: Path, value: Any) -> None:
 def _redact_text(text: str, extra_paths: Iterable[Path] = ()) -> str:
     """遮盖用户目录、真实仓库和临时克隆绝对路径，避免 Trace 泄露本地位置。"""
 
-    replacements = [
-        (Path.home(), "<USER_HOME>"),
-        (REPO_ROOT, "<REPO_ROOT>"),
-        *((path, "<ISOLATED_REPO>") for path in extra_paths),
-    ]
+    # CI workspace 通常位于用户目录下；必须先遮盖更具体的子路径，否则
+    # `<USER_HOME>` 会吞掉 repo/隔离目录，既破坏证据语义也让跨平台测试失真。
+    replacements = sorted(
+        [
+            (Path.home(), "<USER_HOME>"),
+            (REPO_ROOT, "<REPO_ROOT>"),
+            *((path, "<ISOLATED_REPO>") for path in extra_paths),
+        ],
+        key=lambda item: len(str(item[0])),
+        reverse=True,
+    )
     redacted = text
     for path, placeholder in replacements:
         for candidate in {str(path), str(path).replace("\\", "/")}:

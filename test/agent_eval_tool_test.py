@@ -118,9 +118,9 @@ class AgentEvalToolTest(unittest.TestCase):
         """目录必须覆盖 11 个 Skill 的 44 个触发用例及能力/回归用例。"""
 
         summary = agent_eval.validate_catalog()
-        self.assertEqual(62, summary["case_count"])
+        self.assertEqual(63, summary["case_count"])
         self.assertEqual(44, summary["suite_counts"]["trigger"])
-        self.assertEqual(12, summary["suite_counts"]["regression"])
+        self.assertEqual(13, summary["suite_counts"]["regression"])
         self.assertEqual(11, len(summary["skill_trigger_coverage"]))
         self.assertEqual(11, len(summary["governance"]["skills"]))
         self.assertLessEqual(
@@ -503,6 +503,25 @@ class AgentEvalToolTest(unittest.TestCase):
         self.assertNotIn(str(Path.home()), redacted)
         self.assertNotIn(str(agent_eval.REPO_ROOT), redacted)
         self.assertNotIn(str(isolated), redacted)
+        self.assertIn("<USER_HOME>", redacted)
+        self.assertIn("<REPO_ROOT>", redacted)
+        self.assertIn("<ISOLATED_REPO>", redacted)
+
+    def test_trace_redacts_nested_paths_before_home(self) -> None:
+        """CI 仓库位于用户目录下时仍必须保留 repo/隔离路径占位语义。"""
+
+        original_repo_root = agent_eval.REPO_ROOT
+        nested_repo = Path.home() / "work" / "LocalTagPlayer"
+        isolated = nested_repo / ".local" / "isolated"
+        try:
+            agent_eval.REPO_ROOT = nested_repo
+            redacted = agent_eval._redact_text(
+                f"home={Path.home()} repo={nested_repo} temp={isolated}",
+                (isolated,),
+            )
+        finally:
+            agent_eval.REPO_ROOT = original_repo_root
+
         self.assertIn("<USER_HOME>", redacted)
         self.assertIn("<REPO_ROOT>", redacted)
         self.assertIn("<ISOLATED_REPO>", redacted)

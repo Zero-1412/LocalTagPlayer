@@ -1,111 +1,77 @@
-﻿# PROJECT.md
+# PROJECT.md
 
-## 项目
+## 产品
 
-Local Tag Player
+Local Tag Player 是面向大型本地视频库的 Tag 驱动发现播放器。典型媒体库约
+11,000 个视频、8 TB；目标是让用户通过标签、搜索和当前筛选队列快速发现并连续播放，
+而不是替代 PotPlayer、VLC 或专业视频工作站。
 
-## 路径
-
-```text
-<project-root>
-```
-
-## 项目目标
-
-做一个面向大量本地缓存视频的 Tag 驱动检索播放器。用户本地视频约 11000 条、约 8T，过去主要依赖 PotPlayer 和手动文件夹分类。现在应用目标不是替代 PotPlayer / VLC，而是把本地目录扫描进库，通过分组 Tag、标签别名、组合筛选、收藏、搜索和筛选结果播放队列快速查找和连续播放。
-
-## 规划来源
-
-后续产品方向、模块优先级和跨平台路线以以下文件为准：
+## 核心用户流程
 
 ```text
-<private-planning-document>
+添加本地目录
+-> 递归扫描视频
+-> 从 root 第一/第二层派生 folder 标签
+-> 用户维护 manual 标签、别名和收藏
+-> 分组标签与关键词筛选
+-> 当前结果成为播放队列
+-> Tag Manager 修正数据
+-> 缓存与诊断维持缩略图和媒体信息稳定
 ```
 
-当前项目实现只代表已有状态；如果旧实现习惯与该规划冲突，以该规划为准，并通过 `ROADMAP.md` 和对应 Chat 任务文档落地。
+核心查询语义：
+
+- 同组标签 OR、不同组 AND、排除标签 NOT；
+- 关键词匹配文件名、路径、标签名和别名；
+- 一级/二级 folder 标签遵守当前媒体 root 的真实父子层级；
+- folder 标签可重算，manual 标签和其它用户维护数据必须保留；
+- 播放器消费来源页面传入的 filtered queue。
+
+稳定身份方向：
+
+```text
+videoId = 数据库稳定身份
+fingerprint = 文件/媒体身份
+path = 当前可变位置
+missing = 路径失效但记录保留
+```
 
 ## 技术栈
 
-- Flutter Windows 桌面应用
-- Dart
-- media_kit / media_kit_video：播放内核
-- SQLite：媒体库索引
-- FFmpeg：缩略图生成
-- FFprobe：媒体信息读取
-- sqflite_common_ffi：SQLite 访问
+- Flutter / Dart 桌面应用；
+- SQLite 与 `sqflite_common_ffi`；
+- `media_kit` / `media_kit_video`；
+- FFmpeg / FFprobe；
+- Windows 原生 C++ 播放边界；
+- Windows Rust 媒体库扫描边界。
 
-## 当前平台
+当前产品和性能基线以 Windows 为主；macOS/Linux 通过平台 adapter 和 CI 验证。
+Windows 路径、原生库和系统命令不能泄漏到平台无关业务层。
 
-当前主要开发目标是 Windows。未来可能多端，但 Windows 相关工具不能直接复用到 Android / iOS，需要按平台重新接入原生库或插件。
-
-## 核心用户需求
-
-- 添加一个或多个本地视频目录。
-- 递归扫描大量视频文件。
-- 一级标签来自根目录下第一层文件夹名，作为 `folder` 来源的初始 Tag。
-- 二级标签来自一级目录下的第二层文件夹名，作为 `folder` 来源的初始 Tag。
-- 一级目录下没有二级目录的视频归入“默认专辑”。
-- 后续真正的检索系统以播放器自己的分组 Tag 数据库为准，不只依赖文件夹树。
-- 标签筛选必须快速、直观，目标是网页式分组筛选。
-- 筛选逻辑默认采用不同标签组 AND、同组标签 OR、排除标签 NOT。
-- 搜索应匹配文件名、路径、标签名和标签别名。
-- 收藏可以跨标签保存喜欢的视频。
-- 播放器右侧显示当前筛选结果队列，支持快速切换视频。
-- 播放器右侧顶部显示当前一级标签下的同级二级标签。
-- 缩略图和媒体信息要缓存，不应每次打开重复读取。
-- 播放时缩略图后台任务应暂停或降负载，避免卡顿。
-- 视频身份最终应走 `videoId + fingerprint + mutable path`，路径失效时标记 `missing`，不立即删除用户整理过的 Tag、收藏和播放记录。
-
-## 运行命令
+## 源码运行
 
 ```powershell
-cd <project-root>
 flutter pub get
 flutter run -d windows
 ```
 
-## 验证命令
-
-每次代码修改后至少执行：
+## 验证
 
 ```powershell
+flutter test
 flutter analyze
 flutter build windows --debug
 ```
 
-## 编码约定
+## 文档入口
 
-- Dart/Flutter/Google 工程标准与本项目 200/500/1000 行治理规则见
-  `docs/architecture/CODE_DEVELOPMENT_STANDARDS_2026_07_29.md`。行数只用于发现风险，
-  交付仍以职责分离、依赖方向、测试和页面可达性为准。
-- 修改前先读相关代码，不凭历史记忆改。
-- 用户工作区可能有未提交修改，不要回滚用户修改。
-- 优先保持现有架构和现有 UI 风格。
-- UI 文案使用中文。
-- 所有 AI Agent 必须先阅读 `AGENTS.md`；Claude 还需要阅读 `CLAUDE.md`。
-- 所有任务必须遵守“从第一性原理出发 + 对抗式审查”的执行方式。
-- 当背景信息窗口达到、超过或接近软件限定上下文长度的 70% 时，必须优先压缩上下文或把当前对话记录、任务状态、已改文件、验证结果和下一步计划传递给下一个新对话，保证继续开发时上下文占用不超过软件限定值的 70%。
-- 每次执行连续开发任务时，必须显式遵守并复述：“从第一性原理出发，后续修改进行对抗式审查，任务结束后自己给出下一步计划”。
-- 新增代码必须增加类/字段/方法/参数/条件分支等维护性注释；修改代码必须同步更新对应注释；删除代码必须删除对应注释。代码注释必须使用中文，注释用于说明职责、约束、意图和边界，不能只复述语法。类、字段、方法、参数等结构说明使用 `/** ... */`，方法内部实现意图使用 `//`。
-- 变更后检查是否存在乱码字符。
-- UI 修改后必须自行启动应用，模拟点击测试本次对应功能，并与蓝图 UI 对比，最后给出下一步完善计划；若自动化不可用，必须记录阻塞原因和人工复测路径。
-- 大功能完成后更新 CURRENT_TASK.md 和 CHANGELOG.md。
-- 新开功能 Chat 时必须读取 ROADMAP.md 和对应 docs/chat_tasks/CHAT_*.md，并在对应模板中迭代版本号和变更点。
+- `AGENTS.md`：所有任务都适用的长期规则；
+- `CURRENT_TASK.md`：当前任务、最近三项、稳定基线、阻塞和下一步；
+- `ARCHITECTURE.md`：当前模块/数据边界和基线；
+- `ROADMAP.md`：当前优先级和未来里程碑；
+- `docs/chat_tasks/`：领域阶段合同与历史；
+- `docs/qa/`：可重复门禁与 dated 证据；
+- `CHANGELOG.md`：版本和历史行为变更。
 
-
-## 多 Chat 协作边界
-
-- Chat 1 / Architecture + Cross Platform Boundary：负责 `main.dart` 拆分、模块边界、底层接口、跨端路线、项目规则和架构版本记录。
-- Chat 2 / Tag Model + Filter Engine + Media Library：负责 SQLite、扫描、folder/manual Tag、分组 Tag、别名、FilterQuery、稳定身份、missing/relink 规划。
-- Chat 3 / Media Library Tag UI：负责网页式 Tag 检索首页、筛选 Chips、结果数量、保存筛选入口和第一阶段响应式结构。
-- Chat 4 / Player Filter Queue + PlayerBackend：负责筛选结果播放队列、PlayerBackend、硬解、诊断和右侧列表，不优先做专业播放器增强。
-- Chat 5 / Thumbnail + Diagnostics + FFmpegBackend：负责 FFmpeg/FFprobe、缩略图缓存队列、失败重试、异常文件、缓存诊断和 FFmpegBackend 落地。
-- Chat 6 / Tag Manager + Batch Tagging：负责标签管理、重命名、合并、别名、批量打标签。
-- Chat 7 / Responsive UI + Platform Polish：负责最终视觉统一、完整响应式布局和 macOS/Linux 适配点。
-- 所有 Chat 修改后都要更新对应文档；涉及底层边界的变更必须更新 `ARCHITECTURE.md` 的架构基线版本和变更点。
-
-## 已知注意事项
-
-- 当前已完成第一阶段 `part` 文件拆分，后续需要继续抽平台接口和独立 import 模块。
-- media_kit 暴露的播放诊断信息有限，精确掉帧和 AV offset 需要进一步接 mpv/native stats。
-- FFmpeg/FFprobe 已内置到 Windows 构建目录，但发布时要注意授权。
+Agent 执行流程、上下文 Level、注释、真实点击、Git 和安全规则只以 `AGENTS.md`
+为准，不在本文件重复。

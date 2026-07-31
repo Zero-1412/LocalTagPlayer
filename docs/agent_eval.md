@@ -172,8 +172,17 @@ Scorer 会确定性检查 `done_when.id` 唯一、完成项与验证记录一一
 - `AGENTS.md` 新增显式删除授权、受保护行为清单、diff 删除审计、页面/Route 可达性证据、失败关闭与提交阻断；`ltp-task-router` 把生产或真实窗口发现的未授权功能删除固定升级为 Level 3 `independent`。
 - 新增 `reg-existing-behavior-preservation` 和 `required_validation_records` 硬门。首轮错误地期待 Level 2 structured，五轮 Agent 均选择 Level 3 independent，结果 0/5；据此收紧规则与用例，而不是降低验证等级。
 - 第二轮使用 `gpt-5.6-terra`、`reasoning_effort=low`、workspace snapshot 与 N=5：5/5、平均 100 分、`stable=true`，0 基础设施错误，平均耗时 190.994 秒；累计输入 1,269,778、缓存输入 1,053,952、输出 19,324 token。
-- 零模型成本验证确认 62 个用例、44/6/12 suite 分布、11 个 Skill 的 2 正 2 负覆盖；17 项评分器单元测试通过，`ltp-task-router` 使用 `quick_validate.py` 的 UTF-8 模式通过目录验证。
+- 零模型成本验证确认当时 62 个用例、44/6/12 suite 分布、11 个 Skill 的 2 正 2 负覆盖；17 项评分器单元测试通过，`ltp-task-router` 使用 `quick_validate.py` 的 UTF-8 模式通过目录验证。
 - 两轮 Trace 与报告保留在 `.local/agent-eval-preserve-20260722/artifacts/agent_eval/`，由 `.gitignore` 隔离，不提交包含本地路径或运行 Trace 的产物。
+
+## 2026-07-31 治理预算与最小上下文门禁
+
+- `validate` 增加严格 UTF-8、Skill frontmatter、Agent UI 元数据、松散 Markdown
+  和默认上下文预算检查。
+- `reg-level3-minimal-context` 固定 Level 3 只读直接治理证据、不得默认全读项目历史。
+- 当前目录共 63 个用例：44 trigger、6 capability、13 regression；
+  评分器单元测试 22 项，并覆盖 CI 仓库位于用户目录下时的路径遮盖顺序。
+- `.github/workflows/agent-governance.yml` 在相关 pull request/push 上运行零模型成本门禁。
 
 ## 命令
 

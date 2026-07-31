@@ -1,144 +1,64 @@
-﻿# AGENTS.md
+# AGENTS.md
 
-## 0. 项目快照
+## 1. 权威范围
 
-项目：Local Tag Player
+本文件只保存 Local Tag Player 每个任务都必须遵守的长期规则：
 
-定位：
+- 产品和用户数据边界；
+- 最小上下文路由；
+- 验证、既有行为保护和交付规则；
+- repo Skill 与 Agent eval 约束。
+
+当前状态只写 `CURRENT_TASK.md`；当前架构和优先级分别写
+`ARCHITECTURE.md`、`ROADMAP.md`；历史进入 `docs/task_history/`、
+dated QA/ADR 或 `CHANGELOG.md`。不要把阶段快照复制回本文件。
+
+## 2. 产品目标与核心闭环
 
 ```text
 Tag-driven local video discovery player
 not a PotPlayer / VLC replacement
 not a general professional video player
-```
 
-核心闭环：
-
-```text
 scan local folders
--> derive initial folder tags
--> add/edit manual tags
--> distinguish folder/manual/rule/filename/import/auto tag sources
--> grouped tag filtering
--> keyword / alias search
--> current filter chips + result count
+-> derive folder tags
+-> maintain manual tags
+-> grouped filtering and alias search
+-> current filter chips and result count
 -> filtered playback queue
--> player consumes current queue
--> Tag Manager fixes tags
--> cache/diagnostics keep thumbnails and media details stable
+-> player consumes that queue
+-> Tag Manager repairs tags
+-> cache/diagnostics keep media details stable
 ```
 
-已完成的一阶段工作：
+没有明确要求时，不重做已完成的一阶段 Chat 1–7，也不优先实现字幕、音轨、
+逐帧、A-B loop、Smart List、missing/relink、文件移动或标签迁移等扩展。
 
-```text
-Chat 1: 架构与跨平台边界
-Chat 2: 标签模型与过滤引擎
-Chat 3: 媒体库标签 UI
-Chat 4: 播放器过滤队列
-Chat 5: 缩略图、诊断与 FFmpegBackend
-Chat 6: 标签管理器与批量打标
-Chat 7: 响应式 UI 与平台 polish
-```
+## 3. 任务路由与上下文预算
 
-当前验证状态、最近完成内容和下一阶段优先级只记录在 `CURRENT_TASK.md`，不得复制到 `AGENTS.md`。开始任务时读取当前文件中的长期规则，再按任务 Level 读取 `CURRENT_TASK.md`；不要用本文件保存容易过期的阶段快照。
+修改前选择能安全完成任务的最小 Level：
 
-不要在没有明确要求时重做 Chat 1-7 的一阶段工作。
-不要把本项目当成通用专业播放器。
-在标签发现、稳定身份、标签维护稳定前，不要优先做字幕、音轨、逐帧、A-B loop 等高级播放器功能。
+- Level 1：明确 analyzer/build 单点错误、单文件编译错误、小溢出、拼写。
+  只读本文件、报错、直接相关文件及必要 caller/import。
+- Level 2：单页面、组件、服务或有限 UI/功能。读本文件、`PROJECT.md`、
+  `CURRENT_TASK.md`、一个直接相关 Chat/contract 和相关源码。
+- Level 3：schema/migration、`src/core`、repository/platform contract、
+  `FilterQuery`、`TagQueryService`、`PlayerBackend`、缓存/播放队列、
+  stable identity、missing/relink、文件移动、标签迁移、架构/路线图治理。
+  读 current contract、相关 ADR/Chat 片段和直接源码；`CHANGELOG` 与历史只用
+  `rg` 精确查询，不得默认全读。
+- 生产或真实窗口发现的未授权功能删除一律 Level 3、`independent` 验证。
 
-## 0.1 用户体验与性能规则
+调查发现触及更高层边界时立即升级。小修复不得读取完整路线图、变更史或全部 Chat。
+背景接近上下文窗口 70% 时先压缩或用 `ltp-session-handoff` 交接。
 
-新增或修改代码时，必须把用户体验放在第一位。涉及主界面、标签筛选、排序、路径切换、搜索输入、播放返回等高频交互时，默认先评估性能影响，再决定实现方式。
-
-界面修改必须保持流畅度不退化：标签筛选、排序方式、媒体库路径切换和搜索输入不得在 UI 线程上反复做全量重算或全列表 rebuild；能缓存、增量刷新、延后重统计的路径，应优先采用轻量 controller/helper 承载。
-
-标签筛选的文件夹层级是硬规则：一级标签只能来自本地媒体库 root 下第一层目录，二级标签只能显示和筛选在其所属一级标签下面，不能越界展示到一级列表，也不能脱离父级单独参与真实筛选。
-
-搜索输入必须使用稳定的 `TextField` / `TextEditingController` / `EditableText` 输入链路，保证真实键盘、自动化输入和 controller 变更都能触发同一条筛选刷新路径；不得退回已知不稳定的 `SearchBar` 输入实现。
-
-标签中心展示不得直接摊平原始 `tags` 索引。展示层必须按来源、分组、父级和大小写归一后的标签名合并重复项；不同一级父级下的二级 folder 标签可以同名但必须显示父级路径，避免破坏文件夹树认知。
-
-每次牵涉媒体库、标签筛选、标签中心、排序或本地媒体库路径浏览的代码改动，都必须验证点击标签、切换标签后的媒体库加载状况；至少运行相关 widget/focused tests，并在可运行桌面端时补充真实窗口点击标签和切换标签的流畅度 QA。
-
-“更多”入口必须先展示明确菜单，不得直接跳到某个具体动作；新增更多项时应优先覆盖打开位置、编辑标签、删除/移除等用户预期动作，并保证危险动作有确认。
-
-设置页中会影响播放稳定性的下拉项必须具备确认或可撤销路径，避免坐标误触直接改变解码、缓存或其它高影响配置。
-
-## 1. 上下文读取规则
-
-修改代码前，先选择能安全完成任务的最小上下文级别。
-不要为了小修复读取完整项目历史。
-
-### 上下文预算 / 会话交接
-
-当背景信息窗口达到、超过或接近软件限定上下文长度的 70% 时，必须优先压缩上下文或把当前对话记录、任务状态、已改文件、验证结果和下一步计划传递给下一个新对话，保证继续开发时上下文占用不超过软件限定值的 70%。
-
-每次执行连续开发任务时，都必须显式遵守并复述这句话：
+连续开发任务必须显式复述：
 
 ```text
 从第一性原理出发，后续修改进行对抗式审查，任务结束后自己给出下一步计划
 ```
 
-### Level 1：小修复
-
-适用：analyzer/build 报错、单文件编译错误、缺失符号、小 UI 溢出、拼写修复。
-
-只读：
-
-```text
-AGENTS.md
-明确的报错或用户给出的 blocker
-直接相关源文件
-必要时只查直接 imports/callers
-```
-
-不要读取完整 `ROADMAP.md`、`CHANGELOG.md`、全部 `docs/chat_tasks/CHAT_*.md` 或完整跨平台计划。
-只用 `rg` 查精确符号或错误；除非直接引用无法解析，否则不要全项目扫描。
-
-### Level 2：有限功能 / UI 任务
-
-适用：一个有限功能、一个页面/组件/服务改动、一个 Chat 阶段内的有限任务。
-
-读取：
-
-```text
-AGENTS.md
-PROJECT.md
-CURRENT_TASK.md
-一个相关 docs/chat_tasks/CHAT_*.md
-直接相关源文件
-通过精确符号搜索找到的小片段
-```
-
-仅当任务触及 `src/core`、共享模型、repository contracts、平台边界或共享 route/layout contract 时读取 `ARCHITECTURE.md`。
-仅当优先级或阶段归属不清时读取 `ROADMAP.md`。
-仅当更新历史记录或确认行为是否已改过时读取 `CHANGELOG.md`。
-
-### Level 3：架构 / Schema / 边界任务
-
-仅适用：SQLite schema/migrations、`src/core`、平台接口、repository contracts、`FilterQuery`、`TagQueryService`、`PlayerBackend`、`FFmpegBackend`、stable identity、missing/relink、文件移动、标签删除/合并迁移、项目 roadmap/architecture 文档修改。
-
-读取：
-
-```text
-AGENTS.md
-PROJECT.md
-ARCHITECTURE.md
-CURRENT_TASK.md
-ROADMAP.md
-CHANGELOG.md
-当前任务相关 docs/chat_tasks/CHAT_*.md
-<private-planning-document>
-相关源文件
-```
-
-如果外部跨平台计划与旧实现习惯冲突，外部计划优先。
-
-如果 Level 1/2 调查发现必须修改 schema、共享查询语义、平台边界、stable identity 或 player/cache queue，立即升级为 Level 3。
-
-## 2. 第一性原理规则
-
-开始任务前先用最短形式确认：
+开始时只确认：
 
 ```text
 Product goal protected:
@@ -148,11 +68,134 @@ Smallest safe change:
 Fewest safe tokens:
 ```
 
-不要为了局部实现细节破坏标签发现闭环。
+## 4. 业务与平台硬边界
 
-## 3. 对抗式审查规则
+平台无关逻辑留在 Dart 业务层：
 
-完成计划或代码修改前，做短审查：
+```text
+Tag search / Tag management / FilterQuery / PlaybackSession / TagQueryService
+```
+
+平台实现留在显式边界后：
+
+```text
+FileSystemAdapter / PlayerBackend / FFmpegBackend / DatabaseProvider / AppPaths
+```
+
+不得把 Windows 路径、exe 或文件管理器命令散落到 UI/业务层。
+
+标签来源只允许 `manual/folder/rule/filename/import/auto`：
+
+- folder 标签可由当前 root 文件树重算；manual 标签必须保留；
+- locked 标签不能被自动流程静默删除；
+- 同名 folder/manual 不得混淆；能用 `tagId` 时不用 name 代替；
+- 一级 folder 标签只来自 root 第一层，二级只来自所属一级的下一层；
+- 二级标签不能提升到一级、脱离父级展示或单独参与真实筛选；
+- 历史数据库层级与当前文件树冲突时，以当前文件树为准。
+
+过滤语义：
+
+```text
+different groups: AND
+same group: OR
+excluded tags: NOT
+keyword: file name / path / tag name / alias
+```
+
+UI 不复制过滤逻辑；筛选必须经过 `FilterQuery` / `TagQueryService`。
+
+播放器只消费来源页面的 filtered queue：
+
+- 右侧队列不得回退全局媒体库；
+- 当前序号反映来源队列；
+- 二级标签切换留在来源队列；
+- 返回媒体库保留筛选状态。
+
+缓存/诊断：
+
+- FFmpeg/FFprobe 只经过 `FFmpegBackend` 或兼容边界；
+- 可见项目优先，后台任务限流、可取消，失败可见且可重试；
+- 0-byte/不完整 JPEG 不是有效缓存；
+- diagnostics dispose 后不得保留 timer/async UI callback。
+
+稳定身份方向：
+
+```text
+videoId = stable database identity
+fingerprint = media identity
+path = mutable location
+missing = invalid path while record is preserved
+```
+
+tags、favorites、play records、progress 绑定 stable identity，不绑定 mutable path。
+schema 修改必须向后兼容、幂等、有 migration 记录、旧库安全并保留用户数据；
+不要立即删除 missing video。
+
+## 5. 用户体验与性能
+
+用户体验优先于实现便利。界面、筛选、排序、路径切换、搜索、弹窗和播放器返回不得
+在 UI 线程反复全量重算或无差别 rebuild；优先缓存、增量、取消过期任务和延后非关键统计。
+
+- 标签点击先更新可见结果；计数和缩略图预取延后；
+- 排序切换不得触发完整标签计数刷新；
+- 搜索使用稳定 `TextField` / `TextEditingController` / `EditableText` 链路，
+  不退回已知不稳定的 `SearchBar` 输入实现；
+- 标签中心按来源、分组、父级和大小写归一合并展示；同名二级 folder 标签显示父路径；
+- 媒体库、标签、筛选、排序或路径浏览变更必须验证标签点击、切换后的加载和流畅度；
+- “更多”先打开明确菜单；删除/移除等危险动作必须确认；
+- 影响解码、缓存或播放稳定性的设置需要确认或撤销路径。
+
+## 6. 修改规则
+
+- 只修改用户授权行为；不做无关清理、大重写或静默语义变化。
+- 保留用户未提交改动，不使用破坏性 Git/文件命令。
+- 新增/修改代码同步维护中文注释；结构职责用 `/** ... */`，局部意图用 `//`。
+  注释解释职责、约束、意图、边界、迁移、来源分离、取消和性能选择，不复述语法。
+- 删除实现时同步删除悬空注释。
+- 文档和提交信息中文优先；API、协议、路径、命令和固定术语可保留原文。
+
+有意义的代码修改更新：
+
+- `CURRENT_TASK.md`：只更新当前、最近三项、阻塞和下一步；
+- `CHANGELOG.md`：对外行为变更；
+- 直接相关 Chat/QA 文档；
+- 修改 core/schema/platform/shared contract 时更新 `ARCHITECTURE.md`；
+- 修改阶段优先级时更新 `ROADMAP.md`。
+
+## 7. 验证与既有行为保护
+
+业务代码至少运行：
+
+```powershell
+flutter analyze
+flutter build windows --debug
+```
+
+同时运行直接相关 focused/widget tests。UI/运行时变更在构建后启动软件并真实点击主要入口；
+涉及菜单、弹窗、布局、状态或视觉反馈时截图检查位置、遮挡、对齐、溢出、对比度和状态。
+客观不可用时记录阻塞、替代验证和精确人工路径，不得冒充完成。
+
+修改可能删除、移动或替换现有分支/UI 子树前：
+
+1. 建立受保护行为清单：入口、相邻入口、显隐、快捷键、持久化、返回路径。
+2. 用源码、focused tests、`CURRENT_TASK` 和精确 Git 历史确认行为。
+3. 单列获授权删除项；未列出的一律保留，无法确认时也保留。
+4. 审查 diff 中被删 Widget、ValueKey、callback、Route、菜单、Overlay/Stack 和条件分支。
+5. 组件存在或组件测试通过不等于页面可达；关键行为必须有页面挂载/可达性证据和真实点击。
+
+受保护行为缺少证据、真实验证失败或删除授权不明时不得提交；先恢复旧行为。
+生产未授权删除还必须补：
+
+- 精确 root cause；
+- 能在组件孤立/挂载移除时失败的 code guard；
+- `evals/agent/regression_cases.json` 只增不删的事故用例；
+- 停止编辑后的独立只读验证。
+
+`dart format` 超时必须如实记录，不能声称成功。
+
+## 8. 对抗式审查与交付
+
+最终审查至少写：
 
 ```text
 schema: unchanged / changed with migration notes
@@ -160,436 +203,38 @@ FilterQuery / TagQueryService: unchanged / changed intentionally
 filtered queue: unchanged / changed intentionally
 thumbnail/media queue: unchanged / changed intentionally
 user data: preserved / risk noted
-prompt impact: satisfies first principles / adds unnecessary scope or context
-validation: analyze/build result
-```
-
-如果发现风险，修复或清楚说明。
-
-## 4. 平台边界规则
-
-平台无关逻辑：
-
-```text
-Tag search
-Tag management
-FilterQuery
-PlaybackSession
-TagQueryService
-```
-
-平台相关逻辑必须留在边界后：
-
-```text
-FileSystemAdapter
-PlayerBackend
-FFmpegBackend
-DatabaseProvider
-AppPaths
-```
-
-不要把 Windows 路径、exe、文件管理器命令或平台假设散落到 UI 或业务逻辑中。
-
-## 5. 标签来源规则
-
-```text
-folder tags = path-derived initial classification
-manual tags = user-maintained data
-```
-
-合法来源：
-
-```text
-manual
-folder
-rule
-filename
-import
-auto
-```
-
-规则：
-
-```text
-1. folder tags 可以由路径规则重新计算。
-2. manual tags 必须保留。
-3. rule / filename / import / auto tags 由各自系统负责。
-4. locked tags 不能被自动流程静默删除。
-5. 同名 folder tag 和 manual tag 不能混淆。
-6. 能用 tagId 时优先用 tagId，不要只按 name 匹配。
-```
-
-## 6. 过滤规则
-
-默认语义：
-
-```text
-different groups: AND
-same group: OR
-excluded tags: NOT
-keyword: file name / path / tag name / tag alias
-```
-
-不要在 UI 中复制过滤逻辑。
-过滤必须经过 `FilterQuery` / `TagQueryService`，除非当前任务明确修改该层。
-
-标签层级规则：
-
-```text
-二级标签必须永远从属于一级标签展示和筛选。
-二级标签不能越界提升到与一级标签同一层级。
-folder 一级/二级标签以当前本地媒体库文件树为准：root 下一层为一级，再下一层为二级。
-如果历史扫描记录、数据库标签或子 root 与当前文件树层级冲突，以当前文件树层级优先。
-```
-
-交互性能规则：
-
-```text
-用户体验永远优先于实现便利。
-每次新增或修改代码时，都必须主动评估本次改动的性能影响。
-涉及界面、列表、筛选、排序、弹窗、播放器返回或高频交互的修改，必须确认不会降低界面流畅度。
-如果功能正确但会造成可感知卡顿，应优先重构为延迟、分批、缓存、取消过期任务或后台协调后再交付。
-标签筛选和排序方式改变时，界面流畅度永远优先。
-排序切换不得触发完整标签计数刷新。
-标签点击应优先更新可见视频结果，标签计数、缩略图预取等重任务必须延后或取消过期任务。
-大媒体库下不得为了即时刷新非关键计数阻塞主界面交互。
-```
-
-## 7. 播放队列规则
-
-```text
-播放器消费当前过滤队列。
-```
-
-规则：
-
-```text
-1. 从过滤后的媒体库结果打开 PlayerPage 时，传入该过滤队列。
-2. 右侧队列不能回退到全局媒体库列表。
-3. 当前 index 显示应类似 1/1661。
-4. 返回媒体库必须保留过滤状态。
-5. 右侧二级标签切换必须保持在来源过滤队列内。
-6. 标签发现闭环稳定前，不优先做高级播放器功能。
-```
-
-## 8. 缓存与诊断规则
-
-```text
-FFmpeg / FFprobe 访问必须经过 FFmpegBackend 或兼容层。
-```
-
-规则：
-
-```text
-1. 可见项目优先级更高。
-2. 后台任务必须限流。
-3. 失败项目应可重试。
-4. 失败原因应可见。
-5. 0-byte 或不完整 JPEG 不能当作有效缓存。
-6. diagnostics UI dispose 后不能保留 timers 或 async callbacks。
-```
-
-## 9. SQLite / Migration 规则
-
-任何 schema 修改必须：
-
-```text
-1. 向后兼容。
-2. 幂等。
-3. 有文档记录。
-4. 对旧数据库安全。
-5. 保留用户维护的数据。
-6. 通过 flutter analyze 和 flutter build windows --debug。
-```
-
-不要立即删除 missing videos。
-未来行为应先标记 missing。
-
-## 10. Stable Identity 方向
-
-未来方向：
-
-```text
-videoId = stable database identity
-fingerprint = file / media identity
-path = current mutable location
-missing = path invalid but record is preserved
-```
-
-tags、favorites、play records、playback progress 应绑定 stable video identity，而不是 mutable path。
-
-## 11. 注释规则
-
-所有新增代码都必须同步增加能帮助后续维护的注释。注释覆盖范围包括：
-
-```text
-1. 类 / widget / service 的总体功能注释。
-2. 字段用途注释。
-3. 方法职责注释。
-4. 参数含义注释，尤其是回调、状态输入、筛选上下文输入。
-5. 条件分支意图注释，说明为什么需要该条件。
-6. 容易误解的业务规则。
-7. 平台边界决策。
-8. SQLite migration 假设。
-9. 标签来源规则。
-10. folder/manual/rule tag 分离。
-11. async queue 或 cancellation 行为。
-12. 缓存有效性规则。
-13. relink / missing / fingerprint 逻辑。
-14. 不明显的性能选择。
-```
-
-修改代码时必须同步更新对应注释，避免注释描述旧行为。
-删除代码时必须删除对应注释，避免留下悬空说明。
-发现周边代码缺少必要注释时，应自行补充，目标是保证代码可读性和后续维护安全。
-代码注释必须使用中文；只有 API 名称、协议名、字段名、固定术语或外部错误信息需要原文保留时，才允许夹带英文。
-类、widget、service、字段、方法、参数等面向 API / 结构的说明使用块级文档注释 `/** ... */`。方法内部、条件分支、局部实现意图使用普通行注释 `//`。
-注释应解释“职责、约束、意图、边界”，不要只复述语法。
-
-好：
-
-```dart
-/**
- * 目录标签可由路径重新计算，但手动标签必须在文件移动后保留。
- */
-```
-
-差：
-
-```dart
-// i 加 1。
-```
-
-## 12. 文档规则
-
-有意义的代码修改后，更新相关文档：
-
-```text
-CURRENT_TASK.md
-CHANGELOG.md
-docs/chat_tasks/CHAT_*.md
-如果修改 src/core、schema、平台边界或共享 contract，更新 ARCHITECTURE.md
-如果修改优先级或阶段归属，更新 ROADMAP.md
-```
-
-## 13. 验证规则
-
-代码修改后至少运行：
-
-```powershell
-flutter analyze
-flutter build windows --debug
-```
-
-UI 或运行时行为变更还要尽量验证：
-
-```powershell
-flutter run -d windows
-```
-
-UI 修改完成后，必须自行启动应用并模拟点击测试对应改动功能。测试范围至少覆盖本次新增或修改的主要交互入口，并与当前蓝图 UI 做短对比，输出下一步完善计划。
-每当新增或修改任何业务代码时，必须在静态测试和构建通过后自动启动软件，并通过真实点击验证本次对应功能；不得只依赖 analyzer、单元测试或代码审查宣称功能完成。
-如果本次业务代码牵涉 UI、菜单、弹窗、布局、交互状态或视觉反馈，必须在真实点击触发对应界面后进行截图，并分析截图中的位置、遮挡、对齐、溢出、对比度和状态反馈。
-只有在自动启动、真实点击或截图能力客观不可用时才允许使用替代验证；此时必须记录具体阻塞原因、已完成的替代验证和仍需人工复测的准确点击路径。
-如果本地自动化或运行窗口不可用，必须记录阻塞原因、已完成的替代验证，以及仍需人工复测的点击路径。
-
-### 既有行为保护与删除授权
-
-任何重构、布局调整、组件拆分、性能优化或故障修复都默认只授权改变用户明确提出的行为；“整理代码”“统一实现”“替换旧组件”“优化交互”均不构成删除其它既有功能的授权。
-
-修改可能删除、移动、替换现有分支或 UI 子树时，必须执行以下容错流程：
-
-```text
-1. 修改前建立“受保护行为清单”：记录本次入口、相邻入口、显隐条件、快捷键、持久化状态和返回路径。
-2. 行为不清楚时先查当前源码、focused tests、CURRENT_TASK.md 对应条目和精确 Git 历史；只查相关提交，不扩大为全仓历史扫描。
-3. 单独建立“获授权删除清单”；没有出现在该清单中的既有行为一律保留。无法确认时按保留处理，不得猜测删除。
-4. 编辑后检查 git diff 中被删除的 Widget、ValueKey、回调、Route、菜单项、Overlay/Stack 挂载点和条件分支，并逐项说明替代路径或恢复原实现。
-5. 组件仍存在、组件单测通过，不等于真实功能仍可用。关键行为必须至少有一项页面/Route 级挂载或可达性回归，并按本文件规则完成真实点击。
-6. 任何受保护行为缺少可达性证据、真实验证失败或删除授权不明确时，任务不得宣称完成，不得提交或推送；先恢复旧行为，再继续重构。
-```
-
-生产或真实窗口发现的未授权功能删除属于严重回归。修复时必须同时补齐：
-
-```text
-root cause: 精确到删除发生的提交和失效验证层
-code guard: 能在组件被孤立或挂载被移除时失败的确定性测试
-agent guard: evals/agent/regression_cases.json 只增不删的事故用例
-delivery guard: 对抗式审查明确写“未授权功能删除：无 / 已授权项列表”
-```
-
-该类生产事故无论修复代码量大小都必须升级为 Level 3，采用 `independent` 验证模式；至少一项页面挂载、可达性或同等关键证据必须由停止编辑后的独立只读阶段复核。独立验证拒绝后不得以同一实现阶段的自检覆盖结论。
-
-最终对抗式审查必须增加：
-
-```text
+prompt impact: satisfies first principles / unnecessary scope
 protected behaviors: preserved / authorized changes listed
 unauthorized feature removal: none / blocker
-mount and reachability: page-level evidence
+mount and reachability: page-level evidence / not applicable
+validation: exact tests/analyze/build/runtime result
 ```
 
-如果 `dart format` 本地超时：
+验证通过后：
 
-```text
-记录为已知本地 formatter 问题。
-不要声称格式化成功，除非它确实完成。
-```
+1. 检查 `git status`；
+2. 只 stage 本任务文件；
+3. 使用中文提交；
+4. push 当前跟踪分支；
+5. 失败时保留本地提交并说明原因。
 
-### Git 提交规则
+日志写入文件，只检索 `ERROR/Exception/failed/exit code/undefined symbol` 附近 30–80 行。
+不要在提示或 final 粘贴完整历史、日志、diff 或大 JSON/CSV。
 
-每次完成代码或文档修改并通过对应验证后，都必须进行一次 git 提交。
+## 9. Repo Skill 与 Agent eval
 
-规则：
+`.agents/skills` 只保存标准目录 Skill；每个 `SKILL.md` frontmatter 只含
+`name`、`description`。Skill 用来缩小而不是扩大上下文。
 
-```text
-1. 提交前先检查 git status。
-2. 只 stage 本次任务相关文件；不要把无关用户改动、临时产物、构建产物或工具缓存一起提交。
-3. 如果工作树已有无关改动，保留它们，不回滚、不整理，只提交本次范围。
-4. 提交信息必须简短说明本次可验证交付物。
-5. 如果验证失败或用户明确要求暂不提交，必须说明原因并不提交。
-6. 提交成功后必须执行远程提交（`git push` 到当前分支的远程跟踪分支）；如果远程不存在、认证失败、网络失败或用户明确要求暂不推送，必须说明原因并保留本地提交。
-```
+- `ltp-task-router` 只分级，完成后退出；
+- 选择一个最小领域 Skill；
+- `ltp-apple-ui-design` 只用于明确视觉/动效/交互/无障碍任务；
+- 纯 schema、过滤、队列、后端、缓存或 stable identity 不触发 Apple UI；
+- 视觉任务最多一个领域 Skill + 一个设计覆盖层。
 
-### 中文优先规则
+修改本文件、bootstrap、harness、Skill、description、trigger 或 Agent prompt 时：
 
-除代码本身、第三方 API 名称、协议名、命令、路径、固定术语和外部错误信息外，文档新增/修改、代码注释、Git 提交信息、任务记录和交接摘要都必须以中文为第一语言。
-
-规则：
-
-```text
-1. 新增或修改文档时默认使用中文；引用外部英文术语时只保留必要原文。
-2. 新增或修改代码注释时必须使用中文，避免留下乱码、半翻译或无法维护的历史注释。
-3. Git commit message 必须使用中文，简短说明本次可验证交付物。
-4. 只有用户明确要求英文，或外部工具格式必须英文时，才在对应位置使用英文。
-```
-
-## 14. 安全规则
-
-```text
-不要做无关清理。
-不要在没有明确要求时重写大系统。
-不要静默改变 schema、player behavior、tag semantics 或 cache invalidation。
-不要在当前任务没有明确要求时实现 Smart List、missing/relink、文件移动、标签删除/合并迁移或高级播放器功能。
-优先小而可回滚的修改。
-```
-
-## 15. Token 预算规则
-
-目标：
-
-```text
-用最小安全上下文完成最小可验证修改。
-```
-
-规则：
-
-```text
-1. token 使用是任务正确性的一部分。
-2. 不要把完整项目历史粘贴进每个任务。
-3. 先选择 Level 1 / 2 / 3。
-4. 任务提示只包含 task level、目标、已知 blocker、可能相关文件、验证命令、明确非目标。
-5. Level 1 不读完整 ROADMAP、CHANGELOG、全部 Chat docs 或跨平台计划。
-6. 除非直接符号搜索失败或任务是 Level 3，否则不要全项目扫描。
-7. 命令失败时不要打印完整日志，只总结关键错误、文件和行号。
-8. final 不输出完整 diff，只总结改动文件和关键行为。
-9. 避免无关格式化、宽泛清理和大重构。
-10. 优先小而可回滚的修改。
-```
-
-## 16. 会话、日志与交接规则
-
-每个 Codex 会话尽量服务一个交付物。
-
-继续同一会话的情况：
-
-```text
-same bug fix
-same PR / patch set
-same bounded feature phase
-same validation loop
-```
-
-新建或恢复独立会话的情况：
-
-```text
-small fix -> unrelated UI redesign
-media library task -> player backend task
-project coding -> blog/research/writing
-one-off investigation unrelated to Local Tag Player
-```
-
-切换会话时，写短交接摘要，不复制完整历史：
-
-```text
-Goal:
-Current status:
-Changed files:
-Validation:
-Remaining blocker:
-Do-not-change constraints:
-Next exact command/task:
-```
-
-日志规则：
-
-```text
-日志放文件中。
-只搜索 ERROR / Exception / failed / exit code / undefined symbol。
-只读匹配附近 30-80 行。
-不要输出完整日志。
-```
-
-Level 3 或范围不清时，先写短计划再编辑：
-
-```text
-files to inspect
-expected ownership layer
-possible migration/risk
-validation commands
-```
-
-## 17. Repo Skills 规则
-
-`.agents/skills` 是本项目的 repo-scoped Codex skill 目录。
-
-规则：
-
-```text
-1. 每个 skill 必须有 `SKILL.md`。
-2. 每个 `SKILL.md` 必须使用标准 YAML frontmatter。
-3. frontmatter 只放 `name` 和 `description`。
-4. `name` 必须是小写字母、数字和连字符。
-5. `description` 必须写清楚触发场景。
-6. skill 用来缩小范围，不用来扩大上下文。
-7. 优先调用最小相关 skill，不要叠加多个重叠 skill。
-```
-
-可用项目 skills：
-
-```text
-$ltp-task-router
-$ltp-small-fix
-$ltp-log-triage
-$ltp-session-handoff
-$ltp-tag-filter-data
-$ltp-media-library-tag-ui
-$ltp-player-filter-queue
-$ltp-cache-diagnostics
-$ltp-stable-identity-missing-relink
-$ltp-tag-manager-batch-tagging
-$ltp-apple-ui-design
-```
-
-Skill 组合规则：
-
-```text
-1. ltp-task-router 只负责 Level 与上下文分级，完成路由后退出。
-2. 领域 Skill 负责业务语义、数据和平台边界。
-3. ltp-apple-ui-design 只在明确的 Apple 风格、视觉、动效、交互或无障碍任务中作为设计覆盖层。
-4. 纯 SQLite、FilterQuery、TagQueryService、filtered queue、PlayerBackend、缓存后端或 stable identity 任务不得触发 ltp-apple-ui-design。
-5. 视觉任务最多组合一个领域 Skill 与一个设计覆盖层，不得同时加载多个重叠领域 Skill。
-```
-
-修改 `AGENTS.md`、`NEW_CHAT_BOOTSTRAP.md`、`docs/agent_harness.md`、Skill 的 `SKILL.md`、Skill description、trigger 或 Agent prompt 时，必须按 `docs/agent_eval.md` 更新受影响用例，并至少运行零模型成本的目录验证与评分器单元测试。关键 Skill 的运行时回归使用隔离临时克隆和 N=5；不得在真实工作树直接试验被测 Agent。
-
-长期硬规则只放在 `AGENTS.md`；`NEW_CHAT_BOOTSTRAP.md` 只负责路由入口，`.agents/skills` 只保存领域专属流程。
-临时任务材料放在用户提示末尾或独立文件中。
+1. 按 `docs/agent_eval.md` 更新受影响用例；
+2. 运行 `python tool/agent_eval.py validate`；
+3. 运行 `python -m unittest discover -s test -p agent_eval_tool_test.py -v`；
+4. 关键 Skill 运行时回归使用隔离临时克隆和 N=5，不在真实工作树试验被测 Agent。

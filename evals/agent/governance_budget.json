@@ -1,28 +1,28 @@
 {
   "files": {
     "AGENTS.md": {
-      "max_chars": 13000,
-      "max_lines": 600
+      "max_chars": 6500,
+      "max_lines": 250
     },
     "CLAUDE.md": {
-      "max_chars": 3000,
-      "max_lines": 80
+      "max_chars": 1000,
+      "max_lines": 30
     },
     "CURRENT_TASK.md": {
-      "max_chars": 12000,
+      "max_chars": 4000,
       "max_lines": 120
     },
     "NEW_CHAT_BOOTSTRAP.md": {
-      "max_chars": 6000,
-      "max_lines": 100
+      "max_chars": 3000,
+      "max_lines": 80
     },
     "PROJECT.md": {
-      "max_chars": 5000,
-      "max_lines": 150
+      "max_chars": 2500,
+      "max_lines": 100
     },
     "docs/agent_harness.md": {
-      "max_chars": 17000,
-      "max_lines": 450
+      "max_chars": 5000,
+      "max_lines": 220
     }
   },
   "version": 1
