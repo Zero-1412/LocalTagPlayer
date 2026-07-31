@@ -1,0 +1,46 @@
+name: Agent 治理门禁
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".agents/skills/**"
+      - ".github/workflows/agent-governance.yml"
+      - "evals/agent/**"
+      - "test/agent_eval_tool_test.py"
+      - "tool/agent_eval.py"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "CURRENT_TASK.md"
+      - "NEW_CHAT_BOOTSTRAP.md"
+      - "PROJECT.md"
+      - "docs/agent_harness.md"
+  push:
+    paths:
+      - ".agents/skills/**"
+      - ".github/workflows/agent-governance.yml"
+      - "evals/agent/**"
+      - "test/agent_eval_tool_test.py"
+      - "tool/agent_eval.py"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "CURRENT_TASK.md"
+      - "NEW_CHAT_BOOTSTRAP.md"
+      - "PROJECT.md"
+      - "docs/agent_harness.md"
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic:
+    name: 目录、预算与评分器单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v7
+      - name: 验证 Agent 目录与治理预算
+        run: python3 tool/agent_eval.py validate
+      - name: 运行 Agent eval 工具单元测试
+        run: python3 -m unittest discover -s test -p agent_eval_tool_test.py -v

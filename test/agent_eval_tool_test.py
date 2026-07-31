@@ -70,6 +70,50 @@ def _structured_result(
 class AgentEvalToolTest(unittest.TestCase):
     """验证目录结构、扣分规则、Trace 归一化和 N 次汇总。"""
 
+    def _write_governance_fixture(
+        self,
+        root: Path,
+        *,
+        skill_text: str = (
+            "---\n"
+            "name: ltp-fixture\n"
+            "description: 测试用 Skill。\n"
+            "---\n"
+        ),
+        metadata_text: str | None = None,
+        max_lines: int = 10,
+    ) -> tuple[Path, Path]:
+        """构造最小治理目录，便于确定性验证编码、元数据和预算。"""
+
+        skill_dir = root / ".agents" / "skills" / "ltp-fixture"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(skill_text, encoding="utf-8")
+        if metadata_text is not None:
+            metadata_dir = skill_dir / "agents"
+            metadata_dir.mkdir()
+            (metadata_dir / "openai.yaml").write_text(
+                metadata_text,
+                encoding="utf-8",
+            )
+        (root / "AGENTS.md").write_text("# fixture\n", encoding="utf-8")
+        eval_root = root / "evals" / "agent"
+        eval_root.mkdir(parents=True)
+        (eval_root / "governance_budget.json").write_text(
+            json.dumps(
+                {
+                    "files": {
+                        "AGENTS.md": {
+                            "max_lines": max_lines,
+                            "max_chars": 100,
+                        }
+                    }
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return skill_dir, eval_root
+
     def test_catalog_has_expected_coverage(self) -> None:
         """目录必须覆盖 11 个 Skill 的 44 个触发用例及能力/回归用例。"""
 
@@ -78,9 +122,68 @@ class AgentEvalToolTest(unittest.TestCase):
         self.assertEqual(44, summary["suite_counts"]["trigger"])
         self.assertEqual(12, summary["suite_counts"]["regression"])
         self.assertEqual(11, len(summary["skill_trigger_coverage"]))
+        self.assertEqual(11, len(summary["governance"]["skills"]))
+        self.assertLessEqual(
+            summary["governance"]["budgets"]["CURRENT_TASK.md"]["lines"],
+            120,
+        )
         for coverage in summary["skill_trigger_coverage"].values():
             self.assertGreaterEqual(coverage["positive"], 2)
             self.assertGreaterEqual(coverage["negative"], 2)
+
+    def test_governance_rejects_non_utf8_skill(self) -> None:
+        """Skill 文本无法按 UTF-8 解码时必须给出确定性失败。"""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            skill_dir, eval_root = self._write_governance_fixture(root)
+            (skill_dir / "SKILL.md").write_bytes(b"\xff\xfe\x00")
+            with self.assertRaisesRegex(agent_eval.EvalError, "UTF-8"):
+                agent_eval.validate_repository_governance(root, eval_root)
+
+    def test_governance_rejects_mojibake_metadata(self) -> None:
+        """Agent UI 元数据包含典型乱码标记时不得通过目录验证。"""
+
+        metadata = (
+            "interface:\n"
+            '  display_name: "Fixture"\n'
+            '  short_description: "ä¸º测试提供能力"\n'
+            '  default_prompt: "使用 $ltp-fixture。"\n'
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _, eval_root = self._write_governance_fixture(
+                root,
+                metadata_text=metadata,
+            )
+            with self.assertRaisesRegex(agent_eval.EvalError, "疑似乱码"):
+                agent_eval.validate_repository_governance(root, eval_root)
+
+    def test_governance_rejects_loose_skill_markdown(self) -> None:
+        """Skill 根目录的松散 Markdown 不得绕过渐进披露和 frontmatter。"""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _, eval_root = self._write_governance_fixture(root)
+            (root / ".agents" / "skills" / "prompt.md").write_text(
+                "loose",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(agent_eval.EvalError, "松散 Markdown"):
+                agent_eval.validate_repository_governance(root, eval_root)
+
+    def test_governance_rejects_context_budget_growth(self) -> None:
+        """默认上下文文件超过预算时必须阻断验证。"""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _, eval_root = self._write_governance_fixture(root, max_lines=1)
+            (root / "AGENTS.md").write_text(
+                "# fixture\nsecond line\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(agent_eval.EvalError, "超过预算"):
+                agent_eval.validate_repository_governance(root, eval_root)
 
     def test_agent_result_schema_uses_supported_subset(self) -> None:
         """Codex Structured Outputs Schema 不得包含服务端拒绝的 uniqueItems。"""

@@ -19,6 +19,7 @@ Eval 用来验证 Agent 是否真实遵守项目规则，不替代 Flutter 单�
 evals/agent/trigger_cases.json
 evals/agent/capability_cases.json
 evals/agent/regression_cases.json
+evals/agent/governance_budget.json
 evals/agent/schemas/*.json
 evals/agent/rubrics/*.json
 tool/agent_eval.py
@@ -38,6 +39,11 @@ summary.json           N 次稳定性和 suite 汇总
 ```
 
 报告同时记录 Codex CLI 版本、显式或默认模型标识、延迟和 token；CLI 未提供可靠价格表时 `estimated_cost_usd` 保持 `null`，不得编造成本。
+
+`validate` 还会严格按 UTF-8 读取所有 repo Skill、验证 `name` / `description`
+frontmatter、可选 `agents/openai.yaml` 的界面字段，并拒绝 `.agents/skills` 根目录下
+绕过渐进披露的松散 Markdown。`governance_budget.json` 对默认加载的规则和状态文件设置
+行数/字符数上限；预算只允许随治理重构下调，不能为容纳新历史而上调。
 
 ## 结构化完成合同
 
@@ -177,6 +183,9 @@ Scorer 会确定性检查 `done_when.id` 唯一、完成项与验证记录一一
 python tool/agent_eval.py validate
 python -m unittest discover -s test -p agent_eval_tool_test.py -v
 ```
+
+`.github/workflows/agent-governance.yml` 会在相关 pull request 和 push 上执行同一组命令，
+因此 Skill 元数据、UTF-8、当前状态预算和评分器回归不能只依赖本机自觉。
 
 运行一个关键回归用例的五次隔离试验：
 

@@ -9,6 +9,7 @@ import fnmatch
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import shutil
 import subprocess
@@ -22,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EVAL_ROOT = REPO_ROOT / "evals" / "agent"
 RESULT_SCHEMA = EVAL_ROOT / "schemas" / "agent_result.schema.json"
 JUDGE_SCHEMA = EVAL_ROOT / "schemas" / "judge_result.schema.json"
+GOVERNANCE_BUDGET = EVAL_ROOT / "governance_budget.json"
 PASS_THRESHOLD = 80
 DEFAULT_BUDGETS = {
     "trigger": {
@@ -46,16 +48,155 @@ class EvalError(RuntimeError):
     """表示用例、运行环境或被测结果不满足 Eval 前置条件。"""
 
 
+def _read_utf8_text(path: Path) -> str:
+    """严格读取 UTF-8 文本，避免终端默认编码把正常中文误判成乱码。"""
+
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise EvalError(f"无法按 UTF-8 读取：{path}: {error}") from error
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     """读取一个 UTF-8 JSON 对象，并在结构错误时给出明确文件位置。"""
 
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(_read_utf8_text(path))
     except (OSError, json.JSONDecodeError) as error:
         raise EvalError(f"无法读取 JSON：{path}: {error}") from error
     if not isinstance(value, dict):
         raise EvalError(f"JSON 顶层必须是对象：{path}")
     return value
+
+
+def _parse_skill_frontmatter(path: Path, text: str) -> dict[str, str]:
+    """解析项目 Skill 的最小 frontmatter，并拒绝额外或漂移字段。"""
+
+    lines = text.splitlines()
+    if not lines or lines[0] != "---":
+        raise EvalError(f"Skill 缺少起始 frontmatter：{path}")
+    try:
+        end_index = lines.index("---", 1)
+    except ValueError as error:
+        raise EvalError(f"Skill 缺少结束 frontmatter：{path}") from error
+
+    metadata: dict[str, str] = {}
+    for line in lines[1:end_index]:
+        if not line.strip() or ":" not in line:
+            raise EvalError(f"Skill frontmatter 条目非法：{path}: {line!r}")
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if key in metadata:
+            raise EvalError(f"Skill frontmatter 字段重复：{path}: {key}")
+        metadata[key] = value
+
+    if set(metadata) != {"name", "description"}:
+        raise EvalError(
+            f"Skill frontmatter 只能包含 name/description：{path}: "
+            + ", ".join(sorted(metadata))
+        )
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", metadata["name"]):
+        raise EvalError(f"Skill name 非法：{path}: {metadata['name']}")
+    if metadata["name"] != path.parent.name:
+        raise EvalError(
+            f"Skill name 必须与目录一致：{path}: {metadata['name']}"
+        )
+    if not metadata["description"]:
+        raise EvalError(f"Skill description 不能为空：{path}")
+    return metadata
+
+
+def _validate_agent_metadata(path: Path, text: str) -> None:
+    """验证可选 Agent UI 元数据具备稳定字段，并拒绝常见乱码标记。"""
+
+    mojibake_markers = ("\ufffd", "Ã", "Â", "â€", "ä¸", "çš", "æœ")
+    if any(marker in text for marker in mojibake_markers):
+        raise EvalError(f"Agent 元数据疑似乱码：{path}")
+    if not re.search(r"(?m)^interface:\s*$", text):
+        raise EvalError(f"Agent 元数据缺少 interface：{path}")
+    for field in ("display_name", "short_description", "default_prompt"):
+        match = re.search(rf'(?m)^\s+{field}:\s*"([^"]+)"\s*$', text)
+        if match is None:
+            raise EvalError(f"Agent 元数据缺少非空 {field}：{path}")
+
+
+def validate_repository_governance(
+    repo_root: Path = REPO_ROOT,
+    eval_root: Path = EVAL_ROOT,
+) -> dict[str, Any]:
+    """验证 Skill 目录、UTF-8 文本和默认上下文预算。"""
+
+    skills_root = repo_root / ".agents" / "skills"
+    if not skills_root.is_dir():
+        raise EvalError(f"缺少 repo Skill 目录：{skills_root}")
+
+    loose_markdown = sorted(path.name for path in skills_root.glob("*.md"))
+    if loose_markdown:
+        raise EvalError(
+            "Skill 根目录不得放置不会被渐进披露的松散 Markdown："
+            + ", ".join(loose_markdown)
+        )
+
+    skill_names: list[str] = []
+    for skill_dir in sorted(path for path in skills_root.iterdir() if path.is_dir()):
+        skill_path = skill_dir / "SKILL.md"
+        if not skill_path.is_file():
+            raise EvalError(f"Skill 目录缺少 SKILL.md：{skill_dir}")
+        metadata = _parse_skill_frontmatter(
+            skill_path,
+            _read_utf8_text(skill_path),
+        )
+        skill_names.append(metadata["name"])
+        for text_path in sorted(skill_dir.rglob("*")):
+            if text_path.is_file() and text_path.suffix.lower() in {
+                ".md",
+                ".yaml",
+                ".yml",
+                ".json",
+            }:
+                text = _read_utf8_text(text_path)
+                if text_path.name == "openai.yaml":
+                    _validate_agent_metadata(text_path, text)
+
+    budget_document = _read_json(eval_root / "governance_budget.json")
+    budget_files = budget_document.get("files")
+    if not isinstance(budget_files, dict) or not budget_files:
+        raise EvalError("governance_budget.json 必须包含非空 files")
+
+    budget_summary: dict[str, dict[str, int]] = {}
+    for relative_path, raw_budget in budget_files.items():
+        if not isinstance(relative_path, str) or not isinstance(raw_budget, dict):
+            raise EvalError("治理预算条目必须是 path -> object")
+        max_lines = raw_budget.get("max_lines")
+        max_chars = raw_budget.get("max_chars")
+        if (
+            not isinstance(max_lines, int)
+            or max_lines < 1
+            or not isinstance(max_chars, int)
+            or max_chars < 1
+        ):
+            raise EvalError(f"治理预算必须是正整数：{relative_path}")
+        target = repo_root / relative_path
+        text = _read_utf8_text(target)
+        actual_lines = len(text.splitlines())
+        actual_chars = len(text)
+        if actual_lines > max_lines or actual_chars > max_chars:
+            raise EvalError(
+                f"治理文件超过预算：{relative_path}: "
+                f"lines={actual_lines}/{max_lines}, chars={actual_chars}/{max_chars}"
+            )
+        budget_summary[relative_path] = {
+            "lines": actual_lines,
+            "max_lines": max_lines,
+            "chars": actual_chars,
+            "max_chars": max_chars,
+        }
+
+    return {
+        "skills": skill_names,
+        "budgets": budget_summary,
+    }
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -227,6 +368,7 @@ def _effective_budgets(case: dict[str, Any]) -> dict[str, int]:
 def validate_catalog(eval_root: Path = EVAL_ROOT) -> dict[str, Any]:
     """验证用例、Skill 覆盖、Schema 和 Rubric 的确定性结构。"""
 
+    governance = validate_repository_governance(REPO_ROOT, eval_root)
     cases = load_cases(eval_root)
     trigger_document = _read_json(eval_root / "trigger_cases.json")
     skill_counts: dict[str, dict[str, int]] = {}
@@ -263,6 +405,7 @@ def validate_catalog(eval_root: Path = EVAL_ROOT) -> dict[str, Any]:
         "suite_counts": suite_counts,
         "skill_trigger_coverage": skill_counts,
         "rubrics": rubrics,
+        "governance": governance,
     }
 
 

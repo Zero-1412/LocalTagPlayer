@@ -1,0 +1,29 @@
+{
+  "files": {
+    "AGENTS.md": {
+      "max_chars": 13000,
+      "max_lines": 600
+    },
+    "CLAUDE.md": {
+      "max_chars": 3000,
+      "max_lines": 80
+    },
+    "CURRENT_TASK.md": {
+      "max_chars": 12000,
+      "max_lines": 120
+    },
+    "NEW_CHAT_BOOTSTRAP.md": {
+      "max_chars": 6000,
+      "max_lines": 100
+    },
+    "PROJECT.md": {
+      "max_chars": 5000,
+      "max_lines": 150
+    },
+    "docs/agent_harness.md": {
+      "max_chars": 17000,
+      "max_lines": 450
+    }
+  },
+  "version": 1
+}

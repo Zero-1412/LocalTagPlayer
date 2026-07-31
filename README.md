@@ -148,6 +148,9 @@ flutter build windows --debug
 
 跨平台构建与正式包生成由 `.github/workflows/` 中的 GitHub Actions 持续验证。打包、签名与公证细节见 [packaging/README.md](packaging/README.md)，第三方再分发边界见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
+参与开发的 AI Agent 使用仓库内 `.agents/skills/` 自动发现项目 Skill；目录结构和
+触发覆盖由 `python tool/agent_eval.py validate` 验证，不维护独立的手工 Skill 清单。
+
 ## 本地数据与隐私
 
 - 应用只索引用户主动添加的本地目录，不上传视频、缩略图、标签或观看记录。

@@ -15,7 +15,7 @@ PROJECT_STATUS: TECH_DEBT_ACCUMULATION
 这些资产既不是“全部有用”，也不是“全部应删”。
 
 - 仍在推动项目进化的核心资产：11 个领域 Skill、Agent 评测工具及用例、发布门禁、平台边界文档、少数可重复 QA 脚本。
-- 已开始拖累项目的资产：失去“当前状态”边界的 `CURRENT_TASK.md`、全量 Level 3 启动规则、重复的 Agent 入口文件、乱码元数据、无调用的松散提示文件、未进入 CI 的评测、重复率高且硬编码本机路径的 QA 脚本、混在活跃区的历史实验文档。
+- 已开始拖累项目的资产：失去“当前状态”边界的 `CURRENT_TASK.md`、全量 Level 3 启动规则、重复的 Agent 入口文件、缺少编码门禁的元数据、无调用的松散提示文件、未进入 CI 的评测、重复率高且硬编码本机路径的 QA 脚本、混在活跃区的历史实验文档。
 - 不需要架构重置：产品核心、数据边界和大多数领域 Skill 的方向正确；问题集中在 Agent 治理层的分层、生命周期和自动验证，而不是播放器业务架构本身。
 
 一句话结论：
@@ -135,7 +135,9 @@ PASS: 17 tests
 
 - `.codex/config.toml` 把 `model_context_window` 和自动压缩阈值都硬编码为 `272000`，与 70% 交接规则冲突，也可能在模型变化后过时。
 - 同一配置把绝对路径 `E:\LocalTagPlayer` 加入 `writable_roots`；在 clone/worktree 中会把原始仓库额外暴露为可写根，且无法复现。
-- `docs/AGENT_SKILL_INSTALL.md` 和 Apple UI Skill 的 `agents/openai.yaml` 已出现实际乱码。
+- 初次通过 PowerShell 默认编码读取 `docs/AGENT_SKILL_INSTALL.md` 和 Apple UI
+  `agents/openai.yaml` 时显示为乱码；执行阶段用严格 UTF-8 复核后确认源文件内容正常。
+  因此真实风险是缺少确定性编码门禁和安装说明已过时，而不是文件已经损坏。
 - 至少四个播放器压力/矩阵脚本硬编码 `E:\flutter\bin\flutter.bat`；一个脚本默认使用当前不存在的 `X:\test-media`。
 - 多个实验脚本的标准化非注释行与其它脚本重合超过 50%，最高约 84%，说明它们更适合成为参数化 runner 的薄清单，而不是独立复制实现。
 
@@ -278,7 +280,7 @@ PASS: 17 tests
 | `.agents/skills/ltp-apple-ui-design/references/apple-ui-foundations.md` | Apple 视觉原则 | 76 | 中：需注明验证日期/适用版本 | KEEP/MODIFY |
 | `.agents/skills/ltp-apple-ui-design/references/motion-craft.md` | 动效实现参考 | 75 | 中 | KEEP/MODIFY |
 | `.agents/skills/ltp-apple-ui-design/references/motion-vocabulary.md` | 动效词汇 | 74 | 中 | KEEP/MODIFY |
-| `.agents/skills/ltp-apple-ui-design/agents/openai.yaml` | Skill UI 元数据 | 28 | 高：中文字段已乱码 | MODIFY |
+| `.agents/skills/ltp-apple-ui-design/agents/openai.yaml` | Skill UI 元数据 | 72 | 中：内容有效，但此前缺少严格 UTF-8/字段门禁 | KEEP/MODIFY |
 | `.agents/skills/context_policy.md` | 松散上下文规则 | 27 | 高：不被发现为 Skill，重复 AGENTS | DELETE |
 | `.agents/skills/prompt_template.md` | 松散任务模板 | 34 | 中高：无调用、重复 bootstrap/harness | MERGE 后 DELETE |
 
@@ -354,7 +356,7 @@ PASS: 17 tests
 
 | 文件或文件组 | 当前作用/调用者 | 分数 | 风险 | 裁决 |
 |---|---|---:|---|---|
-| `docs/AGENT_SKILL_INSTALL.md` | Skill 安装说明；人工 | 24 | 高：全文乱码、内容已被 repo 自动发现替代 | DELETE |
+| `docs/AGENT_SKILL_INSTALL.md` | Skill 安装说明；人工 | 42 | 中高：内容可解码，但清单过时且已被 repo 自动发现替代 | DELETE |
 | `docs/NEW_CHAT_BOOTSTRAP.md` | 旧路径兼容跳转 | 64 | 中：长期双入口 | ARCHIVE，保留一次迁移提示 |
 | `docs/RELEASE_NOTES_0.2.0.md`、`docs/RELEASE_NOTES_0.2.3.md`、`docs/RELEASE_NOTES_0.2.4.md` | 不可变发布记录；用户/发布 | 90 | 低 | KEEP |
 | `docs/architecture/ADR_001_PROGRESSIVE_ARCHITECTURE_MIGRATION.md` | 决策记录 | 89 | 低 | KEEP |
@@ -511,7 +513,7 @@ docs/qa/windows_renderer_preference_20260727.md
 
 3. 文件：`docs/AGENT_SKILL_INSTALL.md`
 
-   原因：内容乱码，且项目内安装说明已不适用于当前 repo 自动发现。
+   原因：内容可按 UTF-8 正确读取，但推荐清单已经过时，项目内安装说明也不再适用于当前 repo 自动发现。
 
    影响：不影响项目内 Agent。
 
@@ -532,7 +534,7 @@ docs/qa/windows_renderer_preference_20260727.md
 | P0 | `CURRENT_TASK.md` | 当前/历史混合，回膨胀 40 倍 | 强制上限 120 行；只留当前、最近三项、阻塞、下一步；CI 检查 |
 | P0 | `AGENTS.md` | 596 行、多职责、多处重复 | 收缩为产品边界、数据安全、路由、验证原则；领域细节下沉 Skill |
 | P0 | `.codex/config.toml` | 绝对路径、窗口硬编码、阈值冲突 | 删除附加仓库根；使用模型默认窗口；compact 留安全余量 |
-| P0 | `.../agents/openai.yaml` | 乱码未被 eval 捕获 | 修复 UTF-8；给 validator 增加解码及中文字段断言 |
+| P0 | `.../agents/openai.yaml` | 缺少编码与字段验证，终端误解码会产生假阳性 | 保持原内容；给 validator 增加严格 UTF-8、字段和乱码标记断言 |
 | P0 | GitHub workflows | Agent eval 不进 CI、无 PR 门禁 | PR 运行零成本 eval/单测；Action 固定 SHA 或 Dependabot |
 | P1 | `ARCHITECTURE.md` | 当前契约与迁移史混合 | `current-contract.md` + `adr/` + `history/` |
 | P1 | `ROADMAP.md` | 完成史过多 | 只保留未来 1–2 个里程碑；完成项归档 |
@@ -621,7 +623,7 @@ LocalTagPlayer/
 ### 第 1 周：停止继续恶化
 
 1. 给 `CURRENT_TASK.md` 增加 120 行/12k 字符预算门禁。
-2. 修复两个乱码文件，并给 `agent_eval.py` 加 UTF-8/元数据验证。
+2. 以严格 UTF-8 复核疑似乱码文件，并给 `agent_eval.py` 加编码/元数据验证；源文件正常时不得制造无意义改写。
 3. 在 PR workflow 中运行现有 62 个目录用例和 17 个单元测试。
 4. 删除 `.codex/config.toml` 的绝对 `writable_roots` 和模型窗口硬编码。
 
@@ -646,7 +648,7 @@ Level 3 默认上下文目标：< 45k tokens
 CURRENT_TASK 目标：< 120 行，最近三项
 根级 Agent 规则目标：< 250 行
 Agent 零成本门禁：每个 PR 必跑
-乱码/无 frontmatter Skill 元数据：0
+无法按 UTF-8 解码/无 frontmatter Skill 元数据：0
 QA 脚本绝对本机路径：0
 无状态实验资产：0
 ```
@@ -681,6 +683,6 @@ validation:
 
 下一项最小、收益最高且可独立交付的任务应是：
 
-> 建立“治理预算门禁”补丁：修复乱码，给 `CURRENT_TASK.md`、`AGENTS.md` 和 Skill 元数据增加零成本验证，并把现有 Agent eval 接入 PR workflow；暂不移动历史文件、不修改业务代码。
+> 建立“治理预算门禁”补丁：严格验证 UTF-8，给 `CURRENT_TASK.md`、`AGENTS.md` 和 Skill 元数据增加零成本验证，并把现有 Agent eval 接入 PR workflow；暂不修改业务代码。
 
 该补丁完成并验证后，再进行文档分层和 QA runner 合并，避免一次大搬迁同时改变路径、规则和执行行为。

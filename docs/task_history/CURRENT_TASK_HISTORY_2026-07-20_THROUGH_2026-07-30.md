@@ -1,0 +1,1686 @@
+# CURRENT_TASK.md 历史归档（2026-07-20 至 2026-07-30）
+
+## 2026-07-30 · 进度条随机点击低延迟 seek
+
+- 根因确认：media_kit 公共 `seek` 使用 libmpv `absolute` 精确随机定位；长 GOP 视频跨段
+  点击时会从前一关键帧解码到目标时间，命令已经提交但新画面不能立即出现。
+- 新增可选 `PlayerInteractiveSeekBoundary`。进度条点击和连续快进/快退通过
+  `PlayerService.seekInteractive` 请求 `absolute+keyframes`；不支持该边界的后端安全
+  回退普通 seek。120ms 后只让最后一代有效交互请求精确收敛到点击时间，避免长 GOP
+  关键帧产生数秒位置偏差；继续观看恢复仍走原有精确 `PlayerBackend.seek`。
+- MediaKit Texture 与 Windows 原生 QA 后端均实现交互式随机跳转；播放态保持继续推进，
+  暂停态不被擅自改成播放。`PlayerBackend` 基础 contract、filtered queue 和当前 index
+  均未改变。
+- 服务/协调器/Windows 原生 focused tests 通过；完整 486 项测试通过、3 项既有 benchmark
+  跳过；静态分析零问题，Windows Debug build 成功。真实 MediaKit Texture 门禁交错提交
+  8 个目标，最终位置进入 750ms 容差、前后帧不同且位置继续推进。
+- 最终 Debug 已启动到真实播放器页；准备自动点击进度条时检测到用户正在操作同一窗口，
+  安全互锁停止抢占，因此不冒充已完成点击后截图。人工复测路径：播放任一视频 → 连续在
+  进度条 20% / 75% / 40% 三处单击 → 确认画面立即切换并持续播放 → 暂停后再单击一次，
+  确认只更新画面且保持暂停。
+- 下一步计划：用两条长 GOP 素材各执行 20 次交错随机点击，分别记录点击到首个新帧 P95
+  与最终位置误差；只在门禁证据显示收益时微调 120ms 收敛窗口，不增加第三段跳转。
+
+## 2026-07-30 · Local Tag Player 0.2.4 正式发布
+
+- 正式版已发布到 `https://github.com/Zero-1412/LocalTagPlayer/releases/tag/v0.2.4`；
+  Windows x64 安装器为 133,361,258 bytes，SHA-256 为
+  `07e7a31275e6a85199a1b342fbbf0c4486a01e2e66bee148d32372819c8999bf`；
+  macOS 未公证 DMG 为 43,259,811 bytes，SHA-256 为
+  `592c97ded974ff784c724e8af6d2f3ab744a3b78d27b14cde667d3bf0cdcc22c`。
+- 公网回读 `SHA256SUMS-windows.txt` 与 `SHA256SUMS-macos.txt`，内容和 GitHub
+  资产摘要一致；Release 非草稿、非预发布，应用内更新弹窗文案预览通过。
+- 首次公开发布流水线 `30535910612` 成功构建、启动并上传双平台产物，但暴露一条
+  Windows CRLF 敏感的架构合同测试；同时发现 pwsh 会让后续成功命令掩盖此前原生命令
+  的非零退出码。问题只影响测试/交付门禁，不影响 v0.2.4 运行时代码或安装包。
+- 提交 `59c99e2` 改用跨空白正则定位 override 实现，为关键定位增加可读断言，并让
+  `pub get`、测试、分析和 Debug build 任一步失败后立即退出；对应工作流回归测试同步
+  防止门禁再次失效。
+- 不发布复验流水线 `30537456609` 全部通过：分支集成、485 项测试、静态分析、Windows
+  Debug build/启动、Windows Release/简体中文安装器、macOS Release/启动/DMG 均为绿色；
+  3 项既有 benchmark 按设计跳过，公开 Release 未被覆盖。
+- schema、`FilterQuery`、`TagQueryService`、PlayerBackend、filtered queue、缓存队列、
+  标签和用户数据均未改变。
+- 下一步计划：配置 Windows Authenticode 与 macOS Developer ID/公证密钥；随后在
+  已安装的 0.2.3 上走一次应用内升级到 0.2.4，复测下载速度、中文安装流程和数据保留。
+
+## 2026-07-30 播放器提示半透明材质
+
+- 左上角操作提示由 94% 不透明结构表面改为 38% 不透明黑色浮动表面，视频内容可以透出；
+  文字与图标固定为高亮白色，弱白色描边保留轮廓，不增加动态模糊或额外动画。
+- 系统高对比度模式自动把底色提高到 78%、描边提高到 52%，避免亮色视频画面吞没反馈；
+  普通模式优先减少遮挡，高对比度模式优先保证可读性。
+- 左上角 16 dp、850ms 生命周期、`IgnorePointer`、实时语义、首次触发和连续 seek 行为均未改。
+- focused 材质/前景色/高对比度测试及完整 484 项测试通过，3 项既有 benchmark 跳过；
+  静态分析零问题，Windows Debug build 与可见窗口启动门禁通过。
+- 真实 Debug 窗口触发暂停提示，确认半透明背景、亮白文字和图标均可见，位置、对齐、
+  描边、视频透出及中央无提示状态正常。
+- schema、`FilterQuery`、`TagQueryService`、PlayerBackend、filtered queue、缓存队列、
+  标签和用户数据均未改变。
+- 下一步计划：实际使用一段时间后只根据遮挡和可读性反馈微调普通模式透明度；
+  不增加 blur，也不把提示重新移回中央。
+
+## 2026-07-30 播放器操作提示统一到左上角
+
+- 播放、暂停、音量、全屏、倍速、上一项、下一项和快进/快退共用同一个播放器反馈挂载点，
+  统一显示在视频区域左上角 16 dp 安全边距内；中央不再挂载任何操作提示，首次触发也不例外。
+- 删除快进/快退专用中央水印分支与状态字段。连续 seek 的累计、80ms 提交节流和松键前最终
+  目标提交保持不变；首次按键仍立即反馈，但反馈位置改为左上角。
+- 提示继续使用 850ms 生命周期、`IgnorePointer`、无障碍实时区域和既有淡入淡出时长，
+  不拦截画面点击，也不新增查询、队列计算或高频全列表 rebuild。
+- 页面级挂载合同固定“单一反馈组件、无中央水印”，widget 测试固定可见与隐藏状态均位于
+  `(16, 16)`。完整 483 项测试通过、3 项既有 benchmark 跳过；静态分析零问题，Windows
+  Debug build 与可见窗口启动门禁通过。
+- 真实 Debug 窗口分别首次触发音量和快进：两类提示均出现在视频左上角，中央无提示；
+  画面、右侧 filtered queue 和当前选中项保持正常。
+- schema、`FilterQuery`、`TagQueryService`、PlayerBackend、filtered queue 来源/顺序、
+  缩略图/媒体缓存队列、标签和用户数据均未改变。
+- 下一步计划：若后续仍觉得提示遮挡内容，单独对提示内边距和停留时长做小范围 A/B；
+  本次不改变文案、样式强度或持续时间。
+
+## 2026-07-30 播放器双击、回车全屏与长按 seek
+
+- 视频画面区域双击复用既有 `playOrPause` 和居中反馈，只切换播放/暂停，不改变当前
+  filtered queue、选中项、比例或控制条。队列条目的单击选择、双击播放仍保持原入口。
+- 播放器主焦点下的回车与小键盘回车切换进入/退出全屏；可配置全屏快捷键继续保留。
+  输入框、弹窗、菜单、其它 Route 和用户显式自定义快捷键仍先由原门禁消费。
+- 播放/暂停、全屏和固定回车忽略 `KeyRepeatEvent`，避免长按导致状态连续反转；
+  快进/快退继续消费重复事件。
+- `PlayerSeekCoordinator` 跨短工作器保留最近后端提交间隔。10 次、每 15ms 的长按模拟
+  会按 60ms 测试门槛合并中间目标并最终累计到 50 秒，证明后端快速确认时也不会绕过
+  节流或丢失松键前最终目标；生产间隔仍为 80ms。
+- “Debug 双击无窗口”再次确认是 integration test 把 Debug 目录入口覆盖为
+  `flutter_test_listener`，不是 Windows runner 或应用启动崩溃。全部测试后重新执行
+  正式 Debug build，精确 PID 双击门禁已取得可见 `local_tag_player` 主窗口。
+- 完整 481 项测试通过、3 项既有 benchmark 跳过，静态分析零问题，Windows Debug
+  build 与双击启动门禁通过。
+- 真实点击准备阶段检测到用户正在操作目标窗口，Computer Use 安全互锁停止抢占，因而
+  没有伪造截图结论。人工复测路径：双击最终 Debug EXE → 打开任一视频 → 双击画面两次
+  确认暂停/播放各切换一次 → 长按当前快进/快退键（默认 J/L）确认画面连续跟随 →
+  回车进入全屏、再次回车退出，并确认长按回车不会反复闪烁。
+- schema、`FilterQuery`、`TagQueryService`、PlayerBackend、filtered queue 来源/顺序、
+  缩略图/媒体缓存队列、标签和用户数据均未改变。
+
+## 2026-07-30 中文安装器与连续快进画面跟随
+
+- Windows Inno Setup 安装器现在只声明简体中文，关闭语言选择和旧安装语言复用；桌面
+  快捷方式与安装后启动文案改用语言包常量，安装、覆盖、关闭应用、完成和卸载页统一
+  使用 `ChineseSimplified.isl`。
+- GitHub Actions 从 Inno Setup 官方仓库固定提交下载中文语言文件，并核对固定
+  SHA-256 后才编译安装器，避免构建机缺文件时回退英文。本机没有 ISCC，因此正式安装
+  页面的真实中文截图必须在下一次 Windows Release 构建后补做。
+- 连续 seek 移入纯应用层 `PlayerSeekCoordinator`：首次目标立即下发，后续输入按
+  80ms 最小间隔串行刷新最新累计目标；不再要求用户停手 80ms 才让解码器开始响应。
+- 相对快进/快退继续基于尚未确认的最新目标累计；工作器不并发，停止输入后保证最后目标
+  被提交，退出时只取消尚未提交的目标。`PlayerBackend` contract 与两种后端实现未改。
+- 真实 MediaKit Texture 专项门禁以 40ms 间隔交错提交 8 次目标；最终位置进入 750ms
+  容差、前后 PNG 帧 SHA-256 不同且新增掉帧不超过 5，证明画面实际跟随目标。
+- 479 项完整测试通过、3 项既有 benchmark 跳过；静态分析零问题，Windows Debug build
+  成功。既有全稳定性矩阵两次超过外层 7 分钟且未生成报告，未冒充通过；新增轻量真实
+  seek 门禁在 38.6 秒内通过。
+- schema、`FilterQuery`、`TagQueryService`、filtered queue 来源/顺序、播放器索引、
+  缩略图/媒体缓存队列、标签和用户数据均未改变。
+
+## 2026-07-30 应用内安装包下载提速
+
+- GitHub Release 下载在服务端支持 Range 时改为四段并行，聚合进度后按顺序合并；四连接实测样本约
+  463 KiB/s，单连接约 54 KiB/s。八连接会出现连接重置，因此不作为默认值。
+- 每段遇到瞬时网络错误可重试一次；服务端不支持 Range 时自动回退单流下载。所有失败路径继续
+  清理临时分段，最终安装包仍须通过发布清单中的 SHA-256 校验后才能启动。
+- 更新弹窗新增实时速度与预计剩余时间；同版本已完整下载且校验通过的安装包可直接复用，避免重复
+  下载约 127 MiB 的 Windows 安装包。
+- 下载器 Range/非 Range/重试测试与更新弹窗测试通过；完整 476 项测试通过、3 项既有 benchmark
+  跳过，静态分析零问题，Windows Debug build 成功。
+- 当前正在运行的旧版本无法热更新下载器；需通过发布页完成本次安装，后续版本的应用内更新才会使用
+  四连接下载。真实新版本更新弹窗需在下一个高版本 Release 发布后复测速度、预计时间与无溢出状态。
+- schema、`FilterQuery`、`TagQueryService`、filtered queue、播放器后端、缓存队列、标签和用户数据
+  均未改变。
+
+## 2026-07-30 小窗口控制条与原生 Texture 稳定尺寸
+
+- 900 dp 以下播放器控制区改为三层紧凑布局，保留文件定位、音量、传输、截图、设置、
+  全屏和队列入口；700×520 修复前左右分别溢出 104/102 px，修复后 700×520 和
+  899×650 真实 Windows 会话均无溢出。
+- 899 dp 真实点击发现并修复设置面板左侧裁切；固定 300 dp 面板现在会约束在可视区内，
+  标题、循环开关与“更多播放设置”完整可达。
+- MediaKit Texture 默认根据 Widget BoxFit 物理目标选择 640×360 至 1920×1080
+  的五档稳定输出，并以去抖、最小请求间隔、降档滞回、原生确认和超时状态限制重建。
+- 三类低码率 fixed/adaptive A/B 均为 0 掉帧、0 停滞、0 未响应；adaptive 的 GPU
+  committed P95 下降 18.3–21.5 MiB，视频区 SSIM 为 0.988722–0.999943。
+- 两次 1.50↔2.00 DPR 往返与快速缩放门禁均通过：每阶段请求/Texture 代数 2/2，
+  重建失败和掉帧均为 0，Flutter 帧耗时 P95 为 38.529/49.256 ms，最终回到 640×360。
+- 生产继续使用 `FilterQuality.low` 与打包 mpv 的 `bilinear/no`；本任务不改变
+  `FilterQuery`、`TagQueryService`、filtered queue、标签、缓存队列、schema 或用户数据。
+- 验证：471 项测试通过、3 项既有 benchmark 跳过，静态分析零问题，Windows Debug
+  build 成功。完整证据：`docs/qa/player_native_output_size_gate_20260730.md`。
+- 下一步计划：在 adaptive 默认路径重新做 `dscale` / `correct-downscaling` 最终窗口
+  A/B；只有像素、画质和资源门禁同时证明收益才调整默认值。
+
+## 2026-07-30 原生 Texture / Widget / DPI 采集与 Flutter 采样 A/B
+
+- 新增可选只读视频表面诊断边界：正式 MediaKit 后端采集原生 Texture、Widget 逻辑
+  尺寸、DPR、BoxFit 物理目标、合成倍率与 `FilterQuality`，不泄漏 Texture ID 或路径，
+  不调用 `VideoController.setSize`。
+- 本机 1.50 DPR 下确认 1920×1080 Texture 在 1440×900 窗口缩为 1545×869
+  （0.805×），在通过布局门禁的 920×650 窗口缩为 765×430（0.398×）。
+- 两档倍率、三类自然低码率片源、`low/medium/high` 共 18 次真实会话全部为 0 掉帧、
+  0 音视频停滞、0 无响应。low↔high SSIM 始终高于 0.99967；medium 在 0.398×
+  抗混叠更强但边缘方差降低 16.6%–42.1%。
+- `medium` 稳定增加约 100 MiB GPU committed 和约 300 MiB private memory；
+  `high` 没有形成可见收益。生产继续显式使用 `FilterQuality.low`，不新增用户设置或
+  高频自适应切换。
+- 700×520 与 900×650 触发现有控制条横向溢出，未拿无效布局做画质结论；本任务不扩大
+  为控制条重构。详细证据：`docs/qa/player_texture_sampling_ab_20260730.md`。
+- 完整 466 项测试、静态分析与 Windows Debug build 通过，3 项既有 benchmark 跳过；
+  真实 Debug 诊断点击确认 1920×1080 Texture、951.33×568.67 dp Widget、DPR 1.50、
+  1427×803 px BoxFit 目标、0.743× 合成倍率与 `low` 采样均可见且无布局异常。
+- 下一步计划：单独修复 900 dp 以下控制条布局，再评估按稳定档位收敛原生输出尺寸。
+
+## 2026-07-30 低码率缩小画质 dscale / correct-downscaling A/B
+
+- 新增三模式、三类自然低码率片源的真实 MediaKit Texture A/B：当前
+  `bilinear/no`、候选 `lanczos/yes`、隔离组 `lanczos/no`；九次会话均由同一
+  NativePlayer 写入并读回，不读取用户媒体库。
+- 九组均为 0 解码/总掉帧、0 音视频停滞、0 无响应；GPU P95 分别为当前
+  4.5%–4.6%、候选 4.5%–4.8%、隔离组 4.6%–4.8%。GPU committed P95 从当前
+  322.1 MiB 增加到候选 381.2–440.2 MiB，卷积缩小存在真实资源成本。
+- 三类内容的 A/B/C 固定窗口 PNG 在各自内容内 SHA-256 完全一致，视频区域两两
+  SSIM 均为 1.0。正式 NativePlayer 输出仍是源尺寸 Texture，窗口缩小由 Flutter/
+  Windows 合成层完成，所以 `dscale` 读回成功但没有参与最终窗口缩小。
+- 决策：生产默认保持打包 mpv 0.36 的实际 `bilinear/no`，不改成
+  `dscale=lanczos + correct-downscaling=yes`。播放诊断新增缩小器与缩小校正读回，
+  QA 脚本和集成模式保留为可复测证据。
+- 完整 461 项测试通过，3 项既有 benchmark 跳过；静态分析与 Windows Debug build
+  通过。真实 Debug 诊断窗口已确认 `bilinear/no` 读回可见，新增字段无截断或溢出。
+- 详细记录：`docs/qa/player_downscale_quality_ab_20260730.md`。
+- 下一步计划：同时采集原生 Texture 尺寸、视频 Widget 目标尺寸和 DPI，先确认正式
+  缩小所有权；只在 NativePlayer 真正承担缩小时重跑算法 A/B。
+
+## 2026-07-30 小窗口播放器队列入口与 NativePlayer 画质审计
+
+- 删除普通播放器顶栏重复的队列按钮；底部控制条成为普通/紧凑/全屏布局的统一队列
+  入口。逻辑宽度低于 1100 时不再打开 Material 居中 `BottomSheet`，改为从播放器右侧
+  展开覆盖队列，并提供遮罩与显式关闭入口。
+- 根因是高 DPI 或小窗口会进入紧凑分支，但原底部按钮仍只切换未挂载的宽屏侧栏状态；
+  新分支复用覆盖队列状态，列表/详情、搜索、删除、收藏、当前索引与来源 filtered queue
+  均保持原 owner 和语义。
+- 新增页面挂载合同，固定“顶部无重复入口、底部按钮可达、紧凑队列右对齐、禁止退回
+  `showModalBottomSheet`”；宽度与顶部安全区使用单一 helper/token，未新增队列重算。
+- 只读审计本机设置与运行时诊断：MediaKit 同一个 NativePlayer 已确认
+  `scale=ewa_lanczossharp`、`cscale=lanczos`、`scaler-resizes-only=yes`，实际硬解为
+  `d3d11va-copy`。当前 1920×1080/60 fps SDR 样本在 988×694 窗口中属于缩小显示，
+  GPU 高质量“上采样”不会产生明显变化；压缩增强因“高帧率 · copy-back 硬解”基线
+  保守关闭，HDR→SDR 因 SDR 源未过门槛，流畅度插值和暗部增强也由用户设置关闭。
+- 验证：focused widget/架构测试与完整 460 项测试通过，3 项既有 benchmark 跳过；
+  `flutter analyze` 零问题，Windows Debug build 成功。真实 Debug 窗口缩至 988×694
+  后点击底部队列，右侧列表与顶部内容起点对齐，关闭入口可用，未见居中、遮挡、溢出、
+  错位或状态反馈缺失；队列仍显示 `1 / 11233`，视频与用户数据未被队列操作改写。
+- 下一步计划：单独评估小窗口下 `dscale` / `correct-downscaling` 等 GPU 缩小属性，
+  并用同一低码率样本做关闭/开启 A/B；在读回、掉帧和色彩门禁通过前不默认叠加。
+
+## 2026-07-30 播放调用与文案对抗式修复
+
+- 正式播放路径统一为 `MediaKit Texture -> media_kit/libmpv`；历史
+  `mediaKitLibmpvEnhanced` / MPV 容器偏好读取后立即迁移为 `mediaKit`。设置页只展示
+  一个只读后端说明，不再提供两个实际创建同一后端的伪切换入口。
+- 媒体打开属性拆为 open 前一次解码/缓存引擎快照和 open 后一次显示快照；滤镜基线只在
+  新媒体打开后恢复一次。旧媒体 GPU 能力任务必须结束后才能开始下一次 open，随后由新
+  媒体基线覆盖，避免迟到任务改写共享 libmpv 实例。
+- GPU 缩放、压缩/暗部滤镜及 HDR→SDR 色调映射增加有界属性回读；设置开关只表示请求，
+  只有全部属性读回一致才显示“已生效”。能力门槛未通过、属性不支持、写入/读回失败均
+  使用不同诊断终态，可选增强异常不再逃逸并打断正式播放。
+- 正式 MediaKit Texture 不运行 NVIDIA 原生增强探测，也不显示 NVIDIA VSR/HDR 运行项；
+  `windows-native-hwnd` 仅可由显式 QA 环境变量进入并保留“原生 QA”诊断前缀。
+- filtered queue、当前 index、返回筛选状态、控制条、快捷键、设置持久化兼容、schema、
+  `FilterQuery` / `TagQueryService`、缩略图/media queue 和用户数据均未改变。
+- 验证状态：`flutter analyze` 零问题；完整测试 459 项通过、3 项按既有 benchmark
+  条件跳过；Windows Debug build 成功。真实 Debug 窗口已点击设置、播放与诊断入口，
+  确认首帧 157 ms、属性回读一致、正式诊断仅显示 `MediaKit Texture`；连续 seek、
+  快速切片和侧栏连续收放 4 次后画面、控制栏与播放推进均保持正常。
+
+## 2026-07-30 NVIDIA 原生激活门禁与 MediaKit SDK 评估
+
+- 正式默认后端继续保持 MediaKit；Windows 原生 child HWND/libmpv D3D11 后端仅作为
+  NVIDIA VSR/HDR 激活门禁和后续平台增强实验边界。
+- 修复原生滤镜事务的状态回读：补齐 `deband` 及四个去色带参数，并允许异步
+  libmpv 属性最多用 200 ms 收敛，避免已成功启用
+  `d3d11vpp=scale=2:scaling-mode=nvidia:nvidia-true-hdr=yes` 后被误判并回滚。
+- 单次 20 秒真人低码率门禁通过：VSR/HDR 均为 `active`，总丢帧、视频停滞和音频停滞
+  均为 0。三类片源六组脚本的第二进程仍出现 `No tests were found`，因此本轮只确认
+  明确的单次激活门禁，不宣称六组矩阵完成。
+- `media_kit_video 2.0.1` 的 Windows Texture 链内部已持有同一 D3D11
+  device/context/texture，但没有稳定的公开逐帧处理扩展契约。未来原型应放在原生
+  `Read()` 后、Flutter texture descriptor 返回前，并先补齐格式、同步、重建、设备丢失、
+  回退和性能门禁。
+- RTX Video SDK 下载需要 NVIDIA 登录并接受具体包许可；在未由有权人员核对实际包内
+  可再分发文件前，项目保持零 SDK 文件分发。当前 mpv 驱动扩展门禁不携带 NVIDIA SDK。
+- 真实 Debug 主窗口与媒体库已成功启动和截图；Computer Use 对该窗口后续激活失败，
+  因此设置页与播放器入口的自动点击仍需人工按文档中的准确路径复测。
+- 下一步计划：先修复三类片源六组 runner 的第二进程发现问题；取得 SDK 包与许可授权后，
+  再做不分发 NVIDIA 文件、默认关闭且可即时回退的 MediaKit Texture 本机原型。
+
+## 2026-07-29 500 行警戒线治理第一批
+
+- 三个优先文件完成：`player_settings_panel.dart` 降至 417 行，一级/高级/选项展示拆为
+  175/230/191 行；`library_widgets.dart` 962→350，Smart List、滚动标题和顶栏响应式
+  布局拆为 191/137/459 行；`player_control_slider.dart` 收敛为 10 行兼容入口，主进度
+  交互、通用滑条、绘制形状与指标分别为 331/182/263/39 行。
+- 当前 510—662 行展示模块已全部降到 500 行以内：数据备份 workspace 377、视频结果
+  网格 500、队列条目 497、缓存诊断加载分派 171、目录管理页 231、Missing/Relink 页
+  225、标签管理页 499、悬停预览 500 行。拆出的新文件最高 459 行，没有新增警戒线文件。
+- 设置确认、搜索 `TextField` / `Ctrl+K`、筛选状态、多选、网格增量加载、filtered queue、
+  拖动结束 seek、缓存失败动作、stable `videoId` relink、manual-only 标签命令及用户数据
+  owner 均保持原位；schema、`FilterQuery` / `TagQueryService`、PlayerBackend、
+  FFmpegBackend 和缓存队列未改变。获授权删除清单为空，未授权功能删除为零。
+- 验证：`flutter analyze` 零问题；架构合同 51 项通过；完整 452 项测试通过、3 项按既有
+  benchmark 条件跳过；Windows Debug build 成功。构建后的真实 EXE 已创建响应窗口并
+  稳定运行。Computer Use 原生 pipe 仍因 `os error 2` 不可用，无法执行真实点击与截图；
+  需人工复测“媒体库搜索/筛选/多选/网格滚动回顶 → 设置播放页各层返回 → 打开任一视频
+  拖动进度并滑开队列条目 → 返回媒体库”，核对布局、回调和 filtered queue 不变。
+- 下一步计划：继续处理仍高于 500 行的 `app_theme_tokens.dart`、`library_page.dart`、
+  `library_local_view.dart` 与 `player_context_panel.dart`；优先把主题 token 按领域拆分，
+  再按相同快照/回调边界收敛页面展示，避免为追求行数迁移业务 owner。
+
+## 2026-07-29 八个超长 presentation 文件一次降到千行以内
+
+- 代码体积治理第九批完成：`player_page.dart` 5226→424、`library_video_results.dart`
+  2808→322、`player_queue_sidebar.dart` 1651→399、`library_tag_discovery_panel.dart`
+  1511→327、`tag_manager_page.dart` 1500→519、`missing_relink_page.dart` 1142→539；
+  已完成的 `library_page.dart` 750 与 `library_widgets.dart` 962 同步纳入硬门禁。用户指定
+  的八个文件全部低于 1000 行，强制重构清单清零。
+- 播放器按打开、事件、NVIDIA、传输、健康采样、控制条、窗口 chrome、性能、队列、
+  对话框、文件动作、诊断、资源和视图边界拆为独立 Dart library；`PlayerPageState`
+  仍是 controller、filtered queue 与 native 资源生命周期 owner。媒体结果按网格、列表
+  行、卡片、悬停预览和导入空态拆分；标签发现、标签管理及批量 relink 只迁移展示与
+  对话框实现，不迁移筛选、标签、扫描、队列或稳定身份命令。
+- 架构合同补充完整协作簇读取与 200/500/1000 行预算，继续禁止 `part`、跨 feature
+  presentation 依赖及未授权功能删除。旧交互清单改为检查真实 Route 导出的播放器视图
+  分区，`player.back`、队列、设置和隐藏进度条仍有页面级可达证据。
+- 验证：`flutter analyze` 零问题；完整 452 项测试通过、3 项按既有 benchmark 条件跳过；
+  Windows Debug build 成功。正式 EXE 已创建可见窗口并保存媒体库截图，未见遮挡、错位、
+  溢出或状态断裂。Computer Use 原生 pipe 仍不可用；播放器队列集成点击脚本又因固定
+  fixture 缺少 `qa.video.play.purple-grid` 在进入播放器前失败，需人工复测“打开任一
+  当前筛选结果 → 折叠/恢复队列 → 全屏边缘队列 → 返回媒体库”，确认筛选与队列不变。
+- 下一步优先继续治理 500 行警戒线文件：`player_settings_panel.dart`、`library_widgets.dart`
+  及本批 510—662 行展示模块；每次只拆一个只读边界，并保持现有 owner 与可达性门禁。
+
+## 2026-07-29 渐进式整体架构重构第一阶段
+
+- 代码体积治理第八批完成：`library_page.dart` 从 4293 行一步降到 750 行，明确退出
+  1000 行强制重构清单。页面外壳只保留依赖注入与 Widget 编排；生命周期、扫描、
+  导航、最近播放、查询、筛选、Route、播放和用户命令按九个一致性边界迁入独立 mixin，
+  共享运行时引用集中于 200 行容器，跨 mixin 契约集中于 223 行 host。
+- 设置 Route 同步迁为 435 行状态/命令 owner 与 252 行纯展示工作区；展示工作区只接收
+  设置、备份和缓存快照及回调，不持有 controller、Repository、平台资源或业务命令。
+  本批新文件全部低于 500 行，最高为 435 行；架构门禁锁定页面低于 1000 行、协调文件
+  低于 500 行，并继续执行所有 presentation 文件的 200/500/1000 分级治理。
+- schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/media queue、
+  stable identity 与用户数据所有权均未改变。旧交互清单中的播放器 Route 挂载源已精确
+  更新到播放 mixin，既有 `LibrarySmokeKeys`、菜单/对话框、设置入口与返回路径无删除。
+- 架构合同 51 项、媒体库/设置 focused 212 项及完整 452 项测试通过（3 项 benchmark
+  按设计跳过），`flutter analyze` 零问题，Windows Debug build 与正式入口点击启动门禁
+  通过。Computer Use 初始化仍因原生管道“系统找不到指定的文件（os error 2）”不可用，
+  无法执行真实点击或截图；仍需人工复测“搜索/清空 → 一级/二级标签 → 排序 → 多选 →
+  网格/列表 → 设置各分组及返回 → 打开视频并返回”，核对计数、队列和筛选状态不变。
+- 代码体积治理第七批完成：标签展示/目录发现 helper、批量选择工具栏、顶栏附件控件和
+  focused harness 迁为 157/153/120/56/90/39/171/128/108 行独立叶子，
+  `library_widgets.dart` 从 1917 行降到 962 行，明确达到 1000 行以内交付目标。
+- `library_page.dart` 随后迁出 126 行添加标签对话框与 74 行清空进度/解除目录确认
+  对话框，预算从 4443 行降到 4293 行。对话框只消费标签/路径/数量快照并返回意图；
+  创建标签、收藏、移除目录和清理进度仍由页面 owner 执行。
+- 新门禁锁定各叶子预算、聚合文件 962 行预算与页面 4293 行预算，并禁止展示叶子接管
+  `FilterQuery`、`TagQueryService`、filtered queue、缓存命令或应用 Store。
+- focused 261 项、完整 451 项测试通过（3 项显式基准跳过），`flutter analyze` 零问题，
+  Windows Debug build 与打包启动门禁通过。Computer Use 初始化仍返回原生管道
+  “系统找不到指定的文件（os error 2）”，无法真实点击或截图；仍需人工复测：
+  “搜索输入/清空 → 展开标签并切换一级/二级 → 排序字段/方向 → 多选/全选/取消 →
+  网格/列表 → 添加标签对话框过滤/取消 → 解除目录管理确认取消 → 清空观看进度确认取消”，
+  核对位置、遮挡、溢出、状态反馈、结果计数和返回筛选状态。
+- 研究 Flutter 官方 Architecture Guide / Compass case study、AppFlowy、LocalSend 与
+  Very Good Ventures 分层实践，确定采用“共享 data/domain 按类型、UI 按功能”的混合
+  结构，不因重构更换状态管理库。
+- 审计发现 `library_page.dart` 约 7,472 行/52 个 import，`player_page.dart` 约
+  5,153 行/44 个 import；两者是后续主要拆分对象。已有 Repository、稳定身份、标签
+  查询和播放器后端边界继续保留。
+- 已把 `main → bootstrap → app shell` 职责分离；Phase 6 已将全部测试迁到具体模块并
+  删除消费者归零的 `src/app.dart` 兼容导出面。
+- 更新功能已迁入 `features/update/{domain,data,presentation}`，具体 GitHub 客户端只在
+  组合根创建，媒体库与关于页改为强制注入 `AppUpdateService`。
+- 新增架构合同，保护组合职责、依赖方向和旧目录清零；focused 更新、架构和真实
+  `LibraryPage` 卡片菜单测试通过。
+- 已把架构目标与审计结果提交到网页端独立评审，采纳版本化结果/计数/队列快照、跨
+  Repository 原子写入归应用服务、播放器 native 资源唯一 owner 和 `LibraryStore`
+  暂不物理拆分的建议，记录于 `docs/architecture/ADR_001_PROGRESSIVE_ARCHITECTURE_MIGRATION.md`。
+- 架构合同禁止生产、单元和集成测试重新引入兼容 `app.dart`，并继续保护 feature
+  presentation 不得跨功能互导和巨型页面行数预算。
+- 设置首页导航已作为首个 Phase 2A 无状态叶节点迁入 `features/settings/presentation`；
+  原状态 owner、导航回调、Route 和全部入口 `ValueKey` 保留，媒体库巨型页面预算由
+  7,500 下调到 7,250 行；Phase 1.5 收敛重复版本构造后继续下调到 7,237 行。
+- Phase 1.5 已完成：新增纯 Dart 查询指纹与 `LibraryResultEpoch` / `LibraryCountEpoch`，
+  现有过滤和延后计数链路只发布完整版本一致的结果；排序仍只重排当前结果，不触发计数。
+- `LibraryResultSnapshot` / `LibraryQueueSnapshot` 固化有序 stable `videoId`；新增
+  11,000 项确定性 fixture、测试期查询追踪器和零授权删除的旧交互挂载清单。
+- 新增 focused tests 与完整 331 项测试通过（3 项显式基准跳过），`flutter analyze` 和
+  Windows Debug build 通过。真实点击自动化因 Computer Use 原生管道不可用而无法执行；
+  备用截图发现用户正在操作其他窗口后立即停止，截图已删除且未作为证据。仍需人工复测：
+  “展开标签 → 一级/二级标签连续切换 → 排序字段/方向 → 打开首个结果 → 返回媒体库”，
+  核对结果计数、顺序、filtered queue 与返回筛选状态。
+- focused/full tests、`flutter analyze`、Windows Debug build 已通过；真实 Windows
+  窗口完成“侧栏设置 → 设置分组 → 关于 → 返回设置 → 返回媒体库”点击与截图，未发现
+  遮挡、错位、溢出或返回状态丢失。
+- Phase 2A-2 已开始：缓存诊断标题与健康状态叶节点迁入
+  `features/settings/presentation/cache_diagnostics_header.dart`；它不读取 `CacheStats`、
+  不持有异步状态或命令。原页面继续拥有统计 Future、刷新、重试、清理与 dispose。
+- 两项缓存诊断 focused widget tests 通过；`LibraryPage` 行数门禁由 7,237 下调到 7,125。
+  完整 332 项测试通过（3 项显式基准跳过），静态分析和 Windows Debug build 通过。
+  真实窗口截图仍受同一 Computer Use 原生管道与用户活动阻塞；需人工复测“设置 → 缩略图
+  缓存 → 刷新统计 → 返回”，确认标题、状态角标和加载/终态无跳位。
+- Phase 2A-2 已完成：加载占位、覆盖率、四项指标、后台任务和失败详情迁入
+  `cache_diagnostics_snapshot_view.dart`。新视图只解释 `CacheStats` 并接收外部动作槽位；
+  原页面继续唯一拥有 Future、刷新、重试、清理、互斥和 dispose。
+- 缓存页面全部既有 `ValueKey`、失败属于缺失子集、50 项展示上限和窄窗布局保留；
+  `LibraryPage` 行数门禁继续由 7,125 下调到 6,642。下一步进入 Phase 2B，先按一致性
+  边界盘点普通设置状态，不把备份和缓存任务塞进巨型 SettingsViewModel。
+- 两项缓存 focused tests、完整 333 项测试通过（3 项显式基准跳过），静态分析和 Windows
+  Debug build 通过。Computer Use 原生管道再次返回“找不到指定文件”，未再使用可能捕获
+  其他窗口的截图回退；仍需人工复测“设置 → 缩略图缓存 → 刷新统计 → 展开失败详情 →
+  返回”，核对 Key 对应入口、150% 文字、按钮禁用态和加载/终态布局。
+- Phase 2B 已完成：`PlaybackSettingsController` 成为普通播放设置唯一可写 owner，负责
+  乐观发布、串行持久化、旧失败抑制和向最后成功快照回滚；备份状态、缓存 Future/命令、
+  Route、`BuildContext` 与平台资源均未进入 controller。
+- 播放行为、渲染器、解码器、流缓存、画质、播放器交互、删除偏好和快捷键均接入同一
+  设置快照；确认、取消、撤销、返回路径和既有 `ValueKey` 保留。新增 controller 竞态
+  单测、架构边界合同及真实 `CacheSettingsPage` 挂载测试，媒体库页面行数门禁降到 6,640。
+- 下一步进入 Phase 2C：只迁移缓存诊断读取、刷新、错误和 dispose 的 latest-only 生命周期；
+  重试、清理、删除、重建、确认与互斥任务继续留给 Phase 2D。
+- Phase 2B focused tests 与完整 339 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 成功。Computer Use 初始化仍因原生管道“找不到指定文件”
+  不可用，未使用截图回退；仍需人工复测“设置 → 播放与解码 → 默认打开行为 → 修改 →
+  返回设置首页”，核对选中值、返回路径和失败时的设置回滚反馈。
+- Phase 2C 已完成：泛型 `CacheDiagnosticsController<CacheStats>` 只拥有统计读取、
+  generation、loading/error/data 与 dispose；旧刷新或离开页面后的异步结果不能发布。
+  controller 不导入 `ThumbnailService`、Repository、文件系统、Route 或平台实现。
+- 缓存 loading/error/data 分派迁入只读 settings presentation；错误态不展示原始异常，
+  只提供重新读取统计入口。页面继续拥有失败项重试、失败标记清理、Repository 写入、
+  动作互斥和反馈，媒体库页面行数门禁由 6,640 降到 6,636。
+- 页面级测试覆盖“设置首页 → 播放设置修改/返回 → 缓存诊断 → 刷新 → 返回”；下一步
+  进入 Phase 2D，单独迁移重试、清理、确认、失败恢复和互斥命令。
+- Phase 2C focused tests 与完整 343 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 成功。Computer Use 原生管道仍返回“找不到指定文件”，
+  未使用截图回退；仍需人工复测“设置 → 缩略图缓存 → 刷新统计 → 返回”，并在可构造
+  读取失败时核对安全错误文案与“重新读取”入口。
+- Phase 2D 已完成现有缓存维护命令迁移：泛型
+  `CacheDiagnosticsMaintenanceController<T>` 互斥执行失败项重试和失败标记清除，
+  编排缓存命令与 Repository 写入；清除持久化失败会恢复全部原失败原因。
+- 源码没有缓存文件删除、全量重建、确认或撤销入口，因此没有凭架构路线新增破坏性功能。
+  页面继续拥有 SnackBar 和动作结束后的统计刷新；既有重试/清除 Key、禁用态和文案
+  保留，媒体库页面预算由 6,636 降到 6,633。
+- 新增互斥、选择性持久化、失败补偿和 dispose focused tests；下一步进入 Phase 2E，
+  单独评估备份/恢复的一致性与数据库替换边界。
+- Phase 2D focused tests 与完整 346 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 成功。Computer Use 原生管道仍不可用；需人工复测
+  “设置 → 缩略图缓存 → 展开失败详情 → 重试失败项/清除失败标记 → 返回”，核对动作
+  互斥禁用、成功/失败反馈和清除动作不删除视频或缓存文件。
+- Phase 2E 已完成现有备份设置纵向切片：通用 `SerialSettingsController<T>` 统一普通
+  设置的串行乐观一致性，`DataBackupStatusController<T>` 唯一拥有状态流订阅，
+  `DataBackupMaintenanceController<TReport>` 互斥立即备份、只读检查与导出。
+- `DataBackupSettingsWorkspace` 只在备份二级页挂载，统一释放 controller 并拥有
+  Dialog/SnackBar；数据库检查、运行态开关、设置文件回滚、文件选择和写出仍由既有
+  应用服务、Repository 与 `FileSystemAdapter` 执行。源码不存在关闭主库、替换、重开
+  或导入恢复入口，因此未凭架构路线新增数据库替换或破坏性恢复。
+- 备份卡片、开关、三个维护动作、设置首页入口与返回 Key 均保留；Route 级测试覆盖
+  “设置首页 → 播放设置 → 视频数据备份 → 缓存诊断 → 返回”。媒体库页面行数门禁由
+  6,633 降到 6,021，下一步进入 Phase 3A/3B，先收敛媒体库修订协议和只保存 stable ID
+  的选择/视图偏好，不碰排序、筛选和扫描生命周期。
+- Phase 2E focused tests 与完整 350 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 原生控制
+  工具仍不可用，无法自动点击或截图；仍需人工复测“设置 → 视频数据备份 → 切换开关 →
+  立即备份/检查完整性/导出后取消 → 返回”，核对互斥禁用、错误回滚与无路径泄漏反馈。
+- Phase 3A/3B 已完成：`LibraryRevisionTracker` 分离结果数据和标签定义代次；普通收藏、
+  播放进度与媒体详情只推进数据代次，root、扫描、relink、删除和标签维护同时推进标签
+  定义代次，`LibraryCountEpoch` 不再把所有数据提交误判为标签结构变化。
+- `LibrarySelectionController` 只保存 stable `videoId` 的只读视图，统一进入、单选、全选、
+  清空和删除后失败项保留；`LibraryViewPreferencesController` 只拥有网格密度、主侧栏
+  折叠和标签面板显隐。页面继续唯一协调筛选来源、排序持久化、批量删除与复合 rebuild。
+- Phase 3A/3B 未迁移排序、筛选、计数算法、播放队列和扫描生命周期；媒体库页面行数
+  门禁由 6,021 降到 6,019。
+- Phase 3A/3B focused tests 与完整 359 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 仍不可用；
+  需人工复测“进入多选 → 选择/全选 → 取消 → 网格/列表切换 → 折叠/展开侧栏 → 标签面板
+  展开后点击标签”，核对选择只跟随 stable id、筛选后退出多选且交互无卡顿。
+- Phase 3C 已完成：`LibrarySortController` 成为排序字段、方向、稳定 fingerprint 与纯
+  内存重排的唯一 owner；自然排序算法迁入纯 domain 文件，页面只在状态真实变化后重排
+  当前已接受 `FilterState` 并经应用服务保存偏好。
+- 排序 controller 不持有 Store、筛选服务、计数查询、持久化或播放队列；页面级回归确认
+  正序切换倒序后两个 stable `videoId` 成员不变、卡片顺序反转且 `resultCountsCalls`
+  零增长。最近播放、收藏、本地目录和筛选结果继续复用同一纯排序入口。
+- helper 兼容导出保留，排序按钮、六项字段、方向回调、菜单、filtered queue 来源与
+  返回路径均未删除；媒体库页面行数门禁由 6,019 降到 5,998。下一步进入 Phase 3D，
+  分离 `LibraryQueryController` 与 `FacetCountController`，共享 epoch 协议但不得互为
+  可写状态源。
+- Phase 3C focused tests 与完整 363 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 仍不可用，
+  无法自动点击或截图；需人工复测“切换名称/日期等字段 → 切换正倒序 → 打开首项 →
+  返回”，核对排序持久化、队列成员和筛选状态不变。
+- Phase 3D 已完成：`LibraryQueryController` 唯一拥有最近请求的 `FilterQuery`、已接受
+  `FilterState`、`FilterStateSource` 缓存和 latest-only revision；候选结果必须同时
+  匹配当前请求代次、`LibraryResultEpoch` 与页面提供的 store/输入身份才会发布。
+- `LibraryFacetCountController` 分别持有可见候选计数与全库稳定计数的只读快照，并复用
+  原空闲调度器；它不读取 query controller，query controller 也不读取 facet owner。
+  页面只先发布可见视频，再延后安排计数，保持搜索和标签点击的主界面优先级。
+- 真实 `LibraryPage` 回归覆盖“名称正序 → 倒序 → 输入搜索 → 清空搜索 → 卡片菜单”，
+  搜索只显示匹配 stable `videoId`，清空后恢复原成员与倒序状态，且高频搜索/排序期间
+  `resultCountsCalls` 零增长。页面行数门禁由 5,998 降到 5,977。
+- Phase 3D focused tests 与完整 368 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。Computer Use 仍不可用，
+  无法自动点击或截图；下一步进入 Phase 3E，只允许从已接受的 `ResultSnapshot` 创建
+  `QueueSnapshot`，不得由原始 Store 或过期筛选重建播放器队列。
+- Phase 3E 已完成：`LibraryPlaybackQueueController` 只接受已捕获的
+  `LibraryResultSnapshot` 与对应展示视频，以 stable `videoId` 一一校验成员和顺序后，
+  唯一通过 `LibraryQueueSnapshot.fromResult` 创建不可变播放队列。
+- 主媒体库复用 query owner 已接受的 result epoch；最近播放、收藏和本地目录以来源、
+  路径、播放数据代次和排序指纹建立独立 epoch。结果快照与队列标题在同一次 build 输入
+  上绑定，旧 Widget 回调、缺失/额外/重复成员或越界选中项均不能从 Store 重建替代队列。
+- `PlayerPage` 新增可选 `queueSnapshot` 输入，生产 `LibraryPage` 同时传递该快照与同序
+  不可变 playlist；邻近缩略图预热也只消费该队列并跳过 missing。页面源码合同确认
+  不再直接构造 Result/Queue snapshot，也不把 `_openVideo` 作为未绑定的原始回调。
+- Phase 3E focused tests 与完整 372 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。媒体库/播放器页面预算分别
+  收紧到 5,975 / 5,374。Computer Use 仍不可用；空后端 Widget 环境无法在可控时间穿过
+  既有“预览释放 → 缩略图预热 → 备份让盘 → endOfFrame”链，因此真实点击仍需人工复测：
+  “筛选并排序 → 打开非首项 → 核对队列成员/顺序和当前 index → 返回保留筛选”。
+- 下一步进入 Phase 3F，只迁移扫描/导入的 latest-only、限流、暂停/取消与 generation
+  生命周期；不得改变 folder/manual 标签来源、扫描提交事务或播放器让盘语义。
+- Phase 3F 已完成：泛型 `LibraryScanLifecycleController<TMediaProgress>` 成为扫描操作、
+  路径导入检查与扫描后媒体解析状态的唯一 application owner；它以操作 revision、
+  Repository generation 和媒体解析 generation 拒绝旧 Future、旧进度与旧错误。
+- 并发扫描继续互斥；暂停失败只回滚同一代次，取消状态保持到扫描 Future 真正退出。
+  文件/目录 stat、扫描后端限流、SQLite 单事务提交、folder/manual 标签和媒体服务创建
+  仍留在原平台/Repository 边界。纯进度文案迁入 library presentation 叶节点。
+- 真实 `LibraryPage` Widget 回归点击“重新扫描 → 暂停 → 继续 → 取消”，随后继续覆盖
+  搜索、排序和“更多”菜单，证明扫描状态 owner 与相邻入口均保持页面级可达。
+- Phase 3F focused tests 与完整 378 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口可见窗口启动通过。媒体库页面门禁降到 5,932。
+  Computer Use 仍不可用，无法截图；生产窗口仍需人工复测同一点击路径并核对进度位置、
+  遮挡、对齐和暂停/取消反馈。
+- 下一步进入 Phase 3G：把现有文件菜单、标签维护与 Missing/Relink 页面编排迁为明确
+  command；获授权删除清单仍为空，不改变确认、撤销、返回、stable identity 或事务边界。
+- Phase 3G-1 已完成文件菜单 command：`RevealVideoLocationCommand`、
+  `RenameVideoFileCommand`、`DeleteVideoCommand` 与无 UI executor 明确区分只读定位、
+  文件系统/Repository 改名补偿和可选回收站删除；页面只绑定确认、反馈与刷新。
+- 改名继续保留扩展名、拒绝覆盖和仅大小写改名，Repository 失败后按原路径补偿；补偿
+  失败只返回固定“重新扫描”错误。删除继续保持“回收站 → Repository → best-effort
+  缓存清理”，批量部分失败只移除成功 stable ID，失败项保持选中。
+- Phase 3G-1 focused tests 与完整 386 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口启动通过；媒体库页面门禁降到 5,919。
+  Computer Use 仍不可用，无法截图；人工复测路径为“更多 → 打开位置 / 删除确认取消”，
+  以及播放器“重命名 → 返回”，核对弹窗位置、遮挡和错误反馈。
+- 下一步进入 Phase 3G-2，只迁移 manual 标签编辑/批量维护命令；folder/locked 标签、
+  tagId、当前一级父级、确认与 Tag Manager Route 均必须保留。
+- Phase 3G-2 已完成单视频手动标签替换 command：不可变输入显式携带当前媒体、
+  已选择标签、locked folder 标签与可选一级父级；executor 统一大小写去重、父级作用域
+  和失败补偿，不持有 Store、Flutter、Route 或具体 Repository。
+- `LibraryTagMaintenance` 在批量写入失败时恢复当前视频的 tagId 关系，并移除本次新建但
+  未提交的标签索引；上层 command 同步恢复 `VideoItem.tags` 与完整 `childTags`，避免
+  内存模型和 Repository 索引在失败后分叉。Tag Manager 的创建、改名、合并、删除与
+  批量操作仍由原页面/Repository 唯一拥有，没有在媒体库页面复制。
+- 独立审查补齐“主库已提交、备份入队失败”边界：该故障只发布备份 failed 诊断并等待
+  后续全量核对，不能让上层 command 错误恢复已经提交前的标签模型。
+- Phase 3G-2 focused tests 与完整 392 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口启动通过；媒体库页面门禁降到 5,913。
+  Computer Use 仍不可用，无法截图；人工复测路径为“卡片更多 → 编辑标签 → 切换/保存/
+  取消”，并覆盖二级标签父级与播放器编辑标签返回，核对弹窗位置、锁定反馈和刷新状态。
+- 下一步进入 Phase 3G-3，只收口 Missing/Relink 命令边界；stable videoId、mutable path、
+  missing 记录保留、确认/返回路径和现有 Repository 事务语义不得改变。
+- Phase 3G-3 已完成单条 Missing/Relink command：不可变命令捕获 stable videoId、
+  picker 前 mutable path 与 fingerprint，拒绝过期、空路径和同一身份重复提交；executor
+  不导入 Flutter、Store、FileSystemAdapter、Route 或具体 Repository。
+- Missing 页面和播放器错误面板继续复用相同 picker、SnackBar 与返回刷新语义；批量路径
+  预览、执行失败定向重试和 root 更新仍由既有 `BulkPathRelinkService` 唯一负责，没有
+  复制 fingerprint、路径占用或 SQLite 逻辑。
+- 独立审查补齐单条 relink 的 batch 失败补偿：同一 `VideoItem` 引用、旧 mutable path、
+  missing 状态、active/detached 索引和 tagId 关系全部恢复。确定性关闭数据库测试证明
+  提交失败不会留下新路径内存假象。
+- Phase 3G-3 focused tests 与完整 398 项测试通过（3 项显式基准跳过），`flutter analyze`
+  零问题，Windows Debug build 与正式入口启动通过；`LibraryPage` 门禁保持 5,913。
+  Computer Use 仍不可用，无法截图；人工复测路径为“更多 → 缺失与重新关联 → 单条取消/
+  选择/失败反馈 → 返回”，再覆盖批量预览/重试和播放器错误面板 Relink。
+- 下一步进入 Phase 3H：只拆 `LibraryPage` 的布局、动画、Route 与 command 绑定，不迁移
+  Repository 语义，不删除任何现有入口，并保持页面预算只降不升。
+- Phase 3H-1 已迁移继续观看清理/撤销命令：`LibraryContinueWatchingCommandExecutor`
+  捕获精确播放快照、批量提交并在清理或撤销失败时补偿同一 `VideoItem`；不持有 Store、
+  BuildContext、Route、SnackBar、筛选结果或播放器资源。
+- 最近播放临时选择由第二个 `LibrarySelectionController` 按 stable videoId 持有，不再
+  绑定 mutable path；`RecentPlaybackView` 也只消费 stable ID。确认弹窗、清理单条/
+  已选/全部、10 秒撤销、新播放不覆盖和全部反馈文案保持可达。
+- Phase 3H-1 focused/widget tests 与完整 403 项测试通过（3 项显式基准跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口启动通过；`LibraryPage`
+  门禁由 5,913 降到 5,796。
+  Computer Use 仍不可用，无法截图；人工复测路径为“侧栏 → 最近播放 → 单选/全选 →
+  删除已选/清空全部 → 取消/确认 → 10 秒撤销”，并在撤销窗口内重新播放验证不覆盖新进度。
+- 下一步进入 Phase 3H-2，继续从页面迁出非布局的来源切换/派生状态编排；Route、动画、
+  command 绑定和所有既有入口继续留在页面，页面预算只降不升。
+- Phase 3H-2 已完成来源导航 owner：`LibrarySourceNavigationController` 唯一持有普通
+  媒体库、继续观看、收藏、本地目录模式，以及当前本地路径和 LIFO 返回栈；不持有
+  BuildContext、Route、Store、FilterQuery、VideoItem 或平台资源。
+- 页面以回调注入 `TagRules.normalizeRootPath/pathKey`，controller 不直接依赖
+  `dart:io Platform`。标签/搜索动作仍只切回普通媒体库并保留旧本地历史；媒体库主入口、
+  最近播放、收藏和 root 入口仍按原规则结束或重建本地浏览会话。
+- 侧栏四类入口、文件选择器当前目录、目录进入、返回按钮/鼠标侧键、移除当前 root、
+  收藏筛选叠加和当前可见 filtered queue 绑定均保持页面级可达。`LibraryPage` 门禁由
+  5,796 降到 5,748。
+- Phase 3H-2 focused/widget tests 与完整 410 项测试通过（3 项显式基准跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口可见窗口启动通过。
+  Computer Use 仍不可用，无法截图；人工复测路径为“媒体库 → 继续观看 → 收藏 →
+  任一 root → 进入两层目录 → 返回按钮/鼠标侧键 → 点击标签 → 回到媒体库”。
+- Phase 3 媒体库 MVVM 一致性边界迁移完成；下一步进入 Phase 4A，只盘点并迁移播放器
+  队列、当前媒体与会话命令 owner。不得迁移 native texture/window、全屏生命周期、
+  PlayerBackend contract 或 filtered queue 来源。
+- Phase 4A 已完成播放器会话 owner：`PlayerSessionController` 接受页面提供的来源对象
+  与媒体库已接受 `QueueSnapshot` stable-ID 顺序，拒绝重复身份和对象/快照错序；来源
+  队列与当前二级标签子集只通过不可修改视图发布。
+- 初始化、队列切换和删除都按 stable `videoId` 保持当前媒体，不再依赖 mutable path；
+  二级标签 matcher 由页面注入，空子集只回退同一来源队列，不会查询 Store。旧
+  `player_playback_controller.dart` 仅保留 import 路径兼容导出，不保留旧构造 API。
+- `PlayerPage` 继续唯一持有 `PlayerService`、backend open、texture/native window、
+  timer、全屏、Route 与 Widget 生命周期；页面门禁由 5,374 收紧到 5,371。
+- Phase 4A focused/widget tests 与完整 416 项测试通过（3 项显式基准跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口可见窗口启动通过。
+  Computer Use 仍不可用，无法自动点击或截图；人工复测路径为“媒体库筛选/排序 →
+  打开非首项 → 单击另一队列项（仅选择）→ 双击播放 → 切换二级标签/取消 → 队首/队尾
+  → 删除当前项前一项 → 返回媒体库”，核对 `N / total`、来源顺序和筛选保留。
+- 下一步进入 Phase 4B：拆出 latest-request 与 backend event bridge；不得改变 open
+  代次、后端选择、错误语义、播放器资源 owner 或 filtered queue 来源。
+- Phase 4B 已完成版本化 open owner：`PlayerOpenRequestController` 以
+  `revision + videoId + path` 捕获不可变意图；更新选择、missing 前置拒绝和 cancel
+  都会推进代次，旧 open Future 不能发布成功、错误或恢复位置。
+- `PlayerBackendEventBridge` 集中持有 completed/error/position/playing 四类订阅，
+  不依赖 Flutter、`PlayerService` 或 `PlayerBackend`；页面继续解释 EOF、进度节流、
+  安全错误面板与播放图标，并在 stop/dispose backend 前等待 bridge 幂等取消。
+- 播放可用性、完成阈值、恢复位置与继续观看纯函数迁入 player domain；媒体库页面和
+  library widgets 不再反向导入播放器 presentation。兼容文件只保留旧 import 路径导出。
+- Phase 4B focused/widget tests 与完整 421 项测试通过（3 项显式基准跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口可见窗口启动通过；
+  `PlayerPage` 门禁由 5,371 降到 5,370。
+  Computer Use 仍不可用，无法自动点击或截图；人工复测路径为“快速连续点选三条队列项
+  → 最后一条成功打开 → missing/重试/跳过 → 播放到 EOF → 返回媒体库”，核对 opening
+  遮罩、错误面板、`N / total`、来源顺序和筛选保留。
+- 下一步进入 Phase 4C：只拆控件显隐、计时器和快捷键的纯状态/调度边界；不得迁移
+  texture/native window、全屏资源、PlayerBackend、诊断采样或 filtered queue。
+- Phase 4C-1 已完成交互显隐 owner：泛型纯 Dart
+  `PlayerInteractionStateController<TIcon>` 唯一持有主控制条与快捷键反馈状态，以及
+  两只可取消 Timer；新显示意图覆盖旧 Timer，dispose 后不再发布迟到回调。
+- 设置浮层和控制区悬停继续按原规则锁定控制条；关闭/离开后恢复 3 秒自动隐藏，快捷键
+  反馈继续显示 850ms，并保留 seek 左上角水印与普通居中反馈。页面只注入 `IconData`
+  和无上下文重建回调。
+- Focus、键位解析、Overlay、全屏队列 Timer、窗口/texture 生命周期和快捷键命令执行
+  均保持原 owner；`PlayerPage` 门禁由 5,370 降到 5,325。
+- Phase 4C-1 focused/widget tests 与完整 426 项测试通过（3 项显式基准跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口可见窗口启动通过。
+  Computer Use 仍不可用；人工复测路径为“进入/离开底部控制区 → 等待 3 秒 → 打开/
+  关闭设置 → 连续触发快进与播放快捷键”，核对透明度、位置、遮挡和反馈覆盖。
+- 下一步进入 Phase 4C-2：只迁移快捷键暂停深度、焦点恢复资格与命令匹配纯状态；
+  FocusNode、HardwareKeyboard、Route/Overlay 探测和具体播放器命令继续留在页面。
+- Phase 4C-2 已完成：`PlayerShortcutGateController` 统一嵌套暂停、manual 标签编辑、
+  命令处理和焦点恢复资格；页面继续采集 Focus/Route/Overlay/Keyboard 并执行命令。
+- 完整 431 项测试通过（3 项跳过），静态分析、Windows Debug build 与正式入口启动通过；
+  `PlayerPage` 门禁降到 5,322。Phase 4C 完成，下一步进入 Phase 4D 原生资源单一 owner。
+- Phase 4D 已完成：纯 Dart `PlayerFullscreenLifecycleController` 唯一持有当前 Route
+  的全屏/过渡状态、会话恢复与退出窗口命令顺序；页面只注入 `endOfFrame`、
+  `window_manager` 命令和无上下文刷新回调，不向 controller 泄漏 `BuildContext`、
+  Route、PlayerBackend 或窗口句柄。
+- `PlayerResourceLifecycleCoordinator` 成为 Texture listener 与 backend/native surface
+  释放的唯一协调 owner，固定执行“解绑 listener → 取消四类事件订阅 → stop → dispose →
+  released”；重复 stop/release 共享 Future，dispose 抛错仍等待 released 并完成媒体库
+  Route 信号。
+- pause 确认后保留最后一帧、child HWND 全屏前 `endOfFrame`、全屏退出后最大化、会话
+  恢复与匿名生命周期诊断均保留；Route 卸载后拒绝迟到窗口命令。filtered queue、当前
+  index、backend 选择、overlay airspace 栈和返回筛选状态均未改变。
+- 7 项原生资源/全屏 focused tests、架构合同与完整 439 项测试通过（3 项显式基准跳过），
+  `flutter analyze`、Windows Debug build 与正式入口可见启动通过；`PlayerPage` 门禁
+  降到 5,021。Computer Use 原生管道仍不可用，未使用可能捕获其它窗口的截图回退；
+  人工复测路径为“筛选并打开视频 → 全屏往返 → 返回媒体库 → 再次打开 → 返回”，核对
+  顶栏无残影、音频停止、最后一帧过渡、窗口最大化恢复和队列/筛选保留。下一步进入
+  Phase 4E，独立迁移播放器诊断，不把诊断状态混入会话、全屏或资源 owner。
+- Phase 4E 已完成：`PlaybackDiagnosticsSnapshot` 迁入 player domain；诊断弹窗只接收
+  `Stream<bool>` 与只读采样回调，不再导入 `player_page.dart`、持有 `PlayerPageState`
+  或通过页面取得 PlayerService。
+- 弹窗继续唯一拥有刷新 Timer、播放订阅、连续样本比较、复制反馈和 dispose；页面仍从
+  同一个当前播放器实例构建匿名快照，不创建第二个 Player。右键“诊断检查”、打开失败
+  面板入口、详细指标、隐私文案和 overlay airspace 均保留。
+- 诊断 focused widget test、架构合同与完整 441 项测试通过（3 项显式基准跳过），
+  `flutter analyze`、Windows Debug build 通过；`PlayerPage` 门禁保持 5,021。Phase 4
+  播放器 MVVM 完成，下一步进入 Phase 5：先收窄 Repository 读写接口并收集事务亲和度
+  证据，不直接物理拆分 `LibraryStore`。
+- Phase 5 已完成代码与事务证据收口：新增 `LibraryQueryRepository` 和
+  `LibraryCommandRepository`，facade 不再持有完整 `LibraryRepository`；组合根仍把
+  同一个 `LibraryStore` 实例注入两个端口，SQLite、内存索引和事务 owner 保持唯一。
+- 标签维护、扫描/root、删除、稳定身份 relink 等跨域写入继续以粗粒度命令在同一 batch
+  提交；审计确认当前不满足物理拆分的收益门槛，完整矩阵见
+  `docs/architecture/LIBRARY_REPOSITORY_AFFINITY_2026_07_29.md`。
+- Phase 5 focused 架构/真实媒体库页面测试与完整 442 项测试通过（3 项显式跳过），
+  `flutter analyze` 零问题，Windows Debug build 与正式入口点击启动通过。该阶段没有
+  视觉变更；Computer Use 原生管道仍不可用，因此没有使用可能捕获其它窗口的截图回退。
+  下一步进入 Phase 6，只清理已经归零的兼容导入/导出并完成最终架构审查。
+- Phase 6 已完成：16 个单元测试和 9 个 integration test 全部改为具体模块 import；
+  `src/app.dart` 消费者归零后已删除。测试 support 中只有共享 benchmark/query trace，
+  没有可迁移的公共 Fake/Mock；各测试私有 fake 继续贴近其唯一消费者。
+- 架构合同改为同时扫描 production、test 与 integration_test，任何重新导入万能 barrel
+  都会失败。focused 与完整 442 项测试通过（3 项显式跳过），`flutter analyze` 零问题，
+  Windows Debug build 与正式入口点击启动通过。
+- Phase 0—6 的最终依赖方向、刻意保留的 Store 聚合边界、验证证据和后续治理原则已记录
+  到 `docs/architecture/ARCHITECTURE_COMPLETION_2026_07_29.md`。整体架构重构收官；
+  后续回到产品 vertical slice，只在需求触及的边界继续机会式降低页面预算。
+- 代码瘦身第一批完成：`RecentPlaybackView` 与 `TagEditorDialog` 从 4577 行的
+  `library_widgets.dart` 迁到 299/481 行的独立叶节点，聚合文件降到 3819 行；最近播放
+  继续只消费 stable videoId，标签编辑继续保持 folder/manual、父级作用域和键盘保存语义。
+- 对齐 Effective Dart、Flutter 职责分离和 Google 小变更/评审标准；完整来源与项目
+  落地规则见 `docs/architecture/CODE_DEVELOPMENT_STANDARDS_2026_07_29.md`。
+- 新增 presentation 行数治理合同：≤200 行为项目最佳实践，201—500 行为关注区，超过
+  500 行必须进入只降不升预算，超过 1000 行列为强制重构对象并禁止新增。外部规范没有
+  通用单文件行数硬限制；这组阈值是本项目治理线，现有 16 个超标文件已显式登记。
+- 验证：focused 架构/Widget 测试 248 项、完整测试 443 项通过（3 项显式 benchmark
+  按设计跳过），`flutter analyze` 零问题，Windows Debug build 与正式 EXE 点击启动
+  存活检查通过。Computer Use 原生管道不可用（系统找不到指定文件），因此本轮无法补做
+  “媒体库 → 最近播放”以及“媒体卡片更多 → 编辑标签”两个入口的真实鼠标路径与截图；
+  替代证据为页面挂载合同、对应 Widget 测试和真实程序启动，仍需人工复测这两个准确
+  路径。
+- 代码瘦身第二批：侧栏通用条目、左右面板转场和结果视图切换器迁到 237/52/221 行
+  独立叶节点，`library_widgets.dart` 从 3819 行继续降到 3348 行。原 `ValueKey`、
+  tooltip、无障碍语义、点击回调、动画 controller 和页面状态 owner 均保留。
+- 超过 1000 行的 8 个 presentation 文件已进入有序强制治理清单：当前先完成
+  `library_widgets.dart` 的 sidebar/top bar，再依次治理 `library_page.dart`、
+  `player_page.dart`、`library_video_results.dart`、`player_queue_sidebar.dart`、
+  `library_tag_discovery_panel.dart`、`tag_manager_page.dart` 和
+  `missing_relink_page.dart`。
+- 第二批验证：focused 架构/Widget 测试 248 项、完整测试 443 项通过（3 项显式
+  benchmark 按设计跳过），`flutter analyze` 零问题，Windows Debug build 与正式 EXE
+  点击启动通过。Computer Use 原生管道仍不可用（系统找不到指定文件），因此侧栏
+  展开/折叠、资料库入口和网格/列表切换的真实鼠标点击及截图保留为人工复测路径。
+- 代码瘦身第三批：sidebar 容器、折叠轨道、品牌区和桌面拖拽滚动行为迁到
+  418/213/121/16 行独立组件，top bar 搜索与筛选状态区域迁到 241/464 行组件；
+  `library_widgets.dart` 从 3348 行降到 1917 行。搜索继续使用同一 controller 链，
+  筛选、导航、动画和页面状态 owner 不变。
+- `library_page.dart` 治理已启动：播放解码器/渲染器下拉迁到 367 行的
+  `features/settings/presentation` 叶节点，页面从 5747 行降到 5391 行；确认、取消、
+  持久化和撤销路径不变，页面与测试直接导入具体组件。
+- 第三批验证：focused 架构/Widget/渲染设置测试 252 项、完整测试 443 项通过（3 项
+  显式 benchmark 按设计跳过），`flutter analyze` 零问题，Windows Debug build 与
+  EXE 点击启动存活检查通过。Computer Use 初始化仍失败：
+  `failed to connect native pipe: 系统找不到指定的文件 (os error 2)`，无法自动点击或
+  截图；人工复测路径为“展开/折叠侧栏并进入各入口 → 顶栏输入/清除搜索与切换筛选 →
+  设置 → 播放设置 → 解码器/渲染器确认、取消与撤销”。
+- 下一步继续治理 `library_page.dart`，优先选择可独立挂载、可直接测试且不取得筛选、
+  队列、扫描或用户数据所有权的 UI 一致性边界；仍按所有 1000+ presentation 文件的
+  既定顺序推进。
+- 代码瘦身第四批：原始码流缓存卡、播放画质/流畅度面板、删除文件设置和缓存失败
+  状态/测试容器迁到 47/371/165/158 行的 settings presentation 叶节点；
+  `library_page.dart` 只降不升预算由 5391 行收紧到 4686 行。
+- 四个叶节点只接收 `PlaybackSettings` 快照、布尔状态和回调；设置 section、返回路径、
+  `PlaybackSettingsController`、缓存诊断/维护 controller、持久化、删除与失败补偿命令
+  仍由原页面 owner 管理。架构合同新增挂载和禁止依赖守卫。
+- 第四批验证：focused 架构/Widget/流畅度测试共 254 项、完整测试 444 项通过（3 项
+  benchmark 按设计跳过），`flutter analyze` 零问题，Windows Debug build 与 EXE 点击
+  启动存活检查通过。Computer Use 仍因原生管道缺失（os error 2）无法点击或截图；
+  人工复测路径为“设置 → 播放与解码 → 原始码流缓存 → 视频画质与增强（含 HDR 确认、
+  流畅度撤销）→ 删除文件危险提示 → 缩略图缓存失败动作及返回设置首页”。
+- 代码瘦身第五批：“播放与解码”主卡及全屏队列/快捷键展示区迁到 98/168 行的
+  settings presentation 叶节点，`library_page.dart` 只降不升预算由 4686 行收紧到
+  4487 行；叶节点只接收设置快照、只读映射和回调。
+- 页面继续唯一拥有 `PlaybackSettingsController`、渲染器/解码器确认与撤销、快捷键
+  冲突校验、全屏队列设置命令、持久化和 section 返回；原 `ValueKey` 与入口可达性不变。
+- 第五批验证：focused 架构/Widget/渲染器保护测试共 254 项、完整测试 445 项通过
+  （3 项 benchmark 按设计跳过），`flutter analyze` 零问题，Windows Debug build 与
+  EXE 点击启动存活检查通过。Computer Use 仍因原生管道缺失（os error 2）无法点击或
+  截图；人工复测路径为“设置 → 播放与解码 → 恢复策略/渲染器/解码器确认与撤销 → 返回
+  → 播放器交互 → 全屏边缘播放列表开关/快捷键恢复默认与录入冲突反馈 → 返回设置首页”。
+- 代码瘦身第六批：设置 Route 外壳和缓存诊断卡装配迁到 82/69 行的 settings
+  presentation 叶节点，`library_page.dart` 只降不升预算由 4487 行收紧到 4443 行。
+- 外壳只接收首页状态、标题、刷新显隐、导航回调和 child；缓存卡只接收统计快照与
+  重试/清除意图。section 状态、缓存读取/维护 controller、Repository 写入及命令结果
+  反馈仍由原页面 owner 管理，原返回/刷新/缓存动作 `ValueKey` 不变。
+- 第六批验证：focused 架构/Widget 测试共 252 项、完整测试 447 项通过（3 项 benchmark
+  按设计跳过），`flutter analyze` 零问题，Windows Debug build 与 EXE 点击启动存活
+  检查通过。Computer Use 仍因原生管道缺失（os error 2）无法点击或截图；人工复测路径
+  为“设置 → 缩略图缓存 → 刷新统计 → 加载/错误恢复 → 失败项重试/清除标记 → 返回按钮
+  与系统返回 → 设置首页”。
+- 下一步继续盘点 `library_page.dart` 中不持有筛选、扫描、队列或用户数据的只读状态/
+  纯展示区域；任何需要迁移共享语义或命令 owner 的候选都停止并另立 Level 3 任务。
+
+## 2026-07-29 fvp / raw media-kit / 当前后端 Windows 同法 A/B
+
+- 同一台 Ryzen 9 7900X、64 GiB、AMD 核显与 RTX 4070 SUPER 机器，以同一份匿名有序
+  清单完成三组 Flutter Windows Release 实测；覆盖 8 个有效容器/编码/分辨率样本、
+  2 个异常样本、逐样本 seek 和同实例 30 次交错队列跳转。
+- 三组有效样本与 seek 均为 8/8，连续切换失败率均为 0%。fvp 的渲染帧中位数
+  149 ms、切换 P95 244 ms、峰值 Working Set 383.8 MiB、Release 目录 41.7 MiB，
+  本轮均优于 media-kit 组。
+- 截图首帧包含各后端整帧截图编码和 Dart 解码成本；当前正式后端的结构化首帧中位数
+  约 197 ms，而完整截图中位数约 731 ms，4K 样本为 191/1799 ms。该反证说明不能
+  把截图差值直接解释为用户可见首帧差值，也不能据单轮暖态运行替换内核。
+- A/B 发现缺失文件此前进入 libmpv 后约 4.4 秒才泛化失败；`MediaKitPlayerBackend`
+  现于进入 libmpv 前快速记录路径无关 `missing_file`，实测 8 ms，错误流不包含本机目录，
+  同一打开代次只计一次失败。破损但存在的文件仍由 libmpv 判断。
+- 决策：media-kit 继续作为正式播放内核；fvp 只保留 Windows 性能专项资格，不进入
+  业务代码或接管 filtered queue。完整方法、硬件支持和限制见
+  `docs/qa/player_fvp_same_method_windows_ab_20260729.md`。
+- SQLite、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序/当前 index、
+  缓存队列、用户设置语义和用户数据均未改变。
+- 遥测单测 3/3、Windows 缺失文件真实按钮点击集成、`flutter analyze` 与正式 Windows
+  Debug build 通过。额外既有队列截图用例缺少 `qa.video.play.purple-grid` 夹具，
+  渲染器设置用例仍断言旧文案，均在首次点击前失败且不属于本次改动。
+
+## 2026-07-29 同实例 libmpv 滤镜验证、回滚与诊断
+
+- `PlayerService` 新增滤镜属性事务：写前捕获旧值、按完整快照写入、逐项读回，
+  不一致时恢复并再次验证；全程复用当前后端和同一个 `NativePlayer`。
+- libmpv 的数值小数格式与 `lavfi=graph=%N%…` 长度前缀按语义归一化，避免把实际
+  已接受的 `deblock` / `deband` 误判为失败；滤镜节点和参数仍要求严格一致。
+- 回滚顺序先关闭 `deband`，恢复旧参数与 `vf`，最后恢复旧主开关，避免失败路径
+  短暂运行半套去色带配置。
+- 自适应 CPU 滤镜与 NVIDIA 联合滤镜统一经过事务边界；诊断页显示序号、用途、
+  验证数、不一致属性名、回滚结果和稳定错误码，不记录属性值或媒体路径。
+- 24 项 focused tests、现有自适应滤镜测试、`flutter analyze`、Windows Debug
+  build 和真实 MediaKit/libmpv Texture integration 通过；真实会话确认
+  `deblock + deband` 写入、规范化读回、D3D11VA 硬解和播放推进同时成立。
+- Debug 真窗已完成媒体打开、播放推进和 filtered queue 布局复核。当前 Computer Use
+  坐标接口未能发送 secondary mouse button，因此新增诊断行仍需人工按“视频右键 →
+  诊断检查 → 详细指标下滚”补一张弹窗截图；此前同一弹窗容器的布局已通过。
+- 调试读回格式期间首轮集成宿主曾记录一次 `0xc0000005`，修正比较逻辑后同口径连续
+  两轮完整通过并正常释放。该偶发样本保留到 fvp A/B 的切换失败率记录中，不据此
+  宣称 libmpv 或 fvp 优劣。
+- SQLite、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列、用户设置
+  语义和用户数据未改变。
+
+## 2026-07-29 MediaKit 首帧、错误、解码器与资源释放遥测
+
+- 新增可选 `PlayerBackendTelemetryBoundary`，按媒体打开代次记录首帧时间、证据、
+  路径无关错误、失败打开率、实际硬解/视频编码和资源释放阶段；其他后端与测试替身
+  无需被迫实现。
+- MediaKit 后端只复用现有 `Player` 与同一个类型化 `NativePlayer`：
+  `estimated-frame-number`、视频参数和播放位置组成分级首帧证据，
+  `hwdec-current` / `video-codec` 持续反映实际解码结果，不创建第二实例。
+- 释放流程串行取消事件与属性观察、释放 Player、等待 Windows 原生清理宽限并关闭
+  遥测流；重复释放复用同一个 Future，诊断页可直接观察阶段和各段耗时。
+- 错误遥测只暴露分类代码与时间，不保存路径或底层原始错误文本；同一打开代次最多
+  计一次失败，避免错误流与 open 异常重复抬高连续切换失败率。
+- focused tests 25 项、`flutter analyze`、Windows Debug build 和真实 Texture
+  integration test 通过。Debug 真窗首帧 243 ms，证据为
+  `media-kit-texture+position-update`，实际硬解 `d3d11va-copy`，H.264，
+  错误/失败打开为 0/0；诊断弹窗无可见遮挡或溢出。
+- SQLite、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列和用户数据
+  未改变；真实队列切换后的打开代次与来源队列保持一致。
+
+## 2026-07-28 MediaKit Texture + 同实例 libmpv 增强架构
+
+- `PlayerService` 明确作为 Flutter 页面唯一的 PlayerFacade：常规播放继续走
+  media_kit API，高级画质属性通过 `MediaKitPlayerBackend` 持有的同一个
+  `NativePlayer` 下发，不创建第二个 mpv_handle、Texture 或解码链。
+- 设置中的增强配置改为 `MediaKit + libmpv 增强`；兼容与增强配置都复用
+  media_kit_video Texture。自研 Windows MPV Texture/child HWND 只保留为显式
+  QA 环境覆盖，用于后续原生 D3D11/NVIDIA 研究。
+- MediaKit 高级属性访问从 `dynamic` 改为类型化 `NativePlayer`，并在一次初始化
+  门禁后批量提交画面比例、缩放、输出范围与滤镜快照。
+- 真实低码率片源集成测试挂载正式视频表面，确认 Texture 创建、播放位置持续推进、
+  `scale/cscale=lanczos` 同实例读回和 D3D11VA 硬解；首次白屏来自测试未挂载
+  Video widget，已修正且 7 秒内完成释放。
+- 自研 MPV QA 后端同步参考 media_kit 改为 wakeup callback、观察属性和限额事件批次，
+  不再固定 50ms 扫描全部属性；它不再是生产默认路径。
+- SQLite、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列与用户数据未改。
+
+## 2026-07-28 全应用功能与动画对抗式压测
+
+- 完整 307 项测试、静态分析和 Windows Debug build 通过；主窗口覆盖搜索、六种排序、
+  标签父子选择、标签面板、网格/列表与设置五类子页，真实窗口完成 12 轮视图切换和
+  30 次设置子页往返。
+- MediaKit / MPV 各执行 6 次全屏往返、100 次快速视频切换和 120 秒长播；两后端
+  停滞均为 0，最大掉帧分别为 0/2，队列、设置和 seek P95 均低于 23ms。
+- 网格卡片补齐与列表一致的稳定播放语义；标签压力脚本改为每次点击前重新解析节点，
+  并遵守标签选择后自动折叠的既有交互，不再复用 stale index。
+- 真实 MPV 全屏发现原生 child HWND 会在 Flutter 提交顶栏卸载帧前切换尺寸，导致顶部
+  摘要像素残留；全屏命令现在等待 `endOfFrame` 后再进入原生全屏，最终实窗的普通全屏
+  和全屏队列稳定帧均无摘要残留。
+- SQLite、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列和用户数据未改。
+  真实跨物理 125%/150%/200% DPI 与隔离媒体根中的破坏性操作仍是人工门禁。证据见
+  `docs/qa/adversarial_full_app_stress_20260728.md`。
+
+## 2026-07-28 MPV Texture 交互卡顿与色彩范围核验
+
+- Windows 原生 Texture 的 Flutter 描述符读取不再等待 MPV 工作线程完成整帧绘制、
+  D3D11 复制和插件处理；新增独立句柄/尺寸锁，只在 `SetSize` 与销毁时短暂同步。
+- 播放进度拖动改为松手后只提交最终 seek；键盘连按在 80ms 尾随窗口内累计最新目标，
+  不再把一串马上过期的位置逐项送入解码器。
+- 宽屏播放列表继续保留原显隐动画和 filtered queue，列表子树增加重绘隔离；渲染器
+  切换提示保留确认与撤销，并在 4 秒后自动收起。
+- 同三类低码率片源的 Debug 前后矩阵：列表收放 P95 `47.311 → 14.719ms`，
+  设置弹层 `52.285 → 21.391ms`，连续 seek `505.127 → 15.636ms`；raster P95
+  从约 39ms 降到约 1.6ms，10 秒阶段停滞 0、最大总掉帧仍为 2。
+- 用户同一 1920×1080/60 文件的运行时链为 `limited + BT.709 → output auto`；
+  片源元数据与 mpv 标准自动映射一致，未加入会裁切高光的全局提亮。
+- Computer Use 真实窗口复测在目标选择阶段被用户物理 Esc 中止；自动集成窗口、
+  focused tests 和构建证据已完成，齿轮/列表/进度/全屏仍需下一次人工点击截图复核。
+
+## 2026-07-28 默认 MPV 改为播放器容器 Texture 渲染
+
+- Windows 用户选择 MPV 后，默认创建 libmpv Flutter Texture 表面；MediaKit 与 MPV
+  现在只替换播放器容器内部的视频表面，不再把 child HWND 叠在整个 Flutter 页面上方。
+- MPV Texture 在后端边界把 `d3d11va` 请求收敛为 `d3d11va-copy`，避免 ANGLE 无法
+  消费非 copy D3D11VA 帧时静默回退软件解码；真实门禁已读回
+  `hwdec-current=d3d11va-copy`。
+- 播放列表收起/展开会立即重排视频表面；控制条、设置浮层和随机位置右键菜单均在同一
+  Flutter 合成树中覆盖实时视频，不再依赖 HWND region 挖洞。
+- 全屏右侧播放列表可见且可命中，画面同步缩放；删除已获授权的全屏顶部队列语境条，
+  底部控制条继续作为浮层显示。
+- `windows-native-hwnd` 环境覆盖仍保留为 NVIDIA VSR/HDR 与原生 D3D11 的显式 QA
+  路径；默认 Texture 容器不宣称 NVIDIA VSR/HDR 已激活。
+- 100%/125%/150%/200%/100% 模拟 DPI、6 次全屏往返、队列开合和短播门禁通过；
+  本机只有一块 100% 缩放显示器，真实跨物理 DPI 继续保持
+  `pending-physical-cross-dpi`。
+- MediaKit 与 MPV 各 30 分钟长播均通过：播放推进分别为 561/561、562/562 个采样，
+  停滞均为 0，最大总掉帧分别为 0 与 2（预算 5）；两后端 18 次快速切换、全屏、
+  队列开合和模拟 DPI 均通过，实际硬解均为 `d3d11va-copy`。
+
+## 2026-07-28 MPV HWND 单侧黑边、首入错位与右键暗框回归修复
+
+- Windows MPV child HWND 始终保持与 Flutter 视频占位区相同的完整矩形；控制条显示时通过
+  native region 让出底部 128 逻辑像素，隐藏后只保留 3 像素进度条，不再永久缩短视频窗口。
+- runner 在应用 region 前先提交本轮 surface 几何，修复初次进入或快速切换视频时使用上一帧
+  坐标造成的错位、重复条带。
+- 右键菜单按视口剩余边距定位，并在路由挂载后重试测量真实菜单项边界；弹层只裁剪覆盖区，
+  视频继续播放，不再出现纯黑暗框。
+- Windows HWND 同步缓存纳入顶部和底部动态 airspace，确保控制条 128 → 3 的变化立即下发。
+- 干净构建将 FFmpeg 固定到 BtbN 月末保留构建，版本仍为 8.1.2 LGPL shared，恢复可重复下载。
+- focused tests、`flutter analyze`、Windows Debug build、真实低码率 1080P integration test 与
+  Debug 真实窗口点击/截图均通过；MediaKit、filtered queue、SQLite、标签、缓存和用户数据未改。
+
+## 2026-07-28 MPV 画面视口与 Flutter 弹层实时共存
+
+- 普通窗口不再沿用全屏顶部 64 逻辑像素 airspace；MPV 自动比例视口增加该高度，
+  保持完整画面且不改变“铺满”会等比裁边的既有语义。全屏顶部队列语境仍保留
+  64 像素，底部控制条仍保留 128 像素。
+- 设置与右键菜单不再隐藏整个 child HWND，也不使用截图或冻结帧。PlayerPage
+  通过 `PlayerOverlaySurfaceBoundary` 发送弹层逻辑矩形，runner 使用
+  `SetWindowRgn` 只从视频 HWND 中减去实际覆盖区域；矩形外视频继续实时播放。
+- 设置面板在主页面、更多页面和内部选项切换时回报真实布局边界；右键菜单挂载后
+  用两个菜单项的真实全局矩形收紧首帧估算。未知尺寸的模态弹窗继续完整让出，
+  嵌套弹层用栈恢复上一层策略。
+- 真人低码率 1080P 的 Windows integration test 验证设置/右键期间
+  `native-surface-visible=true`、播放头推进、`d3d11va` 非 copy 与 0 Flutter
+  纹理复制；真实 Debug 点击截图确认普通画面更大，主设置、更多设置和右键菜单
+  无黑屏、遮挡、错位或队列穿透。
+- `flutter analyze`、focused tests 与 Windows Debug build 通过。SQLite、
+  `FilterQuery` / `TagQueryService`、filtered queue、MediaKit、缓存队列和用户
+  数据未改变。证据见 `docs/qa/mpv_hwnd_overlay_region_20260728.md`。
+
+## 2026-07-28 MediaKit / MPV 双后端稳定性矩阵
+
+- 新增统一 Windows 稳定性矩阵：同一组匿名真实片源分别验证 MediaKit 与 MPV 的
+  正式全屏状态机、DPI metrics、latest-request 快速切换和长播诊断，报告明确记录
+  `playerBackend`，不再混用两个后端的结论。
+- 快速切换门禁只通过 PlayerPage 正式队列跳转链发起请求；匿名快照验证 filtered
+  source queue 的身份、顺序、当前 index 与最终打开项没有漂移，不包含本地路径。
+- 默认发布门禁为每个后端长播 30 分钟、快速切换 18 次、总掉帧预算 5 帧。本机用
+  真人面部、动画渐变、暗场三段 650 kbps 1080P 完成 15 秒短门禁：两后端四类自动
+  场景均通过，5/5 长播采样推进、停滞 0、最大总掉帧 0。
+- 本机只有单显示器，真实跨显示器 DPI 未执行，因此汇总发布状态保持
+  `pending-physical-cross-dpi`；模拟 Flutter metrics 通过不能冒充真实跨屏通过。
+- macOS/Linux 继续只允许 MediaKit。两平台若要开放 MPV，必须先分别实现各自原生
+  `PlayerBackend` 并通过同类矩阵，Windows child HWND 不能作为其完成证据。
+- 证据与运行方法见
+  `docs/qa/player_backend_stability_matrix_20260728.md`。
+
+## 2026-07-28 用户选择 MediaKit / MPV 与 NVIDIA 自动增强
+
+- 设置页“播放”新增唯一的两态渲染器选择：`MediaKit 兼容渲染` 与
+  `MPV 容器渲染`。高影响切换必须确认，只影响下一次进入播放器，并提供撤销；
+  旧 `automatic` 设置迁移为 MPV，不再向用户显示平台自动选择。
+- Windows 在用户选择 MPV 且硬件解码开启时创建 libmpv Flutter Texture
+  后端；选择 MediaKit 时明确走兼容后端。非 Windows 或关闭硬解时仍安全回退
+  MediaKit，因为当前没有对应的平台 MPV 实现，界面会解释该限制。
+- 播放器齿轮已删除 NVIDIA VSR/HDR 两个手动开关。MPV 后端会在进入媒体后根据
+  活动 NVIDIA 适配器、原生 D3D11 请求能力、源尺寸、显示分辨率、HDR 信号与
+  10-bit 输出自动决定；这项结论现在只属于显式 `windows-native-hwnd` QA 路径，
+  默认 Texture 不显示或宣称 NVIDIA VSR/HDR 已激活。
+- 原生桥新增 `video-params/w` / `video-params/h` 固定快照，解决自动策略此前
+  无法判断 1080P→4K 放大需求的问题；属性未就绪时归零，不沿用上一条视频。
+- 真人面部、动画渐变、暗场三类 650 kbps 1080P 实测均自动请求 VSR+HDR，
+  驱动回读均为 `active`，最大总掉帧 0、音视频停滞 0。设置页 Windows
+  integration test 完成真实下拉、确认、状态切换和两张截图，未见遮挡、溢出或
+  状态歧义。
+- 画质门禁报告新增 `playerBackend` 与 `rendererPreference`，后续 MediaKit /
+  MPV 结果分开统计。filtered queue、当前 index、返回状态、SQLite、标签、
+  缓存队列和用户数据保持不变。证据见
+  `docs/qa/player_backend_selection_nvidia_auto_20260728.md`。
+
+## 2026-07-28 NVIDIA VSR/HDR 自动让路与激活判定
+
+- 两个产品入口保留：固定 mpv 的 `d3d11vpp` 已能实际调用 NVIDIA VSR 与
+  TrueHDR；NVIDIA App 显示“开、未激活”只表示当前没有满足触发条件或没有被其
+  状态页识别，不能据此删除功能。
+- 压缩画质增强或暗场增强不再让开关不可点击。开启 NVIDIA 时只在当前播放会话
+  暂停冲突的 CPU `lavfi`，不改用户持久偏好；关闭、请求失败或性能回滚后归还
+  滤镜所有权并重新采样。
+- 不读取、不代改 NVIDIA App 的全局开关；产品以固定 mpv 日志归一化后的
+  `NVIDIA VSR/HDR 驱动确认: active` 为真实运行证据。
+- 真人面部、动画渐变、暗场三类真实低码率 1080P 联合验证均为 VSR/HDR
+  `active`、最大总掉帧 0、音视频停滞 0、无自动回滚；关闭后的偏好恢复门禁也
+  通过。证据见 `docs/qa/nvidia_auto_activation_20260728.md`。
+- 一次 Windows integration test 在播放器构造早期出现现有的原生
+  `0xc0000005` 启动抖动，同条件重跑和后续三组均通过；未把它归因于 NVIDIA
+  滤镜，继续作为 child HWND 生命周期风险记录。
+
+## 2026-07-28 Windows Debug 双击无窗口修复
+
+- 已稳定复现：集成测试后的 Debug exe 进程存活且响应，但
+  `MainWindowHandle=0`，应用事件中没有崩溃；经 `flutter run` 重建正式入口后
+  同一路径立即产生可见窗口。
+- 根因是 Windows integration test 复用
+  `build/windows/x64/runner/Debug` 并留下测试入口；此前验证顺序为“正式 build
+  → integration test”，导致最终交付目录不是正式 `main.dart`。
+- 新增 `tool/verify_windows_debug_package.ps1`：交付前重新执行
+  `flutter build windows --debug`，再按精确 PID 双击验证进程未退出且主窗口
+  句柄非零，最后只关闭该 QA 进程。
+- 产品启动代码、默认 MediaKit、Windows 增强后端、filtered queue、SQLite、
+  标签、缓存队列和用户数据均未修改。
+- `flutter analyze`、299 项全量测试（另 3 项按既有条件跳过）、最终 Windows
+  Debug build 和 `-SkipBuild` 双击复验均通过；最终交付目录的主窗口标题为
+  `local_tag_player`。
+
+## 2026-07-28 NVIDIA 发布范围收敛与 VSR 日常开启结论
+
+- 固定 mpv `v0.41.0-908-g48e6c35c0` 的 NVIDIA RTX 视频超分与 RTX Video HDR
+  作为现阶段 Windows 可交付能力；界面移除“实验”文案，但两个能力继续默认关闭、
+  仅会话保存，并保留硬件/源信号门禁、滤镜互斥、性能回滚和非 NVIDIA 回退。
+- A/B 工具改为在固定第 12 秒通过进程绑定的
+  `PrintWindow(PW_RENDERFULLCONTENT)` 捕获最终 Windows 表面，并强制 off/on
+  同尺寸；此前不同时间、不同渲染尺寸的 `mpv screenshot video` 不再作为观感
+  证据。
+- 真人面部、动画渐变、暗场三类自然低码率 1080P 六组 20 秒 A/B 均为 0 总
+  掉帧、0 音视频停滞且 VSR 开启组由驱动确认 active。肉眼结果是：真人/动画
+  边缘有收益，但真人压缩纹理也会变硬；暗场收益很小。因此 VSR 保持默认关闭，
+  仅建议在低码率画面偏软且被放大时按需开启。
+- NVOFA 插帧降级为独立长期研究，不进入产品、不进入安装包、不再阻塞播放器
+  发布。patched libmpv D3D11 hwframe 钩子与独立 FFmpeg 后端也不再由原任务
+  自动继续；只有未来显式重启 NVOFA 研究时才重新评估。
+- 默认 MediaKit、其他平台、插件 ABI v1、filtered queue、SQLite、标签、缓存
+  队列和用户数据均未改变。证据见
+  `docs/qa/nvidia_vsr_daily_ab_20260728.md`。
+- `flutter analyze`、298 项全量测试（另 3 项按既有条件跳过）、Windows Debug
+  build、PowerShell 语法和真实播放器齿轮点击/截图均通过；VSR/HDR 标题、说明、
+  循环开关及“更多播放设置”无错位、遮挡或溢出。
+
+## 2026-07-28 child HWND 生命周期与 D3D11VA 零拷贝边界
+
+- 8 次独立进程 airspace 测试全部通过，Application Error 和孤儿进程均为 0；
+  新增同进程真实 HWND 回归，默认 4/12 轮、零拷贝 12 轮以及幂等 dispose 均通过。
+- 原始 `0xc0000005` dump 的故障地址在运行时生成代码区且栈已损坏，不能指向
+  `NativePlayerBridge`、libmpv 或 NVOFA；没有证明原生缺陷，因此未修改生产
+  销毁次序。
+- `LOCAL_TAG_PLAYER_D3D11VA_ZERO_COPY_QA=1` 才请求并读回
+  `d3d11va-zero-copy=yes`。默认正式会话保持 `no`；压缩清晰增强 `vf` 交替挂载
+  可继续出帧且输出掉帧为 0，但不代表软件滤镜内部没有下载/上传。
+- 三类片源六组零拷贝 NVOFA A/B 在前置真实帧性能门禁连续产生 140/138 新增
+  掉帧后停止，未生成可复用摘要；产品插帧入口继续关闭。
+- 公开 libmpv render API 没有 D3D11 帧接口，VapourSynth R4 只提供软件平面；
+  本节当时记录的 patched libmpv 下一步已被上方发布范围收敛取代，不再自动继续。
+- 详细证据见
+  `docs/qa/windows_hwnd_lifecycle_zero_copy_boundary_20260728.md`。
+
+## 2026-07-28 NVOFA 遮挡有效性与两级补洞
+
+- 参考 NVIDIA FRUC Programming Guide 的阶段顺序，把原先单段 Compute 扩展为
+  三段 QA 管线：低分辨率 flow-grid 前后向校验与局部矢量补洞、逐平面中点 warp
+  与遮挡有效性、只对低有效性像素执行的图像域 hole filling。它是仓库自研的开放
+  近似实现，不下载、不链接也不冒充 NVIDIA FRUC SDK。
+- 新增/扩展确定性 D3D11 探针，旧基线仍为 zero=128、motion=90、
+  unreliable-side=117；单个坏光流格经矢量补洞恢复为 90，高反差显露边界经
+  图像域补洞由中灰风险值修复为 201。三段任一步失败仍让整条 QA 滤镜回滚，
+  没有 CPU 静默慢路径。
+- 当前插件 SHA-256
+  `aaea83ae158818755b1ea7846a7363f3b583c8a68f6c87f6c22ea5a0fc986f31`
+  下，真人面部、动画渐变、暗场六组，以及快速横移、2px 细栅栏、固定字幕、
+  运动模糊、重复切镜十组，均为 off/on 24/48fps、总掉帧 0/0、音视频停滞
+  0/0，并命中 RTX 4070 SUPER LUID `00000000:00017093`。
+- 固定奇数帧人工 A/B 未发现新增五官撕裂、动画翼缘暗边、暗场亮斑、细线断裂或
+  字幕笔画漂移；切镜 off/on SSIM 为 0.999906，没有跨场景混合。运动模糊样本
+  本身含五帧曝光，单帧不能证明产品级稳定收益，因此产品入口继续关闭。
+- A/B schema 5 可由清单驱动匿名压力片源，明确区分“运行时门禁通过”和“产品
+  可启用”。mpv 未提供 decoder/output 分项掉帧时保留 `null`，不再把不可用
+  冒充 0；真实 `totalDroppedFrames=0` 仍是强制门禁。
+- 连续压力首轮在尚未启用插件的 off 组出现一次 child HWND 原生宿主
+  `0xc0000005` 启动崩溃；同条件最小复现与最终 16 组均通过，但该生命周期偶发
+  问题仍阻止产品开放。下一步应做多轮启动/退出与快速切换 soak，并继续去除
+  VapourSynth 软件帧、CUDA 光流回读和最终平面读回。
+- 默认 MediaKit、Windows 后端选择、产品 UI、插件 ABI v1、filtered queue、
+  SQLite、标签、缓存队列和用户数据均未改变；QA 插件、R78 与 NVIDIA 文件仍
+  无 install、无 bundle。
+- `flutter analyze`、297 项全量测试（另 3 项按既有条件跳过）、Windows Debug
+  build、三段 D3D11/真实帧探针和 PowerShell 语法均通过；正式 Debug bundle
+  48 个文件中未发现 NVOFA、CUDA、VapourSynth、VSScript 或 Optical Flow 文件。
+
+## 2026-07-28 NVOFA cost 与前后向一致性保护
+
+- NVOFA 会话现在显式请求前向/后向 `UINT8` cost，并把两侧 cost 与 S10.5 光流
+  一起上传到同 LUID 的 D3D11 Compute。shader 在目标位置检查
+  forward/backward residual 与硬件 cost，输出帧记录
+  `LTPNVOFAConsistencyProtected=1`。
+- 第一版“按置信度强选单侧 + 二次反推光流”虽然通过 24→48fps、零掉帧等技术
+  门禁，却在动画翼缘产生肉眼可见的锯齿暗拖影，因此已被拒绝，没有进入提交。
+- 最终实现保留已验证的中点取样，平均合成占 85%，一致性只允许把两侧比例限制
+  在 42.5%–57.5%；确定性 D3D11 探针得到 zero=128、motion=90、
+  unreliable-side=117。相对旧版动画截图 SSIM 为 0.9981、PSNR 为 57.68 dB，
+  而被拒绝的强加权版本仅为 0.9943 / 40.44 dB，且肉眼回归明确。
+- 最终三类 650 kbps 1080P、六组 20 秒 A/B 均为 off/on 24/48fps、总掉帧
+  0/0、视频与音频停滞 0/0，并命中 RTX 4070 SUPER 的精确 LUID
+  `00000000:00017093`；真人、动画和暗场开启截图人工复核均无新增明显伪影。
+- QA 脚本只复用同时具备报告、完整截图和 `All tests passed!` 日志的单组证据，
+  且记录的插件 SHA-256 必须等于当前二进制；最终六组都绑定
+  `4b55e595947f7e77988e4c3bfcbc1c35064e4c041088b7aabc044777e6b588db`。
+  失败、不完整或旧 hash 组仍强制执行。
+- 这仍不是完整 FRUC：cost/一致性只能识别风险，尚无遮挡 mask、矢量补洞和
+  图像域显露区域补洞。产品入口继续关闭，插件/R78/NVIDIA 文件仍不安装、不
+  打包；下一步应在隔离 QA 链实现补洞并审查连续快速运动，而不是继续放大权重。
+
+## 2026-07-28 NVOFA 同 LUID D3D11 Compute 合成
+
+- Windows child HWND 初始化时通过 DXGI 1.6 高性能顺序选择可创建 D3D11
+  Feature Level 11+ 的 NVIDIA 适配器；mpv 用唯一适配器描述设置
+  `d3d11-adapter`，CUDA 再用 `cuDeviceGetLuid` 精确匹配同一个 LUID，不再固定
+  CUDA device 0。多块同名 NVIDIA 卡会安全拒绝，可用环境变量显式选择 LUID。
+- RTX 4070 SUPER 真机确认 mpv D3D11、CUDA/NVOFA 与新增 Compute 设备均为
+  `00000000:00017093`；活动 GPU 诊断来源改为
+  `windows-native-mpv-selected-d3d11-adapter`，不再借用尚未创建的 ANGLE 设备。
+- 中间帧的双线性采样与双向融合已从 CPU `parallel_for` 迁移到 D3D11
+  Compute Shader。输入软件平面、S10.5 双向光流和最终输出仍需上传/读回，因此
+  准确边界是“同 GPU 硬件光流 + GPU warp”，不是全程 non-copy。
+- D3D11 初始化、shader 编译、资源上传、dispatch 或读回任一步失败都会让
+  VapourSynth 滤镜报错并触发现有会话回滚；没有静默 CPU 慢路径。
+- 三类 650 kbps 1080P 的 4 秒门禁分别用时 3.996 / 3.998 / 3.995 秒，均完成
+  24→48fps、seek、reload、`d3d11-warp=passed` 且窗口内无新增掉帧。
+- 真人面部、动画渐变、暗场各 off/on 20 秒六组再次全部通过：off/on 为
+  24/48fps、总掉帧 0/0、音视频停滞 0/0，六组均使用相同精确 LUID，六张截图
+  均正常出画，进程退出生命周期完整。
+- 插件、VapourSynth R78 与 NVIDIA 公开头文件仍为 `EXCLUDE_FROM_ALL` 本机
+  QA 资产，没有 install 规则；产品入口、默认 MediaKit、Windows 后端选择、
+  插件 ABI v1、filtered queue、SQLite、标签、缓存队列和用户数据均未改变。
+- 下一阶段优先消除 VapourSynth 软件帧和光流回读，并加入前后向一致性、遮挡/
+  显露区域处理与快速运动连续视频审查；未通过前不开放默认入口。
+
+## 2026-07-28 NVOFA 2× 中间帧本机原型
+
+- 新增显式 `EXCLUDE_FROM_ALL` 的 VapourSynth R78 插件目标。插件只从 System32
+  动态加载 `nvcuda.dll` / `nvofapi64.dll`，使用已固定的 NVIDIA BSD-3-Clause
+  公开头文件构建；没有 install 规则，也不进入正式 runner 或 Flutter bundle。
+- 每个滤镜实例实际执行 A→B 与 B→A 两次 NVOFA Optical Flow，偶数帧保留源帧，
+  奇数帧以双向 0.5 warp 合成；切场时复制前帧，禁止跨镜头混合。输出帧属性记录
+  是否插值、切场和处理耗时。
+- mpv 通过结构化 `vf` 的 `user-data` 传入唯一绝对插件 DLL；脚本显式注册
+  VSScript output index 0，并把容器帧率约分后传给插件。24fps→48fps、精确 seek、
+  同进程 reload 与关闭回退均通过。
+- 初始单线程 CPU warp 在真实 1080P 上 7 秒只推进 3.52 秒并产生 97 个输出掉帧，
+  因此未开放入口。按 16 行块并行后，三类 650 kbps 1080P 的 4 秒实时门禁用时
+  3.998 / 4.016 / 4.010 秒，窗口内无新增掉帧。
+- 真人面部、动画渐变、暗场各 off/on 20 秒六组均为 off 24fps、on 48fps，
+  off/on 总掉帧 0/0、音视频停滞 0/0。12.020833 秒固定中间帧人工检查未见明显
+  五官双影、动画轮廓撕裂或暗场污染；off/on PSNR 为 46.94 / 26.05 / 53.50 dB，
+  证明不是同帧复制，但这些数值不是无真值条件下的质量评分。
+- Windows 后端启停命令与状态快照存在不同平台消息时序；强类型边界现在最多等待
+  2 秒读回 `requested/active`，仍不以命令发送成功冒充应用成功。
+- 当前链仍为 D3D11VA→VapourSynth 软件帧→CUDA luma 上传→NVOFA→CPU warp，
+  不属于非 copy D3D11 合成；未增加播放器 UI、持久化键或默认启用。下一阶段必须
+  匹配活动 D3D11 LUID 并把 warp 迁到 D3D11 compute，再重跑六组与运动序列审查。
+- 默认 MediaKit、Windows 后端选择、现有插件 ABI v1、filtered queue、当前
+  index、返回状态、SQLite、标签、缓存队列和用户数据均未改变。
+- `flutter analyze`、297 项全量测试（另 3 项按既有条件跳过）和 Windows Debug
+  build 通过；正式 Debug bundle 未发现 NVOFA、CUDA、VapourSynth 或 VSScript
+  文件，四个新增/扩展 QA 脚本均通过 PowerShell 语法解析。
+- 完整证据见 `docs/qa/nvofa_vapoursynth_interpolation_20260728.md`。
+
+## 2026-07-28 NVIDIA RTX Video HDR 驱动实链
+
+- 固定 libmpv `v0.41.0-908-g48e6c35c0` 已确认包含
+  `d3d11vpp=nvidia-true-hdr=yes`；通过 NVIDIA D3D11 驱动扩展执行，不下载、
+  提交或分发 RTX Video SDK 文件。
+- 能力快照分别建模 VSR 与 TrueHDR；HDR 入口只允许 Windows 原生 child HWND、
+  非 copy `d3d11va`、固定实现版本、明确 SDR 源且无压缩/暗场 CPU 滤镜冲突。
+- 齿轮一级保留原 VSR 稳定键并明确显示“NVIDIA RTX 视频超分（实验）”，新增
+  `player.settings.nvidiaVideoHdrExperiment`。两个开关会话级、默认关闭。
+- VSR/HDR 由一次完整 `vf` 原子应用；联合开启使用
+  `d3d11vpp=scale=2:scaling-mode=nvidia:nvidia-true-hdr=yes`，不强制 NV12。
+  新组合被拒绝时恢复之前已确认组合；运行压力复用既有 NVIDIA 回滚。
+- 原生桥只匹配固定成功/失败/已是 HDR 文本，返回
+  `inactive/requested/active/rejected/ignored-source-hdr`，不泄漏原始 verbose
+  日志；同时返回源 primaries/gamma 供 SDR/HDR 门禁。
+- 真人面部、动画渐变、暗场各 off/on 20 秒六组均为驱动 `active`、0 总掉帧、
+  0 视频/音频停滞；滤镜均无 `format=nv12`。播放期间 DXGI 报告 3840×2160、
+  10-bit、PQ/BT.2020、HDR 信号活动；峰值亮度元数据为 0.0 nits，仍不可用于
+  显示器亮度校准结论。
+- 真实 Debug 点击后的 Flutter 合成层截图确认两个 NVIDIA 入口可达，TrueHDR
+  开启态、三行说明、锚点、边界和对比度正常。自定义 runner 未注册系统级
+  `captureScreenshot`，因此未把该替代截图描述成 Windows Graphics Capture。
+- 默认 MediaKit、渲染器选择、filtered queue、当前 index、返回状态、插件 ABI
+  v1、SQLite、标签、缓存队列和用户数据均未改变。
+- 完整证据见 `docs/qa/mpv_nvidia_true_hdr_20260728.md`。
+
+## 2026-07-28 NVOFA CUDA 真实硬件执行门禁
+
+- 固定 NVIDIA 官方公开头文件提交
+  `edb50da3cf849840d680249aa6dbef248ebce2ca`；QA 脚本按两个原始文件的
+  SHA-256 下载到被忽略的 `build` 目录，不提交、不安装、不打包厂商头文件。
+- 新增隔离 `ltp_nvofa_cuda_execute_probe`：只从 System32 加载 `nvcuda.dll`
+  与 `nvofapi64.dll`，动态建立 CUDA context、NVOFA API 2.0 session 和
+  CUdeviceptr 缓冲区，上传两帧水平位移灰度图并实际调用 `nvOFExecute`。
+- RTX 4070 SUPER / NVIDIA 595.97 上 Debug 与 Release 均通过；驱动最大 API
+  5.0，输出 grid 4、320×192，回读 3840 个非零 S10.5 光流向量。
+- 探针目标为 `EXCLUDE_FROM_ALL` 且没有 install 规则；标准应用没有新增 CUDA
+  Toolkit、NVIDIA SDK、DLL 或启动时 GPU 会话依赖。
+- 该结果只证明硬件光流 primitive 可执行，不表示 FRUC 已生成中间帧，也不表示
+  RTX Video SDK 的 VSR、Artifact Reduction 或 SDR→HDR 已接入；现有产品入口
+  与能力快照不冒充 active。
+- 架构门禁测试覆盖固定提交、摘要校验、System32 加载、真实 execute/非零向量及
+  零分发 CMake 约束。
+- `flutter analyze`、297 项全量测试（另 3 项按既有条件跳过）与 Windows Debug
+  build 通过；Debug bundle 复核没有 NVOFA、CUDA 或 NVIDIA SDK 文件。
+- 默认 MediaKit、Windows 后端选择、filtered queue、当前 index、返回状态、
+  插件 ABI v1、SQLite、标签、缓存队列和用户数据均未改变。
+- 完整证据见 `docs/qa/nvofa_cuda_execute_20260728.md`。
+
+## 2026-07-28 VapourSynth R78 真实帧与 NVOFA 驱动门禁
+
+- 官方 `VapourSynth64-Portable-R78.zip` 已按 GitHub Release 摘要
+  `8f12c2436aba6f596cde88d779f923a0bd454899b4bde1dd111b7ebbd8d7c3e3`
+  下载并隔离安装到被忽略的 `build` 目录；未修改系统 PATH、注册表或应用包。
+- R78 报告 Core R78 / API R4.2；固定 libmpv 的真实帧探针向透传脚本送入
+  320×180、24 fps、144 帧 H.264 样本，Debug/Release 均通过实际帧推进、
+  精确 seek、同进程 reload，并确认透传帧率不会被标记为插帧 active。
+- 新增独立 NVOFA 系统驱动探针和 runner 只读快照。宿主只以
+  `LOAD_LIBRARY_SEARCH_SYSTEM32` 加载 `nvofapi64.dll`；本机返回 API 5.0，
+  D3D11、D3D12、CUDA、Vulkan 入口均存在。
+- `PlayerMotionInterpolationCapability` 只增加驱动状态、API 版本和 D3D11
+  可用性；驱动 API 可用不等于 FRUC SDK/插件已接入，也不等于 RTX Video SDK
+  的 VSR、伪影消除或 HDR 已完成。
+- 两个 QA 目标均为独立 `EXCLUDE_FROM_ALL` 目标，没有 install 规则；正式 runner
+  只包含无厂商头文件依赖的系统驱动门禁，不包含 VapourSynth、Python 或 NVIDIA
+  SDK 文件。
+- NVIDIA Optical Flow SDK 与 RTX Video SDK 下载均要求 NVIDIA 开发者账户/
+  许可流程；本轮没有代替用户登录或接受许可，也没有提交或分发厂商文件。
+- `flutter analyze`、297 项全量测试（另 3 项按既有条件跳过）与 Windows Debug
+  build 通过；真实工作区 Debug 窗口以 `windows-native-hwnd` 进入首个媒体并
+  正常出画，Escape 返回 11239 项媒体库，原生 stop/dispose/released 在 57 ms
+  内完成，最终进程正常退出。
+- 默认 MediaKit、Windows 后端选择、filtered queue、当前 index、返回状态、
+  插件 ABI、SQLite、标签、缓存队列和用户数据均未改变。
+- 完整证据见 `docs/qa/vapoursynth_r78_real_frames_nvofa_20260728.md`。
+
+## 2026-07-28 Windows 本机运动补偿插帧运行时边界
+
+- 固定 libmpv `v0.41.0-908-g48e6c35c0` 的运行日志确认
+  `-Dvapoursynth=enabled`，未知滤镜会被拒绝而 `vapoursynth` 可解析；实际送入
+  320×180 H.264 帧后确定当前应用包缺少 `VSScript.dll`，因此此前只有滤镜入口，
+  没有完整插帧运行链。
+- 新增 `PlayerMotionInterpolationBoundary`。`PlayerService` 只传递强类型能力和
+  布尔启停意图；路径、DLL、Python、mpv handle 与第三方日志留在 Windows 原生层。
+- runner 只接受两个绝对路径环境变量，安全预加载并校验 `VSScript.dll`；
+  `MPV_FORMAT_NODE` 结构化滤镜保留现有去块、降噪、锐化/NVIDIA 图，只替换
+  `ltp-motion-interpolation` 标签。脚本/运行时/滤镜失败自动移除并继续原视频。
+- `requested` 不冒充真实插帧；只有滤镜标签仍存在且 `estimated-vf-fps` 至少达到
+  `container-fps` 的 1.5 倍才进入 `active`。
+- 新增不安装、不分发的假 VSScript 宿主探针；本机结果为
+  `structured-vf=passed preserve-existing=passed remove=passed`
+  `active-revocation=passed reload=passed`。
+- `flutter analyze`、297 项全量测试（另 3 项跳过）和 Windows Debug build 通过；
+  真实启动工作区 Debug exe 后媒体库正常加载 11239 个视频，“设置 → 返回”点击链
+  正常，默认未配置外部运行时没有启动崩溃、遮挡、溢出或错位。
+- QA 探针目标标记为 `EXCLUDE_FROM_ALL` 且没有 install 规则；标准 runner 目录确认
+  不含假 `VSScript.dll`。
+- 本节当时记录的 R78 下载阻断已由上方“R78 真实帧与 NVOFA 驱动门禁”解除；
+  NVIDIA NVOFA FRUC SDK 仍需开发者账户和许可确认，尚未下载、提交或分发厂商
+  文件。
+- filtered queue、当前 index、返回媒体库状态、插件 ABI v1、SQLite、标签、缓存
+  队列和用户数据均未改变。
+- 验证记录见 `docs/qa/vapoursynth_motion_runtime_20260728.md`。
+
+## 2026-07-27 PlayerService 显示同步插值边界
+
+- 播放设置新增“流畅度提升：关闭 / 显示同步插值”，旧设置缺字段时安全关闭；
+  启用前说明这不是 NVIDIA 或其它 AI 生成中间帧，并提供跨 Route 撤销。
+- `PlayerPage` 只传递 `PlayerSmoothMotionMode`；`PlayerService` 统一配置
+  `display-resample / oversample / interpolation`，不让页面持有 mpv 字符串协议。
+- Windows 原生桥补齐四个固定属性读回；只有 `video-sync`、`tscale` 和
+  `interpolation` 全部符合预期才标记为配置已确认，逐帧运行态单独展示
+  `display-sync-active`；能力不足时关闭插值并继续播放。
+- 复用既有两秒健康采样和掉帧/缓冲/停滞熔断；运行期压力只回滚当前媒体，下一条
+  媒体仍按用户偏好重新验证，不修改全局设置。
+- filtered queue、当前 index、返回媒体库状态、MediaKit/Windows 后端选择、
+  插件 ABI、SQLite、缓存队列和用户数据均不改变。
+- `flutter analyze`、295 项全量测试与 Windows Debug build 通过；真实 Debug
+  窗口已点击“设置 → 视频画质与增强 → 流畅度提升”，确认弹窗、状态文案和撤销
+  均可达，最终设置恢复为“关闭”。
+- 验证记录见 `docs/qa/player_smooth_motion_20260727.md`。
+
+## 2026-07-27 Windows 播放渲染器用户入口
+
+- `PlaybackSettings` 新增类型化 `rendererPreference`，旧设置缺字段时迁移为
+  `automatic`；可选“自动（推荐）/ MediaKit 兼容渲染 / Windows 增强
+  （libmpv / D3D11）”。
+- 设置首页直接显示当前渲染器，播放与解码页的切换必须确认，保存后提供撤销；
+  当前播放不热拆引擎，下次进入播放器 Route 时生效；Snackbar 撤销不依赖已销毁
+  的设置控件，退出设置子 Route 后仍可恢复原值。
+- 组合根通过 `resolvePlayerBackendSelection` 选择具体后端。Windows 增强使用已
+  通过 NVIDIA 六组 A/B 的 child HWND 路径；非 Windows、硬解关闭或异常配置
+  安全回退 MediaKit，既有 `LOCAL_TAG_PLAYER_BACKEND` QA 覆盖继续优先。
+- 页面仍只传递用户偏好给 `PlayerServiceFactory`，不接触 MediaKit、libmpv、
+  HWND 或 D3D11 类型；filtered queue、当前索引、返回状态、SQLite、缓存队列
+  和用户数据不变。
+- `flutter analyze`、290 项全量测试与 Windows Debug build 通过；真实窗口确认
+  持久化 Windows 增强可打开 mpv child HWND，跨 Route 撤销可用，最终偏好已
+  恢复为“自动（推荐）”。
+- 验证记录见 `docs/qa/windows_renderer_preference_20260727.md`。
+
+## 2026-07-27 Windows 原生 libmpv NVIDIA RTX Super Resolution
+
+- 原生 child HWND 后端现可读取 `mpv-version`、完整 `vf` 与归一化的
+  `native-nvidia-vsr-state`；只匹配 mpv verbose 的固定 NVIDIA 成功文本，
+  不把可能包含媒体路径的原始日志交给 Flutter。
+- `d3d11va → d3d11vpp scaling-mode=nvidia → gpu-next/D3D11` 已在 RTX 4070
+  SUPER 上通过真人面部、动画渐变、暗场各关闭/开启 20 秒 A/B；六组均为
+  0 掉帧、0 音视频停滞、无回滚，开启组全部由驱动确认 `active`。
+- 原生后端补齐滤镜后临时截图；12 张证据帧已生成，开启帧为 3840×2160 并带
+  驱动 `RTX VSR` 标记。产品滤镜门禁已开放，但仍只允许 Windows 原生 D3D11
+  child HWND、非 copy D3D11VA 且无 CPU `lavfi` 冲突的会话启用。
+- 默认 Windows 后端仍未切换；下一步先增加可持久化、可撤销的渲染器选择，并
+  完成普通窗口鼠标、跨 DPI 与退出门禁，再决定是否提升为默认。
+- 完整记录见 `docs/qa/mpv_nvidia_native_d3d11_20260727.md` 与
+  `docs/qa/professional_player_feature_research_20260727.md`。
+
+## 2026-07-27 PlayerService 播放器应用层边界
+
+- 播放器依赖方向改为
+  `Flutter PlayerPage → PlayerService → PlayerBackend → MediaKit / Windows libmpv`。
+  `LibraryPage` 与 `PlayerPage` 只接收 `PlayerServiceFactory`，具体后端只在组合根
+  选择并由服务独占。
+- 新增 `PlayerRuntimeAccess`，让自动画质、GPU 检测、HDR、NVIDIA 门禁和内存诊断
+  只消费必要的运行时属性；页面不能取得 MediaKit Player、VideoController、
+  mpv handle、D3D11 纹理或 HWND。
+- `PlayerService` 统一代理播放命令、状态流、视频表面、截图、显卡能力和 child HWND
+  弹层显隐，并接管每次 open 前后的类型化比例、缩放、输出范围、HDR 与倍速恢复。
+- 默认后端仍为 MediaKit；`windows-native-mpv`、`windows-native-hwnd` 和 stub
+  仍只由显式 QA 环境变量启用。filtered queue、当前索引、返回媒体库状态、设置键、
+  插件 ABI、SQLite、缓存队列和用户数据均未改变。
+- `flutter analyze`、287 项全量测试与 Windows Debug build 已通过；真实窗口复测
+  因已打开的安装版检测到用户持续输入而按保护规则中止，未把安装版结果冒充本次
+  Debug 证据。仍需人工复测“媒体库卡片 → 播放器 → 齿轮 → 返回媒体库”。
+
+## 2026-07-27 Flutter child HWND airspace 原型
+
+- 新增显式 `LOCAL_TAG_PLAYER_BACKEND=windows-native-hwnd`；默认 Windows
+  MediaKit、macOS/Linux 后端选择、`PlayerBackend` contract 均不改变。
+- runner 创建双层 child HWND：外层按 Flutter 逻辑矩形和实际 view 客户区换算
+  几何并裁剪，内层交给 libmpv `wid + gpu-next + d3d11 + d3d11va`；不注册
+  Flutter Texture，诊断中的纹理复制数保持 0。
+- Windows 固定依赖已从 mpv 0.36 升级到 `v0.41.0-908-g48e6c35c0`；
+  CMake 固定 2026-07-26 归档、SHA-256 和 mpv v0.41.0 许可证，Debug bundle
+  已读回同一版本。
+- child HWND 对 Flutter view 使用 `HTTRANSPARENT/MA_NOACTIVATE`，真实左键、
+  右键、控制条和快捷键均由 Flutter 接收；设置、更多设置、上下文菜单和诊断
+  弹层打开前隐藏外层 HWND，关闭后按最后矩形恢复。
+- 通用 `auto-safe` 仍保留给默认 MediaKit；显式 HWND 实验在 Dart 与 runner
+  两层固定 `d3d11va`，普通应用诊断已确认实际为非 copy `d3d11va`。
+- 普通应用完成全屏 2560×1440、连续 PageDown 切换 1→2→3→4、返回媒体库和
+  宿主退出；filtered queue 仍为 11164 项，当前索引、标题和画面同步，退出日志
+  包含 pause/pop/dispose 完整确认。
+- 跨 DPI 修复把 device pixel ratio 纳入矩形去重，逻辑尺寸不变时也会请求
+  runner 按新客户区重算物理矩形；focused test 覆盖 100%→150%。当前机器只
+  枚举到一个 96 DPI 显示器，真实跨屏门禁仍未完成。
+- 因真实跨 DPI 尚无物理证据，三类片源六组 A/B 未重新运行，Windows 默认后端
+  继续 MediaKit，NVIDIA filter 继续禁用。完整记录见
+  `docs/qa/child_hwnd_airspace_20260727.md`。
+
+## 2026-07-27 新版 ANGLE 与原生 HWND/D3D11 边界复核
+
+- 固定 ANGLE 提交 `c3ede28106e957254509e36fe94a838c761c77d0` 已在
+  `.local/qa` 隔离构建；EGL/D3D11 shared texture、ANGLE device、
+  adapter LUID 和像素读回探针全部通过。
+- 新 ANGLE 分别配合正式 mpv 0.36 与隔离 mpv 0.41 进入 MediaKit 后，
+  `hwdec=d3d11va` 和 `gpu-hwdec-interop=d3d11va` 请求值均存在，实际仍为
+  `hwdec-current=no`。因此不运行三类片源六组 NVIDIA A/B，不调整滤镜。
+- 独立子 HWND + mpv 0.41 的 `gpu-next/D3D11` 路径得到
+  `hwdec-current=d3d11va`、0 解码/输出掉帧和正常导出帧，证明阻断位于当前
+  Flutter Texture / OpenGL render API 边界。
+- 正式 ANGLE/mpv 依赖、MediaKit 插件 ABI、默认回退均未改变；新增入口只接受
+  显式 QA 环境变量。
+- 下一步只做 Flutter child HWND 的矩形、DPI、z-order、控制条/设置/队列
+  airspace 与生命周期原型。完整证据见
+  `docs/qa/angle_d3d11_interop_20260727.md`。
+
+## 2026-07-27 播放设置收纳、D3D11VA 边界复核与依赖审计
+
+- 播放器齿轮一级只保留 NVIDIA 实验、循环方式和“更多播放设置”；镜像画面、
+  GPU 高质量缩放（非 NVIDIA AI）与压缩画质增强已移入更多页，原键、回调、
+  持久化和压缩三档返回路径不变。
+- MediaKit Windows 只以 OpenGL render API 接入 libmpv，再经旧 ANGLE 输出
+  D3D11 共享纹理；显式提前选择 `gpu-hwdec-interop=d3d11va` 对正式 0.36 和
+  隔离 0.41 均无效，实际仍为 `hwdec-current=no`，实验补丁已撤回。
+- 非 copy 硬门槛未解决，因此三类片源六组 NVIDIA A/B 没有继续运行，也没有
+  调整滤镜参数。下一步只评估隔离升级 ANGLE 或新的 Windows 渲染边界。
+- 依赖审计确认 Flutter stable、MediaKit 1.2.6、media_kit_video 2.0.1 与多数
+  直接包已是当前版本；mpv 后续已固定升级到 0.41.0 系列。`file_picker` 11、
+  `package_info_plus` 10、`flutter_lints` 6 均需独立主版本升级，不在本次混入。
+- 完整审计见 `docs/qa/dependency_audit_20260727.md`；纹理证据更新在
+  `docs/qa/mpv_nvidia_scaling_isolated_20260727.md`。
+- 两项 focused widget test、`flutter analyze`、Windows Debug build 通过；
+  1268×714 真实 Windows 集成进程从齿轮点击进入更多页并完成 71 秒播放，截图中
+  长 GPU 名称自然换行，三个迁移项及相邻比例/倍速/滑杆无遮挡、截断或溢出。
+
+## 2026-07-27 mpv NVIDIA scaling-mode 隔离升级结果
+
+- 独立 `mpv v0.41.0-744-g304426c39` 已证明 D3D11VA、NVIDIA scaling mode 和驱动 RTX Super Resolution 日志成立。
+- NVIDIA `d3d11vpp` 与现有 CPU `lavfi` 不能安全串联；直接串联会静默停用压缩滤镜，显式下载又会让放大后的 4K 帧回到 CPU。
+- 同一新版 DLL 进入 MediaKit 后，请求 `d3d11va` 的实际值为 `hwdec-current=no`；真人面部第一条开启组即未通过非 copy 硬门槛，因此按规则终止动画渐变与暗场开启组。
+- 正式 Windows 包已恢复固定 mpv 0.36.0。代码只预置互斥 `vf` 所有权、读回确认和掉帧回滚；`filterChainValidated=false`，不会真正写入 NVIDIA filter。
+- 可复跑工具为 `tool/run_nvidia_scaling_ab.ps1`，完整证据见 `docs/qa/mpv_nvidia_scaling_isolated_20260727.md`。
+
+## 2026-07-27 内嵌 mpv NVIDIA scaling-mode 实验门禁
+
+- Windows 构建继续固定 `media-kit/libmpv-win32-video-build` 2023-09-24 的 mpv 0.36.0；对 Debug bundle 的 `libmpv-2.dll` 做二进制字符串检查，确认包含 `d3d11vpp`，但不包含 `scaling-mode`、NVIDIA RTX Super Resolution 文案或相关扩展 GUID。
+- 播放器齿轮新增会话级“NVIDIA 视频增强（实验）”开关，当前明确显示“mpv 0.36.0：有 d3d11vpp；无 NVIDIA scaling-mode”并禁用；不会把 D3D11 解码/渲染误报为 NVIDIA AI 已工作。
+- 能力检测优先读取后端 `mpv-version`，不可用时回退项目固定依赖版本；即使本机替换为 mpv 0.39+，在 `d3d11va` 纹理输入、现有 `vf` 链共存和性能回滚完成验证前仍不开放点击。
+- 本轮未写入 `d3d11vpp=scale=2:scaling-mode=nvidia`，未升级 libmpv，未修改或调用本机视频增强插件 ABI，也未新增 NVIDIA 文件、持久化设置、解码器变化或 SDK 分发。
+- focused 能力/设置/页面挂载测试、`flutter analyze` 与 Windows Debug build 通过；真实 1248×714 Debug 窗口点击媒体卡片、齿轮及禁用开关，入口文案完整、状态不变，相邻设置可达且无溢出、遮挡或错位。
+
+## 2026-07-27 SDK 零分发本机视频增强插件原型
+
+- 实验性 Windows 原生 mpv 后端新增 SDK 中立 ABI v1；只从 `LOCAL_TAG_PLAYER_VIDEO_PLUGIN_PATH` 指定的绝对路径加载可信本机 DLL，不扫描、不安装、不分发插件或 NVIDIA 文件。
+- mpv/ANGLE 在原生工作线程完成共享 D3D11 纹理复制后调用插件；宿主先保留同设备原帧备份，插件返回错误时恢复原帧、记录回退并停用当前插件会话，播放继续。
+- 默认 MediaKit、`LOCAL_TAG_PLAYER_BACKEND` 显式门禁、`PlayerBackend` contract、filtered queue、缓存队列、SQLite 与用户数据均保持不变。
+- QA-only 往返探针和宿主自测没有 install 规则；真实结果为 `round-trip=passed fallback=passed`，标准 Debug bundle 未发现探针、NVIDIA SDK 或同名厂商文件。
+- 播放诊断增加插件状态、名称、处理帧、回退数和错误码。隔离低码率 1080P 真实 Windows 页面分别通过正常与第 30 帧故障注入：齿轮、右键诊断均可达，状态为 `active` / `process-failed`，回退后播放头继续推进且总掉帧为 0；截图位于 `.local/qa/local-video-plugin/`。
+
+## 2026-07-27 GPU 高质量缩放命名与 RTX Video SDK 评估
+
+- 播放器齿轮和播放诊断把既有 libmpv 能力明确标注为“GPU 高质量缩放（非 NVIDIA AI）”；设置键、默认值、持久化、mpv 属性和性能回滚不变。
+- RTX Video SDK 1.1 公开能力覆盖 DX11、超分、伪影修复和 SDR→HDR，但下载需要 NVIDIA 登录；下载包内实际 EULA、目标代码再分发与 MIT 排除声明是发布前硬阻断。
+- 当前 `PlayerBackend.setProperty` 和 `PlayerGpuRenderBoundary` 不暴露逐帧 D3D11 纹理；未来原型只能在实验性 Windows 原生后端复用活动 device/LUID，任何失败无缝回到现有 libmpv 缩放。
+- 完整评估见 `docs/qa/rtx_video_sdk_feasibility_20260727.md`；本轮不下载、不提交、不分发 SDK，不改变 filtered queue、缓存队列或用户数据。
+- focused test 3/3、`flutter analyze` 与 Windows Debug build 通过；真实 Debug 窗口完成媒体卡片、播放器、控制条和齿轮可达性点击，长名称完整换行且无溢出或遮挡。
+
+## 2026-07-27 三类自然低码率片源 A/B 与 NVIDIA 状态核查
+
+- `Tears of Steel` 真人面部/暗场与 `Sintel` 动画渐变均以 CC BY 3.0 开放片源隔离压制为低码率 1080P；关闭/清晰增强共六轮真实 Windows 播放均为 0 掉帧、0 音视频停滞。
+- 清晰增强对动画渐变最有价值，对面部与暗场保持克制；QA-only 额外 0.18 后锐化只改善部分动画轮廓，却让面部压缩纹理和暗场噪点变硬，未达到三类一致获益，GLSL 继续不加入。
+- 本机 NVIDIA App 的视频页显示超分辨率关闭、HDR 禁用；播放器虽精确使用 RTX 4070 SUPER 的 `d3d11va-copy`，当前“GPU 画质超分”仍是 libmpv `ewa_lanczossharp`，未接 RTX Video SDK，因此不能宣称 NVIDIA AI 增强已工作。
+- 可复跑工具为 `tool/run_natural_compression_quality_ab.ps1`，完整证据与限制见 `docs/qa/player_natural_compression_ab_20260727.md`；未修改正式播放器、filtered queue、PlayerBackend contract、缓存队列或用户数据。
+
+## 2026-07-27 压缩画质增强三档与低码率 1080P A/B
+
+- 播放器齿轮和全局播放画质页统一提供“关闭 / 自动 / 清晰增强”；旧布尔设置安全迁移为关闭或自动，不改变解码器、超分、HDR、暗部增强或 filtered queue。
+- 自动档继续沿用现有基线和性能回滚；清晰增强只请求当前分辨率/解码路径允许的最高安全档，检测到掉帧、缓冲或停滞时仍按原规则立即降级。
+- 既有去块、时空降噪与轻锐化链路增加保守 mpv GPU 去色带：`iterations=1`、`threshold=24`、`range=12`、`grain=8`；关闭或性能回滚到最低档时同步停用。
+- 450 kbps、1920×1080、30fps 固定运动样本完成关闭/清晰增强各 20 秒 Windows 实机基线，两档均为 0 掉帧、0 视频/音频卡顿；同一 12 秒暂停帧的窗口截图位于 `.local/qa/compression-quality-ab/`。
+- 局部 A/B 显示增强主要改善棋盘格边缘和轻微压缩波动，未出现明显光晕；现有 `unsharp` 已提供足够清晰度，因此本轮不加入缩放后 GLSL 锐化，后续只在更多真实片源证明收益稳定时复议。
+
+## 2026-07-25 GitHub Actions Node.js 24
+
+- 正式包与跨平台工作流使用的 checkout、artifact 和 GitHub Release 动作已升级到 Node.js 24 版本；不改变构建、签名、公证或发布门禁。
+- YAML 语法、Node.js 24 Action 引用和无公开发布的手动正式包流水线均已验证；Debug 门禁、Windows 安装器与 macOS DMG 全部通过且无 Node.js 20 注释。
+
+> 本文件只保存当前活跃任务、最近稳定基线、已确认阻塞和下一步入口。已完成的详细记录进入 `CHANGELOG.md` 与对应 Chat 文档。
+
+## 活跃任务：远程开发分支收口
+
+### 2026-07-25 应用内更新与关于页面
+
+- 应用版本提升为 `0.2.2+4`。Windows 更新安装器在播放器内下载到临时 `.part`，校验 GitHub SHA-256 后才启动；失败文件不会执行。
+- 设置首页新增关于入口，展示版本/构建号、正式版渠道和主动检查结果；启动静默检查与 Release 页面降级路径保留。
+- focused 更新测试、设置入口测试、276 项全量测试、`flutter analyze` 与 Windows Debug build 已通过（3 项显式 benchmark 按设计跳过）。
+- 真实 Windows 窗口已点击“设置 → 关于 → 检查更新”，确认版本 `0.2.2 (4)`、最新正式版反馈、品牌名、位置、对齐、对比度和状态反馈均正常，无遮挡或溢出；待完成独立只读复核。
+
+### 2026-07-25 0.2.1 正式构建
+
+- 应用版本提升为 `0.2.1+3`，正式安装包版本为 `0.2.1`。
+- 远程开发分支已全部收口到 `origin/master`，发布提交必须继续保持与远程主线一致。
+- GitHub 未配置 Windows/macOS 签名凭据，本次按显式门禁发布未签名、未公证构建，并在 Release 正文和 SHA-256 校验文件中明确交付边界。
+- 本地 272 项测试、`flutter analyze`、Windows Debug/Release build 与 Release 进程 10 秒存活响应检查通过；3 项显式真实媒体库 benchmark 按设计跳过。
+
+- 自动清理分支的生产代码已由主线等价实现，通过保留主线内容的祖先合并记录其集成关系，不回退远程更新、发布门禁或新文档。
+- `media_kit_video 2.0.1` 实验迁移正在合入主线；继续固定归档 SHA256，并保留 Windows 构建期稳定 GPU/软件 descriptor 补丁与架构合同。
+- FFmpeg 8.1.2 缩略图 A/B 仅作为可复跑 QA 工具保留，既有软件缩略图正式路径不变。
+- 完整测试、静态分析、Windows Debug 构建与真实启动通过后合入 `master`，再删除两个已处理远程分支并复跑正式打包门禁。
+
+## 活跃任务
+
+### 2026-07-24 正式打包分支集成门禁
+
+- 正式打包前刷新并检查全部远程分支；正常合并、rebase 或 cherry-pick 后的补丁等价均可通过，任何仍有独有提交的分支都会阻断打包。
+- 未集成分支只在隔离临时 Worktree 中累计试合并，以发现单分支或分支间冲突；临时合并结果不会直接成为正式包。
+- 待打包提交必须与 `origin/master` 当前提交一致；分支门禁通过后继续执行全量测试、静态分析、Windows Debug 构建与 10 秒启动存活检查。
+- 当前远程 `codex/auto-remove-missing-unreadable-clean` 与主线存在 `ARCHITECTURE.md` 合并冲突，`codex/media-kit-2-migration-experiment` 也仍有独有提交，因此正式打包会按设计被阻断，远程分支均保留。
+
+### 2026-07-24 远程正式版更新
+
+- 应用版本已提升为 `0.2.0+2`。
+- 正式包首帧后异步检查 GitHub 最新正式 Release；发现更高版本时弹窗展示更新内容，并优先打开 Windows x64 安装器。
+- 更新网络失败不会阻塞媒体库；SQLite、标签语义、filtered queue、PlayerBackend、缩略图和用户数据保持不变。
+- GitHub 仓库当前未配置 Windows/Apple 签名 Secrets；签名/公证标签工作流在凭据补齐前不能产出双平台签名包。
+- 工作流增加默认关闭的 `publish_unsigned_release` 手动门禁；只有显式选择时才允许把未签名/未公证产物发布，并在 Release 正文标明状态。
+- `flutter analyze`、271 项测试、Windows Debug/Release build 均通过；真实已安装 `0.1.0` 窗口确认同版本 Release 不会误弹提示。
+
+### 2026-07-24 原生纹理退出竞态与独立启动修复
+
+- 目标：优先捕获并符号化原生 crash dump，围绕播放器纹理创建/销毁与退出做 N≥5 复现，再修复独立 EXE 启动、当前页面语义挂载并执行长时压力门禁。
+- 原生根因已确认：既有 full dump 为 `0xc0000409`，WinDbg 精确落到 `media_kit_video_plugin` 的 `unordered_map::at`；Flutter 注册纹理时可在描述符写入 map 前同步取帧，回调又读取可变的全局 `texture_id_`，异常越过原生回调边界后终止进程。
+- 构建期现从固定 SHA256 的 `media_kit_video 1.3.1` 归档生成 `video_output_ltp.cc`，GPU/软件纹理回调各自捕获稳定描述符，所有权继续由对应 texture ID 的 map 保持到注销完成；不修改 Pub Cache、`PlayerBackend` contract 或播放器队列。
+- 播放器页面竞态基线 N=5 为 4 次完整通过、1 次控制条可见性脚本失败；修复后一次完整 900 秒门禁退出码 0，完成 35 个播放器创建/退出循环、0 无响应，门禁 WER 目录 0 dump，seek P95 28ms、dispose P95 5265.7ms。最终候选按用户指令停止，并在进程树收口前完成到第 30 轮、剩余约 140 秒，期间门禁目录 0 dump、日志 0 原生异常。
+- 独立 EXE 旧配置无窗口根因是只保存尺寸/最大化、不保存坐标，却在有快照时传入 `center:false`；改为始终居中恢复尺寸后，真实现有配置直接启动 N=5 全部在 0.78–1.05 秒获得可响应 HWND。
+- 当前实际挂载的紧凑排序控件补齐字段、方向和 6 个菜单项语义。真实 Windows UIA 点击确认全部 `qa.sort.*` 节点可达，菜单无溢出/遮挡并已恢复用户原“日期/倒序”偏好。
+- `flutter analyze`、完整 268 项测试和 Windows Debug build 通过，3 项显式真实媒体 benchmark 按设计跳过。SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列、稳定身份和用户数据语义均未改变。
+- 剩余风险：独立 EXE 启动可见性验证后的整进程关闭在全局 CrashDumps 产生同一 PID 的 `0xc0000005` / `0xc000041d`；本地符号栈显示纹理线程在 registrar 已为空后仍调用 `FlutterDesktopTextureRegistrarMarkExternalTextureFrameAvailable`。它与已通过的播放器 Route 退出门禁不同，本轮未宣称修复。
+- 下一步：优先把宿主关闭纳入独立 WER 门禁并收敛 registrar 生命周期；随后排查压力日志仍输出媒体 basename 的隐私缺口，并用更长门禁确认媒体库空闲阶段句柄缓慢上行是否属于驱动/DevTools 缓存还是可回收资源泄漏。
+
+### 2026-07-23 未授权功能删除事故治理
+
+- 目标：把播放器隐藏态细进度被误删的生产事故转化为仓库级容错，确保重构、布局调整或性能优化不能再次用孤立组件测试掩盖真实功能不可达。
+- 当前状态：已完成规则与确定性保护。所有删除默认拒绝，修改前必须建立受保护行为/获授权删除清单，编辑后审计 diff 删除项；关键行为必须同时具备页面/Route 可达性证据与真实点击，证据不足时禁止提交推送。
+- 生产或真实窗口发现的未授权功能删除固定升级为 Level 3 `independent`。新增播放器挂载合同测试、Agent 事故回归和 `required_validation_records` 评分硬门，完成项状态或验证方法不匹配直接零分。
+- 零模型成本验证为 62 个用例、44/6/12 分布、17 项评分器测试与有效 Skill 目录；修正首轮过弱的 Level 2 预期后，隔离 N=5 回归达到 5/5、平均 100 分、`stable=true`、0 基础设施错误。
+- 未修改播放器运行时、SQLite schema、过滤语义、filtered queue、`PlayerBackend`、缓存队列、播放设置、稳定身份或用户数据。
+
+### 2026-07-22 播放器隐藏态细进度回归修复
+
+- 目标：恢复完整控制条自动收起后贴在视频底边的 3px 只读播放进度，避免既有功能在未获授权时随控制层重排被删除。
+- 当前状态：已完成。历史定位确认提交 `5271f63` 删除了 `PlayerPage` 中独立的 `PlayerHiddenProgressBar` 挂载，但遗留组件与孤立测试；现已按原 Stack 层级恢复，并增加边界注释禁止把它并入透明控制条子树。
+- `flutter analyze`、完整 264 项测试与 Windows Debug build 通过，3 项显式真实媒体 benchmark 按设计跳过。真实 Debug 点击覆盖“进入播放器 → 3 秒自动隐藏 → 底部细进度保留 → 鼠标进入底部唤回控制条”，两态截图位于 `.local/qa/player-hidden-progress/`。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、`PlayerBackend` contract、缓存队列、播放设置、稳定身份或用户数据。
+
+### 2026-07-22 播放器快速切换与预览纹理交接
+
+- 目标：修复播放器连续切换不同分辨率视频时的 Windows 原生闪退，并让快速输入直接收敛到最新选择，不等待旧视频达到可播放状态。
+- 当前状态：已完成。媒体卡进入正式播放前会先停止悬停预览媒体输出并取消旧异步代次；缩略图只承担首次进入播放器的冷启动占位，不再参与队列切换或跨媒体复用图片流。
+- open worker 在滤镜清理、性能配置、`openPath` 返回和首帧校验等异步边界后都会检查更新请求；旧请求立即退出，损坏媒体总判定窗口仍约 1.5 秒，新选择检测粒度从 250ms 缩短到 80ms。
+- Windows 事件日志确认修复前存在 `flutter_windows.dll` 的 `0xc0000005` / `0xc000041d` 原生异常记录。修复后真实悬停预览出画再进入播放器，日志显示预览纹理先释放并销毁，再创建正式播放器纹理。
+- 第一轮跨 1080p / 2048×1080 / 4K 往返 20 次稳定；第二轮 20 次毫秒级输入用时 4.19 秒，只完成 5 次实际媒体 open，15 个过期请求被合并，最终第 1 条正常出画。进程保持响应，本轮新增 Application Error 为 0，截图与日志位于 `.local/qa/player-switch-crash-after/`。
+- `flutter analyze`、完整 264 项测试和 Windows Debug build 通过。SQLite、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、`PlayerBackend` contract、缩略图调度、稳定身份和用户数据均未改变。
+
+### 2026-07-22 启动后卡片预览与首播冷启动
+
+- 目标：修复应用启动后首次悬停视频卡片永久 loading，并降低首次点击卡片进入播放器时的原生冷启动与 loading 闪烁。
+- 当前状态：实现与 focused test 已完成。MediaKit 在 Flutter 首帧提交后统一预热，悬停预览和正式播放器共用可重试的幂等初始化门；悬停 Player 构造也纳入异常保护，失败会释放资源并复位 loading。
+- 播放器跳转复用媒体库已验证缩略图覆盖原生纹理接管窗口；open 成功后至少保持 500ms 再按系统动效策略淡出。正常本地打开 800ms 内不闪 loading，真正慢盘或损坏媒体继续显示加载与失败反馈。
+- Debug 真实启动测得首帧后 MediaKit 预热约 210ms；真实鼠标悬停连续出画。点击后约 575ms 显示缓存首帧占位且无 loading/黑屏，再约 700ms 由正在播放的原生视频帧接管；截图位于 `.local/qa/hover_preview_cold_start/final-hover-preview.png` 与 `final-player-playing.png`。
+- `flutter analyze`、6 项聚焦回归、完整 263 项测试与 Windows Debug build 均通过，3 项显式真实媒体 benchmark 按设计跳过。SQLite、标签查询、filtered queue 内容/顺序、PlayerBackend contract、缩略图调度、稳定身份和用户数据均未改变。
+
+### 2026-07-22 暗部增强闭环与 HDR 能力正式化
+
+- 目标：补齐“画质增强路线”中未完成的 SDR 暗部增强，并将已具备活动 LUID、Compute 门槛和会话回滚的 HDR 映射从内部实验文案收敛为真实可选能力。
+- 当前状态：已完成。新增默认关闭的“暗部细节增强”，仅对后端明确报告的 SDR、1080p 及以下、当前硬解会话应用保守 gamma 曲线；未知传递函数、4K 或软解保持关闭。
+- 暗部曲线与自动去块/时空降噪/锐化合成单条 `vf` 快照，不在 UI 线程处理视频帧；独立压力计数在新增掉帧、缓冲或停滞时只回滚当前媒体，不改写用户持久开关。
+- 最终固定样本 A/B：关闭/开启态各 60 秒、12 个诊断样本，均为 0 掉帧、0 停滞、窗口 0 无响应；进程 GPU Engine P95 均为 5.0%，显存 committed P95 为 299.4 / 300.1 MiB。像素预检保持 Limited 黑位 `YMIN=16`，`YAVG` 从 43.6642 提升到 45.4358。
+- 同轮 HDR 60 秒样本在新增 1 个总掉帧后立即恢复 `auto`，验证运行时熔断真实生效。设置页删除内部“画质增强路线”卡，展示暗部增强与“HDR 动态映射”真实开关。
+- `flutter analyze`、完整 258 项测试、Windows Debug build 和三组真实 MediaKit 固定样本均通过。Debug 真实点击确认开关可操作、恢复关闭后状态正确，页面无截断、遮挡、错位或溢出；两态截图位于 `.local/qa/settings-quality-completion/`。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、PlayerBackend contract、缩略图/媒体详情队列、稳定身份或用户数据。
+
+### 2026-07-22 全屏边缘播放列表开关与命中修复
+
+- 目标：提高全屏右缘播放列表的触发可靠性，避免鼠标到达最右边时列表反向消失，并把自动边缘唤出收敛为播放器交互页的单一开关。
+- 当前状态：实现与 focused test 已完成。未展开时使用固定 32px 热区；展开后按实际 320–476px 列表宽度加 12px 容错保持，最右透明热区不再覆盖列表；离开完整列表后使用固定 450ms 宽限。
+- 设置页删除热区宽度和隐藏延迟滑杆，只保留默认开启的“全屏边缘播放列表”开关。开关关闭只禁用鼠标边缘自动唤出，播放器显式列表按钮仍可使用；旧 JSON 参数继续兼容读取但不再参与运行时命中。
+- `flutter analyze`、完整 255 项测试和 Windows Debug build 均通过，3 项显式真实媒体 benchmark 按设计跳过。Debug 真实点击确认：关闭开关时最右缘不触发；开启后约 320ms 展开，最右缘停留超过 850ms 保持，移回画面 700ms 后收起；设置页和全屏覆盖队列均无截断、遮挡、错位或溢出。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、PlayerBackend、缩略图/媒体详情队列、稳定身份或用户数据。
+
+### 2026-07-22 播放器全屏返回与会话恢复
+
+- 目标：播放器从全屏点击返回时，底层主界面和其他页面恢复为窗口最大化；同一应用会话再次进入播放器时恢复全屏。普通最大化进入播放器时继续使用原窗口路径。
+- 当前状态：实现与 focused test 已完成。媒体库 Route 只持有内存态的播放器全屏会话标记，不写入 `PlaybackSettings` 或窗口布局文件；播放器返回前以 `window_manager` 实际全屏状态兜底，只有全屏路径执行“退出全屏 → 最大化 → Route 返回”。
+- 用户在播放器内手动退出全屏会立即清除会话标记；从普通窗口或最大化窗口返回不会最大化窗口，也不会让下一次播放器误进全屏。
+- 最终 `flutter analyze`、完整 255 项测试与 Windows Debug build 通过，3 项显式真实媒体 benchmark 按设计跳过。真实点击确认普通最大化进入/返回、播放器进入全屏、Esc 主动退出后清除恢复状态并在重进时保持窗口播放器；自动化运行时不支持鼠标侧键，直接全屏返回与重进全屏由 focused 状态测试和同一 `_exitPlayer` 代码路径覆盖，仍建议用实体鼠标侧键补一次人工验收。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、PlayerBackend contract、缓存队列、稳定身份、播放设置或用户数据。
+
+### 2026-07-22 全屏队列语境显隐与 Debug 独立启动
+
+- 目标：全屏底部控制条可见时移除顶部队列语境遮挡，并修复手动双击 Windows Debug 包后进程存在但窗口不出现。
+- 当前状态：已完成。全屏队列语境改为与控制条互斥；控制条出现时淡出，3 秒自动收起后恢复，不新增 Timer、队列查询或逐帧视频处理。
+- Debug 启动根因是组合根在应用首帧前同步调用 `MediaKit.ensureInitialized()`；独立 exe 卡在该原生加载路径时，Dart VM 中 `_initialized=false`、窗口服务尚未创建。默认 MediaKit 后端现只在真正创建播放器时初始化，原生实验后端不受影响。
+- 新 Debug exe 从构建目录直接启动后 864ms 获得非零窗口句柄并保持响应；真实点击覆盖“媒体库首项 → 播放器 → 全屏 → 控制条显示 → 3 秒收起”，两态截图位于 `.local/qa/fullscreen-controls/`。
+- focused test、完整 254 项测试、`flutter analyze` 与 Windows Debug build 均通过，3 项显式真实媒体 benchmark 按设计跳过。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、PlayerBackend contract、缓存队列、稳定身份或用户数据。
+
+### 2026-07-22 HDR 长播、会话回滚与 SDR 暗部基线
+
+- 目标：固定 HDR 样本验证长播观感、掉帧、GPU 功耗和显示输出；运行时压力自动回滚本次 HDR 会话；暗部增强继续使用独立 SDR 基线。
+- 当前状态：已完成。主设置页把原“播放与继续观看”拆为“播放与解码”和独立“视频画质与增强”；继续观看、硬解和码流缓存留在前者，比例、缩放、色彩、自动画质、超分与 HDR 实验进入后者，仍共用同一设置快照与保存链。
+- Windows DXGI 输出探针现返回每块 adapter 的桌面输出、分辨率、位深、色彩空间、HDR 信号和亮度元数据。当前活动 RTX 4070 SUPER 的 `DISPLAY1` 为 3840×2160、8 bit、`rgb-full-g22-p709`、HDR 信号未活动、峰值 417 nits；本轮 HDR 结论是映射到 SDR 显示输出，不宣称 HDR 直通。
+- 固定 1080p HDR10/PQ 样本长播 302 秒，共 60 个 5 秒诊断样本：解码/输出/总掉帧最大值均为 0，停滞 0，全部 `smooth=true`，会话结束仍为 `hable + hdr-compute-peak=yes` 且无自动回滚。进程 GPU Engine 中位/P95 为 6.7% / 9.6%，GPU committed 为 458.5 / 470.4 MiB；NVIDIA-SMI 整卡功耗中位/P95 为 157.77 / 168.31 W，不能冒充进程功耗。
+- 固定 1080p SDR 暗部样本长播 182 秒，共 36 个诊断样本：解码/输出/总掉帧最大值均为 0，停滞 0，全部 `smooth=true`。进程 GPU Engine 中位/P95 为 5.1% / 5.7%，GPU committed 为 301.4 / 308.4 MiB；近黑梯度与相邻灰阶可辨，作为暗部增强关闭态原始对照。
+- HDR 压力保护复用两秒播放健康样本：新增掉帧、缓冲或音视频停滞立即回滚；帧推进、缓存或 FPS 中等压力连续两次才回滚；seek/暂停不评估，回滚锁存到下一媒体且不改写持久开关。释放期进入退出态，避免销毁停顿误触发。
+- 真实点击已覆盖“设置 → 视频画质与增强 → HDR 实验 → 确认 → 关闭”，首页拆分、画质页和两态截图均无截断、遮挡、溢出或状态歧义，证据位于 `.local/qa/hdr-mapping/`；固定样本 JSON、进程指标、后端帧和窗口截图位于 `.local/qa/fixed-quality-baseline/`。
+- 最终 `flutter analyze`、完整 253 项测试、Windows Debug build、活动 LUID / Compute / 显示输出 integration test、设置真实点击和固定样本长播/短复测均通过；3 项显式真实媒体 benchmark 按设计跳过。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、缩略图/媒体详情队列、稳定身份或用户数据。
+
+### 2026-07-22 原生 GPU 能力矩阵与第三阶段闸门
+
+- 目标：从实际 MediaKit / ANGLE 渲染设备返回活动 adapter LUID，在该 LUID 上建立 1080p / 4K Compute 帧预算，只选择一个第三阶段功能做默认关闭、可回滚实验；暗部增强保持独立观感与性能基线。
+- 当前状态：已完成。构建期只替换固定 SHA256 的 MediaKit `ANGLESurfaceManager` 单个源文件，在真实 D3D11 device 创建/销毁处登记 LUID；不修改 Pub Cache，不按枚举顺序、Feature Level、名称或显存占用推断活动显卡。
+- 当前设备矩阵：RTX 4070 SUPER（约 11.72 GiB 专用显存）与 AMD Radeon Graphics（约 460 MiB 专用显存）均为 D3D 12_1、Compute 已验证、Vulkan 已匹配；Microsoft Basic Render Driver 标记为软件适配器，不参与活动硬件卡选择。完整证据见 `docs/qa/player_gpu_capability_matrix_20260722.md`。
+- 实际生产渲染设备返回 LUID `00000000:00016bec`，精确匹配 RTX 4070 SUPER。D3D11 HDR 类 Compute kernel 在 60fps 的 4.167ms 预留切片下，1080p P95 为 0.036ms、4K P95 为 0.129ms，两档均通过；JSON 位于 `.local/qa/gpu-capability-matrix/active-device-compute-budget.json`。
+- 该阶段只选择了“HDR 动态映射”做可回滚验证；后续已保留默认关闭、HDR 源、精确 LUID、Compute 能力与会话压力门槛，并收敛为正式用户文案。运动补帧保持未启动；`hqdn3d` 已以保守时域参数参与时空降噪。
+- `tool/run_gpu_capability_matrix.ps1` 可重建活动 LUID、设备矩阵和 1080p / 4K 预算；压测显式触发并在原生后台执行，普通播放启动不运行 Compute 基线。
+- 暗部增强不与第三阶段 Compute 功能共用结论；后续已使用固定 SDR 暗场样本完成独立开/关 A/B，并只在 SDR、1080p 及以下、实际硬解边界内提供默认关闭的手动开关。
+- 隔离 Windows integration test 真实点击“设置 → 播放与继续观看 → HDR 实验 → 确认 → 关闭”，开启/回滚两态无遮挡、溢出或状态歧义；截图位于 `.local/qa/hdr-mapping/`。真实 MediaKit 会话另行核验 `hable/yes → auto/auto` 回滚。
+- 最终 `flutter analyze`、完整 251 项测试、Windows Debug build、活动 LUID / Compute 基线 integration test 与 HDR 两态真实点击 integration test 全部通过，3 项显式 benchmark 按设计跳过。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列、稳定身份或用户数据。
+
+### 2026-07-22 自动画质协调器与 GPU 能力检测
+
+- 目标：先建立 1080p / 4K 的 GPU、CPU 与丢帧基线，再让第二阶段去块、降噪和适度锐化只在实时余量允许时动态启用；第三阶段功能必须先经过真实显卡能力检测。
+- 当前状态：已完成。主界面“播放与继续观看”设置新增默认关闭的“自动画质协调器”，隔离 Debug 窗口已完成设置开关、1080p / 4K 播放、队列滚动与诊断真实点击。
+- 隔离实测稳定段：1080p 硬解 CPU / GPU Engine 中位 64.9% / 43.3%，软解 142.4% / 1.0%，两者解码/总掉帧均为 0；4K 硬解 66.5% / 59.2% 且 0 掉帧，4K 软解 216.1% / 1.0%，出现 27 帧总掉帧与 0.114 秒 AV 偏移。完整口径见 `docs/qa/player_quality_baseline_20260722.md`。
+- 协调器复用原播放健康 Timer，每两秒采集扩展样本；连续 8 个健康样本且满足 10 秒冷却才升级。1080p 硬解最高锐化、1080p 软解最高降噪、4K 硬解最高去块、4K 软解保持关闭；新增掉帧、缓冲、停滞或 FPS 压力立即降级。
+- 去块、`hqdn3d` 和 `unsharp` 使用 FFmpeg 官方滤镜参数，并作为单条 `vf` 快照经既有 `PlayerBackend` 串行应用；Flutter 不读取视频帧，不新增 UI Timer，不触碰 filtered queue 或后台媒体队列。
+- `PlayerGpuCapabilityDetector` 在媒体可播放后读取实际输出驱动、GPU API/上下文、D3D11 Feature Level、当前硬解和 HDR 源信号；后续原生设备矩阵已补齐 Compute / Vulkan 能力，但多卡环境仍须唯一确认活动适配器才可解锁。
+- 最终 `flutter analyze`、完整 244 项测试与 Windows Debug build 通过，3 项显式 benchmark 跳过。真实诊断中 1080p GPU 档升至“去块 + 降噪 + 锐化”，4K GPU 档封顶“去块”，两者解码/总掉帧均为 0；截图保存于 `.local/qa/2026-07-22-quality-live/`，不进入仓库。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、PlayerBackend contract、缩略图/媒体详情队列或用户数据。
+
+### 2026-07-22 播放器第一阶段画质能力与队列密度
+
+- 目标：减小播放器队列卡片的无效内间距，并把第一阶段画质、解码、缓存与诊断能力集中到主界面设置页；第二、三阶段只展示真实路线，不提供尚未满足流畅度门槛的假开关。
+- 当前状态：已完成。队列卡片横向内边距、序号占位和内容间距已收紧，缩略图与标题略增大，11176 项队列仍按可见项构建。
+- 播放设置新增原始高清码流缓存、正确画面比例、Bicubic / Lanczos 缩放和自动 / Limited / Full 输出色彩范围；自动硬解显式允许连续失败三帧后回退软件解码，默认高质量缓存使用 96 MiB 前向与 32 MiB 回看内存窗口，不复制源文件。
+- 既有 FFprobe 媒体详情缓存继续负责编码、分辨率与时长；播放诊断补充实际亮度/色度缩放器、源色彩范围、矩阵、原色、传递函数和输出范围，并保留实际硬解、缓存、解码/输出/总丢帧。
+- 第二阶段“去块、降噪、适度锐化、暗部增强、自动画质”和第三阶段“AI 超分、时域降噪、运动补帧、HDR 映射、Vulkan / Compute Shader”在设置页标记为待性能基线/能力检测，避免默认打开高开销滤镜导致播放或 UI 卡顿。
+- 精确 Debug 真实点击覆盖设置入口、缩放器切换并恢复、播放器入场、队列滚动和播放诊断；实测 `d3d11va-copy`、Lanczos、自动输出范围、源 `limited / BT.709 / BT.1886`，解码与总丢帧为 0，缓存约 111 秒，视频/音频持续推进。
+- `flutter analyze`、完整 238 项测试与 Windows Debug 构建通过，3 项显式 benchmark 跳过；截图保存于 `.local/qa/2026-07-22-player-quality/`，不进入公开仓库。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 内容/顺序、稳定身份、缩略图/媒体详情队列或用户标签/收藏数据。
+
+### 2026-07-22 播放器控制显隐、全屏覆盖队列与快进档位
+
+- 目标：降低播放画面上的常驻遮挡，在不改变 filtered queue 和视频纹理尺寸的前提下提供流畅的全屏覆盖队列、自定义快进快退档位与左上角文字反馈。
+- 当前状态：已完成。控制条首次进入默认显示，3 秒无交互后自动收起，仅鼠标进入底部进度区域时重新显示；全屏队列以根层覆盖动画出现并铺满高度，不再挤压或缩放画面。
+- 更多播放设置新增 5 / 10 / 15 / 30 / 60 秒离散滑动档位，前进/后退按钮与快捷键统一读取；按键连发只在左上角显示一次轻量文字水印，不再使用中央 HUD。
+- 真实 Windows 复测覆盖 1249×714 窗口、2560×1440 全屏、11176 项队列滚动、控制条自动隐藏、快进水印和更多设置。复测发现设置页内部 `AnimatedSwitcher` 与视频纹理叠加会触发 Flutter Windows 引擎访问冲突，改为内容树直接切换后连续打开和停留均稳定。
+- Apple 式动效使用 320ms 淡入/短距离右滑和更短退出，动画只改变合成属性；reduced motion 继续缩短/移除位移，不为队列滚动增加全列表动画或新 I/O。
+- 最终 `flutter analyze`、完整 238 项测试与 Windows Debug 构建通过，3 项显式 benchmark 跳过。测试后的 GPU 超分开关已恢复关闭。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序、`PlayerBackend` contract、缩略图/媒体详情队列或用户标签/收藏数据。
+
+### 2026-07-22 播放器 GPU 画质超分
+
+- 目标：在播放器进度条齿轮设置中提供可即时开关的画质超分，同时保持视频播放、filtered queue 与 Flutter UI 响应流畅。
+- 当前状态：代码、持久化、focused tests、全量测试、静态分析与 Windows Debug 构建已完成；显式启动 Debug 路径时 Windows 应用激活实际路由到已安装 Release 进程，随后又检测到用户正在窗口输入，自动化按安全规则中止，因此仍需补做新构建的准确人工点击与截图复验。
+- 当前打包的 libmpv `v0.36.0-403` 不包含新版 Intel/NVIDIA `d3d11vpp scaling-mode` 厂商扩展；本轮使用其已支持的 `ewa_lanczossharp` GPU 高质量上采样，不宣称 RTX/Intel AI 超分。
+- 设置默认关闭；开启后显式使用 `scaler-resizes-only=yes`，仅在源画面需要放大时运行，高质量亮度缩放与 sigmoid 变换留在 GPU renderer，Flutter UI 不处理视频帧。
+- 关闭后恢复 Lanczos 基线；每次媒体 open 前后重新应用设置，播放诊断显示开关、实际 `scale` 与 resize-only 状态。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列、解码设置或用户标签/收藏数据。
+
+### 2026-07-21 GitHub 首次公开发布与隐私收口
+
+- 目标：让首次访问仓库的人能理解产品目的、特色功能、技术框架和架构边界，并通过 GitHub Release 获取 Windows / macOS 安装包。
+- 当前状态：README、隐私过滤和 `v0.1.0` GitHub Release 已完成；Actions 运行 `29821115757` 的版本解析、Windows、macOS 与公开发布 job 全部成功。
+- README 已按“问题场景 → 核心闭环 → 特色能力 → 技术栈 → 架构思想 → 下载/隐私/边界”重写，明确本项目不是 VLC / PotPlayer 的替代品。
+- `vX.Y.Z` 标签发布改为 Windows 与 macOS 双端成功后原子创建 Release，同时上传 `.exe`、`.dmg` 和两份 SHA-256；普通分支与手动构建不创建公开 Release。
+- 已清理公开 `master` 历史中的个人邮箱、本机用户名/盘符路径和 `.codex/config.toml`，提交者统一为 GitHub noreply 身份；公开分支和标签均只引用脱敏后的历史。
+- 本地开发配置和路径上下文继续保留，但由 `.gitignore` 隔离；数据库、日志、媒体样本、环境变量、签名证书、安装包和本地私有配置均加入上传过滤。
+- 定向审计未发现已跟踪的媒体文件、数据库、日志、环境变量、私钥、签名证书或 API token。公开仓库仍包含随桌面包使用的 FFmpeg/FFprobe 第三方二进制，属于依赖与许可证审查项，不是个人隐私。
+- 公开 Release：Windows x64 安装器 108,566,180 字节，SHA-256 `74b733522c32eef027d9c1b0e846d3bfc6d740e6725fb30544a6f0f1e03c6ea6`；macOS DMG 42,757,651 字节，SHA-256 `6bbdf24c2b288dab2277bc3592557595f31c3bca37abaa7268c15c3b7bb8320a`。
+- GitHub Support 的 cached views / dangling commit purge 工单已由仓库所有者提交，当前等待 GitHub 后台处理；仓库 About 已更新为标签发现、组合筛选与当前结果队列定位。
+- README 已补充三张完全隔离 profile、程序生成演示媒体制作的脱敏截图；截图不含真实媒体、个人路径、观看记录或用户标签。
+- 后续标签发布已配置 Windows Authenticode 与 macOS Developer ID / notarization 必过门禁；签名凭据缺失时构建失败，不会发布未签名正式包。`v0.1.0` 仍是未签名、未公证的历史产物。
+
+### 2026-07-21 Windows / macOS 正式版安装包
+
+- 目标：基于 `pubspec.yaml` 的 `0.1.0+1` 构建 Windows x64 Release 安装器与 macOS Release DMG，不改变业务、数据或播放语义。
+- 当前状态：已完成。Windows 本地 Release 安装器、隔离安装/启动/卸载冒烟均通过；独立 macOS runner 已完成 Release 构建、10 秒启动检查、DMG 生成与上传。
+- Windows 安装器使用当前用户目录安装，卸载时保留用户数据库、标签、收藏和播放记录。
+- macOS bundle identifier 已从模板占位符收敛为 `com.zero1412.localtagplayer`，Finder 展示名为 `Local Tag Player`。
+- 仓库当前没有 Windows Authenticode 与 Apple Developer ID / notarization 凭据；生成的安装包必须明确标记为未签名或未公证，不能宣称通过系统信任链。
+- Windows 安装器：108,571,720 字节，SHA-256 `0ad9b542bed463d9036111c1a2a7acc2e1e0fe4ff4d4261339665890a506fe36`。
+- macOS DMG：42,757,735 字节，SHA-256 `536c53e804e2267ccecc3d6991da66561e25bc6676cf94119e5d3222b03a5094`；Actions 运行 `29815594317` 的 Windows / macOS job 均成功。
+
+### 2026-07-21 媒体卡片文件菜单收口
+
+- 目标：让媒体卡片“更多”只承担当前文件定位与删除，移除与播放器详情重复的标签编辑和文件重命名，并缩小悬浮菜单。
+- 当前状态：已完成。
+- 网格卡片、紧凑列表和本地目录视图共用“打开文件 / 删除文件”双项菜单；播放器详情中的标签编辑与重命名能力保持不变。
+- “打开文件”仍通过 `FileSystemAdapter.revealInFileManager(item.path)` 定位当前卡片的完整视频路径，不打开媒体库 root 或资源目录。
+- 菜单宽度限制为 136–156px，条目最小高度 40px，外层垂直留白 4px；真实窗口无遮挡、溢出或文字截断。
+- 页面级回归直接记录平台边界收到的路径，并断言等于被点击卡片；同时锁定菜单不再出现“编辑标签 / 重命名文件”。
+
+## 当前稳定基线
+
+- 产品边界：Tag 驱动的本地视频发现播放器，不扩展字幕、音轨、逐帧或 A-B loop 等专业播放器能力。
+- 数据边界：SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 内容与顺序、标签来源语义均未改变。
+- 验证：247 项测试通过，3 项显式 benchmark 跳过；播放器控制显隐、全屏覆盖队列、快进档位、左上角文字反馈、GPU 超分、自动画质协调与原生显卡设备矩阵回归、`flutter analyze`、Windows debug build 均通过。真实窗口完成设置开关、1080p / 4K 播放、队列滚动与诊断复测；低分辨率超分两态、自动画质和 GPU 设备矩阵诊断截图已保存。
+- 架构基线：`Architecture Baseline 0.5.54`。
+
+## 已确认阻塞
+
+- 外部跨平台规划 `<private-planning-document>` 当前不存在；本轮依照仓库内长期规则和现有跨平台边界实施。
+- GitHub Support purge 工单已提交，但服务端缓存清理尚未确认完成；处理完成后仍需验证旧提交 API 返回 404。
+- 项目级 `LICENSE` 必须由仓库所有者在 `GPL-3.0-or-later` 与 `MIT` 等授权策略中明确选择；第三方声明不能代替项目源码授权。
+- 实际生成可信安装包仍需仓库所有者在 GitHub Actions 配置 Windows PFX、Apple Developer ID Application 证书和 App Store Connect 团队 API key；不得把证书、密码、Base64 或私钥提交到仓库。
+
+## 下一步入口
+
+1. 后续播放器视觉复验优先覆盖 Windows 150% 文字缩放与系统 reduced motion，确认全屏覆盖队列、左上角 seek 水印和更多设置仍无溢出、纹理抖动或引擎崩溃。
+2. 等待 GitHub Support 完成服务端 purge，随后确认旧 Commit API 返回 404。
+3. 确定项目级许可证并提交根目录 `LICENSE`；保留 `THIRD_PARTY_NOTICES.md` 与安装包内第三方许可证。
+4. 在 GitHub Actions secrets 配置两端签名凭据，创建新标签并在真实 Windows / macOS 上复验 SmartScreen、Gatekeeper、签名、时间戳、公证票据与校验值。
+## 2026-07-24 路径失效自动清理语义修正
+
+- 开关开启时，数据库记录对应路径只要不存在就直接清理，不要求先经过扫描写入 `isMissing`。
+- 清理仍只作用于数据库视频行、标签关系和依赖备份；不删除磁盘文件或文件夹。
+
+## 2026-07-28 MPV 命令调度与稳态播放修复
+
+- 目标：解决 MPV 容器渲染下首播/切换等待、列表收放画面抖动、seek 不流畅和偶发
+  卡顿，同时保留 MediaKit、filtered queue 与现有播放器 UI。
+- 根因：Windows 原生工作线程曾在渲染前连续处理属性命令，每条命令又触发完整状态
+  采样；自动压缩增强还会在掉帧回滚后重新升档，形成 CPU `lavfi` 振荡。
+- 实现：新增可选 `PlayerPropertyBatchBoundary`，批量下发打开偏好和增强属性；单条
+  命令直接返回状态快照；原生工作线程在控制命令前优先消费合并后的渲染请求。
+- 性能保护：50/60fps copy-back 基线（含 1080p60、4K60）保持关闭；低帧率增强
+  一旦确认带来压力，本媒体锁定关闭直到切换视频。诊断要求连续位置异常或独立
+  掉帧/停滞证据，避免单次定时器抖动误报。
+- 实测：同一 4K60 样本修复前 19 秒总掉帧从 32 增至 81、AV 偏移约 0.35 秒；
+  修复后约 49 秒总掉帧保持 1、AV 偏移约 0.000004 秒、表面重建保持 6。
+  真实窗口完成列表收放、连续 seek、快速切换和诊断长采样。
+- 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue
+  来源/内容/顺序、MediaKit、缩略图/媒体详情队列或用户数据。
