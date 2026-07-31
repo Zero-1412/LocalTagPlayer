@@ -20,7 +20,9 @@ Local Tag Player 已完成标签发现、稳定身份、filtered queue、标签�
 3. 配置 Windows Authenticode 与 macOS Developer ID/公证外部凭据。
 4. 在真实已安装旧版本上验证应用内升级、摘要、中文安装和数据保留。
 5. GitHub Support purge 完成后验证旧 Commit API 缓存清理。
-6. 在隔离兼容批次升级 `file_picker` 8 → 11 和 `package_info_plus` 9 → 10；不得混入治理或 UI 变更，准入条件见 `docs/qa/dependency_upgrade_gate.md`。
+6. `file_picker` 8 → 11 已在隔离兼容批次完成；`package_info_plus` 9 → 10
+   等待稳定版 `win32` 约束收敛，不得使用 beta 或 `dependency_overrides` 绕过。
+   准入条件与证据见 `docs/qa/dependency_upgrade_gate.md`。
 
 ## P1：核心闭环深化
 

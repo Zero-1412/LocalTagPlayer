@@ -11,7 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   desktop_drop: ^0.7.1
-  file_picker: ^8.1.7
+  file_picker: ^11.0.2
   media_kit: ^1.1.11
   media_kit_video: ^2.0.1
   media_kit_libs_linux: ^1.2.1

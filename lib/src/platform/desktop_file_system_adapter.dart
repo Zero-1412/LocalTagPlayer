@@ -27,7 +27,7 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
     String? dialogTitle,
     String? initialDirectory,
   }) async {
-    final path = await FilePicker.platform.getDirectoryPath(
+    final path = await FilePicker.getDirectoryPath(
       dialogTitle: dialogTitle,
       initialDirectory: initialDirectory,
     );
@@ -40,7 +40,7 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
     String? initialDirectory,
     List<String> allowedExtensions = const <String>[],
   }) async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       dialogTitle: dialogTitle,
       type: allowedExtensions.isEmpty ? FileType.any : FileType.custom,
       allowedExtensions: allowedExtensions.isEmpty ? null : allowedExtensions,
@@ -59,7 +59,7 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
     String? initialDirectory,
     List<String> allowedExtensions = const <String>[],
   }) async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       dialogTitle: dialogTitle,
       type: allowedExtensions.isEmpty ? FileType.any : FileType.custom,
       allowedExtensions: allowedExtensions.isEmpty ? null : allowedExtensions,
@@ -76,7 +76,7 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
     String? dialogTitle,
     List<String> allowedExtensions = const <String>[],
   }) async {
-    final path = await FilePicker.platform.saveFile(
+    final path = await FilePicker.saveFile(
       dialogTitle: dialogTitle,
       fileName: suggestedName,
       type: allowedExtensions.isEmpty ? FileType.any : FileType.custom,

@@ -361,6 +361,18 @@ void main() {
     expect(dependencies.updateService, isA<GitHubReleaseUpdateService>());
   });
 
+  test('desktop file picker adapter follows the stable static API contract',
+      () {
+    final adapter = File(
+      'lib/src/platform/desktop_file_system_adapter.dart',
+    ).readAsStringSync();
+
+    expect(adapter, contains('FilePicker.getDirectoryPath('));
+    expect(adapter, contains('FilePicker.pickFiles('));
+    expect(adapter, contains('FilePicker.saveFile('));
+    expect(adapter, isNot(contains('FilePicker.platform')));
+  });
+
   test(
       'application shell and bootstrap keep composition responsibilities apart',
       () {
