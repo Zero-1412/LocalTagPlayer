@@ -1,4 +1,4 @@
-﻿# ARCHITECTURE.md
+# ARCHITECTURE.md
 
 > 本文件是截至 2026-07-30 的架构演化归档；当前合同见仓库根目录 `ARCHITECTURE.md`。
 
@@ -158,7 +158,7 @@ contract 按类型组织，UI 按功能组织；不引入新的状态管理依�
 第一阶段把 `LocalTagPlayerApp` 与 bootstrap 组合根分离，并将更新能力迁入
 `features/update/{domain,data,presentation}`。`GitHubReleaseUpdateService` 只在组合根
 实例化，应用壳、媒体库与关于页只依赖 `AppUpdateService`。详细审计、目标依赖方向和
-Phase 0-6 门禁见 `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
+Phase 0-6 门禁见 `docs/history/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 
 代码体积治理把 `LibraryPage` 收敛为 750 行 Route/Widget 编排外壳。生命周期、扫描、
 导航、最近播放、查询、筛选、Route、播放和用户命令分别由独立 mixin 协调，所有状态与
@@ -307,14 +307,14 @@ Phase 6 将 16 个单元测试和 9 个 integration test 从万能 `src/app.dart
 模块，并在消费者归零后删除该兼容导出面。架构合同现在同时扫描 production、test 与
 integration_test，禁止重新引入 barrel；应用入口、bootstrap 和页面挂载保持不变。
 Phase 0—6 的最终结构、完成证据与后续治理原则见
-`docs/architecture/ARCHITECTURE_COMPLETION_2026_07_29.md`。
+`docs/history/architecture/ARCHITECTURE_COMPLETION_2026_07_29.md`。
 
 后续代码瘦身采用 Effective Dart、Flutter 职责分离和 Google 小变更原则，并叠加项目
 本地 presentation 行数门禁。200 行以内是新增页面/组件最佳实践，201—500 行进入关注
 区，超过 500 行必须登记只降不升的历史预算，超过 1000 行属于强制重构对象且禁止新增。
 这些数值不是外部规范宣称的通用文件标准；行数只用于发现风险，最终仍由职责、单向依赖、
 测试和页面可达性判断是否真正解耦。完整来源和执行门禁见
-`docs/architecture/CODE_DEVELOPMENT_STANDARDS_2026_07_29.md`。
+`docs/history/architecture/CODE_DEVELOPMENT_STANDARDS_2026_07_29.md`。
 
 首批把最近播放与标签编辑从 `library_widgets.dart` 拆为独立叶节点，聚合文件从 4577 行
 降到 3819 行，并移除其对播放设置、播放进度、缩略图和视频结果组件的无关依赖；页面仍
@@ -511,7 +511,7 @@ runner 必须先保存本轮 surface 左上角、尺寸与 view 尺寸，再移�
 airspace。底部 128 像素继续保护 Flutter 控制条。此修改不改变自动/4:3/16:9/
 铺满的比例语义，也不改变 MediaKit 表面、filtered queue、SQLite、标签、缓存
 队列或用户数据。完整证据见
-`docs/qa/mpv_hwnd_overlay_region_20260728.md`。
+`docs/history/qa/2026-07/mpv_hwnd_overlay_region_20260728.md`。
 
 ## 播放器后端稳定性门禁
 
@@ -547,7 +547,7 @@ NVIDIA adapter、原生 D3D11 请求能力、源/输出尺寸、HDR 活动信号
 0 总掉帧、0 音视频停滞。画质报告显式记录 `playerBackend` 与
 `rendererPreference`，后续门禁不混算两种后端。filtered queue、SQLite、
 标签、缓存队列和用户数据不变。完整证据见
-`docs/qa/player_backend_selection_nvidia_auto_20260728.md`。
+`docs/history/qa/2026-07/player_backend_selection_nvidia_auto_20260728.md`。
 
 `Architecture Baseline 0.5.91` 把 NVIDIA VSR/TrueHDR 与现有 CPU 画质滤镜的
 互斥从“禁止点击”改为会话级自动让路。设置层只在固定 mpv、Windows 原生
@@ -559,7 +559,7 @@ NVIDIA App 全局设置，也不把 NVIDIA App 的“未激活”当成运行时
 暗场三类低码率 1080P 联合门禁均为驱动 active、0 总掉帧、0 音视频停滞、无
 回滚。默认仍关闭且仅会话保存；默认 MediaKit、其他平台、插件 ABI v1、
 filtered queue、SQLite、标签、缓存队列和用户数据不变。完整证据见
-`docs/qa/nvidia_auto_activation_20260728.md`。
+`docs/history/qa/2026-07/nvidia_auto_activation_20260728.md`。
 
 `Architecture Baseline 0.5.90` 修复 Windows Debug 交付目录的启动门禁。根因
 不是 VSR/HDR 或生产启动代码：Windows integration test 会复用
@@ -579,7 +579,7 @@ PlayerService、filtered queue、SQLite、标签、缓存队列和用户数据�
 按低码率放大场景启用。NVOFA 插帧降级为独立长期研究，不阻塞发布；patched
 libmpv D3D11 hwframe 钩子与独立 FFmpeg 后端不再由原任务自动继续。默认
 MediaKit、其他平台、插件 ABI v1、filtered queue、SQLite、标签、缓存队列和
-用户数据不变。完整证据见 `docs/qa/nvidia_vsr_daily_ab_20260728.md`。
+用户数据不变。完整证据见 `docs/history/qa/2026-07/nvidia_vsr_daily_ab_20260728.md`。
 
 `Architecture Baseline 0.5.88` 校正 Windows D3D11VA 的零拷贝边界，并把偶发
 child HWND 崩溃转成可重复生命周期门禁。8 次独立 runner 与 12 次同进程
@@ -593,7 +593,7 @@ render API 只有 OpenGL/软件输出，VapourSynth R4 只有软件平面，现�
 下一原型，该路线现已由 0.5.89 降级为独立长期研究，不再自动继续。默认
 MediaKit、产品开关、
 插件 ABI v1、filtered queue、SQLite、标签、缓存队列和用户数据不变。完整证据
-见 `docs/qa/windows_hwnd_lifecycle_zero_copy_boundary_20260728.md`。
+见 `docs/history/qa/2026-07/windows_hwnd_lifecycle_zero_copy_boundary_20260728.md`。
 
 `Architecture Baseline 0.5.87` 在 QA-only NVOFA 原型内增加三段同 LUID
 D3D11 Compute：第一段以双向 cost 和 forward-backward residual 生成稠密 flow，

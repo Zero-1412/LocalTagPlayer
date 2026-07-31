@@ -9,8 +9,8 @@
 
 - 目标：执行 `docs/audits/LOCAL_TAG_PLAYER_AGENT_ECOSYSTEM_AUDIT_2026_07_31.md`
   中有证据支持的治理任务，按 P0、P1、P2 完成自动门禁、文档分层、脚本合并和历史归档。
-- 当前阶段：P2，默认规则和 current/history 文档已分层；下一步建立 QA manifest、
-  合并重复 runner 并归档已完成实验资产。
+- 当前阶段：P2 收口；上下文预算、文档分层、QA manifest、runner 合并/退役、实验归档、
+  路径可移植性和 GitHub Action SHA 固定均已完成，正在执行停止编辑后的独立验证。
 - 保护边界：不修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、
   PlayerBackend、缓存队列、标签来源语义、用户数据或既有 UI 可达性。
 - 验证模式：Level 3 `independent`；每个阶段停止编辑后执行独立只读复核。
@@ -19,12 +19,12 @@
 
 ## 最近完成
 
-1. 2026-07-31：`AGENTS`、Project、Claude、Harness 建立单一事实源；
-   Architecture、Roadmap、Changelog 的 current contract 与历史无损分离。
-2. 2026-07-31：建立治理预算、严格 UTF-8/Skill 元数据验证和 PR workflow；
-   `CURRENT_TASK` 历史无损归档，63 个 Agent 用例与 21 个工具单测通过。
-3. 2026-07-31：完成 180 项 Agent 治理资产对抗式审计，报告提交
-   `75a4e57` 已推送到 `origin/master`。
+1. 2026-07-31：建立 37 项 QA 自动化生命周期清单；合并/退役 3 个包装器，
+   归档 3 个历史 runner，并新增脚本、证据路径和绝对盘符门禁。
+2. 2026-07-31：Chat 1—7、34 份 dated QA 证据、架构完成材料和一次性实验
+   已分层归档；当前短契约、索引和门禁路径保留。
+3. 2026-07-31：19 个第三方 GitHub Action 固定到完整 SHA；
+   63 个 Agent 用例与 25 个工具单测通过，跨 major 依赖升级已建立隔离门禁。
 
 ## 当前稳定基线
 
@@ -42,6 +42,6 @@
 
 ## 下一步
 
-1. 建立 QA manifest，合并重复 runner 并移除本机绝对路径。
-2. 归档已完成 Chat/QA/实验资产，生成可检索索引。
-3. 固定 GitHub Actions 依赖，完成全量独立复核。
+1. 执行架构契约测试、PowerShell 解析、引用完整性、`flutter analyze` 和 Windows debug build。
+2. 对照 Git 历史独立确认归档正文未丢失、业务边界未变化且无未授权文件进入提交。
+3. 更新审计执行证据，提交并推送；确认远端治理 workflow 通过后关闭本任务。

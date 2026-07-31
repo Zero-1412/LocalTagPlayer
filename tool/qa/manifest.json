@@ -1,0 +1,344 @@
+{
+  "schema_version": 1,
+  "statuses": [
+    "active",
+    "experimental",
+    "archived",
+    "retired"
+  ],
+  "entries": [
+    {
+      "id": "main-window-semantic-stress",
+      "path": "scripts/qa/main_window_stress_semantic.mjs",
+      "status": "active",
+      "kind": "semantic-gate",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/qa/main_window_semantic_stress_gate.md",
+      "replacement": null
+    },
+    {
+      "id": "agent-eval",
+      "path": "tool/agent_eval.py",
+      "status": "active",
+      "kind": "governance-gate",
+      "last_verified": "2026-07-31",
+      "evidence": "docs/agent_eval.md",
+      "replacement": null
+    },
+    {
+      "id": "thumbnail-gpu-benchmark",
+      "path": "tool/benchmark_thumbnail_gpu_paths.ps1",
+      "status": "active",
+      "kind": "benchmark",
+      "last_verified": "2026-07-18",
+      "evidence": "docs/chat_tasks/CHAT_5_THUMBNAIL_DIAGNOSTICS.md",
+      "replacement": null
+    },
+    {
+      "id": "local-video-plugin-probe",
+      "path": "tool/build_local_video_plugin_probe.ps1",
+      "status": "experimental",
+      "kind": "native-probe",
+      "last_verified": "2026-07-27",
+      "evidence": "docs/history/qa/2026-07/rtx_video_sdk_feasibility_20260727.md",
+      "replacement": null
+    },
+    {
+      "id": "release-branch-integration",
+      "path": "tool/check_release_branch_integration.ps1",
+      "status": "active",
+      "kind": "release-gate",
+      "last_verified": "2026-07-30",
+      "evidence": ".github/workflows/release-packages.yml",
+      "replacement": null
+    },
+    {
+      "id": "release-notes-preview",
+      "path": "tool/check_release_notes_preview.ps1",
+      "status": "active",
+      "kind": "release-gate",
+      "last_verified": "2026-07-30",
+      "evidence": ".github/workflows/release-packages.yml",
+      "replacement": null
+    },
+    {
+      "id": "nvofa-motion-samples",
+      "path": "tool/generate_nvofa_motion_stress_samples.ps1",
+      "status": "experimental",
+      "kind": "sample-generator",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/nvofa_vapoursynth_interpolation_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "player-quality-samples",
+      "path": "tool/generate_player_quality_samples.ps1",
+      "status": "active",
+      "kind": "sample-generator",
+      "last_verified": "2026-07-30",
+      "evidence": "docs/history/qa/2026-07/player_downscale_quality_ab_20260730.md",
+      "replacement": null
+    },
+    {
+      "id": "stress-artifact-manager",
+      "path": "tool/manage_stress_artifacts.ps1",
+      "status": "active",
+      "kind": "artifact-safety",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/adversarial_full_app_stress_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "compression-quality-ab",
+      "path": "tool/archive/quality/run_compression_quality_ab.ps1",
+      "status": "archived",
+      "kind": "quality-runner",
+      "last_verified": "2026-07-27",
+      "evidence": "docs/history/qa/2026-07/player_natural_compression_ab_20260727.md",
+      "replacement": "tool/run_quality_ab.ps1"
+    },
+    {
+      "id": "downscale-quality-ab",
+      "path": "tool/run_downscale_quality_ab.ps1",
+      "status": "active",
+      "kind": "quality-engine",
+      "last_verified": "2026-07-30",
+      "evidence": "docs/history/qa/2026-07/player_downscale_quality_ab_20260730.md",
+      "replacement": null
+    },
+    {
+      "id": "fixed-quality-baseline",
+      "path": "tool/run_fixed_quality_baseline.ps1",
+      "status": "active",
+      "kind": "quality-runner",
+      "last_verified": "2026-07-22",
+      "evidence": "docs/history/qa/2026-07/player_quality_baseline_20260722.md",
+      "replacement": null
+    },
+    {
+      "id": "gpu-capability-matrix",
+      "path": "tool/run_gpu_capability_matrix.ps1",
+      "status": "active",
+      "kind": "capability-gate",
+      "last_verified": "2026-07-22",
+      "evidence": "docs/history/qa/2026-07/player_gpu_capability_matrix_20260722.md",
+      "replacement": null
+    },
+    {
+      "id": "hdr-mapping-visual-qa",
+      "path": "tool/archive/quality/run_hdr_mapping_visual_qa.ps1",
+      "status": "archived",
+      "kind": "visual-runner",
+      "last_verified": "2026-07-22",
+      "evidence": "docs/history/qa/2026-07/player_hdr_sdr_baseline_20260722.md",
+      "replacement": null
+    },
+    {
+      "id": "library-add-remove-stress",
+      "path": "tool/run_library_add_remove_player_stress.ps1",
+      "status": "active",
+      "kind": "stress-runner",
+      "last_verified": "2026-07-14",
+      "evidence": "docs/history/qa/2026-07/library_add_remove_player_stress_20260714.md",
+      "replacement": null
+    },
+    {
+      "id": "mpv-hwnd-d3d11-probe",
+      "path": "tool/run_mpv_hwnd_d3d11_probe.ps1",
+      "status": "experimental",
+      "kind": "native-probe",
+      "last_verified": "2026-07-27",
+      "evidence": "docs/history/qa/2026-07/mpv_nvidia_native_d3d11_20260727.md",
+      "replacement": null
+    },
+    {
+      "id": "natural-compression-quality-ab",
+      "path": "tool/run_natural_compression_quality_ab.ps1",
+      "status": "active",
+      "kind": "quality-runner",
+      "last_verified": "2026-07-27",
+      "evidence": "docs/history/qa/2026-07/player_natural_compression_ab_20260727.md",
+      "replacement": null
+    },
+    {
+      "id": "nvidia-scaling-ab",
+      "path": "tool/run_nvidia_scaling_ab.ps1",
+      "status": "experimental",
+      "kind": "native-quality",
+      "last_verified": "2026-07-27",
+      "evidence": "docs/history/qa/2026-07/mpv_nvidia_scaling_isolated_20260727.md",
+      "replacement": null
+    },
+    {
+      "id": "nvidia-true-hdr-ab",
+      "path": "tool/run_nvidia_true_hdr_ab.ps1",
+      "status": "experimental",
+      "kind": "native-quality",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/mpv_nvidia_true_hdr_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "nvidia-vsr-hdr-ab",
+      "path": null,
+      "status": "retired",
+      "kind": "native-quality",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/nvidia_vsr_daily_ab_20260728.md",
+      "replacement": "tool/run_nvidia_true_hdr_ab.ps1 -CombinedVsr"
+    },
+    {
+      "id": "nvofa-driver-probe",
+      "path": "tool/run_nvofa_driver_probe.ps1",
+      "status": "experimental",
+      "kind": "native-probe",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/nvofa_cuda_execute_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "nvofa-execute-probe",
+      "path": "tool/run_nvofa_execute_probe.ps1",
+      "status": "experimental",
+      "kind": "native-probe",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/nvofa_cuda_execute_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "nvofa-motion-ab",
+      "path": "tool/run_nvofa_motion_ab.ps1",
+      "status": "experimental",
+      "kind": "motion-probe",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/nvofa_vapoursynth_interpolation_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "nvofa-vapoursynth-probe",
+      "path": "tool/run_nvofa_vapoursynth_interpolation_probe.ps1",
+      "status": "experimental",
+      "kind": "motion-probe",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/nvofa_vapoursynth_interpolation_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "player-backend-stability",
+      "path": "tool/run_player_backend_stability_matrix.ps1",
+      "status": "active",
+      "kind": "stability-gate",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/player_backend_stability_matrix_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "player-queue-visual",
+      "path": "tool/archive/quality/run_player_queue_visual_qa.ps1",
+      "status": "archived",
+      "kind": "visual-runner",
+      "last_verified": "2026-07-22",
+      "evidence": "docs/chat_tasks/CHAT_4_PLAYER.md",
+      "replacement": null
+    },
+    {
+      "id": "player-real-library-stress",
+      "path": "tool/run_player_real_library_stress.ps1",
+      "status": "active",
+      "kind": "stress-runner",
+      "last_verified": "2026-07-24",
+      "evidence": "docs/history/qa/2026-07/player_quality_baseline_20260722.md",
+      "replacement": null
+    },
+    {
+      "id": "quality-ab-presets",
+      "path": "tool/run_quality_ab.ps1",
+      "status": "active",
+      "kind": "quality-preset-runner",
+      "last_verified": "2026-07-31",
+      "evidence": "test/architecture_contract_test.dart",
+      "replacement": null
+    },
+    {
+      "id": "vapoursynth-motion-host",
+      "path": "tool/run_vapoursynth_motion_host_probe.ps1",
+      "status": "experimental",
+      "kind": "motion-probe",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/vapoursynth_motion_runtime_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "vapoursynth-real-frame",
+      "path": "tool/run_vapoursynth_real_frame_probe.ps1",
+      "status": "experimental",
+      "kind": "motion-probe",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/vapoursynth_r78_real_frames_nvofa_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "library-stress-summary",
+      "path": "tool/summarize_library_add_remove_stress.ps1",
+      "status": "active",
+      "kind": "result-summary",
+      "last_verified": "2026-07-14",
+      "evidence": "docs/history/qa/2026-07/library_add_remove_player_stress_20260714.md",
+      "replacement": null
+    },
+    {
+      "id": "player-stress-summary",
+      "path": "tool/summarize_player_stress_metrics.ps1",
+      "status": "active",
+      "kind": "result-summary",
+      "last_verified": "2026-07-24",
+      "evidence": "docs/history/experiments/media_kit_2_windows_experiment_20260724.md",
+      "replacement": null
+    },
+    {
+      "id": "vapoursynth-nvofa-script",
+      "path": "tool/vapoursynth_nvofa_interpolation.vpy",
+      "status": "experimental",
+      "kind": "motion-script",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/nvofa_vapoursynth_interpolation_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "vapoursynth-passthrough-script",
+      "path": "tool/vapoursynth_passthrough_probe.vpy",
+      "status": "experimental",
+      "kind": "motion-script",
+      "last_verified": "2026-07-28",
+      "evidence": "docs/history/qa/2026-07/vapoursynth_motion_runtime_20260728.md",
+      "replacement": null
+    },
+    {
+      "id": "windows-debug-package",
+      "path": "tool/verify_windows_debug_package.ps1",
+      "status": "active",
+      "kind": "package-gate",
+      "last_verified": "2026-07-30",
+      "evidence": ".github/workflows/release-packages.yml",
+      "replacement": null
+    },
+    {
+      "id": "native-output-size-wrapper",
+      "path": null,
+      "status": "retired",
+      "kind": "quality-wrapper",
+      "last_verified": "2026-07-31",
+      "evidence": "docs/history/qa/2026-07/player_native_output_size_gate_20260730.md",
+      "replacement": "tool/run_quality_ab.ps1 -Preset native-output"
+    },
+    {
+      "id": "texture-sampling-wrapper",
+      "path": null,
+      "status": "retired",
+      "kind": "quality-wrapper",
+      "last_verified": "2026-07-31",
+      "evidence": "docs/history/qa/2026-07/player_texture_sampling_ab_20260730.md",
+      "replacement": "tool/run_quality_ab.ps1 -Preset flutter-texture"
+    }
+  ]
+}

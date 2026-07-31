@@ -1,0 +1,110 @@
+# MediaKit / MPV 稳定性矩阵（2026-07-28）
+>
+> 状态：历史 QA/实验记录。当前门禁与优先级以 `docs/qa/`、`ROADMAP.md` 和 QA manifest 为准。
+
+## 目标
+
+用同一组真实匿名片源、同一套 PlayerPage 正式交互链分别验证 MediaKit 与 Windows
+原生 MPV，避免把一个后端的结论套用到另一个后端。
+
+本门禁不修改播放器选择、filtered queue、SQLite、标签或用户数据。macOS 与 Linux
+继续只允许 MediaKit；将来若要开放 MPV，必须先分别实现、接入和验证各自的原生
+`PlayerBackend`，不能复用 Windows 的 Texture 或 child HWND 结论。
+
+## 矩阵定义
+
+| 场景 | MediaKit | Windows MPV | 自动通过条件 | 发布前附加条件 |
+| --- | --- | --- | --- | --- |
+| 全屏 | 正式窗口全屏状态机 | 正式窗口全屏状态机 + libmpv Texture | 六次往返后视频表面、当前项和已打开项保持一致；全屏队列可见且可命中 | 人工观察无黑窗、穿透或窗口层级异常 |
+| 跨 DPI | Flutter Texture metrics 重算 | libmpv Texture metrics 重算 | 100%/125%/150%/200%/100% 模拟变化期间表面持续有效 | 必须在两块不同缩放显示器间真实移窗；单显示器不得标记通过 |
+| 快速切换 | latest-request 串行 open | latest-request 串行 open | 默认 18 次短间隔请求后只打开最后一次选择，来源队列身份与顺序不变 | 无 |
+| 长播 | MediaKit/libmpv Texture | Windows libmpv Texture / `d3d11va-copy` | 默认每个后端 30 分钟，持续推进、无音视频停滞、掉帧不超过预算、队列不漂移 | 发布候选机型按实际 GPU/显示器复跑 |
+
+## 工具与证据
+
+- 集成门禁：`integration_test/player_backend_stability_matrix_test.dart`
+- 双后端汇总：`tool/run_player_backend_stability_matrix.ps1`
+- 匿名状态入口：
+  `PlayerPageState.buildStabilitySnapshotForTest` 与
+  `jumpToQueueIndexForStabilityTest`
+- 汇总报告：
+  `.local/qa/player-backend-stability/<时间>/player-backend-stability-matrix.json`
+
+默认命令：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tool/run_player_backend_stability_matrix.ps1
+```
+
+其它机器没有本机自然片源时，必须通过 `-SamplePaths` 传入至少三段真实视频。默认
+每个后端长播 1800 秒、快速切换 18 次、总掉帧预算 5 帧。只有真实跨 DPI 已在
+对应硬件上完成后，才可显式传入 `-PhysicalCrossDpiStatus passed`；该参数不是自动
+检测的替代品。
+
+## 本机短门禁结果
+
+本次先用真人面部、动画渐变、暗场三段 650 kbps 1080P 自然片源，各后端长播
+15 秒并快速切换 12 次，验证矩阵本身可执行：
+
+| 后端 | 全屏 | 模拟 DPI | 快速切换 | 15 秒长播 | 停滞样本 | 最大总掉帧 |
+| --- | --- | --- | --- | --- | --- | --- |
+| MediaKit | 通过 | 通过 | 12/12，最终项正确 | 5/5 采样推进 | 0 | 0 |
+| MPV | 通过 | 通过 | 12/12，最终项正确 | 5/5 采样推进 | 0 | 0 |
+
+汇总自动门禁为 `passed`，但发布门禁保持
+`pending-physical-cross-dpi`。测试机只有一块 2560×1440 显示器，真实跨显示器
+DPI 没有执行；15 秒短门禁只用于先证明矩阵可运行，正式 30 分钟结果见下一节。
+
+切换默认 MPV 表面后的补充短门禁覆盖队列宽度 `1064 → 1440 → 1064`、6 次全屏
+往返、全屏队列命中、100%/125%/150%/200%/100% metrics 和 20 秒播放推进，结果
+全部通过；MPV 实际读回 `hwdec-current=d3d11va-copy`。真实 Debug 窗口还验证了
+随机视频位置的右键菜单、设置弹层、普通/全屏队列开合和控制条浮层均无黑块、遮挡或
+stale surface，全屏顶部不再显示队列语境条。
+
+## 本机 30 分钟正式门禁结果
+
+输出目录：
+`.local/qa/player-backend-stability/texture-container-30m-20260728`。
+
+| 后端 | 实际硬解 | 全屏/队列/模拟 DPI | 快速切换 | 播放推进 | 停滞样本 | 最大总掉帧 / 预算 |
+| --- | --- | --- | --- | --- | ---: | ---: |
+| MediaKit | `d3d11va-copy` | 全部通过 | 18/18，最终项与来源队列正确 | 561/561 | 0 | 0 / 5 |
+| MPV Texture | `d3d11va-copy` | 全部通过 | 18/18，最终项与来源队列正确 | 562/562 | 0 | 2 / 5 |
+
+汇总 `automatedPass=true`。测试机只有一块 100% 缩放显示器，因此发布门禁仍为
+`pending-physical-cross-dpi`；自动 metrics 结果不能冒充两块不同缩放显示器间的
+真实移窗验证。
+
+## 平台门禁
+
+| 平台 | MediaKit | MPV |
+| --- | --- | --- |
+| Windows | 可用，纳入本矩阵 | 可用，默认 libmpv Texture / `d3d11va-copy`；child HWND 仅作显式 NVIDIA QA 覆盖 |
+| macOS | 可用 | 阻塞：尚无 macOS 原生 MPV 后端 |
+| Linux | 可用 | 阻塞：尚无 Linux 原生 MPV 后端 |
+
+平台门禁由 `resolvePlayerBackendSelection` 的非 Windows 回退、focused test 和矩阵
+汇总共同保护。仅增加 UI 选项、链接 libmpv 或复用 Windows 枚举值，均不构成
+macOS/Linux 原生后端完成。
+
+## 交互压力与色彩链补测
+
+新增正式 PlayerPage 交互阶段：六轮宽屏列表显隐、六轮齿轮设置开关、十八次连续
+seek，均采集 Flutter `FrameTiming`、原生 surface resize、掉帧和队列快照。优化前后
+使用同一 Debug 构建模式、三段自然低码率 1080P 和相同循环数：
+
+| 指标 | 优化前 P95 | 优化后 P95 | 优化后最大值 |
+| --- | ---: | ---: | ---: |
+| 播放列表显隐总帧 | 47.311ms | 14.719ms | 16.911ms |
+| 设置弹层总帧 | 52.285ms | 21.391ms | 42.347ms |
+| 连续 seek 总帧 | 505.127ms | 15.636ms | 19.372ms |
+| 列表 / 设置 raster | 38.296 / 39.199ms | 1.579 / 1.645ms | — |
+
+优化后 10 秒阶段 4/4 采样推进，音视频停滞 0，最大总掉帧 2；队列来源、当前项与
+纹理均保持有效。用户指定的同一 1920×1080/60 文件也通过完整矩阵，运行时回读
+`sourceLevels=limited`、`sourceMatrix=bt.709`、`outputLevels=auto`，没有发现
+LocalTagPlayer 强制 limited RGB 或错误 BT.601 矩阵的证据。
+
+真实 UI 点击原计划由 Computer Use 补测，但目标选择阶段收到用户物理 Esc，工具按
+安全规则终止。本轮不得把自动窗口门禁冒充真实点击截图；下一次需人工进入播放器后
+依次验证列表显隐、齿轮开关、进度拖动、全屏往返及渲染器提示自动消失。

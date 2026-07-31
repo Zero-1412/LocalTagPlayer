@@ -1,5 +1,5 @@
 param(
-  [string]$Flutter = 'E:\flutter\bin\flutter.bat',
+  [string]$Flutter = 'flutter',
   [int]$DurationSeconds = 1800,
   [int]$Seed = 20260713,
   [string]$MediaPath = '',

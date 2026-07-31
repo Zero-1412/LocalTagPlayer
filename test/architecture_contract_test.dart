@@ -1927,7 +1927,7 @@ void main() {
       'integration_test/player_fixed_quality_baseline_test.dart',
     ).readAsStringSync();
     final script = File(
-      'tool/run_texture_sampling_ab.ps1',
+      'tool/run_quality_ab.ps1',
     ).readAsStringSync();
 
     expect(model, contains('class PlayerVideoSurfaceDiagnostics'));
@@ -1950,7 +1950,8 @@ void main() {
     expect(integration, contains("'texture-low'"));
     expect(integration, contains("'texture-medium'"));
     expect(integration, contains("'texture-high'"));
-    expect(script, contains('"flutter-texture"'));
+    expect(script, contains("'flutter-texture'"));
+    expect(script, contains("experiment = 'flutter-texture'"));
   });
 
   test('原生 Texture 输出只经稳定档位协调器重建且紧窄控制入口完整', () {
@@ -1967,7 +1968,7 @@ void main() {
       'integration_test/player_fixed_quality_baseline_test.dart',
     ).readAsStringSync();
     final script = File(
-      'tool/run_native_output_size_ab.ps1',
+      'tool/run_quality_ab.ps1',
     ).readAsStringSync();
 
     expect(coordinator, contains('stableOutputSizes'));
@@ -1994,7 +1995,8 @@ void main() {
     expect(controls, contains("'player.queue.toggle'"));
     expect(integration, contains("'native-output-fixed'"));
     expect(integration, contains("'native-output-adaptive'"));
-    expect(script, contains('Experiment = "native-output"'));
+    expect(script, contains("experiment = 'native-output'"));
+    expect(script, contains("Preset -eq 'native-output'"));
   });
 
   test('player shortcut suspension and focus eligibility have one pure owner',

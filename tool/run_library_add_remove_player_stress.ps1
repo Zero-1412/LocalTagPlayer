@@ -1,8 +1,8 @@
 ﻿param(
-  [string]$Flutter = 'E:\flutter\bin\flutter.bat',
-  [string]$Ffmpeg = '<project-root>\windows\tools\ffmpeg\bin\ffmpeg.exe',
+  [string]$Flutter = 'flutter',
+  [string]$Ffmpeg = '',
   [string]$SourceProfile = "$env:APPDATA\com.example\local_tag_player\LocalTagPlayer",
-  [string]$RootPath = 'X:\test-media',
+  [string]$RootPath = '',
   [int]$Cycles = 10,
   [int]$Seed = 20260714,
   [int]$ReleaseTailSeconds = 60,
@@ -15,6 +15,13 @@
 )
 
 $ErrorActionPreference = 'Stop'
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if (-not $Ffmpeg) {
+  $Ffmpeg = Join-Path $repoRoot 'windows\tools\ffmpeg\bin\ffmpeg.exe'
+}
+if (-not $RootPath) {
+  throw '必须通过 -RootPath 显式传入只读真实媒体目录。'
+}
 $artifactsRoot = Join-Path $PSScriptRoot '..\artifacts'
 New-Item -ItemType Directory -Force -Path $artifactsRoot | Out-Null
 & (Join-Path $PSScriptRoot 'manage_stress_artifacts.ps1') `
@@ -46,7 +53,8 @@ Set-Content -LiteralPath (Join-Path $Output '.ltp-stress-artifact') -Value ((Get
 $profile = Join-Path $Output 'profile'
 New-Item -ItemType Directory -Force -Path $profile | Out-Null
 
-# 复制数据库和缩略图到可丢弃 profile；媒体文件仍从 X:\test-media 原地只读，不复制 5.9 TB 内容。
+# 复制数据库和缩略图到可丢弃 profile；媒体文件仍从显式 RootPath 原地只读，
+# 不把大型媒体内容复制进压力测试产物。
 & robocopy $SourceProfile $profile /E /COPY:DAT /DCOPY:DAT /R:1 /W:1 /XF library.db-shm library.db-wal /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -gt 7) {
   throw "隔离 profile 复制失败，robocopy exit code=$LASTEXITCODE"

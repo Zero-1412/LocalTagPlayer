@@ -152,7 +152,7 @@
 - 生产继续使用 `FilterQuality.low` 与打包 mpv 的 `bilinear/no`；本任务不改变
   `FilterQuery`、`TagQueryService`、filtered queue、标签、缓存队列、schema 或用户数据。
 - 验证：471 项测试通过、3 项既有 benchmark 跳过，静态分析零问题，Windows Debug
-  build 成功。完整证据：`docs/qa/player_native_output_size_gate_20260730.md`。
+  build 成功。完整证据：`docs/history/qa/2026-07/player_native_output_size_gate_20260730.md`。
 - 下一步计划：在 adaptive 默认路径重新做 `dscale` / `correct-downscaling` 最终窗口
   A/B；只有像素、画质和资源门禁同时证明收益才调整默认值。
 
@@ -170,7 +170,7 @@
   `high` 没有形成可见收益。生产继续显式使用 `FilterQuality.low`，不新增用户设置或
   高频自适应切换。
 - 700×520 与 900×650 触发现有控制条横向溢出，未拿无效布局做画质结论；本任务不扩大
-  为控制条重构。详细证据：`docs/qa/player_texture_sampling_ab_20260730.md`。
+  为控制条重构。详细证据：`docs/history/qa/2026-07/player_texture_sampling_ab_20260730.md`。
 - 完整 466 项测试、静态分析与 Windows Debug build 通过，3 项既有 benchmark 跳过；
   真实 Debug 诊断点击确认 1920×1080 Texture、951.33×568.67 dp Widget、DPR 1.50、
   1427×803 px BoxFit 目标、0.743× 合成倍率与 `low` 采样均可见且无布局异常。
@@ -192,7 +192,7 @@
   QA 脚本和集成模式保留为可复测证据。
 - 完整 461 项测试通过，3 项既有 benchmark 跳过；静态分析与 Windows Debug build
   通过。真实 Debug 诊断窗口已确认 `bilinear/no` 读回可见，新增字段无截断或溢出。
-- 详细记录：`docs/qa/player_downscale_quality_ab_20260730.md`。
+- 详细记录：`docs/history/qa/2026-07/player_downscale_quality_ab_20260730.md`。
 - 下一步计划：同时采集原生 Texture 尺寸、视频 Widget 目标尺寸和 DPI，先确认正式
   缩小所有权；只在 NativePlayer 真正承担缩小时重跑算法 A/B。
 
@@ -669,13 +669,13 @@
   都会失败。focused 与完整 442 项测试通过（3 项显式跳过），`flutter analyze` 零问题，
   Windows Debug build 与正式入口点击启动通过。
 - Phase 0—6 的最终依赖方向、刻意保留的 Store 聚合边界、验证证据和后续治理原则已记录
-  到 `docs/architecture/ARCHITECTURE_COMPLETION_2026_07_29.md`。整体架构重构收官；
+  到 `docs/history/architecture/ARCHITECTURE_COMPLETION_2026_07_29.md`。整体架构重构收官；
   后续回到产品 vertical slice，只在需求触及的边界继续机会式降低页面预算。
 - 代码瘦身第一批完成：`RecentPlaybackView` 与 `TagEditorDialog` 从 4577 行的
   `library_widgets.dart` 迁到 299/481 行的独立叶节点，聚合文件降到 3819 行；最近播放
   继续只消费 stable videoId，标签编辑继续保持 folder/manual、父级作用域和键盘保存语义。
 - 对齐 Effective Dart、Flutter 职责分离和 Google 小变更/评审标准；完整来源与项目
-  落地规则见 `docs/architecture/CODE_DEVELOPMENT_STANDARDS_2026_07_29.md`。
+  落地规则见 `docs/history/architecture/CODE_DEVELOPMENT_STANDARDS_2026_07_29.md`。
 - 新增 presentation 行数治理合同：≤200 行为项目最佳实践，201—500 行为关注区，超过
   500 行必须进入只降不升预算，超过 1000 行列为强制重构对象并禁止新增。外部规范没有
   通用单文件行数硬限制；这组阈值是本项目治理线，现有 16 个超标文件已显式登记。
@@ -763,7 +763,7 @@
   同一打开代次只计一次失败。破损但存在的文件仍由 libmpv 判断。
 - 决策：media-kit 继续作为正式播放内核；fvp 只保留 Windows 性能专项资格，不进入
   业务代码或接管 filtered queue。完整方法、硬件支持和限制见
-  `docs/qa/player_fvp_same_method_windows_ab_20260729.md`。
+  `docs/history/qa/2026-07/player_fvp_same_method_windows_ab_20260729.md`。
 - SQLite、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/顺序/当前 index、
   缓存队列、用户设置语义和用户数据均未改变。
 - 遥测单测 3/3、Windows 缺失文件真实按钮点击集成、`flutter analyze` 与正式 Windows
@@ -842,7 +842,7 @@
   和全屏队列稳定帧均无摘要残留。
 - SQLite、`FilterQuery` / `TagQueryService`、filtered queue、缓存队列和用户数据未改。
   真实跨物理 125%/150%/200% DPI 与隔离媒体根中的破坏性操作仍是人工门禁。证据见
-  `docs/qa/adversarial_full_app_stress_20260728.md`。
+  `docs/history/qa/2026-07/adversarial_full_app_stress_20260728.md`。
 
 ## 2026-07-28 MPV Texture 交互卡顿与色彩范围核验
 
@@ -910,7 +910,7 @@
   无黑屏、遮挡、错位或队列穿透。
 - `flutter analyze`、focused tests 与 Windows Debug build 通过。SQLite、
   `FilterQuery` / `TagQueryService`、filtered queue、MediaKit、缓存队列和用户
-  数据未改变。证据见 `docs/qa/mpv_hwnd_overlay_region_20260728.md`。
+  数据未改变。证据见 `docs/history/qa/2026-07/mpv_hwnd_overlay_region_20260728.md`。
 
 ## 2026-07-28 MediaKit / MPV 双后端稳定性矩阵
 
@@ -927,7 +927,7 @@
 - macOS/Linux 继续只允许 MediaKit。两平台若要开放 MPV，必须先分别实现各自原生
   `PlayerBackend` 并通过同类矩阵，Windows child HWND 不能作为其完成证据。
 - 证据与运行方法见
-  `docs/qa/player_backend_stability_matrix_20260728.md`。
+  `docs/history/qa/2026-07/player_backend_stability_matrix_20260728.md`。
 
 ## 2026-07-28 用户选择 MediaKit / MPV 与 NVIDIA 自动增强
 
@@ -950,7 +950,7 @@
 - 画质门禁报告新增 `playerBackend` 与 `rendererPreference`，后续 MediaKit /
   MPV 结果分开统计。filtered queue、当前 index、返回状态、SQLite、标签、
   缓存队列和用户数据保持不变。证据见
-  `docs/qa/player_backend_selection_nvidia_auto_20260728.md`。
+  `docs/history/qa/2026-07/player_backend_selection_nvidia_auto_20260728.md`。
 
 ## 2026-07-28 NVIDIA VSR/HDR 自动让路与激活判定
 
@@ -964,7 +964,7 @@
   `NVIDIA VSR/HDR 驱动确认: active` 为真实运行证据。
 - 真人面部、动画渐变、暗场三类真实低码率 1080P 联合验证均为 VSR/HDR
   `active`、最大总掉帧 0、音视频停滞 0、无自动回滚；关闭后的偏好恢复门禁也
-  通过。证据见 `docs/qa/nvidia_auto_activation_20260728.md`。
+  通过。证据见 `docs/history/qa/2026-07/nvidia_auto_activation_20260728.md`。
 - 一次 Windows integration test 在播放器构造早期出现现有的原生
   `0xc0000005` 启动抖动，同条件重跑和后续三组均通过；未把它归因于 NVIDIA
   滤镜，继续作为 child HWND 生命周期风险记录。
@@ -1004,7 +1004,7 @@
   自动继续；只有未来显式重启 NVOFA 研究时才重新评估。
 - 默认 MediaKit、其他平台、插件 ABI v1、filtered queue、SQLite、标签、缓存
   队列和用户数据均未改变。证据见
-  `docs/qa/nvidia_vsr_daily_ab_20260728.md`。
+  `docs/history/qa/2026-07/nvidia_vsr_daily_ab_20260728.md`。
 - `flutter analyze`、298 项全量测试（另 3 项按既有条件跳过）、Windows Debug
   build、PowerShell 语法和真实播放器齿轮点击/截图均通过；VSR/HDR 标题、说明、
   循环开关及“更多播放设置”无错位、遮挡或溢出。
@@ -1024,7 +1024,7 @@
 - 公开 libmpv render API 没有 D3D11 帧接口，VapourSynth R4 只提供软件平面；
   本节当时记录的 patched libmpv 下一步已被上方发布范围收敛取代，不再自动继续。
 - 详细证据见
-  `docs/qa/windows_hwnd_lifecycle_zero_copy_boundary_20260728.md`。
+  `docs/history/qa/2026-07/windows_hwnd_lifecycle_zero_copy_boundary_20260728.md`。
 
 ## 2026-07-28 NVOFA 遮挡有效性与两级补洞
 
@@ -1134,7 +1134,7 @@
 - `flutter analyze`、297 项全量测试（另 3 项按既有条件跳过）和 Windows Debug
   build 通过；正式 Debug bundle 未发现 NVOFA、CUDA、VapourSynth 或 VSScript
   文件，四个新增/扩展 QA 脚本均通过 PowerShell 语法解析。
-- 完整证据见 `docs/qa/nvofa_vapoursynth_interpolation_20260728.md`。
+- 完整证据见 `docs/history/qa/2026-07/nvofa_vapoursynth_interpolation_20260728.md`。
 
 ## 2026-07-28 NVIDIA RTX Video HDR 驱动实链
 
@@ -1160,7 +1160,7 @@
   `captureScreenshot`，因此未把该替代截图描述成 Windows Graphics Capture。
 - 默认 MediaKit、渲染器选择、filtered queue、当前 index、返回状态、插件 ABI
   v1、SQLite、标签、缓存队列和用户数据均未改变。
-- 完整证据见 `docs/qa/mpv_nvidia_true_hdr_20260728.md`。
+- 完整证据见 `docs/history/qa/2026-07/mpv_nvidia_true_hdr_20260728.md`。
 
 ## 2026-07-28 NVOFA CUDA 真实硬件执行门禁
 
@@ -1183,7 +1183,7 @@
   build 通过；Debug bundle 复核没有 NVOFA、CUDA 或 NVIDIA SDK 文件。
 - 默认 MediaKit、Windows 后端选择、filtered queue、当前 index、返回状态、
   插件 ABI v1、SQLite、标签、缓存队列和用户数据均未改变。
-- 完整证据见 `docs/qa/nvofa_cuda_execute_20260728.md`。
+- 完整证据见 `docs/history/qa/2026-07/nvofa_cuda_execute_20260728.md`。
 
 ## 2026-07-28 VapourSynth R78 真实帧与 NVOFA 驱动门禁
 
@@ -1210,7 +1210,7 @@
   内完成，最终进程正常退出。
 - 默认 MediaKit、Windows 后端选择、filtered queue、当前 index、返回状态、
   插件 ABI、SQLite、标签、缓存队列和用户数据均未改变。
-- 完整证据见 `docs/qa/vapoursynth_r78_real_frames_nvofa_20260728.md`。
+- 完整证据见 `docs/history/qa/2026-07/vapoursynth_r78_real_frames_nvofa_20260728.md`。
 
 ## 2026-07-28 Windows 本机运动补偿插帧运行时边界
 
@@ -1238,7 +1238,7 @@
   文件。
 - filtered queue、当前 index、返回媒体库状态、插件 ABI v1、SQLite、标签、缓存
   队列和用户数据均未改变。
-- 验证记录见 `docs/qa/vapoursynth_motion_runtime_20260728.md`。
+- 验证记录见 `docs/history/qa/2026-07/vapoursynth_motion_runtime_20260728.md`。
 
 ## 2026-07-27 PlayerService 显示同步插值边界
 
@@ -1256,7 +1256,7 @@
 - `flutter analyze`、295 项全量测试与 Windows Debug build 通过；真实 Debug
   窗口已点击“设置 → 视频画质与增强 → 流畅度提升”，确认弹窗、状态文案和撤销
   均可达，最终设置恢复为“关闭”。
-- 验证记录见 `docs/qa/player_smooth_motion_20260727.md`。
+- 验证记录见 `docs/history/qa/2026-07/player_smooth_motion_20260727.md`。
 
 ## 2026-07-27 Windows 播放渲染器用户入口
 
@@ -1275,7 +1275,7 @@
 - `flutter analyze`、290 项全量测试与 Windows Debug build 通过；真实窗口确认
   持久化 Windows 增强可打开 mpv child HWND，跨 Route 撤销可用，最终偏好已
   恢复为“自动（推荐）”。
-- 验证记录见 `docs/qa/windows_renderer_preference_20260727.md`。
+- 验证记录见 `docs/history/qa/2026-07/windows_renderer_preference_20260727.md`。
 
 ## 2026-07-27 Windows 原生 libmpv NVIDIA RTX Super Resolution
 
@@ -1290,8 +1290,8 @@
   child HWND、非 copy D3D11VA 且无 CPU `lavfi` 冲突的会话启用。
 - 默认 Windows 后端仍未切换；下一步先增加可持久化、可撤销的渲染器选择，并
   完成普通窗口鼠标、跨 DPI 与退出门禁，再决定是否提升为默认。
-- 完整记录见 `docs/qa/mpv_nvidia_native_d3d11_20260727.md` 与
-  `docs/qa/professional_player_feature_research_20260727.md`。
+- 完整记录见 `docs/history/qa/2026-07/mpv_nvidia_native_d3d11_20260727.md` 与
+  `docs/history/qa/2026-07/professional_player_feature_research_20260727.md`。
 
 ## 2026-07-27 PlayerService 播放器应用层边界
 
@@ -1334,7 +1334,7 @@
   枚举到一个 96 DPI 显示器，真实跨屏门禁仍未完成。
 - 因真实跨 DPI 尚无物理证据，三类片源六组 A/B 未重新运行，Windows 默认后端
   继续 MediaKit，NVIDIA filter 继续禁用。完整记录见
-  `docs/qa/child_hwnd_airspace_20260727.md`。
+  `docs/history/qa/2026-07/child_hwnd_airspace_20260727.md`。
 
 ## 2026-07-27 新版 ANGLE 与原生 HWND/D3D11 边界复核
 
@@ -1351,7 +1351,7 @@
   显式 QA 环境变量。
 - 下一步只做 Flutter child HWND 的矩形、DPI、z-order、控制条/设置/队列
   airspace 与生命周期原型。完整证据见
-  `docs/qa/angle_d3d11_interop_20260727.md`。
+  `docs/history/qa/2026-07/angle_d3d11_interop_20260727.md`。
 
 ## 2026-07-27 播放设置收纳、D3D11VA 边界复核与依赖审计
 
@@ -1366,8 +1366,8 @@
 - 依赖审计确认 Flutter stable、MediaKit 1.2.6、media_kit_video 2.0.1 与多数
   直接包已是当前版本；mpv 后续已固定升级到 0.41.0 系列。`file_picker` 11、
   `package_info_plus` 10、`flutter_lints` 6 均需独立主版本升级，不在本次混入。
-- 完整审计见 `docs/qa/dependency_audit_20260727.md`；纹理证据更新在
-  `docs/qa/mpv_nvidia_scaling_isolated_20260727.md`。
+- 完整审计见 `docs/history/qa/2026-07/dependency_audit_20260727.md`；纹理证据更新在
+  `docs/history/qa/2026-07/mpv_nvidia_scaling_isolated_20260727.md`。
 - 两项 focused widget test、`flutter analyze`、Windows Debug build 通过；
   1268×714 真实 Windows 集成进程从齿轮点击进入更多页并完成 71 秒播放，截图中
   长 GPU 名称自然换行，三个迁移项及相邻比例/倍速/滑杆无遮挡、截断或溢出。
@@ -1378,7 +1378,7 @@
 - NVIDIA `d3d11vpp` 与现有 CPU `lavfi` 不能安全串联；直接串联会静默停用压缩滤镜，显式下载又会让放大后的 4K 帧回到 CPU。
 - 同一新版 DLL 进入 MediaKit 后，请求 `d3d11va` 的实际值为 `hwdec-current=no`；真人面部第一条开启组即未通过非 copy 硬门槛，因此按规则终止动画渐变与暗场开启组。
 - 正式 Windows 包已恢复固定 mpv 0.36.0。代码只预置互斥 `vf` 所有权、读回确认和掉帧回滚；`filterChainValidated=false`，不会真正写入 NVIDIA filter。
-- 可复跑工具为 `tool/run_nvidia_scaling_ab.ps1`，完整证据见 `docs/qa/mpv_nvidia_scaling_isolated_20260727.md`。
+- 可复跑工具为 `tool/run_nvidia_scaling_ab.ps1`，完整证据见 `docs/history/qa/2026-07/mpv_nvidia_scaling_isolated_20260727.md`。
 
 ## 2026-07-27 内嵌 mpv NVIDIA scaling-mode 实验门禁
 
@@ -1401,7 +1401,7 @@
 - 播放器齿轮和播放诊断把既有 libmpv 能力明确标注为“GPU 高质量缩放（非 NVIDIA AI）”；设置键、默认值、持久化、mpv 属性和性能回滚不变。
 - RTX Video SDK 1.1 公开能力覆盖 DX11、超分、伪影修复和 SDR→HDR，但下载需要 NVIDIA 登录；下载包内实际 EULA、目标代码再分发与 MIT 排除声明是发布前硬阻断。
 - 当前 `PlayerBackend.setProperty` 和 `PlayerGpuRenderBoundary` 不暴露逐帧 D3D11 纹理；未来原型只能在实验性 Windows 原生后端复用活动 device/LUID，任何失败无缝回到现有 libmpv 缩放。
-- 完整评估见 `docs/qa/rtx_video_sdk_feasibility_20260727.md`；本轮不下载、不提交、不分发 SDK，不改变 filtered queue、缓存队列或用户数据。
+- 完整评估见 `docs/history/qa/2026-07/rtx_video_sdk_feasibility_20260727.md`；本轮不下载、不提交、不分发 SDK，不改变 filtered queue、缓存队列或用户数据。
 - focused test 3/3、`flutter analyze` 与 Windows Debug build 通过；真实 Debug 窗口完成媒体卡片、播放器、控制条和齿轮可达性点击，长名称完整换行且无溢出或遮挡。
 
 ## 2026-07-27 三类自然低码率片源 A/B 与 NVIDIA 状态核查
@@ -1409,7 +1409,7 @@
 - `Tears of Steel` 真人面部/暗场与 `Sintel` 动画渐变均以 CC BY 3.0 开放片源隔离压制为低码率 1080P；关闭/清晰增强共六轮真实 Windows 播放均为 0 掉帧、0 音视频停滞。
 - 清晰增强对动画渐变最有价值，对面部与暗场保持克制；QA-only 额外 0.18 后锐化只改善部分动画轮廓，却让面部压缩纹理和暗场噪点变硬，未达到三类一致获益，GLSL 继续不加入。
 - 本机 NVIDIA App 的视频页显示超分辨率关闭、HDR 禁用；播放器虽精确使用 RTX 4070 SUPER 的 `d3d11va-copy`，当前“GPU 画质超分”仍是 libmpv `ewa_lanczossharp`，未接 RTX Video SDK，因此不能宣称 NVIDIA AI 增强已工作。
-- 可复跑工具为 `tool/run_natural_compression_quality_ab.ps1`，完整证据与限制见 `docs/qa/player_natural_compression_ab_20260727.md`；未修改正式播放器、filtered queue、PlayerBackend contract、缓存队列或用户数据。
+- 可复跑工具为 `tool/run_natural_compression_quality_ab.ps1`，完整证据与限制见 `docs/history/qa/2026-07/player_natural_compression_ab_20260727.md`；未修改正式播放器、filtered queue、PlayerBackend contract、缓存队列或用户数据。
 
 ## 2026-07-27 压缩画质增强三档与低码率 1080P A/B
 
@@ -1560,7 +1560,7 @@
 
 - 目标：从实际 MediaKit / ANGLE 渲染设备返回活动 adapter LUID，在该 LUID 上建立 1080p / 4K Compute 帧预算，只选择一个第三阶段功能做默认关闭、可回滚实验；暗部增强保持独立观感与性能基线。
 - 当前状态：已完成。构建期只替换固定 SHA256 的 MediaKit `ANGLESurfaceManager` 单个源文件，在真实 D3D11 device 创建/销毁处登记 LUID；不修改 Pub Cache，不按枚举顺序、Feature Level、名称或显存占用推断活动显卡。
-- 当前设备矩阵：RTX 4070 SUPER（约 11.72 GiB 专用显存）与 AMD Radeon Graphics（约 460 MiB 专用显存）均为 D3D 12_1、Compute 已验证、Vulkan 已匹配；Microsoft Basic Render Driver 标记为软件适配器，不参与活动硬件卡选择。完整证据见 `docs/qa/player_gpu_capability_matrix_20260722.md`。
+- 当前设备矩阵：RTX 4070 SUPER（约 11.72 GiB 专用显存）与 AMD Radeon Graphics（约 460 MiB 专用显存）均为 D3D 12_1、Compute 已验证、Vulkan 已匹配；Microsoft Basic Render Driver 标记为软件适配器，不参与活动硬件卡选择。完整证据见 `docs/history/qa/2026-07/player_gpu_capability_matrix_20260722.md`。
 - 实际生产渲染设备返回 LUID `00000000:00016bec`，精确匹配 RTX 4070 SUPER。D3D11 HDR 类 Compute kernel 在 60fps 的 4.167ms 预留切片下，1080p P95 为 0.036ms、4K P95 为 0.129ms，两档均通过；JSON 位于 `.local/qa/gpu-capability-matrix/active-device-compute-budget.json`。
 - 该阶段只选择了“HDR 动态映射”做可回滚验证；后续已保留默认关闭、HDR 源、精确 LUID、Compute 能力与会话压力门槛，并收敛为正式用户文案。运动补帧保持未启动；`hqdn3d` 已以保守时域参数参与时空降噪。
 - `tool/run_gpu_capability_matrix.ps1` 可重建活动 LUID、设备矩阵和 1080p / 4K 预算；压测显式触发并在原生后台执行，普通播放启动不运行 Compute 基线。
@@ -1573,7 +1573,7 @@
 
 - 目标：先建立 1080p / 4K 的 GPU、CPU 与丢帧基线，再让第二阶段去块、降噪和适度锐化只在实时余量允许时动态启用；第三阶段功能必须先经过真实显卡能力检测。
 - 当前状态：已完成。主界面“播放与继续观看”设置新增默认关闭的“自动画质协调器”，隔离 Debug 窗口已完成设置开关、1080p / 4K 播放、队列滚动与诊断真实点击。
-- 隔离实测稳定段：1080p 硬解 CPU / GPU Engine 中位 64.9% / 43.3%，软解 142.4% / 1.0%，两者解码/总掉帧均为 0；4K 硬解 66.5% / 59.2% 且 0 掉帧，4K 软解 216.1% / 1.0%，出现 27 帧总掉帧与 0.114 秒 AV 偏移。完整口径见 `docs/qa/player_quality_baseline_20260722.md`。
+- 隔离实测稳定段：1080p 硬解 CPU / GPU Engine 中位 64.9% / 43.3%，软解 142.4% / 1.0%，两者解码/总掉帧均为 0；4K 硬解 66.5% / 59.2% 且 0 掉帧，4K 软解 216.1% / 1.0%，出现 27 帧总掉帧与 0.114 秒 AV 偏移。完整口径见 `docs/history/qa/2026-07/player_quality_baseline_20260722.md`。
 - 协调器复用原播放健康 Timer，每两秒采集扩展样本；连续 8 个健康样本且满足 10 秒冷却才升级。1080p 硬解最高锐化、1080p 软解最高降噪、4K 硬解最高去块、4K 软解保持关闭；新增掉帧、缓冲、停滞或 FPS 压力立即降级。
 - 去块、`hqdn3d` 和 `unsharp` 使用 FFmpeg 官方滤镜参数，并作为单条 `vf` 快照经既有 `PlayerBackend` 串行应用；Flutter 不读取视频帧，不新增 UI Timer，不触碰 filtered queue 或后台媒体队列。
 - `PlayerGpuCapabilityDetector` 在媒体可播放后读取实际输出驱动、GPU API/上下文、D3D11 Feature Level、当前硬解和 HDR 源信号；后续原生设备矩阵已补齐 Compute / Vulkan 能力，但多卡环境仍须唯一确认活动适配器才可解锁。

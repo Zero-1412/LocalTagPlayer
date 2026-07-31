@@ -112,6 +112,17 @@ class AgentEvalToolTest(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        manifest_dir = root / "tool" / "qa"
+        manifest_dir.mkdir(parents=True)
+        (manifest_dir / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "entries": [],
+                }
+            ),
+            encoding="utf-8",
+        )
         return skill_dir, eval_root
 
     def test_catalog_has_expected_coverage(self) -> None:
@@ -183,6 +194,69 @@ class AgentEvalToolTest(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(agent_eval.EvalError, "超过预算"):
+                agent_eval.validate_repository_governance(root, eval_root)
+
+    def test_governance_rejects_uncatalogued_qa_script(self) -> None:
+        """新增 QA 脚本没有生命周期条目时必须阻断治理验证。"""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _, eval_root = self._write_governance_fixture(root)
+            tool_dir = root / "tool"
+            (tool_dir / "uncatalogued.ps1").write_text(
+                "Write-Output 'fixture'\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(agent_eval.EvalError, "漏登记脚本"):
+                agent_eval.validate_repository_governance(root, eval_root)
+
+    def test_governance_rejects_missing_qa_evidence(self) -> None:
+        """QA 条目的证据文件缺失时不得留下表面有效的清单记录。"""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _, eval_root = self._write_governance_fixture(root)
+            script_path = root / "tool" / "fixture.ps1"
+            script_path.write_text(
+                "Write-Output 'fixture'\n",
+                encoding="utf-8",
+            )
+            manifest_path = root / "tool" / "qa" / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "entries": [
+                            {
+                                "id": "fixture",
+                                "path": "tool/fixture.ps1",
+                                "status": "active",
+                                "kind": "fixture",
+                                "last_verified": "2026-07-31",
+                                "evidence": "docs/missing.md",
+                                "replacement": None,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(agent_eval.EvalError, "证据路径不存在"):
+                agent_eval.validate_repository_governance(root, eval_root)
+
+    def test_governance_rejects_floating_action_reference(self) -> None:
+        """第三方 GitHub Action 使用浮动标签时必须阻断供应链治理。"""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _, eval_root = self._write_governance_fixture(root)
+            workflow_dir = root / ".github" / "workflows"
+            workflow_dir.mkdir(parents=True)
+            (workflow_dir / "fixture.yml").write_text(
+                "steps:\n  - uses: actions/checkout@v7\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(agent_eval.EvalError, "完整提交"):
                 agent_eval.validate_repository_governance(root, eval_root)
 
     def test_agent_result_schema_uses_supported_subset(self) -> None:

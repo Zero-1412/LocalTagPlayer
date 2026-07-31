@@ -1,5 +1,5 @@
 ﻿param(
-  [string]$Flutter = 'E:\flutter\bin\flutter.bat',
+  [string]$Flutter = 'flutter',
   [string[]]$SamplePaths = @(),
   [ValidateRange(10, 86400)]
   [int]$LongPlaySeconds = 1800,

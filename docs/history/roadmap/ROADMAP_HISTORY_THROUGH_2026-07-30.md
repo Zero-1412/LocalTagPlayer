@@ -40,7 +40,7 @@
 - [x] Phase 6：删除已经归零的 `src/app.dart` 兼容导出面；测试具体 import 从 Phase 2
   起随改动持续推进。
 
-完整方案与阶段门禁见 `docs/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
+完整方案与阶段门禁见 `docs/history/architecture/ARCHITECTURE_REFACTOR_2026_07_29.md`。
 
 ## 2026-07-29 代码体积治理
 

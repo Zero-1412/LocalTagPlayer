@@ -1,4 +1,4 @@
-﻿# CHANGELOG.md
+# CHANGELOG.md
 
 > 本文件是截至 2026-07-30 的完整变更归档；当前变更入口见仓库根目录 `CHANGELOG.md`。
 
@@ -93,7 +93,7 @@
 - 471 项测试通过、3 项既有 benchmark 跳过；静态分析零问题，Windows Debug build
   与 899 dp 真实设置点击截图通过。
 - filtered queue、PlayerBackend 基础 contract、SQLite、标签、缓存队列和用户数据
-  均未改变。详细记录：`docs/qa/player_native_output_size_gate_20260730.md`。
+  均未改变。详细记录：`docs/history/qa/2026-07/player_native_output_size_gate_20260730.md`。
 
 ## 2026-07-30 · 完成 Flutter Texture 尺寸采集与采样 A/B
 
@@ -107,7 +107,7 @@
   PlayerBackend 基础 contract、SQLite、标签、缓存队列和用户数据不变。
 - 完整 466 项测试、静态分析与 Windows Debug build 通过，3 项既有 benchmark 跳过；
   真实 Debug 诊断点击确认新增尺寸、DPR、BoxFit、倍率与采样字段可见且无布局异常。
-- 详细记录：`docs/qa/player_texture_sampling_ab_20260730.md`。
+- 详细记录：`docs/history/qa/2026-07/player_texture_sampling_ab_20260730.md`。
 
 ## 2026-07-30 · 完成低码率缩小画质 A/B
 
@@ -383,7 +383,7 @@
   `missing_file`；同一打开代次只记录一次失败。Windows 集成测试确认缺失路径约
   8 ms 失败，遥测与错误流均不泄露本机目录。
 - 结果、硬件支持矩阵、指标限制和后续门槛见
-  `docs/qa/player_fvp_same_method_windows_ab_20260729.md`。
+  `docs/history/qa/2026-07/player_fvp_same_method_windows_ab_20260729.md`。
 - 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue 来源/内容/
   顺序/当前 index、`PlayerBackend` contract、缓存队列或用户数据。
 
@@ -815,7 +815,7 @@
   掉帧均为 0，并导出正常真人帧；后续只评估 Flutter child HWND airspace。
 - SQLite、标签查询、filtered queue、`PlayerBackend` contract、缓存队列和
   用户数据均未改变。完整证据见
-  `docs/qa/angle_d3d11_interop_20260727.md`。
+  `docs/history/qa/2026-07/angle_d3d11_interop_20260727.md`。
 
 ## 2026-07-27 · 播放设置收纳与依赖/渲染边界复核
 
@@ -1047,14 +1047,14 @@
 - Vulkan 使用系统 `vulkan-1.dll` 动态加载并枚举物理设备，按 vendor/device ID 与 DXGI 结果匹配；安装包不新增 Vulkan SDK 运行依赖，loader、实例和设备匹配分别报告。
 - 播放诊断新增设备数量、活动 GPU 判定来源、显存预算/占用、Vulkan loader/实例和逐适配器矩阵。当前会话确认 GPU renderer 后，单硬件卡可唯一选择；多硬件卡仅在 Feature Level 唯一匹配时选择，否则 Compute 增强保持锁定。
 - 当前设备矩阵枚举 RTX 4070 SUPER、AMD Radeon Graphics 和 Microsoft Basic Render Driver；两块硬件卡均为 D3D 12_1、Compute 与 Vulkan 已验证，但 Feature Level 相同，活动适配器保持未唯一确认。
-- 新增 Windows integration test 与 `tool/run_gpu_capability_matrix.ps1`，可保存不含媒体路径的 JSON；实测矩阵记录在 `docs/qa/player_gpu_capability_matrix_20260722.md`。
+- 新增 Windows integration test 与 `tool/run_gpu_capability_matrix.ps1`，可保存不含媒体路径的 JSON；实测矩阵记录在 `docs/history/qa/2026-07/player_gpu_capability_matrix_20260722.md`。
 - 隔离 Debug 真实点击进入 1080p 播放、打开诊断并滚动矩阵；播放持续推进且解码/总掉帧为 0，适配器行无遮挡或横向溢出。完整 247 项测试、`flutter analyze`、Windows Debug build 与独立 integration matrix test 通过，3 项 benchmark 跳过。
 - 运动补帧、时域降噪、HDR 映射和暗部增强未在本轮启用；暗部增强后续必须使用独立 SDR 暗场观感与性能基线。
 - 未修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、缩略图/媒体详情队列、稳定身份或用户数据。
 
 ## 2026-07-22 · 自动画质协调器与 GPU 能力检测
 
-- 隔离 profile 固定 1080p 类 H.264 与 4K 类 HEVC 样本，分别运行 `auto-safe` 和 `no`，稳定段同时采集进程 CPU、GPU Engine、GPU committed、实际解码器、掉帧、AV 偏移和音视频停滞；完整口径与结果写入 `docs/qa/player_quality_baseline_20260722.md`。
+- 隔离 profile 固定 1080p 类 H.264 与 4K 类 HEVC 样本，分别运行 `auto-safe` 和 `no`，稳定段同时采集进程 CPU、GPU Engine、GPU committed、实际解码器、掉帧、AV 偏移和音视频停滞；完整口径与结果写入 `docs/history/qa/2026-07/player_quality_baseline_20260722.md`。
 - 1080p 硬解 / 软解均为 0 掉帧，但软解 CPU 中位从 64.9% 升至 142.4%；4K 硬解为 0 掉帧，4K 软解 CPU 中位 216.1% 且出现 27 帧总掉帧与 0.114 秒 AV 偏移，因此 4K 软件解码不开放自动滤镜。
 - 新增默认关闭的“自动画质协调器”。它复用原播放健康 Timer，每两秒读取扩展样本；连续健康与 10 秒冷却后逐级启用去块、`hqdn3d` 降噪和轻量 `unsharp`，掉帧、缓冲、停滞或 FPS 余量不足时立即回退。
 - 基线最高档按实际媒体和解码路径限制：1080p 硬解可到锐化、1080p 软解最多降噪、4K 硬解最多去块、4K 软解保持关闭；新媒体打开前清空上一条滤镜和余量状态。

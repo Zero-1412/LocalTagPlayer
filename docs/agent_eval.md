@@ -184,6 +184,14 @@ Scorer 会确定性检查 `done_when.id` 唯一、完成项与验证记录一一
   评分器单元测试 22 项，并覆盖 CI 仓库位于用户目录下时的路径遮盖顺序。
 - `.github/workflows/agent-governance.yml` 在相关 pull request/push 上运行零模型成本门禁。
 
+## 2026-07-31 QA 自动化生命周期门禁
+
+- `tool/qa/manifest.json` 是 QA、发布和 Agent 治理脚本的唯一生命周期清单，状态只允许 `active`、`experimental`、`archived`、`retired`。
+- `validate` 会检查脚本是否全部登记、非退役脚本是否存在、PowerShell 是否携带开发机盘符、证据路径是否存在，以及退役条目是否给出替代命令。
+- 历史视觉/质量脚本放在 `tool/archive/quality/`，默认任务不得自动运行；一次性证据放在 `docs/history/qa/`。
+- 当前零模型成本基线为 63 个 Agent 用例和 25 项评分器单元测试。
+- 第三方 GitHub Action 必须固定到 40 位提交 SHA；浮动 major 标签或分支会被同一门禁拒绝。
+
 ## 命令
 
 先执行零模型成本的目录与评分器验证：

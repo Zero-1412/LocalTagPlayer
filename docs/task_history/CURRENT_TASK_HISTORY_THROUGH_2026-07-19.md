@@ -1,4 +1,4 @@
-﻿# CURRENT_TASK.md
+# CURRENT_TASK.md
 
 > 历史归档：本文件完整保存拆分前的任务记录，仅供追溯，不属于新任务的默认上下文。
 > 当前任务、最新验证和下一步入口以仓库根目录的 `CURRENT_TASK.md` 为准。
@@ -1017,4 +1017,4 @@ flutter build windows --debug
 - 修复三项真实竞态：异步未入库统计遍历可变 roots、root 移除未失效过滤数据 revision、旧媒体探测回调在移除后重新 upsert 已删记录。
 - 10 轮均保持 4,827 → 11,135 → 4,827 的 Store/UI 一致性；添加 P95 2.405 秒、移除 P95 0.773 秒，UI 追平均小于 1 ms。
 - 快速滚动仍有明显长帧：添加后/移除后阶段 P95 中位数约 62/52 ms；20 个播放样本有 6 个 8K H.264 软件解码，进程 Private/GPU committed 峰值约 2,342/941 MiB。
-- 完整证据和下一步见 `docs/qa/library_add_remove_player_stress_20260714.md`。
+- 完整证据和下一步见 `docs/history/qa/2026-07/library_add_remove_player_stress_20260714.md`。

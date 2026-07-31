@@ -121,6 +121,131 @@ def _validate_agent_metadata(path: Path, text: str) -> None:
             raise EvalError(f"Agent 元数据缺少非空 {field}：{path}")
 
 
+def _validate_qa_manifest(repo_root: Path) -> dict[str, Any]:
+    """验证 QA/发布脚本都有生命周期记录且不携带开发机绝对路径。"""
+
+    manifest_path = repo_root / "tool" / "qa" / "manifest.json"
+    manifest = _read_json(manifest_path)
+    entries = manifest.get("entries")
+    if not isinstance(entries, list):
+        raise EvalError(f"QA manifest entries 必须是数组：{manifest_path}")
+
+    allowed_statuses = {
+        "active",
+        "experimental",
+        "archived",
+        "retired",
+    }
+    required_fields = {
+        "id",
+        "path",
+        "status",
+        "kind",
+        "last_verified",
+        "evidence",
+        "replacement",
+    }
+    ids: set[str] = set()
+    paths: set[str] = set()
+    status_counts: dict[str, int] = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != required_fields:
+            raise EvalError(f"QA manifest 条目字段不完整：{entry!r}")
+        entry_id = entry["id"]
+        status = entry["status"]
+        relative_path = entry["path"]
+        if not isinstance(entry_id, str) or not entry_id or entry_id in ids:
+            raise EvalError(f"QA manifest id 非法或重复：{entry_id!r}")
+        ids.add(entry_id)
+        if status not in allowed_statuses:
+            raise EvalError(f"QA manifest status 非法：{entry_id}: {status!r}")
+        status_counts[status] = status_counts.get(status, 0) + 1
+        for field in ("kind", "last_verified", "evidence"):
+            if not isinstance(entry[field], str) or not entry[field]:
+                raise EvalError(f"QA manifest {field} 不能为空：{entry_id}")
+
+        evidence = Path(entry["evidence"])
+        if evidence.is_absolute() or ".." in evidence.parts:
+            raise EvalError(f"QA manifest evidence 必须是仓库内相对路径：{entry_id}")
+        evidence_path = repo_root / evidence
+        if not evidence_path.is_file():
+            raise EvalError(
+                f"QA manifest 证据路径不存在：{entry['evidence']}"
+            )
+
+        if status == "retired":
+            if relative_path is not None or not entry["replacement"]:
+                raise EvalError(
+                    f"retired 条目必须清空 path 并声明 replacement：{entry_id}"
+                )
+            continue
+        if not isinstance(relative_path, str) or not relative_path:
+            raise EvalError(f"QA manifest path 不能为空：{entry_id}")
+        if relative_path in paths:
+            raise EvalError(f"QA manifest path 重复：{relative_path}")
+        paths.add(relative_path)
+        script_path = repo_root / relative_path
+        if not script_path.is_file():
+            raise EvalError(f"QA manifest 路径不存在：{relative_path}")
+        if script_path.suffix.lower() == ".ps1":
+            script_text = _read_utf8_text(script_path)
+            if re.search(r"(?i)(?<![A-Za-z])[A-Z]:\\", script_text):
+                raise EvalError(f"QA 脚本包含开发机绝对路径：{relative_path}")
+
+    discovered = {
+        path.relative_to(repo_root).as_posix()
+        for path in [
+            *sorted((repo_root / "tool").rglob("*.ps1")),
+            *sorted((repo_root / "tool").rglob("*.vpy")),
+            *sorted((repo_root / "scripts" / "qa").glob("*.mjs")),
+        ]
+    }
+    agent_eval_path = repo_root / "tool" / "agent_eval.py"
+    if agent_eval_path.is_file():
+        discovered.add("tool/agent_eval.py")
+    missing = sorted(discovered - paths)
+    unknown = sorted(paths - discovered)
+    if missing:
+        raise EvalError("QA manifest 漏登记脚本：" + ", ".join(missing))
+    if unknown:
+        raise EvalError("QA manifest 登记了非自动化路径：" + ", ".join(unknown))
+    return {
+        "entries": len(entries),
+        "status_counts": status_counts,
+    }
+
+
+def _validate_workflow_action_pins(repo_root: Path) -> dict[str, int]:
+    """验证第三方 GitHub Action 都固定到可审计的完整提交。"""
+
+    workflow_root = repo_root / ".github" / "workflows"
+    workflow_paths = [
+        *sorted(workflow_root.glob("*.yml")),
+        *sorted(workflow_root.glob("*.yaml")),
+    ]
+    action_references = 0
+    for workflow_path in workflow_paths:
+        text = _read_utf8_text(workflow_path)
+        for match in re.finditer(
+            r"(?m)^\s*(?:-\s*)?uses:\s*([^@\s]+)@([^\s#]+)",
+            text,
+        ):
+            action, reference = match.groups()
+            if action.startswith("./"):
+                continue
+            action_references += 1
+            if re.fullmatch(r"[0-9a-fA-F]{40}", reference) is None:
+                relative_path = workflow_path.relative_to(repo_root).as_posix()
+                raise EvalError(
+                    "GitHub Action 必须固定到完整提交："
+                    f"{relative_path}: {action}@{reference}"
+                )
+    return {
+        "workflows": len(workflow_paths),
+        "action_references": action_references,
+    }
+
+
 def validate_repository_governance(
     repo_root: Path = REPO_ROOT,
     eval_root: Path = EVAL_ROOT,
@@ -196,6 +321,8 @@ def validate_repository_governance(
     return {
         "skills": skill_names,
         "budgets": budget_summary,
+        "qa_manifest": _validate_qa_manifest(repo_root),
+        "workflow_action_pins": _validate_workflow_action_pins(repo_root),
     }
 
 

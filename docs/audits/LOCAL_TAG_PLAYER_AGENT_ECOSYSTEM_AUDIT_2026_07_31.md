@@ -686,3 +686,59 @@ validation:
 > 建立“治理预算门禁”补丁：严格验证 UTF-8，给 `CURRENT_TASK.md`、`AGENTS.md` 和 Skill 元数据增加零成本验证，并把现有 Agent eval 接入 PR workflow；暂不修改业务代码。
 
 该补丁完成并验证后，再进行文档分层和 QA runner 合并，避免一次大搬迁同时改变路径、规则和执行行为。
+
+## 13. 2026-07-31 整治执行结果
+
+本节是审计后的执行证据；前文评分保留为整治前快照，不再代表当前状态。
+
+| 执行项 | 裁决 | 完成证据 |
+| --- | --- | --- |
+| 默认上下文预算与严格 UTF-8/Skill 元数据门禁 | DONE | `70a33b9`；63 个目录用例持续通过 |
+| Agent governance PR/push workflow | DONE | `.github/workflows/agent-governance.yml` |
+| 本机 `.codex/config.toml` 可移植性 | DONE（本地忽略文件） | 移除固定盘符 writable root、模型窗口与自动 compact 硬编码 |
+| 根规则、Project、Claude、Harness 单一事实源 | DONE | `cfa3380`；`AGENTS.md` 240 行并受 250 行预算保护 |
+| Architecture/Roadmap/Changelog 当前契约与历史拆分 | DONE | `98cbfce`；历史正文保存在 `docs/history/` |
+| Chat 1—7 当前短契约与历史拆分 | DONE | 原路径保留短契约，完整正文迁入 `docs/history/chat/` |
+| dated QA、完成材料和一次性实验归档 | DONE | 34 份 QA 证据、3 份架构材料和 media_kit 实验进入带索引历史区 |
+| QA runner 合并、退役与生命周期清单 | DONE | 37 条 manifest：18 active、13 experimental、3 archived、3 retired |
+| QA 路径可移植性 | DONE | PowerShell 不再包含开发机盘符；Flutter、媒体 root 与 bundled FFmpeg 由参数、`PATH` 或仓库根解析 |
+| QA manifest 完整性 | DONE | 校验器拒绝漏登记脚本、失效证据、非法生命周期和开发机绝对路径 |
+| 第三方 GitHub Action 供应链固定 | DONE | 19 个引用全部固定到 40 位提交 SHA；浮动引用会触发回归失败 |
+| 直接依赖 major 过时项 | DEFER（有证据） | `flutter pub outdated --no-dev-dependencies`：`file_picker` 8→11、`package_info_plus` 9→10；隔离准入见 `docs/qa/dependency_upgrade_gate.md` |
+
+### 对抗式修正
+
+- 严格 UTF-8 读取证明 Apple UI `agents/openai.yaml` 和被审计安装说明的源内容正常；早期“乱码”判断是 PowerShell 默认解码假阳性，未制造无意义重写。
+- `run_fixed_quality_baseline.ps1` 与 `run_natural_compression_quality_ab.ps1` 含有不同的确定性样本生成和基线职责，强行合并会降低可复现性，因此保留为 active；只合并真正的薄包装器。
+- 三个低频视觉/质量 runner 没有删除，而是迁入 `tool/archive/quality/` 并登记为 archived，既移出默认路径又保留历史复现能力。
+- 跨 major 依赖升级会改变平台插件、生成注册文件和发布验证范围，且与当前用户自有生成文件改动冲突；将它们隔离为兼容批次比在治理提交中盲升更符合长期可维护性。
+
+### 整治后裁决
+
+停止编辑后的 Level 3 独立复核结果：
+
+- Agent 目录与治理验证：63/63；评分器单元测试：25/25。
+- QA manifest：37/37 路径、生命周期和证据有效；3 个 workflow 的 19 个第三方 Action 引用均为完整 SHA。
+- 归档正文：47/47 组在扣除归档说明、链接迁移和替代命令后与 Git 基线一致；迁移范围相对链接缺失为 0。
+- PowerShell：manifest 内 30 个 `.ps1` 全部通过语法解析。
+- 架构契约：55/55 通过。
+- `flutter analyze`：No issues found。
+- `flutter build windows --debug`：成功生成 `local_tag_player.exe`。
+- `flutter pub outdated --no-dev-dependencies`：成功完成，跨 major 项按依赖升级门禁隔离。
+- `git diff --check`：通过；用户已有的五个 generated plugin 文件不进入本次提交。
+
+```text
+PROJECT_STATUS: HEALTHY
+
+schema: unchanged
+FilterQuery / TagQueryService: unchanged
+filtered queue: unchanged
+thumbnail/media queue: unchanged
+user data: preserved
+protected behaviors: preserved
+unauthorized feature removal: none
+mount and reachability: not applicable（未修改业务代码或 UI）
+prompt impact: 默认上下文缩短并有预算门禁；历史证据改为按需读取
+```
+
+当前技能、规则和配置已经从“技术债累积”转为受预算、生命周期、证据路径和 CI 约束的治理资产。仍保留的 experimental 脚本不进入默认执行路径；外部签名凭据、GitHub Support purge 和跨 major 依赖兼容属于明确边界或独立交付物，不再作为隐式治理债务。
