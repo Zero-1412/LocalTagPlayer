@@ -5,15 +5,17 @@
 
 ## 当前任务
 
-### 2026-07-31 · Agent 治理整治
+### 2026-07-31 · Agent 治理整治（已完成）
 
 - 目标：执行 `docs/audits/LOCAL_TAG_PLAYER_AGENT_ECOSYSTEM_AUDIT_2026_07_31.md`
   中有证据支持的治理任务，按 P0、P1、P2 完成自动门禁、文档分层、脚本合并和历史归档。
-- 当前阶段：P2 收口；上下文预算、文档分层、QA manifest、runner 合并/退役、实验归档、
-  路径可移植性和 GitHub Action SHA 固定均已完成，正在执行停止编辑后的独立验证。
+- 完成状态：P0、P1、P2 全部完成；上下文预算、文档分层、QA manifest、runner 合并/退役、
+  实验归档、路径可移植性和 GitHub Action SHA 固定均已落地。
 - 保护边界：不修改 SQLite schema、`FilterQuery` / `TagQueryService`、filtered queue、
   PlayerBackend、缓存队列、标签来源语义、用户数据或既有 UI 可达性。
 - 验证模式：Level 3 `independent`；每个阶段停止编辑后执行独立只读复核。
+- 远端证据：提交 `67064fa` 的 Agent 治理门禁 `30607763500` 通过，
+  macOS/Linux adapter、构建与启动门禁 `30607763445` 通过。
 - 已证伪风险：`docs/AGENT_SKILL_INSTALL.md` 与 Apple UI `agents/openai.yaml`
   均可被严格 UTF-8 正确解码；此前乱码是 PowerShell 默认解码造成的显示问题。
 
@@ -42,6 +44,6 @@
 
 ## 下一步
 
-1. 执行架构契约测试、PowerShell 解析、引用完整性、`flutter analyze` 和 Windows debug build。
-2. 对照 Git 历史独立确认归档正文未丢失、业务边界未变化且无未授权文件进入提交。
-3. 更新审计执行证据，提交并推送；确认远端治理 workflow 通过后关闭本任务。
+1. 下一个独立兼容批次按 `docs/qa/dependency_upgrade_gate.md` 评估两个直接依赖 major 升级。
+2. 仓库所有者配置签名证书或 GitHub Support purge 完成后，按已记录门禁继续外部验证。
+3. 新产品任务从 `NEW_CHAT_BOOTSTRAP.md` 重新路由；不得默认读取本轮历史归档。

@@ -726,6 +726,11 @@ validation:
 - `flutter build windows --debug`：成功生成 `local_tag_player.exe`。
 - `flutter pub outdated --no-dev-dependencies`：成功完成，跨 major 项按依赖升级门禁隔离。
 - `git diff --check`：通过；用户已有的五个 generated plugin 文件不进入本次提交。
+- P2 实施提交 `67064fa` 已推送到 `origin/master`；远端 Agent 治理门禁
+  [30607763500](https://github.com/Zero-1412/LocalTagPlayer/actions/runs/30607763500)
+  和 macOS/Linux 桌面验证
+  [30607763445](https://github.com/Zero-1412/LocalTagPlayer/actions/runs/30607763445)
+  均成功。
 
 ```text
 PROJECT_STATUS: HEALTHY
