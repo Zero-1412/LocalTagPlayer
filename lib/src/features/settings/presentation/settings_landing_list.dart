@@ -26,6 +26,7 @@ class SettingsLandingList extends StatelessWidget {
     required this.onOpenFileDeletion,
     required this.onOpenDataBackup,
     required this.onOpenCache,
+    required this.onOpenUpdateProxy,
     required this.onOpenAbout,
   });
 
@@ -61,6 +62,9 @@ class SettingsLandingList extends StatelessWidget {
 
   /** 打开缩略图缓存二级页。 */
   final VoidCallback onOpenCache;
+
+  /** 打开应用更新专用网络代理二级页。 */
+  final VoidCallback onOpenUpdateProxy;
 
   /** 打开关于与更新二级页。 */
   final VoidCallback onOpenAbout;
@@ -143,6 +147,13 @@ class SettingsLandingList extends StatelessWidget {
         const SizedBox(height: 8),
         _SettingsNavigationGroup(
           children: [
+            _SettingsNavigationTile(
+              key: const ValueKey('settings.category.updateProxy'),
+              icon: Icons.lan_outlined,
+              title: '网络代理',
+              subtitle: '为应用更新检查与安装包下载配置 HTTP 代理',
+              onTap: onOpenUpdateProxy,
+            ),
             _SettingsNavigationTile(
               key: const ValueKey('settings.category.about'),
               icon: Icons.info_outline_rounded,

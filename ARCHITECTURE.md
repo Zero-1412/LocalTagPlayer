@@ -3,7 +3,7 @@
 ## 当前基线
 
 ```text
-Architecture Baseline 0.5.126
+Architecture Baseline 0.5.127
 ```
 
 本文件只保存当前有效的模块、数据和平台合同。逐提交演化说明已归档到
@@ -158,6 +158,9 @@ LibraryScanBackend
 
 - Windows/macOS/Linux adapter 实现系统行为；
 - Dart core 不出现盘符、exe、Explorer/Finder 命令或打包目录假设；
+- 应用更新代理由组合根注入 `AppPaths`，独立保存到 `app_update_proxy_settings.json`；
+  仅 `GitHubReleaseUpdateService` 的独立 `HttpClient` 消费该配置，不修改系统代理或媒体链路；
+  设置首页通过独立“网络代理”二级页读写该边界，“关于”页只保留版本与更新操作；
 - 原生依赖必须固定版本/摘要并记录许可；
 - Windows C++ 与 Rust 组件只通过显式 ABI/序列化合同进入 Dart；
 - 平台不可用时返回可诊断失败或安全回退，不伪造能力成功。

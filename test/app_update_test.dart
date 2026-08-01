@@ -6,11 +6,14 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_tag_player/src/core/app_paths.dart';
 import 'package:local_tag_player/src/features/update/data/github_release_update_service.dart';
 import 'package:local_tag_player/src/features/update/domain/app_release.dart';
+import 'package:local_tag_player/src/features/update/domain/app_update_proxy_settings.dart';
 import 'package:local_tag_player/src/features/update/domain/app_update_service.dart';
 import 'package:local_tag_player/src/features/update/presentation/about_settings_page.dart';
 import 'package:local_tag_player/src/features/update/presentation/app_update_prompt.dart';
+import 'package:local_tag_player/src/features/update/presentation/update_proxy_settings_page.dart';
 
 class _FakeUpdateService implements AppUpdateService {
   _FakeUpdateService({
@@ -62,6 +65,19 @@ class _FakeUpdateService implements AppUpdateService {
   }
 }
 
+class _FakeProxyUpdateService extends _FakeUpdateService
+    implements AppUpdateProxySettingsService {
+  AppUpdateProxySettings settings = AppUpdateProxySettings.defaults;
+
+  @override
+  Future<AppUpdateProxySettings> loadProxySettings() async => settings;
+
+  @override
+  Future<void> saveProxySettings(AppUpdateProxySettings settings) async {
+    this.settings = settings;
+  }
+}
+
 AppRelease _release() => AppRelease(
       version: '0.3.0',
       title: 'Local Tag Player 0.3.0',
@@ -103,6 +119,78 @@ void main() {
 
     expect(release.downloadName, 'LocalTagPlayer-0.3.0-windows-x64-setup.exe');
     expect(release.downloadSha256, 'b' * 64);
+  });
+
+  test('应用更新代理只接受无凭据 HTTP host:port', () {
+    expect(normalizeAppUpdateProxyAddress('127.0.0.1:7890'), '127.0.0.1:7890');
+    expect(
+      normalizeAppUpdateProxyAddress('http://localhost:10809/'),
+      'localhost:10809',
+    );
+    expect(
+        normalizeAppUpdateProxyAddress('http://user:pass@host:7890'), isNull);
+    expect(normalizeAppUpdateProxyAddress('https://host:7890'), isNull);
+    expect(normalizeAppUpdateProxyAddress('host'), isNull);
+    expect(
+      appUpdateProxyDirective(
+        const AppUpdateProxySettings(
+          enabled: true,
+          address: '127.0.0.1:7890',
+        ),
+        Uri.https('api.github.com', '/releases/latest'),
+      ),
+      'PROXY 127.0.0.1:7890',
+    );
+    expect(
+      appUpdateProxyDirective(
+        AppUpdateProxySettings.defaults,
+        Uri.https('api.github.com', '/releases/latest'),
+      ),
+      'DIRECT',
+    );
+    final disabledWithCredentials = const AppUpdateProxySettings(
+      enabled: false,
+      address: 'http://user:password@127.0.0.1:7890',
+    ).normalized();
+    expect(disabledWithCredentials.enabled, isFalse);
+    expect(disabledWithCredentials.address, isEmpty);
+    final restoredWithCredentials = AppUpdateProxySettings.fromJson(
+      <String, Object?>{
+        'enabled': false,
+        'address': 'http://user:password@127.0.0.1:7890',
+      },
+    );
+    expect(restoredWithCredentials.enabled, isFalse);
+    expect(restoredWithCredentials.address, isEmpty);
+  });
+
+  test('应用更新代理保存到独立应用私有设置文件', () async {
+    final temporaryDirectory =
+        await Directory.systemTemp.createTemp('ltp-update-proxy-test-');
+    final paths = AppPaths(dataDirectoryOverride: temporaryDirectory);
+    final service = GitHubReleaseUpdateService(paths: paths);
+
+    try {
+      await service.saveProxySettings(
+        const AppUpdateProxySettings(
+          enabled: true,
+          address: 'http://127.0.0.1:7890/',
+        ),
+      );
+      final restored = await GitHubReleaseUpdateService(
+        paths: paths,
+      ).loadProxySettings();
+
+      expect(restored.enabled, isTrue);
+      expect(restored.address, '127.0.0.1:7890');
+      expect(await (await paths.appUpdateProxySettingsFile()).exists(), isTrue);
+      expect(
+        await paths.appUpdateProxySettingsFile(),
+        isNot(await paths.settingsFile()),
+      );
+    } finally {
+      await temporaryDirectory.delete(recursive: true);
+    }
   });
 
   test('安装器 SHA-256 文件校验拒绝不匹配内容', () async {
@@ -155,6 +243,7 @@ void main() {
       await installer.writeAsBytes(payload, flush: true);
       String? launchedPath;
       final service = GitHubReleaseUpdateService(
+        paths: AppPaths(dataDirectoryOverride: temporaryDirectory),
         updateDirectory: temporaryDirectory,
         launchInstaller: (path) async => launchedPath = path,
       );
@@ -234,12 +323,73 @@ void main() {
 
     expect(find.text('版本 0.2.1 (3)'), findsOneWidget);
     expect(find.text('Local Tag Player'), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings.updateProxy')), findsNothing);
     await tester.tap(
       find.byKey(const ValueKey('settings.about.checkUpdate')),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('当前已是最新正式版本'), findsOneWidget);
+  });
+
+  testWidgets('网络代理页保存只作用于更新的 HTTP 代理', (tester) async {
+    final service = _FakeProxyUpdateService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: UpdateProxySettingsPage(proxySettingsService: service),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('settings.updateProxy')), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('settings.updateProxy.enabled')),
+    );
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const ValueKey('settings.updateProxy.address')),
+      'http://127.0.0.1:7890/',
+    );
+    final saveProxy = find.byKey(const ValueKey('settings.updateProxy.save'));
+    await tester.ensureVisible(saveProxy);
+    await tester.pumpAndSettle();
+    await tester.tap(saveProxy);
+    await tester.pumpAndSettle();
+
+    expect(service.settings.enabled, isTrue);
+    expect(service.settings.address, '127.0.0.1:7890');
+    expect(find.textContaining('将用于后续更新检查'), findsOneWidget);
+  });
+
+  testWidgets('网络代理页拒绝保存带账号密码的代理', (tester) async {
+    final service = _FakeProxyUpdateService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: UpdateProxySettingsPage(proxySettingsService: service),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings.updateProxy.enabled')),
+    );
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const ValueKey('settings.updateProxy.address')),
+      'http://user:password@127.0.0.1:7890',
+    );
+    final saveProxy = find.byKey(const ValueKey('settings.updateProxy.save'));
+    await tester.ensureVisible(saveProxy);
+    await tester.pumpAndSettle();
+    await tester.tap(saveProxy);
+    await tester.pumpAndSettle();
+
+    expect(service.settings, AppUpdateProxySettings.defaults);
+    expect(find.textContaining('请输入有效的 HTTP 代理地址'), findsOneWidget);
   });
 
   testWidgets('关于页主动检查失败时提供可重试反馈', (tester) async {
@@ -261,6 +411,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('检查更新失败，请确认网络连接后重试'), findsOneWidget);
+    expect(find.text('检查更新失败，请确认网络或代理设置后重试'), findsOneWidget);
   });
 }

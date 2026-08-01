@@ -390,7 +390,7 @@ void main() {
     expect(shell, contains('class LocalTagPlayerApp'));
     expect(shell, isNot(contains('Platform.')));
     expect(shell, isNot(contains('GitHubReleaseUpdateService')));
-    expect(bootstrap, contains('GitHubReleaseUpdateService()'));
+    expect(bootstrap, contains('GitHubReleaseUpdateService(paths: paths)'));
     expect(bootstrap, contains('createLocalTagPlayerDependencies'));
     expect(File(compatibilityPath).existsSync(), isFalse);
   });
@@ -873,6 +873,7 @@ void main() {
       'settings.category.fileDeletion',
       'settings.category.dataBackup',
       'settings.category.cache',
+      'settings.category.updateProxy',
       'settings.category.about',
       'settings.resumeBehavior.summary',
     ]) {

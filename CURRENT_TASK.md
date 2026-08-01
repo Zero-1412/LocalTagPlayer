@@ -5,20 +5,16 @@
 
 ## 当前任务
 
-### 2026-08-01 · 0.2.5 公共未签名发布（完成）
+### 2026-08-01 · 应用更新专用网络代理（完成）
 
-- 目标：把 v0.2.4 之后已合入 `master` 的播放器和兼容性修复打包并发布到 GitHub。
-- 版本：`0.2.5+7`；新增 `docs/RELEASE_NOTES_0.2.5.md` 作为应用更新弹窗和
-  后续 GitHub Release 的单一正文来源。
-- 发布边界：远程没有 Windows/macOS 签名 secrets；经用户明确授权后，
-  发布未签名/未公证的 `v0.2.5` 公开 Release，发布说明与 macOS 文件名均保留风险标识。
-- 保护边界：不修改 schema、过滤语义、filtered queue、PlayerBackend、缓存队列或用户数据。
-- 验证结果：Level 3 `independent`；Actions [run 30691208487](https://github.com/Zero-1412/LocalTagPlayer/actions/runs/30691208487)
-  的分支集成、全量业务门禁、Windows Release 安装器、macOS Release 启动与公开发布均通过。
-- 公开产物：[Local Tag Player 0.2.5](https://github.com/Zero-1412/LocalTagPlayer/releases/tag/v0.2.5)
-  含 Windows x64 安装器、macOS 未公证 DMG 与两份 SHA256 清单；标签精确指向 `c4e6ca4`。
-- 哈希证据：Windows 安装器为 `9792bd608fec529bce688f74934c9f7b1e01468803e9ad44d09e782e7281d425`；
-  macOS DMG 为 `210544cd13df298a1a47dd1c1eb0fa8e10f6585e64faa65745f6447d690031d3`。
+- 目标：在设置首页增加独立“网络代理”二级页，配置可持久化的 HTTP 代理，
+  加速 GitHub 更新检查和安装包下载；“关于”页不承载代理表单。
+- 作用域：仅 `GitHubReleaseUpdateService` 的独立 `HttpClient`；不修改系统代理、媒体播放、
+  媒体扫描、FFmpeg、schema、过滤语义、filtered queue 或用户媒体数据。
+- 安全边界：只接受无凭据 HTTP `host:port`；拒绝账号密码、路径、查询和非 HTTP 协议。
+- 持久化：组合根注入 `AppPaths`，独立保存到 `app_update_proxy_settings.json`，损坏或缺失时回退直连。
+- 验证：更新/下载/架构 focused tests 72 项、设置入口 widget test 1 项、`flutter analyze`、
+  Windows Debug build 均通过；真实窗口确认独立页面可达、布局完整且“关于”页不再挂载代理表单。
 
 ## 最近完成
 
@@ -32,7 +28,7 @@
 ## 当前稳定基线
 
 - 产品：Tag 驱动的本地视频发现播放器，不以替代 VLC/PotPlayer 或专业播放器为目标。
-- 架构：`Architecture Baseline 0.5.126`。
+- 架构：`Architecture Baseline 0.5.127`。
 - 数据：schema、标签来源、查询语义、filtered queue 与用户维护数据保持稳定。
 - 版本：`0.2.5+7`；依赖：`file_picker 11.0.2`、`package_info_plus 9.0.1`；后者 10.x
   受稳定版 `win32` 约束冲突阻塞。
@@ -51,5 +47,5 @@
    `package_info_plus` 9 → 10；不得使用 beta 或 `dependency_overrides` 绕过。
 2. 如继续精修播放器，使用实体键盘补一次完整的长按验收；应用切换后播放器需先点击
    才重新接收快捷键的问题应作为独立任务调查，不与 seek 语义混改。
-3. 仓库所有者配置签名证书后，为下一版本重跑签名/公证门禁，不静默改写已公开的 `v0.2.5`；
-   GitHub Support purge 完成后另行继续旧 Commit API 的外部验证。
+3. 代理功能完成后，使用本机代理完成一次 GitHub 检查和安装包下载真实验收；
+   仓库签名凭据与 GitHub Support purge 仍按既有独立任务跟进。

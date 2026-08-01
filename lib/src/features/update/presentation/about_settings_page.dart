@@ -68,7 +68,7 @@ class _AboutSettingsPageState extends State<AboutSettingsPage> {
         setState(() {
           _checking = false;
           _statusIsError = true;
-          _status = '检查更新失败，请确认网络连接后重试';
+          _status = '检查更新失败，请确认网络或代理设置后重试';
         });
       }
     }

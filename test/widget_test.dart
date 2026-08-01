@@ -3411,6 +3411,7 @@ void main() {
             onOpenFileDeletion: () => openedSections.add('deletion'),
             onOpenDataBackup: () => openedSections.add('backup'),
             onOpenCache: () => openedSections.add('cache'),
+            onOpenUpdateProxy: () => openedSections.add('updateProxy'),
             onOpenAbout: () => openedSections.add('about'),
           ),
         ),
@@ -3432,7 +3433,7 @@ void main() {
     expect(find.byType(Switch), findsNothing);
     expect(find.byType(Slider), findsNothing);
     expect(find.byType(DropdownButtonFormField<dynamic>), findsNothing);
-    // ListView 只挂载当前视口；第七个“关于”入口会在滚动后创建。
+    // ListView 只挂载当前视口；应用分组入口会在滚动后创建。
     expect(find.byType(AppInteractionSurface), findsNWidgets(6));
 
     for (final entry in <(String, String)>[
@@ -3442,6 +3443,7 @@ void main() {
       ('settings.category.fileDeletion', 'deletion'),
       ('settings.category.dataBackup', 'backup'),
       ('settings.category.cache', 'cache'),
+      ('settings.category.updateProxy', 'updateProxy'),
       ('settings.category.about', 'about'),
     ]) {
       final entryFinder = find.byKey(ValueKey(entry.$1));

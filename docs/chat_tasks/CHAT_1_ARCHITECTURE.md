@@ -9,6 +9,8 @@
 ## 必须保持
 
 - Presentation 不拥有平台命令或持久化；
+- 更新代理只经 `AppPaths` 与更新服务的独立 `HttpClient` 生效，不泄漏到 UI、系统或媒体链路；
+- 代理表单由设置首页的独立“网络代理”二级页承载，不与“关于”页混挂；
 - 扫描器不直接写业务数据库；
 - schema migration 向后兼容、幂等并保留用户数据；
 - Windows 实现不泄漏到 Dart core；

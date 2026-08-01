@@ -7,7 +7,9 @@ import 'package:crypto/crypto.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/app_paths.dart';
 import '../domain/app_release.dart';
+import '../domain/app_update_proxy_settings.dart';
 import '../domain/app_update_service.dart';
 import 'release_asset_downloader.dart';
 
@@ -16,20 +18,29 @@ import 'release_asset_downloader.dart';
  *
  * 请求在首帧后异步执行并设置短超时；失败由调用方静默忽略，不影响离线媒体库启动。
  */
-class GitHubReleaseUpdateService implements AppUpdateService {
+class GitHubReleaseUpdateService
+    implements AppUpdateService, AppUpdateProxySettingsService {
   GitHubReleaseUpdateService({
+    required AppPaths paths,
     HttpClient? httpClient,
     this.repository = 'Zero-1412/LocalTagPlayer',
     Future<void> Function(String path)? launchInstaller,
     Directory? updateDirectory,
-  })  : _httpClient = httpClient ?? HttpClient(),
+  })  : _paths = paths,
+        _httpClient = httpClient ?? HttpClient(),
         _launchInstaller = launchInstaller ?? _launchWindowsInstaller,
         _updateDirectory = updateDirectory {
+    // 更新服务拥有独立 HttpClient；代理不会泄漏到媒体、FFmpeg 或系统全局环境。
+    _httpClient.findProxy =
+        (uri) => appUpdateProxyDirective(_proxySettings, uri);
     _assetDownloader = ReleaseAssetDownloader(httpClient: _httpClient);
   }
 
   /** GitHub `owner/repository` 标识。 */
   final String repository;
+
+  /** 代理配置只通过组合根注入的应用私有路径读写。 */
+  final AppPaths _paths;
 
   /** 独立网络客户端，便于测试且不与媒体探测任务共享连接状态。 */
   final HttpClient _httpClient;
@@ -42,6 +53,47 @@ class GitHubReleaseUpdateService implements AppUpdateService {
 
   /** 测试可替换的下载目录；生产始终使用系统临时更新目录。 */
   final Directory? _updateDirectory;
+
+  AppUpdateProxySettings _proxySettings = AppUpdateProxySettings.defaults;
+  Future<AppUpdateProxySettings>? _proxySettingsLoad;
+
+  @override
+  Future<AppUpdateProxySettings> loadProxySettings() =>
+      _proxySettingsLoad ??= _readProxySettings().then((settings) {
+        _proxySettings = settings;
+        return settings;
+      });
+
+  @override
+  Future<void> saveProxySettings(AppUpdateProxySettings settings) async {
+    final normalized = settings.normalized();
+    final file = await _paths.appUpdateProxySettingsFile();
+    await file.writeAsString(jsonEncode(normalized.toJson()), flush: true);
+    _proxySettings = normalized;
+    _proxySettingsLoad = Future<AppUpdateProxySettings>.value(normalized);
+  }
+
+  /** 损坏或缺失的代理文件只回退直连，不阻塞离线媒体库和更新检查。 */
+  Future<AppUpdateProxySettings> _readProxySettings() async {
+    try {
+      final file = await _paths.appUpdateProxySettingsFile();
+      if (!await file.exists()) {
+        return AppUpdateProxySettings.defaults;
+      }
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is Map<String, dynamic>) {
+        return AppUpdateProxySettings.fromJson(decoded);
+      }
+      if (decoded is Map) {
+        return AppUpdateProxySettings.fromJson(
+          decoded.cast<String, Object?>(),
+        );
+      }
+    } catch (_) {
+      return AppUpdateProxySettings.defaults;
+    }
+    return AppUpdateProxySettings.defaults;
+  }
 
   @override
   Future<AppVersionInfo> currentVersion() async {
@@ -56,6 +108,7 @@ class GitHubReleaseUpdateService implements AppUpdateService {
 
   @override
   Future<AppRelease?> checkForUpdate() async {
+    await loadProxySettings();
     final package = await currentVersion();
     final request = await _httpClient
         .getUrl(
@@ -87,6 +140,7 @@ class GitHubReleaseUpdateService implements AppUpdateService {
     AppRelease release, {
     void Function(AppUpdateDownloadProgress progress)? onProgress,
   }) async {
+    await loadProxySettings();
     if (!Platform.isWindows) {
       throw UnsupportedError('当前平台暂不支持应用内启动安装器');
     }

@@ -15,8 +15,10 @@ import '../../features/settings/presentation/settings_landing_list.dart';
 import '../../features/settings/presentation/settings_workspace_scaffold.dart';
 import '../../models/data_backup_models.dart';
 import '../../services/media/thumbnail_service.dart';
+import '../../features/update/domain/app_update_proxy_settings.dart';
 import '../../features/update/domain/app_update_service.dart';
 import '../../features/update/presentation/about_settings_page.dart';
+import '../../features/update/presentation/update_proxy_settings_page.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -29,6 +31,7 @@ enum CacheSettingsSection {
   fileDeletion,
   dataBackup,
   cache,
+  updateProxy,
   about,
 }
 
@@ -96,7 +99,7 @@ class CacheSettingsWorkspace extends StatelessWidget {
   final DataBackupStatus dataBackupStatus;
   /** 数据备份任务后续状态流。 */
   final Stream<DataBackupStatus> dataBackupStatuses;
-  /** 关于页使用的更新服务边界。 */
+  /** 关于页与更新代理页共享的应用更新服务边界。 */
   final AppUpdateService updateService;
   /** 从设置首页进入指定分区。 */
   final ValueChanged<CacheSettingsSection> onOpenSection;
@@ -137,6 +140,9 @@ class CacheSettingsWorkspace extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isHome = section == CacheSettingsSection.home;
+    final proxySettingsService = updateService is AppUpdateProxySettingsService
+        ? updateService as AppUpdateProxySettingsService
+        : null;
     return SettingsWorkspaceScaffold(
       isHome: isHome,
       title: title,
@@ -162,6 +168,8 @@ class CacheSettingsWorkspace extends StatelessWidget {
               onOpenDataBackup: () =>
                   onOpenSection(CacheSettingsSection.dataBackup),
               onOpenCache: () => onOpenSection(CacheSettingsSection.cache),
+              onOpenUpdateProxy: () =>
+                  onOpenSection(CacheSettingsSection.updateProxy),
               onOpenAbout: () => onOpenSection(CacheSettingsSection.about),
             )
           : ListView(
@@ -239,6 +247,15 @@ class CacheSettingsWorkspace extends StatelessWidget {
                     onRetry: onRefreshCache,
                     onRetryFailures: onRetryFailures,
                     onClearFailures: onClearFailures,
+                  ),
+                if (section == CacheSettingsSection.updateProxy)
+                  SizedBox(
+                    height: MediaQuery.sizeOf(context).height - 120,
+                    child: proxySettingsService == null
+                        ? const Center(child: Text('当前更新服务不支持代理设置'))
+                        : UpdateProxySettingsPage(
+                            proxySettingsService: proxySettingsService,
+                          ),
                   ),
                 if (section == CacheSettingsSection.about)
                   SizedBox(

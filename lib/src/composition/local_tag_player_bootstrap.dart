@@ -146,7 +146,7 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies({
     ),
     playerServiceFactory: _createPlayerService,
     mediaProbeBackendFactory: mediaProbeBackendFactory,
-    updateService: GitHubReleaseUpdateService(),
+    updateService: GitHubReleaseUpdateService(paths: paths),
   );
 }
 

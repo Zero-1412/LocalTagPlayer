@@ -364,6 +364,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
         CacheSettingsSection.fileDeletion => '删除文件',
         CacheSettingsSection.dataBackup => '视频数据备份',
         CacheSettingsSection.cache => '缩略图缓存',
+        CacheSettingsSection.updateProxy => '网络代理',
         CacheSettingsSection.about => '关于',
       };
 
