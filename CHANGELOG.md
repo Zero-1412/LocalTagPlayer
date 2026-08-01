@@ -6,13 +6,13 @@
 
 ## Unreleased
 
-### 0.2.5 验证包
+### 0.2.5 公共未签名发布
 
 - 将应用版本更新为 `0.2.5+7`，增加应用内更新弹窗和安装包共用的用户发布说明。
-- 缺少 Windows/macOS 签名凭据时只生成 GitHub Actions 临时验证产物，不创建或覆盖
-  公开 Release；既有 `v0.2.4` 保持不变。
-- GitHub Actions `30690076415` 通过分支集成、全量业务、双平台 Release 构建与启动门禁，
-  生成 Windows x64 安装器与未公证 macOS DMG 临时产物及各自 SHA256 清单。
+- 远程缺少 Windows/macOS 签名凭据；经用户明确授权，直接发布未签名 Windows 安装器与
+  未公证 macOS DMG，发布说明与 macOS 文件名均保留风险标识。
+- GitHub Actions `30691208487` 通过分支集成、全量业务、双平台 Release 构建与启动门禁，
+  创建 `v0.2.5` 公开 Release，含双平台安装包与各自 SHA256 清单。
 
 ### 播放器交互
 
@@ -59,6 +59,7 @@
 
 ## 发布版本
 
+- [0.2.5](docs/RELEASE_NOTES_0.2.5.md)
 - [0.2.4](docs/RELEASE_NOTES_0.2.4.md)
 - [0.2.3](docs/RELEASE_NOTES_0.2.3.md)
 - [0.2.0](docs/RELEASE_NOTES_0.2.0.md)
