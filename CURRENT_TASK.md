@@ -5,7 +5,7 @@
 
 ## 当前任务
 
-### 2026-08-01 · 0.2.5 桌面安装包验证批次（进行中）
+### 2026-08-01 · 0.2.5 桌面安装包验证批次（完成）
 
 - 目标：把 v0.2.4 之后已合入 `master` 的播放器和兼容性修复打包并推送 GitHub。
 - 版本：`0.2.5+7`；新增 `docs/RELEASE_NOTES_0.2.5.md` 作为应用更新弹窗和
@@ -13,17 +13,21 @@
 - 发布边界：远程没有 Windows/macOS 签名 secrets，本批次只生成 Actions 临时验证产物；
   不创建 `v0.2.5` 标签，不发布未签名公开 Release，不覆盖既有 `v0.2.4`。
 - 保护边界：不修改 schema、过滤语义、filtered queue、PlayerBackend、缓存队列或用户数据。
-- 验证模式：Level 3 `independent`；发布说明、分支集成、Release build、哈希与
-  GitHub Actions 结果均需提供精确证据。
+- 验证结果：Level 3 `independent`；Actions [run 30690076415](https://github.com/Zero-1412/LocalTagPlayer/actions/runs/30690076415)
+  的分支集成、全量业务门禁、Windows Release 安装器与 macOS Release 启动均通过。
+- 临时产物：`LocalTagPlayer-0.2.5-windows-x64`（132,878,257 bytes）与
+  `LocalTagPlayer-0.2.5-macos`（41,609,161 bytes）已上传，含各自 SHA256 清单，保留到 2026-08-31。
+- 替代验证：Actions 已执行产物哈希生成与上传；本机向 GitHub 产物 CDN 二次下载时
+  连接长时间无数据落盘，已终止无限等待，未冒充宣称本地复算云端产物哈希。
 
 ## 最近完成
 
-1. 2026-08-01：对齐 PotPlayer 的方向键长按快进节奏，按住期间只做关键帧预览，
+1. 2026-08-01：完成 `0.2.5+7` 版本、发布说明、本地 Release 门禁与 GitHub 双平台验证包；
+   缺少签名 secrets 时未创建标签或公开未签名 Release。
+2. 2026-08-01：对齐 PotPlayer 的方向键长按快进节奏，按住期间只做关键帧预览，
    松开时精确收敛最终目标一次，并增加累计目标时间反馈。
-2. 2026-07-31：完成 `file_picker` 11.0.2 稳定升级、静态 API 迁移、
+3. 2026-07-31：完成 `file_picker` 11.0.2 稳定升级、静态 API 迁移、
    契约测试和 Windows 原生目录选择真实点击；不使用 beta 或依赖覆盖。
-3. 2026-07-31：建立 37 项 QA 自动化生命周期清单；合并/退役 3 个包装器，
-   归档 3 个历史 runner，并新增脚本、证据路径和绝对盘符门禁。
 
 ## 当前稳定基线
 
@@ -47,4 +51,5 @@
    `package_info_plus` 9 → 10；不得使用 beta 或 `dependency_overrides` 绕过。
 2. 如继续精修播放器，使用实体键盘补一次完整的长按验收；应用切换后播放器需先点击
    才重新接收快捷键的问题应作为独立任务调查，不与 seek 语义混改。
-3. 仓库所有者配置签名证书或 GitHub Support purge 完成后，按已记录门禁继续外部验证。
+3. 仓库所有者配置签名证书后，为 `v0.2.5` 重跑签名/公证门禁并发布正式 GitHub Release；
+   GitHub Support purge 完成后另行继续旧 Commit API 的外部验证。
