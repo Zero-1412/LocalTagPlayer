@@ -39,9 +39,6 @@ class MediaKitPlayerBackend
     milliseconds: 5200,
   );
 
-  /** 先展示关键帧，再给连续输入留下一个节流周期，最后精确收敛到用户目标。 */
-  static const _interactiveSeekConvergenceDelay = Duration(milliseconds: 120);
-
   /**
    * 创建 MediaKit 播放后端。
    *
@@ -162,9 +159,6 @@ class MediaKitPlayerBackend
   /** 后端是否已经进入释放流程。 */
   var _disposed = false;
 
-  /** 每次交互式或精确跳转递增；延迟收敛只允许最后一代写入播放位置。 */
-  var _interactiveSeekGeneration = 0;
-
   /** 串行化重复 dispose 调用，禁止两个释放流程并发进入 media_kit/libmpv。 */
   Future<void>? _disposeFuture;
 
@@ -218,7 +212,6 @@ class MediaKitPlayerBackend
 
   @override
   Future<void> openPath(String path) async {
-    _interactiveSeekGeneration += 1;
     final generation = _telemetry.beginOpen();
     _activeOpenGeneration = generation;
     _videoParametersGeneration = 0;
@@ -255,14 +248,10 @@ class MediaKitPlayerBackend
   Future<void> stop() => _player.stop();
 
   @override
-  Future<void> seek(Duration position) {
-    _interactiveSeekGeneration += 1;
-    return _player.seek(position);
-  }
+  Future<void> seek(Duration position) => _player.seek(position);
 
   @override
   Future<void> seekInteractive(Duration position) async {
-    final generation = ++_interactiveSeekGeneration;
     final nativePlayer = _nativePlayer;
     if (nativePlayer == null || _player.state.completed) {
       // 非原生平台继续使用公共 API；EOF 必须由 media_kit 清除 completed 状态。
@@ -279,27 +268,7 @@ class MediaKitPlayerBackend
         'absolute+keyframes',
       ]),
     );
-    // 关键帧先提供即时视觉反馈；延迟精确跳转只保留最后一代，连续点击不会被旧目标拉回。
-    unawaited(_convergeInteractiveSeek(generation, position));
-  }
-
-  /** 在关键帧已经可见后精确收敛；释放、打开新媒体或新 seek 会取消旧代次。 */
-  Future<void> _convergeInteractiveSeek(
-    int generation,
-    Duration position,
-  ) async {
-    await Future<void>.delayed(_interactiveSeekConvergenceDelay);
-    if (_disposed || generation != _interactiveSeekGeneration) {
-      return;
-    }
-    try {
-      await _player.seek(position);
-    } catch (error) {
-      // 延迟任务不能泄漏未处理异常；仍有效的后端错误沿用安全分类流。
-      if (!_disposed && generation == _interactiveSeekGeneration) {
-        _recordBackendError(error);
-      }
-    }
+    // 精确收敛由页面在单次交互结束或真实 KeyUp 后显式提交，后端不再猜测输入间隔。
   }
 
   @override
@@ -747,7 +716,6 @@ class MediaKitPlayerBackend
   Future<void> _disposeOnce() async {
     if (_released.isCompleted) return;
     _disposed = true;
-    _interactiveSeekGeneration += 1;
     _telemetry.beginRelease();
     final playerDisposeWatch = Stopwatch();
     var nativeReleaseWait = Duration.zero;

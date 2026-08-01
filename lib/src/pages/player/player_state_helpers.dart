@@ -60,7 +60,24 @@ extension PlayerStateHelpers on PlayerPageState {
   }
 
   KeyEventResult handleKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+    if (event is! KeyDownEvent &&
+        event is! KeyRepeatEvent &&
+        event is! KeyUpEvent) {
+      return KeyEventResult.ignored;
+    }
+    final pressedKey = playerShortcutIdFromEvent(event);
+    final shortcuts = effectivePlaybackSettings.shortcuts;
+    bool matches(PlayerShortcutAction action) =>
+        pressedKey != null && shortcuts[action] == pressedKey;
+
+    // 即使按住期间弹窗或焦点状态改变，对应 KeyUp 仍必须结束预览并精确落到最终目标。
+    if (event is KeyUpEvent) {
+      final activeAction = keyboardSeekAction;
+      if (activeAction != null && matches(activeAction)) {
+        keyboardSeekAction = null;
+        settleKeyboardSeek();
+        return KeyEventResult.handled;
+      }
       return KeyEventResult.ignored;
     }
     final primaryFocus = FocusManager.instance.primaryFocus;
@@ -98,10 +115,6 @@ extension PlayerStateHelpers on PlayerPageState {
       unawaited(deleteQueueItem(selectedIndex));
       return KeyEventResult.handled;
     }
-    final pressedKey = playerShortcutIdFromEvent(event);
-    final shortcuts = effectivePlaybackSettings.shortcuts;
-    bool matches(PlayerShortcutAction action) =>
-        pressedKey != null && shortcuts[action] == pressedKey;
     if (matches(PlayerShortcutAction.navigateBack)) {
       if (isWindowFullscreen) {
         unawaited(toggleWindowFullscreen());
@@ -118,25 +131,28 @@ extension PlayerStateHelpers on PlayerPageState {
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekBackward)) {
-      seekRelative(Duration(seconds: -seekStepSeconds));
-      // KeyRepeat 继续执行 seek，但同一次按住只在首次 KeyDown 展示一次左上角反馈。
-      if (playerSeekFeedbackShouldShow(isRepeat: event is KeyRepeatEvent)) {
-        showShortcutFeedback(
-          '后退 $seekStepSeconds 秒',
-          Icons.fast_rewind_rounded,
-        );
+      if (event is KeyDownEvent) {
+        // 新 KeyDown 代表新一轮物理按键；若上一轮遗漏 KeyUp，不能继承旧累计目标。
+        cancelKeyboardSeek();
       }
+      keyboardSeekAction = PlayerShortcutAction.seekBackward;
+      final target = seekRelative(Duration(seconds: -seekStepSeconds));
+      showShortcutFeedback(
+        '后退 $seekStepSeconds 秒 · ${formatDuration(target)}',
+        Icons.fast_rewind_rounded,
+      );
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekForward)) {
-      seekRelative(Duration(seconds: seekStepSeconds));
-      // 与快退一致，重复键事件不重新启动左上角反馈动画。
-      if (playerSeekFeedbackShouldShow(isRepeat: event is KeyRepeatEvent)) {
-        showShortcutFeedback(
-          '前进 $seekStepSeconds 秒',
-          Icons.fast_forward_rounded,
-        );
+      if (event is KeyDownEvent) {
+        cancelKeyboardSeek();
       }
+      keyboardSeekAction = PlayerShortcutAction.seekForward;
+      final target = seekRelative(Duration(seconds: seekStepSeconds));
+      showShortcutFeedback(
+        '前进 $seekStepSeconds 秒 · ${formatDuration(target)}',
+        Icons.fast_forward_rounded,
+      );
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.previous)) {

@@ -6317,8 +6317,6 @@ void main() {
   });
 
   test('player controls hide only outside controls and settings', () {
-    expect(playerSeekFeedbackShouldShow(isRepeat: false), isTrue);
-    expect(playerSeekFeedbackShouldShow(isRepeat: true), isFalse);
     expect(playerFullscreenQueueWidth(800), 320);
     expect(playerFullscreenQueueWidth(2000), 476);
     expect(

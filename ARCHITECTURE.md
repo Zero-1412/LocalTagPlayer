@@ -3,7 +3,7 @@
 ## 当前基线
 
 ```text
-Architecture Baseline 0.5.124
+Architecture Baseline 0.5.125
 ```
 
 本文件只保存当前有效的模块、数据和平台合同。逐提交演化说明已归档到
@@ -124,7 +124,8 @@ source filtered result
 - 正式默认后端仍是 MediaKit Texture；
 - Windows native mpv/child HWND 只允许显式 QA 覆盖，不自动成为生产默认；
 - `PlayerService -> PlayerBackend -> MediaKit / Windows native` 依赖方向固定；
-- 交互式 seek 可先走 keyframe 快速反馈，再仅让最后一代请求精确收敛；
+- 交互式 seek 在按键重复期间只走 keyframe 快速预览，由应用层累计逻辑目标；
+- 物理按键松开时仅对最后目标执行一次精确 seek，平台后端不得用固定计时器自行收敛；
 - 继续观看恢复使用精确 seek，不改变播放/暂停意图；
 - Texture 输出尺寸由稳定档位、去抖、最小间隔、降档滞回和原生确认协调；
 - NVIDIA VSR/HDR、NVOFA、VapourSynth 和本机插件属于能力门禁或长期研究，

@@ -189,9 +189,6 @@ class PlayerOpeningOverlayState extends State<PlayerOpeningOverlay> {
   }
 }
 
-/** 持续按住快进键仍可重复 seek，但居中反馈只在首次按下时展示。 */
-bool playerSeekFeedbackShouldShow({required bool isRepeat}) => !isRepeat;
-
 /** 全屏覆盖队列宽度随窗口有限伸缩，避免窄屏遮挡过多或超宽屏过度扩张。 */
 double playerFullscreenQueueWidth(double windowWidth) =>
     math.min(476.0, math.max(320.0, windowWidth * 0.32));

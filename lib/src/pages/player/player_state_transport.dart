@@ -117,7 +117,17 @@ extension PlayerStateTransport on PlayerPageState {
     if (isExiting) {
       return;
     }
+    // 进度条是单次最终提交；先取消可能遗漏 KeyUp 的键盘会话，再立即预览并精确落点。
+    cancelKeyboardSeek();
+    final latency = Stopwatch()..start();
     await seekCoordinator.request(target);
+    if (isExiting) {
+      return;
+    }
+    await playerService.seek(target);
+    latency.stop();
+    lastSeekLatencyMs = latency.elapsedMilliseconds;
+    lastSeekAt = DateTime.now();
   }
 
   /**
@@ -141,10 +151,21 @@ extension PlayerStateTransport on PlayerPageState {
   }
 
   /**
-   * 相对跳转在 seek 未完成时基于用户最新目标累加，而不是反复读取滞后的后端位置。
+   * 键盘长按期间持续累加逻辑目标，只提交关键帧预览；真实 KeyUp 再精确收敛。
    */
-  void seekRelative(Duration delta) {
-    unawaited(seekCoordinator.requestRelative(delta));
+  Duration seekRelative(Duration delta) {
+    return keyboardSeek.requestRelative(delta);
+  }
+
+  /** KeyUp 后等待最后一个关键帧预览提交完成，再只对最终累计目标做一次精确 seek。 */
+  void settleKeyboardSeek() {
+    unawaited(keyboardSeek.settle());
+  }
+
+  /** 切换媒体、进度条提交或退出时取消旧键盘目标和尚未提交的预览。 */
+  void cancelKeyboardSeek() {
+    keyboardSeekAction = null;
+    keyboardSeek.cancel();
   }
 
   /**

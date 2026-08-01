@@ -17,6 +17,7 @@ extension PlayerStateResources on PlayerPageState {
   void disposePlayerPage() {
     // 路由或测试直接卸载播放器时同样进入退出态，禁止尚未结束的健康采样把释放期停顿误判为 HDR 压力。
     isExiting = true;
+    cancelKeyboardSeek();
     openRequests.cancel();
     interaction.dispose();
     queuePrefetchTimer?.cancel();

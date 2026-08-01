@@ -142,8 +142,8 @@ class PlayerService
   /**
    * 执行用户进度条或连续按键触发的低延迟随机跳转。
    *
-   * 支持交互式边界的后端可先落到目标附近关键帧，再把最后请求精确收敛；其它后端复用精确 seek，
-   * 因而不会为了性能优化扩大通用 [PlayerBackend] 契约或破坏跨平台回退。
+   * 支持交互式边界的后端只落到目标附近关键帧；调用方在交互结束时通过 [seek]
+   * 精确收敛最终目标。其它后端复用精确 seek，不扩大通用 [PlayerBackend] 契约。
    */
   Future<void> seekInteractive(Duration position) {
     final boundary = _backend is PlayerInteractiveSeekBoundary

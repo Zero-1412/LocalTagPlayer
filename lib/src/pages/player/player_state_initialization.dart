@@ -77,8 +77,21 @@ extension PlayerStateInitialization on PlayerPageState {
       rendererPreference: pageWidget.playbackSettings.rendererPreference,
     );
     seekCoordinator = PlayerSeekCoordinator(
-      // 进度条和连续按键使用关键帧优先的交互式跳转；继续观看恢复仍显式走精确 seek。
+      // 进度条和连续按键只提交关键帧预览；单次交互结束或 KeyUp 再显式精确 seek。
       submit: playerService.seekInteractive,
+      readPosition: () => playerService.state.position,
+      readDuration: () => playerService.state.duration,
+      isExiting: () => isExiting,
+      onLatency: (milliseconds) {
+        lastSeekLatencyMs = milliseconds;
+        lastSeekAt = DateTime.now();
+      },
+      // 关键帧可能与逻辑目标相距超过容差；此处只等命令返回，不等待精确位置确认。
+      confirmationTimeout: Duration.zero,
+    );
+    keyboardSeek = PlayerKeyboardSeekController(
+      coordinator: seekCoordinator,
+      settle: playerService.seek,
       readPosition: () => playerService.state.position,
       readDuration: () => playerService.state.duration,
       isExiting: () => isExiting,

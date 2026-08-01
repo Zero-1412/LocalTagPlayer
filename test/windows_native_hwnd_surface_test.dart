@@ -146,6 +146,16 @@ void main() {
         interactiveSeekCall.arguments! as Map<Object?, Object?>;
     expect(interactiveSeekArguments['integer'], 18000);
     await tester.pump(const Duration(milliseconds: 130));
+    expect(
+      calls.where(
+        (call) =>
+            call.method == 'command' &&
+            (call.arguments! as Map<Object?, Object?>)['name'] == 'seek',
+      ),
+      isEmpty,
+      reason: '连续输入期间后端不能用固定 Timer 猜测 KeyUp 并反复精确 seek',
+    );
+    await backend.seek(const Duration(seconds: 18));
     final exactSeekCall = calls.lastWhere(
       (call) =>
           call.method == 'command' &&

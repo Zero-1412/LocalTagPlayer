@@ -284,6 +284,10 @@ class PlayerPageState extends State<PlayerPage> {
   DateTime? routePopRequestedAt;
   /** 首次立即提交、连续输入节流追踪最新目标的页面级 seek 协调器。 */
   late final PlayerSeekCoordinator seekCoordinator;
+  /** 快进/快退物理按键的累计目标、KeyUp 收敛与取消 owner。 */
+  late final PlayerKeyboardSeekController keyboardSeek;
+  /** 当前连续键盘 seek 的动作；只接受对应 KeyUp 结束这一轮。 */
+  PlayerShortcutAction? keyboardSeekAction;
   var isExiting = false;
   /** 恢复选择弹窗期间暂停进度写入，避免刚打开的 0 秒覆盖稳定进度。 */
   var choosingPlaybackStart = false;

@@ -75,4 +75,24 @@ void main() {
     expect(chrome, isNot(contains('class PlayerSeekFeedbackWatermark')));
     expect(page, isNot(contains('shortcutFeedbackIsSeekWatermark')));
   });
+
+  test('长按 seek 由 KeyUp 精确收敛且反馈持续显示累计目标', () {
+    final helpers = File('lib/src/pages/player/player_state_helpers.dart')
+        .readAsStringSync();
+    final transport = File('lib/src/pages/player/player_state_transport.dart')
+        .readAsStringSync();
+    final mediaKit = File(
+      'lib/src/services/player/media_kit_player_backend.dart',
+    ).readAsStringSync();
+    final native = File(
+      'lib/src/services/player/windows_native_player_backend.dart',
+    ).readAsStringSync();
+
+    expect(helpers, contains('event is! KeyUpEvent'));
+    expect(helpers, contains('settleKeyboardSeek();'));
+    expect(helpers, contains(r'${formatDuration(target)}'));
+    expect(transport, contains('keyboardSeek.requestRelative(delta)'));
+    expect(mediaKit, isNot(contains('_interactiveSeekConvergenceDelay')));
+    expect(native, isNot(contains('_interactiveSeekConvergenceDelay')));
+  });
 }

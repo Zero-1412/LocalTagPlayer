@@ -160,3 +160,94 @@ class PlayerSeekCoordinator {
     return target;
   }
 }
+
+/**
+ * 拥有一次物理快进/快退按键的累计目标与 KeyUp 精确收敛。
+ *
+ * 连续 KeyRepeat 只经 [coordinator] 提交廉价关键帧预览；目标始终基于本控制器保存的
+ * 逻辑位置累加，不读取可能落在前后关键帧的后端位置。新会话或取消会使旧 KeyUp 的
+ * 迟到精确 seek 失效。
+ */
+class PlayerKeyboardSeekController {
+  PlayerKeyboardSeekController({
+    required PlayerSeekCoordinator coordinator,
+    required PlayerSeekSubmit settle,
+    required PlayerSeekDurationReader readPosition,
+    required PlayerSeekDurationReader readDuration,
+    required PlayerSeekExitReader isExiting,
+    required PlayerSeekLatencyListener onLatency,
+  })  : _coordinator = coordinator,
+        _settle = settle,
+        _readPosition = readPosition,
+        _readDuration = readDuration,
+        _isExiting = isExiting,
+        _onLatency = onLatency;
+
+  final PlayerSeekCoordinator _coordinator;
+  final PlayerSeekSubmit _settle;
+  final PlayerSeekDurationReader _readPosition;
+  final PlayerSeekDurationReader _readDuration;
+  final PlayerSeekExitReader _isExiting;
+  final PlayerSeekLatencyListener _onLatency;
+
+  Duration? _target;
+  Future<void>? _previewTail;
+  var _generation = 0;
+
+  /** 当前物理按键会话是否尚未收到 KeyUp。 */
+  bool get isActive => _target != null;
+
+  /** 当前会话累计后的最终逻辑目标。 */
+  Duration? get target => _target;
+
+  /** 基于当前会话目标累计 [delta]，并异步提交最新关键帧预览。 */
+  Duration requestRelative(Duration delta) {
+    if (_isExiting()) {
+      return _readPosition();
+    }
+    if (_target == null) {
+      _generation++;
+    }
+    final duration = _readDuration();
+    var next = (_target ?? _readPosition()) + delta;
+    if (next < Duration.zero) {
+      next = Duration.zero;
+    } else if (duration > Duration.zero && next > duration) {
+      next = duration;
+    }
+    _target = next;
+    _previewTail = _coordinator.request(next);
+    unawaited(_previewTail);
+    return next;
+  }
+
+  /** 等待最终预览命令返回，并只对仍有效的本轮目标执行一次精确 seek。 */
+  Future<void> settle() async {
+    final finalTarget = _target;
+    if (finalTarget == null || _isExiting()) {
+      return;
+    }
+    final generation = _generation;
+    final previewTail = _previewTail;
+    _target = null;
+    _previewTail = null;
+    if (previewTail != null) {
+      await previewTail;
+    }
+    if (_isExiting() || generation != _generation || _target != null) {
+      return;
+    }
+    final latency = Stopwatch()..start();
+    await _settle(finalTarget);
+    latency.stop();
+    _onLatency(latency.elapsedMilliseconds);
+  }
+
+  /** 取消当前目标与待提交预览，并使上一轮迟到的精确收敛失效。 */
+  void cancel() {
+    _generation++;
+    _target = null;
+    _previewTail = null;
+    _coordinator.cancelPending();
+  }
+}

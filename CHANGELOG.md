@@ -6,6 +6,13 @@
 
 ## Unreleased
 
+### 播放器交互
+
+- 优化方向键长按快进/快退：按住期间使用关键帧预览并累计目标，松开时只执行一次精确 seek，
+  避免每次按键重复都触发昂贵的精确解码收敛。
+- 快进/快退反馈增加累计目标时间；单次 5 秒步进、进度条最终提交、来源 filtered queue、
+  播放/暂停意图和返回路径保持不变。
+
 ### 依赖兼容
 
 - 将 `file_picker` 从 8.3.7 升至 11.0.2，并把桌面文件选择适配器迁移到
@@ -36,8 +43,9 @@
 
 - SQLite schema、migration 和用户数据库未修改；
 - `FilterQuery` / `TagQueryService` 语义未修改；
-- filtered playback queue、PlayerBackend 和缓存队列未修改；
-- UI、标签来源、用户媒体和可达功能未修改。
+- filtered playback queue 和缓存队列未修改；`PlayerBackend` 方法签名未修改，
+  仅明确交互式 seek 为预览、精确收敛由调用方在交互结束时发起；
+- 除快进/快退目标时间反馈外，UI、标签来源、用户媒体和可达功能未修改。
 
 ## 发布版本
 

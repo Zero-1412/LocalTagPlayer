@@ -29,7 +29,7 @@ extension PlayerStateHealth on PlayerPageState {
       'exit_requested',
       backend: playerService,
     ));
-    seekCoordinator.cancelPending();
+    cancelKeyboardSeek();
     openRequests.cancel();
     detailsService.dispose();
     persistOpenedProgress();

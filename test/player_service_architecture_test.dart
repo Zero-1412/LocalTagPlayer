@@ -201,6 +201,9 @@ void main() {
       ),
     );
     expect(source, contains('submit: playerService.seekInteractive'));
+    expect(source, contains('PlayerKeyboardSeekController('));
+    expect(source, contains('settle: playerService.seek'));
+    expect(source, contains('confirmationTimeout: Duration.zero'));
     expect(source, contains('await seekExactlyWithDiagnostics(start);'));
     expect(source, contains('submit: playerService.seek'));
   });

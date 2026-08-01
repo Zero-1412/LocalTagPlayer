@@ -118,4 +118,94 @@ void main() {
       );
     }
   });
+
+  test('键盘长按只预览累计目标并在 KeyUp 后精确收敛一次', () async {
+    final previews = <Duration>[];
+    final settled = <Duration>[];
+    var position = Duration.zero;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async => previews.add(target),
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      settle: (target) async {
+        settled.add(target);
+        position = target;
+      },
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+    );
+
+    expect(
+      keyboard.requestRelative(const Duration(seconds: 5)),
+      const Duration(seconds: 5),
+    );
+    expect(
+      keyboard.requestRelative(const Duration(seconds: 5)),
+      const Duration(seconds: 10),
+    );
+    expect(
+      keyboard.requestRelative(const Duration(seconds: 5)),
+      const Duration(seconds: 15),
+    );
+    expect(keyboard.target, const Duration(seconds: 15));
+    expect(settled, isEmpty);
+
+    await keyboard.settle();
+
+    expect(
+      previews,
+      const <Duration>[
+        Duration(seconds: 5),
+        Duration(seconds: 15),
+      ],
+    );
+    expect(settled, const <Duration>[Duration(seconds: 15)]);
+    expect(keyboard.isActive, isFalse);
+  });
+
+  test('新会话取消会阻止上一轮迟到 KeyUp 覆盖位置', () async {
+    final firstPreview = Completer<void>();
+    final settled = <Duration>[];
+    var first = true;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (_) async {
+        if (first) {
+          first = false;
+          await firstPreview.future;
+        }
+      },
+      readPosition: () => Duration.zero,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      settle: (target) async => settled.add(target),
+      readPosition: () => Duration.zero,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+    );
+
+    keyboard.requestRelative(const Duration(seconds: 5));
+    final oldKeyUp = keyboard.settle();
+    keyboard.cancel();
+    firstPreview.complete();
+    await oldKeyUp;
+
+    expect(settled, isEmpty);
+    expect(keyboard.target, isNull);
+  });
 }
