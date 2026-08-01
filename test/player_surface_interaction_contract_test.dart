@@ -91,8 +91,23 @@ void main() {
     expect(helpers, contains('event is! KeyUpEvent'));
     expect(helpers, contains('settleKeyboardSeek();'));
     expect(helpers, contains(r'${formatDuration(target)}'));
+    expect(helpers, contains('playerKeyboardSeekRepeatStepSeconds'));
+    expect(helpers, contains('连续快进'));
     expect(transport, contains('keyboardSeek.requestRelative(delta)'));
     expect(mediaKit, isNot(contains('_interactiveSeekConvergenceDelay')));
     expect(native, isNot(contains('_interactiveSeekConvergenceDelay')));
+  });
+
+  test('长按重复步长受限且反馈刷新与预览节奏对齐', () {
+    final coordinator = File(
+      'lib/src/features/player/application/player_seek_coordinator.dart',
+    ).readAsStringSync();
+    final interaction = File(
+      'lib/src/features/player/application/player_interaction_state_controller.dart',
+    ).readAsStringSync();
+
+    expect(coordinator, contains('Duration(milliseconds: 64)'));
+    expect(coordinator, contains('playerKeyboardSeekRepeatStepSeconds'));
+    expect(interaction, contains('minimumPublishInterval'));
   });
 }

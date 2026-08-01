@@ -18,6 +18,19 @@ typedef PlayerSeekLatencyListener = void Function(int milliseconds);
 typedef PlayerSeekDelay = Future<void> Function(Duration duration);
 
 /**
+ * 把配置步长映射为长按重复阶段的小步长。
+ *
+ * 短按继续使用完整配置值；长按最多推进 5 秒，避免一个 64ms 预览窗口合并多个
+ * KeyRepeat 后形成十几秒的画面硬跳。
+ */
+int playerKeyboardSeekRepeatStepSeconds(int configuredSeconds) {
+  final softened = (configuredSeconds * 0.4).round();
+  if (softened < 1) return 1;
+  if (softened > 5) return 5;
+  return softened;
+}
+
+/**
  * 协调播放器页面的连续 seek，保证首次立即提交且后续只追踪最新目标。
  *
  * 相对快进/快退会基于尚未确认的最新目标继续累计。工作器始终串行调用后端，
@@ -25,13 +38,16 @@ typedef PlayerSeekDelay = Future<void> Function(Duration duration);
  * 用户停止输入后，最后一个精确目标仍会被提交。
  */
 class PlayerSeekCoordinator {
+  /** 连续预览约 15fps；高于旧 80ms 节奏但仍给解码器保留合并窗口。 */
+  static const defaultMinimumDispatchInterval = Duration(milliseconds: 64);
+
   PlayerSeekCoordinator({
     required PlayerSeekSubmit submit,
     required PlayerSeekDurationReader readPosition,
     required PlayerSeekDurationReader readDuration,
     required PlayerSeekExitReader isExiting,
     required PlayerSeekLatencyListener onLatency,
-    this.minimumDispatchInterval = const Duration(milliseconds: 80),
+    this.minimumDispatchInterval = defaultMinimumDispatchInterval,
     this.confirmationPollInterval = const Duration(milliseconds: 25),
     this.confirmationTimeout = const Duration(seconds: 2),
     this.confirmationTolerance = const Duration(milliseconds: 750),

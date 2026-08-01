@@ -333,11 +333,16 @@ extension PlayerStateHealth on PlayerPageState {
 
   void showVideoControls() => interaction.showControls();
 
-  /** 显示短时快捷键结果；控制条仍只由底部热区或设置入口唤出。 */
-  void showShortcutFeedback(String label, IconData icon) {
+  /** 显示短时快捷键结果；连续输入可限制页面刷新但不能延迟首次反馈。 */
+  void showShortcutFeedback(
+    String label,
+    IconData icon, {
+    Duration minimumPublishInterval = Duration.zero,
+  }) {
     interaction.showFeedback(
       label: label,
       icon: icon,
+      minimumPublishInterval: minimumPublishInterval,
     );
   }
 

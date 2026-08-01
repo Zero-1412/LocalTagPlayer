@@ -13,7 +13,7 @@ bool playerControlsShouldAutoHide({
 /**
  * 播放器主控制条与短时快捷键反馈的纯 Dart 状态 owner。
  *
- * controller 只拥有两只可取消 Timer 和可序列化状态，不持有 Widget、`BuildContext`、
+ * controller 只拥有三只可取消 Timer 和可序列化状态，不持有 Widget、`BuildContext`、
  * Focus、Overlay、Route 或播放器资源。图标使用泛型，由 presentation 注入具体类型。
  */
 class PlayerInteractionStateController<TIcon> {
@@ -36,6 +36,12 @@ class PlayerInteractionStateController<TIcon> {
 
   /** 快捷键反馈自动隐藏 Timer。 */
   Timer? _feedbackHideTimer;
+
+  /** 高频反馈只保留一个待发布 Timer，避免每个 KeyRepeat 都重建播放器页面。 */
+  Timer? _feedbackPublishTimer;
+
+  /** 记录上次真实发布反馈的间隔，连续输入按预算合并到最新文案。 */
+  Stopwatch? _feedbackSincePublish;
 
   /** dispose 后拒绝 Timer 和页面回调。 */
   var _disposed = false;
@@ -126,31 +132,65 @@ class PlayerInteractionStateController<TIcon> {
     showControls(hideAfter: hideAfter);
   }
 
-  /** 显示一次短时快捷键反馈；更新反馈会覆盖旧 Timer。 */
+  /**
+   * 显示一次短时快捷键反馈；更新反馈会覆盖旧隐藏 Timer。
+   *
+   * [minimumPublishInterval] 只限制已经可见时的页面刷新，字段始终立即保存最新值；
+   * 首次反馈和普通离散动作仍立即发布。
+   */
   void showFeedback({
     required String label,
     required TIcon icon,
     Duration visibleFor = const Duration(milliseconds: 850),
+    Duration minimumPublishInterval = Duration.zero,
   }) {
     if (_disposed) return;
     _feedbackHideTimer?.cancel();
+    final wasVisible = feedbackVisible;
     feedbackLabel = label;
     feedbackIcon = icon;
     feedbackVisible = true;
-    _publish();
+    final sincePublish = _feedbackSincePublish?.elapsed;
+    final publishImmediately = !wasVisible ||
+        minimumPublishInterval == Duration.zero ||
+        sincePublish == null ||
+        sincePublish >= minimumPublishInterval;
+    if (publishImmediately) {
+      _feedbackPublishTimer?.cancel();
+      _feedbackPublishTimer = null;
+      _publishFeedback();
+    } else {
+      _feedbackPublishTimer ??= Timer(
+        minimumPublishInterval - sincePublish,
+        () {
+          _feedbackPublishTimer = null;
+          if (_disposed || !feedbackVisible) return;
+          _publishFeedback();
+        },
+      );
+    }
     _feedbackHideTimer = Timer(visibleFor, () {
       if (_disposed || !feedbackVisible) return;
+      _feedbackPublishTimer?.cancel();
+      _feedbackPublishTimer = null;
       feedbackVisible = false;
       _publish();
     });
   }
 
-  /** 释放两类短时 UI Timer；重复调用保持幂等。 */
+  /** 释放控制条隐藏、反馈隐藏和反馈合并 Timer；重复调用保持幂等。 */
   void dispose() {
     if (_disposed) return;
     _disposed = true;
     _controlsHideTimer?.cancel();
     _feedbackHideTimer?.cancel();
+    _feedbackPublishTimer?.cancel();
+  }
+
+  /** 发布最新反馈快照，并从真实刷新时刻重新计算高频合并窗口。 */
+  void _publishFeedback() {
+    _feedbackSincePublish = Stopwatch()..start();
+    _publish();
   }
 
   /** 仅在有效生命周期内发布状态变化。 */

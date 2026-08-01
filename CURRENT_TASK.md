@@ -10,12 +10,12 @@
 - 目标：用同一视频对比 PotPlayer 与本项目的方向键长按快进，修复重复按键期间
   反复触发精确 seek 导致的迟滞感。
 - 实现：KeyRepeat 只提交关键帧预览并累计逻辑目标，KeyUp 对最终目标精确收敛一次；
-  快进/快退反馈同步显示累计目标时间。
+  连续阶段使用受限小步长和约 64ms 预览/反馈预算，避免十几秒画面硬跳及高频整页重建。
 - 保护边界：单次 5 秒精确步进、进度条最终提交、播放/暂停意图、filtered queue、
   current index、返回路径、schema、过滤语义、缓存队列和用户数据保持不变。
 - 验证模式：Level 3 `independent`；停止编辑后执行独立只读复核。
-- 本地证据：focused tests 通过，analyze 零问题，Windows Debug build 成功；
-  构建产物打开同一视频后目标反馈为 `前进 5 秒 · 00:29`，来源队列保持
+- 本地证据：focused tests 24 项通过，analyze 零问题，Windows Debug build 成功；
+  构建产物打开同一视频后短按反馈保持 `前进 5 秒 · 目标时间`，来源队列保持
   `2 / 11248`，返回媒体库正常。电脑控制接口不支持原始长按，KeyRepeat/KeyUp
   交互边界由确定性测试覆盖。
 
@@ -31,7 +31,7 @@
 ## 当前稳定基线
 
 - 产品：Tag 驱动的本地视频发现播放器，不以替代 VLC/PotPlayer 或专业播放器为目标。
-- 架构：`Architecture Baseline 0.5.125`。
+- 架构：`Architecture Baseline 0.5.126`。
 - 数据：schema、标签来源、查询语义、filtered queue 与用户维护数据保持稳定。
 - 依赖：`file_picker 11.0.2`、`package_info_plus 9.0.1`；后者 10.x
   受稳定版 `win32` 约束冲突阻塞。

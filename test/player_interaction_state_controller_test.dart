@@ -79,7 +79,42 @@ void main() {
     expect(controller.feedbackVisible, isFalse);
   });
 
-  testWidgets('dispose 取消两类 Timer 并拒绝后续发布', (tester) async {
+  testWidgets('连续反馈按刷新预算合并并发布最新目标', (tester) async {
+    var changes = 0;
+    final controller = PlayerInteractionStateController<String>(
+      initialFeedbackIcon: 'idle',
+      onChanged: () => changes++,
+    );
+    addTearDown(controller.dispose);
+
+    controller.showFeedback(
+      label: '前进 5 秒 · 00:05',
+      icon: 'forward',
+      minimumPublishInterval: const Duration(milliseconds: 64),
+    );
+    controller.showFeedback(
+      label: '连续快进 · 00:07',
+      icon: 'forward',
+      minimumPublishInterval: const Duration(milliseconds: 64),
+    );
+    controller.showFeedback(
+      label: '连续快进 · 00:09',
+      icon: 'forward',
+      minimumPublishInterval: const Duration(milliseconds: 64),
+    );
+
+    expect(changes, 1);
+    expect(controller.feedbackLabel, '连续快进 · 00:09');
+    await tester.pump(const Duration(milliseconds: 63));
+    expect(changes, 1);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(changes, 2);
+    expect(controller.feedbackLabel, '连续快进 · 00:09');
+    await tester.pump(const Duration(milliseconds: 786));
+    expect(controller.feedbackVisible, isFalse);
+  });
+
+  testWidgets('dispose 取消控制、隐藏和连续反馈 Timer 并拒绝后续发布', (tester) async {
     var changes = 0;
     final controller = PlayerInteractionStateController<String>(
       initialFeedbackIcon: 'idle',
@@ -91,13 +126,19 @@ void main() {
       icon: 'play',
       visibleFor: const Duration(milliseconds: 10),
     );
+    controller.showFeedback(
+      label: '连续快进 · 00:09',
+      icon: 'forward',
+      minimumPublishInterval: const Duration(milliseconds: 64),
+    );
     final changesBeforeDispose = changes;
+    final labelBeforeDispose = controller.feedbackLabel;
 
     controller.dispose();
     controller.showFeedback(label: '迟到事件', icon: 'late');
     await tester.pump(const Duration(milliseconds: 20));
 
     expect(changes, changesBeforeDispose);
-    expect(controller.feedbackLabel, '播放');
+    expect(controller.feedbackLabel, labelBeforeDispose);
   });
 }

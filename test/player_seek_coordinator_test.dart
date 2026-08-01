@@ -4,6 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/features/player/application/player_seek_coordinator.dart';
 
 void main() {
+  test('长按重复步长低档保持细腻且高档限制为 5 秒', () {
+    expect(playerKeyboardSeekRepeatStepSeconds(1), 1);
+    expect(playerKeyboardSeekRepeatStepSeconds(5), 2);
+    expect(playerKeyboardSeekRepeatStepSeconds(10), 4);
+    expect(playerKeyboardSeekRepeatStepSeconds(30), 5);
+    expect(
+      PlayerSeekCoordinator.defaultMinimumDispatchInterval,
+      const Duration(milliseconds: 64),
+    );
+  });
+
   test('连续 seek 首次立即提交并按节流周期追踪最新累计目标', () async {
     final firstSubmission = Completer<void>();
     final submitted = <Duration>[];

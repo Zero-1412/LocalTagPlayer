@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/playback_settings.dart';
+import '../../features/player/application/player_seek_coordinator.dart';
 import '../../models/video_item.dart';
 import '../../widgets/player_shortcut_input.dart';
 import 'player_page.dart';
@@ -131,27 +132,45 @@ extension PlayerStateHelpers on PlayerPageState {
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekBackward)) {
+      final isRepeat = event is KeyRepeatEvent;
       if (event is KeyDownEvent) {
         // 新 KeyDown 代表新一轮物理按键；若上一轮遗漏 KeyUp，不能继承旧累计目标。
         cancelKeyboardSeek();
       }
       keyboardSeekAction = PlayerShortcutAction.seekBackward;
-      final target = seekRelative(Duration(seconds: -seekStepSeconds));
+      final stepSeconds = isRepeat
+          ? playerKeyboardSeekRepeatStepSeconds(seekStepSeconds)
+          : seekStepSeconds;
+      final target = seekRelative(Duration(seconds: -stepSeconds));
       showShortcutFeedback(
-        '后退 $seekStepSeconds 秒 · ${formatDuration(target)}',
+        isRepeat
+            ? '连续快退 · ${formatDuration(target)}'
+            : '后退 $seekStepSeconds 秒 · ${formatDuration(target)}',
         Icons.fast_rewind_rounded,
+        minimumPublishInterval: isRepeat
+            ? PlayerSeekCoordinator.defaultMinimumDispatchInterval
+            : Duration.zero,
       );
       return KeyEventResult.handled;
     }
     if (matches(PlayerShortcutAction.seekForward)) {
+      final isRepeat = event is KeyRepeatEvent;
       if (event is KeyDownEvent) {
         cancelKeyboardSeek();
       }
       keyboardSeekAction = PlayerShortcutAction.seekForward;
-      final target = seekRelative(Duration(seconds: seekStepSeconds));
+      final stepSeconds = isRepeat
+          ? playerKeyboardSeekRepeatStepSeconds(seekStepSeconds)
+          : seekStepSeconds;
+      final target = seekRelative(Duration(seconds: stepSeconds));
       showShortcutFeedback(
-        '前进 $seekStepSeconds 秒 · ${formatDuration(target)}',
+        isRepeat
+            ? '连续快进 · ${formatDuration(target)}'
+            : '前进 $seekStepSeconds 秒 · ${formatDuration(target)}',
         Icons.fast_forward_rounded,
+        minimumPublishInterval: isRepeat
+            ? PlayerSeekCoordinator.defaultMinimumDispatchInterval
+            : Duration.zero,
       );
       return KeyEventResult.handled;
     }
