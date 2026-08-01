@@ -5,19 +5,16 @@
 
 ## 当前任务
 
-### 2026-08-01 · 对齐 PotPlayer 的长按快进节奏（本地验证完成）
+### 2026-08-01 · 0.2.5 桌面安装包验证批次（进行中）
 
-- 目标：用同一视频对比 PotPlayer 与本项目的方向键长按快进，修复重复按键期间
-  反复触发精确 seek 导致的迟滞感。
-- 实现：KeyRepeat 只提交关键帧预览并累计逻辑目标，KeyUp 对最终目标精确收敛一次；
-  连续阶段使用受限小步长和约 64ms 预览/反馈预算，避免十几秒画面硬跳及高频整页重建。
-- 保护边界：单次 5 秒精确步进、进度条最终提交、播放/暂停意图、filtered queue、
-  current index、返回路径、schema、过滤语义、缓存队列和用户数据保持不变。
-- 验证模式：Level 3 `independent`；停止编辑后执行独立只读复核。
-- 本地证据：focused tests 24 项通过，analyze 零问题，Windows Debug build 成功；
-  构建产物打开同一视频后短按反馈保持 `前进 5 秒 · 目标时间`，来源队列保持
-  `2 / 11248`，返回媒体库正常。电脑控制接口不支持原始长按，KeyRepeat/KeyUp
-  交互边界由确定性测试覆盖。
+- 目标：把 v0.2.4 之后已合入 `master` 的播放器和兼容性修复打包并推送 GitHub。
+- 版本：`0.2.5+7`；新增 `docs/RELEASE_NOTES_0.2.5.md` 作为应用更新弹窗和
+  后续 GitHub Release 的单一正文来源。
+- 发布边界：远程没有 Windows/macOS 签名 secrets，本批次只生成 Actions 临时验证产物；
+  不创建 `v0.2.5` 标签，不发布未签名公开 Release，不覆盖既有 `v0.2.4`。
+- 保护边界：不修改 schema、过滤语义、filtered queue、PlayerBackend、缓存队列或用户数据。
+- 验证模式：Level 3 `independent`；发布说明、分支集成、Release build、哈希与
+  GitHub Actions 结果均需提供精确证据。
 
 ## 最近完成
 
@@ -33,7 +30,7 @@
 - 产品：Tag 驱动的本地视频发现播放器，不以替代 VLC/PotPlayer 或专业播放器为目标。
 - 架构：`Architecture Baseline 0.5.126`。
 - 数据：schema、标签来源、查询语义、filtered queue 与用户维护数据保持稳定。
-- 依赖：`file_picker 11.0.2`、`package_info_plus 9.0.1`；后者 10.x
+- 版本：`0.2.5+7`；依赖：`file_picker 11.0.2`、`package_info_plus 9.0.1`；后者 10.x
   受稳定版 `win32` 约束冲突阻塞。
 - 最近业务验证：486 项测试通过、3 项 benchmark 按设计跳过；
   `flutter analyze`、Windows Debug build 和交互式 seek 真实后端门禁通过。
