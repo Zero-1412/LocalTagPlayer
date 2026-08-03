@@ -69,6 +69,12 @@ void main() {
       const Duration(seconds: 30),
       operation: '真实媒体首帧与时长',
     );
+    final playbackGate = PlayerSeekPlaybackGate(
+      readPlaying: () => backend.state.playing,
+      pause: backend.pause,
+      play: backend.play,
+      isExiting: () => false,
+    );
 
     final duration = backend.state.duration;
     // 先完成两次不计分的预热，避免把打开后首个随机访问当成稳态交互延迟。
@@ -76,6 +82,7 @@ void main() {
       await _seekAndConfirm(
         tester,
         backend,
+        playbackGate,
         _fractionOf(duration, fraction),
       );
     }
@@ -85,12 +92,13 @@ void main() {
       final elapsed = await _seekAndConfirm(
         tester,
         backend,
+        playbackGate,
         _fractionOf(duration, fraction),
       );
       samples.add(elapsed);
     }
 
-    await _verifyShortAndLongKeyboardPaths(tester, backend);
+    await _verifyShortAndLongKeyboardPaths(tester, backend, playbackGate);
     final sorted = List<int>.of(samples)..sort();
     final p50 = sorted[sorted.length ~/ 2];
     final p95 = sorted[((sorted.length - 1) * 0.95).round()];
@@ -127,6 +135,7 @@ void main() {
 Future<void> _verifyShortAndLongKeyboardPaths(
   WidgetTester tester,
   MediaKitPlayerBackend backend,
+  PlayerSeekPlaybackGate playbackGate,
 ) async {
   final previews = <Duration>[];
   final exacts = <Duration>[];
@@ -146,11 +155,13 @@ Future<void> _verifyShortAndLongKeyboardPaths(
     settle: (target) async {
       exacts.add(target);
       await backend.seek(target);
+      await _waitForPosition(tester, backend, target);
     },
     readPosition: () => backend.state.position,
     readDuration: () => backend.state.duration,
     isExiting: () => false,
     onLatency: (_) {},
+    previewPlaybackGate: playbackGate,
   );
 
   final shortTarget = keyboard.requestRelative(
@@ -178,11 +189,15 @@ Future<void> _verifyShortAndLongKeyboardPaths(
 Future<int> _seekAndConfirm(
   WidgetTester tester,
   MediaKitPlayerBackend backend,
+  PlayerSeekPlaybackGate playbackGate,
   Duration target,
 ) async {
   final stopwatch = Stopwatch()..start();
-  await backend.seek(target);
-  await _waitForPosition(tester, backend, target);
+  // 矩阵测量走与页面相同的暂停会话：不允许旧音频或未落稳帧先于最终位置恢复。
+  await playbackGate.run(() async {
+    await backend.seek(target);
+    await _waitForPosition(tester, backend, target);
+  });
   stopwatch.stop();
   return stopwatch.elapsedMilliseconds;
 }

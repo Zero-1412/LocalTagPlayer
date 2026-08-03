@@ -120,7 +120,8 @@ extension PlayerStateTransport on PlayerPageState {
     // 进度条只在手势结束后提交一次精确落点，不能先预览再精确 seek；
     // 否则同一次拖动会在后端形成双跳转，并放大长 GOP 的可感知卡顿。
     cancelKeyboardSeek();
-    await seekExactlyWithDiagnostics(target);
+    // 精确 seek 从前一关键帧解码时不允许旧声音先恢复；位置确认后再按原播放意图继续。
+    await seekPlaybackGate.run(() => seekExactlyWithDiagnostics(target));
   }
 
   /**
@@ -155,7 +156,13 @@ extension PlayerStateTransport on PlayerPageState {
 
   /** KeyUp 后等待最后一个关键帧预览提交完成，再只对最终累计目标做一次精确 seek。 */
   void settleKeyboardSeek() {
-    unawaited(keyboardSeek.settle());
+    if (keyboardSeek.hasInteractivePreview) {
+      // 长按在第一个 KeyRepeat 已经打开了同一个暂停会话，由控制器在精确落点后关闭。
+      unawaited(keyboardSeek.settle());
+      return;
+    }
+    // 短按没有预览会话，仍要保证精确落点稳定后才恢复声音。
+    unawaited(seekPlaybackGate.run(keyboardSeek.settle));
   }
 
   /** 切换媒体、进度条提交或退出时取消旧键盘目标和尚未提交的预览。 */

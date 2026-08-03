@@ -96,6 +96,8 @@ void main() {
     expect(transport, contains('keyboardSeek.requestRelative('));
     expect(transport, contains('submitPreview: submitPreview'));
     expect(helpers, contains('submitPreview: isRepeat'));
+    expect(transport, contains('seekPlaybackGate.run'));
+    expect(transport, contains('keyboardSeek.hasInteractivePreview'));
     expect(mediaKit, isNot(contains('_interactiveSeekConvergenceDelay')));
     expect(native, isNot(contains('_interactiveSeekConvergenceDelay')));
   });

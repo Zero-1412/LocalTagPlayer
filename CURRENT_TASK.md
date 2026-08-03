@@ -5,6 +5,13 @@
 
 ## 当前任务
 
+### 2026-08-03 · 修复 seek 音频预览与落点恢复（完成）
+
+- 目标：长按快进/快退的关键帧预览期间停止音频输出；松开后只在最终精确 seek 的位置反馈确认后，按用户原本的播放/暂停意图恢复。
+- 作用域：`PlayerKeyboardSeekController`、进度条提交和 `MediaKit Texture` 会话控制；不修改 `PlayerBackend` 接口、数据库、筛选语义、来源 filtered queue、缓存队列或用户媒体。
+- 方案：不改全局 mpv audio buffer 或 A/V sync；将 pause → keyframe preview/precise seek → play 串行为一个会话门，减少尾端旧预览帧与精确落点竞争造成的可见卡顿。
+- 验证：新增播放态、暂停态、长按预览的会话顺序契约；`flutter analyze`、seek 契约、页面契约、完整 widget 测试与 Windows Debug build 均通过。真实窗口已打开 1080p 媒体并完成右方向键单次 seek；由于本仓库不保存 12-case 私有样本 manifest 且电脑自动化不支持 KeyDown/KeyUp 按住，完整矩阵需在持有样本 manifest 的环境重跑，脚本已改为通过同一会话门测量。
+
 ### 2026-08-03 · 修复播放器单次 seek 与真实延迟门禁（完成）
 
 - 目标：消除进度条释放和方向键短按各自可能产生的预览加精确 seek 双跳转，避免长 GOP

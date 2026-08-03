@@ -294,4 +294,75 @@ void main() {
     expect(settled, isEmpty);
     expect(keyboard.target, isNull);
   });
+  test('播放中精确 seek 在落点完成后才恢复音频', () async {
+    final commands = <String>[];
+    final gate = PlayerSeekPlaybackGate(
+      readPlaying: () => true,
+      pause: () async => commands.add('pause'),
+      play: () async => commands.add('play'),
+      isExiting: () => false,
+    );
+
+    await gate.run<void>(() async => commands.add('seek-confirmed'));
+
+    expect(commands, <String>['pause', 'seek-confirmed', 'play']);
+    expect(gate.isActive, isFalse);
+  });
+
+  test('用户原本暂停时 seek 不得静默自动播放', () async {
+    final commands = <String>[];
+    final gate = PlayerSeekPlaybackGate(
+      readPlaying: () => false,
+      pause: () async => commands.add('pause'),
+      play: () async => commands.add('play'),
+      isExiting: () => false,
+    );
+
+    await gate.run<void>(() async => commands.add('seek-confirmed'));
+
+    expect(commands, <String>['seek-confirmed']);
+  });
+
+  test('键盘长按在暂停确认后预览，精确落点后再恢复声音', () async {
+    final commands = <String>[];
+    var position = Duration.zero;
+    final gate = PlayerSeekPlaybackGate(
+      readPlaying: () => true,
+      pause: () async => commands.add('pause'),
+      play: () async => commands.add('play'),
+      isExiting: () => false,
+    );
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async {
+        commands.add('preview:${target.inSeconds}');
+        position = target;
+      },
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      settle: (target) async {
+        commands.add('exact:${target.inSeconds}');
+        position = target;
+      },
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      previewPlaybackGate: gate,
+    );
+
+    keyboard.requestRelative(const Duration(seconds: 5));
+    await keyboard.settle();
+
+    expect(
+      commands,
+      <String>['pause', 'preview:5', 'exact:5', 'play'],
+    );
+  });
 }

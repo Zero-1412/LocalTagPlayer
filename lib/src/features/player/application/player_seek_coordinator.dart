@@ -14,6 +14,12 @@ typedef PlayerSeekExitReader = bool Function();
 /** 发布一次已完成 seek 的端到端耗时。 */
 typedef PlayerSeekLatencyListener = void Function(int milliseconds);
 
+/** 读取当前媒体是否处于用户主动播放态。*/
+typedef PlayerPlaybackIntentReader = bool Function();
+
+/** 在不改变用户播放意图的前提下执行一次传输命令。*/
+typedef PlayerPlaybackCommand = Future<void> Function();
+
 /** 等待节流或位置确认轮询；测试可注入即时等待以保持确定性。 */
 typedef PlayerSeekDelay = Future<void> Function(Duration duration);
 
@@ -184,6 +190,81 @@ class PlayerSeekCoordinator {
  * 逻辑位置累加，不读取可能落在前后关键帧的后端位置。新会话或取消会使旧 KeyUp 的
  * 迟到精确 seek 失效。
  */
+/**
+ * 在交互式或精确 seek 的解码窗口暂停播放，并在位置确认后恢复原本的播放意图。
+ *
+ * 它不修改用户音量、倍速或全局 mpv 音画同步配置：仅使快进预览期间不输出音频，防止旧关键帧
+ * 的声音和最终落点混在一起。命令尾链保证旧会话的恢复与新会话的暂停按顺序下发。
+ */
+class PlayerSeekPlaybackGate {
+  PlayerSeekPlaybackGate({
+    required PlayerPlaybackIntentReader readPlaying,
+    required PlayerPlaybackCommand pause,
+    required PlayerPlaybackCommand play,
+    required PlayerSeekExitReader isExiting,
+  })  : _readPlaying = readPlaying,
+        _pause = pause,
+        _play = play,
+        _isExiting = isExiting;
+
+  final PlayerPlaybackIntentReader _readPlaying;
+  final PlayerPlaybackCommand _pause;
+  final PlayerPlaybackCommand _play;
+  final PlayerSeekExitReader _isExiting;
+
+  Future<void> _tail = Future<void>.value();
+  Future<void>? _prepared;
+  var _active = false;
+  var _resumeAfterSeek = false;
+
+  /** 是否已经占用一个 seek 的音频暂停窗口。*/
+  bool get isActive => _active;
+
+  /** 在第一个预览命令前暂停音频，并返回可供后续 seek 等待的屏障。*/
+  Future<void> begin() {
+    if (_active) {
+      return _prepared ?? _tail;
+    }
+    _active = true;
+    _resumeAfterSeek = !_isExiting() && _readPlaying();
+    if (!_resumeAfterSeek) {
+      return _prepared = _tail;
+    }
+    return _prepared = _enqueue(_pause);
+  }
+
+  /** 对单次精确 seek 保证“暂停 -> 落点确认 -> 恢复”的顺序。*/
+  Future<T> run<T>(Future<T> Function() operation) async {
+    try {
+      await begin();
+      return await operation();
+    } finally {
+      await finish();
+    }
+  }
+
+  /** 只在进入窗口前本来处于播放态时恢复；用户原本暂停的媒体保持暂停。*/
+  Future<void> finish() {
+    if (!_active) {
+      return _tail;
+    }
+    _active = false;
+    final shouldResume = _resumeAfterSeek;
+    _resumeAfterSeek = false;
+    _prepared = null;
+    if (!shouldResume || _isExiting()) {
+      return _tail;
+    }
+    return _enqueue(_play);
+  }
+
+  /** 以可恢复的串行尾链下发后端命令，单次失败不会永久堵塞之后的用户交互。*/
+  Future<void> _enqueue(PlayerPlaybackCommand command) {
+    _tail = _tail.catchError((_) {}).then((_) => command());
+    return _tail;
+  }
+}
+
 class PlayerKeyboardSeekController {
   PlayerKeyboardSeekController({
     required PlayerSeekCoordinator coordinator,
@@ -192,6 +273,7 @@ class PlayerKeyboardSeekController {
     required PlayerSeekDurationReader readDuration,
     required PlayerSeekExitReader isExiting,
     required PlayerSeekLatencyListener onLatency,
+    this.previewPlaybackGate,
   })  : _coordinator = coordinator,
         _settle = settle,
         _readPosition = readPosition,
@@ -205,6 +287,8 @@ class PlayerKeyboardSeekController {
   final PlayerSeekDurationReader _readDuration;
   final PlayerSeekExitReader _isExiting;
   final PlayerSeekLatencyListener _onLatency;
+  /** 仅长按进入关键帧预览时占用，短按不会触发。*/
+  final PlayerSeekPlaybackGate? previewPlaybackGate;
 
   Duration? _target;
   Future<void>? _previewTail;
@@ -215,6 +299,9 @@ class PlayerKeyboardSeekController {
 
   /** 当前会话累计后的最终逻辑目标。 */
   Duration? get target => _target;
+
+  /** 是否已经进入长按的关键帧预览路径。*/
+  bool get hasInteractivePreview => _previewTail != null;
 
   /**
    * 基于当前会话目标累计 [delta]，并按需异步提交最新关键帧预览。
@@ -241,7 +328,15 @@ class PlayerKeyboardSeekController {
     }
     _target = next;
     if (submitPreview) {
-      _previewTail = _coordinator.request(next);
+      final generation = _generation;
+      final prepared = previewPlaybackGate?.begin() ?? Future<void>.value();
+      _previewTail = prepared.then<void>((_) async {
+        // 暂停确认后才允许关键帧预览；被取消的旧会话不得越过此屏障发送滞后 seek。
+        if (_isExiting() || generation != _generation) {
+          return;
+        }
+        await _coordinator.request(next);
+      });
       unawaited(_previewTail);
     }
     return next;
@@ -255,18 +350,26 @@ class PlayerKeyboardSeekController {
     }
     final generation = _generation;
     final previewTail = _previewTail;
+    final shouldFinishPreview = previewPlaybackGate?.isActive ?? false;
     _target = null;
     _previewTail = null;
-    if (previewTail != null) {
-      await previewTail;
+    try {
+      if (previewTail != null) {
+        await previewTail;
+      }
+      if (_isExiting() || generation != _generation || _target != null) {
+        return;
+      }
+      final latency = Stopwatch()..start();
+      await _settle(finalTarget);
+      latency.stop();
+      _onLatency(latency.elapsedMilliseconds);
+    } finally {
+      // 精确落点已确认或会话已取消后，才按原播放意图恢复音频。
+      if (shouldFinishPreview) {
+        await previewPlaybackGate?.finish();
+      }
     }
-    if (_isExiting() || generation != _generation || _target != null) {
-      return;
-    }
-    final latency = Stopwatch()..start();
-    await _settle(finalTarget);
-    latency.stop();
-    _onLatency(latency.elapsedMilliseconds);
   }
 
   /** 取消当前目标与待提交预览，并使上一轮迟到的精确收敛失效。 */
@@ -275,5 +378,9 @@ class PlayerKeyboardSeekController {
     _target = null;
     _previewTail = null;
     _coordinator.cancelPending();
+    if (previewPlaybackGate?.isActive ?? false) {
+      // cancel 不会中断正在后端执行的寻帧，但仍要在其后恢复这一轮自动暂停。
+      unawaited(previewPlaybackGate!.finish().catchError((_) {}));
+    }
   }
 }

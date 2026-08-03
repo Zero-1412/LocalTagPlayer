@@ -89,9 +89,16 @@ extension PlayerStateInitialization on PlayerPageState {
       // 关键帧可能与逻辑目标相距超过容差；此处只等命令返回，不等待精确位置确认。
       confirmationTimeout: Duration.zero,
     );
+    seekPlaybackGate = PlayerSeekPlaybackGate(
+      readPlaying: () => playerService.state.playing,
+      pause: playerService.pause,
+      play: playerService.play,
+      isExiting: () => isExiting,
+    );
     keyboardSeek = PlayerKeyboardSeekController(
       coordinator: seekCoordinator,
-      settle: playerService.seek,
+      // 精确收敛不只等后端命令返回；还要等位置反馈接近最终目标，再恢复音频播放。
+      settle: seekExactlyWithDiagnostics,
       readPosition: () => playerService.state.position,
       readDuration: () => playerService.state.duration,
       isExiting: () => isExiting,
@@ -99,6 +106,7 @@ extension PlayerStateInitialization on PlayerPageState {
         lastSeekLatencyMs = milliseconds;
         lastSeekAt = DateTime.now();
       },
+      previewPlaybackGate: seekPlaybackGate,
     );
     if (playerService.supportsNativeNvidiaVideoEnhancement) {
       // NVIDIA 实验只允许显式 child HWND QA 后端探测，正式 Texture 路径不付出该开销。
