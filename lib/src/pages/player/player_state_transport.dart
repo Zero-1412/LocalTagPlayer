@@ -117,24 +117,17 @@ extension PlayerStateTransport on PlayerPageState {
     if (isExiting) {
       return;
     }
-    // 进度条是单次最终提交；先取消可能遗漏 KeyUp 的键盘会话，再立即预览并精确落点。
+    // 进度条只在手势结束后提交一次精确落点，不能先预览再精确 seek；
+    // 否则同一次拖动会在后端形成双跳转，并放大长 GOP 的可感知卡顿。
     cancelKeyboardSeek();
-    final latency = Stopwatch()..start();
-    await seekCoordinator.request(target);
-    if (isExiting) {
-      return;
-    }
-    await playerService.seek(target);
-    latency.stop();
-    lastSeekLatencyMs = latency.elapsedMilliseconds;
-    lastSeekAt = DateTime.now();
+    await seekExactlyWithDiagnostics(target);
   }
 
   /**
    * 执行继续观看所需的精确 seek，并保留既有位置确认与延迟诊断语义。
    *
-   * 该协调器只服务单次恢复，不与进度条的关键帧优先工作器共享待提交目标，
-   * 避免恢复播放被随后到达的交互式请求改写。
+   * 该协调器只服务单次精确落点，不与长按的关键帧预览工作器共享待提交目标，
+   * 避免短按或进度条提交被随后到达的交互式请求改写。
    */
   Future<void> seekExactlyWithDiagnostics(Duration target) async {
     final exactCoordinator = PlayerSeekCoordinator(
@@ -151,10 +144,13 @@ extension PlayerStateTransport on PlayerPageState {
   }
 
   /**
-   * 键盘长按期间持续累加逻辑目标，只提交关键帧预览；真实 KeyUp 再精确收敛。
+   * 键盘短按仅累加并在 KeyUp 精确落点一次；确认长按后才提交关键帧预览。
    */
-  Duration seekRelative(Duration delta) {
-    return keyboardSeek.requestRelative(delta);
+  Duration seekRelative(Duration delta, {required bool submitPreview}) {
+    return keyboardSeek.requestRelative(
+      delta,
+      submitPreview: submitPreview,
+    );
   }
 
   /** KeyUp 后等待最后一个关键帧预览提交完成，再只对最终累计目标做一次精确 seek。 */

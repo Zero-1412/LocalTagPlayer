@@ -216,8 +216,16 @@ class PlayerKeyboardSeekController {
   /** 当前会话累计后的最终逻辑目标。 */
   Duration? get target => _target;
 
-  /** 基于当前会话目标累计 [delta]，并异步提交最新关键帧预览。 */
-  Duration requestRelative(Duration delta) {
+  /**
+   * 基于当前会话目标累计 [delta]，并按需异步提交最新关键帧预览。
+   *
+   * 首个物理 KeyDown 传入 `submitPreview: false`，使短按只在 KeyUp 精确落点；
+   * 只有系统产生 KeyRepeat，才表示进入长按并允许交互式预览占用解码器。
+   */
+  Duration requestRelative(
+    Duration delta, {
+    bool submitPreview = true,
+  }) {
     if (_isExiting()) {
       return _readPosition();
     }
@@ -232,8 +240,10 @@ class PlayerKeyboardSeekController {
       next = duration;
     }
     _target = next;
-    _previewTail = _coordinator.request(next);
-    unawaited(_previewTail);
+    if (submitPreview) {
+      _previewTail = _coordinator.request(next);
+      unawaited(_previewTail);
+    }
     return next;
   }
 

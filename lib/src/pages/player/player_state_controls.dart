@@ -121,7 +121,7 @@ extension PlayerStateControls on PlayerPageState {
                                     loadPreview: (target) => widget
                                         .thumbnailService
                                         .previewFrameFor(currentItem, target),
-                                    onChanged: (value) => unawaited(
+                                    onCommitted: (value) => unawaited(
                                       seekWithDiagnostics(
                                         Duration(milliseconds: value.round()),
                                       ),

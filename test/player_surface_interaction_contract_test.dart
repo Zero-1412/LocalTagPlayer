@@ -93,7 +93,9 @@ void main() {
     expect(helpers, contains(r'${formatDuration(target)}'));
     expect(helpers, contains('playerKeyboardSeekRepeatStepSeconds'));
     expect(helpers, contains('连续快进'));
-    expect(transport, contains('keyboardSeek.requestRelative(delta)'));
+    expect(transport, contains('keyboardSeek.requestRelative('));
+    expect(transport, contains('submitPreview: submitPreview'));
+    expect(helpers, contains('submitPreview: isRepeat'));
     expect(mediaKit, isNot(contains('_interactiveSeekConvergenceDelay')));
     expect(native, isNot(contains('_interactiveSeekConvergenceDelay')));
   });

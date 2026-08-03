@@ -19,7 +19,7 @@ class PlayerProgressSlider extends StatefulWidget {
     this.sliderKey,
     required this.value,
     required this.max,
-    required this.onChanged,
+    required this.onCommitted,
     required this.previewIdentity,
     required this.loadPreview,
     this.isFullscreen = false,
@@ -34,8 +34,13 @@ class PlayerProgressSlider extends StatefulWidget {
   /** 视频总时长，当前页面使用毫秒。 */
   final double max;
 
-  /** 拖动后提交真实 seek 的回调。 */
-  final ValueChanged<double> onChanged;
+  /**
+   * 仅在手势结束时提交最终 seek 目标。
+   *
+   * 内部 Slider 的 `onChanged` 只维护拖动中的本地视觉位置；不能把每个移动事件
+   * 透传到播放器，否则长 GOP 媒体会在同一次拖动中堆积多次解码跳转。
+   */
+  final ValueChanged<double> onCommitted;
 
   /** 当前视频稳定标识；切换视频时使迟到预览立即失效。 */
   final Object previewIdentity;
@@ -166,7 +171,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
       _dragging = false;
       _dragValue = null;
     });
-    widget.onChanged(value);
+    widget.onCommitted(value);
   }
 
   @override

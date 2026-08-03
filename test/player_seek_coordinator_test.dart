@@ -183,6 +183,81 @@ void main() {
     expect(keyboard.isActive, isFalse);
   });
 
+  test('键盘短按不发送预览并只在 KeyUp 精确 seek 一次', () async {
+    final previews = <Duration>[];
+    final settled = <Duration>[];
+    var position = const Duration(seconds: 20);
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async => previews.add(target),
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      settle: (target) async {
+        settled.add(target);
+        position = target;
+      },
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+    );
+
+    expect(
+      keyboard.requestRelative(
+        const Duration(seconds: 5),
+        submitPreview: false,
+      ),
+      const Duration(seconds: 25),
+    );
+    await keyboard.settle();
+
+    expect(previews, isEmpty);
+    expect(settled, const <Duration>[Duration(seconds: 25)]);
+    expect(position, const Duration(seconds: 25));
+  });
+
+  test('键盘长按从短按累积目标开始提交关键帧预览', () async {
+    final previews = <Duration>[];
+    final settled = <Duration>[];
+    var position = Duration.zero;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async => previews.add(target),
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      settle: (target) async {
+        settled.add(target);
+        position = target;
+      },
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+    );
+
+    keyboard.requestRelative(
+      const Duration(seconds: 5),
+      submitPreview: false,
+    );
+    keyboard.requestRelative(const Duration(seconds: 2));
+    await keyboard.settle();
+
+    expect(previews, const <Duration>[Duration(seconds: 7)]);
+    expect(settled, const <Duration>[Duration(seconds: 7)]);
+  });
+
   test('新会话取消会阻止上一轮迟到 KeyUp 覆盖位置', () async {
     final firstPreview = Completer<void>();
     final settled = <Duration>[];

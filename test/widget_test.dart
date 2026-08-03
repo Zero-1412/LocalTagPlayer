@@ -8973,7 +8973,7 @@ void main() {
                   requestedPosition = position;
                   return previewRequest.future;
                 },
-                onChanged: (_) {},
+                onCommitted: (_) {},
               ),
             ],
           ),
@@ -9032,7 +9032,7 @@ void main() {
             max: 100000,
             previewIdentity: 'video-1',
             loadPreview: (_) async => null,
-            onChanged: committed.add,
+            onCommitted: committed.add,
           ),
         ),
       ),

@@ -141,7 +141,12 @@ extension PlayerStateHelpers on PlayerPageState {
       final stepSeconds = isRepeat
           ? playerKeyboardSeekRepeatStepSeconds(seekStepSeconds)
           : seekStepSeconds;
-      final target = seekRelative(Duration(seconds: -stepSeconds));
+      final target = seekRelative(
+        Duration(seconds: -stepSeconds),
+        // 首次 KeyDown 只建立短按目标；确认进入长按后才发送关键帧预览，
+        // 这样短按 KeyUp 只剩一次精确 seek，不会双跳转。
+        submitPreview: isRepeat,
+      );
       showShortcutFeedback(
         isRepeat
             ? '连续快退 · ${formatDuration(target)}'
@@ -162,7 +167,11 @@ extension PlayerStateHelpers on PlayerPageState {
       final stepSeconds = isRepeat
           ? playerKeyboardSeekRepeatStepSeconds(seekStepSeconds)
           : seekStepSeconds;
-      final target = seekRelative(Duration(seconds: stepSeconds));
+      final target = seekRelative(
+        Duration(seconds: stepSeconds),
+        // 与后退保持相同会话语义，避免方向不同导致延迟门禁不可比较。
+        submitPreview: isRepeat,
+      );
       showShortcutFeedback(
         isRepeat
             ? '连续快进 · ${formatDuration(target)}'
