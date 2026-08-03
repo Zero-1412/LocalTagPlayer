@@ -5,12 +5,12 @@
 
 ## 当前任务
 
-### 2026-08-03 · 修复 seek 音频预览与落点恢复（完成）
+### 2026-08-03 · 修复 seek 临时静音与新帧恢复（完成）
 
-- 目标：长按快进/快退的关键帧预览期间停止音频输出；松开后只在最终精确 seek 的位置反馈确认后，按用户原本的播放/暂停意图恢复。
+- 目标：长按快进/快退只临时静音，关键帧预览保持视频时钟连续；KeyUp 只精确 seek 一次，且必须等新视频帧交付证据后解除静音。
 - 作用域：`PlayerKeyboardSeekController`、进度条提交和 `MediaKit Texture` 会话控制；不修改 `PlayerBackend` 接口、数据库、筛选语义、来源 filtered queue、缓存队列或用户媒体。
-- 方案：不改全局 mpv audio buffer 或 A/V sync；将 pause → keyframe preview/precise seek → play 串行为一个会话门，减少尾端旧预览帧与精确落点竞争造成的可见卡顿。
-- 验证：新增播放态、暂停态、长按预览的会话顺序契约；`flutter analyze`、seek 契约、页面契约、完整 widget 测试与 Windows Debug build 均通过。真实窗口已打开 1080p 媒体并完成右方向键单次 seek；由于本仓库不保存 12-case 私有样本 manifest 且电脑自动化不支持 KeyDown/KeyUp 按住，完整矩阵需在持有样本 manifest 的环境重跑，脚本已改为通过同一会话门测量。
+- 方案：以 `volume=0` 代替 `pause/play`；保持 latest-only 合并，按实际关键帧 seek 耗时自适应为 15/10/8fps 预览，并采用 750/1200/1800ms 新帧确认阈值。12-case 脚本会产出长 GOP p95 对应的建议档位，不伪造本机无 manifest 的结果。
+- 验证：seek 会话顺序（含无新帧不解静音）、长 GOP 节流档位、页面与架构契约、完整 widget 测试、`flutter analyze` 与 Windows Debug build 均通过；真实 Debug 应用成功启动并显示媒体库。`.local/qa/player_seek-latency-matrix.json` 不存在，故 12-case Texture 门禁仍需在持有私有 manifest 的机器重跑。
 
 ### 2026-08-03 · 修复播放器单次 seek 与真实延迟门禁（完成）
 
@@ -23,12 +23,12 @@
 
 ## 最近完成
 
-1. 2026-08-03：进度条松手改为单次精确 seek；方向键短按不再先做关键帧预览，
+1. 2026-08-03：seek 改为临时静音而非暂停视频时钟；方向键 KeyUp 等新视频帧后恢复音量，
+   并保持 latest-only 合并和 GOP 成本自适应节流。
+2. 2026-08-03：进度条松手改为单次精确 seek；方向键短按不再先做关键帧预览，
    长按仍在 `KeyRepeat` 后预览并在 KeyUp 精确收敛一次；建立真实 codec/GOP 延迟矩阵门禁。
-2. 2026-08-01：完成 `0.2.5+7` 双平台打包、全量门禁与 `v0.2.5` 公开 GitHub Release；
+3. 2026-08-01：完成 `0.2.5+7` 双平台打包、全量门禁与 `v0.2.5` 公开 GitHub Release；
    缺少签名 secrets 的风险已在发布说明和 macOS 文件名中明确标识。
-3. 2026-08-01：对齐 PotPlayer 的方向键长按快进节奏，按住期间只做关键帧预览，
-   松开时精确收敛最终目标一次，并增加累计目标时间反馈。
 
 ## 当前稳定基线
 
@@ -37,8 +37,8 @@
 - 数据：schema、标签来源、查询语义、filtered queue 与用户维护数据保持稳定。
 - 版本：`0.2.5+7`；依赖：`file_picker 11.0.2`、`package_info_plus 9.0.1`；后者 10.x
   受稳定版 `win32` 约束冲突阻塞。
-- 最近业务验证：短按/长按 seek 契约、进度条 widget、真实 MediaKit Texture seek 门禁、
-  `flutter analyze` 与 Windows Debug build 均通过；完整的 12-case 编码/GOP 矩阵摘要位于未跟踪 artifacts。
+- 最近业务验证：短按/长按 seek 会话、进度条 widget 与页面契约已通过；完整的 12-case
+  编码/GOP 矩阵仍需在持有私有 manifest 的机器重跑，结果将决定最终门禁校准档位。
 
 ## 已确认阻塞
 

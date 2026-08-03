@@ -76,6 +76,7 @@ extension PlayerStateInitialization on PlayerPageState {
           pageWidget.playbackSettings.hardwareDecodingEnabled,
       rendererPreference: pageWidget.playbackSettings.rendererPreference,
     );
+    seekPreviewThrottle = PlayerSeekGopAdaptiveThrottle();
     seekCoordinator = PlayerSeekCoordinator(
       // 进度条和连续按键只提交关键帧预览；单次交互结束或 KeyUp 再显式精确 seek。
       submit: playerService.seekInteractive,
@@ -88,11 +89,16 @@ extension PlayerStateInitialization on PlayerPageState {
       },
       // 关键帧可能与逻辑目标相距超过容差；此处只等命令返回，不等待精确位置确认。
       confirmationTimeout: Duration.zero,
+      adaptiveThrottle: seekPreviewThrottle,
     );
-    seekPlaybackGate = PlayerSeekPlaybackGate(
-      readPlaying: () => playerService.state.playing,
-      pause: playerService.pause,
-      play: playerService.play,
+    seekAudioGate = PlayerSeekAudioGate(
+      // 临时静音只写后端，不触碰用户音量、播放状态或视频时钟。
+      readDesiredVolume: () => volume,
+      setVolume: playerService.setVolume,
+      readPresentedFrame: readPresentedVideoFrame,
+      waitForNewFrame: waitForPresentedVideoFrame,
+      framePresentationTimeout: () =>
+          seekPreviewThrottle.finalPresentationTimeout,
       isExiting: () => isExiting,
     );
     keyboardSeek = PlayerKeyboardSeekController(
@@ -106,7 +112,7 @@ extension PlayerStateInitialization on PlayerPageState {
         lastSeekLatencyMs = milliseconds;
         lastSeekAt = DateTime.now();
       },
-      previewPlaybackGate: seekPlaybackGate,
+      previewAudioGate: seekAudioGate,
     );
     if (playerService.supportsNativeNvidiaVideoEnhancement) {
       // NVIDIA 实验只允许显式 child HWND QA 后端探测，正式 Texture 路径不付出该开销。

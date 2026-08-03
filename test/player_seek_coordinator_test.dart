@@ -4,6 +4,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/features/player/application/player_seek_coordinator.dart';
 
 void main() {
+  test('长 GOP 代理仅降低当前会话预览频率并放宽最终新帧阈值', () {
+    final throttle = PlayerSeekGopAdaptiveThrottle();
+
+    expect(throttle.minimumDispatchInterval, const Duration(milliseconds: 64));
+    expect(
+      throttle.finalPresentationTimeout,
+      const Duration(milliseconds: 750),
+    );
+
+    throttle.recordPreviewLatency(200);
+    expect(throttle.minimumDispatchInterval, const Duration(milliseconds: 96));
+    expect(
+      throttle.finalPresentationTimeout,
+      const Duration(milliseconds: 1200),
+    );
+
+    throttle.recordPreviewLatency(400);
+    expect(throttle.minimumDispatchInterval, const Duration(milliseconds: 125));
+    expect(
+      throttle.finalPresentationTimeout,
+      const Duration(milliseconds: 1800),
+    );
+  });
+
   test('长按重复步长低档保持细腻且高档限制为 5 秒', () {
     expect(playerKeyboardSeekRepeatStepSeconds(1), 1);
     expect(playerKeyboardSeekRepeatStepSeconds(5), 2);
@@ -296,25 +320,56 @@ void main() {
   });
   test('播放中精确 seek 在落点完成后才恢复音频', () async {
     final commands = <String>[];
-    final gate = PlayerSeekPlaybackGate(
-      readPlaying: () => true,
-      pause: () async => commands.add('pause'),
-      play: () async => commands.add('play'),
+    final gate = PlayerSeekAudioGate(
+      readDesiredVolume: () => 80,
+      setVolume: (value) async => commands.add('volume:$value'),
+      readPresentedFrame: () async => 10,
+      waitForNewFrame: (_, __) async {
+        commands.add('frame-presented');
+        return true;
+      },
+      framePresentationTimeout: () => const Duration(milliseconds: 750),
       isExiting: () => false,
     );
 
     await gate.run<void>(() async => commands.add('seek-confirmed'));
 
-    expect(commands, <String>['pause', 'seek-confirmed', 'play']);
+    expect(
+      commands,
+      <String>[
+        'volume:0.0',
+        'seek-confirmed',
+        'frame-presented',
+        'volume:80.0'
+      ],
+    );
     expect(gate.isActive, isFalse);
+  });
+
+  test('精确落点没有新视频帧证据时保持临时静音', () async {
+    final commands = <String>[];
+    final gate = PlayerSeekAudioGate(
+      readDesiredVolume: () => 80,
+      setVolume: (value) async => commands.add('volume:$value'),
+      readPresentedFrame: () async => 10,
+      waitForNewFrame: (_, __) async => false,
+      framePresentationTimeout: () => const Duration(milliseconds: 750),
+      isExiting: () => false,
+    );
+
+    await gate.run<void>(() async => commands.add('seek-confirmed'));
+
+    expect(commands, <String>['volume:0.0', 'seek-confirmed']);
   });
 
   test('用户原本暂停时 seek 不得静默自动播放', () async {
     final commands = <String>[];
-    final gate = PlayerSeekPlaybackGate(
-      readPlaying: () => false,
-      pause: () async => commands.add('pause'),
-      play: () async => commands.add('play'),
+    final gate = PlayerSeekAudioGate(
+      readDesiredVolume: () => 0,
+      setVolume: (value) async => commands.add('volume:$value'),
+      readPresentedFrame: () async => 10,
+      waitForNewFrame: (_, __) async => true,
+      framePresentationTimeout: () => const Duration(milliseconds: 750),
       isExiting: () => false,
     );
 
@@ -323,13 +378,18 @@ void main() {
     expect(commands, <String>['seek-confirmed']);
   });
 
-  test('键盘长按在暂停确认后预览，精确落点后再恢复声音', () async {
+  test('键盘长按临时静音后预览，精确落点新帧交付后再恢复声音', () async {
     final commands = <String>[];
     var position = Duration.zero;
-    final gate = PlayerSeekPlaybackGate(
-      readPlaying: () => true,
-      pause: () async => commands.add('pause'),
-      play: () async => commands.add('play'),
+    final gate = PlayerSeekAudioGate(
+      readDesiredVolume: () => 35,
+      setVolume: (value) async => commands.add('volume:$value'),
+      readPresentedFrame: () async => 10,
+      waitForNewFrame: (_, __) async {
+        commands.add('frame-presented');
+        return true;
+      },
+      framePresentationTimeout: () => const Duration(milliseconds: 750),
       isExiting: () => false,
     );
     final coordinator = PlayerSeekCoordinator(
@@ -354,7 +414,7 @@ void main() {
       readDuration: () => const Duration(minutes: 2),
       isExiting: () => false,
       onLatency: (_) {},
-      previewPlaybackGate: gate,
+      previewAudioGate: gate,
     );
 
     keyboard.requestRelative(const Duration(seconds: 5));
@@ -362,7 +422,13 @@ void main() {
 
     expect(
       commands,
-      <String>['pause', 'preview:5', 'exact:5', 'play'],
+      <String>[
+        'volume:0.0',
+        'preview:5',
+        'exact:5',
+        'frame-presented',
+        'volume:35.0',
+      ],
     );
   });
 }

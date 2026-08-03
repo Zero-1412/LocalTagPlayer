@@ -284,8 +284,8 @@ class PlayerPageState extends State<PlayerPage> {
   DateTime? routePopRequestedAt;
   /** 首次立即提交、连续输入节流追踪最新目标的页面级 seek 协调器。 */
   late final PlayerSeekCoordinator seekCoordinator;
-  /** 在解码落点待确认时暂停音频，但不改写用户的播放/暂停意图。*/
-  late final PlayerSeekPlaybackGate seekPlaybackGate;
+  late final PlayerSeekGopAdaptiveThrottle seekPreviewThrottle;
+  late final PlayerSeekAudioGate seekAudioGate;
   /** 快进/快退物理按键的累计目标、KeyUp 收敛与取消 owner。 */
   late final PlayerKeyboardSeekController keyboardSeek;
   /** 当前连续键盘 seek 的动作；只接受对应 KeyUp 结束这一轮。 */

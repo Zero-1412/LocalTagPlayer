@@ -45,4 +45,16 @@
 .\tool\run_player_seek_latency_matrix.ps1 -Manifest .\.local\qa\player_seek-latency-matrix.json
 ```
 
-输出位于未跟踪的 `artifacts/player_seek_latency_<timestamp>/`：每个 case 的日志和不含路径的 `summary.json`。任一样本缺失、probe 与 manifest 不符、GOP 分类不符、后端未确认位置或 p95 超预算都会使门禁失败。
+输出位于未跟踪的 `artifacts/player_seek_latency_<timestamp>/`：每个 case 的日志和不含路径的 `summary.json`。测量路径与页面一致：临时静音但不暂停视频时钟，精确 seek 的位置反馈后还必须观察到 `estimated-frame-number` 变化才计入完成。任一样本缺失、probe 与 manifest 不符、GOP 分类不符、后端未确认位置/新帧或 p95 超预算都会使门禁失败。
+
+## 长 GOP 策略校准
+
+脚本同时写出 `long_gop_policy.json`。它用六个长 GOP case 的最高 p95 推荐页面的运行时档位：
+
+- `<= 750ms`：64ms（约 15fps）预览，750ms 最终新帧阈值；
+- `<= 1200ms`：96ms（约 10fps）预览，1200ms 阈值；
+- `> 1200ms`：125ms（约 8fps）预览，1800ms 阈值。
+
+运行时不为交互额外扫描媒体 GOP；它保留 latest-only 合并并以同一会话的关键帧 seek 耗时选择上述档位。只有持有完整 12-case manifest 的机器产出结果后，才可以调整这些校准边界。
+
+若超过最终新帧阈值仍无帧号变化，播放器保留临时静音而不播放旧落点音频；下一次 seek 会建立新会话。该失败路径写入 `PLAYER_SEEK frame_presentation_timeout`，供诊断而非作为成功收敛。

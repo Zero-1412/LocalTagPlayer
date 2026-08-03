@@ -69,12 +69,7 @@ void main() {
       const Duration(seconds: 30),
       operation: '真实媒体首帧与时长',
     );
-    final playbackGate = PlayerSeekPlaybackGate(
-      readPlaying: () => backend.state.playing,
-      pause: backend.pause,
-      play: backend.play,
-      isExiting: () => false,
-    );
+    final playbackGate = _createAudioGate(tester, backend);
 
     final duration = backend.state.duration;
     // 先完成两次不计分的预热，避免把打开后首个随机访问当成稳态交互延迟。
@@ -135,7 +130,7 @@ void main() {
 Future<void> _verifyShortAndLongKeyboardPaths(
   WidgetTester tester,
   MediaKitPlayerBackend backend,
-  PlayerSeekPlaybackGate playbackGate,
+  PlayerSeekAudioGate playbackGate,
 ) async {
   final previews = <Duration>[];
   final exacts = <Duration>[];
@@ -161,7 +156,7 @@ Future<void> _verifyShortAndLongKeyboardPaths(
     readDuration: () => backend.state.duration,
     isExiting: () => false,
     onLatency: (_) {},
-    previewPlaybackGate: playbackGate,
+    previewAudioGate: playbackGate,
   );
 
   final shortTarget = keyboard.requestRelative(
@@ -189,17 +184,53 @@ Future<void> _verifyShortAndLongKeyboardPaths(
 Future<int> _seekAndConfirm(
   WidgetTester tester,
   MediaKitPlayerBackend backend,
-  PlayerSeekPlaybackGate playbackGate,
+  PlayerSeekAudioGate playbackGate,
   Duration target,
 ) async {
   final stopwatch = Stopwatch()..start();
-  // 矩阵测量走与页面相同的暂停会话：不允许旧音频或未落稳帧先于最终位置恢复。
+  // 矩阵测量走与页面相同的临时静音会话：视频时钟不停，最终新帧交付后才恢复音频。
   await playbackGate.run(() async {
     await backend.seek(target);
     await _waitForPosition(tester, backend, target);
   });
   stopwatch.stop();
   return stopwatch.elapsedMilliseconds;
+}
+
+/** 为真实 Texture 测量构建与页面一致的临时静音与帧交付门。 */
+PlayerSeekAudioGate _createAudioGate(
+  WidgetTester tester,
+  MediaKitPlayerBackend backend,
+) =>
+    PlayerSeekAudioGate(
+      readDesiredVolume: () => 100,
+      setVolume: backend.setVolume,
+      readPresentedFrame: () => _readPresentedFrame(backend),
+      waitForNewFrame: (previousFrame, timeout) =>
+          _waitForNewFrame(tester, backend, previousFrame, timeout),
+      framePresentationTimeout: () => const Duration(milliseconds: 1800),
+      isExiting: () => false,
+    );
+
+Future<int?> _readPresentedFrame(MediaKitPlayerBackend backend) async =>
+    int.tryParse((await backend.getProperty('estimated-frame-number')).trim());
+
+Future<bool> _waitForNewFrame(
+  WidgetTester tester,
+  MediaKitPlayerBackend backend,
+  int? previousFrame,
+  Duration timeout,
+) async {
+  final stopwatch = Stopwatch()..start();
+  while (stopwatch.elapsed < timeout) {
+    final currentFrame = await _readPresentedFrame(backend);
+    if (currentFrame != null &&
+        (previousFrame == null || currentFrame != previousFrame)) {
+      return true;
+    }
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  throw TimeoutException('精确 seek 后未观察到新视频帧', timeout);
 }
 
 Future<void> _waitForPosition(

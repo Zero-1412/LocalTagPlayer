@@ -57,6 +57,39 @@ extension PlayerStateTransport on PlayerPageState {
   }
 
   /**
+   * `estimated-frame-number` 是现有 MediaKit Texture 路径可取得的最接近“新视频帧已
+   * 交付”的证据。它不是 time-pos，避免仅音频时钟前进就错误解除 seek 临时静音。
+   */
+  Future<int?> readPresentedVideoFrame() async =>
+      parseMpvInt(await getMpvProperty('estimated-frame-number'));
+
+  /**
+   * 精确 seek 已落点后轮询视频帧号。向前、向后 seek 都只要求帧号发生变化；不使用
+   * 大小比较，以免反向跳转把正确的新帧误判为旧帧。超时会留下诊断而非伪造成功证据。
+   */
+  Future<bool> waitForPresentedVideoFrame(
+    int? previousFrame,
+    Duration timeout,
+  ) async {
+    final stopwatch = Stopwatch()..start();
+    while (!isExiting && stopwatch.elapsed < timeout) {
+      final currentFrame = await readPresentedVideoFrame();
+      if (currentFrame != null &&
+          (previousFrame == null || currentFrame != previousFrame)) {
+        lastVideoFrameNumber = currentFrame;
+        lastVideoAdvanceAt = DateTime.now();
+        return true;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+    debugPrint(
+      'PLAYER_SEEK frame_presentation_timeout '
+      'previous=$previousFrame timeout_ms=${timeout.inMilliseconds}',
+    );
+    return false;
+  }
+
+  /**
    * 更新当前会话的画面比例并立即应用到 mpv。
    *
    * 自动、4:3 与 16:9 保持完整画面；铺满使用 panscan 等比裁边，主要用于
@@ -120,8 +153,8 @@ extension PlayerStateTransport on PlayerPageState {
     // 进度条只在手势结束后提交一次精确落点，不能先预览再精确 seek；
     // 否则同一次拖动会在后端形成双跳转，并放大长 GOP 的可感知卡顿。
     cancelKeyboardSeek();
-    // 精确 seek 从前一关键帧解码时不允许旧声音先恢复；位置确认后再按原播放意图继续。
-    await seekPlaybackGate.run(() => seekExactlyWithDiagnostics(target));
+    // 精确 seek 从前一关键帧解码时不允许旧声音先恢复；位置确认且新帧交付后才解除静音。
+    await seekAudioGate.run(() => seekExactlyWithDiagnostics(target));
   }
 
   /**
@@ -161,8 +194,8 @@ extension PlayerStateTransport on PlayerPageState {
       unawaited(keyboardSeek.settle());
       return;
     }
-    // 短按没有预览会话，仍要保证精确落点稳定后才恢复声音。
-    unawaited(seekPlaybackGate.run(keyboardSeek.settle));
+    // 短按没有预览会话，仍要保证精确落点稳定且新帧交付后才恢复声音。
+    unawaited(seekAudioGate.run(keyboardSeek.settle));
   }
 
   /** 切换媒体、进度条提交或退出时取消旧键盘目标和尚未提交的预览。 */

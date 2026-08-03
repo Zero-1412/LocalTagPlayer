@@ -126,4 +126,36 @@ foreach ($case in $cases | Sort-Object id) {
 }
 
 $results | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Output 'summary.json') -Encoding utf8
+
+# 以六个真实长 GOP 的最差 p95 决定页面默认的预览节流与最终新帧等待档位；不根据
+# manifest 声明或请求的硬解参数猜测结果。运行时仍以本会话实际关键帧 seek 成本自适应。
+$longGopResults = @($results | Where-Object { $_.case -like '*-long-gop' })
+if ($longGopResults.Count -ne 6) {
+  throw 'Expected six long-GOP measurements before choosing the seek preview policy'
+}
+$longGopP95Ms = [int](($longGopResults | Measure-Object -Property p95Ms -Maximum).Maximum)
+if ($longGopP95Ms -le 750) {
+  $policy = [pscustomobject]@{
+    longGopP95Ms = $longGopP95Ms
+    previewIntervalMs = 64
+    previewFps = 15.6
+    finalFrameTimeoutMs = 750
+  }
+} elseif ($longGopP95Ms -le 1200) {
+  $policy = [pscustomobject]@{
+    longGopP95Ms = $longGopP95Ms
+    previewIntervalMs = 96
+    previewFps = 10.4
+    finalFrameTimeoutMs = 1200
+  }
+} else {
+  $policy = [pscustomobject]@{
+    longGopP95Ms = $longGopP95Ms
+    previewIntervalMs = 125
+    previewFps = 8.0
+    finalFrameTimeoutMs = 1800
+  }
+}
+$policy | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Output 'long_gop_policy.json') -Encoding utf8
+Write-Output "PLAYER_SEEK_LONG_GOP_POLICY $($policy | ConvertTo-Json -Compress)"
 $results | Format-Table case, p50Ms, p95Ms, maxMs, budgetMs, hwdec
