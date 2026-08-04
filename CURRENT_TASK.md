@@ -5,6 +5,12 @@
 
 ## 当前任务
 
+### 2026-08-04 · seek 恢复时间线诊断（完成）
+
+- 对真实 4K 媒体库样本的录屏曾复现连续预览后约 1.37 秒画面静止；新增 `PLAYER_SEEK_TRACE` 把 `KeyUp`、精确 seek 开始/返回、新视频帧证据、音频恢复请求/完成关联到同一 trace id。
+- 每条事件记录 `mono_us` 作为唯一延迟依据，`wall_utc_ms` 仅用于和录屏启动侧车日志建立跨进程锚点；不改 `PlayerBackend`、音频策略、filtered queue 或用户数据。
+- 验证：seek coordinator focused test 覆盖六个节点顺序与同一 trace id；`flutter analyze` 与 Windows Debug 构建通过。重启后的真实窗口被 Windows 自动化句柄复用为其他应用，已停止输入；待可可靠选中播放器窗口后，以 30fps 录屏和 trace 日志复核此前间歇性静止段。
+
 ### 2026-08-03 · 修复 seek 临时静音与新帧恢复（完成）
 
 - 目标：长按快进/快退只临时静音，关键帧预览保持视频时钟连续；KeyUp 只精确 seek 一次，且必须等新视频帧交付证据后解除静音。

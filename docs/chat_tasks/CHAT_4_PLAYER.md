@@ -30,3 +30,9 @@
 不把 NVIDIA/NVOFA 实验宣传或自动晋级为生产能力，不优先专业播放器功能。
 
 历史：`docs/history/chat/CHAT_4_PLAYER_THROUGH_2026-07-30.md`。
+
+## 2026-08-04 · seek 恢复 trace
+
+- `PlayerSeekAudioGate` 在一个临时静音会话内分配 trace id；`PlayerKeyboardSeekController` 在同一 id 下记录 `key_up`、`exact_seek_start` 和 `exact_seek_complete`。
+- 新视频帧或超时、以及音频恢复请求/完成继续写入同一 trace。`mono_us` 只用于会话内延迟，`wall_utc_ms` 只作为本地录屏起始时间的对齐锚点；两者不得混用为性能结论。
+- 诊断不改变 preview latest-only 合并、音频静音策略、`PlayerBackend` 合约或来源 filtered queue。

@@ -431,4 +431,59 @@ void main() {
       ],
     );
   });
+
+  test('KeyUp、精确 seek、新视频帧和音频恢复共用单调 trace', () async {
+    final lines = <String>[];
+    final trace = PlayerSeekTraceLogger(
+      output: lines.add,
+      wallClock: () => DateTime.utc(2026, 8, 4),
+    );
+    final gate = PlayerSeekAudioGate(
+      readDesiredVolume: () => 35,
+      setVolume: (_) async {},
+      readPresentedFrame: () async => 10,
+      waitForNewFrame: (_, __) async => true,
+      framePresentationTimeout: () => const Duration(milliseconds: 750),
+      isExiting: () => false,
+      trace: trace,
+    );
+    final coordinator = PlayerSeekCoordinator(
+      submit: (_) async {},
+      readPosition: () => Duration.zero,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      settle: (_) async {},
+      readPosition: () => Duration.zero,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      previewAudioGate: gate,
+      trace: trace,
+    );
+
+    keyboard.requestRelative(const Duration(seconds: 5));
+    await keyboard.settle();
+
+    expect(
+      lines.map((line) => RegExp(r'stage=([^ ]+)').firstMatch(line)!.group(1)),
+      <String>[
+        'key_up',
+        'exact_seek_start',
+        'exact_seek_complete',
+        'new_video_frame',
+        'audio_restore_start',
+        'audio_restore_complete',
+      ],
+    );
+    for (final line in lines) {
+      expect(line, contains('PLAYER_SEEK_TRACE trace=1 mono_us='));
+      expect(line, contains('wall_utc_ms=1785801600000'));
+    }
+  });
 }

@@ -77,6 +77,7 @@ extension PlayerStateInitialization on PlayerPageState {
       rendererPreference: pageWidget.playbackSettings.rendererPreference,
     );
     seekPreviewThrottle = PlayerSeekGopAdaptiveThrottle();
+    seekTrace = PlayerSeekTraceLogger(output: debugPrint);
     seekCoordinator = PlayerSeekCoordinator(
       // 进度条和连续按键只提交关键帧预览；单次交互结束或 KeyUp 再显式精确 seek。
       submit: playerService.seekInteractive,
@@ -100,6 +101,7 @@ extension PlayerStateInitialization on PlayerPageState {
       framePresentationTimeout: () =>
           seekPreviewThrottle.finalPresentationTimeout,
       isExiting: () => isExiting,
+      trace: seekTrace,
     );
     keyboardSeek = PlayerKeyboardSeekController(
       coordinator: seekCoordinator,
@@ -113,6 +115,7 @@ extension PlayerStateInitialization on PlayerPageState {
         lastSeekAt = DateTime.now();
       },
       previewAudioGate: seekAudioGate,
+      trace: seekTrace,
     );
     if (playerService.supportsNativeNvidiaVideoEnhancement) {
       // NVIDIA 实验只允许显式 child HWND QA 后端探测，正式 Texture 路径不付出该开销。

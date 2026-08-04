@@ -285,6 +285,8 @@ class PlayerPageState extends State<PlayerPage> {
   /** 首次立即提交、连续输入节流追踪最新目标的页面级 seek 协调器。 */
   late final PlayerSeekCoordinator seekCoordinator;
   late final PlayerSeekGopAdaptiveThrottle seekPreviewThrottle;
+  /** 页面生命周期内共享的单调 seek trace，供 KeyUp、帧交付和音频恢复关联。 */
+  late final PlayerSeekTraceLogger seekTrace;
   late final PlayerSeekAudioGate seekAudioGate;
   /** 快进/快退物理按键的累计目标、KeyUp 收敛与取消 owner。 */
   late final PlayerKeyboardSeekController keyboardSeek;

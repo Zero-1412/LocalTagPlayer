@@ -47,6 +47,21 @@
 
 输出位于未跟踪的 `artifacts/player_seek_latency_<timestamp>/`：每个 case 的日志和不含路径的 `summary.json`。测量路径与页面一致：临时静音但不暂停视频时钟，精确 seek 的位置反馈后还必须观察到 `estimated-frame-number` 变化才计入完成。任一样本缺失、probe 与 manifest 不符、GOP 分类不符、后端未确认位置/新帧或 p95 超预算都会使门禁失败。
 
+## 录屏与 `PLAYER_SEEK_TRACE` 对齐
+
+当真实媒体库出现“预览帧先到、连续播放稍后恢复”的间歇性问题时，录屏应以 30fps 或更高的固定帧率保存到未跟踪的 `.local/qa/`，并在启动录制时写入 UTC 毫秒侧车记录。调试日志中的同一 `trace` 必须按以下顺序出现：
+
+```text
+key_up
+exact_seek_start
+exact_seek_complete
+new_video_frame | new_video_frame_timeout
+audio_restore_start
+audio_restore_complete
+```
+
+每条事件的 `mono_us` 只用于计算节点间隔；`wall_utc_ms` 只用于和录屏侧车记录建立时间锚点。若 `exact_seek_complete` 已出现而 `new_video_frame` 明显延后，说明解码/呈现恢复慢；若 `new_video_frame` 已出现但连续画面仍静止，则需要继续检查 Texture 呈现或播放器时钟，不能把单一预览帧当作恢复完成。
+
 ## 长 GOP 策略校准
 
 脚本同时写出 `long_gop_policy.json`。它用六个长 GOP case 的最高 p95 推荐页面的运行时档位：

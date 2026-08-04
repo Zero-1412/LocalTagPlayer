@@ -33,6 +33,56 @@ typedef PlayerSeekFrameWaiter = Future<bool> Function(
 );
 
 /**
+ * 将一次 seek 会话的关键节点写成可与录屏对齐的短 trace。
+ *
+ * `mono_us` 只用于比较会话内的真实间隔，避免系统时间校正污染结论；`wall_utc_ms`
+ * 仅作为录屏启动日志的跨进程锚点，不能参与延迟计算。输出端由页面注入，业务层不依赖
+ * Flutter 的 `debugPrint`。
+ */
+typedef PlayerSeekTraceOutput = void Function(String line);
+
+class PlayerSeekTraceLogger {
+  PlayerSeekTraceLogger({
+    PlayerSeekTraceOutput? output,
+    Stopwatch? monotonicClock,
+    DateTime Function()? wallClock,
+  })  : _output = output,
+        _monotonicClock = monotonicClock ?? (Stopwatch()..start()),
+        _wallClock = wallClock ?? DateTime.now;
+
+  final PlayerSeekTraceOutput? _output;
+  final Stopwatch _monotonicClock;
+  final DateTime Function() _wallClock;
+  var _nextTraceId = 0;
+
+  int begin() => ++_nextTraceId;
+
+  void mark(
+    int? traceId,
+    String stage, {
+    Duration? target,
+    int? previousFrame,
+    int? waitMilliseconds,
+    bool? framePresented,
+  }) {
+    final output = _output;
+    if (traceId == null || output == null) return;
+    final fields = <String>[
+      'PLAYER_SEEK_TRACE',
+      'trace=$traceId',
+      'mono_us=${_monotonicClock.elapsedMicroseconds}',
+      'wall_utc_ms=${_wallClock().toUtc().millisecondsSinceEpoch}',
+      'stage=$stage',
+      if (target != null) 'target_ms=${target.inMilliseconds}',
+      if (previousFrame != null) 'previous_frame=$previousFrame',
+      if (waitMilliseconds != null) 'wait_ms=$waitMilliseconds',
+      if (framePresented != null) 'frame_presented=$framePresented',
+    ];
+    output(fields.join(' '));
+  }
+}
+
+/**
  * 把配置步长映射为长按重复阶段的小步长。
  *
  * 短按继续使用完整配置值；长按最多推进 5 秒，避免一个 64ms 预览窗口合并多个
@@ -210,6 +260,7 @@ class PlayerSeekAudioGate {
     required PlayerSeekFrameWaiter waitForNewFrame,
     required PlayerSeekDurationReader framePresentationTimeout,
     required PlayerSeekExitReader isExiting,
+    this.trace,
   })  : _readDesiredVolume = readDesiredVolume,
         _setVolume = setVolume,
         _readPresentedFrame = readPresentedFrame,
@@ -223,20 +274,24 @@ class PlayerSeekAudioGate {
   final PlayerSeekFrameWaiter _waitForNewFrame;
   final PlayerSeekDurationReader _framePresentationTimeout;
   final PlayerSeekExitReader _isExiting;
+  final PlayerSeekTraceLogger? trace;
 
   Future<void> _tail = Future<void>.value();
   Future<void>? _prepared;
   var _active = false;
   var _restoreAudio = false;
   var _session = 0;
+  int? _traceId;
 
   bool get isActive => _active;
+  int? get activeTraceId => _active ? _traceId : null;
 
   /** 第一个预览命令前只下发音量 0；绝不暂停视频时钟。 */
   Future<void> begin() {
     if (_active) return _prepared ?? _tail;
     _active = true;
     _session++;
+    _traceId = trace?.begin();
     _restoreAudio = !_isExiting() && _readDesiredVolume() > 0;
     if (!_restoreAudio) return _prepared = _tail;
     return _prepared = _enqueue(() => _setVolume(0));
@@ -282,15 +337,18 @@ class PlayerSeekAudioGate {
     }
     _active = false;
     final session = _session;
+    final traceId = _traceId;
     final shouldRestore = _restoreAudio;
     _restoreAudio = false;
     _prepared = null;
+    _traceId = null;
     if (!shouldRestore || _isExiting()) {
       await _tail;
       return;
     }
     var framePresented = true;
     if (waitForNewFrame) {
+      final frameWait = Stopwatch()..start();
       try {
         framePresented = await _waitForNewFrame(
           frameBeforeExact,
@@ -299,11 +357,21 @@ class PlayerSeekAudioGate {
       } catch (_) {
         framePresented = false;
       }
+      frameWait.stop();
+      trace?.mark(
+        traceId,
+        framePresented ? 'new_video_frame' : 'new_video_frame_timeout',
+        previousFrame: frameBeforeExact,
+        waitMilliseconds: frameWait.elapsedMilliseconds,
+        framePresented: framePresented,
+      );
     }
     // 没有新帧证据时不得播放旧落点的声音；下一次 seek 会重新建立一个安全会话。
     if (!framePresented) return;
     if (_isExiting() || _session != session || _active) return;
+    trace?.mark(traceId, 'audio_restore_start');
     await _enqueue(() => _setVolume(_readDesiredVolume()));
+    trace?.mark(traceId, 'audio_restore_complete');
   }
 
   Future<void> _enqueue(Future<void> Function() command) {
@@ -327,6 +395,7 @@ class PlayerKeyboardSeekController {
     required PlayerSeekExitReader isExiting,
     required PlayerSeekLatencyListener onLatency,
     this.previewAudioGate,
+    this.trace,
   })  : _coordinator = coordinator,
         _settle = settle,
         _readPosition = readPosition,
@@ -341,6 +410,7 @@ class PlayerKeyboardSeekController {
   final PlayerSeekExitReader _isExiting;
   final PlayerSeekLatencyListener _onLatency;
   final PlayerSeekAudioGate? previewAudioGate;
+  final PlayerSeekTraceLogger? trace;
 
   Duration? _target;
   Future<void>? _previewTail;
@@ -381,6 +451,8 @@ class PlayerKeyboardSeekController {
     final generation = _generation;
     final previewTail = _previewTail;
     final shouldFinishPreview = previewAudioGate?.isActive ?? false;
+    final traceId = previewAudioGate?.activeTraceId ?? trace?.begin();
+    trace?.mark(traceId, 'key_up', target: finalTarget);
     _target = null;
     _previewTail = null;
     var exactSubmitted = false;
@@ -390,9 +462,16 @@ class PlayerKeyboardSeekController {
       if (_isExiting() || generation != _generation || _target != null) return;
       frameBeforeExact = await previewAudioGate?.captureFinalFrame();
       final latency = Stopwatch()..start();
+      trace?.mark(traceId, 'exact_seek_start', target: finalTarget);
       await _settle(finalTarget);
       latency.stop();
       exactSubmitted = true;
+      trace?.mark(
+        traceId,
+        'exact_seek_complete',
+        target: finalTarget,
+        waitMilliseconds: latency.elapsedMilliseconds,
+      );
       _onLatency(latency.elapsedMilliseconds);
     } finally {
       if (shouldFinishPreview) {
