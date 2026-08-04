@@ -8,7 +8,7 @@ Local Tag Player 面向“本地视频很多、仅靠文件夹已经难以整理
 
 [下载最新版本](https://github.com/Zero-1412/LocalTagPlayer/releases/latest) · [安装指南](INSTALL.md) · [查看更新记录](CHANGELOG.md) · [阅读架构说明](ARCHITECTURE.md)
 
-> 当前发布版为 `v0.2.4`。提供 Windows x64 安装器与 macOS DMG，两者当前均未签名；Linux 暂时支持源码构建。安装前请核对 Release 页面随附的 SHA-256。
+> 当前发布版为 `v0.2.6`。提供 Windows x64 安装器与 macOS DMG，两者当前均未签名；Linux 暂时支持源码构建。安装前请核对 Release 页面随附的 SHA-256。
 
 ## 产品预览
 
@@ -119,8 +119,8 @@ flowchart LR
 
 | 平台 | 产物 | 当前状态 |
 | --- | --- | --- |
-| Windows x64 | `.exe` 安装器 | `v0.2.4` 已发布；当前未进行 Authenticode 签名 |
-| macOS | `.dmg` | `v0.2.4` 已发布；当前未进行 Developer ID 签名或 Apple 公证 |
+| Windows x64 | `.exe` 安装器 | `v0.2.6` 已发布；当前未进行 Authenticode 签名 |
+| macOS | `.dmg` | `v0.2.6` 已发布；当前未进行 Developer ID 签名或 Apple 公证 |
 | Linux | 源码构建 | CI 验证 adapter、构建与启动，暂未提供正式安装包 |
 
 > 当前 Windows 与 macOS 安装包可能触发 Windows SmartScreen 或 macOS Gatekeeper。请核对 Release 页面随附的 `SHA256SUMS` 文件；在平台签名与公证完成前，不应把安装包描述为受信任签名产物。
