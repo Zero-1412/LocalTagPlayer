@@ -10,6 +10,7 @@ import '../models/player_backend_telemetry.dart';
 import '../models/player_filter_transaction.dart';
 import '../models/player_gpu_capabilities.dart';
 import '../models/player_motion_interpolation_capability.dart';
+import '../models/player_media_controls.dart';
 import '../models/player_video_surface_diagnostics.dart';
 import '../models/video_item.dart';
 
@@ -120,6 +121,28 @@ abstract interface class PlayerVideoSurfaceDiagnosticsBoundary {
 abstract interface class PlayerInteractiveSeekBoundary {
   /** 显示 [position] 附近关键帧，并保持后端原有播放/暂停意图。 */
   Future<void> seekInteractive(Duration position);
+}
+
+/**
+ * 当前媒体的轨道、章节与音画同步控制。
+ *
+ * 此边界是可选的：没有 libmpv/MediaKit 支持的测试或 QA 后端必须返回 unsupported，
+ * 不得把音轨、字幕或章节塞进通用 [PlayerBackendState]，更不能改变来源 filtered queue。
+ */
+abstract interface class PlayerMediaControlsBoundary {
+  Future<PlayerMediaControlsSnapshot> readMediaControls();
+
+  Future<void> selectAudioTrack(String trackId);
+
+  Future<void> selectSubtitleTrack(String trackId);
+
+  Future<void> toggleSubtitle();
+
+  Future<void> adjustSubtitleDelay(Duration delta);
+
+  Future<void> adjustAudioDelay(Duration delta);
+
+  Future<void> seekChapter(int chapterIndex);
 }
 
 /**

@@ -197,6 +197,9 @@ class PlayerPageState extends State<PlayerPage> {
   Timer? queuePrefetchTimer;
   Timer? fullscreenQueueHideTimer;
   Timer? playbackHealthTimer;
+  /** mpv `g-*` 媒体菜单组合键的短暂前缀状态；不持久化也不影响可配置快捷键。 */
+  Timer? mediaControlShortcutPrefixTimer;
+  var mediaControlShortcutPrefixPending = false;
   var playbackHealthSampling = false;
   /** 第二阶段自动画质协调器；只消费低频诊断样本，不创建额外定时器。 */
   final adaptiveQualityCoordinator = PlayerAdaptiveQualityCoordinator();

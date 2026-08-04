@@ -23,6 +23,7 @@ extension PlayerStateResources on PlayerPageState {
     queuePrefetchTimer?.cancel();
     fullscreenQueueHideTimer?.cancel();
     playbackHealthTimer?.cancel();
+    mediaControlShortcutPrefixTimer?.cancel();
     detailsService.dispose();
     persistOpenedProgress();
     queueScrollController.dispose();

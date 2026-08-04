@@ -225,6 +225,43 @@ extension PlayerStateHelpers on PlayerPageState {
       showShortcutFeedback('倍速 $playbackRate×', Icons.speed_rounded);
       return KeyEventResult.handled;
     }
+    if (handleMpvMediaControlMenuShortcut(event)) {
+      return KeyEventResult.handled;
+    }
+    // mpv 默认 `#`：循环音轨。现有可配置快捷键已先匹配，不能覆盖用户绑定。
+    if (event.character == '#') {
+      unawaited(cycleAudioTrack());
+      return KeyEventResult.handled;
+    }
+    // 当前 J/L 已由项目占用为快退/快进，保留现有行为；其余不冲突的 mpv 字幕键按原义补齐。
+    if (event.logicalKey == LogicalKeyboardKey.keyV) {
+      unawaited(toggleSubtitleWithFeedback());
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyZ) {
+      unawaited(
+        adjustSubtitleDelayWithFeedback(
+          Duration(
+            milliseconds: HardwareKeyboard.instance.isShiftPressed ? 100 : -100,
+          ),
+        ),
+      );
+      return KeyEventResult.handled;
+    }
+    // mpv 默认 Ctrl++ / Ctrl+-：调节音频延迟；不与项目现有可配置动作冲突。
+    if (HardwareKeyboard.instance.isControlPressed &&
+        (event.logicalKey == LogicalKeyboardKey.equal ||
+            event.logicalKey == LogicalKeyboardKey.minus)) {
+      unawaited(
+        adjustAudioDelayWithFeedback(
+          Duration(
+            milliseconds:
+                event.logicalKey == LogicalKeyboardKey.equal ? 100 : -100,
+          ),
+        ),
+      );
+      return KeyEventResult.handled;
+    }
     switch (event.logicalKey) {
       case LogicalKeyboardKey.arrowUp:
         stepPlayerVolume(5);
@@ -277,6 +314,41 @@ extension PlayerStateHelpers on PlayerPageState {
           ? Icons.fullscreen_exit_rounded
           : Icons.fullscreen_rounded,
     );
+  }
+
+  /**
+   * mpv 的 `g-a`、`g-s` 与 `g-c` 都打开当前媒体控制菜单。
+   *
+   * 页面先处理用户可配置动作，随后才识别此前未占用的组合键；因此不会改写任何
+   * 已有快捷键。章节默认 PageUp/PageDown 已被来源队列占用，继续保留原行为。
+   */
+  bool handleMpvMediaControlMenuShortcut(KeyEvent event) {
+    if (event is KeyRepeatEvent) return false;
+    final key = event.logicalKey;
+    if (mediaControlShortcutPrefixPending) {
+      mediaControlShortcutPrefixTimer?.cancel();
+      mediaControlShortcutPrefixTimer = null;
+      mediaControlShortcutPrefixPending = false;
+      if (key == LogicalKeyboardKey.keyA ||
+          key == LogicalKeyboardKey.keyS ||
+          key == LogicalKeyboardKey.keyC) {
+        unawaited(showMediaControlsDialog());
+        return true;
+      }
+      return false;
+    }
+    if (key != LogicalKeyboardKey.keyG ||
+        HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isAltPressed ||
+        HardwareKeyboard.instance.isShiftPressed) {
+      return false;
+    }
+    mediaControlShortcutPrefixPending = true;
+    mediaControlShortcutPrefixTimer = Timer(const Duration(seconds: 1), () {
+      mediaControlShortcutPrefixPending = false;
+      mediaControlShortcutPrefixTimer = null;
+    });
+    return true;
   }
 
   void handlePointerDown(PointerDownEvent event) {

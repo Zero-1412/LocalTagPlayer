@@ -119,6 +119,8 @@ source filtered result
 `PlayerBackend` 是平台播放能力的最小合同。可选扩展边界承载属性批处理、
 交互式 seek、诊断和平台特性；不为单一后端强迫所有平台实现。
 
+`PlayerMediaControlsBoundary` 是附着于 `PlayerBackend` 的可选媒体控制合同：只暴露当前会话的音轨、字幕、章节及音频/字幕延迟意图；`PlayerService` 负责安全转发，不支持的后端必须显式降级。该边界不拥有播放列表、播放记录或用户媒体数据，且不得创建第二条播放器/解码链。
+
 ## Windows 播放边界
 
 - 正式默认后端仍是 MediaKit Texture；

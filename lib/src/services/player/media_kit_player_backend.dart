@@ -8,6 +8,8 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../models/player_backend_telemetry.dart';
 import '../../models/player_gpu_capabilities.dart';
+import '../../models/player_media_controls.dart';
+import 'media_kit_player_media_controls.dart';
 import '../../models/player_video_surface_diagnostics.dart';
 import '../../platform/platform_interfaces.dart';
 import 'player_backend_telemetry_tracker.dart';
@@ -30,6 +32,7 @@ class MediaKitPlayerBackend
         PlayerVideoSurfaceDiagnosticsBoundary,
         PlayerPropertyBatchBoundary,
         PlayerInteractiveSeekBoundary,
+        PlayerMediaControlsBoundary,
         PlayerGpuRenderBoundary {
   /**
    * media_kit 1.2.6 的 Windows NativePlayer 会在 dispose 返回 5 秒后才调用
@@ -143,6 +146,7 @@ class MediaKitPlayerBackend
 
   /** 是否已在同一个 NativePlayer 上观察视频编码。 */
   var _videoCodecObserverAttached = false;
+  SubtitleTrack? _lastSelectedSubtitleTrack;
 
   /** media_kit 当前 VideoController 的 Texture 是否已经具备渲染表面。 */
   var _textureReady = false;
@@ -279,6 +283,141 @@ class MediaKitPlayerBackend
 
   @override
   Future<void> playOrPause() => _player.playOrPause();
+
+  @override
+  Future<PlayerMediaControlsSnapshot> readMediaControls() async {
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null || _disposed) {
+      return const PlayerMediaControlsSnapshot.unsupported();
+    }
+    final chapters = await readMediaKitChapters(nativePlayer);
+    final subtitleDelay = await _readDelay(nativePlayer, 'sub-delay');
+    final audioDelay = await _readDelay(nativePlayer, 'audio-delay');
+    final selectedAudioId = _player.state.track.audio.id;
+    final selectedSubtitleId = _player.state.track.subtitle.id;
+    return PlayerMediaControlsSnapshot(
+      supported: true,
+      audioTracks: _player.state.tracks.audio
+          .map(
+            (track) => PlayerMediaTrack(
+              id: track.id,
+              title: track.title,
+              language: track.language,
+              codec: track.codec,
+              isDefault: track.isDefault ?? false,
+              selected: track.id == selectedAudioId,
+            ),
+          )
+          .toList(growable: false),
+      subtitleTracks: _player.state.tracks.subtitle
+          .map(
+            (track) => PlayerMediaTrack(
+              id: track.id,
+              title: track.title,
+              language: track.language,
+              codec: track.codec,
+              isDefault: track.isDefault ?? false,
+              selected: track.id == selectedSubtitleId,
+            ),
+          )
+          .toList(growable: false),
+      chapters: chapters,
+      subtitleDelay: subtitleDelay,
+      audioDelay: audioDelay,
+    );
+  }
+
+  @override
+  Future<void> selectAudioTrack(String trackId) async {
+    final track = _player.state.tracks.audio
+        .where((candidate) => candidate.id == trackId)
+        .firstOrNull;
+    if (track == null) {
+      throw ArgumentError.value(trackId, 'trackId');
+    }
+    await _player.setAudioTrack(track);
+  }
+
+  @override
+  Future<void> selectSubtitleTrack(String trackId) async {
+    if (trackId == 'no') {
+      await _player.setSubtitleTrack(SubtitleTrack.no());
+      return;
+    }
+    final track = _player.state.tracks.subtitle
+        .where((candidate) => candidate.id == trackId)
+        .firstOrNull;
+    if (track == null) {
+      throw ArgumentError.value(trackId, 'trackId');
+    }
+    _lastSelectedSubtitleTrack = track;
+    await _player.setSubtitleTrack(track);
+  }
+
+  @override
+  Future<void> toggleSubtitle() async {
+    final selected = _player.state.track.subtitle;
+    if (selected.id != 'no') {
+      if (selected.id != 'auto') {
+        _lastSelectedSubtitleTrack = selected;
+      }
+      await _player.setSubtitleTrack(SubtitleTrack.no());
+      return;
+    }
+    final fallback =
+        _lastSelectedSubtitleTrack ?? _player.state.tracks.subtitle.firstOrNull;
+    if (fallback == null) {
+      return;
+    }
+    await _player.setSubtitleTrack(fallback);
+  }
+
+  @override
+  Future<void> adjustSubtitleDelay(Duration delta) =>
+      _adjustDelay('sub-delay', delta);
+
+  @override
+  Future<void> adjustAudioDelay(Duration delta) =>
+      _adjustDelay('audio-delay', delta);
+
+  @override
+  Future<void> seekChapter(int chapterIndex) async {
+    final chapters = await readMediaKitChapters(_nativePlayer);
+    final chapter =
+        chapters.where((item) => item.index == chapterIndex).firstOrNull;
+    if (chapter == null) {
+      throw ArgumentError.value(chapterIndex, 'chapterIndex');
+    }
+    await _player.seek(chapter.position);
+  }
+
+  Future<void> _adjustDelay(String property, Duration delta) async {
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null || _disposed) {
+      throw UnsupportedError('media_controls_unsupported');
+    }
+    final current = await _readDelay(nativePlayer, property);
+    final next = current + delta;
+    await nativePlayer.setProperty(
+      property,
+      (next.inMicroseconds / Duration.microsecondsPerSecond).toStringAsFixed(3),
+    );
+  }
+
+  Future<Duration> _readDelay(
+      NativePlayer nativePlayer, String property) async {
+    try {
+      final value = await nativePlayer.getProperty(property);
+      final seconds = double.tryParse(value.trim());
+      if (seconds == null || !seconds.isFinite) {
+        return Duration.zero;
+      }
+      return Duration(
+          microseconds: (seconds * Duration.microsecondsPerSecond).round());
+    } catch (_) {
+      return Duration.zero;
+    }
+  }
 
   /**
    * 返回 media_kit 当前播放器实际持有的同一个 NativePlayer。

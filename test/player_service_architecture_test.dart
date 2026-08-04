@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/core/playback_settings.dart';
 import 'package:local_tag_player/src/models/player_gpu_capabilities.dart';
 import 'package:local_tag_player/src/models/player_motion_interpolation_capability.dart';
+import 'package:local_tag_player/src/models/player_media_controls.dart';
 import 'package:local_tag_player/src/platform/platform_interfaces.dart';
 import 'package:local_tag_player/src/services/player/player_service.dart';
 
@@ -166,6 +167,61 @@ class _InteractiveSeekRecordingBackend extends _RecordingPlayerBackend
       commands.add('seek-interactive');
 }
 
+/** 验证媒体控制仍经由可选后端边界，不泄露具体播放器实现。 */
+class _MediaControlsRecordingBackend extends _RecordingPlayerBackend
+    implements PlayerMediaControlsBoundary {
+  final List<String> mediaCommands = <String>[];
+
+  @override
+  Future<PlayerMediaControlsSnapshot> readMediaControls() async =>
+      const PlayerMediaControlsSnapshot(
+        supported: true,
+        audioTracks: <PlayerMediaTrack>[
+          PlayerMediaTrack(
+            id: '1',
+            title: '中文',
+            language: 'zh',
+            codec: 'aac',
+            isDefault: true,
+            selected: true,
+          ),
+        ],
+        subtitleTracks: <PlayerMediaTrack>[],
+        chapters: <PlayerMediaChapter>[
+          PlayerMediaChapter(
+            index: 0,
+            position: Duration.zero,
+            title: '开始',
+          ),
+        ],
+        subtitleDelay: Duration.zero,
+        audioDelay: Duration.zero,
+      );
+
+  @override
+  Future<void> adjustAudioDelay(Duration delta) async =>
+      mediaCommands.add('audio-delay:${delta.inMilliseconds}');
+
+  @override
+  Future<void> adjustSubtitleDelay(Duration delta) async =>
+      mediaCommands.add('subtitle-delay:${delta.inMilliseconds}');
+
+  @override
+  Future<void> seekChapter(int chapterIndex) async =>
+      mediaCommands.add('chapter:$chapterIndex');
+
+  @override
+  Future<void> selectAudioTrack(String trackId) async =>
+      mediaCommands.add('audio:$trackId');
+
+  @override
+  Future<void> selectSubtitleTrack(String trackId) async =>
+      mediaCommands.add('subtitle:$trackId');
+
+  @override
+  Future<void> toggleSubtitle() async => mediaCommands.add('subtitle-toggle');
+}
+
 /**
  * 读取播放器页面及其同库状态分区，确保服务边界契约覆盖真实 Route 挂载。
  */
@@ -276,6 +332,39 @@ void main() {
     expect(fallbackBackend.commands, <String>['seek']);
   });
 
+  test('PlayerService 只通过可选边界转发媒体控制，普通后端明确不支持', () async {
+    final fallback = PlayerService(backend: _RecordingPlayerBackend());
+    final fallbackSnapshot = await fallback.readMediaControls();
+    expect(fallbackSnapshot.supported, isFalse);
+    expect(
+      () => fallback.selectAudioTrack('1'),
+      throwsUnsupportedError,
+    );
+
+    final backend = _MediaControlsRecordingBackend();
+    final service = PlayerService(backend: backend);
+    final snapshot = await service.readMediaControls();
+    expect(snapshot.supported, isTrue);
+    expect(snapshot.audioTracks.single.label('音轨'), '中文');
+    await service.selectAudioTrack('1');
+    await service.selectSubtitleTrack('no');
+    await service.toggleSubtitle();
+    await service.adjustSubtitleDelay(const Duration(milliseconds: 100));
+    await service.adjustAudioDelay(const Duration(milliseconds: -100));
+    await service.seekChapter(0);
+    expect(
+      backend.mediaCommands,
+      <String>[
+        'audio:1',
+        'subtitle:no',
+        'subtitle-toggle',
+        'subtitle-delay:100',
+        'audio-delay:-100',
+        'chapter:0',
+      ],
+    );
+  });
+
   test('不支持 Windows 可选能力的后端由 PlayerService 安全回退', () async {
     final service = PlayerService(backend: _RecordingPlayerBackend());
 
@@ -314,5 +403,19 @@ void main() {
     expect(enabled.capability.nvidiaOpticalFlowApiVersion, 0x50);
     expect(disabled.applied, isTrue);
     expect(disabled.capability.enabled, isFalse);
+  });
+
+  test('媒体控制入口挂载在正式播放器控制栏，并保持覆盖层生命周期', () {
+    final source = _readPlayerPageCluster();
+    final widgets = File(
+      'lib/src/pages/player/player_media_controls_widgets.dart',
+    ).readAsStringSync();
+
+    expect(source, contains("ValueKey('player.mediaControls')"));
+    expect(source, contains('showMediaControlsDialog'));
+    expect(source, contains('withPlayerOverlaySurfaceOccluded'));
+    expect(source, contains('readMediaControls'));
+    expect(source, contains('seekChapter'));
+    expect(widgets, contains('PlayerMediaControlSection'));
   });
 }

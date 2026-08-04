@@ -281,6 +281,12 @@ extension PlayerStateControls on PlayerPageState {
           icon: Icons.photo_camera_outlined,
           onPressed: () => unawaited(saveCurrentFrameScreenshot()),
         ),
+        PlayerChromeButton(
+          key: const ValueKey('player.mediaControls'),
+          tooltip: '音轨、字幕与章节',
+          icon: Icons.tune_rounded,
+          onPressed: () => unawaited(showMediaControlsDialog()),
+        ),
         KeyedSubtree(
           key: settingsButtonAnchorKey,
           child: PlayerChromeButton(

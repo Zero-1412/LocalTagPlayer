@@ -1,5 +1,11 @@
 # Chat 4：播放器与筛选结果队列
 
+## 2026-08-04 · 媒体轨道、章节与同步校正
+
+- 审计仅纳入适合本地发现播放器的能力：内嵌音轨选择、字幕选择/关闭、字幕延迟、音频延迟与章节定位；不纳入 mpv 内部播放列表、watch-later、网络录制、脚本/OSD、A-B 或逐帧等专业播放器扩展。
+- `PlayerMediaControlsBoundary` 为可选平台扩展。`PlayerService` 只转发强类型意图；MediaKit 在当前 `NativePlayer` 上调用类型化轨道 API，并按需读取 libmpv 章节节点，绝不创建第二个播放器、解码链或队列。
+- 新增快捷键不得替换现有绑定：`#`、`v`、`z/Z`、`Ctrl++/Ctrl+-` 与 `g-a/g-s/g-c` 仅在未被配置动作占用时处理；既有 `J/L`、`PageUp/PageDown` 保持原有 seek/来源队列语义。
+
 ## 2026-08-04 — 键盘 seek 恢复连续播放
 
 - 同一条本地样本的无内容泄露图形帧差分复现了旧路径在短按后约 0.4 秒的静止窗口；trace 同时证明 MediaKit Texture 使用 `estimated-frame-number` 回退，不能把它宣称为最终屏幕呈现。

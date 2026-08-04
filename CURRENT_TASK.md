@@ -1,5 +1,12 @@
 # CURRENT_TASK.md
 
+## 2026-08-04 · mpv 推荐媒体控制（完成）
+
+- 目标：在不扩展为专业播放器的边界内，补齐审计确认的音轨、字幕、章节和音频同步校正；不修改已有快捷键、schema、标签过滤、来源 filtered queue、缓存队列或用户数据。
+- 实现：`PlayerMediaControlsBoundary` 是可选平台能力，MediaKit 后端复用同一条 libmpv 会话读取轨道/章节并执行控制；不支持的后端明确返回“不支持”。播放器控制栏已挂载“音轨、字幕与章节”面板。
+- 快捷键：只新增未占用的 `#`、`v`、`z/Z`、`Ctrl++/Ctrl+-` 与 `g-a/g-s/g-c`；`J/L`、`PageUp/PageDown` 等既有绑定未改。
+- 验证：`flutter analyze`、播放器/架构聚焦测试、媒体控制面板点击测试和 Windows Debug 构建通过；新 Debug 进程成功启动。完整 `flutter test` 唯一失败为未改动的 `library_top_bar_search_surface.dart` 446 行超过既有 444 行上限，已记录为独立基线问题；媒体控制入口另有页面挂载契约保护。
+
 ## 2026-08-04 — 键盘 seek 恢复连续播放（进行中）
 
 - 真实同素材对照已复现：项目方向键短按后约 0.4 秒静止帧窗口；PotPlayer 的同一步骤持续有帧变化。MediaKit Texture 会退回 `estimated-frame-number`，不能再把它当作最终呈现证据。

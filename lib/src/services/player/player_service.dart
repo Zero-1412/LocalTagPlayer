@@ -6,6 +6,7 @@ import '../../models/player_backend_telemetry.dart';
 import '../../models/player_filter_transaction.dart';
 import '../../models/player_gpu_capabilities.dart';
 import '../../models/player_motion_interpolation_capability.dart';
+import '../../models/player_media_controls.dart';
 import '../../models/player_feature_apply_result.dart';
 import '../../models/player_video_surface_diagnostics.dart';
 import '../../platform/platform_interfaces.dart';
@@ -31,7 +32,8 @@ class PlayerService
         PlayerPropertyBatchBoundary,
         PlayerGpuRenderBoundary,
         PlayerOverlaySurfaceBoundary,
-        PlayerMotionInterpolationBoundary {
+        PlayerMotionInterpolationBoundary,
+        PlayerMediaControlsBoundary {
   /** 创建一个独占单个播放 Route 生命周期的服务。 */
   PlayerService({required PlayerBackend backend}) : _backend = backend;
 
@@ -160,6 +162,54 @@ class PlayerService
 
   /** 在播放与暂停之间切换。 */
   Future<void> playOrPause() => _backend.playOrPause();
+
+  /**
+   * 读取当前文件的媒体控制快照；不支持的后端显式返回 unsupported，页面不猜测
+   * 轨道或章节，也不从应用播放队列推导这些媒体内信息。
+   */
+  @override
+  Future<PlayerMediaControlsSnapshot> readMediaControls() {
+    final boundary = _backend is PlayerMediaControlsBoundary
+        ? _backend as PlayerMediaControlsBoundary
+        : null;
+    return boundary?.readMediaControls() ??
+        Future<PlayerMediaControlsSnapshot>.value(
+          const PlayerMediaControlsSnapshot.unsupported(),
+        );
+  }
+
+  PlayerMediaControlsBoundary _mediaControlsBoundary() {
+    final boundary = _backend is PlayerMediaControlsBoundary
+        ? _backend as PlayerMediaControlsBoundary
+        : null;
+    if (boundary == null) {
+      throw UnsupportedError('media_controls_unsupported');
+    }
+    return boundary;
+  }
+
+  @override
+  Future<void> selectAudioTrack(String trackId) =>
+      _mediaControlsBoundary().selectAudioTrack(trackId);
+
+  @override
+  Future<void> selectSubtitleTrack(String trackId) =>
+      _mediaControlsBoundary().selectSubtitleTrack(trackId);
+
+  @override
+  Future<void> toggleSubtitle() => _mediaControlsBoundary().toggleSubtitle();
+
+  @override
+  Future<void> adjustSubtitleDelay(Duration delta) =>
+      _mediaControlsBoundary().adjustSubtitleDelay(delta);
+
+  @override
+  Future<void> adjustAudioDelay(Duration delta) =>
+      _mediaControlsBoundary().adjustAudioDelay(delta);
+
+  @override
+  Future<void> seekChapter(int chapterIndex) =>
+      _mediaControlsBoundary().seekChapter(chapterIndex);
 
   @override
   Future<void> setProperty(String property, String value) =>
