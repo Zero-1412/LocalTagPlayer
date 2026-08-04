@@ -400,7 +400,6 @@ class PlayerSeekAudioGate {
 class PlayerKeyboardSeekController {
   PlayerKeyboardSeekController({
     required PlayerSeekCoordinator coordinator,
-    required PlayerSeekSubmit settle,
     required PlayerSeekDurationReader readPosition,
     required PlayerSeekDurationReader readDuration,
     required PlayerSeekExitReader isExiting,
@@ -408,14 +407,12 @@ class PlayerKeyboardSeekController {
     this.previewAudioGate,
     this.trace,
   })  : _coordinator = coordinator,
-        _settle = settle,
         _readPosition = readPosition,
         _readDuration = readDuration,
         _isExiting = isExiting,
         _onLatency = onLatency;
 
   final PlayerSeekCoordinator _coordinator;
-  final PlayerSeekSubmit _settle;
   final PlayerSeekDurationReader _readPosition;
   final PlayerSeekDurationReader _readDuration;
   final PlayerSeekExitReader _isExiting;
@@ -431,8 +428,17 @@ class PlayerKeyboardSeekController {
   Duration? get target => _target;
   bool get hasInteractivePreview => _previewTail != null;
 
-  /** 首次 KeyDown 不预览；只有 KeyRepeat 才开启关键帧预览与临时静音。 */
-  Duration requestRelative(Duration delta, {bool submitPreview = true}) {
+  /**
+   * 键盘跳转始终先落到关键帧预览，避免 KeyUp 再次绝对精确 seek 重置解码链。
+   *
+   * 短按不静音；仅物理长按进入 KeyRepeat 后才打开临时静音。这样既保留普通方向键
+   * 的连贯声音，也不会让长按期间的旧音频与关键帧预览错位。
+   */
+  Duration requestRelative(
+    Duration delta, {
+    bool submitPreview = true,
+    bool mutePreview = true,
+  }) {
     if (_isExiting()) return _readPosition();
     if (_target == null) _generation++;
     final duration = _readDuration();
@@ -445,7 +451,9 @@ class PlayerKeyboardSeekController {
     _target = next;
     if (submitPreview) {
       final generation = _generation;
-      final prepared = previewAudioGate?.begin() ?? Future<void>.value();
+      final prepared = mutePreview
+          ? previewAudioGate?.begin() ?? Future<void>.value()
+          : Future<void>.value();
       _previewTail = prepared.then<void>((_) async {
         if (_isExiting() || generation != _generation) return;
         await _coordinator.request(next);
@@ -455,8 +463,13 @@ class PlayerKeyboardSeekController {
     return next;
   }
 
-  /** KeyUp 只精确 seek 一次，且在精确落点的新视频帧交付后才解除静音。 */
-  Future<void> settle() async {
+  /**
+   * KeyUp 只收敛到已经提交的最新关键帧，不补发 absolute 精确 seek。
+   *
+   * 最终精确定位保留给进度条提交路径；键盘快进/快退优先保证恢复连续播放。长按的
+   * 音频只在该关键帧预览已经提交、并观察到后续帧推进后恢复，避免把预览帧当成稳定播放。
+   */
+  Future<void> settlePreview() async {
     final finalTarget = _target;
     if (finalTarget == null || _isExiting()) return;
     final generation = _generation;
@@ -466,30 +479,28 @@ class PlayerKeyboardSeekController {
     trace?.mark(traceId, 'key_up', target: finalTarget);
     _target = null;
     _previewTail = null;
-    var exactSubmitted = false;
-    int? frameBeforeExact;
+    var previewSubmitted = false;
+    int? frameAfterPreview;
     try {
-      if (previewTail != null) await previewTail;
-      if (_isExiting() || generation != _generation || _target != null) return;
       final latency = Stopwatch()..start();
-      trace?.mark(traceId, 'exact_seek_start', target: finalTarget);
-      await _settle(finalTarget);
+      if (previewTail != null) await previewTail;
       latency.stop();
-      exactSubmitted = true;
+      if (_isExiting() || generation != _generation || _target != null) return;
+      previewSubmitted = previewTail != null;
       trace?.mark(
         traceId,
-        'exact_seek_complete',
+        'keyframe_seek_complete',
         target: finalTarget,
         waitMilliseconds: latency.elapsedMilliseconds,
       );
-      // 和短按相同，命令确认后再取基线，确保等待的是最终精确落点之后的 Texture 渲染。
-      frameBeforeExact = await previewAudioGate?.captureFinalFrame();
+      // 基线在最后一次关键帧命令完成后取得，确保等待的是恢复播放后的后续帧推进。
+      frameAfterPreview = await previewAudioGate?.captureFinalFrame();
       _onLatency(latency.elapsedMilliseconds);
     } finally {
       if (shouldFinishPreview) {
         await previewAudioGate?.finish(
-          frameBeforeExact: frameBeforeExact,
-          waitForNewFrame: exactSubmitted,
+          frameBeforeExact: frameAfterPreview,
+          waitForNewFrame: previewSubmitted,
         );
       }
     }

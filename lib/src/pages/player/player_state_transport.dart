@@ -186,25 +186,19 @@ extension PlayerStateTransport on PlayerPageState {
     await exactCoordinator.request(target);
   }
 
-  /**
-   * 键盘短按仅累加并在 KeyUp 精确落点一次；确认长按后才提交关键帧预览。
-   */
-  Duration seekRelative(Duration delta, {required bool submitPreview}) {
+  /** 键盘快进/快退只提交关键帧预览；仅 KeyRepeat 进入临时静音会话。 */
+  Duration seekRelative(Duration delta, {required bool mutePreview}) {
     return keyboardSeek.requestRelative(
       delta,
-      submitPreview: submitPreview,
+      // 首次短按同样立即走关键帧路径，不能在 KeyUp 再重启一次长 GOP 精确解码。
+      submitPreview: true,
+      mutePreview: mutePreview,
     );
   }
 
-  /** KeyUp 后等待最后一个关键帧预览提交完成，再只对最终累计目标做一次精确 seek。 */
+  /** KeyUp 只收敛最后一个关键帧预览；进度条仍使用独立的精确定位路径。 */
   void settleKeyboardSeek() {
-    if (keyboardSeek.hasInteractivePreview) {
-      // 长按在第一个 KeyRepeat 已经打开了同一个暂停会话，由控制器在精确落点后关闭。
-      unawaited(keyboardSeek.settle());
-      return;
-    }
-    // 短按没有预览会话，仍要保证精确落点稳定且新帧交付后才恢复声音。
-    unawaited(seekAudioGate.run(keyboardSeek.settle));
+    unawaited(keyboardSeek.settlePreview());
   }
 
   /** 切换媒体、进度条提交或退出时取消旧键盘目标和尚未提交的预览。 */

@@ -156,7 +156,6 @@ void main() {
 
   test('键盘长按只预览累计目标并在 KeyUp 后精确收敛一次', () async {
     final previews = <Duration>[];
-    final settled = <Duration>[];
     var position = Duration.zero;
     final coordinator = PlayerSeekCoordinator(
       submit: (target) async => previews.add(target),
@@ -169,10 +168,6 @@ void main() {
     );
     final keyboard = PlayerKeyboardSeekController(
       coordinator: coordinator,
-      settle: (target) async {
-        settled.add(target);
-        position = target;
-      },
       readPosition: () => position,
       readDuration: () => const Duration(minutes: 2),
       isExiting: () => false,
@@ -192,9 +187,7 @@ void main() {
       const Duration(seconds: 15),
     );
     expect(keyboard.target, const Duration(seconds: 15));
-    expect(settled, isEmpty);
-
-    await keyboard.settle();
+    await keyboard.settlePreview();
 
     expect(
       previews,
@@ -203,13 +196,11 @@ void main() {
         Duration(seconds: 15),
       ],
     );
-    expect(settled, const <Duration>[Duration(seconds: 15)]);
     expect(keyboard.isActive, isFalse);
   });
 
   test('键盘短按不发送预览并只在 KeyUp 精确 seek 一次', () async {
     final previews = <Duration>[];
-    final settled = <Duration>[];
     var position = const Duration(seconds: 20);
     final coordinator = PlayerSeekCoordinator(
       submit: (target) async => previews.add(target),
@@ -222,10 +213,6 @@ void main() {
     );
     final keyboard = PlayerKeyboardSeekController(
       coordinator: coordinator,
-      settle: (target) async {
-        settled.add(target);
-        position = target;
-      },
       readPosition: () => position,
       readDuration: () => const Duration(minutes: 2),
       isExiting: () => false,
@@ -235,20 +222,18 @@ void main() {
     expect(
       keyboard.requestRelative(
         const Duration(seconds: 5),
-        submitPreview: false,
+        mutePreview: false,
       ),
       const Duration(seconds: 25),
     );
-    await keyboard.settle();
+    await keyboard.settlePreview();
 
-    expect(previews, isEmpty);
-    expect(settled, const <Duration>[Duration(seconds: 25)]);
-    expect(position, const Duration(seconds: 25));
+    expect(previews, const <Duration>[Duration(seconds: 25)]);
+    expect(position, const Duration(seconds: 20));
   });
 
   test('键盘长按从短按累积目标开始提交关键帧预览', () async {
     final previews = <Duration>[];
-    final settled = <Duration>[];
     var position = Duration.zero;
     final coordinator = PlayerSeekCoordinator(
       submit: (target) async => previews.add(target),
@@ -261,10 +246,6 @@ void main() {
     );
     final keyboard = PlayerKeyboardSeekController(
       coordinator: coordinator,
-      settle: (target) async {
-        settled.add(target);
-        position = target;
-      },
       readPosition: () => position,
       readDuration: () => const Duration(minutes: 2),
       isExiting: () => false,
@@ -273,18 +254,17 @@ void main() {
 
     keyboard.requestRelative(
       const Duration(seconds: 5),
-      submitPreview: false,
+      mutePreview: false,
     );
-    keyboard.requestRelative(const Duration(seconds: 2));
-    await keyboard.settle();
+    keyboard.requestRelative(const Duration(seconds: 2), mutePreview: true);
+    await keyboard.settlePreview();
 
-    expect(previews, const <Duration>[Duration(seconds: 7)]);
-    expect(settled, const <Duration>[Duration(seconds: 7)]);
+    expect(
+        previews, const <Duration>[Duration(seconds: 5), Duration(seconds: 7)]);
   });
 
   test('新会话取消会阻止上一轮迟到 KeyUp 覆盖位置', () async {
     final firstPreview = Completer<void>();
-    final settled = <Duration>[];
     var first = true;
     final coordinator = PlayerSeekCoordinator(
       submit: (_) async {
@@ -302,7 +282,6 @@ void main() {
     );
     final keyboard = PlayerKeyboardSeekController(
       coordinator: coordinator,
-      settle: (target) async => settled.add(target),
       readPosition: () => Duration.zero,
       readDuration: () => const Duration(minutes: 2),
       isExiting: () => false,
@@ -310,12 +289,11 @@ void main() {
     );
 
     keyboard.requestRelative(const Duration(seconds: 5));
-    final oldKeyUp = keyboard.settle();
+    final oldKeyUp = keyboard.settlePreview();
     keyboard.cancel();
     firstPreview.complete();
     await oldKeyUp;
 
-    expect(settled, isEmpty);
     expect(keyboard.target, isNull);
   });
   test('播放中精确 seek 在落点完成后才恢复音频', () async {
@@ -422,10 +400,6 @@ void main() {
     );
     final keyboard = PlayerKeyboardSeekController(
       coordinator: coordinator,
-      settle: (target) async {
-        commands.add('exact:${target.inSeconds}');
-        position = target;
-      },
       readPosition: () => position,
       readDuration: () => const Duration(minutes: 2),
       isExiting: () => false,
@@ -434,14 +408,13 @@ void main() {
     );
 
     keyboard.requestRelative(const Duration(seconds: 5));
-    await keyboard.settle();
+    await keyboard.settlePreview();
 
     expect(
       commands,
       <String>[
         'volume:0.0',
         'preview:5',
-        'exact:5',
         'capture-final-baseline',
         'frame-presented',
         'volume:35.0',
@@ -476,7 +449,6 @@ void main() {
     );
     final keyboard = PlayerKeyboardSeekController(
       coordinator: coordinator,
-      settle: (_) async {},
       readPosition: () => Duration.zero,
       readDuration: () => const Duration(minutes: 2),
       isExiting: () => false,
@@ -486,14 +458,13 @@ void main() {
     );
 
     keyboard.requestRelative(const Duration(seconds: 5));
-    await keyboard.settle();
+    await keyboard.settlePreview();
 
     expect(
       lines.map((line) => RegExp(r'stage=([^ ]+)').firstMatch(line)!.group(1)),
       <String>[
         'key_up',
-        'exact_seek_start',
-        'exact_seek_complete',
+        'keyframe_seek_complete',
         'new_video_frame',
         'audio_restore_start',
         'audio_restore_complete',

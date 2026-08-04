@@ -1,5 +1,11 @@
 # Chat 4：播放器与筛选结果队列
 
+## 2026-08-04 — 键盘 seek 恢复连续播放
+
+- 同一条本地样本的无内容泄露图形帧差分复现了旧路径在短按后约 0.4 秒的静止窗口；trace 同时证明 MediaKit Texture 使用 `estimated-frame-number` 回退，不能把它宣称为最终屏幕呈现。
+- 键盘短按改为立即关键帧预览且不临时静音；KeyRepeat 进入的长按继续 latest-only、GOP 自适应节流与临时静音，但 KeyUp 只收敛最后一个关键帧预览，不再追加 absolute 精确 seek。进度条松手仍走独立精确定位。
+- Debug 窗口实际回归：新路径 trace 为 `key_up → keyframe_seek_complete`，没有 `exact_seek_start`；短按后的帧差分连续，系统音频保持正常范围。实体键盘长按仍需在后续验收时人工复核，自动化不能伪造 KeyRepeat。
+
 ## 所有权
 
 - `PlaybackSession`、PlayerPage 和来源 filtered queue；

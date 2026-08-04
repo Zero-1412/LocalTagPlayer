@@ -202,8 +202,8 @@ void main() {
     );
     expect(source, contains('submit: playerService.seekInteractive'));
     expect(source, contains('PlayerKeyboardSeekController('));
-    // KeyUp 通过诊断精确收敛入口保留位置与新帧确认，不能为静态断言退回裸后端调用。
-    expect(source, contains('settle: seekExactlyWithDiagnostics'));
+    // 进度条保留独立精确定位；键盘 KeyUp 不能再次重启绝对 seek。
+    expect(source, isNot(contains('settle: seekExactlyWithDiagnostics')));
     expect(source, contains('confirmationTimeout: Duration.zero'));
     expect(source, contains('await seekExactlyWithDiagnostics(start);'));
     expect(source, contains('submit: playerService.seek'));

@@ -133,7 +133,6 @@ Future<void> _verifyShortAndLongKeyboardPaths(
   PlayerSeekAudioGate playbackGate,
 ) async {
   final previews = <Duration>[];
-  final exacts = <Duration>[];
   final coordinator = PlayerSeekCoordinator(
     submit: (target) async {
       previews.add(target);
@@ -147,11 +146,6 @@ Future<void> _verifyShortAndLongKeyboardPaths(
   );
   final keyboard = PlayerKeyboardSeekController(
     coordinator: coordinator,
-    settle: (target) async {
-      exacts.add(target);
-      await backend.seek(target);
-      await _waitForPosition(tester, backend, target);
-    },
     readPosition: () => backend.state.position,
     readDuration: () => backend.state.duration,
     isExiting: () => false,
@@ -161,23 +155,22 @@ Future<void> _verifyShortAndLongKeyboardPaths(
 
   final shortTarget = keyboard.requestRelative(
     const Duration(seconds: 3),
-    submitPreview: false,
+    mutePreview: false,
   );
-  await keyboard.settle();
-  await _waitForPosition(tester, backend, shortTarget);
-  expect(previews, isEmpty, reason: '短按不得先提交关键帧预览');
-  expect(exacts, hasLength(1), reason: '短按必须只提交一次精确 seek');
+  await keyboard.settlePreview();
+  expect(previews, contains(shortTarget), reason: '短按必须立即提交关键帧预览');
 
   final longTarget = keyboard.requestRelative(
     const Duration(seconds: 3),
-    submitPreview: false,
+    mutePreview: false,
   );
-  final finalLongTarget = keyboard.requestRelative(const Duration(seconds: 1));
-  await keyboard.settle();
-  await _waitForPosition(tester, backend, finalLongTarget);
+  final finalLongTarget = keyboard.requestRelative(
+    const Duration(seconds: 1),
+    mutePreview: true,
+  );
+  await keyboard.settlePreview();
   expect(longTarget, lessThan(finalLongTarget));
-  expect(previews, hasLength(1), reason: '长按重复时应有一条关键帧预览');
-  expect(exacts, hasLength(2), reason: '长按 KeyUp 仍只精确收敛一次');
+  expect(previews, contains(finalLongTarget), reason: '长按必须收敛到最后一个关键帧预览');
 }
 
 /** 对正式后端发送一次精确 seek，并等待画面位置真实接近目标。 */

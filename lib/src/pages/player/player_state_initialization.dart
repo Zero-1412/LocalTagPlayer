@@ -106,8 +106,6 @@ extension PlayerStateInitialization on PlayerPageState {
     );
     keyboardSeek = PlayerKeyboardSeekController(
       coordinator: seekCoordinator,
-      // 精确收敛不只等后端命令返回；还要等位置反馈接近最终目标，再恢复音频播放。
-      settle: seekExactlyWithDiagnostics,
       readPosition: () => playerService.state.position,
       readDuration: () => playerService.state.duration,
       isExiting: () => isExiting,

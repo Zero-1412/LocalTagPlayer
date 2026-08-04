@@ -94,11 +94,10 @@ void main() {
     expect(helpers, contains('playerKeyboardSeekRepeatStepSeconds'));
     expect(helpers, contains('连续快进'));
     expect(transport, contains('keyboardSeek.requestRelative('));
-    expect(transport, contains('submitPreview: submitPreview'));
-    expect(helpers, contains('submitPreview: isRepeat'));
-    expect(transport, contains('seekAudioGate.run'));
+    expect(transport, contains('submitPreview: true'));
+    expect(helpers, contains('mutePreview: isRepeat'));
+    expect(transport, contains('keyboardSeek.settlePreview()'));
     expect(transport, contains('waitForPresentedVideoFrame'));
-    expect(transport, contains('keyboardSeek.hasInteractivePreview'));
     expect(mediaKit, isNot(contains('_interactiveSeekConvergenceDelay')));
     expect(native, isNot(contains('_interactiveSeekConvergenceDelay')));
   });

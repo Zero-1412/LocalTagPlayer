@@ -1,5 +1,12 @@
 # CURRENT_TASK.md
 
+## 2026-08-04 — 键盘 seek 恢复连续播放（进行中）
+
+- 真实同素材对照已复现：项目方向键短按后约 0.4 秒静止帧窗口；PotPlayer 的同一步骤持续有帧变化。MediaKit Texture 会退回 `estimated-frame-number`，不能再把它当作最终呈现证据。
+- 已改为：键盘短按立即 `absolute+keyframes` 且保持原音量；长按保留 latest-only、GOP 自适应节流与临时静音，但 KeyUp 只收敛已提交的关键帧预览，不再追加 absolute 精确 seek。进度条松手仍走独立精确定位。
+- 已通过完整 `flutter test`、`flutter analyze` 与 Windows Debug build；新 Debug 窗口同素材短按复录已无旧路径约 0.4 秒静止帧窗口，trace 不再出现 `exact_seek_start`。
+- 不修改 schema、FilterQuery / TagQueryService、filtered queue、缓存队列、用户数据或 PlayerBackend 契约。
+
 > 本文件只保存当前任务、最近三项完成记录、稳定基线、阻塞和下一步。
 > 完整历史位于 `docs/task_history/`；不得把已完成叙事重新追加到本文件。
 

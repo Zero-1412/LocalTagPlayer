@@ -143,9 +143,8 @@ extension PlayerStateHelpers on PlayerPageState {
           : seekStepSeconds;
       final target = seekRelative(
         Duration(seconds: -stepSeconds),
-        // 首次 KeyDown 只建立短按目标；确认进入长按后才发送关键帧预览，
-        // 这样短按 KeyUp 只剩一次精确 seek，不会双跳转。
-        submitPreview: isRepeat,
+        // 每次按下立即预览关键帧；只有 KeyRepeat 才静音，避免短按人为打断声音。
+        mutePreview: isRepeat,
       );
       showShortcutFeedback(
         isRepeat
@@ -170,7 +169,7 @@ extension PlayerStateHelpers on PlayerPageState {
       final target = seekRelative(
         Duration(seconds: stepSeconds),
         // 与后退保持相同会话语义，避免方向不同导致延迟门禁不可比较。
-        submitPreview: isRepeat,
+        mutePreview: isRepeat,
       );
       showShortcutFeedback(
         isRepeat
