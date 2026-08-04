@@ -101,6 +101,7 @@ extension PlayerStateInitialization on PlayerPageState {
       framePresentationTimeout: () =>
           seekPreviewThrottle.finalPresentationTimeout,
       isExiting: () => isExiting,
+      readFrameEvidence: () => lastPresentedVideoFrameEvidence,
       trace: seekTrace,
     );
     keyboardSeek = PlayerKeyboardSeekController(

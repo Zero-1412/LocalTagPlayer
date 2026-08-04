@@ -323,7 +323,10 @@ void main() {
     final gate = PlayerSeekAudioGate(
       readDesiredVolume: () => 80,
       setVolume: (value) async => commands.add('volume:$value'),
-      readPresentedFrame: () async => 10,
+      readPresentedFrame: () async {
+        commands.add('capture-final-baseline');
+        return 10;
+      },
       waitForNewFrame: (_, __) async {
         commands.add('frame-presented');
         return true;
@@ -339,6 +342,7 @@ void main() {
       <String>[
         'volume:0.0',
         'seek-confirmed',
+        'capture-final-baseline',
         'frame-presented',
         'volume:80.0'
       ],
@@ -351,7 +355,10 @@ void main() {
     final gate = PlayerSeekAudioGate(
       readDesiredVolume: () => 80,
       setVolume: (value) async => commands.add('volume:$value'),
-      readPresentedFrame: () async => 10,
+      readPresentedFrame: () async {
+        commands.add('capture-final-baseline');
+        return 10;
+      },
       waitForNewFrame: (_, __) async => false,
       framePresentationTimeout: () => const Duration(milliseconds: 750),
       isExiting: () => false,
@@ -359,7 +366,10 @@ void main() {
 
     await gate.run<void>(() async => commands.add('seek-confirmed'));
 
-    expect(commands, <String>['volume:0.0', 'seek-confirmed']);
+    expect(
+      commands,
+      <String>['volume:0.0', 'seek-confirmed', 'capture-final-baseline'],
+    );
   });
 
   test('用户原本暂停时 seek 不得静默自动播放', () async {
@@ -367,7 +377,10 @@ void main() {
     final gate = PlayerSeekAudioGate(
       readDesiredVolume: () => 0,
       setVolume: (value) async => commands.add('volume:$value'),
-      readPresentedFrame: () async => 10,
+      readPresentedFrame: () async {
+        commands.add('capture-final-baseline');
+        return 10;
+      },
       waitForNewFrame: (_, __) async => true,
       framePresentationTimeout: () => const Duration(milliseconds: 750),
       isExiting: () => false,
@@ -384,7 +397,10 @@ void main() {
     final gate = PlayerSeekAudioGate(
       readDesiredVolume: () => 35,
       setVolume: (value) async => commands.add('volume:$value'),
-      readPresentedFrame: () async => 10,
+      readPresentedFrame: () async {
+        commands.add('capture-final-baseline');
+        return 10;
+      },
       waitForNewFrame: (_, __) async {
         commands.add('frame-presented');
         return true;
@@ -426,6 +442,7 @@ void main() {
         'volume:0.0',
         'preview:5',
         'exact:5',
+        'capture-final-baseline',
         'frame-presented',
         'volume:35.0',
       ],
@@ -445,6 +462,7 @@ void main() {
       waitForNewFrame: (_, __) async => true,
       framePresentationTimeout: () => const Duration(milliseconds: 750),
       isExiting: () => false,
+      readFrameEvidence: () => 'native-rendered-texture',
       trace: trace,
     );
     final coordinator = PlayerSeekCoordinator(
@@ -484,6 +502,9 @@ void main() {
     for (final line in lines) {
       expect(line, contains('PLAYER_SEEK_TRACE trace=1 mono_us='));
       expect(line, contains('wall_utc_ms=1785801600000'));
+      if (line.contains('stage=new_video_frame')) {
+        expect(line, contains('frame_evidence=native-rendered-texture'));
+      }
     }
   });
 }

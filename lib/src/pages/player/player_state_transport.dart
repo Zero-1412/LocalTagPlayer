@@ -57,14 +57,23 @@ extension PlayerStateTransport on PlayerPageState {
   }
 
   /**
-   * `estimated-frame-number` 是现有 MediaKit Texture 路径可取得的最接近“新视频帧已
-   * 交付”的证据。它不是 time-pos，避免仅音频时钟前进就错误解除 seek 临时静音。
+   * Windows 原生桥在 mpv render 回调完成共享纹理复制并通知 Flutter Texture 后递增
+   * `native-rendered-frames`，这是最终精确落点已进入 Texture 的直接证据。非原生桥
+   * 才退回 mpv 的估算帧号，并把来源写入 trace，不能把回退值与屏幕呈现混为一谈。
    */
-  Future<int?> readPresentedVideoFrame() async =>
-      parseMpvInt(await getMpvProperty('estimated-frame-number'));
+  Future<int?> readPresentedVideoFrame() async {
+    final nativeRendered =
+        parseMpvInt(await getMpvProperty('native-rendered-frames'));
+    if (nativeRendered != null) {
+      lastPresentedVideoFrameEvidence = 'native-rendered-texture';
+      return nativeRendered;
+    }
+    lastPresentedVideoFrameEvidence = 'estimated-frame-number-fallback';
+    return parseMpvInt(await getMpvProperty('estimated-frame-number'));
+  }
 
   /**
-   * 精确 seek 已落点后轮询视频帧号。向前、向后 seek 都只要求帧号发生变化；不使用
+   * 精确 seek 已落点后轮询 Texture 渲染号。向前、向后 seek 都只要求帧号发生变化；不使用
    * 大小比较，以免反向跳转把正确的新帧误判为旧帧。超时会留下诊断而非伪造成功证据。
    */
   Future<bool> waitForPresentedVideoFrame(

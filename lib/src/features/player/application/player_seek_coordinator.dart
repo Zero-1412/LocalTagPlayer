@@ -32,6 +32,9 @@ typedef PlayerSeekFrameWaiter = Future<bool> Function(
   Duration timeout,
 );
 
+/** 返回当前帧门禁使用的证据来源，供录屏回归排除估算帧号假阳性。 */
+typedef PlayerSeekFrameEvidenceReader = String Function();
+
 /**
  * 将一次 seek 会话的关键节点写成可与录屏对齐的短 trace。
  *
@@ -64,6 +67,7 @@ class PlayerSeekTraceLogger {
     int? previousFrame,
     int? waitMilliseconds,
     bool? framePresented,
+    String? frameEvidence,
   }) {
     final output = _output;
     if (traceId == null || output == null) return;
@@ -77,6 +81,7 @@ class PlayerSeekTraceLogger {
       if (previousFrame != null) 'previous_frame=$previousFrame',
       if (waitMilliseconds != null) 'wait_ms=$waitMilliseconds',
       if (framePresented != null) 'frame_presented=$framePresented',
+      if (frameEvidence != null) 'frame_evidence=$frameEvidence',
     ];
     output(fields.join(' '));
   }
@@ -260,6 +265,7 @@ class PlayerSeekAudioGate {
     required PlayerSeekFrameWaiter waitForNewFrame,
     required PlayerSeekDurationReader framePresentationTimeout,
     required PlayerSeekExitReader isExiting,
+    this.readFrameEvidence,
     this.trace,
   })  : _readDesiredVolume = readDesiredVolume,
         _setVolume = setVolume,
@@ -274,6 +280,7 @@ class PlayerSeekAudioGate {
   final PlayerSeekFrameWaiter _waitForNewFrame;
   final PlayerSeekDurationReader _framePresentationTimeout;
   final PlayerSeekExitReader _isExiting;
+  final PlayerSeekFrameEvidenceReader? readFrameEvidence;
   final PlayerSeekTraceLogger? trace;
 
   Future<void> _tail = Future<void>.value();
@@ -297,7 +304,7 @@ class PlayerSeekAudioGate {
     return _prepared = _enqueue(() => _setVolume(0));
   }
 
-  /** 最终精确 seek 前读取帧号，后续必须观察到不同帧号才允许解除静音。 */
+  /** 精确 seek 命令已完成后读取帧号，后续必须观察到不同帧号才允许解除静音。 */
   Future<int?> captureFinalFrame() async {
     await (_prepared ?? _tail);
     if (!_active || _isExiting()) return null;
@@ -314,9 +321,12 @@ class PlayerSeekAudioGate {
     int? frameBeforeExact;
     try {
       await begin();
-      frameBeforeExact = await captureFinalFrame();
       final result = await operation();
       completed = true;
+      // 基线必须在精确命令完成后取得，不能把命令执行期间仍在播放的预览帧当作最终落点。
+      if (_restoreAudio) {
+        frameBeforeExact = await captureFinalFrame();
+      }
       return result;
     } finally {
       await finish(
@@ -364,6 +374,7 @@ class PlayerSeekAudioGate {
         previousFrame: frameBeforeExact,
         waitMilliseconds: frameWait.elapsedMilliseconds,
         framePresented: framePresented,
+        frameEvidence: readFrameEvidence?.call(),
       );
     }
     // 没有新帧证据时不得播放旧落点的声音；下一次 seek 会重新建立一个安全会话。
@@ -460,7 +471,6 @@ class PlayerKeyboardSeekController {
     try {
       if (previewTail != null) await previewTail;
       if (_isExiting() || generation != _generation || _target != null) return;
-      frameBeforeExact = await previewAudioGate?.captureFinalFrame();
       final latency = Stopwatch()..start();
       trace?.mark(traceId, 'exact_seek_start', target: finalTarget);
       await _settle(finalTarget);
@@ -472,6 +482,8 @@ class PlayerKeyboardSeekController {
         target: finalTarget,
         waitMilliseconds: latency.elapsedMilliseconds,
       );
+      // 和短按相同，命令确认后再取基线，确保等待的是最终精确落点之后的 Texture 渲染。
+      frameBeforeExact = await previewAudioGate?.captureFinalFrame();
       _onLatency(latency.elapsedMilliseconds);
     } finally {
       if (shouldFinishPreview) {

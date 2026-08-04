@@ -212,8 +212,18 @@ PlayerSeekAudioGate _createAudioGate(
       isExiting: () => false,
     );
 
-Future<int?> _readPresentedFrame(MediaKitPlayerBackend backend) async =>
-    int.tryParse((await backend.getProperty('estimated-frame-number')).trim());
+/**
+ * Windows 原生桥可用时，只有共享 Texture 已完成复制并标记帧可用才递增该计数；矩阵因此
+ * 与页面的最终音频门保持同一证据口径。纯 MediaKit 会话没有该扩展时保留估算帧号回退，
+ * 使跨平台门禁仍可运行，但不得把其结果当作屏幕呈现的同等级证据。
+ */
+Future<int?> _readPresentedFrame(MediaKitPlayerBackend backend) async {
+  final nativeRendered = int.tryParse(
+      (await backend.getProperty('native-rendered-frames')).trim());
+  if (nativeRendered != null) return nativeRendered;
+  return int.tryParse(
+      (await backend.getProperty('estimated-frame-number')).trim());
+}
 
 Future<bool> _waitForNewFrame(
   WidgetTester tester,

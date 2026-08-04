@@ -34,5 +34,5 @@
 ## 2026-08-04 · seek 恢复 trace
 
 - `PlayerSeekAudioGate` 在一个临时静音会话内分配 trace id；`PlayerKeyboardSeekController` 在同一 id 下记录 `key_up`、`exact_seek_start` 和 `exact_seek_complete`。
-- 新视频帧或超时、以及音频恢复请求/完成继续写入同一 trace。`mono_us` 只用于会话内延迟，`wall_utc_ms` 只作为本地录屏起始时间的对齐锚点；两者不得混用为性能结论。
+- 精确 seek 返回后才采样最终帧基线；Windows 正式 Texture 路径优先等原生桥完成共享纹理复制的 `native-rendered-frames` 递增，非原生路径才回退 mpv `estimated-frame-number`，并在 trace 标出 `frame_evidence`。新视频帧或超时、以及音频恢复请求/完成继续写入同一 trace。`mono_us` 只用于会话内延迟，`wall_utc_ms` 只作为本地录屏起始时间的对齐锚点；两者不得混用为性能结论。
 - 诊断不改变 preview latest-only 合并、音频静音策略、`PlayerBackend` 合约或来源 filtered queue。

@@ -115,16 +115,12 @@ class PlayerPage extends StatefulWidget {
       onMediaDetailsUpdated;
   /** 页面退出后由播放器原生资源释放流程完成的路由协调信号。 */
   final Completer<void> disposalCompleter;
-
   /** 文件选择、写入、元数据与文件管理器定位的平台边界。 */
   final FileSystemAdapter fileSystem;
-
   /** 组合根提供的应用层播放服务工厂；页面不选择或取得具体后端。 */
   final PlayerServiceFactory playerServiceFactory;
-
   /** 由组合根选择的媒体探测后端工厂。 */
   final MediaProbeBackendFactory mediaProbeBackendFactory;
-
   /** 媒体库 Route 持有的播放器全屏会话状态，不参与持久化。 */
   final PlayerFullscreenSessionController fullscreenSessionController;
 
@@ -267,6 +263,7 @@ class PlayerPageState extends State<PlayerPage> {
   int? lastSeekLatencyMs;
   DateTime? lastSeekAt;
   int? lastVideoFrameNumber;
+  var lastPresentedVideoFrameEvidence = 'unavailable';
   double? lastAudioPts;
   DateTime? lastVideoAdvanceAt;
   DateTime? lastAudioAdvanceAt;

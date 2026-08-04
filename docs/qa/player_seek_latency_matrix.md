@@ -45,7 +45,7 @@
 .\tool\run_player_seek_latency_matrix.ps1 -Manifest .\.local\qa\player_seek-latency-matrix.json
 ```
 
-输出位于未跟踪的 `artifacts/player_seek_latency_<timestamp>/`：每个 case 的日志和不含路径的 `summary.json`。测量路径与页面一致：临时静音但不暂停视频时钟，精确 seek 的位置反馈后还必须观察到 `estimated-frame-number` 变化才计入完成。任一样本缺失、probe 与 manifest 不符、GOP 分类不符、后端未确认位置/新帧或 p95 超预算都会使门禁失败。
+输出位于未跟踪的 `artifacts/player_seek_latency_<timestamp>/`：每个 case 的日志和不含路径的 `summary.json`。测量路径与页面一致：临时静音但不暂停视频时钟；精确 seek 返回后才采样基线，Windows 正式 Texture 还必须观察到 `native-rendered-frames` 递增才计入完成。非原生路径可回退 `estimated-frame-number`，但结果必须标记为估算证据，不能与 Texture 已渲染结果混算。任一样本缺失、probe 与 manifest 不符、GOP 分类不符、后端未确认位置/新帧或 p95 超预算都会使门禁失败。
 
 ## 录屏与 `PLAYER_SEEK_TRACE` 对齐
 
@@ -72,4 +72,4 @@ audio_restore_complete
 
 运行时不为交互额外扫描媒体 GOP；它保留 latest-only 合并并以同一会话的关键帧 seek 耗时选择上述档位。只有持有完整 12-case manifest 的机器产出结果后，才可以调整这些校准边界。
 
-若超过最终新帧阈值仍无帧号变化，播放器保留临时静音而不播放旧落点音频；下一次 seek 会建立新会话。该失败路径写入 `PLAYER_SEEK frame_presentation_timeout`，供诊断而非作为成功收敛。
+若超过最终新帧阈值仍无帧号变化，播放器保留临时静音而不播放旧落点音频；下一次 seek 会建立新会话。`frame_evidence=native-rendered-texture` 表示原生桥已经完成共享纹理复制并标记 Flutter Texture 可用，`estimated-frame-number-fallback` 只表示兼容路径的 mpv 估算，录屏分析不得把两者视为同等的屏幕呈现证据。该失败路径写入 `PLAYER_SEEK frame_presentation_timeout`，供诊断而非作为成功收敛。
