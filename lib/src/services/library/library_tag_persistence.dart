@@ -128,6 +128,33 @@ class LibraryTagPersistence {
     VideoItem video, {
     String? parentTag,
   }) {
+    _removeManualTagsInBatch(
+      batch,
+      video,
+      matches: (tag) =>
+          parentTag == null ? tag.parentId == null : tag.parentId == parentTag,
+    );
+  }
+
+  /**
+   * 清理视频的全部 manual 关系。
+   *
+   * 顶层 manual 编辑会把历史二级 manual 标签提升到独立层级，因此必须同时
+   * 删除旧的 parent 关系；folder 关系不在本方法范围内。
+   */
+  void removeAllManualTagsInBatch(Batch batch, VideoItem video) {
+    _removeManualTagsInBatch(
+      batch,
+      video,
+      matches: (_) => true,
+    );
+  }
+
+  void _removeManualTagsInBatch(
+    Batch batch,
+    VideoItem video, {
+    required bool Function(TagItem tag) matches,
+  }) {
     final key = TagRules.pathKey(video.path);
     final retained = _videoTagIdsByPathKey[key];
     if (retained == null || retained.isEmpty) {
@@ -139,9 +166,7 @@ class LibraryTagPersistence {
       if (tag == null || tag.source != TagSource.manual) {
         continue;
       }
-      final sameScope =
-          parentTag == null ? tag.parentId == null : tag.parentId == parentTag;
-      if (!sameScope) {
+      if (!matches(tag)) {
         continue;
       }
       removed.add(tagId);

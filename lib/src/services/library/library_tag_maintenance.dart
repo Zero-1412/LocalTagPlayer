@@ -73,14 +73,15 @@ class LibraryTagMaintenance {
     if (videosToUpdate.isEmpty) {
       return 0;
     }
+    final independentTag = _independentManualTag(tag);
     final batch = _store.database.batch();
     for (final item in videosToUpdate) {
-      _addManualTagToItem(item, tag);
+      _addManualTagToItem(item, independentTag);
       _store.videoPersistence.insertInBatch(batch, item);
       _store.tagPersistence.attachTagInBatch(
         batch,
         item,
-        tag,
+        independentTag,
         source: TagSource.manual,
       );
     }
@@ -104,25 +105,42 @@ class LibraryTagMaintenance {
     if (videosToUpdate.isEmpty) {
       return 0;
     }
+    final independentTag = tag.parentId == null
+        ? tag
+        : _store.tagsById[TagRules.tagIdFor(
+            name: tag.name, groupId: tag.groupId ?? 'manual')];
     final batch = _store.database.batch();
     var changed = 0;
     for (final item in videosToUpdate) {
-      final hadManualLink = _store
-              .videoTagIdsByPathKey[TagRules.pathKey(item.path)]
-              ?.contains(tag.id) ??
-          false;
-      final changedCompat = _removeManualTagFromItem(item, tag);
-      batch.delete(
-        'video_tags',
-        where: 'video_id = ? AND tag_id = ? AND source = ?',
-        whereArgs: [item.videoId, tag.id, TagSource.manual.name],
-      );
-      _store.videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.remove(tag.id);
-      if (_store.videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.isEmpty ??
-          false) {
-        _store.videoTagIdsByPathKey.remove(TagRules.pathKey(item.path));
+      final pathKey = TagRules.pathKey(item.path);
+      final linkedTagIds = <String>{
+        if (independentTag != null) independentTag.id,
+        tag.id,
+      };
+      var changedCompat = false;
+      for (final tagId in linkedTagIds) {
+        final hadManualLink =
+            _store.videoTagIdsByPathKey[pathKey]?.contains(tagId) ?? false;
+        if (independentTag != null && tagId == independentTag.id) {
+          changedCompat =
+              _removeManualTagFromItem(item, independentTag) || changedCompat;
+        } else {
+          changedCompat = _removeManualTagFromItem(item, tag) || changedCompat;
+        }
+        batch.delete(
+          'video_tags',
+          where: 'video_id = ? AND tag_id = ? AND source = ?',
+          whereArgs: [item.videoId, tagId, TagSource.manual.name],
+        );
+        _store.videoTagIdsByPathKey[pathKey]?.remove(tagId);
+        if (hadManualLink) {
+          changedCompat = true;
+        }
       }
-      if (hadManualLink || changedCompat) {
+      if (_store.videoTagIdsByPathKey[pathKey]?.isEmpty ?? false) {
+        _store.videoTagIdsByPathKey.remove(pathKey);
+      }
+      if (changedCompat) {
         changed++;
       }
       _store.videoPersistence.insertInBatch(batch, item);
@@ -208,12 +226,11 @@ class LibraryTagMaintenance {
     VideoItem item, {
     String? parentTag,
   }) {
-    _store.tagPersistence.removeManualTagScopeInBatch(
-      batch,
-      item,
-      parentTag: parentTag,
-    );
     if (parentTag == null) {
+      // 顶层 manual 是独立用户数据；保存时顺便提升历史二级 manual 关系，
+      // 但保留由当前文件树派生的 child folder 标签。
+      _promoteLegacyManualChildTagsToRoot(item);
+      _store.tagPersistence.removeAllManualTagsInBatch(batch, item);
       final folderTags = _folderTagsForItem(item);
       for (final tag in item.tags) {
         if (folderTags.any((folderTag) => TagRules.sameTag(folderTag, tag))) {
@@ -232,6 +249,11 @@ class LibraryTagMaintenance {
       }
       return;
     }
+    _store.tagPersistence.removeManualTagScopeInBatch(
+      batch,
+      item,
+      parentTag: parentTag,
+    );
     final folderChildTags = _folderChildTagsForItem(item, parentTag);
     for (final child in item.childTags[parentTag] ?? const <String>{}) {
       if (folderChildTags
@@ -252,16 +274,64 @@ class LibraryTagMaintenance {
     }
   }
 
+  /** 将旧版挂在文件夹父级下的 manual 标签提升为独立顶层标签。 */
+  void _promoteLegacyManualChildTagsToRoot(VideoItem item) {
+    final rootPath = item.rootPath;
+    if (rootPath == null || rootPath.isEmpty) {
+      return;
+    }
+    final entries = item.childTags.entries.toList(growable: false);
+    for (final entry in entries) {
+      final folderChildren = _folderChildTagsForItem(item, entry.key);
+      final legacyManualChildren = entry.value
+          .where(
+            (child) => !folderChildren.any(
+              (folderChild) => TagRules.sameTag(folderChild, child),
+            ),
+          )
+          .toList(growable: false);
+      if (legacyManualChildren.isEmpty) {
+        continue;
+      }
+      item.tags.addAll(legacyManualChildren);
+      entry.value.removeAll(legacyManualChildren);
+      if (entry.value.isEmpty) {
+        item.childTags.remove(entry.key);
+      }
+    }
+  }
+
   /**
    * 为内存视频模型添加 manual 标签兼容字段。
    */
   void _addManualTagToItem(VideoItem item, TagItem tag) {
-    final parentId = tag.parentId;
-    if (parentId == null) {
-      item.tags.add(tag.name);
-      return;
+    item.tags.add(tag.name);
+  }
+
+  /** 将批量入口收到的历史二级 manual 标签归一为独立顶层标签。 */
+  TagItem _independentManualTag(TagItem tag) {
+    if (tag.parentId == null) {
+      return tag;
     }
-    (item.childTags[parentId] ??= <String>{}).add(tag.name);
+    final groupId = tag.groupId ?? 'manual';
+    final id = TagRules.tagIdFor(name: tag.name, groupId: groupId);
+    final existing = _store.tagsById[id];
+    if (existing != null) {
+      return existing;
+    }
+    final promoted = TagItem(
+      id: id,
+      name: tag.name,
+      displayName: tag.displayName ?? tag.name,
+      groupId: groupId,
+      source: TagSource.manual,
+      aliases: tag.aliases,
+      isFavorite: tag.isFavorite,
+      isHidden: tag.isHidden,
+      sortOrder: tag.sortOrder,
+    );
+    _store.tagsById[id] = promoted;
+    return promoted;
   }
 
   /**

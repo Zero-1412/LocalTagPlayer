@@ -205,8 +205,10 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
   }
 
   /**
-   * 使用统一弹窗编辑视频在当前标签层级下的 manual 标签。
+   * 使用统一弹窗编辑视频独立的顶层 manual 标签。
    *
+   * 文件夹筛选可以处于二级上下文，但用户主动维护的标签不继承该父级；
+   * 这样同一个 manual 标签可以跨文件夹复用，并由 manual 分组统一筛选。
    * [deferLibraryRefresh] 仅供播放器前台路由使用，保存后延迟到返回媒体库再刷新结果，
    * 避免隐藏页面在播放期间执行标签计数重算。
    */
@@ -214,23 +216,16 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     VideoItem item, {
     bool deferLibraryRefresh = false,
   }) async {
-    final childParentTag = activeChildParentTag;
-    final editingChildTags = childParentTag != null;
-    final lockedTags = editingChildTags
-        ? folderChildTagsForItem(item, childParentTag)
-        : folderTagsForItem(item);
+    final lockedTags = folderTagsForItem(item);
     final updated = await showDialog<Set<String>>(
       context: context,
       builder: (_) => TagEditorDialog(
-        title:
-            editingChildTags ? '${item.title} / $childParentTag' : item.title,
-        initialTags: editingChildTags
-            ? (item.childTags[childParentTag] ?? const <String>{})
-            : item.tags,
+        title: item.title,
+        helperText: '只修改独立 manual 标签；文件夹标签由目录结构维护。',
         existingTags: tagEditorCandidates(
           runtime.store?.allTagItems ?? const <TagItem>[],
-          parentTag: editingChildTags ? childParentTag : null,
         ),
+        initialTags: item.tags,
         lockedTags: lockedTags,
       ),
     );
@@ -242,7 +237,6 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
         item: item,
         selectedTags: updated,
         lockedFolderTags: lockedTags,
-        parentTag: editingChildTags ? childParentTag : null,
       ),
       commit: (target, parentTag) async {
         await runtime.store?.replaceManualTags(target, parentTag: parentTag);

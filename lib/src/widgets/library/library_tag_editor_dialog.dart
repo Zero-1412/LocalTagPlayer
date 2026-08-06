@@ -217,7 +217,7 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                     controller: _controller,
                     autofocus: true,
                     decoration: InputDecoration(
-                      labelText: '搜索或新建 manual 标签',
+                      labelText: '搜索或新建独立 manual 标签',
                       prefixIcon: const Icon(Icons.search_rounded),
                       suffixIcon: _query.isEmpty
                           ? null

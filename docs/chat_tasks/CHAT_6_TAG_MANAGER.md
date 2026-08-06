@@ -10,6 +10,7 @@
 
 - 优先使用 `tagId`；
 - manual/folder 来源不混淆；
+- 用户主动添加的 manual 标签使用独立顶层关系，不沿用 folder 父子层级；
 - 批量移除 manual 不删除 folder 关系；
 - locked 标签不被自动流程静默删除；
 - merge/delete 只有 migration、回滚和用户数据验证完整时才开放；

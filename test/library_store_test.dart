@@ -677,6 +677,61 @@ void main() {
     );
   });
 
+  test('top-level manual replacement promotes legacy child tags for filtering',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('manual_root_scope');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Series', 'Album', 'root.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, file.path);
+    const legacyChild = TagItem(
+      id: 'manual:series:independent',
+      name: 'independent',
+      displayName: 'independent',
+      groupId: 'manual',
+      parentId: 'Series',
+      source: TagSource.manual,
+    );
+    await store.saveTag(legacyChild);
+    item.childTags['Series'] = <String>{'Album', 'independent'};
+    await store.replaceManualTags(item, parentTag: 'Series');
+
+    await store.replaceManualTags(item);
+
+    final independentId =
+        TagRules.tagIdFor(name: 'independent', groupId: 'manual');
+    expect(item.tags, contains('independent'));
+    expect(item.childTags['Series'], <String>{'Album'});
+    expect(
+      store.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
+      contains(independentId),
+    );
+    expect(
+      store.videoTagIdsByPathKey[TagRules.pathKey(file.path)]
+              ?.contains(legacyChild.id) ??
+          false,
+      isFalse,
+    );
+    expect(
+      FilterQuery(includeTagIds: <String>{independentId}).matches(
+        item,
+        tagContext: store.tagQueryContext,
+      ),
+      isTrue,
+    );
+  });
+
   test('video repository persists direct upserts and deletes tag links',
       () async {
     final stores = <LibraryStore>[];
@@ -1683,7 +1738,7 @@ void main() {
   });
 
   test(
-      'tag maintenance removes manual child link without deleting folder child',
+      'batch manual tagging promotes legacy child tags without deleting folder child',
       () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('tag_strategy');
@@ -1711,15 +1766,17 @@ void main() {
     );
     await store.saveTag(manualChild);
     expect(await store.batchAddManualTag(manualChild, [item]), 1);
+    final independentId = TagRules.tagIdFor(name: 'Album', groupId: 'manual');
+    expect(item.tags, contains('Album'));
     expect(store.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
-        contains(manualChild.id));
+        contains(independentId));
 
     expect(await store.batchRemoveManualTag(manualChild, [item]), 1);
 
     expect(item.childTags['Series'], contains('Album'));
     expect(
       store.videoTagIdsByPathKey[TagRules.pathKey(file.path)]
-              ?.contains(manualChild.id) ??
+              ?.contains(independentId) ??
           false,
       isFalse,
     );
@@ -1728,7 +1785,7 @@ void main() {
     expect(reloadedItem.childTags['Series'], contains('Album'));
     expect(
       reloaded.videoTagIdsByPathKey[TagRules.pathKey(file.path)]
-              ?.contains(manualChild.id) ??
+              ?.contains(independentId) ??
           false,
       isFalse,
     );

@@ -54,6 +54,8 @@ manual / folder / rule / filename / import / auto
 
 - folder 标签从当前 root 文件树第一/第二层派生；
 - 二级标签始终属于所属一级标签；
+- 用户主动维护的 manual 标签始终属于独立顶层 `manual` 组，不继承 folder 父级；
+- 历史挂在 folder 父级下的 manual 关系在顶层保存或批量操作时提升为顶层关系，保留标签名称与视频关联；
 - folder 可重算，manual/locked 和其它用户维护关系必须保留；
 - 同名 folder/manual 不合并身份；关系优先使用 `tagId`；
 - 展示层可按来源、组、父级和规范化名称聚合，但不得改变真实关系。
