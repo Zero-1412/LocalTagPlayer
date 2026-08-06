@@ -349,7 +349,7 @@ class WindowsNativePlayerBackend
   @override
   Future<void> seekInteractive(Duration position) async {
     await _command('seek-fast', integer: position.inMilliseconds);
-    // 页面在单次交互结束或 KeyUp 后提交普通 seek；原生层只承担廉价关键帧预览。
+    // 页面在精确恢复入口提交普通 seek；原生层只承担廉价关键帧预览。
   }
 
   @override

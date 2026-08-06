@@ -1,5 +1,12 @@
 # CURRENT_TASK.md
 
+## 2026-08-06 · 进度条连续点击响应（完成）
+
+- 目标：鼠标连续快速点击进度条时只追踪最新目标，单次点击立即进入交互式 seek，不被旧 seek 的新帧等待或音量恢复阻塞；
+- 实现：进度条回调复用页面级 latest-only `PlayerSeekCoordinator`，移除鼠标交互路径上的 `PlayerSeekAudioGate` 等待；精确恢复路径仍保留原音频门禁；
+- 保护：PlayerBackend、来源 filtered queue、播放/暂停意图、标签筛选、缓存队列和用户数据不变；
+- 验证：seek、进度条和播放器架构 focused tests、`flutter analyze`、Windows Debug build 通过；Debug 页面截图挂载正常，但实际点击因 Computer Use 再次返回 `node_repl exec context not found` 未完成。
+
 ## 2026-08-06 · 主动标签脱离文件夹层级（完成）
 
 - 目标：主动添加的 manual 标签统一作为独立顶层关系，任意视频可单独添加，并可从 manual 分组筛选；

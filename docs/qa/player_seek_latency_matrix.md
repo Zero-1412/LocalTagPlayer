@@ -1,6 +1,6 @@
 # 播放器真实 seek 延迟矩阵门禁
 
-本门禁衡量本产品已支持的本地发现播放器交互，不把目标扩展为 PotPlayer 或 VLC 的完整专业播放器。它保护两件具体行为：进度条松手只做一次精确 seek；方向键短按只在 KeyUp 做一次精确 seek，只有长按产生 `KeyRepeat` 后才允许关键帧预览。
+本门禁衡量本产品已支持的本地发现播放器交互，不把目标扩展为 PotPlayer 或 VLC 的完整专业播放器。它保护精确恢复入口和方向键语义：精确恢复只做一次 absolute seek，方向键短按只在 KeyUp 做一次精确 seek，只有长按产生 `KeyRepeat` 后才允许关键帧预览。普通鼠标点击进度条走独立的关键帧 latest-only 交互路径，由 focused 测试保护其快速点击不堆积。
 
 ## 覆盖与口径
 
@@ -45,7 +45,7 @@
 .\tool\run_player_seek_latency_matrix.ps1 -Manifest .\.local\qa\player_seek-latency-matrix.json
 ```
 
-输出位于未跟踪的 `artifacts/player_seek_latency_<timestamp>/`：每个 case 的日志和不含路径的 `summary.json`。测量路径与页面一致：临时静音但不暂停视频时钟；精确 seek 返回后才采样基线，Windows 正式 Texture 还必须观察到 `native-rendered-frames` 递增才计入完成。非原生路径可回退 `estimated-frame-number`，但结果必须标记为估算证据，不能与 Texture 已渲染结果混算。任一样本缺失、probe 与 manifest 不符、GOP 分类不符、后端未确认位置/新帧或 p95 超预算都会使门禁失败。
+输出位于未跟踪的 `artifacts/player_seek_latency_<timestamp>/`：每个 case 的日志和不含路径的 `summary.json`。矩阵通过正式精确恢复入口测量：临时静音但不暂停视频时钟；精确 seek 返回后才采样基线，Windows 正式 Texture 还必须观察到 `native-rendered-frames` 递增才计入完成。非原生路径可回退 `estimated-frame-number`，但结果必须标记为估算证据，不能与 Texture 已渲染结果混算。任一样本缺失、probe 与 manifest 不符、GOP 分类不符、后端未确认位置/新帧或 p95 超预算都会使门禁失败。
 
 ## 录屏与 `PLAYER_SEEK_TRACE` 对齐
 

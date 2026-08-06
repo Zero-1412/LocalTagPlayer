@@ -167,22 +167,18 @@ extension PlayerStateTransport on PlayerPageState {
   }
 
   /**
-   * 处理鼠标进度条的单次跳转：先用关键帧路径尽快交付目标附近画面，再由音频门禁等待新帧。
-   * 进度条自身保留鼠标目标，避免等待后端精确位置回写造成视觉回弹；继续观看恢复仍走精确 seek。
+   * 处理鼠标进度条的交互式跳转。
+   *
+   * 进度条点击必须复用页面级 latest-only 协调器：第一次点击立即下发，后续快速点击
+   * 只替换尚未下发的目标，不能让每个点击都排队等待新帧和音量恢复。进度条组件自身
+   * 保留鼠标目标，避免位置流尚未追上时滑块回弹；继续观看恢复仍走精确 seek 与音频门禁。
    */
   Future<void> seekFromProgressBarWithDiagnostics(Duration target) async {
     if (isExiting) {
       return;
     }
     cancelKeyboardSeek();
-    final latency = Stopwatch()..start();
-    try {
-      await seekAudioGate.run(() => playerService.seekInteractive(target));
-    } finally {
-      latency.stop();
-      lastSeekLatencyMs = latency.elapsedMilliseconds;
-      lastSeekAt = DateTime.now();
-    }
+    await seekCoordinator.request(target);
   }
 
   /**
@@ -215,7 +211,7 @@ extension PlayerStateTransport on PlayerPageState {
     );
   }
 
-  /** KeyUp 只收敛最后一个关键帧预览；进度条仍使用独立的精确定位路径。 */
+  /** KeyUp 只收敛最后一个关键帧预览；进度条使用独立的交互式 latest-only 路径。 */
   void settleKeyboardSeek() {
     unawaited(keyboardSeek.settlePreview());
   }

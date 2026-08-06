@@ -272,7 +272,7 @@ class MediaKitPlayerBackend
         'absolute+keyframes',
       ]),
     );
-    // 精确收敛由页面在单次交互结束或真实 KeyUp 后显式提交，后端不再猜测输入间隔。
+    // 精确收敛由页面的精确恢复入口显式提交，后端不再猜测鼠标输入间隔。
   }
 
   @override

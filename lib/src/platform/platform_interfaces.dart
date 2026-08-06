@@ -114,8 +114,9 @@ abstract interface class PlayerVideoSurfaceDiagnosticsBoundary {
 /**
  * 为进度条点击和连续快进提供关键帧优先随机跳转的可选后端边界。
  *
- * 交互式跳转只负责尽快显示目标附近关键帧；调用方在单次交互结束或键盘松开后，
- * 再通过普通 seek 精确收敛最终目标。这样连续输入不会被固定延迟误判为已经结束。
+ * 交互式跳转只负责尽快显示目标附近关键帧；页面根据交互类型决定是否再通过普通
+ * seek 精确收敛。连续鼠标点击和键盘预览可只保留 latest-only 关键帧目标，继续观看
+ * 等精确入口仍显式提交普通 seek。
  * 不支持该边界的后端由 [PlayerService] 安全回退到普通 seek，页面不得感知 mpv 参数。
  */
 abstract interface class PlayerInteractiveSeekBoundary {

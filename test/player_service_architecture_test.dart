@@ -257,8 +257,14 @@ void main() {
       ),
     );
     expect(source, contains('submit: playerService.seekInteractive'));
+    expect(source, contains('await seekCoordinator.request(target);'));
+    // 鼠标连续点击不得进入等待新帧/恢复音量的串行门禁；精确恢复路径仍单独保留。
+    expect(
+      source,
+      isNot(contains('seekAudioGate.run(() => playerService.seekInteractive')),
+    );
     expect(source, contains('PlayerKeyboardSeekController('));
-    // 进度条保留独立精确定位；键盘 KeyUp 不能再次重启绝对 seek。
+    // 进度条走交互式 latest-only；键盘 KeyUp 不能再次重启绝对 seek。
     expect(source, isNot(contains('settle: seekExactlyWithDiagnostics')));
     expect(source, contains('confirmationTimeout: Duration.zero'));
     expect(source, contains('await seekExactlyWithDiagnostics(start);'));

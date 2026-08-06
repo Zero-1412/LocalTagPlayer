@@ -79,7 +79,7 @@ extension PlayerStateInitialization on PlayerPageState {
     seekPreviewThrottle = PlayerSeekGopAdaptiveThrottle();
     seekTrace = PlayerSeekTraceLogger(output: debugPrint);
     seekCoordinator = PlayerSeekCoordinator(
-      // 进度条和连续按键只提交关键帧预览；单次交互结束或 KeyUp 再显式精确 seek。
+      // 进度条和连续按键只提交关键帧预览；继续观看等精确入口单独提交普通 seek。
       submit: playerService.seekInteractive,
       readPosition: () => playerService.state.position,
       readDuration: () => playerService.state.duration,

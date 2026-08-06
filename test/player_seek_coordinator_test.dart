@@ -90,6 +90,40 @@ void main() {
     expect(coordinator.latestRequestedTarget, isNull);
   });
 
+  test('鼠标快速连续点击只保留正在执行目标之后的最新落点', () async {
+    final firstSubmission = Completer<void>();
+    final submitted = <Duration>[];
+    var first = true;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async {
+        submitted.add(target);
+        if (first) {
+          first = false;
+          await firstSubmission.future;
+        }
+      },
+      readPosition: () => Duration.zero,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+
+    final firstClick = coordinator.request(const Duration(seconds: 10));
+    coordinator.request(const Duration(seconds: 20));
+    coordinator.request(const Duration(seconds: 30));
+
+    expect(submitted, const <Duration>[Duration(seconds: 10)]);
+    firstSubmission.complete();
+    await firstClick;
+
+    expect(
+      submitted,
+      const <Duration>[Duration(seconds: 10), Duration(seconds: 30)],
+    );
+  });
+
   test('seek 目标始终约束在当前媒体时长内', () async {
     final submitted = <Duration>[];
     var position = Duration.zero;
