@@ -4,6 +4,43 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/features/player/application/player_seek_coordinator.dart';
 
 void main() {
+  test('后端 seek 已超过节流窗口时不会再追加一个完整间隔', () async {
+    final submitted = <Duration>[];
+    final delays = <Duration>[];
+    var first = true;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async {
+        submitted.add(target);
+        if (first) {
+          first = false;
+          // 模拟长 GOP 的一次交互式 seek；命令本身已覆盖 64ms 节流窗口。
+          await Future<void>.delayed(const Duration(milliseconds: 90));
+        }
+      },
+      readPosition: () => Duration.zero,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: const Duration(milliseconds: 64),
+      confirmationTimeout: Duration.zero,
+      delay: (duration) async {
+        delays.add(duration);
+        await Future<void>.delayed(duration);
+      },
+    );
+
+    final worker = coordinator.request(const Duration(seconds: 10));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    coordinator.request(const Duration(seconds: 20));
+    await worker;
+
+    expect(
+      submitted,
+      const <Duration>[Duration(seconds: 10), Duration(seconds: 20)],
+    );
+    expect(delays, isEmpty);
+  });
+
   test('长 GOP 代理仅降低当前会话预览频率并放宽最终新帧阈值', () {
     final throttle = PlayerSeekGopAdaptiveThrottle();
 

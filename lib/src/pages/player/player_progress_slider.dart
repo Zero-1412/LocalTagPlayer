@@ -20,6 +20,7 @@ class PlayerProgressSlider extends StatefulWidget {
     required this.value,
     required this.max,
     required this.onCommitted,
+    this.onSeekTargetChanged,
     required this.previewIdentity,
     required this.loadPreview,
     this.isFullscreen = false,
@@ -41,6 +42,9 @@ class PlayerProgressSlider extends StatefulWidget {
    * 透传到播放器，否则长 GOP 媒体会在同一次拖动中堆积多次解码跳转。
    */
   final Future<void> Function(double value) onCommitted;
+
+  /** 通知外层同步时间文本与隐藏态进度条的乐观目标；不改变后端提交语义。 */
+  final ValueChanged<double?>? onSeekTargetChanged;
 
   /** 当前视频稳定标识；切换视频时使迟到预览立即失效。 */
   final Object previewIdentity;
@@ -183,6 +187,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
   /** 开始拖动时锁定本地显示值，避免后端尚未确认的位置把滑块拉回。 */
   void _handleChangeStart(double value) {
     _clearPendingCommit();
+    widget.onSeekTargetChanged?.call(null);
     setState(() {
       _dragging = true;
       _dragValue = value;
@@ -207,6 +212,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
       _pendingCommitValue = committedValue;
       _pendingCommitCompleted = false;
     });
+    widget.onSeekTargetChanged?.call(committedValue);
     _pendingCommitTimer = Timer(_pendingCommitTimeout, () {
       if (!mounted ||
           _commitGeneration != generation ||

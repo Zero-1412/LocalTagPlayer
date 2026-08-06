@@ -221,8 +221,10 @@ class PlayerSeekCoordinator {
         if (requested == null) continue;
         _pendingTarget = null;
         final latency = Stopwatch()..start();
-        await _submit(requested);
+        // 节流窗口从命令派发开始计算；后端已耗时超过窗口时，下一次最新目标
+        // 应在命令返回后立即接续，不能把同一个窗口重复加在命令完成之后。
         _sinceLastDispatch = Stopwatch()..start();
+        await _submit(requested);
 
         final confirmation = Stopwatch()..start();
         while (!_isExiting() && confirmation.elapsed < confirmationTimeout) {

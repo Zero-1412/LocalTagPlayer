@@ -264,6 +264,8 @@ class PlayerPageState extends State<PlayerPage> {
   String? openingPosterPath;
   int? lastSeekLatencyMs;
   DateTime? lastSeekAt;
+  /** 进度条点击后的乐观位置；等待后端位置流追上后清除，避免时间文本落后于滑块。 */
+  Duration? optimisticProgressPosition;
   int? lastVideoFrameNumber;
   var lastPresentedVideoFrameEvidence = 'unavailable';
   double? lastAudioPts;

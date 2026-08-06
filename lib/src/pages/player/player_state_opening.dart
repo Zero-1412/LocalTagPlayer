@@ -30,6 +30,7 @@ extension PlayerStateOpening on PlayerPageState {
     }
     // 新媒体不能继承上一条视频遗漏 KeyUp 的累计目标或迟到精确 seek。
     cancelKeyboardSeek();
+    setOptimisticProgressPosition(null);
     if (openedPath == null && openingPosterPath == null) {
       // 缩略图只承担 Route 首次冷启动占位；队列切换继续复用唯一视频纹理，
       // 避免图片解码与不同分辨率的原生纹理重建在同一帧交叉。

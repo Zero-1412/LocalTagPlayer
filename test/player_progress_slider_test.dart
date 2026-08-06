@@ -5,6 +5,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/pages/player/player_progress_slider.dart';
 
 void main() {
+  testWidgets('点击目标同时通知外层即时位置', (tester) async {
+    final visualTargets = <double?>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 48,
+            child: PlayerProgressSlider(
+              sliderKey: const ValueKey('progress.visualTarget'),
+              value: 0,
+              max: 1000,
+              previewIdentity: 'video-1',
+              loadPreview: (_) async => null,
+              onSeekTargetChanged: visualTargets.add,
+              onCommitted: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final sliderRect =
+        tester.getRect(find.byKey(const ValueKey('progress.visualTarget')));
+    await tester.tapAt(
+      Offset(sliderRect.left + sliderRect.width * 0.75, sliderRect.center.dy),
+    );
+    await tester.pump();
+
+    expect(visualTargets.first, isNull);
+    expect(visualTargets.last, isNotNull);
+  });
+
   testWidgets('进度条点击在后端回写前保持目标位置', (tester) async {
     double? committed;
 

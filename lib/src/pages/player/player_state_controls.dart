@@ -46,12 +46,14 @@ extension PlayerStateControls on PlayerPageState {
             stream: playerService.positionChanges,
             initialData: playerService.state.position,
             builder: (context, positionSnapshot) {
+              final livePosition = positionSnapshot.data ?? Duration.zero;
+              final position = optimisticProgressPosition ?? livePosition;
               return AnimatedOpacity(
                 key: const ValueKey('player.controls.hiddenProgress'),
                 duration: fadeDuration,
                 opacity: controlsVisible ? 0 : 1,
                 child: PlayerHiddenProgressBar(
-                  position: positionSnapshot.data ?? Duration.zero,
+                  position: position,
                   duration: playerService.state.duration,
                 ),
               );
@@ -76,7 +78,8 @@ extension PlayerStateControls on PlayerPageState {
                   stream: playerService.positionChanges,
                   initialData: playerService.state.position,
                   builder: (context, positionSnapshot) {
-                    final position = positionSnapshot.data ?? Duration.zero;
+                    final livePosition = positionSnapshot.data ?? Duration.zero;
+                    final position = optimisticProgressPosition ?? livePosition;
                     final duration = playerService.state.duration;
                     final maxMs =
                         math.max(1, duration.inMilliseconds).toDouble();
@@ -121,6 +124,13 @@ extension PlayerStateControls on PlayerPageState {
                                     loadPreview: (target) => widget
                                         .thumbnailService
                                         .previewFrameFor(currentItem, target),
+                                    onSeekTargetChanged: (value) =>
+                                        setOptimisticProgressPosition(
+                                      value == null
+                                          ? null
+                                          : Duration(
+                                              milliseconds: value.round()),
+                                    ),
                                     onCommitted: (value) =>
                                         seekFromProgressBarWithDiagnostics(
                                       Duration(milliseconds: value.round()),

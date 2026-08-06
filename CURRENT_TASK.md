@@ -1,5 +1,12 @@
 # CURRENT_TASK.md
 
+## 2026-08-06 · PotPlayer 对照后的进度条反馈（完成）
+- 根因：快速点击后，滑块已有乐观目标，但时间文本和隐藏态进度线仍读取旧的 position stream；协调器还存在后端耗时后重复追加节流窗口。
+- 修复：节流从 seek 派发开始计时；进度条 latest target 同步到时间文本和隐藏态进度线，位置流追上目标后自动清除；切换媒体时清除旧目标。
+- 对照：PotPlayer 连续点击保持播放状态并立即显示最新时间；当前项目已保持播放状态，滑块/时间/隐藏进度线使用同一乐观目标。
+- 保护：schema、FilterQuery、TagQueryService、filtered queue、PlayerBackend 契约、缩略图队列和用户数据未改。
+- 验证：PotPlayer 与 Debug 版本真实窗口对照、进度条/seek focused tests、`flutter analyze`、`flutter build windows --debug` 通过；媒体首帧仍受具体编码 GOP 和后端解码耗时影响。
+
 ## 2026-08-06 · 进度条快速点击回写竞态（完成）
 - 根因：相近目标的第一次位置回写仅凭 500ms 容差被误判为最新点击，导致滑块回弹。
 - 修复：进度条等待 latest-only 提交完成，并比较最近旧目标与当前目标的距离；旧回写不再清掉最新乐观位置。

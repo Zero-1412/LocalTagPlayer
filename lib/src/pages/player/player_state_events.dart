@@ -17,6 +17,14 @@ import 'player_page.dart';
  * 仍保留在页面状态对象中。
  */
 extension PlayerStateEvents on PlayerPageState {
+  /** 让进度条的本地目标同时驱动时间文本和隐藏态进度反馈。 */
+  void setOptimisticProgressPosition(Duration? position) {
+    if (optimisticProgressPosition == position) {
+      return;
+    }
+    rebuild(() => optimisticProgressPosition = position);
+  }
+
   /**
    * 处理播放内核在 open 完成后才报告的运行期错误。
    *
@@ -38,6 +46,12 @@ extension PlayerStateEvents on PlayerPageState {
 
   /** 以低频写入当前已打开视频的进度，避免播放流每帧触发 SQLite。 */
   void handlePosition(Duration position) {
+    final optimistic = optimisticProgressPosition;
+    if (mounted &&
+        optimistic != null &&
+        (position - optimistic).abs() <= const Duration(milliseconds: 500)) {
+      rebuild(() => optimisticProgressPosition = null);
+    }
     final openedPathSnapshot = openedPath;
     if (openRequests.isOpening ||
         choosingPlaybackStart ||
