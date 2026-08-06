@@ -71,13 +71,33 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
   /** 拖动期间只更新本地视觉位置，松手后才向播放后端提交一次 seek。 */
   double? _dragValue;
   var _dragging = false;
+  /** 鼠标点击后暂时保持目标位置，等待后端位置流追上，避免滑块回弹。 */
+  double? _pendingCommitValue;
+  Timer? _pendingCommitTimer;
+
+  static const _pendingCommitTimeout = Duration(seconds: 3);
+  static const _pendingCommitToleranceMs = 500.0;
 
   @override
   void didUpdateWidget(covariant PlayerProgressSlider oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.previewIdentity != widget.previewIdentity) {
       _cancelPreview(clearHover: false);
+      _clearPendingCommit();
+      return;
     }
+    final pending = _pendingCommitValue;
+    if (pending != null &&
+        (widget.value - pending).abs() <= _pendingCommitToleranceMs) {
+      _clearPendingCommit();
+    }
+  }
+
+  /** 清理已经被后端确认或超时的本地乐观位置。 */
+  void _clearPendingCommit() {
+    _pendingCommitTimer?.cancel();
+    _pendingCommitTimer = null;
+    _pendingCommitValue = null;
   }
 
   /** 根据轨道可用宽度把指针位置映射为目标播放时间。 */
@@ -148,12 +168,14 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
   @override
   void dispose() {
     _previewTimer?.cancel();
+    _pendingCommitTimer?.cancel();
     _requestGeneration++;
     super.dispose();
   }
 
   /** 开始拖动时锁定本地显示值，避免后端尚未确认的位置把滑块拉回。 */
   void _handleChangeStart(double value) {
+    _clearPendingCommit();
     setState(() {
       _dragging = true;
       _dragValue = value;
@@ -167,11 +189,21 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
 
   /** 松手后只提交最终目标，后续位置显示继续以播放器确认状态为准。 */
   void _handleChangeEnd(double value) {
+    final committedValue = value.clamp(0.0, widget.max).toDouble();
+    _pendingCommitTimer?.cancel();
     setState(() {
       _dragging = false;
       _dragValue = null;
+      _pendingCommitValue = committedValue;
     });
-    widget.onCommitted(value);
+    _pendingCommitTimer = Timer(_pendingCommitTimeout, () {
+      if (!mounted || _pendingCommitValue != committedValue) {
+        return;
+      }
+      setState(() => _pendingCommitValue = null);
+      _pendingCommitTimer = null;
+    });
+    widget.onCommitted(committedValue);
   }
 
   @override
@@ -204,10 +236,12 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
                   duration: accessibility.fadeDuration(AppMotion.hover),
                   curve: AppMotion.standardCurve,
                   builder: (context, hoverProgress, child) {
+                    final displayValue =
+                        (_dragging ? _dragValue : _pendingCommitValue) ??
+                            widget.value;
                     return PlayerSliderVisual(
                       sliderKey: widget.sliderKey,
-                      value: (_dragging ? _dragValue : widget.value) ??
-                          widget.value,
+                      value: displayValue.clamp(0.0, widget.max).toDouble(),
                       max: widget.max,
                       onChanged: _handleChanged,
                       onChangeStart: _handleChangeStart,

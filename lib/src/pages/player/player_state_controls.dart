@@ -122,7 +122,7 @@ extension PlayerStateControls on PlayerPageState {
                                         .thumbnailService
                                         .previewFrameFor(currentItem, target),
                                     onCommitted: (value) => unawaited(
-                                      seekWithDiagnostics(
+                                      seekFromProgressBarWithDiagnostics(
                                         Duration(milliseconds: value.round()),
                                       ),
                                     ),

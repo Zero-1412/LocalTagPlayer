@@ -39,6 +39,36 @@ class QueueListViewportState extends State<QueueListViewport> {
   /** 某些 Windows 滚轮/程序化跳转不会稳定发送结束通知，使用短防抖兜底。 */
   Timer? _settleFallbackTimer;
 
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_handleControllerScroll);
+  }
+
+  @override
+  void didUpdateWidget(covariant QueueListViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) {
+      return;
+    }
+    oldWidget.controller.removeListener(_handleControllerScroll);
+    widget.controller.addListener(_handleControllerScroll);
+  }
+
+  /**
+   * 用控制器变化补齐 Windows 滚轮和程序化定位缺少 ScrollEndNotification 的情况。
+   * 只在第一次进入滚动态时重建，避免高频滚轮事件把整个可视队列反复 rebuild。
+   */
+  void _handleControllerScroll() {
+    if (!mounted) {
+      return;
+    }
+    if (_scrollSettled) {
+      setState(() => _scrollSettled = false);
+    }
+    _scheduleSettledFallback();
+  }
+
   /**
    * 记录滚动生命周期；结束通知必须触发重建，修复 `jumpTo` 后占位残留。
    */
@@ -85,6 +115,7 @@ class QueueListViewportState extends State<QueueListViewport> {
   @override
   void dispose() {
     _settleFallbackTimer?.cancel();
+    widget.controller.removeListener(_handleControllerScroll);
     super.dispose();
   }
 
@@ -106,7 +137,8 @@ class QueueListViewportState extends State<QueueListViewport> {
           return DeferredQueueListItem(
             item: item,
             scrollSettled: _scrollSettled,
-            child: widget.itemBuilder(context, index, item),
+            // 占位期间不创建完整卡片，避免缩略图/媒体详情 Future 在快速滚动时提前启动。
+            childBuilder: () => widget.itemBuilder(context, index, item),
           );
         },
       ),
@@ -122,7 +154,7 @@ class DeferredQueueListItem extends StatelessWidget {
     super.key,
     required this.item,
     required this.scrollSettled,
-    required this.child,
+    required this.childBuilder,
   });
 
   /** 当前队列项，仅用于在占位状态展示稳定标题。 */
@@ -132,7 +164,7 @@ class DeferredQueueListItem extends StatelessWidget {
   final bool scrollSettled;
 
   /** 滚动负载允许时才创建的完整队列项。 */
-  final Widget child;
+  final Widget Function() childBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -142,7 +174,7 @@ class DeferredQueueListItem extends StatelessWidget {
           Scrollable.recommendDeferredLoadingForContext(context),
     );
     if (!shouldDefer) {
-      return child;
+      return childBuilder();
     }
     // 快速滚动期间不启动缩略图校验或媒体详情读取，只保留可辨认的标题反馈。
     return Padding(

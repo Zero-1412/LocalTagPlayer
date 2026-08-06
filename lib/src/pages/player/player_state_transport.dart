@@ -167,6 +167,25 @@ extension PlayerStateTransport on PlayerPageState {
   }
 
   /**
+   * 处理鼠标进度条的单次跳转：先用关键帧路径尽快交付目标附近画面，再由音频门禁等待新帧。
+   * 进度条自身保留鼠标目标，避免等待后端精确位置回写造成视觉回弹；继续观看恢复仍走精确 seek。
+   */
+  Future<void> seekFromProgressBarWithDiagnostics(Duration target) async {
+    if (isExiting) {
+      return;
+    }
+    cancelKeyboardSeek();
+    final latency = Stopwatch()..start();
+    try {
+      await seekAudioGate.run(() => playerService.seekInteractive(target));
+    } finally {
+      latency.stop();
+      lastSeekLatencyMs = latency.elapsedMilliseconds;
+      lastSeekAt = DateTime.now();
+    }
+  }
+
+  /**
    * 执行继续观看所需的精确 seek，并保留既有位置确认与延迟诊断语义。
    *
    * 该协调器只服务单次精确落点，不与长按的关键帧预览工作器共享待提交目标，
