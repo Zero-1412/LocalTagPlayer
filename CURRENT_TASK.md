@@ -1,11 +1,12 @@
 # CURRENT_TASK.md
 
-## 2026-08-06 · PotPlayer 对照后的进度条反馈（完成）
-- 根因：快速点击后，滑块已有乐观目标，但时间文本和隐藏态进度线仍读取旧的 position stream；协调器还存在后端耗时后重复追加节流窗口。
-- 修复：节流从 seek 派发开始计时；进度条 latest target 同步到时间文本和隐藏态进度线，位置流追上目标后自动清除；切换媒体时清除旧目标。
-- 对照：PotPlayer 连续点击保持播放状态并立即显示最新时间；当前项目已保持播放状态，滑块/时间/隐藏进度线使用同一乐观目标。
-- 保护：schema、FilterQuery、TagQueryService、filtered queue、PlayerBackend 契约、缩略图队列和用户数据未改。
-- 验证：PotPlayer 与 Debug 版本真实窗口对照、进度条/seek focused tests、`flutter analyze`、`flutter build windows --debug` 通过；媒体首帧仍受具体编码 GOP 和后端解码耗时影响。
+## 2026-08-06 · 同媒体 click→seek→首帧 A/B 与隐藏态首击修复（完成）
+- 媒体：项目播放器与 PotPlayer 均使用 `D:\video\崩铁\银狼\241229_90_SilverWolf-interview.mp4`，时长 3:21、H.264 2560x1440 60fps；项目来源队列保持 1/1。
+- A/B：PotPlayer 49% 目标点击派发约 72ms，约 250–300ms 采样出现目标帧；项目隐藏态 20% 目标点击派发约 79ms，100ms 采样已到目标附近，300/800ms 仍保持目标播放。
+- 根因：隐藏视觉线只有 3px，透明点击区虽扩大到 12px，但播放器页面外层与 Texture/HWND 的命中顺序仍可能让首击只唤醒控制条；HWND 还必须让出完整点击区。
+- 修复：视觉线保持 3px；隐藏态在页面最外层挂载 12px 透明命中区，直接复用 latest-only seek 协调器；HWND 隐藏底部让出 12px；移除会造成重复 seek 的外层兜底路径。
+- 保护：schema、FilterQuery、TagQueryService、来源 filtered queue、PlayerBackend 契约、缩略图队列和用户数据未改。
+- 验证：同媒体 PotPlayer/项目真实窗口与 100/300/800ms 截图采样、隐藏进度 widget、seek coordinator focused tests、`flutter analyze`、`flutter build windows --debug` 均通过。
 
 ## 2026-08-06 · 进度条快速点击回写竞态（完成）
 - 根因：相近目标的第一次位置回写仅凭 500ms 容差被误判为最新点击，导致滑块回弹。

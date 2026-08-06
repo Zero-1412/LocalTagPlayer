@@ -129,13 +129,16 @@ class PlayerSliderVisual extends StatelessWidget {
 }
 
 /**
- * 控制栏隐藏后贴住视频底边的只读细进度线，避免遮挡画面或扩大点击区域。
+ * 控制栏隐藏后贴住视频底边的细进度线。
+ *
+ * 视觉线保持 3px；提供 [onSeek] 时在同一位置增加透明点击区，不改变视觉占位。
  */
 class PlayerHiddenProgressBar extends StatelessWidget {
   const PlayerHiddenProgressBar({
     super.key,
     required this.position,
     required this.duration,
+    this.onSeek,
   });
 
   /** 当前播放位置。 */
@@ -144,39 +147,68 @@ class PlayerHiddenProgressBar extends StatelessWidget {
   /** 当前视频总时长。 */
   final Duration duration;
 
+  /** 隐藏态点击后提交目标；为空时仅渲染视觉提示。 */
+  final ValueChanged<Duration>? onSeek;
+
   @override
   Widget build(BuildContext context) {
     final fraction = playerProgressFraction(position, duration);
-    return IgnorePointer(
-      child: SizedBox(
-        key: const ValueKey('player.hiddenProgressBar'),
-        height: 3,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            const ColoredBox(color: Color(0x520b1020)),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                key: const ValueKey('player.hiddenProgressBar.active'),
-                widthFactor: fraction,
-                heightFactor: 1,
-                child: const DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: appAccentViolet,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0x526d5dfc),
-                        blurRadius: 3,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final hitTargetHeight = onSeek == null ? 3.0 : 12.0;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: onSeek == null
+              ? null
+              : (details) {
+                  final width = constraints.maxWidth;
+                  if (width <= 0) return;
+                  final targetFraction =
+                      (details.localPosition.dx / width).clamp(0.0, 1.0);
+                  onSeek!(Duration(
+                    milliseconds:
+                        (duration.inMilliseconds * targetFraction).round(),
+                  ));
+                },
+          child: SizedBox(
+            key: const ValueKey('player.hiddenProgressBar.hitTarget'),
+            height: hitTargetHeight,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                key: const ValueKey('player.hiddenProgressBar'),
+                width: double.infinity,
+                height: 3,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    const ColoredBox(color: Color(0x520b1020)),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        key: const ValueKey('player.hiddenProgressBar.active'),
+                        widthFactor: fraction,
+                        heightFactor: 1,
+                        child: const DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: appAccentViolet,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color(0x526d5dfc),
+                                blurRadius: 3,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

@@ -8955,6 +8955,42 @@ void main() {
     expect(active.widthFactor, 0.25);
   });
 
+  testWidgets('player hidden progress bar maps its transparent hit target',
+      (tester) async {
+    Duration? requested;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlayerHiddenProgressBar(
+            position: const Duration(seconds: 25),
+            duration: const Duration(seconds: 100),
+            onSeek: (value) => requested = value,
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(
+        find.byKey(const ValueKey('player.hiddenProgressBar.hitTarget')),
+      ),
+      const Size(800, 12),
+    );
+    expect(
+      tester.getSize(find.byKey(const ValueKey('player.hiddenProgressBar'))),
+      const Size(800, 3),
+    );
+
+    final hitTarget = tester.getRect(
+      find.byKey(const ValueKey('player.hiddenProgressBar.hitTarget')),
+    );
+    await tester.tapAt(
+      Offset(hitTarget.left + hitTarget.width * 0.75, hitTarget.center.dy),
+    );
+
+    expect(requested, const Duration(seconds: 75));
+  });
+
   testWidgets('player progress expands on hover and delays frame preview',
       (tester) async {
     final previewRequest = Completer<File?>();

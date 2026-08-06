@@ -52,9 +52,23 @@ extension PlayerStateControls on PlayerPageState {
                 key: const ValueKey('player.controls.hiddenProgress'),
                 duration: fadeDuration,
                 opacity: controlsVisible ? 0 : 1,
-                child: PlayerHiddenProgressBar(
-                  position: position,
-                  duration: playerService.state.duration,
+                child: IgnorePointer(
+                  // 控制条可见时由完整 Slider 接管命中；隐藏时让细线直接提交
+                  // 目标，避免第一次点击只能唤醒控制条而没有 seek。
+                  ignoring: controlsVisible,
+                  child: PlayerHiddenProgressBar(
+                    position: position,
+                    duration: playerService.state.duration,
+                    onSeek: controlsVisible
+                        ? null
+                        : (target) {
+                            showVideoControls();
+                            setOptimisticProgressPosition(target);
+                            unawaited(
+                              seekFromProgressBarWithDiagnostics(target),
+                            );
+                          },
+                  ),
                 ),
               );
             },

@@ -204,6 +204,55 @@ extension PlayerStateView on PlayerPageState {
                                                   icon: shortcutFeedbackIcon,
                                                 ),
                                               ),
+                                            if (!controlsVisible &&
+                                                !openRequests.isOpening &&
+                                                !openRequests.hasFailure)
+                                              Positioned(
+                                                left: 0,
+                                                right: 0,
+                                                bottom: 0,
+                                                height: 12,
+                                                child: LayoutBuilder(
+                                                  builder:
+                                                      (context, constraints) =>
+                                                          GestureDetector(
+                                                    behavior:
+                                                        HitTestBehavior.opaque,
+                                                    onTapDown: (details) {
+                                                      focusNode.requestFocus();
+                                                      final width =
+                                                          constraints.maxWidth;
+                                                      if (width <= 0) return;
+                                                      final fraction = (details
+                                                                  .localPosition
+                                                                  .dx /
+                                                              width)
+                                                          .clamp(0.0, 1.0);
+                                                      final target = Duration(
+                                                        milliseconds: (playerService
+                                                                    .state
+                                                                    .duration
+                                                                    .inMilliseconds *
+                                                                fraction)
+                                                            .round(),
+                                                      );
+                                                      // 页面最外层命中区必须先于 Texture/HWND
+                                                      // 收到隐藏态首击；提交仍统一经过 seek 协调器。
+                                                      showVideoControls();
+                                                      setOptimisticProgressPosition(
+                                                        target,
+                                                      );
+                                                      unawaited(
+                                                        seekFromProgressBarWithDiagnostics(
+                                                          target,
+                                                        ),
+                                                      );
+                                                    },
+                                                    child:
+                                                        const SizedBox.expand(),
+                                                  ),
+                                                ),
+                                              ),
                                           ],
                                         ),
                                       ),

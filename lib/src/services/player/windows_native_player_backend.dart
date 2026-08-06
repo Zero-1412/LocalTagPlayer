@@ -628,7 +628,9 @@ class _WindowsHwndVideoSurfaceState extends State<_WindowsHwndVideoSurface>
     with WidgetsBindingObserver {
   static const double _fullscreenTopAirspace = 64;
   static const double _visibleControlsOcclusion = 128;
-  static const double _hiddenProgressOcclusion = 3;
+  // 隐藏进度线的视觉高度仍是 3px，但点击区为 12px；HWND 必须让出同样的
+  // 底部区域，否则鼠标会先被原生子窗口吃掉，Flutter 进度线无法收到首击。
+  static const double _hiddenProgressOcclusion = 12;
   final GlobalKey _placeholderKey = GlobalKey();
   Rect? _lastLogicalRect;
   Size? _lastLogicalViewSize;
