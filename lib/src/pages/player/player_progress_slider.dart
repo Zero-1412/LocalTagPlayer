@@ -35,12 +35,12 @@ class PlayerProgressSlider extends StatefulWidget {
   final double max;
 
   /**
-   * 仅在手势结束时提交最终 seek 目标。
+   * 仅在手势结束时提交最终 seek 目标，并在播放器协调器完成该目标后返回。
    *
    * 内部 Slider 的 `onChanged` 只维护拖动中的本地视觉位置；不能把每个移动事件
    * 透传到播放器，否则长 GOP 媒体会在同一次拖动中堆积多次解码跳转。
    */
-  final ValueChanged<double> onCommitted;
+  final Future<void> Function(double value) onCommitted;
 
   /** 当前视频稳定标识；切换视频时使迟到预览立即失效。 */
   final Object previewIdentity;
@@ -74,6 +74,10 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
   /** 鼠标点击后暂时保持目标位置，等待后端位置流追上，避免滑块回弹。 */
   double? _pendingCommitValue;
   Timer? _pendingCommitTimer;
+  var _pendingCommitCompleted = false;
+  var _commitGeneration = 0;
+  double? _lastCommitValue;
+  double? _previousCommitValue;
 
   static const _pendingCommitTimeout = Duration(seconds: 3);
   static const _pendingCommitToleranceMs = 500.0;
@@ -83,13 +87,15 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.previewIdentity != widget.previewIdentity) {
       _cancelPreview(clearHover: false);
+      _commitGeneration++;
       _clearPendingCommit();
+      _lastCommitValue = null;
+      _previousCommitValue = null;
       return;
     }
     final pending = _pendingCommitValue;
-    if (pending != null &&
-        (widget.value - pending).abs() <= _pendingCommitToleranceMs) {
-      _clearPendingCommit();
+    if (pending != null && _pendingCommitCompleted) {
+      _maybeClearPendingCommit(widget.value);
     }
   }
 
@@ -98,6 +104,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
     _pendingCommitTimer?.cancel();
     _pendingCommitTimer = null;
     _pendingCommitValue = null;
+    _pendingCommitCompleted = false;
   }
 
   /** 根据轨道可用宽度把指针位置映射为目标播放时间。 */
@@ -190,20 +197,67 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
   /** 松手后只提交最终目标，后续位置显示继续以播放器确认状态为准。 */
   void _handleChangeEnd(double value) {
     final committedValue = value.clamp(0.0, widget.max).toDouble();
+    final generation = ++_commitGeneration;
+    _previousCommitValue = _lastCommitValue;
+    _lastCommitValue = committedValue;
     _pendingCommitTimer?.cancel();
     setState(() {
       _dragging = false;
       _dragValue = null;
       _pendingCommitValue = committedValue;
+      _pendingCommitCompleted = false;
     });
     _pendingCommitTimer = Timer(_pendingCommitTimeout, () {
-      if (!mounted || _pendingCommitValue != committedValue) {
+      if (!mounted ||
+          _commitGeneration != generation ||
+          _pendingCommitValue != committedValue) {
         return;
       }
       setState(() => _pendingCommitValue = null);
       _pendingCommitTimer = null;
+      _pendingCommitCompleted = false;
     });
-    widget.onCommitted(committedValue);
+    unawaited(_awaitCommit(committedValue, generation));
+  }
+
+  /**
+   * 只有最新提交已经离开协调器，且位置流也追上后才解除本地乐观位置。
+   *
+   * 快速点击时第一次位置回写可能与第二个目标相差不到容差；没有完成标记就
+   * 会把旧落点误判为新落点，导致滑块回弹。
+   */
+  Future<void> _awaitCommit(double value, int generation) async {
+    try {
+      await widget.onCommitted(value);
+    } catch (_) {
+      // 提交失败时保留目标直到超时，避免失败瞬间回弹覆盖用户最后一次点击。
+      return;
+    }
+    if (!mounted ||
+        generation != _commitGeneration ||
+        _pendingCommitValue != value) {
+      return;
+    }
+    _pendingCommitCompleted = true;
+    _maybeClearPendingCommit(widget.value);
+  }
+
+  /**
+   * 位置流可能先回写上一次点击的目标；相近目标仅靠绝对容差无法区分新旧。
+   * 选择更接近最新提交的值，宁可短暂保持乐观位置，也不能让旧回写覆盖新点击。
+   */
+  void _maybeClearPendingCommit(double observedValue) {
+    final pending = _pendingCommitValue;
+    if (pending == null || !_pendingCommitCompleted) return;
+    if ((observedValue - pending).abs() > _pendingCommitToleranceMs) {
+      return;
+    }
+    final previous = _previousCommitValue;
+    if (previous != null &&
+        (observedValue - previous).abs() < (observedValue - pending).abs()) {
+      return;
+    }
+    _clearPendingCommit();
   }
 
   @override

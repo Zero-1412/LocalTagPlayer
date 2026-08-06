@@ -121,10 +121,9 @@ extension PlayerStateControls on PlayerPageState {
                                     loadPreview: (target) => widget
                                         .thumbnailService
                                         .previewFrameFor(currentItem, target),
-                                    onCommitted: (value) => unawaited(
-                                      seekFromProgressBarWithDiagnostics(
-                                        Duration(milliseconds: value.round()),
-                                      ),
+                                    onCommitted: (value) =>
+                                        seekFromProgressBarWithDiagnostics(
+                                      Duration(milliseconds: value.round()),
                                     ),
                                   ),
                                   LayoutBuilder(
