@@ -1,5 +1,14 @@
 # CURRENT_TASK.md
 
+## 2026-08-07 · seek→native-rendered-frame 单调时间线（实现完成）
+
+- 目标：为同一媒体的 click → seek → 首帧解码建立项目内部可比的单调时间线，区分命令返回与原生渲染帧真正到达；不再扩大进度条命中区。
+- 实现：`PlayerSeekCoordinator` 在实际派发前记录 `seek_submit_start`，命令返回记录 `seek_command_complete`，后台仅观察最新目标的帧号变化并记录 `native_rendered_frame` / `presented_frame_fallback` 与 `seek_to_frame_us`。
+- 保护：后台观测不阻塞下一次 latest-only seek；schema、FilterQuery / TagQueryService、filtered queue、PlayerBackend 方法契约、缩略图队列和用户数据不变。
+- 验证：seek coordinator 17 项、进度条 11 项、隐藏进度 3 项 focused tests，`flutter analyze` 与 `flutter build windows --debug` 均通过；Debug 可执行文件启动并保持响应后正常退出。
+- 阻塞：当前线程没有可调用的桌面鼠标工具，未冒充完成同媒体真实点击录屏；人工路径是打开 `D:\video\崩铁\银狼\241229_90_SilverWolf-interview.mp4`，点击两个不同进度目标后从 stdout 搜索同一 `trace=` 的 `seek_submit_start → seek_command_complete → native_rendered_frame`，比较 `seek_to_frame_us`。
+- 已知基线：`architecture_contract_test.dart` 的既有 `library_top_bar_search_surface.dart` 446 行 / 444 行门禁失败与本任务无关；其余相关架构用例通过。
+
 ## 2026-08-06 · 同媒体 click→seek→首帧 A/B 与隐藏态首击修复（完成）
 - 媒体：项目播放器与 PotPlayer 均使用 `D:\video\崩铁\银狼\241229_90_SilverWolf-interview.mp4`，时长 3:21、H.264 2560x1440 60fps；项目来源队列保持 1/1。
 - A/B：PotPlayer 49% 目标点击派发约 72ms，约 250–300ms 采样出现目标帧；项目隐藏态 20% 目标点击派发约 79ms，100ms 采样已到目标附近，300/800ms 仍保持目标播放。

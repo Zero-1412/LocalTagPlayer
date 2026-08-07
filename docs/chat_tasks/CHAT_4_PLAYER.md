@@ -1,5 +1,10 @@
 # Chat 4：播放器与筛选结果队列
 
+## 2026-08-07 · click → seek → native-rendered-frame 时间线
+
+- 进度条交互式 `PlayerSeekCoordinator` 在同一 `Stopwatch` 下记录 `seek_submit_start`、`seek_command_complete` 与首个帧号变化；原生 Texture 证据写为 `native_rendered_frame`，兼容回退写为 `presented_frame_fallback`，并输出 `seek_to_frame_us`。
+- 首帧观测在后台只保留最新目标，不能阻塞下一次 latest-only 派发；该诊断不扩大命中区、不改变音频门禁、播放意图或来源 filtered queue。
+
 ## 2026-08-06 · 进度条连续点击响应
 
 - 鼠标进度条点击复用页面级 latest-only `PlayerSeekCoordinator`：首个目标立即提交，后续快速点击替换尚未下发的目标，禁止每个点击进入新帧确认和音频恢复的串行等待。

@@ -549,4 +549,46 @@ void main() {
       }
     }
   });
+
+  test('进度条 seek 记录同一单调时钟下的首个原生渲染帧', () async {
+    final lines = <String>[];
+    final trace = PlayerSeekTraceLogger(
+      output: lines.add,
+      wallClock: () => DateTime.utc(2026, 8, 7),
+    );
+    var frameReadCount = 0;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (_) async {},
+      readPosition: () => Duration.zero,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+      trace: trace,
+      readPresentedFrame: () async {
+        frameReadCount++;
+        return frameReadCount == 1 ? 20 : 21;
+      },
+      readFrameEvidence: () => 'native-rendered-texture',
+    );
+
+    await coordinator.request(const Duration(seconds: 12));
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+
+    expect(
+      lines.map((line) => RegExp(r'stage=([^ ]+)').firstMatch(line)!.group(1)),
+      <String>[
+        'seek_submit_start',
+        'seek_command_complete',
+        'native_rendered_frame',
+      ],
+    );
+    final frameLine = lines.singleWhere(
+      (line) => line.contains('stage=native_rendered_frame'),
+    );
+    expect(frameLine, contains('frame_number=21'));
+    expect(frameLine, contains('frame_evidence=native-rendered-texture'));
+    expect(frameLine, contains('seek_to_frame_us='));
+  });
 }

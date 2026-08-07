@@ -60,6 +60,18 @@ audio_restore_start
 audio_restore_complete
 ```
 
+进度条交互式 seek 不进入音频门禁时，使用同一 `PLAYER_SEEK_TRACE` 的以下节点测量命令到首帧：
+
+```text
+seek_submit_start
+seek_command_complete
+native_rendered_frame | presented_frame_fallback | native_rendered_frame_timeout
+```
+
+`native_rendered_frame` 的 `mono_us` 由项目内单调 Stopwatch 记录，`seek_to_frame_us` 是从
+`seek_submit_start` 到该帧被观察到的间隔；它不包含点击工具、录屏工具或 wall clock 的时间。
+后台观测只保留最新目标，不得阻塞下一次 latest-only 派发。
+
 每条事件的 `mono_us` 只用于计算节点间隔；`wall_utc_ms` 只用于和录屏侧车记录建立时间锚点。若 `exact_seek_complete` 已出现而 `new_video_frame` 明显延后，说明解码/呈现恢复慢；若 `new_video_frame` 已出现但连续画面仍静止，则需要继续检查 Texture 呈现或播放器时钟，不能把单一预览帧当作恢复完成。
 
 ## 长 GOP 策略校准

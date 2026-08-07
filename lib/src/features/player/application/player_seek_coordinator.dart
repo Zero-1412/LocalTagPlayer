@@ -35,6 +35,9 @@ typedef PlayerSeekFrameWaiter = Future<bool> Function(
 /** 返回当前帧门禁使用的证据来源，供录屏回归排除估算帧号假阳性。 */
 typedef PlayerSeekFrameEvidenceReader = String Function();
 
+/** 返回当前输入会话已经分配的 trace id；没有会话时返回 null。 */
+typedef PlayerSeekTraceIdReader = int? Function();
+
 /**
  * 将一次 seek 会话的关键节点写成可与录屏对齐的短 trace。
  *
@@ -58,6 +61,9 @@ class PlayerSeekTraceLogger {
   final DateTime Function() _wallClock;
   var _nextTraceId = 0;
 
+  /** 当前进程内的单调微秒，供 seek 与原生帧观测共用同一时间基准。 */
+  int get monotonicMicroseconds => _monotonicClock.elapsedMicroseconds;
+
   int begin() => ++_nextTraceId;
 
   void mark(
@@ -65,7 +71,9 @@ class PlayerSeekTraceLogger {
     String stage, {
     Duration? target,
     int? previousFrame,
+    int? frameNumber,
     int? waitMilliseconds,
+    int? seekToFrameMicroseconds,
     bool? framePresented,
     String? frameEvidence,
   }) {
@@ -79,7 +87,10 @@ class PlayerSeekTraceLogger {
       'stage=$stage',
       if (target != null) 'target_ms=${target.inMilliseconds}',
       if (previousFrame != null) 'previous_frame=$previousFrame',
+      if (frameNumber != null) 'frame_number=$frameNumber',
       if (waitMilliseconds != null) 'wait_ms=$waitMilliseconds',
+      if (seekToFrameMicroseconds != null)
+        'seek_to_frame_us=$seekToFrameMicroseconds',
       if (framePresented != null) 'frame_presented=$framePresented',
       if (frameEvidence != null) 'frame_evidence=$frameEvidence',
     ];
@@ -156,6 +167,12 @@ class PlayerSeekCoordinator {
     this.confirmationTimeout = const Duration(seconds: 2),
     this.confirmationTolerance = const Duration(milliseconds: 750),
     this.adaptiveThrottle,
+    this.trace,
+    this.readTraceId,
+    this.readPresentedFrame,
+    this.readFrameEvidence,
+    this.frameObservationTimeout = const Duration(seconds: 2),
+    this.frameObservationPollInterval = const Duration(milliseconds: 16),
     PlayerSeekDelay? delay,
   })  : _submit = submit,
         _readPosition = readPosition,
@@ -175,11 +192,18 @@ class PlayerSeekCoordinator {
   final PlayerSeekExitReader _isExiting;
   final PlayerSeekLatencyListener _onLatency;
   final PlayerSeekDelay _delay;
+  final PlayerSeekTraceLogger? trace;
+  final PlayerSeekTraceIdReader? readTraceId;
+  final PlayerSeekFrameReader? readPresentedFrame;
+  final PlayerSeekFrameEvidenceReader? readFrameEvidence;
+  final Duration frameObservationTimeout;
+  final Duration frameObservationPollInterval;
 
   Duration? _pendingTarget;
   Duration? _latestRequestedTarget;
   Future<void>? _worker;
   Stopwatch? _sinceLastDispatch;
+  var _frameObservationGeneration = 0;
   var _running = false;
 
   Duration? get latestRequestedTarget => _latestRequestedTarget;
@@ -188,6 +212,9 @@ class PlayerSeekCoordinator {
   Future<void> request(Duration target) {
     if (_isExiting()) return Future<void>.value();
     final normalized = _clamp(target);
+    // 新目标会让旧落点失效；后台首帧观测只保留当前最新目标，避免快速点击
+    // 产生多个属性轮询器并争用同一条 native 播放链。
+    _frameObservationGeneration++;
     _latestRequestedTarget = normalized;
     _pendingTarget = normalized;
     if (_running) return _worker!;
@@ -202,6 +229,7 @@ class PlayerSeekCoordinator {
 
   /** 只取消尚未派发的目标；不强行中断正在执行的后端命令。 */
   void cancelPending() {
+    _frameObservationGeneration++;
     _pendingTarget = null;
     _latestRequestedTarget = null;
   }
@@ -220,11 +248,41 @@ class PlayerSeekCoordinator {
         final requested = _pendingTarget;
         if (requested == null) continue;
         _pendingTarget = null;
+        final traceId = _traceIdForSeek();
+        final seekStartMicroseconds = trace?.monotonicMicroseconds;
+        trace?.mark(traceId, 'seek_submit_start', target: requested);
+        Future<int?>? frameBeforeSeek;
+        final frameReader = readPresentedFrame;
+        if (trace != null && frameReader != null) {
+          try {
+            // 与 native seek 并行读取基线，不把一次属性查询串到命令前面。
+            frameBeforeSeek = frameReader();
+          } catch (_) {
+            frameBeforeSeek = null;
+          }
+        }
         final latency = Stopwatch()..start();
         // 节流窗口从命令派发开始计算；后端已耗时超过窗口时，下一次最新目标
         // 应在命令返回后立即接续，不能把同一个窗口重复加在命令完成之后。
         _sinceLastDispatch = Stopwatch()..start();
         await _submit(requested);
+        trace?.mark(
+          traceId,
+          'seek_command_complete',
+          target: requested,
+          waitMilliseconds: latency.elapsedMilliseconds,
+        );
+        if (traceId != null && frameBeforeSeek != null) {
+          unawaited(
+            _observePresentedFrame(
+              traceId: traceId,
+              target: requested,
+              seekStartMicroseconds: seekStartMicroseconds,
+              previousFrame: frameBeforeSeek,
+              observationGeneration: _frameObservationGeneration,
+            ),
+          );
+        }
 
         final confirmation = Stopwatch()..start();
         while (!_isExiting() && confirmation.elapsed < confirmationTimeout) {
@@ -242,6 +300,75 @@ class PlayerSeekCoordinator {
     } finally {
       _running = false;
       _latestRequestedTarget = null;
+    }
+  }
+
+  int? _traceIdForSeek() {
+    final trace = this.trace;
+    if (trace == null) return null;
+    return readTraceId?.call() ?? trace.begin();
+  }
+
+  /**
+   * 在命令返回后异步等待首个新帧；它不阻塞 coordinator 的下一次 latest-only 派发。
+   * `mono_us` 与 `seek_to_frame_us` 都由同一个 Dart Stopwatch 生成，不能与 wall clock 混算。
+   */
+  Future<void> _observePresentedFrame({
+    required int traceId,
+    required Duration target,
+    required int? seekStartMicroseconds,
+    required Future<int?> previousFrame,
+    required int observationGeneration,
+  }) async {
+    final frameReader = readPresentedFrame;
+    final trace = this.trace;
+    if (frameReader == null || trace == null) return;
+    int? previous;
+    try {
+      previous = await previousFrame;
+    } catch (_) {
+      previous = null;
+    }
+    final watch = Stopwatch()..start();
+    while (!_isExiting() &&
+        observationGeneration == _frameObservationGeneration &&
+        watch.elapsed < frameObservationTimeout) {
+      int? current;
+      try {
+        current = await frameReader();
+      } catch (_) {
+        current = null;
+      }
+      if (current != null &&
+          (previous == null || current != previous) &&
+          observationGeneration == _frameObservationGeneration) {
+        final evidence = readFrameEvidence?.call();
+        final observedAt = trace.monotonicMicroseconds;
+        trace.mark(
+          traceId,
+          evidence == 'native-rendered-texture'
+              ? 'native_rendered_frame'
+              : 'presented_frame_fallback',
+          target: target,
+          frameNumber: current,
+          seekToFrameMicroseconds: seekStartMicroseconds == null
+              ? null
+              : observedAt - seekStartMicroseconds,
+          frameEvidence: evidence,
+        );
+        return;
+      }
+      await _delay(frameObservationPollInterval);
+    }
+    if (observationGeneration == _frameObservationGeneration && !_isExiting()) {
+      trace.mark(
+        traceId,
+        'native_rendered_frame_timeout',
+        target: target,
+        previousFrame: previous,
+        waitMilliseconds: watch.elapsedMilliseconds,
+        frameEvidence: readFrameEvidence?.call(),
+      );
     }
   }
 

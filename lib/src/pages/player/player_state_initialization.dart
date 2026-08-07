@@ -91,6 +91,11 @@ extension PlayerStateInitialization on PlayerPageState {
       // 关键帧可能与逻辑目标相距超过容差；此处只等命令返回，不等待精确位置确认。
       confirmationTimeout: Duration.zero,
       adaptiveThrottle: seekPreviewThrottle,
+      trace: seekTrace,
+      // 键盘临时静音会话已有 trace id；进度条没有音频门禁时由 coordinator 新建 id。
+      readTraceId: () => seekAudioGate.activeTraceId,
+      readPresentedFrame: readPresentedVideoFrame,
+      readFrameEvidence: () => lastPresentedVideoFrameEvidence,
     );
     seekAudioGate = PlayerSeekAudioGate(
       // 临时静音只写后端，不触碰用户音量、播放状态或视频时钟。
