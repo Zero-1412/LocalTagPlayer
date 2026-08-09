@@ -2153,8 +2153,9 @@ void main() {
     expect(executor, contains('class ReplaceVideoManualTagsCommand'));
     expect(executor, contains('class LibraryManualTagCommandExecutor'));
     expect(executor, contains('..._normalize(command.lockedFolderTags)'));
-    expect(executor, contains('..._normalize(command.selectedTags)'));
-    expect(executor, contains('await commit(item, parentTag)'));
+    expect(executor,
+        contains('final manualTags = _normalize(command.selectedTags)'));
+    expect(executor, contains('await commit(item, parentTag, manualTags)'));
     expect(executor, contains('..addAll(previousTags)'));
     expect(executor, contains('..addAll(previousChildTags)'));
     expect(executor, isNot(contains("import 'package:flutter/")));
@@ -2166,6 +2167,8 @@ void main() {
     expect(page, contains('runtime.manualTagCommandExecutor.replace('));
     expect(page, contains('ReplaceVideoManualTagsCommand('));
     expect(page, contains('lockedTags: lockedTags'));
+    expect(page, contains('initialManualTags: initialManualTags'));
+    expect(page, contains('manualTags: manualTags'));
     expect(page, contains('TagEditorDialog('));
     expect(page, isNot(contains('Set<String> _normalizeTagSet(')));
     expect(maintenance, contains('final previousLinks ='));

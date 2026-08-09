@@ -6,9 +6,10 @@ import '../../../models/platform_models.dart';
 /**
  * 生成标签编辑器当前层级可见的名称候选。
  *
- * 顶层编辑显示顶层标签及所有非隐藏 manual 标签。manual 不受目录层级约束，
+ * 顶层编辑只显示所有非隐藏 manual 标签。manual 不受目录层级约束，
  * 因而兼容旧版带 parentId 的 manual 定义；保存层会把实际关联规范化为顶层
- * manual 关联。二级 folder 候选仍只显示当前父级下的项目，避免破坏目录层级。
+ * manual 关联。带 [parentTag] 的查询仅兼容读取历史二级 manual 定义，候选始终不会
+ * 混入 folder 来源。
  */
 Set<String> tagEditorCandidatesForScope(
   Iterable<TagItem> tags, {
@@ -17,9 +18,9 @@ Set<String> tagEditorCandidatesForScope(
   return <String>{
     for (final tag in tags)
       if (!tag.isHidden &&
-          (parentTag == null
-              ? tag.parentId == null || tag.source == TagSource.manual
-              : tag.parentId != null &&
+          tag.source == TagSource.manual &&
+          (parentTag == null ||
+              tag.parentId != null &&
                   TagRules.sameTag(tag.parentId!, parentTag)))
         tag.name,
   };

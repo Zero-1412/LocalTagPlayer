@@ -3,10 +3,11 @@
 ## 2026-08-09 · 全局 manual 标签候选与历史关系修复（完成）
 
 - 补充修复：页面状态宿主曾保留一份旧候选规则，实际弹窗仍会忽略带历史 `parentId` 的 manual 定义；现已统一委托给同一候选函数，顶层弹窗显示全部非隐藏 manual 标签，二级 folder 标签仍只在所属父级展示。
+- 来源边界：单视频编辑器已分离 folder 只读标签与 manual 可编辑集合；自定义标签不继承目录层级，和 folder 同名时也保存为独立 `source=manual` 关系，不创建或影响本地文件夹。
 - 根因：历史版本曾把 manual 标签保存到 folder 二级父级下，导致同名用户标签按父目录分裂；编辑器顶层候选只显示顶层定义，因此已有标签会像是“必须重新输入”，顶层筛选也会漏掉旧关系中的视频。旧的“添加到我的标签库”入口还只在同时新增收藏时刷新视图。
 - 修复：媒体库加载时以单个 SQLite batch 幂等提升已加载视频的历史二级 manual 关系到同名顶层 `tagId`，保留旧标签定义、folder 标签、稳定 `videoId` 与用户数据；编辑器兼容展示未迁移的旧 manual 定义并显示标签中心已收藏的 manual 快捷候选；旧入口无论收藏是否变化都会更新标签定义视图。
 - 数据核对：当前用户库发现 8 个 manual 定义，其中 3 个历史二级定义、5 条关系将于下一次新构建启动时自动提升；不删除视频、标签定义、收藏或播放记录。
-- 验证：`flutter test test/library_store_test.dart test/library_manual_tag_command_executor_test.dart test/library_dialogs_test.dart`、标签候选 focused test、`flutter analyze` 与 `flutter build windows --debug` 均通过。未后台启动第二个应用进程修改正在使用的用户数据库；请从新 Debug 构建启动后验证候选与筛选。
+- 验证：历史关系、同名 folder/manual 双来源保存、弹窗分离展示、保存回滚与架构契约 focused tests，以及 `flutter analyze`、`flutter build windows --debug` 均通过。未后台启动第二个应用进程修改正在使用的用户数据库；请从新 Debug 构建启动后验证候选与筛选。
 - 下一步：人工打开任一视频的标签编辑器，确认 `Banana` / `婊子` 等已有 manual 标签可直接点击；在媒体库 manual 分组点击后确认旧二级关系视频一并命中。
 
 ## 2026-08-07 · seek→native-rendered-frame 单调时间线（实现完成）

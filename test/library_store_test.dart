@@ -1819,6 +1819,49 @@ void main() {
     );
   });
 
+  test('单视频编辑可保存与 folder 同名的独立 manual 关系', () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('manual_same_name');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final mediaRoot =
+        Directory('${dataDir.path}${Platform.pathSeparator}media');
+    final file = await _writeVideoPlaceholder(
+      mediaRoot,
+      ['Series', 'Album', 'same-name.mp4'],
+    );
+
+    final store = await _loadTrackedStore(stores);
+    await store.addRootAndScan(mediaRoot.path);
+    final item = _videoByPath(store, file.path);
+    const manualName = 'Series';
+    final manualId = TagRules.tagIdFor(name: manualName, groupId: 'manual');
+
+    await store.replaceManualTags(item, manualTags: const <String>[manualName]);
+
+    expect(item.tags, contains(manualName));
+    expect(
+      store.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
+      contains(manualId),
+    );
+    final reloaded = await _loadTrackedStore(stores);
+    final reloadedItem = _videoByPath(reloaded, file.path);
+    expect(reloadedItem.tags, contains(manualName));
+    expect(
+      reloaded.videoTagIdsByPathKey[TagRules.pathKey(file.path)],
+      contains(manualId),
+    );
+    expect(
+      FilterQuery(includeTagIds: <String>{manualId}).matches(
+        reloadedItem,
+        tagContext: reloaded.tagQueryContext,
+      ),
+      isTrue,
+    );
+  });
+
   test('tag maintenance rejects non-manual tags in batch operations', () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('tag_reject_source');

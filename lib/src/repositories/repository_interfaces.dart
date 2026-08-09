@@ -82,6 +82,7 @@ abstract interface class LibraryCommandRepository {
   Future<void> replaceManualTags(
     VideoItem item, {
     String? parentTag,
+    Iterable<String>? manualTags,
   });
 
   Future<TagItem> createManualTag({

@@ -983,8 +983,13 @@ class LibraryStore
   Future<void> replaceManualTags(
     VideoItem item, {
     String? parentTag,
+    Iterable<String>? manualTags,
   }) async {
-    await _tagMaintenance.replaceManualTags(item, parentTag: parentTag);
+    await _tagMaintenance.replaceManualTags(
+      item,
+      parentTag: parentTag,
+      manualTags: manualTags,
+    );
     // 主库提交已不可回滚；备份入队失败只能进入诊断，不能诱导上层恢复旧标签模型。
     await dataBackupService.enqueueVideoBestEffort(item.videoId);
   }

@@ -218,6 +218,7 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
   }) async {
     final lockedTags = folderTagsForItem(item);
     final tagItems = runtime.store?.allTagItems ?? const <TagItem>[];
+    final initialManualTags = manualTagsForItem(item);
     final updated = await showDialog<Set<String>>(
       context: context,
       builder: (_) => TagEditorDialog(
@@ -228,7 +229,7 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
           for (final tag in tagItems)
             if (tag.source == TagSource.manual && tag.isFavorite) tag.name,
         },
-        initialTags: item.tags,
+        initialManualTags: initialManualTags,
         lockedTags: lockedTags,
       ),
     );
@@ -241,8 +242,12 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
         selectedTags: updated,
         lockedFolderTags: lockedTags,
       ),
-      commit: (target, parentTag) async {
-        await runtime.store?.replaceManualTags(target, parentTag: parentTag);
+      commit: (target, parentTag, manualTags) async {
+        await runtime.store?.replaceManualTags(
+          target,
+          parentTag: parentTag,
+          manualTags: manualTags,
+        );
       },
     );
     if (mounted) {
@@ -281,6 +286,26 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
       return const <String>{};
     }
     return TagRules.parentTagsFor(rootPath, item.path);
+  }
+
+  /** 从 source 明确的关系索引读取当前视频的独立 manual 标签。 */
+  Set<String> manualTagsForItem(VideoItem item) {
+    final store = runtime.store;
+    if (store == null) {
+      final folderTags = folderTagsForItem(item);
+      return {
+        for (final tag in item.tags)
+          if (!folderTags.any((folderTag) => TagRules.sameTag(folderTag, tag)))
+            tag,
+      };
+    }
+    final tagIds = store.videoTagIdsByPathKey[TagRules.pathKey(item.path)] ??
+        const <String>{};
+    return {
+      for (final tagId in tagIds)
+        if (store.tagsById[tagId]?.source == TagSource.manual)
+          store.tagsById[tagId]!.name,
+    };
   }
 
   Set<String> folderChildTagsForItem(VideoItem item, String parentTag) {

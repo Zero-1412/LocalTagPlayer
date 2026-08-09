@@ -36,10 +36,14 @@ class ReplaceVideoManualTagsCommand {
 class LibraryManualTagCommandExecutor {
   const LibraryManualTagCommandExecutor();
 
-  /** 应用 folder 锁定规则、提交 manual 关系，并在失败时恢复原模型。 */
+  /** 应用 folder 锁定规则、提交显式 manual 关系，并在失败时恢复原模型。 */
   Future<void> replace(
     ReplaceVideoManualTagsCommand command, {
-    required Future<void> Function(VideoItem item, String? parentTag) commit,
+    required Future<void> Function(
+      VideoItem item,
+      String? parentTag,
+      Set<String> manualTags,
+    ) commit,
   }) async {
     final item = command.item;
     final previousTags = <String>{...item.tags};
@@ -47,9 +51,10 @@ class LibraryManualTagCommandExecutor {
       for (final entry in item.childTags.entries)
         entry.key: <String>{...entry.value},
     };
+    final manualTags = _normalize(command.selectedTags);
     final nextTags = <String>{
       ..._normalize(command.lockedFolderTags),
-      ..._normalize(command.selectedTags),
+      ...manualTags
     };
     final parentTag = command.parentTag;
     if (parentTag == null) {
@@ -60,7 +65,7 @@ class LibraryManualTagCommandExecutor {
       item.childTags[parentTag] = nextTags;
     }
     try {
-      await commit(item, parentTag);
+      await commit(item, parentTag, manualTags);
     } catch (_) {
       item.tags
         ..clear()

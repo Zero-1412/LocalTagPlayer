@@ -32,6 +32,7 @@ class LibraryTagMaintenance {
   Future<void> replaceManualTags(
     VideoItem item, {
     String? parentTag,
+    Iterable<String>? manualTags,
   }) async {
     final pathKey = TagRules.pathKey(item.path);
     final previousLinks = _store.videoTagIdsByPathKey[pathKey] == null
@@ -40,7 +41,12 @@ class LibraryTagMaintenance {
     final previousTagIds = <String>{..._store.tagsById.keys};
     final batch = _store.database.batch();
     try {
-      syncManualTagsInBatch(batch, item, parentTag: parentTag);
+      syncManualTagsInBatch(
+        batch,
+        item,
+        parentTag: parentTag,
+        manualTags: manualTags,
+      );
       _store.videoPersistence.insertInBatch(batch, item);
       await batch.commit(noResult: true);
     } catch (_) {
@@ -319,23 +325,26 @@ class LibraryTagMaintenance {
   /**
    * 在批处理中刷新 manual 来源标签索引。
    *
-   * folder 派生标签会被排除，避免同名 folder 标签被误写成 manual 来源。
+   * 调用方提供 [manualTags] 时，按该来源明确的集合写入；同名 folder/manual
+   * 可以同时存在，不能再由名称推断来源。旧调用方未提供时才兼容排除 folder 名称。
    */
   void syncManualTagsInBatch(
     Batch batch,
     VideoItem item, {
     String? parentTag,
+    Iterable<String>? manualTags,
   }) {
     if (parentTag == null) {
       // 顶层 manual 是独立用户数据；保存时顺便提升历史二级 manual 关系，
       // 但保留由当前文件树派生的 child folder 标签。
       _promoteLegacyManualChildTagsToRoot(item);
       _store.tagPersistence.removeAllManualTagsInBatch(batch, item);
-      final folderTags = _folderTagsForItem(item);
-      for (final tag in item.tags) {
-        if (folderTags.any((folderTag) => TagRules.sameTag(folderTag, tag))) {
-          continue;
-        }
+      final tagsToPersist = manualTags ??
+          item.tags.where(
+            (tag) => !_folderTagsForItem(item)
+                .any((folderTag) => TagRules.sameTag(folderTag, tag)),
+          );
+      for (final tag in tagsToPersist) {
         _store.tagPersistence.attachTagInBatch(
           batch,
           item,

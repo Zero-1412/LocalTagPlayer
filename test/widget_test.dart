@@ -7339,7 +7339,7 @@ void main() {
 
     expect(
       tagEditorCandidatesForScope(tags, parentTag: '原神'),
-      <String>{'已使用标签', '未使用标签', '文件夹标签'},
+      <String>{'已使用标签', '未使用标签'},
     );
     expect(
       tagEditorCandidatesForScope(tags),
@@ -7354,7 +7354,7 @@ void main() {
           body: TagEditorDialog(
             title: '视频 / 手动标签',
             helperText: '只修改手动标签；文件夹标签由目录结构维护。',
-            initialTags: {'FolderTag', 'ManualTag'},
+            initialManualTags: {'FolderTag', 'ManualTag'},
             existingTags: {'SuggestedTag'},
             lockedTags: {'FolderTag'},
             recentTags: ['RecentTag'],
@@ -7365,12 +7365,10 @@ void main() {
     );
 
     final chips = tester.widgetList<InputChip>(find.byType(InputChip));
-    final folderChip = chips.firstWhere(
-      (chip) => (chip.label as Text).data == 'FolderTag',
-    );
-    final manualChip = chips.firstWhere(
-      (chip) => (chip.label as Text).data == 'ManualTag',
-    );
+    final folderChip = chips.firstWhere((chip) =>
+        (chip.label as Text).data == 'FolderTag' && chip.avatar != null);
+    final manualChip = chips.firstWhere((chip) =>
+        (chip.label as Text).data == 'FolderTag' && chip.avatar == null);
 
     expect(folderChip.onDeleted, isNull);
     expect(manualChip.onDeleted, isNotNull);
@@ -7400,7 +7398,7 @@ void main() {
 
     manualChip.onDeleted!();
     await tester.pump();
-    expect(find.text('ManualTag'), findsNothing);
+    expect(find.text('FolderTag'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('tagEditor.unsavedChanges')),
       findsOneWidget,
@@ -7424,7 +7422,7 @@ void main() {
             body: TagEditorDialog(
               title: '一段很长的媒体标题用于验证标签编辑器',
               helperText: '只修改手动标签；文件夹标签由目录结构维护。',
-              initialTags: {'FolderTag', 'ManualTag'},
+              initialManualTags: {'ManualTag'},
               existingTags: {'SuggestedTag', 'AnotherTag'},
               lockedTags: {'FolderTag'},
             ),
@@ -7451,7 +7449,7 @@ void main() {
         home: Scaffold(
           body: TagEditorDialog(
             title: '完整候选标签',
-            initialTags: const <String>{},
+            initialManualTags: const <String>{},
             existingTags: candidates,
           ),
         ),
@@ -7477,7 +7475,7 @@ void main() {
                     context: context,
                     builder: (_) => const TagEditorDialog(
                       title: '键盘标签编辑',
-                      initialTags: <String>{},
+                      initialManualTags: <String>{},
                       existingTags: <String>{'Existing'},
                     ),
                   );

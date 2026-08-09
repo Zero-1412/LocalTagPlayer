@@ -78,8 +78,13 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
   Future<void> replaceManualTags(
     VideoItem item, {
     String? parentTag,
+    Iterable<String>? manualTags,
   }) =>
-      _commands.replaceManualTags(item, parentTag: parentTag);
+      _commands.replaceManualTags(
+        item,
+        parentTag: parentTag,
+        manualTags: manualTags,
+      );
 
   Future<TagItem> createManualTag({
     required String name,

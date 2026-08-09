@@ -58,6 +58,7 @@ manual / folder / rule / filename / import / auto
 - 历史挂在 folder 父级下的 manual 关系在顶层保存或批量操作时提升为顶层关系，保留标签名称与视频关联；
 - folder 可重算，manual/locked 和其它用户维护关系必须保留；
 - 同名 folder/manual 不合并身份；关系优先使用 `tagId`；
+- 单视频编辑将 folder 锁定显示与 manual 可编辑集合分开传递；即使名称相同，manual 仍只新增/删除 `source=manual` 的数据库关联，绝不创建、移动或改写目录；
 - 展示层可按来源、组、父级和规范化名称聚合，但不得改变真实关系。
 
 过滤唯一所有者是 `FilterQuery` / `TagQueryService`：

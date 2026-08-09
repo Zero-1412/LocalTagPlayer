@@ -17,7 +17,7 @@ class TagEditorDialog extends StatefulWidget {
   const TagEditorDialog({
     super.key,
     required this.title,
-    required this.initialTags,
+    required this.initialManualTags,
     required this.existingTags,
     this.lockedTags = const <String>{},
     this.helperText,
@@ -26,7 +26,8 @@ class TagEditorDialog extends StatefulWidget {
   });
 
   final String title;
-  final Set<String> initialTags;
+  /** 仅包含当前视频已关联的 manual 标签；不得混入 folder 兼容字段。 */
+  final Set<String> initialManualTags;
   final Set<String> existingTags;
 
   /** 由 folder 等外部来源维护、在当前弹窗中只能查看不能删除的标签。 */
@@ -46,7 +47,7 @@ class TagEditorDialog extends StatefulWidget {
 }
 
 class _TagEditorDialogState extends State<TagEditorDialog> {
-  late final Set<String> _tags = _normalizeTags(widget.initialTags);
+  late final Set<String> _tags = _normalizeTags(widget.initialManualTags);
   final _controller = TextEditingController();
   String _query = '';
 
@@ -94,10 +95,6 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
     _controller.clear();
     setState(() => _query = '');
   }
-
-  /** 标签是否由当前弹窗之外的来源维护。 */
-  bool _isLocked(String tag) =>
-      widget.lockedTags.any((locked) => TagRules.sameTag(locked, tag));
 
   Set<String> _normalizeTags(Iterable<String> tags) {
     final normalized = <String>{};
@@ -254,24 +251,29 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                               spacing: 8,
                               runSpacing: 8,
                               children: [
+                                for (final tag
+                                    in (widget.lockedTags.toList()..sort()))
+                                  Tooltip(
+                                    message: '文件夹来源标签，只能通过目录结构修改',
+                                    child: InputChip(
+                                      avatar: const Icon(
+                                        Icons.lock_outline_rounded,
+                                        size: 15,
+                                      ),
+                                      label: Text(tag),
+                                      onDeleted: null,
+                                      deleteButtonTooltipMessage:
+                                          '从当前视频移除 $tag',
+                                    ),
+                                  ),
                                 for (final tag in (_tags.toList()..sort()))
                                   Tooltip(
-                                    message: _isLocked(tag)
-                                        ? '文件夹来源标签，只能通过目录结构修改'
-                                        : '移除手动标签',
+                                    message: '移除手动标签',
                                     child: InputChip(
-                                      avatar: _isLocked(tag)
-                                          ? const Icon(
-                                              Icons.lock_outline_rounded,
-                                              size: 15)
-                                          : null,
                                       label: Text(tag),
-                                      onDeleted: _isLocked(tag)
-                                          ? null
-                                          : () => setState(() {
-                                                _dirty =
-                                                    _tags.remove(tag) || _dirty;
-                                              }),
+                                      onDeleted: () => setState(() {
+                                        _dirty = _tags.remove(tag) || _dirty;
+                                      }),
                                       deleteButtonTooltipMessage:
                                           '从当前视频移除 $tag',
                                     ),

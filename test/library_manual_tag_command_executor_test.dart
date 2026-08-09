@@ -31,10 +31,11 @@ void main() {
         selectedTags: const <String>[' Manual ', 'manual', ''],
         lockedFolderTags: const <String>['Folder'],
       ),
-      commit: (target, parentTag) async {
+      commit: (target, parentTag, manualTags) async {
         committedParent = parentTag;
         expect(target.videoId, 'manual-tag-command');
         expect(target.tags, <String>{'Folder', 'Manual'});
+        expect(manualTags, <String>{'Manual'});
       },
     );
 
@@ -52,8 +53,9 @@ void main() {
         selectedTags: const <String>['manual-new'],
         lockedFolderTags: const <String>['folder-child'],
       ),
-      commit: (target, parentTag) async {
+      commit: (target, parentTag, manualTags) async {
         expect(parentTag, 'parent');
+        expect(manualTags, <String>{'manual-new'});
       },
     );
 
@@ -81,7 +83,7 @@ void main() {
           selectedTags: const <String>['new'],
           lockedFolderTags: const <String>['folder'],
         ),
-        commit: (_, __) => Future<void>.error(StateError('commit failed')),
+        commit: (_, __, ___) => Future<void>.error(StateError('commit failed')),
       ),
       throwsStateError,
     );
@@ -101,5 +103,22 @@ void main() {
 
     expect(command.selectedTags, <String>['manual']);
     expect(() => command.selectedTags.add('other'), throwsUnsupportedError);
+  });
+
+  test('同名 folder 与 manual 仍将 manual 集合明确交给保存层', () async {
+    final item = _item();
+
+    await executor.replace(
+      ReplaceVideoManualTagsCommand(
+        item: item,
+        selectedTags: const <String>['Folder'],
+        lockedFolderTags: const <String>['Folder'],
+      ),
+      commit: (target, parentTag, manualTags) async {
+        expect(parentTag, isNull);
+        expect(target.tags, <String>{'Folder'});
+        expect(manualTags, <String>{'Folder'});
+      },
+    );
   });
 }
