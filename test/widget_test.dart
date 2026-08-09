@@ -7342,7 +7342,7 @@ void main() {
     );
     expect(
       tagEditorCandidates(tags),
-      <String>{'顶级标签'},
+      <String>{'顶级标签', '已使用标签', '未使用标签', '其它父级标签'},
     );
   });
 

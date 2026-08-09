@@ -403,6 +403,7 @@ class LibraryStore
           );
         }
       }
+      await store._promoteLegacyManualTagsToRoot();
       await store.ensureTagIndexCoverage(diagnostics: diagnostics);
       await store.dataBackupService.startOrResume();
       return store;
@@ -1033,6 +1034,16 @@ class LibraryStore
     );
     await saveTag(updated);
     return updated;
+  }
+
+  /** 启动时修复旧版二级 manual 关系，并将受影响视频排入既有备份队列。 */
+  Future<void> _promoteLegacyManualTagsToRoot() async {
+    final affected = await _tagMaintenance.promoteLegacyManualTagsToRoot();
+    if (affected.isNotEmpty) {
+      await dataBackupService.enqueueVideos(
+        affected.map((item) => item.videoId),
+      );
+    }
   }
 
   Future<void> updateTagDetails(

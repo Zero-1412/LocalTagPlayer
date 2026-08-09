@@ -172,16 +172,22 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
       return;
     }
     try {
+      var tagDefinitionChanged = false;
       if (!runtime.store!.allTagItems.any(
         (existing) =>
             (existing.groupId ?? 'manual') == 'manual' &&
             TagRules.sameTag(existing.name, tag),
       )) {
         await runtime.store!.createManualTag(name: tag, groupId: 'manual');
+        tagDefinitionChanged = true;
       }
+      var favoriteChanged = false;
       if (!runtime.store!.favoriteTags
           .any((existing) => TagRules.sameTag(existing, tag))) {
         await runtime.store!.addFavoriteTag(tag);
+        favoriteChanged = true;
+      }
+      if ((tagDefinitionChanged || favoriteChanged) && mounted) {
         setState(() {
           runtime.libraryRevisionTracker.record(
             LibraryDataChangeKind.tagDefinitions,
@@ -189,6 +195,7 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
           invalidateDerivedCaches();
           refreshStableTagCountsNow(runtime.store!);
         });
+        scheduleFilterRefresh(refreshCounts: true);
       }
     } catch (error) {
       if (!mounted) {

@@ -217,14 +217,17 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     bool deferLibraryRefresh = false,
   }) async {
     final lockedTags = folderTagsForItem(item);
+    final tagItems = runtime.store?.allTagItems ?? const <TagItem>[];
     final updated = await showDialog<Set<String>>(
       context: context,
       builder: (_) => TagEditorDialog(
         title: item.title,
         helperText: '只修改独立 manual 标签；文件夹标签由目录结构维护。',
-        existingTags: tagEditorCandidates(
-          runtime.store?.allTagItems ?? const <TagItem>[],
-        ),
+        existingTags: tagEditorCandidates(tagItems),
+        favoriteTags: {
+          for (final tag in tagItems)
+            if (tag.source == TagSource.manual && tag.isFavorite) tag.name,
+        },
         initialTags: item.tags,
         lockedTags: lockedTags,
       ),

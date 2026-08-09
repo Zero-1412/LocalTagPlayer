@@ -629,7 +629,8 @@ void main() {
     expect(persisted.sortOrder, 42);
   });
 
-  test('manual child tag persistence keeps folder child tags separate',
+  test(
+      'startup promotes legacy manual child links without changing folder tags',
       () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('manual_child');
@@ -663,11 +664,38 @@ void main() {
     final reloaded = await _loadTrackedStore(stores);
     final reloadedItem = _videoByPath(reloaded, file.path);
     final pathKey = TagRules.pathKey(file.path);
-    expect(reloadedItem.childTags['Series'],
-        containsAll(['Album', 'manual-child']));
-    expect(reloaded.videoTagIdsByPathKey[pathKey], contains(manualChild.id));
+    final rootManualId =
+        TagRules.tagIdFor(name: 'manual-child', groupId: 'manual');
+    expect(reloadedItem.tags, contains('manual-child'));
+    expect(reloadedItem.childTags['Series'], contains('Album'));
+    expect(
+      reloaded.videoTagIdsByPathKey[pathKey],
+      contains(rootManualId),
+    );
+    expect(
+      reloaded.videoTagIdsByPathKey[pathKey]?.contains(manualChild.id) ?? false,
+      isFalse,
+    );
     final summaries = await reloaded.tagUsageSummaries();
-    expect(summaries[manualChild.id]?.manual, 1);
+    expect(summaries[rootManualId]?.manual, 1);
+    expect(
+      FilterQuery(includeTagIds: <String>{rootManualId}).matches(
+        reloadedItem,
+        tagContext: reloaded.tagQueryContext,
+      ),
+      isTrue,
+    );
+    final reloadedAgain = await _loadTrackedStore(stores);
+    expect(
+      reloadedAgain.videoTagIdsByPathKey[pathKey],
+      contains(rootManualId),
+    );
+    expect(
+      reloadedAgain.videoTagIdsByPathKey[pathKey]?.contains(manualChild.id) ??
+          false,
+      isFalse,
+    );
+    expect((await reloadedAgain.tagUsageSummaries())[rootManualId]?.manual, 1);
     expect(
       reloaded.tagsById.values.where((tag) =>
           tag.source == TagSource.folder &&

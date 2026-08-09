@@ -51,7 +51,8 @@ bool libraryTagDiscoveryPanelOpenAfterMutation({
  *
  * 候选直接来自规范化 `TagItem` 索引，因此包含尚未出现在兼容视频字段中的标签。候选可以
  * 来自 folder 等已有来源，但用户选中后仍由保存层建立独立 manual 关系；隐藏标签不展示，
- * 二级候选仍严格限制在 [parentTag] 下。
+ * 二级候选仍严格限制在 [parentTag] 下。顶层编辑兼容显示旧版二级 manual 定义；选择后
+ * 会由保存层落为独立顶层 manual 关联，避免用户必须重复输入已有标签。
  */
 Set<String> tagEditorCandidates(
   Iterable<TagItem> tags, {
@@ -61,7 +62,7 @@ Set<String> tagEditorCandidates(
     for (final tag in tags)
       if (!tag.isHidden &&
           (parentTag == null
-              ? tag.parentId == null
+              ? tag.parentId == null || tag.source == TagSource.manual
               : tag.parentId != null &&
                   TagRules.sameTag(tag.parentId!, parentTag)))
         tag.name,

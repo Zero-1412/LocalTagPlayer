@@ -58,6 +58,106 @@ class LibraryTagMaintenance {
   }
 
   /**
+   * 将历史上挂在 folder 父级下的 manual 关联提升为独立顶层关联。
+   *
+   * 早期版本允许 manual 使用二级层级，导致同一个用户标签按不同父目录分裂，候选列表
+   * 与顶层筛选都会遗漏其中一部分视频。迁移只移动实际关系并保留旧标签定义，因而可重复
+   * 执行、不会删除用户数据；当前模型与后续保存都只消费新的顶层 manual tagId。
+   */
+  Future<List<VideoItem>> promoteLegacyManualTagsToRoot() async {
+    final legacyTags = _store.tagsById.values
+        .where(
+          (tag) =>
+              tag.source == TagSource.manual &&
+              tag.parentId != null &&
+              tag.parentId!.trim().isNotEmpty,
+        )
+        .toList(growable: false);
+    if (legacyTags.isEmpty) {
+      return const <VideoItem>[];
+    }
+
+    final itemsByPathKey = <String, VideoItem>{
+      ..._store.videos,
+      ..._store.detachedVideos,
+    };
+    final previousLinks = <String, Set<String>>{
+      for (final entry in _store.videoTagIdsByPathKey.entries)
+        entry.key: <String>{...entry.value},
+    };
+    final previousTagIds = <String>{..._store.tagsById.keys};
+    final itemSnapshots =
+        <VideoItem, ({Set<String> tags, Map<String, Set<String>> childTags})>{};
+    final affected = <VideoItem>{};
+    final batch = _store.database.batch();
+
+    try {
+      for (final legacyTag in legacyTags) {
+        final linkedPathKeys = [
+          for (final entry in _store.videoTagIdsByPathKey.entries)
+            if (entry.value.contains(legacyTag.id)) entry.key,
+        ];
+        for (final pathKey in linkedPathKeys) {
+          final item = itemsByPathKey[pathKey];
+          // 未加载的孤立关系不应被自动删除，等关联视频恢复后再迁移。
+          if (item == null) {
+            continue;
+          }
+          itemSnapshots.putIfAbsent(
+            item,
+            () => (
+              tags: <String>{...item.tags},
+              childTags: <String, Set<String>>{
+                for (final entry in item.childTags.entries)
+                  entry.key: <String>{...entry.value},
+              },
+            ),
+          );
+          final rootTag = _independentManualTag(legacyTag);
+          _removeManualTagFromItem(item, legacyTag);
+          _addManualTagToItem(item, rootTag);
+          _store.tagPersistence.attachTagInBatch(
+            batch,
+            item,
+            rootTag,
+            source: TagSource.manual,
+          );
+          batch.delete(
+            'video_tags',
+            where: 'video_id = ? AND tag_id = ? AND source = ?',
+            whereArgs: [item.videoId, legacyTag.id, TagSource.manual.name],
+          );
+          _store.videoTagIdsByPathKey[pathKey]?.remove(legacyTag.id);
+          affected.add(item);
+        }
+      }
+      for (final item in affected) {
+        _store.videoPersistence.insertInBatch(batch, item);
+      }
+      if (affected.isNotEmpty) {
+        await batch.commit(noResult: true);
+      }
+      return affected.toList(growable: false);
+    } catch (_) {
+      _store.videoTagIdsByPathKey
+        ..clear()
+        ..addAll(previousLinks);
+      _store.tagsById.removeWhere(
+        (tagId, _) => !previousTagIds.contains(tagId),
+      );
+      for (final entry in itemSnapshots.entries) {
+        entry.key.tags
+          ..clear()
+          ..addAll(entry.value.tags);
+        entry.key.childTags
+          ..clear()
+          ..addAll(entry.value.childTags);
+      }
+      rethrow;
+    }
+  }
+
+  /**
    * 批量添加 manual 标签。
    *
    * 只允许 manual 来源标签，避免把 folder 派生标签当作用户维护数据写入。
