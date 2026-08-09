@@ -229,6 +229,7 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
           for (final tag in tagItems)
             if (tag.source == TagSource.manual && tag.isFavorite) tag.name,
         },
+        mostUsedTags: mostUsedManualTags(),
         initialManualTags: initialManualTags,
         lockedTags: lockedTags,
       ),
@@ -306,6 +307,41 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
         if (store.tagsById[tagId]?.source == TagSource.manual)
           store.tagsById[tagId]!.name,
     };
+  }
+
+  /** 按真实 video-tag 关联次数为编辑器候选排序，不依赖可变展示计数。 */
+  List<String> mostUsedManualTags() {
+    final store = runtime.store;
+    if (store == null) {
+      return const <String>[];
+    }
+    final usageByNormalizedName = <String, int>{};
+    final displayNameByNormalizedName = <String, String>{};
+    for (final tagIds in store.videoTagIdsByPathKey.values) {
+      for (final tagId in tagIds) {
+        final tag = store.tagsById[tagId];
+        if (tag == null || tag.source != TagSource.manual || tag.isHidden) {
+          continue;
+        }
+        final normalizedName = TagRules.normalizeTag(tag.name).toLowerCase();
+        if (normalizedName.isEmpty) {
+          continue;
+        }
+        displayNameByNormalizedName.putIfAbsent(normalizedName, () => tag.name);
+        usageByNormalizedName.update(
+          normalizedName,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+      }
+    }
+    final names = displayNameByNormalizedName.keys.toList(growable: false)
+      ..sort((left, right) {
+        final byUsage = usageByNormalizedName[right]!
+            .compareTo(usageByNormalizedName[left]!);
+        return byUsage != 0 ? byUsage : left.compareTo(right);
+      });
+    return [for (final name in names) displayNameByNormalizedName[name]!];
   }
 
   Set<String> folderChildTagsForItem(VideoItem item, String parentTag) {

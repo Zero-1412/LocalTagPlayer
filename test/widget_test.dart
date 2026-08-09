@@ -7389,7 +7389,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField), 'Suggested');
     await tester.pump();
-    expect(find.text('搜索结果'), findsOneWidget);
+    expect(find.text('自定义标签搜索结果'), findsOneWidget);
     expect(find.text('SuggestedTag'), findsOneWidget);
     expect(find.text('RecentTag'), findsNothing);
 
@@ -7468,10 +7468,32 @@ void main() {
       ),
     );
 
-    expect(find.text('全部可用标签'), findsOneWidget);
+    expect(find.text('全部可用自定义标签（常用优先，已选不重复显示）'), findsOneWidget);
     expect(find.byType(ActionChip), findsNWidgets(30));
     expect(find.text('候选标签 1'), findsOneWidget);
     expect(find.text('候选标签 30'), findsOneWidget);
+  });
+
+  testWidgets('manual tag editor places the most-used custom tags first',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: TagEditorDialog(
+            title: '常用排序',
+            initialManualTags: <String>{},
+            existingTags: <String>{'低频', '最高频', '次高频'},
+            mostUsedTags: <String>['最高频', '次高频'],
+          ),
+        ),
+      ),
+    );
+
+    final candidateLabels = tester
+        .widgetList<ActionChip>(find.byType(ActionChip))
+        .map((chip) => (chip.label as Text).data)
+        .toList();
+    expect(candidateLabels, <String?>['最高频', '次高频', '低频']);
   });
 
   testWidgets('manual tag editor supports keyboard save', (tester) async {

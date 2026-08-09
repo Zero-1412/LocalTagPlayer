@@ -23,6 +23,7 @@ class TagEditorDialog extends StatefulWidget {
     this.helperText,
     this.recentTags = const <String>[],
     this.favoriteTags = const <String>{},
+    this.mostUsedTags = const <String>[],
   });
 
   final String title;
@@ -41,6 +42,9 @@ class TagEditorDialog extends StatefulWidget {
 
   /** 用户在标签中心标记为收藏的 manual 标签。 */
   final Set<String> favoriteTags;
+
+  /** 按当前媒体库实际关联次数降序排列的 manual 标签名称。 */
+  final List<String> mostUsedTags;
 
   @override
   State<TagEditorDialog> createState() => _TagEditorDialogState();
@@ -121,6 +125,7 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
   List<String> _availableTags(
     Iterable<String> source, {
     bool sort = true,
+    Iterable<String> prioritizedTags = const <String>[],
   }) {
     final query = _query.trim().toLowerCase();
     final result = _normalizeTags(source.where(
@@ -129,7 +134,21 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
           (query.isEmpty || tag.toLowerCase().contains(query)),
     )).toList();
     if (sort) {
-      result.sort();
+      final priority = <String, int>{
+        for (final (index, tag) in prioritizedTags.indexed)
+          TagRules.normalizeTag(tag).toLowerCase(): index,
+      };
+      result.sort((left, right) {
+        final leftPriority = priority[left.toLowerCase()];
+        final rightPriority = priority[right.toLowerCase()];
+        if (leftPriority != null || rightPriority != null) {
+          if (leftPriority == null) return 1;
+          if (rightPriority == null) return -1;
+          final compared = leftPriority.compareTo(rightPriority);
+          if (compared != 0) return compared;
+        }
+        return left.toLowerCase().compareTo(right.toLowerCase());
+      });
     }
     return result;
   }
@@ -137,7 +156,10 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final sameNameSourceTags = _sameNameSourceTags;
-    final suggestions = _availableTags(widget.existingTags);
+    final suggestions = _availableTags(
+      widget.existingTags,
+      prioritizedTags: widget.mostUsedTags,
+    );
     final recent = _availableTags(widget.recentTags, sort: false);
     final favorites = _availableTags(widget.favoriteTags);
     final theme = maintenanceWorkspaceTheme(Theme.of(context));
@@ -320,7 +342,9 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                               }),
                             ),
                             _TagSuggestionSection(
-                              title: _query.trim().isEmpty ? '全部可用标签' : '搜索结果',
+                              title: _query.trim().isEmpty
+                                  ? '全部可用自定义标签（常用优先，已选不重复显示）'
+                                  : '自定义标签搜索结果',
                               tags: suggestions,
                               icon: Icons.sell_outlined,
                               onSelected: (tag) => setState(() {
