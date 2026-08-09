@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../core/tag_rules.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
+import '../../features/library/domain/tag_editor_candidates.dart';
 import '../../features/update/domain/app_update_service.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/library_sort.dart';
@@ -164,17 +164,8 @@ abstract class LibraryPageStateHost<T extends StatefulWidget> extends State<T> {
   Set<String> tagEditorCandidates(
     Iterable<TagItem> tags, {
     String? parentTag,
-  }) {
-    return <String>{
-      for (final tag in tags)
-        if (!tag.isHidden &&
-            (parentTag == null
-                ? tag.parentId == null
-                : tag.parentId != null &&
-                    TagRules.sameTag(tag.parentId!, parentTag)))
-          tag.name,
-    };
-  }
+  }) =>
+      tagEditorCandidatesForScope(tags, parentTag: parentTag);
 
   /** 返回目录/文件选择器应使用的媒体上下文起点。 */
   String? preferredLibraryPickerDirectory({

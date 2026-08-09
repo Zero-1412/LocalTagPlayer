@@ -7,7 +7,6 @@ import '../../features/update/domain/app_update_service.dart';
 import '../../features/library/application/library_source_navigation_controller.dart';
 import '../../features/library/presentation/library_queue_title.dart';
 import '../../features/library/presentation/library_scan_progress_labels.dart';
-import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
 import '../../platform/platform_interfaces.dart';
@@ -45,29 +44,6 @@ bool libraryTagDiscoveryPanelOpenAfterMutation({
   required bool collapseAfterMutation,
 }) =>
     collapseAfterMutation ? false : currentOpen;
-
-/**
- * 返回标签编辑器在指定层级应展示的完整名称候选。
- *
- * 候选直接来自规范化 `TagItem` 索引，因此包含尚未出现在兼容视频字段中的标签。候选可以
- * 来自 folder 等已有来源，但用户选中后仍由保存层建立独立 manual 关系；隐藏标签不展示，
- * 二级候选仍严格限制在 [parentTag] 下。顶层编辑兼容显示旧版二级 manual 定义；选择后
- * 会由保存层落为独立顶层 manual 关联，避免用户必须重复输入已有标签。
- */
-Set<String> tagEditorCandidates(
-  Iterable<TagItem> tags, {
-  String? parentTag,
-}) {
-  return <String>{
-    for (final tag in tags)
-      if (!tag.isHidden &&
-          (parentTag == null
-              ? tag.parentId == null || tag.source == TagSource.manual
-              : tag.parentId != null &&
-                  TagRules.sameTag(tag.parentId!, parentTag)))
-        tag.name,
-  };
-}
 
 /** 播放器 Route 挂载期间排除媒体库语义，防止 Windows UIA 保留旧页面节点。 */
 @visibleForTesting

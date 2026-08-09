@@ -16,6 +16,7 @@ import 'package:local_tag_player/src/core/playback_settings.dart';
 import 'package:local_tag_player/src/core/tag_rules.dart';
 import 'package:local_tag_player/src/features/library/application/library_continue_watching_command_executor.dart';
 import 'package:local_tag_player/src/features/library/domain/library_query_snapshot.dart';
+import 'package:local_tag_player/src/features/library/domain/tag_editor_candidates.dart';
 import 'package:local_tag_player/src/features/player/application/player_interaction_state_controller.dart';
 import 'package:local_tag_player/src/features/player/application/player_open_request_controller.dart';
 import 'package:local_tag_player/src/features/player/application/player_session_controller.dart';
@@ -7337,11 +7338,11 @@ void main() {
     ];
 
     expect(
-      tagEditorCandidates(tags, parentTag: '原神'),
+      tagEditorCandidatesForScope(tags, parentTag: '原神'),
       <String>{'已使用标签', '未使用标签', '文件夹标签'},
     );
     expect(
-      tagEditorCandidates(tags),
+      tagEditorCandidatesForScope(tags),
       <String>{'顶级标签', '已使用标签', '未使用标签', '其它父级标签'},
     );
   });
