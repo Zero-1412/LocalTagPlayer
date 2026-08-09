@@ -60,6 +60,12 @@ class _CardFileMenuRepository
   var resultCountsCalls = 0;
   /** 页面级扫描可达性回归记录的启动次数。 */
   var scanCalls = 0;
+  /** 启动后新增视频检查的调用次数，用于保护其不被后台清理阻塞。 */
+  var untrackedVideoCountCalls = 0;
+  /** 测试可指定尚未入库的视频数。 */
+  var untrackedVideoCount = 0;
+  /** 测试可暂缓启动清理，模拟大媒体库的磁盘检查。 */
+  Completer<int>? pendingUnavailableCleanup;
   /** 页面暂停/继续按钮发给 Repository 的顺序。 */
   final pausedStates = <bool>[];
   /** 页面取消按钮发给 Repository 的次数。 */
@@ -77,13 +83,19 @@ class _CardFileMenuRepository
   }
 
   @override
-  Future<int> countUntrackedVideos() async => 0;
+  Future<int> countUntrackedVideos() async {
+    untrackedVideoCountCalls += 1;
+    return untrackedVideoCount;
+  }
 
   /**
    * 页面启动可能执行自动清理；菜单回归测试没有无效记录，因此返回零且不改变视频集合。
    */
   @override
-  Future<int> removeMissingOrUnreadableVideos() async => 0;
+  Future<int> removeMissingOrUnreadableVideos() async {
+    final pending = pendingUnavailableCleanup;
+    return pending?.future ?? 0;
+  }
 
   @override
   Future<LibraryScanCommitResult> scanWithChanges({
@@ -269,6 +281,59 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
 }
 
 void main() {
+  testWidgets('启动新增视频检查不会被自动清理阻塞', (tester) async {
+    final repository = _CardFileMenuRepository()
+      ..roots.add(r'D:\\library')
+      ..untrackedVideoCount = 2
+      ..pendingUnavailableCleanup = Completer<int>();
+    final store = LibraryApplicationFacade(
+      queryRepository: repository,
+      commandRepository: repository,
+      tagRepository: repository,
+      cacheRepository: repository,
+      playbackRepository: repository,
+    );
+    final root = await Directory.systemTemp.createTemp('ltp-startup-scan-');
+    addTearDown(() async {
+      final cleanup = repository.pendingUnavailableCleanup;
+      if (cleanup != null && !cleanup.isCompleted) {
+        cleanup.complete(0);
+      }
+      await root.delete(recursive: true);
+    });
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory(p.join(root.path, 'thumbs')),
+      _CardFileMenuFFmpegBackend(),
+    );
+    final applicationService = _CardFileMenuApplicationService(
+      store: store,
+      thumbnailService: thumbnailService,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryPage(
+          applicationService: applicationService,
+          fileSystem: _CardFileMenuFileSystem(),
+          playerServiceFactory: ({
+            required String hwdec,
+            required bool enableHardwareAcceleration,
+            required PlayerRendererPreference rendererPreference,
+          }) =>
+              PlayerService(backend: _CardFileMenuPlayerBackend()),
+          mediaProbeBackendFactory: _CardFileMenuProbeBackend.new,
+          updateService: _CardFileMenuUpdateService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(repository.untrackedVideoCountCalls, 1);
+    expect(find.text('发现新增视频'), findsOneWidget);
+    expect(find.text('当前目录发现 2 个未入库视频，是否现在重新扫描？'), findsOneWidget);
+  });
+
   testWidgets('媒体卡片菜单可达且查询与排序只发布最新结果', (tester) async {
     tester.view.physicalSize = const Size(1248, 714);
     tester.view.devicePixelRatio = 1;

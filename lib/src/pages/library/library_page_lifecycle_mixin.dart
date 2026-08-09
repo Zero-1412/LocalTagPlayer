@@ -202,11 +202,13 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
       scheduleFilterRefresh();
       scheduleInitialStableTagCounts(store);
       unawaited(() async {
-        if (playbackSettings.autoRemoveMissingOrUnreadableVideos) {
+        // 新增发现是用户启动后最直接的反馈，必须先于可能遍历整个媒体库的无效记录
+        // 清理执行；否则大库在默认开启自动清理时，会让新增提示长期不可见。
+        await promptForNewVideos(store);
+        if (playbackSettings.autoRemoveMissingOrUnreadableVideos &&
+            mounted &&
+            identical(runtime.store, store)) {
           await cleanupMissingOrUnreadableVideos(store);
-        }
-        if (mounted && identical(runtime.store, store)) {
-          await promptForNewVideos(store);
         }
       }());
     });
