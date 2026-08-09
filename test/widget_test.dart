@@ -7372,6 +7372,14 @@ void main() {
 
     expect(folderChip.onDeleted, isNull);
     expect(manualChip.onDeleted, isNotNull);
+    expect(
+      find.byKey(const ValueKey('tagEditor.sameNameSourceNotice')),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('只会移除自定义标签，不会影响目录标签'),
+      findsOneWidget,
+    );
     expect(find.text('只修改手动标签；文件夹标签由目录结构维护。'), findsOneWidget);
     expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
     expect(find.text('最近使用'), findsOneWidget);
@@ -7399,6 +7407,10 @@ void main() {
     manualChip.onDeleted!();
     await tester.pump();
     expect(find.text('FolderTag'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('tagEditor.sameNameSourceNotice')),
+      findsNothing,
+    );
     expect(
       find.byKey(const ValueKey('tagEditor.unsavedChanges')),
       findsOneWidget,

@@ -109,6 +109,14 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
     return normalized;
   }
 
+  /** 找出同时来自目录和用户维护数据的同名标签。 */
+  List<String> get _sameNameSourceTags => [
+        for (final tag in _tags)
+          if (widget.lockedTags
+              .any((lockedTag) => TagRules.sameTag(lockedTag, tag)))
+            tag,
+      ]..sort();
+
   /** 返回未选中且匹配当前搜索词的候选，保持大小写不敏感。 */
   List<String> _availableTags(
     Iterable<String> source, {
@@ -128,6 +136,7 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final sameNameSourceTags = _sameNameSourceTags;
     final suggestions = _availableTags(widget.existingTags);
     final recent = _availableTags(widget.recentTags, sort: false);
     final favorites = _availableTags(widget.favoriteTags);
@@ -280,6 +289,12 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                                   ),
                               ],
                             ),
+                            if (sameNameSourceTags.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              _TagEditorSameNameSourceNotice(
+                                tags: sameNameSourceTags,
+                              ),
+                            ],
                             if (_tags.isEmpty)
                               const Text(
                                 '尚未选择标签，可从下方候选添加或直接输入新标签。',
@@ -357,6 +372,49 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                 onPressed: _save,
                 icon: const Icon(Icons.check_rounded, size: 18),
                 label: const Text('\u4fdd\u5b58'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/** 明确同名标签的来源边界，避免用户把可编辑 manual 误认为目录项。 */
+class _TagEditorSameNameSourceNotice extends StatelessWidget {
+  const _TagEditorSameNameSourceNotice({required this.tags});
+
+  final List<String> tags;
+
+  @override
+  Widget build(BuildContext context) {
+    final names = tags.map((tag) => '“$tag”').join('、');
+    return Semantics(
+      container: true,
+      child: DecoratedBox(
+        key: const ValueKey('tagEditor.sameNameSourceNotice'),
+        decoration: BoxDecoration(
+          color: libraryAccent.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          border: Border.all(color: libraryAccent.withValues(alpha: 0.32)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline_rounded,
+                  size: 17, color: libraryAccent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$names 同时存在目录和自定义两种来源。移除不带锁图标的同名标签，只会移除自定义标签，不会影响目录标签。',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: libraryTextMuted,
+                        height: 1.4,
+                      ),
+                ),
               ),
             ],
           ),
