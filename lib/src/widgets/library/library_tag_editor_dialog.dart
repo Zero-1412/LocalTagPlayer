@@ -100,6 +100,27 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
     setState(() => _query = '');
   }
 
+  /**
+   * 只在输入法没有候选组合文本时处理 Enter。
+   *
+   * Windows 中文输入法也用 Enter 确认候选词；若仍沿用 [TextField.onSubmitted]，
+   * 候选词会被误当成“添加标签”并立即清空，导致中文看似无法输入。组合态必须把
+   * 按键交还给 [EditableText]，确认完成后的下一次 Enter 才添加标签。
+   */
+  KeyEventResult _handleInputKey(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.enter ||
+        HardwareKeyboard.instance.isControlPressed) {
+      return KeyEventResult.ignored;
+    }
+    final composing = _controller.value.composing;
+    if (composing.isValid && !composing.isCollapsed) {
+      return KeyEventResult.ignored;
+    }
+    _addTag(_controller.text);
+    return KeyEventResult.handled;
+  }
+
   Set<String> _normalizeTags(Iterable<String> tags) {
     final normalized = <String>{};
     for (final raw in tags) {
@@ -241,25 +262,27 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  TextField(
-                    controller: _controller,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: '搜索或新建独立 manual 标签',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : IconButton(
-                              key: const ValueKey('tagEditor.clearSearch'),
-                              tooltip: '清除搜索',
-                              onPressed: _clearQuery,
-                              icon: const Icon(Icons.close_rounded),
-                            ),
-                      helperText: 'Tab 浏览候选，Enter 添加，Ctrl+Enter 保存，Esc 取消',
+                  Focus(
+                    onKeyEvent: _handleInputKey,
+                    child: TextField(
+                      controller: _controller,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: '搜索或新建独立 manual 标签',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: _query.isEmpty
+                            ? null
+                            : IconButton(
+                                key: const ValueKey('tagEditor.clearSearch'),
+                                tooltip: '清除搜索',
+                                onPressed: _clearQuery,
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                        helperText: 'Tab 浏览候选，Enter 添加，Ctrl+Enter 保存，Esc 取消',
+                      ),
+                      // 搜索链路继续只使用当前 TextField/controller；清除不创建第二输入状态。
+                      onChanged: (value) => setState(() => _query = value),
                     ),
-                    // 搜索链路继续只使用当前 TextField/controller；清除不创建第二输入状态。
-                    onChanged: (value) => setState(() => _query = value),
-                    onSubmitted: _addTag,
                   ),
                   const SizedBox(height: 12),
                   Expanded(

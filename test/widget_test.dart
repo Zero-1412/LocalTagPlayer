@@ -7542,6 +7542,51 @@ void main() {
     expect(find.text('键盘标签编辑'), findsNothing);
   });
 
+  testWidgets('manual tag editor keeps an IME composing value on Enter',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: TagEditorDialog(
+            title: '输入法组合文本',
+            initialManualTags: <String>{},
+            existingTags: <String>{},
+          ),
+        ),
+      ),
+    );
+    final field = find.byType(TextField);
+    await tester.showKeyboard(field);
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'nihao',
+        selection: TextSelection.collapsed(offset: 5),
+        composing: TextRange(start: 0, end: 5),
+      ),
+    );
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        'nihao');
+    expect(find.byType(InputChip), findsNothing);
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '你好',
+        selection: TextSelection.collapsed(offset: 2),
+      ),
+    );
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(find.text('你好'), findsOneWidget);
+  });
+
   test('secondary discovery hides default album from secondary lists', () {
     const defaultAlbum = TagItem(
       id: 'folder.child:genshin:default',
