@@ -123,7 +123,6 @@ class PlayerPage extends StatefulWidget {
   final MediaProbeBackendFactory mediaProbeBackendFactory;
   /** 媒体库 Route 持有的播放器全屏会话状态，不参与持久化。 */
   final PlayerFullscreenSessionController fullscreenSessionController;
-
   @override
   State<PlayerPage> createState() => PlayerPageState();
 }
@@ -135,10 +134,8 @@ class PlayerPageState extends State<PlayerPage> {
    * `setState` 的生命周期所有权仍保留在真正的 [State] 子类中。
    */
   void rebuild(VoidCallback action) => setState(action);
-
   /** 供同库状态扩展只读访问页面输入。 */
   PlayerPage get pageWidget => widget;
-
   /** 解析 MPV 数值属性；不可用占位保持为空，避免伪造诊断值。 */
   double? parseMpvNumber(String? value) {
     final text = value?.trim();
