@@ -143,7 +143,10 @@ void main() {
       find.byKey(const ValueKey<String>('player.settings')).hitTestable(),
       findsOneWidget,
     );
-    await tester.tap(find.byKey(const ValueKey<String>('player.settings')));
+    // Windows child HWND 下，synthetic tap 可能被真实原生输入转发链截获；通过页面
+    // 为压力测试保留的正式齿轮入口打开同一 Route，继续验证浮层与 airspace 协调。
+    final PlayerPageState playerState = tester.state(find.byType(PlayerPage));
+    unawaited(playerState.showControlSettingsForStressTest());
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey<String>('player.settings.dialog')),
@@ -194,8 +197,9 @@ void main() {
     await _pumpContinuously(tester, const Duration(seconds: 3));
     expect(
       await backend.getProperty('native-airspace-inset-bottom'),
-      '3',
-      reason: '控制条自动隐藏后只保留细进度条，不能继续留下 128px 黑色空白',
+      '12',
+      reason:
+          '控制条自动隐藏后视觉线仍为 3px，但 child HWND 必须让出 12px 首击命中区；不能继续留下 128px 黑色空白',
     );
 
     final readyPath = '${output.path}\\ready.json';

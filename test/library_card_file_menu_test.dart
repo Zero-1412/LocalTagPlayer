@@ -293,13 +293,22 @@ void main() {
       cacheRepository: repository,
       playbackRepository: repository,
     );
-    final root = await Directory.systemTemp.createTemp('ltp-startup-scan-');
-    addTearDown(() async {
+    // Windows 测试 runner 的 `Directory.createTemp` 偶发在目录已创建后仍不回调；本
+    // 用例只需要隔离空目录，改用同步创建的唯一路径，避免测试在首次挂载前悬挂。
+    final root = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'ltp_startup_scan_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
       final cleanup = repository.pendingUnavailableCleanup;
       if (cleanup != null && !cleanup.isCompleted) {
         cleanup.complete(0);
       }
-      await root.delete(recursive: true);
+      if (root.existsSync()) {
+        root.deleteSync(recursive: true);
+      }
     });
     final thumbnailService = ThumbnailService.forDirectory(
       Directory(p.join(root.path, 'thumbs')),
@@ -332,6 +341,15 @@ void main() {
     expect(repository.untrackedVideoCountCalls, 1);
     expect(find.text('发现新增视频'), findsOneWidget);
     expect(find.text('当前目录发现 2 个未入库视频，是否现在重新扫描？'), findsOneWidget);
+
+    // 测试不能把启动弹窗 Route 与模拟中的大库清理 Future 永久悬挂在树上；先按用户
+    // 可见路径关闭提示，再释放后台清理，才能验证“发现”先于“清理”而不污染后续测试。
+    await tester.tap(find.text('稍后'));
+    await tester.pumpAndSettle();
+    repository.pendingUnavailableCleanup?.complete(0);
+    // 清理完成会排入一次零延迟筛选刷新；再推进一帧，避免它在测试树 dispose 后
+    // 才成为悬挂 Timer。
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('媒体卡片菜单可达且查询与排序只发布最新结果', (tester) async {

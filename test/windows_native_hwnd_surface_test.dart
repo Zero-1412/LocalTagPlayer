@@ -165,7 +165,8 @@ void main() {
         exactSeekCall.arguments! as Map<Object?, Object?>;
     expect(exactSeekArguments['integer'], 18000);
 
-    // 控制条收起后 HWND 尺寸保持不变，只把窗口 region 的底部让位收窄到细进度条。
+    // 控制条收起后 HWND 尺寸保持不变；视觉线虽为 3px，原生窗口仍须让出 12px
+    // 的首击命中区，否则最外层 Flutter 进度条收不到鼠标事件。
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -187,7 +188,7 @@ void main() {
     final hiddenControlsArguments =
         hiddenControlsRectCall.arguments! as Map<Object?, Object?>;
     expect(hiddenControlsArguments['height'], 600);
-    expect(hiddenControlsArguments['airspaceBottom'], 3);
+    expect(hiddenControlsArguments['airspaceBottom'], 12);
 
     // 全屏顶部队列语境仍须避让，切换状态只改变原生矩形而不重建后端。
     await tester.pumpWidget(

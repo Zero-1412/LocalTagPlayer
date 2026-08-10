@@ -75,6 +75,27 @@
 
 ## 当前任务
 
+### 2026-08-10 · v0.2.7 发布门禁：启动挂起与 HWND 命中区（完成）
+
+- 首次挂载悬挂根因：`library_card_file_menu_test.dart` 在 Windows runner 上使用
+  `Directory.systemTemp.createTemp`；目录已落盘但 Future 偶发不回调，测试停在
+  `pumpWidget` 前并在 GitHub Actions 超时 10 分钟，并非生产页面的“新增提示 → 自动清理”
+  异步顺序倒置。测试改为同文件既有的同步唯一路径创建法；关闭“稍后”对话框、释放模拟
+  清理 Future，并推进清理回调排入的零延迟筛选 Timer，确保测试 teardown 无悬挂 Route/Timer。
+- HWND 语义核对：隐藏态视觉线固定 3px，实际首击命中区固定 12px；child HWND 必须让出
+  完整 12px，否则 `hit-test-transparent` 也无法保证 Flutter 收到首击。将过时的 3px
+  unit/integration 断言改为 12px，不改变生产实现。
+- 真实窗口：使用匿名 `fixed-low-bitrate-1080p.mp4` 启动 Debug child-HWND 集成窗口，报告确认
+  `gpu-next-d3d11-child-hwnd`、`d3d11va`、zero texture copies、input forwarding
+  `hit-test-transparent`、hidden `bottomAirspace=12`。在窗口底边的 12px 命中区进行物理首击后，
+  播放位置跳转至点击横向目标且画面持续播放；视觉进度线仍为 3px。
+- 验证：启动发现 focused widget、HWND surface focused unit、无人工等待的 child-HWND Windows
+  integration test 均通过。schema、FilterQuery / TagQueryService、filtered queue、缩略图/媒体
+  队列、PlayerBackend 契约和用户数据未改。
+- 完整门禁：`flutter test`（521 passed / 3 skipped）、`flutter analyze`、Windows Debug 构建均通过。
+- 下一步：提交、推送，再以 `publish_unsigned_release=true` 重新触发 v0.2.7 手动未签名 Windows /
+  未公证 macOS 发布，并核验公开 Release 与资产。
+
 ### 2026-08-10 · 标签编辑器中文输入法候选确认（完成）
 
 - 根因：单视频 manual 标签编辑器把 `TextField.onSubmitted` 直接用作“添加标签”；
@@ -86,11 +107,8 @@
 - 验证：新增 IME 组合态 widget 回归；组合态 Enter 保留文本，确认文本后 Enter 正常添加；
   既有键盘保存回归通过。`flutter analyze` 和 Windows Debug build 均通过；Debug 程序可启动，
   但当前本机媒体库启动加载未结束，且已有正式应用进程，未触碰用户数据以强行进入真实弹窗。
-- 发布阻塞：`v0.2.7` 的发布说明、架构门禁、IME 与键盘 focused tests、`flutter analyze`、
-  Windows Debug/Release 构建均已通过；GitHub 全量测试仍被两个既有独立用例阻塞：
-  `library_card_file_menu_test.dart` 的启动新增视频检查在 Windows runner 超时 10 分钟，以及
-  `windows_native_hwnd_surface_test.dart` 的控制区高度断言期望 3、实际 12。未创建 tag、Release 或安装包资产，
-  后续须先分别复现并修复/确认这两个门禁，不能直接放宽断言或跳过测试。
+- 发布状态：此前的两个全量测试门禁已在本次独立定位后修复/确认；未创建 tag、Release 或安装包资产，
+  待本次完整本地门禁通过后按既有手动未签名/未公证路径重新发布。
 
 ### 2026-08-09 · 启动新增视频发现延后（完成）
 
