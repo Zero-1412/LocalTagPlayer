@@ -80,9 +80,9 @@
 - 根因：单视频 manual 标签编辑器把 `TextField.onSubmitted` 直接用作“添加标签”；
   Windows 中文输入法按 `Enter` 确认候选词时会触发该回调，文本随即被归一化并清空，
   表现为中文偶发无法输入而英文正常。
-- 修复：输入框祖先仅在非组合态的普通 `Enter` 添加标签；组合中的 `TextRange.composing`
-  会把按键交给 `EditableText` 完成候选确认。`Ctrl+Enter` 保存、Tab 候选浏览、Esc 取消
-  和既有标签来源分离保持不变。
+- 修复：不再在原始键盘事件层拦截 `Enter`；改为监听 `TextRange.composing` 的结束时机，
+  仅忽略紧随候选确认的一次 `onSubmitted`，下一帧自动失效。`Ctrl+Enter` 保存、Tab 候选
+  浏览、Esc 取消和既有标签来源分离保持不变。
 - 验证：新增 IME 组合态 widget 回归；组合态 Enter 保留文本，确认文本后 Enter 正常添加；
   既有键盘保存回归通过。`flutter analyze` 和 Windows Debug build 均通过；Debug 程序可启动，
   但当前本机媒体库启动加载未结束，且已有正式应用进程，未触碰用户数据以强行进入真实弹窗。

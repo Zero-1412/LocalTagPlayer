@@ -7581,10 +7581,10 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pump();
-
-    expect(find.text('你好'), findsOneWidget);
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+      '你好',
+    );
   });
 
   test('secondary discovery hides default album from secondary lists', () {

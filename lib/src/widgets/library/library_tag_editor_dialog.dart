@@ -54,6 +54,8 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
   late final Set<String> _tags = _normalizeTags(widget.initialManualTags);
   final _controller = TextEditingController();
   String _query = '';
+  bool _hasPendingImeSubmission = false;
+  var _imeCompositionEpoch = 0;
 
   /** 当前选择是否与打开弹窗时不同；只用于提示未保存状态，不提前写入标签数据。 */
   bool _dirty = false;
@@ -68,7 +70,14 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
   void _cancel() => Navigator.of(context).pop();
 
   @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_trackImeComposition);
+  }
+
+  @override
   void dispose() {
+    _controller.removeListener(_trackImeComposition);
     _controller.dispose();
     super.dispose();
   }
@@ -101,24 +110,34 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
   }
 
   /**
-   * 只在输入法没有候选组合文本时处理 Enter。
+   * 记录输入法组合态刚完成的帧，但不在键盘事件层处理 Enter。
    *
-   * Windows 中文输入法也用 Enter 确认候选词；若仍沿用 [TextField.onSubmitted]，
-   * 候选词会被误当成“添加标签”并立即清空，导致中文看似无法输入。组合态必须把
-   * 按键交还给 [EditableText]，确认完成后的下一次 Enter 才添加标签。
+   * Windows 中文输入法用 Enter 选择候选；拦截原始按键会让输入法失去提交机会。
+   * 输入法的候选确认可能先结束组合态、再回调 [onSubmitted]，因此一旦观察到组合文本，
+   * 就暂时让输入法接管 Enter。若同一帧未收到提交回调，则在下一帧释放普通 Enter。
    */
-  KeyEventResult _handleInputKey(FocusNode _, KeyEvent event) {
-    if (event is! KeyDownEvent ||
-        event.logicalKey != LogicalKeyboardKey.enter ||
-        HardwareKeyboard.instance.isControlPressed) {
-      return KeyEventResult.ignored;
-    }
+  void _trackImeComposition() {
     final composing = _controller.value.composing;
     if (composing.isValid && !composing.isCollapsed) {
-      return KeyEventResult.ignored;
+      _hasPendingImeSubmission = true;
+      return;
     }
-    _addTag(_controller.text);
-    return KeyEventResult.handled;
+    if (!_hasPendingImeSubmission) return;
+
+    final epoch = ++_imeCompositionEpoch;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _imeCompositionEpoch != epoch) return;
+      _hasPendingImeSubmission = false;
+    });
+  }
+
+  /** 组合候选确认触发的提交只保留文本；下一次普通 Enter 才添加标签。 */
+  void _handleSubmitted(String value) {
+    if (_hasPendingImeSubmission) {
+      _hasPendingImeSubmission = false;
+      return;
+    }
+    _addTag(value);
   }
 
   Set<String> _normalizeTags(Iterable<String> tags) {
@@ -262,27 +281,25 @@ class _TagEditorDialogState extends State<TagEditorDialog> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  Focus(
-                    onKeyEvent: _handleInputKey,
-                    child: TextField(
-                      controller: _controller,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        labelText: '搜索或新建独立 manual 标签',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        suffixIcon: _query.isEmpty
-                            ? null
-                            : IconButton(
-                                key: const ValueKey('tagEditor.clearSearch'),
-                                tooltip: '清除搜索',
-                                onPressed: _clearQuery,
-                                icon: const Icon(Icons.close_rounded),
-                              ),
-                        helperText: 'Tab 浏览候选，Enter 添加，Ctrl+Enter 保存，Esc 取消',
-                      ),
-                      // 搜索链路继续只使用当前 TextField/controller；清除不创建第二输入状态。
-                      onChanged: (value) => setState(() => _query = value),
+                  TextField(
+                    controller: _controller,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: '搜索或新建独立 manual 标签',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                              key: const ValueKey('tagEditor.clearSearch'),
+                              tooltip: '清除搜索',
+                              onPressed: _clearQuery,
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                      helperText: 'Tab 浏览候选，Enter 添加，Ctrl+Enter 保存，Esc 取消',
                     ),
+                    // 搜索链路继续只使用当前 TextField/controller；清除不创建第二输入状态。
+                    onChanged: (value) => setState(() => _query = value),
+                    onSubmitted: _handleSubmitted,
                   ),
                   const SizedBox(height: 12),
                   Expanded(
