@@ -86,6 +86,11 @@
 - 验证：新增 IME 组合态 widget 回归；组合态 Enter 保留文本，确认文本后 Enter 正常添加；
   既有键盘保存回归通过。`flutter analyze` 和 Windows Debug build 均通过；Debug 程序可启动，
   但当前本机媒体库启动加载未结束，且已有正式应用进程，未触碰用户数据以强行进入真实弹窗。
+- 发布阻塞：`v0.2.7` 的发布说明、架构门禁、IME 与键盘 focused tests、`flutter analyze`、
+  Windows Debug/Release 构建均已通过；GitHub 全量测试仍被两个既有独立用例阻塞：
+  `library_card_file_menu_test.dart` 的启动新增视频检查在 Windows runner 超时 10 分钟，以及
+  `windows_native_hwnd_surface_test.dart` 的控制区高度断言期望 3、实际 12。未创建 tag、Release 或安装包资产，
+  后续须先分别复现并修复/确认这两个门禁，不能直接放宽断言或跳过测试。
 
 ### 2026-08-09 · 启动新增视频发现延后（完成）
 
