@@ -133,6 +133,17 @@ abstract interface class LibraryCommandRepository {
 
   Future<VideoItem?> deleteVideo(String path);
 
+  /**
+   * 把源视频的收藏与 manual 标签并入目标视频后再删除源视频。
+   *
+   * 两个视频的用户数据合并与源记录删除必须由同一 Repository 事务提交；folder 标签不在
+   * 合并范围内，避免把目录派生关系写入另一个路径。
+   */
+  Future<VideoItem?> deleteVideoAndMergeUserData({
+    required VideoItem source,
+    required VideoItem target,
+  });
+
   /** 只移除数据库中的路径失效/missing/不可读记录；磁盘内容必须保留。 */
   Future<int> removeMissingOrUnreadableVideos();
 

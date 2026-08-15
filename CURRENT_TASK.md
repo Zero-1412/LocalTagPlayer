@@ -1,5 +1,16 @@
 # CURRENT_TASK.md
 
+# 2026-08-15 · 相似视频合并用户数据后删除（完成）
+
+- 目标：相似候选删除前，把源视频收藏和 `source=manual` 自定义标签并入保留视频；目标已有
+  数据只做并集，不覆盖；folder 派生标签不复制。
+- 实现：两条候选自动选择另一条；多条候选显示保留目标选择框；新增 Repository 原子命令，
+  在同一 SQLite 事务中更新目标视频并删除源视频，文件仍先移入系统回收站。
+- 验证：新增 LibraryStore 合并删除回归，覆盖收藏、manual 标签、folder 标签隔离和源关系删除；
+  focused store/executor、架构契约与 `flutter analyze` 已通过；`flutter build windows --debug`
+  被 Explorer 启动且仍在运行的 Debug `local_tag_player.exe` 锁定，返回 LNK1168，未强制结束用户进程。
+- 下一步：完成停止编辑后的独立审计，提交并推送当前分支；关闭该窗口后重跑构建门禁。
+
 # 2026-08-15 · 删除视频同步清理缓存诊断 metadata（完成）
 
 - 根因：相似视频等入口已通过统一删除命令清理文件、视频行、标签关联、备份快照和缩略图，

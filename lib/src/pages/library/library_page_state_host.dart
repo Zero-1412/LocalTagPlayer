@@ -136,8 +136,8 @@ abstract class LibraryPageStateHost<T extends StatefulWidget> extends State<T> {
     List<VideoItem> playlist, {
     VoidCallback? onRouteReturned,
   });
-  /** 复用媒体库确认删除边界，返回本次是否确实删除了记录。 */
-  Future<bool> deleteVideoFromSimilarity(VideoItem item);
+  /** 复用媒体库确认删除边界，先合并用户数据到保留项再删除源视频。 */
+  Future<bool> deleteVideoFromSimilarity(VideoItem item, VideoItem mergeInto);
   /** 播放器队列删除始终先把本地视频移入系统回收站。 */
   Future<void> deleteVideoFromPlayer(VideoItem item);
   Future<void> editManualTagsFromPlayer(VideoItem item);

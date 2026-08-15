@@ -26,11 +26,15 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     runtime.playerScopedRemovedVideoIds.add(item.videoId);
   }
 
-  /** 相似候选页复用同一确认/回收站/记录清理边界，并把结果反馈给页面行。 */
+  /** 相似候选页先合并收藏/manual 标签，再复用统一确认/回收站/记录清理边界。 */
   @override
-  Future<bool> deleteVideoFromSimilarity(VideoItem item) {
+  Future<bool> deleteVideoFromSimilarity(
+    VideoItem item,
+    VideoItem mergeInto,
+  ) {
     return _deleteVideoWithConfirmation(
       item,
+      mergeInto: mergeInto,
       onDeleted: () => markLibraryDataChanged(
         tagDefinitionsChanged: true,
         removedVideoIds: <String>[item.videoId],
@@ -56,14 +60,18 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
 
   Future<bool> _deleteVideoWithConfirmation(
     VideoItem item, {
+    VideoItem? mergeInto,
     required VoidCallback onDeleted,
   }) async {
-    final decision = await resolveSingleVideoDeleteDecision(item);
+    final decision = await resolveSingleVideoDeleteDecision(
+      item,
+      mergeInto: mergeInto,
+    );
     if (decision == null || !mounted) {
       return false;
     }
     try {
-      await deleteConfirmedLibraryVideo(item);
+      await deleteConfirmedLibraryVideo(item, mergeInto: mergeInto);
       if (mounted) {
         onDeleted();
       }
@@ -87,13 +95,25 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
    * 该方法不刷新页面，便于批量删除在全部条目处理完后只触发一次筛选和计数更新。
    */
   Future<void> deleteConfirmedLibraryVideo(
-    VideoItem item,
-  ) async {
+    VideoItem item, {
+    VideoItem? mergeInto,
+  }) async {
     await runtime.fileCommandExecutor.delete(
       DeleteVideoCommand(item: item),
       moveFileToTrash: fileSystem.moveFileToTrash,
       deleteRecord: (path) async {
-        await runtime.store?.deleteVideo(path);
+        final store = runtime.store;
+        if (store == null) {
+          return;
+        }
+        if (mergeInto == null) {
+          await store.deleteVideo(path);
+        } else {
+          await store.deleteVideoAndMergeUserData(
+            source: item,
+            target: mergeInto,
+          );
+        }
       },
       deleteThumbnail: (target) async {
         await runtime.thumbnailService?.deleteThumbnailFor(target);
@@ -162,8 +182,9 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
 
   /** 单条删除按确认偏好决定是否显示提示；文件动作始终进入系统回收站。 */
   Future<VideoDeleteDecision?> resolveSingleVideoDeleteDecision(
-    VideoItem item,
-  ) async {
+    VideoItem item, {
+    VideoItem? mergeInto,
+  }) async {
     final settings = runtime.playbackSettings;
     final immediate = videoDeleteDecisionWithoutPrompt(settings);
     if (immediate != null) {
@@ -172,6 +193,7 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     final decision = await showPlayerDeleteConfirmationDialog(
       context,
       item,
+      mergeInto: mergeInto,
     );
     return rememberDeleteDecision(decision);
   }

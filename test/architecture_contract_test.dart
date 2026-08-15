@@ -2103,6 +2103,9 @@ void main() {
     final deleteDialog = File(
       'lib/src/pages/player/player_delete_dialog.dart',
     ).readAsStringSync();
+    final similarityPage = File(
+      'lib/src/pages/library/video_similarity_page.dart',
+    ).readAsStringSync();
 
     expect(executor, contains('class RevealVideoLocationCommand'));
     expect(executor, contains('class RenameVideoFileCommand'));
@@ -2129,8 +2132,11 @@ void main() {
     expect(page, contains('runtime.fileCommandExecutor.rename('));
     expect(page, contains('runtime.fileCommandExecutor.delete('));
     expect(page, contains('runtime.fileCommandExecutor.deleteAll('));
+    expect(page, contains('deleteVideoAndMergeUserData('));
     expect(page, contains('showPlayerDeleteConfirmationDialog('));
     expect(page, contains('showBatchVideoDeleteConfirmationDialog('));
+    expect(similarityPage, contains('选择保留视频'));
+    expect(similarityPage, contains('videoSimilarity.mergeTarget.'));
     expect(
         deleteDialog, isNot(contains("ValueKey('deleteDialog.moveToTrash')")));
     expect(deleteDialog, contains("const Text('移入回收站并移除记录')"));

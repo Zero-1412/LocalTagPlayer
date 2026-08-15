@@ -173,6 +173,17 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
   Future<void> upsertPlaybackStates(Iterable<VideoItem> items) =>
       _commands.upsertPlaybackStates(items);
   Future<VideoItem?> deleteVideo(String path) => _commands.deleteVideo(path);
+
+  /** 相似候选删除时，先合并收藏/manual 标签，再沿统一删除事务移除源视频。 */
+  Future<VideoItem?> deleteVideoAndMergeUserData({
+    required VideoItem source,
+    required VideoItem target,
+  }) =>
+      _commands.deleteVideoAndMergeUserData(
+        source: source,
+        target: target,
+      );
+
   /** 执行设置页授权的数据库清理，不向 UI 暴露 SQLite 或文件删除能力。 */
   Future<int> removeMissingOrUnreadableVideos() =>
       _commands.removeMissingOrUnreadableVideos();

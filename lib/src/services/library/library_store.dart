@@ -303,6 +303,56 @@ class LibraryStore
     );
   }
 
+  /** 读取视频的 manual 关系，合并时只允许复制来源明确的用户标签。 */
+  Future<List<({TagItem tag, bool locked})>> _manualTagLinksForVideo(
+    String videoId,
+  ) async {
+    final rows = await _db.query(
+      'video_tags',
+      columns: const <String>['tag_id', 'locked'],
+      where: 'video_id = ? AND source = ?',
+      whereArgs: <Object?>[videoId, TagSource.manual.name],
+      orderBy: 'tag_id ASC',
+    );
+    final links = <({TagItem tag, bool locked})>[];
+    for (final row in rows) {
+      final tagId = row['tag_id'] as String?;
+      final tag = tagId == null ? null : tagsById[tagId];
+      if (tag == null || tag.source != TagSource.manual) {
+        throw StateError('源视频存在无法解析的 manual 标签关系');
+      }
+      links.add(
+        (
+          tag: tag,
+          locked: (row['locked'] as int? ?? 0) == 1,
+        ),
+      );
+    }
+    return links;
+  }
+
+  /** 在同一事务中写入目标视频新增的 manual 标签关系。 */
+  void _attachManualTagInBatch(
+    Batch batch,
+    VideoItem target,
+    ({TagItem tag, bool locked}) link,
+  ) {
+    final now = DateTime.now().toIso8601String();
+    batch.insert(
+      'video_tags',
+      <String, Object?>{
+        'video_path': target.path,
+        'video_id': target.videoId,
+        'tag_id': link.tag.id,
+        'source': TagSource.manual.name,
+        'locked': link.locked ? 1 : 0,
+        'created_at': now,
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
   @override
   Future<void> saveSession(PlaybackSession session) async {
     await _db.insert(
@@ -1271,9 +1321,61 @@ class LibraryStore
    * 收藏、播放进度、媒体详情和稳定身份字段都存放在 videos 行中；删除该行后不会留下
    * 孤立用户状态。磁盘文件与缩略图缓存由 Application 层按用户选择分别处理。
    */
-  Future<VideoItem?> deleteVideo(String path) async {
+  Future<VideoItem?> deleteVideo(String path) => _deleteVideo(path);
+
+  @override
+  Future<VideoItem?> deleteVideoAndMergeUserData({
+    required VideoItem source,
+    required VideoItem target,
+  }) =>
+      _deleteVideo(source.path, mergeInto: target);
+
+  Future<VideoItem?> _deleteVideo(
+    String path, {
+    VideoItem? mergeInto,
+  }) async {
     final pathKey = TagRules.pathKey(path);
     final item = videos[pathKey] ?? detachedVideos[pathKey];
+    VideoItem? targetItem;
+    VideoItem? mergedTarget;
+    List<({TagItem tag, bool locked})> tagsToMerge = const [];
+    if (mergeInto != null) {
+      if (item == null || item.videoId == mergeInto.videoId) {
+        throw StateError('合并删除需要两个不同且仍存在的视频');
+      }
+      targetItem = <VideoItem>[...videos.values, ...detachedVideos.values]
+          .where((candidate) => candidate.videoId == mergeInto.videoId)
+          .firstOrNull;
+      if (targetItem == null) {
+        throw StateError('合并目标视频已不在媒体库中');
+      }
+      final sourceLinks = await _manualTagLinksForVideo(item.videoId);
+      final targetLinks = await _manualTagLinksForVideo(targetItem.videoId);
+      final targetTagIds = targetLinks.map((link) => link.tag.id).toSet();
+      final mergedNames = targetLinks.map((link) => link.tag.name).toList();
+      final selectedLinks = <({TagItem tag, bool locked})>[];
+      for (final link in sourceLinks) {
+        if (targetTagIds.contains(link.tag.id) ||
+            mergedNames.any(
+              (name) => TagRules.sameTag(name, link.tag.name),
+            )) {
+          continue;
+        }
+        selectedLinks.add(link);
+        mergedNames.add(link.tag.name);
+      }
+      tagsToMerge = List<({TagItem tag, bool locked})>.unmodifiable(
+        selectedLinks,
+      );
+      final mergedFavorite = targetItem.isFavorite || item.isFavorite;
+      if (mergedFavorite != targetItem.isFavorite || tagsToMerge.isNotEmpty) {
+        mergedTarget = VideoItem.fromJson(targetItem.toJson())
+          ..isFavorite = mergedFavorite;
+        for (final link in tagsToMerge) {
+          mergedTarget.tags.add(link.tag.name);
+        }
+      }
+    }
     if (item != null) {
       // 等待当前小批次结束，避免全量 worker 在主库删除提交前把已清快照重新写回。
       await dataBackupService.pauseForPlayback();
@@ -1285,6 +1387,12 @@ class LibraryStore
       }
       final batch = _db.batch();
       if (item != null) {
+        if (mergedTarget != null && targetItem != null) {
+          _videoPersistence.insertInBatch(batch, mergedTarget);
+          for (final link in tagsToMerge) {
+            _attachManualTagInBatch(batch, mergedTarget, link);
+          }
+        }
         _tagPersistence.deleteVideoLinksInBatch(
           batch,
           item,
@@ -1294,9 +1402,22 @@ class LibraryStore
       }
       _videoPersistence.deleteInBatch(batch, path);
       await batch.commit(noResult: true);
+      if (mergedTarget != null && targetItem != null) {
+        targetItem
+          ..isFavorite = mergedTarget.isFavorite
+          ..tags.clear()
+          ..tags.addAll(mergedTarget.tags);
+        final targetTagIds =
+            (videoTagIdsByPathKey[TagRules.pathKey(targetItem.path)] ??=
+                <String>{});
+        targetTagIds.addAll(tagsToMerge.map((link) => link.tag.id));
+      }
       videos.remove(pathKey);
       detachedVideos.remove(pathKey);
       videoTagIdsByPathKey.remove(pathKey);
+      if (targetItem != null && mergedTarget != null) {
+        await dataBackupService.enqueueVideoBestEffort(targetItem.videoId);
+      }
       return item;
     } catch (_) {
       if (item != null) {

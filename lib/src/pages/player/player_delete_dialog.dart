@@ -36,15 +36,19 @@ VideoDeleteDecision? videoDeleteDecisionWithoutPrompt(
  */
 Future<VideoDeleteDecision?> showPlayerDeleteConfirmationDialog(
   BuildContext context,
-  VideoItem item,
-) {
+  VideoItem item, {
+  VideoItem? mergeInto,
+}) {
   return _showVideoDeleteConfirmationDialog(
     context,
     title: '删除视频',
     subjectTitle: item.title,
     subjectPath: item.path,
-    impactText: '将本地视频移入系统回收站，并移除媒体库记录、标签关系、收藏、播放进度、'
-        '媒体详情和缩略图缓存。文件可从回收站恢复。',
+    impactText: mergeInto == null
+        ? '将本地视频移入系统回收站，并移除媒体库记录、标签关系、收藏、播放进度、'
+            '媒体详情和缩略图缓存。文件可从回收站恢复。'
+        : '会先把收藏和自定义标签合并到“${mergeInto.title}”，再将本地视频移入系统回收站，'
+            '并移除源视频的媒体库记录、标签关系、播放进度、媒体详情和缩略图缓存。',
   );
 }
 

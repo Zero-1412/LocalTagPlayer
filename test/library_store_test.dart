@@ -887,6 +887,84 @@ void main() {
     );
   });
 
+  test('merge delete unions favorite and manual tags into the retained video',
+      () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('merge_delete_data');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final sourceFile = await _writeVideoPlaceholder(
+      dataDir,
+      <String>['source.mp4'],
+    );
+    final targetFile = await _writeVideoPlaceholder(
+      dataDir,
+      <String>['target.mp4'],
+    );
+    final store = await _loadTrackedStore(stores);
+    final source = VideoItem(
+      path: sourceFile.path,
+      title: 'source',
+      folder: dataDir.path,
+      tags: <String>{'SourceFolder'},
+      isFavorite: true,
+      addedAt: DateTime.utc(2026, 8, 15),
+    );
+    final target = VideoItem(
+      path: targetFile.path,
+      title: 'target',
+      folder: dataDir.path,
+      tags: <String>{'TargetFolder'},
+      addedAt: DateTime.utc(2026, 8, 15),
+    );
+    await store.upsertVideo(source);
+    await store.upsertVideo(target);
+    final manualTag = await store.createManualTag(
+      name: '保留标签',
+      groupId: 'manual',
+    );
+    await store.batchAddManualTag(manualTag, <VideoItem>[source]);
+
+    await store.deleteVideoAndMergeUserData(
+      source: source,
+      target: target,
+    );
+
+    final retained = store.videos[TagRules.pathKey(target.path)];
+    expect(retained, isNotNull);
+    expect(retained!.isFavorite, isTrue);
+    expect(retained.tags, contains('保留标签'));
+    expect(retained.tags, contains('TargetFolder'));
+    expect(retained.tags, isNot(contains('SourceFolder')));
+    expect(store.videos[TagRules.pathKey(source.path)], isNull);
+    expect(
+      store.videoTagIdsByPathKey[TagRules.pathKey(target.path)],
+      contains(manualTag.id),
+    );
+    expect(
+      await store.database.query(
+        'video_tags',
+        where: 'video_id = ?',
+        whereArgs: <Object?>[source.videoId],
+      ),
+      isEmpty,
+    );
+    expect(
+      await store.database.query(
+        'video_tags',
+        where: 'video_id = ? AND tag_id = ? AND source = ?',
+        whereArgs: <Object?>[
+          target.videoId,
+          manualTag.id,
+          TagSource.manual.name,
+        ],
+      ),
+      hasLength(1),
+    );
+  });
+
   test('metadata repository dedupes roots and favorite tags on reload',
       () async {
     final stores = <LibraryStore>[];

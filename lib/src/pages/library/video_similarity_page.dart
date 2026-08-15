@@ -43,8 +43,8 @@ class VideoSimilarityPage extends StatefulWidget {
     VoidCallback? onRouteReturned,
   }) onPlay;
 
-  /** 复用媒体库统一确认删除流程；返回值表示记录与文件动作均已成功。 */
-  final Future<bool> Function(VideoItem item) onDelete;
+  /** 先选择保留目标，再复用媒体库统一确认/合并/删除流程。 */
+  final Future<bool> Function(VideoItem item, VideoItem mergeInto) onDelete;
 
   /** 复用媒体库已有的平台文件定位边界。 */
   final Future<void> Function(VideoItem item) onRevealLocation;
@@ -227,13 +227,81 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     }
   }
 
-  Future<void> _delete(VideoItem item) async {
+  Future<VideoItem?> _chooseMergeTarget(
+    VideoItem item,
+    List<VideoItem> playlist,
+  ) async {
+    final candidates = playlist
+        .where((candidate) => candidate.videoId != item.videoId)
+        .toList(growable: false);
+    if (candidates.length == 1) {
+      return candidates.single;
+    }
+    if (candidates.isEmpty || !mounted) {
+      return null;
+    }
+    return showDialog<VideoItem>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('选择保留视频'),
+        content: SizedBox(
+          width: 520,
+          height: 360,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('源视频的收藏和自定义标签会并入所选视频，目录标签不会复制。'),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: candidates.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final candidate = candidates[index];
+                    return ListTile(
+                      key: ValueKey(
+                        'videoSimilarity.mergeTarget.${candidate.videoId}',
+                      ),
+                      title: Text(
+                        candidate.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        candidate.path,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.check_circle_outline_rounded),
+                      onTap: () => Navigator.of(dialogContext).pop(candidate),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _delete(VideoItem item, List<VideoItem> playlist) async {
     if (_actingVideoIds.contains(item.videoId)) {
+      return;
+    }
+    final mergeInto = await _chooseMergeTarget(item, playlist);
+    if (mergeInto == null || !mounted) {
       return;
     }
     setState(() => _actingVideoIds.add(item.videoId));
     try {
-      final deleted = await widget.onDelete(item);
+      final deleted = await widget.onDelete(item, mergeInto);
       if (!deleted || !mounted) {
         return;
       }
@@ -395,7 +463,7 @@ class _SimilarityOverview extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '先用文件级指纹快速筛选，再按相近时长/画面规格/大小比较缓存首帧，并对通过者抽取多个时间点的时序感知 dHash，识别重新编码后的近重复。可在行内播放或发起确认删除；不会自动删除，请人工确认后再处理。',
+            '先用文件级指纹快速筛选，再按相近时长/画面规格/大小比较缓存首帧，并对通过者抽取多个时间点的时序感知 dHash，识别重新编码后的近重复。删除时会把收藏和自定义标签合并到保留项，再将源视频移入回收站；不会自动删除，请人工确认后再处理。',
             style: const TextStyle(
               color: libraryTextMuted,
               fontSize: 12,
@@ -528,7 +596,8 @@ class _SimilarityGroupCard extends StatelessWidget {
   final Set<String> actingVideoIds;
   final Set<String> revealingVideoIds;
   final Future<void> Function(VideoItem item, List<VideoItem> playlist) onPlay;
-  final Future<void> Function(VideoItem item) onDelete;
+  final Future<void> Function(VideoItem item, List<VideoItem> playlist)
+      onDelete;
   final Future<void> Function(VideoItem item) onReveal;
 
   @override
@@ -639,7 +708,8 @@ class _SimilarityVideoRow extends StatelessWidget {
   final bool acting;
   final bool revealing;
   final Future<void> Function(VideoItem item, List<VideoItem> playlist) onPlay;
-  final Future<void> Function(VideoItem item) onDelete;
+  final Future<void> Function(VideoItem item, List<VideoItem> playlist)
+      onDelete;
   final Future<void> Function(VideoItem item) onReveal;
 
   @override
@@ -722,8 +792,8 @@ class _SimilarityVideoRow extends StatelessWidget {
             ),
             IconButton(
               key: ValueKey('videoSimilarity.delete.${item.videoId}'),
-              tooltip: '删除此候选视频',
-              onPressed: () => onDelete(item),
+              tooltip: '合并收藏和自定义标签后删除此候选视频',
+              onPressed: () => onDelete(item, playlist),
               icon: const Icon(Icons.delete_outline_rounded),
             ),
             IconButton(
