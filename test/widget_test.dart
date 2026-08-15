@@ -1918,6 +1918,7 @@ void main() {
       (WidgetTester tester) async {
     var pickFolderCount = 0;
     var tagCenterCount = 0;
+    var similarVideosCount = 0;
     var collapsed = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -1950,6 +1951,7 @@ void main() {
                 onRescan: () {},
                 onRemoveLocalLibraryRoot: (_) {},
                 onFavoritesToggle: () {},
+                onOpenSimilarVideos: () => similarVideosCount++,
                 onOpenRecentPlayback: () {},
                 onOpenLocalLibraryRoot: (_) {},
                 onOpenDirectoryManager: () {},
@@ -1970,9 +1972,13 @@ void main() {
 
     expect(find.text('媒体库'), findsOneWidget);
     expect(find.text('标签中心'), findsOneWidget);
+    expect(find.text('相似视频'), findsOneWidget);
     await tester.tap(find.byKey(LibrarySmokeKeys.sidebarTagCenter));
     await tester.pump();
     expect(tagCenterCount, 1);
+    await tester.tap(find.text('相似视频'));
+    await tester.pump();
+    expect(similarVideosCount, 1);
     expect(find.text('添加目录'), findsNothing);
     expect(find.byTooltip('新增本地库路径'), findsOneWidget);
     expect(
@@ -2019,9 +2025,13 @@ void main() {
     expect(find.text('标签中心'), findsNothing);
     expect(find.byTooltip('媒体库'), findsOneWidget);
     expect(find.byTooltip('标签中心'), findsOneWidget);
+    expect(find.byTooltip('相似视频'), findsOneWidget);
     await tester.tap(find.byKey(LibrarySmokeKeys.sidebarTagCenter));
     await tester.pump();
     expect(tagCenterCount, 2);
+    await tester.tap(find.byTooltip('相似视频'));
+    await tester.pump();
+    expect(similarVideosCount, 2);
     expect(
         tester.getSize(find.byKey(LibrarySmokeKeys.sidebarSurface)).width, 76);
     expect(find.byTooltip('展开功能栏'), findsOneWidget);

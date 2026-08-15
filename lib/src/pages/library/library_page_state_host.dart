@@ -116,6 +116,8 @@ abstract class LibraryPageStateHost<T extends StatefulWidget> extends State<T> {
   void invalidateDerivedCaches();
 
   /** 播放器和文件命令使用的显式动作。 */
+  /** 通过既有文件系统边界定位一个视频；维护页复用该动作而不复制平台命令。 */
+  Future<void> revealVideoLocation(VideoItem item);
   Future<void> deleteVideoFromPlayer(
     VideoItem item,
     bool moveLocalFileToTrash,

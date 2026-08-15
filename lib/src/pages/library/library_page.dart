@@ -267,6 +267,7 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
         onFavoritesToggle: showFavoriteVideos,
         onOpenRecentPlayback: showRecentPlaybackVideos,
         onOpenLocalLibraryRoot: showLocalLibraryPath,
+        onOpenSimilarVideos: openSimilarVideos,
         onOpenDirectoryManager: openDirectoryManager,
         onOpenMissingRelink: openMissingRelink,
         onOpenTagManager: () => openTagManager(videos),

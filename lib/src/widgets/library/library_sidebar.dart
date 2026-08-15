@@ -52,6 +52,7 @@ class LibrarySidebar extends StatelessWidget {
     required this.onRescan,
     required this.onRemoveLocalLibraryRoot,
     required this.onFavoritesToggle,
+    required this.onOpenSimilarVideos,
     required this.onOpenRecentPlayback,
     required this.onOpenLocalLibraryRoot,
     required this.onOpenDirectoryManager,
@@ -92,6 +93,8 @@ class LibrarySidebar extends StatelessWidget {
   final VoidCallback onRescan;
   final ValueChanged<String> onRemoveLocalLibraryRoot;
   final VoidCallback onFavoritesToggle;
+  /** 打开只读的重复下载候选页，不改变当前筛选结果。 */
+  final VoidCallback onOpenSimilarVideos;
   final VoidCallback onOpenRecentPlayback;
   final ValueChanged<String> onOpenLocalLibraryRoot;
   final VoidCallback onOpenDirectoryManager;
@@ -155,6 +158,7 @@ class LibrarySidebar extends StatelessWidget {
                         onShowAllLibrary: onShowAllLibrary,
                         onOpenRecentPlayback: onOpenRecentPlayback,
                         onFavoritesToggle: onFavoritesToggle,
+                        onOpenSimilarVideos: onOpenSimilarVideos,
                         onOpenDirectoryManager: onOpenDirectoryManager,
                         onOpenMissingRelink: onOpenMissingRelink,
                         onOpenTagManager: onOpenTagManager,
@@ -206,6 +210,12 @@ class LibrarySidebar extends StatelessWidget {
                                       selected: favoriteVideosSelected,
                                       trailing: favoriteCount.toString(),
                                       onTap: onFavoritesToggle,
+                                    ),
+                                    LibrarySidebarNavItem(
+                                      icon: Icons.find_replace_outlined,
+                                      label: '相似视频',
+                                      selected: false,
+                                      onTap: onOpenSimilarVideos,
                                     ),
                                     LibrarySidebarNavItem(
                                       key: LibrarySmokeKeys.sidebarTagCenter,

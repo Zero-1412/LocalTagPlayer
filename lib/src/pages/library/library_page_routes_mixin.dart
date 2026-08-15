@@ -10,6 +10,7 @@ import '../tags/tag_manager_page.dart';
 import 'directory_manager_page.dart';
 import 'missing_relink_page.dart';
 import 'cache_settings_page.dart';
+import 'video_similarity_page.dart';
 
 import 'library_page_state_host.dart';
 
@@ -122,6 +123,24 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
           onAddDirectory: pickFolder,
           onRescan: rescan,
           onRemoveRoot: removeLibraryRootData,
+        ),
+        backShortcutProvider: () => runtime
+            .playbackSettings.shortcuts[PlayerShortcutAction.navigateBack]!,
+      ),
+    );
+  }
+
+  /** 打开只读重复候选页；返回后不触发筛选、标签计数或播放队列刷新。 */
+  Future<void> openSimilarVideos() async {
+    final store = runtime.store;
+    if (store == null) {
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      smoothRoute<void>(
+        VideoSimilarityPage(
+          store: store,
+          onRevealLocation: revealVideoLocation,
         ),
         backShortcutProvider: () => runtime
             .playbackSettings.shortcuts[PlayerShortcutAction.navigateBack]!,

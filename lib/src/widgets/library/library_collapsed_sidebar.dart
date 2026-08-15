@@ -27,6 +27,7 @@ class CollapsedLibrarySidebar extends StatelessWidget {
     required this.onShowAllLibrary,
     required this.onOpenRecentPlayback,
     required this.onFavoritesToggle,
+    required this.onOpenSimilarVideos,
     required this.onOpenDirectoryManager,
     required this.onOpenMissingRelink,
     required this.onOpenTagManager,
@@ -47,6 +48,8 @@ class CollapsedLibrarySidebar extends StatelessWidget {
   final VoidCallback onShowAllLibrary;
   final VoidCallback onOpenRecentPlayback;
   final VoidCallback onFavoritesToggle;
+  /** 折叠状态下仍可打开重复下载候选页。 */
+  final VoidCallback onOpenSimilarVideos;
   final VoidCallback onOpenDirectoryManager;
   final VoidCallback onOpenMissingRelink;
   /** 折叠状态下仍可打开标签中心。 */
@@ -89,6 +92,12 @@ class CollapsedLibrarySidebar extends StatelessWidget {
                   tooltip: '本地收藏',
                   selected: favoritesSelected,
                   onTap: onFavoritesToggle,
+                ),
+                _CollapsedSidebarItem(
+                  icon: Icons.find_replace_outlined,
+                  tooltip: '相似视频',
+                  selected: false,
+                  onTap: onOpenSimilarVideos,
                 ),
                 _CollapsedSidebarItem(
                   key: LibrarySmokeKeys.sidebarTagCenter,

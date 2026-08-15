@@ -395,6 +395,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
   }
 
   /** 通过共享文件系统平台边界定位视频；页面不拼接 Windows 或其它平台命令。 */
+  @override
   Future<void> revealVideoLocation(VideoItem item) async {
     final revealed = await runtime.fileCommandExecutor.reveal(
       RevealVideoLocationCommand(item),
