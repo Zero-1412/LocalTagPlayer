@@ -67,4 +67,20 @@ void main() {
     expect(page, contains('onRouteReturned: ()'));
     expect(page, contains('_actingVideoIds.remove(item.videoId)'));
   });
+
+  test('播放器删除后相似候选按 stable ID 局部对账', () {
+    final page = File(
+      'lib/src/pages/library/video_similarity_page.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('_reconcileAfterPlayerReturn'));
+    expect(
+      page,
+      contains('_reconcileAfterPlayerReturn(activeVideoId: item.videoId)'),
+    );
+    expect(page, contains('_report = _report.withoutVideo(item);'));
+    expect(page, contains('for (final item in removedById.values)'));
+    expect(page, contains('WidgetsBinding.instance.addPostFrameCallback'));
+    expect(page, contains('_deletedVideoIds.addAll(removedById.keys)'));
+  });
 }

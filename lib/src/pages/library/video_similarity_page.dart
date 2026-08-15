@@ -114,6 +114,35 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     return List<VideoSimilarityGroup>.unmodifiable(visible);
   }
 
+  /** 播放器返回时只对账当前候选快照中的失效 stable ID，不触发整页重建或重新扫描。 */
+  void _reconcileAfterPlayerReturn({String? activeVideoId}) {
+    final currentVideoIds =
+        widget.store.videos.values.map((item) => item.videoId).toSet();
+    final removedById = <String, VideoItem>{};
+    for (final group in _report.allGroups) {
+      for (final item in group.videos) {
+        if (!currentVideoIds.contains(item.videoId)) {
+          removedById[item.videoId] = item;
+        }
+      }
+    }
+    if (!mounted || (activeVideoId == null && removedById.isEmpty)) {
+      return;
+    }
+    setState(() {
+      if (activeVideoId != null) {
+        _actingVideoIds.remove(activeVideoId);
+      }
+      if (removedById.isNotEmpty) {
+        _deletedVideoIds.addAll(removedById.keys);
+        for (final item in removedById.values) {
+          _report = _report.withoutVideo(item);
+        }
+        _visualError = null;
+      }
+    });
+  }
+
   Future<void> _runVisualScan() async {
     if (_visualScanning) {
       return;
@@ -180,7 +209,14 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
         List<VideoItem>.unmodifiable(playlist),
         onRouteReturned: () {
           if (mounted) {
-            setState(() => _actingVideoIds.remove(item.videoId));
+            _reconcileAfterPlayerReturn(activeVideoId: item.videoId);
+            // 播放器删除事务先完成，媒体库宿主的差量回调随后发布；下一帧再对账一次，
+            // 覆盖宿主延后刷新 Store 内存索引的时序，但仍只移除受影响候选行。
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _reconcileAfterPlayerReturn();
+              }
+            });
           }
         },
       );
