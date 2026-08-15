@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_tag_player/main.dart' as app;
 import 'package:local_tag_player/src/models/library_scan_models.dart' as ltp;
+import 'package:local_tag_player/src/pages/player/player_page.dart';
 import 'package:local_tag_player/src/services/library/library_card_ui_diagnostics.dart'
     as ltp;
 import 'package:local_tag_player/src/services/library/library_stress_control.dart'
@@ -69,7 +70,21 @@ void main() {
       const Duration(minutes: 3),
       '媒体库 hydration 或专项控制注册超时',
     );
-    await _pumpUntilFound(tester, _visibleLibraryPlayButtons());
+    await _pumpUntil(
+      tester,
+      () {
+        final snapshot = ltp.LibraryStressControl.snapshot();
+        return snapshot.videoCount > 0 && snapshot.visibleCount > 0;
+      },
+      const Duration(minutes: 3),
+      '媒体库专项控制已注册，但 SQLite hydration 结果尚未进入可见筛选状态',
+    );
+    await _pumpUntilFound(
+      tester,
+      _visibleLibraryPlayButtons(),
+      timeout: const Duration(seconds: 60),
+      error: '媒体库 hydration 已有可见结果，但播放入口尚未完成挂载',
+    );
 
     // 复制的真实 profile 可能已经包含目标 root；先通过同一事务链路恢复“待添加”基线。
     final initial = ltp.LibraryStressControl.snapshot();
@@ -198,14 +213,18 @@ void main() {
       await _rapidlyScrollLibrary(tester, random);
       await _pumpContinuously(tester, const Duration(seconds: 1));
       frameSampler.flush();
-      await _playRandomVideo(
-        tester,
-        random,
-        outputDirectory,
-        cycle: cycle,
-        phasePrefix: 'removed_player',
-        frameSampler: frameSampler,
-      );
+      // 显式隔离 profile 通常以空库为基线；移除后没有可播放入口是正确结果，
+      // 只有复制 profile 本身带有其它 root/视频时才继续覆盖“移除后仍可播放”的路径。
+      if (baseline.videoCount > 0) {
+        await _playRandomVideo(
+          tester,
+          random,
+          outputDirectory,
+          cycle: cycle,
+          phasePrefix: 'removed_player',
+          frameSampler: frameSampler,
+        );
+      }
 
       // ignore: avoid_print
       print('LIBRARY_STRESS cycle=$cycle/$cycles seed=$seed '
@@ -283,7 +302,7 @@ Future<void> _playRandomVideo(
 
   frameSampler.begin('${phasePrefix}_diagnostics', cycle);
   await _setStressPhase(outputDirectory, '${phasePrefix}_diagnostics', cycle);
-  await _samplePlaybackDiagnostics(tester, surface, cycle, phasePrefix);
+  await _samplePlaybackDiagnostics(tester, cycle, phasePrefix);
   frameSampler.flush();
   await _signalDesktopCapture(
     outputDirectory,
@@ -395,23 +414,18 @@ Future<void> _randomlySeek(
 /** 打开诊断页采样实际硬解、AV offset、两路推进和最近 seek 延迟。 */
 Future<void> _samplePlaybackDiagnostics(
   WidgetTester tester,
-  Finder videoSurface,
   int cycle,
   String phase,
 ) async {
-  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-  await mouse.addPointer(location: tester.getCenter(videoSurface));
-  await mouse.moveTo(tester.getCenter(videoSurface));
-  await tester.pump(const Duration(milliseconds: 150));
-  await tester.tap(find.byKey(const ValueKey('player.settings')));
-  await tester.pump(const Duration(milliseconds: 250));
-  final open = find.byKey(const ValueKey('player.diagnostics.open'));
-  if (open.evaluate().isEmpty) {
-    await mouse.removePointer();
-    throw StateError('播放器诊断入口不存在');
+  final playerPage = find.byType(PlayerPage);
+  if (playerPage.evaluate().isEmpty) {
+    throw StateError('播放器页面不存在，无法打开诊断');
   }
-  await tester.tap(open);
-  await _pumpContinuously(tester, const Duration(seconds: 3));
+  // 播放设置页当前只承载播放选项，诊断入口由页面状态的只读快照边界提供；
+  // 压测不再依赖自动收起控制条或已不存在的旧 settings.diagnostics key。
+  final snapshot = await tester
+      .state<PlayerPageState>(playerPage)
+      .buildDiagnosticsSnapshot();
   final prefixes = <String>[
     'mpv 请求硬解:',
     'mpv 实际硬解:',
@@ -424,20 +438,14 @@ Future<void> _samplePlaybackDiagnostics(
     '最近 seek 耗时:',
     '媒体详情活动读取:',
     '媒体详情排队读取:',
+    '原生实际渲染帧:',
+    '原生表面尺寸:',
   ];
-  final metrics = <String>[];
-  for (final element in find.byType(Text).evaluate()) {
-    final data = (element.widget as Text).data;
-    if (data == null) continue;
-    for (final line in data.split('\n')) {
-      if (prefixes.any(line.startsWith)) metrics.add(line);
-    }
-  }
+  final metrics = snapshot.lines
+      .where((line) => prefixes.any(line.startsWith))
+      .toList(growable: false);
   // ignore: avoid_print
   print('PLAYER_DIAGNOSTICS cycle=$cycle phase=$phase ${metrics.join(' | ')}');
-  await tester.tap(find.byKey(const ValueKey('player.diagnostics.close')));
-  await _pumpContinuously(tester, const Duration(milliseconds: 300));
-  await mouse.removePointer();
 }
 
 /** 等待异步数据库/扫描任务时持续以 50 ms 驱动 Flutter 帧。 */
@@ -483,7 +491,7 @@ Future<Duration> _waitForUiCount(WidgetTester tester) async {
 Finder _visibleLibraryPlayButtons() => find.byWidgetPredicate((widget) {
       final key = widget.key;
       return key is ValueKey<String> &&
-          (key.value.startsWith('smoke.card.play:') ||
+          (key.value.startsWith('smoke.card.open:') ||
               key.value.startsWith('smoke.list.play:'));
     }).hitTestable();
 
@@ -496,12 +504,13 @@ Future<void> _pumpUntilFound(
   WidgetTester tester,
   Finder finder, {
   Duration timeout = const Duration(seconds: 30),
+  String error = '等待目标 UI 超时',
 }) =>
     _pumpUntil(
       tester,
       () => finder.evaluate().isNotEmpty,
       timeout,
-      '等待目标 UI 超时',
+      error,
     );
 
 /** 以小步泵帧等待任意状态条件，避免人为制造阶梯帧。 */

@@ -11,6 +11,8 @@
   [int]$ArtifactRetentionDays = 7,
   # 显式保留隔离 profile、录像和逐项采样，供失败复现或深度分析。
   [switch]$KeepRawArtifacts,
+  # 用 Flutter Profile 构建执行集成测试；默认 Debug 保留本地快速诊断路径。
+  [switch]$Profile,
   [string]$Output = ''
 )
 
@@ -50,12 +52,12 @@ if (-not (Test-Path -LiteralPath $Ffmpeg)) {
 
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 Set-Content -LiteralPath (Join-Path $Output '.ltp-stress-artifact') -Value ((Get-Date).ToUniversalTime().ToString('o'))
-$profile = Join-Path $Output 'profile'
-New-Item -ItemType Directory -Force -Path $profile | Out-Null
+$profileDir = Join-Path $Output 'profile'
+New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
 
 # 复制数据库和缩略图到可丢弃 profile；媒体文件仍从显式 RootPath 原地只读，
 # 不把大型媒体内容复制进压力测试产物。
-& robocopy $SourceProfile $profile /E /COPY:DAT /DCOPY:DAT /R:1 /W:1 /XF library.db-shm library.db-wal /NFL /NDL /NJH /NJS /NP | Out-Null
+& robocopy $SourceProfile $profileDir /E /COPY:DAT /DCOPY:DAT /R:1 /W:1 /XF library.db-shm library.db-wal /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -gt 7) {
   throw "隔离 profile 复制失败，robocopy exit code=$LASTEXITCODE"
 }
@@ -175,7 +177,9 @@ $recordJob = Start-Job -ArgumentList $Output, $Ffmpeg -ScriptBlock {
   $video = Join-Path $Output 'stress-recording.mkv'
   $psi = [System.Diagnostics.ProcessStartInfo]::new()
   $psi.FileName = $Ffmpeg
-  $psi.Arguments = "-hide_banner -loglevel warning -nostats -f gdigrab -framerate 30 -draw_mouse 0 -i `"title=local_tag_player`" -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p `"$video`""
+  # GetWindowRect 可能返回奇数宽高；先缩放到最近的偶数尺寸，避免 libx264 在
+  # 桌面窗口证据阶段拒绝编码，而不改变应用本身的实际窗口布局。
+  $psi.Arguments = "-hide_banner -loglevel warning -nostats -f gdigrab -framerate 30 -draw_mouse 0 -i `"title=local_tag_player`" -vf `"scale=trunc(iw/2)*2:trunc(ih/2)*2`" -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p `"$video`""
   $psi.UseShellExecute = $false
   $psi.CreateNoWindow = $true
   $psi.RedirectStandardInput = $true
@@ -196,7 +200,7 @@ $recordJob = Start-Job -ArgumentList $Output, $Ffmpeg -ScriptBlock {
   if ($recorder.ExitCode -ne 0) { throw "FFmpeg 录屏退出码：$($recorder.ExitCode)" }
 }
 
-$env:LOCAL_TAG_PLAYER_DATA_DIR = $profile
+$env:LOCAL_TAG_PLAYER_DATA_DIR = $profileDir
 $env:LOCAL_TAG_PLAYER_LIBRARY_STRESS_ROOT = $RootPath
 $env:LOCAL_TAG_PLAYER_LIBRARY_STRESS_CYCLES = $Cycles.ToString()
 $env:LOCAL_TAG_PLAYER_STRESS_SEED = $Seed.ToString()
@@ -204,13 +208,24 @@ $env:LOCAL_TAG_PLAYER_RELEASE_TAIL_SECONDS = $ReleaseTailSeconds.ToString()
 $env:LOCAL_TAG_PLAYER_STRESS_OUTPUT = $Output
 $testExitCode = 1
 try {
-  & $Flutter test integration_test/library_add_remove_player_stress_test.dart -d windows --timeout 35m *>&1 |
-    Tee-Object -FilePath (Join-Path $Output 'stress.log')
+  if ($Profile) {
+    & $Flutter drive `
+      --profile `
+      --driver (Join-Path $repoRoot 'test_driver\integration_test.dart') `
+      --target (Join-Path $repoRoot 'integration_test\library_add_remove_player_stress_test.dart') `
+      -d windows --timeout 35m *>&1 |
+      Tee-Object -FilePath (Join-Path $Output 'stress.log')
+  } else {
+    & $Flutter test integration_test/library_add_remove_player_stress_test.dart -d windows --timeout 35m *>&1 |
+      Tee-Object -FilePath (Join-Path $Output 'stress.log')
+  }
   $testExitCode = $LASTEXITCODE
 } finally {
   New-Item -ItemType File -Force -Path (Join-Path $Output 'stress.done') | Out-Null
   Wait-Job $monitorJob, $captureJob, $recordJob -Timeout 30 | Out-Null
-  Receive-Job $monitorJob, $captureJob, $recordJob
+  # 外部录屏器属于附加证据；保留其错误文本并继续执行摘要，不能覆盖 Flutter
+  # 测试本身的退出码，也不能因 PowerShell 的 Stop 策略跳过汇总文件。
+  Receive-Job $monitorJob, $captureJob, $recordJob -ErrorAction Continue
   Remove-Job $monitorJob, $captureJob, $recordJob -Force
   Remove-Item Env:LOCAL_TAG_PLAYER_DATA_DIR -ErrorAction SilentlyContinue
   Remove-Item Env:LOCAL_TAG_PLAYER_LIBRARY_STRESS_ROOT -ErrorAction SilentlyContinue

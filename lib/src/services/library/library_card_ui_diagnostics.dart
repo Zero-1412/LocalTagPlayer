@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 /**
  * 真实媒体库压测使用的卡片子树 build/layout 聚合器。
  *
- * 只有 debug 构建且显式提供 `LOCAL_TAG_PLAYER_STRESS_OUTPUT` 时启用。每个探针只在
+ * 只有 Debug/Profile 构建且显式提供 `LOCAL_TAG_PLAYER_STRESS_OUTPUT` 时启用。每个探针只在
  * 内存追加微秒样本，阶段切换后才写 JSONL，避免诊断文件 I/O 本身污染滚动帧耗时。
  * build 只统计传入 builder 的直接执行时间，不包含后代 Widget 后续由框架触发的 build；
  * layout 为包含子节点的根布局耗时，各子树之间存在包含关系，不能直接相加。
@@ -22,15 +22,15 @@ import 'package:flutter/widgets.dart';
 class LibraryCardUiDiagnostics {
   const LibraryCardUiDiagnostics._();
 
-  static final bool _enabled = kDebugMode &&
+  static final bool _enabled = (kDebugMode || kProfileMode) &&
       (Platform.environment['LOCAL_TAG_PLAYER_STRESS_OUTPUT']
               ?.trim()
               .isNotEmpty ??
           false);
   static final String? _scrollStatsOutput =
       Platform.environment['LOCAL_TAG_PLAYER_SCROLL_STATS_OUTPUT'];
-  static final bool _scrollStatsEnabled =
-      kDebugMode && (_scrollStatsOutput?.trim().isNotEmpty ?? false);
+  static final bool _scrollStatsEnabled = (kDebugMode || kProfileMode) &&
+      (_scrollStatsOutput?.trim().isNotEmpty ?? false);
   static final Map<String, _LibraryCardSubtreeSamples> _samples =
       <String, _LibraryCardSubtreeSamples>{};
   static String _phase = 'startup';

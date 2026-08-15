@@ -108,7 +108,7 @@ abstract interface class LibraryPageApplicationService {
     void Function(MediaDetailsProgress progress)? onProgress,
   });
 
-  /** debug 专项压测允许操作的唯一 root；发布构建为 null。 */
+  /** Debug/Profile 专项压测允许操作的唯一 root；Release 构建为 null。 */
   String? get stressRoot;
 
   /** 写入不包含用户标签或路径内容的启动诊断摘要。 */

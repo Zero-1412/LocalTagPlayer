@@ -142,7 +142,8 @@ mixin LibraryPageScanMixin<T extends StatefulWidget>
     runtime.libraryMediaDetailsService?.dispose();
     runtime.libraryMediaDetailsService = null;
     runtime.activeScanUiDiagnostics?.abort();
-    final diagnostics = kDebugMode ? LibraryScanUiDiagnostics() : null;
+    final diagnostics =
+        (kDebugMode || kProfileMode) ? LibraryScanUiDiagnostics() : null;
     diagnostics?.start();
     runtime.activeScanUiDiagnostics = diagnostics;
     var diagnosticsWillFinish = false;

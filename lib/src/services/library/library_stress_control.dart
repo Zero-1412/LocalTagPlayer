@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
 
 import '../../models/library_scan_models.dart';
 import '../../platform/file_system_adapter.dart';
@@ -8,7 +9,7 @@ import 'library_load_diagnostics.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * 由组合根解析的 debug 压测与诊断配置。
+ * 由组合根解析的 Debug/Profile 压测与诊断配置。
  *
  * 页面只消费已经解析的值，不读取进程环境，也不直接创建诊断文件。
  */
@@ -124,19 +125,18 @@ class LibraryStressControl {
     required Future<void> Function() waitForPlayerRelease,
     required LibraryStressSnapshot Function() snapshot,
   }) {
-    assert(() {
+    if (kDebugMode || kProfileMode) {
       _owner = owner;
       _addRoot = addRoot;
       _removeRoot = removeRoot;
       _waitForPlayerRelease = waitForPlayerRelease;
       _snapshot = snapshot;
-      return true;
-    }());
+    }
   }
 
   /** 清除指定页面拥有的回调，禁止测试在页面退出后继续写数据库。 */
   static void unregister(Object owner) {
-    assert(() {
+    if (kDebugMode || kProfileMode) {
       if (identical(_owner, owner)) {
         _owner = null;
         _addRoot = null;
@@ -144,8 +144,7 @@ class LibraryStressControl {
         _waitForPlayerRelease = null;
         _snapshot = null;
       }
-      return true;
-    }());
+    }
   }
 
   /** 通过页面应用链路添加环境变量指定的 root。 */

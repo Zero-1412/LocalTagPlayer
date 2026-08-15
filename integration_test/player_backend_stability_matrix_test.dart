@@ -113,6 +113,27 @@ void main() {
             hwdec: PlayerHardwareAcceleration.resolve(settings.hwdec),
             enableHardwareAcceleration: settings.hardwareDecodingEnabled,
           );
+    final nativeLifecycle = usesMpv
+        ? await backend.getProperty('native-lifecycle')
+        : 'media-kit-in-process';
+    final nativeVideoOutput =
+        usesMpv ? await backend.getProperty('current-vo') : 'media-kit-texture';
+    if (usesMpv &&
+        nativeLifecycle != 'mpv_ready' &&
+        nativeLifecycle != 'mpv_texture_ready') {
+      // MPV 是本机可选后端；创建成功但没有进入真实 libmpv/ANGLE ready 状态时，
+      // 必须立即给出平台能力结论，不能继续把后续 PlayerPage 失败写成解码问题。
+      throw StateError(
+        '当前 Windows MPV 后端不可测：native-lifecycle=$nativeLifecycle '
+        'current-vo=$nativeVideoOutput',
+      );
+    }
+    // ignore: avoid_print
+    print(
+      'PLAYER_BACKEND_PREFLIGHT backend=$backendName '
+      'availability=available native_lifecycle=$nativeLifecycle '
+      'current_vo=$nativeVideoOutput',
+    );
     final playerKey = GlobalKey<PlayerPageState>();
     final disposalCompleter = Completer<void>();
 
@@ -232,6 +253,9 @@ void main() {
       'schemaVersion': 1,
       'platform': 'windows',
       'playerBackend': backendName,
+      'backendAvailability': 'available',
+      'nativeLifecycle': nativeLifecycle,
+      'nativeVideoOutput': nativeVideoOutput,
       'rendererPreference': settings.rendererPreference.name,
       'actualHwdec': await backend.getProperty('hwdec-current'),
       'initialColorPipeline': initialColorPipeline,
@@ -294,18 +318,18 @@ Future<Map<String, Object?>> _runFullscreenScenario(
   final before = backend.state.position.inMilliseconds;
   const cycles = 6;
   for (var index = 0; index < cycles; index++) {
-    await state.toggleWindowFullscreenForStressTest();
+    await _toggleFullscreenWithFrame(tester, state);
     await _pumpContinuously(tester, const Duration(milliseconds: 250));
     expect(state.buildStabilitySnapshotForTest().windowFullscreen, isTrue);
     expect(
       find.byKey(const ValueKey<String>('player.video.surface')),
       findsOneWidget,
     );
-    await state.toggleWindowFullscreenForStressTest();
+    await _toggleFullscreenWithFrame(tester, state);
     await _pumpContinuously(tester, const Duration(milliseconds: 250));
     expect(state.buildStabilitySnapshotForTest().windowFullscreen, isFalse);
   }
-  await state.toggleWindowFullscreenForStressTest();
+  await _toggleFullscreenWithFrame(tester, state);
   await _pumpContinuously(tester, const Duration(milliseconds: 350));
   state.toggleQueueVisibilityForStressTest();
   await _pumpContinuously(tester, const Duration(milliseconds: 350));
@@ -320,7 +344,7 @@ Future<Map<String, Object?>> _runFullscreenScenario(
       .isNotEmpty;
   state.toggleQueueVisibilityForStressTest();
   await _pumpContinuously(tester, const Duration(milliseconds: 180));
-  await state.toggleWindowFullscreenForStressTest();
+  await _toggleFullscreenWithFrame(tester, state);
   await _pumpContinuously(tester, const Duration(milliseconds: 350));
   final after = backend.state.position.inMilliseconds;
   final snapshot = state.buildStabilitySnapshotForTest();
@@ -339,6 +363,19 @@ Future<Map<String, Object?>> _runFullscreenScenario(
     'fullscreenQueueVisible': fullscreenQueueVisible,
     'fullscreenQueueHitTestable': fullscreenQueueHitTestable,
   };
+}
+
+/** 压力测试调用正式全屏状态机时，先完成其 endOfFrame 门禁。 */
+Future<void> _toggleFullscreenWithFrame(
+  WidgetTester tester,
+  PlayerPageState state,
+) async {
+  final toggle = state.toggleWindowFullscreenForStressTest();
+  await tester.pump();
+  await toggle.timeout(
+    const Duration(seconds: 10),
+    onTimeout: () => throw StateError('稳定性矩阵全屏状态机等待窗口命令超时'),
+  );
 }
 
 /**

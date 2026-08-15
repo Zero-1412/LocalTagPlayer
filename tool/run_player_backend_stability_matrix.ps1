@@ -9,6 +9,8 @@
   [int]$MaxDroppedFrames = 5,
   [ValidateSet('auto', 'passed', 'failed')]
   [string]$PhysicalCrossDpiStatus = 'auto',
+  # 用 Flutter Profile 构建执行集成测试；默认 Debug 保留本地快速诊断路径。
+  [switch]$Profile,
   [string]$Output = ''
 )
 
@@ -76,10 +78,19 @@ try {
 
     $previousPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    & $Flutter test `
-      integration_test/player_backend_stability_matrix_test.dart `
-      -d windows *>&1 |
-      Tee-Object -FilePath $logPath
+    if ($Profile) {
+      & $Flutter drive `
+        --profile `
+        --driver (Join-Path $repoRoot 'test_driver\integration_test.dart') `
+        --target (Join-Path $repoRoot 'integration_test\player_backend_stability_matrix_test.dart') `
+        -d windows *>&1 |
+        Tee-Object -FilePath $logPath
+    } else {
+      & $Flutter test `
+        integration_test/player_backend_stability_matrix_test.dart `
+        -d windows *>&1 |
+        Tee-Object -FilePath $logPath
+    }
     $exitCode = $LASTEXITCODE
     $ErrorActionPreference = $previousPreference
 

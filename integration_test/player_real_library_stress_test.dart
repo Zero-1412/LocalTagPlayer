@@ -234,12 +234,20 @@ Future<void> _waitForLibraryReady(
   Duration timeout = const Duration(minutes: 3),
 }) async {
   final stopwatch = Stopwatch()..start();
-  while (_visibleLibraryPlayButtons().isEmpty && stopwatch.elapsed < timeout) {
+  var stableFrames = 0;
+  while (stableFrames < 2 && stopwatch.elapsed < timeout) {
     await tester.pump(const Duration(milliseconds: 50));
+    // library_page_lifecycle_mixin 在 hydration 后还会通过 post-frame callback
+    // 发布筛选结果；连续两帧命中才算 UI 结果已挂载，而不是只看到控制边界注册。
+    stableFrames =
+        _visibleLibraryPlayButtons().isNotEmpty ? stableFrames + 1 : 0;
   }
-  if (_visibleLibraryPlayButtons().isEmpty) {
+  if (stableFrames < 2) {
     throw StateError('真实媒体库未在 ${timeout.inSeconds} 秒内完成可播放入口加载');
   }
+  // 把首个结果帧后的布局/命中测试更新交给测试窗口完成，避免马上进入播放器时
+  // 把仍在 hydration 尾部的旧 RenderObject 当成可交互入口。
+  await tester.pump(const Duration(milliseconds: 100));
 }
 
 /** 在媒体库结果中随机上下拖动，扩大实际样本覆盖范围。 */
@@ -351,9 +359,16 @@ Future<void> _toggleFullscreenThroughPlayerState(WidgetTester tester) async {
   if (playerPage.evaluate().isEmpty) {
     throw StateError('播放器页面不存在，无法执行全屏状态机');
   }
-  await tester
+  final toggle = tester
       .state<PlayerPageState>(playerPage)
       .toggleWindowFullscreenForStressTest();
+  // 正式状态机先等待 WidgetsBinding.endOfFrame，再执行窗口命令。直接 await
+  // 会在测试 isolate 没有新帧时自锁；先泵一帧才能让生产状态机继续推进。
+  await tester.pump();
+  await toggle.timeout(
+    const Duration(seconds: 10),
+    onTimeout: () => throw StateError('播放器全屏状态机等待窗口命令超时'),
+  );
 }
 
 /**

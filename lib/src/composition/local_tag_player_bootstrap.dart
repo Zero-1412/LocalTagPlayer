@@ -102,11 +102,14 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies({
           : const DesktopFileSystemAdapter();
   MediaProbeBackend mediaProbeBackendFactory() =>
       createMediaProbeBackend(ffmpegBackend);
+  // Profile 是真实窗口压测的 release-like 构建；只有显式提供压力 root 时才
+  // 开放同一组受限控制，Release 仍不会暴露测试入口。
+  final pressureBuild = kDebugMode || kProfileMode;
   final libraryDebugOptions = LibraryDebugOptions(
-    stressRoot: kDebugMode
+    stressRoot: pressureBuild
         ? Platform.environment['LOCAL_TAG_PLAYER_LIBRARY_STRESS_ROOT']?.trim()
         : null,
-    startupDiagnosticsPath: kDebugMode
+    startupDiagnosticsPath: pressureBuild
         ? p.join(
             Directory.systemTemp.path,
             'local_tag_player_startup_diagnostics.json',

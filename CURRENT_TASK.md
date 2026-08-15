@@ -1,18 +1,27 @@
 # CURRENT_TASK.md
 
-# 2026-08-15 · 按全测标准执行首轮全面测试（进行中）
+# 2026-08-15 · MediaKit/全屏/压力测试门禁复跑（完成）
 
-- 目标：按 `docs/qa/performance_full_test_standard.md` 执行 L0–L3 全测，建立首个可比较基线，
-  覆盖大库加载/扫描、seek 矩阵、主窗口语义、播放器后端、增删压力和真实库播放器长跑。
-- 结果：`flutter analyze` 与 Windows Debug 构建通过；大库加载/扫描通过；12 组 seek 数据在预算内，
-  但首次矩阵有一次可重试的 tearDown/startup 异常。全量 `flutter test` 有 3 条既有架构/契约失败；
-  后端 30 分钟长播超时且 working set 持续增长，增删压力在第 0 轮等待 UI 超时，真实库播放器在全屏往返后卡住。
-- 保护：业务代码未修改；加载/扫描/seek/增删/真实库播放器使用隔离 profile，`D:\video` 只读；
-  后端矩阵首次命令未显式注入隔离 profile，但停止后核验用户 `library.db` 大小与修改时间未变。
-- 证据：原始结果位于 `artifacts/full_test_20260815_133918/`；日期化结论见
-  `docs/history/qa/2026-08/full_test_20260815.md`。
-- 下一步：先修复或定位后端长播资源增长、全屏状态机卡住、增删专项 UI hydration 前置失败和 MPV unsupported；
-  再用显式隔离 profile、可用桌面控制和 profile/release-like 构建重跑未完成门禁。
+- 目标：按 `docs/qa/performance_full_test_standard.md` 用显式隔离 profile、Profile/release-like
+  构建和可用桌面控制，重新执行播放器释放、全屏、增删压力、真实库长压与双后端门禁。
+- 结果：MediaKit 10 轮增删、Profile 1 轮增删和真实库 Profile 1800 秒/71 轮均通过；每轮释放
+  回到 `texture_id=-1 / release_phase=released`，原生 Windows 等待约 5.2 秒，未复现单调资源泄漏。
+  全屏测试的卡住原因是测试直接等待依赖 `endOfFrame` 的命令而未泵帧，已改为显式泵帧并加超时；
+  桌面实点验证全屏/退出、`1 / 11234` 来源队列和返回路径保持正常。
+- 测试前置：增删压力现在先等待专项控制、SQLite hydration 的 `videoCount/visibleCount` 和连续可见
+  播放入口；修复过期 smoke key/诊断入口。Profile 仅在显式压力 root 下注册同一控制，Release 仍不注册。
+- 后端：Profile 双后端矩阵 120 秒长播、6 次快速切换、全屏/队列/交互均自动通过；MediaKit 为
+  `media-kit-in-process / media-kit-texture`，MPV 为 `mpv_texture_ready / libmpv-angle-d3d11`，当前
+  Windows 可测。单显示器使真实跨 DPI 发布门禁保持 `pending-physical-cross-dpi`。
+- AXTree：带桌面控制时复现 Flutter Windows accessibility bridge 的 AXTree stale-node warning；同一
+  独立 profile 无桌面控制时为 0 条。应用保持语义树和页面可达性，不以删除 Semantics 掩盖环境/引擎问题。
+- 保护：schema、FilterQuery / TagQueryService、来源 filtered queue、PlayerBackend、缓存队列、stable
+  identity 和用户数据未改；压测 profile 可丢弃，`D:\video` 只读。全量 `flutter test` 仍有 3 条既有治理/视觉
+  契约失败（迁移行数预算、`video_similarity_page.dart` 行数治理、视觉复核播放/删除合同）。
+- 证据：`artifacts/full_gate_20260815_01/`；日期化结论见
+  `docs/history/qa/2026-08/full_gate_20260815.md`。
+- 下一步：修复既有全量单测的 3 条独立门禁；具备第二显示器后执行真实跨 DPI；针对 Flutter Windows
+  accessibility bridge 评估 SDK/引擎升级或最小复现，不删除现有语义入口。
 
 # 2026-08-15 · 相似视频合并用户数据后删除（完成）
 

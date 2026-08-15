@@ -110,7 +110,7 @@ Future<Finder> _firstVisiblePlayButton(WidgetTester tester) async {
     final finder = find.byWidgetPredicate((widget) {
       final key = widget.key;
       return key is ValueKey<String> &&
-          (key.value.startsWith('smoke.card.play:') ||
+          (key.value.startsWith('smoke.card.open:') ||
               key.value.startsWith('smoke.list.play:'));
     }).hitTestable();
     if (finder.evaluate().isNotEmpty) {

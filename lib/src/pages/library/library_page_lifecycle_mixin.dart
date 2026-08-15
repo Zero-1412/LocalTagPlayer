@@ -122,7 +122,8 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
   }
 
   Future<void> load() async {
-    final diagnostics = kDebugMode ? LibraryLoadDiagnostics() : null;
+    final diagnostics =
+        (kDebugMode || kProfileMode) ? LibraryLoadDiagnostics() : null;
     final startupWatch = Stopwatch()..start();
     final startupData = await applicationService.load(
       diagnostics: diagnostics,
@@ -254,7 +255,7 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
     ThumbnailService thumbnailService,
   ) {
     final root = applicationService.stressRoot;
-    if (!kDebugMode || root == null || root.isEmpty) {
+    if (!(kDebugMode || kProfileMode) || root == null || root.isEmpty) {
       return;
     }
     LibraryStressControl.register(
