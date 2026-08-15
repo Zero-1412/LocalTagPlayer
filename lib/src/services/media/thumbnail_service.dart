@@ -153,6 +153,7 @@ class ThumbnailService {
   _PreviewFrameJob? _activePreviewJob;
   _PreviewFrameJob? _pendingPreviewJob;
   final Queue<_PreviewFrameJob> _similarityPreviewJobs = Queue();
+  String? _lastSimilarityVideoId;
   var _activeSimilarityPreviewJobs = 0;
   var _similarityScanForeground = false;
   final Set<String> _activeCacheKeys = {};
@@ -222,6 +223,7 @@ class ThumbnailService {
         job.completer.complete(null);
       }
     }
+    _lastSimilarityVideoId = null;
   }
 
   /**
@@ -548,7 +550,7 @@ class ThumbnailService {
     final maxActive = _similarityScanForeground ? _maxSimilarityPreviewJobs : 1;
     while (_activeSimilarityPreviewJobs < maxActive &&
         _similarityPreviewJobs.isNotEmpty) {
-      final job = _similarityPreviewJobs.removeFirst();
+      final job = _takeNextSimilarityPreviewJob();
       _activeSimilarityPreviewJobs++;
       unawaited(
         _generatePreview(job).then<void>((file) {
@@ -562,6 +564,35 @@ class ThumbnailService {
         }),
       );
     }
+  }
+
+  /**
+   * 在相似取帧队列中轮转视频来源，避免同一视频的三个时间点连续占满等待区。
+   * 仅改变排队顺序，不改变每个视频的采样点或并发上限；同一视频是唯一来源时仍按 FIFO。
+   */
+  _PreviewFrameJob _takeNextSimilarityPreviewJob() {
+    var selected = _similarityPreviewJobs.removeFirst();
+    final lastVideoId = _lastSimilarityVideoId;
+    if (lastVideoId != null &&
+        selected.item.videoId == lastVideoId &&
+        _similarityPreviewJobs.isNotEmpty) {
+      _PreviewFrameJob? alternative;
+      final pendingCount = _similarityPreviewJobs.length;
+      for (var index = 0; index < pendingCount; index++) {
+        final candidate = _similarityPreviewJobs.removeFirst();
+        if (alternative == null && candidate.item.videoId != lastVideoId) {
+          alternative = candidate;
+        } else {
+          _similarityPreviewJobs.addLast(candidate);
+        }
+      }
+      if (alternative != null) {
+        _similarityPreviewJobs.addFirst(selected);
+        selected = alternative;
+      }
+    }
+    _lastSimilarityVideoId = selected.item.videoId;
+    return selected;
   }
 
   /** 经 FFmpegBackend 生成并再次校验 JPEG，失败只影响本次悬停提示。 */

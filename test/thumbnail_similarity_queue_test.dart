@@ -61,13 +61,45 @@ void main() {
     expect(await pending, isNotNull);
     expect(backend.calls, 1);
   });
+
+  test('相似取帧队列在视频之间轮转，避免单视频时间点占满尾部', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('ltp_similarity_fair_');
+    addTearDown(() => directory.delete(recursive: true));
+    final backend = _ConcurrentPreviewBackend();
+    final service = ThumbnailService.forDirectory(directory, backend)..pause();
+    final first = _video(directory.path, id: 'similarity-a');
+    final second = _video(directory.path, id: 'similarity-b');
+    final pending = <Future<File?>>[
+      for (var index = 0; index < 3; index++)
+        service.similarityPreviewFrameFor(
+          first,
+          Duration(seconds: index + 1),
+        ),
+      for (var index = 0; index < 3; index++)
+        service.similarityPreviewFrameFor(
+          second,
+          Duration(seconds: index + 10),
+        ),
+    ];
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(backend.calls, 0);
+    service.resume();
+    await Future.wait(pending);
+
+    expect(
+      backend.videoIds.take(4),
+      <String>['similarity-a', 'similarity-b', 'similarity-a', 'similarity-b'],
+    );
+  });
 }
 
-VideoItem _video(String directory) {
+VideoItem _video(String directory, {String id = 'similarity-queue'}) {
   return VideoItem(
-    videoId: 'similarity-queue',
-    path: '$directory/source.mp4',
-    title: 'similarity-queue',
+    videoId: id,
+    path: '$directory/$id.mp4',
+    title: id,
     folder: directory,
     tags: <String>{},
     addedAt: DateTime(2024),
@@ -86,11 +118,13 @@ class _ConcurrentPreviewBackend implements FFmpegBackend {
   int active = 0;
   int maxActive = 0;
   int calls = 0;
+  final List<String> videoIds = <String>[];
 
   void reset() {
     active = 0;
     maxActive = 0;
     calls = 0;
+    videoIds.clear();
   }
 
   @override
@@ -119,6 +153,7 @@ class _ConcurrentPreviewBackend implements FFmpegBackend {
   }) async {
     active++;
     calls++;
+    videoIds.add(item.videoId);
     if (active > maxActive) {
       maxActive = active;
     }

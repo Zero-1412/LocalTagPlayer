@@ -230,6 +230,13 @@ class VideoContentSimilarityService {
     var compared = 0;
     var processed = 0;
     final deepCandidates = <_VisualCandidate>[];
+    var pendingSignatureWrites = Future<void>.value();
+
+    void enqueueSignatureWrite(VideoItem item, List<int> hashes) {
+      pendingSignatureWrites = pendingSignatureWrites.then<void>(
+        (_) => _savePersistedSignature(item, hashes),
+      );
+    }
 
     Future<VideoVisualSignatureCacheEntry?> persistedFor(VideoItem item) async {
       final cached = persistedSignatures[item.videoId];
@@ -254,6 +261,7 @@ class VideoContentSimilarityService {
         item,
         signatures,
         loadPersisted: persistedFor,
+        onSignatureReady: enqueueSignatureWrite,
       );
       signatureTasks[item.videoId] = task;
       return task;
@@ -331,12 +339,17 @@ class VideoContentSimilarityService {
       deepVideos[right.videoId] = right;
     }
     final deepVideoList = deepVideos.values.toList(growable: false);
+    final scheduledDeepVideos = List<VideoItem>.of(deepVideoList)
+      // Longest-processing-time first reduces the tail when duration/size vary;
+      // workers still pull continuously, so this only changes scheduling order.
+      ..sort(_compareDeepWorkEstimate);
+
     var deepProcessed = 0;
-    if (deepVideoList.isNotEmpty) {
+    if (scheduledDeepVideos.isNotEmpty) {
       progress.report(
         VideoVisualScanPhase.extractingSignatures,
         0,
-        deepVideoList.length,
+        scheduledDeepVideos.length,
       );
     }
     final workerCount = _visualComparisonWorkerCount();
@@ -347,28 +360,28 @@ class VideoContentSimilarityService {
           return;
         }
         final index = nextDeepVideo++;
-        if (index >= deepVideoList.length) {
+        if (index >= scheduledDeepVideos.length) {
           return;
         }
         await _waitForScheduler(cancelled, shouldYield);
         if (cancelled()) {
           return;
         }
-        await signatureFor(deepVideoList[index]);
+        await signatureFor(scheduledDeepVideos[index]);
         deepProcessed++;
         progress.report(
           VideoVisualScanPhase.extractingSignatures,
           deepProcessed,
-          deepVideoList.length,
+          scheduledDeepVideos.length,
         );
       }
     }
 
-    if (deepVideoList.isNotEmpty) {
+    if (scheduledDeepVideos.isNotEmpty) {
       await Future.wait<void>(
         <Future<void>>[
           for (var index = 0;
-              index < math.min(workerCount, deepVideoList.length);
+              index < math.min(workerCount, scheduledDeepVideos.length);
               index++)
             extractWorker(),
         ],
@@ -711,6 +724,23 @@ class VideoContentSimilarityService {
     return 2;
   }
 
+  /** 按预计解码成本从高到低排队，避免长视频集中落在深度扫描尾部。 */
+  int _compareDeepWorkEstimate(VideoItem left, VideoItem right) {
+    final leftDuration = _durationFor(left)?.inMilliseconds ?? 0;
+    final rightDuration = _durationFor(right)?.inMilliseconds ?? 0;
+    final duration = rightDuration.compareTo(leftDuration);
+    if (duration != 0) {
+      return duration;
+    }
+    final leftSize = left.fileSize ?? 0;
+    final rightSize = right.fileSize ?? 0;
+    final size = rightSize.compareTo(leftSize);
+    if (size != 0) {
+      return size;
+    }
+    return left.videoId.compareTo(right.videoId);
+  }
+
   Duration? _durationFor(VideoItem item) {
     final mediaDuration = item.mediaDetails?.duration;
     if (mediaDuration != null && mediaDuration > Duration.zero) {
@@ -881,6 +911,7 @@ class VideoContentSimilarityService {
     VideoItem item,
     Map<String, List<int>?> cache, {
     Future<VideoVisualSignatureCacheEntry?> Function(VideoItem)? loadPersisted,
+    void Function(VideoItem item, List<int> hashes)? onSignatureReady,
   }) async {
     if (cache.containsKey(item.videoId)) {
       return cache[item.videoId];
@@ -933,7 +964,11 @@ class VideoContentSimilarityService {
     final result = hashes.length < 2 ? null : hashes;
     cache[item.videoId] = result;
     if (result != null) {
-      await _savePersistedSignature(item, result);
+      if (onSignatureReady != null) {
+        onSignatureReady(item, result);
+      } else {
+        await _savePersistedSignature(item, result);
+      }
     }
     return result;
   }
