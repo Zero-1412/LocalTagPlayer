@@ -75,6 +75,19 @@
 
 ## 当前任务
 
+### 2026-08-15 · 标签输入触发 Windows runner 原生闪退（进行中）
+
+- 根因：Windows 事件日志记录 `flutter_windows.dll` 的 `0xc0000005`；runner 在
+  `OnDestroy` 释放 `FlutterViewController` 后，仍会对延后抵达的 `WM_FONTCHANGE`
+  无条件访问 engine。标签输入框会触发字体/输入法消息，因而更容易命中该生命周期竞态。
+- 修复：`WM_FONTCHANGE` 处理前检查 controller 是否仍存活；不会改动 SQLite schema、
+  TagQueryService / FilterQuery、来源 filtered queue、播放器后端或用户标签数据。
+- 验证：Windows runner focused 源码守卫、`flutter analyze` 与 `flutter build windows --debug`
+  均通过；使用隔离数据目录启动新 Debug 应用并保持 5 秒存活，未新增 Windows
+  Application Error 1000。未为验证向真实用户库写入测试标签。
+- 下一步：人工在真实媒体库打开任意视频的“添加标签”，输入/保存后关闭应用；确认事件查看器
+  不再出现 `local_tag_player.exe` 的 `flutter_windows.dll` 访问冲突。
+
 ### 2026-08-15 · 内容级重复判断与候选缩略图（完成）
 
 - 目标：在已有文件级重复候选之上识别重新编码/容器变化后的近重复，并让候选组可直接目视复核。
@@ -82,8 +95,10 @@
   `ThumbnailService` 的缓存首帧和 FFmpeg 取帧边界抽取中段/后段 2 帧，计算有序 3 帧 dHash
   时序距离；算法签名仅驻留页面内存，不写 schema。每次最多比较 48 对，避免全库无界解码。
 - 页面：确定重复与内容近重复分组分开标识；每行展示共享缩略图缓存、标题、路径、媒体摘要和定位按钮；
-  视觉复核进行中/失败均可见，不自动删除或移动文件。
-- 保护：schema、FilterQuery / TagQueryService、来源 filtered queue、PlayerBackend、标签、收藏、
+  视觉复核进行中/失败均可见；新增播放与删除操作，删除仍需统一确认。
+- 播放：相似页通过显式 `similarity` 来源创建当前候选组的 filtered queue，只把该组传给播放器，
+  不回退到全库；删除成功后重建候选快照并重新执行有界视觉复核。
+- 保护：schema、FilterQuery / TagQueryService、既有来源 filtered queue、PlayerBackend、标签、收藏、
   播放记录和缩略图后台队列未改变；missing/无时长条目继续保留且跳过物理比较。
 - 验证：相似服务与既有 widget focused tests、`flutter analyze`、`flutter build windows --debug` 通过；
   真实 Debug 窗口打开相似视频页，候选缩略图正常生成/复用，视觉复核 48/48 在约 10 秒内收敛。

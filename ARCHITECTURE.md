@@ -138,6 +138,8 @@ source filtered result
 - NVIDIA VSR/HDR、NVOFA、VapourSynth 和本机插件属于能力门禁或长期研究，
   未经发布、许可、回退和真实性证据不得成为自动生产路径；
 - 原生工作线程、窗口和纹理生命周期必须在 Flutter dispose/退出前有序收口。
+- Windows runner 在 controller 释放后仍可能收到排队的系统消息；这类消息必须先确认
+  Flutter controller 存活，不能再解引用 engine。
 
 ## 缓存与诊断
 

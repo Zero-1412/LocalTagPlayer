@@ -2835,6 +2835,25 @@ void main() {
     expect(source, isNot(contains('center: layout == null')));
   });
 
+  test('Windows runner ignores late font notifications after Flutter shutdown',
+      () {
+    final runnerSource = File(
+      'windows/runner/flutter_window.cpp',
+    ).readAsStringSync();
+    final fontChangeStart = runnerSource.indexOf('case WM_FONTCHANGE:');
+    final fontChangeEnd = runnerSource.indexOf('break;', fontChangeStart);
+    final fontChangeBody = runnerSource.substring(
+      fontChangeStart,
+      fontChangeEnd,
+    );
+
+    // 输入法和字体通知可在 controller 释放后抵达；runner 必须拒绝访问已销毁 engine。
+    expect(fontChangeStart, greaterThanOrEqualTo(0));
+    expect(fontChangeEnd, greaterThan(fontChangeStart));
+    expect(fontChangeBody, contains('if (flutter_controller_)'));
+    expect(fontChangeBody, contains('ReloadSystemFonts()'));
+  });
+
   test('player stress fullscreen uses the production state machine directly',
       () {
     final playerSource = _readPlayerPageCluster();

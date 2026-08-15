@@ -83,7 +83,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   switch (message) {
     case WM_FONTCHANGE:
-      flutter_controller_->engine()->ReloadSystemFonts();
+      // 窗口销毁会先释放 Flutter controller；随后排队抵达的字体/输入法通知
+      // 不能再访问已释放的 engine，否则标签输入等 TextField 场景会触发原生访问冲突。
+      if (flutter_controller_) {
+        flutter_controller_->engine()->ReloadSystemFonts();
+      }
       break;
   }
 
