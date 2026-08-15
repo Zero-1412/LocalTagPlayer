@@ -57,6 +57,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   late VideoSimilarityReport _report;
   final Set<String> _revealingVideoIds = <String>{};
   final Set<String> _actingVideoIds = <String>{};
+  final Set<String> _deletedVideoIds = <String>{};
   var _visualScanning = false;
   var _visualGeneration = 0;
   String? _visualError;
@@ -89,6 +90,30 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     });
   }
 
+  /** 过滤晚返回的视觉扫描快照，避免删除完成后旧结果把 stable videoId 重新带回页面。 */
+  List<VideoSimilarityGroup> _withoutDeletedVideos(
+    Iterable<VideoSimilarityGroup> groups,
+  ) {
+    final visible = <VideoSimilarityGroup>[];
+    for (final group in groups) {
+      final videos = group.videos
+          .where((item) => !_deletedVideoIds.contains(item.videoId))
+          .toList(growable: false);
+      if (videos.length < 2) {
+        continue;
+      }
+      visible.add(
+        VideoSimilarityGroup(
+          fingerprint: group.fingerprint,
+          kind: group.kind,
+          visualScore: group.visualScore,
+          videos: List<VideoItem>.unmodifiable(videos),
+        ),
+      );
+    }
+    return List<VideoSimilarityGroup>.unmodifiable(visible);
+  }
+
   Future<void> _runVisualScan() async {
     if (_visualScanning) {
       return;
@@ -113,7 +138,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
       }
       setState(() {
         _report = _report.withVisualGroups(
-          groups: result.groups,
+          groups: _withoutDeletedVideos(result.groups),
           candidatePairCount: result.candidatePairCount,
           comparedPairCount: result.comparedPairCount,
         );
@@ -167,7 +192,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   }
 
   Future<void> _delete(VideoItem item) async {
-    if (_actingVideoIds.contains(item.videoId) || _visualScanning) {
+    if (_actingVideoIds.contains(item.videoId)) {
       return;
     }
     setState(() => _actingVideoIds.add(item.videoId));
@@ -176,8 +201,10 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
       if (!deleted || !mounted) {
         return;
       }
+      _deletedVideoIds.add(item.videoId);
       // 删除已由父页面完成数据库、文件和缩略图清理；这里重建只读候选快照，
-      // 先局部移除当前行，再按最新库内容重新运行一次有界视觉复核。
+      // 先局部移除当前行，再按最新库内容重新运行一次有界视觉复核。正在运行的旧扫描
+      // 即使晚返回，也会按 stable videoId 过滤，不能把已删除行重新带回页面。
       setState(() {
         _report = _report.withoutVideo(item);
         _visualError = null;
@@ -261,7 +288,6 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
                                 group: group,
                                 thumbnailService: widget.thumbnailService,
                                 actingVideoIds: _actingVideoIds,
-                                visualScanning: _visualScanning,
                                 revealingVideoIds: _revealingVideoIds,
                                 onPlay: _play,
                                 onDelete: _delete,
@@ -454,7 +480,6 @@ class _SimilarityGroupCard extends StatelessWidget {
     required this.group,
     required this.thumbnailService,
     required this.actingVideoIds,
-    required this.visualScanning,
     required this.revealingVideoIds,
     required this.onPlay,
     required this.onDelete,
@@ -465,7 +490,6 @@ class _SimilarityGroupCard extends StatelessWidget {
   final VideoSimilarityGroup group;
   final ThumbnailService thumbnailService;
   final Set<String> actingVideoIds;
-  final bool visualScanning;
   final Set<String> revealingVideoIds;
   final Future<void> Function(VideoItem item, List<VideoItem> playlist) onPlay;
   final Future<void> Function(VideoItem item) onDelete;
@@ -546,7 +570,6 @@ class _SimilarityGroupCard extends StatelessWidget {
               thumbnailService: thumbnailService,
               playlist: group.videos,
               acting: actingVideoIds.contains(group.videos[i].videoId),
-              visualScanning: visualScanning,
               revealing: revealingVideoIds.contains(group.videos[i].videoId),
               onPlay: onPlay,
               onDelete: onDelete,
@@ -567,7 +590,6 @@ class _SimilarityVideoRow extends StatelessWidget {
     required this.thumbnailService,
     required this.playlist,
     required this.acting,
-    required this.visualScanning,
     required this.revealing,
     required this.onPlay,
     required this.onDelete,
@@ -579,7 +601,6 @@ class _SimilarityVideoRow extends StatelessWidget {
   final ThumbnailService thumbnailService;
   final List<VideoItem> playlist;
   final bool acting;
-  final bool visualScanning;
   final bool revealing;
   final Future<void> Function(VideoItem item, List<VideoItem> playlist) onPlay;
   final Future<void> Function(VideoItem item) onDelete;
@@ -666,7 +687,7 @@ class _SimilarityVideoRow extends StatelessWidget {
             IconButton(
               key: ValueKey('videoSimilarity.delete.${item.videoId}'),
               tooltip: '删除此候选视频',
-              onPressed: visualScanning ? null : () => onDelete(item),
+              onPressed: () => onDelete(item),
               icon: const Icon(Icons.delete_outline_rounded),
             ),
             IconButton(

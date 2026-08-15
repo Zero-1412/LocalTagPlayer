@@ -9,21 +9,26 @@ import 'package:flutter_test/flutter_test.dart';
  * 播放进度刷盘仍由既有 openVideo 尾部完成，避免用户看到不必要的长时间占位。
  */
 void main() {
-  test('视觉复核期间已有候选仍可播放，删除继续等待扫描完成', () {
+  test('视觉复核期间已有候选仍可播放和删除', () {
     final page = File(
       'lib/src/pages/library/video_similarity_page.dart',
     ).readAsStringSync();
 
     expect(page, contains('onPressed: () => onPlay(item, playlist)'));
-    expect(
-      page,
-      contains('onPressed: visualScanning ? null : () => onDelete(item)'),
-    );
+    expect(page, contains('onPressed: () => onDelete(item)'));
     expect(
       page,
       isNot(
         contains(
           'onPressed: visualScanning ? null : () => onPlay(item, playlist)',
+        ),
+      ),
+    );
+    expect(
+      page,
+      isNot(
+        contains(
+          'onPressed: visualScanning ? null : () => onDelete(item)',
         ),
       ),
     );
