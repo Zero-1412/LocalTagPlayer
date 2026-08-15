@@ -815,6 +815,78 @@ void main() {
     expect((await deleted.tagUsageSummaries())[tag.id]?.manual ?? 0, 0);
   });
 
+  test('deleting a video removes its cache diagnostic metadata', () async {
+    final stores = <LibraryStore>[];
+    final dataDir = await _prepareStoreTestDirectory('delete_cache_metadata');
+    addTearDown(() async {
+      await _closeTrackedStores(stores);
+      await dataDir.delete(recursive: true);
+    });
+    final file = await _writeVideoPlaceholder(
+      dataDir,
+      <String>['cache-metadata.mp4'],
+    );
+    final store = await _loadTrackedStore(stores);
+    final item = VideoItem(
+      path: file.path,
+      title: 'cache metadata',
+      folder: file.parent.path,
+      tags: const <String>{},
+      addedAt: DateTime.utc(2026, 8, 15),
+    );
+    await store.upsertVideo(item);
+    await store.saveThumbnailStatus(
+      item.videoId,
+      const CacheStatus(kind: CacheStatusKind.ready),
+    );
+    await store.saveMediaDetailsStatus(
+      item.videoId,
+      const CacheStatus(kind: CacheStatusKind.failed),
+    );
+    await store.database.insert(
+      'metadata',
+      <String, Object?>{
+        'key': 'cache.thumbnail.unrelated-video',
+        'value': '{"kind":"ready"}',
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    expect(
+      await store.database.query(
+        'metadata',
+        where: 'key IN (?, ?)',
+        whereArgs: <Object?>[
+          'cache.thumbnail.${item.videoId}',
+          'cache.media_details.${item.videoId}',
+        ],
+      ),
+      hasLength(2),
+    );
+
+    await store.deleteVideo(item.path);
+
+    expect(
+      await store.database.query(
+        'metadata',
+        where: 'key IN (?, ?)',
+        whereArgs: <Object?>[
+          'cache.thumbnail.${item.videoId}',
+          'cache.media_details.${item.videoId}',
+        ],
+      ),
+      isEmpty,
+    );
+    expect(
+      await store.database.query(
+        'metadata',
+        where: 'key = ?',
+        whereArgs: const <Object?>['cache.thumbnail.unrelated-video'],
+      ),
+      hasLength(1),
+    );
+  });
+
   test('metadata repository dedupes roots and favorite tags on reload',
       () async {
     final stores = <LibraryStore>[];

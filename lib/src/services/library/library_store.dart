@@ -286,6 +286,23 @@ class LibraryStore
     );
   }
 
+  /**
+   * 将视频级缓存诊断状态排入主库删除批次。
+   *
+   * 这些状态只服务诊断，不应在视频行删除后继续以 stable videoId 残留；与标签关联、视频
+   * 行同批提交，避免事务中断时出现半套依赖。
+   */
+  void _deleteCacheStatusesInBatch(Batch batch, String videoId) {
+    batch.delete(
+      'metadata',
+      where: 'key IN (?, ?)',
+      whereArgs: <Object?>[
+        'cache.thumbnail.$videoId',
+        'cache.media_details.$videoId',
+      ],
+    );
+  }
+
   @override
   Future<void> saveSession(PlaybackSession session) async {
     await _db.insert(
@@ -1273,6 +1290,7 @@ class LibraryStore
           item,
           updateMemoryIndex: false,
         );
+        _deleteCacheStatusesInBatch(batch, item.videoId);
       }
       _videoPersistence.deleteInBatch(batch, path);
       await batch.commit(noResult: true);

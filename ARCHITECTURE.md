@@ -109,6 +109,9 @@ Repository 拥有：
 - 所有媒体库、收藏/最近播放、本地目录、相似视频和播放器队列中的用户视频删除，统一经过
   `LibraryFileCommandExecutor` 与 `FileSystemAdapter.moveFileToTrash`；执行顺序固定为
   `移入系统回收站 -> 删除 Repository 记录 -> 清理可重建缩略图缓存`。
+- Repository 删除事务同时清理 `cache.thumbnail.<videoId>` 与
+  `cache.media_details.<videoId>` 两类缓存诊断 metadata，和标签关联、视频行同批提交，
+  不留下以 stable `videoId` 为键的孤立状态。
 - 删除确认只保留“是否继续提示”的偏好；不再提供“仅移出媒体库、保留本地文件”的分支，
   因为该分支会让“删除”在不同入口产生不可逆的语义差异。视频文件可从系统回收站恢复。
 - 路径失效/不可读的自动数据库清理是明确例外：它只删除数据库记录，不操作磁盘文件，也不

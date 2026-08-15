@@ -1,5 +1,17 @@
 # CURRENT_TASK.md
 
+# 2026-08-15 · 删除视频同步清理缓存诊断 metadata（完成）
+
+- 根因：相似视频等入口已通过统一删除命令清理文件、视频行、标签关联、备份快照和缩略图，
+  但主库 `metadata` 中以 stable `videoId` 命名的 `cache.thumbnail.*` 与 `cache.media_details.*`
+  状态未随视频行删除，可能留下孤立诊断记录。
+- 修复：`LibraryStore.deleteVideo` 将两类 metadata 的定向删除加入与标签关联、视频行相同的
+  SQLite batch；只删除目标视频的键，不影响其它视频或全局 metadata。
+- 验证：新增“删除视频移除缓存诊断 metadata”回归测试，`library_store_test.dart` 与文件命令
+  执行器 focused tests、`flutter analyze` 通过；`flutter build windows --debug` 已尝试，但被
+  Explorer 启动且仍在运行的 Debug `local_tag_player.exe` 锁定，返回 LNK1168，未强制结束用户进程。
+- 下一步：完成停止编辑后的独立审计，提交并推送当前分支；构建门禁待关闭该窗口后重跑。
+
 # 2026-08-15 · 用户视频删除统一移入回收站（完成）
 
 - 盘点：媒体库网格/列表、收藏、最近播放、本地目录、相似视频、批量选择和播放器右侧队列
