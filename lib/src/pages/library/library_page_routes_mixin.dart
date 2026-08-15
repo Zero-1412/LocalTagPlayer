@@ -25,6 +25,8 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
     if (store == null || thumbnailService == null) {
       return;
     }
+    final videoIdsBeforeSettings =
+        store.videos.values.map((item) => item.videoId).toSet();
     await Navigator.of(context).push(
       smoothRoute<void>(
         CacheSettingsPage(
@@ -79,7 +81,11 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
       ),
     );
     if (mounted) {
-      markLibraryDataChanged();
+      final removedVideoIds = videoIdsBeforeSettings
+          .difference(store.videos.values.map((item) => item.videoId).toSet());
+      markLibraryDataChanged(
+        removedVideoIds: removedVideoIds.isEmpty ? null : removedVideoIds,
+      );
     }
   }
 

@@ -133,6 +133,19 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final preserveScrollOnResultDelta =
+        runtime.pendingResultDeltaVideoIds.isNotEmpty;
+    if (preserveScrollOnResultDelta && !runtime.resultDeltaClearScheduled) {
+      runtime.resultDeltaClearScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        runtime.resultDeltaClearScheduled = false;
+        if (mounted) {
+          runtime.pendingResultDeltaVideoIds.clear();
+          runtime.pendingRemovedVideoIds.clear();
+        }
+      });
+    }
+
     final filterState =
         runtime.queryController.state ?? buildImmediateFilterState(store);
     final filteredVideos = filterState.filteredVideos;
@@ -362,6 +375,7 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
                       onRevealLocation: revealVideoLocation,
                       onToggleFavorite: toggleFavorite,
                       onDelete: requestDeleteVideo,
+                      preserveScrollOnResultDelta: preserveScrollOnResultDelta,
                     ),
                   LibraryResultMode.recent => videos.isEmpty
                       ? EmptyState(
@@ -392,6 +406,8 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
                               clearRecentPlayback(selectedOnly: true),
                           onDeleteAll: () =>
                               clearRecentPlayback(selectedOnly: false),
+                          preserveScrollOnResultDelta:
+                              preserveScrollOnResultDelta,
                         ),
                   _ => videos.isEmpty
                       ? EmptyState(
@@ -417,6 +433,8 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
                           onRevealLocation: revealVideoLocation,
                           onToggleFavorite: toggleFavorite,
                           onDelete: requestDeleteVideo,
+                          preserveScrollOnResultDelta:
+                              preserveScrollOnResultDelta,
                           selectionMode: runtime.librarySelectionMode,
                           selectedVideoIds: runtime.selectedLibraryVideoIds,
                           onToggleSelected: (item) => setState(

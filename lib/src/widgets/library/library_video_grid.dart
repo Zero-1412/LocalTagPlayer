@@ -29,6 +29,7 @@ class VideoGrid extends StatefulWidget {
     this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDelete,
+    this.preserveScrollOnResultDelta = false,
     this.selectionMode = false,
     this.selectedVideoIds = const <String>{},
     this.onToggleSelected,
@@ -64,6 +65,9 @@ class VideoGrid extends StatefulWidget {
 
   /** 请求删除视频记录；是否同步删除本地文件由 Application 层确认。 */
   final ValueChanged<VideoItem> onDelete;
+
+  /** 删除或列表差量发布时保留当前滚动锚点，不把结果区跳回首屏。 */
+  final bool preserveScrollOnResultDelta;
 
   /** true 时卡片和列表点击只切换选择，不打开播放器。 */
   final bool selectionMode;
@@ -149,8 +153,13 @@ class _VideoGridState extends State<VideoGrid> {
     final resultChanged = _resultBoundarySignature(oldWidget.videos) !=
         _resultBoundarySignature(widget.videos);
     if (resultChanged || oldWidget.dense != widget.dense) {
-      // 新筛选、排序或视图模式从首批 10 行开始，并在下一帧安全回到顶部。
-      _resetIncrementalResults();
+      if (widget.preserveScrollOnResultDelta &&
+          oldWidget.dense == widget.dense) {
+        _preserveResultDelta(oldWidget.videos, widget.videos);
+      } else {
+        // 新筛选、排序或视图模式从首批 10 行开始，并在下一帧安全回到顶部。
+        _resetIncrementalResults();
+      }
     }
     if (oldWidget.scrollChromeEnabled && !widget.scrollChromeEnabled) {
       _reportHeaderVisibility(true);
@@ -178,6 +187,61 @@ class _VideoGridState extends State<VideoGrid> {
         return;
       }
       _scrollController.jumpTo(0);
+    });
+  }
+
+  /**
+   * 结果仅发生 stable ID 差量时保留当前可见锚点。
+   *
+   * 删除项可能位于当前视口上方；以旧列表中的锚点视频重新定位到新索引，避免
+   * Sliver 因索引收缩造成内容跳动，同时继续让 keyed child 复用未变化卡片。
+   */
+  void _preserveResultDelta(
+    List<VideoItem> oldVideos,
+    List<VideoItem> nextVideos,
+  ) {
+    _loadedItemCount = math.min(_loadedItemCount, nextVideos.length);
+    if (oldVideos.isEmpty ||
+        nextVideos.isEmpty ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    final rowExtent = math.max(_currentRowExtent, 1);
+    final columns = math.max(_currentColumnCount, 1);
+    final offset = _scrollController.position.pixels;
+    final oldRow = math.max((offset / rowExtent).floor(), 0);
+    final oldAnchorIndex = math.min(
+      oldVideos.length - 1,
+      oldRow * columns,
+    );
+    var nextAnchorIndex = nextVideos.indexWhere(
+      (item) => item.videoId == oldVideos[oldAnchorIndex].videoId,
+    );
+    if (nextAnchorIndex < 0) {
+      for (var index = oldAnchorIndex + 1;
+          index < oldVideos.length && nextAnchorIndex < 0;
+          index += 1) {
+        nextAnchorIndex = nextVideos.indexWhere(
+          (item) => item.videoId == oldVideos[index].videoId,
+        );
+      }
+    }
+    if (nextAnchorIndex < 0) {
+      return;
+    }
+    final intraRowOffset = offset - oldRow * rowExtent;
+    final nextOffset =
+        (nextAnchorIndex ~/ columns) * rowExtent + intraRowOffset;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+      final position = _scrollController.position;
+      _scrollController.jumpTo(
+        nextOffset
+            .clamp(position.minScrollExtent, position.maxScrollExtent)
+            .toDouble(),
+      );
     });
   }
 

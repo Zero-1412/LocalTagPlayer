@@ -91,7 +91,10 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       // 点击与后台清理可能竞态；播放前再次确认路径，失效时只删数据库记录并阻止进入错误页。
       await store.deleteVideo(selectedItem.path);
       if (mounted) {
-        markLibraryDataChanged(tagDefinitionsChanged: true);
+        markLibraryDataChanged(
+          tagDefinitionsChanged: true,
+          removedVideoIds: <String>[selectedItem.videoId],
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('路径已失效，已从媒体库移除记录')),
         );
@@ -200,6 +203,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     runtime.playerScopedLibraryDataChanged = false;
     runtime.playerScopedNeedsCountRefresh = false;
     runtime.playerScopedTagDefinitionsChanged = false;
+    runtime.playerScopedRemovedVideoIds.clear();
     final playerDisposed = Completer<void>();
     runtime.latestPlayerRelease = playerDisposed.future;
     // 备份只做 SQLite 小批次，但播放器仍优先；等待当前批次结束后再创建解码会话。
@@ -279,6 +283,11 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       store.resumeDataBackupAfterPlayback();
     }
     if (mounted && runtime.playerScopedLibraryDataChanged) {
+      final removedVideoIds = Set<String>.of(
+        runtime.playerScopedRemovedVideoIds,
+      );
+      runtime.pendingResultDeltaVideoIds.addAll(removedVideoIds);
+      runtime.pendingRemovedVideoIds.addAll(removedVideoIds);
       runtime.libraryRevisionTracker.record(
         runtime.playerScopedTagDefinitionsChanged
             ? LibraryDataChangeKind.tagDefinitions
@@ -286,10 +295,13 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       );
       invalidateDerivedCaches();
       scheduleFilterRefresh(
-          refreshCounts: runtime.playerScopedNeedsCountRefresh);
+        refreshCounts: runtime.playerScopedNeedsCountRefresh,
+        removedVideoIds: removedVideoIds.isEmpty ? null : removedVideoIds,
+      );
       runtime.playerScopedLibraryDataChanged = false;
       runtime.playerScopedNeedsCountRefresh = false;
       runtime.playerScopedTagDefinitionsChanged = false;
+      runtime.playerScopedRemovedVideoIds.clear();
     }
   }
 

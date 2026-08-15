@@ -26,6 +26,7 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     runtime.playerScopedLibraryDataChanged = true;
     runtime.playerScopedNeedsCountRefresh = true;
     runtime.playerScopedTagDefinitionsChanged = true;
+    runtime.playerScopedRemovedVideoIds.add(item.videoId);
   }
 
   /** 相似候选页复用同一确认/回收站/记录清理边界，并把结果反馈给页面行。 */
@@ -33,7 +34,10 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
   Future<bool> deleteVideoFromSimilarity(VideoItem item) {
     return _deleteVideoWithConfirmation(
       item,
-      onDeleted: () => markLibraryDataChanged(tagDefinitionsChanged: true),
+      onDeleted: () => markLibraryDataChanged(
+        tagDefinitionsChanged: true,
+        removedVideoIds: <String>[item.videoId],
+      ),
     );
   }
 
@@ -46,7 +50,10 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
   Future<void> requestDeleteVideo(VideoItem item) async {
     await _deleteVideoWithConfirmation(
       item,
-      onDeleted: () => markLibraryDataChanged(tagDefinitionsChanged: true),
+      onDeleted: () => markLibraryDataChanged(
+        tagDefinitionsChanged: true,
+        removedVideoIds: <String>[item.videoId],
+      ),
     );
   }
 
@@ -147,7 +154,10 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
       () => runtime.librarySelection.removeAll(result.deletedVideoIds),
     );
     if (result.deletedVideoIds.isNotEmpty) {
-      markLibraryDataChanged(tagDefinitionsChanged: true);
+      markLibraryDataChanged(
+        tagDefinitionsChanged: true,
+        removedVideoIds: result.deletedVideoIds,
+      );
     }
     if (result.failedItems.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(

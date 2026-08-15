@@ -80,6 +80,39 @@ void main() {
     expect(report.visualCandidatePairCount, 4);
     expect(report.visualComparedPairCount, 3);
   });
+
+  test('删除候选先局部移除分组并保留视觉统计快照', () {
+    final retained = _video(
+      'retained',
+      '/library/retained.mp4',
+      fingerprint: 'same',
+    );
+    final removed = _video(
+      'removed',
+      '/library/removed.mp4',
+      fingerprint: 'same',
+    );
+    final report =
+        VideoSimilarityReport.fromVideos([retained, removed]).withVisualGroups(
+      groups: [
+        VideoSimilarityGroup(
+          fingerprint: 'visual',
+          kind: VideoSimilarityKind.visualNearDuplicate,
+          videos: [retained, removed],
+        ),
+      ],
+      candidatePairCount: 5,
+      comparedPairCount: 4,
+    );
+
+    final next = report.withoutVideo(removed);
+
+    expect(next.groups, isEmpty);
+    expect(next.visualGroups, isEmpty);
+    expect(next.indexedVideoCount, 1);
+    expect(next.visualCandidatePairCount, 5);
+    expect(next.visualComparedPairCount, 4);
+  });
 }
 
 VideoItem _video(

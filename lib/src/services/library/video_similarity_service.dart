@@ -118,6 +118,60 @@ class VideoSimilarityReport {
     );
   }
 
+  /**
+   * 从当前报告中局部移除一个 stable videoId。
+   *
+   * 删除动作已由 Store 提交时，页面先复用现有分组快照更新可见列表；后续视觉复核仍可
+   * 在后台重新计算，避免删除一行就先对全部媒体重新建组造成整页空窗。
+   */
+  VideoSimilarityReport withoutVideo(VideoItem removedItem) {
+    final videoId = removedItem.videoId;
+    List<VideoSimilarityGroup> removeFrom(
+      Iterable<VideoSimilarityGroup> source,
+    ) {
+      final groups = <VideoSimilarityGroup>[];
+      for (final group in source) {
+        final videos = group.videos
+            .where((item) => item.videoId != videoId)
+            .toList(growable: false);
+        if (videos.length >= 2) {
+          groups.add(
+            VideoSimilarityGroup(
+              fingerprint: group.fingerprint,
+              videos: List<VideoItem>.unmodifiable(videos),
+              kind: group.kind,
+              visualScore: group.visualScore,
+            ),
+          );
+        }
+      }
+      return groups;
+    }
+
+    final indexedDelta = removedItem.isMissing
+        ? 0
+        : removedItem.mediaFingerprint?.trim().isNotEmpty == true
+            ? -1
+            : 0;
+    final unindexedDelta = removedItem.isMissing
+        ? 0
+        : removedItem.mediaFingerprint?.trim().isNotEmpty == true
+            ? 0
+            : -1;
+    final missingDelta = removedItem.isMissing ? -1 : 0;
+    return VideoSimilarityReport(
+      groups: List<VideoSimilarityGroup>.unmodifiable(removeFrom(groups)),
+      indexedVideoCount: indexedVideoCount + indexedDelta,
+      unindexedVideoCount: unindexedVideoCount + unindexedDelta,
+      missingVideoCount: missingVideoCount + missingDelta,
+      visualGroups: List<VideoSimilarityGroup>.unmodifiable(
+        removeFrom(visualGroups),
+      ),
+      visualCandidatePairCount: visualCandidatePairCount,
+      visualComparedPairCount: visualComparedPairCount,
+    );
+  }
+
   /** 按首个稳定排序视频排列的重复候选组。 */
   final List<VideoSimilarityGroup> groups;
 

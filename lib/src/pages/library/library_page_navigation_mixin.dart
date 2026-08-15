@@ -321,6 +321,9 @@ mixin LibraryPageNavigationMixin<T extends StatefulWidget>
     if (!mounted) {
       return removedVideos.length;
     }
+    final removedVideoIds = removedVideos.map((item) => item.videoId).toSet();
+    runtime.pendingResultDeltaVideoIds.addAll(removedVideoIds);
+    runtime.pendingRemovedVideoIds.addAll(removedVideoIds);
     setState(() {
       // 解除管理改变了 active 数据源；必须提升 revision，禁止 FilterStateSource 复用
       // 操作前的 11k 列表缓存，否则 SQLite 已完成但 UI 总量会长期停留在旧值。
@@ -331,7 +334,10 @@ mixin LibraryPageNavigationMixin<T extends StatefulWidget>
       runtime.sourceNavigation.leaveRemovedRoot(root);
       refreshStableTagCountsNow(store);
     });
-    scheduleFilterRefresh(refreshCounts: true);
+    scheduleFilterRefresh(
+      refreshCounts: true,
+      removedVideoIds: removedVideoIds.isEmpty ? null : removedVideoIds,
+    );
     // 缩略图与媒体详情均可在 root 重新加入时复用，解除管理不能把缓存当作垃圾清除。
     return removedVideos.length;
   }

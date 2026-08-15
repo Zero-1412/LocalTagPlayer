@@ -110,4 +110,41 @@ void main() {
     expect(publishes, 0);
     expect(controller.isDisposed, isTrue);
   });
+
+  test('删除差量只移除指定 stable ID 并保留未变化结果对象', () {
+    final removed = _video('video-removed', 'removed');
+    final retained = _video('video-retained', 'retained');
+    final source = FilterStateSource()
+      ..configure(
+        engine: TagQueryService(
+          videos: <VideoItem>[removed, retained],
+          tagContext: const TagQueryContext(),
+        ),
+        totalCount: 2,
+        dataRevision: 1,
+        sortFingerprint: 'name:ascending',
+      );
+    const query = FilterQuery();
+    final initial = source.update(query);
+
+    source.configure(
+      engine: TagQueryService(
+        videos: <VideoItem>[retained],
+        tagContext: const TagQueryContext(),
+      ),
+      totalCount: 1,
+      dataRevision: 2,
+      sortFingerprint: 'name:ascending',
+    );
+    final next = source.applyVideoDelta(
+      query,
+      const <VideoItem>[],
+      removedVideoIds: <String>[removed.videoId],
+    );
+
+    expect(initial.filteredVideos, contains(removed));
+    expect(next.filteredVideos, <VideoItem>[retained]);
+    expect(next.filteredVideos.single, same(retained));
+    expect(next.totalCount, 1);
+  });
 }

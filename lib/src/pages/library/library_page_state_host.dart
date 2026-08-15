@@ -46,8 +46,16 @@ abstract class LibraryPageStateHost<T extends StatefulWidget> extends State<T> {
   /** 构建同步首帧使用的筛选结果，正式刷新仍走 query owner。 */
   FilterState buildImmediateFilterState(LibraryApplicationFacade store);
 
-  /** 记录数据修订并按既有规则刷新可见结果与计数。 */
-  void markLibraryDataChanged({bool tagDefinitionsChanged = false});
+  /**
+   * 记录数据修订并按既有规则刷新可见结果与计数。
+   *
+   * 删除或列表项状态变化可传 stable ID 差量，查询 owner 会保留未变化结果，避免整表重算。
+   */
+  void markLibraryDataChanged({
+    bool tagDefinitionsChanged = false,
+    Iterable<String>? removedVideoIds,
+    Iterable<VideoItem>? changedVideos,
+  });
 
   /** 当前二级 folder 标签所属一级标签。 */
   String? get activeChildParentTag;
@@ -86,6 +94,7 @@ abstract class LibraryPageStateHost<T extends StatefulWidget> extends State<T> {
   void scheduleFilterRefresh({
     bool refreshCounts = false,
     Iterable<VideoItem>? changedVideos,
+    Iterable<String>? removedVideoIds,
   });
 
   /** 执行一次扫描并继续复用 Repository generation 与进度回调。 */

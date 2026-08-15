@@ -96,6 +96,14 @@ class LibraryPageRuntime {
   bool playerScopedNeedsCountRefresh = false;
   /** 播放器 Route 内是否发生标签定义变化。 */
   bool playerScopedTagDefinitionsChanged = false;
+  /** 播放器 Route 内已删除的 stable videoId，返回媒体库时只移除对应列表项。 */
+  final Set<String> playerScopedRemovedVideoIds = <String>{};
+  /** 下一次列表结果发布需要保留滚动位置的 stable videoId 差量。 */
+  final Set<String> pendingResultDeltaVideoIds = <String>{};
+  /** 尚未完成列表发布的删除 stable ID，合并连续删除避免旧项重新出现在缓存结果。 */
+  final Set<String> pendingRemovedVideoIds = <String>{};
+  /** 防止同一差量在多次 build 中重复安排清理回调。 */
+  bool resultDeltaClearScheduled = false;
   /** 最近一次播放器原生资源完全释放的完成信号。 */
   Future<void> latestPlayerRelease = Future<void>.value();
   /** 播放器 Route 活跃时排除底层媒体库语义树。 */

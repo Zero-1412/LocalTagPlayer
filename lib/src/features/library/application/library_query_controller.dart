@@ -92,16 +92,21 @@ class LibraryQueryController {
   /**
    * 使用最近一次 [configure] 的快照同步计算候选结果，但不直接发布。
    *
-   * [changedVideos] 非空时复用 stable `videoId` 差量路径；最终是否接受仍必须经
-   * [publish] 或 [schedule] 的 epoch 校验。
+   * [changedVideos] 或 [removedVideoIds] 非空时复用 stable `videoId` 差量路径；最终
+   * 是否接受仍必须经 [publish] 或 [schedule] 的 epoch 校验。
    */
   FilterState compute(
     FilterQuery query, {
     Iterable<VideoItem>? changedVideos,
+    Iterable<String>? removedVideoIds,
   }) {
-    return changedVideos == null
+    return changedVideos == null && removedVideoIds == null
         ? _source.update(query)
-        : _source.applyVideoDelta(query, changedVideos);
+        : _source.applyVideoDelta(
+            query,
+            changedVideos ?? const <VideoItem>[],
+            removedVideoIds: removedVideoIds ?? const <String>[],
+          );
   }
 
   /**
@@ -126,13 +131,14 @@ class LibraryQueryController {
    * 在下一事件循环计算并发布最新筛选请求。
    *
    * [query] 是当前搜索与标签输入；[expectedEpoch] 是调用时的完整版本身份；
-   * [changedVideos] 非空时只重新评估扫描差量；[isStillCurrent] 由页面核对当前 store 和
-   * 输入身份；[onAccepted] 只在 controller 已保存候选结果后调用。
+   * [changedVideos] 或 [removedVideoIds] 非空时只重新评估列表差量；[isStillCurrent] 由
+   * 页面核对当前 store 和输入身份；[onAccepted] 只在 controller 已保存候选结果后调用。
    */
   void schedule({
     required FilterQuery query,
     required LibraryResultEpoch expectedEpoch,
     Iterable<VideoItem>? changedVideos,
+    Iterable<String>? removedVideoIds,
     required bool Function(LibraryResultEpoch epoch) isStillCurrent,
     required LibraryQueryAccepted onAccepted,
     LibraryQueryMeasured? onMeasured,
@@ -143,6 +149,7 @@ class LibraryQueryController {
     final requestRevision = ++_revision;
     _requestedQuery = query;
     final changedSnapshot = changedVideos?.toList(growable: false);
+    final removedSnapshot = removedVideoIds?.toList(growable: false);
     Future<void>.delayed(Duration.zero, () {
       if (_disposed ||
           requestRevision != _revision ||
@@ -153,6 +160,7 @@ class LibraryQueryController {
       final candidate = compute(
         query,
         changedVideos: changedSnapshot,
+        removedVideoIds: removedSnapshot,
       );
       watch.stop();
       onMeasured?.call(watch.elapsed);

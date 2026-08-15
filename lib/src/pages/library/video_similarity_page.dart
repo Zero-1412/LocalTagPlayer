@@ -168,9 +168,9 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
         return;
       }
       // 删除已由父页面完成数据库、文件和缩略图清理；这里重建只读候选快照，
-      // 再按最新库内容重新运行一次有界视觉复核。
+      // 先局部移除当前行，再按最新库内容重新运行一次有界视觉复核。
       setState(() {
-        _report = _buildReport();
+        _report = _report.withoutVideo(item);
         _visualError = null;
       });
       unawaited(_runVisualScan());
@@ -237,7 +237,13 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
                                   ? _report.groups[index]
                                   : _report.visualGroups[
                                       index - _report.groups.length];
+                              final groupKey = ValueKey<String>(
+                                'videoSimilarity.group.'
+                                '${group.kind.name}.'
+                                '${group.videos.map((item) => item.videoId).join('|')}',
+                              );
                               return _SimilarityGroupCard(
+                                key: groupKey,
                                 index: index,
                                 group: group,
                                 thumbnailService: widget.thumbnailService,
@@ -430,6 +436,7 @@ class _OverviewPill extends StatelessWidget {
 
 class _SimilarityGroupCard extends StatelessWidget {
   const _SimilarityGroupCard({
+    super.key,
     required this.index,
     required this.group,
     required this.thumbnailService,
@@ -518,6 +525,9 @@ class _SimilarityGroupCard extends StatelessWidget {
           for (var i = 0; i < group.videos.length; i++) ...[
             if (i > 0) const Divider(height: 1, color: libraryBorder),
             _SimilarityVideoRow(
+              key: ValueKey<String>(
+                'videoSimilarity.item.${group.videos[i].videoId}',
+              ),
               item: group.videos[i],
               ordinal: i + 1,
               thumbnailService: thumbnailService,
@@ -538,6 +548,7 @@ class _SimilarityGroupCard extends StatelessWidget {
 
 class _SimilarityVideoRow extends StatelessWidget {
   const _SimilarityVideoRow({
+    super.key,
     required this.item,
     required this.ordinal,
     required this.thumbnailService,

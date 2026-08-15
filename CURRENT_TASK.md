@@ -1,5 +1,25 @@
 # CURRENT_TASK.md
 
+## 2026-08-15 · 删除后的列表局部差量刷新（完成）
+
+- 盘点：主媒体库网格/列表、收藏、最近播放、本地目录和相似视频页都有视频删除或列表
+  清理入口；播放器右侧队列已有 stable `videoId` key；标签管理当前只检查删除影响，不执行
+  标签或视频删除。此前主库删除会提升 revision 后走全量筛选，`VideoGrid` 还会重置增量批次
+  并把滚动位置跳回顶部。
+- 修复：删除入口传递 stable ID 差量，`FilterStateSource` 只移除对应结果并保留未变化对象；
+  主库网格用 stable key 和滚动锚点保持视口，最近播放/本地目录/相似分组补齐 stable key 与
+  `findChildIndexCallback`。最近播放清理也改为只提交 changed video 差量；相似页删除先局部
+  移除分组，再在后台进行有界视觉复核。
+- 保护：删除事务、回收站策略、schema、FilterQuery / TagQueryService 语义、来源 filtered queue、
+  PlayerBackend、缩略图队列和用户数据边界未改变；连续删除会合并 pending stable ID，避免旧项
+  从缓存结果短暂回流。
+- 验证：删除差量查询、相似报告局部移除、列表入口 stable key 契约、文件删除顺序、媒体卡片菜单、
+  相似检测 focused tests，以及 `flutter analyze`、Windows Debug build 均通过；使用隔离数据目录
+  的 Debug 前台启动成功并正常退出；真实桌面点击需在新 Debug 构建中人工确认删除后滚动位置和
+  相邻卡片不跳回首屏。
+- 下一步：打开媒体库网格/列表、收藏、最近播放、本地目录和相似视频，分别删除视口中间项，确认
+  未删除项目、当前滚动位置和缩略图不整体重载。
+
 ## 2026-08-15 · 相似视频播放返回动作状态（完成）
 
 - 根因：相似视频行的 `_actingVideoIds` 由 `onPlay` Future 的完整生命周期清除；播放 Route

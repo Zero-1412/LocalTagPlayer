@@ -96,15 +96,16 @@ class FilterStateSource {
   }
 
   /**
-   * 仅重新评估扫描差量中的视频，保留未变项的已过滤列表。
+   * 仅重新评估扫描差量中的视频，或移除已删除的 stable ID，保留未变项的已过滤列表。
    *
    * 如果尚无可复用状态或查询已变，则回退到完整计算；扫描结果通过
-   * stable `videoId` 替换旧项，避免新增、missing 或 relink 导致整个列表重建。
+   * stable `videoId` 替换旧项，避免新增、删除、missing 或 relink 导致整个列表重建。
    */
   FilterState applyVideoDelta(
     FilterQuery query,
-    Iterable<VideoItem> changedVideos,
-  ) {
+    Iterable<VideoItem> changedVideos, {
+    Iterable<String> removedVideoIds = const <String>[],
+  }) {
     final cachedState = _cachedState;
     if (cachedState == null ||
         LibraryQueryFingerprint.result(
@@ -123,7 +124,8 @@ class FilterStateSource {
       presentationSort: _sortFingerprint,
     );
     final changed = changedVideos.toList(growable: false);
-    if (changed.isEmpty) {
+    final removedIds = removedVideoIds.toSet();
+    if (changed.isEmpty && removedIds.isEmpty) {
       final state = FilterState(
         epoch: epoch,
         query: query,
@@ -136,9 +138,10 @@ class FilterStateSource {
       return state;
     }
     final changedIds = {for (final item in changed) item.videoId};
+    final replacedIds = {...changedIds, ...removedIds};
     final filteredVideos = <VideoItem>[
       for (final item in cachedState.filteredVideos)
-        if (!changedIds.contains(item.videoId)) item,
+        if (!replacedIds.contains(item.videoId)) item,
       ...changed.where(
         (item) => query.matches(item, tagContext: _engine.tagContext),
       ),

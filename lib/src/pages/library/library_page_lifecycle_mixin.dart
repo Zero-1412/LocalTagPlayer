@@ -223,6 +223,8 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
     if (active != null) {
       return active;
     }
+    final videoIdsBeforeCleanup =
+        store.videos.values.map((item) => item.videoId).toSet();
     final task = store.removeMissingOrUnreadableVideos();
     runtime.unavailableCleanupFuture = task;
     return task.whenComplete(() {
@@ -230,7 +232,13 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
         runtime.unavailableCleanupFuture = null;
       }
       if (mounted && identical(runtime.store, store)) {
-        markLibraryDataChanged(tagDefinitionsChanged: true);
+        final removedVideoIds = videoIdsBeforeCleanup.difference(
+          store.videos.values.map((item) => item.videoId).toSet(),
+        );
+        markLibraryDataChanged(
+          tagDefinitionsChanged: true,
+          removedVideoIds: removedVideoIds.isEmpty ? null : removedVideoIds,
+        );
       }
     });
   }

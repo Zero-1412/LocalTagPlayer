@@ -117,6 +117,7 @@ mixin LibraryPageQueryMixin<T extends StatefulWidget>
   void scheduleFilterRefresh({
     bool refreshCounts = false,
     Iterable<VideoItem>? changedVideos,
+    Iterable<String>? removedVideoIds,
   }) {
     final store = runtime.store;
     if (store == null) {
@@ -143,6 +144,7 @@ mixin LibraryPageQueryMixin<T extends StatefulWidget>
       query: query,
       expectedEpoch: resultEpoch,
       changedVideos: changedVideos,
+      removedVideoIds: removedVideoIds,
       isStillCurrent: (candidate) =>
           mounted &&
           runtime.store == store &&

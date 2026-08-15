@@ -69,7 +69,7 @@ mixin LibraryPageRecentMixin<T extends StatefulWidget>
       return;
     }
     setState(runtime.recentPlaybackSelection.clear);
-    markLibraryDataChanged();
+    markLibraryDataChanged(changedVideos: targets);
     final messenger = ScaffoldMessenger.of(context);
     messenger
       ..hideCurrentSnackBar()
@@ -125,7 +125,9 @@ mixin LibraryPageRecentMixin<T extends StatefulWidget>
       );
       return;
     }
-    markLibraryDataChanged();
+    markLibraryDataChanged(
+        changedVideos:
+            snapshots.map((snapshot) => snapshot.item).toList(growable: false));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('已恢复 ${result.snapshots.length} 条观看进度')),
     );
@@ -141,7 +143,17 @@ mixin LibraryPageRecentMixin<T extends StatefulWidget>
   @override
   void markLibraryDataChanged({
     bool tagDefinitionsChanged = false,
+    Iterable<String>? removedVideoIds,
+    Iterable<VideoItem>? changedVideos,
   }) {
+    final removedIds = removedVideoIds?.toSet();
+    final changed = changedVideos?.toList(growable: false);
+    if (removedIds != null) {
+      runtime.pendingRemovedVideoIds.addAll(removedIds);
+    }
+    runtime.pendingResultDeltaVideoIds
+      ..addAll(removedIds ?? const <String>[])
+      ..addAll(changed?.map((item) => item.videoId) ?? const <String>[]);
     runtime.libraryRevisionTracker.record(
       tagDefinitionsChanged
           ? LibraryDataChangeKind.tagDefinitions
@@ -153,7 +165,13 @@ mixin LibraryPageRecentMixin<T extends StatefulWidget>
       // 数据变化后先回退到持久化 usageCount，精确计数由延后刷新任务更新。
       runtime.facetCountController.clearStable();
     }
-    scheduleFilterRefresh(refreshCounts: true);
+    scheduleFilterRefresh(
+      refreshCounts: true,
+      changedVideos: changed,
+      removedVideoIds: runtime.pendingRemovedVideoIds.isEmpty
+          ? null
+          : Set<String>.of(runtime.pendingRemovedVideoIds),
+    );
   }
 
   /**
@@ -182,6 +200,8 @@ mixin LibraryPageRecentMixin<T extends StatefulWidget>
       runtime.favoriteVideoCacheKey = null;
     }
     runtime.facetCountController.clearStable();
+    runtime.pendingResultDeltaVideoIds
+        .addAll(result.changedVideos.map((item) => item.videoId));
     scheduleFilterRefresh(
       refreshCounts: true,
       changedVideos: result.changedVideos,

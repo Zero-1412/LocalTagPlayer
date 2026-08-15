@@ -33,6 +33,7 @@ class RecentPlaybackView extends StatelessWidget {
     required this.onDeleteOne,
     required this.onDeleteSelected,
     required this.onDeleteAll,
+    this.preserveScrollOnResultDelta = false,
   });
 
   final List<VideoItem> videos;
@@ -53,6 +54,9 @@ class RecentPlaybackView extends StatelessWidget {
   final ValueChanged<VideoItem> onDeleteOne;
   final VoidCallback onDeleteSelected;
   final VoidCallback onDeleteAll;
+
+  /** 删除或播放记录差量发布时保留当前列表位置。 */
+  final bool preserveScrollOnResultDelta;
 
   @override
   Widget build(BuildContext context) {
@@ -109,21 +113,27 @@ class RecentPlaybackView extends StatelessWidget {
                   ),
                   itemExtent: narrow ? 138 : 126,
                   itemCount: videos.length,
+                  findChildIndexCallback: preserveScrollOnResultDelta
+                      ? (key) => _recentPlaybackIndexForKey(key, videos)
+                      : null,
                   itemBuilder: (context, index) {
                     final item = videos[index];
-                    return _RecentPlaybackRow(
-                      item: item,
-                      selected: selectedVideoIds.contains(item.videoId),
-                      thumbnailService: thumbnailService,
-                      playbackSettings: playbackSettings,
-                      onOpen: () => onOpen(item, videos),
-                      onRevealLocation: onRevealLocation == null
-                          ? null
-                          : () => onRevealLocation!(item),
-                      onToggleFavorite: () => onToggleFavorite(item),
-                      onDeleteVideo: () => onDeleteVideo(item),
-                      onToggleSelected: () => onToggleSelected(item),
-                      onDelete: () => onDeleteOne(item),
+                    return KeyedSubtree(
+                      key: ValueKey<String>(item.videoId),
+                      child: _RecentPlaybackRow(
+                        item: item,
+                        selected: selectedVideoIds.contains(item.videoId),
+                        thumbnailService: thumbnailService,
+                        playbackSettings: playbackSettings,
+                        onOpen: () => onOpen(item, videos),
+                        onRevealLocation: onRevealLocation == null
+                            ? null
+                            : () => onRevealLocation!(item),
+                        onToggleFavorite: () => onToggleFavorite(item),
+                        onDeleteVideo: () => onDeleteVideo(item),
+                        onToggleSelected: () => onToggleSelected(item),
+                        onDelete: () => onDeleteOne(item),
+                      ),
                     );
                   },
                 );
@@ -142,17 +152,23 @@ class RecentPlaybackView extends StatelessWidget {
                   crossAxisSpacing: compact ? 10 : 14,
                 ),
                 itemCount: videos.length,
+                findChildIndexCallback: preserveScrollOnResultDelta
+                    ? (key) => _recentPlaybackIndexForKey(key, videos)
+                    : null,
                 itemBuilder: (context, index) {
                   final item = videos[index];
-                  return _RecentPlaybackCard(
-                    item: item,
-                    selected: selectedVideoIds.contains(item.videoId),
-                    thumbnailService: thumbnailService,
-                    playbackSettings: playbackSettings,
-                    onOpen: () => onOpen(item, videos),
-                    onToggleFavorite: () => onToggleFavorite(item),
-                    onToggleSelected: () => onToggleSelected(item),
-                    onDelete: () => onDeleteOne(item),
+                  return KeyedSubtree(
+                    key: ValueKey<String>(item.videoId),
+                    child: _RecentPlaybackCard(
+                      item: item,
+                      selected: selectedVideoIds.contains(item.videoId),
+                      thumbnailService: thumbnailService,
+                      playbackSettings: playbackSettings,
+                      onOpen: () => onOpen(item, videos),
+                      onToggleFavorite: () => onToggleFavorite(item),
+                      onToggleSelected: () => onToggleSelected(item),
+                      onDelete: () => onDeleteOne(item),
+                    ),
                   );
                 },
               );
@@ -162,6 +178,17 @@ class RecentPlaybackView extends StatelessWidget {
       ],
     );
   }
+}
+
+int? _recentPlaybackIndexForKey(
+  Key? key,
+  List<VideoItem> videos,
+) {
+  if (key is! ValueKey<String>) {
+    return null;
+  }
+  final index = videos.indexWhere((item) => item.videoId == key.value);
+  return index < 0 ? null : index;
 }
 
 class _RecentPlaybackRow extends StatelessWidget {

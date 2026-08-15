@@ -75,6 +75,7 @@ class LocalLibraryView extends StatelessWidget {
     this.onRevealLocation,
     required this.onToggleFavorite,
     required this.onDelete,
+    this.preserveScrollOnResultDelta = false,
   });
 
   final String? currentPath;
@@ -90,6 +91,9 @@ class LocalLibraryView extends StatelessWidget {
   final ValueChanged<VideoItem>? onRevealLocation;
   final ValueChanged<VideoItem> onToggleFavorite;
   final ValueChanged<VideoItem> onDelete;
+
+  /** 删除差量发布时保留当前路径列表的滚动位置。 */
+  final bool preserveScrollOnResultDelta;
 
   @override
   Widget build(BuildContext context) {
@@ -158,25 +162,34 @@ class LocalLibraryView extends StatelessWidget {
                           ),
                           itemExtent: narrow ? 132 : 120,
                           itemCount: entries.length,
+                          findChildIndexCallback: preserveScrollOnResultDelta
+                              ? (key) => _localEntryIndexForKey(key, entries)
+                              : null,
                           itemBuilder: (context, index) {
                             final entry = entries[index];
                             if (entry.isFolder) {
-                              return _LocalFolderRow(
-                                path: entry.path,
-                                onOpen: () => onOpenFolder(entry.path),
+                              return KeyedSubtree(
+                                key: ValueKey<String>('folder:${entry.path}'),
+                                child: _LocalFolderRow(
+                                  path: entry.path,
+                                  onOpen: () => onOpenFolder(entry.path),
+                                ),
                               );
                             }
                             final video = entry.video!;
-                            return InteractiveVideoListRow(
-                              item: video,
-                              thumbnailService: thumbnailService,
-                              playbackSettings: playbackSettings,
-                              onOpen: () => onOpenVideo(video, localVideos),
-                              onRevealLocation: onRevealLocation == null
-                                  ? null
-                                  : () => onRevealLocation!(video),
-                              onToggleFavorite: () => onToggleFavorite(video),
-                              onDelete: () => onDelete(video),
+                            return KeyedSubtree(
+                              key: ValueKey<String>('video:${video.videoId}'),
+                              child: InteractiveVideoListRow(
+                                item: video,
+                                thumbnailService: thumbnailService,
+                                playbackSettings: playbackSettings,
+                                onOpen: () => onOpenVideo(video, localVideos),
+                                onRevealLocation: onRevealLocation == null
+                                    ? null
+                                    : () => onRevealLocation!(video),
+                                onToggleFavorite: () => onToggleFavorite(video),
+                                onDelete: () => onDelete(video),
+                              ),
                             );
                           },
                         );
@@ -200,25 +213,34 @@ class LocalLibraryView extends StatelessWidget {
                           crossAxisSpacing: compact ? 10 : 14,
                         ),
                         itemCount: entries.length,
+                        findChildIndexCallback: preserveScrollOnResultDelta
+                            ? (key) => _localEntryIndexForKey(key, entries)
+                            : null,
                         itemBuilder: (context, index) {
                           final entry = entries[index];
                           if (entry.isFolder) {
-                            return _LocalFolderCard(
-                              path: entry.path,
-                              onOpen: () => onOpenFolder(entry.path),
+                            return KeyedSubtree(
+                              key: ValueKey<String>('folder:${entry.path}'),
+                              child: _LocalFolderCard(
+                                path: entry.path,
+                                onOpen: () => onOpenFolder(entry.path),
+                              ),
                             );
                           }
                           final video = entry.video!;
-                          return InteractiveVideoCard(
-                            item: video,
-                            thumbnailService: thumbnailService,
-                            playbackSettings: playbackSettings,
-                            onOpen: () => onOpenVideo(video, localVideos),
-                            onRevealLocation: onRevealLocation == null
-                                ? null
-                                : () => onRevealLocation!(video),
-                            onToggleFavorite: () => onToggleFavorite(video),
-                            onDelete: () => onDelete(video),
+                          return KeyedSubtree(
+                            key: ValueKey<String>('video:${video.videoId}'),
+                            child: InteractiveVideoCard(
+                              item: video,
+                              thumbnailService: thumbnailService,
+                              playbackSettings: playbackSettings,
+                              onOpen: () => onOpenVideo(video, localVideos),
+                              onRevealLocation: onRevealLocation == null
+                                  ? null
+                                  : () => onRevealLocation!(video),
+                              onToggleFavorite: () => onToggleFavorite(video),
+                              onDelete: () => onDelete(video),
+                            ),
                           );
                         },
                       );
@@ -229,6 +251,24 @@ class LocalLibraryView extends StatelessWidget {
       ),
     );
   }
+}
+
+int? _localEntryIndexForKey(
+  Key? key,
+  List<LocalLibraryEntry> entries,
+) {
+  if (key is! ValueKey<String>) {
+    return null;
+  }
+  final value = key.value;
+  final index = entries.indexWhere(
+    (entry) =>
+        value ==
+        (entry.isFolder
+            ? 'folder:${entry.path}'
+            : 'video:${entry.video!.videoId}'),
+  );
+  return index < 0 ? null : index;
 }
 
 @visibleForTesting
