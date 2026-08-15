@@ -64,13 +64,23 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   var _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
   var _visualProgress = 0;
   var _visualProgressTotal = 0;
+  var _visualPlaybackActive = false;
   String? _visualError;
 
   @override
   void initState() {
     super.initState();
     _report = _buildReport();
+    widget.thumbnailService.setSimilarityScanForeground(true);
     _scheduleVisualScan();
+  }
+
+  @override
+  void dispose() {
+    _visualPlaybackActive = false;
+    widget.thumbnailService.cancelSimilarityScan();
+    widget.thumbnailService.setSimilarityScanForeground(false);
+    super.dispose();
   }
 
   VideoSimilarityReport _buildReport() {
@@ -99,6 +109,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   /** 使删除/刷新触发前一轮复核尽快退出，避免旧任务继续占用 FFmpeg 队列。 */
   void _cancelVisualScan() {
     _visualGeneration++;
+    widget.thumbnailService.cancelSimilarityScan();
     if (!_visualScanning || !mounted) {
       return;
     }
@@ -187,6 +198,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
         widget.store.videos.values,
         excludedVideoIds: exactVideoIds,
         isCancelled: () => !mounted || generation != _visualGeneration,
+        shouldYield: () => _visualPlaybackActive,
         onProgress: (progress) {
           if (!mounted || generation != _visualGeneration) {
             return;
@@ -249,6 +261,8 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
       return;
     }
     setState(() => _actingVideoIds.add(item.videoId));
+    _visualPlaybackActive = true;
+    widget.thumbnailService.setSimilarityScanForeground(false);
     try {
       await widget.onPlay(
         item,
@@ -267,6 +281,8 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
         },
       );
     } finally {
+      _visualPlaybackActive = false;
+      widget.thumbnailService.setSimilarityScanForeground(true);
       if (mounted) {
         setState(() => _actingVideoIds.remove(item.videoId));
       }

@@ -117,4 +117,16 @@ void main() {
     expect(deleteMethod, contains('_visualScanStale = true;'));
     expect(deleteMethod, isNot(contains('_scheduleVisualScan();')));
   });
+
+  test('播放器播放期间让视觉复核让渡取帧并在返回后恢复', () {
+    final page = File(
+      'lib/src/pages/library/video_similarity_page.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('_visualPlaybackActive = true;'));
+    expect(page, contains('setSimilarityScanForeground(false)'));
+    expect(page, contains('shouldYield: () => _visualPlaybackActive'));
+    expect(page, contains('_visualPlaybackActive = false;'));
+    expect(page, contains('setSimilarityScanForeground(true)'));
+  });
 }

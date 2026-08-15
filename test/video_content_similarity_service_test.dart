@@ -182,6 +182,8 @@ void main() {
         contains(
             'final cachedFrame = await _thumbnailService.thumbnailFor(item);'));
     expect(source, isNot(contains('ensureThumbnailFor(item)')));
+    expect(source, contains('similarityPreviewFrameFor(item, position)'));
+    expect(source, contains('Future.wait<List<int>?>'));
   });
 
   test('builds candidates asynchronously so dense libraries can yield', () {
@@ -193,6 +195,8 @@ void main() {
     expect(
         source, contains('Future<List<_VisualCandidate>?> _buildCandidates('));
     expect(source, contains('await Future<void>.delayed(Duration.zero);'));
+    expect(source, contains('bool Function()? shouldYield'));
+    expect(source, contains('_waitForScheduler(isCancelled, shouldYield)'));
   });
 }
 

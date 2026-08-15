@@ -77,6 +77,7 @@ class VideoContentSimilarityService {
     Iterable<String> excludedVideoIds = const <String>[],
     int maxCandidatePairs = _maxVisualCandidatePairs,
     bool Function()? isCancelled,
+    bool Function()? shouldYield,
     void Function(VideoVisualScanProgress progress)? onProgress,
   }) async {
     if (maxCandidatePairs <= 0) {
@@ -93,6 +94,7 @@ class VideoContentSimilarityService {
       videos,
       maxCandidatePairs,
       isCancelled: cancelled,
+      shouldYield: shouldYield,
       onProgress: onProgress,
     );
     if (candidates == null || cancelled()) {
@@ -100,6 +102,10 @@ class VideoContentSimilarityService {
     }
     if (candidates.isEmpty) {
       return const VideoVisualScanResult.empty();
+    }
+    await _waitForScheduler(cancelled, shouldYield);
+    if (cancelled()) {
+      return const VideoVisualScanResult.cancelled();
     }
     onProgress?.call(
       VideoVisualScanProgress(
@@ -119,6 +125,10 @@ class VideoContentSimilarityService {
     for (var candidateIndex = 0;
         candidateIndex < candidates.length;
         candidateIndex++) {
+      if (cancelled()) {
+        return const VideoVisualScanResult.cancelled();
+      }
+      await _waitForScheduler(cancelled, shouldYield);
       if (cancelled()) {
         return const VideoVisualScanResult.cancelled();
       }
@@ -186,8 +196,14 @@ class VideoContentSimilarityService {
         continue;
       }
       deepComparedCandidates++;
-      final leftSignature = await _signatureFor(left, signatures);
-      final rightSignature = await _signatureFor(right, signatures);
+      final pairSignatures = await Future.wait<List<int>?>(
+        <Future<List<int>?>>[
+          _signatureFor(left, signatures),
+          _signatureFor(right, signatures),
+        ],
+      );
+      final leftSignature = pairSignatures[0];
+      final rightSignature = pairSignatures[1];
       if (cancelled()) {
         return const VideoVisualScanResult.cancelled();
       }
@@ -266,6 +282,7 @@ class VideoContentSimilarityService {
     List<VideoItem> videos,
     int maxCandidatePairs, {
     required bool Function() isCancelled,
+    bool Function()? shouldYield,
     void Function(VideoVisualScanProgress progress)? onProgress,
   }) async {
     await Future<void>.delayed(Duration.zero);
@@ -281,6 +298,7 @@ class VideoContentSimilarityService {
       indexed.add(_TimedVideo(index: index, duration: duration));
       if (index % 64 == 0) {
         await Future<void>.delayed(Duration.zero);
+        await _waitForScheduler(isCancelled, shouldYield);
       }
     }
     indexed.sort((a, b) => a.duration.compareTo(b.duration));
@@ -307,6 +325,10 @@ class VideoContentSimilarityService {
 
     final seen = <String, _VisualCandidate>{};
     for (var i = 0; i < indexed.length; i++) {
+      if (isCancelled()) {
+        return null;
+      }
+      await _waitForScheduler(isCancelled, shouldYield);
       if (isCancelled()) {
         return null;
       }
@@ -512,6 +534,15 @@ class VideoContentSimilarityService {
     }
   }
 
+  Future<void> _waitForScheduler(
+    bool Function() isCancelled,
+    bool Function()? shouldYield,
+  ) async {
+    while (shouldYield?.call() == true && !isCancelled()) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+  }
+
   Duration? _durationFor(VideoItem item) {
     final mediaDuration = item.mediaDetails?.duration;
     if (mediaDuration != null && mediaDuration > Duration.zero) {
@@ -660,7 +691,7 @@ class VideoContentSimilarityService {
     final duration = _durationFor(item);
     final hashes = <int>[];
     // 视觉复核不能把不可见的全库视频提升为播放器兜底任务；只读取已有首帧，
-    // 需要深度复核时再通过 FFmpeg previewFrameFor 走有界取帧预算。
+    // 需要深度复核时再通过 ThumbnailService 的批量取帧边界走有界预算。
     final cachedFrame = await _thumbnailService.thumbnailFor(item);
     if (cachedFrame != null) {
       final hash = await _dHashFor(cachedFrame);
@@ -680,8 +711,13 @@ class VideoContentSimilarityService {
                 microseconds: (duration.inMicroseconds * fraction).round(),
               ),
           ];
-    for (final position in positions) {
-      final frame = await _thumbnailService.previewFrameFor(item, position);
+    final frames = await Future.wait<File?>(
+      <Future<File?>>[
+        for (final position in positions)
+          _thumbnailService.similarityPreviewFrameFor(item, position),
+      ],
+    );
+    for (final frame in frames) {
       if (frame == null) {
         continue;
       }

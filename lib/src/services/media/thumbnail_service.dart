@@ -46,6 +46,8 @@ class _PreviewFrameJob {
   final Completer<File?> completer;
 }
 
+enum _PreviewFrameMode { interactive, similarity }
+
 /**
  * 缩略图缓存统计快照，供设置/诊断页展示当前缓存队列状态。
  */
@@ -150,6 +152,9 @@ class ThumbnailService {
   Future<Directory>? _previewDirectoryFuture;
   _PreviewFrameJob? _activePreviewJob;
   _PreviewFrameJob? _pendingPreviewJob;
+  final Queue<_PreviewFrameJob> _similarityPreviewJobs = Queue();
+  var _activeSimilarityPreviewJobs = 0;
+  var _similarityScanForeground = false;
   final Set<String> _activeCacheKeys = {};
   final Set<String> _backgroundQueued = {};
   final Set<String> _priorityQueued = {};
@@ -187,6 +192,38 @@ class ThumbnailService {
   int get activeBackgroundJobs => _activeBackgroundJobs;
   int get maxBackgroundJobs => _maxBackgroundJobs;
 
+  /** 相似视频页前台时允许的独立取帧并发；播放器或其它页面不会继承该火力。 */
+  static int get _maxSimilarityPreviewJobs {
+    final cores = Platform.numberOfProcessors;
+    if (cores >= 12) {
+      return 4;
+    }
+    if (cores >= 8) {
+      return 3;
+    }
+    return 2;
+  }
+
+  /** 相似视频页进入/离开前台时调整独立视觉取帧队列的并发上限。 */
+  void setSimilarityScanForeground(bool foreground) {
+    if (_similarityScanForeground == foreground) {
+      return;
+    }
+    _similarityScanForeground = foreground;
+    _drainSimilarityPreviewQueue();
+  }
+
+  /** 取消已离开页面或被删除动作淘汰的视觉取帧等待；活动 FFmpeg 任务自然收尾。 */
+  void cancelSimilarityScan() {
+    while (_similarityPreviewJobs.isNotEmpty) {
+      final job = _similarityPreviewJobs.removeFirst();
+      _previewCompletions.remove(job.cacheKey);
+      if (!job.completer.isCompleted) {
+        job.completer.complete(null);
+      }
+    }
+  }
+
   /**
    * 暂停缩略图队列。
    *
@@ -196,6 +233,8 @@ class ThumbnailService {
   void pause({bool allowPriorityRequests = false}) {
     _isPaused = true;
     _allowPriorityWhilePaused = allowPriorityRequests;
+    // 播放期间连相似视频的批量取帧也停止；当前已启动的 FFmpeg 任务自然收尾。
+    _drainSimilarityPreviewQueue();
   }
 
   void resume() {
@@ -206,6 +245,7 @@ class ThumbnailService {
     _allowPriorityWhilePaused = false;
     _drainQueue();
     _pumpBackgroundCandidates(allowPlayerFallback: false);
+    _drainSimilarityPreviewQueue();
   }
 
   static Future<ThumbnailService> create(
@@ -314,6 +354,16 @@ class ThumbnailService {
 
     _priorityJobs.removeWhere((job) => job.cacheKey == cacheKey);
     _backgroundJobs.removeWhere((job) => job.cacheKey == cacheKey);
+    _similarityPreviewJobs.removeWhere((job) {
+      if (job.item.videoId != item.videoId && job.item.path != item.path) {
+        return false;
+      }
+      _previewCompletions.remove(job.cacheKey);
+      if (!job.completer.isCompleted) {
+        job.completer.complete(null);
+      }
+      return true;
+    });
     _priorityQueued.remove(cacheKey);
     _backgroundQueued.remove(cacheKey);
     _memoryCache.remove(cacheKey);
@@ -367,7 +417,36 @@ class ThumbnailService {
    * 时间按整秒合并，服务端同时最多运行一个 FFmpeg；若用户继续移动，等待区只保留
    * 最新位置。预览失败不会写入 [VideoItem.thumbnailError]，避免污染媒体库诊断。
    */
-  Future<File?> previewFrameFor(VideoItem item, Duration position) async {
+  Future<File?> previewFrameFor(VideoItem item, Duration position) {
+    return _previewFrameFor(
+      item,
+      position,
+      mode: _PreviewFrameMode.interactive,
+    );
+  }
+
+  /**
+   * 相似视频视觉复核使用的独立批量取帧入口。
+   *
+   * 与播放器悬停预览的 latest-only 队列分离；相似视频页前台时可并行取帧，
+   * 播放期间由 [pause] 冻结，避免多个 FFmpeg 任务争抢当前播放会话。
+   */
+  Future<File?> similarityPreviewFrameFor(
+    VideoItem item,
+    Duration position,
+  ) {
+    return _previewFrameFor(
+      item,
+      position,
+      mode: _PreviewFrameMode.similarity,
+    );
+  }
+
+  Future<File?> _previewFrameFor(
+    VideoItem item,
+    Duration position, {
+    required _PreviewFrameMode mode,
+  }) async {
     final sourceKey = await _cacheKeyFor(item);
     if (sourceKey == null) {
       return null;
@@ -395,21 +474,27 @@ class ThumbnailService {
 
     final completer = Completer<File?>();
     _previewCompletions[previewKey] = completer;
-    final replaced = _pendingPreviewJob;
-    if (replaced != null && replaced.cacheKey != previewKey) {
-      _previewCompletions.remove(replaced.cacheKey);
-      if (!replaced.completer.isCompleted) {
-        replaced.completer.complete(null);
-      }
-    }
-    _pendingPreviewJob = _PreviewFrameJob(
+    final job = _PreviewFrameJob(
       cacheKey: previewKey,
       item: item,
       output: output,
       position: safePosition,
       completer: completer,
     );
-    _drainPreviewQueue();
+    if (mode == _PreviewFrameMode.interactive) {
+      final replaced = _pendingPreviewJob;
+      if (replaced != null && replaced.cacheKey != previewKey) {
+        _previewCompletions.remove(replaced.cacheKey);
+        if (!replaced.completer.isCompleted) {
+          replaced.completer.complete(null);
+        }
+      }
+      _pendingPreviewJob = job;
+      _drainPreviewQueue();
+    } else {
+      _similarityPreviewJobs.add(job);
+      _drainSimilarityPreviewQueue();
+    }
     return completer.future;
   }
 
@@ -453,6 +538,30 @@ class ThumbnailService {
         _drainPreviewQueue();
       }),
     );
+  }
+
+  /** 批量视觉复核队列；前台有限并发，离开页面降为单并发，播放时完全停发。 */
+  void _drainSimilarityPreviewQueue() {
+    if (_isPaused) {
+      return;
+    }
+    final maxActive = _similarityScanForeground ? _maxSimilarityPreviewJobs : 1;
+    while (_activeSimilarityPreviewJobs < maxActive &&
+        _similarityPreviewJobs.isNotEmpty) {
+      final job = _similarityPreviewJobs.removeFirst();
+      _activeSimilarityPreviewJobs++;
+      unawaited(
+        _generatePreview(job).then<void>((file) {
+          if (!job.completer.isCompleted) {
+            job.completer.complete(file);
+          }
+        }).whenComplete(() {
+          _previewCompletions.remove(job.cacheKey);
+          _activeSimilarityPreviewJobs--;
+          _drainSimilarityPreviewQueue();
+        }),
+      );
+    }
   }
 
   /** 经 FFmpegBackend 生成并再次校验 JPEG，失败只影响本次悬停提示。 */
