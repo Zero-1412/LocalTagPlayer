@@ -339,7 +339,7 @@ class LibraryStore
     VideoVisualSignatureCacheEntry entry,
   ) async {
     if (entry.algorithm != videoVisualSignatureAlgorithm ||
-        entry.hashes.length < 2) {
+        entry.hashes.length < 3) {
       return;
     }
     // 事务内再次确认 stable videoId 仍存在，防止删除与晚到的后台签名写入交叉时

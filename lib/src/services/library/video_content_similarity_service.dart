@@ -11,9 +11,11 @@ import 'video_similarity_service.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-// 首帧复用媒体库缩略图，另外取四分之一、二分之一和四分之三处的帧；避免只因
-// 片头/片尾或首帧水印变化就漏掉同一内容，同时仍把取帧数量限制在有界候选内。
-const _visualSampleFractions = <double>[0.25, 0.5, 0.75];
+// 首帧只复用作廉价预筛；主体签名固定取 30%、50%、70% 三个中段采样点，
+// 避免同作者共用片头/片尾模板或首帧水印成为近重复证据，同时不增加取帧数量。
+const _visualSampleFractions = <double>[0.3, 0.5, 0.7];
+// 签名首位保留首帧；它只能服务 quick hash，主体比较会显式跳过该位置。
+const _missingVisualEdgeHash = -1;
 /** 视觉结果仅作为人工复核候选，适度偏向召回率而不是自动删除的精确率。 */
 const _visualDistanceThreshold = 0.28;
 /** 时序签名至少要有四分之三的采样点命中，避免单个相同片头制造满分误报。 */
@@ -905,7 +907,7 @@ class VideoContentSimilarityService {
   ) async {
     final repository = _visualSignatureCache;
     if (repository == null ||
-        hashes.length < 2 ||
+        hashes.length < 3 ||
         (item.mediaFingerprint == null &&
             item.fileSize == null &&
             item.modifiedMs == null)) {
@@ -942,7 +944,7 @@ class VideoContentSimilarityService {
       return persisted.hashes;
     }
     final duration = _durationFor(item);
-    final hashes = <int>[];
+    final hashes = <int>[_missingVisualEdgeHash];
     // 视觉复核不能把不可见的全库视频提升为播放器兜底任务；只读取已有首帧，
     // 需要深度复核时再通过 ThumbnailService 的批量取帧边界走有界预算。
     final cachedFrame = await _thumbnailService.thumbnailFor(item);
@@ -979,9 +981,9 @@ class VideoContentSimilarityService {
         hashes.add(hash);
       }
     }
-    // 单个时间点取帧失败不应吞掉整个候选；至少两帧仍能提供时序方向，最终只作为
+    // 单个时间点取帧失败不应吞掉整个候选；至少两个主体采样点仍能提供时序方向，最终只作为
     // 人工复核候选展示，不触发自动删除。
-    final result = hashes.length < 2 ? null : hashes;
+    final result = hashes.length < 3 ? null : hashes;
     cache[item.videoId] = result;
     if (result != null) {
       if (onSignatureReady != null) {
@@ -1004,8 +1006,9 @@ class VideoContentSimilarityService {
     final persisted = await loadPersisted?.call(item);
     if (persisted != null) {
       final hash = persisted.hashes.first;
-      cache[item.videoId] = hash;
-      return hash;
+      final quickHash = hash == _missingVisualEdgeHash ? null : hash;
+      cache[item.videoId] = quickHash;
+      return quickHash;
     }
     // 只读取已存在的有效 JPEG，不在候选预筛阶段触发 FFmpeg 生成任务。
     final frame = await _thumbnailService.thumbnailFor(item);
@@ -1070,19 +1073,25 @@ class VideoContentSimilarityService {
   }
 
   double _sequenceDistance(List<int> left, List<int> right) {
+    // v5 签名首位是首帧预筛值；主体相似度只比较中段采样，隔离公共片头/片尾。
+    final leftContent = left.length > 1 ? left.sublist(1) : const <int>[];
+    final rightContent = right.length > 1 ? right.sublist(1) : const <int>[];
+    if (leftContent.isEmpty || rightContent.isEmpty) {
+      return double.infinity;
+    }
     var best = double.infinity;
     for (final offset in <int>[-1, 0, 1]) {
       final distances = <int>[];
-      for (var index = 0; index < left.length; index++) {
+      for (var index = 0; index < leftContent.length; index++) {
         final other = index + offset;
-        if (other < 0 || other >= right.length) {
+        if (other < 0 || other >= rightContent.length) {
           continue;
         }
-        distances.add(_hamming(left[index] ^ right[other]));
+        distances.add(_hamming(leftContent[index] ^ rightContent[other]));
       }
       final distance = _summarizeTemporalDistances(
         distances,
-        expectedCount: math.max(left.length, right.length),
+        expectedCount: math.max(leftContent.length, rightContent.length),
       );
       if (distance != null) {
         best = math.min(best, distance);

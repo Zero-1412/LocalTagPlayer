@@ -169,7 +169,8 @@ void main() {
     expect(cache.saved, isEmpty);
   });
 
-  test('does not let one repeated frame create a visual duplicate group',
+  test(
+      'does not let shared opening and closing frames create a duplicate group',
       () async {
     final thumbnailService = ThumbnailService.forDirectory(
       Directory.systemTemp,
@@ -179,11 +180,16 @@ void main() {
     final second = _video('single-frame-b', const Duration(seconds: 90));
     final cache = _FakeVisualSignatureCache(
       <String, VideoVisualSignatureCacheEntry>{
-        first.videoId: _signatureWithHashes(first, const <int>[0, 0, 0, 0]),
-        // 只有前三个采样点相同，最后一个采样点完全不同；无序最近邻会错误地
-        // 把它压成 100%，固定时序 offset 则应拒绝该组。
-        second.videoId:
-            _signatureWithHashes(second, <int>[0, 0, 0, 0xffffffffffffffff]),
+        first.videoId: _signatureWithHashes(
+          first,
+          const <int>[0, 1, 2, 3],
+        ),
+        // 首帧和末尾模板相同，但三个主体采样点不同；边缘模板不能把同作者
+        // 的不同作品压成 100% 视觉重复。
+        second.videoId: _signatureWithHashes(
+          second,
+          <int>[0, 0xffffffffffffffff, 0xffffffffffffffff, 3],
+        ),
       },
     );
 
@@ -289,7 +295,7 @@ void main() {
     ).readAsStringSync();
 
     expect(
-        source, contains('final result = hashes.length < 2 ? null : hashes;'));
+        source, contains('final result = hashes.length < 3 ? null : hashes;'));
     expect(
         source,
         contains(
