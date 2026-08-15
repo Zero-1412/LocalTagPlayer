@@ -142,6 +142,8 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
         VideoSimilarityPage(
           store: store,
           thumbnailService: thumbnailService,
+          onPlay: playSimilarVideo,
+          onDelete: deleteVideoFromSimilarity,
           onRevealLocation: revealVideoLocation,
         ),
         backShortcutProvider: () => runtime

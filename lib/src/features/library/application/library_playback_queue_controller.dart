@@ -81,6 +81,8 @@ class LibraryPlaybackQueueController {
               localPath == null ? const <String>[] : <String>[localPath],
         ),
       LibraryResultSource.recent => const FilterQuery(unplayedOnly: true),
+      // 相似候选页是显式的页面来源；它只播放页面传入的候选组，不冒充全库筛选结果。
+      LibraryResultSource.similarity => const FilterQuery(),
     };
     final epoch = source == LibraryResultSource.library
         ? acceptedLibraryEpoch
@@ -194,7 +196,8 @@ enum LibraryResultSource {
   library,
   recent,
   favorites,
-  local;
+  local,
+  similarity;
 
   /** 从页面结果模式的稳定名称恢复公开来源枚举。 */
   static LibraryResultSource fromName(String name) =>

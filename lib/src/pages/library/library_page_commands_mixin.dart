@@ -28,6 +28,15 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     runtime.playerScopedTagDefinitionsChanged = true;
   }
 
+  /** 相似候选页复用同一确认/回收站/记录清理边界，并把结果反馈给页面行。 */
+  @override
+  Future<bool> deleteVideoFromSimilarity(VideoItem item) {
+    return _deleteVideoWithConfirmation(
+      item,
+      onDeleted: () => markLibraryDataChanged(tagDefinitionsChanged: true),
+    );
+  }
+
   /**
    * 处理媒体卡片删除动作，并把移入系统回收站保持为显式可选项。
    *
@@ -35,9 +44,19 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
    * 媒体库时，仍位于受监控 root 的文件会在下次扫描时作为新条目重新出现。
    */
   Future<void> requestDeleteVideo(VideoItem item) async {
+    await _deleteVideoWithConfirmation(
+      item,
+      onDeleted: () => markLibraryDataChanged(tagDefinitionsChanged: true),
+    );
+  }
+
+  Future<bool> _deleteVideoWithConfirmation(
+    VideoItem item, {
+    required VoidCallback onDeleted,
+  }) async {
     final decision = await resolveSingleVideoDeleteDecision(item);
     if (decision == null || !mounted) {
-      return;
+      return false;
     }
     try {
       await deleteConfirmedLibraryVideo(
@@ -45,17 +64,19 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
         decision.moveLocalFileToTrash,
       );
       if (mounted) {
-        markLibraryDataChanged(tagDefinitionsChanged: true);
+        onDeleted();
       }
+      return true;
     } catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
       final message =
           error is FileSystemException ? error.message : '当前平台暂不支持移入回收站';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('移除失败：$message；媒体库记录未删除')),
       );
+      return false;
     }
   }
 

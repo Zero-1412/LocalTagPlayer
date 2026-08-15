@@ -7,6 +7,7 @@ import '../../features/library/application/library_playback_queue_controller.dar
 import '../../features/library/application/library_revision_tracker.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
 import '../../models/media_details.dart';
+import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import '../../services/library/library_application_facade.dart';
 import '../../services/library/library_scan_playback_gate.dart';
@@ -24,6 +25,38 @@ import 'library_page_state_host.dart';
 /** LibraryPagePlaybackMixin 按既有一致性边界承载页面协调逻辑，不复制业务状态 owner。 */
 mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     on LibraryPageStateHost<T> {
+  /**
+   * 从相似候选组建立显式的独立播放来源。
+   *
+   * 该入口不读取全库或当前媒体库筛选结果；[playlist] 必须来自相似页当前展示的候选组，
+   * 再经同一 PlaybackQueueController 固化为 PlayerPage 可消费的快照。
+   */
+  @override
+  Future<void> playSimilarVideo(
+    VideoItem item,
+    List<VideoItem> playlist,
+  ) async {
+    final store = runtime.store;
+    if (store == null || playlist.isEmpty) {
+      return;
+    }
+    final epoch = LibraryResultEpoch.fromQuery(
+      dataRevision: runtime.libraryDataRevision,
+      query: const FilterQuery(),
+      presentationSort: 'similarity:title:path',
+    );
+    final result = runtime.playbackQueueController.acceptDisplayedResult(
+      source: LibraryResultSource.similarity,
+      acceptedLibraryEpoch: epoch,
+      displayedVideos: playlist,
+      totalCount: playlist.length,
+      dataRevision: runtime.libraryDataRevision,
+      playbackDataRevision: runtime.playbackDataRevision,
+      sortFingerprint: 'similarity:title:path',
+    );
+    await openVideo(item, playlist, result, '相似候选');
+  }
+
   Future<void> openVideo(
     VideoItem item,
     List<VideoItem> playlist,

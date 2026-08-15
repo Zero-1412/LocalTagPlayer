@@ -140,4 +140,34 @@ void main() {
     );
     expect(selection.queue.snapshot.resultEpoch, result.epoch);
   });
+
+  test('相似候选来源只固化当前候选组，不回退到全库', () {
+    final first = _video('video-first', 'first');
+    final second = _video('video-second', 'second');
+    final controller = LibraryPlaybackQueueController();
+    final result = controller.acceptDisplayedResult(
+      source: LibraryResultSource.similarity,
+      acceptedLibraryEpoch: LibraryResultEpoch.fromQuery(
+        dataRevision: 2,
+        query: const FilterQuery(),
+        presentationSort: 'similarity:title:path',
+      ),
+      displayedVideos: <VideoItem>[second, first],
+      totalCount: 2,
+      dataRevision: 2,
+      playbackDataRevision: 0,
+      sortFingerprint: 'similarity:title:path',
+    );
+
+    final selection = controller.prepareSelection(
+      result: result,
+      acceptedVideos: <VideoItem>[first, second],
+      selectedVideoId: second.videoId,
+    );
+
+    expect(selection, isNotNull);
+    expect(selection!.queue.videos, <VideoItem>[second, first]);
+    expect(selection.queue.snapshot.orderedVideoIds,
+        <String>[second.videoId, first.videoId]);
+  });
 }

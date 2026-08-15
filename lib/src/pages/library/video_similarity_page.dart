@@ -16,8 +16,8 @@ import '../../widgets/app_theme_tokens.dart';
 /**
  * 重复下载候选页。
  *
- * 页面只读取当前 facade 的视频快照并展示候选，不自动删除、移动或修改任何条目；用户
- * 可逐条定位文件后自行确认。重复判断先复用扫描阶段的轻量 mediaFingerprint，再按需
+ * 页面读取当前 facade 的视频快照并展示候选；播放、定位和删除都委托给媒体库页面已有
+ * 的边界，删除必须经过统一确认。重复判断先复用扫描阶段的轻量 mediaFingerprint，再按需
  * 经过共享缩略图/FFmpeg 边界做时序视觉复核。
  */
 class VideoSimilarityPage extends StatefulWidget {
@@ -25,6 +25,8 @@ class VideoSimilarityPage extends StatefulWidget {
     super.key,
     required this.store,
     required this.thumbnailService,
+    required this.onPlay,
+    required this.onDelete,
     required this.onRevealLocation,
   });
 
@@ -33,6 +35,12 @@ class VideoSimilarityPage extends StatefulWidget {
 
   /** 复用全局缩略图队列；页面不自行启动 FFmpeg 进程。 */
   final ThumbnailService thumbnailService;
+
+  /** 由媒体库页面创建当前候选组的独立播放队列。 */
+  final Future<void> Function(VideoItem item, List<VideoItem> playlist) onPlay;
+
+  /** 复用媒体库统一确认删除流程；返回值表示记录与文件动作均已成功。 */
+  final Future<bool> Function(VideoItem item) onDelete;
 
   /** 复用媒体库已有的平台文件定位边界。 */
   final Future<void> Function(VideoItem item) onRevealLocation;
@@ -44,6 +52,7 @@ class VideoSimilarityPage extends StatefulWidget {
 class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   late VideoSimilarityReport _report;
   final Set<String> _revealingVideoIds = <String>{};
+  final Set<String> _actingVideoIds = <String>{};
   var _visualScanning = false;
   var _visualGeneration = 0;
   String? _visualError;
@@ -122,6 +131,44 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     }
   }
 
+  Future<void> _play(VideoItem item, List<VideoItem> playlist) async {
+    if (_actingVideoIds.contains(item.videoId)) {
+      return;
+    }
+    setState(() => _actingVideoIds.add(item.videoId));
+    try {
+      await widget.onPlay(item, List<VideoItem>.unmodifiable(playlist));
+    } finally {
+      if (mounted) {
+        setState(() => _actingVideoIds.remove(item.videoId));
+      }
+    }
+  }
+
+  Future<void> _delete(VideoItem item) async {
+    if (_actingVideoIds.contains(item.videoId) || _visualScanning) {
+      return;
+    }
+    setState(() => _actingVideoIds.add(item.videoId));
+    try {
+      final deleted = await widget.onDelete(item);
+      if (!deleted || !mounted) {
+        return;
+      }
+      // 删除已由父页面完成数据库、文件和缩略图清理；这里重建只读候选快照，
+      // 再按最新库内容重新运行一次有界视觉复核。
+      setState(() {
+        _report = _buildReport();
+        _visualError = null;
+      });
+      unawaited(_runVisualScan());
+    } finally {
+      if (mounted) {
+        setState(() => _actingVideoIds.remove(item.videoId));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Theme(
@@ -182,7 +229,11 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
                                 index: index,
                                 group: group,
                                 thumbnailService: widget.thumbnailService,
+                                actingVideoIds: _actingVideoIds,
+                                visualScanning: _visualScanning,
                                 revealingVideoIds: _revealingVideoIds,
+                                onPlay: _play,
+                                onDelete: _delete,
                                 onReveal: _reveal,
                               );
                             },
@@ -251,7 +302,7 @@ class _SimilarityOverview extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '先用文件级指纹快速筛选，再按相近时长/画面规格比较缓存首帧与中后段 2 个时间点的时序感知 dHash，识别重新编码后的近重复。这里只提供候选和文件定位，不会自动删除；请人工确认后再处理。',
+            '先用文件级指纹快速筛选，再按相近时长/画面规格比较缓存首帧与中后段 2 个时间点的时序感知 dHash，识别重新编码后的近重复。可在行内播放或发起确认删除；不会自动删除，请人工确认后再处理。',
             style: const TextStyle(
               color: libraryTextMuted,
               fontSize: 12,
@@ -370,14 +421,22 @@ class _SimilarityGroupCard extends StatelessWidget {
     required this.index,
     required this.group,
     required this.thumbnailService,
+    required this.actingVideoIds,
+    required this.visualScanning,
     required this.revealingVideoIds,
+    required this.onPlay,
+    required this.onDelete,
     required this.onReveal,
   });
 
   final int index;
   final VideoSimilarityGroup group;
   final ThumbnailService thumbnailService;
+  final Set<String> actingVideoIds;
+  final bool visualScanning;
   final Set<String> revealingVideoIds;
+  final Future<void> Function(VideoItem item, List<VideoItem> playlist) onPlay;
+  final Future<void> Function(VideoItem item) onDelete;
   final Future<void> Function(VideoItem item) onReveal;
 
   @override
@@ -450,7 +509,12 @@ class _SimilarityGroupCard extends StatelessWidget {
               item: group.videos[i],
               ordinal: i + 1,
               thumbnailService: thumbnailService,
+              playlist: group.videos,
+              acting: actingVideoIds.contains(group.videos[i].videoId),
+              visualScanning: visualScanning,
               revealing: revealingVideoIds.contains(group.videos[i].videoId),
+              onPlay: onPlay,
+              onDelete: onDelete,
               onReveal: onReveal,
             ),
           ],
@@ -465,14 +529,24 @@ class _SimilarityVideoRow extends StatelessWidget {
     required this.item,
     required this.ordinal,
     required this.thumbnailService,
+    required this.playlist,
+    required this.acting,
+    required this.visualScanning,
     required this.revealing,
+    required this.onPlay,
+    required this.onDelete,
     required this.onReveal,
   });
 
   final VideoItem item;
   final int ordinal;
   final ThumbnailService thumbnailService;
+  final List<VideoItem> playlist;
+  final bool acting;
+  final bool visualScanning;
   final bool revealing;
+  final Future<void> Function(VideoItem item, List<VideoItem> playlist) onPlay;
+  final Future<void> Function(VideoItem item) onDelete;
   final Future<void> Function(VideoItem item) onReveal;
 
   @override
@@ -536,16 +610,38 @@ class _SimilarityVideoRow extends StatelessWidget {
               ],
             ),
           ),
-          IconButton(
-            tooltip: '在文件管理器中定位',
-            onPressed: revealing ? null : () => onReveal(item),
-            icon: revealing
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.folder_open_outlined),
-          ),
+          if (acting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else ...[
+            IconButton(
+              key: ValueKey('videoSimilarity.play.${item.videoId}'),
+              tooltip: '播放当前候选组',
+              onPressed: visualScanning ? null : () => onPlay(item, playlist),
+              icon: const Icon(Icons.play_arrow_rounded),
+            ),
+            IconButton(
+              key: ValueKey('videoSimilarity.delete.${item.videoId}'),
+              tooltip: '删除此候选视频',
+              onPressed: visualScanning ? null : () => onDelete(item),
+              icon: const Icon(Icons.delete_outline_rounded),
+            ),
+            IconButton(
+              tooltip: '在文件管理器中定位',
+              onPressed: revealing ? null : () => onReveal(item),
+              icon: revealing
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.folder_open_outlined),
+            ),
+          ],
         ],
       ),
     );

@@ -23,6 +23,7 @@ String libraryQueueTitle({
     LibraryResultSource.local =>
       '${localPath ?? '本地媒体库'}  |  $playlistLength / $totalCount',
     LibraryResultSource.library => libraryTitle,
+    LibraryResultSource.similarity => '相似候选  |  $playlistLength / $totalCount',
   };
 }
 
