@@ -9,6 +9,7 @@ import 'package:local_tag_player/src/models/video_visual_signature.dart';
 import 'package:local_tag_player/src/platform/platform_interfaces.dart';
 import 'package:local_tag_player/src/repositories/repository_interfaces.dart';
 import 'package:local_tag_player/src/services/library/video_content_similarity_service.dart';
+import 'package:local_tag_player/src/services/library/video_similarity_service.dart';
 import 'package:local_tag_player/src/services/media/thumbnail_service.dart';
 
 void main() {
@@ -199,6 +200,40 @@ void main() {
     ).findNearDuplicateGroups([first, second], maxCandidatePairs: 4);
 
     expect(result.groups, isEmpty);
+  });
+
+  test(
+      'keeps a hard partial match as a review candidate instead of dropping it',
+      () async {
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory.systemTemp,
+      _NoopFFmpegBackend(),
+    );
+    final first = _video('hard-copy-a', const Duration(seconds: 90));
+    final second = _video('hard-copy-b', const Duration(seconds: 90));
+    final cache = _FakeVisualSignatureCache(
+      <String, VideoVisualSignatureCacheEntry>{
+        first.videoId: _signatureWithHashes(first, const <int>[0, 0, 0, 1]),
+        // 两个主体采样点一致，第三个因剪辑/重编码差异完全不同；该候选应保留
+        // 给人工确认，但不能冒充高置信重复。
+        second.videoId: _signatureWithHashes(
+          second,
+          <int>[0, 0, 0, 0xffffffffffffffff],
+        ),
+      },
+    );
+
+    final result = await VideoContentSimilarityService(
+      thumbnailService,
+      visualSignatureCache: cache,
+    ).findNearDuplicateGroups([first, second], maxCandidatePairs: 4);
+
+    expect(result.groups, hasLength(1));
+    expect(
+      result.groups.single.visualConfidence,
+      VideoVisualMatchConfidence.review,
+    );
+    expect(result.groups.single.visualScore, closeTo(0.495, 0.001));
   });
 
   test('reports candidate-building and frame-comparison phases', () async {

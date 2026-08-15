@@ -8,6 +8,14 @@ enum VideoSimilarityKind {
   visualNearDuplicate,
 }
 
+enum VideoVisualMatchConfidence {
+  /** 主体采样全部通过，适合优先人工确认。 */
+  high,
+
+  /** 主体证据部分通过，但仍满足元数据/标题约束，仅作为扩大召回的待复核项。 */
+  review,
+}
+
 // ignore_for_file: slash_for_doc_comments
 
 /**
@@ -22,6 +30,7 @@ class VideoSimilarityGroup {
     required this.videos,
     this.kind = VideoSimilarityKind.exactFingerprint,
     this.visualScore,
+    this.visualConfidence = VideoVisualMatchConfidence.high,
   });
 
   /** 仅供测试和后续诊断使用，界面不展示内部指纹值。 */
@@ -37,6 +46,9 @@ class VideoSimilarityGroup {
    * 不是重复概率，也不能单独作为删除依据。
    */
   final double? visualScore;
+
+  /** 视觉候选的证据等级；review 不代表可以自动删除。 */
+  final VideoVisualMatchConfidence visualConfidence;
 
   /** 同组视频按标题和路径稳定排序。 */
   final List<VideoItem> videos;
@@ -149,6 +161,7 @@ class VideoSimilarityReport {
               videos: List<VideoItem>.unmodifiable(videos),
               kind: group.kind,
               visualScore: group.visualScore,
+              visualConfidence: group.visualConfidence,
             ),
           );
         }

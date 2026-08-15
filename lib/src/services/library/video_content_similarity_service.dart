@@ -18,10 +18,11 @@ const _visualSampleFractions = <double>[0.3, 0.5, 0.7];
 const _missingVisualEdgeHash = -1;
 /** 视觉结果仅作为人工复核候选，适度偏向召回率而不是自动删除的精确率。 */
 const _visualDistanceThreshold = 0.28;
-/** 时序签名至少要有四分之三的采样点命中，避免单个相同片头制造满分误报。 */
-const _minimumTemporalMatchCoverage = 0.75;
 /** 未命中的采样点会增加距离，避免把“最佳帧”误称为整段视频相似度。 */
 const _temporalCoveragePenalty = 0.5;
+/** 难例召回只进入“待复核”组，不能绕过元数据/标题约束。 */
+const _visualReviewDistanceThreshold = 0.56;
+const _visualReviewMetadataScore = 0.72;
 /**
  * 候选上限只作为异常大库的保护；候选选择本身按每个视频分摊，不能再取全局
  * 时长排序的前 N 对，否则同一时长密集区会饿死其它视频。
@@ -229,6 +230,7 @@ class VideoContentSimilarityService {
     final quickHashes = <String, int?>{};
     final parent = List<int>.generate(videos.length, (index) => index);
     final matchedScores = <int, double>{};
+    final reviewMatches = <int, bool>{};
     var uncachedDeepCandidates = 0;
     var deepComparedCandidates = 0;
     var compared = 0;
@@ -311,14 +313,18 @@ class VideoContentSimilarityService {
       // 把单个巧合画面升格为 100% 结果，也避免每次重新启动 FFmpeg。
       if (leftPersistedValid && rightPersistedValid) {
         compared++;
-        final distance = _sequenceDistance(
+        final match = _sequenceMatch(
           leftPersisted.hashes,
           rightPersisted.hashes,
         );
-        if (distance <= _visualDistanceThreshold) {
+        if (match != null && _acceptVisualMatch(candidate, match)) {
           _union(parent, candidate.left, candidate.right);
-          _recordMinimumScore(matchedScores, candidate.left, distance);
-          _recordMinimumScore(matchedScores, candidate.right, distance);
+          _recordMinimumScore(matchedScores, candidate.left, match.distance);
+          _recordMinimumScore(matchedScores, candidate.right, match.distance);
+          if (match.distance > _visualDistanceThreshold) {
+            reviewMatches[candidate.left] = true;
+            reviewMatches[candidate.right] = true;
+          }
         }
         reportProcessed();
         continue;
@@ -422,11 +428,15 @@ class VideoContentSimilarityService {
       final rightSignature = signatures[right.videoId];
       if (leftSignature != null && rightSignature != null) {
         compared++;
-        final distance = _sequenceDistance(leftSignature, rightSignature);
-        if (distance <= _visualDistanceThreshold) {
+        final match = _sequenceMatch(leftSignature, rightSignature);
+        if (match != null && _acceptVisualMatch(candidate, match)) {
           _union(parent, candidate.left, candidate.right);
-          _recordMinimumScore(matchedScores, candidate.left, distance);
-          _recordMinimumScore(matchedScores, candidate.right, distance);
+          _recordMinimumScore(matchedScores, candidate.left, match.distance);
+          _recordMinimumScore(matchedScores, candidate.right, match.distance);
+          if (match.distance > _visualDistanceThreshold) {
+            reviewMatches[candidate.left] = true;
+            reviewMatches[candidate.right] = true;
+          }
         }
       }
     }
@@ -452,12 +462,17 @@ class VideoContentSimilarityService {
               null,
               (worst, value) =>
                   worst == null ? value : math.max(worst, value).toDouble());
+      final confidence =
+          entry.value.any((index) => reviewMatches[index] == true)
+              ? VideoVisualMatchConfidence.review
+              : VideoVisualMatchConfidence.high;
       groups.add(
         VideoSimilarityGroup(
           // 分组结果不持久化；该值仅用于调试区分算法版本，缓存条目另走 Repository。
           fingerprint: videoVisualSignatureAlgorithm,
           kind: VideoSimilarityKind.visualNearDuplicate,
           visualScore: score,
+          visualConfidence: confidence,
           videos: List<VideoItem>.unmodifiable(members),
         ),
       );
@@ -1072,14 +1087,14 @@ class VideoContentSimilarityService {
     return (red * 299 + green * 587 + blue * 114) ~/ 1000;
   }
 
-  double _sequenceDistance(List<int> left, List<int> right) {
+  _VisualSequenceMatch? _sequenceMatch(List<int> left, List<int> right) {
     // v5 签名首位是首帧预筛值；主体相似度只比较中段采样，隔离公共片头/片尾。
     final leftContent = left.length > 1 ? left.sublist(1) : const <int>[];
     final rightContent = right.length > 1 ? right.sublist(1) : const <int>[];
     if (leftContent.isEmpty || rightContent.isEmpty) {
-      return double.infinity;
+      return null;
     }
-    var best = double.infinity;
+    _VisualSequenceMatch? best;
     for (final offset in <int>[-1, 0, 1]) {
       final distances = <int>[];
       for (var index = 0; index < leftContent.length; index++) {
@@ -1093,8 +1108,9 @@ class VideoContentSimilarityService {
         distances,
         expectedCount: math.max(leftContent.length, rightContent.length),
       );
-      if (distance != null) {
-        best = math.min(best, distance);
+      if (distance != null &&
+          (best == null || distance.distance < best.distance)) {
+        best = distance;
       }
     }
     // 不使用无序 nearest-neighbor：重复片头、黑场或水印可能让所有采样点
@@ -1102,13 +1118,24 @@ class VideoContentSimilarityService {
     return best;
   }
 
+  bool _acceptVisualMatch(
+    _VisualCandidate candidate,
+    _VisualSequenceMatch match,
+  ) {
+    if (match.distance <= _visualDistanceThreshold) {
+      return true;
+    }
+    return match.distance <= _visualReviewDistanceThreshold &&
+        (candidate.titleMatch || candidate.score <= _visualReviewMetadataScore);
+  }
+
   /**
    * 将采样点距离压成带覆盖约束的距离。
    *
-   * 单纯平均值会让一个相同片段掩盖其余不相似画面；这里要求至少四分之三
-   * 采样点在视觉阈值内，并为未命中点增加惩罚，使结果仍是人工候选而非概率。
+   * 单纯平均值会让一个相同片段掩盖其余不相似画面；这里保留命中覆盖率并为
+   * 未命中点增加惩罚，严格组与 review 组再使用不同距离门槛，使结果仍是人工候选而非概率。
    */
-  double? _summarizeTemporalDistances(
+  _VisualSequenceMatch? _summarizeTemporalDistances(
     List<int> distances, {
     required int expectedCount,
   }) {
@@ -1122,15 +1149,13 @@ class VideoContentSimilarityService {
         .length;
     final missing = math.max(0, expectedCount - normalized.length);
     final coverage = hits / expectedCount;
-    final minimumCoverage =
-        expectedCount < 3 ? 1.0 : _minimumTemporalMatchCoverage;
-    if (coverage < minimumCoverage) {
-      return null;
-    }
     final mean =
         (normalized.fold<double>(0, (sum, value) => sum + value) + missing) /
             expectedCount;
-    return mean + (1 - coverage) * _temporalCoveragePenalty;
+    return _VisualSequenceMatch(
+      distance: mean + (1 - coverage) * _temporalCoveragePenalty,
+      coverage: coverage,
+    );
   }
 
   int _hamming(int value) {
@@ -1199,6 +1224,14 @@ class _VisualCandidate {
   final double score;
   final bool titleMatch;
   final bool relaxedShape;
+}
+
+/** 时序签名的保守距离和命中覆盖率；review 组使用同一距离轴但单独标记证据等级。 */
+class _VisualSequenceMatch {
+  const _VisualSequenceMatch({required this.distance, required this.coverage});
+
+  final double distance;
+  final double coverage;
 }
 
 int _find(List<int> parent, int index) {

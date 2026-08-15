@@ -140,6 +140,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
           fingerprint: group.fingerprint,
           kind: group.kind,
           visualScore: group.visualScore,
+          visualConfidence: group.visualConfidence,
           videos: List<VideoItem>.unmodifiable(videos),
         ),
       );

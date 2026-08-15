@@ -68,7 +68,7 @@ class VideoSimilarityGroupCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '${group.kind == VideoSimilarityKind.exactFingerprint ? '确定重复' : '内容近重复候选'} · ${group.videos.length} 个视频',
+                    '${group.kind == VideoSimilarityKind.exactFingerprint ? '确定重复' : group.visualConfidence == VideoVisualMatchConfidence.review ? '疑似内容近重复（待复核）' : '内容近重复候选'} · ${group.videos.length} 个视频',
                     style: const TextStyle(
                       color: libraryText,
                       fontSize: 14,
