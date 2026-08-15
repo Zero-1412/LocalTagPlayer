@@ -133,13 +133,15 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
   /** 打开只读重复候选页；返回后不触发筛选、标签计数或播放队列刷新。 */
   Future<void> openSimilarVideos() async {
     final store = runtime.store;
-    if (store == null) {
+    final thumbnailService = runtime.thumbnailService;
+    if (store == null || thumbnailService == null) {
       return;
     }
     await Navigator.of(context).push<void>(
       smoothRoute<void>(
         VideoSimilarityPage(
           store: store,
+          thumbnailService: thumbnailService,
           onRevealLocation: revealVideoLocation,
         ),
         backShortcutProvider: () => runtime

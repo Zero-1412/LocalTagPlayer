@@ -47,6 +47,39 @@ void main() {
       '/library/same-b.mp4',
     ]);
   });
+
+  test(
+      'keeps visual near-duplicate groups separate from exact fingerprint groups',
+      () {
+    final exact = VideoSimilarityReport.fromVideos([
+      _video('exact-a', '/library/exact-a.mp4', fingerprint: 'same'),
+      _video('exact-b', '/library/exact-b.mp4', fingerprint: 'same'),
+    ]);
+    final visualGroup = VideoSimilarityGroup(
+      fingerprint: 'visual-dhash-v1',
+      kind: VideoSimilarityKind.visualNearDuplicate,
+      visualScore: 0.12,
+      videos: [
+        _video('visual-a', '/library/visual-a.mp4'),
+        _video('visual-b', '/library/visual-b.mp4'),
+      ],
+    );
+
+    final report = exact.withVisualGroups(
+      groups: [visualGroup],
+      candidatePairCount: 4,
+      comparedPairCount: 3,
+    );
+
+    expect(report.groups.single.kind, VideoSimilarityKind.exactFingerprint);
+    expect(report.visualGroups.single.kind,
+        VideoSimilarityKind.visualNearDuplicate);
+    expect(report.duplicateGroupCount, 2);
+    expect(report.duplicateVideoCount, 4);
+    expect(report.duplicateExtraCount, 2);
+    expect(report.visualCandidatePairCount, 4);
+    expect(report.visualComparedPairCount, 3);
+  });
 }
 
 VideoItem _video(

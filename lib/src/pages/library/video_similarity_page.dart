@@ -1,9 +1,14 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../models/media_details.dart';
 import '../../models/video_item.dart';
 import '../../services/library/library_application_facade.dart';
+import '../../services/library/video_content_similarity_service.dart';
 import '../../services/library/video_similarity_service.dart';
+import '../../services/media/thumbnail_service.dart';
 import '../../widgets/app_theme_tokens.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -12,17 +17,22 @@ import '../../widgets/app_theme_tokens.dart';
  * 重复下载候选页。
  *
  * 页面只读取当前 facade 的视频快照并展示候选，不自动删除、移动或修改任何条目；用户
- * 可逐条定位文件后自行确认。重复判断复用扫描阶段已经持久化的轻量 mediaFingerprint。
+ * 可逐条定位文件后自行确认。重复判断先复用扫描阶段的轻量 mediaFingerprint，再按需
+ * 经过共享缩略图/FFmpeg 边界做时序视觉复核。
  */
 class VideoSimilarityPage extends StatefulWidget {
   const VideoSimilarityPage({
     super.key,
     required this.store,
+    required this.thumbnailService,
     required this.onRevealLocation,
   });
 
   /** 只读读取视频索引；页面不穿透 facade 访问 SQLite。 */
   final LibraryApplicationFacade store;
+
+  /** 复用全局缩略图队列；页面不自行启动 FFmpeg 进程。 */
+  final ThumbnailService thumbnailService;
 
   /** 复用媒体库已有的平台文件定位边界。 */
   final Future<void> Function(VideoItem item) onRevealLocation;
@@ -34,11 +44,15 @@ class VideoSimilarityPage extends StatefulWidget {
 class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   late VideoSimilarityReport _report;
   final Set<String> _revealingVideoIds = <String>{};
+  var _visualScanning = false;
+  var _visualGeneration = 0;
+  String? _visualError;
 
   @override
   void initState() {
     super.initState();
     _report = _buildReport();
+    unawaited(_runVisualScan());
   }
 
   VideoSimilarityReport _buildReport() {
@@ -46,7 +60,52 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   }
 
   void _refresh() {
-    setState(() => _report = _buildReport());
+    setState(() {
+      _report = _buildReport();
+      _visualError = null;
+    });
+    unawaited(_runVisualScan());
+  }
+
+  Future<void> _runVisualScan() async {
+    if (_visualScanning) {
+      return;
+    }
+    final generation = ++_visualGeneration;
+    if (mounted) {
+      setState(() => _visualScanning = true);
+    }
+    final exactVideoIds = _report.groups
+        .expand((group) => group.videos)
+        .map((item) => item.videoId)
+        .toSet();
+    try {
+      final result = await VideoContentSimilarityService(
+        widget.thumbnailService,
+      ).findNearDuplicateGroups(
+        widget.store.videos.values,
+        excludedVideoIds: exactVideoIds,
+      );
+      if (!mounted || generation != _visualGeneration) {
+        return;
+      }
+      setState(() {
+        _report = _report.withVisualGroups(
+          groups: result.groups,
+          candidatePairCount: result.candidatePairCount,
+          comparedPairCount: result.comparedPairCount,
+        );
+        _visualScanning = false;
+      });
+    } catch (error) {
+      if (!mounted || generation != _visualGeneration) {
+        return;
+      }
+      setState(() {
+        _visualScanning = false;
+        _visualError = '视觉复核失败：$error';
+      });
+    }
   }
 
   Future<void> _reveal(VideoItem item) async {
@@ -81,7 +140,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
             IconButton(
               key: const ValueKey('videoSimilarity.refresh'),
               tooltip: '重新计算',
-              onPressed: _refresh,
+              onPressed: _visualScanning ? null : _refresh,
               icon: const Icon(Icons.refresh_rounded),
             ),
             const SizedBox(width: 12),
@@ -100,26 +159,37 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _SimilarityOverview(report: _report),
+                  _SimilarityOverview(
+                    report: _report,
+                    visualScanning: _visualScanning,
+                    visualError: _visualError,
+                  ),
                   const SizedBox(height: 16),
                   Expanded(
                     child: _report.hasMatches
                         ? ListView.separated(
                             key: const ValueKey('videoSimilarity.groups'),
-                            itemCount: _report.groups.length,
+                            itemCount: _report.groups.length +
+                                _report.visualGroups.length,
                             separatorBuilder: (_, __) =>
                                 const SizedBox(height: 12),
                             itemBuilder: (context, index) {
-                              final group = _report.groups[index];
+                              final group = index < _report.groups.length
+                                  ? _report.groups[index]
+                                  : _report.visualGroups[
+                                      index - _report.groups.length];
                               return _SimilarityGroupCard(
                                 index: index,
                                 group: group,
+                                thumbnailService: widget.thumbnailService,
                                 revealingVideoIds: _revealingVideoIds,
                                 onReveal: _reveal,
                               );
                             },
                           )
-                        : const _SimilarityEmptyState(),
+                        : _visualScanning
+                            ? const _SimilarityScanningState()
+                            : const _SimilarityEmptyState(),
                   ),
                 ],
               ),
@@ -132,9 +202,15 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
 }
 
 class _SimilarityOverview extends StatelessWidget {
-  const _SimilarityOverview({required this.report});
+  const _SimilarityOverview({
+    required this.report,
+    required this.visualScanning,
+    required this.visualError,
+  });
 
   final VideoSimilarityReport report;
+  final bool visualScanning;
+  final String? visualError;
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +251,7 @@ class _SimilarityOverview extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '使用扫描阶段已有的轻量内容指纹（文件大小 + 首尾采样）分组。这里只提供候选和文件定位，不会自动删除；请人工确认后再处理。',
+            '先用文件级指纹快速筛选，再按相近时长/画面规格比较缓存首帧与中后段 2 个时间点的时序感知 dHash，识别重新编码后的近重复。这里只提供候选和文件定位，不会自动删除；请人工确认后再处理。',
             style: const TextStyle(
               color: libraryTextMuted,
               fontSize: 12,
@@ -210,8 +286,31 @@ class _SimilarityOverview extends StatelessWidget {
                   label: '缺失记录已跳过',
                   value: '${report.missingVideoCount}',
                 ),
+              if (visualScanning)
+                const _OverviewPill(
+                  label: '视觉复核',
+                  value: '进行中',
+                  warning: true,
+                ),
+              if (!visualScanning && report.visualCandidatePairCount > 0)
+                _OverviewPill(
+                  label: '视觉候选/已比较',
+                  value:
+                      '${report.visualCandidatePairCount}/${report.visualComparedPairCount}',
+                ),
             ],
           ),
+          if (visualError != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              visualError!,
+              style: const TextStyle(
+                color: Color(0xffffb06b),
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -270,12 +369,14 @@ class _SimilarityGroupCard extends StatelessWidget {
   const _SimilarityGroupCard({
     required this.index,
     required this.group,
+    required this.thumbnailService,
     required this.revealingVideoIds,
     required this.onReveal,
   });
 
   final int index;
   final VideoSimilarityGroup group;
+  final ThumbnailService thumbnailService;
   final Set<String> revealingVideoIds;
   final Future<void> Function(VideoItem item) onReveal;
 
@@ -313,7 +414,7 @@ class _SimilarityGroupCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '重复候选组 · ${group.videos.length} 个视频',
+                    '${group.kind == VideoSimilarityKind.exactFingerprint ? '确定重复' : '内容近重复候选'} · ${group.videos.length} 个视频',
                     style: const TextStyle(
                       color: libraryText,
                       fontSize: 14,
@@ -321,14 +422,24 @@ class _SimilarityGroupCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                Text(
-                  '建议保留 1 个',
-                  style: const TextStyle(
-                    color: libraryTextMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                if (group.visualScore != null)
+                  Text(
+                    '相似度 ${(1 - group.visualScore!).clamp(0, 1) * 100 ~/ 1}%',
+                    style: const TextStyle(
+                      color: libraryTextMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  )
+                else
+                  const Text(
+                    '建议保留 1 个',
+                    style: TextStyle(
+                      color: libraryTextMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -338,6 +449,7 @@ class _SimilarityGroupCard extends StatelessWidget {
             _SimilarityVideoRow(
               item: group.videos[i],
               ordinal: i + 1,
+              thumbnailService: thumbnailService,
               revealing: revealingVideoIds.contains(group.videos[i].videoId),
               onReveal: onReveal,
             ),
@@ -352,12 +464,14 @@ class _SimilarityVideoRow extends StatelessWidget {
   const _SimilarityVideoRow({
     required this.item,
     required this.ordinal,
+    required this.thumbnailService,
     required this.revealing,
     required this.onReveal,
   });
 
   final VideoItem item;
   final int ordinal;
+  final ThumbnailService thumbnailService;
   final bool revealing;
   final Future<void> Function(VideoItem item) onReveal;
 
@@ -380,6 +494,11 @@ class _SimilarityVideoRow extends StatelessWidget {
               ),
             ),
           ),
+          _SimilarityThumbnail(
+            item: item,
+            thumbnailService: thumbnailService,
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -433,6 +552,77 @@ class _SimilarityVideoRow extends StatelessWidget {
   }
 }
 
+/** 重复候选行只请求视口内首帧，命中全局缓存时不再重复读盘或启动 FFmpeg。 */
+class _SimilarityThumbnail extends StatefulWidget {
+  const _SimilarityThumbnail({
+    required this.item,
+    required this.thumbnailService,
+  });
+
+  final VideoItem item;
+  final ThumbnailService thumbnailService;
+
+  @override
+  State<_SimilarityThumbnail> createState() => _SimilarityThumbnailState();
+}
+
+class _SimilarityThumbnailState extends State<_SimilarityThumbnail> {
+  late Future<File?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.thumbnailService.ensureThumbnailFor(widget.item);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SimilarityThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.videoId != widget.item.videoId ||
+        oldWidget.thumbnailService != widget.thumbnailService) {
+      _future = widget.thumbnailService.ensureThumbnailFor(widget.item);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 118,
+      height: 66,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(7),
+        child: FutureBuilder<File?>(
+          future: _future,
+          initialData: widget.thumbnailService.cachedThumbnailFor(widget.item),
+          builder: (context, snapshot) {
+            final file = snapshot.data;
+            if (file != null) {
+              return Image.file(
+                file,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
+                gaplessPlayback: true,
+                cacheWidth: 236,
+              );
+            }
+            final loading = snapshot.connectionState == ConnectionState.waiting;
+            return DecoratedBox(
+              decoration: const BoxDecoration(color: librarySurfaceAlt),
+              child: Center(
+                child: Icon(
+                  loading ? Icons.hourglass_top_rounded : Icons.movie_outlined,
+                  color: libraryTextMuted,
+                  size: 22,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
 class _SimilarityEmptyState extends StatelessWidget {
   const _SimilarityEmptyState();
 
@@ -464,6 +654,54 @@ class _SimilarityEmptyState extends StatelessWidget {
             SizedBox(height: 8),
             Text(
               '如果仍有新视频未完成扫描，请先回到媒体库执行“重新扫描”，再点击右上角重新计算。',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: libraryTextMuted,
+                fontSize: 12,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SimilarityScanningState extends StatelessWidget {
+  const _SimilarityScanningState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 520),
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: librarySurface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: libraryBorder),
+        ),
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            ),
+            SizedBox(height: 14),
+            Text(
+              '正在按时序画面复核近重复视频',
+              style: TextStyle(
+                color: libraryText,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '会优先比较时长和画面规格接近的候选，缩略图生成沿用媒体库缓存队列。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: libraryTextMuted,
