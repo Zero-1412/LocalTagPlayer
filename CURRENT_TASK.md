@@ -1,5 +1,19 @@
 # CURRENT_TASK.md
 
+# 2026-08-15 · 真实跨 DPI 与 AXTree 独立门禁（进行中）
+
+- 硬件阻塞：本机仍只有 `DISPLAY1`（2560×1440），没有第二显示器；真实跨物理 DPI 不能执行，
+  `PhysicalCrossDpiStatus` 不得伪造为 `passed`。
+- AXTree 最小复现：在 `artifacts/ax_tree_repro_20260815/` 建立独立 Flutter Windows harness，
+  以 800 个全部挂载的语义节点交替切换到 6 个节点，并执行 24 次无动画 route replacement。
+- SDK/engine A/B：Flutter 3.44.4（engine `a10d8ac...`）与隔离 Flutter 3.41.9（engine `42d3d75...`）
+  均完成 Debug 构建；两版在桌面 observer 和无 observer 条件下均为 0 条 `Failed to update ui::AXTree`。
+- 结论：最小 harness 尚未复现主应用大 profile 的 188 条告警，不能据此宣称 SDK 升级修复；当前证据仍指向
+  大规模应用语义树、hydration/route 时序和桌面 observer 的组合，保留现有 `Semantics`、`ExcludeSemantics`
+  与播放器 `BlockSemantics`。
+- 下一步：接入缩放不同的第二显示器，真实移窗/全屏/返回并重新执行稳定性矩阵；AXTree 继续缩小
+  “大语义树 + observer + route”复现范围，不升级全局 Flutter SDK。
+
 # 2026-08-15 · 既有全量单测与跨 DPI/AXTree 收尾（本轮完成）
 
 - 目标：单独收口前一轮全量 `flutter test` 暴露的 3 条既有失败，同时保持播放器来源队列、页面可达性和
