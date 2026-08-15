@@ -8,6 +8,7 @@
 | `dependency_upgrade_gate.md` | 跨 major 依赖升级的隔离与验证门槛 |
 | `main_window_latency_smoke.md` | 主窗口延迟 smoke 契约 |
 | `main_window_semantic_stress_gate.md` | 主窗口语义压力门禁 |
+| `performance_full_test_standard.md` | 压测、性能优化与 L3 全测标准 |
 | `windows_hardware_decode_matrix.md` | Windows 硬解兼容矩阵 |
 
 自动化脚本的状态、最近验证日期、证据和替代命令统一登记在 `tool/qa/manifest.json`。新增、移动或退役 QA 脚本时必须同步更新清单；治理 CI 会拒绝漏登记脚本和失效证据路径。

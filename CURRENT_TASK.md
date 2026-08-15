@@ -11,6 +11,18 @@
   被 Explorer 启动且仍在运行的 Debug `local_tag_player.exe` 锁定，返回 LNK1168，未强制结束用户进程。
 - 下一步：完成停止编辑后的独立审计，提交并推送当前分支；关闭该窗口后重跑构建门禁。
 
+# 2026-08-15 · 压测与性能全测标准（文档完成）
+
+- 目标：为后续一次全测建立 Windows 主基线，覆盖大库加载/扫描、标签筛选、过滤队列、播放器、
+  缓存诊断、资源尾部和隔离目录压力；不把平均值或 Debug 耗时冒充发布性能结论。
+- 方案：新增 `docs/qa/performance_full_test_standard.md`，统一 profile/release-like 构建、P50/P95/P99、
+  冷热启动、帧预算、资源增长、硬失败/Warning/Pass 裁决和报告字段；复用现有 benchmark、seek 矩阵、
+  双后端稳定性、增删目录压力与真实库播放器长跑入口。
+- 保护：不修改 schema、FilterQuery / TagQueryService、来源 filtered queue、PlayerBackend、缓存队列、
+  stable identity 或用户数据；真实媒体根只读，写入型压力测试必须使用可丢弃 profile。
+- 验证：完成文档交叉检查；尚未执行真实 L3 全测。下一步按标准冻结机器/样本/seed，先跑 L0–L2 建立首个
+  可比较基线，再执行隔离增删压力和 30 分钟播放器长跑。
+
 # 2026-08-15 · 删除视频同步清理缓存诊断 metadata（完成）
 
 - 根因：相似视频等入口已通过统一删除命令清理文件、视频行、标签关联、备份快照和缩略图，
