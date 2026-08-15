@@ -48,10 +48,16 @@ void main() {
             phase: VideoVisualScanPhase.extractingSignatures,
             progress: 3,
             total: 8,
+            estimatedRemaining: Duration(milliseconds: 250),
+            itemsPerSecond: 20,
           ),
         ),
       ),
     );
     expect(find.text('正在完成时序画面复核（3/8）'), findsOneWidget);
+    expect(
+      find.text('已用时 0秒 · 当前阶段预计还需 1秒 · 20.0项/秒'),
+      findsOneWidget,
+    );
   });
 }

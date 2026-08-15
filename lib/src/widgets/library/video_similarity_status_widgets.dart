@@ -134,7 +134,7 @@ class VideoSimilarityOverview extends StatelessWidget {
                       null)
                 _VideoSimilarityOverviewPill(
                   label: '预计剩余',
-                  value: _formatVisualDuration(
+                  value: _formatVisualRemaining(
                     visualTiming?.estimatedRemaining ??
                         visualEstimatedRemaining!,
                   ),
@@ -399,6 +399,17 @@ String _formatVisualDuration(Duration duration) {
   return '$remainingSeconds秒';
 }
 
+/** 剩余时间不能把仍在执行的非零任务截断成 0 秒，避免用户误以为扫描已完成。 */
+String _formatVisualRemaining(Duration duration) {
+  if (duration <= Duration.zero) {
+    return '0秒';
+  }
+  final roundedSeconds =
+      (duration.inMicroseconds + Duration.microsecondsPerSecond - 1) ~/
+          Duration.microsecondsPerSecond;
+  return _formatVisualDuration(Duration(seconds: roundedSeconds));
+}
+
 String _formatVisualRate(double? itemsPerSecond) {
   if (itemsPerSecond == null || itemsPerSecond <= 0) {
     return '速度估算中';
@@ -413,7 +424,7 @@ String _visualTimingSummary({
 }) {
   final remaining = estimatedRemaining == null
       ? '预计剩余时间估算中'
-      : '当前阶段预计还需 ${_formatVisualDuration(estimatedRemaining)}';
+      : '当前阶段预计还需 ${_formatVisualRemaining(estimatedRemaining)}';
   return '已用时 ${_formatVisualDuration(elapsed)} · $remaining · '
       '${_formatVisualRate(itemsPerSecond)}';
 }
