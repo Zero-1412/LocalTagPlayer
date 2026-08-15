@@ -34,8 +34,9 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
   @override
   Future<void> playSimilarVideo(
     VideoItem item,
-    List<VideoItem> playlist,
-  ) async {
+    List<VideoItem> playlist, {
+    VoidCallback? onRouteReturned,
+  }) async {
     final store = runtime.store;
     if (store == null || playlist.isEmpty) {
       return;
@@ -54,15 +55,22 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       playbackDataRevision: runtime.playbackDataRevision,
       sortFingerprint: 'similarity:title:path',
     );
-    await openVideo(item, playlist, result, '相似候选');
+    await openVideo(
+      item,
+      playlist,
+      result,
+      '相似候选',
+      onPlayerRouteReturned: onRouteReturned,
+    );
   }
 
   Future<void> openVideo(
     VideoItem item,
     List<VideoItem> playlist,
     LibraryResultSnapshot acceptedResult,
-    String acceptedQueueTitle,
-  ) async {
+    String acceptedQueueTitle, {
+    VoidCallback? onPlayerRouteReturned,
+  }) async {
     final store = runtime.store;
     if (store == null) {
       return;
@@ -112,6 +120,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
         selectedItem,
         preparedQueue,
         acceptedQueueTitle,
+        onPlayerRouteReturned: onPlayerRouteReturned,
       ),
     );
   }
@@ -120,8 +129,9 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
   Future<void> openVideoAfterScanYield(
     VideoItem item,
     LibraryPlaybackQueue preparedQueue,
-    String queueTitle,
-  ) async {
+    String queueTitle, {
+    VoidCallback? onPlayerRouteReturned,
+  }) async {
     final store = runtime.store;
     if (store == null) {
       return;
@@ -243,6 +253,8 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
           ),
         ),
       );
+      // 播放器 Route 已返回，调用方可立即恢复动作状态；原生资源释放和进度刷盘仍在 finally 中继续。
+      onPlayerRouteReturned?.call();
     } finally {
       if (mounted) {
         // 反向 Route 已完成后立即恢复媒体库语义，不等待原生资源释放尾部。

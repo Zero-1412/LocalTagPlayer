@@ -36,8 +36,12 @@ class VideoSimilarityPage extends StatefulWidget {
   /** 复用全局缩略图队列；页面不自行启动 FFmpeg 进程。 */
   final ThumbnailService thumbnailService;
 
-  /** 由媒体库页面创建当前候选组的独立播放队列。 */
-  final Future<void> Function(VideoItem item, List<VideoItem> playlist) onPlay;
+  /** 由媒体库页面创建当前候选组的独立播放队列，并在播放器 Route 返回时通知页面。 */
+  final Future<void> Function(
+    VideoItem item,
+    List<VideoItem> playlist, {
+    VoidCallback? onRouteReturned,
+  }) onPlay;
 
   /** 复用媒体库统一确认删除流程；返回值表示记录与文件动作均已成功。 */
   final Future<bool> Function(VideoItem item) onDelete;
@@ -137,7 +141,15 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     }
     setState(() => _actingVideoIds.add(item.videoId));
     try {
-      await widget.onPlay(item, List<VideoItem>.unmodifiable(playlist));
+      await widget.onPlay(
+        item,
+        List<VideoItem>.unmodifiable(playlist),
+        onRouteReturned: () {
+          if (mounted) {
+            setState(() => _actingVideoIds.remove(item.videoId));
+          }
+        },
+      );
     } finally {
       if (mounted) {
         setState(() => _actingVideoIds.remove(item.videoId));

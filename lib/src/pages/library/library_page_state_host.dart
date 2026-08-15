@@ -118,8 +118,15 @@ abstract class LibraryPageStateHost<T extends StatefulWidget> extends State<T> {
   /** 播放器和文件命令使用的显式动作。 */
   /** 通过既有文件系统边界定位一个视频；维护页复用该动作而不复制平台命令。 */
   Future<void> revealVideoLocation(VideoItem item);
-  /** 从相似候选页创建独立来源队列；队列只包含当前候选组。 */
-  Future<void> playSimilarVideo(VideoItem item, List<VideoItem> playlist);
+  /**
+   * 从相似候选页创建独立来源队列；队列只包含当前候选组。
+   * [onRouteReturned] 在播放器 Route 弹回后立即通知页面，不能被资源释放尾部延迟。
+   */
+  Future<void> playSimilarVideo(
+    VideoItem item,
+    List<VideoItem> playlist, {
+    VoidCallback? onRouteReturned,
+  });
   /** 复用媒体库确认删除边界，返回本次是否确实删除了记录。 */
   Future<bool> deleteVideoFromSimilarity(VideoItem item);
   Future<void> deleteVideoFromPlayer(
