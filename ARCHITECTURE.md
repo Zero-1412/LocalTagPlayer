@@ -106,7 +106,7 @@ Repository 拥有：
 - 相似视频批量取帧使用独立队列：页面前台按 CPU 采用 2–4 路有界并发，非前台降为单并发，离开页面
   取消排队任务；播放器活跃时由 ThumbnailService.pause 冻结批量队列，候选调度等待播放结束后恢复。
 - 相似视频视觉扫描必须分别统计候选构建、首帧预筛和深度时序取帧的累计耗时、平滑吞吐率及剩余时间估算；
-  首帧预筛两端可并行，深度签名按 CPU 档位批量并发但必须按 stable videoId 合并 in-flight 任务，实际
+  首帧预筛两端可并行，深度签名按 stable `videoId` 建立连续有界 worker，完成一项后立即补位；实际
   FFmpeg 数量仍受 ThumbnailService 有界队列约束。深度任务未汇合前不得沿用预筛吞吐率伪造“还剩 1 秒”。
 - 视觉签名属于可重建派生缓存，持久化在现有 `metadata` 表的
   `cache.visual_signature.<videoId>` key 中，不新增表或改变 SQLite schema version；条目必须携带

@@ -75,7 +75,7 @@ class VideoVisualScanProgress {
 }
 
 /**
- * 为两个扫描阶段统一记录耗时和吞吐率。
+ * 为扫描阶段统一记录耗时和吞吐率。
  *
  * 候选构建和视觉比较的工作量不同，不能把它们拼成一个百分比再套固定总时长。
  * 阶段切换时重置速率窗口，前几项先显示“正在估算”，避免首个慢取帧把 ETA 放大。
@@ -132,14 +132,6 @@ class _VisualScanProgressReporter {
       ),
     );
   }
-}
-
-/** 深度复核任务只携带结果，合并候选组仍在主扫描顺序中完成，保证结果稳定。 */
-class _VisualSignaturePair {
-  const _VisualSignaturePair(this.left, this.right);
-
-  final List<int>? left;
-  final List<int>? right;
 }
 
 /**
@@ -207,8 +199,8 @@ class VideoContentSimilarityService {
     );
 
     final signatures = <String, List<int>?>{};
-    // 深度候选按视频 ID 合并 in-flight 任务，避免同一视频同时出现在多个邻居
-    // 对中时重复启动 FFmpeg；批次大小再按 CPU 档位有界放大，保持可取消和可让渡。
+    // 深度候选按视频 ID 合并任务，避免同一视频同时出现在多个邻居对中时重复
+    // 启动 FFmpeg；后面会以唯一视频为单位持续补充 worker，避免慢候选对拖住整批。
     final signatureTasks = <String, Future<List<int>?>>{};
     final persistedSignatures = <String, VideoVisualSignatureCacheEntry>{};
     final visualSignatureRepository = _visualSignatureCache;
@@ -329,64 +321,80 @@ class VideoContentSimilarityService {
       deepCandidates.add(candidate);
     }
 
-    // 快速首帧预筛和深度取帧的成本量级不同；深度阶段单独计数、单独估算，
-    // 避免预筛已接近总量时把尚未启动的 FFmpeg 任务错误显示成“还剩 1 秒”。
+    // 快速首帧预筛和深度取帧的成本量级不同；深度阶段按“唯一视频”计数，避免
+    // 一个视频参与多个候选对时被重复估算。唯一任务池也让慢文件不会阻塞整批补充。
+    final deepVideos = <String, VideoItem>{};
+    for (final candidate in deepCandidates) {
+      final left = videos[candidate.left];
+      final right = videos[candidate.right];
+      deepVideos[left.videoId] = left;
+      deepVideos[right.videoId] = right;
+    }
+    final deepVideoList = deepVideos.values.toList(growable: false);
     var deepProcessed = 0;
-    if (deepCandidates.isNotEmpty) {
+    if (deepVideoList.isNotEmpty) {
       progress.report(
         VideoVisualScanPhase.extractingSignatures,
         0,
-        deepCandidates.length,
+        deepVideoList.length,
       );
     }
     final workerCount = _visualComparisonWorkerCount();
-    for (var offset = 0;
-        offset < deepCandidates.length;
-        offset += workerCount) {
-      if (cancelled()) {
-        return const VideoVisualScanResult.cancelled();
-      }
-      await _waitForScheduler(cancelled, shouldYield);
-      if (cancelled()) {
-        return const VideoVisualScanResult.cancelled();
-      }
-      final batch = deepCandidates.skip(offset).take(workerCount).toList();
-      final results = await Future.wait<_VisualSignaturePair>(
-        batch.map((candidate) async {
-          final left = videos[candidate.left];
-          final right = videos[candidate.right];
-          final pairSignatures = await Future.wait<List<int>?>(
-            <Future<List<int>?>>[
-              signatureFor(left),
-              signatureFor(right),
-            ],
-          );
-          return _VisualSignaturePair(pairSignatures[0], pairSignatures[1]);
-        }),
-      );
-      for (var index = 0; index < batch.length; index++) {
+    var nextDeepVideo = 0;
+    Future<void> extractWorker() async {
+      while (true) {
         if (cancelled()) {
-          return const VideoVisualScanResult.cancelled();
+          return;
         }
-        final candidate = batch[index];
-        final result = results[index];
-        final leftSignature = result.left;
-        final rightSignature = result.right;
-        if (leftSignature != null && rightSignature != null) {
-          compared++;
-          final distance = _sequenceDistance(leftSignature, rightSignature);
-          if (distance <= _visualDistanceThreshold) {
-            _union(parent, candidate.left, candidate.right);
-            _recordMinimumScore(matchedScores, candidate.left, distance);
-            _recordMinimumScore(matchedScores, candidate.right, distance);
-          }
+        final index = nextDeepVideo++;
+        if (index >= deepVideoList.length) {
+          return;
         }
+        await _waitForScheduler(cancelled, shouldYield);
+        if (cancelled()) {
+          return;
+        }
+        await signatureFor(deepVideoList[index]);
         deepProcessed++;
         progress.report(
           VideoVisualScanPhase.extractingSignatures,
           deepProcessed,
-          deepCandidates.length,
+          deepVideoList.length,
         );
+      }
+    }
+
+    if (deepVideoList.isNotEmpty) {
+      await Future.wait<void>(
+        <Future<void>>[
+          for (var index = 0;
+              index < math.min(workerCount, deepVideoList.length);
+              index++)
+            extractWorker(),
+        ],
+      );
+      if (cancelled()) {
+        return const VideoVisualScanResult.cancelled();
+      }
+    }
+
+    // 取帧完成后只比较内存中的 dHash 序列；比较本身不再被某个慢 FFmpeg 对拖住。
+    for (final candidate in deepCandidates) {
+      if (cancelled()) {
+        return const VideoVisualScanResult.cancelled();
+      }
+      final left = videos[candidate.left];
+      final right = videos[candidate.right];
+      final leftSignature = signatures[left.videoId];
+      final rightSignature = signatures[right.videoId];
+      if (leftSignature != null && rightSignature != null) {
+        compared++;
+        final distance = _sequenceDistance(leftSignature, rightSignature);
+        if (distance <= _visualDistanceThreshold) {
+          _union(parent, candidate.left, candidate.right);
+          _recordMinimumScore(matchedScores, candidate.left, distance);
+          _recordMinimumScore(matchedScores, candidate.right, distance);
+        }
       }
     }
 

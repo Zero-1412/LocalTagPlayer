@@ -226,6 +226,36 @@ void main() {
     expect(source, contains('estimatedRemaining: remaining'));
   });
 
+  test('extracts each deep video once instead of batching candidate pairs',
+      () async {
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory.systemTemp,
+      _NoopFFmpegBackend(),
+    );
+    final progress = <VideoVisualScanProgress>[];
+    final videos = <VideoItem>[
+      for (var index = 0; index < 4; index++)
+        _video('unique-deep-$index', const Duration(seconds: 90)),
+    ];
+
+    final result = await VideoContentSimilarityService(thumbnailService)
+        .findNearDuplicateGroups(
+      videos,
+      maxCandidatePairs: 16,
+      onProgress: progress.add,
+    );
+
+    final extractionProgress = progress
+        .where(
+          (item) => item.phase == VideoVisualScanPhase.extractingSignatures,
+        )
+        .toList(growable: false);
+    expect(result.candidatePairCount, greaterThan(4));
+    expect(extractionProgress.last.total, lessThan(result.candidatePairCount));
+    expect(extractionProgress.last.total, videos.length);
+    expect(extractionProgress.last.processed, videos.length);
+  });
+
   test('allows a partial visual signature instead of requiring every sample',
       () {
     final source = File(
@@ -240,7 +270,7 @@ void main() {
             'final cachedFrame = await _thumbnailService.thumbnailFor(item);'));
     expect(source, isNot(contains('ensureThumbnailFor(item)')));
     expect(source, contains('similarityPreviewFrameFor(item, position)'));
-    expect(source, contains('Future.wait<List<int>?>'));
+    expect(source, contains('Future.wait<File?>'));
   });
 
   test('builds candidates asynchronously so dense libraries can yield', () {
