@@ -64,6 +64,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   var _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
   var _visualProgress = 0;
   var _visualProgressTotal = 0;
+  VideoVisualScanProgress? _visualTiming;
   var _visualPlaybackActive = false;
   String? _visualError;
 
@@ -118,6 +119,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
       _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
       _visualProgress = 0;
       _visualProgressTotal = 0;
+      _visualTiming = null;
     });
   }
 
@@ -185,6 +187,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
         _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
         _visualProgress = 0;
         _visualProgressTotal = 0;
+        _visualTiming = null;
       });
     }
     final exactVideoIds = _report.groups
@@ -203,12 +206,17 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
           if (!mounted || generation != _visualGeneration) {
             return;
           }
-          if (progress.processed == progress.total ||
-              progress.processed % 64 == 0) {
+          final phaseChanged = progress.phase != _visualProgressPhase;
+          final elapsedChanged =
+              progress.elapsed.inSeconds != _visualTiming?.elapsed.inSeconds;
+          if (phaseChanged ||
+              progress.processed == progress.total ||
+              elapsedChanged) {
             setState(() {
               _visualProgressPhase = progress.phase;
               _visualProgress = progress.processed;
               _visualProgressTotal = progress.total;
+              _visualTiming = progress;
             });
           }
         },
@@ -430,6 +438,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
                     visualProgressPhase: _visualProgressPhase,
                     visualProgress: _visualProgress,
                     visualProgressTotal: _visualProgressTotal,
+                    visualTiming: _visualTiming,
                   ),
                   const SizedBox(height: 16),
                   Expanded(
@@ -472,6 +481,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
                                 phase: _visualProgressPhase,
                                 progress: _visualProgress,
                                 total: _visualProgressTotal,
+                                timing: _visualTiming,
                               )
                             : VideoSimilarityEmptyState(
                                 stale: _visualScanStale,

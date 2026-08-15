@@ -52,11 +52,91 @@ class VideoVisualScanProgress {
     required this.phase,
     required this.processed,
     required this.total,
+    this.elapsed = Duration.zero,
+    this.estimatedRemaining,
+    this.itemsPerSecond,
   });
 
   final VideoVisualScanPhase phase;
   final int processed;
   final int total;
+
+  /** 扫描启动后的累计耗时；用于把“转圈”变成可判断的运行状态。 */
+  final Duration elapsed;
+
+  /** 依据当前阶段吞吐率推测的剩余时间；预热不足时为空。 */
+  final Duration? estimatedRemaining;
+
+  /** 当前阶段的平滑处理速度，单位为候选项/秒。 */
+  final double? itemsPerSecond;
+}
+
+/**
+ * 为两个扫描阶段统一记录耗时和吞吐率。
+ *
+ * 候选构建和视觉比较的工作量不同，不能把它们拼成一个百分比再套固定总时长。
+ * 阶段切换时重置速率窗口，前几项先显示“正在估算”，避免首个慢取帧把 ETA 放大。
+ */
+class _VisualScanProgressReporter {
+  _VisualScanProgressReporter(this._onProgress)
+      : _overall = Stopwatch()..start(),
+        _phaseClock = Stopwatch()..start();
+
+  final void Function(VideoVisualScanProgress progress)? _onProgress;
+  final Stopwatch _overall;
+  Stopwatch _phaseClock;
+  VideoVisualScanPhase? _phase;
+  double? _smoothedRate;
+
+  void report(VideoVisualScanPhase phase, int processed, int total) {
+    if (_onProgress == null) {
+      return;
+    }
+    if (_phase != phase) {
+      _phase = phase;
+      _phaseClock = Stopwatch()..start();
+      _smoothedRate = null;
+    }
+    final safeTotal = math.max(total, 1);
+    final safeProcessed = processed.clamp(0, safeTotal);
+    final elapsedMicros = _phaseClock.elapsed.inMicroseconds;
+    final phaseSeconds = elapsedMicros / Duration.microsecondsPerSecond;
+    double? rate;
+    if (safeProcessed >= 4 && phaseSeconds >= 0.25) {
+      final instantRate = safeProcessed / phaseSeconds;
+      _smoothedRate = _smoothedRate == null
+          ? instantRate
+          : (_smoothedRate! * 0.7) + (instantRate * 0.3);
+      rate = _smoothedRate;
+    }
+    Duration? remaining;
+    if (rate != null && safeProcessed < safeTotal && rate > 0) {
+      remaining = Duration(
+        microseconds: ((safeTotal - safeProcessed) /
+                rate *
+                Duration.microsecondsPerSecond)
+            .round(),
+      );
+    }
+    _onProgress(
+      VideoVisualScanProgress(
+        phase: phase,
+        processed: safeProcessed,
+        total: safeTotal,
+        elapsed: _overall.elapsed,
+        estimatedRemaining: remaining,
+        itemsPerSecond: rate,
+      ),
+    );
+  }
+}
+
+/** 深度复核任务只携带结果，合并候选组仍在主扫描顺序中完成，保证结果稳定。 */
+class _VisualSignaturePair {
+  const _VisualSignaturePair(this.left, this.right);
+
+  final List<int>? left;
+  final List<int>? right;
 }
 
 /**
@@ -88,6 +168,7 @@ class VideoContentSimilarityService {
     final videos = source
         .where((item) => !item.isMissing && !excluded.contains(item.videoId))
         .toList(growable: false);
+    final progress = _VisualScanProgressReporter(onProgress);
     // 让页面首帧和已有缩略图任务先运行；候选构建虽有界，仍可能在密集时长区
     // 触发大量比较与排序，不能在调用方首个事件循环里同步占满 UI 线程。
     final candidates = await _buildCandidates(
@@ -95,7 +176,11 @@ class VideoContentSimilarityService {
       maxCandidatePairs,
       isCancelled: cancelled,
       shouldYield: shouldYield,
-      onProgress: onProgress,
+      onProgress: (item) => progress.report(
+        item.phase,
+        item.processed,
+        item.total,
+      ),
     );
     if (candidates == null || cancelled()) {
       return const VideoVisualScanResult.cancelled();
@@ -107,21 +192,44 @@ class VideoContentSimilarityService {
     if (cancelled()) {
       return const VideoVisualScanResult.cancelled();
     }
-    onProgress?.call(
-      VideoVisualScanProgress(
-        phase: VideoVisualScanPhase.comparingCandidates,
-        processed: 0,
-        total: candidates.length,
-      ),
+    progress.report(
+      VideoVisualScanPhase.comparingCandidates,
+      0,
+      candidates.length,
     );
 
     final signatures = <String, List<int>?>{};
+    // 深度候选按视频 ID 合并 in-flight 任务，避免同一视频同时出现在多个邻居
+    // 对中时重复启动 FFmpeg；批次大小再按 CPU 档位有界放大，保持可取消和可让渡。
+    final signatureTasks = <String, Future<List<int>?>>{};
     final quickHashes = <String, int?>{};
     final parent = List<int>.generate(videos.length, (index) => index);
     final matchedScores = <int, double>{};
     var uncachedDeepCandidates = 0;
     var deepComparedCandidates = 0;
     var compared = 0;
+    var processed = 0;
+    final deepCandidates = <_VisualCandidate>[];
+
+    void reportProcessed() {
+      processed++;
+      progress.report(
+        VideoVisualScanPhase.comparingCandidates,
+        processed,
+        candidates.length,
+      );
+    }
+
+    Future<List<int>?> signatureFor(VideoItem item) {
+      final cached = signatureTasks[item.videoId];
+      if (cached != null) {
+        return cached;
+      }
+      final task = _signatureFor(item, signatures);
+      signatureTasks[item.videoId] = task;
+      return task;
+    }
+
     for (var candidateIndex = 0;
         candidateIndex < candidates.length;
         candidateIndex++) {
@@ -137,10 +245,19 @@ class VideoContentSimilarityService {
       final right = videos[candidate.right];
       // 已有文件级指纹命中的组不再重复触发取帧；页面会单独展示它们。
       if (_sameFingerprint(left, right)) {
+        reportProcessed();
         continue;
       }
-      final leftQuickHash = await _quickHashFor(left, quickHashes);
-      final rightQuickHash = await _quickHashFor(right, quickHashes);
+      // 两端首帧都只经过缓存边界，允许同时排队；在低端机器上仍由
+      // ThumbnailService 的 regular queue 限制实际解码并发。
+      final quickPair = await Future.wait<int?>(
+        <Future<int?>>[
+          _quickHashFor(left, quickHashes),
+          _quickHashFor(right, quickHashes),
+        ],
+      );
+      final leftQuickHash = quickPair[0];
+      final rightQuickHash = quickPair[1];
       if (leftQuickHash != null && rightQuickHash != null) {
         final quickDistance = _hamming(leftQuickHash ^ rightQuickHash) / 64;
         if (quickDistance <= _quickMatchDistanceThreshold) {
@@ -148,25 +265,13 @@ class VideoContentSimilarityService {
           _recordMinimumScore(matchedScores, candidate.left, quickDistance);
           _recordMinimumScore(matchedScores, candidate.right, quickDistance);
           compared++;
-          onProgress?.call(
-            VideoVisualScanProgress(
-              phase: VideoVisualScanPhase.comparingCandidates,
-              processed: candidateIndex + 1,
-              total: candidates.length,
-            ),
-          );
+          reportProcessed();
           continue;
         }
         if (quickDistance > _quickVisualDistanceThreshold &&
             candidate.score > _quickRejectMetadataScore &&
             !candidate.titleMatch) {
-          onProgress?.call(
-            VideoVisualScanProgress(
-              phase: VideoVisualScanPhase.comparingCandidates,
-              processed: candidateIndex + 1,
-              total: candidates.length,
-            ),
-          );
+          reportProcessed();
           continue;
         }
       }
@@ -174,71 +279,63 @@ class VideoContentSimilarityService {
         // 单侧或双侧缺缓存都计入回退配额，避免 ensureThumbnailFor 的播放器兜底
         // 在大库中为每个候选逐个启动解码。
         if (uncachedDeepCandidates >= _maxUncachedDeepCandidatePairs) {
-          onProgress?.call(
-            VideoVisualScanProgress(
-              phase: VideoVisualScanPhase.comparingCandidates,
-              processed: candidateIndex + 1,
-              total: candidates.length,
-            ),
-          );
+          reportProcessed();
           continue;
         }
         uncachedDeepCandidates++;
       }
       if (deepComparedCandidates >= _maxDeepVisualCandidatePairs) {
-        onProgress?.call(
-          VideoVisualScanProgress(
-            phase: VideoVisualScanPhase.comparingCandidates,
-            processed: candidateIndex + 1,
-            total: candidates.length,
-          ),
-        );
+        reportProcessed();
         continue;
       }
       deepComparedCandidates++;
-      final pairSignatures = await Future.wait<List<int>?>(
-        <Future<List<int>?>>[
-          _signatureFor(left, signatures),
-          _signatureFor(right, signatures),
-        ],
-      );
-      final leftSignature = pairSignatures[0];
-      final rightSignature = pairSignatures[1];
+      deepCandidates.add(candidate);
+    }
+
+    final workerCount = _visualComparisonWorkerCount();
+    for (var offset = 0;
+        offset < deepCandidates.length;
+        offset += workerCount) {
       if (cancelled()) {
         return const VideoVisualScanResult.cancelled();
       }
-      if (leftSignature == null || rightSignature == null) {
-        onProgress?.call(
-          VideoVisualScanProgress(
-            phase: VideoVisualScanPhase.comparingCandidates,
-            processed: candidateIndex + 1,
-            total: candidates.length,
-          ),
-        );
-        continue;
+      await _waitForScheduler(cancelled, shouldYield);
+      if (cancelled()) {
+        return const VideoVisualScanResult.cancelled();
       }
-      compared++;
-      final distance = _sequenceDistance(leftSignature, rightSignature);
-      if (distance > _visualDistanceThreshold) {
-        onProgress?.call(
-          VideoVisualScanProgress(
-            phase: VideoVisualScanPhase.comparingCandidates,
-            processed: candidateIndex + 1,
-            total: candidates.length,
-          ),
-        );
-        continue;
-      }
-      _union(parent, candidate.left, candidate.right);
-      _recordMinimumScore(matchedScores, candidate.left, distance);
-      _recordMinimumScore(matchedScores, candidate.right, distance);
-      onProgress?.call(
-        VideoVisualScanProgress(
-          phase: VideoVisualScanPhase.comparingCandidates,
-          processed: candidateIndex + 1,
-          total: candidates.length,
-        ),
+      final batch = deepCandidates.skip(offset).take(workerCount).toList();
+      final results = await Future.wait<_VisualSignaturePair>(
+        batch.map((candidate) async {
+          final left = videos[candidate.left];
+          final right = videos[candidate.right];
+          final pairSignatures = await Future.wait<List<int>?>(
+            <Future<List<int>?>>[
+              signatureFor(left),
+              signatureFor(right),
+            ],
+          );
+          return _VisualSignaturePair(pairSignatures[0], pairSignatures[1]);
+        }),
       );
+      for (var index = 0; index < batch.length; index++) {
+        if (cancelled()) {
+          return const VideoVisualScanResult.cancelled();
+        }
+        final candidate = batch[index];
+        final result = results[index];
+        final leftSignature = result.left;
+        final rightSignature = result.right;
+        if (leftSignature != null && rightSignature != null) {
+          compared++;
+          final distance = _sequenceDistance(leftSignature, rightSignature);
+          if (distance <= _visualDistanceThreshold) {
+            _union(parent, candidate.left, candidate.right);
+            _recordMinimumScore(matchedScores, candidate.left, distance);
+            _recordMinimumScore(matchedScores, candidate.right, distance);
+          }
+        }
+        reportProcessed();
+      }
     }
 
     final components = <int, List<int>>{};
@@ -541,6 +638,17 @@ class VideoContentSimilarityService {
     while (shouldYield?.call() == true && !isCancelled()) {
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
+  }
+
+  /**
+   * 深度签名任务按机器档位有界并发；实际 FFmpeg 数量仍由 ThumbnailService
+   * 的相似度队列控制，避免把“加并发”变成进程风暴。
+   */
+  int _visualComparisonWorkerCount() {
+    final processors = Platform.numberOfProcessors;
+    if (processors >= 12) return 4;
+    if (processors >= 8) return 3;
+    return 2;
   }
 
   Duration? _durationFor(VideoItem item) {

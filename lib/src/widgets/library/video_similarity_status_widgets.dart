@@ -17,6 +17,10 @@ class VideoSimilarityOverview extends StatelessWidget {
     required this.visualProgressPhase,
     required this.visualProgress,
     required this.visualProgressTotal,
+    this.visualTiming,
+    this.visualElapsed = Duration.zero,
+    this.visualEstimatedRemaining,
+    this.visualItemsPerSecond,
   });
 
   final VideoSimilarityReport report;
@@ -26,6 +30,10 @@ class VideoSimilarityOverview extends StatelessWidget {
   final VideoVisualScanPhase visualProgressPhase;
   final int visualProgress;
   final int visualProgressTotal;
+  final VideoVisualScanProgress? visualTiming;
+  final Duration visualElapsed;
+  final Duration? visualEstimatedRemaining;
+  final double? visualItemsPerSecond;
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +116,28 @@ class VideoSimilarityOverview extends StatelessWidget {
                       ? '${_visualPhaseShortLabel(visualProgressPhase)} '
                           '$visualProgress/$visualProgressTotal'
                       : _visualPhaseShortLabel(visualProgressPhase),
+                  warning: true,
+                ),
+              if (visualScanning)
+                _VideoSimilarityOverviewPill(
+                  label: '耗时/速度',
+                  value: '${_formatVisualDuration(
+                    visualTiming?.elapsed ?? visualElapsed,
+                  )} · ${_formatVisualRate(
+                    visualTiming?.itemsPerSecond ?? visualItemsPerSecond,
+                  )}',
+                  warning: true,
+                ),
+              if (visualScanning &&
+                  (visualTiming?.estimatedRemaining ??
+                          visualEstimatedRemaining) !=
+                      null)
+                _VideoSimilarityOverviewPill(
+                  label: '预计剩余',
+                  value: _formatVisualDuration(
+                    visualTiming?.estimatedRemaining ??
+                        visualEstimatedRemaining!,
+                  ),
                   warning: true,
                 ),
               if (!visualScanning && visualScanStale)
@@ -246,11 +276,19 @@ class VideoSimilarityScanningState extends StatelessWidget {
     this.phase = VideoVisualScanPhase.buildingCandidates,
     this.progress = 0,
     this.total = 0,
+    this.timing,
+    this.elapsed = Duration.zero,
+    this.estimatedRemaining,
+    this.itemsPerSecond,
   });
 
   final VideoVisualScanPhase phase;
   final int progress;
   final int total;
+  final VideoVisualScanProgress? timing;
+  final Duration elapsed;
+  final Duration? estimatedRemaining;
+  final double? itemsPerSecond;
 
   @override
   Widget build(BuildContext context) {
@@ -307,6 +345,21 @@ class VideoSimilarityScanningState extends StatelessWidget {
                 height: 1.45,
               ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              _visualTimingSummary(
+                elapsed: timing?.elapsed ?? elapsed,
+                estimatedRemaining:
+                    timing?.estimatedRemaining ?? estimatedRemaining,
+                itemsPerSecond: timing?.itemsPerSecond ?? itemsPerSecond,
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: libraryAccent,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       ),
@@ -326,4 +379,37 @@ String _visualPhaseTitle(VideoVisualScanPhase phase) {
     VideoVisualScanPhase.buildingCandidates => '正在建立视觉候选',
     VideoVisualScanPhase.comparingCandidates => '正在按时序画面复核近重复视频',
   };
+}
+
+String _formatVisualDuration(Duration duration) {
+  final seconds = duration.inSeconds.clamp(0, 1 << 31);
+  final hours = seconds ~/ 3600;
+  final minutes = (seconds % 3600) ~/ 60;
+  final remainingSeconds = seconds % 60;
+  if (hours > 0) {
+    return '$hours时$minutes分';
+  }
+  if (minutes > 0) {
+    return '$minutes分$remainingSeconds秒';
+  }
+  return '$remainingSeconds秒';
+}
+
+String _formatVisualRate(double? itemsPerSecond) {
+  if (itemsPerSecond == null || itemsPerSecond <= 0) {
+    return '速度估算中';
+  }
+  return '${itemsPerSecond.toStringAsFixed(1)}项/秒';
+}
+
+String _visualTimingSummary({
+  required Duration elapsed,
+  required Duration? estimatedRemaining,
+  required double? itemsPerSecond,
+}) {
+  final remaining = estimatedRemaining == null
+      ? '预计剩余时间估算中'
+      : '当前阶段预计还需 ${_formatVisualDuration(estimatedRemaining)}';
+  return '已用时 ${_formatVisualDuration(elapsed)} · $remaining · '
+      '${_formatVisualRate(itemsPerSecond)}';
 }

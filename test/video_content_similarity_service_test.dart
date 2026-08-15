@@ -147,10 +147,10 @@ void main() {
     await VideoContentSimilarityService(thumbnailService)
         .findNearDuplicateGroups(
       [
-        _video('progress-a', const Duration(seconds: 90)),
-        _video('progress-b', const Duration(seconds: 90)),
+        for (var index = 0; index < 20; index++)
+          _video('progress-$index', const Duration(seconds: 90)),
       ],
-      maxCandidatePairs: 4,
+      maxCandidatePairs: 64,
       onProgress: progress.add,
     );
 
@@ -167,6 +167,18 @@ void main() {
       isTrue,
     );
     expect(progress.last.processed, progress.last.total);
+    expect(progress.every((item) => item.elapsed >= Duration.zero), isTrue);
+    expect(progress.any((item) => item.elapsed > Duration.zero), isTrue);
+
+    final source = File(
+      'lib/src/services/library/video_content_similarity_service.dart',
+    ).readAsStringSync();
+    expect(source,
+        contains('final workerCount = _visualComparisonWorkerCount();'));
+    expect(source,
+        contains('final signatureTasks = <String, Future<List<int>?>>{}'));
+    expect(source, contains('Future.wait<int?>('));
+    expect(source, contains('estimatedRemaining: remaining'));
   });
 
   test('allows a partial visual signature instead of requiring every sample',

@@ -13,6 +13,9 @@ void main() {
             phase: VideoVisualScanPhase.buildingCandidates,
             progress: 100,
             total: 200,
+            elapsed: Duration(seconds: 65),
+            estimatedRemaining: Duration(seconds: 120),
+            itemsPerSecond: 4.2,
           ),
         ),
       ),
@@ -20,6 +23,10 @@ void main() {
 
     expect(find.text('正在建立视觉候选（100/200）'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(
+      find.text('已用时 1分5秒 · 当前阶段预计还需 2分0秒 · 4.2项/秒'),
+      findsOneWidget,
+    );
 
     await tester.pumpWidget(
       const MaterialApp(
