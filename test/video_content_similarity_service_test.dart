@@ -66,6 +66,77 @@ void main() {
     expect(result.candidatePairCount, 1);
   });
 
+  test('uses normalized title lane when duration metadata is missing',
+      () async {
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory.systemTemp,
+      _NoopFFmpegBackend(),
+    );
+    final first = _video('1671374536_1080p', const Duration(seconds: 90));
+    final second =
+        _video('1671374536_1080p_Source', const Duration(seconds: 90));
+    first
+      ..mediaDetails = null
+      ..playbackDuration = Duration.zero;
+    second
+      ..mediaDetails = null
+      ..playbackDuration = Duration.zero;
+
+    final result = await VideoContentSimilarityService(thumbnailService)
+        .findNearDuplicateGroups([first, second], maxCandidatePairs: 4);
+
+    expect(result.candidatePairCount, 1);
+  });
+
+  test('keeps Japanese title tokens in the normalized lane', () async {
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory.systemTemp,
+      _NoopFFmpegBackend(),
+    );
+    final japanese = _video('魔法少女えれな', const Duration(seconds: 90));
+    final sourceCopy = _video('魔法少女えれな_Source', const Duration(seconds: 90));
+
+    final result = await VideoContentSimilarityService(thumbnailService)
+        .findNearDuplicateGroups([japanese, sourceCopy], maxCandidatePairs: 4);
+
+    expect(result.candidatePairCount, 1);
+  });
+
+  test('keeps a nearby crop or letterbox candidate despite aspect-ratio drift',
+      () async {
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory.systemTemp,
+      _NoopFFmpegBackend(),
+    );
+    final first = _video('shape-a', const Duration(seconds: 90));
+    final second = _video('shape-b', const Duration(seconds: 90));
+    second.mediaDetails = const MediaDetails(
+      width: 1440,
+      height: 1080,
+      duration: Duration(seconds: 90),
+    );
+
+    final result = await VideoContentSimilarityService(thumbnailService)
+        .findNearDuplicateGroups([first, second], maxCandidatePairs: 4);
+
+    expect(result.candidatePairCount, 1);
+  });
+
+  test('cancellation returns a non-applicable result without groups', () async {
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory.systemTemp,
+      _NoopFFmpegBackend(),
+    );
+    final result = await VideoContentSimilarityService(thumbnailService)
+        .findNearDuplicateGroups(
+      [_video('cancelled', const Duration(seconds: 90))],
+      isCancelled: () => true,
+    );
+
+    expect(result.cancelled, isTrue);
+    expect(result.groups, isEmpty);
+  });
+
   test('allows a partial visual signature instead of requiring every sample',
       () {
     final source = File(
@@ -74,6 +145,11 @@ void main() {
 
     expect(
         source, contains('final result = hashes.length < 2 ? null : hashes;'));
+    expect(
+        source,
+        contains(
+            'final cachedFrame = await _thumbnailService.thumbnailFor(item);'));
+    expect(source, isNot(contains('ensureThumbnailFor(item)')));
   });
 
   test('builds candidates asynchronously so dense libraries can yield', () {
@@ -83,7 +159,7 @@ void main() {
 
     expect(source, contains('final candidates = await _buildCandidates('));
     expect(
-        source, contains('Future<List<_VisualCandidate>> _buildCandidates('));
+        source, contains('Future<List<_VisualCandidate>?> _buildCandidates('));
     expect(source, contains('await Future<void>.delayed(Duration.zero);'));
   });
 }

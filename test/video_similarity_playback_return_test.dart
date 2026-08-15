@@ -87,4 +87,19 @@ void main() {
     expect(page, contains('WidgetsBinding.instance.addPostFrameCallback'));
     expect(page, contains('_deletedVideoIds.addAll(removedById.keys)'));
   });
+
+  test('相似视频删除取消旧视觉任务且不自动重启全库复核', () {
+    final page = File(
+      'lib/src/pages/library/video_similarity_page.dart',
+    ).readAsStringSync();
+    final start = page.indexOf('Future<void> _delete(');
+    final end = page.indexOf('  @override\n  Widget build', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+    final deleteMethod = page.substring(start, end);
+
+    expect(deleteMethod, contains('_cancelVisualScan();'));
+    expect(deleteMethod, contains('_visualScanStale = true;'));
+    expect(deleteMethod, isNot(contains('_scheduleVisualScan();')));
+  });
 }

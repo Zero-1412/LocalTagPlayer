@@ -60,6 +60,9 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   final Set<String> _deletedVideoIds = <String>{};
   var _visualScanning = false;
   var _visualGeneration = 0;
+  var _visualScanStale = false;
+  var _visualProgress = 0;
+  var _visualProgressTotal = 0;
   String? _visualError;
 
   @override
@@ -77,16 +80,31 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     setState(() {
       _report = _buildReport();
       _visualError = null;
+      _visualScanStale = false;
     });
     _scheduleVisualScan();
   }
 
   /** 先让相似视频页完成首帧挂载，再启动可能触发候选构建和取帧的后台扫描。 */
   void _scheduleVisualScan() {
+    final requestedGeneration = _visualGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      if (mounted && requestedGeneration == _visualGeneration) {
         unawaited(_runVisualScan());
       }
+    });
+  }
+
+  /** 使删除/刷新触发前一轮复核尽快退出，避免旧任务继续占用 FFmpeg 队列。 */
+  void _cancelVisualScan() {
+    _visualGeneration++;
+    if (!_visualScanning || !mounted) {
+      return;
+    }
+    setState(() {
+      _visualScanning = false;
+      _visualProgress = 0;
+      _visualProgressTotal = 0;
     });
   }
 
@@ -149,7 +167,11 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     }
     final generation = ++_visualGeneration;
     if (mounted) {
-      setState(() => _visualScanning = true);
+      setState(() {
+        _visualScanning = true;
+        _visualProgress = 0;
+        _visualProgressTotal = 0;
+      });
     }
     final exactVideoIds = _report.groups
         .expand((group) => group.videos)
@@ -161,8 +183,20 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
       ).findNearDuplicateGroups(
         widget.store.videos.values,
         excludedVideoIds: exactVideoIds,
+        isCancelled: () => !mounted || generation != _visualGeneration,
+        onProgress: (processed, total) {
+          if (!mounted || generation != _visualGeneration) {
+            return;
+          }
+          if (processed == total || processed % 64 == 0) {
+            setState(() {
+              _visualProgress = processed;
+              _visualProgressTotal = total;
+            });
+          }
+        },
       );
-      if (!mounted || generation != _visualGeneration) {
+      if (!mounted || generation != _visualGeneration || result.cancelled) {
         return;
       }
       setState(() {
@@ -172,6 +206,9 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
           comparedPairCount: result.comparedPairCount,
         );
         _visualScanning = false;
+        _visualScanStale = false;
+        _visualProgress = result.candidatePairCount;
+        _visualProgressTotal = result.candidatePairCount;
       });
     } catch (error) {
       if (!mounted || generation != _visualGeneration) {
@@ -180,6 +217,8 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
       setState(() {
         _visualScanning = false;
         _visualError = '视觉复核失败：$error';
+        _visualProgress = 0;
+        _visualProgressTotal = 0;
       });
     }
   }
@@ -299,6 +338,9 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     if (mergeInto == null || !mounted) {
       return;
     }
+    // 删除会改变候选快照；先取消当前复核，成功后只做局部移除，不立即再次启动
+    // 1 万级媒体库的全量视觉扫描，用户可通过“重新计算”明确发起下一轮。
+    _cancelVisualScan();
     setState(() => _actingVideoIds.add(item.videoId));
     try {
       final deleted = await widget.onDelete(item, mergeInto);
@@ -306,14 +348,13 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
         return;
       }
       _deletedVideoIds.add(item.videoId);
-      // 删除已由父页面完成数据库、文件和缩略图清理；这里重建只读候选快照，
-      // 先局部移除当前行，再按最新库内容重新运行一次有界视觉复核。正在运行的旧扫描
-      // 即使晚返回，也会按 stable videoId 过滤，不能把已删除行重新带回页面。
+      // 删除已由父页面完成数据库、文件和缩略图清理；这里仅局部移除当前行并标记
+      // 视觉结果过期，避免删除一条记录就再次启动 1 万级媒体库的全量取帧。
       setState(() {
         _report = _report.withoutVideo(item);
         _visualError = null;
+        _visualScanStale = true;
       });
-      _scheduleVisualScan();
     } finally {
       if (mounted) {
         setState(() => _actingVideoIds.remove(item.videoId));
@@ -362,6 +403,9 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
                     report: _report,
                     visualScanning: _visualScanning,
                     visualError: _visualError,
+                    visualScanStale: _visualScanStale,
+                    visualProgress: _visualProgress,
+                    visualProgressTotal: _visualProgressTotal,
                   ),
                   const SizedBox(height: 16),
                   Expanded(
@@ -400,8 +444,13 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
                             },
                           )
                         : _visualScanning
-                            ? const VideoSimilarityScanningState()
-                            : const VideoSimilarityEmptyState(),
+                            ? VideoSimilarityScanningState(
+                                progress: _visualProgress,
+                                total: _visualProgressTotal,
+                              )
+                            : VideoSimilarityEmptyState(
+                                stale: _visualScanStale,
+                              ),
                   ),
                 ],
               ),

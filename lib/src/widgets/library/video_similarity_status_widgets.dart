@@ -12,11 +12,17 @@ class VideoSimilarityOverview extends StatelessWidget {
     required this.report,
     required this.visualScanning,
     required this.visualError,
+    required this.visualScanStale,
+    required this.visualProgress,
+    required this.visualProgressTotal,
   });
 
   final VideoSimilarityReport report;
   final bool visualScanning;
   final String? visualError;
+  final bool visualScanStale;
+  final int visualProgress;
+  final int visualProgressTotal;
 
   @override
   Widget build(BuildContext context) {
@@ -93,9 +99,17 @@ class VideoSimilarityOverview extends StatelessWidget {
                   value: '${report.missingVideoCount}',
                 ),
               if (visualScanning)
-                const _VideoSimilarityOverviewPill(
+                _VideoSimilarityOverviewPill(
                   label: '视觉复核',
-                  value: '进行中',
+                  value: visualProgressTotal > 0
+                      ? '$visualProgress/$visualProgressTotal'
+                      : '准备中',
+                  warning: true,
+                ),
+              if (!visualScanning && visualScanStale)
+                const _VideoSimilarityOverviewPill(
+                  label: '视觉结果',
+                  value: '待重新计算',
                   warning: true,
                 ),
               if (!visualScanning && report.visualCandidatePairCount > 0)
@@ -173,7 +187,9 @@ class _VideoSimilarityOverviewPill extends StatelessWidget {
 
 /** 空状态保留相似候选页的可达反馈，不把“暂无结果”与“仍在扫描”混淆。 */
 class VideoSimilarityEmptyState extends StatelessWidget {
-  const VideoSimilarityEmptyState({super.key});
+  const VideoSimilarityEmptyState({super.key, this.stale = false});
+
+  final bool stale;
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +202,7 @@ class VideoSimilarityEmptyState extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(color: libraryBorder),
         ),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.check_circle_outline_rounded,
@@ -194,7 +210,7 @@ class VideoSimilarityEmptyState extends StatelessWidget {
             SizedBox(height: 12),
             Text(
               '当前没有重复候选',
-              style: TextStyle(
+              style: const TextStyle(
                 color: libraryText,
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
@@ -202,7 +218,9 @@ class VideoSimilarityEmptyState extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              '如果仍有新视频未完成扫描，请先回到媒体库执行“重新扫描”，再点击右上角重新计算。',
+              stale
+                  ? '候选已局部更新；点击右上角“重新计算”继续搜索未复核的重复视频。'
+                  : '如果仍有新视频未完成扫描，请先回到媒体库执行“重新扫描”，再点击右上角重新计算。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: libraryTextMuted,
@@ -219,7 +237,14 @@ class VideoSimilarityEmptyState extends StatelessWidget {
 
 /** 扫描状态在已有候选继续显示时只作为摘要提示，不替换候选列表。 */
 class VideoSimilarityScanningState extends StatelessWidget {
-  const VideoSimilarityScanningState({super.key});
+  const VideoSimilarityScanningState({
+    super.key,
+    this.progress = 0,
+    this.total = 0,
+  });
+
+  final int progress;
+  final int total;
 
   @override
   Widget build(BuildContext context) {
@@ -232,7 +257,7 @@ class VideoSimilarityScanningState extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(color: libraryBorder),
         ),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
@@ -242,7 +267,7 @@ class VideoSimilarityScanningState extends StatelessWidget {
             ),
             SizedBox(height: 14),
             Text(
-              '正在按时序画面复核近重复视频',
+              total > 0 ? '正在按时序画面复核近重复视频（$progress/$total）' : '正在按时序画面复核近重复视频',
               style: TextStyle(
                 color: libraryText,
                 fontSize: 16,
@@ -251,7 +276,7 @@ class VideoSimilarityScanningState extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              '会优先比较时长和画面规格接近的候选，并对未缓存首帧保留有界深度回退；缩略图生成沿用媒体库缓存队列。',
+              '会优先比较多通道候选，并对未缓存首帧保留有界深度回退；不会为全库视频逐个启动播放器兜底。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: libraryTextMuted,
