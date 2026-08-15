@@ -1,5 +1,19 @@
 # CURRENT_TASK.md
 
+# 2026-08-15 · 分层 AXTree 复现与真实跨 DPI 门禁（进行中）
+
+- 硬件阻塞：Windows 仍只检测到 `DISPLAY1`（2560×1440），没有第二显示器；没有运行稳定性矩阵，
+  `PhysicalCrossDpiStatus` 继续保持未通过。
+- 分层 harness：在前一版语义树基础上增加 240 个媒体卡片、自动滚动脉冲、播放器式 route、
+  `BlockSemantics`、24 项来源队列和自动返回媒体库，循环 3 次；仍只使用独立 artifacts profile。
+- 3.44.4/3.41.9 与 observer/no-observer 四组均构建、运行、正常退出，日志均为 0 条
+  `Failed to update ui::AXTree`；observer 的 accessibility state 已实际观察到媒体库、播放器、
+  `BlockSemantics`、队列和返回节点交替挂载。
+- 结论：问题仍未在独立 harness 中复现，不能把 SDK/engine 升级写成已验证修复；继续保留生产
+  `Semantics`、`ExcludeSemantics`、`BlockSemantics` 和播放器 route 语义。
+- 下一步：接入缩放比例不同的第二显示器后，执行真实移窗/全屏/返回/释放门禁；AXTree 继续只增加
+  一层应用形状并保持四格 A/B。
+
 # 2026-08-15 · 真实跨 DPI 与 AXTree 独立门禁（进行中）
 
 - 硬件阻塞：本机仍只有 `DISPLAY1`（2560×1440），没有第二显示器；真实跨物理 DPI 不能执行，

@@ -46,6 +46,29 @@ Local Tag Player 数据库、播放器或用户 profile 的最小 Windows harnes
 再叠加播放器 `BlockSemantics` 和 route 返回；每一步继续保留 3.44.4/3.41.9 双版本及 observer/no-observer
 对照。只有在某个层级能稳定复现且只在某个 engine 消失时，才评估隔离升级并回到 Local Tag Player 门禁。
 
+## 分层扩展结果
+
+本轮已完成下一层，不改变前述四格矩阵：
+
+- 媒体库页一次挂载 240 个带语义的媒体卡片，并由 `ScrollController` 做 8 次上下滚动脉冲；
+- 自动进入播放器式 route，播放器主体包在 `BlockSemantics(blocking: true)` 中；
+- 右侧挂载 24 项 `sourcePlaylist` 队列语义；
+- route 保留 2 秒后自动 `pop` 返回媒体库，整个流程循环 3 次。
+
+3.44.4 与 3.41.9 的桌面 observer/no-observer 四组仍全部为 0 条
+`Failed to update ui::AXTree`、0 条其它 stderr 错误。observer 的 accessibility state 已观察到
+媒体库、播放器、`BlockSemantics`、队列和“返回媒体库”节点交替出现，四组进程均正常退出。
+
+分层运行目录：
+
+- `artifacts/ax_tree_repro_20260815/runs/3.44.4-layered-cua/`
+- `artifacts/ax_tree_repro_20260815/runs/3.44.4-layered-no-cua/`
+- `artifacts/ax_tree_repro_20260815/runs/3.41.9-layered-cua/`
+- `artifacts/ax_tree_repro_20260815/runs/3.41.9-layered-no-cua/`
+
+因此当前判断保持不变：即使增加媒体卡片、滚动、`BlockSemantics` 和 route 返回，最小工程仍未复现
+主应用大 profile 的 188 条告警；下一层应接近真实媒体库的 hydration/增量结果挂载，而不是删除语义节点。
+
 ## 跨 DPI 状态
 
 本机只有 `DISPLAY1`（2560×1440），没有第二显示器，因此真实跨物理 DPI 门禁仍为
