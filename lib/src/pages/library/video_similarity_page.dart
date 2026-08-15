@@ -65,7 +65,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   void initState() {
     super.initState();
     _report = _buildReport();
-    unawaited(_runVisualScan());
+    _scheduleVisualScan();
   }
 
   VideoSimilarityReport _buildReport() {
@@ -77,7 +77,16 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
       _report = _buildReport();
       _visualError = null;
     });
-    unawaited(_runVisualScan());
+    _scheduleVisualScan();
+  }
+
+  /** 先让相似视频页完成首帧挂载，再启动可能触发候选构建和取帧的后台扫描。 */
+  void _scheduleVisualScan() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_runVisualScan());
+      }
+    });
   }
 
   Future<void> _runVisualScan() async {
@@ -173,7 +182,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
         _report = _report.withoutVideo(item);
         _visualError = null;
       });
-      unawaited(_runVisualScan());
+      _scheduleVisualScan();
     } finally {
       if (mounted) {
         setState(() => _actingVideoIds.remove(item.videoId));

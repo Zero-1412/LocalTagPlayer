@@ -75,6 +75,17 @@ void main() {
     expect(
         source, contains('final result = hashes.length < 2 ? null : hashes;'));
   });
+
+  test('builds candidates asynchronously so dense libraries can yield', () {
+    final source = File(
+      'lib/src/services/library/video_content_similarity_service.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('final candidates = await _buildCandidates('));
+    expect(
+        source, contains('Future<List<_VisualCandidate>> _buildCandidates('));
+    expect(source, contains('await Future<void>.delayed(Duration.zero);'));
+  });
 }
 
 VideoItem _video(String title, Duration duration) {

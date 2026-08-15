@@ -37,6 +37,15 @@ void main() {
     expect(page, contains('EdgeInsets.only(right: 18, bottom: 12)'));
   });
 
+  test('相似视频页首帧后再启动视觉扫描', () {
+    final page = File(
+      'lib/src/pages/library/video_similarity_page.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('_scheduleVisualScan();'));
+    expect(page, contains('WidgetsBinding.instance.addPostFrameCallback'));
+  });
+
   test('相似视频播放返回后先清除动作占位再等待资源释放', () {
     final playback = File(
       'lib/src/pages/library/library_page_playback_mixin.dart',

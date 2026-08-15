@@ -58,7 +58,9 @@ class VideoContentSimilarityService {
         .where((item) => !item.isMissing && !excluded.contains(item.videoId))
         .where((item) => _durationFor(item) != null)
         .toList(growable: false);
-    final candidates = _buildCandidates(videos, maxCandidatePairs);
+    // 让页面首帧和已有缩略图任务先运行；候选构建虽有界，仍可能在密集时长区
+    // 触发大量比较与排序，不能在调用方首个事件循环里同步占满 UI 线程。
+    final candidates = await _buildCandidates(videos, maxCandidatePairs);
     if (candidates.isEmpty) {
       return const VideoVisualScanResult.empty();
     }
@@ -144,10 +146,11 @@ class VideoContentSimilarityService {
     );
   }
 
-  List<_VisualCandidate> _buildCandidates(
+  Future<List<_VisualCandidate>> _buildCandidates(
     List<VideoItem> videos,
     int maxCandidatePairs,
-  ) {
+  ) async {
+    await Future<void>.delayed(Duration.zero);
     final indexed = <_TimedVideo>[];
     for (var index = 0; index < videos.length; index++) {
       final duration = _durationFor(videos[index]);
@@ -162,6 +165,11 @@ class VideoContentSimilarityService {
     ];
     final seen = <String, _VisualCandidate>{};
     for (var i = 0; i < indexed.length; i++) {
+      if (i % 8 == 0) {
+        // 大库中同一时长可能有数千条记录；批次间让出事件循环，保证滚动和返回
+        // 操作仍可响应，候选覆盖规则本身不变。
+        await Future<void>.delayed(Duration.zero);
+      }
       final left = indexed[i];
       final local = <_VisualCandidate>[];
       final toleranceMs = math.max(
