@@ -137,6 +137,38 @@ void main() {
     expect(result.groups, isEmpty);
   });
 
+  test('reports candidate-building and frame-comparison phases', () async {
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory.systemTemp,
+      _NoopFFmpegBackend(),
+    );
+    final progress = <VideoVisualScanProgress>[];
+
+    await VideoContentSimilarityService(thumbnailService)
+        .findNearDuplicateGroups(
+      [
+        _video('progress-a', const Duration(seconds: 90)),
+        _video('progress-b', const Duration(seconds: 90)),
+      ],
+      maxCandidatePairs: 4,
+      onProgress: progress.add,
+    );
+
+    expect(
+      progress.any(
+        (item) => item.phase == VideoVisualScanPhase.buildingCandidates,
+      ),
+      isTrue,
+    );
+    expect(
+      progress.any(
+        (item) => item.phase == VideoVisualScanPhase.comparingCandidates,
+      ),
+      isTrue,
+    );
+    expect(progress.last.processed, progress.last.total);
+  });
+
   test('allows a partial visual signature instead of requiring every sample',
       () {
     final source = File(

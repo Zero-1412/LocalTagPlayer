@@ -55,6 +55,21 @@ void main() {
     expect(page, contains('WidgetsBinding.instance.addPostFrameCallback'));
   });
 
+  test('相似视频扫描把候选构建和画面对比进度传到页面', () {
+    final page = File(
+      'lib/src/pages/library/video_similarity_page.dart',
+    ).readAsStringSync();
+    final status = File(
+      'lib/src/widgets/library/video_similarity_status_widgets.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('visualProgressPhase: _visualProgressPhase'));
+    expect(page, contains('onProgress: (progress)'));
+    expect(status, contains('VideoVisualScanPhase.buildingCandidates'));
+    expect(status, contains('LinearProgressIndicator('));
+    expect(status, contains('_visualPhaseShortLabel(visualProgressPhase)'));
+  });
+
   test('相似视频播放返回后先清除动作占位再等待资源释放', () {
     final playback = File(
       'lib/src/pages/library/library_page_playback_mixin.dart',

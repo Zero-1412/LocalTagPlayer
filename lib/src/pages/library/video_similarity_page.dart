@@ -61,6 +61,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   var _visualScanning = false;
   var _visualGeneration = 0;
   var _visualScanStale = false;
+  var _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
   var _visualProgress = 0;
   var _visualProgressTotal = 0;
   String? _visualError;
@@ -103,6 +104,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     }
     setState(() {
       _visualScanning = false;
+      _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
       _visualProgress = 0;
       _visualProgressTotal = 0;
     });
@@ -169,6 +171,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     if (mounted) {
       setState(() {
         _visualScanning = true;
+        _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
         _visualProgress = 0;
         _visualProgressTotal = 0;
       });
@@ -184,14 +187,16 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
         widget.store.videos.values,
         excludedVideoIds: exactVideoIds,
         isCancelled: () => !mounted || generation != _visualGeneration,
-        onProgress: (processed, total) {
+        onProgress: (progress) {
           if (!mounted || generation != _visualGeneration) {
             return;
           }
-          if (processed == total || processed % 64 == 0) {
+          if (progress.processed == progress.total ||
+              progress.processed % 64 == 0) {
             setState(() {
-              _visualProgress = processed;
-              _visualProgressTotal = total;
+              _visualProgressPhase = progress.phase;
+              _visualProgress = progress.processed;
+              _visualProgressTotal = progress.total;
             });
           }
         },
@@ -207,6 +212,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
         );
         _visualScanning = false;
         _visualScanStale = false;
+        _visualProgressPhase = VideoVisualScanPhase.comparingCandidates;
         _visualProgress = result.candidatePairCount;
         _visualProgressTotal = result.candidatePairCount;
       });
@@ -217,6 +223,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
       setState(() {
         _visualScanning = false;
         _visualError = '视觉复核失败：$error';
+        _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
         _visualProgress = 0;
         _visualProgressTotal = 0;
       });
@@ -404,6 +411,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
                     visualScanning: _visualScanning,
                     visualError: _visualError,
                     visualScanStale: _visualScanStale,
+                    visualProgressPhase: _visualProgressPhase,
                     visualProgress: _visualProgress,
                     visualProgressTotal: _visualProgressTotal,
                   ),
@@ -445,6 +453,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
                           )
                         : _visualScanning
                             ? VideoSimilarityScanningState(
+                                phase: _visualProgressPhase,
                                 progress: _visualProgress,
                                 total: _visualProgressTotal,
                               )

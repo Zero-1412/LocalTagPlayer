@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/library/video_content_similarity_service.dart';
 import '../../services/library/video_similarity_service.dart';
 import '../app_theme_tokens.dart';
 
@@ -13,6 +14,7 @@ class VideoSimilarityOverview extends StatelessWidget {
     required this.visualScanning,
     required this.visualError,
     required this.visualScanStale,
+    required this.visualProgressPhase,
     required this.visualProgress,
     required this.visualProgressTotal,
   });
@@ -21,6 +23,7 @@ class VideoSimilarityOverview extends StatelessWidget {
   final bool visualScanning;
   final String? visualError;
   final bool visualScanStale;
+  final VideoVisualScanPhase visualProgressPhase;
   final int visualProgress;
   final int visualProgressTotal;
 
@@ -102,8 +105,9 @@ class VideoSimilarityOverview extends StatelessWidget {
                 _VideoSimilarityOverviewPill(
                   label: '视觉复核',
                   value: visualProgressTotal > 0
-                      ? '$visualProgress/$visualProgressTotal'
-                      : '准备中',
+                      ? '${_visualPhaseShortLabel(visualProgressPhase)} '
+                          '$visualProgress/$visualProgressTotal'
+                      : _visualPhaseShortLabel(visualProgressPhase),
                   warning: true,
                 ),
               if (!visualScanning && visualScanStale)
@@ -239,10 +243,12 @@ class VideoSimilarityEmptyState extends StatelessWidget {
 class VideoSimilarityScanningState extends StatelessWidget {
   const VideoSimilarityScanningState({
     super.key,
+    this.phase = VideoVisualScanPhase.buildingCandidates,
     this.progress = 0,
     this.total = 0,
   });
 
+  final VideoVisualScanPhase phase;
   final int progress;
   final int total;
 
@@ -267,7 +273,9 @@ class VideoSimilarityScanningState extends StatelessWidget {
             ),
             SizedBox(height: 14),
             Text(
-              total > 0 ? '正在按时序画面复核近重复视频（$progress/$total）' : '正在按时序画面复核近重复视频',
+              total > 0
+                  ? '${_visualPhaseTitle(phase)}（$progress/$total）'
+                  : _visualPhaseTitle(phase),
               style: TextStyle(
                 color: libraryText,
                 fontSize: 16,
@@ -275,8 +283,23 @@ class VideoSimilarityScanningState extends StatelessWidget {
               ),
             ),
             SizedBox(height: 8),
+            SizedBox(
+              width: 360,
+              child: LinearProgressIndicator(
+                value: total > 0
+                    ? (progress / total).clamp(0.0, 1.0).toDouble()
+                    : null,
+                minHeight: 5,
+                borderRadius: BorderRadius.circular(4),
+                backgroundColor: librarySurfaceAlt,
+                color: libraryAccent,
+              ),
+            ),
+            SizedBox(height: 10),
             Text(
-              '会优先比较多通道候选，并对未缓存首帧保留有界深度回退；不会为全库视频逐个启动播放器兜底。',
+              phase == VideoVisualScanPhase.buildingCandidates
+                  ? '正在按媒体库视频建立多通道候选；完成后会进入逐对画面复核。'
+                  : '会对候选抽取时序画面并保留有界深度回退；不会为全库视频逐个启动播放器兜底。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: libraryTextMuted,
@@ -289,4 +312,18 @@ class VideoSimilarityScanningState extends StatelessWidget {
       ),
     );
   }
+}
+
+String _visualPhaseShortLabel(VideoVisualScanPhase phase) {
+  return switch (phase) {
+    VideoVisualScanPhase.buildingCandidates => '建候选',
+    VideoVisualScanPhase.comparingCandidates => '比画面',
+  };
+}
+
+String _visualPhaseTitle(VideoVisualScanPhase phase) {
+  return switch (phase) {
+    VideoVisualScanPhase.buildingCandidates => '正在建立视觉候选',
+    VideoVisualScanPhase.comparingCandidates => '正在按时序画面复核近重复视频',
+  };
 }

@@ -40,6 +40,25 @@ const _maxUncachedDeepCandidatePairs = 512;
 /** 即使首帧已缓存，深度取帧也有全局上限；强匹配仍走廉价首帧路径。 */
 const _maxDeepVisualCandidatePairs = 2048;
 
+/** 视觉复核的两个可见阶段，避免候选构建期间只能显示无期限转圈。 */
+enum VideoVisualScanPhase {
+  buildingCandidates,
+  comparingCandidates,
+}
+
+/** 页面使用的阶段进度；不把候选构建和 FFmpeg 取帧混成一个无意义的百分比。 */
+class VideoVisualScanProgress {
+  const VideoVisualScanProgress({
+    required this.phase,
+    required this.processed,
+    required this.total,
+  });
+
+  final VideoVisualScanPhase phase;
+  final int processed;
+  final int total;
+}
+
 /**
  * 内容级近重复检测器。
  *
@@ -58,7 +77,7 @@ class VideoContentSimilarityService {
     Iterable<String> excludedVideoIds = const <String>[],
     int maxCandidatePairs = _maxVisualCandidatePairs,
     bool Function()? isCancelled,
-    void Function(int processed, int total)? onProgress,
+    void Function(VideoVisualScanProgress progress)? onProgress,
   }) async {
     if (maxCandidatePairs <= 0) {
       return const VideoVisualScanResult.empty();
@@ -74,6 +93,7 @@ class VideoContentSimilarityService {
       videos,
       maxCandidatePairs,
       isCancelled: cancelled,
+      onProgress: onProgress,
     );
     if (candidates == null || cancelled()) {
       return const VideoVisualScanResult.cancelled();
@@ -81,6 +101,13 @@ class VideoContentSimilarityService {
     if (candidates.isEmpty) {
       return const VideoVisualScanResult.empty();
     }
+    onProgress?.call(
+      VideoVisualScanProgress(
+        phase: VideoVisualScanPhase.comparingCandidates,
+        processed: 0,
+        total: candidates.length,
+      ),
+    );
 
     final signatures = <String, List<int>?>{};
     final quickHashes = <String, int?>{};
@@ -111,13 +138,25 @@ class VideoContentSimilarityService {
           _recordMinimumScore(matchedScores, candidate.left, quickDistance);
           _recordMinimumScore(matchedScores, candidate.right, quickDistance);
           compared++;
-          onProgress?.call(candidateIndex + 1, candidates.length);
+          onProgress?.call(
+            VideoVisualScanProgress(
+              phase: VideoVisualScanPhase.comparingCandidates,
+              processed: candidateIndex + 1,
+              total: candidates.length,
+            ),
+          );
           continue;
         }
         if (quickDistance > _quickVisualDistanceThreshold &&
             candidate.score > _quickRejectMetadataScore &&
             !candidate.titleMatch) {
-          onProgress?.call(candidateIndex + 1, candidates.length);
+          onProgress?.call(
+            VideoVisualScanProgress(
+              phase: VideoVisualScanPhase.comparingCandidates,
+              processed: candidateIndex + 1,
+              total: candidates.length,
+            ),
+          );
           continue;
         }
       }
@@ -125,13 +164,25 @@ class VideoContentSimilarityService {
         // 单侧或双侧缺缓存都计入回退配额，避免 ensureThumbnailFor 的播放器兜底
         // 在大库中为每个候选逐个启动解码。
         if (uncachedDeepCandidates >= _maxUncachedDeepCandidatePairs) {
-          onProgress?.call(candidateIndex + 1, candidates.length);
+          onProgress?.call(
+            VideoVisualScanProgress(
+              phase: VideoVisualScanPhase.comparingCandidates,
+              processed: candidateIndex + 1,
+              total: candidates.length,
+            ),
+          );
           continue;
         }
         uncachedDeepCandidates++;
       }
       if (deepComparedCandidates >= _maxDeepVisualCandidatePairs) {
-        onProgress?.call(candidateIndex + 1, candidates.length);
+        onProgress?.call(
+          VideoVisualScanProgress(
+            phase: VideoVisualScanPhase.comparingCandidates,
+            processed: candidateIndex + 1,
+            total: candidates.length,
+          ),
+        );
         continue;
       }
       deepComparedCandidates++;
@@ -141,19 +192,37 @@ class VideoContentSimilarityService {
         return const VideoVisualScanResult.cancelled();
       }
       if (leftSignature == null || rightSignature == null) {
-        onProgress?.call(candidateIndex + 1, candidates.length);
+        onProgress?.call(
+          VideoVisualScanProgress(
+            phase: VideoVisualScanPhase.comparingCandidates,
+            processed: candidateIndex + 1,
+            total: candidates.length,
+          ),
+        );
         continue;
       }
       compared++;
       final distance = _sequenceDistance(leftSignature, rightSignature);
       if (distance > _visualDistanceThreshold) {
-        onProgress?.call(candidateIndex + 1, candidates.length);
+        onProgress?.call(
+          VideoVisualScanProgress(
+            phase: VideoVisualScanPhase.comparingCandidates,
+            processed: candidateIndex + 1,
+            total: candidates.length,
+          ),
+        );
         continue;
       }
       _union(parent, candidate.left, candidate.right);
       _recordMinimumScore(matchedScores, candidate.left, distance);
       _recordMinimumScore(matchedScores, candidate.right, distance);
-      onProgress?.call(candidateIndex + 1, candidates.length);
+      onProgress?.call(
+        VideoVisualScanProgress(
+          phase: VideoVisualScanPhase.comparingCandidates,
+          processed: candidateIndex + 1,
+          total: candidates.length,
+        ),
+      );
     }
 
     final components = <int, List<int>>{};
@@ -197,6 +266,7 @@ class VideoContentSimilarityService {
     List<VideoItem> videos,
     int maxCandidatePairs, {
     required bool Function() isCancelled,
+    void Function(VideoVisualScanProgress progress)? onProgress,
   }) async {
     await Future<void>.delayed(Duration.zero);
     if (isCancelled()) {
@@ -209,8 +279,19 @@ class VideoContentSimilarityService {
         continue;
       }
       indexed.add(_TimedVideo(index: index, duration: duration));
+      if (index % 64 == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
     }
     indexed.sort((a, b) => a.duration.compareTo(b.duration));
+    // 候选构建阶段按实际进入时长邻居筛选的视频计数，避免把内部两轮循环
+    // 暴露为用户难以理解的两倍总量；无时长但命中文名通道的极小库会显示 1/1。
+    final candidateBuildTotal = math.max(indexed.length, 1);
+    _reportCandidateProgress(
+      onProgress,
+      0,
+      candidateBuildTotal,
+    );
     final rankedByVideo = <List<_VisualCandidate>>[
       for (var index = 0; index < videos.length; index++) <_VisualCandidate>[],
     ];
@@ -234,6 +315,11 @@ class VideoContentSimilarityService {
         // 操作仍可响应，候选覆盖规则本身不变。
         await Future<void>.delayed(Duration.zero);
       }
+      _reportCandidateProgress(
+        onProgress,
+        i + 1,
+        candidateBuildTotal,
+      );
       final left = indexed[i];
       final local = <_VisualCandidate>[];
       final toleranceMs = math.max(
@@ -381,6 +467,12 @@ class VideoContentSimilarityService {
       }
     }
 
+    _reportCandidateProgress(
+      onProgress,
+      candidateBuildTotal,
+      candidateBuildTotal,
+    );
+
     // 按邻居轮次交错不同 duration 区间，保证候选上限也不会只覆盖排序最前端。
     final candidates = <_VisualCandidate>[];
     for (var round = 0; round < _maxVisualNeighborsPerVideo; round++) {
@@ -397,6 +489,27 @@ class VideoContentSimilarityService {
       }
     }
     return candidates;
+  }
+
+  void _reportCandidateProgress(
+    void Function(VideoVisualScanProgress progress)? onProgress,
+    int processed,
+    int total,
+  ) {
+    if (onProgress == null) {
+      return;
+    }
+    final safeTotal = math.max(total, 1);
+    final safeProcessed = processed.clamp(0, safeTotal);
+    if (safeProcessed == safeTotal || safeProcessed % 64 == 0) {
+      onProgress(
+        VideoVisualScanProgress(
+          phase: VideoVisualScanPhase.buildingCandidates,
+          processed: safeProcessed,
+          total: safeTotal,
+        ),
+      );
+    }
   }
 
   Duration? _durationFor(VideoItem item) {
