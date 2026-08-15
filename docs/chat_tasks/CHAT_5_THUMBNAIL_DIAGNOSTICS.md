@@ -14,6 +14,9 @@
 - 播放活跃时降低后台负载；
 - UI 不拼 FFmpeg 路径或拥有 cache invalidation；
 - diagnostics dispose 后无 timer/async UI callback。
+- 相似视频视觉签名是可重建派生缓存：经 `VisualSignatureCacheRepository` 按 stable `videoId`
+  持久化，并以算法版本和媒体 fingerprint/size/mtime 校验有效性；删除时必须由 Repository
+  同事务清理，缓存读写失败只能回退重算，不能阻断媒体库或播放器。
 
 ## 非目标
 

@@ -132,6 +132,7 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies({
       tagRepository: repository,
       cacheRepository: repository,
       playbackRepository: repository,
+      visualSignatureCacheRepository: repository,
     );
   }
 

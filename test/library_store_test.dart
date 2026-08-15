@@ -13,6 +13,7 @@ import 'package:local_tag_player/src/models/library_scan_models.dart';
 import 'package:local_tag_player/src/models/media_details.dart';
 import 'package:local_tag_player/src/models/platform_models.dart';
 import 'package:local_tag_player/src/models/video_item.dart';
+import 'package:local_tag_player/src/models/video_visual_signature.dart';
 import 'package:local_tag_player/src/platform/database_provider.dart';
 import 'package:local_tag_player/src/services/library/library_load_diagnostics.dart';
 import 'package:local_tag_player/src/services/library/library_scan_backend.dart';
@@ -843,6 +844,20 @@ void main() {
       item.videoId,
       const CacheStatus(kind: CacheStatusKind.failed),
     );
+    await store.saveVisualSignature(
+      VideoVisualSignatureCacheEntry(
+        videoId: item.videoId,
+        algorithm: videoVisualSignatureAlgorithm,
+        hashes: const <int>[1, 2, 3],
+        fileSize: 5,
+        modifiedMs: 1,
+      ),
+    );
+    expect(await store.loadVisualSignature(item.videoId), isNotNull);
+    expect(
+      await store.loadVisualSignatures(<String>[item.videoId, 'missing']),
+      containsPair(item.videoId, isNotNull),
+    );
     await store.database.insert(
       'metadata',
       <String, Object?>{
@@ -855,13 +870,14 @@ void main() {
     expect(
       await store.database.query(
         'metadata',
-        where: 'key IN (?, ?)',
+        where: 'key IN (?, ?, ?)',
         whereArgs: <Object?>[
           'cache.thumbnail.${item.videoId}',
           'cache.media_details.${item.videoId}',
+          'cache.visual_signature.${item.videoId}',
         ],
       ),
-      hasLength(2),
+      hasLength(3),
     );
 
     await store.deleteVideo(item.path);
@@ -869,10 +885,11 @@ void main() {
     expect(
       await store.database.query(
         'metadata',
-        where: 'key IN (?, ?)',
+        where: 'key IN (?, ?, ?)',
         whereArgs: <Object?>[
           'cache.thumbnail.${item.videoId}',
           'cache.media_details.${item.videoId}',
+          'cache.visual_signature.${item.videoId}',
         ],
       ),
       isEmpty,

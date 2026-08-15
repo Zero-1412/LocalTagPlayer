@@ -12,6 +12,7 @@ import '../../models/data_backup_models.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
+import '../../models/video_visual_signature.dart';
 import '../../platform/database_provider.dart';
 import '../../repositories/repository_interfaces.dart';
 import '../tags/tag_query_service.dart';
@@ -34,6 +35,7 @@ class LibraryStore
         LibraryRepository,
         TagRepository,
         CacheRepository,
+        VisualSignatureCacheRepository,
         PlaybackRepository,
         LibraryStoreAccess {
   LibraryStore._(
@@ -286,19 +288,98 @@ class LibraryStore
     );
   }
 
+  @override
+  Future<VideoVisualSignatureCacheEntry?> loadVisualSignature(
+    String videoId,
+  ) async =>
+      (await loadVisualSignatures(<String>[videoId]))[videoId];
+
+  @override
+  Future<Map<String, VideoVisualSignatureCacheEntry>> loadVisualSignatures(
+    Iterable<String> videoIds,
+  ) async {
+    final ids = videoIds.toSet().where((id) => id.isNotEmpty).toList();
+    final result = <String, VideoVisualSignatureCacheEntry>{};
+    const prefix = 'cache.visual_signature.';
+    // SQLite 的 IN 参数有上限，按 400 条分块仍只需少量查询即可预热大候选集。
+    for (var offset = 0; offset < ids.length; offset += 400) {
+      final chunk = ids.skip(offset).take(400).toList(growable: false);
+      final rows = await _db.query(
+        'metadata',
+        columns: const ['key', 'value'],
+        where: 'key IN (${List<String>.filled(chunk.length, '?').join(', ')})',
+        whereArgs: <Object?>[
+          for (final id in chunk) '$prefix$id',
+        ],
+      );
+      for (final row in rows) {
+        final key = row['key'] as String?;
+        if (key == null || !key.startsWith(prefix)) {
+          continue;
+        }
+        final videoId = key.substring(prefix.length);
+        try {
+          final entry = VideoVisualSignatureCacheEntry.fromJson(
+            videoId,
+            jsonDecode(row['value']! as String),
+          );
+          if (entry != null) {
+            result[videoId] = entry;
+          }
+        } on Object {
+          // 单条派生缓存损坏只触发对应视频重算，不阻塞整批预热。
+        }
+      }
+    }
+    return result;
+  }
+
+  @override
+  Future<void> saveVisualSignature(
+    VideoVisualSignatureCacheEntry entry,
+  ) async {
+    if (entry.algorithm != videoVisualSignatureAlgorithm ||
+        entry.hashes.length < 2) {
+      return;
+    }
+    // 事务内再次确认 stable videoId 仍存在，防止删除与晚到的后台签名写入交叉时
+    // 重新制造孤立 metadata；删除先提交时这里自然跳过，删除后提交则由删除批次清理。
+    await _db.transaction((transaction) async {
+      final videos = await transaction.query(
+        'videos',
+        columns: const ['video_id'],
+        where: 'video_id = ?',
+        whereArgs: [entry.videoId],
+        limit: 1,
+      );
+      if (videos.isEmpty) {
+        return;
+      }
+      await transaction.insert(
+        'metadata',
+        {
+          'key': 'cache.visual_signature.${entry.videoId}',
+          'value': jsonEncode(entry.toJson()),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    });
+  }
+
   /**
    * 将视频级缓存诊断状态排入主库删除批次。
    *
-   * 这些状态只服务诊断，不应在视频行删除后继续以 stable videoId 残留；与标签关联、视频
-   * 行同批提交，避免事务中断时出现半套依赖。
+   * 这些状态和视觉签名只服务诊断/派生缓存，不应在视频行删除后继续以 stable videoId
+   * 残留；与标签关联、视频行同批提交，避免事务中断时出现半套依赖。
    */
   void _deleteCacheStatusesInBatch(Batch batch, String videoId) {
     batch.delete(
       'metadata',
-      where: 'key IN (?, ?)',
+      where: 'key IN (?, ?, ?)',
       whereArgs: <Object?>[
         'cache.thumbnail.$videoId',
         'cache.media_details.$videoId',
+        'cache.visual_signature.$videoId',
       ],
     );
   }

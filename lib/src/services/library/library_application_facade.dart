@@ -6,6 +6,7 @@ import '../../models/library_scan_models.dart';
 import '../../models/data_backup_models.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
+import '../../models/video_visual_signature.dart';
 import '../../repositories/repository_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments, annotate_overrides
@@ -17,18 +18,21 @@ import '../../repositories/repository_interfaces.dart';
  * `LibraryStore` 的具体类型。标签筛选、stable identity 与 SQLite 单写仍留在 Dart
  * Repository 内部，不下沉到 Rust/C++。
  */
-class LibraryApplicationFacade implements LibraryRelinkRepository {
+class LibraryApplicationFacade
+    implements LibraryRelinkRepository, VisualSignatureCacheRepository {
   LibraryApplicationFacade({
     required LibraryQueryRepository queryRepository,
     required LibraryCommandRepository commandRepository,
     required TagRepository tagRepository,
     required CacheRepository cacheRepository,
     required PlaybackRepository playbackRepository,
+    VisualSignatureCacheRepository? visualSignatureCacheRepository,
   })  : _queries = queryRepository,
         _commands = commandRepository,
         _tagRepository = tagRepository,
         _cacheRepository = cacheRepository,
         _playbackRepository = playbackRepository,
+        _visualSignatureCache = visualSignatureCacheRepository,
         roots = UnmodifiableListView<String>(queryRepository.roots),
         videos = UnmodifiableMapView<String, VideoItem>(queryRepository.videos),
         favoriteTags =
@@ -44,6 +48,7 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
   final TagRepository _tagRepository;
   final CacheRepository _cacheRepository;
   final PlaybackRepository _playbackRepository;
+  final VisualSignatureCacheRepository? _visualSignatureCache;
 
   /** 反映 repository 最新内容、但禁止页面增删的 root 视图。 */
   final List<String> roots;
@@ -148,6 +153,28 @@ class LibraryApplicationFacade implements LibraryRelinkRepository {
 
   Future<CacheStatus> thumbnailStatus(String videoId) =>
       _cacheRepository.thumbnailStatus(videoId);
+
+  @override
+  Future<VideoVisualSignatureCacheEntry?> loadVisualSignature(
+    String videoId,
+  ) async {
+    return await _visualSignatureCache?.loadVisualSignature(videoId);
+  }
+
+  @override
+  Future<Map<String, VideoVisualSignatureCacheEntry>> loadVisualSignatures(
+    Iterable<String> videoIds,
+  ) async {
+    return await _visualSignatureCache?.loadVisualSignatures(videoIds) ??
+        <String, VideoVisualSignatureCacheEntry>{};
+  }
+
+  @override
+  Future<void> saveVisualSignature(
+    VideoVisualSignatureCacheEntry entry,
+  ) async {
+    await _visualSignatureCache?.saveVisualSignature(entry);
+  }
 
   Future<void> savePlaybackPosition({
     required String videoId,

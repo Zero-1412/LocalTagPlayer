@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import '../../models/video_item.dart';
+import '../../models/video_visual_signature.dart';
+import '../../repositories/repository_interfaces.dart';
 import '../media/thumbnail_service.dart';
 import 'video_similarity_service.dart';
 
@@ -145,12 +147,17 @@ class _VisualSignaturePair {
  * 先按时长/画面规格/文件大小为每个视频选择最相近邻居，再复用已有缩略图做廉价
  * 首帧 dHash 预筛，最后经 [ThumbnailService] 的 FFmpeg 取帧边界生成有序多帧 dHash。
  * 这样可以识别重新编码、容器变化或轻微裁剪后的复制品，同时避免同一时长密集区
- * 垄断全局候选；平台路径、外部进程或解码逻辑仍不进入页面，签名只在当前扫描内存中存在。
+ * 垄断全局候选；平台路径、外部进程或解码逻辑仍不进入页面，签名通过 Repository
+ * 复用带身份校验的持久化派生缓存，失效时再回退到本轮取帧。
  */
 class VideoContentSimilarityService {
-  const VideoContentSimilarityService(this._thumbnailService);
+  const VideoContentSimilarityService(
+    this._thumbnailService, {
+    VisualSignatureCacheRepository? visualSignatureCache,
+  }) : _visualSignatureCache = visualSignatureCache;
 
   final ThumbnailService _thumbnailService;
+  final VisualSignatureCacheRepository? _visualSignatureCache;
 
   Future<VideoVisualScanResult> findNearDuplicateGroups(
     Iterable<VideoItem> source, {
@@ -202,6 +209,26 @@ class VideoContentSimilarityService {
     // 深度候选按视频 ID 合并 in-flight 任务，避免同一视频同时出现在多个邻居
     // 对中时重复启动 FFmpeg；批次大小再按 CPU 档位有界放大，保持可取消和可让渡。
     final signatureTasks = <String, Future<List<int>?>>{};
+    final persistedSignatures = <String, VideoVisualSignatureCacheEntry>{};
+    final visualSignatureRepository = _visualSignatureCache;
+    if (visualSignatureRepository != null) {
+      final videoIds = <String>{
+        for (final candidate in candidates) ...<String>{
+          videos[candidate.left].videoId,
+          videos[candidate.right].videoId,
+        },
+      };
+      try {
+        // 元数据表批量预热只做一次（内部按参数上限分块），避免每个候选视频
+        // 启动一条独立查询；不存在或损坏的条目仍由本轮取帧回退重建。
+        persistedSignatures.addAll(
+          await visualSignatureRepository.loadVisualSignatures(videoIds),
+        );
+      } on Object {
+        // 派生缓存读取失败只影响命中率，不能阻断相似候选搜索。
+        persistedSignatures.clear();
+      }
+    }
     final quickHashes = <String, int?>{};
     final parent = List<int>.generate(videos.length, (index) => index);
     final matchedScores = <int, double>{};
@@ -210,6 +237,11 @@ class VideoContentSimilarityService {
     var compared = 0;
     var processed = 0;
     final deepCandidates = <_VisualCandidate>[];
+
+    Future<VideoVisualSignatureCacheEntry?> persistedFor(VideoItem item) async {
+      final cached = persistedSignatures[item.videoId];
+      return cached != null && cached.matches(item) ? cached : null;
+    }
 
     void reportProcessed() {
       processed++;
@@ -225,7 +257,11 @@ class VideoContentSimilarityService {
       if (cached != null) {
         return cached;
       }
-      final task = _signatureFor(item, signatures);
+      final task = _signatureFor(
+        item,
+        signatures,
+        loadPersisted: persistedFor,
+      );
       signatureTasks[item.videoId] = task;
       return task;
     }
@@ -252,8 +288,8 @@ class VideoContentSimilarityService {
       // ThumbnailService 的 regular queue 限制实际解码并发。
       final quickPair = await Future.wait<int?>(
         <Future<int?>>[
-          _quickHashFor(left, quickHashes),
-          _quickHashFor(right, quickHashes),
+          _quickHashFor(left, quickHashes, loadPersisted: persistedFor),
+          _quickHashFor(right, quickHashes, loadPersisted: persistedFor),
         ],
       );
       final leftQuickHash = quickPair[0];
@@ -359,8 +395,8 @@ class VideoContentSimilarityService {
                   best == null ? value : math.min(best, value).toDouble());
       groups.add(
         VideoSimilarityGroup(
-          // 视觉签名不持久化；该值仅用于调试区分算法版本。
-          fingerprint: 'visual-dhash-v3',
+          // 分组结果不持久化；该值仅用于调试区分算法版本，缓存条目另走 Repository。
+          fingerprint: videoVisualSignatureAlgorithm,
           kind: VideoSimilarityKind.visualNearDuplicate,
           visualScore: score,
           videos: List<VideoItem>.unmodifiable(members),
@@ -789,12 +825,46 @@ class VideoContentSimilarityService {
         leftFingerprint == rightFingerprint;
   }
 
+  Future<void> _savePersistedSignature(
+    VideoItem item,
+    List<int> hashes,
+  ) async {
+    final repository = _visualSignatureCache;
+    if (repository == null ||
+        hashes.length < 2 ||
+        (item.mediaFingerprint == null &&
+            item.fileSize == null &&
+            item.modifiedMs == null)) {
+      return;
+    }
+    try {
+      await repository.saveVisualSignature(
+        VideoVisualSignatureCacheEntry(
+          videoId: item.videoId,
+          algorithm: videoVisualSignatureAlgorithm,
+          hashes: List<int>.unmodifiable(hashes),
+          mediaFingerprint: item.mediaFingerprint,
+          fileSize: item.fileSize,
+          modifiedMs: item.modifiedMs,
+        ),
+      );
+    } on Object {
+      // 派生缓存写入失败不影响本轮已得到的视觉结果，下一轮可重试。
+    }
+  }
+
   Future<List<int>?> _signatureFor(
     VideoItem item,
-    Map<String, List<int>?> cache,
-  ) async {
+    Map<String, List<int>?> cache, {
+    Future<VideoVisualSignatureCacheEntry?> Function(VideoItem)? loadPersisted,
+  }) async {
     if (cache.containsKey(item.videoId)) {
       return cache[item.videoId];
+    }
+    final persisted = await loadPersisted?.call(item);
+    if (persisted != null) {
+      cache[item.videoId] = persisted.hashes;
+      return persisted.hashes;
     }
     final duration = _durationFor(item);
     final hashes = <int>[];
@@ -838,15 +908,25 @@ class VideoContentSimilarityService {
     // 人工复核候选展示，不触发自动删除。
     final result = hashes.length < 2 ? null : hashes;
     cache[item.videoId] = result;
+    if (result != null) {
+      await _savePersistedSignature(item, result);
+    }
     return result;
   }
 
   Future<int?> _quickHashFor(
     VideoItem item,
-    Map<String, int?> cache,
-  ) async {
+    Map<String, int?> cache, {
+    Future<VideoVisualSignatureCacheEntry?> Function(VideoItem)? loadPersisted,
+  }) async {
     if (cache.containsKey(item.videoId)) {
       return cache[item.videoId];
+    }
+    final persisted = await loadPersisted?.call(item);
+    if (persisted != null) {
+      final hash = persisted.hashes.first;
+      cache[item.videoId] = hash;
+      return hash;
     }
     // 只读取已存在的有效 JPEG，不在候选预筛阶段触发 FFmpeg 生成任务。
     final frame = await _thumbnailService.thumbnailFor(item);

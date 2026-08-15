@@ -108,6 +108,11 @@ Repository 拥有：
 - 相似视频视觉扫描必须分别统计候选构建和画面对比的累计耗时、平滑吞吐率及剩余时间估算；首帧预筛
   两端可并行，深度签名按 CPU 档位批量并发但必须按 stable videoId 合并 in-flight 任务，实际 FFmpeg
   数量仍受 ThumbnailService 有界队列约束。ETA 预热不足时显示估算中，不得伪造固定总时长。
+- 视觉签名属于可重建派生缓存，持久化在现有 `metadata` 表的
+  `cache.visual_signature.<videoId>` key 中，不新增表或改变 SQLite schema version；条目必须携带
+  算法版本及 mediaFingerprint/size/mtime 快照，读取时不匹配即失效并重算。签名写入经
+  `VisualSignatureCacheRepository`，不进入用户数据备份；删除事务必须与 thumbnail/media_details
+  metadata 一并清理，晚到写入须在事务内确认 stable videoId 仍存在。
 - 播放活跃时降低后台媒体负载；播放期间不得让视觉复核继续启动新的 FFmpeg 任务；
 - 目录切换、排序和搜索不得在 UI 线程重复全量查询/rebuild；
 - root 删除、文件删除和数据库清理是不同用户动作，不能互相暗示授权。
@@ -117,8 +122,8 @@ Repository 拥有：
 - 所有媒体库、收藏/最近播放、本地目录、相似视频和播放器队列中的用户视频删除，统一经过
   `LibraryFileCommandExecutor` 与 `FileSystemAdapter.moveFileToTrash`；执行顺序固定为
   `移入系统回收站 -> 删除 Repository 记录 -> 清理可重建缩略图缓存`。
-- Repository 删除事务同时清理 `cache.thumbnail.<videoId>` 与
-  `cache.media_details.<videoId>` 两类缓存诊断 metadata，和标签关联、视频行同批提交，
+- Repository 删除事务同时清理 `cache.thumbnail.<videoId>`、`cache.media_details.<videoId>` 与
+  `cache.visual_signature.<videoId>` 三类缓存诊断/派生 metadata，和标签关联、视频行同批提交，
   不留下以 stable `videoId` 为键的孤立状态。
 - 相似视频采用“合并后删除”：源视频的 `is_favorite` 与 `source=manual` 标签关系只并入用户
   选定的保留视频；目标数据按并集保留，folder 派生标签不复制。两条候选自动选择另一条，

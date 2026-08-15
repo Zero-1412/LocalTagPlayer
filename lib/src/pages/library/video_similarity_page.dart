@@ -197,6 +197,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     try {
       final result = await VideoContentSimilarityService(
         widget.thumbnailService,
+        visualSignatureCache: widget.store,
       ).findNearDuplicateGroups(
         widget.store.videos.values,
         excludedVideoIds: exactVideoIds,

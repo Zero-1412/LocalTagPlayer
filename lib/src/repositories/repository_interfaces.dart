@@ -5,6 +5,7 @@ import '../models/library_scan_models.dart';
 import '../models/data_backup_models.dart';
 import '../models/platform_models.dart';
 import '../models/video_item.dart';
+import '../models/video_visual_signature.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -245,6 +246,23 @@ abstract interface class CacheRepository {
   Future<void> saveThumbnailStatus(String videoId, CacheStatus status);
 
   Future<void> saveMediaDetailsStatus(String videoId, CacheStatus status);
+}
+
+/**
+ * 内容级视觉签名的持久化边界。
+ *
+ * 该缓存是可重建派生数据，不进入用户数据备份；但读写仍必须经过 Repository，删除
+ * 视频时由同一主库事务清理，避免以 stable videoId 残留孤立 metadata。
+ */
+abstract interface class VisualSignatureCacheRepository {
+  Future<VideoVisualSignatureCacheEntry?> loadVisualSignature(String videoId);
+
+  /** 进入相似视频页时一次性读取候选涉及的视频，避免逐候选发起 SQLite 查询。 */
+  Future<Map<String, VideoVisualSignatureCacheEntry>> loadVisualSignatures(
+    Iterable<String> videoIds,
+  );
+
+  Future<void> saveVisualSignature(VideoVisualSignatureCacheEntry entry);
 }
 
 abstract interface class PlaybackRepository {

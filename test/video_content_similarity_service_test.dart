@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/models/external_media_tools_state.dart';
 import 'package:local_tag_player/src/models/media_details.dart';
 import 'package:local_tag_player/src/models/video_item.dart';
+import 'package:local_tag_player/src/models/video_visual_signature.dart';
 import 'package:local_tag_player/src/platform/platform_interfaces.dart';
+import 'package:local_tag_player/src/repositories/repository_interfaces.dart';
 import 'package:local_tag_player/src/services/library/video_content_similarity_service.dart';
 import 'package:local_tag_player/src/services/media/thumbnail_service.dart';
 
@@ -137,6 +139,36 @@ void main() {
     expect(result.groups, isEmpty);
   });
 
+  test('reuses a valid persisted visual signature before starting deep frames',
+      () async {
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory.systemTemp,
+      _NoopFFmpegBackend(),
+    );
+    final first = _video('persisted-a', const Duration(seconds: 90));
+    final second = _video('persisted-b', const Duration(seconds: 90));
+    final cache =
+        _FakeVisualSignatureCache(<String, VideoVisualSignatureCacheEntry>{
+      first.videoId: _signature(first),
+      second.videoId: _signature(second),
+    });
+    final stale = _signature(first);
+    first.modifiedMs = 2;
+    expect(stale.matches(first), isFalse);
+    first.modifiedMs = 1;
+
+    final result = await VideoContentSimilarityService(
+      thumbnailService,
+      visualSignatureCache: cache,
+    ).findNearDuplicateGroups([first, second], maxCandidatePairs: 4);
+
+    expect(result.groups, hasLength(1));
+    expect(cache.bulkLoadCalls, 1);
+    expect(
+        cache.loadCalls, containsAll(<String>[first.videoId, second.videoId]));
+    expect(cache.saved, isEmpty);
+  });
+
   test('reports candidate-building and frame-comparison phases', () async {
     final thumbnailService = ThumbnailService.forDirectory(
       Directory.systemTemp,
@@ -229,6 +261,53 @@ VideoItem _video(String title, Duration duration) {
     ),
     playbackDuration: duration,
   );
+}
+
+VideoVisualSignatureCacheEntry _signature(VideoItem item) {
+  return VideoVisualSignatureCacheEntry(
+    videoId: item.videoId,
+    algorithm: videoVisualSignatureAlgorithm,
+    hashes: const <int>[0, 0, 0],
+    fileSize: item.fileSize,
+    modifiedMs: item.modifiedMs,
+  );
+}
+
+class _FakeVisualSignatureCache implements VisualSignatureCacheRepository {
+  _FakeVisualSignatureCache(this.entries);
+
+  final Map<String, VideoVisualSignatureCacheEntry> entries;
+  final List<String> loadCalls = <String>[];
+  final List<VideoVisualSignatureCacheEntry> saved =
+      <VideoVisualSignatureCacheEntry>[];
+  var bulkLoadCalls = 0;
+
+  @override
+  Future<VideoVisualSignatureCacheEntry?> loadVisualSignature(
+    String videoId,
+  ) async {
+    loadCalls.add(videoId);
+    return entries[videoId];
+  }
+
+  @override
+  Future<Map<String, VideoVisualSignatureCacheEntry>> loadVisualSignatures(
+    Iterable<String> videoIds,
+  ) async {
+    bulkLoadCalls++;
+    final ids = videoIds.toList(growable: false);
+    loadCalls.addAll(ids);
+    return <String, VideoVisualSignatureCacheEntry>{
+      for (final id in ids)
+        if (entries[id] != null) id: entries[id]!,
+    };
+  }
+
+  @override
+  Future<void> saveVisualSignature(VideoVisualSignatureCacheEntry entry) async {
+    saved.add(entry);
+    entries[entry.videoId] = entry;
+  }
 }
 
 class _NoopFFmpegBackend implements FFmpegBackend {
