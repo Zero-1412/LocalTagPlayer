@@ -16,6 +16,10 @@ import 'video_similarity_service.dart';
 const _visualSampleFractions = <double>[0.25, 0.5, 0.75];
 /** 视觉结果仅作为人工复核候选，适度偏向召回率而不是自动删除的精确率。 */
 const _visualDistanceThreshold = 0.28;
+/** 时序签名至少要有四分之三的采样点命中，避免单个相同片头制造满分误报。 */
+const _minimumTemporalMatchCoverage = 0.75;
+/** 未命中的采样点会增加距离，避免把“最佳帧”误称为整段视频相似度。 */
+const _temporalCoveragePenalty = 0.5;
 /**
  * 候选上限只作为异常大库的保护；候选选择本身按每个视频分摊，不能再取全局
  * 时长排序的前 N 对，否则同一时长密集区会饿死其它视频。
@@ -35,11 +39,9 @@ const _visualShapeTolerance = 0.25;
 /** 首帧只做廉价预筛；接近元数据的候选即使首帧变化也必须深度复核。 */
 const _quickVisualDistanceThreshold = 0.45;
 const _quickRejectMetadataScore = 0.75;
-/** 首帧已经高度相似时可直接进入人工复核组，不再为每对视频重复取四个 FFmpeg 帧。 */
-const _quickMatchDistanceThreshold = 0.16;
 /** 缺少缓存首帧时只允许有限的 FFmpeg 深度回退，禁止首次进入相似页启动全库解码。 */
 const _maxUncachedDeepCandidatePairs = 512;
-/** 即使首帧已缓存，深度取帧也有全局上限；强匹配仍走廉价首帧路径。 */
+/** 即使首帧已缓存，深度取帧也有全局上限；首帧命中仍需完整时序复核。 */
 const _maxDeepVisualCandidatePairs = 2048;
 
 /** 视觉复核的可见阶段，避免快速预筛结束后深度取帧仍只能显示无期限转圈。 */
@@ -295,16 +297,32 @@ class VideoContentSimilarityService {
       );
       final leftQuickHash = quickPair[0];
       final rightQuickHash = quickPair[1];
+      final leftPersisted = persistedSignatures[left.videoId];
+      final rightPersisted = persistedSignatures[right.videoId];
+      final leftPersistedValid = leftPersisted != null &&
+          leftPersisted.matches(left) &&
+          leftPersisted.hashes.length >= 2;
+      final rightPersistedValid = rightPersisted != null &&
+          rightPersisted.matches(right) &&
+          rightPersisted.hashes.length >= 2;
+      // 持久化签名是完整时序证据；命中后直接比较内存中的签名，避免首帧预筛
+      // 把单个巧合画面升格为 100% 结果，也避免每次重新启动 FFmpeg。
+      if (leftPersistedValid && rightPersistedValid) {
+        compared++;
+        final distance = _sequenceDistance(
+          leftPersisted.hashes,
+          rightPersisted.hashes,
+        );
+        if (distance <= _visualDistanceThreshold) {
+          _union(parent, candidate.left, candidate.right);
+          _recordMinimumScore(matchedScores, candidate.left, distance);
+          _recordMinimumScore(matchedScores, candidate.right, distance);
+        }
+        reportProcessed();
+        continue;
+      }
       if (leftQuickHash != null && rightQuickHash != null) {
         final quickDistance = _hamming(leftQuickHash ^ rightQuickHash) / 64;
-        if (quickDistance <= _quickMatchDistanceThreshold) {
-          _union(parent, candidate.left, candidate.right);
-          _recordMinimumScore(matchedScores, candidate.left, quickDistance);
-          _recordMinimumScore(matchedScores, candidate.right, quickDistance);
-          compared++;
-          reportProcessed();
-          continue;
-        }
         if (quickDistance > _quickVisualDistanceThreshold &&
             candidate.score > _quickRejectMetadataScore &&
             !candidate.titleMatch) {
@@ -423,13 +441,15 @@ class VideoContentSimilarityService {
       }
       final members = entry.value.map((index) => videos[index]).toList()
         ..sort(_compareVideos);
+      // 组分数取最弱成员边，而不是某一对最佳边；视觉百分比因此代表该组
+      // 的保守匹配度，不再把传递合并或单帧巧合显示成 100%。
       final score = entry.value
           .map((index) => matchedScores[index])
           .whereType<double>()
           .fold<double?>(
               null,
-              (best, value) =>
-                  best == null ? value : math.min(best, value).toDouble());
+              (worst, value) =>
+                  worst == null ? value : math.max(worst, value).toDouble());
       groups.add(
         VideoSimilarityGroup(
           // 分组结果不持久化；该值仅用于调试区分算法版本，缓存条目另走 Repository。
@@ -1052,40 +1072,56 @@ class VideoContentSimilarityService {
   double _sequenceDistance(List<int> left, List<int> right) {
     var best = double.infinity;
     for (final offset in <int>[-1, 0, 1]) {
-      var total = 0;
-      var count = 0;
+      final distances = <int>[];
       for (var index = 0; index < left.length; index++) {
         final other = index + offset;
         if (other < 0 || other >= right.length) {
           continue;
         }
-        total += _hamming(left[index] ^ right[other]);
-        count++;
+        distances.add(_hamming(left[index] ^ right[other]));
       }
-      if (count > 0) {
-        best = math.min(best, total / (count * 64));
+      final distance = _summarizeTemporalDistances(
+        distances,
+        expectedCount: math.max(left.length, right.length),
+      );
+      if (distance != null) {
+        best = math.min(best, distance);
       }
     }
-    // 分数轴被片头/片尾剪辑后，固定 offset 仍可能错位；对每帧取另一侧最近邻
-    // 再做双向平均，补足轻微时间轴变化，同时保留 offset 结果的严格下界。
-    double nearestAverage(List<int> source, List<int> target) {
-      if (source.isEmpty || target.isEmpty) {
-        return double.infinity;
-      }
-      var total = 0;
-      for (final hash in source) {
-        var nearest = 64;
-        for (final candidate in target) {
-          nearest = math.min(nearest, _hamming(hash ^ candidate));
-        }
-        total += nearest;
-      }
-      return total / (source.length * 64);
-    }
+    // 不使用无序 nearest-neighbor：重复片头、黑场或水印可能让所有采样点
+    // 找到同一个画面，从而制造虚假的满分；固定小 offset 更符合时序证据。
+    return best;
+  }
 
-    final nearest =
-        (nearestAverage(left, right) + nearestAverage(right, left)) / 2;
-    return math.min(best, nearest);
+  /**
+   * 将采样点距离压成带覆盖约束的距离。
+   *
+   * 单纯平均值会让一个相同片段掩盖其余不相似画面；这里要求至少四分之三
+   * 采样点在视觉阈值内，并为未命中点增加惩罚，使结果仍是人工候选而非概率。
+   */
+  double? _summarizeTemporalDistances(
+    List<int> distances, {
+    required int expectedCount,
+  }) {
+    if (distances.isEmpty) {
+      return null;
+    }
+    final normalized =
+        distances.map((distance) => distance / 64).toList(growable: false);
+    final hits = normalized
+        .where((distance) => distance <= _visualDistanceThreshold)
+        .length;
+    final missing = math.max(0, expectedCount - normalized.length);
+    final coverage = hits / expectedCount;
+    final minimumCoverage =
+        expectedCount < 3 ? 1.0 : _minimumTemporalMatchCoverage;
+    if (coverage < minimumCoverage) {
+      return null;
+    }
+    final mean =
+        (normalized.fold<double>(0, (sum, value) => sum + value) + missing) /
+            expectedCount;
+    return mean + (1 - coverage) * _temporalCoveragePenalty;
   }
 
   int _hamming(int value) {

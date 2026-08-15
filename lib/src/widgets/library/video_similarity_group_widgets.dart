@@ -78,7 +78,7 @@ class VideoSimilarityGroupCard extends StatelessWidget {
                 ),
                 if (group.visualScore != null)
                   Text(
-                    '相似度 ${(1 - group.visualScore!).clamp(0, 1) * 100 ~/ 1}%',
+                    '视觉匹配度 ${((1 - group.visualScore!).clamp(0, 1) * 100).round()}%',
                     style: const TextStyle(
                       color: libraryTextMuted,
                       fontSize: 11,

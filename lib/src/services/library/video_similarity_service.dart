@@ -30,7 +30,12 @@ class VideoSimilarityGroup {
   /** 仅影响候选解释，不改变用户数据或删除语义。 */
   final VideoSimilarityKind kind;
 
-  /** 视觉候选的时序 dHash 相似度；越低越相似。 */
+  /**
+   * 视觉候选的保守时序 dHash 距离；越低越相似。
+   *
+   * 该值要求多帧覆盖并取组内最弱匹配边，UI 转成“视觉匹配度”百分比，
+   * 不是重复概率，也不能单独作为删除依据。
+   */
   final double? visualScore;
 
   /** 同组视频按标题和路径稳定排序。 */
@@ -107,12 +112,15 @@ class VideoSimilarityReport {
     required int candidatePairCount,
     required int comparedPairCount,
   }) {
+    final sortedVisualGroups = List<VideoSimilarityGroup>.of(groups)
+      ..sort(_compareVisualGroups);
     return VideoSimilarityReport(
       groups: this.groups,
       indexedVideoCount: indexedVideoCount,
       unindexedVideoCount: unindexedVideoCount,
       missingVideoCount: missingVideoCount,
-      visualGroups: List<VideoSimilarityGroup>.unmodifiable(groups),
+      // 页面使用匹配度从高到低的稳定顺序；距离越低，显示百分比越高。
+      visualGroups: List<VideoSimilarityGroup>.unmodifiable(sortedVisualGroups),
       visualCandidatePairCount: candidatePairCount,
       visualComparedPairCount: comparedPairCount,
     );
@@ -221,4 +229,22 @@ int _compareVideos(VideoItem a, VideoItem b) {
     return path;
   }
   return a.videoId.compareTo(b.videoId);
+}
+
+int _compareVisualGroups(VideoSimilarityGroup a, VideoSimilarityGroup b) {
+  final aScore = a.visualScore;
+  final bScore = b.visualScore;
+  if (aScore == null && bScore != null) {
+    return 1;
+  }
+  if (aScore != null && bScore == null) {
+    return -1;
+  }
+  if (aScore != null && bScore != null) {
+    final score = aScore.compareTo(bScore);
+    if (score != 0) {
+      return score;
+    }
+  }
+  return _compareVideos(a.videos.first, b.videos.first);
 }

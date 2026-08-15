@@ -81,6 +81,39 @@ void main() {
     expect(report.visualComparedPairCount, 3);
   });
 
+  test('视觉候选按匹配度百分比从高到低稳定排序', () {
+    final lowerDistance = VideoSimilarityGroup(
+      fingerprint: 'visual-low-distance',
+      kind: VideoSimilarityKind.visualNearDuplicate,
+      visualScore: 0.08,
+      videos: [
+        _video('visual-high-match-a', '/library/visual-high-match-a.mp4'),
+        _video('visual-high-match-b', '/library/visual-high-match-b.mp4'),
+      ],
+    );
+    final higherDistance = VideoSimilarityGroup(
+      fingerprint: 'visual-high-distance',
+      kind: VideoSimilarityKind.visualNearDuplicate,
+      visualScore: 0.22,
+      videos: [
+        _video('visual-low-match-a', '/library/visual-low-match-a.mp4'),
+        _video('visual-low-match-b', '/library/visual-low-match-b.mp4'),
+      ],
+    );
+
+    final report =
+        VideoSimilarityReport.fromVideos(const <VideoItem>[]).withVisualGroups(
+      groups: [higherDistance, lowerDistance],
+      candidatePairCount: 2,
+      comparedPairCount: 2,
+    );
+
+    expect(
+      report.visualGroups.map((group) => group.visualScore),
+      [0.08, 0.22],
+    );
+  });
+
   test('删除候选先局部移除分组并保留视觉统计快照', () {
     final retained = _video(
       'retained',

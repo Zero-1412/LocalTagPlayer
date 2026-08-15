@@ -169,6 +169,32 @@ void main() {
     expect(cache.saved, isEmpty);
   });
 
+  test('does not let one repeated frame create a visual duplicate group',
+      () async {
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory.systemTemp,
+      _NoopFFmpegBackend(),
+    );
+    final first = _video('single-frame-a', const Duration(seconds: 90));
+    final second = _video('single-frame-b', const Duration(seconds: 90));
+    final cache = _FakeVisualSignatureCache(
+      <String, VideoVisualSignatureCacheEntry>{
+        first.videoId: _signatureWithHashes(first, const <int>[0, 0, 0, 0]),
+        // 只有前三个采样点相同，最后一个采样点完全不同；无序最近邻会错误地
+        // 把它压成 100%，固定时序 offset 则应拒绝该组。
+        second.videoId:
+            _signatureWithHashes(second, <int>[0, 0, 0, 0xffffffffffffffff]),
+      },
+    );
+
+    final result = await VideoContentSimilarityService(
+      thumbnailService,
+      visualSignatureCache: cache,
+    ).findNearDuplicateGroups([first, second], maxCandidatePairs: 4);
+
+    expect(result.groups, isEmpty);
+  });
+
   test('reports candidate-building and frame-comparison phases', () async {
     final thumbnailService = ThumbnailService.forDirectory(
       Directory.systemTemp,
@@ -309,10 +335,17 @@ VideoItem _video(String title, Duration duration) {
 }
 
 VideoVisualSignatureCacheEntry _signature(VideoItem item) {
+  return _signatureWithHashes(item, const <int>[0, 0, 0]);
+}
+
+VideoVisualSignatureCacheEntry _signatureWithHashes(
+  VideoItem item,
+  List<int> hashes,
+) {
   return VideoVisualSignatureCacheEntry(
     videoId: item.videoId,
     algorithm: videoVisualSignatureAlgorithm,
-    hashes: const <int>[0, 0, 0],
+    hashes: hashes,
     fileSize: item.fileSize,
     modifiedMs: item.modifiedMs,
   );

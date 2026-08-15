@@ -5,7 +5,7 @@ import 'video_item.dart';
 /**
  * 视觉签名算法版本；算法、采样点或距离语义改变时必须递增/改名，旧缓存自然失效。
  */
-const videoVisualSignatureAlgorithm = 'visual-dhash-v3';
+const videoVisualSignatureAlgorithm = 'visual-dhash-v4';
 
 /**
  * 可持久化的内容级视觉签名。
