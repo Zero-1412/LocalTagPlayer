@@ -29,18 +29,12 @@ class RenameVideoFileCommand {
   final String newBaseName;
 }
 
-/** 删除媒体库记录及可选本地文件的显式命令。 */
+/** 删除媒体库记录及本地视频文件的显式命令。 */
 class DeleteVideoCommand {
-  const DeleteVideoCommand({
-    required this.item,
-    required this.moveLocalFileToTrash,
-  });
+  const DeleteVideoCommand({required this.item});
 
   /** 需要删除的稳定视频对象。 */
   final VideoItem item;
-
-  /** 是否先通过平台边界把本地文件移入系统回收站。 */
-  final bool moveLocalFileToTrash;
 }
 
 /** 批量删除完成后的不可变结果；失败项保留原对象供页面继续选中。 */
@@ -136,8 +130,8 @@ class LibraryFileCommandExecutor {
   /**
    * 执行已确认的删除命令。
    *
-   * 回收站动作保持在 Repository 删除之前，避免平台拒绝删除时先丢失用户数据库记录；
-   * 缩略图是可重建缓存，清理失败不能把已经提交的业务删除误报为失败。
+   * 所有用户视频删除都必须先通过平台边界移入系统回收站，避免平台拒绝时先丢失
+   * 数据库记录；缩略图是可重建缓存，清理失败不能把已经提交的业务删除误报为失败。
    */
   Future<void> delete(
     DeleteVideoCommand command, {
@@ -146,9 +140,7 @@ class LibraryFileCommandExecutor {
     Future<void> Function(VideoItem item)? deleteThumbnail,
   }) async {
     final item = command.item;
-    if (command.moveLocalFileToTrash) {
-      await moveFileToTrash(item.path);
-    }
+    await moveFileToTrash(item.path);
     await deleteRecord(item.path);
     try {
       await deleteThumbnail?.call(item);

@@ -1,5 +1,23 @@
 # CURRENT_TASK.md
 
+# 2026-08-15 · 用户视频删除统一移入回收站（完成）
+
+- 盘点：媒体库网格/列表、收藏、最近播放、本地目录、相似视频、批量选择和播放器右侧队列
+  最终都经过 `LibraryFileCommandExecutor`；此前 `DeleteVideoCommand.moveLocalFileToTrash` 与
+  删除确认/设置页允许“仅移出媒体库”，导致文件可能留在原目录。
+- 修复：删除命令移除绕过布尔值，所有用户视频删除固定按“移入系统回收站 → 删除 Repository
+  记录 → 清理可重建缩略图缓存”执行；确认框和设置页删除“仅移出媒体库”选项，保留“不再提示”。
+  旧设置 JSON 键继续以 `true` 回写，避免旧配置恢复保留文件语义。
+- 例外边界：缺失/不可读自动清理仍只删除数据库记录；缩略图、FFmpeg 临时输出、更新下载包和
+  测试临时目录继续使用直接清理，不属于用户视频回收站合同。
+- 保护：schema、FilterQuery / TagQueryService、来源 filtered queue、PlayerBackend、stable
+  videoId、数据库删除顺序和用户数据绑定未改变；平台失败时在删除 Repository 前抛错并保留记录。
+- 验证：文件执行器、相似视频/播放器返回、删除弹窗/设置、架构契约和 PlaybackSettings focused
+  tests 通过；`flutter analyze`、`flutter build windows --debug`、真实 Windows 回收站 smoke 与
+  隔离数据目录启动响应检查通过。全量 `flutter test` 仅保留既有的架构迁移预算和
+  `video_similarity_page.dart` 行数治理两条基线门禁失败；本次删除合同 focused 测试未失败。
+- 下一步：停止编辑后完成只读审计，提交并推送当前分支。
+
 # 2026-08-15 · 相似视频播放器删除返回局部对账（完成）
 
 - 根因：播放器右侧删除已通过原有确认、文件/数据库/缩略图事务更新 Store，但相似视频页仍

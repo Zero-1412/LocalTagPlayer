@@ -134,6 +134,7 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
 
   @override
   Future<void> deleteFile(String path) async {
+    // 仅清理缩略图、临时产物等可重建文件；用户视频统一走 moveFileToTrash。
     final file = File(path);
     if (await file.exists()) {
       await file.delete();

@@ -82,7 +82,6 @@ class PlaybackSettings {
     required this.darkSceneEnhancementEnabled,
     required this.hdrDynamicToneMappingExperimentEnabled,
     required this.confirmBeforeDeletingVideo,
-    required this.moveDeletedFileToTrash,
     this.autoRemoveMissingOrUnreadableVideos = true,
   }) : compressionEnhancementMode = compressionEnhancementMode ??
             (automaticQualityEnhancementEnabled == true
@@ -111,7 +110,6 @@ class PlaybackSettings {
     darkSceneEnhancementEnabled: false,
     hdrDynamicToneMappingExperimentEnabled: false,
     confirmBeforeDeletingVideo: true,
-    moveDeletedFileToTrash: false,
     autoRemoveMissingOrUnreadableVideos: true,
   );
   /** 播放内核已验证并允许持久化的固定倍速档位。 */
@@ -274,10 +272,8 @@ class PlaybackSettings {
   final bool darkSceneEnhancementEnabled;
   /** 是否启用默认关闭、关闭即恢复 mpv 自动值的 HDR 动态映射。 */
   final bool hdrDynamicToneMappingExperimentEnabled;
-  /** 删除视频前是否显示影响范围与回收站选择确认。 */
+  /** 删除视频前是否显示影响范围确认。视频文件动作始终进入系统回收站。 */
   final bool confirmBeforeDeletingVideo;
-  /** 删除确认或无提示删除时，是否先把本地文件移入系统回收站。 */
-  final bool moveDeletedFileToTrash;
   /** 是否只从数据库自动移除安全确认的 missing 或不可读视频；不授权删除磁盘文件。 */
   final bool autoRemoveMissingOrUnreadableVideos;
 
@@ -314,7 +310,6 @@ class PlaybackSettings {
     bool? darkSceneEnhancementEnabled,
     bool? hdrDynamicToneMappingExperimentEnabled,
     bool? confirmBeforeDeletingVideo,
-    bool? moveDeletedFileToTrash,
     bool? autoRemoveMissingOrUnreadableVideos,
   }) {
     final resolvedCompressionMode = compressionEnhancementMode ??
@@ -354,8 +349,6 @@ class PlaybackSettings {
               this.hdrDynamicToneMappingExperimentEnabled,
       confirmBeforeDeletingVideo:
           confirmBeforeDeletingVideo ?? this.confirmBeforeDeletingVideo,
-      moveDeletedFileToTrash:
-          moveDeletedFileToTrash ?? this.moveDeletedFileToTrash,
       autoRemoveMissingOrUnreadableVideos:
           autoRemoveMissingOrUnreadableVideos ??
               this.autoRemoveMissingOrUnreadableVideos,
@@ -398,7 +391,8 @@ class PlaybackSettings {
         'hdrDynamicToneMappingExperimentEnabled':
             hdrDynamicToneMappingExperimentEnabled,
         'confirmBeforeDeletingVideo': confirmBeforeDeletingVideo,
-        'moveDeletedFileToTrash': moveDeletedFileToTrash,
+        // 历史配置键保持为 true，避免旧版本设置回写后重新表达“保留媒体文件”语义。
+        'moveDeletedFileToTrash': true,
         'autoRemoveMissingOrUnreadableVideos':
             autoRemoveMissingOrUnreadableVideos,
       };
@@ -497,9 +491,6 @@ class PlaybackSettings {
       confirmBeforeDeletingVideo: json['confirmBeforeDeletingVideo'] is bool
           ? json['confirmBeforeDeletingVideo']! as bool
           : defaults.confirmBeforeDeletingVideo,
-      moveDeletedFileToTrash: json['moveDeletedFileToTrash'] is bool
-          ? json['moveDeletedFileToTrash']! as bool
-          : defaults.moveDeletedFileToTrash,
       autoRemoveMissingOrUnreadableVideos:
           json['autoRemoveMissingOrUnreadableVideos'] is bool
               ? json['autoRemoveMissingOrUnreadableVideos']! as bool

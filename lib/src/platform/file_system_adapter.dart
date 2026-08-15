@@ -92,7 +92,11 @@ abstract interface class FileSystemAdapter {
   /** 读取单个文件的轻量元数据；不存在时返回 null。 */
   Future<FileSystemEntitySnapshot?> statFile(String path);
 
-  /** 删除单个文件；文件不存在时安全返回。 */
+  /**
+   * 永久删除非用户媒体文件；文件不存在时安全返回。
+   *
+   * 用户视频禁止调用此方法，必须使用 [moveFileToTrash]，以保留系统回收站的恢复路径。
+   */
   Future<void> deleteFile(String path);
 
   /**

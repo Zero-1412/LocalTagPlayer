@@ -82,7 +82,7 @@ void main() {
             activeTags: const <String>['QA'],
             activeChildTag: null,
             queueTitle: '本机插件隔离 QA',
-            onDeleteVideo: (_, __) async {},
+            onDeleteVideo: (_) async {},
             onToggleFavorite: (_) async {},
             onRenameFile: (_, __) async {},
             onEditManualTags: (_) async {},

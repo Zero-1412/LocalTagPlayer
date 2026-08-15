@@ -62,7 +62,6 @@ class CacheSettingsWorkspace extends StatelessWidget {
     required this.onRefreshCache,
     required this.onPlaybackSettingsChanged,
     required this.onConfirmDeleteChanged,
-    required this.onMoveToTrashChanged,
     required this.onAutoCleanupChanged,
     required this.onFullscreenQueueChanged,
     required this.onResetShortcuts,
@@ -112,8 +111,6 @@ class CacheSettingsWorkspace extends StatelessWidget {
       onPlaybackSettingsChanged;
   /** 提交删除前确认开关意图。 */
   final ValueChanged<bool> onConfirmDeleteChanged;
-  /** 提交移入系统回收站开关意图。 */
-  final ValueChanged<bool> onMoveToTrashChanged;
   /** 提交自动清理失效记录意图；命令繁忙时为 null。 */
   final ValueChanged<bool>? onAutoCleanupChanged;
   /** 提交全屏队列开关意图。 */
@@ -154,7 +151,6 @@ class CacheSettingsWorkspace extends StatelessWidget {
               resumeBehavior: settings.resumeBehavior,
               rendererPreference: settings.rendererPreference,
               confirmBeforeDeletingVideo: settings.confirmBeforeDeletingVideo,
-              moveDeletedFileToTrash: settings.moveDeletedFileToTrash,
               autoRemoveMissingOrUnreadableVideos:
                   settings.autoRemoveMissingOrUnreadableVideos,
               onOpenPlayback: () =>
@@ -214,11 +210,9 @@ class CacheSettingsWorkspace extends StatelessWidget {
                   DeleteFileSettingsPanel(
                     confirmBeforeDeletingVideo:
                         settings.confirmBeforeDeletingVideo,
-                    moveDeletedFileToTrash: settings.moveDeletedFileToTrash,
                     autoRemoveMissingOrUnreadableVideos:
                         settings.autoRemoveMissingOrUnreadableVideos,
                     onConfirmChanged: onConfirmDeleteChanged,
-                    onMoveToTrashChanged: onMoveToTrashChanged,
                     onAutoRemoveMissingOrUnreadableChanged:
                         unavailableCleanupRunning ? null : onAutoCleanupChanged,
                   ),

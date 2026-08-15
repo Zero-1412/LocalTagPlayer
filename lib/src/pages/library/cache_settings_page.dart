@@ -282,12 +282,10 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   /** 更新删除确认与回收站偏好，并立即写入现有设置文件。 */
   Future<void> _changeDeletePreferences({
     bool? confirmBeforeDeletingVideo,
-    bool? moveDeletedFileToTrash,
     bool? autoRemoveMissingOrUnreadableVideos,
   }) async {
     final next = _settings.copyWith(
       confirmBeforeDeletingVideo: confirmBeforeDeletingVideo,
-      moveDeletedFileToTrash: moveDeletedFileToTrash,
       autoRemoveMissingOrUnreadableVideos: autoRemoveMissingOrUnreadableVideos,
     );
     try {
@@ -403,11 +401,6 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
         onConfirmDeleteChanged: (value) {
           unawaited(_changeDeletePreferences(
             confirmBeforeDeletingVideo: value,
-          ));
-        },
-        onMoveToTrashChanged: (value) {
-          unawaited(_changeDeletePreferences(
-            moveDeletedFileToTrash: value,
           ));
         },
         onAutoCleanupChanged: (value) {

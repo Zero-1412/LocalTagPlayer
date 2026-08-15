@@ -17,11 +17,8 @@ import 'library_page_state_host.dart';
 mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     on LibraryPageStateHost<T> {
   @override
-  Future<void> deleteVideoFromPlayer(
-    VideoItem item,
-    bool moveLocalFileToTrash,
-  ) async {
-    await deleteConfirmedLibraryVideo(item, moveLocalFileToTrash);
+  Future<void> deleteVideoFromPlayer(VideoItem item) async {
+    await deleteConfirmedLibraryVideo(item);
     // 播放器路由仍在前台时不重建媒体库；返回后统一刷新可见结果和标签计数。
     runtime.playerScopedLibraryDataChanged = true;
     runtime.playerScopedNeedsCountRefresh = true;
@@ -42,10 +39,10 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
   }
 
   /**
-   * 处理媒体卡片删除动作，并把移入系统回收站保持为显式可选项。
+   * 处理媒体卡片删除动作；所有用户视频文件都先移入系统回收站。
    *
-   * 数据库事务会一并删除标签关系、收藏、播放进度、媒体详情和稳定身份记录；选择仅移出
-   * 媒体库时，仍位于受监控 root 的文件会在下次扫描时作为新条目重新出现。
+   * 数据库事务会一并删除标签关系、收藏、播放进度、媒体详情和稳定身份记录；缺失/不可读
+   * 自动清理是独立的数据库记录清理，不会删除磁盘文件。
    */
   Future<void> requestDeleteVideo(VideoItem item) async {
     await _deleteVideoWithConfirmation(
@@ -66,10 +63,7 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
       return false;
     }
     try {
-      await deleteConfirmedLibraryVideo(
-        item,
-        decision.moveLocalFileToTrash,
-      );
+      await deleteConfirmedLibraryVideo(item);
       if (mounted) {
         onDeleted();
       }
@@ -94,13 +88,9 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
    */
   Future<void> deleteConfirmedLibraryVideo(
     VideoItem item,
-    bool moveLocalFileToTrash,
   ) async {
     await runtime.fileCommandExecutor.delete(
-      DeleteVideoCommand(
-        item: item,
-        moveLocalFileToTrash: moveLocalFileToTrash,
-      ),
+      DeleteVideoCommand(item: item),
       moveFileToTrash: fileSystem.moveFileToTrash,
       deleteRecord: (path) async {
         await runtime.store?.deleteVideo(path);
@@ -136,7 +126,6 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
       targets.map(
         (item) => DeleteVideoCommand(
           item: item,
-          moveLocalFileToTrash: decision.moveLocalFileToTrash,
         ),
       ),
       moveFileToTrash: fileSystem.moveFileToTrash,
@@ -171,7 +160,7 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     }
   }
 
-  /** 单条删除按当前偏好决定直接执行或展示统一确认层。 */
+  /** 单条删除按确认偏好决定是否显示提示；文件动作始终进入系统回收站。 */
   Future<VideoDeleteDecision?> resolveSingleVideoDeleteDecision(
     VideoItem item,
   ) async {
@@ -183,12 +172,11 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     final decision = await showPlayerDeleteConfirmationDialog(
       context,
       item,
-      initialMoveLocalFileToTrash: settings.moveDeletedFileToTrash,
     );
     return rememberDeleteDecision(decision);
   }
 
-  /** 批量删除与单条删除共享确认显示和回收站默认值。 */
+  /** 批量删除与单条删除共享确认显示，并始终把文件移入系统回收站。 */
   Future<VideoDeleteDecision?> resolveBatchVideoDeleteDecision(
     int count,
   ) async {
@@ -200,7 +188,6 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     final decision = await showBatchVideoDeleteConfirmationDialog(
       context,
       count: count,
-      initialMoveLocalFilesToTrash: settings.moveDeletedFileToTrash,
     );
     return rememberDeleteDecision(decision);
   }
@@ -216,7 +203,6 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
       return null;
     }
     final next = runtime.playbackSettings.copyWith(
-      moveDeletedFileToTrash: decision.moveLocalFileToTrash,
       confirmBeforeDeletingVideo: !decision.dontAskAgain,
     );
     try {

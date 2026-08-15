@@ -18,7 +18,6 @@ class SettingsLandingList extends StatelessWidget {
     required this.resumeBehavior,
     required this.rendererPreference,
     required this.confirmBeforeDeletingVideo,
-    required this.moveDeletedFileToTrash,
     this.autoRemoveMissingOrUnreadableVideos = true,
     required this.onOpenPlayback,
     required this.onOpenVideoQuality,
@@ -38,9 +37,6 @@ class SettingsLandingList extends StatelessWidget {
 
   /** 删除动作当前是否保留确认层。 */
   final bool confirmBeforeDeletingVideo;
-
-  /** 删除动作当前是否同步把本地文件移入回收站。 */
-  final bool moveDeletedFileToTrash;
 
   /** 扫描后是否自动清理缺失/不可读数据库记录。 */
   final bool autoRemoveMissingOrUnreadableVideos;
@@ -122,8 +118,8 @@ class SettingsLandingList extends StatelessWidget {
               icon: Icons.delete_outline_rounded,
               title: '删除文件',
               subtitle: confirmBeforeDeletingVideo
-                  ? '删除前提示 · ${moveDeletedFileToTrash ? '移入回收站' : '仅移除记录'} · ${autoRemoveMissingOrUnreadableVideos ? '自动清理无效记录' : '保留无效记录'}'
-                  : '不再提示 · ${moveDeletedFileToTrash ? '移入回收站' : '仅移除记录'} · ${autoRemoveMissingOrUnreadableVideos ? '自动清理无效记录' : '保留无效记录'}',
+                  ? '删除前提示 · 始终移入回收站 · ${autoRemoveMissingOrUnreadableVideos ? '自动清理无效记录' : '保留无效记录'}'
+                  : '不再提示 · 始终移入回收站 · ${autoRemoveMissingOrUnreadableVideos ? '自动清理无效记录' : '保留无效记录'}',
               onTap: onOpenFileDeletion,
             ),
             _SettingsNavigationTile(

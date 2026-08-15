@@ -244,7 +244,7 @@ void main() {
           activeTags: const <String>[],
           activeChildTag: null,
           queueTitle: '隔离重命名测试',
-          onDeleteVideo: (_, __) async {},
+          onDeleteVideo: (_) async {},
           onToggleFavorite: (_) async {},
           onRenameFile: (target, newBaseName) async {
             renameAttempts += 1;

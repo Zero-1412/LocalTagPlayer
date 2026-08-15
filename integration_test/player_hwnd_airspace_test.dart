@@ -78,7 +78,7 @@ void main() {
           activeTags: const <String>['QA'],
           activeChildTag: null,
           queueTitle: 'child HWND airspace QA',
-          onDeleteVideo: (_, __) async {},
+          onDeleteVideo: (_) async {},
           onToggleFavorite: (_) async {},
           onRenameFile: (_, __) async {},
           onEditManualTags: (_) async {},

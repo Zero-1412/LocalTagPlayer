@@ -191,7 +191,7 @@ void main() {
           activeTags: const <String>['QA'],
           activeChildTag: null,
           queueTitle: '固定匿名画质基线',
-          onDeleteVideo: (_, __) async {},
+          onDeleteVideo: (_) async {},
           onToggleFavorite: (_) async {},
           onRenameFile: (_, __) async {},
           onEditManualTags: (_) async {},

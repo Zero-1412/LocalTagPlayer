@@ -2715,11 +2715,10 @@ void main() {
     );
   });
 
-  testWidgets('player delete dialog keeps recycle-bin action explicit',
+  testWidgets('player delete dialog always uses recycle-bin action',
       (tester) async {
     final item = _testVideo(path: r'X:\test-media\clip.mp4', title: 'clip');
     VideoDeleteDecision? result;
-    var initialMoveToTrash = false;
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -2728,7 +2727,6 @@ void main() {
               result = await showPlayerDeleteConfirmationDialog(
                 context,
                 item,
-                initialMoveLocalFileToTrash: initialMoveToTrash,
               );
             },
             child: const Text('打开删除确认'),
@@ -2743,43 +2741,21 @@ void main() {
     expect(dialogTheme.colorScheme.brightness, Brightness.dark);
     expect(dialogTheme.dialogTheme.backgroundColor, librarySurface);
     expect(
-      tester
-          .widget<Checkbox>(
-            find.descendant(
-              of: find.byKey(const ValueKey('deleteDialog.moveToTrash')),
-              matching: find.byType(Checkbox),
-            ),
-          )
-          .value,
-      isFalse,
-    );
+        find.byKey(const ValueKey('deleteDialog.moveToTrash')), findsNothing);
     expect(find.text('不再提示'), findsOneWidget);
-    expect(find.text('仅移出媒体库'), findsOneWidget);
-    await tester.tap(find.text('仅移出媒体库'));
+    expect(find.text('移入回收站并移除记录'), findsOneWidget);
+    expect(find.textContaining('本地视频移入系统回收站'), findsOneWidget);
+    await tester.tap(find.text('移入回收站并移除记录'));
     await tester.pumpAndSettle();
-    expect(result?.moveLocalFileToTrash, isFalse);
     expect(result?.dontAskAgain, isFalse);
 
     result = null;
-    initialMoveToTrash = true;
     await tester.tap(find.text('打开删除确认'));
     await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<Checkbox>(
-            find.descendant(
-              of: find.byKey(const ValueKey('deleteDialog.moveToTrash')),
-              matching: find.byType(Checkbox),
-            ),
-          )
-          .value,
-      isTrue,
-    );
     await tester.tap(find.text('不再提示'));
     await tester.pump();
     await tester.tap(find.text('移入回收站并移除记录'));
     await tester.pumpAndSettle();
-    expect(result?.moveLocalFileToTrash, isTrue);
     expect(result?.dontAskAgain, isTrue);
   });
 
@@ -3415,7 +3391,6 @@ void main() {
             resumeBehavior: PlaybackResumeBehavior.ask,
             rendererPreference: PlayerRendererPreference.automatic,
             confirmBeforeDeletingVideo: true,
-            moveDeletedFileToTrash: false,
             onOpenPlayback: () => openedSections.add('playback'),
             onOpenVideoQuality: () => openedSections.add('quality'),
             onOpenPlayerInteraction: () => openedSections.add('interaction'),
@@ -3615,15 +3590,12 @@ void main() {
   testWidgets('delete file settings remain readable at 150 percent',
       (tester) async {
     bool? confirmChanged;
-    bool? trashChanged;
     bool? autoRemoveChanged;
     await tester.pumpWidget(
       deleteFileSettingsSmokeHarness(
         confirmBeforeDeletingVideo: false,
-        moveDeletedFileToTrash: true,
         textScaler: TextScaler.linear(1.5),
         onConfirmChanged: (value) => confirmChanged = value,
-        onMoveToTrashChanged: (value) => trashChanged = value,
         onAutoRemoveMissingOrUnreadableChanged: (value) =>
             autoRemoveChanged = value,
       ),
@@ -3631,8 +3603,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('删除前显示提示框'), findsOneWidget);
-    expect(find.text('同步将本地文件移入回收站'), findsOneWidget);
-    expect(find.textContaining('直接把本地文件移入回收站'), findsOneWidget);
+    expect(find.textContaining('视频文件删除规则：始终移入系统回收站'), findsOneWidget);
+    expect(find.textContaining('后续删除将不再提示，但仍会先把本地视频移入系统回收站'), findsOneWidget);
     expect(tester.takeException(), isNull);
     expect(
       find.byKey(const ValueKey(
@@ -3645,15 +3617,11 @@ void main() {
       find.byKey(const ValueKey('settings.fileDeletion.confirm')),
     );
     await tester.tap(
-      find.byKey(const ValueKey('settings.fileDeletion.moveToTrash')),
-    );
-    await tester.tap(
       find.byKey(const ValueKey(
         'settings.fileDeletion.autoRemoveMissingOrUnreadable',
       )),
     );
     expect(confirmChanged, isTrue);
-    expect(trashChanged, isFalse);
     expect(autoRemoveChanged, isFalse);
   });
 
@@ -4641,7 +4609,8 @@ void main() {
         'fullscreen': 'Space',
       },
       'confirmBeforeDeletingVideo': false,
-      'moveDeletedFileToTrash': true,
+      // 历史设置键仍被读取但不再控制视频删除语义。
+      'moveDeletedFileToTrash': false,
       'autoRemoveMissingOrUnreadableVideos': false,
     });
     expect(settings.shortcuts[PlayerShortcutAction.navigateBack], 'Control+B');
@@ -4649,7 +4618,6 @@ void main() {
     expect(settings.shortcuts[PlayerShortcutAction.fullscreen], 'Space');
     expect(settings.shortcuts[PlayerShortcutAction.screenshot], 'S');
     expect(settings.confirmBeforeDeletingVideo, isFalse);
-    expect(settings.moveDeletedFileToTrash, isTrue);
     expect(settings.autoRemoveMissingOrUnreadableVideos, isFalse);
     expect(settings.toJson()['shortcuts'], isA<Map>());
     expect(settings.toJson()['confirmBeforeDeletingVideo'], isFalse);
@@ -4673,7 +4641,7 @@ void main() {
       },
     });
     expect(settings.confirmBeforeDeletingVideo, isTrue);
-    expect(settings.moveDeletedFileToTrash, isFalse);
+    expect(settings.toJson()['moveDeletedFileToTrash'], isTrue);
     expect(settings.autoRemoveMissingOrUnreadableVideos, isTrue);
     expect(settings.shortcuts[PlayerShortcutAction.navigateBack], 'Escape');
     expect(settings.shortcuts[PlayerShortcutAction.playPause], 'Control+K');
@@ -4690,10 +4658,8 @@ void main() {
     final decision = videoDeleteDecisionWithoutPrompt(
       PlaybackSettings.defaults.copyWith(
         confirmBeforeDeletingVideo: false,
-        moveDeletedFileToTrash: true,
       ),
     );
-    expect(decision?.moveLocalFileToTrash, isTrue);
     expect(decision?.dontAskAgain, isTrue);
   });
 
@@ -4736,7 +4702,6 @@ void main() {
       darkSceneEnhancementEnabled: true,
       hdrDynamicToneMappingExperimentEnabled: true,
       confirmBeforeDeletingVideo: false,
-      moveDeletedFileToTrash: true,
     );
     await changed.save(paths);
     final loaded = await PlaybackSettings.load(paths);
@@ -4758,7 +4723,7 @@ void main() {
     expect(loaded.darkSceneEnhancementEnabled, isTrue);
     expect(loaded.hdrDynamicToneMappingExperimentEnabled, isTrue);
     expect(loaded.confirmBeforeDeletingVideo, isFalse);
-    expect(loaded.moveDeletedFileToTrash, isTrue);
+    expect(loaded.toJson()['moveDeletedFileToTrash'], isTrue);
     expect(loaded.toJson()['playbackMode'], 'repeatAll');
     expect(loaded.toJson()['videoAspectMode'], 'cover');
     expect(loaded.toJson()['videoScaler'], 'bicubic');

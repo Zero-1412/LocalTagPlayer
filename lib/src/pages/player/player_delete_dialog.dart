@@ -6,15 +6,9 @@ import '../../widgets/app_theme_tokens.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-/** 删除确认层返回的完整偏好，不把“不再提示”混入文件操作布尔值。 */
+/** 删除确认层返回的唯一可选偏好；视频文件动作本身固定进入回收站。 */
 class VideoDeleteDecision {
-  const VideoDeleteDecision({
-    required this.moveLocalFileToTrash,
-    required this.dontAskAgain,
-  });
-
-  /** 是否先把本地媒体文件移入系统回收站。 */
-  final bool moveLocalFileToTrash;
+  const VideoDeleteDecision({required this.dontAskAgain});
 
   /** 是否保存当前选择并在后续删除中跳过确认层。 */
   final bool dontAskAgain;
@@ -30,7 +24,6 @@ VideoDeleteDecision? videoDeleteDecisionWithoutPrompt(
     return null;
   }
   return VideoDeleteDecision(
-    moveLocalFileToTrash: settings.moveDeletedFileToTrash,
     dontAskAgain: true,
   );
 }
@@ -38,23 +31,20 @@ VideoDeleteDecision? videoDeleteDecisionWithoutPrompt(
 /**
  * 展示单视频删除确认弹窗。
  *
- * 返回 null 表示取消；确认后同时返回回收站选择与“不再提示”选择。文件操作不能
- * 静默降级为绕过回收站的永久删除，调用方仍必须经过 FileSystemAdapter。
+ * 返回 null 表示取消；确认后返回“不再提示”选择。用户视频文件始终先移入系统回收站，
+ * 不能静默降级为保留原文件或永久删除。
  */
 Future<VideoDeleteDecision?> showPlayerDeleteConfirmationDialog(
   BuildContext context,
-  VideoItem item, {
-  bool initialMoveLocalFileToTrash = false,
-}) {
+  VideoItem item,
+) {
   return _showVideoDeleteConfirmationDialog(
     context,
     title: '删除视频',
     subjectTitle: item.title,
     subjectPath: item.path,
-    impactText: '将移除媒体库记录、标签关系、收藏、播放进度、媒体详情和缩略图缓存。'
-        '如果保留本地文件，它在下次扫描时可能重新加入媒体库。',
-    recycleTitle: '同时将本地视频移入回收站',
-    initialMoveLocalFileToTrash: initialMoveLocalFileToTrash,
+    impactText: '将本地视频移入系统回收站，并移除媒体库记录、标签关系、收藏、播放进度、'
+        '媒体详情和缩略图缓存。文件可从回收站恢复。',
   );
 }
 
@@ -62,29 +52,23 @@ Future<VideoDeleteDecision?> showPlayerDeleteConfirmationDialog(
 Future<VideoDeleteDecision?> showBatchVideoDeleteConfirmationDialog(
   BuildContext context, {
   required int count,
-  bool initialMoveLocalFilesToTrash = false,
 }) {
   return _showVideoDeleteConfirmationDialog(
     context,
     title: '删除 $count 个视频',
-    impactText: '将删除所选视频的数据库记录、标签关系、收藏、播放进度、媒体详情和缩略图缓存。'
-        '如果保留本地文件，它们在下次扫描时可能重新加入媒体库。',
-    recycleTitle: '同时将所选本地视频移入回收站',
-    initialMoveLocalFileToTrash: initialMoveLocalFilesToTrash,
+    impactText: '将所选本地视频移入系统回收站，并删除数据库记录、标签关系、收藏、播放进度、'
+        '媒体详情和缩略图缓存。文件可从回收站恢复。',
   );
 }
 
-/** 构建单条与批量删除共享的确认层，保证两个入口记忆同一组设置。 */
+/** 构建单条与批量删除共享的确认层，保证所有视频删除都进入回收站。 */
 Future<VideoDeleteDecision?> _showVideoDeleteConfirmationDialog(
   BuildContext context, {
   required String title,
   required String impactText,
-  required String recycleTitle,
-  required bool initialMoveLocalFileToTrash,
   String? subjectTitle,
   String? subjectPath,
 }) async {
-  var moveLocalFileToTrash = initialMoveLocalFileToTrash;
   var dontAskAgain = false;
   return showDialog<VideoDeleteDecision>(
     context: context,
@@ -120,22 +104,6 @@ Future<VideoDeleteDecision?> _showVideoDeleteConfirmationDialog(
                 ],
                 Text(impactText),
                 const SizedBox(height: 12),
-                Material(
-                  color: playerSurfaceAlt,
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  clipBehavior: Clip.antiAlias,
-                  child: CheckboxListTile(
-                    key: const ValueKey('deleteDialog.moveToTrash'),
-                    value: moveLocalFileToTrash,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text(recycleTitle),
-                    subtitle: const Text('可在 Windows 回收站中恢复'),
-                    onChanged: (value) => setDialogState(
-                      () => moveLocalFileToTrash = value ?? false,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
                 CheckboxListTile(
                   key: const ValueKey('deleteDialog.dontAskAgain'),
                   contentPadding: EdgeInsets.zero,
@@ -160,13 +128,10 @@ Future<VideoDeleteDecision?> _showVideoDeleteConfirmationDialog(
               style: FilledButton.styleFrom(backgroundColor: playerDanger),
               onPressed: () => Navigator.of(dialogContext).pop(
                 VideoDeleteDecision(
-                  moveLocalFileToTrash: moveLocalFileToTrash,
                   dontAskAgain: dontAskAgain,
                 ),
               ),
-              child: Text(
-                moveLocalFileToTrash ? '移入回收站并移除记录' : '仅移出媒体库',
-              ),
+              child: const Text('移入回收站并移除记录'),
             ),
           ],
         ),

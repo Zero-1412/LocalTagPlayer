@@ -147,7 +147,7 @@ void main() {
     final calls = <String>[];
 
     await executor.delete(
-      DeleteVideoCommand(item: item, moveLocalFileToTrash: true),
+      DeleteVideoCommand(item: item),
       moveFileToTrash: (_) async {
         calls.add('trash');
       },
@@ -169,8 +169,8 @@ void main() {
 
     final result = await executor.deleteAll(
       <DeleteVideoCommand>[
-        DeleteVideoCommand(item: first, moveLocalFileToTrash: false),
-        DeleteVideoCommand(item: second, moveLocalFileToTrash: false),
+        DeleteVideoCommand(item: first),
+        DeleteVideoCommand(item: second),
       ],
       moveFileToTrash: (_) async {},
       deleteRecord: (path) async {

@@ -148,7 +148,6 @@ extension PlayerStateQueue on PlayerPageState {
           () => showPlayerDeleteConfirmationDialog(
             context,
             item,
-            initialMoveLocalFileToTrash: settings.moveDeletedFileToTrash,
           ),
         );
     if (decision == null || !mounted) {
@@ -159,7 +158,6 @@ extension PlayerStateQueue on PlayerPageState {
       // 只有确认提交才记忆弹窗选择；取消不会改写后续删除行为。
       final saved = await saveDeletePreferencesBeforeAction(
         settings.copyWith(
-          moveDeletedFileToTrash: decision.moveLocalFileToTrash,
           confirmBeforeDeletingVideo: !decision.dontAskAgain,
         ),
       );
@@ -174,7 +172,7 @@ extension PlayerStateQueue on PlayerPageState {
         persistOpenedProgress();
         await playerService.stop();
       }
-      await pageWidget.onDeleteVideo(item, decision.moveLocalFileToTrash);
+      await pageWidget.onDeleteVideo(item);
       if (!mounted) {
         return;
       }
@@ -193,7 +191,7 @@ extension PlayerStateQueue on PlayerPageState {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            decision.moveLocalFileToTrash ? '已移入回收站并移除媒体库记录' : '已从媒体库移除视频',
+            '已移入回收站并移除媒体库记录',
           ),
         ),
       );

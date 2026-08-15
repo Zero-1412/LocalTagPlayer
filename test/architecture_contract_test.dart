@@ -2109,6 +2109,7 @@ void main() {
     expect(executor, contains('class DeleteVideoCommand'));
     expect(executor, contains('class LibraryFileCommandExecutor'));
     expect(executor, contains('Future<LibraryBatchDeleteResult> deleteAll('));
+    expect(executor, isNot(contains('moveLocalFileToTrash')));
     expect(executor, contains('await commitRenamedPath(item, renamedPath)'));
     expect(executor, contains('await renameFile(renamedPath, oldPath)'));
     expect(executor, contains('await moveFileToTrash(item.path)'));
@@ -2130,7 +2131,10 @@ void main() {
     expect(page, contains('runtime.fileCommandExecutor.deleteAll('));
     expect(page, contains('showPlayerDeleteConfirmationDialog('));
     expect(page, contains('showBatchVideoDeleteConfirmationDialog('));
-    expect(deleteDialog, contains("ValueKey('deleteDialog.moveToTrash')"));
+    expect(
+        deleteDialog, isNot(contains("ValueKey('deleteDialog.moveToTrash')")));
+    expect(deleteDialog, contains("const Text('移入回收站并移除记录')"));
+    expect(deleteDialog, isNot(contains('仅移出媒体库')));
     expect(deleteDialog, contains("ValueKey('deleteDialog.dontAskAgain')"));
   });
 

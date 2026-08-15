@@ -96,9 +96,8 @@ class PlayerPage extends StatefulWidget {
   final List<String> activeTags;
   final String? activeChildTag;
   final String queueTitle;
-  /** 删除媒体库记录，并按用户确认结果选择是否把本地文件移入回收站。 */
-  final Future<void> Function(VideoItem item, bool moveLocalFileToTrash)
-      onDeleteVideo;
+  /** 删除媒体库记录；本地视频始终先移入系统回收站。 */
+  final Future<void> Function(VideoItem item) onDeleteVideo;
   final Future<void> Function(VideoItem item) onToggleFavorite;
   /** 通过媒体库协调物理文件与稳定 mutable path 的同目录重命名事务。 */
   final Future<void> Function(VideoItem item, String newBaseName) onRenameFile;
