@@ -9,20 +9,28 @@ import 'video_similarity_service.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-// 首帧复用媒体库缩略图，另外取中段/后段两个时间点；避免页面首次打开为每个候选
-// 启动六次 FFmpeg，同时仍保留有序时序特征而不是只比较一个画面。
-const _visualSampleFractions = <double>[0.35, 0.65];
-const _visualDistanceThreshold = 0.22;
+// 首帧复用媒体库缩略图，另外取四分之一、二分之一和四分之三处的帧；避免只因
+// 片头/片尾或首帧水印变化就漏掉同一内容，同时仍把取帧数量限制在有界候选内。
+const _visualSampleFractions = <double>[0.25, 0.5, 0.75];
+/** 视觉结果仅作为人工复核候选，适度偏向召回率而不是自动删除的精确率。 */
+const _visualDistanceThreshold = 0.28;
 /**
  * 候选上限只作为异常大库的保护；候选选择本身按每个视频分摊，不能再取全局
  * 时长排序的前 N 对，否则同一时长密集区会饿死其它视频。
  */
 const _maxVisualCandidatePairs = 65536;
-const _maxVisualNeighborsPerVideo = 8;
-/** 首帧只做廉价预筛，低于完整时序阈值的候选才启动中段/后段取帧。 */
-const _quickVisualDistanceThreshold = 0.32;
-/** 缩略图尚未缓存时只保留少量深度回退，避免首次打开页面启动全库 FFmpeg 风暴。 */
-const _maxUncachedDeepCandidatePairs = 256;
+/** 每个视频保留综合、时长和大小三条候选通道，避免单一评分压掉编码变体。 */
+const _maxVisualNeighborsPerVideo = 24;
+/** 重新编码/剪辑后仍允许一定时长漂移；最终结果还要通过多帧视觉复核。 */
+const _visualDurationTolerance = 0.12;
+const _visualMinDurationToleranceMs = 3000;
+/** 允许轻微裁切或画幅变化进入人工复核候选。 */
+const _visualShapeTolerance = 0.12;
+/** 首帧只做廉价预筛；接近元数据的候选即使首帧变化也必须深度复核。 */
+const _quickVisualDistanceThreshold = 0.45;
+const _quickRejectMetadataScore = 0.75;
+/** 两侧都没有缓存首帧时的有界深度回退；候选顺序按视频轮次交错，避免前段独占。 */
+const _maxUncachedDeepCandidatePairs = 4096;
 
 /**
  * 内容级近重复检测器。
@@ -72,12 +80,13 @@ class VideoContentSimilarityService {
       final rightQuickHash = await _quickHashFor(right, quickHashes);
       if (leftQuickHash != null && rightQuickHash != null) {
         final quickDistance = _hamming(leftQuickHash ^ rightQuickHash) / 64;
-        if (quickDistance > _quickVisualDistanceThreshold) {
+        if (quickDistance > _quickVisualDistanceThreshold &&
+            candidate.score > _quickRejectMetadataScore) {
           continue;
         }
-      } else {
-        // 未缓存首帧的候选仍允许少量深度回退，但不能让首次打开页面为全库
-        // 生成数千个 JPEG；后续缩略图预取或再次扫描会逐步扩大覆盖。
+      } else if (leftQuickHash == null && rightQuickHash == null) {
+        // 只有两侧都没有缓存首帧时才消耗深度回退配额；单侧缺缓存仍可复用另一侧
+        // 的廉价预筛，避免把大量可复核候选误判为“资源保护”而静默跳过。
         if (uncachedDeepCandidates >= _maxUncachedDeepCandidatePairs) {
           continue;
         }
@@ -154,16 +163,20 @@ class VideoContentSimilarityService {
     final seen = <String, _VisualCandidate>{};
     for (var i = 0; i < indexed.length; i++) {
       final left = indexed[i];
-      final tolerance = Duration(
-        milliseconds: math.max(
-          2500,
-          (left.duration.inMilliseconds * 0.06).round(),
-        ),
-      );
       final local = <_VisualCandidate>[];
+      final toleranceMs = math.max(
+        _visualMinDurationToleranceMs,
+        (left.duration.inMilliseconds * _visualDurationTolerance).round(),
+      );
       for (var j = i + 1; j < indexed.length; j++) {
         final right = indexed[j];
-        if (right.duration - left.duration > tolerance) {
+        final durationDeltaMs =
+            right.duration.inMilliseconds - left.duration.inMilliseconds;
+        final rightToleranceMs = math.max(
+          _visualMinDurationToleranceMs,
+          (right.duration.inMilliseconds * _visualDurationTolerance).round(),
+        );
+        if (durationDeltaMs > math.max(toleranceMs, rightToleranceMs)) {
           break;
         }
         if (!_compatibleVideoShape(videos[left.index], videos[right.index])) {
@@ -183,8 +196,33 @@ class VideoContentSimilarityService {
         final left = a.left.compareTo(b.left);
         return left != 0 ? left : a.right.compareTo(b.right);
       });
+      // 综合分优先覆盖常见副本；再单独补入时长/大小近邻，避免“大小差异大”或
+      // “片头剪辑导致时长差异”把真实副本排到前 8 个之外。
+      final selected = <String, _VisualCandidate>{};
+      void addLane(Iterable<_VisualCandidate> lane, int limit) {
+        var added = 0;
+        for (final candidate in lane) {
+          final key = _candidateKey(candidate);
+          if (selected.containsKey(key)) continue;
+          selected[key] = candidate;
+          added++;
+          if (added >= limit) break;
+        }
+      }
+
+      addLane(local, 16);
+      final byDuration = List<_VisualCandidate>.of(local)
+        ..sort((a, b) => _durationDeltaFor(
+              videos[a.left],
+              videos[a.right],
+            ).compareTo(_durationDeltaFor(videos[b.left], videos[b.right])));
+      addLane(byDuration, 4);
+      final bySize = List<_VisualCandidate>.of(local)
+        ..sort((a, b) => _sizeDistanceFor(videos[a.left], videos[a.right])
+            .compareTo(_sizeDistanceFor(videos[b.left], videos[b.right])));
+      addLane(bySize, 4);
       rankedByVideo[i].addAll(
-        local.take(_maxVisualNeighborsPerVideo),
+        selected.values.take(_maxVisualNeighborsPerVideo),
       );
     }
 
@@ -217,12 +255,39 @@ class VideoContentSimilarityService {
     return playbackDuration > Duration.zero ? playbackDuration : null;
   }
 
+  int _durationDeltaFor(VideoItem left, VideoItem right) {
+    final leftDuration = _durationFor(left);
+    final rightDuration = _durationFor(right);
+    if (leftDuration == null || rightDuration == null) {
+      return 1 << 62;
+    }
+    return (leftDuration - rightDuration).inMilliseconds.abs();
+  }
+
+  double _sizeDistanceFor(VideoItem left, VideoItem right) {
+    final leftSize = left.fileSize;
+    final rightSize = right.fileSize;
+    if (leftSize == null ||
+        rightSize == null ||
+        leftSize <= 0 ||
+        rightSize <= 0) {
+      return 0;
+    }
+    return math.log(leftSize / rightSize).abs();
+  }
+
+  String _candidateKey(_VisualCandidate candidate) {
+    return '${candidate.left}:${candidate.right}';
+  }
+
   double _candidateScore(VideoItem left, VideoItem right) {
     final leftDuration = _durationFor(left)!;
     final rightDuration = _durationFor(right)!;
     final tolerance = math.max(
-      2500,
-      (leftDuration.inMilliseconds * 0.06).round(),
+      _visualMinDurationToleranceMs,
+      (math.max(leftDuration.inMilliseconds, rightDuration.inMilliseconds) *
+              _visualDurationTolerance)
+          .round(),
     );
     final durationDistance =
         (leftDuration - rightDuration).inMilliseconds.abs() / tolerance;
@@ -237,7 +302,8 @@ class VideoContentSimilarityService {
             rightWidth == null ||
             rightHeight == null
         ? 0.0
-        : ((leftWidth / leftHeight) - (rightWidth / rightHeight)).abs() / 0.08;
+        : ((leftWidth / leftHeight) - (rightWidth / rightHeight)).abs() /
+            _visualShapeTolerance;
     final leftSize = left.fileSize;
     final rightSize = right.fileSize;
     final sizeDistance =
@@ -262,7 +328,7 @@ class VideoContentSimilarityService {
     }
     final leftRatio = leftWidth / leftHeight;
     final rightRatio = rightWidth / rightHeight;
-    return (leftRatio - rightRatio).abs() <= 0.08;
+    return (leftRatio - rightRatio).abs() <= _visualShapeTolerance;
   }
 
   bool _sameFingerprint(VideoItem left, VideoItem right) {
@@ -306,7 +372,9 @@ class VideoContentSimilarityService {
         hashes.add(hash);
       }
     }
-    final result = hashes.length < 3 ? null : hashes;
+    // 单个时间点取帧失败不应吞掉整个候选；至少两帧仍能提供时序方向，最终只作为
+    // 人工复核候选展示，不触发自动删除。
+    final result = hashes.length < 2 ? null : hashes;
     cache[item.videoId] = result;
     return result;
   }

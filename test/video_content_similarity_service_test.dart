@@ -48,6 +48,33 @@ void main() {
 
     expect(result.candidatePairCount, 1);
   });
+
+  test('keeps candidates with moderate duration drift for visual review',
+      () async {
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory.systemTemp,
+      _NoopFFmpegBackend(),
+    );
+    final first = _video('first-drift', const Duration(seconds: 100));
+    final second = _video('second-drift', const Duration(seconds: 111));
+
+    final result = await VideoContentSimilarityService(thumbnailService)
+        .findNearDuplicateGroups([first, second], maxCandidatePairs: 4);
+
+    // 旧 6% 窗口会把 11% 的片头/片尾差异直接排除；视觉候选必须先进入
+    // 多帧复核，不能在元数据预筛阶段静默丢失。
+    expect(result.candidatePairCount, 1);
+  });
+
+  test('allows a partial visual signature instead of requiring every sample',
+      () {
+    final source = File(
+      'lib/src/services/library/video_content_similarity_service.dart',
+    ).readAsStringSync();
+
+    expect(
+        source, contains('final result = hashes.length < 2 ? null : hashes;'));
+  });
 }
 
 VideoItem _video(String title, Duration duration) {

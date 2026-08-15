@@ -29,6 +29,14 @@ void main() {
     );
   });
 
+  test('相似视频滚动内容为滚动条预留右侧安全区', () {
+    final page = File(
+      'lib/src/pages/library/video_similarity_page.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('EdgeInsets.only(right: 18, bottom: 12)'));
+  });
+
   test('相似视频播放返回后先清除动作占位再等待资源释放', () {
     final playback = File(
       'lib/src/pages/library/library_page_playback_mixin.dart',

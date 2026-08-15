@@ -228,6 +228,10 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
                     child: _report.hasMatches
                         ? ListView.separated(
                             key: const ValueKey('videoSimilarity.groups'),
+                            // Windows 桌面 Scrollbar 默认覆盖 viewport 内容；为卡片预留
+                            // 独立右侧安全区，避免滚动条压住行内按钮和建议保留提示。
+                            padding:
+                                const EdgeInsets.only(right: 18, bottom: 12),
                             itemCount: _report.groups.length +
                                 _report.visualGroups.length,
                             separatorBuilder: (_, __) =>
@@ -320,7 +324,7 @@ class _SimilarityOverview extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '先用文件级指纹快速筛选，再按相近时长/画面规格/大小比较缓存首帧，并对通过者抽取中后段 2 个时间点的时序感知 dHash，识别重新编码后的近重复。可在行内播放或发起确认删除；不会自动删除，请人工确认后再处理。',
+            '先用文件级指纹快速筛选，再按相近时长/画面规格/大小比较缓存首帧，并对通过者抽取多个时间点的时序感知 dHash，识别重新编码后的近重复。可在行内播放或发起确认删除；不会自动删除，请人工确认后再处理。',
             style: const TextStyle(
               color: libraryTextMuted,
               fontSize: 12,
@@ -822,7 +826,7 @@ class _SimilarityScanningState extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              '会优先比较时长和画面规格接近的候选，缩略图生成沿用媒体库缓存队列。',
+              '会优先比较时长和画面规格接近的候选，并对未缓存首帧保留有界深度回退；缩略图生成沿用媒体库缓存队列。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: libraryTextMuted,
