@@ -1,5 +1,19 @@
 # CURRENT_TASK.md
 
+# 2026-08-15 · 按全测标准执行首轮全面测试（进行中）
+
+- 目标：按 `docs/qa/performance_full_test_standard.md` 执行 L0–L3 全测，建立首个可比较基线，
+  覆盖大库加载/扫描、seek 矩阵、主窗口语义、播放器后端、增删压力和真实库播放器长跑。
+- 结果：`flutter analyze` 与 Windows Debug 构建通过；大库加载/扫描通过；12 组 seek 数据在预算内，
+  但首次矩阵有一次可重试的 tearDown/startup 异常。全量 `flutter test` 有 3 条既有架构/契约失败；
+  后端 30 分钟长播超时且 working set 持续增长，增删压力在第 0 轮等待 UI 超时，真实库播放器在全屏往返后卡住。
+- 保护：业务代码未修改；加载/扫描/seek/增删/真实库播放器使用隔离 profile，`D:\video` 只读；
+  后端矩阵首次命令未显式注入隔离 profile，但停止后核验用户 `library.db` 大小与修改时间未变。
+- 证据：原始结果位于 `artifacts/full_test_20260815_133918/`；日期化结论见
+  `docs/history/qa/2026-08/full_test_20260815.md`。
+- 下一步：先修复或定位后端长播资源增长、全屏状态机卡住、增删专项 UI hydration 前置失败和 MPV unsupported；
+  再用显式隔离 profile、可用桌面控制和 profile/release-like 构建重跑未完成门禁。
+
 # 2026-08-15 · 相似视频合并用户数据后删除（完成）
 
 - 目标：相似候选删除前，把源视频收藏和 `source=manual` 自定义标签并入保留视频；目标已有
