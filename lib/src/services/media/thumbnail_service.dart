@@ -444,6 +444,39 @@ class ThumbnailService {
     );
   }
 
+  /**
+   * 读取相似复核帧的短生命周期字节快照。
+   *
+   * 相似签名消费的是帧内容而不是文件路径；若直接把 [File] 交给调用方，
+   * 后续帧完成时的 LRU 清理可能在调用方读取前删除该临时 JPEG，形成
+   * PathNotFoundException。这里在缓存服务边界内立即读取，失败只重试一次，
+   * 不让临时缓存竞态中断整轮视觉复核。
+   */
+  Future<Uint8List?> similarityPreviewBytesFor(
+    VideoItem item,
+    Duration position,
+  ) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final file = await _previewFrameFor(
+        item,
+        position,
+        mode: _PreviewFrameMode.similarity,
+      );
+      if (file == null) {
+        continue;
+      }
+      try {
+        final bytes = await file.readAsBytes();
+        if (bytes.length >= 4) {
+          return bytes;
+        }
+      } on Object {
+        // LRU 清理或外部缓存清理造成的瞬时缺失由下一次尝试恢复。
+      }
+    }
+    return null;
+  }
+
   Future<File?> _previewFrameFor(
     VideoItem item,
     Duration position, {
@@ -465,7 +498,12 @@ class ThumbnailService {
     }
     final existing = _previewCompletions[previewKey];
     if (existing != null) {
-      return existing.future;
+      // Completer 可能已完成但尚未经过 whenComplete 清理；若临时文件同时被
+      // LRU 删除，不能把同一个失效 File 路径再次交给调用方。
+      if (!existing.isCompleted) {
+        return existing.future;
+      }
+      _previewCompletions.remove(previewKey);
     }
     final directory = await _preparePreviewDirectory();
     final output = File(p.join(directory.path, '$previewKey.jpg'));

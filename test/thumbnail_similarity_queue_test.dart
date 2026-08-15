@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -92,6 +93,27 @@ void main() {
       backend.videoIds.take(4),
       <String>['similarity-a', 'similarity-b', 'similarity-a', 'similarity-b'],
     );
+  });
+
+  test('相似复核消费字节快照，不受临时帧 LRU 清理影响', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('ltp_similarity_bytes_');
+    addTearDown(() => directory.delete(recursive: true));
+    final backend = _ConcurrentPreviewBackend();
+    final service = ThumbnailService.forDirectory(directory, backend)
+      ..setSimilarityScanForeground(true);
+    final item = _video(directory.path, id: 'similarity-bytes');
+
+    final frames = await Future.wait<Uint8List?>([
+      for (var index = 0; index < 32; index++)
+        service.similarityPreviewBytesFor(
+          item,
+          Duration(seconds: index + 1),
+        ),
+    ]);
+    // 超过 24 项后会触发预览 LRU；调用方仍应拿到已读取的内容快照，
+    // 而不是在消费临时 File 路径时收到 PathNotFoundException。
+    expect(frames.whereType<Uint8List>(), hasLength(32));
   });
 }
 

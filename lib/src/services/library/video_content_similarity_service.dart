@@ -981,17 +981,17 @@ class VideoContentSimilarityService {
                 microseconds: (duration.inMicroseconds * fraction).round(),
               ),
           ];
-    final frames = await Future.wait<File?>(
-      <Future<File?>>[
+    final frames = await Future.wait<Uint8List?>(
+      <Future<Uint8List?>>[
         for (final position in positions)
-          _thumbnailService.similarityPreviewFrameFor(item, position),
+          _thumbnailService.similarityPreviewBytesFor(item, position),
       ],
     );
     for (final frame in frames) {
       if (frame == null) {
         continue;
       }
-      final hash = await _dHashFor(frame);
+      final hash = await _dHashForBytes(frame);
       if (hash != null) {
         hashes.add(hash);
       }
@@ -1033,7 +1033,15 @@ class VideoContentSimilarityService {
   }
 
   Future<int?> _dHashFor(File file) async {
-    final bytes = await file.readAsBytes();
+    try {
+      return _dHashForBytes(await file.readAsBytes());
+    } on Object {
+      // 缓存文件可能在校验和读取之间被清理；该帧失败不应中断整轮扫描。
+      return null;
+    }
+  }
+
+  Future<int?> _dHashForBytes(Uint8List bytes) async {
     ui.Codec? codec;
     ui.Image? image;
     try {

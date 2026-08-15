@@ -336,8 +336,8 @@ void main() {
         contains(
             'final cachedFrame = await _thumbnailService.thumbnailFor(item);'));
     expect(source, isNot(contains('ensureThumbnailFor(item)')));
-    expect(source, contains('similarityPreviewFrameFor(item, position)'));
-    expect(source, contains('Future.wait<File?>'));
+    expect(source, contains('similarityPreviewBytesFor(item, position)'));
+    expect(source, contains('Future.wait<Uint8List?>'));
     expect(source, contains('onSignatureReady: enqueueSignatureWrite'));
     expect(source, contains('_compareDeepWorkEstimate'));
   });
