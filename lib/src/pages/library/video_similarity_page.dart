@@ -302,7 +302,7 @@ class _SimilarityOverview extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '先用文件级指纹快速筛选，再按相近时长/画面规格比较缓存首帧与中后段 2 个时间点的时序感知 dHash，识别重新编码后的近重复。可在行内播放或发起确认删除；不会自动删除，请人工确认后再处理。',
+            '先用文件级指纹快速筛选，再按相近时长/画面规格/大小比较缓存首帧，并对通过者抽取中后段 2 个时间点的时序感知 dHash，识别重新编码后的近重复。可在行内播放或发起确认删除；不会自动删除，请人工确认后再处理。',
             style: const TextStyle(
               color: libraryTextMuted,
               fontSize: 12,
