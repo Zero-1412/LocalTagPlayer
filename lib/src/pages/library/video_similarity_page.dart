@@ -645,7 +645,9 @@ class _SimilarityVideoRow extends StatelessWidget {
             IconButton(
               key: ValueKey('videoSimilarity.play.${item.videoId}'),
               tooltip: '播放当前候选组',
-              onPressed: visualScanning ? null : () => onPlay(item, playlist),
+              // 视觉复核只追加候选组，不改变当前已展示组；播放必须随时复用该组队列。
+              // 删除仍在扫描期间锁定，避免复核结果与删除后的快照发生竞态。
+              onPressed: () => onPlay(item, playlist),
               icon: const Icon(Icons.play_arrow_rounded),
             ),
             IconButton(
