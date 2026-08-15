@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/tag_rules.dart';
-import '../app_theme_tokens.dart';
 import 'library_sidebar_brand.dart';
+import 'library_collapsed_sidebar_items.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -75,51 +75,51 @@ class CollapsedLibrarySidebar extends StatelessWidget {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                _CollapsedSidebarItem(
+                CollapsedSidebarItem(
                   icon: Icons.grid_view_rounded,
                   tooltip: '媒体库',
                   selected: mediaSelected,
                   onTap: onShowAllLibrary,
                 ),
-                _CollapsedSidebarItem(
+                CollapsedSidebarItem(
                   icon: Icons.history_rounded,
                   tooltip: '继续观看',
                   selected: recentSelected,
                   onTap: onOpenRecentPlayback,
                 ),
-                _CollapsedSidebarItem(
+                CollapsedSidebarItem(
                   icon: Icons.auto_awesome_outlined,
                   tooltip: '本地收藏',
                   selected: favoritesSelected,
                   onTap: onFavoritesToggle,
                 ),
-                _CollapsedSidebarItem(
+                CollapsedSidebarItem(
                   icon: Icons.find_replace_outlined,
                   tooltip: '相似视频',
                   selected: false,
                   onTap: onOpenSimilarVideos,
                 ),
-                _CollapsedSidebarItem(
+                CollapsedSidebarItem(
                   key: LibrarySmokeKeys.sidebarTagCenter,
                   icon: Icons.sell_outlined,
                   tooltip: '标签中心',
                   selected: false,
                   onTap: onOpenTagManager,
                 ),
-                const _CollapsedSidebarDivider(),
-                _CollapsedSidebarItem(
+                const CollapsedSidebarDivider(),
+                CollapsedSidebarItem(
                   icon: Icons.folder_copy_outlined,
                   tooltip: '目录管理',
                   selected: false,
                   onTap: onOpenDirectoryManager,
                 ),
-                _CollapsedSidebarItem(
+                CollapsedSidebarItem(
                   icon: Icons.link_off_rounded,
                   tooltip: '缺失与重新关联',
                   selected: false,
                   onTap: onOpenMissingRelink,
                 ),
-                _CollapsedSidebarItem(
+                CollapsedSidebarItem(
                   icon: isScanning
                       ? Icons.hourglass_empty_rounded
                       : Icons.sync_rounded,
@@ -127,15 +127,15 @@ class CollapsedLibrarySidebar extends StatelessWidget {
                   selected: false,
                   onTap: isScanning || roots.isEmpty ? null : onRescan,
                 ),
-                _CollapsedSidebarItem(
+                CollapsedSidebarItem(
                   icon: Icons.create_new_folder_outlined,
                   tooltip: '新增本地库路径',
                   selected: false,
                   onTap: isScanning ? null : onPickFolder,
                 ),
-                if (roots.isNotEmpty) const _CollapsedSidebarDivider(),
+                if (roots.isNotEmpty) const CollapsedSidebarDivider(),
                 for (final root in roots)
-                  _CollapsedSidebarItem(
+                  CollapsedSidebarItem(
                     icon: Icons.folder_outlined,
                     tooltip: p.basename(root).isEmpty ? root : p.basename(root),
                     selected: localLibrarySelected &&
@@ -147,7 +147,7 @@ class CollapsedLibrarySidebar extends StatelessWidget {
               ],
             ),
           ),
-          _CollapsedSidebarItem(
+          CollapsedSidebarItem(
             icon: Icons.settings_outlined,
             tooltip: '设置',
             selected: false,
@@ -157,66 +157,4 @@ class CollapsedLibrarySidebar extends StatelessWidget {
       ),
     );
   }
-}
-
-/** 图标折叠态的单个入口；选中态仅用背景和强调色表达。 */
-class _CollapsedSidebarItem extends StatelessWidget {
-  const _CollapsedSidebarItem({
-    super.key,
-    required this.icon,
-    required this.tooltip,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Tooltip(
-        message: tooltip,
-        child: Semantics(
-          button: onTap != null,
-          selected: selected,
-          label: tooltip,
-          child: Material(
-            color: selected ? const Color(0xff2b3650) : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: onTap,
-              child: SizedBox.square(
-                dimension: 46,
-                child: Icon(
-                  icon,
-                  size: 21,
-                  color: selected
-                      ? appAccentViolet
-                      : onTap == null
-                          ? const Color(0xff526077)
-                          : const Color(0xffa7b4c6),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/** 折叠导航的轻量分组线。 */
-class _CollapsedSidebarDivider extends StatelessWidget {
-  const _CollapsedSidebarDivider();
-
-  @override
-  Widget build(BuildContext context) => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 6),
-        child: Divider(height: 1, color: Color(0xff2a3548)),
-      );
 }

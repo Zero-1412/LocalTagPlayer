@@ -1,27 +1,29 @@
 # CURRENT_TASK.md
 
-# 2026-08-15 · MediaKit/全屏/压力测试门禁复跑（完成）
+# 2026-08-15 · 既有全量单测与跨 DPI/AXTree 收尾（本轮完成）
 
-- 目标：按 `docs/qa/performance_full_test_standard.md` 用显式隔离 profile、Profile/release-like
-  构建和可用桌面控制，重新执行播放器释放、全屏、增删压力、真实库长压与双后端门禁。
-- 结果：MediaKit 10 轮增删、Profile 1 轮增删和真实库 Profile 1800 秒/71 轮均通过；每轮释放
-  回到 `texture_id=-1 / release_phase=released`，原生 Windows 等待约 5.2 秒，未复现单调资源泄漏。
-  全屏测试的卡住原因是测试直接等待依赖 `endOfFrame` 的命令而未泵帧，已改为显式泵帧并加超时；
-  桌面实点验证全屏/退出、`1 / 11234` 来源队列和返回路径保持正常。
-- 测试前置：增删压力现在先等待专项控制、SQLite hydration 的 `videoCount/visibleCount` 和连续可见
-  播放入口；修复过期 smoke key/诊断入口。Profile 仅在显式压力 root 下注册同一控制，Release 仍不注册。
-- 后端：Profile 双后端矩阵 120 秒长播、6 次快速切换、全屏/队列/交互均自动通过；MediaKit 为
-  `media-kit-in-process / media-kit-texture`，MPV 为 `mpv_texture_ready / libmpv-angle-d3d11`，当前
-  Windows 可测。单显示器使真实跨 DPI 发布门禁保持 `pending-physical-cross-dpi`。
-- AXTree：带桌面控制时复现 Flutter Windows accessibility bridge 的 AXTree stale-node warning；同一
-  独立 profile 无桌面控制时为 0 条。应用保持语义树和页面可达性，不以删除 Semantics 掩盖环境/引擎问题。
-- 保护：schema、FilterQuery / TagQueryService、来源 filtered queue、PlayerBackend、缓存队列、stable
-  identity 和用户数据未改；压测 profile 可丢弃，`D:\video` 只读。全量 `flutter test` 仍有 3 条既有治理/视觉
-  契约失败（迁移行数预算、`video_similarity_page.dart` 行数治理、视觉复核播放/删除合同）。
-- 证据：`artifacts/full_gate_20260815_01/`；日期化结论见
+- 目标：单独收口前一轮全量 `flutter test` 暴露的 3 条既有失败，同时保持播放器来源队列、页面可达性和
+  无障碍语义入口不变；第二显示器可用后再执行真实跨物理 DPI 门禁。
+- 单测修复：继续观看视图拆出行/卡片叶子；相似视频页拆出状态展示、候选组/行和缩略图叶子；播放/删除
+  契约改为读取实际候选行文件并校验带 `playlist` 的删除回调。架构契约同步覆盖拆分后的真实组件边界，
+  没有放宽历史预算；侧栏、本地目录和视频网格中同一门禁暴露的后续预算超额也按叶节点迁移收口。
+- 验证：全量 `flutter test` 结果为 542 项通过、3 项跳过，日志末尾为 `All other tests passed!`；
+  `flutter analyze`、`flutter build windows --debug` 和 `flutter build windows --release` 均通过。
+- 真实窗口：使用全新隔离 `LOCAL_TAG_PLAYER_DATA_DIR` 启动当前 Debug 构建，实际点击“相似视频”进入
+  空状态页（0 组），再点击返回媒体库，页面仍保持空库状态；窗口正常关闭，未触碰用户 profile。
+- 跨 DPI：当前只有 `DISPLAY1`（3840×2160），真实跨屏无法执行，发布状态继续为
+  `pending-physical-cross-dpi`；已有 100%/125%/150%/200% 模拟 metrics 只作为自动化证据。
+- AXTree：Flutter stable 为 3.44.4（framework `ad70ec...`，engine `a10d8a...`）；带桌面控制的真实窗口
+  复现 188 条 `accessibility_bridge.cc:114` AXTree stale-node 错误，独立 profile 无桌面控制对照为 0 条。
+  当前建议先做小语义树 + route/hydration 的最小复现，再在隔离 SDK/engine 版本上 A/B，不删除 `Semantics`、
+  `ExcludeSemantics` 或播放器 `BlockSemantics`。
+- 保护：schema、FilterQuery / TagQueryService、来源 filtered queue、PlayerBackend、缩略图/媒体队列、
+  stable identity 和用户数据未改；`D:\video` 仍只读，写入型测试使用可丢弃 profile。
+- 证据：`artifacts/three_failures_20260815_flutter-test-final.log`、`artifacts/desktop_gate_20260815_01/`、
+  `artifacts/desktop_gate_20260815_02_no_cua/`；日期化结论见
   `docs/history/qa/2026-08/full_gate_20260815.md`。
-- 下一步：修复既有全量单测的 3 条独立门禁；具备第二显示器后执行真实跨 DPI；针对 Flutter Windows
-  accessibility bridge 评估 SDK/引擎升级或最小复现，不删除现有语义入口。
+- 下一步：接入第二显示器并确认两块屏缩放不同后，运行稳定性矩阵并通过桌面实点记录真实移窗/全屏/返回；
+  AXTree 另开隔离 SDK/最小复现评估，不在本任务中升级全局 Flutter SDK。
 
 # 2026-08-15 · 相似视频合并用户数据后删除（完成）
 

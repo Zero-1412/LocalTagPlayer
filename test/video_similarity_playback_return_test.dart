@@ -13,11 +13,15 @@ void main() {
     final page = File(
       'lib/src/pages/library/video_similarity_page.dart',
     ).readAsStringSync();
+    final groupWidgets = File(
+      'lib/src/widgets/library/video_similarity_group_widgets.dart',
+    ).readAsStringSync();
+    final source = '$page\n$groupWidgets';
 
-    expect(page, contains('onPressed: () => onPlay(item, playlist)'));
-    expect(page, contains('onPressed: () => onDelete(item)'));
+    expect(source, contains('onPressed: () => onPlay(item, playlist)'));
+    expect(source, contains('onPressed: () => onDelete(item, playlist)'));
     expect(
-      page,
+      source,
       isNot(
         contains(
           'onPressed: visualScanning ? null : () => onPlay(item, playlist)',
@@ -25,10 +29,10 @@ void main() {
       ),
     );
     expect(
-      page,
+      source,
       isNot(
         contains(
-          'onPressed: visualScanning ? null : () => onDelete(item)',
+          'onPressed: visualScanning ? null : () => onDelete(item, playlist)',
         ),
       ),
     );

@@ -1695,9 +1695,10 @@ void main() {
       'lib/src/pages/player/player_open_request_controller.dart',
     ).readAsStringSync();
     final libraryPage = _readLibraryPageCluster();
-    final recentPlayback = File(
+    final recentPlayback = [
       'lib/src/widgets/library/library_recent_playback_view.dart',
-    ).readAsStringSync();
+      'lib/src/widgets/library/library_recent_playback_items.dart',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
 
     expect(requests, contains('class PlayerOpenRequestController'));
     expect(requests, contains('final int revision'));

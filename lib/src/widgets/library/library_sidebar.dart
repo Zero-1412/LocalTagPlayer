@@ -6,26 +6,13 @@ import '../../core/tag_rules.dart';
 import '../../models/platform_models.dart';
 import '../app_theme_tokens.dart';
 import 'library_collapsed_sidebar.dart';
-import 'library_desktop_scroll_behavior.dart';
 import 'library_panel_content_transition.dart';
 import 'library_sidebar_brand.dart';
 import 'library_sidebar_items.dart';
+import 'library_sidebar_scroll_behavior.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
-
-/** 主功能栏专用的无可见滚动条行为，继续保留桌面拖拽设备。 */
-class _LibrarySidebarScrollBehavior extends DesktopDragScrollBehavior {
-  const _LibrarySidebarScrollBehavior();
-
-  @override
-  Widget buildScrollbar(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) =>
-      child;
-}
 
 class LibrarySidebar extends StatelessWidget {
   const LibrarySidebar({
@@ -174,7 +161,7 @@ class LibrarySidebar extends StatelessWidget {
                           children: [
                             Expanded(
                               child: ScrollConfiguration(
-                                behavior: const _LibrarySidebarScrollBehavior(),
+                                behavior: const LibrarySidebarScrollBehavior(),
                                 child: ListView(
                                   padding: EdgeInsets.zero,
                                   children: [
@@ -303,7 +290,7 @@ class LibrarySidebar extends StatelessWidget {
                                             math.min(220, 42.0 * roots.length),
                                         child: ScrollConfiguration(
                                           behavior:
-                                              const _LibrarySidebarScrollBehavior(),
+                                              const LibrarySidebarScrollBehavior(),
                                           child: ListView.builder(
                                             itemExtent: 42,
                                             padding: EdgeInsets.zero,
@@ -421,7 +408,7 @@ class LibrarySidebar extends StatelessWidget {
     );
     // 侧栏所有嵌套列表统一继承无滚动条行为，避免展开态与折叠态分别维护。
     return ScrollConfiguration(
-      behavior: const _LibrarySidebarScrollBehavior(),
+      behavior: const LibrarySidebarScrollBehavior(),
       child: sidebar,
     );
   }

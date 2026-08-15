@@ -12,6 +12,7 @@ import '../../services/media/thumbnail_service.dart';
 import '../app_theme_tokens.dart';
 import 'library_smoke_keys.dart';
 import 'library_tag_discovery_panel.dart';
+import 'library_local_view_folder_items.dart';
 import 'library_video_results.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -170,7 +171,7 @@ class LocalLibraryView extends StatelessWidget {
                             if (entry.isFolder) {
                               return KeyedSubtree(
                                 key: ValueKey<String>('folder:${entry.path}'),
-                                child: _LocalFolderRow(
+                                child: LocalFolderRow(
                                   path: entry.path,
                                   onOpen: () => onOpenFolder(entry.path),
                                 ),
@@ -221,7 +222,7 @@ class LocalLibraryView extends StatelessWidget {
                           if (entry.isFolder) {
                             return KeyedSubtree(
                               key: ValueKey<String>('folder:${entry.path}'),
-                              child: _LocalFolderCard(
+                              child: LocalFolderCard(
                                 path: entry.path,
                                 onOpen: () => onOpenFolder(entry.path),
                               ),
@@ -624,108 +625,6 @@ class _TagDiscoverySmokeHarnessState extends State<TagDiscoverySmokeHarness> {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LocalFolderCard extends StatelessWidget {
-  const _LocalFolderCard({required this.path, required this.onOpen});
-
-  final String path;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: LibrarySmokeSemantics.localFolder(path),
-      value: path,
-      child: Material(
-        key: LibrarySmokeKeys.localFolder(path),
-        color: appPanel,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onOpen,
-          child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              border: Border.all(color: appBorder),
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: appSoftShadow,
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.folder_rounded,
-                    size: 58, color: appAccentViolet),
-                const SizedBox(height: 16),
-                Text(
-                  p.basename(path),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: appText,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LocalFolderRow extends StatelessWidget {
-  const _LocalFolderRow({required this.path, required this.onOpen});
-
-  final String path;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: LibrarySmokeSemantics.localFolder(path),
-      value: path,
-      child: Material(
-        key: LibrarySmokeKeys.localFolder(path),
-        color: appPanel,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onOpen,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              border: Border.all(color: appBorder),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.folder_rounded,
-                    color: appAccentViolet, size: 32),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    p.basename(path),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: appText,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const Icon(Icons.chevron_right_rounded, color: appTextMuted),
-              ],
-            ),
           ),
         ),
       ),

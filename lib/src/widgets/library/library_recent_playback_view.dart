@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/layout_size.dart';
 import '../../core/playback_settings.dart';
 import '../../models/video_item.dart';
-import '../../features/player/domain/player_playback_progress.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../app_theme_tokens.dart';
+import 'library_recent_playback_items.dart';
 import 'library_video_results.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -120,7 +120,7 @@ class RecentPlaybackView extends StatelessWidget {
                     final item = videos[index];
                     return KeyedSubtree(
                       key: ValueKey<String>(item.videoId),
-                      child: _RecentPlaybackRow(
+                      child: RecentPlaybackRow(
                         item: item,
                         selected: selectedVideoIds.contains(item.videoId),
                         thumbnailService: thumbnailService,
@@ -159,7 +159,7 @@ class RecentPlaybackView extends StatelessWidget {
                   final item = videos[index];
                   return KeyedSubtree(
                     key: ValueKey<String>(item.videoId),
-                    child: _RecentPlaybackCard(
+                    child: RecentPlaybackCard(
                       item: item,
                       selected: selectedVideoIds.contains(item.videoId),
                       thumbnailService: thumbnailService,
@@ -190,137 +190,3 @@ int? _recentPlaybackIndexForKey(
   final index = videos.indexWhere((item) => item.videoId == key.value);
   return index < 0 ? null : index;
 }
-
-class _RecentPlaybackRow extends StatelessWidget {
-  const _RecentPlaybackRow({
-    required this.item,
-    required this.selected,
-    required this.thumbnailService,
-    required this.playbackSettings,
-    required this.onOpen,
-    required this.onRevealLocation,
-    required this.onToggleFavorite,
-    required this.onDeleteVideo,
-    required this.onToggleSelected,
-    required this.onDelete,
-  });
-
-  final VideoItem item;
-  final bool selected;
-  final ThumbnailService thumbnailService;
-  final PlaybackSettings playbackSettings;
-  final VoidCallback onOpen;
-  final VoidCallback? onRevealLocation;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onDeleteVideo;
-  final VoidCallback onToggleSelected;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Checkbox(value: selected, onChanged: (_) => onToggleSelected()),
-        Expanded(
-          child: Column(
-            children: [
-              Expanded(
-                child: InteractiveVideoListRow(
-                  item: item,
-                  thumbnailService: thumbnailService,
-                  playbackSettings: playbackSettings,
-                  onOpen: onOpen,
-                  onRevealLocation: onRevealLocation,
-                  onToggleFavorite: onToggleFavorite,
-                  onDelete: onDeleteVideo,
-                ),
-              ),
-              LinearProgressIndicator(
-                value: videoPlaybackProgressFraction(item),
-                minHeight: 3,
-                color: appAccentViolet,
-                backgroundColor: libraryBorder,
-              ),
-            ],
-          ),
-        ),
-        IconButton(
-          tooltip: '\u5220\u9664\u8be5\u64ad\u653e\u8bb0\u5f55',
-          onPressed: onDelete,
-          icon: const Icon(Icons.delete_outline_rounded),
-        ),
-      ],
-    );
-  }
-}
-
-class _RecentPlaybackCard extends StatelessWidget {
-  const _RecentPlaybackCard({
-    required this.item,
-    required this.selected,
-    required this.thumbnailService,
-    required this.playbackSettings,
-    required this.onOpen,
-    required this.onToggleFavorite,
-    required this.onToggleSelected,
-    required this.onDelete,
-  });
-
-  final VideoItem item;
-  final bool selected;
-  final ThumbnailService thumbnailService;
-  final PlaybackSettings playbackSettings;
-  final VoidCallback onOpen;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onToggleSelected;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        InteractiveVideoCard(
-          item: item,
-          thumbnailService: thumbnailService,
-          playbackSettings: playbackSettings,
-          onOpen: onOpen,
-          onToggleFavorite: onToggleFavorite,
-        ),
-        Positioned(
-          top: 8,
-          left: 48,
-          child:
-              Checkbox(value: selected, onChanged: (_) => onToggleSelected()),
-        ),
-        Positioned(
-          left: 8,
-          right: 8,
-          bottom: 6,
-          child: LinearProgressIndicator(
-            value: videoPlaybackProgressFraction(item),
-            minHeight: 4,
-            borderRadius: BorderRadius.circular(99),
-            color: appAccentViolet,
-            backgroundColor: const Color(0x55000000),
-          ),
-        ),
-        Positioned(
-          top: 8,
-          right: 8,
-          child: IconButton.filledTonal(
-            tooltip: '\u5220\u9664\u8be5\u64ad\u653e\u8bb0\u5f55',
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/**
- * 本地媒体库路径浏览视图。
- *
- * 文件夹使用文件夹卡片/行，视频复用现有视频卡片/行；这样本地浏览不会绕开
- * 播放队列、收藏和更多编辑等媒体库已有行为。
- */

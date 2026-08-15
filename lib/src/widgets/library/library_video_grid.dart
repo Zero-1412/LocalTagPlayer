@@ -4,14 +4,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-import '../../core/layout_size.dart';
 import '../../core/playback_settings.dart';
 import '../../models/video_item.dart';
 import '../../services/library/library_card_ui_diagnostics.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../app_theme_tokens.dart';
-import 'library_video_grid_results_view.dart';
-import 'library_video_grid_return_to_top.dart';
+import 'library_video_grid_layout.dart';
 import 'library_video_grid_resize_coordinator.dart';
 import 'library_video_results.dart';
 
@@ -463,102 +461,33 @@ class _VideoGridState extends State<VideoGrid> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final measuredWidth = constraints.maxWidth;
-        final referenceWidth = widget.columnReferenceWidth ?? measuredWidth;
-        final stableWidth = _stableViewportWidth(referenceWidth);
-        final resizing = (referenceWidth - stableWidth).abs() > 0.5;
-        final compact = stableWidth < LayoutBreakpoints.compactMaxWidth;
-        final narrow = stableWidth < 560;
-        final crossAxisSpacing = libraryVideoGridCrossAxisSpacing(
-          gridWidth: stableWidth,
-          compact: compact,
-        );
-        final mainAxisSpacing = libraryVideoGridMainAxisSpacing(
-          gridWidth: stableWidth,
-          compact: compact,
-        );
-        final textScaleFactor = MediaQuery.textScalerOf(context).scale(1);
-        final columnCount = widget.dense
-            ? 1
-            : libraryVideoGridColumnCount(
-                gridWidth: stableWidth,
-                narrow: narrow,
-                compact: compact,
-              );
-        final rowExtent = widget.dense
-            ? (narrow ? 132.0 : 120.0)
-            : libraryVideoCardMainAxisExtentForColumnCount(
-                  gridWidth: measuredWidth,
-                  compact: compact,
-                  columnCount: columnCount,
-                  crossAxisSpacing: crossAxisSpacing,
-                  textScaleFactor: textScaleFactor,
-                ) +
-                mainAxisSpacing;
+    return LibraryVideoGridLayout(
+      videos: widget.videos,
+      thumbnailService: widget.thumbnailService,
+      playbackSettings: widget.playbackSettings,
+      dense: widget.dense,
+      columnReferenceWidth: widget.columnReferenceWidth,
+      onVisible: widget.onVisible,
+      onOpen: widget.onOpen,
+      onRevealLocation: widget.onRevealLocation,
+      onToggleFavorite: widget.onToggleFavorite,
+      onDelete: widget.onDelete,
+      selectionMode: widget.selectionMode,
+      selectedVideoIds: widget.selectedVideoIds,
+      onToggleSelected: widget.onToggleSelected,
+      scrollChromeEnabled: widget.scrollChromeEnabled,
+      scrollController: _scrollController,
+      loadedItemCount: _loadedItemCount,
+      showReturnToTop: _showReturnToTop,
+      stableViewportWidth: _stableViewportWidth,
+      visibleIndexMap: _visibleIndexMap,
+      onLayoutMetrics: (columnCount, rowExtent, visibleItemCount) {
         _currentColumnCount = columnCount;
         _currentRowExtent = rowExtent;
-        final initialCount = libraryIncrementalItemCount(
-          totalCount: widget.videos.length,
-          currentCount: 0,
-          columnCount: columnCount,
-        );
-        // 窗口改变列数时只允许扩大首批范围，不能让已显示卡片倒退消失。
-        final visibleItemCount = math
-            .min(
-              widget.videos.length,
-              math.max(_loadedItemCount, initialCount),
-            )
-            .toInt();
-        // 同步真实首批数量，供预加载阈值和显式压测统计使用；不触发额外 build。
         _loadedItemCount = visibleItemCount;
-        final visibleIndexByVideoId = _visibleIndexMap(visibleItemCount);
-        final results = LibraryVideoGridResultsView(
-          dense: widget.dense,
-          narrow: narrow,
-          compact: compact,
-          scrollController: _scrollController,
-          visibleItemCount: visibleItemCount,
-          visibleIndexByVideoId: visibleIndexByVideoId,
-          videos: widget.videos,
-          thumbnailService: widget.thumbnailService,
-          playbackSettings: widget.playbackSettings,
-          onVisible: widget.onVisible,
-          onOpen: widget.onOpen,
-          onRevealLocation: widget.onRevealLocation,
-          onToggleFavorite: widget.onToggleFavorite,
-          onDelete: widget.onDelete,
-          selectionMode: widget.selectionMode,
-          selectedVideoIds: widget.selectedVideoIds,
-          onToggleSelected: widget.onToggleSelected,
-          columnCount: columnCount,
-          measuredWidth: measuredWidth,
-          crossAxisSpacing: crossAxisSpacing,
-          mainAxisSpacing: mainAxisSpacing,
-          textScaleFactor: textScaleFactor,
-        );
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: NotificationListener<ScrollNotification>(
-                onNotification: _handleScrollNotification,
-                child: AnimatedOpacity(
-                  opacity: resizing ? 0.97 : 1,
-                  duration: const Duration(milliseconds: 120),
-                  curve: Curves.easeOutCubic,
-                  child: results,
-                ),
-              ),
-            ),
-            if (widget.scrollChromeEnabled)
-              LibraryVideoGridReturnToTop(
-                visible: _showReturnToTop,
-                onTap: _scrollToTop,
-              ),
-          ],
-        );
       },
+      onScrollNotification: _handleScrollNotification,
+      onScrollToTop: _scrollToTop,
     );
   }
 }
