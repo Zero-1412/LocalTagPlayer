@@ -198,6 +198,19 @@ void main() {
       ),
       isTrue,
     );
+    expect(
+      progress.any(
+        (item) => item.phase == VideoVisualScanPhase.extractingSignatures,
+      ),
+      isTrue,
+    );
+    final extractionProgress = progress
+        .where(
+            (item) => item.phase == VideoVisualScanPhase.extractingSignatures)
+        .toList(growable: false);
+    expect(extractionProgress.first.processed, 0);
+    expect(extractionProgress.last.processed, extractionProgress.last.total);
+    expect(extractionProgress.last.total, lessThanOrEqualTo(64));
     expect(progress.last.processed, progress.last.total);
     expect(progress.every((item) => item.elapsed >= Duration.zero), isTrue);
     expect(progress.any((item) => item.elapsed > Duration.zero), isTrue);

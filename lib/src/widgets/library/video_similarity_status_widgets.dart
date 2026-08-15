@@ -337,7 +337,9 @@ class VideoSimilarityScanningState extends StatelessWidget {
             Text(
               phase == VideoVisualScanPhase.buildingCandidates
                   ? '正在按媒体库视频建立多通道候选；完成后会进入逐对画面复核。'
-                  : '会对候选抽取时序画面并保留有界深度回退；不会为全库视频逐个启动播放器兜底。',
+                  : phase == VideoVisualScanPhase.comparingCandidates
+                      ? '正在用缓存首帧做快速预筛；通过者随后进入有界时序取帧。'
+                      : '正在等待有界时序取帧任务完成；不会为全库视频逐个启动播放器兜底。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: libraryTextMuted,
@@ -370,14 +372,16 @@ class VideoSimilarityScanningState extends StatelessWidget {
 String _visualPhaseShortLabel(VideoVisualScanPhase phase) {
   return switch (phase) {
     VideoVisualScanPhase.buildingCandidates => '建候选',
-    VideoVisualScanPhase.comparingCandidates => '比画面',
+    VideoVisualScanPhase.comparingCandidates => '首帧预筛',
+    VideoVisualScanPhase.extractingSignatures => '取时序帧',
   };
 }
 
 String _visualPhaseTitle(VideoVisualScanPhase phase) {
   return switch (phase) {
     VideoVisualScanPhase.buildingCandidates => '正在建立视觉候选',
-    VideoVisualScanPhase.comparingCandidates => '正在按时序画面复核近重复视频',
+    VideoVisualScanPhase.comparingCandidates => '正在用缓存首帧预筛视觉候选',
+    VideoVisualScanPhase.extractingSignatures => '正在完成时序画面复核',
   };
 }
 

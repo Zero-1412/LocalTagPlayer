@@ -39,6 +39,19 @@ void main() {
         ),
       ),
     );
-    expect(find.text('正在按时序画面复核近重复视频（64/128）'), findsOneWidget);
+    expect(find.text('正在用缓存首帧预筛视觉候选（64/128）'), findsOneWidget);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: VideoSimilarityScanningState(
+            phase: VideoVisualScanPhase.extractingSignatures,
+            progress: 3,
+            total: 8,
+          ),
+        ),
+      ),
+    );
+    expect(find.text('正在完成时序画面复核（3/8）'), findsOneWidget);
   });
 }

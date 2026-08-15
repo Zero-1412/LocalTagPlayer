@@ -42,13 +42,14 @@ const _maxUncachedDeepCandidatePairs = 512;
 /** 即使首帧已缓存，深度取帧也有全局上限；强匹配仍走廉价首帧路径。 */
 const _maxDeepVisualCandidatePairs = 2048;
 
-/** 视觉复核的两个可见阶段，避免候选构建期间只能显示无期限转圈。 */
+/** 视觉复核的可见阶段，避免快速预筛结束后深度取帧仍只能显示无期限转圈。 */
 enum VideoVisualScanPhase {
   buildingCandidates,
   comparingCandidates,
+  extractingSignatures,
 }
 
-/** 页面使用的阶段进度；不把候选构建和 FFmpeg 取帧混成一个无意义的百分比。 */
+/** 页面使用的阶段进度；不把廉价预筛和 FFmpeg 深度取帧混成一个无意义的百分比。 */
 class VideoVisualScanProgress {
   const VideoVisualScanProgress({
     required this.phase,
@@ -328,6 +329,16 @@ class VideoContentSimilarityService {
       deepCandidates.add(candidate);
     }
 
+    // 快速首帧预筛和深度取帧的成本量级不同；深度阶段单独计数、单独估算，
+    // 避免预筛已接近总量时把尚未启动的 FFmpeg 任务错误显示成“还剩 1 秒”。
+    var deepProcessed = 0;
+    if (deepCandidates.isNotEmpty) {
+      progress.report(
+        VideoVisualScanPhase.extractingSignatures,
+        0,
+        deepCandidates.length,
+      );
+    }
     final workerCount = _visualComparisonWorkerCount();
     for (var offset = 0;
         offset < deepCandidates.length;
@@ -370,7 +381,12 @@ class VideoContentSimilarityService {
             _recordMinimumScore(matchedScores, candidate.right, distance);
           }
         }
-        reportProcessed();
+        deepProcessed++;
+        progress.report(
+          VideoVisualScanPhase.extractingSignatures,
+          deepProcessed,
+          deepCandidates.length,
+        );
       }
     }
 

@@ -17,6 +17,8 @@
 - 相似视频视觉签名是可重建派生缓存：经 `VisualSignatureCacheRepository` 按 stable `videoId`
   持久化，并以算法版本和媒体 fingerprint/size/mtime 校验有效性；删除时必须由 Repository
   同事务清理，缓存读写失败只能回退重算，不能阻断媒体库或播放器。
+- 相似视频进度必须区分首帧预筛和深度时序取帧；深度取帧尚未汇合时不能继续沿用预筛吞吐率计算 ETA，
+  也不能让扫描 Future 在仍有深度批次时提前完成。
 
 ## 非目标
 
