@@ -7257,6 +7257,11 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.text('维护工作区'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('maintenance.workspace.back')),
+      findsOneWidget,
+    );
     expect(find.text('2 个视频路径失效'), findsOneWidget);
     expect(find.text('标签与播放记录已保留'), findsOneWidget);
     expect(find.byKey(const ValueKey('missingRelink.list')), findsOneWidget);

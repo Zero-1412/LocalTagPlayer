@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · Missing / Relink UI 外壳重构（已完成）
+
+- 目标：在播放器 Phase 2 已有实现证据的基础上，继续第三阶段维护页面统一；先把 Missing / Relink
+  收敛为“维护工作区 / 缺失与重新关联”的内容优先页面。
+- 当前修改：新增维护页面共享两级标题栏；为返回、批量路径替换和内容宽度建立稳定外壳；保留
+  单条 relink、批量预览、空态、稳定身份说明与原有命中区。
+- 保护：不修改 `videoId`、fingerprint、mutable path、missing 语义、Repository 提交、文件选择器、
+  schema、`FilterQuery`、`TagQueryService`、filtered queue、PlayerBackend 或用户数据。
+- 目标文档：`docs/design/MISSING_RELINK_UI_SHELL_TARGET.md`。
+- 当前验证：Missing/Relink 150% focused widget test 通过；稳定身份架构契约 57 项通过；relink command
+  独立测试 4 项通过；完整 `flutter test` 通过（617 passed，4 skipped）；`flutter analyze` 无问题；
+  `flutter build windows --debug` 成功。Debug 窗口在 1339×804 下真实检查空态、维护标题栏、批量入口、
+  内容宽度与返回媒体库路径，无明显遮挡、裁切或溢出。
+- 阻塞：无。
+- 下一步：进入目录管理 UI 外壳或共享 Dialog/Menu/Sheet/Tooltip/Snackbar 组件族；继续保持稳定身份和
+  用户数据边界不变。
+
 # 2026-08-16 · 设置工作区 UI 外壳重构（已完成）
 
 - 目标：在媒体库与标签中心外壳方向稳定后，推进下一页面设置工作区首页，统一维护上下文、

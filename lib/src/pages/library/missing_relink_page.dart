@@ -6,6 +6,7 @@ import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
 import '../../services/library/library_application_facade.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_workspace_app_bar.dart';
 
 import 'missing_bulk_relink_dialog.dart';
 import 'missing_relink_sections.dart';
@@ -152,6 +153,26 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
   /** 返回媒体库时报告是否有单条索引发生变化。 */
   void _close() => Navigator.of(context).pop(_changed);
 
+  /** 打开批量路径替换预览；页面只接收完成数量，不拥有映射与校验语义。 */
+  Future<void> _openBulkRelinkPreview(List<VideoItem> missing) async {
+    if (missing.isEmpty) {
+      return;
+    }
+    final count = await showDialog<int>(
+      context: context,
+      builder: (_) => maintenanceDialogSurface(
+        context: context,
+        child: BulkPathRelinkDialog(
+          store: widget.store,
+          fileSystem: widget.fileSystem,
+        ),
+      ),
+    );
+    if (count != null && count > 0 && mounted) {
+      setState(() => _changed = true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final missing = _missingVideos;
@@ -165,57 +186,40 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
   Widget _buildWorkspace(List<VideoItem> missing) {
     return Scaffold(
       backgroundColor: libraryBackground,
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: '返回媒体库',
-          onPressed: _close,
-          icon: const Icon(Icons.arrow_back_rounded),
-        ),
-        title: const Text('缺失与重新关联'),
-        actions: [
-          OutlinedButton.icon(
-            key: const ValueKey('missingRelink.bulkPreview'),
-            onPressed: missing.isEmpty
-                ? null
-                : () async {
-                    final count = await showDialog<int>(
-                      context: context,
-                      builder: (_) => maintenanceDialogSurface(
-                        context: context,
-                        child: BulkPathRelinkDialog(
-                          store: widget.store,
-                          fileSystem: widget.fileSystem,
-                        ),
-                      ),
-                    );
-                    if (count != null && count > 0 && mounted) {
-                      setState(() => _changed = true);
-                    }
-                  },
-            icon: const Icon(Icons.drive_file_move_outline, size: 18),
-            label: const Text('批量路径替换'),
-          ),
-          const SizedBox(width: 16),
-        ],
+      appBar: MaintenanceWorkspaceAppBar(
+        title: '缺失与重新关联',
+        onBack: _close,
+        actionIcon: Icons.drive_file_move_outline,
+        actionLabel: '批量路径替换',
+        actionTooltip: '批量路径替换',
+        actionKey: const ValueKey('missingRelink.bulkPreview'),
+        onAction:
+            missing.isEmpty ? null : () => _openBulkRelinkPreview(missing),
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final padding = constraints.maxWidth < 700 ? 16.0 : 24.0;
-          return Padding(
-            padding: EdgeInsets.fromLTRB(padding, 8, padding, padding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                MissingRelinkOverview(missingCount: missing.length),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: MissingVideoList(
-                    missing: missing,
-                    relinkingVideoIds: _relinkCommandExecutor.runningVideoIds,
-                    onRelink: _relink,
-                  ),
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1120),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(padding, 18, padding, padding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    MissingRelinkOverview(missingCount: missing.length),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: MissingVideoList(
+                        missing: missing,
+                        relinkingVideoIds:
+                            _relinkCommandExecutor.runningVideoIds,
+                        onRelink: _relink,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           );
         },

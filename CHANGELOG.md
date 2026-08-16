@@ -5,6 +5,14 @@
 
 ## Unreleased
 
+### Missing / Relink UI 外壳重构
+
+- 建立“维护工作区 / 缺失与重新关联”两级上下文标题栏，保留返回与批量路径替换入口；窄窗口下
+  批量动作降级为带 tooltip 的图标按钮。
+- 内容区增加稳定桌面宽度边界，继续保留缺失摘要、稳定身份保留说明、空态、单条重新关联和批量预览。
+- 不修改 `videoId`、fingerprint、mutable path、missing/relink 业务、schema、`FilterQuery`、
+  `TagQueryService`、filtered queue、PlayerBackend 或用户数据。
+
 ### 设置工作区 UI 外壳重构
 
 - 建立设置首页的 Before/After 视觉目标，顶部改为“维护工作区 / 设置”两级上下文栏，二级页
