@@ -1,5 +1,21 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 标签中心 UI 外壳重构（已完成）
+
+- 目标：在媒体库首页视觉方向已确认后，推进下一页面 Tag Manager 的维护工作区外壳，建立
+  “维护工作区 / 标签 rail / 标签 inspector”的清晰层级。
+- 当前修改：顶部上下文栏、左侧标签发现 rail、右侧 inspector 身份头部、空状态和维护分区表面；
+  保留页面状态 owner、搜索 controller、既有 keys、focus order、callbacks、风险检查和返回路径。
+- 保护：不触碰 schema、TagItem/TagGroup 数据语义、FilterQuery、TagQueryService、来源
+  filtered queue、PlayerBackend、缩略图/媒体详情队列、stable identity 或用户数据。
+- 目标文档：`docs/design/TAG_MANAGER_UI_SHELL_TARGET.md`。
+- 当前验证：Tag Manager focused widget tests 通过；`flutter test test/widget_test.dart` 通过（212 passed）；
+  `flutter test test/architecture_contract_test.dart` 通过（58 passed）；完整 `flutter test` 通过（617 passed，4 skipped）；
+  `flutter analyze` 无问题；`flutter build windows --debug` 成功；当前 Debug 构建在 1339×804 下真实检查
+  标签中心入口、空状态、选中 inspector、批量打标签和高风险操作，无明显遮挡、裁切或溢出。
+- 阻塞：无。
+- 下一步：等待本轮标签中心视觉反馈；若方向保持，再决定继续补齐 Tag Manager 其他状态，或进入下一个页面的 UI 外壳重构。
+
 # 2026-08-16 · 媒体库首页 Phase 2 内容区与 inspector 细化（已完成）
 
 - 目标：在已确认的 Phase 1 Before/After 方向上，继续收敛视频结果密度、排序/视图控件和标签 inspector 的层级、语义与命中反馈。

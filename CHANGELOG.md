@@ -5,6 +5,15 @@
 
 ## Unreleased
 
+### 标签中心 UI 外壳重构
+
+- 建立 Tag Manager 的 Before/After 视觉目标，顶部改为“维护工作区 / 标签中心”两级上下文栏，
+  左侧强化标签发现 rail，右侧增加标签 inspector 身份头部。
+- 空状态、选中行、属性/批量/高风险操作分区统一维护页深色 surface 层级；保留搜索、分组筛选、
+  创建、编辑、批量 manual 打标、引用检查、焦点顺序和返回路径。
+- 不修改标签数据模型、来源语义、schema、`FilterQuery`、`TagQueryService`、filtered queue、
+  PlayerBackend、缩略图/媒体详情队列、stable identity 或用户数据。
+
 ### 媒体库首页 Phase 1 视觉重构
 
 - 建立媒体库首页 Before/After 视觉目标，明确页面上下文、搜索、活动筛选、标签发现和视频结果的层级关系。

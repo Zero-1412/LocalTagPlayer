@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/app_theme_tokens.dart';
+
 // ignore_for_file: slash_for_doc_comments
 
 /**
@@ -27,12 +29,37 @@ class TagManagerWorkspaceAppBar extends StatelessWidget
   final VoidCallback onCreate;
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => Size.fromHeight(compact ? 65 : 77);
 
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      title: const Text('标签管理'),
+      toolbarHeight: compact ? 64 : 76,
+      titleSpacing: 0,
+      title: const Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '维护工作区',
+            style: TextStyle(
+              color: libraryTextMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
+          ),
+          SizedBox(height: 3),
+          Text(
+            '标签中心',
+            style: TextStyle(
+              color: libraryText,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
       actions: [
         IconButton(
           tooltip: '刷新',
@@ -51,8 +78,12 @@ class TagManagerWorkspaceAppBar extends StatelessWidget
             icon: const Icon(Icons.add),
             label: const Text('新建标签'),
           ),
-        const SizedBox(width: 12),
+        SizedBox(width: compact ? 8 : 20),
       ],
+      bottom: const PreferredSize(
+        preferredSize: Size.fromHeight(1),
+        child: Divider(height: 1, color: libraryBorder),
+      ),
     );
   }
 }

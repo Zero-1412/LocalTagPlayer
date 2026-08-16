@@ -32,7 +32,7 @@ class TagManagerSection extends StatelessWidget {
     final dangerColor = Theme.of(context).colorScheme.error;
     // 使用真实 Material 承载内部 SwitchListTile 的 focus/hover/ink，避免表面色遮住反馈。
     return Material(
-      color: librarySurface,
+      color: danger ? dangerColor.withValues(alpha: 0.06) : librarySurfaceAlt,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
         side: BorderSide(
@@ -64,6 +64,129 @@ class TagManagerSection extends StatelessWidget {
   }
 }
 
+/** 右侧 inspector 的标签身份头部，先回答“正在维护什么”再展示编辑表单。 */
+class TagManagerInspectorHeader extends StatelessWidget {
+  const TagManagerInspectorHeader({
+    super.key,
+    required this.tag,
+    required this.groupLabel,
+    required this.usageCount,
+  });
+
+  final TagItem tag;
+  final String groupLabel;
+  final int usageCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final isFolder = tag.source == TagSource.folder;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: librarySurfaceAlt,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: const Border.fromBorderSide(BorderSide(color: libraryBorder)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: appAccentViolet.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Icon(
+                  isFolder ? Icons.folder_outlined : Icons.sell_outlined,
+                  color: libraryAccent,
+                  size: 22,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '标签 inspector',
+                    style: TextStyle(
+                      color: libraryTextMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    tag.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      TagManagerMetaPill(label: tag.source.name),
+                      TagManagerMetaPill(label: groupLabel),
+                      TagManagerMetaPill(label: '使用 $usageCount'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'ID: ${tag.id}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: libraryTextMuted,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/** inspector 头部使用的低强调元数据胶囊，区别于可操作的分组 ChoiceChip。 */
+class TagManagerMetaPill extends StatelessWidget {
+  const TagManagerMetaPill({super.key, required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: librarySurface,
+        borderRadius: BorderRadius.circular(7),
+        border: const Border.fromBorderSide(BorderSide(color: libraryBorder)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: libraryTextMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class TagGroupSummary extends StatelessWidget {
   const TagGroupSummary({
     super.key,
@@ -84,12 +207,12 @@ class TagGroupSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     if (groups.isEmpty) {
       return const Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
         child: Text('暂无标签组', style: TextStyle(color: libraryTextMuted)),
       );
     }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

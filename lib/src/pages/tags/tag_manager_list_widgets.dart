@@ -17,17 +17,220 @@ class TagManagerEmptyDetail extends StatelessWidget {
         borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
         border: Border.fromBorderSide(BorderSide(color: libraryBorder)),
       ),
-      child: const Center(
+      child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.sell_outlined, size: 34, color: libraryTextMuted),
-            SizedBox(height: 12),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: librarySurfaceAlt,
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                border: const Border.fromBorderSide(
+                  BorderSide(color: libraryBorder),
+                ),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(14),
+                child: Icon(Icons.sell_outlined,
+                    size: 28, color: libraryTextMuted),
+              ),
+            ),
+            const SizedBox(height: 16),
             Text(
               '选择一个标签查看和维护详情',
-              style: TextStyle(color: libraryTextMuted),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: libraryText,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                '从左侧列表选择标签，开始编辑属性或检查影响范围。',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: libraryTextMuted),
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/** 标签中心右侧 inspector 的统一外壳，保持选中态和空状态共享同一边界。 */
+class TagManagerInspectorSurface extends StatelessWidget {
+  const TagManagerInspectorSurface({
+    super.key,
+    required this.child,
+  });
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: librarySurface,
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
+        border: Border.fromBorderSide(BorderSide(color: libraryBorder)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.panel),
+        child: child,
+      ),
+    );
+  }
+}
+
+/** 左侧标签列表的上下文标题，展示发现范围而不改变筛选语义。 */
+class TagManagerListHeader extends StatelessWidget {
+  const TagManagerListHeader({
+    super.key,
+    required this.visibleCount,
+  });
+
+  final int visibleCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.sell_outlined, size: 18, color: libraryAccent),
+              const SizedBox(width: 8),
+              Text(
+                '标签',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const Spacer(),
+              Text(
+                '$visibleCount 个',
+                style: const TextStyle(
+                  color: libraryTextMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            '按来源和分组维护标签关系',
+            style: TextStyle(color: libraryTextMuted, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/** 标签列表单行外壳，保留单击选中回调并强化 selected 的定位线。 */
+class TagManagerListItem extends StatelessWidget {
+  const TagManagerListItem({
+    super.key,
+    required this.row,
+    required this.groupLabel,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final TagManagerTagRow row;
+  final String groupLabel;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tag = row.tag;
+    final isFolder = tag.source == TagSource.folder;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
+      child: Material(
+        color: selected
+            ? appAccentViolet.withValues(alpha: 0.16)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              border: Border(
+                left: BorderSide(
+                  color: selected ? appAccentViolet : Colors.transparent,
+                  width: 3,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? appAccentViolet.withValues(alpha: 0.18)
+                        : librarySurfaceAlt,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(7),
+                    child: Icon(
+                      isFolder ? Icons.folder_outlined : Icons.sell_outlined,
+                      size: 16,
+                      color: selected ? libraryAccent : libraryTextMuted,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        row.displayLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        row.subtitle(groupLabel),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: libraryTextMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (tag.isHidden)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Icon(Icons.visibility_off_outlined,
+                        size: 17, color: libraryTextMuted),
+                  )
+                else if (tag.isFavorite)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Icon(Icons.star_rounded,
+                        size: 17, color: libraryAccent),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );

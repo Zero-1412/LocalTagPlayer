@@ -374,7 +374,12 @@ class _TagManagerPageState extends State<TagManagerPage> {
         onCreate: _createTag,
       ),
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        padding: EdgeInsets.fromLTRB(
+          compact ? 12 : 20,
+          compact ? 10 : 16,
+          compact ? 12 : 20,
+          compact ? 12 : 20,
+        ),
         child: FutureBuilder<Map<String, TagUsageSummary>>(
           future: _usageFuture,
           builder: (context, snapshot) {
@@ -387,7 +392,7 @@ class _TagManagerPageState extends State<TagManagerPage> {
                   width: compact
                       ? double.infinity
                       : (layoutSize == LayoutSize.medium ? 316 : 360),
-                  height: compact ? 320 : null,
+                  height: compact ? 304 : null,
                   child: DecoratedBox(
                     decoration: const BoxDecoration(
                       color: librarySurface,
@@ -399,8 +404,9 @@ class _TagManagerPageState extends State<TagManagerPage> {
                     ),
                     child: Column(
                       children: [
+                        TagManagerListHeader(visibleCount: rows.length),
                         Padding(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
                           child: TagManagerSearchField(
                             controller: _searchController,
                             onChanged: () => setState(() {}),
@@ -423,36 +429,16 @@ class _TagManagerPageState extends State<TagManagerPage> {
                         const Divider(height: 1),
                         Expanded(
                           child: ListView.builder(
+                            padding: const EdgeInsets.only(top: 6, bottom: 8),
                             itemCount: rows.length,
                             itemBuilder: (context, index) {
                               final row = rows[index];
                               final tag = row.tag;
-                              return Padding(
-                                padding: const EdgeInsets.fromLTRB(8, 2, 8, 2),
-                                child: ListTile(
-                                  selected: tag.id == _selectedTagId,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                        AppRadius.control),
-                                  ),
-                                  leading: Icon(tag.source == TagSource.folder
-                                      ? Icons.folder_outlined
-                                      : Icons.sell_outlined),
-                                  title: Text(row.displayLabel,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis),
-                                  subtitle: Text(
-                                      row.subtitle(_groupLabel(tag.groupId))),
-                                  trailing: tag.isHidden
-                                      ? const Icon(
-                                          Icons.visibility_off_outlined,
-                                          size: 18)
-                                      : tag.isFavorite
-                                          ? const Icon(Icons.star_rounded,
-                                              size: 18)
-                                          : null,
-                                  onTap: () => _selectTag(tag),
-                                ),
+                              return TagManagerListItem(
+                                row: row,
+                                groupLabel: _groupLabel(tag.groupId),
+                                selected: tag.id == _selectedTagId,
+                                onTap: () => _selectTag(tag),
                               );
                             },
                           ),
@@ -465,28 +451,30 @@ class _TagManagerPageState extends State<TagManagerPage> {
                 Expanded(
                   child: _selectedTag == null
                       ? const TagManagerEmptyDetail()
-                      : TagManagerDetail(
-                          tag: _selectedTag!,
-                          usage: _rowFor(_selectedTag!, usage).usage,
-                          groups: widget.store.tagGroups,
-                          currentResultCount: widget.currentResults.length,
-                          displayNameController: _displayNameController,
-                          aliasesController: _aliasesController,
-                          sortOrderController: _sortOrderController,
-                          groupId: _editingGroupId,
-                          isHidden: _editingHidden,
-                          isFavorite: _editingFavorite,
-                          onGroupChanged: (value) =>
-                              setState(() => _editingGroupId = value),
-                          onHiddenChanged: (value) =>
-                              setState(() => _editingHidden = value),
-                          onFavoriteChanged: (value) =>
-                              setState(() => _editingFavorite = value),
-                          onSave: _saveSelectedTag,
-                          onBatchAdd: () => _batchAdd(_selectedTag!),
-                          onBatchRemove: () => _batchRemove(_selectedTag!),
-                          onDelete: () => _showDeleteBlocked(_selectedTag!),
-                          onMerge: () => _showMergeBlocked(_selectedTag!),
+                      : TagManagerInspectorSurface(
+                          child: TagManagerDetail(
+                            tag: _selectedTag!,
+                            usage: _rowFor(_selectedTag!, usage).usage,
+                            groups: widget.store.tagGroups,
+                            currentResultCount: widget.currentResults.length,
+                            displayNameController: _displayNameController,
+                            aliasesController: _aliasesController,
+                            sortOrderController: _sortOrderController,
+                            groupId: _editingGroupId,
+                            isHidden: _editingHidden,
+                            isFavorite: _editingFavorite,
+                            onGroupChanged: (value) =>
+                                setState(() => _editingGroupId = value),
+                            onHiddenChanged: (value) =>
+                                setState(() => _editingHidden = value),
+                            onFavoriteChanged: (value) =>
+                                setState(() => _editingFavorite = value),
+                            onSave: _saveSelectedTag,
+                            onBatchAdd: () => _batchAdd(_selectedTag!),
+                            onBatchRemove: () => _batchRemove(_selectedTag!),
+                            onDelete: () => _showDeleteBlocked(_selectedTag!),
+                            onMerge: () => _showMergeBlocked(_selectedTag!),
+                          ),
                         ),
                 ),
               ],

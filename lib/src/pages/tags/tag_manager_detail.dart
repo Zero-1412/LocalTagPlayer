@@ -55,6 +55,13 @@ class TagManagerDetail extends StatelessWidget {
     final compact =
         LayoutBreakpoints.fromWidth(MediaQuery.sizeOf(context).width) ==
             LayoutSize.compact;
+    var groupLabel = tag.groupId ?? '未分组';
+    for (final group in groups) {
+      if (group.id == tag.groupId) {
+        groupLabel = group.displayName ?? group.name;
+        break;
+      }
+    }
     final groupItems = groups.isEmpty
         ? const <DropdownMenuItem<String>>[
             DropdownMenuItem(
@@ -81,15 +88,12 @@ class TagManagerDetail extends StatelessWidget {
           28,
         ),
         children: [
-          Text(tag.name,
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          Text('ID: ${tag.id}',
-              style: const TextStyle(color: libraryTextMuted)),
-          const SizedBox(height: 18),
+          TagManagerInspectorHeader(
+            tag: tag,
+            groupLabel: groupLabel,
+            usageCount: usage.total,
+          ),
+          const SizedBox(height: 16),
           TagManagerSection(
             title: '使用情况',
             child: Wrap(
