@@ -1,5 +1,23 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 数据备份 UI 外壳重构（已完成）
+
+- 目标：进入第三阶段下一个仍缺独立视觉目标的数据保护叶页面，把数据备份从通用设置卡片收敛为
+  “数据保护工作区”，先建立 Before/After 视觉目标，再替换展示外壳。
+- 当前修改：新增 `docs/design/DATA_BACKUP_UI_SHELL_TARGET.md`；数据备份使用带稳定
+  `settings.dataBackup.workspaceSurface` key 和 Semantics container 的实色工作区 surface；
+  保留保护范围、同步状态、进度、维护动作和原有 `settings.dataBackup.card` key。
+- 保护：不修改 `DataBackupSettingsWorkspace`、`DataBackupMaintenanceController`、备份数据库、
+  文件选择器、持久化、备份状态语义或用户数据。
+- 当前验证：数据备份工作区、设置入口可达性、150% 文字缩放、维护操作键盘顺序和架构契约
+  focused 验证通过；完整 `flutter test` 通过（621 passed，4 skipped）；`flutter analyze` 无问题；
+  `flutter build windows --debug` 成功。Debug 窗口真实从媒体库进入设置，再进入视频数据备份，检查
+  保护范围、11,194 / 11,194 同步状态、维护按钮和完整性检查 Dialog，关闭后页面恢复，无明显遮挡、
+  裁切或溢出。
+- 阻塞：无。
+- 下一步：先收集数据备份页在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，
+  再决定进入下一个维护状态或继续细化备份错误/导出反馈；不扩展到备份服务或数据库边界。
+
 # 2026-08-16 · 缓存诊断 UI 外壳重构（已完成）
 
 - 目标：进入第三阶段下一个仍缺独立视觉目标的维护叶页面，把缓存诊断从通用设置卡片收敛为

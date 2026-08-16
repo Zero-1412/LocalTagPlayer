@@ -4078,6 +4078,11 @@ void main() {
     );
     await tester.pump();
 
+    expect(
+      find.byKey(const ValueKey('settings.dataBackup.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
     expect(find.text('同步状态'), findsOneWidget);
     expect(
       find.textContaining('不复制视频文件，也不改变 folder 标签来源'),

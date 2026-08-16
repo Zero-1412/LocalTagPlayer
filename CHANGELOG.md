@@ -5,6 +5,13 @@
 
 ## Unreleased
 
+### 数据备份 UI 外壳重构
+
+- 数据备份从通用 `Card` 收敛为带稳定 Semantics 和挂载 key 的实色数据保护工作区；保留保护范围、
+  同步状态、进度、立即备份、完整性检查、导出和原有设置 key。
+- 不改变 `DataBackupSettingsWorkspace`、备份 controller、备份数据库、文件选择器、持久化、用户数据
+  或任何备份命令语义。
+
 ### 缓存诊断 UI 外壳重构
 
 - 缓存诊断从通用 `Card` 收敛为带稳定 Semantics 和挂载 key 的实色诊断工作区；保留 loading、

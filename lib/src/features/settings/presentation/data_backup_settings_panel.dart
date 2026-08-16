@@ -36,99 +36,112 @@ class DataBackupSettingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Semantics(
       key: const ValueKey('settings.dataBackup.card'),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SwitchListTile(
-              key: const ValueKey('settings.dataBackup.toggle'),
-              contentPadding: EdgeInsets.zero,
-              value: enabled,
-              onChanged: onEnabledChanged,
-              secondary: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: appAccentViolet.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                ),
-                child: const SizedBox.square(
-                  dimension: 42,
-                  child: Icon(Icons.shield_outlined, color: libraryAccent),
+      container: true,
+      label: '数据保护工作区',
+      child: DecoratedBox(
+        key: const ValueKey('settings.dataBackup.workspaceSurface'),
+        decoration: BoxDecoration(
+          color: librarySurface,
+          borderRadius: BorderRadius.circular(AppRadius.panel),
+          border: const Border.fromBorderSide(BorderSide(color: libraryBorder)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Material(
+                type: MaterialType.transparency,
+                child: SwitchListTile(
+                  key: const ValueKey('settings.dataBackup.toggle'),
+                  contentPadding: EdgeInsets.zero,
+                  value: enabled,
+                  onChanged: onEnabledChanged,
+                  secondary: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: appAccentViolet.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                    ),
+                    child: const SizedBox.square(
+                      dimension: 42,
+                      child: Icon(Icons.shield_outlined, color: libraryAccent),
+                    ),
+                  ),
+                  title: const Text(
+                    '视频数据备份',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  subtitle: const Padding(
+                    padding: EdgeInsets.only(top: 5),
+                    child: Text(
+                      '独立保存视频身份与用户维护数据，主媒体库仍是唯一业务写入源。',
+                      style: TextStyle(color: libraryTextMuted, height: 1.4),
+                    ),
+                  ),
                 ),
               ),
-              title: const Text(
-                '视频数据备份',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-              subtitle: const Padding(
-                padding: EdgeInsets.only(top: 5),
-                child: Text(
-                  '独立保存视频身份与用户维护数据，主媒体库仍是唯一业务写入源。',
-                  style: TextStyle(color: libraryTextMuted, height: 1.4),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-            const _DataBackupScopeSummary(),
-            const SizedBox(height: 20),
-            const SettingsGroupTitle(title: '同步状态'),
-            const SizedBox(height: 10),
-            _DataBackupMetricGrid(
-              statusLabel: statusLabel,
-              progressLabel: progressLabel,
-              pendingLabel: pendingLabel,
-              lastCompletedLabel: lastCompletedLabel,
-            ),
-            if (progress != null) ...[
               const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.capsule),
-                child: LinearProgressIndicator(minHeight: 5, value: progress),
+              const _DataBackupScopeSummary(),
+              const SizedBox(height: 20),
+              const SettingsGroupTitle(title: '同步状态'),
+              const SizedBox(height: 10),
+              _DataBackupMetricGrid(
+                statusLabel: statusLabel,
+                progressLabel: progressLabel,
+                pendingLabel: pendingLabel,
+                lastCompletedLabel: lastCompletedLabel,
               ),
-            ],
-            const SizedBox(height: 20),
-            const Divider(height: 1),
-            const SizedBox(height: 16),
-            const Text(
-              '维护动作',
-              style: TextStyle(
-                color: libraryText,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 5),
-            const Text(
-              '完整性检查只读取并报告差异；导出不包含本地路径或视频文件。',
-              style: TextStyle(color: libraryTextMuted, height: 1.4),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                FilledButton.icon(
-                  key: const ValueKey('settings.dataBackup.runNow'),
-                  onPressed: enabled && !maintenanceRunning ? onRunNow : null,
-                  icon: const Icon(Icons.backup_rounded),
-                  label: const Text('立即备份'),
-                ),
-                OutlinedButton.icon(
-                  key: const ValueKey('settings.dataBackup.checkIntegrity'),
-                  onPressed: maintenanceRunning ? null : onCheckIntegrity,
-                  icon: const Icon(Icons.verified_user_rounded),
-                  label: const Text('检查完整性'),
-                ),
-                OutlinedButton.icon(
-                  key: const ValueKey('settings.dataBackup.export'),
-                  onPressed: maintenanceRunning ? null : onExport,
-                  icon: const Icon(Icons.file_download_outlined),
-                  label: const Text('导出备份'),
+              if (progress != null) ...[
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.capsule),
+                  child: LinearProgressIndicator(minHeight: 5, value: progress),
                 ),
               ],
-            ),
-          ],
+              const SizedBox(height: 20),
+              const Divider(height: 1),
+              const SizedBox(height: 16),
+              const Text(
+                '维护动作',
+                style: TextStyle(
+                  color: libraryText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                '完整性检查只读取并报告差异；导出不包含本地路径或视频文件。',
+                style: TextStyle(color: libraryTextMuted, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FilledButton.icon(
+                    key: const ValueKey('settings.dataBackup.runNow'),
+                    onPressed: enabled && !maintenanceRunning ? onRunNow : null,
+                    icon: const Icon(Icons.backup_rounded),
+                    label: const Text('立即备份'),
+                  ),
+                  OutlinedButton.icon(
+                    key: const ValueKey('settings.dataBackup.checkIntegrity'),
+                    onPressed: maintenanceRunning ? null : onCheckIntegrity,
+                    icon: const Icon(Icons.verified_user_rounded),
+                    label: const Text('检查完整性'),
+                  ),
+                  OutlinedButton.icon(
+                    key: const ValueKey('settings.dataBackup.export'),
+                    onPressed: maintenanceRunning ? null : onExport,
+                    icon: const Icon(Icons.file_download_outlined),
+                    label: const Text('导出备份'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
