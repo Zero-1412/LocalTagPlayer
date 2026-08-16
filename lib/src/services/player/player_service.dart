@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -11,6 +13,7 @@ import '../../models/player_feature_apply_result.dart';
 import '../../models/player_video_surface_diagnostics.dart';
 import '../../platform/platform_interfaces.dart';
 import 'player_hdr_mapping_experiment.dart';
+import 'player_position_reconciler.dart';
 import 'player_smooth_motion.dart';
 import 'player_video_super_resolution.dart';
 
@@ -35,10 +38,24 @@ class PlayerService
         PlayerMotionInterpolationBoundary,
         PlayerMediaControlsBoundary {
   /** 创建一个独占单个播放 Route 生命周期的服务。 */
-  PlayerService({required PlayerBackend backend}) : _backend = backend;
+  PlayerService({required PlayerBackend backend}) : _backend = backend {
+    _positionSubscription = _backend.positionChanges.listen(
+      _handleBackendPosition,
+    );
+  }
 
   /** 具体引擎只在服务内部持有，页面和业务控制器不可取得该引用。 */
   final PlayerBackend _backend;
+
+  /** 服务向页面输出经过 seek 目标栅栏处理的位置流。 */
+  final StreamController<Duration> _positionChanges =
+      StreamController<Duration>.broadcast(sync: true);
+  late final StreamSubscription<Duration> _positionSubscription;
+  final PlayerPositionReconciler _positionReconciler =
+      PlayerPositionReconciler();
+  /** 所有精确/交互式 seek 共用一条尾链，禁止旧命令晚于新命令完成。 */
+  Future<void> _seekTail = Future<void>.value();
+  Future<void>? _disposeFuture;
 
   /**
    * 只有隔离 Windows child HWND QA 后端返回 true。
@@ -73,10 +90,53 @@ class PlayerService
   var _filterTransactionSequence = 0;
 
   @override
-  PlayerBackendState get state => _backend.state;
+  PlayerBackendState get state {
+    final backendState = _backend.state;
+    final position = _positionReconciler.reconcile(backendState.position);
+    if (position == backendState.position) {
+      return backendState;
+    }
+    return PlayerBackendState(
+      position: position,
+      duration: backendState.duration,
+      playing: backendState.playing,
+      buffering: backendState.buffering,
+      volume: backendState.volume,
+      videoTrackCount: backendState.videoTrackCount,
+      audioTrackCount: backendState.audioTrackCount,
+    );
+  }
 
   /** 播放位置变化流。 */
-  Stream<Duration> get positionChanges => _backend.positionChanges;
+  Stream<Duration> get positionChanges => _positionChanges.stream;
+
+  /** 过滤 seek 前已排队的旧位置事件，同时保留真实位置流的低频特性。 */
+  void _handleBackendPosition(Duration position) {
+    if (_positionChanges.isClosed) return;
+    _positionChanges.add(_positionReconciler.reconcile(position));
+  }
+
+  /** 打开新媒体前清除上一媒体的 seek 目标，防止旧位置穿透到新会话。 */
+  void _resetPositionReconciler() => _positionReconciler.reset();
+
+  /** 将 seek 命令放到同一条尾链；动作失败不会阻塞后续最新用户意图。 */
+  Future<void> _enqueueSeek(Future<void> Function() command) async {
+    try {
+      await _seekTail;
+    } catch (_) {
+      // 旧 seek 失败仍不能阻塞后续 seek；原命令的异常继续向调用方传播。
+    }
+    await command();
+  }
+
+  Future<void> _runSeek(Future<void> Function() command) {
+    final operation = _enqueueSeek(command);
+    _seekTail = operation.then<void>(
+      (_) {},
+      onError: (_) {},
+    );
+    return operation;
+  }
 
   /** 播放/暂停状态变化流。 */
   Stream<bool> get playingChanges => _backend.playingChanges;
@@ -127,7 +187,10 @@ class PlayerService
   ValueListenable<int?> get textureId => _backend.textureId;
 
   /** 打开当前 filtered queue 选中的本地媒体。 */
-  Future<void> openPath(String path) => _backend.openPath(path);
+  Future<void> openPath(String path) {
+    _resetPositionReconciler();
+    return _backend.openPath(path);
+  }
 
   /** 开始或继续播放。 */
   Future<void> play() => _backend.play();
@@ -139,7 +202,13 @@ class PlayerService
   Future<void> stop() => _backend.stop();
 
   /** 跳转到指定媒体位置。 */
-  Future<void> seek(Duration position) => _backend.seek(position);
+  Future<void> seek(Duration position) {
+    _positionReconciler.beginSeek(
+      target: position,
+      current: state.position,
+    );
+    return _runSeek(() => _backend.seek(position));
+  }
 
   /**
    * 执行用户进度条或连续按键触发的低延迟随机跳转。
@@ -148,10 +217,16 @@ class PlayerService
    * 精确收敛最终目标。其它后端复用精确 seek，不扩大通用 [PlayerBackend] 契约。
    */
   Future<void> seekInteractive(Duration position) {
+    _positionReconciler.beginSeek(
+      target: position,
+      current: state.position,
+    );
     final boundary = _backend is PlayerInteractiveSeekBoundary
         ? _backend as PlayerInteractiveSeekBoundary
         : null;
-    return boundary?.seekInteractive(position) ?? _backend.seek(position);
+    return _runSeek(
+      () => boundary?.seekInteractive(position) ?? _backend.seek(position),
+    );
   }
 
   /** 设置当前会话倍速。 */
@@ -596,8 +671,17 @@ class PlayerService
     return boundary.setMotionInterpolationEnabled(enabled);
   }
 
-  /** 释放服务独占的引擎、视频表面和原生资源。 */
-  Future<void> dispose() => _backend.dispose();
+  /** 释放服务独占的引擎、位置流和原生资源。 */
+  Future<void> dispose() {
+    return _disposeFuture ??= _dispose();
+  }
+
+  Future<void> _dispose() async {
+    _positionReconciler.reset();
+    await _positionSubscription.cancel();
+    await _positionChanges.close();
+    await _backend.dispose();
+  }
 
   /** 等待底层 Player、纹理、D3D11/HWND 资源完成释放。 */
   Future<void> get released => _backend.released;

@@ -1,5 +1,16 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 播放器快进位置回跳竞态（进行中）
+
+- 现象：快进/快退偶发先移动到新位置，随后被旧位置状态回写到操作前落点。
+- 根因：seek 命令与位置流不是同一时序；后端可能在 seek 返回后投递 seek 前已排队的旧
+  `time-pos`，精确与交互式 seek 还可能分别进入后端。
+- 修复：`PlayerService` 串行化两类 seek；新增目标栅栏，在确认窗口内屏蔽迟到旧位置，超时
+  后回退真实后端值。新增 reconciler 与服务边界 focused 回归。
+- 保护：不修改 schema、FilterQuery/TagQueryService、来源 filtered queue、PlayerBackend
+  接口、播放/暂停意图或用户数据。
+- 下一步：完成 focused/analyze/build，停止编辑后独立只读审查并只提交本任务文件。
+
 # 2026-08-16 · 相似视频扫描跨页面复用与播放器后台让渡（完成）
 
 - 根因：视觉扫描 Future、取消代次和进度只由相似视频页面持有，页面退出立即取消；再次进入又从头

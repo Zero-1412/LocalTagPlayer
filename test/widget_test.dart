@@ -271,6 +271,10 @@ class _PreferenceRecordingPlayerBackend implements PlayerBackend {
   final properties = <String, String>{};
   final rates = <double>[];
 
+  /** 偏好设置测试不播放媒体，但必须提供服务位置订阅的安全空流。 */
+  @override
+  Stream<Duration> get positionChanges => const Stream<Duration>.empty();
+
   @override
   Future<void> setProperty(String property, String value) async {
     properties[property] = value;

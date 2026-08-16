@@ -1,5 +1,14 @@
 # Chat 4：播放器与筛选结果队列
 
+## 2026-08-16 · seek 位置回跳竞态
+
+- 根因：后端 seek 命令返回后，命令前已排队的 `time-pos` 位置事件仍可能迟到；精确与交互式
+  seek 也可能从两条独立 Future 同时进入后端，旧完成结果覆盖最新目标。
+- 修复：`PlayerService` 统一串行执行两类 seek；新增短暂目标栅栏，确认窗口内将迟到旧位置投影为
+  最新目标，确认超时后才回退实际后端位置。`PlayerBackend` 方法签名、来源 filtered queue 和
+  播放/暂停意图不变。
+- focused 回归覆盖“新目标后旧位置事件”和“精确/交互式 seek 交错”两种顺序。
+
 ## 2026-08-07 · click → seek → native-rendered-frame 时间线
 
 - 进度条交互式 `PlayerSeekCoordinator` 在同一 `Stopwatch` 下记录 `seek_submit_start`、`seek_command_complete` 与首个帧号变化；原生 Texture 证据写为 `native_rendered_frame`，兼容回退写为 `presented_frame_fallback`，并输出 `seek_to_frame_us`。
