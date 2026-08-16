@@ -6,6 +6,7 @@ import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import '../../services/library/library_application_facade.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_feedback.dart';
 
 import 'tag_manager_blocked_dialog.dart';
 import 'tag_manager_create_dialog.dart';
@@ -156,7 +157,7 @@ class _TagManagerPageState extends State<TagManagerPage> {
   }
 
   Future<void> _createTag() async {
-    final result = await showDialog<CreateTagResult>(
+    final result = await showMaintenanceDialog<CreateTagResult>(
       context: context,
       builder: (context) => CreateTagDialog(groups: widget.store.tagGroups),
     );
@@ -176,8 +177,10 @@ class _TagManagerPageState extends State<TagManagerPage> {
       await _refreshUsage();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('创建标签失败：$error')));
+        showMaintenanceSnackBar(
+          context,
+          message: '创建标签失败：$error',
+        );
       }
     }
   }
@@ -206,8 +209,7 @@ class _TagManagerPageState extends State<TagManagerPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('标签已保存')));
+    showMaintenanceSnackBar(context, message: '标签已保存');
   }
 
   Future<void> _batchAdd(TagItem tag) async {
@@ -233,8 +235,7 @@ class _TagManagerPageState extends State<TagManagerPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('已添加到 $count 个视频')));
+    showMaintenanceSnackBar(context, message: '已添加到 $count 个视频');
   }
 
   Future<void> _batchRemove(TagItem tag) async {
@@ -260,8 +261,10 @@ class _TagManagerPageState extends State<TagManagerPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('已从 $count 个视频移除 manual 标签')));
+    showMaintenanceSnackBar(
+      context,
+      message: '已从 $count 个视频移除 manual 标签',
+    );
   }
 
   Future<bool?> _confirmBatch({
@@ -269,7 +272,7 @@ class _TagManagerPageState extends State<TagManagerPage> {
     required String message,
     required String action,
   }) {
-    return showDialog<bool>(
+    return showMaintenanceDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
@@ -291,10 +294,9 @@ class _TagManagerPageState extends State<TagManagerPage> {
   }
 
   void _showManualOnlyNotice(String action) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text(
-              '$action 只支持 manual 标签。folder 来源标签由路径派生，不能作为普通 manual 批量操作对象。')),
+    showMaintenanceSnackBar(
+      context,
+      message: '$action 只支持 manual 标签。folder 来源标签由路径派生，不能作为普通 manual 批量操作对象。',
     );
   }
 
@@ -337,15 +339,12 @@ class _TagManagerPageState extends State<TagManagerPage> {
     required String title,
     required String message,
   }) {
-    return showDialog<void>(
+    return showMaintenanceDialog<void>(
       context: context,
-      builder: (dialogContext) => maintenanceDialogSurface(
-        context: dialogContext,
-        child: BlockedTagOperationDialog(
-          icon: icon,
-          title: title,
-          message: message,
-        ),
+      builder: (dialogContext) => BlockedTagOperationDialog(
+        icon: icon,
+        title: title,
+        message: message,
       ),
     );
   }

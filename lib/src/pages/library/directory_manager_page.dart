@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/library/library_application_facade.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_feedback.dart';
 import '../../widgets/maintenance_workspace_app_bar.dart';
 import 'directory_manager_sections.dart';
 
@@ -87,61 +88,58 @@ class _DirectoryManagerPageState extends State<DirectoryManagerPage> {
     if (_busy || widget.scanning) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMaintenanceDialog<bool>(
       context: context,
-      builder: (dialogContext) => maintenanceDialogSurface(
-        context: context,
-        child: AlertDialog(
-          icon: const Icon(Icons.folder_off_outlined, color: appAccentViolet),
-          title: const Text('解除目录管理'),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '目录中的视频会从当前媒体库与播放队列隐藏，但不会删除本地文件。',
-                  style: TextStyle(color: libraryText, height: 1.45),
-                ),
-                const SizedBox(height: 12),
-                const DirectoryDataPolicy(),
-                const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: librarySurfaceAlt,
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                    border: Border.all(color: libraryBorder),
-                  ),
-                  child: Text(
-                    root,
-                    style: const TextStyle(
-                      color: libraryTextMuted,
-                      fontSize: 12,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              key: const ValueKey('directoryManager.confirmRemove'),
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xffb84d5f),
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.folder_off_outlined, color: appAccentViolet),
+        title: const Text('解除目录管理'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '目录中的视频会从当前媒体库与播放队列隐藏，但不会删除本地文件。',
+                style: TextStyle(color: libraryText, height: 1.45),
               ),
-              child: const Text('解除管理'),
-            ),
-          ],
+              const SizedBox(height: 12),
+              const DirectoryDataPolicy(),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: librarySurfaceAlt,
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  border: Border.all(color: libraryBorder),
+                ),
+                child: Text(
+                  root,
+                  style: const TextStyle(
+                    color: libraryTextMuted,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const ValueKey('directoryManager.confirmRemove'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xffb84d5f),
+            ),
+            child: const Text('解除管理'),
+          ),
+        ],
       ),
     );
     if (confirmed != true || !mounted) {

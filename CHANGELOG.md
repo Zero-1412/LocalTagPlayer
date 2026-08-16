@@ -5,6 +5,15 @@
 
 ## Unreleased
 
+### 维护反馈组件族统一
+
+- 新增维护工作区共享 Dialog、Menu、Sheet、Tooltip、Snackbar 入口，统一深色实色浮层、弱描边、圆角、
+  安全区和 tooltip 语义；不引入全窗口 blur 或持续动画。
+- 迁移标签中心、备份设置、Missing/Relink、目录管理和媒体库确认/恢复反馈；保留原有返回值、确认、
+  危险动作、撤销/恢复文案和页面业务 owner。
+- 不修改 schema、`FilterQuery`、`TagQueryService`、filtered queue、`PlayerBackend`、缓存/媒体详情队列、
+  stable identity 或用户数据。
+
 ### 目录管理 UI 外壳重构
 
 - 目录管理统一为“维护工作区 / 目录管理”标题层级；添加目录与重新扫描在 expanded 下保留文字动作，

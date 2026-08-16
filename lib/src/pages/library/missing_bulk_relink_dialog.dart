@@ -5,6 +5,7 @@ import '../../platform/file_system_adapter.dart';
 import '../../services/library/library_application_facade.dart';
 import '../../services/relink/bulk_path_relink_service.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_feedback.dart';
 import 'missing_bulk_relink_preview.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -83,24 +84,21 @@ class BulkPathRelinkDialogState extends State<BulkPathRelinkDialog> {
     if (ready == 0) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMaintenanceDialog<bool>(
       context: context,
-      builder: (dialogContext) => maintenanceDialogSurface(
-        context: context,
-        child: AlertDialog(
-          title: const Text('确认批量重新关联'),
-          content: Text('将更新 $ready 条视频的 mutable path。文件本身不会被移动或删除。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确认更新'),
-            ),
-          ],
-        ),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('确认批量重新关联'),
+        content: Text('将更新 $ready 条视频的 mutable path。文件本身不会被移动或删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('确认更新'),
+          ),
+        ],
       ),
     );
     if (confirmed != true || !mounted) {
@@ -193,8 +191,9 @@ class BulkPathRelinkDialogState extends State<BulkPathRelinkDialog> {
       ),
     ));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已复制不含本地路径的审计摘要')),
+      showMaintenanceSnackBar(
+        context,
+        message: '已复制不含本地路径的审计摘要',
       );
     }
   }

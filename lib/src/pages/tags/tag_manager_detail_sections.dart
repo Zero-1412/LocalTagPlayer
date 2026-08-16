@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/platform_models.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_feedback.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -239,7 +240,7 @@ class TagGroupSummary extends StatelessWidget {
                 onSelected: (_) => onSelected(null),
               ),
               for (final group in groups)
-                Tooltip(
+                MaintenanceTooltip(
                   message: '${group.id} · sort ${group.sortOrder}',
                   child: ChoiceChip(
                     key: ValueKey('tagManager.group.${group.id}'),

@@ -84,6 +84,7 @@ import 'package:local_tag_player/src/services/tags/tag_query_service.dart';
 import 'package:local_tag_player/src/services/window/desktop_window_state_service.dart';
 import 'package:local_tag_player/src/widgets/app_theme_tokens.dart';
 import 'package:local_tag_player/src/widgets/design_system/app_interaction_surface.dart';
+import 'package:local_tag_player/src/widgets/maintenance_feedback.dart';
 import 'package:local_tag_player/src/widgets/maintenance_workspace_app_bar.dart';
 import 'package:local_tag_player/src/widgets/library/library_confirmation_dialogs.dart';
 import 'package:local_tag_player/src/widgets/library/library_local_view.dart';
@@ -3409,6 +3410,134 @@ void main() {
           ?.resolve(const <WidgetState>{}),
       appAccentViolet,
     );
+  });
+
+  testWidgets('maintenance feedback surfaces keep results and dark material',
+      (tester) async {
+    late BuildContext pageContext;
+    String? dialogResult;
+    String? sheetResult;
+    String? menuResult;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: maintenanceWorkspaceTheme(ThemeData(useMaterial3: true)),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              pageContext = context;
+              return Wrap(
+                children: [
+                  FilledButton(
+                    key: const ValueKey('test.maintenance.dialog'),
+                    onPressed: () async {
+                      dialogResult = await showMaintenanceDialog<String>(
+                        context: pageContext,
+                        builder: (dialogContext) => AlertDialog(
+                          title: const Text('测试对话框'),
+                          content: const Text('确认层保持维护主题。'),
+                          actions: [
+                            FilledButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop('dialog'),
+                              child: const Text('完成'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    child: const Text('打开对话框'),
+                  ),
+                  FilledButton(
+                    key: const ValueKey('test.maintenance.sheet'),
+                    onPressed: () async {
+                      sheetResult =
+                          await showMaintenanceModalBottomSheet<String>(
+                        pageContext,
+                        builder: (sheetContext) => SizedBox(
+                          height: 180,
+                          child: Center(
+                            child: FilledButton(
+                              onPressed: () =>
+                                  Navigator.of(sheetContext).pop('sheet'),
+                              child: const Text('完成 Sheet'),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('打开 Sheet'),
+                  ),
+                  FilledButton(
+                    key: const ValueKey('test.maintenance.menu'),
+                    onPressed: () async {
+                      menuResult = await showMaintenanceMenu<String>(
+                        context: pageContext,
+                        position: const RelativeRect.fromLTRB(16, 16, 500, 500),
+                        items: [
+                          const PopupMenuItem<String>(
+                            value: 'menu',
+                            child: Text('完成菜单'),
+                          ),
+                        ],
+                      );
+                    },
+                    child: const Text('打开菜单'),
+                  ),
+                  MaintenanceTooltip(
+                    message: '维护动作说明',
+                    child: IconButton(
+                      onPressed: () {},
+                      icon: const Icon(Icons.info_outline_rounded),
+                    ),
+                  ),
+                  FilledButton(
+                    key: const ValueKey('test.maintenance.snackbar'),
+                    onPressed: () => showMaintenanceSnackBar(
+                      pageContext,
+                      message: '维护反馈已显示',
+                    ),
+                    child: const Text('显示反馈'),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('test.maintenance.dialog')));
+    await tester.pumpAndSettle();
+    final dialog = find.byType(AlertDialog);
+    expect(dialog, findsOneWidget);
+    expect(
+      Theme.of(tester.element(dialog)).dialogTheme.backgroundColor,
+      librarySurface,
+    );
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+    expect(dialogResult, 'dialog');
+
+    await tester.tap(find.byKey(const ValueKey('test.maintenance.sheet')));
+    await tester.pumpAndSettle();
+    expect(find.text('完成 Sheet'), findsOneWidget);
+    await tester.tap(find.text('完成 Sheet'));
+    await tester.pumpAndSettle();
+    expect(sheetResult, 'sheet');
+
+    await tester.tap(find.byKey(const ValueKey('test.maintenance.menu')));
+    await tester.pumpAndSettle();
+    expect(find.text('完成菜单'), findsOneWidget);
+    await tester.tap(find.text('完成菜单'));
+    await tester.pumpAndSettle();
+    expect(menuResult, 'menu');
+
+    expect(find.byType(MaintenanceTooltip), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('test.maintenance.snackbar')));
+    await tester.pump();
+    expect(find.text('维护反馈已显示'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   test('settings workspace uses the shared Apple card radius', () {

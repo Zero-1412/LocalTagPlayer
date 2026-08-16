@@ -1,5 +1,23 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 维护反馈组件族统一（已完成）
+
+- 目标：继续第三阶段维护页面统一，把 `Dialog/Menu/Sheet/Tooltip/Snackbar` 收敛为 Calm Desktop
+  Media Workspace 的共享反馈层。
+- 当前修改：新增 `maintenance_feedback.dart`，提供维护主题对话框、菜单、modal sheet、Snackbar 和
+  tooltip 入口；迁移标签中心、备份设置、Missing/Relink、目录管理及媒体库确认反馈，保留原有返回值、
+  确认、撤销/恢复、危险动作和页面 owner。
+- 保护：不修改 schema、`FilterQuery`、`TagQueryService`、搜索 controller、排序、filtered queue、
+  `PlayerBackend`、缩略图/媒体详情队列、stable identity、root/detached 语义或用户数据。
+- 目标文档：`docs/design/MAINTENANCE_FEEDBACK_UI_TARGET.md`。
+- 当前验证：共享反馈 surfaces focused widget test、标签高风险/新建标签、Missing/Relink、目录管理、
+  继续观看确认和备份维护路径均通过；架构契约 57 项通过；完整 `flutter test` 通过（619 passed，
+  4 skipped）；`flutter analyze` 无问题；`flutter build windows --debug` 成功。Debug 窗口在 1339×804
+  下真实检查目录管理确认层、取消、返回媒体库和 Missing/Relink 维护外壳，无明显遮挡、裁切或溢出。
+- 阻塞：无。
+- 下一步：继续维护页的共享菜单/sheet 实际调用迁移与 high contrast/reduced motion 实窗验收，再进入下一项
+  仍缺视觉证据的维护状态；不扩展到业务边界。
+
 # 2026-08-16 · 目录管理 UI 外壳重构（已完成）
 
 - 目标：继续第三阶段维护页面统一，把目录管理收敛为“维护工作区 / 目录管理”的内容优先页面。

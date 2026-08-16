@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../app_theme_tokens.dart';
+import '../maintenance_feedback.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -13,7 +13,7 @@ Future<bool?> showClearAllRecentPlaybackConfirmation(
   BuildContext context, {
   required int count,
 }) {
-  return showDialog<bool>(
+  return showMaintenanceDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: const Text('清空全部观看进度？'),
@@ -44,31 +44,28 @@ Future<bool?> showRemoveLibraryRootConfirmation(
   BuildContext context, {
   required String root,
 }) {
-  return showDialog<bool>(
+  return showMaintenanceDialog<bool>(
     context: context,
-    builder: (dialogContext) => maintenanceDialogSurface(
-      context: context,
-      child: AlertDialog(
-        title: const Text('解除目录管理'),
-        content: Text(
-          '目录中的视频会从当前媒体库与播放队列隐藏，但不会删除本地文件。\n\n'
-          '标签关系、收藏、播放进度、媒体详情和稳定视频身份都会保留；'
-          '以后重新添加同一目录或匹配到相同文件时会自动恢复。\n\n$root',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xffb84d5f),
-            ),
-            child: const Text('解除管理'),
-          ),
-        ],
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('解除目录管理'),
+      content: Text(
+        '目录中的视频会从当前媒体库与播放队列隐藏，但不会删除本地文件。\n\n'
+        '标签关系、收藏、播放进度、媒体详情和稳定视频身份都会保留；'
+        '以后重新添加同一目录或匹配到相同文件时会自动恢复。\n\n$root',
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xffb84d5f),
+          ),
+          child: const Text('解除管理'),
+        ),
+      ],
     ),
   );
 }

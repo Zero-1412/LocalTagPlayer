@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_feedback.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -66,15 +67,12 @@ Widget tagManagerBlockedOperationSmokeHarness({
         body: Builder(
           builder: (context) => Center(
             child: FilledButton(
-              onPressed: () => showDialog<void>(
+              onPressed: () => showMaintenanceDialog<void>(
                 context: context,
-                builder: (dialogContext) => maintenanceDialogSurface(
-                  context: dialogContext,
-                  child: const BlockedTagOperationDialog(
-                    icon: Icons.delete_outline_rounded,
-                    title: '暂不能删除此标签',
-                    message: '“示例标签”当前有 12 条引用。本次未删除标签或任何视频关联。',
-                  ),
+                builder: (_) => const BlockedTagOperationDialog(
+                  icon: Icons.delete_outline_rounded,
+                  title: '暂不能删除此标签',
+                  message: '“示例标签”当前有 12 条引用。本次未删除标签或任何视频关联。',
                 ),
               ),
               child: const Text('检查删除影响'),

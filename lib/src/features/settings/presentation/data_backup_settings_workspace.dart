@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/data_backup_settings.dart';
 import '../../../models/data_backup_models.dart';
 import '../../../widgets/app_theme_tokens.dart';
+import '../../../widgets/maintenance_feedback.dart';
 import '../application/data_backup_controllers.dart';
 import '../application/serial_settings_controller.dart';
 import 'data_backup_settings_panel.dart';
@@ -147,8 +148,9 @@ class _DataBackupSettingsWorkspaceState
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存数据备份设置失败：$error')),
+        showMaintenanceSnackBar(
+          context,
+          message: '保存数据备份设置失败：$error',
         );
       }
     }
@@ -161,7 +163,7 @@ class _DataBackupSettingsWorkspaceState
       if (report == null || !mounted) {
         return;
       }
-      await showDialog<void>(
+      await showMaintenanceDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Row(
@@ -238,8 +240,9 @@ class _DataBackupSettingsWorkspaceState
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('备份完整性检查失败：$error')),
+        showMaintenanceSnackBar(
+          context,
+          message: '备份完整性检查失败：$error',
         );
       }
     }
@@ -251,8 +254,9 @@ class _DataBackupSettingsWorkspaceState
       await _maintenanceController.runNow();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('启动视频数据备份失败：$error')),
+        showMaintenanceSnackBar(
+          context,
+          message: '启动视频数据备份失败：$error',
         );
       }
     }
@@ -263,14 +267,16 @@ class _DataBackupSettingsWorkspaceState
     try {
       final outcome = await _maintenanceController.export();
       if (mounted && outcome?.path != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('视频依赖备份已导出')),
+        showMaintenanceSnackBar(
+          context,
+          message: '视频依赖备份已导出',
         );
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出视频依赖备份失败：$error')),
+        showMaintenanceSnackBar(
+          context,
+          message: '导出视频依赖备份失败：$error',
         );
       }
     }

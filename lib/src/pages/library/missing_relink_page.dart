@@ -6,6 +6,7 @@ import '../../models/video_item.dart';
 import '../../platform/file_system_adapter.dart';
 import '../../services/library/library_application_facade.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_feedback.dart';
 import '../../widgets/maintenance_workspace_app_bar.dart';
 
 import 'missing_bulk_relink_dialog.dart';
@@ -55,12 +56,9 @@ void showMissingRelinkCommandResult(
   if (!context.mounted) {
     return;
   }
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(
-        result.changed ? '已重新关联：${item.title}' : '${result.error}',
-      ),
-    ),
+  showMaintenanceSnackBar(
+    context,
+    message: result.changed ? '已重新关联：${item.title}' : '${result.error}',
   );
 }
 
@@ -158,14 +156,11 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
     if (missing.isEmpty) {
       return;
     }
-    final count = await showDialog<int>(
+    final count = await showMaintenanceDialog<int>(
       context: context,
-      builder: (_) => maintenanceDialogSurface(
-        context: context,
-        child: BulkPathRelinkDialog(
-          store: widget.store,
-          fileSystem: widget.fileSystem,
-        ),
+      builder: (_) => BulkPathRelinkDialog(
+        store: widget.store,
+        fileSystem: widget.fileSystem,
       ),
     );
     if (count != null && count > 0 && mounted) {
