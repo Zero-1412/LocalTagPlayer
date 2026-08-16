@@ -84,6 +84,7 @@ import 'package:local_tag_player/src/services/tags/tag_query_service.dart';
 import 'package:local_tag_player/src/services/window/desktop_window_state_service.dart';
 import 'package:local_tag_player/src/widgets/app_theme_tokens.dart';
 import 'package:local_tag_player/src/widgets/design_system/app_interaction_surface.dart';
+import 'package:local_tag_player/src/widgets/maintenance_workspace_app_bar.dart';
 import 'package:local_tag_player/src/widgets/library/library_confirmation_dialogs.dart';
 import 'package:local_tag_player/src/widgets/library/library_local_view.dart';
 import 'package:local_tag_player/src/widgets/library/library_panel_content_transition.dart';
@@ -7153,6 +7154,48 @@ void main() {
     expect(tester.widget<FilledButton>(relinkButton).onPressed, isNotNull);
   });
 
+  testWidgets('maintenance workspace app bar compacts paired actions',
+      (tester) async {
+    tester.view.physicalSize = const Size(640, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          appBar: MaintenanceWorkspaceAppBar(
+            title: '目录管理',
+            onBack: () {},
+            actionIcon: Icons.sync_rounded,
+            actionLabel: '重新扫描',
+            actionTooltip: '重新扫描',
+            actionKey: const ValueKey('directoryManager.rescan'),
+            onAction: () {},
+            secondaryActionIcon: Icons.add_rounded,
+            secondaryActionLabel: '添加目录',
+            secondaryActionTooltip: '添加目录',
+            secondaryActionKey: const ValueKey('directoryManager.add'),
+            onSecondaryAction: () {},
+            actionEmphasized: true,
+          ),
+          body: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('directoryManager.add')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('directoryManager.rescan')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('添加目录'), findsOneWidget);
+    expect(find.byTooltip('重新扫描'), findsOneWidget);
+    expect(find.text('添加目录'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('directory manager preserves data policy and scales to 150%',
       (tester) async {
     tester.view.physicalSize = const Size(1248, 714);
@@ -7189,6 +7232,11 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.text('维护工作区'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('maintenance.workspace.back')),
+      findsOneWidget,
+    );
     expect(find.text('2 个受管理目录'), findsOneWidget);
     expect(find.textContaining('不会删除磁盘文件'), findsOneWidget);
     expect(find.byKey(const ValueKey('directoryManager.add')), findsOneWidget);

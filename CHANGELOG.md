@@ -5,6 +5,14 @@
 
 ## Unreleased
 
+### 目录管理 UI 外壳重构
+
+- 目录管理统一为“维护工作区 / 目录管理”标题层级；添加目录与重新扫描在 expanded 下保留文字动作，
+  compact 下收敛为带 tooltip 的图标动作。
+- 内容区增加稳定桌面宽度边界，继续保留目录数量、扫描状态、root 列表、空态、解除管理确认和数据保留说明。
+- 不修改 root/扫描/解除管理业务、`LibraryApplicationFacade`、schema、`FilterQuery`、`TagQueryService`、
+  filtered queue、PlayerBackend 或用户数据。
+
 ### Missing / Relink UI 外壳重构
 
 - 建立“维护工作区 / 缺失与重新关联”两级上下文标题栏，保留返回与批量路径替换入口；窄窗口下

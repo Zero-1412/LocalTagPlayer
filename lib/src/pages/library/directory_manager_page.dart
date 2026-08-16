@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/library/library_application_facade.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_workspace_app_bar.dart';
 import 'directory_manager_sections.dart';
 
 export 'directory_manager_sections.dart';
@@ -163,64 +164,55 @@ class _DirectoryManagerPageState extends State<DirectoryManagerPage> {
       child: Scaffold(
         key: const ValueKey('directoryManager.page'),
         backgroundColor: libraryBackground,
-        appBar: AppBar(
-          leading: IconButton(
-            tooltip: '返回媒体库',
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-          title: const Text('目录管理'),
-          actions: [
-            OutlinedButton.icon(
-              key: const ValueKey('directoryManager.add'),
-              onPressed: _busy || widget.scanning ? null : _addDirectory,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('添加目录'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              key: const ValueKey('directoryManager.rescan'),
-              onPressed: _busy || widget.scanning || widget.store.roots.isEmpty
-                  ? null
-                  : _rescan,
-              icon: _busy || widget.scanning
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.sync_rounded),
-              label: Text(widget.scanning ? '扫描中' : '重新扫描'),
-            ),
-            const SizedBox(width: 16),
-          ],
+        appBar: MaintenanceWorkspaceAppBar(
+          title: '目录管理',
+          onBack: () => Navigator.of(context).pop(),
+          actionIcon: Icons.sync_rounded,
+          actionLabel: widget.scanning ? '扫描中' : '重新扫描',
+          actionTooltip: widget.scanning ? '扫描中' : '重新扫描',
+          actionKey: const ValueKey('directoryManager.rescan'),
+          actionEmphasized: true,
+          onAction: _busy || widget.scanning || widget.store.roots.isEmpty
+              ? null
+              : _rescan,
+          secondaryActionIcon: Icons.add_rounded,
+          secondaryActionLabel: '添加目录',
+          secondaryActionTooltip: '添加目录',
+          secondaryActionKey: const ValueKey('directoryManager.add'),
+          onSecondaryAction: _busy || widget.scanning ? null : _addDirectory,
         ),
         body: LayoutBuilder(
           builder: (context, constraints) {
             final pagePadding = constraints.maxWidth < 700 ? 16.0 : 24.0;
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                pagePadding,
-                8,
-                pagePadding,
-                pagePadding,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  DirectoryOverview(
-                    rootCount: widget.store.roots.length,
-                    scanning: widget.scanning || _busy,
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1120),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    pagePadding,
+                    18,
+                    pagePadding,
+                    pagePadding,
                   ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: DirectoryRootList(
-                      roots: widget.store.roots,
-                      busy: _busy || widget.scanning,
-                      onRemove: _removeRoot,
-                      onAdd: _addDirectory,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      DirectoryOverview(
+                        rootCount: widget.store.roots.length,
+                        scanning: widget.scanning || _busy,
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: DirectoryRootList(
+                          roots: widget.store.roots,
+                          busy: _busy || widget.scanning,
+                          onRemove: _removeRoot,
+                          onAdd: _addDirectory,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
           },

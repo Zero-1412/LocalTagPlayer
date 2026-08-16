@@ -1,5 +1,20 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 目录管理 UI 外壳重构（已完成）
+
+- 目标：继续第三阶段维护页面统一，把目录管理收敛为“维护工作区 / 目录管理”的内容优先页面。
+- 当前修改：复用维护标题栏并支持添加目录/重新扫描双动作的 expanded/compact 形态；为目录状态摘要和
+  root 列表建立稳定桌面宽度；保留解除管理确认和数据保留说明。
+- 保护：不修改 `LibraryApplicationFacade`、root、detached、扫描、解除管理、FileSystemAdapter、
+  schema、`FilterQuery`、`TagQueryService`、filtered queue、PlayerBackend 或用户数据。
+- 目标文档：`docs/design/DIRECTORY_MANAGER_UI_SHELL_TARGET.md`。
+- 当前验证：目录管理 150% focused widget test、compact 标题栏 focused test 通过；架构契约 57 项通过；
+  完整 `flutter test` 通过（618 passed，4 skipped）；`flutter analyze` 无问题；
+  `flutter build windows --debug` 成功。Debug 窗口在 1339×804 下真实检查目录管理标题层级、添加/重新扫描入口、
+  目录摘要、root 列表和返回媒体库路径，无明显遮挡、裁切或溢出。
+- 阻塞：无。
+- 下一步：进入共享 `Dialog/Menu/Sheet/Tooltip/Snackbar` 组件族；继续保持维护页面回退路径和危险操作确认。
+
 # 2026-08-16 · Missing / Relink UI 外壳重构（已完成）
 
 - 目标：在播放器 Phase 2 已有实现证据的基础上，继续第三阶段维护页面统一；先把 Missing / Relink

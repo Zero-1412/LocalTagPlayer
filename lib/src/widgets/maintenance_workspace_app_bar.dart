@@ -22,6 +22,13 @@ class MaintenanceWorkspaceAppBar extends StatelessWidget
     required this.actionTooltip,
     required this.actionKey,
     this.onAction,
+    this.secondaryActionIcon,
+    this.secondaryActionLabel,
+    this.secondaryActionTooltip,
+    this.secondaryActionKey,
+    this.onSecondaryAction,
+    this.actionEmphasized = false,
+    this.secondaryActionEmphasized = false,
   });
 
   /** 当前维护页面标题。 */
@@ -39,6 +46,19 @@ class MaintenanceWorkspaceAppBar extends StatelessWidget
   /** 页面主要动作；为空时保持禁用状态。 */
   final VoidCallback? onAction;
 
+  /** 可选的次要动作，通常用于添加、打开或辅助维护入口。 */
+  final IconData? secondaryActionIcon;
+  final String? secondaryActionLabel;
+  final String? secondaryActionTooltip;
+  final Key? secondaryActionKey;
+  final VoidCallback? onSecondaryAction;
+
+  /** 主要动作是否使用更高对比度的实色层级。 */
+  final bool actionEmphasized;
+
+  /** 次要动作是否使用更高对比度的实色层级。 */
+  final bool secondaryActionEmphasized;
+
   @override
   Size get preferredSize => const Size.fromHeight(77);
 
@@ -48,6 +68,15 @@ class MaintenanceWorkspaceAppBar extends StatelessWidget
           MediaQuery.sizeOf(context).width,
         ) ==
         LayoutSize.compact;
+    final secondaryAction = _buildAction(
+      compact: compact,
+      icon: secondaryActionIcon,
+      label: secondaryActionLabel,
+      tooltip: secondaryActionTooltip,
+      key: secondaryActionKey,
+      onPressed: onSecondaryAction,
+      emphasized: secondaryActionEmphasized,
+    );
     return AppBar(
       toolbarHeight: compact ? 64 : 76,
       titleSpacing: 0,
@@ -82,20 +111,16 @@ class MaintenanceWorkspaceAppBar extends StatelessWidget
         ],
       ),
       actions: [
-        if (compact)
-          IconButton(
-            key: actionKey,
-            tooltip: actionTooltip,
-            onPressed: onAction,
-            icon: Icon(actionIcon),
-          )
-        else
-          OutlinedButton.icon(
-            key: actionKey,
-            onPressed: onAction,
-            icon: Icon(actionIcon, size: 18),
-            label: Text(actionLabel),
-          ),
+        if (secondaryAction != null) secondaryAction,
+        _buildAction(
+          compact: compact,
+          icon: actionIcon,
+          label: actionLabel,
+          tooltip: actionTooltip,
+          key: actionKey,
+          onPressed: onAction,
+          emphasized: actionEmphasized,
+        )!,
         SizedBox(width: compact ? 8 : 20),
       ],
       bottom: const PreferredSize(
@@ -103,5 +128,48 @@ class MaintenanceWorkspaceAppBar extends StatelessWidget
         child: Divider(height: 1, color: libraryBorder),
       ),
     );
+  }
+
+  /** 按窗口密度构建同一动作的文字或图标形态，保留稳定 key 与 tooltip。 */
+  Widget? _buildAction({
+    required bool compact,
+    required IconData? icon,
+    required String? label,
+    required String? tooltip,
+    required Key? key,
+    required VoidCallback? onPressed,
+    required bool emphasized,
+  }) {
+    if (icon == null || label == null || tooltip == null || key == null) {
+      return null;
+    }
+    if (compact) {
+      return emphasized
+          ? IconButton.filled(
+              key: key,
+              tooltip: tooltip,
+              onPressed: onPressed,
+              icon: Icon(icon),
+            )
+          : IconButton(
+              key: key,
+              tooltip: tooltip,
+              onPressed: onPressed,
+              icon: Icon(icon),
+            );
+    }
+    return emphasized
+        ? FilledButton.icon(
+            key: key,
+            onPressed: onPressed,
+            icon: Icon(icon, size: 18),
+            label: Text(label),
+          )
+        : OutlinedButton.icon(
+            key: key,
+            onPressed: onPressed,
+            icon: Icon(icon, size: 18),
+            label: Text(label),
+          );
   }
 }
