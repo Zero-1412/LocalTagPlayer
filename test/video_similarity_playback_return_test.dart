@@ -4,18 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+String _source(String relativePath) =>
+    File('${Directory.current.path}/$relativePath')
+        .readAsStringSync()
+        .replaceAll('\r\n', '\n');
+
 /**
  * 保护相似视频页的返回时序：Route 弹回后先恢复行级动作状态，原生播放器资源释放和
  * 播放进度刷盘仍由既有 openVideo 尾部完成，避免用户看到不必要的长时间占位。
  */
 void main() {
   test('视觉复核期间已有候选仍可播放和删除', () {
-    final page = File(
-      'lib/src/pages/library/video_similarity_page.dart',
-    ).readAsStringSync();
-    final groupWidgets = File(
-      'lib/src/widgets/library/video_similarity_group_widgets.dart',
-    ).readAsStringSync();
+    final page = _source('lib/src/pages/library/video_similarity_page.dart');
+    final groupWidgets =
+        _source('lib/src/widgets/library/video_similarity_group_widgets.dart');
     final source = '$page\n$groupWidgets';
 
     expect(source, contains('onPressed: () => onPlay(item, playlist)'));
@@ -39,32 +41,25 @@ void main() {
   });
 
   test('相似视频滚动内容为滚动条预留右侧安全区', () {
-    final page = File(
-      'lib/src/pages/library/video_similarity_page.dart',
-    ).readAsStringSync();
+    final page = _source('lib/src/pages/library/video_similarity_page.dart');
 
     expect(page, contains('EdgeInsets.only(right: 18, bottom: 12)'));
   });
 
   test('相似视频页首帧后再启动视觉扫描', () {
-    final page = File(
-      'lib/src/pages/library/video_similarity_page.dart',
-    ).readAsStringSync();
+    final page = _source('lib/src/pages/library/video_similarity_page.dart');
 
     expect(page, contains('_scheduleVisualScan();'));
     expect(page, contains('WidgetsBinding.instance.addPostFrameCallback'));
   });
 
   test('相似视频扫描把候选构建和画面对比进度传到页面', () {
-    final page = File(
-      'lib/src/pages/library/video_similarity_page.dart',
-    ).readAsStringSync();
-    final status = File(
-      'lib/src/widgets/library/video_similarity_status_widgets.dart',
-    ).readAsStringSync();
-    final controller = File(
+    final page = _source('lib/src/pages/library/video_similarity_page.dart');
+    final status =
+        _source('lib/src/widgets/library/video_similarity_status_widgets.dart');
+    final controller = _source(
       'lib/src/services/library/video_similarity_scan_controller.dart',
-    ).readAsStringSync();
+    );
 
     expect(page, contains('visualProgressPhase: _visualProgressPhase'));
     expect(controller, contains('onProgress: (progress)'));
@@ -75,12 +70,9 @@ void main() {
   });
 
   test('相似视频播放返回后先清除动作占位再等待资源释放', () {
-    final playback = File(
-      'lib/src/pages/library/library_page_playback_mixin.dart',
-    ).readAsStringSync();
-    final page = File(
-      'lib/src/pages/library/video_similarity_page.dart',
-    ).readAsStringSync();
+    final playback =
+        _source('lib/src/pages/library/library_page_playback_mixin.dart');
+    final page = _source('lib/src/pages/library/video_similarity_page.dart');
 
     final routeReturned = playback.indexOf('onPlayerRouteReturned?.call();');
     final disposalWait =
@@ -92,9 +84,8 @@ void main() {
   });
 
   test('播放器删除差量在资源释放尾部前发布到主界面', () {
-    final playback = File(
-      'lib/src/pages/library/library_page_playback_mixin.dart',
-    ).readAsStringSync();
+    final playback =
+        _source('lib/src/pages/library/library_page_playback_mixin.dart');
 
     final refresh = playback.indexOf(
       '_applyPlayerScopedLibraryChangesAfterRouteReturn();',
@@ -111,9 +102,7 @@ void main() {
   });
 
   test('播放器删除后相似候选按 stable ID 局部对账', () {
-    final page = File(
-      'lib/src/pages/library/video_similarity_page.dart',
-    ).readAsStringSync();
+    final page = _source('lib/src/pages/library/video_similarity_page.dart');
 
     expect(page, contains('_reconcileAfterPlayerReturn'));
     expect(
@@ -127,9 +116,7 @@ void main() {
   });
 
   test('相似视频删除使旧视觉任务失效且不自动重启全库复核', () {
-    final page = File(
-      'lib/src/pages/library/video_similarity_page.dart',
-    ).readAsStringSync();
+    final page = _source('lib/src/pages/library/video_similarity_page.dart');
     final start = page.indexOf('Future<void> _delete(');
     final end = page.indexOf('  @override\n  Widget build', start);
     expect(start, greaterThanOrEqualTo(0));
@@ -143,15 +130,12 @@ void main() {
   });
 
   test('播放器播放期间让视觉复核让渡取帧并在返回后恢复', () {
-    final page = File(
-      'lib/src/pages/library/video_similarity_page.dart',
-    ).readAsStringSync();
-    final playback = File(
-      'lib/src/pages/library/library_page_playback_mixin.dart',
-    ).readAsStringSync();
-    final controller = File(
+    final page = _source('lib/src/pages/library/video_similarity_page.dart');
+    final playback =
+        _source('lib/src/pages/library/library_page_playback_mixin.dart');
+    final controller = _source(
       'lib/src/services/library/video_similarity_scan_controller.dart',
-    ).readAsStringSync();
+    );
 
     expect(page, contains('setPlaybackActive(true)'));
     expect(page, contains('setPlaybackActive(false)'));
@@ -165,18 +149,13 @@ void main() {
   });
 
   test('相似视频扫描由媒体库 Route 持有，离开页面不取消且仅首次自动执行', () {
-    final page = File(
-      'lib/src/pages/library/video_similarity_page.dart',
-    ).readAsStringSync();
-    final runtime = File(
-      'lib/src/pages/library/library_page_runtime.dart',
-    ).readAsStringSync();
-    final routes = File(
-      'lib/src/pages/library/library_page_routes_mixin.dart',
-    ).readAsStringSync();
-    final controller = File(
+    final page = _source('lib/src/pages/library/video_similarity_page.dart');
+    final runtime = _source('lib/src/pages/library/library_page_runtime.dart');
+    final routes =
+        _source('lib/src/pages/library/library_page_routes_mixin.dart');
+    final controller = _source(
       'lib/src/services/library/video_similarity_scan_controller.dart',
-    ).readAsStringSync();
+    );
 
     expect(runtime,
         contains('VideoSimilarityScanController? similarityScanController'));
@@ -194,12 +173,11 @@ void main() {
   });
 
   test('播放器会话同时暂停媒体详情后台探测并尊重进入前暂停状态', () {
-    final playback = File(
-      'lib/src/pages/library/library_page_playback_mixin.dart',
-    ).readAsStringSync();
-    final gate = File(
+    final playback =
+        _source('lib/src/pages/library/library_page_playback_mixin.dart');
+    final gate = _source(
       'lib/src/services/library/library_playback_background_gate.dart',
-    ).readAsStringSync();
+    );
 
     expect(playback, contains('LibraryPlaybackBackgroundGate'));
     expect(playback, contains('backgroundGate.restore()'));
