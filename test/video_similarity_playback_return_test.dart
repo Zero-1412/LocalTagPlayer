@@ -62,9 +62,13 @@ void main() {
     final status = File(
       'lib/src/widgets/library/video_similarity_status_widgets.dart',
     ).readAsStringSync();
+    final controller = File(
+      'lib/src/services/library/video_similarity_scan_controller.dart',
+    ).readAsStringSync();
 
     expect(page, contains('visualProgressPhase: _visualProgressPhase'));
-    expect(page, contains('onProgress: (progress)'));
+    expect(controller, contains('onProgress: (progress)'));
+    expect(controller, contains('_progress = progress;'));
     expect(status, contains('VideoVisualScanPhase.buildingCandidates'));
     expect(status, contains('LinearProgressIndicator('));
     expect(status, contains('_visualPhaseShortLabel(visualProgressPhase)'));
@@ -103,7 +107,7 @@ void main() {
     expect(page, contains('_deletedVideoIds.addAll(removedById.keys)'));
   });
 
-  test('相似视频删除取消旧视觉任务且不自动重启全库复核', () {
+  test('相似视频删除使旧视觉任务失效且不自动重启全库复核', () {
     final page = File(
       'lib/src/pages/library/video_similarity_page.dart',
     ).readAsStringSync();
@@ -116,17 +120,73 @@ void main() {
     expect(deleteMethod, contains('_cancelVisualScan();'));
     expect(deleteMethod, contains('_visualScanStale = true;'));
     expect(deleteMethod, isNot(contains('_scheduleVisualScan();')));
+    expect(page, contains('invalidateForDataChange()'));
   });
 
   test('播放器播放期间让视觉复核让渡取帧并在返回后恢复', () {
     final page = File(
       'lib/src/pages/library/video_similarity_page.dart',
     ).readAsStringSync();
+    final playback = File(
+      'lib/src/pages/library/library_page_playback_mixin.dart',
+    ).readAsStringSync();
+    final controller = File(
+      'lib/src/services/library/video_similarity_scan_controller.dart',
+    ).readAsStringSync();
 
-    expect(page, contains('_visualPlaybackActive = true;'));
-    expect(page, contains('setSimilarityScanForeground(false)'));
-    expect(page, contains('shouldYield: () => _visualPlaybackActive'));
-    expect(page, contains('_visualPlaybackActive = false;'));
-    expect(page, contains('setSimilarityScanForeground(true)'));
+    expect(page, contains('setPlaybackActive(true)'));
+    expect(page, contains('setPlaybackActive(false)'));
+    expect(
+      playback,
+      contains('similarityScanController: runtime.similarityScanController'),
+    );
+    expect(playback, contains('backgroundGate.restore()'));
+    expect(controller, contains('shouldYield: () => _playbackActive'));
+    expect(controller, contains('_pageForeground && !_playbackActive'));
+  });
+
+  test('相似视频扫描由媒体库 Route 持有，离开页面不取消且仅首次自动执行', () {
+    final page = File(
+      'lib/src/pages/library/video_similarity_page.dart',
+    ).readAsStringSync();
+    final runtime = File(
+      'lib/src/pages/library/library_page_runtime.dart',
+    ).readAsStringSync();
+    final routes = File(
+      'lib/src/pages/library/library_page_routes_mixin.dart',
+    ).readAsStringSync();
+    final controller = File(
+      'lib/src/services/library/video_similarity_scan_controller.dart',
+    ).readAsStringSync();
+
+    expect(runtime,
+        contains('VideoSimilarityScanController? similarityScanController'));
+    expect(routes, contains('scanController: similarityScanController'));
+    expect(page, contains('setPageForeground(false)'));
+    expect(page,
+        isNot(contains('widget.thumbnailService.cancelSimilarityScan()')));
+    expect(controller, contains('Future<void> startIfNeeded()'));
+    expect(controller, contains('if (_activeTask != null)'));
+    expect(controller, contains('if (_hasRun)'));
+    expect(controller, contains('Future<void> refresh()'));
+    expect(
+        controller, contains('isCancelled: () => generation != _generation'));
+    expect(controller, isNot(contains('isCancelled: () => !mounted')));
+  });
+
+  test('播放器会话同时暂停媒体详情后台探测并尊重进入前暂停状态', () {
+    final playback = File(
+      'lib/src/pages/library/library_page_playback_mixin.dart',
+    ).readAsStringSync();
+    final gate = File(
+      'lib/src/services/library/library_playback_background_gate.dart',
+    ).readAsStringSync();
+
+    expect(playback, contains('LibraryPlaybackBackgroundGate'));
+    expect(playback, contains('backgroundGate.restore()'));
+    expect(gate, contains('final MediaDetailsService? _mediaDetailsService'));
+    expect(gate, contains('_mediaDetailsService?.pause()'));
+    expect(gate, contains('_mediaDetailsService?.resume()'));
+    expect(gate, contains('if (!_mediaDetailsWasPaused)'));
   });
 }

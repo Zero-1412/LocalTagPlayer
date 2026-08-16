@@ -10,6 +10,7 @@ import '../../models/media_details.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import '../../services/library/library_application_facade.dart';
+import '../../services/library/library_playback_background_gate.dart';
 import '../../services/library/library_scan_playback_gate.dart';
 import '../../services/player/playback_snapshot_write_queue.dart';
 import '../../services/player/player_hardware_compatibility.dart';
@@ -195,11 +196,11 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     if (!mounted) {
       return;
     }
-    final wasPaused = thumbnailService.isPaused;
-    if (!wasPaused) {
-      // 播放期间冻结后台补全，但允许实际可视的播放器队列项以单并发补齐缩略图。
-      thumbnailService.pause(allowPriorityRequests: true);
-    }
+    final backgroundGate = LibraryPlaybackBackgroundGate(
+      thumbnailService: thumbnailService,
+      mediaDetailsService: runtime.libraryMediaDetailsService,
+      similarityScanController: runtime.similarityScanController,
+    )..enter();
     runtime.playerScopedLibraryDataChanged = false;
     runtime.playerScopedNeedsCountRefresh = false;
     runtime.playerScopedTagDefinitionsChanged = false;
@@ -210,6 +211,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     await store.pauseDataBackupForPlayback();
     if (!mounted) {
       store.resumeDataBackupAfterPlayback();
+      backgroundGate.restore();
       return;
     }
     setState(() => runtime.playerRouteActive = true);
@@ -217,9 +219,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     // 可能在本次 rebuild 前进入 offstage，让 Windows UIA 继续缓存旧页面节点。
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) {
-      if (!wasPaused) {
-        thumbnailService.resume();
-      }
+      backgroundGate.restore();
       store.resumeDataBackupAfterPlayback();
       return;
     }
@@ -277,9 +277,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
           const SnackBar(content: Text('部分播放进度保存失败，请稍后重试')),
         );
       }
-      if (!wasPaused) {
-        thumbnailService.resume();
-      }
+      backgroundGate.restore();
       store.resumeDataBackupAfterPlayback();
     }
     if (mounted && runtime.playerScopedLibraryDataChanged) {

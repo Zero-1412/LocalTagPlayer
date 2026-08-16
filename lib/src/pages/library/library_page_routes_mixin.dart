@@ -140,7 +140,10 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
   Future<void> openSimilarVideos() async {
     final store = runtime.store;
     final thumbnailService = runtime.thumbnailService;
-    if (store == null || thumbnailService == null) {
+    final similarityScanController = runtime.similarityScanController;
+    if (store == null ||
+        thumbnailService == null ||
+        similarityScanController == null) {
       return;
     }
     await Navigator.of(context).push<void>(
@@ -148,6 +151,7 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
         VideoSimilarityPage(
           store: store,
           thumbnailService: thumbnailService,
+          scanController: similarityScanController,
           onPlay: playSimilarVideo,
           onDelete: deleteVideoFromSimilarity,
           onRevealLocation: revealVideoLocation,

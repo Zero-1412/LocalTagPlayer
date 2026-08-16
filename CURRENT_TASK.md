@@ -1,5 +1,19 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 相似视频扫描跨页面复用与播放器后台让渡（完成）
+
+- 根因：视觉扫描 Future、取消代次和进度只由相似视频页面持有，页面退出立即取消；再次进入又从头
+  执行，播放器也只冻结部分缩略图任务。
+- 修复方向：新增媒体库 Route 级 `VideoSimilarityScanController`，首次进入自动执行，离开页面只降为
+  后台速率并保留 Future，后续进入订阅共享进度/结果，显式刷新才重跑；删除/数据变化失效旧结果但不自动
+  重扫。播放器进入时通知 controller 等待视觉调度，并暂停 MediaDetailsService 新 FFprobe，退出后按原状态恢复。
+- 保护：不改变 schema、FilterQuery/TagQueryService、来源 filtered queue、PlayerBackend、候选算法、
+  删除/回收站/标签合并事务或持久化视觉签名缓存；页面只做状态投影和 stable ID 局部对账。
+- 验证：相似视频页面/播放回程、架构契约和相似服务 focused tests 通过；全量 `flutter test` 为 564 项通过、
+  3 项既有条件跳过；`flutter analyze` 与 `flutter build windows --debug` 通过；隔离 Debug 实例可启动并
+  正常关闭。当前环境没有桌面点击/截图控制器，未冒充完成真实页面点击证据。
+- 下一步：停止编辑后检查只 stage 本任务文件，提交中文变更并推送当前跟踪分支。
+
 # 2026-08-15 · 相似视频临时预览缓存竞态（进行中）
 
 - 现象：真实窗口相似视频页报 `PathNotFoundException`，缺失路径位于 `hover_preview/*.jpg`，整轮视觉复核被页面显示为失败。

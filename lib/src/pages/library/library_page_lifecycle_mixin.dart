@@ -9,6 +9,7 @@ import '../../services/library/library_load_diagnostics.dart';
 import '../../services/library/library_stress_control.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../../services/player/playback_snapshot_write_queue.dart';
+import '../../services/library/video_similarity_scan_controller.dart';
 
 import 'library_page_state_host.dart';
 
@@ -30,6 +31,7 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
     LibraryStressControl.unregister(this);
     unawaited(runtime.playbackSnapshotQueue?.dispose());
     runtime.libraryMediaDetailsService?.dispose();
+    runtime.similarityScanController?.dispose();
     runtime.activeScanUiDiagnostics?.abort();
     HardwareKeyboard.instance.removeHandler(handleGlobalSearchShortcut);
     runtime.searchController.removeListener(handleSearchControllerChanged);
@@ -162,6 +164,10 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
           );
           runtime.store = store;
           runtime.thumbnailService = thumbnailService;
+          runtime.similarityScanController ??= VideoSimilarityScanController(
+            store: store,
+            thumbnailService: thumbnailService,
+          );
           runtime.playbackSettings = playbackSettings;
           runtime.dataBackupSettings = dataBackupSettings;
           runtime.lastObservedSearchText = runtime.searchController.text;

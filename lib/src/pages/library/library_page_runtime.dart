@@ -21,6 +21,7 @@ import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import '../../services/library/library_application_facade.dart';
 import '../../services/library/library_scan_ui_diagnostics.dart';
+import '../../services/library/video_similarity_scan_controller.dart';
 import '../../services/media/media_details_service.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../../services/player/playback_snapshot_write_queue.dart';
@@ -44,6 +45,8 @@ class LibraryPageRuntime {
   ThumbnailService? thumbnailService;
   /** 后台媒体详情补全服务；页面释放时统一取消。 */
   MediaDetailsService? libraryMediaDetailsService;
+  /** 媒体库 Route 级相似视频扫描；相似视频页进出只改变前台优先级。 */
+  VideoSimilarityScanController? similarityScanController;
   /** 页面与播放器 Route 共享的最新播放设置快照。 */
   PlaybackSettings playbackSettings = PlaybackSettings.defaults;
   /** 自动清理失效记录的复用 Future，防止重复执行。 */

@@ -6,6 +6,7 @@ import '../../models/video_item.dart';
 import '../../services/library/library_application_facade.dart';
 import '../../services/library/video_content_similarity_service.dart';
 import '../../services/library/video_similarity_service.dart';
+import '../../services/library/video_similarity_scan_controller.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../../widgets/app_theme_tokens.dart';
 import '../../widgets/library/video_similarity_group_widgets.dart';
@@ -25,6 +26,7 @@ class VideoSimilarityPage extends StatefulWidget {
     super.key,
     required this.store,
     required this.thumbnailService,
+    required this.scanController,
     required this.onPlay,
     required this.onDelete,
     required this.onRevealLocation,
@@ -35,6 +37,9 @@ class VideoSimilarityPage extends StatefulWidget {
 
   /** 复用全局缩略图队列；页面不自行启动 FFmpeg 进程。 */
   final ThumbnailService thumbnailService;
+
+  /** 与媒体库 Route 共享的扫描状态；页面进出不拥有或取消扫描 Future。 */
+  final VideoSimilarityScanController scanController;
 
   /** 由媒体库页面创建当前候选组的独立播放队列，并在播放器 Route 返回时通知页面。 */
   final Future<void> Function(
@@ -59,28 +64,31 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   final Set<String> _actingVideoIds = <String>{};
   final Set<String> _deletedVideoIds = <String>{};
   var _visualScanning = false;
-  var _visualGeneration = 0;
   var _visualScanStale = false;
   var _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
   var _visualProgress = 0;
   var _visualProgressTotal = 0;
   VideoVisualScanProgress? _visualTiming;
-  var _visualPlaybackActive = false;
   String? _visualError;
+  VideoVisualScanResult? _appliedVisualResult;
+  late final VoidCallback _scanControllerListener;
 
   @override
   void initState() {
     super.initState();
     _report = _buildReport();
-    widget.thumbnailService.setSimilarityScanForeground(true);
+    _scanControllerListener = _handleScanControllerChanged;
+    widget.scanController.setPageForeground(true);
+    widget.scanController.addListener(_scanControllerListener);
+    _syncFromScanController();
     _scheduleVisualScan();
   }
 
   @override
   void dispose() {
-    _visualPlaybackActive = false;
-    widget.thumbnailService.cancelSimilarityScan();
-    widget.thumbnailService.setSimilarityScanForeground(false);
+    widget.scanController.removeListener(_scanControllerListener);
+    widget.scanController.setPlaybackActive(false);
+    widget.scanController.setPageForeground(false);
     super.dispose();
   }
 
@@ -91,46 +99,41 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   void _refresh() {
     setState(() {
       _report = _buildReport();
+      _appliedVisualResult = null;
       _visualError = null;
       _visualScanStale = false;
     });
-    _scheduleVisualScan();
+    _scheduleVisualScan(force: true);
   }
 
   /** 先让相似视频页完成首帧挂载，再启动可能触发候选构建和取帧的后台扫描。 */
-  void _scheduleVisualScan() {
-    final requestedGeneration = _visualGeneration;
+  void _scheduleVisualScan({bool force = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && requestedGeneration == _visualGeneration) {
-        unawaited(_runVisualScan());
+      if (mounted) {
+        unawaited(_runVisualScan(force: force));
       }
     });
   }
 
-  /** 使删除/刷新触发前一轮复核尽快退出，避免旧任务继续占用 FFmpeg 队列。 */
+  /** 使删除后的旧候选失效，但不因页面退出或普通返回取消共享扫描。 */
   void _cancelVisualScan() {
-    _visualGeneration++;
-    widget.thumbnailService.cancelSimilarityScan();
-    if (!_visualScanning || !mounted) {
-      return;
-    }
-    setState(() {
-      _visualScanning = false;
-      _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
-      _visualProgress = 0;
-      _visualProgressTotal = 0;
-      _visualTiming = null;
-    });
+    widget.scanController.invalidateForDataChange();
   }
 
   /** 过滤晚返回的视觉扫描快照，避免删除完成后旧结果把 stable videoId 重新带回页面。 */
   List<VideoSimilarityGroup> _withoutDeletedVideos(
     Iterable<VideoSimilarityGroup> groups,
   ) {
+    final currentVideoIds =
+        widget.store.videos.values.map((item) => item.videoId).toSet();
     final visible = <VideoSimilarityGroup>[];
     for (final group in groups) {
       final videos = group.videos
-          .where((item) => !_deletedVideoIds.contains(item.videoId))
+          .where(
+            (item) =>
+                currentVideoIds.contains(item.videoId) &&
+                !_deletedVideoIds.contains(item.videoId),
+          )
           .toList(growable: false);
       if (videos.length < 2) {
         continue;
@@ -146,6 +149,37 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
       );
     }
     return List<VideoSimilarityGroup>.unmodifiable(visible);
+  }
+
+  /** 把共享 controller 的状态投影到页面，进度通知不重建基础指纹报告。 */
+  void _handleScanControllerChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(_syncFromScanController);
+  }
+
+  void _syncFromScanController() {
+    final controller = widget.scanController;
+    final result = controller.result;
+    if (result != null && !identical(result, _appliedVisualResult)) {
+      _report = _report.withVisualGroups(
+        groups: _withoutDeletedVideos(result.groups),
+        candidatePairCount: result.candidatePairCount,
+        comparedPairCount: result.comparedPairCount,
+      );
+      _appliedVisualResult = result;
+      _visualScanStale = false;
+    }
+    _visualScanning = controller.isScanning;
+    _visualError = controller.error;
+    final progress = controller.progress;
+    if (progress != null) {
+      _visualProgressPhase = progress.phase;
+      _visualProgress = progress.processed;
+      _visualProgressTotal = progress.total;
+      _visualTiming = progress;
+    }
   }
 
   /** 播放器返回时只对账当前候选快照中的失效 stable ID，不触发整页重建或重新扫描。 */
@@ -177,79 +211,10 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
     });
   }
 
-  Future<void> _runVisualScan() async {
-    if (_visualScanning) {
-      return;
-    }
-    final generation = ++_visualGeneration;
-    if (mounted) {
-      setState(() {
-        _visualScanning = true;
-        _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
-        _visualProgress = 0;
-        _visualProgressTotal = 0;
-        _visualTiming = null;
-      });
-    }
-    final exactVideoIds = _report.groups
-        .expand((group) => group.videos)
-        .map((item) => item.videoId)
-        .toSet();
-    try {
-      final result = await VideoContentSimilarityService(
-        widget.thumbnailService,
-        visualSignatureCache: widget.store,
-      ).findNearDuplicateGroups(
-        widget.store.videos.values,
-        excludedVideoIds: exactVideoIds,
-        isCancelled: () => !mounted || generation != _visualGeneration,
-        shouldYield: () => _visualPlaybackActive,
-        onProgress: (progress) {
-          if (!mounted || generation != _visualGeneration) {
-            return;
-          }
-          final phaseChanged = progress.phase != _visualProgressPhase;
-          final elapsedChanged =
-              progress.elapsed.inSeconds != _visualTiming?.elapsed.inSeconds;
-          if (phaseChanged ||
-              progress.processed == progress.total ||
-              elapsedChanged) {
-            setState(() {
-              _visualProgressPhase = progress.phase;
-              _visualProgress = progress.processed;
-              _visualProgressTotal = progress.total;
-              _visualTiming = progress;
-            });
-          }
-        },
-      );
-      if (!mounted || generation != _visualGeneration || result.cancelled) {
-        return;
-      }
-      setState(() {
-        _report = _report.withVisualGroups(
-          groups: _withoutDeletedVideos(result.groups),
-          candidatePairCount: result.candidatePairCount,
-          comparedPairCount: result.comparedPairCount,
-        );
-        _visualScanning = false;
-        _visualScanStale = false;
-        _visualProgressPhase = VideoVisualScanPhase.comparingCandidates;
-        _visualProgress = result.candidatePairCount;
-        _visualProgressTotal = result.candidatePairCount;
-      });
-    } catch (error) {
-      if (!mounted || generation != _visualGeneration) {
-        return;
-      }
-      setState(() {
-        _visualScanning = false;
-        _visualError = '视觉复核失败：$error';
-        _visualProgressPhase = VideoVisualScanPhase.buildingCandidates;
-        _visualProgress = 0;
-        _visualProgressTotal = 0;
-      });
-    }
+  Future<void> _runVisualScan({bool force = false}) {
+    return force
+        ? widget.scanController.refresh()
+        : widget.scanController.startIfNeeded();
   }
 
   Future<void> _reveal(VideoItem item) async {
@@ -271,8 +236,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
       return;
     }
     setState(() => _actingVideoIds.add(item.videoId));
-    _visualPlaybackActive = true;
-    widget.thumbnailService.setSimilarityScanForeground(false);
+    widget.scanController.setPlaybackActive(true);
     try {
       await widget.onPlay(
         item,
@@ -291,8 +255,7 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
         },
       );
     } finally {
-      _visualPlaybackActive = false;
-      widget.thumbnailService.setSimilarityScanForeground(true);
+      widget.scanController.setPlaybackActive(false);
       if (mounted) {
         setState(() => _actingVideoIds.remove(item.videoId));
       }
