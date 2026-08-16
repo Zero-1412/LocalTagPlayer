@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 更新网络代理 UI 外壳重构（已完成）
+
+- 目标：进入第三阶段下一个设置维护叶页面，把应用更新代理从通用卡片收敛为
+  “更新网络连接工作区”，先建立 Before/After 视觉目标，再替换展示外壳。
+- 当前修改：新增 `docs/design/UPDATE_PROXY_UI_SHELL_TARGET.md`；网络代理使用带稳定
+  `settings.updateProxy.workspaceSurface` key 和 Semantics container 的实色工作区 surface；
+  保留范围说明、代理开关、地址输入、保存按钮、status 文案和历史 key，状态反馈收敛为就地状态表面。
+- 保护：不修改 `AppUpdateProxySettingsService`、地址规范化、HTTP-only/无凭据约束、更新检查/安装包下载、
+  系统代理、媒体播放、媒体库扫描、筛选、播放队列、缓存队列、stable identity 或用户数据语义。
+- 当前验证：代理页保存、凭据拒绝、150% 文字缩放 focused 验证通过；设置首页滚动后进入网络代理、检查
+  工作区/开关/地址/保存并返回的页面级可达性验证通过；完整 `flutter test` 通过（622 passed，4 skipped）；
+  `flutter analyze` 无问题；`flutter build windows --debug` 成功。Debug 窗口真实从媒体库进入设置，再进入
+  网络代理，检查当前持久化代理状态、范围说明、输入框和保存按钮，无明显遮挡、裁切或溢出；未修改代理设置。
+- 阻塞：无。
+- 下一步：收集网络代理页在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，
+  再决定进入关于/更新页；不扩展到更新网络业务边界。
+
 # 2026-08-16 · 文件删除设置 UI 外壳重构（已完成）
 
 - 目标：进入第三阶段下一个高风险维护叶页面，把文件删除设置从通用设置卡片收敛为

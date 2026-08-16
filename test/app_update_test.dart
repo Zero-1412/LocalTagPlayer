@@ -344,6 +344,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('settings.updateProxy')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings.updateProxy.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
     await tester.tap(
       find.byKey(const ValueKey('settings.updateProxy.enabled')),
     );
@@ -361,6 +366,35 @@ void main() {
     expect(service.settings.enabled, isTrue);
     expect(service.settings.address, '127.0.0.1:7890');
     expect(find.textContaining('将用于后续更新检查'), findsOneWidget);
+  });
+
+  testWidgets('网络代理页在 150% 文字缩放下保持配置内容可读', (tester) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          textScaler: TextScaler.linear(1.5),
+        ),
+        child: MaterialApp(
+          home: Scaffold(
+            body: UpdateProxySettingsPage(
+              proxySettingsService: _FakeProxyUpdateService(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('settings.updateProxy.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.text('仅支持 HTTP 代理，不保存账号或密码'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings.updateProxy.save')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('网络代理页拒绝保存带账号密码的代理', (tester) async {

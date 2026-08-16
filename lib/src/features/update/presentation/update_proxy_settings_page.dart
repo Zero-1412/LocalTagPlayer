@@ -118,76 +118,115 @@ class _UpdateProxySettingsPageState extends State<UpdateProxySettingsPage> {
       key: const ValueKey('settings.updateProxy'),
       padding: const EdgeInsets.all(24),
       children: [
-        Card(
+        Semantics(
           key: const ValueKey('settings.updateProxy.card'),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  '更新网络代理',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  '仅用于 GitHub Releases 检查与安装包下载，不影响媒体播放、媒体库或系统代理。',
-                  style: TextStyle(color: libraryTextMuted, height: 1.45),
-                ),
-                const SizedBox(height: 14),
-                SwitchListTile(
-                  key: const ValueKey('settings.updateProxy.enabled'),
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('使用 HTTP 代理'),
-                  subtitle: const Text('支持本机代理，例如 127.0.0.1:7890'),
-                  value: _enabled,
-                  onChanged: _loading || _saving
-                      ? null
-                      : (value) => setState(() => _enabled = value),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  key: const ValueKey('settings.updateProxy.address'),
-                  controller: _addressController,
-                  enabled: !_loading && !_saving && _enabled,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: const InputDecoration(
-                    labelText: '代理地址',
-                    hintText: '127.0.0.1:7890',
-                    helperText: '仅支持 HTTP 代理，不保存账号或密码',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _saveSettings(),
-                ),
-                const SizedBox(height: 14),
-                FilledButton.tonalIcon(
-                  key: const ValueKey('settings.updateProxy.save'),
-                  onPressed: _loading || _saving ? null : _saveSettings,
-                  icon: _saving
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(_saving ? '正在保存' : '保存代理设置'),
-                ),
-                if (_status != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    _status!,
-                    key: const ValueKey('settings.updateProxy.status'),
-                    style: TextStyle(
-                      color: _statusIsError
-                          ? Theme.of(context).colorScheme.error
-                          : libraryTextMuted,
+          container: true,
+          label: '更新网络连接工作区',
+          child: DecoratedBox(
+            key: const ValueKey('settings.updateProxy.workspaceSurface'),
+            decoration: BoxDecoration(
+              color: librarySurface,
+              borderRadius: BorderRadius.circular(AppRadius.panel),
+              border: const Border.fromBorderSide(
+                BorderSide(color: libraryBorder),
+              ),
+            ),
+            // 保留 Material 状态层，让开关、输入框和按钮的 focus/ink 反馈可见。
+            child: Material(
+              type: MaterialType.transparency,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '更新网络代理',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
-                  ),
-                ],
-              ],
+                    const SizedBox(height: 6),
+                    const Text(
+                      '仅用于 GitHub Releases 检查与安装包下载，不影响媒体播放、媒体库或系统代理。',
+                      style: TextStyle(color: libraryTextMuted, height: 1.45),
+                    ),
+                    const SizedBox(height: 14),
+                    SwitchListTile(
+                      key: const ValueKey('settings.updateProxy.enabled'),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('使用 HTTP 代理'),
+                      subtitle: const Text('支持本机代理，例如 127.0.0.1:7890'),
+                      value: _enabled,
+                      onChanged: _loading || _saving
+                          ? null
+                          : (value) => setState(() => _enabled = value),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      key: const ValueKey('settings.updateProxy.address'),
+                      controller: _addressController,
+                      enabled: !_loading && !_saving && _enabled,
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      decoration: const InputDecoration(
+                        labelText: '代理地址',
+                        hintText: '127.0.0.1:7890',
+                        helperText: '仅支持 HTTP 代理，不保存账号或密码',
+                        border: OutlineInputBorder(),
+                      ),
+                      onSubmitted: (_) => _saveSettings(),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton.tonalIcon(
+                      key: const ValueKey('settings.updateProxy.save'),
+                      onPressed: _loading || _saving ? null : _saveSettings,
+                      icon: _saving
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_outlined),
+                      label: Text(_saving ? '正在保存' : '保存代理设置'),
+                    ),
+                    if (_status != null) ...[
+                      const SizedBox(height: 10),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: (_statusIsError
+                                  ? Theme.of(context).colorScheme.error
+                                  : libraryBorder)
+                              .withValues(alpha: 0.08),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.control),
+                          border: Border.all(
+                            color: (_statusIsError
+                                    ? Theme.of(context).colorScheme.error
+                                    : libraryBorder)
+                                .withValues(alpha: 0.34),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          child: Text(
+                            _status!,
+                            key: const ValueKey('settings.updateProxy.status'),
+                            style: TextStyle(
+                              color: _statusIsError
+                                  ? Theme.of(context).colorScheme.error
+                                  : libraryTextMuted,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),

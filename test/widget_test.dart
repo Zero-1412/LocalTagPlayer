@@ -35,6 +35,7 @@ import 'package:local_tag_player/src/features/settings/presentation/settings_lan
 import 'package:local_tag_player/src/features/settings/presentation/settings_workspace_scaffold.dart';
 import 'package:local_tag_player/src/features/settings/presentation/settings_workspace_theme.dart';
 import 'package:local_tag_player/src/features/update/domain/app_release.dart';
+import 'package:local_tag_player/src/features/update/domain/app_update_proxy_settings.dart';
 import 'package:local_tag_player/src/features/update/domain/app_update_service.dart';
 import 'package:local_tag_player/src/models/data_backup_models.dart';
 import 'package:local_tag_player/src/models/library_sort.dart';
@@ -177,8 +178,11 @@ class _MissingRelinkTestRepository
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-/** 设置 Route 测试不访问网络，仅满足关于页的应用更新边界。 */
-class _SettingsRouteUpdateService implements AppUpdateService {
+/** 设置 Route 测试不访问网络，仅满足关于页和代理页的应用更新边界。 */
+class _SettingsRouteUpdateService
+    implements AppUpdateService, AppUpdateProxySettingsService {
+  AppUpdateProxySettings proxySettings = AppUpdateProxySettings.defaults;
+
   @override
   Future<AppVersionInfo> currentVersion() async => const AppVersionInfo(
         appName: 'Local Tag Player',
@@ -194,6 +198,14 @@ class _SettingsRouteUpdateService implements AppUpdateService {
     AppRelease release, {
     void Function(AppUpdateDownloadProgress progress)? onProgress,
   }) async {}
+
+  @override
+  Future<AppUpdateProxySettings> loadProxySettings() async => proxySettings;
+
+  @override
+  Future<void> saveProxySettings(AppUpdateProxySettings settings) async {
+    proxySettings = settings;
+  }
 }
 
 /** 模拟用户取消原生文件选择器，不执行任何磁盘操作。 */
@@ -3743,6 +3755,39 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey('settings.fileDeletion.confirm')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings.section.back')),
+    );
+    await tester.pump();
+
+    final proxyEntry = find.byKey(
+      const ValueKey('settings.category.updateProxy'),
+    );
+    await tester.drag(
+      find.byKey(const ValueKey('settings.home')),
+      const Offset(0, -500),
+    );
+    await tester.pump();
+    await tester.ensureVisible(proxyEntry);
+    await tester.pump();
+    await tester.tap(proxyEntry);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.updateProxy.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.updateProxy.enabled')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.updateProxy.address')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.updateProxy.save')),
       findsOneWidget,
     );
     await tester.tap(
