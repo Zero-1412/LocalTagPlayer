@@ -8,7 +8,7 @@ import 'library_sort_control.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-/** 宽桌面排序字段的视觉宽度，同时约束触发入口与弹层。 */
+/** 宽桌面排序字段的视觉宽度，同时约束触发入口、弹层和结构轻表面。 */
 const double _expandedSortFieldWidth = 168;
 
 /** 排序字段、6px 间距和 48px 方向命中区组成的稳定动作宽度。 */
@@ -104,7 +104,7 @@ class LibraryCompactTopSortControl extends StatelessWidget {
                 height: 38,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: librarySurface,
+                  color: librarySurfaceAlt,
                   borderRadius: BorderRadius.circular(AppRadius.control),
                   border: Border.all(color: libraryBorder),
                 ),

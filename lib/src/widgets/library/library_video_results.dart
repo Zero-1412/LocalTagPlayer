@@ -91,8 +91,8 @@ double libraryVideoCardMetadataHeightForTextScale(double textScaleFactor) {
   return libraryVideoCardMetadataHeight + (safeScale - 1) * 32;
 }
 
-/** 桌面结果区略收紧左右留白，把宽度优先分配给缩略图。 */
-double libraryVideoGridHorizontalPadding(bool compact) => compact ? 28 : 44;
+/** Phase 2 收紧桌面结果区外侧留白，把首屏宽度优先分配给缩略图和文件名。 */
+double libraryVideoGridHorizontalPadding(bool compact) => compact ? 28 : 36;
 
 /**
  * 计算视频网格的横向列间距。
@@ -115,21 +115,18 @@ double libraryVideoGridCrossAxisSpacing({
   return 20;
 }
 
-/** 行间距与卡片标题高度配合，宽窗口增加呼吸感但不降低首屏浏览数量。 */
+/** 行间距与卡片标题高度配合；宽屏减少装饰留白，但不改变卡片列数或加载批次。 */
 double libraryVideoGridMainAxisSpacing({
   required double gridWidth,
   required bool compact,
 }) {
-  if (compact || gridWidth < 720) {
+  if (compact || gridWidth < 1000) {
     return 14;
   }
-  if (gridWidth < 1000) {
+  if (gridWidth < 1400) {
     return 16;
   }
-  if (gridWidth < 1400) {
-    return 18;
-  }
-  return 22;
+  return 18;
 }
 
 /** 超宽结果区适度放大卡片上限，使桌面信息密度接近内容平台而不是文件缩略图墙。 */

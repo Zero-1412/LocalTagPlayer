@@ -1,5 +1,16 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 媒体库首页 Phase 2 内容区与 inspector 细化（已完成）
+
+- 目标：在已确认的 Phase 1 Before/After 方向上，继续收敛视频结果密度、排序/视图控件和标签 inspector 的层级、语义与命中反馈。
+- 已完成：桌面结果区左右留白从 44 收紧为 36，宽屏行间距从 22 收紧为 18；保持列数、卡片 key、增量批次、滚动锚点和缩略图任务不变。
+  排序字段使用结构轻表面；网格/列表滑块增加克制的当前端色洗；标签 tab 增加底部定位线和 selected 语义，二级标签辅助语义带父级上下文与数量。
+- 保护：`FilterQuery`、`TagQueryService`、标签父子筛选语义、来源 filtered queue、缩略图/媒体详情队列、schema、stable identity 和用户数据不变；未删除任何既有入口、回调、命中区或返回路径。
+- 当前验证：`flutter test test/widget_test.dart` 通过（212 passed）；`flutter test test/architecture_contract_test.dart` 通过（58 passed）；完整 `flutter test` 通过（617 passed，4 skipped）；
+  `flutter analyze` 无问题；`flutter build windows --debug` 成功；最终 Debug 窗口在 1339×804 下真实检查媒体库、标签 inspector、列表视图和排序菜单，无明显遮挡、裁切或溢出。
+- 阻塞：无。
+- 下一步：等待 Phase 2 视觉反馈；若方向继续保持，再按同一 token 和语义约束推进媒体库其他状态或下一页面，不扩展到业务边界重构。
+
 # 2026-08-16 · 媒体库首页 Phase 1 视觉重构（已完成）
 
 - 目标：建立媒体库首页 Before/After 视觉目标，按页面外壳、上下文栏、标签 inspector、视频卡片逐层收敛为内容优先的桌面媒体工作区。
@@ -7,7 +18,7 @@
 - 保护：唯一搜索 controller、标签筛选/结果状态、排序/视图/多选、标签父子层级、增量网格、缩略图 Future、来源 filtered queue、schema 和用户数据不变。
 - 当前验证：`flutter test` 通过（616 passed，4 skipped）；架构迁移预算 focused test 通过；`flutter analyze` 无问题；`flutter build windows --debug` 成功；debug 窗口在 100% 与 150% 文字缩放下已真实打开媒体库并展开标签 inspector，入口、搜索框、标签行和卡片网格无明显遮挡或溢出。
 - 阻塞：无。
-- 下一步：请先基于 Before/After 目标确认 Phase 1 的视觉方向；确认后再进入 Phase 2 的页面内容区密度、排序/视图控件和标签 inspector 细节收敛。
+- 下一步：Phase 1 视觉方向已由用户确认，细化工作已记录在上方 Phase 2 当前任务中。
 
 # 2026-08-16 · 启动后台任务全量审计与有界资源调度（实现中）
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -375,7 +376,7 @@ void main() {
         narrow: false,
         compact: false,
       ),
-      closeTo(210.25, 0.01),
+      closeTo(211.75, 0.01),
     );
     expect(
       libraryVideoCardMainAxisExtent(
@@ -409,7 +410,15 @@ void main() {
       libraryVideoGridCrossAxisSpacing(gridWidth: 1600, compact: false),
       20,
     );
-    expect(libraryVideoGridHorizontalPadding(false), 44);
+    expect(libraryVideoGridHorizontalPadding(false), 36);
+    expect(
+      libraryVideoGridMainAxisSpacing(gridWidth: 1200, compact: false),
+      16,
+    );
+    expect(
+      libraryVideoGridMainAxisSpacing(gridWidth: 1600, compact: false),
+      18,
+    );
     expect(
       libraryVideoGridMaxCrossAxisExtent(
         gridWidth: 1600,
@@ -3146,6 +3155,31 @@ void main() {
     expect(find.byKey(LibrarySmokeKeys.primaryTab), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Child01'), findsNothing);
+  });
+
+  testWidgets('tag discovery tabs expose selected semantics', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(const TagDiscoverySmokeHarness(childCount: 12));
+
+    expect(
+      tester
+              .getSemantics(find.byKey(LibrarySmokeKeys.primaryTab))
+              .flagsCollection
+              .isSelected ==
+          Tristate.isTrue,
+      isTrue,
+    );
+    await tester.tap(find.byKey(LibrarySmokeKeys.secondaryTab));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      tester
+              .getSemantics(find.byKey(LibrarySmokeKeys.secondaryTab))
+              .flagsCollection
+              .isSelected ==
+          Tristate.isTrue,
+      isTrue,
+    );
+    semantics.dispose();
   });
 
   testWidgets(

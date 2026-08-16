@@ -23,19 +23,36 @@ class TagPanelTabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? librarySurface : Colors.transparent,
-      borderRadius: BorderRadius.circular(9),
-      child: InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? librarySurface : Colors.transparent,
         borderRadius: BorderRadius.circular(9),
-        onTap: onTap,
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? appAccentViolet : libraryTextMuted,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(9),
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              // 选中态用底部定位线补足 tab 语义，不扩大紫色背景面积。
+              border: Border(
+                bottom: BorderSide(
+                  color: selected ? appAccentViolet : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: selected ? appAccentViolet : libraryTextMuted,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ),
@@ -346,6 +363,10 @@ class SecondaryTagPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final parentLabel =
         secondaryTagParentLabel(tag, showParentLabel: showParentLabel);
+    final displayName = tag.displayName ?? tag.name;
+    final semanticLabel = parentLabel == null || parentLabel.isEmpty
+        ? displayName
+        : '$displayName / $parentLabel';
     final background = excluded
         ? const Color(0xfffff1f0)
         : selected
@@ -357,73 +378,77 @@ class SecondaryTagPill extends StatelessWidget {
             ? const Color(0xffd2caff)
             : const Color(0xffe6ecf5);
     final textColor = excluded ? const Color(0xffb42318) : appAccentViolet;
-    return Tooltip(
-      message:
-          '\u70b9\u51fb\u52a0\u5165\u7b5b\u9009\uff0c\u957f\u6309\u8bbe\u4e3a NOT \u6392\u9664',
-      child: GestureDetector(
-        onLongPress: onExcludeToggle,
-        child: Material(
-          color: background,
-          borderRadius: BorderRadius.circular(8),
-          child: InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: semanticLabel,
+      value: formatCount(count),
+      child: Tooltip(
+        message:
+            '\u70b9\u51fb\u52a0\u5165\u7b5b\u9009\uff0c\u957f\u6309\u8bbe\u4e3a NOT \u6392\u9664',
+        child: GestureDetector(
+          onLongPress: onExcludeToggle,
+          child: Material(
+            color: background,
             borderRadius: BorderRadius.circular(8),
-            onTap: onToggle,
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 31),
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: border),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (selected || excluded) ...[
-                    Icon(
-                      excluded
-                          ? Icons.remove_circle_outline
-                          : Icons.check_circle_rounded,
-                      size: 15,
-                      color: textColor,
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  Flexible(
-                    child: Text(
-                      excluded
-                          ? 'NOT ${tag.displayName ?? tag.name}'
-                          : (tag.displayName ?? tag.name),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: onToggle,
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 31),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: border),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (selected || excluded) ...[
+                      Icon(
+                        excluded
+                            ? Icons.remove_circle_outline
+                            : Icons.check_circle_rounded,
+                        size: 15,
                         color: textColor,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
                       ),
-                    ),
-                  ),
-                  if (parentLabel != null && parentLabel.isNotEmpty) ...[
-                    const SizedBox(width: 7),
-                    Container(
-                      height: 20,
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: librarySurfaceAlt,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Flexible(
                       child: Text(
-                        parentLabel,
-                        style: const TextStyle(
-                          color: Color(0xff94a3b8),
-                          fontSize: 10,
-                          height: 1,
-                          fontWeight: FontWeight.w700,
+                        excluded ? 'NOT $displayName' : displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
+                    if (parentLabel != null && parentLabel.isNotEmpty) ...[
+                      const SizedBox(width: 7),
+                      Container(
+                        height: 20,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: librarySurfaceAlt,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          parentLabel,
+                          style: const TextStyle(
+                            color: Color(0xff94a3b8),
+                            fontSize: 10,
+                            height: 1,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

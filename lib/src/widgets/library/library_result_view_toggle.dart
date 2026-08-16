@@ -39,7 +39,6 @@ class ResultViewToggle extends StatefulWidget {
 class _ResultViewToggleState extends State<ResultViewToggle>
     with SingleTickerProviderStateMixin {
   static const _slideDuration = Duration(milliseconds: 180);
-
   late final AnimationController _controller;
   late bool _visualDense;
   var _transitionVersion = 0;
@@ -53,7 +52,6 @@ class _ResultViewToggleState extends State<ResultViewToggle>
       value: widget.dense ? 1 : 0,
     );
   }
-
   @override
   void didUpdateWidget(covariant ResultViewToggle oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -65,13 +63,11 @@ class _ResultViewToggleState extends State<ResultViewToggle>
     setState(() => _visualDense = widget.dense);
     _animateTo(widget.dense);
   }
-
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
-
   /** 根据剩余距离计算时长，让快速反向保持与正向一致的移动速度。 */
   Duration _remainingDuration(double target) {
     final distance = (_controller.value - target).abs();
@@ -113,6 +109,7 @@ class _ResultViewToggleState extends State<ResultViewToggle>
 
   @override
   Widget build(BuildContext context) {
+    final accessibility = AppAccessibilityScope.of(context);
     final tooltip = _visualDense ? '切换为网格视图' : '切换为列表视图';
     return Tooltip(
       message: tooltip,
@@ -141,6 +138,7 @@ class _ResultViewToggleState extends State<ResultViewToggle>
                   animation: _controller,
                   builder: (context, child) {
                     final progress = _controller.value;
+                    // 选中端只增加一层低对比度色洗；高对比度仍依赖图标和位置表达状态。
                     return Stack(
                       children: [
                         Transform.translate(
@@ -150,7 +148,9 @@ class _ResultViewToggleState extends State<ResultViewToggle>
                             width: 30,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: librarySurfaceAlt,
+                              color: accessibility.highContrast || !_visualDense
+                                  ? librarySurfaceAlt
+                                  : appAccentViolet.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),

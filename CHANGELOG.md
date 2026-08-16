@@ -12,6 +12,13 @@
 - 标签发现面板新增只过滤可见标签的稳定搜索入口；不创建新的筛选条件，不触发媒体库查询，也不改变标签父子语义。
 - `FilterQuery`、`TagQueryService`、filtered queue、缩略图/媒体详情队列、PlayerBackend、schema 和用户数据保持不变。
 
+### 媒体库首页 Phase 2 内容区与 inspector 细化
+
+- 收紧桌面结果区外侧留白和宽屏行间距，把首屏空间优先还给缩略图与文件名；保留既有列数、增量加载、滚动和缩略图任务边界。
+- 排序字段改用结构轻表面，网格/列表滑块用低对比度当前端色洗表达状态；排序、方向、视图 owner、偏好保存和命中区不变。
+- 标签 inspector 的 tab 增加选中定位线与辅助 selected 语义；二级标签语义补充父级上下文和数量，继续保留排除态与真实筛选链路。
+- 不修改 `FilterQuery`、`TagQueryService`、filtered queue、缩略图/媒体详情队列、PlayerBackend、schema、stable identity 或用户数据。
+
 ### 缩略图缓存缺失补全
 
 - 缓存诊断页新增“生成缺失缓存”明确入口；媒体库首帧后延迟登记一次自动补全，用户也可以按需手动开始。
