@@ -320,8 +320,9 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存删除设置失败：$error')),
+      showMaintenanceSnackBar(
+        context,
+        message: '保存删除设置失败：$error',
       );
       return;
     }
@@ -341,19 +342,18 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     try {
       final removed = await widget.store.removeMissingOrUnreadableVideos();
       if (mounted && showFeedback) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
+        showMaintenanceSnackBar(
+          context,
+          message:
               removed == 0 ? '没有需要清理的缺失或不可读记录' : '已从数据库移除 $removed 条记录；磁盘文件未删除',
-            ),
-          ),
         );
       }
       return removed;
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('清理缺失或不可读记录失败：$error')),
+        showMaintenanceSnackBar(
+          context,
+          message: '清理缺失或不可读记录失败：$error',
         );
       }
       return 0;

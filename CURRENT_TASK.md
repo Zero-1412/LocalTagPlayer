@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 文件删除设置 UI 外壳重构（已完成）
+
+- 目标：进入第三阶段下一个高风险维护叶页面，把文件删除设置从通用设置卡片收敛为
+  “文件删除安全工作区”，先建立 Before/After 视觉目标，再替换展示外壳。
+- 当前修改：新增 `docs/design/DELETE_FILE_UI_SHELL_TARGET.md`；文件删除设置使用带稳定
+  `settings.fileDeletion.workspaceSurface` key 和 Semantics container 的实色工作区 surface；
+  保留历史 card key、两个开关、删除规则和危险提示；本页相关 Snackbar 接入共享维护反馈。
+- 保护：不修改 `CacheSettingsPage` 的删除 owner、设置持久化、FileSystemAdapter、回收站、自动清理、
+  stable identity、标签关系、扫描或用户数据语义。
+- 当前验证：文件删除工作区、设置入口可达性、150% 文字缩放、关闭确认后的危险提示、
+  共享维护反馈和架构契约 focused 验证通过；完整 `flutter test` 通过（621 passed，4 skipped）；
+  `flutter analyze` 无问题；`flutter build windows --debug` 成功。Debug 窗口真实从媒体库进入设置，
+  再进入删除文件，检查两个开关、回收站规则和危险提示，无明显遮挡、裁切或溢出，且未触发删除或清理动作。
+- 阻塞：无。
+- 下一步：收集文件删除页在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，
+  再决定继续细化其他维护状态或进入下一个页面；不扩展到删除业务或文件系统边界。
+
 # 2026-08-16 · 数据备份 UI 外壳重构（已完成）
 
 - 目标：进入第三阶段下一个仍缺独立视觉目标的数据保护叶页面，把数据备份从通用设置卡片收敛为

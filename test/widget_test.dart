@@ -3724,6 +3724,32 @@ void main() {
       findsOneWidget,
     );
 
+    final deleteEntry = find.byKey(
+      const ValueKey('settings.category.fileDeletion'),
+    );
+    await tester.ensureVisible(deleteEntry);
+    await tester.pump();
+    await tester.tap(deleteEntry);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.fileDeletion.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey('settings.fileDeletion.autoRemoveMissingOrUnreadable'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.fileDeletion.confirm')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings.section.back')),
+    );
+    await tester.pump();
+
     final backupEntry = find.byKey(
       const ValueKey('settings.category.dataBackup'),
     );
@@ -3809,6 +3835,11 @@ void main() {
     );
     await tester.pump();
 
+    expect(
+      find.byKey(const ValueKey('settings.fileDeletion.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
     expect(find.text('删除前显示提示框'), findsOneWidget);
     expect(find.textContaining('视频文件删除规则：始终移入系统回收站'), findsOneWidget);
     expect(find.textContaining('后续删除将不再提示，但仍会先把本地视频移入系统回收站'), findsOneWidget);
