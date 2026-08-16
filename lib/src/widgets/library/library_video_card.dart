@@ -117,16 +117,17 @@ class InteractiveVideoCardState extends State<InteractiveVideoCard> {
                       : _focused
                           ? appAccentViolet.withValues(alpha: 0.78)
                           : _hovered
-                              ? libraryTextMuted.withValues(alpha: 0.42)
-                              : libraryBorder.withValues(alpha: 0.72),
+                              ? libraryTextMuted.withValues(alpha: 0.34)
+                              : libraryBorder.withValues(alpha: 0.48),
                   width: widget.selected || _focused ? 1.5 : 1,
                 ),
                 boxShadow: _hovered && !accessibility.highContrast
                     ? const <BoxShadow>[
                         BoxShadow(
-                          color: Color(0x30000000),
-                          blurRadius: 18,
-                          offset: Offset(0, 8),
+                          // hover 只提供轻微抬升，不制造大面积离屏阴影或布局变化。
+                          color: Color(0x24000000),
+                          blurRadius: 12,
+                          offset: Offset(0, 5),
                         ),
                       ]
                     : const <BoxShadow>[],

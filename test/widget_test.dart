@@ -3148,6 +3148,31 @@ void main() {
     expect(find.text('Child01'), findsNothing);
   });
 
+  testWidgets(
+      'tag inspector search narrows visible tags without changing query',
+      (tester) async {
+    await tester.pumpWidget(const TagDiscoverySmokeHarness(childCount: 12));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(LibrarySmokeKeys.secondaryTab));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Child02'), findsWidgets);
+
+    await tester.enterText(
+      find.byKey(LibrarySmokeKeys.tagSearchField),
+      'Child01',
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Child01'), findsWidgets);
+    expect(find.text('Child02'), findsNothing);
+    expect(find.byTooltip('清除标签搜索'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('清除标签搜索'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Child02'), findsWidgets);
+  });
+
   test('library sort comparator applies default order immediately', () {
     final older = VideoItem(
       path: 'D:\\video\\older.mp4',

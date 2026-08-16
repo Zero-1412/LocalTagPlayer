@@ -199,20 +199,21 @@ class TagDiscoveryZoneState extends State<TagDiscoveryZone> {
     final outerPanelWidth = widget.panelWidth ?? 482.0;
     final innerPanelWidth =
         (outerPanelWidth - 28).clamp(276.0, 592.0).toDouble();
+    final hasSearchKeyword = _tagSearchController.text.trim().isNotEmpty;
     final panel = Container(
       width: widget.dense ? double.infinity : innerPanelWidth,
       margin: EdgeInsets.fromLTRB(widget.dense ? 12 : 12, 12, 16, 16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
         color: librarySurface,
         borderRadius: BorderRadius.circular(AppRadius.panel),
-        border: Border.all(color: libraryBorder),
+        border: Border.all(color: libraryBorder.withValues(alpha: 0.86)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _TagDiscoveryPanelHeader(onCollapse: widget.onCollapse),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           Container(
             height: 44,
             padding: const EdgeInsets.all(4),
@@ -245,7 +246,69 @@ class TagDiscoveryZoneState extends State<TagDiscoveryZone> {
               ],
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
+          // 这个输入只筛选右侧可见标签，不创建新的过滤条件，也不触发媒体库查询。
+          // 使用稳定 TextField 保持键盘、文字缩放和辅助技术路径可用。
+          TextField(
+            key: LibrarySmokeKeys.tagSearchField,
+            controller: _tagSearchController,
+            onChanged: (_) => setState(() {}),
+            cursorColor: appAccentViolet,
+            style: const TextStyle(
+              color: libraryText,
+              fontSize: AppTypography.body,
+              fontWeight: AppTypography.medium,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: libraryBackground,
+              hintText: '在标签中查找',
+              hintStyle: const TextStyle(
+                color: libraryTextMuted,
+                fontSize: AppTypography.body,
+              ),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                size: 19,
+                color: libraryTextMuted,
+              ),
+              suffixIcon: hasSearchKeyword
+                  ? IconButton(
+                      tooltip: '清除标签搜索',
+                      onPressed: () {
+                        _tagSearchController.clear();
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.close_rounded, size: 17),
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                borderSide: BorderSide(
+                  color: libraryBorder.withValues(alpha: 0.86),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                borderSide: BorderSide(
+                  color: libraryBorder.withValues(alpha: 0.86),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                borderSide: const BorderSide(
+                  color: appAccentViolet,
+                  width: 1.5,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: 12,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           const Text(
             '\u9009\u62e9\u4e00\u7ea7\u6807\u7b7e\u4ee5\u67e5\u770b\u5bf9\u5e94\u7684\u4e8c\u7ea7\u6807\u7b7e\uff08\u4e0e\u5176\u4ed6\u6761\u4ef6\u4e3a AND \u5173\u7cfb\uff09',
             style: TextStyle(

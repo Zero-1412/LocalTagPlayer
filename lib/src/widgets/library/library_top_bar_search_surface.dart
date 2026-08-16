@@ -121,9 +121,9 @@ class _LibrarySearchSurfaceState extends State<LibrarySearchSurface> {
           boxShadow: _focused
               ? <BoxShadow>[
                   BoxShadow(
-                    color: appAccentViolet.withValues(alpha: 0.14),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
+                    color: appAccentViolet.withValues(alpha: 0.10), // 焦点光晕保持克制。
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
                 ]
               : librarySoftShadow,

@@ -1,5 +1,14 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 媒体库首页 Phase 1 视觉重构（已完成）
+
+- 目标：建立媒体库首页 Before/After 视觉目标，按页面外壳、上下文栏、标签 inspector、视频卡片逐层收敛为内容优先的桌面媒体工作区。
+- 已完成：新增 `docs/design/LIBRARY_UI_PHASE1_TARGET.md`；左侧导航选中态降低紫色面积并增加定位线；搜索焦点阴影收敛；标签 inspector 增加只过滤可见标签的稳定 `TextField`；卡片边界和 hover 阴影减弱；侧栏装饰提取为独立叶节点并保持迁移预算不增长。
+- 保护：唯一搜索 controller、标签筛选/结果状态、排序/视图/多选、标签父子层级、增量网格、缩略图 Future、来源 filtered queue、schema 和用户数据不变。
+- 当前验证：`flutter test` 通过（616 passed，4 skipped）；架构迁移预算 focused test 通过；`flutter analyze` 无问题；`flutter build windows --debug` 成功；debug 窗口在 100% 与 150% 文字缩放下已真实打开媒体库并展开标签 inspector，入口、搜索框、标签行和卡片网格无明显遮挡或溢出。
+- 阻塞：无。
+- 下一步：请先基于 Before/After 目标确认 Phase 1 的视觉方向；确认后再进入 Phase 2 的页面内容区密度、排序/视图控件和标签 inspector 细节收敛。
+
 # 2026-08-16 · 启动后台任务全量审计与有界资源调度（实现中）
 
 - 目标：应用启动后自动执行安全、可恢复的补全任务；重新核对所有后台线程的触发条件、重复启动、暂停/取消、

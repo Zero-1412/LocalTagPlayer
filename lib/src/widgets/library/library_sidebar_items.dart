@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../app_theme_tokens.dart';
+import 'library_sidebar_selection_decoration.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -12,7 +13,6 @@ class LibrarySidebarSectionLabel extends StatelessWidget {
 
   /** 当前导航分组名称。 */
   final String label;
-
   @override
   Widget build(BuildContext context) {
     return Text(
@@ -196,6 +196,7 @@ class LibrarySidebarNavItem extends StatelessWidget {
             child: Container(
               height: 38,
               padding: const EdgeInsets.symmetric(horizontal: 11),
+              decoration: librarySidebarSelectionDecoration(selected: selected),
               child: Row(
                 children: [
                   Icon(
@@ -212,8 +213,7 @@ class LibrarySidebarNavItem extends StatelessWidget {
                       style: TextStyle(
                         color: selected ? libraryText : const Color(0xffb8c3d3),
                         fontSize: 13,
-                        fontWeight:
-                            selected ? FontWeight.w700 : FontWeight.w600,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                       ),
                     ),
                   ),
