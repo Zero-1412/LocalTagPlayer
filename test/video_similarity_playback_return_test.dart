@@ -91,6 +91,25 @@ void main() {
     expect(page, contains('_actingVideoIds.remove(item.videoId)'));
   });
 
+  test('播放器删除差量在资源释放尾部前发布到主界面', () {
+    final playback = File(
+      'lib/src/pages/library/library_page_playback_mixin.dart',
+    ).readAsStringSync();
+
+    final refresh = playback.indexOf(
+      '_applyPlayerScopedLibraryChangesAfterRouteReturn();',
+    );
+    final disposalWait =
+        playback.indexOf('await playerDisposed.future.timeout(');
+    expect(refresh, greaterThanOrEqualTo(0));
+    expect(disposalWait, greaterThan(refresh));
+    expect(
+      playback,
+      contains(
+          'removedVideoIds: removedVideoIds.isEmpty ? null : removedVideoIds'),
+    );
+  });
+
   test('播放器删除后相似候选按 stable ID 局部对账', () {
     final page = File(
       'lib/src/pages/library/video_similarity_page.dart',

@@ -263,6 +263,9 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       if (mounted) {
         // 反向 Route 已完成后立即恢复媒体库语义，不等待原生资源释放尾部。
         setState(() => runtime.playerRouteActive = false);
+        // 主界面可见结果只依赖已经提交的 Store 差量；必须在资源释放和进度刷盘尾部前发布，
+        // 否则播放器返回后会先显示旧视频，直到最长 15 秒的 release wait 结束。
+        _applyPlayerScopedLibraryChangesAfterRouteReturn();
       }
       // 路由返回不代表 media_kit 原生线程已释放；等待完成信号再恢复后台任务。
       await playerDisposed.future.timeout(
@@ -280,27 +283,37 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       backgroundGate.restore();
       store.resumeDataBackupAfterPlayback();
     }
-    if (mounted && runtime.playerScopedLibraryDataChanged) {
-      final removedVideoIds = Set<String>.of(
-        runtime.playerScopedRemovedVideoIds,
-      );
-      runtime.pendingResultDeltaVideoIds.addAll(removedVideoIds);
-      runtime.pendingRemovedVideoIds.addAll(removedVideoIds);
-      runtime.libraryRevisionTracker.record(
-        runtime.playerScopedTagDefinitionsChanged
-            ? LibraryDataChangeKind.tagDefinitions
-            : LibraryDataChangeKind.content,
-      );
-      invalidateDerivedCaches();
-      scheduleFilterRefresh(
-        refreshCounts: runtime.playerScopedNeedsCountRefresh,
-        removedVideoIds: removedVideoIds.isEmpty ? null : removedVideoIds,
-      );
-      runtime.playerScopedLibraryDataChanged = false;
-      runtime.playerScopedNeedsCountRefresh = false;
-      runtime.playerScopedTagDefinitionsChanged = false;
-      runtime.playerScopedRemovedVideoIds.clear();
+  }
+
+  /**
+   * Route 弹回后立即发布播放器内已提交的数据差量。
+   *
+   * 原生播放器释放、内存采样和播放进度刷盘属于后台尾部，不得阻塞主界面的删除结果；
+   * 这里仍沿用 stable videoId、查询 owner 和延后计数刷新，不重建全库列表。
+   */
+  void _applyPlayerScopedLibraryChangesAfterRouteReturn() {
+    if (!mounted || !runtime.playerScopedLibraryDataChanged) {
+      return;
     }
+    final removedVideoIds = Set<String>.of(
+      runtime.playerScopedRemovedVideoIds,
+    );
+    runtime.pendingResultDeltaVideoIds.addAll(removedVideoIds);
+    runtime.pendingRemovedVideoIds.addAll(removedVideoIds);
+    runtime.libraryRevisionTracker.record(
+      runtime.playerScopedTagDefinitionsChanged
+          ? LibraryDataChangeKind.tagDefinitions
+          : LibraryDataChangeKind.content,
+    );
+    invalidateDerivedCaches();
+    scheduleFilterRefresh(
+      refreshCounts: runtime.playerScopedNeedsCountRefresh,
+      removedVideoIds: removedVideoIds.isEmpty ? null : removedVideoIds,
+    );
+    runtime.playerScopedLibraryDataChanged = false;
+    runtime.playerScopedNeedsCountRefresh = false;
+    runtime.playerScopedTagDefinitionsChanged = false;
+    runtime.playerScopedRemovedVideoIds.clear();
   }
 
   /**

@@ -1,5 +1,15 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 播放器列表删除返回后的主界面刷新延迟（完成，构建待解锁）
+
+- 现象：播放器右侧队列删除视频后返回主界面，旧视频要等较长时间才从对应结果中消失。
+- 根因：播放器 Route 返回后的删除差量刷新位于原生资源释放、最多 15 秒等待、内存采样和进度刷盘之后。
+- 修复：Route 弹回并恢复媒体库语义后立即发布 stable `videoId` 差量；释放、采样和刷盘继续在尾部执行。
+- 保护：不修改 schema、FilterQuery/TagQueryService 语义、来源 filtered queue、回收站事务或用户数据。
+- 验证：focused/全量 `flutter test`、`flutter analyze` 通过；Windows Debug 构建因 PID 26180
+  占用 Debug exe 触发 `LNK1168`，未强制结束用户进程。
+- 下一步：关闭 PID 26180 后重跑 `flutter build windows --debug`；本次代码审查和提交不依赖强杀进程。
+
 # 2026-08-16 · 播放器快进位置回跳竞态（进行中）
 
 - 现象：快进/快退偶发先移动到新位置，随后被旧位置状态回写到操作前落点。

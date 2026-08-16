@@ -158,6 +158,8 @@ source filtered result
 - PlayerPage 只消费来源 filtered queue，不从全局媒体库重建；
 - 右侧二级标签切换保持来源语境；
 - 返回媒体库保留筛选状态；
+- 播放器 Route 弹回后，已提交的删除/收藏差量先通过 `LibraryQueryController` 发布到媒体库可见结果，
+  再等待原生资源释放、内存采样和播放进度刷盘尾部；尾部任务不得阻塞主界面显示删除结果；
 - 快速 open/seek 使用 generation/cancellation 防止旧请求覆盖新意图；`PlayerService`
   还串行化精确/交互式 seek，并在目标确认窗口内屏蔽 seek 前已排队的旧位置事件，
   防止时间状态与下一次相对 seek 回到旧落点；
