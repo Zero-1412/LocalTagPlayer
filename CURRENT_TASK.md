@@ -1,5 +1,24 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 短按快进回到原关键帧（进行中）
+
+- 现象：单次按下快进偶发先移动到目标，随后回到原点；长按才能继续到后面。
+- 根因：短按只走 `absolute+keyframes`，长 GOP 的前置关键帧可能等于当前落点；位置栅栏不能改变后端实际落点。
+- 修复方向：保留短按即时关键帧预览，KeyUp 在无 `KeyRepeat` 时补一次精确 seek；长按仍 latest-only 预览。
+- 保护：不修改 schema、FilterQuery/TagQueryService、来源 filtered queue、PlayerBackend 接口或播放/暂停意图。
+- 下一步：完成 focused/analyze/build，停止编辑后独立只读审查并只提交本任务文件。
+
+# 2026-08-16 · 架构演进 Phase 0 基础门禁（完成，Windows 构建待解锁）
+
+- 目标：建立架构 ADR、依赖方向门禁、架构指标入口和不含用户数据的旧库 fixture，为 stable-ID
+  与 schema migration 提供可重复基线。
+- 保护：本轮不修改 schema、FilterQuery/TagQueryService、来源 filtered queue、PlayerBackend、
+  thumbnail/media queue、播放器行为或用户数据；保留当前工作树中的播放器相关未提交改动。
+- 验证：Phase 0 focused contract、既有架构 contract、`flutter analyze`、指标脚本和 `git diff --check`
+  通过；Windows Debug 构建因 PID 21368 占用 Debug exe 触发 `LNK1168`，未强制结束用户进程。
+- 下一步：关闭 PID 21368 后重跑 `flutter build windows --debug`；随后进入 Phase 1 stable-ID 索引设计，
+  仍需保持 schema migration 与当前播放器行为隔离。
+
 # 2026-08-16 · 播放器列表删除返回后的主界面刷新延迟（完成，构建待解锁）
 
 - 现象：播放器右侧队列删除视频后返回主界面，旧视频要等较长时间才从对应结果中消失。

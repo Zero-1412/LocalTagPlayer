@@ -303,8 +303,53 @@ void main() {
     expect(position, const Duration(seconds: 20));
   });
 
+  test('短按关键帧预览落回原关键帧后由 KeyUp 精确收敛', () async {
+    final previews = <Duration>[];
+    final exactTargets = <Duration>[];
+    var position = const Duration(seconds: 20);
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async {
+        previews.add(target);
+        // 模拟长 GOP：25 秒的交互式关键帧预览仍落在 20 秒关键帧。
+        position = Duration(seconds: (target.inSeconds ~/ 10) * 10);
+      },
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      exactSubmit: (target) async {
+        exactTargets.add(target);
+        position = target;
+      },
+    );
+
+    expect(
+      keyboard.requestRelative(
+        const Duration(seconds: 5),
+        isRepeat: false,
+        mutePreview: false,
+      ),
+      const Duration(seconds: 25),
+    );
+    await keyboard.settlePreview();
+
+    expect(previews, const <Duration>[Duration(seconds: 25)]);
+    expect(exactTargets, const <Duration>[Duration(seconds: 25)]);
+    expect(position, const Duration(seconds: 25));
+  });
+
   test('键盘长按从短按累积目标开始提交关键帧预览', () async {
     final previews = <Duration>[];
+    final exactTargets = <Duration>[];
     var position = Duration.zero;
     final coordinator = PlayerSeekCoordinator(
       submit: (target) async => previews.add(target),
@@ -321,17 +366,24 @@ void main() {
       readDuration: () => const Duration(minutes: 2),
       isExiting: () => false,
       onLatency: (_) {},
+      exactSubmit: (target) async => exactTargets.add(target),
     );
 
     keyboard.requestRelative(
       const Duration(seconds: 5),
+      isRepeat: false,
       mutePreview: false,
     );
-    keyboard.requestRelative(const Duration(seconds: 2), mutePreview: true);
+    keyboard.requestRelative(
+      const Duration(seconds: 2),
+      isRepeat: true,
+      mutePreview: true,
+    );
     await keyboard.settlePreview();
 
     expect(
         previews, const <Duration>[Duration(seconds: 5), Duration(seconds: 7)]);
+    expect(exactTargets, isEmpty);
   });
 
   test('新会话取消会阻止上一轮迟到 KeyUp 覆盖位置', () async {

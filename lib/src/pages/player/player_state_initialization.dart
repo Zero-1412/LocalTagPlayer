@@ -118,6 +118,7 @@ extension PlayerStateInitialization on PlayerPageState {
         lastSeekLatencyMs = milliseconds;
         lastSeekAt = DateTime.now();
       },
+      exactSubmit: seekExactlyWithDiagnostics,
       previewAudioGate: seekAudioGate,
       trace: seekTrace,
     );

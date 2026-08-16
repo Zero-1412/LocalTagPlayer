@@ -201,17 +201,22 @@ extension PlayerStateTransport on PlayerPageState {
     await exactCoordinator.request(target);
   }
 
-  /** 键盘快进/快退只提交关键帧预览；仅 KeyRepeat 进入临时静音会话。 */
-  Duration seekRelative(Duration delta, {required bool mutePreview}) {
+  /** 键盘先提交关键帧预览；短按 KeyUp 精确收敛，长按保持 latest-only 预览。 */
+  Duration seekRelative(
+    Duration delta, {
+    required bool mutePreview,
+    bool isRepeat = false,
+  }) {
     return keyboardSeek.requestRelative(
       delta,
-      // 首次短按同样立即走关键帧路径，不能在 KeyUp 再重启一次长 GOP 精确解码。
+      isRepeat: isRepeat,
+      // 首次短按先走关键帧路径，KeyUp 再用独立精确命令确认完整步长；长按不重复精确 seek。
       submitPreview: true,
       mutePreview: mutePreview,
     );
   }
 
-  /** KeyUp 只收敛最后一个关键帧预览；进度条使用独立的交互式 latest-only 路径。 */
+  /** KeyUp 收敛键盘会话；短按精确到完整步长，长按不重复绝对 seek。 */
   void settleKeyboardSeek() {
     unawaited(keyboardSeek.settlePreview());
   }

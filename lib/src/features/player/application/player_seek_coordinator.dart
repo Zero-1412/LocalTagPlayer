@@ -533,32 +533,38 @@ class PlayerKeyboardSeekController {
     required PlayerSeekDurationReader readDuration,
     required PlayerSeekExitReader isExiting,
     required PlayerSeekLatencyListener onLatency,
+    PlayerSeekSubmit? exactSubmit,
     this.previewAudioGate,
     this.trace,
   })  : _coordinator = coordinator,
         _readPosition = readPosition,
         _readDuration = readDuration,
         _isExiting = isExiting,
-        _onLatency = onLatency;
+        _onLatency = onLatency,
+        _exactSubmit = exactSubmit;
 
   final PlayerSeekCoordinator _coordinator;
   final PlayerSeekDurationReader _readPosition;
   final PlayerSeekDurationReader _readDuration;
   final PlayerSeekExitReader _isExiting;
   final PlayerSeekLatencyListener _onLatency;
+  /** 短按 KeyUp 的精确收敛；长按只保留 latest-only 关键帧预览。 */
+  final PlayerSeekSubmit? _exactSubmit;
   final PlayerSeekAudioGate? previewAudioGate;
   final PlayerSeekTraceLogger? trace;
 
   Duration? _target;
   Future<void>? _previewTail;
   var _generation = 0;
+  var _sawRepeat = false;
 
   bool get isActive => _target != null;
   Duration? get target => _target;
   bool get hasInteractivePreview => _previewTail != null;
 
   /**
-   * 键盘跳转始终先落到关键帧预览，避免 KeyUp 再次绝对精确 seek 重置解码链。
+   * 键盘跳转始终先落到关键帧预览；短按的 KeyUp 再由独立精确命令确认完整步长，
+   * 长按则不重复发起绝对精确 seek，避免重置解码链。
    *
    * 短按不静音；仅物理长按进入 KeyRepeat 后才打开临时静音。这样既保留普通方向键
    * 的连贯声音，也不会让长按期间的旧音频与关键帧预览错位。
@@ -567,9 +573,16 @@ class PlayerKeyboardSeekController {
     Duration delta, {
     bool submitPreview = true,
     bool mutePreview = true,
+    bool isRepeat = false,
   }) {
     if (_isExiting()) return _readPosition();
-    if (_target == null) _generation++;
+    if (_target == null) {
+      _generation++;
+      _sawRepeat = false;
+    }
+    if (isRepeat) {
+      _sawRepeat = true;
+    }
     final duration = _readDuration();
     var next = (_target ?? _readPosition()) + delta;
     if (next < Duration.zero) {
@@ -593,21 +606,25 @@ class PlayerKeyboardSeekController {
   }
 
   /**
-   * KeyUp 只收敛到已经提交的最新关键帧，不补发 absolute 精确 seek。
+   * KeyUp 收敛当前输入会话：短按补发一次 absolute 精确 seek，长按不重复精确 seek。
    *
-   * 最终精确定位保留给进度条提交路径；键盘快进/快退优先保证恢复连续播放。长按的
-   * 音频只在该关键帧预览已经提交、并观察到后续帧推进后恢复，避免把预览帧当成稳定播放。
+   * 短按的关键帧预览可能落在目标之前，尤其是长 GOP 媒体中可能回到当前起点；
+   * 因此短按必须用精确命令确认完整步长。长按继续只使用关键帧预览，避免每个 KeyRepeat
+   * 堆积绝对 seek；长按的音频只在预览帧推进后恢复。
    */
   Future<void> settlePreview() async {
     final finalTarget = _target;
     if (finalTarget == null || _isExiting()) return;
     final generation = _generation;
     final previewTail = _previewTail;
+    final exactSubmit = _exactSubmit;
+    final shouldSubmitExact = exactSubmit != null && !_sawRepeat;
     final shouldFinishPreview = previewAudioGate?.isActive ?? false;
     final traceId = previewAudioGate?.activeTraceId ?? trace?.begin();
     trace?.mark(traceId, 'key_up', target: finalTarget);
     _target = null;
     _previewTail = null;
+    _sawRepeat = false;
     var previewSubmitted = false;
     int? frameAfterPreview;
     try {
@@ -622,6 +639,14 @@ class PlayerKeyboardSeekController {
         target: finalTarget,
         waitMilliseconds: latency.elapsedMilliseconds,
       );
+      if (shouldSubmitExact &&
+          !_isExiting() &&
+          generation == _generation &&
+          _target == null) {
+        trace?.mark(traceId, 'short_exact_seek_start', target: finalTarget);
+        await exactSubmit(finalTarget);
+        trace?.mark(traceId, 'short_exact_seek_complete', target: finalTarget);
+      }
       // 基线在最后一次关键帧命令完成后取得，确保等待的是恢复播放后的后续帧推进。
       frameAfterPreview = await previewAudioGate?.captureFinalFrame();
       _onLatency(latency.elapsedMilliseconds);
@@ -640,6 +665,7 @@ class PlayerKeyboardSeekController {
     _generation++;
     _target = null;
     _previewTail = null;
+    _sawRepeat = false;
     _coordinator.cancelPending();
     if (previewAudioGate?.isActive ?? false) {
       unawaited(

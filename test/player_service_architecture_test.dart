@@ -264,7 +264,9 @@ void main() {
       isNot(contains('seekAudioGate.run(() => playerService.seekInteractive')),
     );
     expect(source, contains('PlayerKeyboardSeekController('));
-    // 进度条走交互式 latest-only；键盘 KeyUp 不能再次重启绝对 seek。
+    expect(source, contains('exactSubmit: seekExactlyWithDiagnostics'));
+    expect(source, contains('isRepeat: isRepeat'));
+    // 进度条走交互式 latest-only；键盘只有短按 KeyUp 才补一次绝对 seek，长按不重复。
     expect(source, isNot(contains('settle: seekExactlyWithDiagnostics')));
     expect(source, contains('confirmationTimeout: Duration.zero'));
     expect(source, contains('await seekExactlyWithDiagnostics(start);'));

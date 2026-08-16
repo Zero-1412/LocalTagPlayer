@@ -143,6 +143,7 @@ extension PlayerStateHelpers on PlayerPageState {
           : seekStepSeconds;
       final target = seekRelative(
         Duration(seconds: -stepSeconds),
+        isRepeat: isRepeat,
         // 每次按下立即预览关键帧；只有 KeyRepeat 才静音，避免短按人为打断声音。
         mutePreview: isRepeat,
       );
@@ -168,6 +169,7 @@ extension PlayerStateHelpers on PlayerPageState {
           : seekStepSeconds;
       final target = seekRelative(
         Duration(seconds: stepSeconds),
+        isRepeat: isRepeat,
         // 与后退保持相同会话语义，避免方向不同导致延迟门禁不可比较。
         mutePreview: isRepeat,
       );
