@@ -1,5 +1,21 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 设置工作区 UI 外壳重构（已完成）
+
+- 目标：在媒体库与标签中心外壳方向稳定后，推进下一页面设置工作区首页，统一维护上下文、
+  首页分组和可进入入口的层级。
+- 当前修改：设置 scaffold 的两级标题栏、首页上下文头部、分组入口 surface 和宽屏容器；保留
+  `CacheSettingsPage` 状态 owner、section route、设置持久化、缓存/备份/删除/快捷键回调。
+- 保护：不触碰 schema、FilterQuery、TagQueryService、filtered queue、PlayerBackend、缩略图/媒体详情
+  队列、stable identity 或用户数据；既有 `settings.category.*`、返回和刷新 key 保持可达。
+- 目标文档：`docs/design/SETTINGS_UI_SHELL_TARGET.md`。
+- 当前验证：设置 focused widget tests 通过（20 passed）；旧交互清单通过；架构契约通过（57 passed）；
+  完整 `flutter test` 通过（617 passed，4 skipped）；`flutter analyze` 无问题；
+  `flutter build windows --debug` 成功。Debug 窗口在 1339×804 下真实检查设置首页、播放与解码二级页、
+  返回箭头、标题层级和首页滚动区域，无明显遮挡、裁切或溢出。
+- 阻塞：无。
+- 下一步：等待设置首页视觉反馈；若方向保持，再进入下一个维护页的 UI 外壳重构，不扩展到业务边界。
+
 # 2026-08-16 · 标签中心 UI 外壳重构（已完成）
 
 - 目标：在媒体库首页视觉方向已确认后，推进下一页面 Tag Manager 的维护工作区外壳，建立

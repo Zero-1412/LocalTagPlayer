@@ -69,15 +69,10 @@ class SettingsLandingList extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       key: const ValueKey('settings.home'),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 32),
       children: [
-        Text(
-          '按功能进入设置，当前播放与数据状态会保留在对应入口。',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: libraryTextMuted,
-              ),
-        ),
-        const SizedBox(height: 22),
+        const SettingsLandingHeader(),
+        const SizedBox(height: 20),
         const SettingsGroupTitle(title: '播放设置'),
         const SizedBox(height: 8),
         _SettingsNavigationGroup(
@@ -218,6 +213,50 @@ class SettingsGroupTitle extends StatelessWidget {
   }
 }
 
+/** 设置首页的稳定上下文头部，不持有设置状态或导航命令。 */
+class SettingsLandingHeader extends StatelessWidget {
+  const SettingsLandingHeader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: appAccentViolet.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            border: Border.all(color: appAccentViolet.withValues(alpha: 0.20)),
+          ),
+          child: const Padding(
+            padding: EdgeInsets.all(10),
+            child: Icon(Icons.tune_rounded, color: libraryAccent, size: 20),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '设置工作区',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '按功能进入设置，当前播放与数据状态会保留在对应入口。',
+                style: TextStyle(color: libraryTextMuted),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /** 设置首页中打开二级页的单个功能入口。 */
 class _SettingsNavigationTile extends StatelessWidget {
   const _SettingsNavigationTile({
@@ -249,7 +288,7 @@ class _SettingsNavigationTile extends StatelessWidget {
     return AppInteractionSurface(
       onTap: onTap,
       semanticLabel: '打开$title',
-      backgroundColor: librarySurface,
+      backgroundColor: librarySurfaceAlt,
       borderRadius: AppRadius.card,
       showBorder: false,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

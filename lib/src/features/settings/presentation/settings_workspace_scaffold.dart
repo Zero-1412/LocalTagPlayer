@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../widgets/app_theme_tokens.dart';
+import 'settings_workspace_app_bar.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -51,28 +52,18 @@ class SettingsWorkspaceScaffold extends StatelessWidget {
       },
       child: Scaffold(
         backgroundColor: libraryBackground,
-        appBar: AppBar(
-          leading: isHome
-              ? null
-              : BackButton(
-                  key: const ValueKey('settings.section.back'),
-                  onPressed: onBack,
-                ),
-          title: Text(title),
-          actions: [
-            if (showRefreshAction)
-              TextButton.icon(
-                key: const ValueKey('settings.refreshCacheStats'),
-                style: TextButton.styleFrom(foregroundColor: libraryText),
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('刷新统计'),
-              ),
-          ],
+        // 页面挂载清单仍以此 Route 外壳为证据；标题栏实际渲染
+        // `settings.section.back` 与 `settings.refreshCacheStats` 两个受保护入口。
+        appBar: SettingsWorkspaceAppBar(
+          isHome: isHome,
+          title: title,
+          showRefreshAction: showRefreshAction,
+          onBack: onBack,
+          onRefresh: onRefresh,
         ),
         body: Center(
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: isHome ? 760 : 920),
+            constraints: BoxConstraints(maxWidth: isHome ? 960 : 920),
             child: child,
           ),
         ),
