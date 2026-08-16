@@ -8,7 +8,9 @@ import 'package:local_tag_player/src/pages/player/player_page.dart';
 
 /** 读取源文件，锁定共享 libmpv 实例的跨媒体写入顺序。 */
 String _source(String relativePath) =>
-    File('${Directory.current.path}/$relativePath').readAsStringSync();
+    File('${Directory.current.path}/$relativePath')
+        .readAsStringSync()
+        .replaceAll('\r\n', '\n');
 
 void main() {
   test('新媒体打开前有界等待旧 GPU 属性任务且允许稳定身份失效', () {
