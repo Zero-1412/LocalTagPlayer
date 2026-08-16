@@ -80,84 +80,126 @@ class _AboutSettingsPageState extends State<AboutSettingsPage> {
       key: const ValueKey('settings.about'),
       padding: const EdgeInsets.all(24),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(
-                  Icons.video_library_rounded,
-                  key: ValueKey('settings.about.logo'),
-                  size: 54,
-                  color: appAccent,
-                ),
-                const SizedBox(height: 16),
-                FutureBuilder<AppVersionInfo>(
-                  future: _versionFuture,
-                  builder: (context, snapshot) {
-                    final version = snapshot.data;
-                    return Column(
-                      children: [
-                        Text(
-                          'Local Tag Player',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          version == null
-                              ? '正在读取版本信息…'
-                              : '版本 ${version.version}'
-                                  '${version.buildNumber.isEmpty ? '' : ' (${version.buildNumber})'}',
-                          key: const ValueKey('settings.about.version'),
-                          style: const TextStyle(color: libraryTextMuted),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-                const Divider(height: 1),
-                const SizedBox(height: 20),
-                const Text(
-                  'Tag 驱动的本地视频发现播放器',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: libraryTextMuted, height: 1.5),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  '更新渠道：GitHub Releases 正式版',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: libraryTextMuted),
-                ),
-                const SizedBox(height: 22),
-                FilledButton.icon(
-                  key: const ValueKey('settings.about.checkUpdate'),
-                  onPressed: _checking ? null : _checkForUpdate,
-                  icon: _checking
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.system_update_alt_rounded),
-                  label: Text(_checking ? '正在检查' : '检查更新'),
-                ),
-                if (_status != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _status!,
-                    key: const ValueKey('settings.about.updateStatus'),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: _statusIsError
-                          ? Theme.of(context).colorScheme.error
-                          : libraryTextMuted,
+        Semantics(
+          key: const ValueKey('settings.about.card'),
+          container: true,
+          label: '版本与更新工作区',
+          child: DecoratedBox(
+            key: const ValueKey('settings.about.workspaceSurface'),
+            decoration: BoxDecoration(
+              color: librarySurface,
+              borderRadius: BorderRadius.circular(AppRadius.panel),
+              border: const Border.fromBorderSide(
+                BorderSide(color: libraryBorder),
+              ),
+            ),
+            // 保留 Material 状态层，让更新按钮的 focus/ink 反馈不被结构 surface 吞掉。
+            child: Material(
+              type: MaterialType.transparency,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Icon(
+                      Icons.video_library_rounded,
+                      key: ValueKey('settings.about.logo'),
+                      size: 54,
+                      color: appAccent,
                     ),
-                  ),
-                ],
-              ],
+                    const SizedBox(height: 16),
+                    FutureBuilder<AppVersionInfo>(
+                      future: _versionFuture,
+                      builder: (context, snapshot) {
+                        final version = snapshot.data;
+                        return Column(
+                          children: [
+                            Text(
+                              'Local Tag Player',
+                              style: Theme.of(context).textTheme.headlineSmall,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              version == null
+                                  ? '正在读取版本信息…'
+                                  : '版本 ${version.version}'
+                                      '${version.buildNumber.isEmpty ? '' : ' (${version.buildNumber})'}',
+                              key: const ValueKey('settings.about.version'),
+                              style: const TextStyle(color: libraryTextMuted),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    const Divider(height: 1),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Tag 驱动的本地视频发现播放器',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: libraryTextMuted, height: 1.5),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      '更新渠道：GitHub Releases 正式版',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: libraryTextMuted),
+                    ),
+                    const SizedBox(height: 22),
+                    FilledButton.icon(
+                      key: const ValueKey('settings.about.checkUpdate'),
+                      onPressed: _checking ? null : _checkForUpdate,
+                      icon: _checking
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.system_update_alt_rounded),
+                      label: Text(_checking ? '正在检查' : '检查更新'),
+                    ),
+                    if (_status != null) ...[
+                      const SizedBox(height: 12),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: (_statusIsError
+                                  ? Theme.of(context).colorScheme.error
+                                  : libraryBorder)
+                              .withValues(alpha: 0.08),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.control),
+                          border: Border.all(
+                            color: (_statusIsError
+                                    ? Theme.of(context).colorScheme.error
+                                    : libraryBorder)
+                                .withValues(alpha: 0.34),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          child: Text(
+                            _status!,
+                            key: const ValueKey(
+                              'settings.about.updateStatus',
+                            ),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: _statusIsError
+                                  ? Theme.of(context).colorScheme.error
+                                  : libraryTextMuted,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),

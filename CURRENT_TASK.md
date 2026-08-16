@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 关于 / 更新 UI 外壳重构（已完成）
+
+- 目标：进入第三阶段下一个设置维护叶页面，把关于页从通用卡片收敛为
+  “版本与更新工作区”，先建立 Before/After 视觉目标，再替换展示外壳。
+- 当前修改：新增 `docs/design/ABOUT_UPDATE_UI_SHELL_TARGET.md`；关于页使用带稳定
+  `settings.about.workspaceSurface` key 和 Semantics container 的实色工作区 surface；
+  保留 logo、版本 Future、更新渠道、主动检查、更新 Dialog 入口和 updateStatus 文案，状态反馈收敛为就地状态表面。
+- 保护：不修改 `AppUpdateService`、版本比较、Release 查询、下载/校验/安装器、代理、媒体播放、媒体库、
+  筛选、播放/缓存队列、stable identity 或用户数据语义。
+- 当前验证：关于页版本/最新状态、失败恢复、150% 文字缩放 focused 验证通过；设置首页滚动后进入关于、
+  检查工作区/logo/主动更新并返回的页面级可达性验证通过；完整 `flutter test` 通过（623 passed，4 skipped）；
+  `flutter analyze` 无问题；`flutter build windows --debug` 成功。Debug 窗口真实从媒体库进入设置，再进入关于，
+  检查当前版本、产品说明、更新渠道和检查更新入口，无明显遮挡、裁切或溢出；未触发更新检查或下载。
+- 阻塞：无。
+- 下一步：收集关于页在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，
+  再决定进入下一个维护页面；不扩展到更新服务边界。
+
 # 2026-08-17 · 更新网络代理 UI 外壳重构（已完成）
 
 - 目标：进入第三阶段下一个设置维护叶页面，把应用更新代理从通用卡片收敛为

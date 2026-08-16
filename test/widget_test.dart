@@ -3795,6 +3795,32 @@ void main() {
     );
     await tester.pump();
 
+    final aboutEntry = find.byKey(
+      const ValueKey('settings.category.about'),
+    );
+    await tester.drag(
+      find.byKey(const ValueKey('settings.home')),
+      const Offset(0, -500),
+    );
+    await tester.pump();
+    await tester.ensureVisible(aboutEntry);
+    await tester.pump();
+    await tester.tap(aboutEntry);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.about.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('settings.about.logo')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings.about.checkUpdate')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('settings.section.back')),
+    );
+    await tester.pump();
+
     final backupEntry = find.byKey(
       const ValueKey('settings.category.dataBackup'),
     );

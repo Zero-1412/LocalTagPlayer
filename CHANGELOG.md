@@ -5,6 +5,13 @@
 
 ## Unreleased
 
+### 关于 / 更新 UI 外壳重构
+
+- 新增关于页 Before/After 视觉目标；页面从通用 `Card` 收敛为带稳定 Semantics 和挂载 key 的
+  “版本与更新工作区”，保留 logo、版本信息、更新渠道、主动检查和 updateStatus 文案。
+- 更新状态改为低干扰就地状态表面；不改变版本读取、Release 查询、下载/校验/安装器、更新 Dialog 或失败恢复语义。
+- 不新增自动检查或网络副作用，不修改代理、媒体播放、媒体库、筛选、播放/缓存队列、stable identity 或用户数据。
+
 ### 更新网络代理 UI 外壳重构
 
 - 新增网络代理页 Before/After 视觉目标；页面从通用 `Card` 收敛为带稳定 Semantics 和挂载 key 的

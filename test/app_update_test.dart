@@ -323,6 +323,11 @@ void main() {
 
     expect(find.text('版本 0.2.1 (3)'), findsOneWidget);
     expect(find.text('Local Tag Player'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings.about.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
     expect(find.byKey(const ValueKey('settings.updateProxy')), findsNothing);
     await tester.tap(
       find.byKey(const ValueKey('settings.about.checkUpdate')),
@@ -330,6 +335,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('当前已是最新正式版本'), findsOneWidget);
+  });
+
+  testWidgets('关于页在 150% 文字缩放下保持版本和更新入口可读', (tester) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          textScaler: TextScaler.linear(1.5),
+        ),
+        child: MaterialApp(
+          home: Scaffold(
+            body: AboutSettingsPage(updateService: _FakeUpdateService()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('settings.about.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.text('版本 0.2.1 (3)'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings.about.checkUpdate')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('网络代理页保存只作用于更新的 HTTP 代理', (tester) async {
