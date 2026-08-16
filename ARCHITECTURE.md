@@ -6,11 +6,10 @@
 Architecture Baseline 0.5.129
 ```
 
-本文件只保存当前有效的模块、数据和平台合同。逐提交演化说明已归档到
-`docs/history/architecture/ARCHITECTURE_HISTORY_THROUGH_2026-07-30.md`；
-设计取舍优先记录为 `docs/architecture/ADR_*.md`，不要把时间线重新追加到本文件。
+本文件只保存当前有效的模块、数据和平台合同。演化记录进入
+`docs/history/architecture/`，设计取舍进入 `docs/architecture/ADR_*.md`。
 
-## 总体结构
+## 总体结构与数据流
 
 ```text
 Presentation
@@ -20,15 +19,9 @@ Presentation
         -> Platform adapters
 ```
 
-依赖只向内：
-
-- Presentation 负责状态呈现和用户意图，不拥有查询、路径或播放器实现；
-- Application 编排异步任务、取消、会话和用户动作；
-- Domain 定义标签、过滤、稳定身份和播放会话合同；
-- Repository 负责 SQLite 持久化和 migration；
-- Platform adapter 隔离文件系统、数据库 Provider、播放器、FFmpeg 和系统路径。
-
-## 产品数据流
+依赖只向内：Presentation 呈现状态和用户意图；Application 编排任务、取消和会话；
+Domain 定义标签、过滤、稳定身份和播放合同；Repository 拥有 SQLite/migration；
+Platform adapter 隔离文件系统、数据库 Provider、播放器、FFmpeg 和系统路径。
 
 ```text
 local roots
@@ -41,27 +34,17 @@ local roots
 -> PlayerPage filtered queue
 ```
 
-Tag Manager 写入 repository；缩略图和媒体探测通过受限后台队列补充 repository，
-不能改变筛选来源或阻塞高频 UI。
+Tag Manager 写入 Repository；缩略图、媒体探测、备份和视觉取帧通过受限后台队列补充，
+不得改变筛选来源或阻塞高频 UI。Rust 扫描器只枚举/提取候选元数据，不得直接写业务数据库。
 
-## 标签和过滤合同
+## 标签与过滤合同
 
-合法标签来源：
+合法来源：`manual / folder / rule / filename / import / auto`。
 
-```text
-manual / folder / rule / filename / import / auto
-```
-
-- folder 标签从当前 root 文件树第一/第二层派生；
-- 二级标签始终属于所属一级标签；
-- 用户主动维护的 manual 标签始终属于独立顶层 `manual` 组，不继承 folder 父级；
-- 历史挂在 folder 父级下的 manual 关系在顶层保存或批量操作时提升为顶层关系，保留标签名称与视频关联；
-- folder 可重算，manual/locked 和其它用户维护关系必须保留；
-- 同名 folder/manual 不合并身份；关系优先使用 `tagId`；
-- 单视频编辑将 folder 锁定显示与 manual 可编辑集合分开传递；即使名称相同，manual 仍只新增/删除 `source=manual` 的数据库关联，绝不创建、移动或改写目录；
-- 展示层可按来源、组、父级和规范化名称聚合，但不得改变真实关系。
-
-过滤唯一所有者是 `FilterQuery` / `TagQueryService`：
+- folder 标签只从当前 root 文件树第一/第二层派生，二级始终属于所属一级。
+- folder 可重算；manual、locked 和其它用户维护关系必须保留。
+- manual 关系保持独立顶层 `manual` 组；同名 folder/manual 不合并身份，关系优先使用 `tagId`。
+- UI、PlayerPage 和 Tag Manager 不复制查询语义，唯一所有者是 `FilterQuery` / `TagQueryService`。
 
 ```text
 same group OR
@@ -69,8 +52,6 @@ different groups AND
 excluded tags NOT
 keyword -> file name / path / tag name / alias
 ```
-
-UI、PlayerPage 和 Tag Manager 不复制查询语义。
 
 ## 稳定身份与 SQLite
 
@@ -81,94 +62,46 @@ path: mutable current location
 isMissing: path unavailable while record is preserved
 ```
 
-标签、收藏、播放记录和进度绑定 `videoId`。路径变化不能静默创建第二个用户身份，
-也不能删除 manual 标签。schema/migration 必须向后兼容、幂等并保留旧数据库数据；
-无法确认新位置时先 missing，不直接物理删除记录。
+标签、收藏、播放记录和进度绑定 `videoId`。路径变化不得创建第二个用户身份或删除 manual
+标签；无法确认新位置时先进入 missing。schema/migration 必须向后兼容、幂等、可回滚并保留旧数据。
 
-当前 schema 版本为 2：`videos.video_id` 是 PRIMARY KEY，`videos.path` 是可变 NOT NULL
-唯一字段；Windows 额外维护 `path COLLATE NOCASE` 唯一索引。`video_tags` 以
-`(video_id, tag_id, source)` 为关系主键，`video_path` 只保存当前路径的同步兼容值。
-旧 path-keyed 数据库由同一 SQLite transaction 换表迁移；无法解析的孤立关系使迁移回滚，
-不静默丢弃标签或用户字段。详细取舍见
+schema v2 的 `videos.video_id` 为 PRIMARY KEY，`videos.path` 为可变唯一字段，Windows 维护
+不区分大小写索引；`video_tags(video_id, tag_id, source)` 为关系主键。旧 path-keyed 数据库在同一
+SQLite transaction 中换表迁移，孤立关系使迁移回滚而不静默丢失用户字段。详细取舍见
 `docs/architecture/ADR_003_STABLE_VIDEO_ID_AND_SCHEMA_MIGRATION.md`。
 
-内存媒体库使用 `VideoIdentityIndex`：`byVideoId` 是主索引，pathKey Map 是同步辅助视图。
-页面删除、重命名、missing relink 和合并删除的生产命令通过 stable-ID API；物理文件动作
-仍可读取命令快照 path，但 Repository 提交身份不再由 path 决定。
+`VideoIdentityIndex.byVideoId` 是主索引，pathKey 只是同步辅助视图；删除、重命名、missing relink
+和合并删除的生产命令使用 stable-ID API。`LibraryRepositoryContext` 统一 connection、索引、
+标签关系和事务；查询、命令、root/扫描/relink 协调分别由 Store service 拥有，不复制状态。
 
-Phase 3 起，`LibraryRepositoryContext` 统一拥有唯一 SQLite connection、stable/path 索引、
-标签关系和 persistence helpers；真实查询、标签/收藏命令和 root/扫描/relink 协调分别由
-`LibraryStoreQueryService`、`LibraryStoreCommandService`、`LibraryStoreCoordinatorService`
-拥有。`LibraryStoreQueryRepository` 与 `LibraryStoreCommandRepository` 只是对外能力端口，
-不复制状态；低层 stable-ID 视频 CRUD、媒体详情/播放状态和缓存写入仍由 Store 作为同一事务
-持久化 owner 保留。扫描、FFprobe、缩略图、视觉取帧和备份通过组合根共享 `ResourceScheduler`，
-播放期间后台 lease 等待、已开始批次自然收尾。播放器运行时和 Flutter 表面分别受
-`PlayerRuntimeBackend`、`PlayerSurfaceRenderer` 契约约束，`PlayerBackend` 仅作为兼容聚合接口；
-具体 runtime/surface adapter 暂不继续拆。大库且支持 trigram FTS5 时，profile 允许生成关键词
-候选 SQL，`dataRevision` 使派生索引在成功写入后按需重建，最终仍由 `FilterQuery`/`TagQueryService`
-验证；真实 11,194 条库基准通过后启用该候选路径，小库、短词和不可用 FTS5 继续走内存路径。
-详见 `docs/architecture/ADR_004_LIBRARY_SPLIT_RESOURCE_SCHEDULER_QUERY_PROFILE.md`。
+大库且 FTS5 可用时可生成关键词候选 SQL，`dataRevision` 成功写入后按需重建；候选文本包含
+tag ID、名称、显示名和 alias，最终结果仍由 `FilterQuery` / `TagQueryService` 验证，小库、短词
+和 FTS5 不可用时走内存路径。缩略图进程内快照按 stable `videoId` 索引，磁盘 key 在该
+`videoId` 范围内优先使用 `mediaFingerprint`，没有 fingerprint 时才回退到 path/size/mtime，
+避免 relink 后丢失可复用缓存，也避免两个数据库记录因内容相同而互相清理缓存。
+`ResourceScheduler` 除 lease 预算外提供 pending request cancellation；取消只移除尚未启动的工作，
+已经取得 lease 的 FFmpeg/SQLite 工作必须自然收尾。详见 ADR_004 和
+`docs/architecture/ADR_005_EXTERNAL_MODULE_COMPARISON_AND_GAPS.md`。
 
-Repository 拥有：
+## 媒体库、后台任务与删除
 
-- videos、tag groups/items、video-tag relations；
-- favorites、play records/progress；
-- roots、scan state、missing/relink 状态；
-- 依赖备份和数据恢复事务。
+- 搜索使用稳定 controller 输入链；标签点击先更新可见结果，计数和预取延后。
+- 扫描、媒体探测、缩略图、备份和视觉复核支持取消过期任务、分阶段进度和有界并发。
+- 播放器活跃时后台 FFprobe/批量取帧让渡或冻结，退出后按进入前状态恢复，不覆盖用户手动暂停。
+- 可重建视觉签名保存为带算法版本、fingerprint/size/mtime 快照的 metadata，不新增 schema；失效即重算，
+  不进入用户备份，晚到写入必须确认 stable videoId 仍存在。
+- 视觉匹配度只供人工复核；首帧 dHash 只预筛，review 组不得自动删除或移动文件。
+- 目录删除、文件删除和数据库清理是不同动作，不能互相暗示授权。
 
-扫描器只枚举和提取候选元数据；稳定身份判定和 SQLite 写入仍由 Application/Repository
-拥有。Rust 扫描器不得直接写业务数据库。
+用户视频删除统一经过 `LibraryFileCommandExecutor` 与 `FileSystemAdapter.moveFileToTrash`：
 
-## 媒体库与后台协调
+```text
+移入系统回收站 -> 删除 Repository 记录 -> 清理可重建缓存
+```
 
-- 搜索使用稳定 controller 输入链；
-- 标签点击先更新可见结果，计数和预取延后；
-- 扫描、媒体探测、缩略图生成和备份任务可取消过期工作；
-- 相似视频视觉复核必须支持取消/分阶段进度回调；候选只读已有缩略图，FFmpeg 深度取帧有界，不能把
-  不可见的大库视频批量提升为播放器兜底解码；页面必须区分候选构建与画面对比阶段，删除候选后局部
-  更新，下一轮由用户明确触发。
-- 相似视频扫描由媒体库 Route 级 controller 持有：首次进入自动启动，后续进入复用进行中/已完成状态，
-  只有显式刷新才重跑；离开页面只撤销前台资格并降为单并发，不取消扫描 Future。删除或其它数据变更
-  使旧结果失效，但不自动重启全库复核。
-- 相似视频批量取帧使用独立队列：页面前台按 CPU 采用 2–4 路有界并发，非前台降为单并发；播放器活跃时
-  由 ThumbnailService.pause 冻结批量队列，候选调度等待播放结束后恢复。
-- 相似视觉签名只消费 `ThumbnailService` 提供的短生命周期字节快照，不跨服务保存临时 `File` 路径；
-  预览 LRU 或外部清理造成的单帧失效只能触发有限重试/跳过，不能把 `PathNotFoundException` 提升为整轮扫描失败。
-- 相似视频视觉扫描必须分别统计候选构建、首帧预筛和深度时序取帧的累计耗时、平滑吞吐率及剩余时间估算；
-  首帧预筛两端可并行，深度签名按 stable `videoId` 建立连续有界 worker，完成一项后立即补位；实际
-  FFmpeg 数量仍受 ThumbnailService 有界队列约束；任务按预计时长/大小优先，取帧队列跨视频轮转，派生
-  签名写入不得占住 FFmpeg worker。深度任务未汇合前不得沿用预筛吞吐率伪造“还剩 1 秒”。
-- 视觉签名属于可重建派生缓存，持久化在现有 `metadata` 表的
-  `cache.visual_signature.<videoId>` key 中，不新增表或改变 SQLite schema version；条目必须携带
-  算法版本及 mediaFingerprint/size/mtime 快照，读取时不匹配即失效并重算。签名写入经
-  `VisualSignatureCacheRepository`，不进入用户数据备份；删除事务必须与 thumbnail/media_details
-  metadata 一并清理，晚到写入须在事务内确认 stable videoId 仍存在。
-- 视觉相似度只能解释为人工复核的“匹配度”，不能解释为重复概率：首帧 dHash 只能预筛，完整签名只比较
-  30%/50%/70% 中段采样点，必须在固定小时间偏移下满足主体覆盖并惩罚未命中点；分组分数取组内最弱匹配边，
-  视觉候选按匹配度降序展示，公共片头/片尾不参与主体评分。难例可进入独立 review 组，但必须有标题或
-  时长/画幅/大小元数据约束；review 组永远只供人工复核。
-- 播放活跃时降低后台媒体负载：相似扫描降为等待调度，缩略图批量队列冻结，MediaDetailsService
-  停止启动新的 FFprobe；播放器释放后按原暂停状态恢复，不覆盖用户此前手动暂停。
-- 目录切换、排序和搜索不得在 UI 线程重复全量查询/rebuild；
-- root 删除、文件删除和数据库清理是不同用户动作，不能互相暗示授权。
-
-### 用户视频删除合同
-
-- 所有媒体库、收藏/最近播放、本地目录、相似视频和播放器队列中的用户视频删除，统一经过
-  `LibraryFileCommandExecutor` 与 `FileSystemAdapter.moveFileToTrash`；执行顺序固定为
-  `移入系统回收站 -> 删除 Repository 记录 -> 清理可重建缩略图缓存`。
-- Repository 删除事务同时清理 `cache.thumbnail.<videoId>`、`cache.media_details.<videoId>` 与
-  `cache.visual_signature.<videoId>` 三类缓存诊断/派生 metadata，和标签关联、视频行同批提交，
-  不留下以 stable `videoId` 为键的孤立状态。
-- 相似视频采用“合并后删除”：源视频的 `is_favorite` 与 `source=manual` 标签关系只并入用户
-  选定的保留视频；目标数据按并集保留，folder 派生标签不复制。两条候选自动选择另一条，
-  多条候选必须显式选择保留目标，合并与源记录删除在同一 Repository 事务中提交。
-- 删除确认只保留“是否继续提示”的偏好；不再提供“仅移出媒体库、保留本地文件”的分支，
-  因为该分支会让“删除”在不同入口产生不可逆的语义差异。视频文件可从系统回收站恢复。
-- 路径失效/不可读的自动数据库清理是明确例外：它只删除数据库记录，不操作磁盘文件，也不
-  冒充回收站动作。
-- 缩略图、FFmpeg 临时输出、更新下载包和测试临时目录属于可重建/临时资源，不纳入用户视频
-  回收站合同；它们继续使用各自的直接清理边界。
+删除事务同步清理标签关系、视频行、thumbnail/media_details/visual_signature metadata；相似视频
+合并删除必须由用户选择保留目标，并只合并收藏和 manual 标签。缺失记录的自动数据库清理不操作磁盘，
+临时资源使用各自清理边界。
 
 ## 播放合同
 
@@ -179,73 +112,25 @@ source filtered result
 -> PlayerBackend
 ```
 
-- PlayerPage 只消费来源 filtered queue，不从全局媒体库重建；
-- 右侧二级标签切换保持来源语境；
-- 返回媒体库保留筛选状态；
-- 播放器 Route 弹回后，已提交的删除/收藏差量先通过 `LibraryQueryController` 发布到媒体库可见结果，
-  再等待原生资源释放、内存采样和播放进度刷盘尾部；尾部任务不得阻塞主界面显示删除结果；
-- 快速 open/seek 使用 generation/cancellation 防止旧请求覆盖新意图；`PlayerService`
-  还串行化精确/交互式 seek，并在目标确认窗口内屏蔽 seek 前已排队的旧位置事件，
-  防止时间状态与下一次相对 seek 回到旧落点；
-- `PlayerService` 的 open、stop、seek、dispose 共享媒体命令尾链；打开期间旧媒体事件先被
-  失效，新媒体可播放后以 stable `videoId + generation` 重绑事件订阅，位置/EOF/错误不能
-  以 mutable path 关联到新队列项；
-- 播放队列、当前 index、播放进度和 UI 反馈彼此独立，不以重建队列换取状态更新。
+- PlayerPage 只消费来源 filtered queue；右侧切换保持来源语境，返回媒体库保留筛选状态。
+- Route 返回先发布已提交的 stable-ID 差量，再在尾部等待原生释放、采样和进度刷盘。
+- open/stop/seek/dispose 共享媒体命令尾链；快速请求使用 generation/cancellation，旧事件不能覆盖新意图。
+- 精确/交互式 seek 串行化，确认窗口屏蔽旧位置事件；播放队列、current index、进度和 UI 反馈彼此独立。
+- `PlayerBackend` 是最小平台合同；可选属性、seek、诊断和媒体控制扩展不得拥有播放列表或用户数据，
+  不支持时必须显式安全降级，不得创建第二条解码链。
 
-`PlayerBackend` 是平台播放能力的最小合同。可选扩展边界承载属性批处理、
-交互式 seek、诊断和平台特性；不为单一后端强迫所有平台实现。
+## Windows、缓存与平台边界
 
-`PlayerMediaControlsBoundary` 是附着于 `PlayerBackend` 的可选媒体控制合同：只暴露当前会话的音轨、字幕、章节及音频/字幕延迟意图；`PlayerService` 负责安全转发，不支持的后端必须显式降级。该边界不拥有播放列表、播放记录或用户媒体数据，且不得创建第二条播放器/解码链。
+- 正式默认后端是 MediaKit Texture；Windows native mpv/child HWND 只供显式 QA，不自动成为生产默认。
+- `PlayerService -> PlayerBackend -> MediaKit / Windows native` 依赖方向固定；原生窗口、线程和纹理在
+  Flutter dispose/退出前有序收口，排队系统消息先确认 controller 存活。
+- NVIDIA VSR/HDR、NVOFA、VapourSynth 和本机插件必须经过能力、许可、回退和真实性门禁，不能自动生产化。
+- `ThumbnailService`/`MediaDetailsService` 通过 `FFmpegBackend`/FFprobe；可见项优先、后台限流、失败可见可重试，
+  0-byte/不完整 JPEG 无效，diagnostics dispose 后取消 timer/异步回调，日志不得泄露媒体路径或数据库内容。
 
-## Windows 播放边界
-
-- 正式默认后端仍是 MediaKit Texture；
-- Windows native mpv/child HWND 只允许显式 QA 覆盖，不自动成为生产默认；
-- `PlayerService -> PlayerBackend -> MediaKit / Windows native` 依赖方向固定；
-- 交互式 seek 在按键重复期间只走 keyframe 快速预览，由应用层累计逻辑目标；单次短按的 KeyUp
-  必须再用一次精确 seek 收敛完整步长，避免长 GOP 的前置关键帧把目标拉回当前落点；
-- 连续预览约以 64ms 节奏合并最新目标；短按使用完整配置步长，长按重复阶段使用
-  受限小步长，避免一个刷新窗口内形成十几秒的画面硬跳；
-- 长按物理按键松开时不重复执行绝对精确 seek；短按才在 KeyUp 执行一次精确收敛，平台后端不得用
-  固定计时器自行收敛；
-- 继续观看恢复使用精确 seek，不改变播放/暂停意图；
-- Texture 输出尺寸由稳定档位、去抖、最小间隔、降档滞回和原生确认协调；
-- NVIDIA VSR/HDR、NVOFA、VapourSynth 和本机插件属于能力门禁或长期研究，
-  未经发布、许可、回退和真实性证据不得成为自动生产路径；
-- 原生工作线程、窗口和纹理生命周期必须在 Flutter dispose/退出前有序收口。
-- Windows runner 在 controller 释放后仍可能收到排队的系统消息；这类消息必须先确认
-  Flutter controller 存活，不能再解引用 engine。
-
-## 缓存与诊断
-
-`ThumbnailService`、`MediaDetailsService` 通过队列调用 `FFmpegBackend`/FFprobe：
-
-- 可见项优先、后台限流；
-- 0-byte 或不完整 JPEG 无效；
-- 失败原因可见、可重试；
-- cache key/失效策略由服务层拥有，UI 不拼路径；
-- diagnostics controller dispose 后取消 timer 和异步回调；
-- 日志、诊断和截图不得泄露用户媒体路径或数据库内容。
-
-## 平台边界
-
-```text
-FileSystemAdapter
-DatabaseProvider
-AppPaths
-PlayerBackend
-FFmpegBackend
-LibraryScanBackend
-```
-
-- Windows/macOS/Linux adapter 实现系统行为；
-- Dart core 不出现盘符、exe、Explorer/Finder 命令或打包目录假设；
-- 应用更新代理由组合根注入 `AppPaths`，独立保存到 `app_update_proxy_settings.json`；
-  仅 `GitHubReleaseUpdateService` 的独立 `HttpClient` 消费该配置，不修改系统代理或媒体链路；
-  设置首页通过独立“网络代理”二级页读写该边界，“关于”页只保留版本与更新操作；
-- 原生依赖必须固定版本/摘要并记录许可；
-- Windows C++ 与 Rust 组件只通过显式 ABI/序列化合同进入 Dart；
-- 平台不可用时返回可诊断失败或安全回退，不伪造能力成功。
+平台边界：`FileSystemAdapter`、`DatabaseProvider`、`AppPaths`、`PlayerBackend`、`FFmpegBackend`、
+`LibraryScanBackend`。Dart core 不出现盘符、exe、Explorer/Finder 命令或打包目录假设；原生组件只通过
+显式 ABI/序列化合同进入 Dart；平台不可用时返回可诊断失败或安全回退。
 
 ## 跨模块不变量
 
@@ -256,14 +141,7 @@ LibraryScanBackend
 5. 扫描和媒体工具不越过 Repository 写业务数据。
 6. 平台命令不进入 UI/Domain。
 7. 后台任务不阻塞高频交互。
-8. 未授权功能删除失败关闭，页面挂载和真实可达性必须有证据。
+8. 未授权删除失败关闭；页面挂载、可达性和真实窗口行为必须有证据。
 
-## 修改本合同
-
-修改 schema、core、repository/platform contract、过滤、稳定身份、播放/缓存队列时：
-
-1. 更新本文件的 current contract；
-2. 需要解释取舍时新增 ADR；
-3. 历史事实进入 `CHANGELOG.md` 或 dated QA，不在本文件堆时间线；
-4. 运行 architecture/focused tests、`flutter analyze` 和对应平台 build；
-5. UI/运行时可观察变化按 `AGENTS.md` 完成真实点击与截图。
+修改 schema、core、Repository/platform contract、过滤、稳定身份、播放或缓存队列时，更新本合同，
+必要时增加 ADR，并运行 architecture/focused tests、`flutter analyze`、对应平台 build 和真实 UI 验收。

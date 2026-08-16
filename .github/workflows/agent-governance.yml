@@ -14,10 +14,13 @@ on:
       - "tool/*.vpy"
       - "scripts/qa/**"
       - "AGENTS.md"
+      - "ARCHITECTURE.md"
       - "CLAUDE.md"
       - "CURRENT_TASK.md"
+      - "CHANGELOG.md"
       - "NEW_CHAT_BOOTSTRAP.md"
       - "PROJECT.md"
+      - "docs/agent_eval.md"
       - "docs/agent_harness.md"
   push:
     paths:
@@ -31,10 +34,13 @@ on:
       - "tool/*.vpy"
       - "scripts/qa/**"
       - "AGENTS.md"
+      - "ARCHITECTURE.md"
       - "CLAUDE.md"
       - "CURRENT_TASK.md"
+      - "CHANGELOG.md"
       - "NEW_CHAT_BOOTSTRAP.md"
       - "PROJECT.md"
+      - "docs/agent_eval.md"
       - "docs/agent_harness.md"
 
 permissions:

@@ -26,6 +26,24 @@
       "replacement": null
     },
     {
+      "id": "architecture-metrics",
+      "path": "tool/architecture_metrics.ps1",
+      "status": "active",
+      "kind": "architecture-gate",
+      "last_verified": "2026-08-16",
+      "evidence": "docs/history/architecture/ARCHITECTURE_COMPLETION_2026_07_29.md",
+      "replacement": null
+    },
+    {
+      "id": "player-seek-latency-matrix",
+      "path": "tool/run_player_seek_latency_matrix.ps1",
+      "status": "active",
+      "kind": "performance-matrix",
+      "last_verified": "2026-08-16",
+      "evidence": "docs/qa/player_seek_latency_matrix.md",
+      "replacement": null
+    },
+    {
       "id": "thumbnail-gpu-benchmark",
       "path": "tool/benchmark_thumbnail_gpu_paths.ps1",
       "status": "active",
