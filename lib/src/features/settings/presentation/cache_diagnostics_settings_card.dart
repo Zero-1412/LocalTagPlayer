@@ -22,6 +22,7 @@ class CacheDiagnosticsSettingsCard extends StatelessWidget {
     required this.onRetry,
     required this.onRetryFailures,
     required this.onClearFailures,
+    this.onGenerateMissing,
   });
 
   /** 最新统计请求是否仍在加载。 */
@@ -45,6 +46,9 @@ class CacheDiagnosticsSettingsCard extends StatelessWidget {
   /** 清除当前失败标记的意图回调。 */
   final ValueChanged<CacheStats> onClearFailures;
 
+  /** 用户显式启动缺失缓存补全的意图回调。 */
+  final ValueChanged<CacheStats>? onGenerateMissing;
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -58,9 +62,13 @@ class CacheDiagnosticsSettingsCard extends StatelessWidget {
           onRetry: onRetry,
           failureActionsBuilder: (stats, cacheBusy) => CacheFailureActions(
             hasFailures: stats.failures.isNotEmpty,
+            missingCount: stats.missing,
             cacheBusy: cacheBusy,
             onRetry: () => onRetryFailures(stats),
             onClear: () => onClearFailures(stats),
+            onGenerateMissing: onGenerateMissing == null
+                ? null
+                : () => onGenerateMissing!(stats),
           ),
         ),
       ),

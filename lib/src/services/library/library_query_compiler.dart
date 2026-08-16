@@ -140,7 +140,8 @@ class LibrarySearchIndex {
       final rows = await transaction.rawQuery('''
         SELECT v.video_id, v.title, v.path, v.relative_path, v.folder,
                COALESCE(GROUP_CONCAT(
-                 COALESCE(t.name, '') || ' ' || COALESCE(t.display_name, '') || ' ' ||
+                 COALESCE(t.id, '') || ' ' || COALESCE(t.name, '') || ' ' ||
+                 COALESCE(t.display_name, '') || ' ' ||
                  COALESCE(t.aliases_json, ''), ' '
                ), '') AS tags
         FROM videos v
@@ -162,5 +163,4 @@ class LibrarySearchIndex {
       await batch.commit(noResult: true);
     });
   }
-
 }

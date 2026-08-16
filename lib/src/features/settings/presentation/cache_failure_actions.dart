@@ -18,6 +18,7 @@ Widget cacheDiagnosticsSmokeHarness({
   bool cacheBusy = false,
   VoidCallback? onRetry,
   VoidCallback? onClear,
+  VoidCallback? onGenerateMissing,
   TextScaler textScaler = TextScaler.noScaling,
 }) {
   return MaterialApp(
@@ -35,9 +36,11 @@ Widget cacheDiagnosticsSmokeHarness({
             cacheBusy: cacheBusy,
             failureActions: CacheFailureActions(
               hasFailures: stats.failures.isNotEmpty,
+              missingCount: stats.missing,
               cacheBusy: cacheBusy,
               onRetry: onRetry ?? () {},
               onClear: onClear ?? () {},
+              onGenerateMissing: onGenerateMissing,
             ),
           ),
         ),
@@ -51,13 +54,18 @@ class CacheFailureActions extends StatelessWidget {
   const CacheFailureActions({
     super.key,
     required this.hasFailures,
+    required this.missingCount,
     required this.cacheBusy,
     required this.onRetry,
     required this.onClear,
+    required this.onGenerateMissing,
   });
 
   /** 当前是否存在可定向处理的失败条目。 */
   final bool hasFailures;
+
+  /** 当前没有有效 JPEG 的条目数量；普通缺失也可由用户显式启动补全。 */
+  final int missingCount;
 
   /** 既有队列忙碌时禁止重复提交。 */
   final bool cacheBusy;
@@ -68,9 +76,14 @@ class CacheFailureActions extends StatelessWidget {
   /** 清除失败标记回调。 */
   final VoidCallback onClear;
 
+  /** 用户显式启动缺失缓存补全；空值表示测试宿主未注入动作。 */
+  final VoidCallback? onGenerateMissing;
+
   @override
   Widget build(BuildContext context) {
     final actionsEnabled = hasFailures && !cacheBusy;
+    final generationEnabled =
+        missingCount > 0 && !cacheBusy && onGenerateMissing != null;
     final status = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -95,7 +108,11 @@ class CacheFailureActions extends StatelessWidget {
                     ? cacheBusy
                         ? '后台任务结束后可重试或清除诊断标记。'
                         : '重试复用现有优先队列；清除标记不会删除视频或有效缓存。'
-                    : '无需重试或清理；普通缺失会在既有队列需要时生成。',
+                    : cacheBusy
+                        ? '后台任务正在按限流窗口推进；当前缺失项会继续处理。'
+                        : missingCount > 0
+                            ? '普通缺失不会自动生成；可手动启动有界补全。'
+                            : '当前没有缺失缓存，无需启动补全。',
                 style: const TextStyle(color: libraryTextMuted, height: 1.4),
               ),
             ],
@@ -107,6 +124,12 @@ class CacheFailureActions extends StatelessWidget {
       spacing: 10,
       runSpacing: 10,
       children: [
+        FilledButton.icon(
+          key: const ValueKey('settings.cache.generateMissing'),
+          onPressed: generationEnabled ? onGenerateMissing : null,
+          icon: const Icon(Icons.image_search_rounded),
+          label: const Text('生成缺失缓存'),
+        ),
         FilledButton.icon(
           key: const ValueKey('settings.cache.retryFailures'),
           onPressed: actionsEnabled ? onRetry : null,

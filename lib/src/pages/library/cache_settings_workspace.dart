@@ -68,6 +68,7 @@ class CacheSettingsWorkspace extends StatelessWidget {
     required this.onShortcutCaptured,
     required this.onRetryFailures,
     required this.onClearFailures,
+    required this.onGenerateMissing,
     required this.onDataBackupSettingsChanged,
     required this.onRunDataBackupNow,
     required this.onCheckDataBackupIntegrity,
@@ -124,6 +125,8 @@ class CacheSettingsWorkspace extends StatelessWidget {
   final ValueChanged<CacheStats> onRetryFailures;
   /** 清除当前缓存失败标记。 */
   final ValueChanged<CacheStats> onClearFailures;
+  /** 启动当前媒体库的缺失缓存补全。 */
+  final ValueChanged<CacheStats> onGenerateMissing;
   /** 提交数据备份设置意图。 */
   final Future<void> Function(DataBackupSettings settings)
       onDataBackupSettingsChanged;
@@ -241,6 +244,7 @@ class CacheSettingsWorkspace extends StatelessWidget {
                     onRetry: onRefreshCache,
                     onRetryFailures: onRetryFailures,
                     onClearFailures: onClearFailures,
+                    onGenerateMissing: onGenerateMissing,
                   ),
                 if (section == CacheSettingsSection.updateProxy)
                   SizedBox(

@@ -10,6 +10,46 @@ import 'package:local_tag_player/src/platform/platform_interfaces.dart';
 import 'package:local_tag_player/src/services/media/thumbnail_service.dart';
 
 void main() {
+  test('缩略图进程内快照和磁盘 key 都跟随 stable identity/fingerprint', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('ltp_thumbnail_identity_');
+    addTearDown(() => directory.delete(recursive: true));
+    final source = File('${directory.path}/old-name.mp4');
+    await source.writeAsBytes(const <int>[1, 2, 3]);
+    final backend = _ConcurrentPreviewBackend();
+    final service = ThumbnailService.forDirectory(directory, backend);
+    final original = _video(
+      directory.path,
+      id: 'stable-thumbnail',
+    )..mediaFingerprint = 'v2:3:stable-media';
+    original.path = source.path;
+
+    final generated = await service.ensureThumbnailFor(original);
+    expect(generated, isNotNull);
+
+    final renamed = _video(
+      directory.path,
+      id: original.videoId,
+    )
+      ..path = '${directory.path}/new-name.mp4'
+      ..mediaFingerprint = original.mediaFingerprint;
+    expect(service.cachedThumbnailFor(renamed)?.path, generated?.path);
+
+    final reloadedService = ThumbnailService.forDirectory(directory, backend);
+    expect(
+        (await reloadedService.thumbnailFor(renamed))?.path, generated?.path);
+
+    final duplicateRecord = _video(
+      directory.path,
+      id: 'another-video-record',
+    )
+      ..path = renamed.path
+      ..mediaFingerprint = renamed.mediaFingerprint;
+    final duplicateThumbnail =
+        await reloadedService.ensureThumbnailFor(duplicateRecord);
+    expect(duplicateThumbnail?.path, isNot(generated?.path));
+  });
+
   test('相似视频前台取帧使用有界并发，离开前台降为单并发', () async {
     final directory =
         await Directory.systemTemp.createTemp('ltp_similarity_queue_');
@@ -164,8 +204,11 @@ class _ConcurrentPreviewBackend implements FFmpegBackend {
     required VideoItem item,
     required File output,
     bool allowFallback = true,
-  }) async =>
-      null;
+  }) async {
+    await output.parent.create(recursive: true);
+    await output.writeAsBytes(const <int>[0xff, 0xd8, 0xff, 0xd9]);
+    return output;
+  }
 
   @override
   Future<File?> createFramePreview({

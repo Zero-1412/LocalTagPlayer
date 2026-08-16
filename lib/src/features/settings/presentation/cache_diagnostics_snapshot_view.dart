@@ -161,7 +161,8 @@ class CacheDiagnosticsLoadStateView extends StatelessWidget {
     final cacheBusy = cacheActionRunning ||
         stats.active > 0 ||
         stats.queued > 0 ||
-        stats.pendingBackgroundRequests > 0;
+        stats.pendingBackgroundRequests > 0 ||
+        stats.backgroundGenerationActive;
     return CacheDiagnosticsSnapshotView(
       stats: stats,
       cacheBusy: cacheBusy,

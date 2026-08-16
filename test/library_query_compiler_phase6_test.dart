@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
 import 'package:local_tag_player/src/models/platform_models.dart';
 import 'package:local_tag_player/src/services/library/library_query_compiler.dart';
 
@@ -38,5 +39,14 @@ void main() {
     );
     expect(shortToken.hasSqlCandidate, isFalse);
     expect(unavailable.hasSqlCandidate, isFalse);
+  });
+
+  test('FTS candidate text includes stable tag ids before Dart verification',
+      () {
+    final source = File(
+      'lib/src/services/library/library_query_compiler.dart',
+    ).readAsStringSync();
+    expect(source, contains("COALESCE(t.id, '')"));
+    expect(source, contains('requiresDartVerification: true'));
   });
 }

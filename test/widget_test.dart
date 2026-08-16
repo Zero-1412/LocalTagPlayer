@@ -3990,6 +3990,7 @@ void main() {
     );
     CacheStats? retried;
     CacheStats? cleared;
+    CacheStats? generated;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -4003,6 +4004,7 @@ void main() {
               onRetry: () {},
               onRetryFailures: (snapshot) => retried = snapshot,
               onClearFailures: (snapshot) => cleared = snapshot,
+              onGenerateMissing: (snapshot) => generated = snapshot,
             ),
           ),
         ),
@@ -4017,9 +4019,14 @@ void main() {
         find.byKey(const ValueKey('settings.cache.clearFailures'));
     await tester.ensureVisible(clearButton);
     await tester.tap(clearButton);
+    final generateButton =
+        find.byKey(const ValueKey('settings.cache.generateMissing'));
+    await tester.ensureVisible(generateButton);
+    await tester.tap(generateButton);
 
     expect(retried, same(stats));
     expect(cleared, same(stats));
+    expect(generated, same(stats));
     expect(tester.takeException(), isNull);
   });
 

@@ -30,6 +30,32 @@ class _ThumbnailJob {
   final bool isBackground;
 }
 
+/** 尚未进入后台候选窗口的视频；保留生成方式而不是把整库复制进队列。 */
+class _ThumbnailBackgroundCandidate {
+  const _ThumbnailBackgroundCandidate({
+    required this.item,
+    required this.allowPlayerFallback,
+    required this.isMissingGeneration,
+  });
+
+  final VideoItem item;
+  final bool allowPlayerFallback;
+  final bool isMissingGeneration;
+}
+
+/** 缩略图后台生产源；只保存迭代器，实际候选按队列空位惰性取出。 */
+class _ThumbnailBackgroundSource {
+  _ThumbnailBackgroundSource({
+    required this.iterator,
+    required this.allowPlayerFallback,
+    this.isMissingGeneration = false,
+  });
+
+  final Iterator<VideoItem> iterator;
+  final bool allowPlayerFallback;
+  final bool isMissingGeneration;
+}
+
 /** 单并发悬停预览任务；等待区只保留鼠标最后停留的位置。 */
 class _PreviewFrameJob {
   const _PreviewFrameJob({
@@ -60,6 +86,7 @@ class CacheStats {
     required this.errors,
     required this.queued,
     required this.pendingBackgroundRequests,
+    this.backgroundGenerationActive = false,
     required this.active,
     required this.activeBackground,
     required this.maxConcurrent,
@@ -81,6 +108,8 @@ class CacheStats {
   final int queued;
   /** 包含 cache key/JPEG 验证与已入队生成的后台请求数。 */
   final int pendingBackgroundRequests;
+  /** 是否仍有用户发起的缺失缓存生产源等待推进。 */
+  final bool backgroundGenerationActive;
   final int active;
   final int activeBackground;
   final int maxConcurrent;
@@ -143,17 +172,24 @@ class ThumbnailService {
   }
 
   static int get _maxBackgroundJobs {
-    return Platform.numberOfProcessors >= 8 ? 2 : 1;
+    // 12 核以上机器增加一个后台 worker；总任务上限仍由 `_maxConcurrentJobs` 和
+    // ResourceScheduler 共同约束，播放期间的 pause/foreground 优先级不变。
+    final processors = Platform.numberOfProcessors;
+    if (processors >= 12) {
+      return 3;
+    }
+    return processors >= 8 ? 2 : 1;
   }
 
   final Map<String, File?> _memoryCache = {};
   /**
-   * 已验证缩略图按媒体路径保存的同步视图，供页面切换首帧直接复用。
+   * 已验证缩略图按 stable videoId 保存的同步视图，供页面切换首帧直接复用。
    *
    * 真正的有效性检查仍由 [thumbnailFor] 完成；这里只返回本次进程内已经验证过的文件，
-   * 避免播放器队列即使命中缓存也必须先绘制一帧占位背景。
+   * 避免播放器队列即使命中缓存也必须先绘制一帧占位背景。不能按 mutable path 做 key，
+   * 否则改名/relink 后同一条用户媒体记录会丢失进程内快照。
    */
-  final Map<String, File?> _pathMemoryCache = {};
+  final Map<String, File?> _videoMemoryCache = {};
   /** 悬停预览独立于媒体库缩略图缓存，按最近使用顺序限制为少量临时帧。 */
   final LinkedHashMap<String, File> _previewMemoryCache = LinkedHashMap();
   final Map<String, Completer<File?>> _previewCompletions = {};
@@ -175,12 +211,18 @@ class ThumbnailService {
   final Queue<_ThumbnailJob> _priorityJobs = Queue();
   final Queue<_ThumbnailJob> _backgroundJobs = Queue();
   /** 尚未执行 cache key/JPEG 校验的后台候选，避免一次扫描同时唤醒 500 个文件 I/O Future。 */
-  final Queue<VideoItem> _backgroundCandidates = Queue();
-  final Set<String> _backgroundCandidatePaths = {};
+  final Queue<_ThumbnailBackgroundCandidate> _backgroundCandidates = Queue();
+  /** 尚未填满后台窗口的惰性生产源，避免把整库复制到内存队列。 */
+  final Queue<_ThumbnailBackgroundSource> _backgroundSources = Queue();
+  /** 尚未做 cache key/JPEG 校验的候选，以 stable videoId 去重。 */
+  final Set<String> _backgroundCandidateVideoIds = {};
   var _activeJobs = 0;
   var _activeBackgroundJobs = 0;
   /** 已接受但尚未结束的后台请求，包含 cache key 与 JPEG 验证阶段。 */
   var _backgroundRequestsInFlight = 0;
+  var _missingGenerationRequested = false;
+  var _missingGenerationSourceExhausted = false;
+  var _missingGenerationPendingCandidates = 0;
   var _completed = 0;
   var _failed = 0;
   var _ffmpegCompleted = 0;
@@ -254,7 +296,7 @@ class ThumbnailService {
     _isPaused = false;
     _allowPriorityWhilePaused = false;
     _drainQueue();
-    _pumpBackgroundCandidates(allowPlayerFallback: false);
+    _pumpBackgroundCandidates();
     _drainSimilarityPreviewQueue();
   }
 
@@ -279,44 +321,61 @@ class ThumbnailService {
     if (_memoryCache.containsKey(cacheKey)) {
       final cached = _memoryCache[cacheKey];
       if (cached == null) {
-        _pathMemoryCache[item.path] = null;
+        _videoMemoryCache[item.videoId] = null;
         return null;
       }
       if (await _isValidThumbnailFile(cached)) {
-        _pathMemoryCache[item.path] = cached;
+        _videoMemoryCache[item.videoId] = cached;
         return cached;
       }
       _memoryCache.remove(cacheKey);
-      _pathMemoryCache.remove(item.path);
+      _videoMemoryCache.remove(item.videoId);
       return null;
     }
 
     final file = File(p.join(_directory.path, '$cacheKey.jpg'));
     if (await _isValidThumbnailFile(file)) {
       _memoryCache[cacheKey] = file;
-      _pathMemoryCache[item.path] = file;
+      _videoMemoryCache[item.videoId] = file;
       return file;
     }
 
-    _pathMemoryCache[item.path] = null;
+    _videoMemoryCache[item.videoId] = null;
     return null;
   }
 
   /** 返回本次进程内已验证的缩略图，不触发文件系统访问。 */
-  File? cachedThumbnailFor(VideoItem item) => _pathMemoryCache[item.path];
+  File? cachedThumbnailFor(VideoItem item) => _videoMemoryCache[item.videoId];
 
   void prefetchAll(Iterable<VideoItem> items,
       {bool allowPlayerFallback = false}) {
-    for (final item in items) {
-      if (_backgroundCandidates.length + _backgroundRequestsInFlight >=
-          _maxBackgroundQueuedJobs) {
-        break;
-      }
-      if (_backgroundCandidatePaths.add(item.path)) {
-        _backgroundCandidates.add(item);
-      }
+    _backgroundSources.add(
+      _ThumbnailBackgroundSource(
+        iterator: items.iterator,
+        allowPlayerFallback: allowPlayerFallback,
+      ),
+    );
+    _pumpBackgroundCandidates();
+  }
+
+  /** 用户显式启动缺失缓存补全；失效路径保留在库中但不进入 FFmpeg 队列。 */
+  void generateMissing(Iterable<VideoItem> items) {
+    if (_missingGenerationRequested) {
+      return;
     }
-    _pumpBackgroundCandidates(allowPlayerFallback: allowPlayerFallback);
+    // 允许在扫描预取仍在运行时登记缺失补全。生产源只会排在已有源之后，
+    // 实际候选仍受 500 项窗口和 24 个校验请求背压约束，避免启动时请求被静默丢弃。
+    _missingGenerationRequested = true;
+    _missingGenerationSourceExhausted = false;
+    _missingGenerationPendingCandidates = 0;
+    _backgroundSources.add(
+      _ThumbnailBackgroundSource(
+        iterator: items.where((item) => !item.isMissing).iterator,
+        allowPlayerFallback: false,
+        isMissingGeneration: true,
+      ),
+    );
+    _pumpBackgroundCandidates();
   }
 
   /**
@@ -325,22 +384,84 @@ class ThumbnailService {
    * 生成并发仍由 `_drainQueue` 限制；这里额外限制进入异步文件校验的 Future 数量，
    * 防止扫描完成后数百个 completion 同时抢占 Flutter 事件循环。
    */
-  void _pumpBackgroundCandidates({required bool allowPlayerFallback}) {
+  void _pumpBackgroundCandidates() {
+    _fillBackgroundCandidates();
     while (!_isPaused &&
         _backgroundRequestsInFlight < _maxBackgroundRequestsInFlight &&
         _backgroundCandidates.isNotEmpty) {
-      final item = _backgroundCandidates.removeFirst();
-      _backgroundCandidatePaths.remove(item.path);
+      final candidate = _backgroundCandidates.removeFirst();
+      final item = candidate.item;
+      _backgroundCandidateVideoIds.remove(item.videoId);
       _backgroundRequestsInFlight++;
       unawaited(
-        _queuePrefetch(item, allowPlayerFallback: allowPlayerFallback)
-            .whenComplete(() {
+        _queuePrefetch(
+          item,
+          allowPlayerFallback: candidate.allowPlayerFallback,
+        ).whenComplete(() {
           _backgroundRequestsInFlight--;
-          _pumpBackgroundCandidates(
-            allowPlayerFallback: allowPlayerFallback,
-          );
+          if (candidate.isMissingGeneration) {
+            _missingGenerationPendingCandidates--;
+            _maybeFinishMissingGeneration();
+          }
+          _pumpBackgroundCandidates();
         }),
       );
+    }
+  }
+
+  /** 只在后台窗口有空位时从生产源取项目，形成稳定背压。 */
+  void _fillBackgroundCandidates() {
+    while (_backgroundSources.isNotEmpty &&
+        _backgroundCandidates.length + _backgroundRequestsInFlight <
+            _maxBackgroundQueuedJobs) {
+      final source = _backgroundSources.first;
+      bool hasNext;
+      try {
+        hasNext = source.iterator.moveNext();
+      } on Object {
+        // 媒体库在补全期间发生删除/重建时，放弃当前迭代器而不让旧容器回调冒泡到 UI。
+        hasNext = false;
+      }
+      if (!hasNext) {
+        _backgroundSources.removeFirst();
+        if (source.isMissingGeneration) {
+          _missingGenerationSourceExhausted = true;
+          _maybeFinishMissingGeneration();
+        }
+        continue;
+      }
+      late final VideoItem item;
+      try {
+        item = source.iterator.current;
+      } on Object {
+        _backgroundSources.removeFirst();
+        if (source.isMissingGeneration) {
+          _missingGenerationSourceExhausted = true;
+          _maybeFinishMissingGeneration();
+        }
+        continue;
+      }
+      if (_backgroundCandidateVideoIds.add(item.videoId)) {
+        if (source.isMissingGeneration) {
+          _missingGenerationPendingCandidates++;
+        }
+        _backgroundCandidates.add(
+          _ThumbnailBackgroundCandidate(
+            item: item,
+            allowPlayerFallback: source.allowPlayerFallback,
+            isMissingGeneration: source.isMissingGeneration,
+          ),
+        );
+      }
+    }
+  }
+
+  /** 只有生产源耗尽且该源登记的候选全部收尾后，才允许下一轮缺失补全。 */
+  void _maybeFinishMissingGeneration() {
+    if (_missingGenerationSourceExhausted &&
+        _missingGenerationPendingCandidates == 0) {
+      _missingGenerationRequested = false;
+      _missingGenerationSourceExhausted = false;
     }
   }
 
@@ -357,12 +478,21 @@ class ThumbnailService {
    * cache key 优先复用扫描阶段持久化的 size/mtime，不为正常数据库记录重复 stat 原视频。
    */
   Future<void> deleteThumbnailFor(VideoItem item) async {
-    _backgroundCandidates.removeWhere(
-      (candidate) => candidate.path == item.path,
-    );
-    _backgroundCandidatePaths.remove(item.path);
+    var removedMissingCandidates = 0;
+    _backgroundCandidates.removeWhere((candidate) {
+      if (candidate.item.videoId != item.videoId) {
+        return false;
+      }
+      if (candidate.isMissingGeneration) {
+        removedMissingCandidates++;
+      }
+      return true;
+    });
+    _missingGenerationPendingCandidates -= removedMissingCandidates;
+    _maybeFinishMissingGeneration();
+    _backgroundCandidateVideoIds.remove(item.videoId);
     final cacheKey = await _cacheKeyFor(item);
-    _pathMemoryCache.remove(item.path);
+    _videoMemoryCache.remove(item.videoId);
     if (cacheKey == null) {
       return;
     }
@@ -716,15 +846,15 @@ class ThumbnailService {
     if (_memoryCache.containsKey(cacheKey)) {
       final cached = _memoryCache[cacheKey];
       if (cached == null || await _isValidThumbnailFile(cached)) {
-        _pathMemoryCache[item.path] = cached;
+        _videoMemoryCache[item.videoId] = cached;
         return cached;
       }
       _memoryCache.remove(cacheKey);
-      _pathMemoryCache.remove(item.path);
+      _videoMemoryCache.remove(item.videoId);
     }
     if (await _isValidThumbnailFile(file)) {
       _memoryCache[cacheKey] = file;
-      _pathMemoryCache[item.path] = file;
+      _videoMemoryCache[item.videoId] = file;
       return file;
     }
     final completion = _jobCompletions.putIfAbsent(
@@ -912,7 +1042,7 @@ class ThumbnailService {
       _failed++;
       _totalGenerateMs += stopwatch.elapsedMilliseconds;
       _memoryCache[cacheKey] = null;
-      _pathMemoryCache[item.path] = null;
+      _videoMemoryCache[item.videoId] = null;
       return null;
     }
 
@@ -931,7 +1061,7 @@ class ThumbnailService {
         _ffmpegCompleted++;
         _totalGenerateMs += stopwatch.elapsedMilliseconds;
         _memoryCache[cacheKey] = file;
-        _pathMemoryCache[item.path] = file;
+        _videoMemoryCache[item.videoId] = file;
         return file;
       }
     } catch (error) {
@@ -948,7 +1078,7 @@ class ThumbnailService {
       _failed++;
       _totalGenerateMs += stopwatch.elapsedMilliseconds;
       _memoryCache[cacheKey] = null;
-      _pathMemoryCache[item.path] = null;
+      _videoMemoryCache[item.videoId] = null;
       return null;
     }
 
@@ -999,7 +1129,7 @@ class ThumbnailService {
         _failed++;
         _totalGenerateMs += stopwatch.elapsedMilliseconds;
         _memoryCache[cacheKey] = null;
-        _pathMemoryCache[item.path] = null;
+        _videoMemoryCache[item.videoId] = null;
         return null;
       }
       if (await _discardSuppressedOutput(cacheKey, output)) {
@@ -1023,14 +1153,14 @@ class ThumbnailService {
       _fallbackCompleted++;
       _totalGenerateMs += stopwatch.elapsedMilliseconds;
       _memoryCache[cacheKey] = output;
-      _pathMemoryCache[item.path] = output;
+      _videoMemoryCache[item.videoId] = output;
       return output;
     } catch (error) {
       item.thumbnailError = 'media_kit: $error';
       _failed++;
       _totalGenerateMs += stopwatch.elapsedMilliseconds;
       _memoryCache[cacheKey] = null;
-      _pathMemoryCache[item.path] = null;
+      _videoMemoryCache[item.videoId] = null;
       return null;
     } finally {
       await player.dispose();
@@ -1084,6 +1214,7 @@ class ThumbnailService {
       queued: queuedJobs,
       pendingBackgroundRequests:
           _backgroundRequestsInFlight + _backgroundCandidates.length,
+      backgroundGenerationActive: _missingGenerationRequested,
       active: _activeJobs,
       activeBackground: _activeBackgroundJobs,
       maxConcurrent: _maxConcurrentJobs,
@@ -1101,26 +1232,22 @@ class ThumbnailService {
     );
   }
 
-  /** 重新登记失败缩略图，并返回受队列容量限制后实际进入候选队列的数量。 */
+  /** 重新登记全部失败缩略图；实际生成仍由惰性生产源按窗口推进。 */
   Future<int> retryFailed(Iterable<VideoItem> items) async {
-    var retried = 0;
-    for (final item in items.where((item) => item.thumbnailError != null)) {
-      if (_backgroundCandidates.length + _backgroundRequestsInFlight >=
-          _maxBackgroundQueuedJobs) {
-        break;
-      }
+    final failedItems = items
+        .where((item) => item.thumbnailError != null)
+        .toList(growable: false);
+    for (final item in failedItems) {
       final cacheKey = await _cacheKeyFor(item);
       if (cacheKey != null) {
         _memoryCache.remove(cacheKey);
       }
       item.thumbnailError = null;
-      if (_backgroundCandidatePaths.add(item.path)) {
-        _backgroundCandidates.add(item);
-        retried++;
-      }
     }
-    _pumpBackgroundCandidates(allowPlayerFallback: false);
-    return retried;
+    if (failedItems.isNotEmpty) {
+      prefetchAll(failedItems);
+    }
+    return failedItems.length;
   }
 
   /**
@@ -1174,6 +1301,13 @@ class ThumbnailService {
   }
 
   Future<String?> _cacheKeyFor(VideoItem item) async {
+    final mediaFingerprint = item.mediaFingerprint?.trim();
+    if (mediaFingerprint != null && mediaFingerprint.isNotEmpty) {
+      // fingerprint 负责识别内容版本，videoId 负责隔离不同数据库记录的派生缓存。
+      // 两条记录可能指向同一内容，不能因删除其中一条而互相清理缩略图。
+      return _stableKey(
+          'video|${item.videoId}|media-fingerprint|$mediaFingerprint');
+    }
     final videoPath = item.path;
     final knownSize = item.fileSize;
     final knownModifiedMs = item.modifiedMs;
