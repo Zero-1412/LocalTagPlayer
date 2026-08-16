@@ -178,7 +178,16 @@ extension PlayerStateTransport on PlayerPageState {
       return;
     }
     cancelKeyboardSeek();
-    await seekCoordinator.request(target);
+    final generation = ++progressSeekGeneration;
+    try {
+      await seekCoordinator.request(target);
+    } finally {
+      // 长 GOP 关键帧可能永远不会落在目标容差内；超时或后端回到其它有效位置时，
+      // 页面必须退回真实 position，不能让乐观目标永久遮住播放器状态。
+      if (mounted && generation == progressSeekGeneration) {
+        setOptimisticProgressPosition(null);
+      }
+    }
   }
 
   /**
@@ -224,6 +233,9 @@ extension PlayerStateTransport on PlayerPageState {
   /** 切换媒体、进度条提交或退出时取消旧键盘目标和尚未提交的预览。 */
   void cancelKeyboardSeek() {
     keyboardSeekAction = null;
+    keyboardSeekLogicalKey = null;
+    progressSeekGeneration++;
+    seekCoordinator.cancelPending();
     keyboardSeek.cancel();
   }
 

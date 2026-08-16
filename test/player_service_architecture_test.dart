@@ -167,6 +167,22 @@ class _InteractiveSeekRecordingBackend extends _RecordingPlayerBackend
       commands.add('seek-interactive');
 }
 
+/** 用门闩制造跨命令竞争，验证 PlayerService 不会让 open 越过 in-flight seek。 */
+class _SerializedCommandBackend extends _RecordingPlayerBackend {
+  _SerializedCommandBackend(this.seekEntered, this.releaseSeek);
+
+  final Completer<void> seekEntered;
+  final Completer<void> releaseSeek;
+
+  @override
+  Future<void> seek(Duration position) async {
+    commands.add('seek-start');
+    seekEntered.complete();
+    await releaseSeek.future;
+    commands.add('seek-end');
+  }
+}
+
 /** 验证媒体控制仍经由可选后端边界，不泄露具体播放器实现。 */
 class _MediaControlsRecordingBackend extends _RecordingPlayerBackend
     implements PlayerMediaControlsBoundary {
@@ -338,6 +354,26 @@ void main() {
 
     expect(interactiveBackend.commands, <String>['seek-interactive']);
     expect(fallbackBackend.commands, <String>['seek']);
+  });
+
+  test('PlayerService 将 in-flight seek 与 open 串行化', () async {
+    final seekEntered = Completer<void>();
+    final releaseSeek = Completer<void>();
+    final backend = _SerializedCommandBackend(seekEntered, releaseSeek);
+    final service = PlayerService(backend: backend);
+
+    final seekFuture = service.seek(const Duration(seconds: 12));
+    await seekEntered.future;
+    final openFuture = service.openPath('next.mp4');
+
+    expect(backend.commands, <String>['seek-start']);
+    releaseSeek.complete();
+    await Future.wait<void>(<Future<void>>[seekFuture, openFuture]);
+    expect(
+      backend.commands,
+      <String>['seek-start', 'seek-end', 'open'],
+    );
+    await service.dispose();
   });
 
   test('PlayerService 只通过可选边界转发媒体控制，普通后端明确不支持', () async {

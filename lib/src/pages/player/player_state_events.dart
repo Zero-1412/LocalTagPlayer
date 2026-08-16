@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import '../../core/tag_rules.dart';
 import '../../features/player/domain/player_playback_progress.dart';
 import '../../models/player_feature_apply_result.dart';
 import '../../models/video_item.dart';
@@ -17,6 +16,32 @@ import 'player_page.dart';
  * 仍保留在页面状态对象中。
  */
 extension PlayerStateEvents on PlayerPageState {
+  /**
+   * 使当前后端媒体事件立即失效，但保留旧纹理和路径作为切换期间的视觉占位。
+   *
+   * 新媒体尚未成功可播放前，所有 position/EOF/error 都只能被丢弃；否则旧媒体的
+   * 迟到事件会在 latest-only open 结束后误写新队列项。
+   */
+  void invalidateOpenedMediaEvents() {
+    openedVideoId = null;
+    openedMediaGeneration = null;
+    handledCompletedVideoId = null;
+    handledCompletedGeneration = null;
+    progressSeekGeneration++;
+    cancelKeyboardSeek();
+  }
+
+  /** 分配新的媒体事件代次；请求 revision 只作为单调下界，避免重开路径撞代次。 */
+  int beginMediaOpenGeneration([int requestedGeneration = 0]) {
+    invalidateOpenedMediaEvents();
+    if (mediaGeneration < requestedGeneration) {
+      mediaGeneration = requestedGeneration;
+    } else {
+      mediaGeneration++;
+    }
+    return mediaGeneration;
+  }
+
   /** 让进度条的本地目标同时驱动时间文本和隐藏态进度反馈。 */
   void setOptimisticProgressPosition(Duration? position) {
     if (optimisticProgressPosition == position) {
@@ -30,14 +55,19 @@ extension PlayerStateEvents on PlayerPageState {
    *
    * 打开 worker 运行期间由可播放性确认统一收口，避免旧媒体迟到错误覆盖快速切换后的新视频。
    */
-  void handlePlayerError(String code) {
-    if (!mounted || openRequests.isOpening) {
+  void handlePlayerError(String code, {int? eventGeneration}) {
+    if (!mounted ||
+        openRequests.isOpening ||
+        eventGeneration == null ||
+        openedMediaGeneration != eventGeneration ||
+        openedVideoId == null) {
       return;
     }
-    final path = openedPath;
-    if (path == null || path != currentItem.path) {
+    final videoId = openedVideoId!;
+    if (currentItem.videoId != videoId) {
       return;
     }
+    invalidateOpenedMediaEvents();
     openedPath = null;
     openRequests.markImmediateFailure(currentOpenTarget, code: code);
     unawaited(playerService.stop());
@@ -45,17 +75,22 @@ extension PlayerStateEvents on PlayerPageState {
   }
 
   /** 以低频写入当前已打开视频的进度，避免播放流每帧触发 SQLite。 */
-  void handlePosition(Duration position) {
+  void handlePosition(Duration position, {int? eventGeneration}) {
+    if (eventGeneration == null ||
+        openedMediaGeneration != eventGeneration ||
+        openedVideoId == null) {
+      return;
+    }
     final optimistic = optimisticProgressPosition;
     if (mounted &&
         optimistic != null &&
         (position - optimistic).abs() <= const Duration(milliseconds: 500)) {
       rebuild(() => optimisticProgressPosition = null);
     }
-    final openedPathSnapshot = openedPath;
+    final openedVideoIdSnapshot = openedVideoId;
     if (openRequests.isOpening ||
         choosingPlaybackStart ||
-        openedPathSnapshot == null ||
+        openedVideoIdSnapshot == null ||
         position <= Duration.zero) {
       return;
     }
@@ -68,7 +103,7 @@ extension PlayerStateEvents on PlayerPageState {
         advanced < const Duration(seconds: 5)) {
       return;
     }
-    final item = itemForPath(openedPathSnapshot);
+    final item = itemForVideoId(openedVideoIdSnapshot);
     if (item == null) {
       return;
     }
@@ -83,10 +118,10 @@ extension PlayerStateEvents on PlayerPageState {
     ));
   }
 
-  /** 从来源队列解析当前路径，确保进度写入对应视频而不是刚切换的新条目。 */
-  VideoItem? itemForPath(String path) {
+  /** 从来源队列解析 stable ID，确保进度写入对应视频而不是刚切换的新条目。 */
+  VideoItem? itemForVideoId(String videoId) {
     for (final item in sourcePlaylist) {
-      if (TagRules.pathKey(item.path) == TagRules.pathKey(path)) {
+      if (item.videoId == videoId) {
         return item;
       }
     }
@@ -96,12 +131,21 @@ extension PlayerStateEvents on PlayerPageState {
   /**
    * 处理播放完成事件，在当前 filtered queue 内顺序进入下一条。
    *
-   * media_kit 在打开新媒体时会发送 false，因此路径去重只防御同一 EOF 的重复 true；
+   * media_kit 在打开新媒体时会发送 false，因此 generation 去重只防御同一 EOF 的重复 true；
    * 到达队尾时明确停止并提示，不默认循环到队首。
    */
-  void handlePlaybackCompleted(bool completed) {
+  void handlePlaybackCompleted(
+    bool completed, {
+    int? eventGeneration,
+  }) {
+    if (eventGeneration == null ||
+        openedMediaGeneration != eventGeneration ||
+        openedVideoId == null) {
+      return;
+    }
     if (!completed) {
-      handledCompletedPath = null;
+      handledCompletedVideoId = null;
+      handledCompletedGeneration = null;
       // 用户在队尾重新播放或拖动进度后，完成提示应立即退出。
       if (mounted && queueEndReached) {
         rebuild(() => queueEndReached = false);
@@ -111,19 +155,25 @@ extension PlayerStateEvents on PlayerPageState {
     if (!mounted || queue.isEmpty) {
       return;
     }
-    final completedPath = currentItem.path;
+    final completedVideoId = openedVideoId!;
     // 旧媒体在快速切换期间迟到的 EOF 不能推进新队列项。
-    if (openedPath != completedPath) {
+    if (currentItem.videoId != completedVideoId) {
       return;
     }
-    if (handledCompletedPath == completedPath) {
+    if (handledCompletedVideoId == completedVideoId &&
+        handledCompletedGeneration == eventGeneration) {
       return;
     }
-    handledCompletedPath = completedPath;
+    handledCompletedVideoId = completedVideoId;
+    handledCompletedGeneration = eventGeneration;
     final duration = playerService.state.duration;
+    final completedItem = itemForVideoId(completedVideoId);
+    if (completedItem == null) {
+      return;
+    }
     unawaited(
       pageWidget.onPlaybackProgressUpdated(
-        currentItem,
+        completedItem,
         duration,
         duration,
         true,

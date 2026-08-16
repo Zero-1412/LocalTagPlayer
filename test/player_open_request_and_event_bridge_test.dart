@@ -118,4 +118,50 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(received, hasLength(4));
   });
+
+  test('backend event bridge 重绑后只转发带指定 generation 的媒体事件', () async {
+    final completed = StreamController<bool>.broadcast();
+    final errors = StreamController<String>.broadcast();
+    final positions = StreamController<Duration>.broadcast();
+    final playing = StreamController<bool>.broadcast();
+    addTearDown(() async {
+      await completed.close();
+      await errors.close();
+      await positions.close();
+      await playing.close();
+    });
+    final received = <String>[];
+    final bridge = PlayerBackendEventBridge(
+      completedChanges: completed.stream,
+      errorChanges: errors.stream,
+      positionChanges: positions.stream,
+      playingChanges: playing.stream,
+      onCompleted: (_) {},
+      onError: (_) {},
+      onPosition: (_) {},
+      onPlayingChanged: (_) {},
+      onCompletedWithGeneration: (value, generation) =>
+          received.add('completed:$value:$generation'),
+      onErrorWithGeneration: (value, generation) =>
+          received.add('error:$value:$generation'),
+      onPositionWithGeneration: (value, generation) =>
+          received.add('position:${value.inSeconds}:$generation'),
+    );
+
+    await bridge.rebind(generation: 7);
+    completed.add(true);
+    errors.add('late-safe-error');
+    positions.add(const Duration(seconds: 9));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      received,
+      <String>[
+        'completed:true:7',
+        'error:late-safe-error:7',
+        'position:9:7',
+      ],
+    );
+    await bridge.dispose();
+  });
 }

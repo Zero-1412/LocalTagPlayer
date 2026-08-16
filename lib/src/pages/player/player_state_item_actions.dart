@@ -81,6 +81,7 @@ extension PlayerStateItemActions on PlayerPageState {
           try {
             await pageWidget.onRenameFile(item, newBaseName);
             await reopenAfterFileRename(
+              videoId: item.videoId,
               path: item.path,
               position: position,
               wasPlaying: wasPlaying,
@@ -92,6 +93,7 @@ extension PlayerStateItemActions on PlayerPageState {
             // 重试失败时原路径仍应存在；恢复旧媒体，避免一次命名错误终止当前会话。
             try {
               await reopenAfterFileRename(
+                videoId: item.videoId,
                 path: oldPath,
                 position: position,
                 wasPlaying: wasPlaying,
@@ -124,11 +126,13 @@ extension PlayerStateItemActions on PlayerPageState {
 
   /** 在后端因文件占用被停止后重新打开目标路径并恢复用户可见播放状态。 */
   Future<void> reopenAfterFileRename({
+    required String videoId,
     required String path,
     required Duration position,
     required bool wasPlaying,
   }) async {
     openRequests.clearFailure();
+    final eventGeneration = beginMediaOpenGeneration();
     await applyPlaybackEngineProfile();
     await playerService.openPath(path);
     await applyMediaPresentationProfile();
@@ -140,7 +144,12 @@ extension PlayerStateItemActions on PlayerPageState {
     } else {
       await playerService.pause();
     }
+    await backendEvents.rebind(generation: eventGeneration);
     openedPath = path;
+    openedVideoId = videoId;
+    openedMediaGeneration = eventGeneration;
+    handledCompletedVideoId = null;
+    handledCompletedGeneration = null;
     openRequests.clearFailure();
     lastPersistedPosition = position;
     lastProgressWriteAt = DateTime.now();

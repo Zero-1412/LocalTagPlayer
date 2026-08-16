@@ -133,9 +133,10 @@ extension PlayerStateChrome on PlayerPageState {
    */
   @visibleForTesting
   PlayerStabilitySnapshot buildStabilitySnapshotForTest() {
-    final openedPathSnapshot = openedPath;
-    final openedItem =
-        openedPathSnapshot == null ? null : itemForPath(openedPathSnapshot);
+    final openedVideoIdSnapshot = openedVideoId;
+    final openedItem = openedVideoIdSnapshot == null
+        ? null
+        : itemForVideoId(openedVideoIdSnapshot);
     return PlayerStabilitySnapshot(
       sourceVideoIds:
           sourcePlaylist.map((item) => item.videoId).toList(growable: false),

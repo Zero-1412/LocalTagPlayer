@@ -144,6 +144,19 @@ extension PlayerStateInitialization on PlayerPageState {
       onCompleted: handlePlaybackCompleted,
       onError: handlePlayerError,
       onPosition: handlePosition,
+      onCompletedWithGeneration: (completed, generation) =>
+          handlePlaybackCompleted(
+        completed,
+        eventGeneration: generation,
+      ),
+      onErrorWithGeneration: (code, generation) => handlePlayerError(
+        code,
+        eventGeneration: generation,
+      ),
+      onPositionWithGeneration: (position, generation) => handlePosition(
+        position,
+        eventGeneration: generation,
+      ),
       onPlayingChanged: (_) {
         if (mounted) rebuild(() {});
       },

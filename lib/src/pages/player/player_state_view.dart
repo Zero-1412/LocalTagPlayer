@@ -40,6 +40,13 @@ extension PlayerStateView on PlayerPageState {
       child: Focus(
         focusNode: focusNode,
         autofocus: true,
+        onFocusChange: (hasFocus) {
+          if (!hasFocus) {
+            // 窗口/弹窗夺焦时系统不保证随后把原 KeyUp 送回本页面；先结束预览和
+            // 临时静音，避免下一次进入播放器继承一轮悬挂输入会话。
+            cancelKeyboardSeek();
+          }
+        },
         onKeyEvent: handleKey,
         child: Listener(
           onPointerDown: handlePointerDown,

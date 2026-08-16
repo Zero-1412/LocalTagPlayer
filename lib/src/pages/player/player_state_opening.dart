@@ -37,9 +37,13 @@ extension PlayerStateOpening on PlayerPageState {
       prepareOpeningPoster(currentItem);
     }
     if (currentItem.isMissing) {
+      invalidateOpenedMediaEvents();
       openedPath = null;
       openRequests.markImmediateFailure(currentOpenTarget,
           code: 'missing_media');
+      // missing 不会进入 backend.openPath；必须显式停掉旧媒体，避免旧声音和画面继续
+      // 被误认为当前队列项的打开结果。
+      unawaited(playerService.stop().catchError((_) {}));
       if (mounted) {
         rebuild(() {});
       }
@@ -59,6 +63,7 @@ extension PlayerStateOpening on PlayerPageState {
       ));
       return;
     }
+    invalidateOpenedMediaEvents();
     if (openRequests.request(currentOpenTarget)) {
       unawaited(drainOpenRequests());
     }
@@ -211,6 +216,7 @@ extension PlayerStateOpening on PlayerPageState {
           if (openRequests.hasSuperseded(request)) {
             continue;
           }
+          final eventGeneration = beginMediaOpenGeneration(request.revision);
           await playerService.openPath(path);
           if (!mounted) {
             return;
@@ -236,16 +242,29 @@ extension PlayerStateOpening on PlayerPageState {
           final playable = await waitForPlayableMedia(request);
           if (!playable) {
             // 快速切换已有更新请求时只放弃旧验证，不展示过时错误。
+            invalidateOpenedMediaEvents();
+            openedPath = null;
             if (!openRequests.hasSuperseded(request)) {
-              openedPath = null;
               openRequests.markFailure(
                 request,
                 code: 'unplayable_media',
               );
+            }
+            // 即使已经有更新请求，损坏/无首帧的 open 也必须先停止，保证下一条媒体
+            // 不会在旧失败会话上叠加播放状态。
+            try {
               await playerService.stop();
+            } catch (_) {
+              // 后续 open/页面释放仍会继续；不把 stop 二次异常伪装成新媒体错误。
             }
             continue;
           }
+          if (openRequests.hasSuperseded(request)) {
+            continue;
+          }
+          // 旧媒体的四类事件订阅必须先取消；新回调携带本次不可变 generation，
+          // 成功发布 stable videoId 后才允许页面消费 position/EOF/error。
+          await backendEvents.rebind(generation: eventGeneration);
           if (openRequests.hasSuperseded(request)) {
             continue;
           }
@@ -253,6 +272,10 @@ extension PlayerStateOpening on PlayerPageState {
             continue;
           }
           openedPath = path;
+          openedVideoId = request.videoId;
+          openedMediaGeneration = eventGeneration;
+          handledCompletedVideoId = null;
+          handledCompletedGeneration = null;
           final requiresGpuCapabilityDetection =
               effectivePlaybackSettings.darkSceneEnhancementEnabled ||
                   effectivePlaybackSettings
@@ -289,6 +312,15 @@ extension PlayerStateOpening on PlayerPageState {
         } catch (error) {
           if (!mounted) {
             return;
+          }
+          invalidateOpenedMediaEvents();
+          openedPath = null;
+          // open、属性应用或可播放性准备任一步骤失败都必须结束旧媒体；否则旧视频
+          // 会在失败面板后继续播放，且下一次 position 事件仍可能污染进度记录。
+          try {
+            await playerService.stop();
+          } catch (_) {
+            // 失败反馈不能被 stop 的二次异常吞掉；资源释放链仍会再次兜底。
           }
           // 只记录错误类型，避免异常正文中的本地路径进入 UI 或可复制诊断摘要。
           openRequests.markFailure(
@@ -354,7 +386,7 @@ extension PlayerStateOpening on PlayerPageState {
     PlayerResumeChoice choice;
     if (behavior == PlaybackResumeBehavior.ask) {
       await playerService.pause();
-      if (!mounted || openedPath != item.path) {
+      if (!mounted || openedVideoId != item.videoId) {
         return;
       }
       choice = await withPlayerOverlaySurfaceOccluded(
@@ -370,7 +402,7 @@ extension PlayerStateOpening on PlayerPageState {
           ? PlayerResumeChoice.continueWatching
           : PlayerResumeChoice.restart;
     }
-    if (!mounted || openedPath != item.path) {
+    if (!mounted || openedVideoId != item.videoId) {
       return;
     }
     final start =

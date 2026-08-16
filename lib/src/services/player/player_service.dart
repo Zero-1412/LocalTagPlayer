@@ -53,8 +53,14 @@ class PlayerService
   late final StreamSubscription<Duration> _positionSubscription;
   final PlayerPositionReconciler _positionReconciler =
       PlayerPositionReconciler();
-  /** 所有精确/交互式 seek 共用一条尾链，禁止旧命令晚于新命令完成。 */
-  Future<void> _seekTail = Future<void>.value();
+  /**
+   * open、stop、精确 seek 和交互式 seek 共用一条媒体命令尾链。
+   *
+   * 页面只能取消尚未派发的 latest-only 目标，不能强行中断 native 命令；统一
+   * 串行边界确保已在后端执行的旧 seek 先完成，再进入新媒体或 stop，不会反向
+   * 覆盖新会话的位置。
+   */
+  Future<void> _mediaCommandTail = Future<void>.value();
   Future<void>? _disposeFuture;
 
   /**
@@ -119,19 +125,21 @@ class PlayerService
   /** 打开新媒体前清除上一媒体的 seek 目标，防止旧位置穿透到新会话。 */
   void _resetPositionReconciler() => _positionReconciler.reset();
 
-  /** 将 seek 命令放到同一条尾链；动作失败不会阻塞后续最新用户意图。 */
-  Future<void> _enqueueSeek(Future<void> Function() command) async {
+  /** 将媒体命令放到同一条尾链；动作失败不会阻塞后续用户意图。 */
+  Future<void> _enqueueMediaCommand(
+    Future<void> Function() command,
+  ) async {
     try {
-      await _seekTail;
+      await _mediaCommandTail;
     } catch (_) {
-      // 旧 seek 失败仍不能阻塞后续 seek；原命令的异常继续向调用方传播。
+      // 旧媒体命令失败仍不能阻塞后续命令；原命令的异常继续向调用方传播。
     }
     await command();
   }
 
-  Future<void> _runSeek(Future<void> Function() command) {
-    final operation = _enqueueSeek(command);
-    _seekTail = operation.then<void>(
+  Future<void> _runMediaCommand(Future<void> Function() command) {
+    final operation = _enqueueMediaCommand(command);
+    _mediaCommandTail = operation.then<void>(
       (_) {},
       onError: (_) {},
     );
@@ -189,17 +197,20 @@ class PlayerService
   /** 打开当前 filtered queue 选中的本地媒体。 */
   Future<void> openPath(String path) {
     _resetPositionReconciler();
-    return _backend.openPath(path);
+    return _runMediaCommand(() => _backend.openPath(path));
   }
 
-  /** 开始或继续播放。 */
-  Future<void> play() => _backend.play();
+  /** 开始或继续播放，并与 seek/open 共用媒体命令边界。 */
+  Future<void> play() => _runMediaCommand(_backend.play);
 
-  /** 暂停播放并保留当前帧。 */
-  Future<void> pause() => _backend.pause();
+  /** 暂停播放并保留当前帧，不能与 in-flight seek 并发。 */
+  Future<void> pause() => _runMediaCommand(_backend.pause);
 
   /** 停止当前媒体。 */
-  Future<void> stop() => _backend.stop();
+  Future<void> stop() {
+    _resetPositionReconciler();
+    return _runMediaCommand(_backend.stop);
+  }
 
   /** 跳转到指定媒体位置。 */
   Future<void> seek(Duration position) {
@@ -207,7 +218,7 @@ class PlayerService
       target: position,
       current: state.position,
     );
-    return _runSeek(() => _backend.seek(position));
+    return _runMediaCommand(() => _backend.seek(position));
   }
 
   /**
@@ -224,19 +235,23 @@ class PlayerService
     final boundary = _backend is PlayerInteractiveSeekBoundary
         ? _backend as PlayerInteractiveSeekBoundary
         : null;
-    return _runSeek(
+    return _runMediaCommand(
       () => boundary?.seekInteractive(position) ?? _backend.seek(position),
     );
   }
 
-  /** 设置当前会话倍速。 */
-  Future<void> setRate(double rate) => _backend.setRate(rate);
+  /** 设置当前会话倍速，并保持与媒体切换的命令顺序。 */
+  Future<void> setRate(double rate) => _runMediaCommand(
+        () => _backend.setRate(rate),
+      );
 
-  /** 设置当前会话音量。 */
-  Future<void> setVolume(double volume) => _backend.setVolume(volume);
+  /** 设置当前会话音量，避免取消 seek 的音频恢复越过 open。 */
+  Future<void> setVolume(double volume) => _runMediaCommand(
+        () => _backend.setVolume(volume),
+      );
 
-  /** 在播放与暂停之间切换。 */
-  Future<void> playOrPause() => _backend.playOrPause();
+  /** 在播放与暂停之间切换，并保持与 seek 的顺序。 */
+  Future<void> playOrPause() => _runMediaCommand(_backend.playOrPause);
 
   /**
    * 读取当前文件的媒体控制快照；不支持的后端显式返回 unsupported，页面不猜测
@@ -680,6 +695,13 @@ class PlayerService
     _positionReconciler.reset();
     await _positionSubscription.cancel();
     await _positionChanges.close();
+    // 先等最后一条媒体命令离开原生后端，再释放 Player，避免 dispose 与 seek/open
+    // 并发触碰同一个 libmpv 实例。
+    try {
+      await _mediaCommandTail;
+    } catch (_) {
+      // 命令异常已经交给原调用方；释放链必须继续完成。
+    }
     await _backend.dispose();
   }
 

@@ -74,8 +74,11 @@ extension PlayerStateHelpers on PlayerPageState {
     // 即使按住期间弹窗或焦点状态改变，对应 KeyUp 仍必须结束预览并精确落到最终目标。
     if (event is KeyUpEvent) {
       final activeAction = keyboardSeekAction;
-      if (activeAction != null && matches(activeAction)) {
+      // KeyUp 可能发生在 Alt/修饰键先释放或用户修改快捷键之后；必须按实际物理
+      // 逻辑键结束会话，不能再次用当前配置和 HardwareKeyboard 状态反推。
+      if (activeAction != null && keyboardSeekLogicalKey == event.logicalKey) {
         keyboardSeekAction = null;
+        keyboardSeekLogicalKey = null;
         settleKeyboardSeek();
         return KeyEventResult.handled;
       }
@@ -136,6 +139,9 @@ extension PlayerStateHelpers on PlayerPageState {
       if (event is KeyDownEvent) {
         // 新 KeyDown 代表新一轮物理按键；若上一轮遗漏 KeyUp，不能继承旧累计目标。
         cancelKeyboardSeek();
+        keyboardSeekLogicalKey = event.logicalKey;
+      } else {
+        keyboardSeekLogicalKey ??= event.logicalKey;
       }
       keyboardSeekAction = PlayerShortcutAction.seekBackward;
       final stepSeconds = isRepeat
@@ -162,6 +168,9 @@ extension PlayerStateHelpers on PlayerPageState {
       final isRepeat = event is KeyRepeatEvent;
       if (event is KeyDownEvent) {
         cancelKeyboardSeek();
+        keyboardSeekLogicalKey = event.logicalKey;
+      } else {
+        keyboardSeekLogicalKey ??= event.logicalKey;
       }
       keyboardSeekAction = PlayerShortcutAction.seekForward;
       final stepSeconds = isRepeat

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/playback_settings.dart';
 import '../../features/library/domain/library_query_snapshot.dart';
@@ -252,8 +253,15 @@ class PlayerPageState extends State<PlayerPage> {
   DateTime? lastProgressWriteAt;
   Duration lastPersistedPosition = Duration.zero;
   DateTime? ignoreQueueSelectionBefore;
-  String? handledCompletedPath;
+  /** 完成事件去重使用 stable videoId + 当前打开 generation，不再依赖 mutable path。 */
+  String? handledCompletedVideoId;
+  int? handledCompletedGeneration;
   String? openedPath;
+  /** 当前后端事件所属的稳定媒体身份；打开期间为空以隔离旧媒体迟到事件。 */
+  String? openedVideoId;
+  int? openedMediaGeneration;
+  /** 页面内单调媒体代次；重命名重开等非 latest-only 路径也必须获得新代次。 */
+  var mediaGeneration = 0;
   /** 当前打开请求使用的已验证缩略图；只承担原生纹理首帧占位。 */
   File? openingPosterFile;
   /** [openingPosterFile] 对应路径，防止快速切换时旧 Future 覆盖新视频。 */
@@ -262,6 +270,8 @@ class PlayerPageState extends State<PlayerPage> {
   DateTime? lastSeekAt;
   /** 进度条点击后的乐观位置；等待后端位置流追上后清除，避免时间文本落后于滑块。 */
   Duration? optimisticProgressPosition;
+  /** 进度条 latest-only 会话代次；切换媒体或退出时让旧 finally 不能清空新目标。 */
+  var progressSeekGeneration = 0;
   int? lastVideoFrameNumber;
   var lastPresentedVideoFrameEvidence = 'unavailable';
   double? lastAudioPts;
@@ -289,6 +299,8 @@ class PlayerPageState extends State<PlayerPage> {
   late final PlayerKeyboardSeekController keyboardSeek;
   /** 当前连续键盘 seek 的动作；只接受对应 KeyUp 结束这一轮。 */
   PlayerShortcutAction? keyboardSeekAction;
+  /** 记录实际按下的逻辑键；KeyUp 时不再依赖已经变化的快捷键配置或修饰键状态。 */
+  LogicalKeyboardKey? keyboardSeekLogicalKey;
   var isExiting = false;
   /** 恢复选择弹窗期间暂停进度写入，避免刚打开的 0 秒覆盖稳定进度。 */
   var choosingPlaybackStart = false;

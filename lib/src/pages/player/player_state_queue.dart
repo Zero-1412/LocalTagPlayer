@@ -101,13 +101,13 @@ extension PlayerStateQueue on PlayerPageState {
 
   /** 切换或退出前补写当前位置、总时长和动态完成态。 */
   void persistOpenedProgress() {
-    final openedPathSnapshot = openedPath;
+    final openedVideoIdSnapshot = openedVideoId;
     final position = playerService.state.position;
     final duration = playerService.state.duration;
-    if (openedPathSnapshot == null || position <= Duration.zero) {
+    if (openedVideoIdSnapshot == null || position <= Duration.zero) {
       return;
     }
-    final item = itemForPath(openedPathSnapshot);
+    final item = itemForVideoId(openedVideoIdSnapshot);
     if (item == null) {
       return;
     }
@@ -176,14 +176,16 @@ extension PlayerStateQueue on PlayerPageState {
       if (!mounted) {
         return;
       }
+      if (queue.length == 1) {
+        // 不先把会话队列改成空列表；exitPlayer 的异步暂停/全屏收尾期间页面仍会
+        // build 当前项，提前 remove 会让 currentItem 越界并留下半帧空播放器。
+        await exitPlayer();
+        return;
+      }
       rebuild(() {
         queueEndReached = false;
         playback.removeItemAt(queueIndex);
       });
-      if (queue.isEmpty) {
-        await exitPlayer();
-        return;
-      }
       ensureQueueIndexVisible(index, center: true);
       if (deletingPlayingItem) {
         requestOpenCurrent();
