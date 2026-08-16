@@ -17,9 +17,14 @@ import 'player_page.dart';
  * 仍保留在页面状态对象中。
  */
 extension PlayerStateNvidia on PlayerPageState {
-  Future<void> probeNvidiaVideoEnhancementCapability() async {
+  Future<void> probeNvidiaVideoEnhancementCapability(
+    PlayerMediaTaskContext task,
+  ) async {
+    if (!isCurrentMediaTask(task)) return;
     if (!playerService.supportsNativeNvidiaVideoEnhancement) {
-      nvidiaVideoAutomaticReason = '正式 MediaKit Texture 不运行 NVIDIA 原生增强探测';
+      rebuild(() {
+        nvidiaVideoAutomaticReason = '正式 MediaKit Texture 不运行 NVIDIA 原生增强探测';
+      });
       return;
     }
     final capability = await PlayerNvidiaVideoEnhancementExperiment.probe(
@@ -28,7 +33,7 @@ extension PlayerStateNvidia on PlayerPageState {
           (compressionEnhancementMode != PlayerCompressionEnhancementMode.off ||
               darkSceneEnhancementActive),
     );
-    if (!mounted) return;
+    if (!isCurrentMediaTask(task)) return;
     rebuild(() {
       nvidiaVideoEnhancementCapability = capability;
       if (!capability.canEnable) {
@@ -43,18 +48,26 @@ extension PlayerStateNvidia on PlayerPageState {
   /** 真实画质集成测试使用的 VSR 会话控制入口。 */
   Future<void> setNvidiaVideoEnhancementExperimentEnabled(
     bool enabled,
-  ) =>
-      setNvidiaVideoFilterModes(
-        videoSuperResolutionEnabled: enabled,
-        videoHdrEnabled: nvidiaVideoHdrExperimentEnabled,
-      );
+  ) async {
+    final task = currentMediaTaskContext;
+    if (task == null) return;
+    await setNvidiaVideoFilterModes(
+      task: task,
+      videoSuperResolutionEnabled: enabled,
+      videoHdrEnabled: nvidiaVideoHdrExperimentEnabled,
+    );
+  }
 
   /** 真实画质集成测试使用的 HDR 会话控制入口。 */
-  Future<void> setNvidiaVideoHdrExperimentEnabled(bool enabled) =>
-      setNvidiaVideoFilterModes(
-        videoSuperResolutionEnabled: nvidiaVideoEnhancementExperimentEnabled,
-        videoHdrEnabled: enabled,
-      );
+  Future<void> setNvidiaVideoHdrExperimentEnabled(bool enabled) async {
+    final task = currentMediaTaskContext;
+    if (task == null) return;
+    await setNvidiaVideoFilterModes(
+      task: task,
+      videoSuperResolutionEnabled: nvidiaVideoEnhancementExperimentEnabled,
+      videoHdrEnabled: enabled,
+    );
+  }
 
   /** NVIDIA 请求前暂时释放 CPU `lavfi`，但保留用户的全局增强偏好。 */
   void suspendCpuEnhancementsForNvidia() {
@@ -75,8 +88,10 @@ extension PlayerStateNvidia on PlayerPageState {
    * 压缩增强从关闭档重新采样，不沿用 NVIDIA 运行期间的性能判断；暗场增强只有
    * 在开启前实际活动、持久偏好仍开启且当前媒体仍满足门槛时才恢复。
    */
-  Future<void> restoreCpuEnhancementsAfterNvidia() async {
-    if (!nvidiaCpuEnhancementsSuspended) return;
+  Future<void> restoreCpuEnhancementsAfterNvidia(
+    PlayerMediaTaskContext task,
+  ) async {
+    if (!isCurrentMediaTask(task) || !nvidiaCpuEnhancementsSuspended) return;
     final restoreDarkScene = nvidiaSuspendedDarkSceneEnhancement &&
         effectivePlaybackSettings.darkSceneEnhancementEnabled &&
         (gpuCapabilitySnapshot?.darkSceneEnhancementEligible ?? false);
@@ -91,9 +106,9 @@ extension PlayerStateNvidia on PlayerPageState {
       level: PlayerAdaptiveQualityLevel.off,
       darkSceneEnhancementEnabled: restoreDarkScene,
     );
-    if (!mounted) return;
+    if (!isCurrentMediaTask(task)) return;
     rebuild(() {});
-    await probeNvidiaVideoEnhancementCapability();
+    await probeNvidiaVideoEnhancementCapability(task);
   }
 
   /**
@@ -103,10 +118,12 @@ extension PlayerStateNvidia on PlayerPageState {
    * 避免开启第二项时意外关闭第一项。TrueHDR 联合模式不强制 NV12。
    */
   Future<void> setNvidiaVideoFilterModes({
+    required PlayerMediaTaskContext task,
     required bool videoSuperResolutionEnabled,
     required bool videoHdrEnabled,
     bool showFailureFeedback = true,
   }) async {
+    if (!isCurrentMediaTask(task)) return;
     if (nvidiaVideoEnhancementExperimentEnabled ==
             videoSuperResolutionEnabled &&
         nvidiaVideoHdrExperimentEnabled == videoHdrEnabled) {
@@ -120,8 +137,8 @@ extension PlayerStateNvidia on PlayerPageState {
     if (startedCpuSuspension) {
       suspendCpuEnhancementsForNvidia();
     }
-    await probeNvidiaVideoEnhancementCapability();
-    if (!mounted) return;
+    await probeNvidiaVideoEnhancementCapability(task);
+    if (!isCurrentMediaTask(task)) return;
     debugPrint(
       'NVIDIA_ENABLE_GATE vsr=$videoSuperResolutionEnabled '
       'hdr=$videoHdrEnabled '
@@ -142,9 +159,9 @@ extension PlayerStateNvidia on PlayerPageState {
         videoHdrEnabled && !nvidiaVideoEnhancementCapability.canEnableHdr;
     if (rejectedVsr || rejectedHdr) {
       if (startedCpuSuspension) {
-        await restoreCpuEnhancementsAfterNvidia();
+        await restoreCpuEnhancementsAfterNvidia(task);
       }
-      if (!mounted) return;
+      if (!mounted || !isCurrentMediaTask(task)) return;
       if (showFailureFeedback) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
@@ -171,12 +188,15 @@ extension PlayerStateNvidia on PlayerPageState {
         nvidiaVideoEnhancementEnabled: videoSuperResolutionEnabled,
         nvidiaVideoHdrEnabled: videoHdrEnabled,
       );
+      if (!mounted || !isCurrentMediaTask(task)) return;
       if (targetEnabled) {
         // d3d11vpp 会触发硬件滤镜图重建；短暂等待后读回，避免把异步重建中的
         // 临时空值误判为永久拒绝。失败仍保持有界重试和原有安全回滚。
         await Future<void>.delayed(const Duration(milliseconds: 200));
+        if (!isCurrentMediaTask(task)) return;
       }
       appliedFilter = await getMpvProperty('vf');
+      if (!isCurrentMediaTask(task)) return;
       final vsrAccepted = !videoSuperResolutionEnabled ||
           appliedFilter.contains('scaling-mode=nvidia');
       final hdrAccepted =
@@ -199,10 +219,11 @@ extension PlayerStateNvidia on PlayerPageState {
         nvidiaVideoEnhancementEnabled: previousVsr,
         nvidiaVideoHdrEnabled: previousHdr,
       );
+      if (!isCurrentMediaTask(task)) return;
       if (startedCpuSuspension && !previousVsr && !previousHdr) {
-        await restoreCpuEnhancementsAfterNvidia();
+        await restoreCpuEnhancementsAfterNvidia(task);
       }
-      if (!mounted) return;
+      if (!mounted || !isCurrentMediaTask(task)) return;
       if (showFailureFeedback) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
@@ -212,7 +233,7 @@ extension PlayerStateNvidia on PlayerPageState {
       }
       return;
     }
-    if (!mounted) return;
+    if (!isCurrentMediaTask(task)) return;
     rebuild(() {
       nvidiaVideoEnhancementExperimentEnabled = videoSuperResolutionEnabled;
       nvidiaVideoHdrExperimentEnabled = videoHdrEnabled;
@@ -221,9 +242,9 @@ extension PlayerStateNvidia on PlayerPageState {
     });
     if (targetEnabled) {
       nvidiaVideoSafetyCoordinator.reset();
-      await refreshNvidiaVideoEnhancementRuntimeState();
+      await refreshNvidiaVideoEnhancementRuntimeState(task);
     } else {
-      await restoreCpuEnhancementsAfterNvidia();
+      await restoreCpuEnhancementsAfterNvidia(task);
     }
   }
 
@@ -234,18 +255,18 @@ extension PlayerStateNvidia on PlayerPageState {
    * 或 Windows HDR 未活动时静默保持原画质链。实际启用仍由驱动日志二次确认。
    */
   Future<void> applyAutomaticNvidiaVideoEnhancement(
-    String openedPathCandidate,
+    PlayerMediaTaskContext task,
   ) async {
     final snapshot = gpuCapabilitySnapshot;
-    if (snapshot == null || openedPathCandidate != openedPath) return;
+    if (snapshot == null || !isCurrentMediaTask(task)) return;
     if (!playerService.supportsNativeNvidiaVideoEnhancement) {
       rebuild(() {
         nvidiaVideoAutomaticReason = '正式 MediaKit Texture 不运行 NVIDIA 原生增强探测';
       });
       return;
     }
-    await probeNvidiaVideoEnhancementCapability();
-    if (!mounted || openedPathCandidate != openedPath) return;
+    await probeNvidiaVideoEnhancementCapability(task);
+    if (!isCurrentMediaTask(task)) return;
     final decision = PlayerNvidiaVideoAutoPolicy.evaluate(
       snapshot: snapshot,
       capability: nvidiaVideoEnhancementCapability,
@@ -264,11 +285,12 @@ extension PlayerStateNvidia on PlayerPageState {
     rebuild(() => nvidiaVideoAutomaticReason = decision.reason);
     if (!decision.enabled) return;
     await setNvidiaVideoFilterModes(
+      task: task,
       videoSuperResolutionEnabled: decision.videoSuperResolutionEnabled,
       videoHdrEnabled: decision.videoHdrEnabled,
       showFailureFeedback: false,
     );
-    if (!mounted || openedPathCandidate != openedPath) return;
+    if (!isCurrentMediaTask(task)) return;
     final requestAccepted = (!decision.videoSuperResolutionEnabled ||
             nvidiaVideoEnhancementExperimentEnabled) &&
         (!decision.videoHdrEnabled || nvidiaVideoHdrExperimentEnabled);
@@ -285,10 +307,15 @@ extension PlayerStateNvidia on PlayerPageState {
    * 最多等待三秒，不读取或展示原始日志；驱动没有确认时保留 `requested`，不能把
    * 已接受的滤镜字符串冒充为 RTX Super Resolution 已经工作。
    */
-  Future<void> refreshNvidiaVideoEnhancementRuntimeState() async {
+  Future<void> refreshNvidiaVideoEnhancementRuntimeState(
+    PlayerMediaTaskContext task,
+  ) async {
+    if (!isCurrentMediaTask(task)) return;
     for (var attempt = 0; attempt < 15; attempt++) {
       final vsrState = await getMpvProperty('native-nvidia-vsr-state');
+      if (!isCurrentMediaTask(task)) return;
       final hdrState = await getMpvProperty('native-nvidia-hdr-state');
+      if (!isCurrentMediaTask(task)) return;
       final vsrDone = !nvidiaVideoEnhancementExperimentEnabled ||
           vsrState == 'active' ||
           vsrState == 'rejected';
@@ -298,13 +325,13 @@ extension PlayerStateNvidia on PlayerPageState {
           hdrState == 'ignored-source-hdr';
       if (vsrDone && hdrDone) break;
       await Future<void>.delayed(const Duration(milliseconds: 200));
-      if (!mounted ||
+      if (!isCurrentMediaTask(task) ||
           !nvidiaVideoEnhancementExperimentEnabled &&
               !nvidiaVideoHdrExperimentEnabled) {
         return;
       }
     }
-    await probeNvidiaVideoEnhancementCapability();
+    await probeNvidiaVideoEnhancementCapability(task);
   }
 
   /**
@@ -316,15 +343,18 @@ extension PlayerStateNvidia on PlayerPageState {
   Future<void> setCompressionEnhancementMode(
     PlayerCompressionEnhancementMode mode,
   ) async {
+    final task = currentMediaTaskContext;
+    if (task == null) return;
     if (compressionEnhancementMode == mode) return;
     if (mode != PlayerCompressionEnhancementMode.off &&
         (nvidiaVideoEnhancementExperimentEnabled ||
             nvidiaVideoHdrExperimentEnabled)) {
       await setNvidiaVideoFilterModes(
+        task: task,
         videoSuperResolutionEnabled: false,
         videoHdrEnabled: false,
       );
-      if (!mounted) return;
+      if (!isCurrentMediaTask(task)) return;
       nvidiaVideoAutomaticReason = '用户切换压缩画质增强，本媒体已回退 CPU 滤镜';
     }
     rebuild(() => compressionEnhancementMode = mode);
@@ -345,8 +375,9 @@ extension PlayerStateNvidia on PlayerPageState {
       nvidiaVideoEnhancementEnabled: nvidiaVideoEnhancementExperimentEnabled,
       nvidiaVideoHdrEnabled: nvidiaVideoHdrExperimentEnabled,
     );
+    if (!isCurrentMediaTask(task)) return;
     if (playerService.supportsNativeNvidiaVideoEnhancement) {
-      await probeNvidiaVideoEnhancementCapability();
+      await probeNvidiaVideoEnhancementCapability(task);
     }
   }
 

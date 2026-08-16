@@ -77,12 +77,13 @@ void main() {
     await tester.tap(toggle);
     await tester.pumpAndSettle(const Duration(seconds: 2));
     final fullscreenQueue =
-        find.byKey(const ValueKey('player.fullscreenQueue'));
+        find.byKey(const ValueKey('player.fullscreenQueue.sidebar'));
     final logicalSize = tester.view.physicalSize / tester.view.devicePixelRatio;
     expect(tester.getRect(fullscreenQueue).right,
         lessThanOrEqualTo(logicalSize.width));
-    expect(tester.getSize(videoSurface).width,
-        lessThan(fullscreenVideoWidth - 400));
+    expect(tester.getRect(fullscreenQueue).left, greaterThanOrEqualTo(0));
+    expect(
+        tester.getSize(videoSurface).width, closeTo(fullscreenVideoWidth, 1));
     await _signalDesktopCapture('player-fullscreen-queue');
 
     await mouse.moveTo(Offset(logicalSize.width / 2, logicalSize.height / 2));
@@ -96,8 +97,9 @@ void main() {
     expect(fullscreenQueue, findsOneWidget);
     expect(tester.getRect(fullscreenQueue).right,
         lessThanOrEqualTo(logicalSize.width));
-    expect(tester.getSize(videoSurface).width,
-        lessThan(fullscreenVideoWidth - 400));
+    expect(tester.getRect(fullscreenQueue).left, greaterThanOrEqualTo(0));
+    expect(
+        tester.getSize(videoSurface).width, closeTo(fullscreenVideoWidth, 1));
     await _signalDesktopCapture('player-fullscreen-queue-edge');
     await mouse.moveTo(Offset(logicalSize.width / 2, logicalSize.height / 2));
     await tester.pump(const Duration(milliseconds: 1200));

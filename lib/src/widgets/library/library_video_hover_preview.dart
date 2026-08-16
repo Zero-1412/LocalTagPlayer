@@ -2,9 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:path/path.dart' as p;
 
 import '../../core/playback_settings.dart';
 import '../../models/video_item.dart';
@@ -12,6 +10,7 @@ import '../../services/library/library_card_ui_diagnostics.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../../services/player/media_kit_initializer.dart';
 import '../app_theme_tokens.dart';
+import 'library_hover_preview_coordinator.dart';
 import 'library_smoke_keys.dart';
 import 'library_video_results.dart';
 
@@ -57,14 +56,8 @@ class VideoPreview extends StatefulWidget {
 
 class VideoPreviewState extends State<VideoPreview> {
   late Future<File?> _future;
-  Timer? _hoverExitTimer;
-  Player? _hoverPlayer;
-  VideoController? _hoverController;
-  var _isHoverPreviewLoading = false;
-  var _isHoverPreviewReady = false;
-  var _isHoverPreviewVisible = false;
-  /** 每次创建或停止预览都会递增，阻止旧 open Future 恢复过期画面。 */
-  var _hoverPreviewGeneration = 0;
+  LibraryHoverPreviewCoordinator? _previewCoordinator;
+  LibraryHoverPreviewCoordinator? _ownedPreviewCoordinator;
 
   @override
   void initState() {
@@ -77,20 +70,42 @@ class VideoPreviewState extends State<VideoPreview> {
   void didUpdateWidget(covariant VideoPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.hoverPreviewEnabled && !widget.hoverPreviewEnabled) {
-      _stopHoverPreview();
+      _onExit();
     }
     if (oldWidget.item.path != widget.item.path ||
         oldWidget.thumbnailService != widget.thumbnailService) {
-      _stopHoverPreview();
+      _previewCoordinator?.exit(oldWidget.item);
       _future = widget.thumbnailService.ensureThumbnailFor(widget.item);
       widget.onVisible?.call(widget.item);
     }
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scoped = LibraryHoverPreviewScope.maybeOf(context);
+    final next = scoped ??
+        (_ownedPreviewCoordinator ??= LibraryHoverPreviewCoordinator());
+    if (identical(_previewCoordinator, next)) {
+      return;
+    }
+    _previewCoordinator?.removeListener(_handlePreviewChanged);
+    _previewCoordinator = next;
+    _previewCoordinator!.addListener(_handlePreviewChanged);
+  }
+
+  void _handlePreviewChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
   void dispose() {
-    _hoverExitTimer?.cancel();
-    unawaited(_disposeHoverPlayer());
+    _previewCoordinator?.removeListener(_handlePreviewChanged);
+    if (identical(_previewCoordinator, _ownedPreviewCoordinator)) {
+      unawaited(_ownedPreviewCoordinator!.disposeAsync());
+    }
     super.dispose();
   }
 
@@ -99,168 +114,50 @@ class VideoPreviewState extends State<VideoPreview> {
     if (!widget.hoverPreviewEnabled) {
       return;
     }
-    _hoverExitTimer?.cancel();
-    _hoverExitTimer = null;
-    if (_isHoverPreviewReady && !_isHoverPreviewVisible && mounted) {
-      setState(() => _isHoverPreviewVisible = true);
-    }
+    _previewCoordinator?.reenter(widget.item);
   }
 
   /** 已显示的预览先淡出；尚在加载的预览直接取消，避免离开后才闪出首帧。 */
   void _onExit() {
-    if (_isHoverPreviewReady && _hoverPlayer != null) {
-      setState(() => _isHoverPreviewVisible = false);
-      _hoverExitTimer?.cancel();
-      _hoverExitTimer = Timer(
-        libraryHoverPreviewFadeDuration,
-        _stopHoverPreview,
-      );
-      return;
-    }
-    _stopHoverPreview();
+    _previewCoordinator?.exit(
+      widget.item,
+      delay: libraryHoverPreviewFadeDuration,
+    );
   }
 
   /** 创建静音原生播放器，并仅在当前卡片仍持有该播放器时展示首帧。 */
   Future<void> _startHoverPreview() async {
+    final coordinator = _previewCoordinator;
     if (!mounted ||
         !widget.hoverPreviewEnabled ||
-        _hoverPlayer != null ||
-        _isHoverPreviewLoading) {
+        coordinator == null ||
+        coordinator.isLoadingFor(widget.item) ||
+        coordinator.isReadyFor(widget.item)) {
       return;
     }
-    setState(() => _isHoverPreviewLoading = true);
-    final generation = ++_hoverPreviewGeneration;
-    Player? player;
-    try {
-      // 上次为避免首帧前阻塞将 media_kit 改为延迟初始化；悬停
-      // 预览也是真实 Player 消费者，必须与正式播放共用同一门禁。
-      (widget.mediaKitInitializer ?? defaultMediaKitInitializer)
-          .ensureInitialized();
-      if (!mounted ||
-          !widget.hoverPreviewEnabled ||
-          generation != _hoverPreviewGeneration) {
-        if (mounted && generation == _hoverPreviewGeneration) {
-          setState(() => _isHoverPreviewLoading = false);
-        }
-        return;
-      }
-      player = Player(
-        configuration: const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
-      );
-      final controller = VideoController(
-        player,
-        configuration: VideoControllerConfiguration(
-          width: 640,
-          height: 360,
-          hwdec: widget.playbackSettings.hwdec,
-          enableHardwareAcceleration:
-              widget.playbackSettings.hardwareDecodingEnabled,
-        ),
-      );
-
-      _hoverPlayer = player;
-      _hoverController = controller;
-      await player.setVolume(0);
-      await player.open(Media(widget.item.path), play: true).timeout(
-            const Duration(seconds: 10),
-          );
-      await controller.platform.future
-          .then((platform) => platform.waitUntilFirstFrameRendered)
-          .timeout(const Duration(seconds: 8), onTimeout: () {});
-      if (!mounted ||
-          generation != _hoverPreviewGeneration ||
-          _hoverPlayer != player) {
-        // 停止路径已经接管并释放该 Player，旧 Future 不得重复 dispose。
-        return;
-      }
-      setState(() {
-        _isHoverPreviewLoading = false;
-        _isHoverPreviewReady = true;
-        _isHoverPreviewVisible = true;
-      });
-    } catch (error) {
-      final generationStillCurrent = generation == _hoverPreviewGeneration;
-      final ownsPlayer = _hoverPlayer == player;
-      if (ownsPlayer) {
-        _hoverPlayer = null;
-        _hoverController = null;
-      }
-      if (player != null && (ownsPlayer || generationStillCurrent)) {
-        await player.dispose();
-      }
-      if (!generationStillCurrent) {
-        // 用户已离开或进入正式播放时属于主动取消，不记录为预览失败。
-        return;
-      }
-      if (mounted) {
-        setState(() {
-          _isHoverPreviewLoading = false;
-          _isHoverPreviewReady = false;
-          _isHoverPreviewVisible = false;
-        });
-      }
-      // 只记录文件名与错误，不输出用户完整媒体路径。
-      debugPrint(
-        'LIBRARY_HOVER_PREVIEW status=failed '
-        'file=${p.basename(widget.item.path)} error=$error',
-      );
-    }
-  }
-
-  /** 取消淡出计时并释放当前卡片独占的动态预览资源。 */
-  void _stopHoverPreview() {
-    unawaited(_releaseHoverPlayer(stopMediaFirst: false));
+    await coordinator.open(
+      item: widget.item,
+      settings: widget.playbackSettings,
+      initializer: widget.mediaKitInitializer ?? defaultMediaKitInitializer,
+    );
   }
 
   /**
-   * 卡片进入正式播放前停止悬停媒体，再把原生销毁尾部留在后台完成。
+   * 卡片进入正式播放前释放媒体库共享预览，再创建正式播放器。
    *
-   * `stop` 会先关闭当前媒体与视频输出，避免媒体库下层 Route 的预览纹理与正式
-   * Player 同时切换分辨率；dispose 不阻塞页面跳转，以保持点击后的响应速度。
+   * 共享预览不能与正式播放器同时保留两条原生解码链；释放动作有界等待，避免点击
+   * 被悬停预览的 native 尾部回收拖住。
    */
   Future<void> releaseForPlayback() =>
-      _releaseHoverPlayer(stopMediaFirst: true);
-
-  /** 统一取消旧代次并释放当前预览 Player，防止异步 open 回写已停止状态。 */
-  Future<void> _releaseHoverPlayer({required bool stopMediaFirst}) async {
-    _hoverPreviewGeneration++;
-    _hoverExitTimer?.cancel();
-    _hoverExitTimer = null;
-    final player = _hoverPlayer;
-    _hoverPlayer = null;
-    _hoverController = null;
-    if (mounted) {
-      setState(() {
-        _isHoverPreviewLoading = false;
-        _isHoverPreviewReady = false;
-        _isHoverPreviewVisible = false;
-      });
-    }
-    if (player != null) {
-      if (stopMediaFirst) {
-        try {
-          await player.stop().timeout(const Duration(milliseconds: 800));
-        } catch (_) {
-          // stop 超时仍继续销毁；正式播放器不等待预览原生线程的延迟回收尾部。
-        }
-      }
-      unawaited(player.dispose());
-    }
-  }
-
-  Future<void> _disposeHoverPlayer() async {
-    _hoverPreviewGeneration++;
-    final player = _hoverPlayer;
-    _hoverPlayer = null;
-    _hoverController = null;
-    if (player != null) {
-      await player.dispose();
-    }
-  }
+      _previewCoordinator?.releaseForPlayback() ?? Future<void>.value();
 
   @override
   Widget build(BuildContext context) {
-    final hoverController = _hoverController;
+    final coordinator = _previewCoordinator;
+    final hoverController = coordinator?.controller;
+    final previewReady = coordinator?.isReadyFor(widget.item) ?? false;
+    final previewVisible = coordinator?.isVisibleFor(widget.item) ?? false;
+    final previewLoading = coordinator?.isLoadingFor(widget.item) ?? false;
     return LibraryCardUiDiagnostics.buildSubtree(
       'preview',
       () => LibraryHoverIntentRegion(
@@ -323,12 +220,12 @@ class VideoPreviewState extends State<VideoPreview> {
                               );
                             },
                           ),
-                          if (_isHoverPreviewReady && hoverController != null)
+                          if (previewReady && hoverController != null)
                             LibraryHoverPreviewFade(
                               key: LibrarySmokeKeys.cardHoverPreview(
                                 widget.item.path,
                               ),
-                              visible: _isHoverPreviewVisible,
+                              visible: previewVisible,
                               child: Video(
                                 controller: hoverController,
                                 controls: NoVideoControls,
@@ -352,7 +249,7 @@ class VideoPreviewState extends State<VideoPreview> {
                         ),
                       ),
                     ),
-                    if (_isHoverPreviewLoading)
+                    if (previewLoading)
                       Center(
                         key: LibrarySmokeKeys.cardHoverPreviewLoading(
                           widget.item.path,
@@ -451,7 +348,7 @@ class VideoPreviewState extends State<VideoPreview> {
                       child: AnimatedOpacity(
                         key: LibrarySmokeKeys.cardDuration(widget.item.path),
                         opacity: libraryDurationOpacityForPreview(
-                          _isHoverPreviewVisible,
+                          previewVisible,
                         ),
                         duration: libraryHoverPreviewFadeDuration,
                         curve: Curves.easeOutCubic,

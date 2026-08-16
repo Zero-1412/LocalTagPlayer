@@ -4,6 +4,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/features/player/application/player_seek_coordinator.dart';
 
 void main() {
+  test('native submit 超时会结束当前 worker 并清掉待发目标', () async {
+    final nativeGate = Completer<void>();
+    Object? failure;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (_) => nativeGate.future,
+      readPosition: () => Duration.zero,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      onFailure: (error) => failure = error,
+      minimumDispatchInterval: Duration.zero,
+      submitTimeout: const Duration(milliseconds: 10),
+    );
+
+    await coordinator.request(const Duration(seconds: 5));
+
+    expect(failure, isA<TimeoutException>());
+    expect(coordinator.isRunning, isFalse);
+    expect(coordinator.latestRequestedTarget, isNull);
+    nativeGate.complete();
+  });
+
   test('后端 seek 已超过节流窗口时不会再追加一个完整间隔', () async {
     final submitted = <Duration>[];
     final delays = <Duration>[];

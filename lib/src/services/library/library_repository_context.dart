@@ -36,10 +36,7 @@ class LibraryRepositoryContext {
           videoTagIdsByPathKey,
           videoTagIdsByVideoId,
         ),
-        queryProfile = LibraryQueryProfile(
-          videoCount: videos.length,
-          fts5Available: fts5Available,
-        );
+        _fts5Available = fts5Available;
 
   /** 当前媒体库唯一 SQLite connection。 */
   final Database database;
@@ -56,8 +53,29 @@ class LibraryRepositoryContext {
   /** stable videoId 主标签关系索引。 */
   final Map<String, Set<String>> videoTagIdsByVideoId;
 
-  /** 当前库规模对应的查询执行 profile。 */
-  final LibraryQueryProfile queryProfile;
+  /** 查询/派生索引使用的进程内数据修订；不写入用户数据备份。 */
+  var _dataRevision = 0;
+  /** SQLite 当前会话是否支持可选 trigram FTS5。 */
+  final bool _fts5Available;
+
+  /** 当前库规模对应的查询执行 profile；视频数量变化时动态重新评估。 */
+  LibraryQueryProfile get queryProfile => LibraryQueryProfile(
+        videoCount: videos.length,
+        fts5Available: _fts5Available,
+      );
+
+  /** 所有成功提交的内容/标签/路径变更共用一个修订号。 */
+  int get dataRevision => _dataRevision;
+
+  /**
+   * 让查询缓存和派生 FTS 索引失效。
+   *
+   * 修订号只在主库提交成功后推进；查询服务发现新修订时重建一次派生索引，
+   * 从而避免每次关键词输入都全量重建，也避免旧候选覆盖新媒体数据。
+   */
+  void markDataChanged() {
+    _dataRevision += 1;
+  }
 
   /** 视频行写入 owner；连接仍由 [database] 的组合根管理。 */
   final LibraryVideoPersistence videoPersistence;

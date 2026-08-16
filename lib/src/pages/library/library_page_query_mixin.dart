@@ -129,16 +129,18 @@ mixin LibraryPageQueryMixin<T extends StatefulWidget>
     final query = currentFilterQuery();
     final resultEpoch = this.resultEpoch(query);
     final countEpoch = this.countEpoch(query);
+    final dataRevision = queryDataRevision(store);
     runtime.queryController.configure(
       engine: TagQueryService(
         videos: store.videos.values,
         tagContext: store.tagQueryContext,
       ),
       totalCount: store.videos.length,
-      dataRevision: runtime.libraryDataRevision,
+      dataRevision: dataRevision,
       sortFingerprint: runtime.sortController.fingerprint,
       compare: runtime.sortController.compare,
       sortVideos: runtime.sortController.sort,
+      loadCandidates: store.queryCandidatesFor,
     );
     runtime.queryController.schedule(
       query: query,
@@ -193,7 +195,7 @@ mixin LibraryPageQueryMixin<T extends StatefulWidget>
   @override
   LibraryResultEpoch resultEpoch(FilterQuery query) =>
       LibraryResultEpoch.fromQuery(
-        dataRevision: runtime.libraryDataRevision,
+        dataRevision: queryDataRevision(runtime.store),
         query: query,
         presentationSort: runtime.sortController.fingerprint,
       );
@@ -202,7 +204,7 @@ mixin LibraryPageQueryMixin<T extends StatefulWidget>
   @override
   LibraryCountEpoch countEpoch(FilterQuery query) =>
       LibraryCountEpoch.fromQuery(
-        dataRevision: runtime.libraryDataRevision,
+        dataRevision: queryDataRevision(runtime.store),
         tagDefinitionRevision: runtime.tagDefinitionRevision,
         query: query,
       );
@@ -229,6 +231,17 @@ mixin LibraryPageQueryMixin<T extends StatefulWidget>
       excludeTagIds: {...runtime.excludedTagIds},
       favoriteOnly: runtime.showFavoritesOnly,
     );
+  }
+
+  /**
+   * 页面 revision 保护 UI 差量，Repository revision 保护 SQLite/FTS 派生索引；取较新者
+   * 使两条提交路径都能淘汰旧结果，且不要求测试 fake 立即实现数据库修订能力。
+   */
+  int queryDataRevision(LibraryApplicationFacade? store) {
+    final repositoryRevision = store?.dataRevision ?? 0;
+    return runtime.libraryDataRevision >= repositoryRevision
+        ? runtime.libraryDataRevision
+        : repositoryRevision;
   }
 
   @override

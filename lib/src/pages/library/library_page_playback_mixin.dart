@@ -186,12 +186,20 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     final activeChildTag = runtime.selectedChildTags.isEmpty
         ? null
         : runtime.selectedChildTags.first;
-    // 在路由切换前把当前项附近已经生成的缩略图提升到同步内存视图，播放器队列
-    // 首帧可直接复用，不需要先绘制占位底色再等待异步 Future 完成。
-    await runtime.playbackQueueController.warmNearby(
-      queue: preparedQueue,
-      selectedVideoId: item.videoId,
-      load: thumbnailService.thumbnailFor,
+    // 邻近缩略图只服务播放器右侧队列，不能阻塞当前视频进入正式 Route；播放器页
+    // 自身仍会按可见优先级读取当前项，后台预热失败也不影响播放。
+    unawaited(
+      runtime.playbackQueueController
+          .warmNearby(
+        queue: preparedQueue,
+        selectedVideoId: item.videoId,
+        load: thumbnailService.thumbnailFor,
+      )
+          .catchError((error, stackTrace) {
+        debugPrint(
+          'PLAYER_QUEUE_THUMBNAIL_WARM_FAILED type=${error.runtimeType}',
+        );
+      }),
     );
     if (!mounted) {
       return;
@@ -285,7 +293,6 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       store.resumeDataBackupAfterPlayback();
     }
   }
-
   /**
    * Route 弹回后立即发布播放器内已提交的数据差量。
    *
@@ -316,7 +323,6 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     runtime.playerScopedTagDefinitionsChanged = false;
     runtime.playerScopedRemovedVideoIds.clear();
   }
-
   /**
    * 为用户刚点击且详情未知的视频执行一次独立高优先级预检。
    *
@@ -353,7 +359,6 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       service.dispose();
     }
   }
-
   /** 返回媒体库后分三次采样，观察原生纹理释放与 Flutter ImageCache 的衰减是否同步。 */
   Future<void> sampleMemoryAfterPlayerRelease() async {
     await PlayerMemoryDiagnostics.logStage('library_after_release_0ms');
@@ -362,14 +367,12 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     await PlayerMemoryDiagnostics.logStage('library_after_release_2000ms');
   }
-
   /** 播放器内收藏只写当前视频，返回媒体库后再做一次无计数轻刷新。 */
   Future<void> toggleFavoriteFromPlayer(VideoItem item) async {
     item.isFavorite = !item.isFavorite;
     await runtime.store?.upsertVideo(item);
     runtime.playerScopedLibraryDataChanged = true;
   }
-
   /** 将播放位置和最近播放时间写入稳定 videoId 对应的视频记录。 */
   Future<void> updatePlaybackProgress(
     VideoItem item,
@@ -397,7 +400,6 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       markPlaybackTimestampChanged(item);
     }
   }
-
   /** 播放器错误面板复用 missing 管理页的安全 picker 与 fingerprint 校验。 */
   Future<bool> relinkMissingFromPlayer(VideoItem item) async {
     final store = runtime.store;

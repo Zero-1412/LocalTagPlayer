@@ -18,13 +18,16 @@ extension PlayerStateGpuCapabilities on PlayerPageState {
   /**
    * 媒体确认可播放后检测当前 GPU 渲染会话；过期 open 的结果不得覆盖新媒体。
    */
-  Future<void> detectCurrentGpuCapabilities(PlayerOpenRequest request) async {
+  Future<void> detectCurrentGpuCapabilities(
+    PlayerOpenRequest request,
+    PlayerMediaTaskContext task,
+  ) async {
     try {
-      await applyDetectedGpuCapabilities(request);
+      await applyDetectedGpuCapabilities(request, task);
     } catch (_) {
       if (!mounted ||
           openRequests.hasSuperseded(request) ||
-          request.path != openedPath) {
+          !isCurrentMediaTask(task)) {
         return;
       }
       // 可选能力探测失败只关闭当前媒体增强，不能形成未处理异步异常或打断播放。
@@ -39,11 +42,20 @@ extension PlayerStateGpuCapabilities on PlayerPageState {
   }
 
   /** 检测并应用仍属于当前 open 请求的 GPU 能力快照。 */
-  Future<void> applyDetectedGpuCapabilities(PlayerOpenRequest request) async {
-    final snapshot = await gpuCapabilityDetector.detect(playerService);
+  Future<void> applyDetectedGpuCapabilities(
+    PlayerOpenRequest request,
+    PlayerMediaTaskContext task,
+  ) async {
+    if (!isCurrentMediaTask(task) || openRequests.hasSuperseded(request)) {
+      return;
+    }
+    final snapshot = await gpuCapabilityDetector.detect(
+      playerService,
+      shouldCancel: () => !isCurrentMediaTask(task),
+    );
     if (!mounted ||
         openRequests.hasSuperseded(request) ||
-        request.path != openedPath) {
+        !isCurrentMediaTask(task)) {
       return;
     }
     final experimentAllowed =
@@ -63,7 +75,7 @@ extension PlayerStateGpuCapabilities on PlayerPageState {
     );
     if (!mounted ||
         openRequests.hasSuperseded(request) ||
-        request.path != openedPath) {
+        !isCurrentMediaTask(task)) {
       return;
     }
     final hdrResult = await PlayerHdrMappingExperiment.apply(
@@ -72,7 +84,7 @@ extension PlayerStateGpuCapabilities on PlayerPageState {
     );
     if (!mounted ||
         openRequests.hasSuperseded(request) ||
-        request.path != openedPath) {
+        !isCurrentMediaTask(task)) {
       // 过期任务不得再向共享后端写回关闭状态；最新 open 会恢复自己的完整快照。
       return;
     }
@@ -101,11 +113,11 @@ extension PlayerStateGpuCapabilities on PlayerPageState {
     hdrMappingExperimentActive = experimentAllowed && hdrResult.applied;
     darkSceneEnhancementActive = darkSceneAllowed && filterResult.applied;
     if (playerService.supportsNativeNvidiaVideoEnhancement) {
-      await applyAutomaticNvidiaVideoEnhancement(request.path);
+      await applyAutomaticNvidiaVideoEnhancement(task);
     }
     if (!mounted ||
         openRequests.hasSuperseded(request) ||
-        request.path != openedPath) {
+        !isCurrentMediaTask(task)) {
       return;
     }
     if (darkSceneEnhancementActive) {

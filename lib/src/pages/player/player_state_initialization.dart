@@ -88,6 +88,14 @@ extension PlayerStateInitialization on PlayerPageState {
         lastSeekLatencyMs = milliseconds;
         lastSeekAt = DateTime.now();
       },
+      onFailure: (error) {
+        if (mounted) {
+          setOptimisticProgressPosition(null);
+        }
+        debugPrint(
+          'PLAYER_SEEK_FAILED type=${error.runtimeType}',
+        );
+      },
       // 关键帧可能与逻辑目标相距超过容差；此处只等命令返回，不等待精确位置确认。
       confirmationTimeout: Duration.zero,
       adaptiveThrottle: seekPreviewThrottle,
@@ -122,10 +130,7 @@ extension PlayerStateInitialization on PlayerPageState {
       previewAudioGate: seekAudioGate,
       trace: seekTrace,
     );
-    if (playerService.supportsNativeNvidiaVideoEnhancement) {
-      // NVIDIA 实验只允许显式 child HWND QA 后端探测，正式 Texture 路径不付出该开销。
-      unawaited(probeNvidiaVideoEnhancementCapability());
-    } else {
+    if (!playerService.supportsNativeNvidiaVideoEnhancement) {
       nvidiaVideoAutomaticReason = '正式 MediaKit Texture 不运行 NVIDIA 原生增强探测';
     }
     volume = playerService.state.volume.clamp(0, 100).toDouble();
@@ -182,6 +187,9 @@ extension PlayerStateInitialization on PlayerPageState {
       )),
       onStopFailed: (_) {
         debugPrint('PLAYER_MEMORY_STAGE stage=stop_timeout');
+      },
+      onReleaseFailed: (stage, error) {
+        handlePlayerResourceReleaseFailure(stage, error);
       },
       onReleased: handlePlayerResourcesReleased,
     );

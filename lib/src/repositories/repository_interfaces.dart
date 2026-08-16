@@ -79,6 +79,12 @@ abstract interface class LibraryQueryRepository {
   Set<String> childTagsFor(String parentTag);
 }
 
+/** 可选的 profile 查询能力；小库或不支持 FTS5 时返回 null 走内存路径。 */
+abstract interface class LibraryQueryCandidateRepository {
+  Future<List<VideoItem>?> queryCandidatesFor(FilterQuery query);
+  int get dataRevision;
+}
+
 /**
  * 媒体库写入与运行时命令能力。
  *

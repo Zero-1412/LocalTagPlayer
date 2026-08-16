@@ -315,5 +315,9 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
+    // PlayerService 的媒体命令尾链有 4 秒终止门，外层资源协调器还有 8 秒 dispose
+    // 上限；显式推进 fake clock，避免未完成的有界释放 timer 污染后续测试。
+    await tester.pump(const Duration(seconds: 9));
+    await disposalCompleter.future;
   });
 }

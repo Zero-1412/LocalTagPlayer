@@ -7,7 +7,7 @@
   [int]$RapidSwitchCount = 18,
   [ValidateRange(0, 10000)]
   [int]$MaxDroppedFrames = 5,
-  [ValidateSet('auto', 'passed', 'failed')]
+  [ValidateSet('auto', 'simulated', 'passed', 'failed')]
   [string]$PhysicalCrossDpiStatus = 'auto',
   # 用 Flutter Profile 构建执行集成测试；默认 Debug 保留本地快速诊断路径。
   [switch]$Profile,
@@ -50,7 +50,10 @@ New-Item -ItemType Directory -Force -Path $Output | Out-Null
 
 Add-Type -AssemblyName System.Windows.Forms
 $screens = [System.Windows.Forms.Screen]::AllScreens
-if ($PhysicalCrossDpiStatus -eq 'auto') {
+if ($PhysicalCrossDpiStatus -eq 'simulated') {
+  # 单屏模拟只验证 Flutter metrics、Surface 重算和状态机，不声称发生了物理跨屏。
+  $effectivePhysicalDpiStatus = 'simulated-single-monitor'
+} elseif ($PhysicalCrossDpiStatus -eq 'auto') {
   # 自动测试无法在单显示器上证明真实跨 DPI；多显示器也需要确认两块屏幕缩放不同并实际移窗。
   $effectivePhysicalDpiStatus = if ($screens.Count -lt 2) {
     'not-run-single-monitor'
@@ -126,6 +129,8 @@ $automatedPass = ($runResults | Where-Object {
   }).Count -eq 0
 $releaseGate = if (-not $automatedPass) {
   'failed'
+} elseif ($effectivePhysicalDpiStatus -eq 'simulated-single-monitor') {
+  'passed-simulated-cross-dpi'
 } elseif ($effectivePhysicalDpiStatus -eq 'passed') {
   'passed'
 } else {

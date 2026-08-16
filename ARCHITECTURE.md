@@ -97,12 +97,16 @@ isMissing: path unavailable while record is preserved
 仍可读取命令快照 path，但 Repository 提交身份不再由 path 决定。
 
 Phase 3 起，`LibraryRepositoryContext` 统一拥有唯一 SQLite connection、stable/path 索引、
-标签关系和 persistence helpers；`LibraryStoreQueryRepository` 与
-`LibraryStoreCommandRepository` 只分离能力，不复制状态。扫描、FFprobe、缩略图、视觉取帧
-和备份通过组合根共享 `ResourceScheduler`，播放期间后台 lease 等待、已开始批次自然收尾。
-播放器运行时和 Flutter 表面分别受 `PlayerRuntimeBackend`、`PlayerSurfaceRenderer` 约束，
-`PlayerBackend` 仅作为兼容聚合接口。大库且支持 trigram FTS5 时，profile 允许生成关键词
-候选 SQL，最终仍由 `FilterQuery`/`TagQueryService` 验证；小库和不支持 FTS5 的环境走内存路径。
+标签关系和 persistence helpers；真实查询、标签/收藏命令和 root/扫描/relink 协调分别由
+`LibraryStoreQueryService`、`LibraryStoreCommandService`、`LibraryStoreCoordinatorService`
+拥有。`LibraryStoreQueryRepository` 与 `LibraryStoreCommandRepository` 只是对外能力端口，
+不复制状态；低层 stable-ID 视频 CRUD、媒体详情/播放状态和缓存写入仍由 Store 作为同一事务
+持久化 owner 保留。扫描、FFprobe、缩略图、视觉取帧和备份通过组合根共享 `ResourceScheduler`，
+播放期间后台 lease 等待、已开始批次自然收尾。播放器运行时和 Flutter 表面分别受
+`PlayerRuntimeBackend`、`PlayerSurfaceRenderer` 契约约束，`PlayerBackend` 仅作为兼容聚合接口；
+具体 runtime/surface adapter 暂不继续拆。大库且支持 trigram FTS5 时，profile 允许生成关键词
+候选 SQL，`dataRevision` 使派生索引在成功写入后按需重建，最终仍由 `FilterQuery`/`TagQueryService`
+验证；真实 11,194 条库基准通过后启用该候选路径，小库、短词和不可用 FTS5 继续走内存路径。
 详见 `docs/architecture/ADR_004_LIBRARY_SPLIT_RESOURCE_SCHEDULER_QUERY_PROFILE.md`。
 
 Repository 拥有：

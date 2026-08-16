@@ -15,18 +15,19 @@ import '../../models/video_item.dart';
 import '../../models/video_visual_signature.dart';
 import '../../platform/database_provider.dart';
 import '../../repositories/repository_interfaces.dart';
-import '../tags/tag_query_service.dart';
 import 'library_collection_rules.dart';
 import 'library_data_backup_service.dart';
 import 'library_load_diagnostics.dart';
 import 'library_metadata_persistence.dart';
 import 'library_query_compiler.dart';
+import 'library_query_service.dart';
 import 'library_schema_migration.dart';
 import 'library_scan_backend.dart';
-import 'library_scan_coordinator.dart';
 import 'library_scan_service.dart';
 import 'library_repository_context.dart';
 import 'library_store_access.dart';
+import 'library_store_coordinator_service.dart';
+import 'library_store_command_service.dart';
 import 'library_tag_maintenance.dart';
 import 'library_tag_persistence.dart';
 import 'library_video_persistence.dart';
@@ -38,6 +39,7 @@ import '../resources/resource_scheduler.dart';
 class LibraryStore
     implements
         LibraryRepository,
+        LibraryQueryCandidateRepository,
         TagRepository,
         CacheRepository,
         VisualSignatureCacheRepository,
@@ -45,14 +47,28 @@ class LibraryStore
         LibraryStoreAccess {
   LibraryStore._(
     this._file,
-    this._context,
+    LibraryRepositoryContext context,
     this._scanBackend,
-    this.dataBackupService,
+    LibraryDataBackupService backupService,
     this._resourceScheduler,
-  );
+  )   : _context = context,
+        dataBackupService = backupService,
+        _queryService = LibraryStoreQueryService(
+          context: context,
+          dataBackupService: backupService,
+        ) {
+    _coordinator = LibraryStoreCoordinatorService(
+      repository: this,
+      context: context,
+      resourceScheduler: _resourceScheduler,
+    );
+    _commandService = LibraryStoreCommandService(repository: this);
+  }
 
   final File _file;
   final LibraryRepositoryContext _context;
+  /** 查询逻辑 owner；不复制 [LibraryRepositoryContext] 的任何索引或连接。 */
+  final LibraryStoreQueryService _queryService;
   Database get _db => _context.database;
   List<String> get roots => _context.roots;
   /** 当前受 root 管理并参与筛选、标签计数和播放队列的视频。 */
@@ -79,23 +95,15 @@ class LibraryStore
    * 该入口只做 profile 选择的候选缩小；调用方不得把候选集直接当最终结果，必须继续
    * 运行 [FilterQuery.matches]，以保留 folder 层级、alias、AND/OR/NOT 等完整语义。
    */
-  Future<List<VideoItem>> queryCandidatesFor(FilterQuery query) async {
-    final plan = queryPlanFor(query);
-    if (!plan.hasSqlCandidate) {
-      return videos.values.toList(growable: false);
-    }
-    // 当前阶段候选入口显式重建派生索引，保证扫描/标签命令尚未接入增量维护时也不读到
-    // 旧候选；后续真实大库基准若证明收益，再用数据修订号替换为增量更新。
-    await const LibrarySearchIndex().rebuild(_db);
-    final rows = await _db.rawQuery(
-      'SELECT video_id FROM videos WHERE ${plan.whereSql}',
-      plan.whereArgs,
-    );
-    return [
-      for (final row in rows)
-        if (videos.byId(row['video_id'] as String) case final item?) item,
-    ];
-  }
+  @override
+  Future<List<VideoItem>?> queryCandidatesFor(FilterQuery query) =>
+      _queryService.queryCandidatesFor(query);
+
+  /** 组合根可直接注入的真实查询 owner；命令仍共享当前 Store/Context。 */
+  LibraryQueryRepository get queryRepository => _queryService;
+
+  @override
+  int get dataRevision => _queryService.dataRevision;
 
   /** stable videoId 主索引；pathKey 视图通过 [videos] 保持向后兼容。 */
   Map<String, VideoItem> get videosById => videos.byVideoId;
@@ -112,8 +120,10 @@ class LibraryStore
   /** 独立视频依赖备份服务；主库仍是唯一业务写入源。 */
   final LibraryDataBackupService dataBackupService;
 
-  /** 当前有效扫描代次；旧代次返回后不得提交数据库或回写 UI。 */
-  int _scanGeneration = 0;
+  /** root/扫描/relink 的协调 owner；Store 只暴露兼容端口。 */
+  late final LibraryStoreCoordinatorService _coordinator;
+  /** 标签、收藏和 root 元数据命令 owner；不复制 Store 状态。 */
+  late final LibraryStoreCommandService _commandService;
 
   @override
   LibraryRepositoryContext get repositoryContext => _context;
@@ -122,7 +132,7 @@ class LibraryStore
   @override
   LibraryScanBackend get scanBackend => _scanBackend;
   @override
-  int get scanGeneration => _scanGeneration;
+  int get scanGeneration => _coordinator.scanGeneration;
 
   @override
   DataBackupStatus get dataBackupStatus => dataBackupService.status;
@@ -156,60 +166,22 @@ class LibraryStore
   Iterable<TagItem> get allTagItems => tagsById.values;
 
   Map<String, int> resultCounts(FilterQuery query) {
-    return TagQueryService(
-      videos: videos.values,
-      tagContext: tagQueryContext,
-    ).resultCounts(query, allTagItems);
+    return _queryService.resultCounts(query);
   }
 
-  Future<Map<String, TagUsageSummary>> tagUsageSummaries() async {
-    final rows = await _db.rawQuery('''
-      SELECT tag_id, source, COUNT(DISTINCT video_id) AS count
-      FROM video_tags
-      GROUP BY tag_id, source
-    ''');
-    final summaries = <String, TagUsageSummary>{
-      for (final tag in tagsById.values) tag.id: const TagUsageSummary(),
-    };
-    for (final row in rows) {
-      final tagId = row['tag_id'] as String;
-      final source = _tagSourceFromName(row['source'] as String?);
-      final count = row['count'] as int? ?? 0;
-      summaries[tagId] = (summaries[tagId] ?? const TagUsageSummary())
-          .increment(source, count);
-    }
-    return summaries;
-  }
+  Future<Map<String, TagUsageSummary>> tagUsageSummaries() =>
+      _queryService.tagUsageSummaries();
 
   @override
-  Future<void> addFavoriteTag(String tag) async {
-    final normalized = TagRules.normalizeTag(tag);
-    if (normalized.isEmpty || favoriteTags.contains(normalized)) return;
-    favoriteTags.add(normalized);
-    await saveMetadata();
-  }
+  Future<void> addFavoriteTag(String tag) => _commandService.addFavoriteTag(tag);
 
   @override
-  Future<void> removeFavoriteTag(String tag) async {
-    favoriteTags.removeWhere((value) => TagRules.sameTag(value, tag));
-    await saveMetadata();
-  }
+  Future<void> removeFavoriteTag(String tag) =>
+      _commandService.removeFavoriteTag(tag);
 
   @override
-  Future<void> replaceRoot(String oldRoot, String newRoot) async {
-    final oldKey = TagRules.pathKey(TagRules.normalizeRootPath(oldRoot));
-    final normalizedNewRoot = TagRules.normalizeRootPath(newRoot);
-    final index = roots.indexWhere((root) => TagRules.pathKey(root) == oldKey);
-    if (index < 0 || normalizedNewRoot.isEmpty) return;
-    final previousRoot = roots[index];
-    roots[index] = normalizedNewRoot;
-    try {
-      await saveMetadata();
-    } catch (_) {
-      roots[index] = previousRoot;
-      rethrow;
-    }
-  }
+  Future<void> replaceRoot(String oldRoot, String newRoot) =>
+      _commandService.replaceRoot(oldRoot, newRoot);
 
   @override
   Future<List<TagGroup>> loadGroups() async =>
@@ -245,6 +217,7 @@ class LibraryStore
       locked: locked,
     );
     await batch.commit(noResult: true);
+    _context.markDataChanged();
     await dataBackupService.enqueueVideo(video.videoId);
   }
 
@@ -270,6 +243,7 @@ class LibraryStore
     if ((remaining ?? 0) == 0) {
       videoTagIdsByPathKey[TagRules.pathKey(video.path)]?.remove(tagId);
     }
+    _context.markDataChanged();
     await dataBackupService.enqueueVideo(videoId);
   }
 
@@ -640,7 +614,7 @@ class LibraryStore
       )
     ''');
     // FTS5 是可选派生索引；不支持的 SQLite 版本继续使用内存查询。
-    await const LibrarySearchIndex().ensureSchema(db);
+    await LibrarySearchIndex().ensureSchema(db);
     await db.execute(stableVideosTableSql('videos'));
     await _ensureVideoColumns(db);
     await db.execute(
@@ -1045,7 +1019,7 @@ class LibraryStore
       tagsById: tagsById,
       videoTagIdsByPathKey: videoTagIndexes.byPath,
       videoTagIdsByVideoId: videoTagIndexes.byVideoId,
-      fts5Available: await const LibrarySearchIndex().ensureSchema(db),
+      fts5Available: await LibrarySearchIndex().ensureSchema(db),
     );
     return LibraryStore._(
       legacyFile,
@@ -1175,71 +1149,29 @@ class LibraryStore
     VideoItem item, {
     String? parentTag,
     Iterable<String>? manualTags,
-  }) async {
-    await _tagMaintenance.replaceManualTags(
-      item,
-      parentTag: parentTag,
-      manualTags: manualTags,
-    );
-    // 主库提交已不可回滚；备份入队失败只能进入诊断，不能诱导上层恢复旧标签模型。
-    await dataBackupService.enqueueVideoBestEffort(item.videoId);
-  }
+  }) =>
+      _commandService.replaceManualTags(
+        item,
+        parentTag: parentTag,
+        manualTags: manualTags,
+      );
 
-  Future<void> saveTag(TagItem tag) async {
-    await _tagPersistence.saveTag(tag);
-    await dataBackupService.enqueueTagDependents(tag.id);
-  }
+  Future<void> saveTag(TagItem tag) => _commandService.saveTag(tag);
 
   Future<TagItem> createManualTag({
     required String name,
     required String groupId,
     String? displayName,
-  }) async {
-    final normalized = TagRules.normalizeTag(name);
-    if (normalized.isEmpty) {
-      throw ArgumentError('tag name is empty');
-    }
-    final id = TagRules.tagIdFor(name: normalized, groupId: groupId);
-    final existing = tagsById[id];
-    if (existing != null && existing.source != TagSource.manual) {
-      throw StateError('manual tag conflicts with an existing non-manual tag');
-    }
-    final tag = existing ??
-        TagItem(
-          id: id,
-          name: normalized,
-          displayName: normalized,
-          groupId: groupId,
-          source: TagSource.manual,
-        );
-    final updated = TagItem(
-      id: tag.id,
-      name: tag.name,
-      displayName: displayName == null || displayName.trim().isEmpty
-          ? tag.displayName
-          : displayName.trim(),
-      groupId: groupId,
-      parentId: tag.parentId,
-      color: tag.color,
-      source: TagSource.manual,
-      aliases: tag.aliases,
-      usageCount: tag.usageCount,
-      isFavorite: tag.isFavorite,
-      isHidden: tag.isHidden,
-      sortOrder: tag.sortOrder,
-    );
-    await saveTag(updated);
-    return updated;
-  }
+  }) =>
+      _commandService.createManualTag(
+        name: name,
+        groupId: groupId,
+        displayName: displayName,
+      );
 
   /** 启动时修复旧版二级 manual 关系，并将受影响视频排入既有备份队列。 */
   Future<void> _promoteLegacyManualTagsToRoot() async {
-    final affected = await _tagMaintenance.promoteLegacyManualTagsToRoot();
-    if (affected.isNotEmpty) {
-      await dataBackupService.enqueueVideos(
-        affected.map((item) => item.videoId),
-      );
-    }
+    await _commandService.promoteLegacyManualTagsToRoot();
   }
 
   Future<void> updateTagDetails(
@@ -1250,49 +1182,25 @@ class LibraryStore
     bool? isHidden,
     bool? isFavorite,
     int? sortOrder,
-  }) async {
-    await saveTag(
-      TagItem(
-        id: tag.id,
-        name: tag.name,
+  }) =>
+      _commandService.updateTagDetails(
+        tag,
         displayName: displayName,
-        groupId: groupId ?? tag.groupId,
-        parentId: tag.parentId,
-        color: tag.color,
-        source: tag.source,
-        aliases: aliases == null ? tag.aliases : dedupeLibraryTags(aliases),
-        usageCount: tag.usageCount,
-        isFavorite: isFavorite ?? tag.isFavorite,
-        isHidden: isHidden ?? tag.isHidden,
-        sortOrder: sortOrder ?? tag.sortOrder,
-      ),
-    );
-  }
+        aliases: aliases,
+        groupId: groupId,
+        isHidden: isHidden,
+        isFavorite: isFavorite,
+        sortOrder: sortOrder,
+      );
 
-  Future<int> countTagReferences(TagItem tag) async {
-    return _tagPersistence.countTagReferences(tag);
-  }
+  Future<int> countTagReferences(TagItem tag) =>
+      _queryService.countTagReferences(tag);
 
-  Future<int> batchAddManualTag(TagItem tag, Iterable<VideoItem> items) async {
-    final targets = items.toList(growable: false);
-    final changed = await _tagMaintenance.batchAddManualTag(tag, targets);
-    if (changed > 0) {
-      await dataBackupService
-          .enqueueVideos(targets.map((item) => item.videoId));
-    }
-    return changed;
-  }
+  Future<int> batchAddManualTag(TagItem tag, Iterable<VideoItem> items) =>
+      _commandService.batchAddManualTag(tag, items);
 
-  Future<int> batchRemoveManualTag(
-      TagItem tag, Iterable<VideoItem> items) async {
-    final targets = items.toList(growable: false);
-    final changed = await _tagMaintenance.batchRemoveManualTag(tag, targets);
-    if (changed > 0) {
-      await dataBackupService
-          .enqueueVideos(targets.map((item) => item.videoId));
-    }
-    return changed;
-  }
+  Future<int> batchRemoveManualTag(TagItem tag, Iterable<VideoItem> items) =>
+      _commandService.batchRemoveManualTag(tag, items);
 
   Future<void> save() async {
     final batch = _db.batch();
@@ -1308,14 +1216,10 @@ class LibraryStore
       _tagMaintenance.syncFolderTagsInBatch(batch, item);
     }
     await batch.commit(noResult: true);
+    _context.markDataChanged();
   }
 
-  Future<void> saveMetadata() async {
-    await _metadataPersistence.save(
-      roots: roots,
-      favoriteTags: favoriteTags,
-    );
-  }
+  Future<void> saveMetadata() => _commandService.saveMetadata();
 
   /**
    * 关闭当前媒体库数据库连接。
@@ -1323,9 +1227,7 @@ class LibraryStore
    * 测试和 repository 拆分需要显式释放 SQLite 文件句柄，避免临时目录清理失败。
    */
   Future<void> close() async {
-    if (_scanGeneration > 0) {
-      _scanBackend.cancelGeneration(_scanGeneration);
-    }
+    await _coordinator.cancelActiveScan();
     await dataBackupService.close();
     await _db.close();
   }
@@ -1338,6 +1240,7 @@ class LibraryStore
     }
     videos[pathKey] = item;
     await _videoPersistence.upsert(item);
+    _context.markDataChanged();
     await dataBackupService.enqueueVideo(item.videoId);
   }
 
@@ -1380,6 +1283,7 @@ class LibraryStore
     _videoPersistence.relinkInBatch(batch, oldPath, updated);
     _tagPersistence.relinkVideoPathInBatch(batch, updated);
     await batch.commit(noResult: true);
+    _context.markDataChanged();
 
     final linkedTagIds = videoTagIdsByPathKey.remove(oldKey);
     videos.remove(oldKey);
@@ -1413,6 +1317,7 @@ class LibraryStore
       videos[pathKey] = item;
     }
     await _videoPersistence.upsertAll(updates);
+    _context.markDataChanged();
   }
 
   /**
@@ -1434,6 +1339,7 @@ class LibraryStore
       videos[TagRules.pathKey(item.path)] = item;
     }
     await _videoPersistence.upsertAll(updates);
+    _context.markDataChanged();
     await dataBackupService.enqueueVideos(
       updates.map((item) => item.videoId),
     );
@@ -1572,6 +1478,7 @@ class LibraryStore
         _videoPersistence.deleteInBatch(batch, path);
       }
       await batch.commit(noResult: true);
+      _context.markDataChanged();
       if (mergedTarget != null && targetItem != null) {
         targetItem
           ..isFavorite = mergedTarget.isFavorite
@@ -1684,14 +1591,14 @@ class LibraryStore
   }
 
   Future<int> addRootAndScan(String rootPath) async {
-    return (await addRootAndScanWithChanges(rootPath)).addedCount;
+    return _coordinator.addRootAndScan(rootPath);
   }
 
   /** 添加 root 并返回可供 UI 与探测队列差量消费的事务提交结果。 */
   Future<LibraryScanCommitResult> addRootAndScanWithChanges(String rootPath,
           {LibraryScanProgressCallback? onProgress}) =>
-      addRootsAndScanWithChanges(
-        <String>[rootPath],
+      _coordinator.addRootAndScanWithChanges(
+        rootPath,
         onProgress: onProgress,
       );
 
@@ -1704,36 +1611,11 @@ class LibraryStore
   @override
   Future<LibraryScanCommitResult> addRootsAndScanWithChanges(
       Iterable<String> rootPaths,
-      {LibraryScanProgressCallback? onProgress}) async {
-    final normalizedRoots = <String>[];
-    final pendingKeys = <String>{};
-    for (final rootPath in rootPaths) {
-      final normalizedRoot = TagRules.normalizeRootPath(rootPath);
-      if (normalizedRoot.isEmpty) {
-        continue;
-      }
-      final rootKey = TagRules.pathKey(normalizedRoot);
-      if (pendingKeys.add(rootKey)) {
-        normalizedRoots.add(normalizedRoot);
-      }
-    }
-    if (normalizedRoots.isEmpty) {
-      return LibraryScanCommitResult.cancelled(_scanGeneration);
-    }
-
-    var metadataChanged = false;
-    final existingKeys = roots.map(TagRules.pathKey).toSet();
-    for (final normalizedRoot in normalizedRoots) {
-      if (existingKeys.add(TagRules.pathKey(normalizedRoot))) {
-        roots.add(normalizedRoot);
-        metadataChanged = true;
-      }
-    }
-    if (metadataChanged) {
-      await saveMetadata();
-    }
-    return scanWithChanges(onProgress: onProgress);
-  }
+      {LibraryScanProgressCallback? onProgress}) =>
+      _coordinator.addRootsAndScanWithChanges(
+        rootPaths,
+        onProgress: onProgress,
+      );
 
   /**
    * 从媒体库根目录列表移除一个目录。
@@ -1743,54 +1625,11 @@ class LibraryStore
    * 磁盘文件始终不由该操作删除。
    */
   Future<List<VideoItem>> removeRoot(String rootPath) async {
-    final normalizedRoot = TagRules.normalizeRootPath(rootPath);
-    final rootKey = TagRules.pathKey(normalizedRoot);
-    if (!roots.any((root) => TagRules.pathKey(root) == rootKey)) {
-      return const <VideoItem>[];
-    }
-
-    // 取消进行中的只读扫描并推进代次，禁止旧扫描在 root 删除后重新提交旧结果。
-    if (_scanGeneration > 0) {
-      _scanBackend.cancelGeneration(_scanGeneration);
-      _scanGeneration++;
-    }
-    final remainingRoots = <String>[
-      for (final root in roots)
-        if (TagRules.pathKey(root) != rootKey) root,
-    ];
-    final removedVideos = <VideoItem>[
-      for (final item in videos.values)
-        if (TagRules.rootContainsFile(normalizedRoot, item.path) &&
-            !remainingRoots.any(
-              (root) => TagRules.rootContainsFile(root, item.path),
-            ))
-          item,
-    ];
-
-    final batch = _db.batch();
-    _metadataPersistence.saveInBatch(
-      batch,
-      roots: remainingRoots,
-      favoriteTags: favoriteTags,
-    );
-    for (final item in removedVideos) {
-      _videoPersistence.markDetachedInBatch(batch, item.videoId, true);
-    }
-    await batch.commit(noResult: true);
-
-    roots
-      ..clear()
-      ..addAll(remainingRoots);
-    for (final item in removedVideos) {
-      final pathKey = TagRules.pathKey(item.path);
-      videos.remove(pathKey);
-      detachedVideos[pathKey] = item;
-    }
-    return List<VideoItem>.unmodifiable(removedVideos);
+    return _coordinator.removeRoot(rootPath);
   }
 
   Future<int> scan() async {
-    return (await scanWithChanges()).addedCount;
+    return _coordinator.scan();
   }
 
   /**
@@ -1798,23 +1637,11 @@ class LibraryStore
    */
   Future<LibraryScanCommitResult> scanWithChanges({
     LibraryScanProgressCallback? onProgress,
-  }) async {
-    final previousGeneration = _scanGeneration;
-    if (previousGeneration > 0) {
-      _scanBackend.cancelGeneration(previousGeneration);
-    }
-    final generation = ++_scanGeneration;
-    return LibraryScanCoordinator(
-      this,
-      resourceScheduler: _resourceScheduler,
-    ).scan(
-      generationId: generation,
-      onProgress: onProgress,
-    );
-  }
+  }) =>
+      _coordinator.scanWithChanges(onProgress: onProgress);
 
   @override
-  Future<void> setScanPaused(bool paused) => _scanBackend.setPaused(paused);
+  Future<void> setScanPaused(bool paused) => _coordinator.setScanPaused(paused);
 
   /**
    * 取消当前只读扫描，并推进代次阻止已经离开后端的旧结果进入事务提交。
@@ -1822,15 +1649,7 @@ class LibraryStore
    * 先登记取消、再解除暂停，保证正在等待播放让盘的扫描也能及时观察取消信号。
    */
   @override
-  Future<void> cancelActiveScan() async {
-    final generation = _scanGeneration;
-    if (generation <= 0) {
-      return;
-    }
-    _scanBackend.cancelGeneration(generation);
-    _scanGeneration++;
-    await _scanBackend.setPaused(false);
-  }
+  Future<void> cancelActiveScan() => _coordinator.cancelActiveScan();
 
   @override
   Future<void> setDataBackupEnabled(bool enabled) =>
@@ -1860,12 +1679,8 @@ class LibraryStore
    *
    * 稳定 videoId 以及 manual 标签、收藏、播放记录和进度保持不变；folder 标签随新路径更新。
    */
-  Future<void> relinkMissingVideo(VideoItem item, String newPath) {
-    return LibraryScanCoordinator(
-      this,
-      resourceScheduler: _resourceScheduler,
-    ).relinkMissingVideo(item, newPath);
-  }
+  Future<void> relinkMissingVideo(VideoItem item, String newPath) =>
+      _coordinator.relinkMissingVideo(item, newPath);
 
   @override
   Future<void> relinkMissingVideoById(String videoId, String newPath) {
@@ -1879,37 +1694,17 @@ class LibraryStore
   /** 在单个 SQLite batch 中提交多条 Relink，并返回重新校验或事务失败的 videoId。 */
   Future<Set<String>> relinkMissingVideosInBatch(
     Map<VideoItem, String> targets,
-  ) {
-    return LibraryScanCoordinator(
-      this,
-      resourceScheduler: _resourceScheduler,
-    ).relinkMissingVideosInBatch(targets);
-  }
+  ) =>
+      _coordinator.relinkMissingVideosInBatch(targets);
 
   static Future<String?> mediaFingerprintFor(String path) async {
     return LibraryScanService.mediaFingerprintFor(path);
   }
 
-  Future<int> countUntrackedVideos() async {
-    return const LibraryScanService().countUntrackedVideos(
-      roots,
-      videos.keys.toSet(),
-    );
-  }
+  Future<int> countUntrackedVideos() => _queryService.countUntrackedVideos();
 
-  Set<String> get allTags {
-    final tags = <String>{};
-    for (final item in videos.values) {
-      tags.addAll(item.tags);
-    }
-    return tags;
-  }
+  Set<String> get allTags => _queryService.allTags;
 
-  Set<String> childTagsFor(String parentTag) {
-    final tags = <String>{};
-    for (final item in videos.values) {
-      tags.addAll(item.childTags[parentTag] ?? const <String>{});
-    }
-    return tags;
-  }
+  Set<String> childTagsFor(String parentTag) =>
+      _queryService.childTagsFor(parentTag);
 }

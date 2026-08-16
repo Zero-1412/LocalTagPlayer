@@ -316,7 +316,9 @@ void main() {
     expect(facade, isNot(contains('final LibraryRepository _repository')));
     expect(
       bootstrap,
-      contains('queryRepository: LibraryStoreQueryRepository(repository)'),
+      contains(
+        'queryRepository: LibraryStoreQueryRepository(repository.queryRepository)',
+      ),
     );
     expect(
       bootstrap,
@@ -1725,8 +1727,8 @@ void main() {
     expect(page, contains('cancelBackendEvents: backendEvents.dispose'));
     expect(page, isNot(contains('StreamSubscription<bool>?')));
     expect(
-      resources.indexOf('await _cancelBackendEvents();'),
-      lessThan(resources.indexOf('await _disposeResource();')),
+      resources.indexOf('await _cancelBackendEvents().timeout('),
+      lessThan(resources.indexOf('await _disposeResource().timeout(')),
     );
     expect(
       compatibility,
@@ -1800,10 +1802,12 @@ void main() {
     );
     expect(resources, contains('Future<void> stopForExit()'));
     expect(resources, contains('Future<void> release()'));
-    final cancelIndex = resources.indexOf('await _cancelBackendEvents();');
+    final cancelIndex =
+        resources.indexOf('await _cancelBackendEvents().timeout(');
     final stopIndex = resources.indexOf('await stopForExit();');
-    final disposeIndex = resources.indexOf('await _disposeResource();');
-    final releasedIndex = resources.indexOf('await _awaitReleased();');
+    // 释放阶段现在各自有界等待；门禁检查真实调用顺序，而不是要求旧的无超时字符串。
+    final disposeIndex = resources.indexOf('await _disposeResource().timeout(');
+    final releasedIndex = resources.indexOf('await _awaitReleased().timeout(');
     expect(cancelIndex, greaterThanOrEqualTo(0));
     expect(cancelIndex, lessThan(stopIndex));
     expect(stopIndex, lessThan(disposeIndex));
@@ -2167,8 +2171,8 @@ void main() {
     final maintenance = File(
       'lib/src/services/library/library_tag_maintenance.dart',
     ).readAsStringSync();
-    final store = File(
-      'lib/src/services/library/library_store.dart',
+    final commandService = File(
+      'lib/src/services/library/library_store_command_service.dart',
     ).readAsStringSync();
     final backup = File(
       'lib/src/services/library/library_data_backup_service.dart',
@@ -2199,7 +2203,10 @@ void main() {
     expect(maintenance, contains('final previousTagIds ='));
     expect(maintenance, contains('_store.videoTagIdsByPathKey[pathKey] ='));
     expect(maintenance, contains('_store.tagsById.removeWhere('));
-    expect(store, contains('enqueueVideoBestEffort(item.videoId)'));
+    expect(
+      commandService,
+      contains('enqueueVideoBestEffort(item.videoId)'),
+    );
     expect(backup, contains('Future<void> enqueueVideoBestEffort('));
     expect(backup, contains('phase: DataBackupPhase.failed'));
   });

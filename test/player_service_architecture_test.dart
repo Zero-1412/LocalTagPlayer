@@ -183,6 +183,16 @@ class _SerializedCommandBackend extends _RecordingPlayerBackend {
   }
 }
 
+/** 用永不自动返回的属性 Future 验证 PlayerService 的统一读取上限。 */
+class _BlockingPropertyBackend extends _RecordingPlayerBackend {
+  _BlockingPropertyBackend(this.blockedRead);
+
+  final Future<String> blockedRead;
+
+  @override
+  Future<String> getProperty(String property) => blockedRead;
+}
+
 /** 验证媒体控制仍经由可选后端边界，不泄露具体播放器实现。 */
 class _MediaControlsRecordingBackend extends _RecordingPlayerBackend
     implements PlayerMediaControlsBoundary {
@@ -373,6 +383,51 @@ void main() {
       backend.commands,
       <String>['seek-start', 'seek-end', 'open'],
     );
+    await service.dispose();
+  });
+
+  test('媒体命令超时会封锁排队命令但不会与旧 native seek 并发', () async {
+    final seekEntered = Completer<void>();
+    final releaseSeek = Completer<void>();
+    final backend = _SerializedCommandBackend(seekEntered, releaseSeek);
+    final service = PlayerService(
+      backend: backend,
+      mediaCommandTimeout: const Duration(milliseconds: 20),
+      mediaCommandDisposeWaitTimeout: const Duration(milliseconds: 20),
+    );
+
+    final seekFuture = service.seek(const Duration(seconds: 12));
+    await seekEntered.future;
+    final openFuture = service.openPath('next.mp4');
+
+    await expectLater(
+      seekFuture,
+      throwsA(isA<PlayerMediaCommandTimeout>()),
+    );
+    await expectLater(
+      openFuture,
+      throwsA(isA<PlayerMediaCommandInvalidated>()),
+    );
+    expect(backend.commands, <String>['seek-start']);
+
+    // 释放唯一 in-flight native 命令后，尾链才能自然收尾；期间没有第二条
+    // open/stop 进入后端，避免旧 seek 迟到覆盖新媒体。
+    releaseSeek.complete();
+    await service.dispose();
+  });
+
+  test('普通属性读取超时会返回明确的属性超时而不是永久等待', () async {
+    final blockedRead = Completer<String>();
+    final service = PlayerService(
+      backend: _BlockingPropertyBackend(blockedRead.future),
+      propertyReadTimeout: const Duration(milliseconds: 10),
+    );
+
+    await expectLater(
+      service.getProperty('demuxer-cache-duration'),
+      throwsA(isA<PlayerPropertyReadTimeout>()),
+    );
+    blockedRead.complete('late');
     await service.dispose();
   });
 

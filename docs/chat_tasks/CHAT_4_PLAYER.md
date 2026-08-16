@@ -1,5 +1,33 @@
 # Chat 4：播放器与筛选结果队列
 
+## 2026-08-16 · 普通属性/诊断超时与健康/NVIDIA 交叉身份
+
+- `PlayerService` 与页面 `getMpvProperty()` 对普通 native 属性读取增加统一超时；内存阶段日志逐项读取也有界，
+  释放协调器对事件取消和诊断阶段设置独立上限，stop 失败进入 `releaseFailed`/失败阶段。
+- 健康采样在每次属性 await 后校验 `videoId + mediaGeneration + requestRevision`；NVIDIA 探测、联合滤镜、驱动
+  状态轮询、CPU 回滚和用户设置入口统一传入当前 task context。
+- focused 回归新增普通属性超时、事件取消/诊断日志卡住、stop 失败状态，以及“旧媒体采样完成后切换新媒体”交叉门禁。
+- 真实 Windows 窗口验收已通过最新 Debug 包：短按 `L` 快进后画面和进度继续前进；全屏播放列表单击第二项可更新
+  选中态；退出播放器返回媒体库后重新进入可正常重建普通播放器、队列和 Texture。验收未改变 schema、筛选语义或来源 filtered queue。
+
+## 2026-08-16 · native 命令超时、释放失败与 GPU 异步身份
+
+- 对抗式检查发现 native seek 无边界会让同一尾链上的后续 open/stop 永久等待，且 Dart `Future.timeout` 本身不会取消底层调用。
+  `PlayerService` 现在只对已派发命令计时；超时后封锁当前服务代次，尚未派发命令立即失效，禁止并发触碰旧 Player。
+- 资源协调器对事件取消、`dispose`、`released` 分阶段限时并保留失败阶段；失败时记录 `player_release_failed`，Route 协调信号仍只表示释放尝试结束。
+- GPU 能力探测支持总超时和取消检查；GPU/NVIDIA/健康回滚/超分结果统一绑定 `videoId + mediaGeneration + requestRevision`，不再用 mutable path 作为主要保护。
+- 播放错误走安全 stop；退出等待 `maybePop()` 并在被拒绝时恢复 `isExiting`，避免停留在不可交互页面。
+- 直接 focused 回归覆盖命令超时不并发、释放两段超时、GPU 总超时/取消和稳定身份源码合同。
+
+## 2026-08-16 · 全屏筛选结果队列 airspace 覆盖回归
+
+- 现象：全屏模式打开筛选结果队列后，显式 child HWND 路径仍可能由原生视频表面覆盖列表或抢走点击命中。
+- 根因：全屏队列虽已挂在 Flutter 根 Stack，显示/隐藏却没有接入既有 `PlayerOverlaySurfaceBoundary` 裁剪合同，
+  且快速显隐时原生裁剪命令可能乱序完成。
+- 修复：按队列右侧实际矩形串行提交裁剪，等待原生让出后再挂载 Flutter 侧栏；隐藏和全屏切换恢复完整表面，
+  菜单/设置弹层优先于全屏队列；过期显示请求不再把旧侧栏写回页面。截图测试同步到当前“不压缩视频宽度”的覆盖层语义。
+- 保护：默认 MediaKit Texture、来源 filtered queue、当前序号、播放会话和视频尺寸不变。
+
 ## 2026-08-16 · 短按快进关键帧回退
 
 - 现象：单次按下快进偶发先显示前进目标，随后回到原点；长按因为连续发送多个预览目标反而能继续前进。

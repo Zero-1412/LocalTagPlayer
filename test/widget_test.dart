@@ -6302,6 +6302,14 @@ void main() {
     expect(playerFullscreenQueueWidth(800), 320);
     expect(playerFullscreenQueueWidth(2000), 476);
     expect(
+      playerFullscreenQueueOverlayRect(const Size(1000, 700)),
+      const Rect.fromLTWH(680, 0, 320, 700),
+    );
+    expect(
+      playerFullscreenQueueOverlayRect(const Size(200, 120)),
+      const Rect.fromLTWH(0, 0, 200, 120),
+    );
+    expect(
       playerPointerInControlBar(localY: 500, surfaceHeight: 700),
       isFalse,
     );

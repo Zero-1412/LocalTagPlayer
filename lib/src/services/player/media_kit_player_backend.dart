@@ -232,7 +232,9 @@ class MediaKitPlayerBackend
       throw StateError('missing_file');
     }
     try {
-      await _player.open(Media(path));
+      // 页面会在媒体可播放、首帧和恢复位置门禁完成后显式 play；禁止 open 的默认
+      // 自动播放先启动又被打开流程中的属性/精确 seek 暂停。
+      await _player.open(Media(path), play: false);
       if (_activeOpenGeneration == generation) {
         unawaited(_captureDecoder(generation));
       }

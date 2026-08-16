@@ -3,6 +3,14 @@ import '../../platform/platform_interfaces.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/** GPU 能力任务的总等待上限；超时只放弃结果，不伪造能力或取消 native 读调用。 */
+const playerGpuCapabilityDetectionTimeout = Duration(seconds: 4);
+
+/** 旧 GPU 任务已失效；调用方应丢弃快照，不再访问共享播放器属性。 */
+class PlayerGpuCapabilityProbeCancelled implements Exception {
+  const PlayerGpuCapabilityProbeCancelled();
+}
+
 /** 第三阶段 GPU 能力检测快照；未知能力不能被解释为支持。 */
 class PlayerGpuCapabilitySnapshot {
   const PlayerGpuCapabilitySnapshot({
@@ -89,7 +97,27 @@ class PlayerGpuCapabilityDetector {
   const PlayerGpuCapabilityDetector();
 
   Future<PlayerGpuCapabilitySnapshot> detect(
-      PlayerRuntimeAccess runtime) async {
+    PlayerRuntimeAccess runtime, {
+    Duration timeout = playerGpuCapabilityDetectionTimeout,
+    bool Function()? shouldCancel,
+  }) {
+    return _detect(
+      runtime,
+      shouldCancel: shouldCancel,
+    ).timeout(timeout);
+  }
+
+  Future<PlayerGpuCapabilitySnapshot> _detect(
+    PlayerRuntimeAccess runtime, {
+    bool Function()? shouldCancel,
+  }) async {
+    void ensureActive() {
+      if (shouldCancel?.call() ?? false) {
+        throw const PlayerGpuCapabilityProbeCancelled();
+      }
+    }
+
+    ensureActive();
     final values = <String, String>{};
     for (final property in const <String>[
       'current-vo',
@@ -107,7 +135,9 @@ class PlayerGpuCapabilityDetector {
     ]) {
       try {
         values[property] = await runtime.getProperty(property);
-      } catch (_) {
+        ensureActive();
+      } catch (error) {
+        if (error is PlayerGpuCapabilityProbeCancelled) rethrow;
         values[property] = 'unavailable';
       }
     }
@@ -115,7 +145,9 @@ class PlayerGpuCapabilityDetector {
     PlayerGpuCapabilityMatrix matrix;
     try {
       matrix = await runtime.queryGpuCapabilities();
-    } catch (_) {
+      ensureActive();
+    } catch (error) {
+      if (error is PlayerGpuCapabilityProbeCancelled) rethrow;
       matrix = const PlayerGpuCapabilityMatrix(
         platformSupported: false,
         probeStatus: 'failed',
@@ -135,7 +167,9 @@ class PlayerGpuCapabilityDetector {
     if (renderBoundary != null) {
       try {
         activeAdapter = await renderBoundary.queryActiveGpuAdapter();
-      } catch (_) {
+        ensureActive();
+      } catch (error) {
+        if (error is PlayerGpuCapabilityProbeCancelled) rethrow;
         activeAdapter = const PlayerGpuActiveAdapter(
           probeStatus: 'unavailable',
           detectionSource: 'backend-query-failed',

@@ -44,6 +44,8 @@ class PlayerBackendEventBridge {
       onError: onError,
       onPosition: onPosition,
       onPlayingChanged: onPlayingChanged,
+      generation: _bindingGeneration,
+      bindingToken: _bindingGeneration,
     );
   }
 
@@ -63,12 +65,18 @@ class PlayerBackendEventBridge {
   late final void Function(Duration position) _onPosition;
   late final void Function(bool playing) _onPlayingChanged;
 
-  /** 当前会话的全部事件订阅；必须在 backend dispose 前统一取消。 */
+  /** 当前会话的全部事件订阅；释放时先失效回调，再后台取消。 */
   final List<StreamSubscription<dynamic>> _subscriptions =
       <StreamSubscription<dynamic>>[];
 
   /** 重绑与释放共用一条尾链，避免旧订阅取消和新订阅建立交错。 */
   Future<void> _bindingTail = Future<void>.value();
+
+  /** 旧订阅取消 Future；重绑不等待它，最终 dispose 仍会统一收口。 */
+  final Set<Future<void>> _pendingCancellations = <Future<void>>{};
+
+  /** 先让旧回调失效，再异步等待底层 StreamSubscription 完成取消。 */
+  var _bindingGeneration = 0;
 
   /** 首次 dispose 的共享 Future，防止并发释放形成第二条取消链。 */
   Future<void>? _disposeFuture;
@@ -88,41 +96,67 @@ class PlayerBackendEventBridge {
     required void Function(String code) onError,
     required void Function(Duration position) onPosition,
     required void Function(bool playing) onPlayingChanged,
-    int? generation,
+    required int generation,
+    required int bindingToken,
   }) {
     _subscriptions.addAll(<StreamSubscription<dynamic>>[
       completedChanges.listen((completed) {
-        if (generation == null) {
+        if (bindingToken != _bindingGeneration) return;
+        final callback = onCompletedWithGeneration;
+        if (callback == null && bindingToken == 0) {
           onCompleted(completed);
         } else {
-          onCompletedWithGeneration?.call(completed, generation);
+          callback?.call(completed, generation);
         }
       }),
       errorChanges.listen((code) {
-        if (generation == null) {
+        if (bindingToken != _bindingGeneration) return;
+        final callback = onErrorWithGeneration;
+        if (callback == null && bindingToken == 0) {
           onError(code);
         } else {
-          onErrorWithGeneration?.call(code, generation);
+          callback?.call(code, generation);
         }
       }),
       positionChanges.listen((position) {
-        if (generation == null) {
+        if (bindingToken != _bindingGeneration) return;
+        final callback = onPositionWithGeneration;
+        if (callback == null && bindingToken == 0) {
           onPosition(position);
         } else {
-          onPositionWithGeneration?.call(position, generation);
+          callback?.call(position, generation);
         }
       }),
-      playingChanges.listen(onPlayingChanged),
+      playingChanges.listen((playing) {
+        if (bindingToken != _bindingGeneration) return;
+        onPlayingChanged(playing);
+      }),
     ]);
   }
 
-  Future<void> _cancelSubscriptions() async {
+  Future<void> _cancelSubscriptions() {
     final subscriptions = List<StreamSubscription<dynamic>>.from(
       _subscriptions,
     );
     _subscriptions.clear();
-    await Future.wait<void>(
+    return Future.wait<void>(
       subscriptions.map((subscription) => subscription.cancel()),
+    );
+  }
+
+  /** 取消不阻塞正常重绑；错误留给最终生命周期收口而不产生未处理 Future。 */
+  void _cancelSubscriptionsInBackground() {
+    final cancellation = _cancelSubscriptions();
+    _pendingCancellations.add(cancellation);
+    unawaited(
+      cancellation.then<void>(
+        (_) {
+          _pendingCancellations.remove(cancellation);
+        },
+        onError: (Object error, StackTrace stack) {
+          _pendingCancellations.remove(cancellation);
+        },
+      ),
     );
   }
 
@@ -133,9 +167,11 @@ class PlayerBackendEventBridge {
    * 位置或错误在媒体切换窗口里污染新队列项。
    */
   Future<void> rebind({required int generation}) {
-    final operation = _bindingTail.then<void>((_) async {
+    final operation = _bindingTail.then<void>((_) {
       if (_disposed) return;
-      await _cancelSubscriptions();
+      // generation gate 先切断旧回调，底层取消可以在后台自然收尾。
+      final bindingToken = ++_bindingGeneration;
+      _cancelSubscriptionsInBackground();
       if (_disposed) return;
       final onCompleted = onCompletedWithGeneration;
       final onError = onErrorWithGeneration;
@@ -153,6 +189,7 @@ class PlayerBackendEventBridge {
         onPosition: _onPosition,
         onPlayingChanged: _onPlayingChanged,
         generation: generation,
+        bindingToken: bindingToken,
       );
     });
     _bindingTail = operation.then<void>(
@@ -163,9 +200,10 @@ class PlayerBackendEventBridge {
   }
 
   /**
-   * 幂等取消全部订阅。
+   * 幂等失效全部订阅。
    *
-   * 调用方必须先等待本 Future，再 stop/dispose backend，避免流关闭与页面回调交错。
+   * generation gate 先切断回调，底层 StreamSubscription 取消在后台收尾；这样不会让
+   * native backend 的 dispose 与测试/平台 stream 的取消 Future 形成循环等待。
    */
   Future<void> dispose() {
     final existing = _disposeFuture;
@@ -173,7 +211,10 @@ class PlayerBackendEventBridge {
       return existing;
     }
     _disposed = true;
-    final future = _bindingTail.then<void>((_) => _cancelSubscriptions());
+    final future = _bindingTail.then<void>((_) {
+      _bindingGeneration++;
+      _cancelSubscriptionsInBackground();
+    });
     _disposeFuture = future;
     return future;
   }

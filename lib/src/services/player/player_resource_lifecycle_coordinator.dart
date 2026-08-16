@@ -34,6 +34,10 @@ class PlayerResourceLifecycleCoordinator {
     required VoidCallback onTextureReady,
     required void Function(DateTime releaseStartedAt) onReleased,
     void Function(Object error)? onStopFailed,
+    void Function(String stage, Object error)? onReleaseFailed,
+    this.stageTimeout = const Duration(seconds: 2),
+    this.disposeTimeout = const Duration(seconds: 8),
+    this.releasedTimeout = const Duration(seconds: 8),
   })  : _textureId = textureId,
         _cancelBackendEvents = cancelBackendEvents,
         _stop = stop,
@@ -42,7 +46,8 @@ class PlayerResourceLifecycleCoordinator {
         _logStage = logStage,
         _onTextureReady = onTextureReady,
         _onReleased = onReleased,
-        _onStopFailed = onStopFailed {
+        _onStopFailed = onStopFailed,
+        _onReleaseFailed = onReleaseFailed {
     _textureId.addListener(_handleTextureReady);
     _handleTextureReady();
   }
@@ -74,6 +79,16 @@ class PlayerResourceLifecycleCoordinator {
   /** stop 超时或失败的安全诊断回调。 */
   final void Function(Object error)? _onStopFailed;
 
+  /** 事件取消和诊断日志的统一上限；超时后释放链进入终止边界。 */
+  final Duration stageTimeout;
+
+  /** dispose 与 released 分别限时；超时只报告阶段，不制造并发释放调用。 */
+  final Duration disposeTimeout;
+  final Duration releasedTimeout;
+
+  /** 释放链失败诊断；页面可据此区分“返回路由”和“原生资源确已释放”。 */
+  final void Function(String stage, Object error)? _onReleaseFailed;
+
   /** 首个有效纹理只发布一次。 */
   var _textureReadyPublished = false;
 
@@ -85,6 +100,12 @@ class PlayerResourceLifecycleCoordinator {
 
   /** 完整释放的共享 Future，保证 dispose/released 只有一个调用 owner。 */
   Future<void>? _releaseFuture;
+
+  /** 释放尝试是否有任一阶段超时或失败。 */
+  bool get releaseFailed => _releaseFailureStage != null;
+
+  /** 首个失败阶段，供 Route 返回后的诊断摘要使用。 */
+  String? get releaseFailureStage => _releaseFailureStage;
 
   /** 首个有效纹理 ID 到达时发布匿名阶段事件。 */
   void _handleTextureReady() {
@@ -112,7 +133,12 @@ class PlayerResourceLifecycleCoordinator {
         readEngineProperties: true,
       );
     } catch (error) {
-      _onStopFailed?.call(error);
+      _reportReleaseFailure('stop', error);
+      try {
+        _onStopFailed?.call(error);
+      } catch (_) {
+        // 退出诊断回调不能反向打断 stop 的幂等尾链。
+      }
     }
   }
 
@@ -142,25 +168,51 @@ class PlayerResourceLifecycleCoordinator {
     );
     try {
       try {
-        await _cancelBackendEvents();
+        await _cancelBackendEvents().timeout(stageTimeout);
+      } catch (error) {
+        _reportReleaseFailure('cancel-events', error);
+      }
+      await stopForExit();
+      try {
+        await _disposeResource().timeout(disposeTimeout);
+      } catch (error) {
+        _reportReleaseFailure('dispose', error);
       } finally {
-        await stopForExit();
+        // dispose 抛错或超时后仍只等待同一后端的 released 信号；不发第二次
+        // dispose，也不把超时转换为与旧 Player 并发的新媒体命令。
         try {
-          await _disposeResource();
-        } finally {
-          // 即使 dispose 抛错，也等待后端自己的 released 信号，避免遗留 HWND/Texture。
-          await _awaitReleased();
+          await _awaitReleased().timeout(releasedTimeout);
+        } catch (error) {
+          _reportReleaseFailure('released', error);
         }
       }
     } finally {
       try {
         await _logStageSafely(
-          'player_disposed',
+          _releaseFailureStage == null
+              ? 'player_disposed'
+              : 'player_release_failed',
           readEngineProperties: false,
         );
       } finally {
-        _onReleased(releaseStartedAt);
+        try {
+          _onReleased(releaseStartedAt);
+        } catch (error) {
+          _reportReleaseFailure('route-callback', error);
+        }
       }
+    }
+  }
+
+  String? _releaseFailureStage;
+
+  /** 只记录首个失败阶段，避免异常正文或重复回调污染页面状态。 */
+  void _reportReleaseFailure(String stage, Object error) {
+    _releaseFailureStage ??= stage;
+    try {
+      _onReleaseFailed?.call(stage, error);
+    } catch (_) {
+      // 诊断回调不能反向打断释放尾链。
     }
   }
 
@@ -173,8 +225,9 @@ class PlayerResourceLifecycleCoordinator {
       await _logStage(
         stage,
         readEngineProperties: readEngineProperties,
-      );
-    } catch (_) {
+      ).timeout(stageTimeout);
+    } catch (error) {
+      _reportReleaseFailure('diagnostic:$stage', error);
       // 生命周期诊断属于旁路观测；资源释放和 Route 完成信号优先。
     }
   }

@@ -1,5 +1,82 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 播放器首帧与媒体库悬停预览启动链（完成）
+
+- 完成：正式 MediaKit 后端以 `open(play: false)` 打开本地媒体，完成引擎/可播放性/恢复位置门禁后由页面显式 `play()`；
+  本地 `cache-pause` 默认切换为 `no`，可用 `LTP_LOCAL_CACHE_PAUSE=true` 做同素材对照。
+- 完成：媒体库结果页挂载一个共享 hover `Player/VideoController`；静态 poster 在原生首帧、透明 Texture 挂载和 Flutter 帧合成完成前持续可见，失败/超时不揭示黑帧。
+- 完成：点击播放器前的邻近缩略图预热改为 `unawaited` 后台任务，不再阻塞正式播放器 Route；共享预览释放与 stop/open 具备代次和串行门禁。
+- 保护：schema、`FilterQuery`/`TagQueryService`、来源 filtered queue、stable videoId 用户数据、正式 PlayerBackend 公共契约和缩略图/媒体队列语义不变。
+- 已验证：目标 focused/widget/architecture tests 通过；`flutter analyze` 通过；`flutter build windows --debug` 成功；Debug 桌面运行时可进入媒体库并点击卡片到播放器 surface。
+
+# 2026-08-16 · 播放器未提交改动与架构 Phase 3–6 收口（完成）
+
+- 完成：播放器释放/seek/媒体身份改动的 analyzer 与架构契约失败已清除；页面派生状态迁出后
+  `player_page.dart` 回到架构行数门禁，释放阶段的取消、dispose、released 均保留有界等待和失败诊断。
+- Phase 3：`LibraryStoreQueryService` 承载真实 SQL/标签查询和候选查询；`LibraryStoreCommandService`
+  承载标签、收藏、root 元数据和 manual tag 命令；`LibraryStoreCoordinatorService` 承载 root、扫描、
+  取消和 relink 协调。三者共享原 `LibraryRepositoryContext`、索引、persistence helpers 和事务，
+  Store 只保留兼容端口及低层 stable-ID 视频/缓存/播放状态持久化 owner。
+- Phase 5：确认“契约拆分完成”；`PlayerRuntimeBackend`/`PlayerSurfaceRenderer` 已独立注入，具体
+  runtime/surface adapter 暂不继续拆，保留正式 MediaKit Texture 和 Windows native 默认行为。
+- Phase 6：候选查询已接入 `LibraryQueryController`/Facade；`dataRevision` 在主库成功写入后推进，
+  FTS5 派生索引按需重建，失败安全回退完整 Dart 查询。真实 11,194 条库的隔离副本基准：完整筛选
+  平均 75.63ms，候选+最终校验 0.484ms，冷索引建立 430.17ms，结果集合一致，因此保留大库启用策略。
+- 保护：schema v2、`FilterQuery`/`TagQueryService` 语义、来源 filtered queue、缩略图/媒体队列、
+  stable videoId 用户数据、正式播放器后端和 Navigator/显式 Route 不变；未增加路由框架。
+- 已验证：`flutter analyze` 无问题；Phase 3–6 focused、播放器 focused、架构契约和隔离真实大库查询基准通过；
+  全量 `flutter test -r compact` 为 600 项通过、4 项按环境/能力跳过；`flutter build windows --debug` 成功生成
+  `build/windows/x64/runner/Debug/local_tag_player.exe`。本轮未提交或推送，保留工作树中的全部用户未提交改动。
+- 最新 Debug 窗口验收：实际进程来自 `E:\LocalTagPlayer\build\windows\x64\runner\Debug\local_tag_player.exe`；
+  短按 `L` 快进后画面与进度继续前进，全屏播放列表单击第二项可更新选中态，退出播放器返回媒体库后重新进入
+  可正常重建普通播放器、队列和 Texture，未见全屏/旧资源残留。
+
+# 2026-08-16 · 播放器命令、释放与异步身份对抗式修复（完成，窗口验收受构建阻断）
+
+- 修复方向：native seek 只在已进入后端后计时；超时会封锁当前 `PlayerService` 代次，唤醒并失效尚未派发的
+  `open/seek/stop`，不与旧 seek 并发；seek worker 收敛失败并清除乐观进度。
+- 完成：释放链对 `dispose`、`released`、事件取消和诊断日志分别保留有界等待/失败阶段；普通属性读取和页面
+  `getMpvProperty()` 统一超时，避免健康、GPU、打开确认和释放诊断永久占用任务。
+- 完成：NVIDIA 探测、联合滤镜、运行状态轮询、CPU 回滚和健康采样统一校验
+  `videoId + mediaGeneration + requestRevision`；旧媒体采样在新媒体切换后不得写回当前状态。
+- 保护：schema、FilterQuery/TagQueryService、来源 filtered queue、PlayerBackend 公共接口、缩略图/媒体队列和用户数据不变；
+  超时后当前 Player 进入终止态，只允许释放并由上层创建新会话。
+- 验证：播放器 focused 与目标源码契约 46 项通过，直接相关 analyzer 通过；Windows Debug 构建被工作树中既有
+  Library 稳定身份编译错误阻断，未把 8 月 10 日旧安装包的窗口烟测结果冒充为本轮验收。
+
+# 2026-08-16 · 全屏筛选结果队列被原生视频表面覆盖（完成）
+
+- 现象：全屏模式下显示播放列表时，显式 child HWND 路径仍可能被视频表面覆盖或抢走列表命中区域。
+- 修复：全屏队列显示前按实际右侧矩形串行提交原生 airspace 裁剪；隐藏、退出全屏和其它 Flutter
+  弹层关闭时按优先级恢复裁剪，过期显示请求由单调代次丢弃；默认 MediaKit Texture 路径保持空操作。
+- 保护：schema、FilterQuery/TagQueryService、来源 filtered queue、PlayerBackend 公共接口、缩略图/媒体队列
+  和用户数据不变；全屏队列仍为根 Stack 覆盖层，不改变视频尺寸。
+- 验证：全屏几何 focused/widget、HWND airspace、PlayerService focused 测试及独立 Windows Debug 构建通过；
+  标准 Debug 构建仍被 PID 21368 锁定，未强制结束用户进程。下一步为真实窗口全屏队列点击/截图验收。
+
+# 2026-08-16 · 播放器对抗式时序与事件归属检查（完成）
+
+- 完成：`open/stop/seek/dispose` 共用 PlayerService 媒体命令尾链；失败或 missing open 会
+  停止旧媒体；最后一项删除在退出路由前不把页面队列变为空。
+- 完成：进度条乐观位置有代次保护和超时回退；事件 bridge 按 stable `videoId + generation`
+  重绑；KeyUp 按实际逻辑键收敛，失焦时取消输入会话。
+- 保护：schema、FilterQuery/TagQueryService、来源 filtered queue、PlayerBackend 公共接口、
+  缩略图/媒体队列和用户数据不变；重命名重开仍保留播放进度与稳定身份。
+- 验证：播放器 focused tests、相关 widget tests、播放器目标源码 `flutter analyze` 和隔离
+  Windows Debug 构建已通过；标准构建仍被 PID 21368 锁定，未强制结束用户进程。
+
+# 2026-08-16 · 架构演进 Phase 1/2 稳定身份迁移（完成，Phase 3 进行中）
+
+- 完成：`VideoIdentityIndex` 以 stable `videoId` 为主索引、pathKey 为同步辅助视图；标签关系
+  新增 videoId 主索引；删除、改名、missing relink 和合并删除的生产命令切换到 stable-ID API。
+- 完成：SQLite schema 版本升至 2；旧 path-keyed `videos/video_tags` 在同一事务中换表迁移为
+  `videos.video_id PRIMARY KEY`、`videos.path UNIQUE`、`video_tags(video_id, tag_id, source)` 主键；
+  迁移幂等、孤立关系失败关闭并保留旧数据。
+- 保护：FilterQuery/TagQueryService 语义、来源 filtered queue、PlayerBackend、缩略图/媒体队列、
+  用户数据和已有播放器改动保持；页面 path 读取视图暂作为迁移兼容层保留。
+- 验证：Phase 2 migration/index focused、旧库 Store 启动、改名、fingerprint relink、missing
+  relink、architecture contract、`flutter analyze` 通过；下一步拆分 LibraryStore 逻辑并保持单库统一事务。
+
 # 2026-08-16 · 短按快进回到原关键帧（进行中）
 
 - 现象：单次按下快进偶发先移动到目标，随后回到原点；长按才能继续到后面。
@@ -591,3 +668,16 @@
    使用 `docs/qa/player_seek_latency_matrix.md` 的 12-case manifest，不将路径提交仓库。
 3. 代理功能完成后，使用本机代理完成一次 GitHub 检查和安装包下载真实验收；
    仓库签名凭据与 GitHub Support purge 仍按既有独立任务跟进。
+# 2026-08-16 · 架构演进 Phase 3–6（实现完成，独立验证待执行）
+
+- 完成：`LibraryRepositoryContext` 统一单数据库、双索引、persistence helpers 和事务；查询/命令端口
+  通过独立适配器注入，避免页面重新取得聚合 Store。
+- 完成：`ResourceScheduler` 统一 scan/probe/thumbnail/visual/backup 预算，并由播放让渡门控制后台 lease；
+  完成：`PlayerRuntimeBackend`/`PlayerSurfaceRenderer` 独立注入，保留 `PlayerBackend` 兼容实现。
+- 完成：`LibraryQueryProfile`、trigram FTS5 可选派生索引和候选编译器；只作为候选缩小，最终仍经过
+  `FilterQuery`/`TagQueryService`，小库、短词和不支持 FTS5 回退内存。
+- 保护：schema v2、stable videoId、用户数据、来源 filtered queue、现有缩略图/媒体详情队列和正式
+  MediaKit/Windows 后端行为不变；未增加路由框架，当前 Navigator/显式 Route 足够。
+- 聚焦验证：Phase 3 context、Phase 4 scheduler、Phase 5 player contract、Phase 6 query compiler、
+  stable identity 和播放器 service/filter tests 通过；架构门禁仅剩用户既有 `player_page.dart` 454 行超过旧阈值 444。
+- 下一步：停止编辑后做独立只读 diff/status/analyze/build/runtime 审查；Windows build 仍需先释放 PID 21368。

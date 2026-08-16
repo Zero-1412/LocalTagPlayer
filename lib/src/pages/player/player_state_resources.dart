@@ -41,11 +41,21 @@ extension PlayerStateResources on PlayerPageState {
       'pause_ack=${pauseAcknowledgedAt?.toIso8601String()} '
       'pop=${routePopRequestedAt?.toIso8601String()} '
       'dispose_start=${releaseStartedAt.toIso8601String()} '
-      'dispose_end=${DateTime.now().toIso8601String()}',
+      'dispose_end=${DateTime.now().toIso8601String()} '
+      'release_failed=${playerResources.releaseFailed} '
+      'failure_stage=${playerResources.releaseFailureStage ?? 'none'}',
     );
     if (!pageWidget.disposalCompleter.isCompleted) {
       pageWidget.disposalCompleter.complete();
     }
+  }
+
+  /** 释放超时仍允许路由协调结束，但保留明确失败状态供诊断和下一次排查。 */
+  void handlePlayerResourceReleaseFailure(String stage, Object error) {
+    debugPrint(
+      'PLAYER_RESOURCE_RELEASE_FAILED stage=$stage '
+      'type=${error.runtimeType}',
+    );
   }
 
   /** 构建当前 filtered queue 侧栏；不同布局实例使用独立滚动控制器。 */

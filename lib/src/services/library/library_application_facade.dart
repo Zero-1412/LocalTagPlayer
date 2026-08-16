@@ -35,13 +35,32 @@ class LibraryApplicationFacade
         _visualSignatureCache = visualSignatureCacheRepository,
         roots = UnmodifiableListView<String>(queryRepository.roots),
         videos = UnmodifiableMapView<String, VideoItem>(queryRepository.videos),
-        videosById =
-            UnmodifiableMapView<String, VideoItem>(queryRepository.videosById),
+        videosById = UnmodifiableMapView<String, VideoItem>(
+          _stableVideoIndex(queryRepository),
+        ),
         favoriteTags =
             UnmodifiableListView<String>(queryRepository.favoriteTags),
         tagGroups = UnmodifiableListView<TagGroup>(queryRepository.tagGroups),
         tagsById =
             UnmodifiableMapView<String, TagItem>(queryRepository.tagsById);
+
+  /**
+   * 新 stable-ID 端口对旧的测试/迁移期 fake 保持兼容。
+   *
+   * 生产 Repository 总是提供 [LibraryQueryRepository.videosById]；旧实现若仍只提供
+   * path 视图，则从同一快照派生，不创建第二套可变状态，也不改变页面的查询语义。
+   */
+  static Map<String, VideoItem> _stableVideoIndex(
+    LibraryQueryRepository source,
+  ) {
+    try {
+      return source.videosById;
+    } on Object {
+      return <String, VideoItem>{
+        for (final item in source.videos.values) item.videoId: item,
+      };
+    }
+  }
 
   /** 由组合根注入的只读查询端口，页面无法通过该引用发起写入。 */
   final LibraryQueryRepository _queries;
@@ -72,10 +91,27 @@ class LibraryApplicationFacade
         ),
       );
   Map<String, Set<String>> get videoTagIdsByVideoId => Map.unmodifiable(
-        _queries.videoTagIdsByVideoId.map(
+        _stableRelationIndex(_queries).map(
           (key, value) => MapEntry(key, Set<String>.unmodifiable(value)),
         ),
       );
+
+  /** 旧 fake 可能只有 path 关系索引；稳定关系缺失时从同一 path 快照派生。 */
+  static Map<String, Set<String>> _stableRelationIndex(
+    LibraryQueryRepository source,
+  ) {
+    try {
+      return source.videoTagIdsByVideoId;
+    } on Object {
+      final byPath = source.videoTagIdsByPathKey;
+      return <String, Set<String>>{
+        for (final entry in byPath.entries)
+          if (source.videos[entry.key] case final item?)
+            item.videoId: entry.value,
+      };
+    }
+  }
+
   TagQueryContext get tagQueryContext => TagQueryContext(
         tagsById: tagsById,
         videoTagIdsByPathKey: videoTagIdsByPathKey,
@@ -83,6 +119,26 @@ class LibraryApplicationFacade
       );
   Iterable<TagItem> get allTagItems => tagsById.values;
   Set<String> get allTags => Set<String>.unmodifiable(_queries.allTags);
+
+  /** 当前 Repository 数据修订；没有候选查询能力的测试 fake 安全回退为 0。 */
+  int get dataRevision => _queries is LibraryQueryCandidateRepository
+      ? (_queries as LibraryQueryCandidateRepository).dataRevision
+      : 0;
+
+  /**
+   * 请求 profile 选择的关键词候选。
+   *
+   * null 表示小库、短关键词或 FTS5 不可用；页面随后继续使用完整 Dart 查询，
+   * 不把候选优化提升为产品筛选语义。
+   */
+  Future<List<VideoItem>?> queryCandidatesFor(FilterQuery query) {
+    final source = _queries;
+    if (source is LibraryQueryCandidateRepository) {
+      return (source as LibraryQueryCandidateRepository)
+          .queryCandidatesFor(query);
+    }
+    return Future<List<VideoItem>?>.value(null);
+  }
 
   Map<String, int> resultCounts(FilterQuery query) =>
       _queries.resultCounts(query);

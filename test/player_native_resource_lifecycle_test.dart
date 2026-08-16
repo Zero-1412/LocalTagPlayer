@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/features/player/application/player_fullscreen_lifecycle_controller.dart';
@@ -85,14 +87,16 @@ void main() {
         'stop-error-reported',
         'dispose',
         'released',
-        'log:player_disposed',
+        'log:player_release_failed',
         'route-released',
       ]),
     );
+    expect(coordinator.releaseFailed, isTrue);
+    expect(coordinator.releaseFailureStage, 'stop');
     textureId.dispose();
   });
 
-  test('dispose 抛错仍等待 released 并发送最终 Route 信号', () async {
+  test('dispose 抛错仍等待 released、报告失败并发送最终 Route 信号', () async {
     final calls = <String>[];
     final textureId = ValueNotifier<int?>(1);
     final coordinator = PlayerResourceLifecycleCoordinator(
@@ -110,20 +114,100 @@ void main() {
       }) async =>
           calls.add('log:$stage'),
       onTextureReady: () {},
+      onReleaseFailed: (stage, _) => calls.add('release-error:$stage'),
       onReleased: (_) => calls.add('route-released'),
     );
 
-    await expectLater(coordinator.release(), throwsStateError);
+    await coordinator.release();
 
     expect(
       calls,
       containsAllInOrder(<String>[
         'dispose-failed',
+        'release-error:dispose',
         'released',
-        'log:player_disposed',
+        'log:player_release_failed',
         'route-released',
       ]),
     );
+    textureId.dispose();
+  });
+
+  test('释放 dispose/released 各自超时并保留失败阶段，不永久挂起', () async {
+    final calls = <String>[];
+    final failures = <String>[];
+    final textureId = ValueNotifier<int?>(1);
+    final coordinator = PlayerResourceLifecycleCoordinator(
+      textureId: textureId,
+      cancelBackendEvents: () async => calls.add('cancel-events'),
+      stop: () async => calls.add('stop'),
+      disposeResource: () async {
+        calls.add('dispose-started');
+        await Completer<void>().future;
+      },
+      awaitReleased: () async {
+        calls.add('released-wait');
+        await Completer<void>().future;
+      },
+      disposeTimeout: const Duration(milliseconds: 10),
+      releasedTimeout: const Duration(milliseconds: 10),
+      logStage: (
+        stage, {
+        required readEngineProperties,
+      }) async =>
+          calls.add('log:$stage'),
+      onTextureReady: () {},
+      onReleaseFailed: (stage, _) => failures.add(stage),
+      onReleased: (_) => calls.add('route-released'),
+    );
+
+    await coordinator.release();
+
+    expect(failures, <String>['dispose', 'released']);
+    expect(calls, contains('log:player_release_failed'));
+    expect(calls, contains('route-released'));
+    textureId.dispose();
+  });
+
+  test('事件取消和诊断日志卡住时也有界并继续完成释放', () async {
+    final calls = <String>[];
+    final failures = <String>[];
+    final textureId = ValueNotifier<int?>(1);
+    final never = Completer<void>().future;
+    final coordinator = PlayerResourceLifecycleCoordinator(
+      textureId: textureId,
+      cancelBackendEvents: () => never,
+      stop: () async => calls.add('stop'),
+      disposeResource: () async => calls.add('dispose'),
+      awaitReleased: () async => calls.add('released'),
+      stageTimeout: const Duration(milliseconds: 10),
+      logStage: (
+        stage, {
+        required readEngineProperties,
+      }) async {
+        if (stage == 'dispose_started') {
+          await never;
+        }
+        calls.add('log:$stage');
+      },
+      onTextureReady: () {},
+      onReleaseFailed: (stage, _) => failures.add(stage),
+      onReleased: (_) => calls.add('route-released'),
+    );
+
+    await coordinator.release();
+
+    expect(failures, contains('diagnostic:dispose_started'));
+    expect(failures, contains('cancel-events'));
+    expect(
+        calls,
+        containsAllInOrder(<String>[
+          'stop',
+          'dispose',
+          'released',
+          'route-released',
+        ]));
+    expect(coordinator.releaseFailed, isTrue);
     textureId.dispose();
   });
 

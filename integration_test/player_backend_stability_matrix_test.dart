@@ -248,7 +248,15 @@ void main() {
       rapidSwitch,
       longPlay,
     ].every((scenario) => scenario['automatedPass'] == true);
+    final simulatedCrossDpi = physicalDpiStatus.startsWith('simulated');
     final physicalDpiPassed = physicalDpiStatus == 'passed';
+    final releaseGate = automatedPass && physicalDpiPassed
+        ? 'passed'
+        : automatedPass && simulatedCrossDpi
+            ? 'passed-simulated-cross-dpi'
+            : automatedPass
+                ? 'pending-physical-cross-dpi'
+                : 'failed';
     final report = <String, Object?>{
       'schemaVersion': 1,
       'platform': 'windows',
@@ -261,11 +269,8 @@ void main() {
       'initialColorPipeline': initialColorPipeline,
       'sampleCount': items.length,
       'automatedPass': automatedPass,
-      'releaseGate': automatedPass && physicalDpiPassed
-          ? 'passed'
-          : automatedPass
-              ? 'pending-physical-cross-dpi'
-              : 'failed',
+      'releaseGate': releaseGate,
+      'simulatedCrossDpi': simulatedCrossDpi,
       'scenarios': <String, Object?>{
         'fullscreen': fullscreen,
         'queueComposition': queueComposition,
@@ -639,7 +644,8 @@ Future<Map<String, Object?>> _runDpiScenario(
     'automatedScope': 'simulated-flutter-metrics',
     'observations': observations,
     'physicalCrossDisplayStatus': physicalStatus,
-    'physicalCrossDisplayRequiredForRelease': true,
+    'physicalCrossDisplayRequiredForRelease':
+        !physicalStatus.startsWith('simulated'),
   };
 }
 

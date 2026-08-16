@@ -200,11 +200,10 @@ extension PlayerStateItemActions on PlayerPageState {
     Future<T> Function() action, {
     Rect? overlayRect,
   }) async {
-    final boundary = playerService;
     final viewSize = MediaQuery.sizeOf(context);
     overlaySurfaceRects.add(overlayRect);
     try {
-      await boundary.setFlutterOverlayVisible(
+      await enqueuePlayerOverlaySurfaceCommand(
         true,
         overlayRect: overlayRect,
         viewSize: viewSize,
@@ -214,15 +213,7 @@ extension PlayerStateItemActions on PlayerPageState {
       if (overlaySurfaceRects.isNotEmpty) {
         overlaySurfaceRects.removeLast();
       }
-      if (overlaySurfaceRects.isEmpty) {
-        await boundary.setFlutterOverlayVisible(false);
-      } else {
-        await boundary.setFlutterOverlayVisible(
-          true,
-          overlayRect: overlaySurfaceRects.last,
-          viewSize: mounted ? MediaQuery.sizeOf(context) : viewSize,
-        );
-      }
+      await restorePlayerOverlaySurface(fallbackViewSize: viewSize);
     }
   }
 
@@ -231,12 +222,70 @@ extension PlayerStateItemActions on PlayerPageState {
     if (!mounted || overlaySurfaceRects.isEmpty) return;
     overlaySurfaceRects[overlaySurfaceRects.length - 1] = rect;
     unawaited(
-      playerService.setFlutterOverlayVisible(
+      enqueuePlayerOverlaySurfaceCommand(
         true,
         overlayRect: rect,
         viewSize: MediaQuery.sizeOf(context),
       ),
     );
+  }
+
+  /**
+   * 串行提交原生视频表面裁剪命令。
+   *
+   * MediaKit/Texture 后端会直接忽略该边界；HWND 后端则必须保证上一条裁剪命令
+   * 完成后再提交下一条，避免列表快速显隐时出现“旧命令回写”假象。
+   */
+  Future<void> enqueuePlayerOverlaySurfaceCommand(
+    bool visible, {
+    Rect? overlayRect,
+    Size? viewSize,
+  }) {
+    final next = playerOverlaySurfaceCommandTail.then<void>((_) async {
+      if (isExiting && visible) {
+        return;
+      }
+      try {
+        await playerService.setFlutterOverlayVisible(
+          visible,
+          overlayRect: overlayRect,
+          viewSize: viewSize,
+        );
+      } catch (error) {
+        // 原生裁剪失败不应阻断播放/退出；播放器仍保留 Flutter 侧可见状态并可重试。
+        debugPrint('PLAYER_OVERLAY_SURFACE_SYNC_FAILED error=$error');
+      }
+    });
+    playerOverlaySurfaceCommandTail = next;
+    return next;
+  }
+
+  /**
+   * 恢复当前最上层 Flutter 弹层、全屏队列或完整视频表面对应的裁剪策略。
+   *
+   * 全屏队列与菜单可能交叠，不能在菜单关闭时无条件恢复完整 HWND；优先级始终是
+   * 内层菜单矩形，其次是全屏队列矩形，最后才是完整视频表面。
+   */
+  Future<void> restorePlayerOverlaySurface({Size? fallbackViewSize}) {
+    final viewSize = mounted ? MediaQuery.sizeOf(context) : fallbackViewSize;
+    if (overlaySurfaceRects.isNotEmpty) {
+      return enqueuePlayerOverlaySurfaceCommand(
+        true,
+        overlayRect: overlaySurfaceRects.last,
+        viewSize: viewSize,
+      );
+    }
+    if (mounted &&
+        isWindowFullscreen &&
+        fullscreenQueueVisible &&
+        viewSize != null) {
+      return enqueuePlayerOverlaySurfaceCommand(
+        true,
+        overlayRect: playerFullscreenQueueOverlayRect(viewSize),
+        viewSize: viewSize,
+      );
+    }
+    return enqueuePlayerOverlaySurfaceCommand(false);
   }
 
   /** 获取已挂载菜单项的全局矩形，用于把估算裁剪收紧到真实 PopupMenu。 */

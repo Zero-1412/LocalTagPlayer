@@ -19,6 +19,40 @@ import 'player_video_super_resolution.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/** native 媒体命令在服务边界内超时；底层 Future 仍由释放链负责收尾。 */
+class PlayerMediaCommandTimeout implements Exception {
+  const PlayerMediaCommandTimeout(this.commandName, this.timeout);
+
+  final String commandName;
+  final Duration timeout;
+
+  @override
+  String toString() =>
+      'PlayerMediaCommandTimeout(command=$commandName, timeout=$timeout)';
+}
+
+/** 当前媒体命令尾链已被超时或释放代次封锁，不能再向旧 Player 发命令。 */
+class PlayerMediaCommandInvalidated implements Exception {
+  const PlayerMediaCommandInvalidated(this.commandName);
+
+  final String commandName;
+
+  @override
+  String toString() => 'PlayerMediaCommandInvalidated(command=$commandName)';
+}
+
+/** 普通 native 属性读取超时；调用方应使用 unavailable 或安全降级。 */
+class PlayerPropertyReadTimeout implements Exception {
+  const PlayerPropertyReadTimeout(this.property, this.timeout);
+
+  final String property;
+  final Duration timeout;
+
+  @override
+  String toString() =>
+      'PlayerPropertyReadTimeout(property=$property, timeout=$timeout)';
+}
+
 /**
  * Flutter 播放器页面唯一依赖的 PlayerFacade。
  *
@@ -42,6 +76,9 @@ class PlayerService
     PlayerBackend? backend,
     PlayerRuntimeBackend? runtimeBackend,
     PlayerSurfaceRenderer? surfaceRenderer,
+    this.mediaCommandTimeout = defaultMediaCommandTimeout,
+    this.mediaCommandDisposeWaitTimeout = defaultMediaCommandDisposeWaitTimeout,
+    this.propertyReadTimeout = defaultPropertyReadTimeout,
   })  : assert(
           backend != null ||
               (runtimeBackend != null && surfaceRenderer != null),
@@ -60,6 +97,19 @@ class PlayerService
   /** 页面表面依赖独立渲染契约，不从运行时后端反向取得 Flutter Widget。 */
   final PlayerSurfaceRenderer _surfaceRenderer;
 
+  /** 单条媒体命令的调用方等待上限；超时不会取消 native，而会封锁本服务。 */
+  static const defaultMediaCommandTimeout = Duration(seconds: 8);
+
+  /** 释放前等待命令尾链的上限；超时后只进入一次性终止释放边界。 */
+  static const defaultMediaCommandDisposeWaitTimeout = Duration(seconds: 4);
+
+  /** 普通诊断属性读取的统一上限；超时不会继续阻塞健康、GPU 或释放诊断。 */
+  static const defaultPropertyReadTimeout = Duration(seconds: 2);
+
+  final Duration mediaCommandTimeout;
+  final Duration mediaCommandDisposeWaitTimeout;
+  final Duration propertyReadTimeout;
+
   /** 服务向页面输出经过 seek 目标栅栏处理的位置流。 */
   final StreamController<Duration> _positionChanges =
       StreamController<Duration>.broadcast(sync: true);
@@ -75,6 +125,11 @@ class PlayerService
    */
   Future<void> _mediaCommandTail = Future<void>.value();
   Future<void>? _disposeFuture;
+  /** 当前 native 命令无法安全中断时，禁止同一 Player 再接收后续命令。 */
+  var _mediaCommandLaneBlocked = false;
+  var _mediaCommandGeneration = 0;
+  var _disposing = false;
+  final Completer<void> _mediaCommandInvalidation = Completer<void>();
 
   /**
    * 只有隔离 Windows child HWND QA 后端返回 true。
@@ -138,25 +193,106 @@ class PlayerService
   /** 打开新媒体前清除上一媒体的 seek 目标，防止旧位置穿透到新会话。 */
   void _resetPositionReconciler() => _positionReconciler.reset();
 
-  /** 将媒体命令放到同一条尾链；动作失败不会阻塞后续用户意图。 */
+  /**
+   * 将媒体命令放到同一条尾链。
+   *
+   * Future.timeout 不会取消底层 Future；因此命令超时后只让调用方返回错误，
+   * 同时封锁当前服务代次。后续 open/seek/stop 会快速失效，不会与仍在 native
+   * 执行的旧命令并发，直到资源释放并由上层创建新的 Player。
+   */
   Future<void> _enqueueMediaCommand(
     Future<void> Function() command,
+    int commandGeneration,
+    String commandName,
+    void Function() onStarted,
   ) async {
     try {
-      await _mediaCommandTail;
+      // 同时等待尾链和失效信号；当前 native 命令即使不返回，已经排队但尚未
+      // 派发的命令也能立即失败，而不是继续占用 Dart 尾链。
+      await Future.any<void>(<Future<void>>[
+        _mediaCommandTail,
+        _mediaCommandInvalidation.future,
+      ]);
     } catch (_) {
-      // 旧媒体命令失败仍不能阻塞后续命令；原命令的异常继续向调用方传播。
+      // 普通命令失败仍不能阻塞后续命令；原命令的异常继续向调用方传播。
     }
+    if (_disposing ||
+        _mediaCommandLaneBlocked ||
+        commandGeneration != _mediaCommandGeneration) {
+      throw PlayerMediaCommandInvalidated(commandName);
+    }
+    onStarted();
     await command();
   }
 
-  Future<void> _runMediaCommand(Future<void> Function() command) {
-    final operation = _enqueueMediaCommand(command);
+  Future<void> _runMediaCommand(
+    Future<void> Function() command, {
+    required String commandName,
+  }) {
+    if (_disposing || _mediaCommandLaneBlocked) {
+      return Future<void>.error(PlayerMediaCommandInvalidated(commandName));
+    }
+    final commandGeneration = _mediaCommandGeneration;
+    final commandStarted = Completer<void>();
+    final operation = _enqueueMediaCommand(
+      command,
+      commandGeneration,
+      commandName,
+      commandStarted.complete,
+    );
     _mediaCommandTail = operation.then<void>(
       (_) {},
       onError: (_) {},
     );
-    return operation;
+    return _waitForMediaCommand(
+      operation,
+      commandStarted,
+      commandName,
+    );
+  }
+
+  /** 只对已经进入 native 的命令计时；排队等待由失效信号负责唤醒。 */
+  Future<void> _waitForMediaCommand(
+    Future<void> operation,
+    Completer<void> commandStarted,
+    String commandName,
+  ) async {
+    await Future.any<void>(<Future<void>>[
+      commandStarted.future,
+      operation,
+    ]);
+    await operation.timeout(
+      mediaCommandTimeout,
+      onTimeout: () {
+        _invalidateMediaCommandLane(commandName);
+        throw PlayerMediaCommandTimeout(
+          commandName,
+          mediaCommandTimeout,
+        );
+      },
+    );
+  }
+
+  /**
+   * 令当前服务进入终止态；不尝试把仍在 native 中的命令与下一条命令并发。
+   */
+  void _invalidateMediaCommandLane(
+    String commandName, {
+    bool emitDiagnostic = true,
+  }) {
+    if (_mediaCommandLaneBlocked) return;
+    _mediaCommandLaneBlocked = true;
+    _mediaCommandGeneration++;
+    if (!_mediaCommandInvalidation.isCompleted) {
+      _mediaCommandInvalidation.complete();
+    }
+    _positionReconciler.reset();
+    if (emitDiagnostic) {
+      debugPrint(
+        'PLAYER_MEDIA_COMMAND_INVALIDATED command=$commandName '
+        'generation=$_mediaCommandGeneration',
+      );
+    }
   }
 
   /** 播放/暂停状态变化流。 */
@@ -210,19 +346,31 @@ class PlayerService
   /** 打开当前 filtered queue 选中的本地媒体。 */
   Future<void> openPath(String path) {
     _resetPositionReconciler();
-    return _runMediaCommand(() => _backend.openPath(path));
+    return _runMediaCommand(
+      () => _backend.openPath(path),
+      commandName: 'open',
+    );
   }
 
   /** 开始或继续播放，并与 seek/open 共用媒体命令边界。 */
-  Future<void> play() => _runMediaCommand(_backend.play);
+  Future<void> play() => _runMediaCommand(
+        _backend.play,
+        commandName: 'play',
+      );
 
   /** 暂停播放并保留当前帧，不能与 in-flight seek 并发。 */
-  Future<void> pause() => _runMediaCommand(_backend.pause);
+  Future<void> pause() => _runMediaCommand(
+        _backend.pause,
+        commandName: 'pause',
+      );
 
   /** 停止当前媒体。 */
   Future<void> stop() {
     _resetPositionReconciler();
-    return _runMediaCommand(_backend.stop);
+    return _runMediaCommand(
+      _backend.stop,
+      commandName: 'stop',
+    );
   }
 
   /** 跳转到指定媒体位置。 */
@@ -231,7 +379,10 @@ class PlayerService
       target: position,
       current: state.position,
     );
-    return _runMediaCommand(() => _backend.seek(position));
+    return _runMediaCommand(
+      () => _backend.seek(position),
+      commandName: 'seek',
+    );
   }
 
   /**
@@ -250,21 +401,27 @@ class PlayerService
         : null;
     return _runMediaCommand(
       () => boundary?.seekInteractive(position) ?? _backend.seek(position),
+      commandName: 'seek-interactive',
     );
   }
 
   /** 设置当前会话倍速，并保持与媒体切换的命令顺序。 */
   Future<void> setRate(double rate) => _runMediaCommand(
         () => _backend.setRate(rate),
+        commandName: 'set-rate',
       );
 
   /** 设置当前会话音量，避免取消 seek 的音频恢复越过 open。 */
   Future<void> setVolume(double volume) => _runMediaCommand(
         () => _backend.setVolume(volume),
+        commandName: 'set-volume',
       );
 
   /** 在播放与暂停之间切换，并保持与 seek 的顺序。 */
-  Future<void> playOrPause() => _runMediaCommand(_backend.playOrPause);
+  Future<void> playOrPause() => _runMediaCommand(
+        _backend.playOrPause,
+        commandName: 'play-or-pause',
+      );
 
   /**
    * 读取当前文件的媒体控制快照；不支持的后端显式返回 unsupported，页面不猜测
@@ -358,7 +515,7 @@ class PlayerService
     final unavailablePrevious = <String>[];
     for (final property in properties.keys) {
       final value = _normalizePropertyReadback(
-        await _backend.getProperty(property),
+        await _readBackendProperty(property),
       );
       if (value == null) {
         unavailablePrevious.add(property);
@@ -455,7 +612,7 @@ class PlayerService
       final mismatches = <String>[];
       for (final entry in expected.entries) {
         final actual = _normalizePropertyReadback(
-          await _backend.getProperty(entry.key),
+          await _readBackendProperty(entry.key),
         );
         if (!_propertyValuesMatch(entry.key, entry.value.trim(), actual)) {
           mismatches.add(entry.key);
@@ -525,7 +682,20 @@ class PlayerService
   }
 
   @override
-  Future<String> getProperty(String property) => _backend.getProperty(property);
+  Future<String> getProperty(String property) => _readBackendProperty(property);
+
+  /** 统一限制底层属性读取，避免诊断 Future 永久占用播放器页面任务。 */
+  Future<String> _readBackendProperty(String property) async {
+    try {
+      return await _backend.getProperty(property).timeout(propertyReadTimeout);
+    } on TimeoutException {
+      debugPrint(
+        'PLAYER_PROPERTY_READ_TIMEOUT property=$property '
+        'timeout_ms=${propertyReadTimeout.inMilliseconds}',
+      );
+      throw PlayerPropertyReadTimeout(property, propertyReadTimeout);
+    }
+  }
 
   @override
   Future<PlayerGpuCapabilityMatrix> queryGpuCapabilities() =>
@@ -705,15 +875,22 @@ class PlayerService
   }
 
   Future<void> _dispose() async {
+    _disposing = true;
+    _invalidateMediaCommandLane('dispose', emitDiagnostic: false);
     _positionReconciler.reset();
     await _positionSubscription.cancel();
     await _positionChanges.close();
     // 先等最后一条媒体命令离开原生后端，再释放 Player，避免 dispose 与 seek/open
     // 并发触碰同一个 libmpv 实例。
     try {
-      await _mediaCommandTail;
-    } catch (_) {
-      // 命令异常已经交给原调用方；释放链必须继续完成。
+      await _mediaCommandTail.timeout(mediaCommandDisposeWaitTimeout);
+    } catch (error) {
+      // 超时后没有安全的 native cancel contract，只能进入一次性终止 dispose；
+      // 此后本服务不会再接受命令，避免旧 seek 覆盖新媒体。
+      debugPrint(
+        'PLAYER_MEDIA_COMMAND_TAIL_RELEASED_WITH_ERROR '
+        'type=${error.runtimeType}',
+      );
     }
     await _backend.dispose();
   }

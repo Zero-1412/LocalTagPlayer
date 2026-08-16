@@ -89,7 +89,9 @@ class LibraryQueryCompiler {
 
 /** 可选 FTS5 三元组索引；SQLite 不支持时安全回退，不阻塞主库启动。 */
 class LibrarySearchIndex {
-  const LibrarySearchIndex();
+  LibrarySearchIndex();
+
+  int? _lastBuiltRevision;
 
   static const tableName = LibraryQueryCompiler.searchTableName;
 
@@ -113,6 +115,25 @@ class LibrarySearchIndex {
   }
 
   /** 只重建派生候选索引；主库视频、标签和用户数据不在此动作中删除。 */
+  Future<bool> ensureFresh(Database db, {required int revision}) async {
+    final available = await ensureSchema(db);
+    if (!available) {
+      return false;
+    }
+    // Query service owns one index object per repository session; a new revision means
+    // a successful command changed source rows and the derived table must be rebuilt once.
+    if (_lastBuiltRevision == revision) {
+      return true;
+    }
+    try {
+      await rebuild(db);
+      _lastBuiltRevision = revision;
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
   Future<void> rebuild(Database db) async {
     await db.transaction((transaction) async {
       await transaction.delete(tableName);
@@ -141,4 +162,5 @@ class LibrarySearchIndex {
       await batch.commit(noResult: true);
     });
   }
+
 }

@@ -3,3 +3,8 @@
 linter:
   rules:
     prefer_single_quotes: true
+
+analyzer:
+  # build 下的 adversarial worktree 是独立生成副本，不属于当前 package 的源代码。
+  exclude:
+    - build/**

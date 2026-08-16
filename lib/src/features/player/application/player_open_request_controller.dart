@@ -75,6 +75,9 @@ class PlayerOpenRequestController {
   /** 当前是否还有待处理请求。 */
   bool get hasPending => _pending != null;
 
+  /** 当前打开请求代次，供页面内独立异步任务进行稳定身份校验。 */
+  int get currentRevision => _revision;
+
   /** 当前是否有需要用户重试或跳过的稳定打开错误。 */
   bool get hasFailure => _failure != null;
 

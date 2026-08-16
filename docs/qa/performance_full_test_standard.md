@@ -127,8 +127,10 @@ CPU/GPU 绝对数值随解码器和媒体规格变化，除“空闲/浏览持�
 - seek 使用现有 [player seek latency matrix](./player_seek_latency_matrix.md) 的 12 例和 manifest
   规则；每例 2 次预热后采 7 次，按 case 的 p95 budget 判定，不跨 codec/GOP 合并。
 - 双后端稳定性矩阵默认每后端至少 18 次快速切换、30 分钟长播、6 次全屏往返；最大掉帧预算
-  由 runner 参数和当次报告声明，不能只看“测试退出码为 0”。真实跨 DPI 若未物理执行，状态必须是
-  `pending-physical-cross-dpi`，不能写成完整通过。
+  由 runner 参数和当次报告声明，不能只看“测试退出码为 0”。跨 DPI 分为两种证据：
+  `simulated-single-monitor` 运行 100%/125%/150%/200%/100% 的 Flutter metrics、Surface
+  重算和状态机验证，发布状态标记为 `passed-simulated-cross-dpi`；只有实际不同缩放屏幕移窗
+  才能标记 `passed`，不能把模拟证据写成物理跨屏通过。
 - 真实媒体库播放器随机压力默认 1,800 秒、固定 seed；覆盖随机打开、队列滚动、两次 seek、全屏
   往返、诊断和返回媒体库。至少有 1 个 cycle，且无崩溃、无卡死、无错误播放器页面残留。
 - 隔离 profile 的增删目录压力默认 10 cycles，覆盖 add/scan/scroll/play/seek/diagnostics/release/remove；
@@ -179,7 +181,7 @@ Remove-Item Env:LOCAL_TAG_PLAYER_DATA_DIR -ErrorAction SilentlyContinue
 .\tool\run_player_seek_latency_matrix.ps1 `
   -Manifest '.\.local\qa\player_seek-latency-matrix.json'
 .\tool\run_player_backend_stability_matrix.ps1 `
-  -LongPlaySeconds 1800 -RapidSwitchCount 18
+  -PhysicalCrossDpiStatus simulated -LongPlaySeconds 1800 -RapidSwitchCount 18
 .\tool\run_library_add_remove_player_stress.ps1 `
   -SourceProfile '<真实 profile 的只读复制源>' `
   -RootPath '<只读真实媒体根>' -Cycles 10 -ReleaseTailSeconds 60

@@ -135,7 +135,8 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies({
       resourceScheduler: resourceScheduler,
     );
     return LibraryApplicationFacade(
-      queryRepository: LibraryStoreQueryRepository(repository),
+      // 查询逻辑由独立 service 承载；命令/缓存/播放仍引用同一个 Store/Context。
+      queryRepository: LibraryStoreQueryRepository(repository.queryRepository),
       commandRepository: LibraryStoreCommandRepository(repository),
       tagRepository: repository,
       cacheRepository: repository,

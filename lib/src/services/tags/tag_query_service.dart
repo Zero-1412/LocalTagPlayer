@@ -63,6 +63,32 @@ class FilterStateSource {
   }
 
   FilterState update(FilterQuery query) {
+    return _updateWithEngine(query, _engine);
+  }
+
+  /**
+   * 使用 profile 查询返回的候选集计算结果；候选仍必须经过同一个 FilterQuery.matches。
+   *
+   * 该方法不改变筛选语义，只替换关键词查询前的输入集合；标签层级、alias、分组
+   * AND/OR、NOT 和收藏/播放状态仍由 TagQueryService 最终判断。
+   */
+  FilterState updateWithCandidates(
+    FilterQuery query,
+    Iterable<VideoItem> candidates,
+  ) {
+    return _updateWithEngine(
+      query,
+      TagQueryService(
+        videos: candidates,
+        tagContext: _engine.tagContext,
+      ),
+    );
+  }
+
+  FilterState _updateWithEngine(
+    FilterQuery query,
+    TagQueryService engine,
+  ) {
     final epoch = LibraryResultEpoch.fromQuery(
       dataRevision: _dataRevision,
       query: query,
@@ -74,7 +100,7 @@ class FilterStateSource {
       return cachedState;
     }
 
-    var filteredVideos = _engine.filter(query);
+    var filteredVideos = engine.filter(query);
     final sortVideos = _sortVideos;
     if (sortVideos != null) {
       filteredVideos = sortVideos(filteredVideos);

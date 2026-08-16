@@ -206,6 +206,14 @@ extension PlayerStateTransport on PlayerPageState {
         lastSeekLatencyMs = milliseconds;
         lastSeekAt = DateTime.now();
       },
+      onFailure: (error) {
+        if (mounted) {
+          setOptimisticProgressPosition(null);
+        }
+        debugPrint(
+          'PLAYER_SEEK_FAILED type=${error.runtimeType}',
+        );
+      },
     );
     await exactCoordinator.request(target);
   }

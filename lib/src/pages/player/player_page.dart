@@ -41,12 +41,9 @@ export 'player_state_transport.dart';
 export 'player_state_health.dart';
 export 'player_state_controls.dart';
 export 'player_state_chrome.dart';
-import 'player_state_performance.dart';
 export 'player_state_performance.dart';
 export 'player_state_gpu_capabilities.dart';
-import 'player_state_opening.dart';
 export 'player_state_opening.dart';
-import 'player_state_queue.dart';
 export 'player_state_queue.dart';
 export 'player_state_dialogs.dart';
 export 'player_state_item_actions.dart';
@@ -57,6 +54,7 @@ export 'player_state_resources.dart';
 import 'player_state_view.dart';
 export 'player_state_view.dart';
 export 'player_top_bar.dart';
+export 'player_state_derived.dart';
 
 class PlayerPage extends StatefulWidget {
   const PlayerPage({
@@ -314,6 +312,13 @@ class PlayerPageState extends State<PlayerPage> {
    * 才恢复完整 child HWND，避免嵌套路由交接时闪回并覆盖 Flutter。
    */
   final List<Rect?> overlaySurfaceRects = <Rect?>[];
+  /**
+   * 原生 child HWND 的裁剪命令必须按提交顺序执行，避免快速显示/隐藏队列时旧命令
+   * 在新命令之后返回，导致全屏列表再次被视频表面覆盖。
+   */
+  Future<void> playerOverlaySurfaceCommandTail = Future<void>.value();
+  /** 全屏队列显示请求的单调代次，用于丢弃已过期的异步挂载结果。 */
+  var fullscreenQueueSurfaceGeneration = 0;
   late PlayerPlaybackMode playbackMode;
   late double playbackRate;
   /** 是否仅水平翻转当前视频画面，控制条与命中区域保持原方向。 */
@@ -386,56 +391,6 @@ class PlayerPageState extends State<PlayerPage> {
 
   static const playbackRates = PlaybackSettings.playbackRates;
   static const seekStepOptions = PlaybackSettings.seekStepOptions;
-
-  List<VideoItem> get sourcePlaylist => playback.sourcePlaylist;
-  List<VideoItem> get queue => playback.queue;
-
-  String? get selectedChildTag => playback.selectedChildTag;
-
-  int get index => playback.playingIndex;
-
-  int get selectedIndex => playback.selectedIndex;
-
-  VideoItem get currentItem => playback.currentItem;
-
-  PlayerOpenTarget get currentOpenTarget =>
-      (videoId: currentItem.videoId, path: currentItem.path);
-
-  bool get controlsVisible => interaction.controlsVisible;
-
-  bool get shortcutFeedbackVisible => interaction.feedbackVisible;
-
-  String? get shortcutFeedbackLabel => interaction.feedbackLabel;
-
-  IconData get shortcutFeedbackIcon => interaction.feedbackIcon;
-
-  bool get settingsDialogOpen => interaction.settingsOpen;
-
-  bool get isWindowFullscreen => windowFullscreen.isFullscreen;
-
-  bool get fullscreenTransitionInProgress =>
-      windowFullscreen.transitionInProgress;
-
-  String get filterSummary {
-    final value = widget.queueTitle.trim();
-    return value.isEmpty ? '\u5168\u90e8\u89c6\u9891' : value;
-  }
-
-  String? get activeParentTag =>
-      widget.activeTags.length == 1 ? widget.activeTags.first : null;
-
-  void selectChildTag(String tag) {
-    if (queue.isEmpty) {
-      return;
-    }
-    persistOpenedProgress();
-    setState(() {
-      queueEndReached = false;
-      playback.toggleChildTag(tag, preferredVideoId: currentItem.videoId);
-    });
-    ensureQueueIndexVisible(index, center: true);
-    requestOpenCurrent();
-  }
 
   @override
   void initState() {

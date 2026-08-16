@@ -147,4 +147,72 @@ void main() {
     expect(next.filteredVideos.single, same(retained));
     expect(next.totalCount, 1);
   });
+
+  test('候选查询只缩小输入集合，最终仍由完整 FilterQuery 校验', () async {
+    final alpha = _video('video-alpha', 'alpha');
+    final bravo = _video('video-bravo', 'bravo');
+    final controller = LibraryQueryController()
+      ..configure(
+        engine: TagQueryService(
+          videos: <VideoItem>[alpha, bravo],
+          tagContext: const TagQueryContext(),
+        ),
+        totalCount: 2,
+        dataRevision: 4,
+        sortFingerprint: 'name:ascending',
+        loadCandidates: (_) async => <VideoItem>[alpha, bravo],
+      );
+    final accepted = <FilterState>[];
+    const query = FilterQuery(keyword: 'alpha');
+
+    controller.schedule(
+      query: query,
+      expectedEpoch: LibraryResultEpoch.fromQuery(
+        dataRevision: 4,
+        query: query,
+        presentationSort: 'name:ascending',
+      ),
+      isStillCurrent: (_) => true,
+      onAccepted: accepted.add,
+    );
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(accepted, hasLength(1));
+    expect(accepted.single.filteredVideos, <VideoItem>[alpha]);
+    expect(accepted.single.totalCount, 2);
+  });
+
+  test('候选索引失败时回退完整内存查询', () async {
+    final alpha = _video('video-alpha', 'alpha');
+    final bravo = _video('video-bravo', 'bravo');
+    final controller = LibraryQueryController()
+      ..configure(
+        engine: TagQueryService(
+          videos: <VideoItem>[alpha, bravo],
+          tagContext: const TagQueryContext(),
+        ),
+        totalCount: 2,
+        dataRevision: 5,
+        sortFingerprint: 'name:ascending',
+        loadCandidates: (_) async => throw StateError('FTS unavailable'),
+      );
+    final accepted = <FilterState>[];
+    const query = FilterQuery(keyword: 'bravo');
+
+    controller.schedule(
+      query: query,
+      expectedEpoch: LibraryResultEpoch.fromQuery(
+        dataRevision: 5,
+        query: query,
+        presentationSort: 'name:ascending',
+      ),
+      isStillCurrent: (_) => true,
+      onAccepted: accepted.add,
+    );
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(accepted.single.filteredVideos, <VideoItem>[bravo]);
+  });
 }

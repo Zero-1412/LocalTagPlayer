@@ -14,6 +14,9 @@ typedef PlayerSeekExitReader = bool Function();
 /** 发布一次已完成 seek 的端到端耗时。 */
 typedef PlayerSeekLatencyListener = void Function(int milliseconds);
 
+/** 报告 native seek 失败或超时；协调器不会把异常泄漏到 unawaited worker。 */
+typedef PlayerSeekFailureListener = void Function(Object error);
+
 /** 等待节流或位置确认轮询；测试可注入即时等待以保持确定性。 */
 typedef PlayerSeekDelay = Future<void> Function(Duration duration);
 
@@ -162,9 +165,11 @@ class PlayerSeekCoordinator {
     required PlayerSeekDurationReader readDuration,
     required PlayerSeekExitReader isExiting,
     required PlayerSeekLatencyListener onLatency,
+    PlayerSeekFailureListener? onFailure,
     this.minimumDispatchInterval = defaultMinimumDispatchInterval,
     this.confirmationPollInterval = const Duration(milliseconds: 25),
     this.confirmationTimeout = const Duration(seconds: 2),
+    this.submitTimeout = const Duration(seconds: 10),
     this.confirmationTolerance = const Duration(milliseconds: 750),
     this.adaptiveThrottle,
     this.trace,
@@ -179,11 +184,14 @@ class PlayerSeekCoordinator {
         _readDuration = readDuration,
         _isExiting = isExiting,
         _onLatency = onLatency,
+        _onFailure = onFailure,
         _delay = delay ?? Future<void>.delayed;
 
   final Duration minimumDispatchInterval;
   final Duration confirmationPollInterval;
   final Duration confirmationTimeout;
+  /** 保护注入的 native submit；正式 PlayerService 会使用更早的服务级超时。 */
+  final Duration submitTimeout;
   final Duration confirmationTolerance;
   final PlayerSeekGopAdaptiveThrottle? adaptiveThrottle;
   final PlayerSeekSubmit _submit;
@@ -191,6 +199,7 @@ class PlayerSeekCoordinator {
   final PlayerSeekDurationReader _readDuration;
   final PlayerSeekExitReader _isExiting;
   final PlayerSeekLatencyListener _onLatency;
+  final PlayerSeekFailureListener? _onFailure;
   final PlayerSeekDelay _delay;
   final PlayerSeekTraceLogger? trace;
   final PlayerSeekTraceIdReader? readTraceId;
@@ -265,7 +274,25 @@ class PlayerSeekCoordinator {
         // 节流窗口从命令派发开始计算；后端已耗时超过窗口时，下一次最新目标
         // 应在命令返回后立即接续，不能把同一个窗口重复加在命令完成之后。
         _sinceLastDispatch = Stopwatch()..start();
-        await _submit(requested);
+        try {
+          await _submit(requested).timeout(submitTimeout);
+        } catch (error) {
+          trace?.mark(
+            traceId,
+            'seek_command_failed',
+            target: requested,
+            waitMilliseconds: latency.elapsedMilliseconds,
+          );
+          _pendingTarget = null;
+          try {
+            _onFailure?.call(error);
+          } catch (_) {
+            // 失败诊断是旁路回调，不能把 native 命令异常重新抛回 worker。
+          }
+          // 当前命令失败时丢弃同一输入批次的 pending 目标；下一次用户输入
+          // 仍可重新建立 worker，避免在服务已封锁后忙循环重放旧目标。
+          break;
+        }
         trace?.mark(
           traceId,
           'seek_command_complete',

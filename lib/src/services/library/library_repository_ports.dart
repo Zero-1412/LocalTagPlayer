@@ -15,7 +15,8 @@ import '../../repositories/repository_interfaces.dart';
  * 但页面组合根拿到的只读对象不再同时暴露命令接口。后续查询编译器可以替换该
  * 适配器，而不改变页面和 [LibraryApplicationFacade] 的契约。
  */
-class LibraryStoreQueryRepository implements LibraryQueryRepository {
+class LibraryStoreQueryRepository
+    implements LibraryQueryRepository, LibraryQueryCandidateRepository {
   const LibraryStoreQueryRepository(this._source);
 
   final LibraryQueryRepository _source;
@@ -44,6 +45,20 @@ class LibraryStoreQueryRepository implements LibraryQueryRepository {
   Iterable<TagItem> get allTagItems => _source.allTagItems;
   @override
   Set<String> get allTags => _source.allTags;
+  @override
+  int get dataRevision => _source is LibraryQueryCandidateRepository
+      ? (_source as LibraryQueryCandidateRepository).dataRevision
+      : 0;
+  @override
+  Future<List<VideoItem>?> queryCandidatesFor(FilterQuery query) {
+    final source = _source;
+    if (source is LibraryQueryCandidateRepository) {
+      return (source as LibraryQueryCandidateRepository).queryCandidatesFor(
+        query,
+      );
+    }
+    return Future<List<VideoItem>?>.value(null);
+  }
   @override
   Map<String, int> resultCounts(FilterQuery query) =>
       _source.resultCounts(query);

@@ -59,11 +59,28 @@ extension PlayerStateHealth on PlayerPageState {
       maximize: windowManager.maximize,
       reportError: reportFullscreenLifecycleError,
     );
+    await hideFullscreenQueueSidebar();
     fullscreenQueueVisible = false;
     pointerInWindowTopBarRegion = false;
     if (mounted) {
       routePopRequestedAt = DateTime.now();
-      Navigator.of(context).maybePop();
+      var didPop = false;
+      try {
+        didPop = await Navigator.of(context).maybePop();
+      } catch (error) {
+        debugPrint(
+          'PLAYER_EXIT_POP_FAILED type=${error.runtimeType}',
+        );
+      }
+      if (!didPop && mounted) {
+        // 路由拒绝退出时恢复交互态；否则页面会留在 isExiting=true 的不可操作状态。
+        isExiting = false;
+        debugPrint('PLAYER_EXIT_POP_REJECTED');
+        rebuild(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('播放器暂时无法退出，请重试')),
+        );
+      }
     }
   }
 
@@ -74,15 +91,19 @@ extension PlayerStateHealth on PlayerPageState {
    * 两者不共用 `time-pos`，因此可以识别“画面停住但声音继续”及其反向故障。
    */
   Future<void> sampleIndependentPlaybackProgress() async {
-    if (playbackHealthSampling || isExiting) {
+    final task = currentMediaTaskContext;
+    if (task == null || playbackHealthSampling || isExiting) {
       return;
     }
     playbackHealthSampling = true;
     try {
       final previousFrame = lastVideoFrameNumber;
       final frame = parseMpvInt(await getMpvProperty('estimated-frame-number'));
+      if (!isCurrentMediaTask(task)) return;
       final audioPts = parseMpvNumber(await getMpvProperty('audio-pts'));
+      if (!isCurrentMediaTask(task)) return;
       final hwdecCurrent = await getMpvProperty('hwdec-current');
+      if (!isCurrentMediaTask(task)) return;
       final now = DateTime.now();
       lastHealthSampleAt = now;
       if (frame != null) {
@@ -154,6 +175,7 @@ extension PlayerStateHealth on PlayerPageState {
         qualityMarginSampleTick++;
         if (qualityMarginSampleTick.isEven) {
           await sampleQualityMargin(
+            task: task,
             sampledAt: now,
             frame: frame,
             previousFrame: previousFrame,
@@ -173,23 +195,31 @@ extension PlayerStateHealth on PlayerPageState {
    * 压力触发时执行一次完整回滚，不增加新的 UI Timer 或逐帧读取。
    */
   Future<void> sampleQualityMargin({
+    required PlayerMediaTaskContext task,
     required DateTime sampledAt,
     required int? frame,
     required int? previousFrame,
     required String? hwdecCurrent,
   }) async {
+    if (!isCurrentMediaTask(task)) return;
     final details =
         detailsService.cachedDetailsFor(currentItem) ?? const MediaDetails();
     final sourceFps = parseMpvNumber(await getMpvProperty('container-fps'));
+    if (!isCurrentMediaTask(task)) return;
     final estimatedFps =
         parseMpvNumber(await getMpvProperty('estimated-vf-fps'));
+    if (!isCurrentMediaTask(task)) return;
     final cacheDuration =
         parseMpvNumber(await getMpvProperty('demuxer-cache-duration'));
+    if (!isCurrentMediaTask(task)) return;
     final decoderDrops =
         parseMpvInt(await getMpvProperty('decoder-frame-drop-count'));
+    if (!isCurrentMediaTask(task)) return;
     final outputDrops =
         parseMpvInt(await getMpvProperty('vo-drop-frame-count'));
+    if (!isCurrentMediaTask(task)) return;
     final totalDrops = parseMpvInt(await getMpvProperty('frame-drop-count'));
+    if (!isCurrentMediaTask(task)) return;
     final sample = PlayerAdaptiveQualitySample(
       sampledAt: sampledAt,
       playing: playerService.state.playing,
@@ -227,6 +257,7 @@ extension PlayerStateHealth on PlayerPageState {
               nvidiaVideoEnhancementExperimentEnabled,
           nvidiaVideoHdrEnabled: nvidiaVideoHdrExperimentEnabled,
         );
+        if (!isCurrentMediaTask(task)) return;
         adaptiveQualityApplyResult = result;
         if (result.applied) {
           adaptiveQualityLevel = decision.level;
@@ -243,7 +274,6 @@ extension PlayerStateHealth on PlayerPageState {
     if (darkSceneEnhancementActive && !isExiting) {
       final darkDecision = darkSceneSafetyCoordinator.evaluate(sample);
       if (darkDecision.shouldRollback) {
-        final guardedPath = openedPath;
         final result = await PlayerAdaptiveQualityEnhancer.apply(
           backend: playerService,
           level: adaptiveQualityLevel,
@@ -252,7 +282,7 @@ extension PlayerStateHealth on PlayerPageState {
               nvidiaVideoEnhancementExperimentEnabled,
           nvidiaVideoHdrEnabled: nvidiaVideoHdrExperimentEnabled,
         );
-        if (!mounted || openedPath != guardedPath) return;
+        if (!isCurrentMediaTask(task)) return;
         adaptiveQualityApplyResult = result;
         darkSceneEnhancementApplyResult = result;
         darkSceneEnhancementActive = !result.applied;
@@ -271,12 +301,11 @@ extension PlayerStateHealth on PlayerPageState {
         !isExiting) {
       final nvidiaDecision = nvidiaVideoSafetyCoordinator.evaluate(sample);
       if (nvidiaDecision.shouldRollback) {
-        final guardedPath = openedPath;
         await PlayerAdaptiveQualityEnhancer.apply(
           backend: playerService,
           level: PlayerAdaptiveQualityLevel.off,
         );
-        if (!mounted || openedPath != guardedPath) return;
+        if (!isCurrentMediaTask(task)) return;
         rebuild(() {
           nvidiaVideoEnhancementExperimentEnabled = false;
           nvidiaVideoHdrExperimentEnabled = false;
@@ -284,9 +313,10 @@ extension PlayerStateHealth on PlayerPageState {
           nvidiaVideoEnhancementRollbackAt = sampledAt;
           nvidiaVideoAutomaticReason = '播放压力触发 NVIDIA 自动回滚';
         });
-        await restoreCpuEnhancementsAfterNvidia();
-        if (!mounted || openedPath != guardedPath) return;
-        await probeNvidiaVideoEnhancementCapability();
+        await restoreCpuEnhancementsAfterNvidia(task);
+        if (!isCurrentMediaTask(task)) return;
+        await probeNvidiaVideoEnhancementCapability(task);
+        if (!isCurrentMediaTask(task)) return;
         debugPrint(
           'PLAYER_NVIDIA_VIDEO_ENHANCEMENT rollback=true '
           'reason=${nvidiaDecision.reason}',
@@ -297,11 +327,10 @@ extension PlayerStateHealth on PlayerPageState {
       final smoothMotionDecision =
           smoothMotionSafetyCoordinator.evaluate(sample);
       if (smoothMotionDecision.shouldRollback) {
-        final guardedPath = openedPath;
         final result = await playerService.applySmoothMotion(
           PlayerSmoothMotionMode.off,
         );
-        if (!mounted || openedPath != guardedPath) return;
+        if (!isCurrentMediaTask(task)) return;
         smoothMotionActive = false;
         smoothMotionApplyReason = result.reason;
         smoothMotionRollbackReason = smoothMotionDecision.reason;
@@ -315,12 +344,11 @@ extension PlayerStateHealth on PlayerPageState {
     if (!hdrMappingExperimentActive || isExiting) return;
     final hdrDecision = hdrMappingSafetyCoordinator.evaluate(sample);
     if (!hdrDecision.shouldRollback) return;
-    final guardedPath = openedPath;
     final result = await PlayerHdrMappingExperiment.apply(
       backend: playerService,
       enabled: false,
     );
-    if (!mounted || openedPath != guardedPath) return;
+    if (!isCurrentMediaTask(task)) return;
     hdrMappingApplyResult = result;
     hdrMappingExperimentActive = !result.applied;
     hdrMappingRollbackReason =

@@ -19,6 +19,7 @@ import '../../widgets/library/library_sidebar.dart';
 import '../../widgets/library/library_smoke_keys.dart';
 import '../../widgets/library/library_tag_discovery_panel.dart';
 import '../../widgets/library/library_tag_display_helpers.dart';
+import '../../widgets/library/library_hover_preview_coordinator.dart';
 import '../../widgets/library/library_video_results.dart';
 import '../../widgets/library/library_widgets.dart';
 import '../../widgets/library/library_recent_playback_view.dart';
@@ -35,7 +36,6 @@ import 'library_page_commands_mixin.dart';
 
 export 'cache_settings_page.dart'
     show CacheSettingsPage, playerShortcutConflictMessage;
-
 /** 标签筛选默认保持折叠，把媒体结果宽度优先留给高频浏览。 */
 const bool libraryTagDiscoveryPanelInitiallyOpen = false;
 /** 计算筛选动作后的面板状态；只有真实标签选择要求自动收起。 */
@@ -52,7 +52,6 @@ bool libraryRouteShouldExcludeSemantics({required bool playerRouteActive}) {
 }
 
 // ignore_for_file: slash_for_doc_comments
-
 class LibraryPage extends StatefulWidget {
   const LibraryPage({
     super.key,
@@ -360,95 +359,100 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
               enabled: runtime.resultMode == LibraryResultMode.library &&
                   !runtime.isScanning,
               onDropPaths: (paths) => unawaited(importLibraryPaths(paths)),
-              child: RepaintBoundary(
-                child: switch (runtime.resultMode) {
-                  LibraryResultMode.local => LocalLibraryView(
-                      currentPath: runtime.localLibraryPath,
-                      entries: localEntries,
-                      thumbnailService: thumbnailService,
-                      playbackSettings: runtime.playbackSettings,
-                      dense: runtime.denseResultGrid,
-                      canGoBack: runtime.sourceNavigation.canGoBack,
-                      onBack: goBackLocalLibraryPath,
-                      onOpenFolder: openLocalLibraryFolder,
-                      onOpenVideo: openAcceptedVideo,
-                      onRevealLocation: revealVideoLocation,
-                      onToggleFavorite: toggleFavorite,
-                      onDelete: requestDeleteVideo,
-                      preserveScrollOnResultDelta: preserveScrollOnResultDelta,
-                    ),
-                  LibraryResultMode.recent => videos.isEmpty
-                      ? EmptyState(
-                          hasLibrary: store.videos.isNotEmpty,
-                          message: '当前没有未完成的观看记录',
-                        )
-                      : RecentPlaybackView(
-                          videos: videos,
-                          selectedVideoIds:
-                              runtime.recentPlaybackSelection.selectedVideoIds,
-                          thumbnailService: thumbnailService,
-                          playbackSettings: runtime.playbackSettings,
-                          dense: runtime.denseResultGrid,
-                          onOpen: openAcceptedVideo,
-                          onRevealLocation: revealVideoLocation,
-                          onToggleFavorite: toggleFavorite,
-                          onDeleteVideo: requestDeleteVideo,
-                          onToggleSelected: toggleRecentSelection,
-                          onSelectAll: () => setState(() {
-                            runtime.recentPlaybackSelection.toggleAll(
-                              videos.map((item) => item.videoId),
-                            );
-                          }),
-                          onClearSelection: () =>
-                              setState(runtime.recentPlaybackSelection.clear),
-                          onDeleteOne: clearOneRecentPlayback,
-                          onDeleteSelected: () =>
-                              clearRecentPlayback(selectedOnly: true),
-                          onDeleteAll: () =>
-                              clearRecentPlayback(selectedOnly: false),
-                          preserveScrollOnResultDelta:
-                              preserveScrollOnResultDelta,
-                        ),
-                  _ => videos.isEmpty
-                      ? EmptyState(
-                          hasLibrary: store.videos.isNotEmpty,
-                          message:
-                              runtime.resultMode == LibraryResultMode.favorites
-                                  ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u89c6\u9891'
-                                  : null,
-                          onAddFiles:
-                              runtime.resultMode == LibraryResultMode.library &&
-                                      store.videos.isEmpty
-                                  ? pickVideoFiles
-                                  : null,
-                        )
-                      : VideoGrid(
-                          videos: videos,
-                          thumbnailService: thumbnailService,
-                          playbackSettings: runtime.playbackSettings,
-                          dense: runtime.denseResultGrid,
-                          columnReferenceWidth: gridColumnReferenceWidth,
-                          onVisible: prioritizeVisibleLibraryItem,
-                          onOpen: openAcceptedVideo,
-                          onRevealLocation: revealVideoLocation,
-                          onToggleFavorite: toggleFavorite,
-                          onDelete: requestDeleteVideo,
-                          preserveScrollOnResultDelta:
-                              preserveScrollOnResultDelta,
-                          selectionMode: runtime.librarySelectionMode,
-                          selectedVideoIds: runtime.selectedLibraryVideoIds,
-                          onToggleSelected: (item) => setState(
-                            () => runtime.librarySelection.toggle(item.videoId),
+              child: LibraryHoverPreviewScope(
+                child: RepaintBoundary(
+                  child: switch (runtime.resultMode) {
+                    LibraryResultMode.local => LocalLibraryView(
+                        currentPath: runtime.localLibraryPath,
+                        entries: localEntries,
+                        thumbnailService: thumbnailService,
+                        playbackSettings: runtime.playbackSettings,
+                        dense: runtime.denseResultGrid,
+                        canGoBack: runtime.sourceNavigation.canGoBack,
+                        onBack: goBackLocalLibraryPath,
+                        onOpenFolder: openLocalLibraryFolder,
+                        onOpenVideo: openAcceptedVideo,
+                        onRevealLocation: revealVideoLocation,
+                        onToggleFavorite: toggleFavorite,
+                        onDelete: requestDeleteVideo,
+                        preserveScrollOnResultDelta:
+                            preserveScrollOnResultDelta,
+                      ),
+                    LibraryResultMode.recent => videos.isEmpty
+                        ? EmptyState(
+                            hasLibrary: store.videos.isNotEmpty,
+                            message: '当前没有未完成的观看记录',
+                          )
+                        : RecentPlaybackView(
+                            videos: videos,
+                            selectedVideoIds: runtime
+                                .recentPlaybackSelection.selectedVideoIds,
+                            thumbnailService: thumbnailService,
+                            playbackSettings: runtime.playbackSettings,
+                            dense: runtime.denseResultGrid,
+                            onOpen: openAcceptedVideo,
+                            onRevealLocation: revealVideoLocation,
+                            onToggleFavorite: toggleFavorite,
+                            onDeleteVideo: requestDeleteVideo,
+                            onToggleSelected: toggleRecentSelection,
+                            onSelectAll: () => setState(() {
+                              runtime.recentPlaybackSelection.toggleAll(
+                                videos.map((item) => item.videoId),
+                              );
+                            }),
+                            onClearSelection: () =>
+                                setState(runtime.recentPlaybackSelection.clear),
+                            onDeleteOne: clearOneRecentPlayback,
+                            onDeleteSelected: () =>
+                                clearRecentPlayback(selectedOnly: true),
+                            onDeleteAll: () =>
+                                clearRecentPlayback(selectedOnly: false),
+                            preserveScrollOnResultDelta:
+                                preserveScrollOnResultDelta,
                           ),
-                          scrollChromeEnabled:
-                              layoutSize == LayoutSize.expanded,
-                          onHeaderVisibilityChanged: (visible) {
-                            if (runtime.libraryHeaderVisible.value != visible) {
-                              runtime.libraryHeaderVisible.value = visible;
-                            }
-                          },
-                        ),
-                },
+                    _ => videos.isEmpty
+                        ? EmptyState(
+                            hasLibrary: store.videos.isNotEmpty,
+                            message: runtime.resultMode ==
+                                    LibraryResultMode.favorites
+                                ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u89c6\u9891'
+                                : null,
+                            onAddFiles: runtime.resultMode ==
+                                        LibraryResultMode.library &&
+                                    store.videos.isEmpty
+                                ? pickVideoFiles
+                                : null,
+                          )
+                        : VideoGrid(
+                            videos: videos,
+                            thumbnailService: thumbnailService,
+                            playbackSettings: runtime.playbackSettings,
+                            dense: runtime.denseResultGrid,
+                            columnReferenceWidth: gridColumnReferenceWidth,
+                            onVisible: prioritizeVisibleLibraryItem,
+                            onOpen: openAcceptedVideo,
+                            onRevealLocation: revealVideoLocation,
+                            onToggleFavorite: toggleFavorite,
+                            onDelete: requestDeleteVideo,
+                            preserveScrollOnResultDelta:
+                                preserveScrollOnResultDelta,
+                            selectionMode: runtime.librarySelectionMode,
+                            selectedVideoIds: runtime.selectedLibraryVideoIds,
+                            onToggleSelected: (item) => setState(
+                              () =>
+                                  runtime.librarySelection.toggle(item.videoId),
+                            ),
+                            scrollChromeEnabled:
+                                layoutSize == LayoutSize.expanded,
+                            onHeaderVisibilityChanged: (visible) {
+                              if (runtime.libraryHeaderVisible.value !=
+                                  visible) {
+                                runtime.libraryHeaderVisible.value = visible;
+                              }
+                            },
+                          ),
+                  },
+                ),
               ),
             ),
           ),

@@ -10,6 +10,7 @@ import '../../models/video_item.dart';
 import '../../models/player_feature_apply_result.dart';
 import '../../services/player/player_hardware_compatibility.dart';
 import '../../services/player/player_adaptive_quality.dart';
+import '../../services/player/player_gpu_capability_detector.dart';
 import '../../services/player/player_memory_diagnostics.dart';
 import 'player_hardware_decode_warning_dialog.dart';
 import 'player_resume_dialog.dart';
@@ -43,7 +44,7 @@ extension PlayerStateOpening on PlayerPageState {
           code: 'missing_media');
       // missing 不会进入 backend.openPath；必须显式停掉旧媒体，避免旧声音和画面继续
       // 被误认为当前队列项的打开结果。
-      unawaited(playerService.stop().catchError((_) {}));
+      unawaited(safeStopPlayer(reason: 'missing-media'));
       if (mounted) {
         rebuild(() {});
       }
@@ -156,8 +157,15 @@ extension PlayerStateOpening on PlayerPageState {
         }
         final previousGpuTask = gpuCapabilityDetectionTask;
         if (previousGpuTask != null) {
-          // libmpv 属性属于共享实例；旧媒体任务结束后再开始新 open，保证最后写入者是新媒体。
-          await previousGpuTask;
+          // 旧任务只能在有界窗口内阻挡新 open；任务自身携带稳定身份，超时后即使
+          // 某个 native 读调用迟到返回，也不能再向新媒体发布结果。
+          try {
+            await previousGpuTask.timeout(playerGpuCapabilityDetectionTimeout);
+          } catch (error) {
+            debugPrint(
+              'PLAYER_GPU_PROBE_WAIT_RELEASED type=${error.runtimeType}',
+            );
+          }
           if (!mounted) return;
           if (openRequests.hasSuperseded(request)) continue;
         }
@@ -252,11 +260,7 @@ extension PlayerStateOpening on PlayerPageState {
             }
             // 即使已经有更新请求，损坏/无首帧的 open 也必须先停止，保证下一条媒体
             // 不会在旧失败会话上叠加播放状态。
-            try {
-              await playerService.stop();
-            } catch (_) {
-              // 后续 open/页面释放仍会继续；不把 stop 二次异常伪装成新媒体错误。
-            }
+            await safeStopPlayer(reason: 'unplayable-media');
             continue;
           }
           if (openRequests.hasSuperseded(request)) {
@@ -282,7 +286,11 @@ extension PlayerStateOpening on PlayerPageState {
                       .hdrDynamicToneMappingExperimentEnabled ||
                   playerService.supportsNativeNvidiaVideoEnhancement;
           if (requiresGpuCapabilityDetection) {
-            final task = detectCurrentGpuCapabilities(request);
+            final taskContext = currentMediaTaskContext;
+            if (taskContext == null) {
+              continue;
+            }
+            final task = detectCurrentGpuCapabilities(request, taskContext);
             gpuCapabilityDetectionTask = task;
             unawaited(task.whenComplete(() {
               if (identical(gpuCapabilityDetectionTask, task)) {
@@ -317,11 +325,7 @@ extension PlayerStateOpening on PlayerPageState {
           openedPath = null;
           // open、属性应用或可播放性准备任一步骤失败都必须结束旧媒体；否则旧视频
           // 会在失败面板后继续播放，且下一次 position 事件仍可能污染进度记录。
-          try {
-            await playerService.stop();
-          } catch (_) {
-            // 失败反馈不能被 stop 的二次异常吞掉；资源释放链仍会再次兜底。
-          }
+          await safeStopPlayer(reason: 'open-failed');
           // 只记录错误类型，避免异常正文中的本地路径进入 UI 或可复制诊断摘要。
           openRequests.markFailure(
             request,
@@ -380,6 +384,10 @@ extension PlayerStateOpening on PlayerPageState {
       completed: item.playbackCompleted,
     );
     if (saved == null) {
+      // MediaKit open 使用 play:false；没有历史进度时也必须在打开门禁完成后显式启动。
+      if (mounted && openedVideoId == item.videoId) {
+        await playerService.play();
+      }
       return;
     }
     final behavior = pageWidget.playbackSettings.resumeBehavior;

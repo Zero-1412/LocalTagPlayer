@@ -6,14 +6,39 @@
 
 ## Unreleased
 
+### 播放器首帧与媒体库悬停预览启动链
+
+- 正式 MediaKit 播放器改为 `open(play: false)`；引擎配置、媒体可播放性和恢复位置准备完成后才显式 `play()`，避免自动播放与打开/精确 seek 交叉。
+- 本地文件默认使用 `cache-pause=no`，并支持 `--dart-define=LTP_LOCAL_CACHE_PAUSE=true` 切换旧 `yes` 变体进行同素材 A/B；诊断日志会记录当前变体而不输出媒体路径。
+- 媒体库结果页改为共享一个 hover `Player/VideoController`；动态层先以透明状态挂载，原生首帧和 Flutter 合成帧完成后才覆盖静态 poster，首帧失败或超时保持 poster。
+- 点击进入播放器前的邻近缩略图预热改为后台执行，不再阻塞正式播放器路由；共享预览的释放、stop/open 切换和过期请求带有串行/代次保护。
+
+### 播放器命令超时、释放诊断与异步身份
+
+- 媒体命令在已进入 native 后增加有界等待；超时不会直接并发下一条命令，而是封锁当前 `PlayerService` 代次，
+  使排队目标失效并交给同一释放链收尾，避免旧 seek 迟到覆盖新媒体。
+- 普通 native 属性读取、页面 `getMpvProperty()`、事件取消和诊断日志增加统一有界等待；释放链对 stop、事件取消、
+  诊断、服务 dispose 和 backend released 分段报告失败，超时不会伪装为成功释放，页面保留可诊断的失败阶段。
+- GPU 探测增加总超时与失效检查；GPU、NVIDIA、健康回滚和超分应用统一绑定 stable `videoId`、媒体 generation 与请求 revision。
+- 健康采样增加旧媒体切换后的交叉门禁；NVIDIA 探测、联合滤镜、驱动状态轮询和 CPU 回滚均携带当前媒体任务上下文。
+- 播放错误使用安全 stop，退出等待并检查 `Navigator.maybePop()` 的结果；拒绝退出时恢复页面交互态并提示用户。
+
+### 播放器全屏筛选结果队列
+
+- 修复显式 Windows child HWND 后端在全屏显示筛选结果队列时仍覆盖 Flutter 列表或抢走命中区域的问题：
+  队列显示前按右侧实际矩形串行裁剪原生视频表面，隐藏、退出全屏和嵌套弹层关闭时按优先级恢复；
+  默认 MediaKit Texture 路径不改变，视频尺寸仍保持全屏布局。
+
 ### 架构分层与资源预算
 
-- `LibraryRepositoryContext` 统一单数据库、stable/path 索引和事务，查询/命令端口通过适配器隔离；
+- `LibraryRepositoryContext` 统一单数据库、stable/path 索引和事务；查询、标签/收藏命令与
+  root/扫描/relink 协调逻辑迁入独立 service，查询/命令端口只负责能力隔离；
   扫描、FFprobe、缩略图、视觉取帧和备份共享 `ResourceScheduler`，播放期间后台资源按 lease 让渡。
 - 播放器新增独立 `PlayerRuntimeBackend` 与 `PlayerSurfaceRenderer` 契约，保留 `PlayerBackend` 兼容入口，
   不改变 MediaKit Texture 或 Windows native QA 默认路径。
-- 建立 profile 驱动的可选 trigram FTS5 派生候选索引；最终筛选仍由 `FilterQuery`/`TagQueryService` 完成，
-  小库和不支持 FTS5 的环境回退内存查询；当前未引入路由框架。
+- profile 驱动的 trigram FTS5 派生候选索引已接入 `LibraryQueryController`/Facade，并由
+  `dataRevision` 驱动按需重建；真实 11,194 条库隔离基准确认候选+最终校验收益，最终筛选仍由
+  `FilterQuery`/`TagQueryService` 完成，小库和不支持 FTS5 的环境回退内存查询；当前未引入路由框架。
 
 ### 稳定身份与 SQLite schema
 

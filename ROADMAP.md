@@ -17,10 +17,10 @@ Local Tag Player 已完成标签发现、稳定身份、filtered queue、标签�
 1. **Phase 0（已完成）**：架构 ADR、依赖方向门禁、架构指标和旧库 fixture。
 2. **Phase 1（已完成）**：`videoId` 主索引、path 辅助索引和 stable-ID 命令 API。
 3. **Phase 2（已完成）**：schema migration，将 `videoId` 设为主身份、path 设为可变唯一字段。
-4. **Phase 3（已完成）**：`LibraryRepositoryContext` 和查询/命令能力适配器拆分 `LibraryStore`，保留单数据库和统一事务。
+4. **Phase 3（已完成）**：`LibraryRepositoryContext` 统一单数据库、stable/path 双索引和事务；真实的查询、标签/收藏命令与 root/扫描/relink 协调逻辑分别迁入 `LibraryStoreQueryService`、`LibraryStoreCommandService`、`LibraryStoreCoordinatorService`。`LibraryStore` 仍保留兼容端口及低层 stable-ID 视频持久化 owner，不复制状态、不打开第二连接。
 5. **Phase 4（已完成）**：`ResourceScheduler` 统一扫描、探测、缩略图、视觉和备份资源预算。
-6. **Phase 5（已完成）**：`PlayerRuntimeBackend` 与 `PlayerSurfaceRenderer` 分离，兼容保留 `PlayerBackend`。
-7. **Phase 6（候选加速器已完成）**：profile、trigram FTS5 计划和可重建搜索索引已建立；接入页面查询前仍需真实大库基准证明收益。
+6. **Phase 5（契约拆分已完成）**：`PlayerRuntimeBackend` 与 `PlayerSurfaceRenderer` 已独立注入，兼容保留 `PlayerBackend`；具体 runtime/surface adapter 暂不继续拆，待出现真实后端替换需求和独立收益证据再推进。
+7. **Phase 6（已完成，FTS5 已通过基准启用）**：候选查询已接入 `LibraryQueryController`/Facade；`dataRevision` 驱动可重建 trigram FTS5 派生索引，失败安全回退完整 Dart 查询。隔离副本上的真实 11,194 条库基准显示完整筛选平均 75.63ms，FTS 候选加最终校验平均 0.484ms，候选路径获胜且结果集合一致；冷索引建立 430.17ms 只作为一次性成本记录。
 
 Phase 3–6 不得改变 `FilterQuery` 语义、来源 filtered queue、用户数据绑定或正式 Windows
 播放器默认后端；每次跨 schema/core/platform contract 修改都必须同步更新架构 ADR 和 focused

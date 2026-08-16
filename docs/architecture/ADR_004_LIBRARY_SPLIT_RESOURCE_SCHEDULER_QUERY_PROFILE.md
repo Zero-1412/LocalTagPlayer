@@ -1,6 +1,6 @@
 # ADR-004：LibraryStore 分层、资源预算与 profile 查询编译
 
-状态：已接受（Phase 3–5 完成，Phase 6 候选加速器已落地）
+状态：已接受（Phase 3–5 完成，Phase 6 已接入并经真实大库基准启用）
 日期：2026-08-16
 
 ## 背景
@@ -22,9 +22,11 @@
 - 视频、标签、metadata persistence helpers；
 - 统一 `transaction` 入口。
 
-`LibraryStoreQueryRepository` 与 `LibraryStoreCommandRepository` 只隔离能力，不复制
-状态。组合根将只读查询端口和命令端口分别注入 facade；跨表操作仍由同一个 Store/Context
-和同一个 SQLite transaction 提交。
+`LibraryStoreQueryService`、`LibraryStoreCommandService`、`LibraryStoreCoordinatorService`
+分别拥有查询、标签/收藏命令和 root/扫描/relink 协调逻辑；`LibraryStoreQueryRepository` 与
+`LibraryStoreCommandRepository` 只隔离对外能力，不复制状态。低层 stable-ID 视频 CRUD、
+媒体详情/播放状态和缓存写入仍由 Store 作为同一个事务 owner 保留。组合根将只读查询端口和
+命令端口分别注入 facade；跨表操作仍由同一个 Store/Context 和同一个 SQLite transaction 提交。
 
 ### 2. ResourceScheduler
 
@@ -47,10 +49,11 @@ Texture、Windows native QA 路径或既有测试后端。
 ### 4. profile 驱动查询和 FTS5
 
 `LibraryQueryProfile` 仅在视频数量达到阈值且 SQLite 支持 trigram FTS5 时选择
-`sqliteFts5`。`LibraryQueryCompiler` 生成的 SQL 只能返回关键词候选集，候选必须继续
-经过 `FilterQuery.matches` / `TagQueryService`；少于 3 字符、FTS5 不可用或小库始终
-回退内存路径。因此 FTS5 不能改变 alias、folder 层级、分组 AND/OR、NOT 和用户筛选语义。
-FTS 表是可重建派生数据，不进入数据备份；不支持 FTS5 的 SQLite 启动不失败。
+`sqliteFts5`。`LibraryQueryController`/Facade 请求候选后，`dataRevision` 只在主库成功提交
+后推进；查询 service 发现新修订时按需重建派生索引。`LibraryQueryCompiler` 生成的 SQL 只能
+返回关键词候选集，候选必须继续经过 `FilterQuery.matches` / `TagQueryService`；少于 3 字符、
+FTS5 不可用或小库始终回退内存路径。因此 FTS5 不能改变 alias、folder 层级、分组 AND/OR、
+NOT 和用户筛选语义。FTS 表是可重建派生数据，不进入数据备份；不支持 FTS5 的 SQLite 启动不失败。
 
 ## 不变事项
 
@@ -69,6 +72,8 @@ FTS 表是可重建派生数据，不进入数据备份；不支持 FTS5 的 SQL
 - `test/player_runtime_surface_contract_test.dart`、播放器 service/filter focused：
   运行时/表面独立契约与既有行为；
 - `test/library_query_compiler_phase6_test.dart`：profile 阈值、FTS5 计划和安全回退；
+- `test/library_query_benchmark_test.dart`：显式隔离真实数据库副本的完整查询/候选查询对比，
+  同时断言最终 stable-ID 结果集合一致；
 - `dart analyze lib test/...`、稳定身份和架构 focused tests。
 
 ## 对抗式审查
@@ -83,5 +88,5 @@ prompt impact: satisfies single-store/single-budget/runtime-surface principles; 
 protected behaviors: stable-ID commands, playback queue, native backend defaults preserved
 unauthorized feature removal: none
 mount and reachability: existing LibraryPage/PlayerPage routes remain mounted and reachable
-validation: focused Phase 3–6 tests passed; full analyze/build pending independent final pass
+validation: Phase 3–6 focused tests、架构契约、`flutter analyze`、全量 `flutter test -r compact`（600 通过、4 跳过）和真实 11,194 条库查询基准通过；Windows Debug build 已成功生成 `build/windows/x64/runner/Debug/local_tag_player.exe`
 ```

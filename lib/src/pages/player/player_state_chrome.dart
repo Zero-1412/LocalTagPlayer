@@ -37,9 +37,7 @@ extension PlayerStateChrome on PlayerPageState {
   void toggleQueueVisibility() {
     if (isWindowFullscreen) {
       if (fullscreenQueueVisible) {
-        fullscreenQueueHideTimer?.cancel();
-        fullscreenQueueHideTimer = null;
-        rebuild(() => fullscreenQueueVisible = false);
+        unawaited(hideFullscreenQueueSidebar());
       } else {
         showFullscreenQueueSidebar();
       }
@@ -60,8 +58,9 @@ extension PlayerStateChrome on PlayerPageState {
 
   /** 切换桌面窗口全屏，并让页面布局与窗口状态同步更新。 */
   Future<void> toggleWindowFullscreen() async {
-    fullscreenQueueHideTimer?.cancel();
-    fullscreenQueueHideTimer = null;
+    // 先让全屏队列退出并等待 HWND 恢复，避免窗口尺寸切换期间旧 child HWND
+    // 留在右侧裁剪区，造成列表下一次显示时被覆盖或命中失效。
+    await hideFullscreenQueueSidebar();
     rebuild(() {
       pointerInWindowTopBarRegion = false;
     });
@@ -167,9 +166,44 @@ extension PlayerStateChrome on PlayerPageState {
   void showFullscreenQueueSidebar() {
     fullscreenQueueHideTimer?.cancel();
     fullscreenQueueHideTimer = null;
-    if (mounted && !fullscreenQueueVisible) {
-      rebuild(() => fullscreenQueueVisible = true);
+    if (!mounted || fullscreenQueueVisible) return;
+    final generation = ++fullscreenQueueSurfaceGeneration;
+    unawaited(_showFullscreenQueueSidebar(generation));
+  }
+
+  /** 等待原生表面让出全屏队列矩形后再挂载 Flutter 侧栏。 */
+  Future<void> _showFullscreenQueueSidebar(int generation) async {
+    if (!isWindowFullscreen) {
+      if (mounted && generation == fullscreenQueueSurfaceGeneration) {
+        rebuild(() => fullscreenQueueVisible = true);
+      }
+      return;
     }
+    final viewSize = MediaQuery.sizeOf(context);
+    await enqueuePlayerOverlaySurfaceCommand(
+      true,
+      overlayRect: overlaySurfaceRects.isEmpty
+          ? playerFullscreenQueueOverlayRect(viewSize)
+          : overlaySurfaceRects.last,
+      viewSize: viewSize,
+    );
+    if (!mounted ||
+        generation != fullscreenQueueSurfaceGeneration ||
+        !isWindowFullscreen) {
+      return;
+    }
+    rebuild(() => fullscreenQueueVisible = true);
+  }
+
+  /** 隐藏全屏队列，并在存在其它弹层时恢复其更高优先级的裁剪矩形。 */
+  Future<void> hideFullscreenQueueSidebar() async {
+    fullscreenQueueHideTimer?.cancel();
+    fullscreenQueueHideTimer = null;
+    ++fullscreenQueueSurfaceGeneration;
+    if (mounted && fullscreenQueueVisible) {
+      rebuild(() => fullscreenQueueVisible = false);
+    }
+    await restorePlayerOverlaySurface();
   }
 
   /** 鼠标离开队列宽度后短延迟收回侧栏，避免边缘抖动导致反复闪烁。 */
@@ -179,9 +213,7 @@ extension PlayerStateChrome on PlayerPageState {
     }
     fullscreenQueueHideTimer = Timer(playerFullscreenQueueHideGrace, () {
       fullscreenQueueHideTimer = null;
-      if (mounted && fullscreenQueueVisible) {
-        rebuild(() => fullscreenQueueVisible = false);
-      }
+      unawaited(hideFullscreenQueueSidebar());
     });
   }
 

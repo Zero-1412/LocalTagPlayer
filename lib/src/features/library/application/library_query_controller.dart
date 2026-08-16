@@ -14,6 +14,15 @@ typedef LibraryQueryAccepted = void Function(FilterState state);
 typedef LibraryQueryMeasured = void Function(Duration elapsed);
 
 /**
+ * 可选的数据库候选加载器；返回 null 表示保持完整内存查询路径。
+ *
+ * 候选加载器只能缩小关键词输入集合，不能绕过 [FilterQuery] 最终校验。
+ */
+typedef LibraryQueryCandidateLoader = Future<List<VideoItem>?> Function(
+  FilterQuery query,
+);
+
+/**
  * 媒体库筛选、搜索和结果发布的唯一 application owner。
  *
  * controller 复用 `FilterStateSource` 的缓存与扫描差量算法，并以自增 revision 拒绝旧请求。
@@ -35,6 +44,8 @@ class LibraryQueryController {
   var _revision = 0;
   /** dispose 后永久阻止结果发布。 */
   var _disposed = false;
+  /** 大库 profile 的可选候选入口；小库默认保持同步内存路径。 */
+  LibraryQueryCandidateLoader? _candidateLoader;
 
   /** 当前已接受结果；页面首次水合前可以为空。 */
   FilterState? get state => _state;
@@ -61,6 +72,7 @@ class LibraryQueryController {
     required String sortFingerprint,
     VideoItemComparator? compare,
     VideoItemSorter? sortVideos,
+    LibraryQueryCandidateLoader? loadCandidates,
   }) {
     if (_disposed) {
       return;
@@ -73,6 +85,7 @@ class LibraryQueryController {
       compare: compare,
       sortVideos: sortVideos,
     );
+    _candidateLoader = loadCandidates;
   }
 
   /**
@@ -150,18 +163,30 @@ class LibraryQueryController {
     _requestedQuery = query;
     final changedSnapshot = changedVideos?.toList(growable: false);
     final removedSnapshot = removedVideoIds?.toList(growable: false);
-    Future<void>.delayed(Duration.zero, () {
+    Future<void>.delayed(Duration.zero, () async {
       if (_disposed ||
           requestRevision != _revision ||
           !isStillCurrent(expectedEpoch)) {
         return;
       }
       final watch = Stopwatch()..start();
-      final candidate = compute(
-        query,
-        changedVideos: changedSnapshot,
-        removedVideoIds: removedSnapshot,
-      );
+      List<VideoItem>? queryCandidates;
+      final loadCandidates = _candidateLoader;
+      if (loadCandidates != null) {
+        try {
+          queryCandidates = await loadCandidates(query);
+        } on Object {
+          // 派生索引失败时回退完整 Dart 查询；不让可选加速器改变页面可用性。
+          queryCandidates = null;
+        }
+      }
+      final candidate = queryCandidates == null
+          ? compute(
+              query,
+              changedVideos: changedSnapshot,
+              removedVideoIds: removedSnapshot,
+            )
+          : _source.updateWithCandidates(query, queryCandidates);
       watch.stop();
       onMeasured?.call(watch.elapsed);
       if (_disposed ||

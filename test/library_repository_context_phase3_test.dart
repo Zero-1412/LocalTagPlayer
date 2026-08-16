@@ -23,7 +23,37 @@ void main() {
     expect(access, contains('LibraryRepositoryContext get repositoryContext'));
     expect(ports, contains('class LibraryStoreQueryRepository'));
     expect(ports, contains('class LibraryStoreCommandRepository'));
-    expect(bootstrap, contains('LibraryStoreQueryRepository(repository)'));
+    expect(bootstrap, contains('LibraryStoreQueryRepository(repository.queryRepository)'));
+    expect(
+      File('lib/src/services/library/library_query_service.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('class LibraryStoreQueryService'),
+        contains('rawQuery('),
+        contains('TagQueryService('),
+        contains('queryCandidatesFor'),
+      ),
+    );
+    expect(
+      File('lib/src/services/library/library_store_command_service.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('class LibraryStoreCommandService'),
+        contains('replaceManualTags'),
+        contains('saveTag'),
+        contains('markDataChanged'),
+      ),
+    );
+    expect(
+      File('lib/src/services/library/library_store_coordinator_service.dart')
+          .readAsStringSync(),
+      allOf(
+        contains('class LibraryStoreCoordinatorService'),
+        contains('LibraryScanCoordinator('),
+        contains('cancelActiveScan'),
+        contains('markDataChanged'),
+      ),
+    );
     expect(bootstrap, contains('LibraryStoreCommandRepository(repository)'));
   });
 }

@@ -193,6 +193,24 @@ class PlayerOpeningOverlayState extends State<PlayerOpeningOverlay> {
 double playerFullscreenQueueWidth(double windowWidth) =>
     math.min(476.0, math.max(320.0, windowWidth * 0.32));
 
+/**
+ * 计算全屏队列实际覆盖的逻辑矩形。
+ *
+ * Flutter Texture 不需要该矩形；显式 child HWND 必须依据同一矩形裁剪原生视频，
+ * 否则 Flutter 侧虽然已经挂载列表，原生表面仍可能覆盖列表或抢走其命中区域。
+ */
+Rect playerFullscreenQueueOverlayRect(Size viewSize) {
+  final width = playerFullscreenQueueWidth(viewSize.width)
+      .clamp(0.0, viewSize.width)
+      .toDouble();
+  return Rect.fromLTWH(
+    viewSize.width - width,
+    0,
+    width,
+    viewSize.height,
+  );
+}
+
 /** 未展开时使用固定 32px 容错热区，避免高分屏最右边缘难以命中。 */
 const playerFullscreenQueueEdgeActivationWidth = 32.0;
 

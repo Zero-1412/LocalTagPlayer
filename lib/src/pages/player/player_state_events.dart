@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../../features/player/domain/player_playback_progress.dart';
 import '../../models/player_feature_apply_result.dart';
 import '../../models/video_item.dart';
@@ -9,6 +11,29 @@ import 'player_page.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
+/** 页面内异步媒体任务的稳定身份快照；path 只作为可变位置，不能单独保护结果。 */
+class PlayerMediaTaskContext {
+  const PlayerMediaTaskContext({
+    required this.videoId,
+    required this.mediaGeneration,
+    required this.requestRevision,
+  });
+
+  final String videoId;
+  final int mediaGeneration;
+  final int requestRevision;
+
+  /** 供页面外的延迟采样在 await 返回后复用同一稳定身份判断。 */
+  bool matches({
+    required String? currentVideoId,
+    required int? currentMediaGeneration,
+    required int currentRequestRevision,
+  }) =>
+      currentVideoId == videoId &&
+      currentMediaGeneration == mediaGeneration &&
+      currentRequestRevision == requestRevision;
+}
+
 /**
  * 处理后端事件与基础播放设置。
  *
@@ -16,6 +41,31 @@ import 'player_page.dart';
  * 仍保留在页面状态对象中。
  */
 extension PlayerStateEvents on PlayerPageState {
+  /** 捕获当前媒体异步任务的三元稳定身份；未发布可播放媒体时返回 null。 */
+  PlayerMediaTaskContext? get currentMediaTaskContext {
+    final videoId = openedVideoId;
+    final generation = openedMediaGeneration;
+    if (videoId == null || generation == null) {
+      return null;
+    }
+    return PlayerMediaTaskContext(
+      videoId: videoId,
+      mediaGeneration: generation,
+      requestRevision: openRequests.currentRevision,
+    );
+  }
+
+  /** 每次 await 返回后统一验证 stable ID、媒体代次和请求 revision。 */
+  bool isCurrentMediaTask(PlayerMediaTaskContext task) {
+    return mounted &&
+        !isExiting &&
+        task.matches(
+          currentVideoId: openedVideoId,
+          currentMediaGeneration: openedMediaGeneration,
+          currentRequestRevision: openRequests.currentRevision,
+        );
+  }
+
   /**
    * 使当前后端媒体事件立即失效，但保留旧纹理和路径作为切换期间的视觉占位。
    *
@@ -70,8 +120,22 @@ extension PlayerStateEvents on PlayerPageState {
     invalidateOpenedMediaEvents();
     openedPath = null;
     openRequests.markImmediateFailure(currentOpenTarget, code: code);
-    unawaited(playerService.stop());
+    unawaited(safeStopPlayer(reason: 'player-error'));
     rebuild(() {});
+  }
+
+  /**
+   * 错误恢复和退出共用的安全 stop；命令失败只进诊断，不产生未处理异步异常。
+   * PlayerService 会在 native 命令卡死时封锁同一媒体尾链，不在这里并发补发 stop。
+   */
+  Future<void> safeStopPlayer({required String reason}) async {
+    try {
+      await playerService.stop();
+    } catch (error) {
+      debugPrint(
+        'PLAYER_SAFE_STOP_FAILED reason=$reason type=${error.runtimeType}',
+      );
+    }
   }
 
   /** 以低频写入当前已打开视频的进度，避免播放流每帧触发 SQLite。 */
@@ -276,14 +340,15 @@ extension PlayerStateEvents on PlayerPageState {
    * 用户开关表达请求，诊断中的“已生效”必须来自属性回读，不能在点击瞬间乐观冒充。
    */
   Future<void> applyVideoSuperResolutionSetting(bool enabled) async {
-    final guardedPath = openedPath;
+    final task = currentMediaTaskContext;
+    if (task == null) return;
     final result = await PlayerVideoSuperResolution.apply(
       backend: playerService,
       enabled: enabled,
       baseScaler: videoScaler,
     );
     if (!mounted ||
-        guardedPath != openedPath ||
+        !isCurrentMediaTask(task) ||
         videoSuperResolutionEnabled != enabled) {
       return;
     }

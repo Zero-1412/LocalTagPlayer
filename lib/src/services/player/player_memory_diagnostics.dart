@@ -15,6 +15,9 @@ import '../../platform/platform_interfaces.dart';
 class PlayerMemoryDiagnostics {
   const PlayerMemoryDiagnostics._();
 
+  /** 诊断属性单次读取上限；日志不能反向阻塞播放器释放尾链。 */
+  static const propertyReadTimeout = Duration(seconds: 2);
+
   /**
    * 记录一个阶段。
    *
@@ -31,12 +34,16 @@ class PlayerMemoryDiagnostics {
     var demuxState = 'unavailable';
     if (backend != null && readEngineProperties) {
       try {
-        demuxSeconds = await backend.getProperty('demuxer-cache-duration');
+        demuxSeconds = await backend
+            .getProperty('demuxer-cache-duration')
+            .timeout(propertyReadTimeout);
       } catch (_) {
         // 文件尚未打开或 Player 正在释放时，mpv 属性允许暂时不可用。
       }
       try {
-        demuxState = await backend.getProperty('demuxer-cache-state');
+        demuxState = await backend
+            .getProperty('demuxer-cache-state')
+            .timeout(propertyReadTimeout);
       } catch (_) {
         // 复杂 node 属性在部分构建中不可转换为字符串，保留 unavailable。
       }

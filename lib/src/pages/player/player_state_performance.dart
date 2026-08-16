@@ -4,10 +4,20 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../widgets/app_theme_tokens.dart';
+import '../../services/player/player_service.dart';
 import 'player_queue_sidebar.dart';
 import 'player_settings_panel.dart';
 import 'player_video_aspect_mode.dart';
 import 'player_page.dart';
+
+/**
+ * 本地文件的缓存暂停 A/B 变体；默认跑 `no`，对照组可用
+ * `--dart-define=LTP_LOCAL_CACHE_PAUSE=true` 启动同素材测试。
+ */
+const bool localPlaybackCachePauseEnabled = bool.fromEnvironment(
+  'LTP_LOCAL_CACHE_PAUSE',
+  defaultValue: false,
+);
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -166,6 +176,10 @@ extension PlayerStatePerformance on PlayerPageState {
    * 这些属性不依赖媒体元数据；同一次 open 只提交一次，避免打开后再次重复平台往返。
    */
   Future<void> applyPlaybackEngineProfile() async {
+    debugPrint(
+      'PLAYER_CACHE_PAUSE_AB scope=local-file '
+      'variant=${localPlaybackCachePauseEnabled ? 'yes' : 'no'}',
+    );
     final options = <String, String>{
       // 固定解码并发，避免 FFmpeg 在高核心数机器上为单个视频扩张大量工作线程。
       'vd-lavc-threads': '4',
@@ -175,8 +189,8 @@ extension PlayerStatePerformance on PlayerPageState {
       'hwdec-software-fallback': '3',
       // 允许 mpv 对高分辨率 HEVC/VP9/AV1 等编码尝试用户选择的硬解后端。
       'hwdec-codecs': 'all',
-      // 缓存暂时耗尽时让 mpv 等待输入恢复，不以连续丢帧追赶播放时钟。
-      'cache-pause': 'yes',
+      // 本地文件不采用网络式 cache pause；保留常量开关便于同素材 A/B 对照。
+      'cache-pause': localPlaybackCachePauseEnabled ? 'yes' : 'no',
       'demuxer-readahead-secs':
           effectivePlaybackSettings.highQualityStreamCacheEnabled ? '15' : '5',
       'demuxer-max-bytes':
@@ -234,7 +248,11 @@ extension PlayerStatePerformance on PlayerPageState {
   Future<String> getMpvProperty(String property) async {
     try {
       final platform = playerService;
-      final value = await platform.getProperty(property);
+      // 页面诊断再保留一层总上限；即使测试或兼容后端绕过服务默认值，
+      // 健康采样、GPU 轮询和打开可播放性确认也不能永久占住页面任务。
+      final value = await platform
+          .getProperty(property)
+          .timeout(PlayerService.defaultPropertyReadTimeout);
       final text = value.toString().trim();
       return text.isEmpty ? 'empty' : text;
     } catch (error) {

@@ -22,6 +22,7 @@ import 'package:local_tag_player/src/services/library/library_page_application_s
 import 'package:local_tag_player/src/services/media/media_details_service.dart';
 import 'package:local_tag_player/src/services/media/thumbnail_service.dart';
 import 'package:local_tag_player/src/services/player/player_service.dart';
+import 'package:local_tag_player/src/services/resources/resource_scheduler.dart';
 import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart';
 import 'package:local_tag_player/src/widgets/library/library_video_results.dart';
 import 'package:path/path.dart' as p;
@@ -223,6 +224,8 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
   final LibraryApplicationFacade store;
   /** 使用隔离目录和空 FFmpeg 后端的缩略图服务。 */
   final ThumbnailService thumbnailService;
+  /** 测试页与生产页保持同一共享资源预算边界。 */
+  final resourceScheduler = ResourceScheduler();
   /** 最近一次保存的展示偏好，用于确认排序由页面持久化而非 controller 越界写盘。 */
   LibrarySortPreferences? savedSortPreferences;
 
@@ -239,6 +242,7 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
         direction: SortDirection.ascending,
       ),
       dataBackupSettings: DataBackupSettings.defaults,
+      resourceScheduler: resourceScheduler,
     );
   }
 
