@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../services/media/thumbnail_service.dart';
+import '../../../widgets/app_theme_tokens.dart';
 import 'cache_diagnostics_snapshot_view.dart';
 import 'cache_failure_actions.dart';
 
@@ -27,17 +28,11 @@ class CacheDiagnosticsSettingsCard extends StatelessWidget {
 
   /** 最新统计请求是否仍在加载。 */
   final bool loading;
-
-  /** 最新统计请求是否失败。 */
   final bool hasError;
-
-  /** 最近一次成功读取的只读统计快照。 */
   final CacheStats? stats;
 
   /** 页面缓存维护 owner 是否正在执行动作。 */
   final bool cacheActionRunning;
-
-  /** 重新读取统计快照的意图回调。 */
   final VoidCallback onRetry;
 
   /** 定向重试当前失败快照的意图回调。 */
@@ -51,24 +46,34 @@ class CacheDiagnosticsSettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: CacheDiagnosticsLoadStateView(
-          loading: loading,
-          hasError: hasError,
-          stats: stats,
-          cacheActionRunning: cacheActionRunning,
-          onRetry: onRetry,
-          failureActionsBuilder: (stats, cacheBusy) => CacheFailureActions(
-            hasFailures: stats.failures.isNotEmpty,
-            missingCount: stats.missing,
-            cacheBusy: cacheBusy,
-            onRetry: () => onRetryFailures(stats),
-            onClear: () => onClearFailures(stats),
-            onGenerateMissing: onGenerateMissing == null
-                ? null
-                : () => onGenerateMissing!(stats),
+    return Semantics(
+      container: true,
+      label: '缓存诊断工作区',
+      child: DecoratedBox(
+        key: const ValueKey('settings.cache.workspaceSurface'),
+        decoration: BoxDecoration(
+          color: librarySurface,
+          borderRadius: BorderRadius.circular(AppRadius.panel),
+          border: const Border.fromBorderSide(BorderSide(color: libraryBorder)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: CacheDiagnosticsLoadStateView(
+            loading: loading,
+            hasError: hasError,
+            stats: stats,
+            cacheActionRunning: cacheActionRunning,
+            onRetry: onRetry,
+            failureActionsBuilder: (stats, cacheBusy) => CacheFailureActions(
+              hasFailures: stats.failures.isNotEmpty,
+              missingCount: stats.missing,
+              cacheBusy: cacheBusy,
+              onRetry: () => onRetryFailures(stats),
+              onClear: () => onClearFailures(stats),
+              onGenerateMissing: onGenerateMissing == null
+                  ? null
+                  : () => onGenerateMissing!(stats),
+            ),
           ),
         ),
       ),

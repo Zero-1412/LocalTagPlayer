@@ -4214,6 +4214,12 @@ void main() {
       ),
     );
 
+    expect(
+      find.byKey(const ValueKey('settings.cache.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
+
     final retryButton =
         find.byKey(const ValueKey('settings.cache.retryFailures'));
     await tester.ensureVisible(retryButton);

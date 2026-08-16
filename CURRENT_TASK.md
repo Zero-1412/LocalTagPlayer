@@ -1,5 +1,21 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 缓存诊断 UI 外壳重构（已完成）
+
+- 目标：进入第三阶段下一个仍缺独立视觉目标的维护叶页面，把缓存诊断从通用设置卡片收敛为
+  “诊断工作区”，先建立 Before/After 视觉目标，再替换展示外壳。
+- 当前修改：新增 `docs/design/CACHE_DIAGNOSTICS_UI_SHELL_TARGET.md`；缓存诊断使用带稳定 key
+  和 Semantics container 的实色工作区 surface；缓存重试、清除和缺失补全反馈接入共享维护 Snackbar。
+- 保护：不修改 `CacheDiagnosticsController`、`CacheDiagnosticsMaintenanceController`、
+  `ThumbnailService`、缓存队列、失败/缺失统计语义、失败详情或用户数据。
+- 当前验证：缓存诊断工作区、读取失败、150% 文字缩放、设置入口可达性和架构契约 focused
+  验证通过；完整 `flutter test` 通过（621 passed，4 skipped）；`flutter analyze` 无问题；
+  `flutter build windows --debug` 成功。Debug 窗口真实从媒体库进入设置，再进入缩略图缓存，检查
+  覆盖率、指标、后台任务、失败语义、失败详情展开和三项恢复操作，无明显遮挡、裁切或溢出。
+- 阻塞：无。
+- 下一步：先收集缓存诊断在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，
+  再决定继续细化其他缓存状态或进入下一个维护页面；不扩展到缓存业务边界。
+
 # 2026-08-16 · 相似视频页 UI 外壳重构（已完成）
 
 - 目标：进入下一个仍缺统一维护视觉证据的页面，把相似视频收敛为“维护工作区 / 相似视频”

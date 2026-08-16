@@ -12,6 +12,7 @@ import '../../models/data_backup_models.dart';
 import '../../models/video_item.dart';
 import '../../services/library/library_application_facade.dart';
 import '../../services/media/thumbnail_service.dart';
+import '../../widgets/maintenance_feedback.dart';
 import 'cache_settings_workspace.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -170,13 +171,15 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       if (outcome == null || !mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(cacheRetryOutcomeLabel(outcome))),
+      showMaintenanceSnackBar(
+        context,
+        message: cacheRetryOutcomeLabel(outcome),
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('重试失败项时出错：$error')),
+        showMaintenanceSnackBar(
+          context,
+          message: '重试失败项时出错：$error',
         );
       }
     } finally {
@@ -203,13 +206,15 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       if (outcome == null || !mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(cacheClearOutcomeLabel(outcome))),
+      showMaintenanceSnackBar(
+        context,
+        message: cacheClearOutcomeLabel(outcome),
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('清除失败标记时出错：$error')),
+        showMaintenanceSnackBar(
+          context,
+          message: '清除失败标记时出错：$error',
         );
       }
     } finally {
@@ -233,10 +238,9 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('已启动缺失缓存补全，将按后台限流分批处理'),
-      ),
+    showMaintenanceSnackBar(
+      context,
+      message: '已启动缺失缓存补全，将按后台限流分批处理',
     );
     unawaited(_cacheDiagnosticsController.refresh());
   }
