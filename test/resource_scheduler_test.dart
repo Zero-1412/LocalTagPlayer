@@ -77,4 +77,47 @@ void main() {
     backgroundLease.release();
     scheduler.dispose();
   });
+
+  test('pending request can be cancelled without consuming a lease', () async {
+    final scheduler = ResourceScheduler(totalBudget: 1);
+    final active = await scheduler.acquire(ResourceKind.thumbnail);
+    final pending = scheduler.acquireRequest(ResourceKind.thumbnail);
+
+    pending.cancel();
+    await expectLater(
+      pending.future,
+      throwsA(isA<ResourceRequestCancelled>()),
+    );
+    expect(scheduler.snapshot.queuedTotal, 0);
+    expect(scheduler.snapshot.activeTotal, 1);
+
+    active.release();
+    expect(scheduler.snapshot.activeTotal, 0);
+    scheduler.dispose();
+  });
+
+  test('默认缩略图预算允许三个后台 lease 且不突破总预算', () async {
+    final scheduler = ResourceScheduler(totalBudget: 4);
+    final first = await scheduler.acquire(ResourceKind.thumbnail);
+    var started = 0;
+    final second = scheduler.acquire(ResourceKind.thumbnail).then((lease) {
+      started++;
+      return lease;
+    });
+    final third = scheduler.acquire(ResourceKind.thumbnail).then((lease) {
+      started++;
+      return lease;
+    });
+
+    await Future<void>.delayed(Duration.zero);
+    expect(started, 2);
+    expect(scheduler.snapshot.activeTotal, 3);
+    expect(scheduler.snapshot.activeByKind[ResourceKind.thumbnail], 3);
+
+    first.release();
+    (await second).release();
+    (await third).release();
+    expect(scheduler.snapshot.activeTotal, 0);
+    scheduler.dispose();
+  });
 }

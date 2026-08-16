@@ -219,6 +219,28 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     }
   }
 
+  /** 用户显式启动缺失缓存补全；服务内部按候选窗口和资源预算持续推进。 */
+  void _generateMissingThumbnails(CacheStats stats) {
+    if (_cacheMaintenanceController.busy ||
+        stats.missing <= 0 ||
+        stats.backgroundGenerationActive ||
+        stats.active > 0 ||
+        stats.queued > 0 ||
+        stats.pendingBackgroundRequests > 0) {
+      return;
+    }
+    widget.thumbnailService.generateMissing(widget.store.videos.values);
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('已启动缺失缓存补全，将按后台限流分批处理'),
+      ),
+    );
+    unawaited(_cacheDiagnosticsController.refresh());
+  }
+
   /**
    * 校验并保存录制到的快捷键。
    *
@@ -419,6 +441,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
         onClearFailures: (stats) {
           unawaited(_clearThumbnailFailureMarkers(stats));
         },
+        onGenerateMissing: _generateMissingThumbnails,
         onDataBackupSettingsChanged: widget.onDataBackupSettingsChanged,
         onRunDataBackupNow: widget.onRunDataBackupNow,
         onCheckDataBackupIntegrity: widget.onCheckDataBackupIntegrity,

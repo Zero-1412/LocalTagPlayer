@@ -186,12 +186,18 @@ class _CardFileMenuFFmpegBackend implements FFmpegBackend {
 
 /** 页面可见项探测返回空批次，避免启动 FFprobe。 */
 class _CardFileMenuProbeBackend implements MediaProbeBackend {
+  _CardFileMenuProbeBackend({this.onProbe});
+
+  final VoidCallback? onProbe;
+
   @override
   Future<List<MediaProbeResult>> probeBatch({
     required int generationId,
     required List<MediaProbeRequest> requests,
-  }) async =>
-      const <MediaProbeResult>[];
+  }) async {
+    onProbe?.call();
+    return const <MediaProbeResult>[];
+  }
 
   @override
   Future<void> cancelGeneration(int generationId) async {}
@@ -226,6 +232,8 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
   final ThumbnailService thumbnailService;
   /** 测试页与生产页保持同一共享资源预算边界。 */
   final resourceScheduler = ResourceScheduler();
+  /** 记录应用启动后是否自动登记了媒体详情补全。 */
+  var mediaProbeBatchCalls = 0;
   /** 最近一次保存的展示偏好，用于确认排序由页面持久化而非 controller 越界写盘。 */
   LibrarySortPreferences? savedSortPreferences;
 
@@ -266,7 +274,9 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
     void Function(MediaDetailsProgress progress)? onProgress,
   }) {
     return MediaDetailsService(
-      probeBackend: _CardFileMenuProbeBackend(),
+      probeBackend: _CardFileMenuProbeBackend(
+        onProbe: () => mediaProbeBatchCalls++,
+      ),
       onUpdated: onUpdated,
       onBatchUpdated: onBatchUpdated,
       onProgress: onProgress,
@@ -285,6 +295,74 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
 }
 
 void main() {
+  testWidgets('媒体库首帧后自动启动缺失缩略图补全', (tester) async {
+    final root = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'ltp_startup_thumbnail_backfill_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (root.existsSync()) {
+        root.deleteSync(recursive: true);
+      }
+    });
+    final repository = _CardFileMenuRepository()..roots.add(root.path);
+    for (var index = 0; index < 600; index++) {
+      final path = p.join(root.path, 'startup-$index.mp4');
+      final item = VideoItem(
+        videoId: 'startup-backfill-$index',
+        path: path,
+        title: 'startup-$index',
+        folder: root.path,
+        tags: const <String>{},
+        addedAt: DateTime.utc(2026, 8, 16),
+        mediaFingerprint: 'startup-backfill-fingerprint-$index',
+      );
+      repository.videos[TagRules.pathKey(path)] = item;
+    }
+    final store = LibraryApplicationFacade(
+      queryRepository: repository,
+      commandRepository: repository,
+      tagRepository: repository,
+      cacheRepository: repository,
+      playbackRepository: repository,
+    );
+    final thumbnailService = ThumbnailService.forDirectory(
+      Directory(p.join(root.path, 'thumbs')),
+      _CardFileMenuFFmpegBackend(),
+    );
+    final applicationService = _CardFileMenuApplicationService(
+      store: store,
+      thumbnailService: thumbnailService,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryPage(
+          applicationService: applicationService,
+          fileSystem: _CardFileMenuFileSystem(),
+          playerServiceFactory: ({
+            required String hwdec,
+            required bool enableHardwareAcceleration,
+            required PlayerRendererPreference rendererPreference,
+          }) =>
+              PlayerService(backend: _CardFileMenuPlayerBackend()),
+          mediaProbeBackendFactory: _CardFileMenuProbeBackend.new,
+          updateService: _CardFileMenuUpdateService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 900));
+
+    // 首帧后的自动登记必须已经填满受控窗口；若只依赖可见卡片优先队列，
+    // 这里最多只会有少量任务，不能证明启动补全已挂载。
+    expect(thumbnailService.queuedJobs, greaterThanOrEqualTo(476));
+    expect(applicationService.mediaProbeBatchCalls, greaterThan(0));
+  });
+
   testWidgets('启动新增视频检查不会被自动清理阻塞', (tester) async {
     final repository = _CardFileMenuRepository()
       ..roots.add(r'D:\\library')

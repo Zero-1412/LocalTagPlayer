@@ -1,5 +1,37 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 启动后台任务全量审计与有界资源调度（实现中）
+
+- 目标：应用启动后自动执行安全、可恢复的补全任务；重新核对所有后台线程的触发条件、重复启动、暂停/取消、
+  播放让渡和资源预算，避免把整库候选一次性压入队列。
+- 已完成：首帧后 800ms 自动登记缺失缩略图；再错开到 1600ms 自动登记缺少媒体详情/可靠时长的 active 视频。
+  `MediaDetailsService` 与 `ThumbnailService` 都使用最多 500 项的惰性窗口，窗口完成后继续生产，不再截断超过窗口的候选；
+  媒体详情保持 8 项 FFprobe 小批次和单原生批次串行。
+- 启动任务清单：筛选刷新/稳定标签计数自动延后；备份开关开启时 Store 加载阶段自动续跑增量/全量批次；新视频扫描仍需
+  用户确认；无效记录清理仍受设置开关保护；视觉相似度扫描仍由相似视频页启动，避免启动时进行高成本全库视觉复核。
+- 资源分配：共享 `ResourceScheduler` 总预算仍为 4，按 scan=1、probe=1、thumbnail=3、visual=1、backup=1 限制类别；
+  12 核以上缩略图最多 3 个后台 worker。后台任务继续遵守可视优先、播放暂停/让渡和 lease finally 释放。
+- 保护：FFmpeg/FFprobe 平台边界、schema、stable identity、filtered queue 和用户数据不变；已知详情失败项不因每次启动
+  无限重试，仍通过诊断页重试。
+- 当前验证：媒体详情 500 项窗口继续推进、缩略图超过 500 项继续推进、真实 `LibraryPage` 启动挂载自动任务回归、资源预算
+  回归和相关 focused tests 已通过；`flutter analyze` 通过；完整 `flutter test` 为 615 passed/4 skipped；
+  `flutter build windows --debug` 返回 0。Computer Use 之前因安装版单实例窗口最小化并检测到用户输入，无法安全
+  继续确认新构建真实窗口，不能把该项冒充通过。
+- 下一步：真实窗口运行验收仍需在没有安装版单实例且窗口可控时补做；本次代码验证已完成，后续可观察启动后缩略图与媒体详情
+  两条任务的实际吞吐和失败率，再按真实数据调参。
+
+# 2026-08-16 · 缩略图缺失补全入口与有界后台生产（完成）
+
+- 目标：在缓存诊断页提供“生成缺失缓存”明确入口，并让超过 500 项的后台候选按窗口继续推进。
+- 已完成：`ThumbnailService` 使用惰性生产源和 500 项候选窗口；显式补全跳过 missing 记录、单次补全防重复，
+  播放期间沿用现有后台暂停/可视优先门；设置页展示入口和“缺失补全进行中”状态。
+- 保护：不修改 schema、`FilterQuery`/`TagQueryService`、来源 filtered queue、stable videoId、PlayerBackend
+  或 FFmpeg 平台边界；保留暂停时登记候选但不启动后台 I/O 的既有行为。
+- 当前验证：`flutter analyze` 无问题；有界队列/入口测试、架构契约测试和相关暂停/播放优先级测试通过；
+  完整 `flutter test` 通过（610 passed/4 skipped）；`flutter build windows --debug` 返回 0；停止编辑后的
+  independent 只读复核通过。
+- 本节保留入口、背压和不截断行为的历史记录；启动自动登记已在当前任务中收口。
+
 # 2026-08-16 · 外部项目架构对比与模块差距收口（完成）
 
 - 目标：按媒体库查询/标签、扫描与资源调度、播放器 runtime/surface、缓存和诊断模块，对比 Stash、Hydrus、

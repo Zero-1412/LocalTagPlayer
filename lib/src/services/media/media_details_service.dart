@@ -38,6 +38,7 @@ class MediaDetailsProgress {
     this.itemsPerSecond,
     this.estimatedRemaining,
     this.isPaused = false,
+    this.sourceExhausted = true,
   });
 
   /** 本轮实际需要探测的总文件数，不包含已缓存详情。 */
@@ -64,14 +65,22 @@ class MediaDetailsProgress {
   /** 是否已阻止后续后台批次启动；活动小批次允许自然收尾。 */
   final bool isPaused;
 
+  /** 后台候选生产源是否已经遍历完；false 时总量会随分批生产逐步增长。 */
+  final bool sourceExhausted;
+
   /** 已处理文件数，包含失败项，避免进度因异常文件永久停滞。 */
   int get processed => completed + failed;
 
   /** 供确定型进度条使用的安全比例。 */
   double get fraction => total <= 0 ? 0 : (processed / total).clamp(0, 1);
 
-  /** 本轮全部条目均已得到成功或失败结论。 */
-  bool get isComplete => total > 0 && processed >= total;
+  /** 生产源耗尽且本轮全部条目均已得到成功或失败结论。 */
+  bool get isComplete =>
+      total > 0 &&
+      sourceExhausted &&
+      queued == 0 &&
+      active == 0 &&
+      processed >= total;
 }
 
 /**
@@ -105,6 +114,13 @@ class _MediaDetailsJob {
   bool priority;
 }
 
+/** 尚未进入媒体详情后台窗口的候选；保留迭代器以形成启动和扫描背压。 */
+class _MediaDetailsBackgroundSource {
+  _MediaDetailsBackgroundSource(this.iterator);
+
+  final Iterator<VideoItem> iterator;
+}
+
 /**
  * 串行协调媒体详情缓存、原生探测与 Repository 回写。
  *
@@ -128,6 +144,9 @@ class MediaDetailsService {
    * 小批次减少平台通道和 SQLite 往返，同时限制可见项等待当前后台批次的最长时间。
    */
   static const int _maxBackgroundBatchSize = 8;
+
+  /** 后台最多保留 500 条待处理详情；生产源耗尽后再继续填充下一窗口。 */
+  static const int _maxBackgroundQueuedJobs = 500;
 
   /** 进程内递增代号，避免多个播放器页面取消同一个原生 generation。 */
   static int _nextGeneration = 1;
@@ -154,6 +173,10 @@ class MediaDetailsService {
 
   /** 扫描产生的后台任务，按原入队顺序执行。 */
   final Queue<_MediaDetailsJob> _backgroundJobs = Queue<_MediaDetailsJob>();
+
+  /** 尚未登记到后台队列的候选生产源；不复制整库视频对象。 */
+  final Queue<_MediaDetailsBackgroundSource> _backgroundSources =
+      Queue<_MediaDetailsBackgroundSource>();
 
   /** 按路径索引尚未执行的任务，供可视请求原地提升而不重复探测。 */
   final Map<String, _MediaDetailsJob> _queuedJobs =
@@ -233,25 +256,17 @@ class MediaDetailsService {
   }
 
   /**
-   * 一次性登记扫描新增项，再启动有限批次后台探测。
+   * 登记扫描或启动补全候选，再启动有限批次后台探测。
    *
-   * 与逐条调用 [detailsFor] 相比，该入口只报告一次初始总量，并让第一个原生调用直接
-   * 获得完整小批次，避免数千次启动调度和平台通道往返。
+   * 只保存惰性迭代器，实际任务最多进入 500 条窗口；窗口完成后才继续生产下一批，
+   * 避免数千次启动调度和平台通道往返同时堆在内存中。
    */
   void prefetchAll(Iterable<VideoItem> items) {
-    if (_disposed) {
-      return;
-    }
-    for (final item in items) {
-      final cached = cachedDetailsFor(item);
-      // 旧版详情缓存没有总时长。已有可靠总时长时仍复用缓存；只有详情存在但
-      // 时长缺失的旧记录才进入一次受限后台补齐，不能在卡片 build 中探测文件。
-      if ((cached != null && item.playbackDuration > Duration.zero) ||
-          _inFlight.containsKey(item.path)) {
-        continue;
-      }
-      _enqueue(item, cached: cached, priority: false);
-    }
+    if (_disposed) return;
+    _backgroundSources.add(
+      _MediaDetailsBackgroundSource(items.iterator),
+    );
+    _fillBackgroundJobs();
     _emitProgress();
     _drainQueue();
   }
@@ -330,11 +345,50 @@ class MediaDetailsService {
     _priorityJobs.addFirst(job);
   }
 
+  /** 只在后台窗口有空位时从生产源取项目，形成稳定背压。 */
+  void _fillBackgroundJobs() {
+    while (_backgroundSources.isNotEmpty &&
+        _backgroundJobs.length < _maxBackgroundQueuedJobs) {
+      final source = _backgroundSources.first;
+      bool hasNext;
+      try {
+        hasNext = source.iterator.moveNext();
+      } on Object {
+        // Store 在扫描/删除期间可能替换索引；旧迭代器只应安全收尾，不能冒泡到 UI。
+        hasNext = false;
+      }
+      if (!hasNext) {
+        _backgroundSources.removeFirst();
+        continue;
+      }
+
+      late final VideoItem item;
+      try {
+        item = source.iterator.current;
+      } on Object {
+        _backgroundSources.removeFirst();
+        continue;
+      }
+      if (item.isMissing) {
+        continue;
+      }
+      final cached = cachedDetailsFor(item);
+      // 旧版详情缓存没有总时长。已有可靠总时长时仍复用缓存；只有详情存在但
+      // 时长缺失的旧记录才进入一次受限后台补齐，不能在卡片 build 中探测文件。
+      if ((cached != null && item.playbackDuration > Duration.zero) ||
+          _inFlight.containsKey(item.path)) {
+        continue;
+      }
+      _enqueue(item, cached: cached, priority: false);
+    }
+  }
+
   /** 串行启动下一批任务；可见队列始终优先且单独成批，避免被后台条目拖延。 */
   void _drainQueue() {
     if (_disposed || _paused || _activeJobs.isNotEmpty) {
       return;
     }
+    _fillBackgroundJobs();
     final jobs = <_MediaDetailsJob>[];
     if (_priorityJobs.isNotEmpty) {
       // 可见项独立执行，完成后可以立即刷新卡片，不等待后台批次其余条目。
@@ -548,6 +602,7 @@ class MediaDetailsService {
           ? null
           : Duration(seconds: (remaining / speed).ceil()),
       isPaused: _paused,
+      sourceExhausted: _backgroundSources.isEmpty,
     ));
   }
 
@@ -581,6 +636,7 @@ class MediaDetailsService {
     }
     _priorityJobs.clear();
     _backgroundJobs.clear();
+    _backgroundSources.clear();
     _queuedJobs.clear();
     _queuedPaths.clear();
     // 活动任务保留到原生取消完成；其 finally 会完成 Future 并清理映射。

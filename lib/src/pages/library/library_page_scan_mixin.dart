@@ -296,24 +296,58 @@ mixin LibraryPageScanMixin<T extends StatefulWidget>
       }
     }
     final probeCandidates = probeCandidatesById.values.toList(growable: false);
+    _startLibraryMediaDetailsBackfill(store, probeCandidates);
+  }
+
+  /**
+   * 应用启动后的安全媒体详情补全。
+   *
+   * 只处理缺少详情/可靠时长且当前仍可读的 active 视频；失败项保留错误状态，交给
+   * 诊断页重试，不在每次启动无限重复同一个异常文件。真正的候选生产和 FFprobe 批次
+  * 由 [MediaDetailsService] 的 500 项窗口与共享 ResourceScheduler 控制。
+  */
+  @override
+  void startStartupLibraryMediaDetailsBackfill(
+    LibraryApplicationFacade store,
+  ) {
+    final candidates = store.videos.values
+        .where(
+          (item) =>
+              !item.isMissing &&
+              item.mediaDetailsError == null &&
+              (item.mediaDetails == null ||
+                  item.playbackDuration <= Duration.zero),
+        )
+        .toList(growable: false);
+    _startLibraryMediaDetailsBackfill(store, candidates);
+  }
+
+  /** 创建或复用当前媒体详情会话，并以惰性候选源启动有限批次。 */
+  void _startLibraryMediaDetailsBackfill(
+    LibraryApplicationFacade store,
+    Iterable<VideoItem> probeCandidates,
+  ) {
     if (probeCandidates.isEmpty) {
       return;
     }
-    final mediaImportGeneration =
-        runtime.scanLifecycleController.beginMediaImport(
-      onChanged: (_) {
-        if (mounted) {
-          setState(() {});
-        }
-      },
-    );
-    final service = _createLibraryMediaDetailsService(
-      store,
-      mediaImportGeneration: mediaImportGeneration,
-    );
-    runtime.libraryMediaDetailsService = service;
+    var service = runtime.libraryMediaDetailsService;
+    int? mediaImportGeneration;
+    if (service == null || service.isDisposed) {
+      mediaImportGeneration = runtime.scanLifecycleController.beginMediaImport(
+        onChanged: (_) {
+          if (mounted) {
+            setState(() {});
+          }
+        },
+      );
+      service = _createLibraryMediaDetailsService(
+        store,
+        mediaImportGeneration: mediaImportGeneration,
+      );
+      runtime.libraryMediaDetailsService = service;
+    }
     // 新增项和旧版缺时长项统一登记为有限批次；真实进入视口仍可提升同一路径任务，
-    // 服务通过 videoId/路径去重，不扩大并发。
+    // 服务通过 videoId/路径去重，不扩大并发；候选源不会在此处复制成无界任务列表。
     service.prefetchAll(probeCandidates);
   }
 

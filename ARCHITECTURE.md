@@ -127,6 +127,11 @@ source filtered result
 - NVIDIA VSR/HDR、NVOFA、VapourSynth 和本机插件必须经过能力、许可、回退和真实性门禁，不能自动生产化。
 - `ThumbnailService`/`MediaDetailsService` 通过 `FFmpegBackend`/FFprobe；可见项优先、后台限流、失败可见可重试，
   0-byte/不完整 JPEG 无效，diagnostics dispose 后取消 timer/异步回调，日志不得泄露媒体路径或数据库内容。
+  缩略图缺失补全既可由设置页明确入口启动，也会在媒体库首帧后延迟登记一次；媒体库首帧后还会错峰登记缺少媒体详情/可靠
+  时长的 active 视频，但不自动重试已知失败项。两类后台生产源都只按最多 500 项候选窗口推进，窗口空出后再从迭代器补入
+  后续项目，禁止超过窗口的候选被截断；媒体详情原生探测仍按最多 8 项小批次串行。
+  缩略图 cache key/JPEG 校验请求最多 24 个，处理器数达到 12 时生成并发最多 3 个，`ResourceScheduler` 的缩略图
+  lease 预算最多 3 个且共享总预算仍为 4。
 
 平台边界：`FileSystemAdapter`、`DatabaseProvider`、`AppPaths`、`PlayerBackend`、`FFmpegBackend`、
 `LibraryScanBackend`。Dart core 不出现盘符、exe、Explorer/Finder 命令或打包目录假设；原生组件只通过

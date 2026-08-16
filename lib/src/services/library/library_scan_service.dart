@@ -315,7 +315,7 @@ class LibraryScanService {
       if (stat.type != FileSystemEntityType.file) {
         return null;
       }
-      return _mediaFingerprintForFile(file, stat);
+      return await _mediaFingerprintForFile(file, stat);
     } catch (_) {
       return null;
     }

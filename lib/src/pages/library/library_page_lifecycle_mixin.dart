@@ -18,6 +18,13 @@ import 'library_page_state_host.dart';
 /** LibraryPageLifecycleMixin 按既有一致性边界承载页面协调逻辑，不复制业务状态 owner。 */
 mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
     on LibraryPageStateHost<T> {
+  /** 延后到首帧后的空闲窗口，避免自动补全与 SQLite 首屏恢复争抢 UI 线程。 */
+  static const _startupThumbnailBackfillDelay = Duration(milliseconds: 800);
+  /** 媒体详情读取再错开一段时间，优先让缩略图先形成可见反馈。 */
+  static const _startupMediaDetailsBackfillDelay = Duration(milliseconds: 1600);
+  Timer? _startupThumbnailBackfillTimer;
+  Timer? _startupMediaDetailsBackfillTimer;
+
   @override
   void initState() {
     super.initState();
@@ -28,6 +35,8 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
 
   @override
   void dispose() {
+    _startupThumbnailBackfillTimer?.cancel();
+    _startupMediaDetailsBackfillTimer?.cancel();
     LibraryStressControl.unregister(this);
     unawaited(runtime.playbackSnapshotQueue?.dispose());
     runtime.libraryMediaDetailsService?.dispose();
@@ -209,6 +218,8 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
       }
       scheduleFilterRefresh();
       scheduleInitialStableTagCounts(store);
+      scheduleStartupThumbnailBackfill(store, thumbnailService);
+      scheduleStartupMediaDetailsBackfill(store);
       unawaited(() async {
         // 新增发现是用户启动后最直接的反馈，必须先于可能遍历整个媒体库的无效记录
         // 清理执行；否则大库在默认开启自动清理时，会让新增提示长期不可见。
@@ -220,6 +231,49 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
         }
       }());
     });
+  }
+
+  /**
+   * 应用启动后自动补齐安全的媒体详情/时长缓存。
+   *
+   * 任务在缩略图启动窗口之后再登记；媒体详情服务内部仍按 500 项窗口惰性生产，
+   * 使用同一个暂停入口、播放器让渡门和 ResourceScheduler，不与首屏争抢资源。
+   */
+  void scheduleStartupMediaDetailsBackfill(LibraryApplicationFacade store) {
+    _startupMediaDetailsBackfillTimer?.cancel();
+    _startupMediaDetailsBackfillTimer = Timer(
+      _startupMediaDetailsBackfillDelay,
+      () {
+        _startupMediaDetailsBackfillTimer = null;
+        if (!mounted || !identical(runtime.store, store)) {
+          return;
+        }
+        startStartupLibraryMediaDetailsBackfill(store);
+      },
+    );
+  }
+
+  /**
+   * 应用启动后自动登记缺失缩略图，但只保留一个页面生命周期内的请求。
+   *
+   * `ThumbnailService.generateMissing` 使用惰性生产源；这里传入视频视图不会把整库
+   * 复制进队列。若扫描预取已经占用后台窗口，请求会在服务内部排队等待而不会丢失。
+   */
+  void scheduleStartupThumbnailBackfill(
+    LibraryApplicationFacade store,
+    ThumbnailService thumbnailService,
+  ) {
+    _startupThumbnailBackfillTimer?.cancel();
+    _startupThumbnailBackfillTimer = Timer(
+      _startupThumbnailBackfillDelay,
+      () {
+        _startupThumbnailBackfillTimer = null;
+        if (!mounted || !identical(runtime.store, store)) {
+          return;
+        }
+        thumbnailService.generateMissing(store.videos.values);
+      },
+    );
   }
 
   /** 串行清理无效数据库记录，完成后统一刷新筛选结果与标签计数。 */

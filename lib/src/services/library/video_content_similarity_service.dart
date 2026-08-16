@@ -1034,7 +1034,7 @@ class VideoContentSimilarityService {
 
   Future<int?> _dHashFor(File file) async {
     try {
-      return _dHashForBytes(await file.readAsBytes());
+      return await _dHashForBytes(await file.readAsBytes());
     } on Object {
       // 缓存文件可能在校验和读取之间被清理；该帧失败不应中断整轮扫描。
       return null;

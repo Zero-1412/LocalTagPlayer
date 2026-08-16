@@ -487,7 +487,7 @@ class PlayerAdaptiveQualityEnhancer {
             failureCode: snapshot.failureCode,
           );
         }
-        return PlayerPropertyVerifier.apply(
+        return await PlayerPropertyVerifier.apply(
           backend: backend,
           label: nvidiaVideoEnhancementEnabled || nvidiaVideoHdrEnabled
               ? 'nvidia-filter-snapshot'

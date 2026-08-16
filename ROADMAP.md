@@ -50,6 +50,8 @@ Phase 3–6 不得改变 `FilterQuery` 语义、来源 filtered queue、用户�
 5. 把真实事故和高价值 QA 转成 focused/page-level/Agent regression 门禁。
 6. 改善缩略图、媒体探测和播放并发时的取消、限流和诊断。
 7. 补齐 macOS/Linux adapter 的真实设备验证，不把 Windows 假设上移。
+8. 根据 `ADR-005` 的外部模块对比，继续用真实数据决定增量 FTS、低层 video persistence 拆分和本地
+   operation trace；没有稳定收益证据前不引入 Redis/BullMQ、路由框架或外部 telemetry。
 
 ## P2：有证据再推进
 

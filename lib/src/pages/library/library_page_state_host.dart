@@ -104,6 +104,11 @@ abstract class LibraryPageStateHost<T extends StatefulWidget> extends State<T> {
     ) action,
   );
 
+  /** 应用启动后自动登记安全的媒体详情/时长补全候选。 */
+  void startStartupLibraryMediaDetailsBackfill(
+    LibraryApplicationFacade store,
+  );
+
   /** 解除目录管理但保留用户数据。 */
   Future<int> removeLibraryRootData(String root);
 

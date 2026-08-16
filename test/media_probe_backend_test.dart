@@ -374,4 +374,34 @@ void main() {
     expect(finished.processed, 12);
     expect(finished.isPaused, isFalse);
   });
+
+  test('background probe keeps a 500-item window and continues producing',
+      () async {
+    final backend = _RecordingProbeBackend();
+    final completed = Completer<MediaDetailsProgress>();
+    final service = MediaDetailsService(
+      probeBackend: backend,
+      onProgress: (progress) {
+        if (progress.isComplete && !completed.isCompleted) {
+          completed.complete(progress);
+        }
+      },
+    )..pause();
+    final items = List<VideoItem>.generate(
+      620,
+      (index) => _probeItem('window-$index'),
+    );
+
+    service.prefetchAll(items);
+    expect(service.queuedReads, 500);
+    expect(backend.requests, isEmpty);
+
+    service.resume();
+    final finalProgress = await completed.future;
+    service.dispose();
+
+    expect(backend.requests, hasLength(620));
+    expect(finalProgress.total, 620);
+    expect(finalProgress.sourceExhausted, isTrue);
+  });
 }

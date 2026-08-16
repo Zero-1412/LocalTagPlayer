@@ -8,6 +8,16 @@ enum ResourceKind { scan, probe, thumbnail, visual, backup }
 /** 资源请求的调度优先级；前台请求只越过尚未启动的后台任务。 */
 enum ResourcePriority { foreground, background }
 
+/** 尚未取得 lease 的资源请求被调用方主动取消。 */
+class ResourceRequestCancelled implements Exception {
+  const ResourceRequestCancelled(this.kind);
+
+  final ResourceKind kind;
+
+  @override
+  String toString() => 'ResourceRequestCancelled(kind=$kind)';
+}
+
 /** ResourceScheduler 的可观测计数，不包含路径、videoId 或媒体内容。 */
 class ResourceSchedulerSnapshot {
   const ResourceSchedulerSnapshot({
@@ -39,6 +49,31 @@ class _ResourceRequest {
   final bool allowDuringPlayback;
   final Completer<ResourceLease> completer;
   final int sequence;
+  var cancelled = false;
+}
+
+/**
+ * 可取消的 pending 资源请求。
+ *
+ * cancel 只作用于尚未取得 lease 的请求；一旦请求已经开始，调用方仍必须在
+ * `finally` 中释放正常返回的 [ResourceLease]，避免把取消误实现为强行打断外部 I/O。
+ */
+class ResourceRequestHandle {
+  ResourceRequestHandle._(this.future, this._cancel);
+
+  final Future<ResourceLease> future;
+  final void Function() _cancel;
+  var _cancelled = false;
+
+  bool get isCancelled => _cancelled;
+
+  void cancel() {
+    if (_cancelled) {
+      return;
+    }
+    _cancelled = true;
+    _cancel();
+  }
 }
 
 /** 一次受控资源占用；释放幂等，避免异常路径重复归还预算。 */
@@ -82,7 +117,8 @@ class ResourceScheduler {
   static const Map<ResourceKind, int> _defaultBudgets = {
     ResourceKind.scan: 1,
     ResourceKind.probe: 1,
-    ResourceKind.thumbnail: 2,
+    // 多核机器允许三个缩略图 lease；总预算仍为 4，且前台请求继续优先于后台。
+    ResourceKind.thumbnail: 3,
     ResourceKind.visual: 1,
     ResourceKind.backup: 1,
   };
@@ -131,9 +167,29 @@ class ResourceScheduler {
     ResourceKind kind, {
     ResourcePriority priority = ResourcePriority.background,
     bool allowDuringPlayback = false,
+  }) =>
+      acquireRequest(
+        kind,
+        priority: priority,
+        allowDuringPlayback: allowDuringPlayback,
+      ).future;
+
+  /**
+   * 建立一个可取消的 pending 请求。
+   *
+   * 页面离开或任务被 latest-only 淘汰时可以取消尚未开始的请求，避免已离开页面的
+   * 工作继续占用等待队列；已经分配 lease 的工作不受影响。
+   */
+  ResourceRequestHandle acquireRequest(
+    ResourceKind kind, {
+    ResourcePriority priority = ResourcePriority.background,
+    bool allowDuringPlayback = false,
   }) {
     if (_disposed) {
-      return Future<ResourceLease>.error(StateError('资源调度器已关闭'));
+      return ResourceRequestHandle._(
+        Future<ResourceLease>.error(StateError('资源调度器已关闭')),
+        () {},
+      );
     }
     final request = _ResourceRequest(
       kind: kind,
@@ -144,7 +200,19 @@ class ResourceScheduler {
     );
     _waiting.add(request);
     _pump();
-    return request.completer.future;
+    return ResourceRequestHandle._(
+      request.completer.future,
+      () {
+        if (request.cancelled || request.completer.isCompleted) {
+          return;
+        }
+        request.cancelled = true;
+        if (_waiting.remove(request)) {
+          request.completer.completeError(ResourceRequestCancelled(kind));
+          _pump();
+        }
+      },
+    );
   }
 
   /** 在一次资源占用中执行动作，保证成功和异常路径都归还预算。 */
@@ -180,6 +248,16 @@ class ResourceScheduler {
   void _pump() {
     if (_disposed) {
       return;
+    }
+    // 取消可能发生在请求仍排队时；先收走它们，保证 snapshot 不留下已经失效的工作。
+    for (final request in List<_ResourceRequest>.from(_waiting)) {
+      if (!request.cancelled) {
+        continue;
+      }
+      _waiting.remove(request);
+      if (!request.completer.isCompleted) {
+        request.completer.completeError(ResourceRequestCancelled(request.kind));
+      }
     }
     while (_activeTotal < _totalBudget) {
       final index = _nextEligibleIndex();

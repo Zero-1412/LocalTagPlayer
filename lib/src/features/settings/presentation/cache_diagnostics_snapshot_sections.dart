@@ -291,6 +291,10 @@ class _CacheTaskSummary extends StatelessWidget {
                   '后台请求',
                   _formatCount(stats.pendingBackgroundRequests),
                 ),
+                _taskValue(
+                  '缺失补全',
+                  stats.backgroundGenerationActive ? '进行中' : '未运行',
+                ),
                 _taskValue('平均耗时', '${stats.averageMs} ms'),
               ],
             ),

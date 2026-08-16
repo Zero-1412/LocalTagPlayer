@@ -604,11 +604,12 @@ void main() {
     expect(playbackStreamCacheLines, lessThanOrEqualTo(47));
     expect(playbackQualityLines, lessThanOrEqualTo(371));
     expect(deleteFileSettingsLines, lessThanOrEqualTo(165));
-    expect(cacheFailureActionsLines, lessThanOrEqualTo(158));
+    // 缓存诊断动作区新增有界缺失补全入口，继续限制在独立叶节点内。
+    expect(cacheFailureActionsLines, lessThanOrEqualTo(190));
     expect(playbackAndDecodingLines, lessThanOrEqualTo(98));
     expect(playerInteractionLines, lessThanOrEqualTo(168));
     expect(settingsWorkspaceScaffoldLines, lessThanOrEqualTo(82));
-    expect(cacheDiagnosticsSettingsCardLines, lessThanOrEqualTo(69));
+    expect(cacheDiagnosticsSettingsCardLines, lessThanOrEqualTo(82));
     expect(libraryTagDisplayHelpersLines, lessThanOrEqualTo(157));
     expect(libraryFolderTagDiscoveryLines, lessThanOrEqualTo(153));
     expect(librarySelectionToolbarLines, lessThanOrEqualTo(120));
