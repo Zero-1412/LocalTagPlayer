@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../widgets/app_theme_tokens.dart';
+import '../../../widgets/maintenance_feedback.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -11,7 +12,9 @@ import '../../../widgets/app_theme_tokens.dart';
  * widget tests 使用同一套视觉契约。
  */
 ThemeData settingsWorkspaceTheme(ThemeData base) {
-  final workspace = maintenanceWorkspaceTheme(base);
+  // 设置页的真实下拉、tooltip 和非阻塞反馈共享维护浮层基线；页面仍只负责
+  // section 编排，设置 controller、持久化和异步动作不进入主题层。
+  final workspace = maintenanceFeedbackTheme(base);
   return workspace.copyWith(
     // DropdownButton 的弹出路由读取 canvasColor；显式保持深色抬升表面，
     // 避免深色文字主题落到默认浅色菜单上而失去可读性。

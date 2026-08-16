@@ -5,6 +5,13 @@
 
 ## Unreleased
 
+### 相似视频页 UI 外壳重构
+
+- 新增相似视频页 Before/After 视觉目标；页面统一进入“维护工作区 / 相似视频”标题层级，
+  重新计算动作保留原 key、tooltip、扫描中禁用和结果语义。
+- 结果区增加 1120px 桌面宽度上限，保留候选列表右侧 scrollbar 安全区；页面接入维护反馈主题。
+- 不修改相似扫描 controller、缩略图/媒体详情队列、来源 playlist、stable identity、删除合并或用户数据。
+
 ### 维护反馈组件族统一
 
 - 新增维护工作区共享 Dialog、Menu、Sheet、Tooltip、Snackbar 入口，统一深色实色浮层、弱描边、圆角、

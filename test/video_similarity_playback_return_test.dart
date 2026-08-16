@@ -43,7 +43,20 @@ void main() {
   test('相似视频滚动内容为滚动条预留右侧安全区', () {
     final page = _source('lib/src/pages/library/video_similarity_page.dart');
 
-    expect(page, contains('EdgeInsets.only(right: 18, bottom: 12)'));
+    expect(page, contains('EdgeInsets.only('));
+    expect(page, contains('right: 18'));
+    expect(page, contains('bottom: 12'));
+  });
+
+  test('相似视频页挂载维护工作区外壳并限制内容宽度', () {
+    final page = _source('lib/src/pages/library/video_similarity_page.dart');
+
+    expect(page, contains('maintenanceFeedbackTheme(Theme.of(context))'));
+    expect(page, contains('MaintenanceWorkspaceAppBar('));
+    expect(page, contains("title: '相似视频'"));
+    expect(
+        page, contains("actionKey: const ValueKey('videoSimilarity.refresh')"));
+    expect(page, contains('BoxConstraints(maxWidth: 1120)'));
   });
 
   test('相似视频页首帧后再启动视觉扫描', () {

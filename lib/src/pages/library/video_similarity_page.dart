@@ -9,6 +9,8 @@ import '../../services/library/video_similarity_service.dart';
 import '../../services/library/video_similarity_scan_controller.dart';
 import '../../services/media/thumbnail_service.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_feedback.dart';
+import '../../widgets/maintenance_workspace_app_bar.dart';
 import '../../widgets/library/video_similarity_group_widgets.dart';
 import '../../widgets/library/video_similarity_status_widgets.dart';
 
@@ -361,98 +363,100 @@ class _VideoSimilarityPageState extends State<VideoSimilarityPage> {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: maintenanceWorkspaceTheme(Theme.of(context)),
+      // 相似扫描仍由 Route 级 controller 持有；这里仅把页面 surface 接入维护工作区
+      // 的浮层基线，避免重新计算、tooltip 和错误反馈跨路由后退回全局主题。
+      data: maintenanceFeedbackTheme(Theme.of(context)),
       child: Scaffold(
         key: const ValueKey('videoSimilarity.page'),
         backgroundColor: libraryBackground,
-        appBar: AppBar(
-          leading: IconButton(
-            tooltip: '返回媒体库',
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-          title: const Text('相似视频'),
-          actions: [
-            IconButton(
-              key: const ValueKey('videoSimilarity.refresh'),
-              tooltip: '重新计算',
-              onPressed: _visualScanning ? null : _refresh,
-              icon: const Icon(Icons.refresh_rounded),
-            ),
-            const SizedBox(width: 12),
-          ],
+        appBar: MaintenanceWorkspaceAppBar(
+          title: '相似视频',
+          onBack: () => Navigator.of(context).pop(),
+          actionIcon: Icons.refresh_rounded,
+          actionLabel: _visualScanning ? '扫描中' : '重新计算',
+          actionTooltip: '重新计算',
+          actionKey: const ValueKey('videoSimilarity.refresh'),
+          actionEmphasized: true,
+          onAction: _visualScanning ? null : _refresh,
         ),
         body: LayoutBuilder(
           builder: (context, constraints) {
             final pagePadding = constraints.maxWidth < 760 ? 16.0 : 28.0;
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                pagePadding,
-                20,
-                pagePadding,
-                pagePadding,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  VideoSimilarityOverview(
-                    report: _report,
-                    visualScanning: _visualScanning,
-                    visualError: _visualError,
-                    visualScanStale: _visualScanStale,
-                    visualProgressPhase: _visualProgressPhase,
-                    visualProgress: _visualProgress,
-                    visualProgressTotal: _visualProgressTotal,
-                    visualTiming: _visualTiming,
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1120),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    pagePadding,
+                    18,
+                    pagePadding,
+                    pagePadding,
                   ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: _report.hasMatches
-                        ? ListView.separated(
-                            key: const ValueKey('videoSimilarity.groups'),
-                            // Windows 桌面 Scrollbar 默认覆盖 viewport 内容；为卡片预留
-                            // 独立右侧安全区，避免滚动条压住行内按钮和建议保留提示。
-                            padding:
-                                const EdgeInsets.only(right: 18, bottom: 12),
-                            itemCount: _report.groups.length +
-                                _report.visualGroups.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final group = index < _report.groups.length
-                                  ? _report.groups[index]
-                                  : _report.visualGroups[
-                                      index - _report.groups.length];
-                              final groupKey = ValueKey<String>(
-                                'videoSimilarity.group.'
-                                '${group.kind.name}.'
-                                '${group.videos.map((item) => item.videoId).join('|')}',
-                              );
-                              return VideoSimilarityGroupCard(
-                                key: groupKey,
-                                index: index,
-                                group: group,
-                                thumbnailService: widget.thumbnailService,
-                                actingVideoIds: _actingVideoIds,
-                                revealingVideoIds: _revealingVideoIds,
-                                onPlay: _play,
-                                onDelete: _delete,
-                                onReveal: _reveal,
-                              );
-                            },
-                          )
-                        : _visualScanning
-                            ? VideoSimilarityScanningState(
-                                phase: _visualProgressPhase,
-                                progress: _visualProgress,
-                                total: _visualProgressTotal,
-                                timing: _visualTiming,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      VideoSimilarityOverview(
+                        report: _report,
+                        visualScanning: _visualScanning,
+                        visualError: _visualError,
+                        visualScanStale: _visualScanStale,
+                        visualProgressPhase: _visualProgressPhase,
+                        visualProgress: _visualProgress,
+                        visualProgressTotal: _visualProgressTotal,
+                        visualTiming: _visualTiming,
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: _report.hasMatches
+                            ? ListView.separated(
+                                key: const ValueKey('videoSimilarity.groups'),
+                                // Windows 桌面 Scrollbar 默认覆盖 viewport 内容；为卡片预留
+                                // 独立右侧安全区，避免滚动条压住行内按钮和建议保留提示。
+                                padding: const EdgeInsets.only(
+                                  right: 18,
+                                  bottom: 12,
+                                ),
+                                itemCount: _report.groups.length +
+                                    _report.visualGroups.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 12),
+                                itemBuilder: (context, index) {
+                                  final group = index < _report.groups.length
+                                      ? _report.groups[index]
+                                      : _report.visualGroups[
+                                          index - _report.groups.length];
+                                  final groupKey = ValueKey<String>(
+                                    'videoSimilarity.group.'
+                                    '${group.kind.name}.'
+                                    '${group.videos.map((item) => item.videoId).join('|')}',
+                                  );
+                                  return VideoSimilarityGroupCard(
+                                    key: groupKey,
+                                    index: index,
+                                    group: group,
+                                    thumbnailService: widget.thumbnailService,
+                                    actingVideoIds: _actingVideoIds,
+                                    revealingVideoIds: _revealingVideoIds,
+                                    onPlay: _play,
+                                    onDelete: _delete,
+                                    onReveal: _reveal,
+                                  );
+                                },
                               )
-                            : VideoSimilarityEmptyState(
-                                stale: _visualScanStale,
-                              ),
+                            : _visualScanning
+                                ? VideoSimilarityScanningState(
+                                    phase: _visualProgressPhase,
+                                    progress: _visualProgress,
+                                    total: _visualProgressTotal,
+                                    timing: _visualTiming,
+                                  )
+                                : VideoSimilarityEmptyState(
+                                    stale: _visualScanStale,
+                                  ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
           },

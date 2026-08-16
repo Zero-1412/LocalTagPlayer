@@ -355,7 +355,8 @@ class _TagManagerPageState extends State<TagManagerPage> {
         LayoutBreakpoints.fromWidth(MediaQuery.sizeOf(context).width);
     final compact = layoutSize == LayoutSize.compact;
     return Theme(
-      data: maintenanceWorkspaceTheme(Theme.of(context)),
+      // 标签详情中的分组下拉和紧凑操作继续使用同一维护反馈浮层基线。
+      data: maintenanceFeedbackTheme(Theme.of(context)),
       child: _buildWorkspace(layoutSize: layoutSize, compact: compact),
     );
   }

@@ -1,5 +1,21 @@
 # CURRENT_TASK.md
 
+# 2026-08-16 · 相似视频页 UI 外壳重构（已完成）
+
+- 目标：进入下一个仍缺统一维护视觉证据的页面，把相似视频收敛为“维护工作区 / 相似视频”
+  的内容优先页面，先建立 Before/After 视觉目标，再替换页面外壳。
+- 当前修改：新增 `docs/design/VIDEO_SIMILARITY_UI_SHELL_TARGET.md`；页面接入共享维护标题栏、
+  `maintenanceFeedbackTheme` 和 1120px 内容宽度上限；保留候选列表右侧 18px scrollbar 安全区。
+- 保护：不修改 `VideoSimilarityScanController`、`VideoSimilarityReport`、缩略图/相似取帧队列、
+  播放器来源 playlist、stable videoId 对账、删除合并、回收站、标签/收藏或用户数据。
+- 当前验证：相似视频页面结构/扫描生命周期 focused tests、主题与维护反馈 focused tests 通过；
+  完整 `flutter test` 通过（621 passed，4 skipped）；`flutter analyze` 无问题；
+  `flutter build windows --debug` 成功。Debug 窗口真实检查从媒体库进入相似视频、扫描中摘要与视觉
+  复核进度、重新计算禁用、返回媒体库路径，无明显遮挡、裁切或溢出。
+- 阻塞：无。
+- 下一步：先收集相似视频页在宽/窄窗口、high contrast 和 reduced motion 下的视觉反馈，再决定继续
+  细化其他维护状态或进入下一页面；不扩展到扫描、播放或数据边界。
+
 # 2026-08-16 · 维护反馈组件族统一（已完成）
 
 - 目标：继续第三阶段维护页面统一，把 `Dialog/Menu/Sheet/Tooltip/Snackbar` 收敛为 Calm Desktop

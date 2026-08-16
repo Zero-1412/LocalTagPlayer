@@ -3549,6 +3549,20 @@ void main() {
     expect(theme.canvasColor, librarySurfaceAlt);
     expect(theme.hoverColor, appAccentViolet.withValues(alpha: 0.10));
     expect(theme.focusColor, appAccentViolet.withValues(alpha: 0.16));
+    expect(theme.popupMenuTheme.color, librarySurfaceAlt);
+    expect(theme.bottomSheetTheme.backgroundColor, librarySurface);
+    expect(theme.tooltipTheme.decoration, isA<BoxDecoration>());
+    expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
+  });
+
+  test('maintenance feedback theme keeps high contrast surfaces solid', () {
+    final base = buildLocalTagPlayerTheme(highContrast: true);
+    final theme = settingsWorkspaceTheme(base);
+
+    expect(base.colorScheme.outline, appBorderHighContrast);
+    expect(theme.dialogTheme.surfaceTintColor, Colors.transparent);
+    expect(theme.popupMenuTheme.color, librarySurfaceAlt);
+    expect(theme.tooltipTheme.textStyle?.color, libraryText);
   });
 
   testWidgets('player chrome keeps non-primary button surface clear at rest',
