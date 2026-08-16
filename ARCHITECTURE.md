@@ -3,7 +3,7 @@
 ## 当前基线
 
 ```text
-Architecture Baseline 0.5.127
+Architecture Baseline 0.5.129
 ```
 
 本文件只保存当前有效的模块、数据和平台合同。逐提交演化说明已归档到
@@ -85,6 +85,26 @@ isMissing: path unavailable while record is preserved
 也不能删除 manual 标签。schema/migration 必须向后兼容、幂等并保留旧数据库数据；
 无法确认新位置时先 missing，不直接物理删除记录。
 
+当前 schema 版本为 2：`videos.video_id` 是 PRIMARY KEY，`videos.path` 是可变 NOT NULL
+唯一字段；Windows 额外维护 `path COLLATE NOCASE` 唯一索引。`video_tags` 以
+`(video_id, tag_id, source)` 为关系主键，`video_path` 只保存当前路径的同步兼容值。
+旧 path-keyed 数据库由同一 SQLite transaction 换表迁移；无法解析的孤立关系使迁移回滚，
+不静默丢弃标签或用户字段。详细取舍见
+`docs/architecture/ADR_003_STABLE_VIDEO_ID_AND_SCHEMA_MIGRATION.md`。
+
+内存媒体库使用 `VideoIdentityIndex`：`byVideoId` 是主索引，pathKey Map 是同步辅助视图。
+页面删除、重命名、missing relink 和合并删除的生产命令通过 stable-ID API；物理文件动作
+仍可读取命令快照 path，但 Repository 提交身份不再由 path 决定。
+
+Phase 3 起，`LibraryRepositoryContext` 统一拥有唯一 SQLite connection、stable/path 索引、
+标签关系和 persistence helpers；`LibraryStoreQueryRepository` 与
+`LibraryStoreCommandRepository` 只分离能力，不复制状态。扫描、FFprobe、缩略图、视觉取帧
+和备份通过组合根共享 `ResourceScheduler`，播放期间后台 lease 等待、已开始批次自然收尾。
+播放器运行时和 Flutter 表面分别受 `PlayerRuntimeBackend`、`PlayerSurfaceRenderer` 约束，
+`PlayerBackend` 仅作为兼容聚合接口。大库且支持 trigram FTS5 时，profile 允许生成关键词
+候选 SQL，最终仍由 `FilterQuery`/`TagQueryService` 验证；小库和不支持 FTS5 的环境走内存路径。
+详见 `docs/architecture/ADR_004_LIBRARY_SPLIT_RESOURCE_SCHEDULER_QUERY_PROFILE.md`。
+
 Repository 拥有：
 
 - videos、tag groups/items、video-tag relations；
@@ -163,6 +183,9 @@ source filtered result
 - 快速 open/seek 使用 generation/cancellation 防止旧请求覆盖新意图；`PlayerService`
   还串行化精确/交互式 seek，并在目标确认窗口内屏蔽 seek 前已排队的旧位置事件，
   防止时间状态与下一次相对 seek 回到旧落点；
+- `PlayerService` 的 open、stop、seek、dispose 共享媒体命令尾链；打开期间旧媒体事件先被
+  失效，新媒体可播放后以 stable `videoId + generation` 重绑事件订阅，位置/EOF/错误不能
+  以 mutable path 关联到新队列项；
 - 播放队列、当前 index、播放进度和 UI 反馈彼此独立，不以重建队列换取状态更新。
 
 `PlayerBackend` 是平台播放能力的最小合同。可选扩展边界承载属性批处理、

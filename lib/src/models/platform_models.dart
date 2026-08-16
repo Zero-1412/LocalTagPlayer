@@ -172,14 +172,30 @@ class TagQueryContext {
   const TagQueryContext({
     this.tagsById = const <String, TagItem>{},
     this.videoTagIdsByPathKey = const <String, Set<String>>{},
+    this.videoTagIdsByVideoId = const <String, Set<String>>{},
   });
 
   final Map<String, TagItem> tagsById;
+  /** 稳定 videoId 到标签关系的主查询索引。 */
+  final Map<String, Set<String>> videoTagIdsByVideoId;
+  /** 旧 pathKey 查询索引，仅作为迁移兼容和路径展示辅助索引。 */
   final Map<String, Set<String>> videoTagIdsByPathKey;
 
+  Set<String> tagIdsFor(VideoItem item) {
+    final byId = videoTagIdsByVideoId[item.videoId];
+    if (byId != null || videoTagIdsByVideoId.containsKey(item.videoId)) {
+      return byId ?? const <String>{};
+    }
+    return videoTagIdsByPathKey[TagRules.pathKey(item.path)] ??
+        const <String>{};
+  }
+
+  bool hasIndexedVideo(VideoItem item) =>
+      videoTagIdsByVideoId.containsKey(item.videoId) ||
+      videoTagIdsByPathKey.containsKey(TagRules.pathKey(item.path));
+
   Iterable<TagItem> tagsFor(VideoItem item) sync* {
-    final ids =
-        videoTagIdsByPathKey[TagRules.pathKey(item.path)] ?? const <String>{};
+    final ids = tagIdsFor(item);
     for (final id in ids) {
       final tag = tagsById[id];
       if (tag != null) {
@@ -189,8 +205,7 @@ class TagQueryContext {
   }
 
   bool videoHasTagId(VideoItem item, String tagId) {
-    return videoTagIdsByPathKey[TagRules.pathKey(item.path)]?.contains(tagId) ??
-        false;
+    return tagIdsFor(item).contains(tagId);
   }
 
   TagItem? findTag(String tagIdOrName) {
@@ -379,9 +394,8 @@ class FilterQuery {
     if (tagContext.videoHasTagId(item, tag.id)) {
       return true;
     }
-    final indexedTagIds =
-        tagContext.videoTagIdsByPathKey[TagRules.pathKey(item.path)];
-    if (indexedTagIds != null && tagContext.tagsById.containsKey(tag.id)) {
+    if (tagContext.hasIndexedVideo(item) &&
+        tagContext.tagsById.containsKey(tag.id)) {
       return false;
     }
     final parentId = tag.parentId;

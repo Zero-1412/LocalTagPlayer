@@ -26,6 +26,7 @@ class LibraryTagPersistence {
     this._db,
     this._tagsById,
     this._videoTagIdsByPathKey,
+    this._videoTagIdsByVideoId,
   );
 
   /** 当前媒体库数据库连接。 */
@@ -36,6 +37,9 @@ class LibraryTagPersistence {
 
   /** 以规范化视频路径为键的视频到标签索引。 */
   final Map<String, Set<String>> _videoTagIdsByPathKey;
+
+  /** stable videoId 主关系索引；path 索引只作为兼容读取面。 */
+  final Map<String, Set<String>> _videoTagIdsByVideoId;
 
   /**
    * 持久化单个标签及其别名。
@@ -115,6 +119,13 @@ class LibraryTagPersistence {
         _videoTagIdsByPathKey.remove(key);
       }
     }
+    final retainedById = _videoTagIdsByVideoId[video.videoId];
+    if (retainedById != null) {
+      retainedById.removeWhere((tagId) => _tagsById[tagId]?.source == source);
+      if (retainedById.isEmpty) {
+        _videoTagIdsByVideoId.remove(video.videoId);
+      }
+    }
   }
 
   /**
@@ -180,6 +191,13 @@ class LibraryTagPersistence {
     if (retained.isEmpty) {
       _videoTagIdsByPathKey.remove(key);
     }
+    final retainedById = _videoTagIdsByVideoId[video.videoId];
+    if (retainedById != null) {
+      retainedById.removeAll(removed);
+      if (retainedById.isEmpty) {
+        _videoTagIdsByVideoId.remove(video.videoId);
+      }
+    }
   }
 
   /**
@@ -211,6 +229,7 @@ class LibraryTagPersistence {
     );
     (_videoTagIdsByPathKey[TagRules.pathKey(video.path)] ??= <String>{})
         .add(tag.id);
+    (_videoTagIdsByVideoId[video.videoId] ??= <String>{}).add(tag.id);
   }
 
   /**
@@ -220,6 +239,7 @@ class LibraryTagPersistence {
    */
   Future<void> deleteVideoLinks(VideoItem video) async {
     _videoTagIdsByPathKey.remove(TagRules.pathKey(video.path));
+    _videoTagIdsByVideoId.remove(video.videoId);
     await _db.delete(
       'video_tags',
       where: 'video_id = ?',
@@ -240,6 +260,7 @@ class LibraryTagPersistence {
     // 需要等待外层事务成功时，先只排入 SQLite 删除，避免提交失败后内存索引先丢失。
     if (updateMemoryIndex) {
       _videoTagIdsByPathKey.remove(TagRules.pathKey(video.path));
+      _videoTagIdsByVideoId.remove(video.videoId);
     }
     batch.delete(
       'video_tags',

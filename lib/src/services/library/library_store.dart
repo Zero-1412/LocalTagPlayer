@@ -20,13 +20,18 @@ import 'library_collection_rules.dart';
 import 'library_data_backup_service.dart';
 import 'library_load_diagnostics.dart';
 import 'library_metadata_persistence.dart';
+import 'library_query_compiler.dart';
+import 'library_schema_migration.dart';
 import 'library_scan_backend.dart';
 import 'library_scan_coordinator.dart';
 import 'library_scan_service.dart';
+import 'library_repository_context.dart';
 import 'library_store_access.dart';
 import 'library_tag_maintenance.dart';
 import 'library_tag_persistence.dart';
 import 'library_video_persistence.dart';
+import 'video_identity_index.dart';
+import '../resources/resource_scheduler.dart';
 
 // ignore_for_file: slash_for_doc_comments, annotate_overrides
 
@@ -40,32 +45,69 @@ class LibraryStore
         LibraryStoreAccess {
   LibraryStore._(
     this._file,
-    this._db,
-    this.roots,
-    this.videos,
-    this.detachedVideos,
-    this.favoriteTags,
-    this.tagGroups,
-    this.tagsById,
-    this.videoTagIdsByPathKey,
+    this._context,
     this._scanBackend,
     this.dataBackupService,
+    this._resourceScheduler,
   );
 
   final File _file;
-  final Database _db;
-  final List<String> roots;
+  final LibraryRepositoryContext _context;
+  Database get _db => _context.database;
+  List<String> get roots => _context.roots;
   /** 当前受 root 管理并参与筛选、标签计数和播放队列的视频。 */
-  final Map<String, VideoItem> videos;
+  VideoIdentityIndex get videos => _context.videos;
   /** 已解除管理但保留稳定身份、标签、收藏和播放数据的视频。 */
-  final Map<String, VideoItem> detachedVideos;
-  final List<String> favoriteTags;
-  final List<TagGroup> tagGroups;
-  final Map<String, TagItem> tagsById;
-  final Map<String, Set<String>> videoTagIdsByPathKey;
+  VideoIdentityIndex get detachedVideos => _context.detachedVideos;
+  List<String> get favoriteTags => _context.favoriteTags;
+  List<TagGroup> get tagGroups => _context.tagGroups;
+  Map<String, TagItem> get tagsById => _context.tagsById;
+  Map<String, Set<String>> get videoTagIdsByPathKey =>
+      _context.videoTagIdsByPathKey;
+  /** stable videoId 到 tagId 的主关系索引；path map 仅用于兼容消费者。 */
+  Map<String, Set<String>> get videoTagIdsByVideoId =>
+      _context.videoTagIdsByVideoId;
+  LibraryQueryProfile get queryProfile => _context.queryProfile;
+
+  /** 供诊断/压测查看当前关键词候选是否会进入 FTS5；最终语义仍在 Dart 校验。 */
+  LibraryQueryPlan queryPlanFor(FilterQuery query) =>
+      const LibraryQueryCompiler().compile(query, queryProfile);
+
+  /**
+   * 返回可交给 Dart FilterQuery 复核的候选视频。
+   *
+   * 该入口只做 profile 选择的候选缩小；调用方不得把候选集直接当最终结果，必须继续
+   * 运行 [FilterQuery.matches]，以保留 folder 层级、alias、AND/OR/NOT 等完整语义。
+   */
+  Future<List<VideoItem>> queryCandidatesFor(FilterQuery query) async {
+    final plan = queryPlanFor(query);
+    if (!plan.hasSqlCandidate) {
+      return videos.values.toList(growable: false);
+    }
+    // 当前阶段候选入口显式重建派生索引，保证扫描/标签命令尚未接入增量维护时也不读到
+    // 旧候选；后续真实大库基准若证明收益，再用数据修订号替换为增量更新。
+    await const LibrarySearchIndex().rebuild(_db);
+    final rows = await _db.rawQuery(
+      'SELECT video_id FROM videos WHERE ${plan.whereSql}',
+      plan.whereArgs,
+    );
+    return [
+      for (final row in rows)
+        if (videos.byId(row['video_id'] as String) case final item?) item,
+    ];
+  }
+
+  /** stable videoId 主索引；pathKey 视图通过 [videos] 保持向后兼容。 */
+  Map<String, VideoItem> get videosById => videos.byVideoId;
+
+  /** detached 视频的 stable videoId 主索引。 */
+  Map<String, VideoItem> get detachedVideosById => detachedVideos.byVideoId;
 
   /** 只读文件系统扫描边界；不拥有 SQLite 连接。 */
   final LibraryScanBackend _scanBackend;
+
+  /** 组合根共享的扫描/探测/缓存/备份资源预算。 */
+  final ResourceScheduler? _resourceScheduler;
 
   /** 独立视频依赖备份服务；主库仍是唯一业务写入源。 */
   final LibraryDataBackupService dataBackupService;
@@ -74,7 +116,9 @@ class LibraryStore
   int _scanGeneration = 0;
 
   @override
-  Database get database => _db;
+  LibraryRepositoryContext get repositoryContext => _context;
+  @override
+  Database get database => _context.database;
   @override
   LibraryScanBackend get scanBackend => _scanBackend;
   @override
@@ -87,13 +131,12 @@ class LibraryStore
   Stream<DataBackupStatus> get dataBackupStatusStream =>
       dataBackupService.statusStream;
 
-  LibraryTagPersistence get _tagPersistence =>
-      LibraryTagPersistence(_db, tagsById, videoTagIdsByPathKey);
+  LibraryTagPersistence get _tagPersistence => _context.tagPersistence;
 
-  LibraryVideoPersistence get _videoPersistence => LibraryVideoPersistence(_db);
+  LibraryVideoPersistence get _videoPersistence => _context.videoPersistence;
 
   LibraryMetadataPersistence get _metadataPersistence =>
-      LibraryMetadataPersistence(_db);
+      _context.metadataPersistence;
 
   LibraryTagMaintenance get _tagMaintenance => LibraryTagMaintenance(this);
 
@@ -107,6 +150,7 @@ class LibraryStore
   TagQueryContext get tagQueryContext => TagQueryContext(
         tagsById: tagsById,
         videoTagIdsByPathKey: videoTagIdsByPathKey,
+        videoTagIdsByVideoId: videoTagIdsByVideoId,
       );
 
   Iterable<TagItem> get allTagItems => tagsById.values;
@@ -513,6 +557,7 @@ class LibraryStore
     required LibraryScanBackend scanBackend,
     required DatabaseProvider databaseProvider,
     bool dataBackupEnabled = false,
+    ResourceScheduler? resourceScheduler,
   }) async {
     final legacyFile = await databaseProvider.legacyLibraryFile();
     final db = diagnostics == null
@@ -530,6 +575,7 @@ class LibraryStore
       sourceDatabase: db,
       backupDatabase: backupDb,
       enabled: dataBackupEnabled,
+      resourceScheduler: resourceScheduler,
     );
     try {
       final store = await _loadFromDatabase(
@@ -538,6 +584,7 @@ class LibraryStore
         diagnostics: diagnostics,
         scanBackend: scanBackend,
         dataBackupService: dataBackupService,
+        resourceScheduler: resourceScheduler,
       );
       if (store.videos.isEmpty &&
           store.detachedVideos.isEmpty &&
@@ -565,10 +612,24 @@ class LibraryStore
 
   static Future<Database> _openDatabase(DatabaseProvider provider) {
     return provider.openLibraryDatabase(
-      version: 1,
+      version: 2,
       createSchema: _createSchema,
-      maintainSchema: _createSchema,
+      upgradeSchema: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2 && newVersion >= 2) {
+          await migrateToStableIdentitySchema(db);
+        }
+      },
+      maintainSchema: _maintainSchema,
     );
+  }
+
+  /**
+   * 启动时再次检查表形状，覆盖旧版本曾把数据库 user_version 留在新值但没有完成
+   * 主键迁移的异常中断场景；迁移本身幂等，已完成 schema 只做索引维护。
+   */
+  static Future<void> _maintainSchema(Database db) async {
+    await migrateToStableIdentitySchema(db);
+    await _createSchema(db);
   }
 
   static Future<void> _createSchema(Database db) async {
@@ -578,36 +639,17 @@ class LibraryStore
         value TEXT NOT NULL
       )
     ''');
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS videos (
-        path TEXT PRIMARY KEY,
-        video_id TEXT,
-        title TEXT NOT NULL,
-        folder TEXT NOT NULL,
-        root_path TEXT,
-        relative_path TEXT,
-        file_size INTEGER,
-        modified_ms INTEGER,
-        tags_json TEXT NOT NULL,
-        child_tags_json TEXT NOT NULL,
-        is_favorite INTEGER NOT NULL,
-        media_details_json TEXT,
-        media_fingerprint TEXT,
-        thumbnail_error TEXT,
-        media_details_error TEXT,
-        added_at TEXT NOT NULL,
-        last_played_at TEXT,
-        is_missing INTEGER NOT NULL DEFAULT 0,
-        is_detached INTEGER NOT NULL DEFAULT 0,
-        playback_position_ms INTEGER NOT NULL DEFAULT 0,
-        playback_duration_ms INTEGER NOT NULL DEFAULT 0,
-        playback_completed INTEGER NOT NULL DEFAULT 0,
-        playback_position_updated_at TEXT
-      )
-    ''');
+    // FTS5 是可选派生索引；不支持的 SQLite 版本继续使用内存查询。
+    await const LibrarySearchIndex().ensureSchema(db);
+    await db.execute(stableVideosTableSql('videos'));
     await _ensureVideoColumns(db);
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_videos_folder ON videos(folder)');
+    await db.execute(
+      Platform.isWindows
+          ? 'CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_path ON videos(path COLLATE NOCASE)'
+          : 'CREATE UNIQUE INDEX IF NOT EXISTS idx_videos_path ON videos(path)',
+    );
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_videos_title ON videos(title)');
     await db.execute(
@@ -655,18 +697,7 @@ class LibraryStore
         PRIMARY KEY (tag_id, alias)
       )
     ''');
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS video_tags (
-        video_path TEXT NOT NULL,
-        video_id TEXT,
-        tag_id TEXT NOT NULL,
-        source TEXT NOT NULL,
-        locked INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (video_path, tag_id, source)
-      )
-    ''');
+    await db.execute(stableVideoTagsTableSql('video_tags'));
     await _ensureVideoTagColumns(db);
     if (Platform.isWindows) {
       // 旧库只在缺失稳定身份时执行 path 回填；NOCASE 索引避免每条关系都全表扫描 videos。
@@ -866,16 +897,21 @@ class LibraryStore
     return tags;
   }
 
-  /** 将视频标签 JOIN 结果 hydration 为规范化路径索引。 */
-  static Map<String, Set<String>> _videoTagIdsFromRows(
-      List<Map<String, Object?>> rows) {
-    final links = <String, Set<String>>{};
+  /** 将视频标签 JOIN 结果 hydration 为 stable ID 主索引和 path 兼容索引。 */
+  static ({
+    Map<String, Set<String>> byPath,
+    Map<String, Set<String>> byVideoId,
+  }) _videoTagIdsFromRows(List<Map<String, Object?>> rows) {
+    final linksByPath = <String, Set<String>>{};
+    final linksByVideoId = <String, Set<String>>{};
     for (final row in rows) {
       final path = row['path'] as String;
+      final videoId = row['video_id'] as String;
       final tagId = row['tag_id'] as String;
-      (links[TagRules.pathKey(path)] ??= <String>{}).add(tagId);
+      (linksByPath[TagRules.pathKey(path)] ??= <String>{}).add(tagId);
+      (linksByVideoId[videoId] ??= <String>{}).add(tagId);
     }
-    return links;
+    return (byPath: linksByPath, byVideoId: linksByVideoId);
   }
 
   static TagGroupLogic _tagGroupLogicFromName(String? value) {
@@ -922,6 +958,7 @@ class LibraryStore
     LibraryLoadDiagnostics? diagnostics,
     required LibraryScanBackend scanBackend,
     required LibraryDataBackupService dataBackupService,
+    ResourceScheduler? resourceScheduler,
   }) async {
     final metadata = diagnostics == null
         ? await LibraryMetadataPersistence(db).load()
@@ -991,25 +1028,31 @@ class LibraryStore
             () => _queryVideoTagRows(db),
             itemCount: (rows) => rows.length,
           );
-    final videoTagIdsByPathKey = diagnostics == null
+    final videoTagIndexes = diagnostics == null
         ? _videoTagIdsFromRows(relationRows)
         : diagnostics.measureSync(
             'dart.video_tag_relation_hydration',
             () => _videoTagIdsFromRows(relationRows),
-            itemCount: (links) => links.length,
+            itemCount: (links) => links.byPath.length + links.byVideoId.length,
           );
+    final context = LibraryRepositoryContext(
+      database: db,
+      roots: metadata.roots,
+      videos: partitionedVideos.active,
+      detachedVideos: partitionedVideos.detached,
+      favoriteTags: metadata.favoriteTags,
+      tagGroups: tagGroups,
+      tagsById: tagsById,
+      videoTagIdsByPathKey: videoTagIndexes.byPath,
+      videoTagIdsByVideoId: videoTagIndexes.byVideoId,
+      fts5Available: await const LibrarySearchIndex().ensureSchema(db),
+    );
     return LibraryStore._(
       legacyFile,
-      db,
-      metadata.roots,
-      partitionedVideos.active,
-      partitionedVideos.detached,
-      metadata.favoriteTags,
-      tagGroups,
-      tagsById,
-      videoTagIdsByPathKey,
+      context,
       scanBackend,
       dataBackupService,
+      resourceScheduler,
     );
   }
 
@@ -1019,15 +1062,15 @@ class LibraryStore
    * detached 行只用于重新添加/重新关联时恢复稳定身份，不能进入常规筛选和播放队列。
    */
   static ({
-    Map<String, VideoItem> active,
-    Map<String, VideoItem> detached,
+    VideoIdentityIndex active,
+    VideoIdentityIndex detached,
   }) _partitionVideosFromRows(List<Map<String, Object?>> rows) {
-    final active = <String, VideoItem>{};
-    final detached = <String, VideoItem>{};
+    final active = VideoIdentityIndex();
+    final detached = VideoIdentityIndex();
     for (final row in rows) {
       final item = LibraryVideoPersistence.videoFromRow(row);
       final target = (row['is_detached'] as int? ?? 0) == 1 ? detached : active;
-      target[TagRules.pathKey(item.path)] = item;
+      target.put(item);
     }
     return (active: active, detached: detached);
   }
@@ -1035,7 +1078,7 @@ class LibraryStore
   /** 一次性读取稳定身份对应的视频标签关系，避免逐视频 N+1 查询。 */
   static Future<List<Map<String, Object?>>> _queryVideoTagRows(Database db) {
     return db.rawQuery('''
-      SELECT vt.tag_id, v.path
+      SELECT vt.tag_id, vt.video_id, v.path
       FROM video_tags vt
       INNER JOIN videos v ON v.video_id = vt.video_id
     ''');
@@ -1405,18 +1448,60 @@ class LibraryStore
   Future<VideoItem?> deleteVideo(String path) => _deleteVideo(path);
 
   @override
+  Future<VideoItem?> deleteVideoById(String videoId) {
+    final item = videos.byId(videoId) ?? detachedVideos.byId(videoId);
+    if (item == null) {
+      return Future<VideoItem?>.value(null);
+    }
+    return _deleteVideo(item.path, expectedVideoId: videoId);
+  }
+
+  @override
+  Future<void> renameVideoPathById(String videoId, String newPath) {
+    final item = videos.byId(videoId);
+    if (item == null) {
+      throw StateError('找不到仍由媒体库管理的 stable videoId');
+    }
+    return renameVideoPath(item, newPath);
+  }
+
+  @override
   Future<VideoItem?> deleteVideoAndMergeUserData({
     required VideoItem source,
     required VideoItem target,
   }) =>
       _deleteVideo(source.path, mergeInto: target);
 
+  @override
+  Future<VideoItem?> deleteVideoAndMergeUserDataById({
+    required String sourceVideoId,
+    required String targetVideoId,
+  }) {
+    final source =
+        videos.byId(sourceVideoId) ?? detachedVideos.byId(sourceVideoId);
+    final target =
+        videos.byId(targetVideoId) ?? detachedVideos.byId(targetVideoId);
+    if (source == null || target == null) {
+      throw StateError('合并删除需要两个仍存在的 stable videoId');
+    }
+    return _deleteVideo(
+      source.path,
+      mergeInto: target,
+      expectedVideoId: sourceVideoId,
+    );
+  }
+
   Future<VideoItem?> _deleteVideo(
     String path, {
     VideoItem? mergeInto,
+    String? expectedVideoId,
   }) async {
     final pathKey = TagRules.pathKey(path);
     final item = videos[pathKey] ?? detachedVideos[pathKey];
+    if (expectedVideoId != null &&
+        (item == null || item.videoId != expectedVideoId)) {
+      throw StateError('视频身份已变化，请重新执行该命令');
+    }
     VideoItem? targetItem;
     VideoItem? mergedTarget;
     List<({TagItem tag, bool locked})> tagsToMerge = const [];
@@ -1481,7 +1566,11 @@ class LibraryStore
         );
         _deleteCacheStatusesInBatch(batch, item.videoId);
       }
-      _videoPersistence.deleteInBatch(batch, path);
+      if (expectedVideoId != null) {
+        _videoPersistence.deleteByIdInBatch(batch, expectedVideoId);
+      } else {
+        _videoPersistence.deleteInBatch(batch, path);
+      }
       await batch.commit(noResult: true);
       if (mergedTarget != null && targetItem != null) {
         targetItem
@@ -1496,6 +1585,9 @@ class LibraryStore
       videos.remove(pathKey);
       detachedVideos.remove(pathKey);
       videoTagIdsByPathKey.remove(pathKey);
+      if (item != null) {
+        videoTagIdsByVideoId.remove(item.videoId);
+      }
       if (targetItem != null && mergedTarget != null) {
         await dataBackupService.enqueueVideoBestEffort(targetItem.videoId);
       }
@@ -1558,6 +1650,7 @@ class LibraryStore
         videos.remove(pathKey);
         detachedVideos.remove(pathKey);
         videoTagIdsByPathKey.remove(pathKey);
+        videoTagIdsByVideoId.remove(item.videoId);
       }
       return removable.length;
     } catch (_) {
@@ -1711,7 +1804,10 @@ class LibraryStore
       _scanBackend.cancelGeneration(previousGeneration);
     }
     final generation = ++_scanGeneration;
-    return LibraryScanCoordinator(this).scan(
+    return LibraryScanCoordinator(
+      this,
+      resourceScheduler: _resourceScheduler,
+    ).scan(
       generationId: generation,
       onProgress: onProgress,
     );
@@ -1765,14 +1861,29 @@ class LibraryStore
    * 稳定 videoId 以及 manual 标签、收藏、播放记录和进度保持不变；folder 标签随新路径更新。
    */
   Future<void> relinkMissingVideo(VideoItem item, String newPath) {
-    return LibraryScanCoordinator(this).relinkMissingVideo(item, newPath);
+    return LibraryScanCoordinator(
+      this,
+      resourceScheduler: _resourceScheduler,
+    ).relinkMissingVideo(item, newPath);
+  }
+
+  @override
+  Future<void> relinkMissingVideoById(String videoId, String newPath) {
+    final item = videos.byId(videoId) ?? detachedVideos.byId(videoId);
+    if (item == null) {
+      throw StateError('找不到待重新关联的 stable videoId');
+    }
+    return relinkMissingVideo(item, newPath);
   }
 
   /** 在单个 SQLite batch 中提交多条 Relink，并返回重新校验或事务失败的 videoId。 */
   Future<Set<String>> relinkMissingVideosInBatch(
     Map<VideoItem, String> targets,
   ) {
-    return LibraryScanCoordinator(this).relinkMissingVideosInBatch(targets);
+    return LibraryScanCoordinator(
+      this,
+      resourceScheduler: _resourceScheduler,
+    ).relinkMissingVideosInBatch(targets);
   }
 
   static Future<String?> mediaFingerprintFor(String path) async {

@@ -164,6 +164,7 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
           );
           runtime.store = store;
           runtime.thumbnailService = thumbnailService;
+          runtime.resourceScheduler = startupData.resourceScheduler;
           runtime.similarityScanController ??= VideoSimilarityScanController(
             store: store,
             thumbnailService: thumbnailService,

@@ -156,6 +156,8 @@ class _FakeLibraryRepository implements LibraryRepository {
   @override
   final Map<String, VideoItem> videos = <String, VideoItem>{};
   @override
+  final Map<String, VideoItem> videosById = <String, VideoItem>{};
+  @override
   final List<String> favoriteTags = <String>[];
   @override
   final List<TagGroup> tagGroups = <TagGroup>[];
@@ -163,6 +165,8 @@ class _FakeLibraryRepository implements LibraryRepository {
   final Map<String, TagItem> tagsById = <String, TagItem>{};
   @override
   final Map<String, Set<String>> videoTagIdsByPathKey = <String, Set<String>>{};
+  @override
+  final Map<String, Set<String>> videoTagIdsByVideoId = <String, Set<String>>{};
 
   @override
   TagQueryContext get tagQueryContext => const TagQueryContext();
@@ -310,8 +314,14 @@ void main() {
     expect(facade, contains('final LibraryQueryRepository _queries'));
     expect(facade, contains('final LibraryCommandRepository _commands'));
     expect(facade, isNot(contains('final LibraryRepository _repository')));
-    expect(bootstrap, contains('queryRepository: repository'));
-    expect(bootstrap, contains('commandRepository: repository'));
+    expect(
+      bootstrap,
+      contains('queryRepository: LibraryStoreQueryRepository(repository)'),
+    );
+    expect(
+      bootstrap,
+      contains('commandRepository: LibraryStoreCommandRepository(repository)'),
+    );
   });
 
   test('sqflite provider owns factory and paths while Dart owns schema writes',
@@ -2114,10 +2124,13 @@ void main() {
     expect(executor, contains('class LibraryFileCommandExecutor'));
     expect(executor, contains('Future<LibraryBatchDeleteResult> deleteAll('));
     expect(executor, isNot(contains('moveLocalFileToTrash')));
-    expect(executor, contains('await commitRenamedPath(item, renamedPath)'));
+    expect(
+      executor,
+      contains('await commitRenamedPathById(item.videoId, renamedPath)'),
+    );
     expect(executor, contains('await renameFile(renamedPath, oldPath)'));
     expect(executor, contains('await moveFileToTrash(item.path)'));
-    expect(executor, contains('await deleteRecord(item.path)'));
+    expect(executor, contains('await deleteRecordById(command.item.videoId)'));
     expect(executor, isNot(contains("import 'package:flutter/")));
     expect(executor, isNot(contains('LibraryApplicationFacade')));
     expect(executor, isNot(contains('LibraryStore')));
@@ -2130,10 +2143,10 @@ void main() {
     expect(executor, isNot(contains('ScaffoldMessenger')));
     expect(page, contains('const LibraryFileCommandExecutor()'));
     expect(page, contains('runtime.fileCommandExecutor.reveal('));
-    expect(page, contains('runtime.fileCommandExecutor.rename('));
-    expect(page, contains('runtime.fileCommandExecutor.delete('));
-    expect(page, contains('runtime.fileCommandExecutor.deleteAll('));
-    expect(page, contains('deleteVideoAndMergeUserData('));
+    expect(page, contains('runtime.fileCommandExecutor.renameById('));
+    expect(page, contains('runtime.fileCommandExecutor.deleteById('));
+    expect(page, contains('runtime.fileCommandExecutor.deleteAllById('));
+    expect(page, contains('deleteVideoAndMergeUserDataById('));
     expect(page, contains('showPlayerDeleteConfirmationDialog('));
     expect(page, contains('showBatchVideoDeleteConfirmationDialog('));
     expect(similarityPage, contains('选择保留视频'));
@@ -2214,7 +2227,7 @@ void main() {
     expect(executor, isNot(contains('BuildContext context')));
     expect(executor, isNot(contains('Navigator.')));
     expect(page, contains('pickMissingVideoReplacementFile('));
-    expect(page, contains('_relinkCommandExecutor.execute('));
+    expect(page, contains('_relinkCommandExecutor.executeById('));
     expect(page, contains('showMissingRelinkCommandResult('));
     expect(page, contains("ValueKey('missingRelink.bulkPreview')"));
     expect(page, contains("ValueKey('missingRelink.list')"));

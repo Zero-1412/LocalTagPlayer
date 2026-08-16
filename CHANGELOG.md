@@ -6,10 +6,37 @@
 
 ## Unreleased
 
+### 架构分层与资源预算
+
+- `LibraryRepositoryContext` 统一单数据库、stable/path 索引和事务，查询/命令端口通过适配器隔离；
+  扫描、FFprobe、缩略图、视觉取帧和备份共享 `ResourceScheduler`，播放期间后台资源按 lease 让渡。
+- 播放器新增独立 `PlayerRuntimeBackend` 与 `PlayerSurfaceRenderer` 契约，保留 `PlayerBackend` 兼容入口，
+  不改变 MediaKit Texture 或 Windows native QA 默认路径。
+- 建立 profile 驱动的可选 trigram FTS5 派生候选索引；最终筛选仍由 `FilterQuery`/`TagQueryService` 完成，
+  小库和不支持 FTS5 的环境回退内存查询；当前未引入路由框架。
+
+### 稳定身份与 SQLite schema
+
+- 完成稳定身份 Phase 1/2：媒体库内存索引以 `videoId` 为主、pathKey 为同步辅助视图；标签关系
+  查询新增 stable-ID 主索引；删除、改名、missing relink 和合并删除的生产命令不再以 mutable
+  path 作为 Repository 身份。
+- SQLite schema 版本升至 2：旧 `videos.path` 主键库在同一事务中迁移为
+  `videos.video_id PRIMARY KEY`、`videos.path UNIQUE` 和 `video_tags(video_id, tag_id, source)`
+  主键；迁移保留收藏、标签、播放状态和 missing 字段，孤立关系失败关闭而不静默丢失。
+
 ### 播放器短按快进
 
 - 修复短按快进在长 GOP 视频中先显示目标、随后回到原关键帧的问题：短按仍先提交低延迟关键帧预览，
   但 KeyUp 会额外执行一次精确 seek；长按继续使用 latest-only 关键帧预览，不堆积精确 seek。
+
+### 播放器对抗式时序与失败恢复
+
+- 播放器 `open/stop/seek/dispose` 现在共用媒体命令尾链；打开失败、损坏媒体和 missing 媒体会
+  停止旧媒体，避免失败面板后旧视频继续播放或旧位置穿透。
+- 进度条乐观位置增加请求代次和确认超时回退；删除最后一项时先退出播放器再移除队列，避免
+  异步退出期间渲染空队列。
+- 后端事件订阅按稳定 `videoId + generation` 在新媒体成功后重绑；KeyUp 使用实际逻辑键并在
+  播放器失焦时取消输入会话，避免快捷键配置/修饰键变化造成悬挂快进。
 
 ### 播放器返回与媒体库同步
 

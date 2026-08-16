@@ -35,6 +35,8 @@ class LibraryApplicationFacade
         _visualSignatureCache = visualSignatureCacheRepository,
         roots = UnmodifiableListView<String>(queryRepository.roots),
         videos = UnmodifiableMapView<String, VideoItem>(queryRepository.videos),
+        videosById =
+            UnmodifiableMapView<String, VideoItem>(queryRepository.videosById),
         favoriteTags =
             UnmodifiableListView<String>(queryRepository.favoriteTags),
         tagGroups = UnmodifiableListView<TagGroup>(queryRepository.tagGroups),
@@ -54,6 +56,8 @@ class LibraryApplicationFacade
   final List<String> roots;
   /** 反映 repository 最新索引、但禁止页面替换条目的视频视图。 */
   final Map<String, VideoItem> videos;
+  /** stable videoId 主索引只读视图；页面命令应优先消费该索引。 */
+  final Map<String, VideoItem> videosById;
   /** 只能通过明确命令修改的收藏标签视图。 */
   final List<String> favoriteTags;
   /** 禁止页面改写顺序或成员的标签组视图。 */
@@ -67,9 +71,15 @@ class LibraryApplicationFacade
           (key, value) => MapEntry(key, Set<String>.unmodifiable(value)),
         ),
       );
+  Map<String, Set<String>> get videoTagIdsByVideoId => Map.unmodifiable(
+        _queries.videoTagIdsByVideoId.map(
+          (key, value) => MapEntry(key, Set<String>.unmodifiable(value)),
+        ),
+      );
   TagQueryContext get tagQueryContext => TagQueryContext(
         tagsById: tagsById,
         videoTagIdsByPathKey: videoTagIdsByPathKey,
+        videoTagIdsByVideoId: videoTagIdsByVideoId,
       );
   Iterable<TagItem> get allTagItems => tagsById.values;
   Set<String> get allTags => Set<String>.unmodifiable(_queries.allTags);
@@ -200,6 +210,8 @@ class LibraryApplicationFacade
   Future<void> upsertPlaybackStates(Iterable<VideoItem> items) =>
       _commands.upsertPlaybackStates(items);
   Future<VideoItem?> deleteVideo(String path) => _commands.deleteVideo(path);
+  Future<VideoItem?> deleteVideoById(String videoId) =>
+      _commands.deleteVideoById(videoId);
 
   /** 相似候选删除时，先合并收藏/manual 标签，再沿统一删除事务移除源视频。 */
   Future<VideoItem?> deleteVideoAndMergeUserData({
@@ -209,6 +221,15 @@ class LibraryApplicationFacade
       _commands.deleteVideoAndMergeUserData(
         source: source,
         target: target,
+      );
+
+  Future<VideoItem?> deleteVideoAndMergeUserDataById({
+    required String sourceVideoId,
+    required String targetVideoId,
+  }) =>
+      _commands.deleteVideoAndMergeUserDataById(
+        sourceVideoId: sourceVideoId,
+        targetVideoId: targetVideoId,
       );
 
   /** 执行设置页授权的数据库清理，不向 UI 暴露 SQLite 或文件删除能力。 */
@@ -280,8 +301,14 @@ class LibraryApplicationFacade
   Future<void> renameVideoPath(VideoItem item, String newPath) =>
       _commands.renameVideoPath(item, newPath);
 
+  Future<void> renameVideoPathById(String videoId, String newPath) =>
+      _commands.renameVideoPathById(videoId, newPath);
+
   Future<void> relinkMissingVideo(VideoItem item, String newPath) =>
       _commands.relinkMissingVideo(item, newPath);
+
+  Future<void> relinkMissingVideoById(String videoId, String newPath) =>
+      _commands.relinkMissingVideoById(videoId, newPath);
 
   Future<Set<String>> relinkMissingVideosInBatch(
     Map<VideoItem, String> targets,

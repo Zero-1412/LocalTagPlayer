@@ -17,9 +17,11 @@ import '../platform/platform_interfaces.dart';
 import '../services/library/library_application_facade.dart';
 import '../services/library/library_load_diagnostics.dart';
 import '../services/library/library_page_application_service.dart';
+import '../services/library/library_repository_ports.dart';
 import '../services/library/library_scan_backend.dart';
 import '../services/library/library_store.dart';
 import '../services/library/library_stress_control.dart';
+import '../services/resources/resource_scheduler.dart';
 import '../services/media/external_media_tools.dart';
 import '../services/media/media_probe_backend.dart';
 import '../services/player/media_kit_initializer.dart';
@@ -70,14 +72,17 @@ PlayerService _createPlayerService({
   required String hwdec,
   required bool enableHardwareAcceleration,
   required PlayerRendererPreference rendererPreference,
-}) =>
-    PlayerService(
-      backend: _createPlayerBackend(
-        hwdec: hwdec,
-        enableHardwareAcceleration: enableHardwareAcceleration,
-        rendererPreference: rendererPreference,
-      ),
-    );
+}) {
+  final backend = _createPlayerBackend(
+    hwdec: hwdec,
+    enableHardwareAcceleration: enableHardwareAcceleration,
+    rendererPreference: rendererPreference,
+  );
+  return PlayerService(
+    runtimeBackend: backend,
+    surfaceRenderer: backend,
+  );
+}
 
 /**
  * 创建当前平台的完整依赖图，确保具体实现只在组合根出现一次。
@@ -95,6 +100,8 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies({
     factory: databaseFactoryFfi,
   );
   final ffmpegBackend = DesktopFFmpegBackend();
+  /** 整个桌面会话唯一资源预算；各服务只持有该对象的引用。 */
+  final resourceScheduler = ResourceScheduler();
   final fileSystem = Platform.isMacOS
       ? const MacOsFileSystemAdapter()
       : Platform.isLinux
@@ -125,10 +132,11 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies({
       scanBackend: createLibraryScanBackend(),
       databaseProvider: databaseProvider,
       dataBackupEnabled: dataBackupEnabled,
+      resourceScheduler: resourceScheduler,
     );
     return LibraryApplicationFacade(
-      queryRepository: repository,
-      commandRepository: repository,
+      queryRepository: LibraryStoreQueryRepository(repository),
+      commandRepository: LibraryStoreCommandRepository(repository),
       tagRepository: repository,
       cacheRepository: repository,
       playbackRepository: repository,
@@ -146,6 +154,7 @@ LocalTagPlayerDependencies createLocalTagPlayerDependencies({
       ffmpegBackend: ffmpegBackend,
       mediaProbeBackendFactory: mediaProbeBackendFactory,
       debugOptions: libraryDebugOptions,
+      resourceScheduler: resourceScheduler,
       registerBeforeWindowClose: registerBeforeWindowClose,
     ),
     playerServiceFactory: _createPlayerService,

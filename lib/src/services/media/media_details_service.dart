@@ -5,6 +5,7 @@ import '../../models/media_details.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import '../../platform/platform_interfaces.dart';
+import '../resources/resource_scheduler.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -116,7 +117,9 @@ class MediaDetailsService {
     this.onBatchUpdated,
     this.onProgress,
     required MediaProbeBackend probeBackend,
+    ResourceScheduler? resourceScheduler,
   })  : _probeBackend = probeBackend,
+        _resourceScheduler = resourceScheduler,
         _generation = _nextGeneration++;
 
   /**
@@ -140,6 +143,8 @@ class MediaDetailsService {
 
   /** 批量媒体探测平台边界；SQLite 写回仍由回调所在 Repository 完成。 */
   final MediaProbeBackend _probeBackend;
+  /** 可选全局探测预算；未注入时保持原有单服务串行行为。 */
+  final ResourceScheduler? _resourceScheduler;
   final Map<String, Future<MediaDetails>> _inFlight = {};
   final Map<String, MediaDetails> _cache = {};
   final Set<String> _queuedPaths = {};
@@ -360,7 +365,19 @@ class MediaDetailsService {
     };
     try {
       if (!_disposed && jobs.every((job) => job.generation == _generation)) {
-        detailsByPath = await _readBatch(jobs, _generation);
+        final scheduler = _resourceScheduler;
+        if (scheduler == null) {
+          detailsByPath = await _readBatch(jobs, _generation);
+        } else {
+          detailsByPath = await scheduler.run(
+            ResourceKind.probe,
+            () => _readBatch(jobs, _generation),
+            priority: jobs.any((job) => job.priority)
+                ? ResourcePriority.foreground
+                : ResourcePriority.background,
+            allowDuringPlayback: jobs.any((job) => job.priority),
+          );
+        }
         if (!_disposed && jobs.every((job) => job.generation == _generation)) {
           for (final job in jobs) {
             if (job.item.mediaDetailsError == null) {

@@ -231,14 +231,11 @@ class TagQueryService {
           continue;
         }
         final countedIds = <String>{};
-        final indexedTagIds =
-            tagContext.videoTagIdsByPathKey[TagRules.pathKey(item.path)];
-        if (indexedTagIds != null) {
-          for (final tagId in indexedTagIds) {
-            if (candidateIds.contains(tagId)) {
-              counts[tagId] = (counts[tagId] ?? 0) + 1;
-              countedIds.add(tagId);
-            }
+        final indexedTagIds = tagContext.tagIdsFor(item);
+        for (final tagId in indexedTagIds) {
+          if (candidateIds.contains(tagId)) {
+            counts[tagId] = (counts[tagId] ?? 0) + 1;
+            countedIds.add(tagId);
           }
         }
         // 兼容旧库快照时按视频实际拥有的标签名反查候选，避免每个视频再次遍历整组标签。

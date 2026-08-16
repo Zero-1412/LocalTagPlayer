@@ -200,6 +200,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       thumbnailService: thumbnailService,
       mediaDetailsService: runtime.libraryMediaDetailsService,
       similarityScanController: runtime.similarityScanController,
+      resourceScheduler: runtime.resourceScheduler,
     )..enter();
     runtime.playerScopedLibraryDataChanged = false;
     runtime.playerScopedNeedsCountRefresh = false;
@@ -440,7 +441,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     if (store == null) {
       throw StateError('媒体库尚未就绪，请稍后重试');
     }
-    await runtime.fileCommandExecutor.rename(
+    await runtime.fileCommandExecutor.renameById(
       RenameVideoFileCommand(
         item: item,
         newBaseName: newBaseName,
@@ -450,7 +451,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       joinPath: fileSystem.joinPath,
       fileExists: fileSystem.fileExists,
       renameFile: fileSystem.renameFile,
-      commitRenamedPath: store.renameVideoPath,
+      commitRenamedPathById: store.renameVideoPathById,
     );
   }
 

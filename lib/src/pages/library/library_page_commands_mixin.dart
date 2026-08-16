@@ -98,20 +98,20 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     VideoItem item, {
     VideoItem? mergeInto,
   }) async {
-    await runtime.fileCommandExecutor.delete(
+    await runtime.fileCommandExecutor.deleteById(
       DeleteVideoCommand(item: item),
       moveFileToTrash: fileSystem.moveFileToTrash,
-      deleteRecord: (path) async {
+      deleteRecordById: (videoId) async {
         final store = runtime.store;
         if (store == null) {
           return;
         }
         if (mergeInto == null) {
-          await store.deleteVideo(path);
+          await store.deleteVideoById(videoId);
         } else {
-          await store.deleteVideoAndMergeUserData(
-            source: item,
-            target: mergeInto,
+          await store.deleteVideoAndMergeUserDataById(
+            sourceVideoId: videoId,
+            targetVideoId: mergeInto.videoId,
           );
         }
       },
@@ -142,15 +142,15 @@ mixin LibraryPageCommandsMixin<T extends StatefulWidget>
       return;
     }
 
-    final result = await runtime.fileCommandExecutor.deleteAll(
+    final result = await runtime.fileCommandExecutor.deleteAllById(
       targets.map(
         (item) => DeleteVideoCommand(
           item: item,
         ),
       ),
       moveFileToTrash: fileSystem.moveFileToTrash,
-      deleteRecord: (path) async {
-        await runtime.store?.deleteVideo(path);
+      deleteRecordById: (videoId) async {
+        await runtime.store?.deleteVideoById(videoId);
       },
       deleteThumbnail: (target) async {
         await runtime.thumbnailService?.deleteThumbnailFor(target);

@@ -24,6 +24,7 @@ import '../../services/library/library_scan_ui_diagnostics.dart';
 import '../../services/library/video_similarity_scan_controller.dart';
 import '../../services/media/media_details_service.dart';
 import '../../services/media/thumbnail_service.dart';
+import '../../services/resources/resource_scheduler.dart';
 import '../../services/player/playback_snapshot_write_queue.dart';
 import '../../widgets/library/library_local_view.dart';
 import '../../features/player/application/player_fullscreen_lifecycle_controller.dart';
@@ -43,6 +44,8 @@ class LibraryPageRuntime {
   PlaybackSnapshotWriteQueue? playbackSnapshotQueue;
   /** 当前媒体库共享的缩略图服务。 */
   ThumbnailService? thumbnailService;
+  /** 与扫描、探测、备份和播放让渡门共享的资源预算。 */
+  ResourceScheduler? resourceScheduler;
   /** 后台媒体详情补全服务；页面释放时统一取消。 */
   MediaDetailsService? libraryMediaDetailsService;
   /** 媒体库 Route 级相似视频扫描；相似视频页进出只改变前台优先级。 */

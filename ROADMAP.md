@@ -9,6 +9,23 @@ Local Tag Player 已完成标签发现、稳定身份、filtered queue、标签�
 本文件只保存未来优先级和明确非目标。旧计划、完成记录和实验路线已归档到
 `docs/history/roadmap/ROADMAP_HISTORY_THROUGH_2026-07-30.md`。
 
+## 架构演进路线
+
+以下路线服务于核心闭环和用户数据保护，按依赖顺序推进；每阶段必须有独立契约和可回滚
+边界，不与无关播放器视觉或实验功能捆绑：
+
+1. **Phase 0（已完成）**：架构 ADR、依赖方向门禁、架构指标和旧库 fixture。
+2. **Phase 1（已完成）**：`videoId` 主索引、path 辅助索引和 stable-ID 命令 API。
+3. **Phase 2（已完成）**：schema migration，将 `videoId` 设为主身份、path 设为可变唯一字段。
+4. **Phase 3（已完成）**：`LibraryRepositoryContext` 和查询/命令能力适配器拆分 `LibraryStore`，保留单数据库和统一事务。
+5. **Phase 4（已完成）**：`ResourceScheduler` 统一扫描、探测、缩略图、视觉和备份资源预算。
+6. **Phase 5（已完成）**：`PlayerRuntimeBackend` 与 `PlayerSurfaceRenderer` 分离，兼容保留 `PlayerBackend`。
+7. **Phase 6（候选加速器已完成）**：profile、trigram FTS5 计划和可重建搜索索引已建立；接入页面查询前仍需真实大库基准证明收益。
+
+Phase 3–6 不得改变 `FilterQuery` 语义、来源 filtered queue、用户数据绑定或正式 Windows
+播放器默认后端；每次跨 schema/core/platform contract 修改都必须同步更新架构 ADR 和 focused
+验证。
+
 ## P0：治理和可信交付
 
 1. 完成 Agent 治理整治：

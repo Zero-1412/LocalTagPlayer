@@ -181,6 +181,15 @@ class LibraryVideoPersistence {
     );
   }
 
+  /** 以 stable videoId 删除视频行；这是 Phase 1 命令 API 的主删除路径。 */
+  void deleteByIdInBatch(Batch batch, String videoId) {
+    batch.delete(
+      'videos',
+      where: 'video_id = ?',
+      whereArgs: <Object?>[videoId],
+    );
+  }
+
   /**
    * 在 root 生命周期事务中切换解除管理状态。
    *

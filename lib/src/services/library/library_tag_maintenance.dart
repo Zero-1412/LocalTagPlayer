@@ -38,6 +38,9 @@ class LibraryTagMaintenance {
     final previousLinks = _store.videoTagIdsByPathKey[pathKey] == null
         ? null
         : <String>{..._store.videoTagIdsByPathKey[pathKey]!};
+    final previousLinksById = _store.videoTagIdsByVideoId[item.videoId] == null
+        ? null
+        : <String>{..._store.videoTagIdsByVideoId[item.videoId]!};
     final previousTagIds = <String>{..._store.tagsById.keys};
     final batch = _store.database.batch();
     try {
@@ -55,6 +58,11 @@ class LibraryTagMaintenance {
         _store.videoTagIdsByPathKey.remove(pathKey);
       } else {
         _store.videoTagIdsByPathKey[pathKey] = previousLinks;
+      }
+      if (previousLinksById == null) {
+        _store.videoTagIdsByVideoId.remove(item.videoId);
+      } else {
+        _store.videoTagIdsByVideoId[item.videoId] = previousLinksById;
       }
       _store.tagsById.removeWhere(
         (tagId, _) => !previousTagIds.contains(tagId),
@@ -89,6 +97,10 @@ class LibraryTagMaintenance {
     };
     final previousLinks = <String, Set<String>>{
       for (final entry in _store.videoTagIdsByPathKey.entries)
+        entry.key: <String>{...entry.value},
+    };
+    final previousLinksById = <String, Set<String>>{
+      for (final entry in _store.videoTagIdsByVideoId.entries)
         entry.key: <String>{...entry.value},
     };
     final previousTagIds = <String>{..._store.tagsById.keys};
@@ -134,6 +146,7 @@ class LibraryTagMaintenance {
             whereArgs: [item.videoId, legacyTag.id, TagSource.manual.name],
           );
           _store.videoTagIdsByPathKey[pathKey]?.remove(legacyTag.id);
+          _store.videoTagIdsByVideoId[item.videoId]?.remove(legacyTag.id);
           affected.add(item);
         }
       }
@@ -148,6 +161,9 @@ class LibraryTagMaintenance {
       _store.videoTagIdsByPathKey
         ..clear()
         ..addAll(previousLinks);
+      _store.videoTagIdsByVideoId
+        ..clear()
+        ..addAll(previousLinksById);
       _store.tagsById.removeWhere(
         (tagId, _) => !previousTagIds.contains(tagId),
       );
@@ -226,7 +242,9 @@ class LibraryTagMaintenance {
       var changedCompat = false;
       for (final tagId in linkedTagIds) {
         final hadManualLink =
-            _store.videoTagIdsByPathKey[pathKey]?.contains(tagId) ?? false;
+            _store.videoTagIdsByVideoId[item.videoId]?.contains(tagId) ??
+                _store.videoTagIdsByPathKey[pathKey]?.contains(tagId) ??
+                false;
         if (independentTag != null && tagId == independentTag.id) {
           changedCompat =
               _removeManualTagFromItem(item, independentTag) || changedCompat;
@@ -239,12 +257,16 @@ class LibraryTagMaintenance {
           whereArgs: [item.videoId, tagId, TagSource.manual.name],
         );
         _store.videoTagIdsByPathKey[pathKey]?.remove(tagId);
+        _store.videoTagIdsByVideoId[item.videoId]?.remove(tagId);
         if (hadManualLink) {
           changedCompat = true;
         }
       }
       if (_store.videoTagIdsByPathKey[pathKey]?.isEmpty ?? false) {
         _store.videoTagIdsByPathKey.remove(pathKey);
+      }
+      if (_store.videoTagIdsByVideoId[item.videoId]?.isEmpty ?? false) {
+        _store.videoTagIdsByVideoId.remove(item.videoId);
       }
       if (changedCompat) {
         changed++;

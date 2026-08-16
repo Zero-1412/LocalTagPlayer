@@ -8,6 +8,7 @@ import '../../platform/file_system_adapter.dart';
 import '../../platform/platform_interfaces.dart';
 import '../media/media_details_service.dart';
 import '../media/thumbnail_service.dart';
+import '../resources/resource_scheduler.dart';
 import 'library_application_facade.dart';
 import 'library_load_diagnostics.dart';
 import 'library_stress_control.dart';
@@ -64,6 +65,7 @@ class LibraryPageStartupData {
     required this.playbackSettings,
     required this.sortPreferences,
     required this.dataBackupSettings,
+    required this.resourceScheduler,
   });
 
   /** 页面唯一业务入口。 */
@@ -80,6 +82,9 @@ class LibraryPageStartupData {
 
   /** 独立视频依赖备份设置。 */
   final DataBackupSettings dataBackupSettings;
+
+  /** 页面级后台资源预算，与 Store/媒体服务/播放让渡门共享。 */
+  final ResourceScheduler resourceScheduler;
 }
 
 /**
@@ -140,6 +145,7 @@ class LocalLibraryPageApplicationService
     required FFmpegBackend ffmpegBackend,
     required MediaProbeBackendFactory mediaProbeBackendFactory,
     required LibraryDebugOptions debugOptions,
+    required ResourceScheduler resourceScheduler,
     void Function(Future<void> Function())? registerBeforeWindowClose,
   })  : _paths = paths,
         _fileSystem = fileSystem,
@@ -147,7 +153,10 @@ class LocalLibraryPageApplicationService
         _ffmpegBackend = ffmpegBackend,
         _mediaProbeBackendFactory = mediaProbeBackendFactory,
         _registerBeforeWindowClose = registerBeforeWindowClose,
-        _debugOptions = debugOptions;
+        _debugOptions = debugOptions,
+        _resourceScheduler = resourceScheduler;
+
+  final ResourceScheduler _resourceScheduler;
 
   final AppPaths _paths;
   final FileSystemAdapter _fileSystem;
@@ -174,10 +183,18 @@ class LocalLibraryPageApplicationService
     );
     try {
       final thumbnailService = diagnostics == null
-          ? await ThumbnailService.create(_paths, _ffmpegBackend)
+          ? await ThumbnailService.create(
+              _paths,
+              _ffmpegBackend,
+              resourceScheduler: _resourceScheduler,
+            )
           : await diagnostics.measureAsync(
               'startup.thumbnail_service_create',
-              () => ThumbnailService.create(_paths, _ffmpegBackend),
+              () => ThumbnailService.create(
+                _paths,
+                _ffmpegBackend,
+                resourceScheduler: _resourceScheduler,
+              ),
             );
       final playbackSettings = diagnostics == null
           ? await PlaybackSettings.load(_paths)
@@ -197,6 +214,7 @@ class LocalLibraryPageApplicationService
         playbackSettings: playbackSettings,
         sortPreferences: sortPreferences,
         dataBackupSettings: dataBackupSettings,
+        resourceScheduler: _resourceScheduler,
       );
       // 只在首屏依赖全部成功后接管窗口关闭，避免注册一个初始化失败的 Store。
       _registerBeforeWindowClose?.call(store.close);
@@ -230,6 +248,7 @@ class LocalLibraryPageApplicationService
   }) {
     return MediaDetailsService(
       probeBackend: _mediaProbeBackendFactory(),
+      resourceScheduler: _resourceScheduler,
       onUpdated: onUpdated,
       onBatchUpdated: onBatchUpdated,
       onProgress: onProgress,

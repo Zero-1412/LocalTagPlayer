@@ -147,12 +147,12 @@ abstract interface class PlayerMediaControlsBoundary {
 }
 
 /**
- * 单个播放会话的底层引擎和视频表面契约。
+ * 播放运行时后端契约。
  *
- * 该接口只由 PlayerService 与组合根持有；PlayerPage 依赖应用层服务，避免把
- * MediaKit、libmpv 或 Windows 增强能力直接耦合进 Flutter 页面。
+ * 它只描述打开、控制、状态事件和底层运行时属性；不要求实现知道 Flutter 如何
+ * 挂载视频表面。兼容后端可以继续实现下面的聚合接口，不改变现有平台行为。
  */
-abstract interface class PlayerBackend implements PlayerRuntimeAccess {
+abstract interface class PlayerRuntimeBackend implements PlayerRuntimeAccess {
   /** 播放位置变化流。 */
   Stream<Duration> get positionChanges;
 
@@ -185,6 +185,14 @@ abstract interface class PlayerBackend implements PlayerRuntimeAccess {
   /** 截取当前视频帧，编码格式由调用方指定。 */
   Future<Uint8List?> screenshot({String format = 'image/jpeg'});
 
+  Future<void> dispose();
+
+  /** 等待后端拥有的 Player、纹理与原生资源全部释放。 */
+  Future<void> get released;
+}
+
+/** Flutter 视频表面渲染契约；不得创建第二个 Player 或解码链。 */
+abstract interface class PlayerSurfaceRenderer {
   /**
    * 构建视频纹理表面；具体 Player/纹理控制器不得泄漏给页面。
    *
@@ -202,12 +210,11 @@ abstract interface class PlayerBackend implements PlayerRuntimeAccess {
     bool reserveTopControlArea = false,
     bool reserveBottomControlArea = false,
   });
-
-  Future<void> dispose();
-
-  /** 等待后端拥有的 Player、纹理与原生资源全部释放。 */
-  Future<void> get released;
 }
+
+/** 当前平台后端的运行时与表面兼容聚合契约。 */
+abstract interface class PlayerBackend
+    implements PlayerRuntimeBackend, PlayerSurfaceRenderer {}
 
 /**
  * 可返回实际渲染设备证据和显式 Compute 基线的 Windows 播放边界。

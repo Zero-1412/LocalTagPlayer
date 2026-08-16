@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import '../../core/app_paths.dart';
 import '../../models/video_item.dart';
 import '../../platform/platform_interfaces.dart';
+import '../resources/resource_scheduler.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -108,14 +109,19 @@ class CacheFailureDetail {
 }
 
 class ThumbnailService {
-  ThumbnailService._(this._directory, this._ffmpegBackend);
+  ThumbnailService._(
+    this._directory,
+    this._ffmpegBackend,
+    this._resourceScheduler,
+  );
 
   /** 测试或 smoke harness 使用显式缓存目录创建实例。 */
   factory ThumbnailService.forDirectory(
     Directory directory,
-    FFmpegBackend ffmpegBackend,
-  ) =>
-      ThumbnailService._(directory, ffmpegBackend);
+    FFmpegBackend ffmpegBackend, {
+    ResourceScheduler? resourceScheduler,
+  }) =>
+      ThumbnailService._(directory, ffmpegBackend, resourceScheduler);
   static const _maxBackgroundQueuedJobs = 500;
   static const _maxBackgroundRequestsInFlight = 24;
   static const _maxPreviewCacheEntries = 24;
@@ -123,6 +129,8 @@ class ThumbnailService {
   final Directory _directory;
   /** 由组合根注入的媒体工具边界，不使用进程级静态后端。 */
   final FFmpegBackend _ffmpegBackend;
+  /** 可选全局资源预算；为空时保持旧的服务内队列行为，便于隔离测试。 */
+  final ResourceScheduler? _resourceScheduler;
   static int get _maxConcurrentJobs {
     final cores = Platform.numberOfProcessors;
     if (cores >= 12) {
@@ -252,10 +260,15 @@ class ThumbnailService {
 
   static Future<ThumbnailService> create(
     AppPaths paths,
-    FFmpegBackend ffmpegBackend,
-  ) async {
+    FFmpegBackend ffmpegBackend, {
+    ResourceScheduler? resourceScheduler,
+  }) async {
     final directory = await paths.thumbnailDirectory();
-    return ThumbnailService._(directory, ffmpegBackend);
+    return ThumbnailService._(
+      directory,
+      ffmpegBackend,
+      resourceScheduler,
+    );
   }
 
   Future<File?> thumbnailFor(VideoItem item) async {
@@ -635,6 +648,19 @@ class ThumbnailService {
 
   /** 经 FFmpegBackend 生成并再次校验 JPEG，失败只影响本次悬停提示。 */
   Future<File?> _generatePreview(_PreviewFrameJob job) async {
+    final scheduler = _resourceScheduler;
+    if (scheduler == null) {
+      return _generatePreviewWithoutResource(job);
+    }
+    return scheduler.run(
+      ResourceKind.visual,
+      () => _generatePreviewWithoutResource(job),
+      priority: ResourcePriority.foreground,
+      allowDuringPlayback: true,
+    );
+  }
+
+  Future<File?> _generatePreviewWithoutResource(_PreviewFrameJob job) async {
     try {
       final file = await _ffmpegBackend.createFramePreview(
         item: job.item,
@@ -843,6 +869,36 @@ class ThumbnailService {
   }
 
   Future<File?> _generate(
+    VideoItem item,
+    File output,
+    String cacheKey,
+    bool allowPlayerFallback,
+  ) {
+    final scheduler = _resourceScheduler;
+    if (scheduler == null) {
+      return _generateWithoutResource(
+        item,
+        output,
+        cacheKey,
+        allowPlayerFallback,
+      );
+    }
+    return scheduler.run(
+      ResourceKind.thumbnail,
+      () => _generateWithoutResource(
+        item,
+        output,
+        cacheKey,
+        allowPlayerFallback,
+      ),
+      priority: allowPlayerFallback
+          ? ResourcePriority.foreground
+          : ResourcePriority.background,
+      allowDuringPlayback: allowPlayerFallback,
+    );
+  }
+
+  Future<File?> _generateWithoutResource(
     VideoItem item,
     File output,
     String cacheKey,

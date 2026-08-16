@@ -1,5 +1,6 @@
 import '../media/media_details_service.dart';
 import '../media/thumbnail_service.dart';
+import '../resources/resource_scheduler.dart';
 import 'video_similarity_scan_controller.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -15,13 +16,16 @@ class LibraryPlaybackBackgroundGate {
     required ThumbnailService thumbnailService,
     required MediaDetailsService? mediaDetailsService,
     required VideoSimilarityScanController? similarityScanController,
+    ResourceScheduler? resourceScheduler,
   })  : _thumbnailService = thumbnailService,
         _mediaDetailsService = mediaDetailsService,
-        _similarityScanController = similarityScanController;
+        _similarityScanController = similarityScanController,
+        _resourceScheduler = resourceScheduler;
 
   final ThumbnailService _thumbnailService;
   final MediaDetailsService? _mediaDetailsService;
   final VideoSimilarityScanController? _similarityScanController;
+  final ResourceScheduler? _resourceScheduler;
   var _thumbnailWasPaused = false;
   var _mediaDetailsWasPaused = false;
   var _entered = false;
@@ -31,6 +35,7 @@ class LibraryPlaybackBackgroundGate {
       return;
     }
     _entered = true;
+    _resourceScheduler?.setPlaybackActive(true);
     _similarityScanController?.setPlaybackActive(true);
     _mediaDetailsWasPaused = _mediaDetailsService?.isPaused ?? false;
     if (!_mediaDetailsWasPaused) {
@@ -53,6 +58,7 @@ class LibraryPlaybackBackgroundGate {
       _mediaDetailsService?.resume();
     }
     _similarityScanController?.setPlaybackActive(false);
+    _resourceScheduler?.setPlaybackActive(false);
     _entered = false;
   }
 }

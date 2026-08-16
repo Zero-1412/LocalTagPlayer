@@ -110,4 +110,46 @@ class LibraryMissingRelinkCommandExecutor {
       _runningVideoIds.remove(command.videoId);
     }
   }
+
+  /**
+   * stable-ID 版本的 Repository 委托。
+   *
+   * 命令仍保留对象快照用于检查旧 path/fingerprint，但提交身份固定为 videoId，
+   * 避免 mutable path 被其它扫描代次替换后误写。
+   */
+  Future<RelinkMissingVideoCommandResult> executeById(
+    RelinkMissingVideoCommand command, {
+    required Future<void> Function(String videoId, String newPath) commitById,
+  }) async {
+    final item = command.item;
+    if (item.videoId != command.videoId ||
+        item.path != command.previousPath ||
+        item.mediaFingerprint != command.expectedFingerprint ||
+        !item.isMissing) {
+      return RelinkMissingVideoCommandResult.failed(
+        command.videoId,
+        StateError('缺失记录已变化，请重新选择文件'),
+      );
+    }
+    if (command.newPath.trim().isEmpty) {
+      return RelinkMissingVideoCommandResult.failed(
+        command.videoId,
+        ArgumentError.value(command.newPath, 'newPath', '新路径不能为空'),
+      );
+    }
+    if (!_runningVideoIds.add(command.videoId)) {
+      return RelinkMissingVideoCommandResult.failed(
+        command.videoId,
+        StateError('该视频正在重新关联，请稍候'),
+      );
+    }
+    try {
+      await commitById(command.videoId, command.newPath);
+      return RelinkMissingVideoCommandResult.succeeded(command.videoId);
+    } catch (error) {
+      return RelinkMissingVideoCommandResult.failed(command.videoId, error);
+    } finally {
+      _runningVideoIds.remove(command.videoId);
+    }
+  }
 }

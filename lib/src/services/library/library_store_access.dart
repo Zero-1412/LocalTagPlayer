@@ -3,6 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../models/platform_models.dart';
 import '../../models/video_item.dart';
 import 'library_metadata_persistence.dart';
+import 'library_repository_context.dart';
 import 'library_scan_backend.dart';
 import 'library_tag_persistence.dart';
 import 'library_video_persistence.dart';
@@ -17,6 +18,8 @@ import 'library_data_backup_service.dart';
  * 成为独立 library，同时仍由唯一 [LibraryStoreAccess] 实现持有 SQLite 写权限。
  */
 abstract interface class LibraryStoreAccess {
+  /** 唯一数据库、索引和事务的共享上下文；协调器不得自行打开第二个连接。 */
+  LibraryRepositoryContext get repositoryContext;
   Database get database;
   LibraryScanBackend get scanBackend;
 
@@ -27,12 +30,17 @@ abstract interface class LibraryStoreAccess {
   List<String> get favoriteTags;
   /** 当前由 active root 管理、可以进入查询与播放队列的视频。 */
   Map<String, VideoItem> get videos;
+  /** active 视频的 stable videoId 主索引；path map 只用于兼容读取和迁移期调用。 */
+  Map<String, VideoItem> get videosById;
   /** 已解除 root 管理但仍保留稳定身份和用户数据的视频。 */
   Map<String, VideoItem> get detachedVideos;
+  /** detached 视频的 stable videoId 主索引。 */
+  Map<String, VideoItem> get detachedVideosById;
   /** 标签分组定义；备份恢复自定义标签时需要在同一事务中补齐。 */
   List<TagGroup> get tagGroups;
   Map<String, TagItem> get tagsById;
   Map<String, Set<String>> get videoTagIdsByPathKey;
+  Map<String, Set<String>> get videoTagIdsByVideoId;
   LibraryMetadataPersistence get metadataPersistence;
   LibraryVideoPersistence get videoPersistence;
   LibraryTagPersistence get tagPersistence;

@@ -12,6 +12,7 @@ import 'library_collection_rules.dart';
 import 'library_scan_service.dart';
 import 'library_store_access.dart';
 import 'library_tag_maintenance.dart';
+import '../resources/resource_scheduler.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -27,10 +28,14 @@ class LibraryScanCoordinator {
    *
    * [_store] 持有数据库连接、内存视频索引和标签索引，本类不拥有这些资源生命周期。
    */
-  const LibraryScanCoordinator(this._store);
+  const LibraryScanCoordinator(
+    this._store, {
+    ResourceScheduler? resourceScheduler,
+  }) : _resourceScheduler = resourceScheduler;
 
   /** 当前媒体库 store。 */
   final LibraryStoreAccess _store;
+  final ResourceScheduler? _resourceScheduler;
 
   /**
    * 将用户选择的新文件重新关联到一个 missing 条目。
@@ -205,12 +210,23 @@ class LibraryScanCoordinator {
           isMissing: item.isMissing,
         ),
     };
-    final scanDelta = await _store.scanBackend.scan(
-      generationId: generationId,
-      roots: List<String>.unmodifiable(_store.roots),
-      knownMetadata: knownMetadata,
-      onProgress: onProgress,
-    );
+    final scheduler = _resourceScheduler;
+    final scanDelta = scheduler == null
+        ? await _store.scanBackend.scan(
+            generationId: generationId,
+            roots: List<String>.unmodifiable(_store.roots),
+            knownMetadata: knownMetadata,
+            onProgress: onProgress,
+          )
+        : await scheduler.run(
+            ResourceKind.scan,
+            () => _store.scanBackend.scan(
+              generationId: generationId,
+              roots: List<String>.unmodifiable(_store.roots),
+              knownMetadata: knownMetadata,
+              onProgress: onProgress,
+            ),
+          );
     if (scanDelta.cancelled || generationId != _store.scanGeneration) {
       return LibraryScanCommitResult.cancelled(generationId);
     }

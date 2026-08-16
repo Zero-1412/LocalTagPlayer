@@ -38,14 +38,27 @@ class PlayerService
         PlayerMotionInterpolationBoundary,
         PlayerMediaControlsBoundary {
   /** 创建一个独占单个播放 Route 生命周期的服务。 */
-  PlayerService({required PlayerBackend backend}) : _backend = backend {
+  PlayerService({
+    PlayerBackend? backend,
+    PlayerRuntimeBackend? runtimeBackend,
+    PlayerSurfaceRenderer? surfaceRenderer,
+  })  : assert(
+          backend != null ||
+              (runtimeBackend != null && surfaceRenderer != null),
+          '必须提供兼容后端，或分别提供运行时后端和表面渲染器',
+        ),
+        _backend = runtimeBackend ?? backend!,
+        _surfaceRenderer = surfaceRenderer ?? backend! {
     _positionSubscription = _backend.positionChanges.listen(
       _handleBackendPosition,
     );
   }
 
   /** 具体引擎只在服务内部持有，页面和业务控制器不可取得该引用。 */
-  final PlayerBackend _backend;
+  final PlayerRuntimeBackend _backend;
+
+  /** 页面表面依赖独立渲染契约，不从运行时后端反向取得 Flutter Widget。 */
+  final PlayerSurfaceRenderer _surfaceRenderer;
 
   /** 服务向页面输出经过 seek 目标栅栏处理的位置流。 */
   final StreamController<Duration> _positionChanges =
@@ -600,7 +613,7 @@ class PlayerService
     bool reserveTopControlArea = false,
     bool reserveBottomControlArea = false,
   }) =>
-      _backend.buildVideoSurface(
+      _surfaceRenderer.buildVideoSurface(
         controls: controls,
         fit: fit,
         aspectRatio: aspectRatio,

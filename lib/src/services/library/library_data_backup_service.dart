@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../models/data_backup_models.dart';
 import '../../models/platform_models.dart';
+import '../resources/resource_scheduler.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -21,9 +22,11 @@ class LibraryDataBackupService {
     required Database sourceDatabase,
     required Database backupDatabase,
     required bool enabled,
+    required ResourceScheduler? resourceScheduler,
   })  : _sourceDatabase = sourceDatabase,
         _backupDatabase = backupDatabase,
         _enabled = enabled,
+        _resourceScheduler = resourceScheduler,
         _status = DataBackupStatus(
           enabled: enabled,
           phase: enabled ? DataBackupPhase.idle : DataBackupPhase.disabled,
@@ -37,6 +40,8 @@ class LibraryDataBackupService {
 
   /** 独立备份 SQLite 连接。 */
   final Database _backupDatabase;
+  /** 全局备份预算；备份仍由本服务控制批次和恢复游标。 */
+  final ResourceScheduler? _resourceScheduler;
 
   /** 状态广播只包含计数和阶段，不泄露用户数据。 */
   final StreamController<DataBackupStatus> _statusController =
@@ -54,12 +59,14 @@ class LibraryDataBackupService {
     required Database sourceDatabase,
     required Database backupDatabase,
     required bool enabled,
+    ResourceScheduler? resourceScheduler,
   }) async {
     await _createSchema(backupDatabase);
     return LibraryDataBackupService._(
       sourceDatabase: sourceDatabase,
       backupDatabase: backupDatabase,
       enabled: enabled,
+      resourceScheduler: resourceScheduler,
     );
   }
 
@@ -443,6 +450,20 @@ class LibraryDataBackupService {
 
   /** 处理持久化增量队列的一小批。 */
   Future<bool> _processPendingBatch() async {
+    final scheduler = _resourceScheduler;
+    if (scheduler == null) {
+      return _processPendingBatchWithoutResource();
+    }
+    return scheduler.run(
+      ResourceKind.backup,
+      _processPendingBatchWithoutResource,
+      // pauseForPlayback 会等待已开始批次结束；允许这个已登记批次自然收尾，
+      // 避免播放门与调度器互相等待。
+      allowDuringPlayback: true,
+    );
+  }
+
+  Future<bool> _processPendingBatchWithoutResource() async {
     final rows = await _backupDatabase.query(
       'pending_video_sync',
       columns: const <String>['video_id'],
@@ -469,6 +490,18 @@ class LibraryDataBackupService {
 
   /** 按稳定 videoId 游标处理一小批全量核对。 */
   Future<bool> _processFullBatch() async {
+    final scheduler = _resourceScheduler;
+    if (scheduler == null) {
+      return _processFullBatchWithoutResource();
+    }
+    return scheduler.run(
+      ResourceKind.backup,
+      _processFullBatchWithoutResource,
+      allowDuringPlayback: true,
+    );
+  }
+
+  Future<bool> _processFullBatchWithoutResource() async {
     if (await _controlValue('full_sync_in_progress') != '1') {
       return false;
     }

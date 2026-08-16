@@ -9,6 +9,13 @@ import '../core/app_paths.dart';
 /** SQLite 建库与连接维护回调。 */
 typedef DatabaseSchemaCallback = Future<void> Function(Database database);
 
+/** SQLite 版本升级回调；所有业务 schema 迁移必须在同一连接内完成。 */
+typedef DatabaseSchemaUpgradeCallback = Future<void> Function(
+  Database database,
+  int oldVersion,
+  int newVersion,
+);
+
 /**
  * 媒体库数据库平台边界。
  *
@@ -24,6 +31,7 @@ abstract interface class DatabaseProvider {
     required int version,
     required DatabaseSchemaCallback createSchema,
     required DatabaseSchemaCallback maintainSchema,
+    DatabaseSchemaUpgradeCallback? upgradeSchema,
   });
 
   /** 打开独立视频依赖备份库；不得与主媒体库复用同一文件。 */
@@ -31,6 +39,7 @@ abstract interface class DatabaseProvider {
     required int version,
     required DatabaseSchemaCallback createSchema,
     required DatabaseSchemaCallback maintainSchema,
+    DatabaseSchemaUpgradeCallback? upgradeSchema,
   });
 }
 
@@ -55,6 +64,7 @@ class SqfliteDatabaseProvider implements DatabaseProvider {
     required int version,
     required DatabaseSchemaCallback createSchema,
     required DatabaseSchemaCallback maintainSchema,
+    DatabaseSchemaUpgradeCallback? upgradeSchema,
   }) async {
     final file = await paths.libraryDatabaseFile();
     return _openDatabase(
@@ -62,6 +72,7 @@ class SqfliteDatabaseProvider implements DatabaseProvider {
       version: version,
       createSchema: createSchema,
       maintainSchema: maintainSchema,
+      upgradeSchema: upgradeSchema,
       cacheSize: -20000,
     );
   }
@@ -71,6 +82,7 @@ class SqfliteDatabaseProvider implements DatabaseProvider {
     required int version,
     required DatabaseSchemaCallback createSchema,
     required DatabaseSchemaCallback maintainSchema,
+    DatabaseSchemaUpgradeCallback? upgradeSchema,
   }) async {
     final file = await paths.dataBackupDatabaseFile();
     return _openDatabase(
@@ -78,6 +90,7 @@ class SqfliteDatabaseProvider implements DatabaseProvider {
       version: version,
       createSchema: createSchema,
       maintainSchema: maintainSchema,
+      upgradeSchema: upgradeSchema,
       // 备份任务按小批次执行，不占用主媒体库同等规模的 page cache。
       cacheSize: -4000,
     );
@@ -89,6 +102,7 @@ class SqfliteDatabaseProvider implements DatabaseProvider {
     required int version,
     required DatabaseSchemaCallback createSchema,
     required DatabaseSchemaCallback maintainSchema,
+    DatabaseSchemaUpgradeCallback? upgradeSchema,
     required int cacheSize,
   }) {
     return factory.openDatabase(
@@ -96,6 +110,7 @@ class SqfliteDatabaseProvider implements DatabaseProvider {
       options: OpenDatabaseOptions(
         version: version,
         onCreate: (database, _) => createSchema(database),
+        onUpgrade: upgradeSchema,
         onOpen: (database) async {
           await maintainSchema(database);
           await database.execute('PRAGMA foreign_keys=ON');

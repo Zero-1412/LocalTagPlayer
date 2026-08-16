@@ -32,6 +32,9 @@ abstract interface class LibraryQueryRepository {
   /** 以内存 pathKey 索引保存的稳定视频记录。 */
   Map<String, VideoItem> get videos;
 
+  /** 以 stable videoId 为主键的 active 视频索引。 */
+  Map<String, VideoItem> get videosById;
+
   /** 用户固定的常用标签名称。 */
   List<String> get favoriteTags;
 
@@ -43,6 +46,9 @@ abstract interface class LibraryQueryRepository {
 
   /** 视频 pathKey 到 tagId 的兼容查询索引。 */
   Map<String, Set<String>> get videoTagIdsByPathKey;
+
+  /** 以 stable videoId 为键的标签关系主索引。 */
+  Map<String, Set<String>> get videoTagIdsByVideoId;
 
   TagQueryContext get tagQueryContext;
 
@@ -134,6 +140,9 @@ abstract interface class LibraryCommandRepository {
 
   Future<VideoItem?> deleteVideo(String path);
 
+  /** 通过 stable videoId 删除，不把 mutable path 作为用户命令身份。 */
+  Future<VideoItem?> deleteVideoById(String videoId);
+
   /**
    * 把源视频的收藏与 manual 标签并入目标视频后再删除源视频。
    *
@@ -143,6 +152,12 @@ abstract interface class LibraryCommandRepository {
   Future<VideoItem?> deleteVideoAndMergeUserData({
     required VideoItem source,
     required VideoItem target,
+  });
+
+  /** 通过 stable ID 合并用户数据后删除源视频。 */
+  Future<VideoItem?> deleteVideoAndMergeUserDataById({
+    required String sourceVideoId,
+    required String targetVideoId,
   });
 
   /** 只移除数据库中的路径失效/missing/不可读记录；磁盘内容必须保留。 */
@@ -194,7 +209,13 @@ abstract interface class LibraryCommandRepository {
    */
   Future<void> renameVideoPath(VideoItem item, String newPath);
 
+  /** 通过 stable ID 提交同一视频的新 mutable path。 */
+  Future<void> renameVideoPathById(String videoId, String newPath);
+
   Future<void> relinkMissingVideo(VideoItem item, String newPath);
+
+  /** 通过 stable ID 提交 missing 视频的新 mutable path。 */
+  Future<void> relinkMissingVideoById(String videoId, String newPath);
 
   Future<Set<String>> relinkMissingVideosInBatch(
     Map<VideoItem, String> targets,

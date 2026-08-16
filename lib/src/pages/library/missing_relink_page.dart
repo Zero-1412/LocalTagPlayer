@@ -83,9 +83,9 @@ Future<RelinkMissingVideoCommandResult?> pickAndRelinkMissingVideo(
   if (path == null || !context.mounted) {
     return null;
   }
-  final result = await LibraryMissingRelinkCommandExecutor().execute(
+  final result = await LibraryMissingRelinkCommandExecutor().executeById(
     RelinkMissingVideoCommand(item: item, newPath: path),
-    commit: store.relinkMissingVideo,
+    commitById: store.relinkMissingVideoById,
   );
   if (!context.mounted) {
     return result;
@@ -136,9 +136,9 @@ class _MissingRelinkPageState extends State<MissingRelinkPage> {
       return;
     }
     // 原生文件选择器打开期间不显示行级 spinner；只有选中候选后才锁定该行进入校验。
-    final operation = _relinkCommandExecutor.execute(
+    final operation = _relinkCommandExecutor.executeById(
       RelinkMissingVideoCommand(item: item, newPath: path),
-      commit: widget.store.relinkMissingVideo,
+      commitById: widget.store.relinkMissingVideoById,
     );
     setState(() {});
     final result = await operation;

@@ -128,6 +128,51 @@ class LibraryFileCommandExecutor {
   }
 
   /**
+   * stable-ID 版本的重命名提交入口。
+   *
+   * 文件系统仍使用命令快照中的 mutable path 执行物理动作，但 Repository 提交只接收
+   * videoId，避免路径变化或旧页面引用把写入落到另一条视频记录。
+   */
+  Future<void> renameById(
+    RenameVideoFileCommand command, {
+    required String Function(String path) normalizePath,
+    required String Function(String path) parentPath,
+    required String Function(List<String> parts) joinPath,
+    required Future<bool> Function(String path) fileExists,
+    required Future<String> Function(String oldPath, String newPath) renameFile,
+    required Future<void> Function(String videoId, String newPath)
+        commitRenamedPathById,
+  }) async {
+    final item = command.item;
+    final oldPath = item.path;
+    final extension = p.extension(oldPath);
+    final targetPath = joinPath(<String>[
+      parentPath(oldPath),
+      '${command.newBaseName}$extension',
+    ]);
+    if (TagRules.pathKey(oldPath) == TagRules.pathKey(targetPath)) {
+      if (normalizePath(oldPath) == normalizePath(targetPath)) {
+        return;
+      }
+      throw StateError('当前暂不支持仅修改文件名大小写，请换一个不同名称');
+    }
+    if (await fileExists(targetPath)) {
+      throw StateError('同名文件已存在，请换一个名称');
+    }
+    final renamedPath = await renameFile(oldPath, targetPath);
+    try {
+      await commitRenamedPathById(item.videoId, renamedPath);
+    } catch (_) {
+      try {
+        await renameFile(renamedPath, oldPath);
+      } catch (_) {
+        throw StateError('文件已改名，但媒体库更新失败；请返回媒体库后重新扫描');
+      }
+      rethrow;
+    }
+  }
+
+  /**
    * 执行已确认的删除命令。
    *
    * 所有用户视频删除都必须先通过平台边界移入系统回收站，避免平台拒绝时先丢失
@@ -146,6 +191,22 @@ class LibraryFileCommandExecutor {
       await deleteThumbnail?.call(item);
     } catch (_) {
       // 缓存可重建，不能覆盖 Repository 已成功提交的删除结果。
+    }
+  }
+
+  /** 通过 stable videoId 提交数据库删除，path 只承担物理文件动作。 */
+  Future<void> deleteById(
+    DeleteVideoCommand command, {
+    required Future<void> Function(String path) moveFileToTrash,
+    required Future<void> Function(String videoId) deleteRecordById,
+    Future<void> Function(VideoItem item)? deleteThumbnail,
+  }) async {
+    await moveFileToTrash(command.item.path);
+    await deleteRecordById(command.item.videoId);
+    try {
+      await deleteThumbnail?.call(command.item);
+    } catch (_) {
+      // 缓存可重建，不能覆盖已经提交的业务删除。
     }
   }
 
@@ -168,6 +229,34 @@ class LibraryFileCommandExecutor {
           command,
           moveFileToTrash: moveFileToTrash,
           deleteRecord: deleteRecord,
+          deleteThumbnail: deleteThumbnail,
+        );
+        deletedVideoIds.add(command.item.videoId);
+      } catch (_) {
+        failedItems.add(command.item);
+      }
+    }
+    return LibraryBatchDeleteResult(
+      deletedVideoIds: deletedVideoIds,
+      failedItems: failedItems,
+    );
+  }
+
+  /** 批量 stable-ID 删除；失败项仍保留原命令供页面重试。 */
+  Future<LibraryBatchDeleteResult> deleteAllById(
+    Iterable<DeleteVideoCommand> commands, {
+    required Future<void> Function(String path) moveFileToTrash,
+    required Future<void> Function(String videoId) deleteRecordById,
+    Future<void> Function(VideoItem item)? deleteThumbnail,
+  }) async {
+    final deletedVideoIds = <String>{};
+    final failedItems = <VideoItem>[];
+    for (final command in commands) {
+      try {
+        await deleteById(
+          command,
+          moveFileToTrash: moveFileToTrash,
+          deleteRecordById: deleteRecordById,
           deleteThumbnail: deleteThumbnail,
         );
         deletedVideoIds.add(command.item.videoId);
