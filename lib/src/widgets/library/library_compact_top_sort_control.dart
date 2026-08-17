@@ -89,11 +89,18 @@ class LibraryCompactTopSortControl extends StatelessWidget {
       style: showCurrentField
           ? IconButton.styleFrom(
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              fixedSize: const Size(
+                _expandedSortFieldWidth,
+                libraryTopBarControlHeight,
+              ),
             )
           : IconButton.styleFrom(
               backgroundColor: librarySurface,
               foregroundColor: libraryTextMuted,
-              fixedSize: const Size(38, 38),
+              fixedSize: const Size(
+                libraryTopBarControlHeight,
+                libraryTopBarControlHeight,
+              ),
               side: const BorderSide(color: libraryBorder),
             ),
       icon: showCurrentField ? null : const Icon(Icons.sort_rounded, size: 20),
@@ -101,7 +108,7 @@ class LibraryCompactTopSortControl extends StatelessWidget {
           ? SizedBox(
               width: _expandedSortFieldWidth,
               child: Container(
-                height: 38,
+                height: libraryTopBarControlHeight,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: librarySurfaceAlt,

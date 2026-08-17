@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_theme_tokens.dart';
 import '../design_system/app_interaction_surface.dart';
+import 'library_reference_icon_button.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -108,7 +109,7 @@ class _LibrarySearchSurfaceState extends State<LibrarySearchSurface> {
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         key: LibrarySmokeKeys.searchSurface,
-        height: compact ? 44 : 50,
+        height: compact ? 44 : libraryTopBarControlHeight,
         duration: accessibility.fadeDuration(AppMotion.hover),
         curve: AppMotion.standardCurve,
         decoration: BoxDecoration(

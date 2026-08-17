@@ -91,6 +91,7 @@ import 'package:local_tag_player/src/widgets/maintenance_workspace_app_bar.dart'
 import 'package:local_tag_player/src/widgets/library/library_confirmation_dialogs.dart';
 import 'package:local_tag_player/src/widgets/library/library_local_view.dart';
 import 'package:local_tag_player/src/widgets/library/library_panel_content_transition.dart';
+import 'package:local_tag_player/src/widgets/library/library_reference_icon_button.dart';
 import 'package:local_tag_player/src/widgets/library/library_result_view_toggle.dart';
 import 'package:local_tag_player/src/widgets/library/library_sidebar.dart';
 import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart';
@@ -2267,6 +2268,14 @@ void main() {
       actionsRect.left - directionRect.right,
       inInclusiveRange(12, 40),
     );
+    expect(searchRect.height, closeTo(libraryTopBarControlHeight, 0.01));
+    expect(sortRect.height, closeTo(libraryTopBarControlHeight, 0.01));
+    expect(directionRect.height, closeTo(libraryTopBarControlHeight, 0.01));
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.resultViewToggle)).height,
+      closeTo(libraryTopBarControlHeight, 0.01),
+    );
+    expect(actionsRect.height, closeTo(libraryTopBarControlHeight, 0.01));
     expect(find.text(sortModeLabel(SortMode.recent)), findsOneWidget);
     expect(
       tester.getSize(find.byKey(LibrarySmokeKeys.searchInputLane)).width,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_theme_tokens.dart';
+import 'library_reference_icon_button.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -40,7 +41,7 @@ class LibrarySelectionToolbar extends StatelessWidget {
     return SizedBox(
       key: LibrarySmokeKeys.selectionStatusArea,
       width: double.infinity,
-      height: 50,
+      height: libraryTopBarControlHeight,
       child: Row(
         children: [
           InkWell(

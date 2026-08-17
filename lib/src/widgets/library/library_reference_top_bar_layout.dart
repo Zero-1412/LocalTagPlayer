@@ -201,7 +201,7 @@ class LibraryReferenceTopBarLayout extends StatelessWidget {
         );
         final normalActions = SizedBox(
           key: LibrarySmokeKeys.toolbarActions,
-          height: 48,
+          height: libraryTopBarControlHeight,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
@@ -306,7 +306,7 @@ class LibraryReferenceTopBarLayout extends StatelessWidget {
               // 不再用大圆角容器包裹一组已经带边框的控件，避免“容器套容器”。
               SizedBox(
                 key: LibrarySmokeKeys.headerActionLane,
-                height: 50,
+                height: libraryTopBarControlHeight,
                 child: Row(
                   children: [
                     Expanded(child: searchSurface),
@@ -359,7 +359,7 @@ class LibraryReferenceTopBarLayout extends StatelessWidget {
         }
         if (proportionalDesktop) {
           return SizedBox(
-            height: 50,
+            height: libraryTopBarControlHeight,
             child: Row(
               children: [
                 // 搜索从 60% 收敛到 50%，把标签浏览和媒体库状态提升为同级主场景。

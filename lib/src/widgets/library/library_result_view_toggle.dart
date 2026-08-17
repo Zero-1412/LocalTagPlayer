@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../app_theme_tokens.dart';
+import 'library_reference_icon_button.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -52,6 +53,7 @@ class _ResultViewToggleState extends State<ResultViewToggle>
       value: widget.dense ? 1 : 0,
     );
   }
+
   @override
   void didUpdateWidget(covariant ResultViewToggle oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -126,7 +128,7 @@ class _ResultViewToggleState extends State<ResultViewToggle>
             onTap: _toggle,
             child: Ink(
               width: 72,
-              height: 48,
+              height: libraryTopBarControlHeight,
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: librarySurface,
