@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/player_media_controls.dart';
 import '../../widgets/app_theme_tokens.dart';
+import 'player_context_menu_items.dart';
 import 'player_diagnostics_dialog.dart';
 import 'player_dialog_content.dart';
 import 'player_media_controls_widgets.dart';
@@ -41,6 +42,7 @@ extension PlayerStateDialogs on PlayerPageState {
       ),
     );
   }
+
   Future<void> cycleAudioTrack() async {
     final snapshot = await playerService.readMediaControls();
     if (!snapshot.supported || snapshot.audioTracks.isEmpty) {
@@ -53,6 +55,7 @@ extension PlayerStateDialogs on PlayerPageState {
     await playerService.selectAudioTrack(target.id);
     showShortcutFeedback('音轨：${target.label('音轨')}', Icons.audiotrack_rounded);
   }
+
   Future<void> cycleSubtitleTrack({required bool reverse}) async {
     final snapshot = await playerService.readMediaControls();
     if (!snapshot.supported || snapshot.subtitleTracks.isEmpty) {
@@ -69,6 +72,7 @@ extension PlayerStateDialogs on PlayerPageState {
     await playerService.selectSubtitleTrack(target.id);
     showShortcutFeedback('字幕：${target.label('字幕')}', Icons.subtitles_rounded);
   }
+
   Future<void> toggleSubtitleWithFeedback() async {
     await playerService.toggleSubtitle();
     final snapshot = await playerService.readMediaControls();
@@ -101,6 +105,7 @@ extension PlayerStateDialogs on PlayerPageState {
     final infoItemKey = GlobalKey();
     final diagnosticsItemKey = GlobalKey();
     final viewSize = MediaQuery.sizeOf(context);
+    final popupMenuTheme = playerDialogTheme(context).popupMenuTheme;
     await withPlayerOverlaySurfaceOccluded(() async {
       final actionFuture = showMenu<String>(
         context: context,
@@ -110,26 +115,14 @@ extension PlayerStateDialogs on PlayerPageState {
           math.max(0.0, viewSize.width - details.globalPosition.dx),
           math.max(0.0, viewSize.height - details.globalPosition.dy),
         ),
-        items: [
-          PopupMenuItem(
-            key: infoItemKey,
-            value: 'info',
-            child: const ListTile(
-              dense: true,
-              leading: Icon(Icons.info_outline),
-              title: Text('\u89c6\u9891\u4fe1\u606f'),
-            ),
-          ),
-          PopupMenuItem(
-            key: diagnosticsItemKey,
-            value: 'diagnostics',
-            child: const ListTile(
-              dense: true,
-              leading: Icon(Icons.monitor_heart_outlined),
-              title: Text('\u8bca\u65ad\u68c0\u67e5'),
-            ),
-          ),
-        ],
+        color: popupMenuTheme.color,
+        elevation: popupMenuTheme.elevation,
+        shape: popupMenuTheme.shape,
+        semanticLabel: '播放器上下文菜单',
+        items: buildPlayerContextMenuItems(
+          infoItemKey: infoItemKey,
+          diagnosticsItemKey: diagnosticsItemKey,
+        ),
       );
       scheduleContextMenuBoundsUpdate(
         <GlobalKey>[infoItemKey, diagnosticsItemKey],

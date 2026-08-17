@@ -1,5 +1,23 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 播放器上下文菜单 UI 外壳重构（进行中）
+
+- 目标：继续播放器 Phase 2，在文件动作弹窗之后收口右键上下文菜单，先建立
+  `docs/design/PLAYER_CONTEXT_MENU_UI_SHELL_TARGET.md` 的 Before/After 目标，再显式复用播放器局部菜单主题、
+  语义标签和稳定挂载 key。
+- 当前修改：抽出无状态播放器上下文菜单项构建函数；保留 overlay 边界测量 `GlobalKey`，为视频信息与诊断检查增加
+  稳定 `ValueKey`/Semantics，并显式传入播放器局部菜单颜色、elevation 和形状。
+- 保护：不修改菜单 anchor、返回值、信息/诊断分发、`withPlayerOverlaySurfaceOccluded`、`PlaybackSession`、
+  `PlayerBackend`、来源 `filtered playback queue`、诊断采样、媒体详情/缓存队列、schema、stable identity 或用户数据。
+- 当前验证：独立菜单展示 focused test 通过，确认两个稳定 item key、显式语义 label、播放器深色菜单主题和选择后卸载；
+  相邻诊断 focused test 通过。媒体控制、架构契约和其它加载播放器核心的测试被工作区既有未提交改动阻断：
+  `lib/src/features/player/application/player_seek_coordinator.dart:639/672` 仍给已删除的 `_sawRepeat` 赋值。
+  该核心文件及相关状态/测试不是本轮改动，已保留不触碰；因此本轮暂不能宣称全量测试、analyze、Windows build 或真实窗口
+  已覆盖新菜单。
+- 阻塞：外部播放器核心编译错误；本轮 UI 仍可通过独立展示测试继续验证，但需用户/后续核心任务先修复 `_sawRepeat` 一致性。
+- 下一步：核心改动恢复可编译后，重跑架构/全量测试、`flutter analyze`、Windows debug build 和真实右键菜单截图；再收集菜单
+  在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的反馈，决定继续收口播放器剩余浮层或转入下一页面外壳。
+
 # 2026-08-17 · 播放器文件动作弹窗 UI 外壳重构（已完成）
 
 - 目标：继续播放器 Phase 2，在启动决策浮层之后收口删除文件与重命名文件两个可达动作弹窗，先建立

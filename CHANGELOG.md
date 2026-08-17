@@ -5,6 +5,17 @@
 
 ## Unreleased
 
+### 播放器短按快进停顿修复
+
+- 键盘短按快进/快退恢复为单次关键帧预览，KeyUp 不再追加第二次绝对精确 seek，避免长 GOP 视频重新建立解码链造成停顿。
+- 进度条提交与继续观看仍保留独立的精确定位入口；不修改 `PlayerBackend`、播放会话、来源 filtered playback queue 或用户数据。
+
+### 播放器上下文菜单 UI 外壳重构
+
+- 新增播放器上下文菜单 Before/After 视觉目标；视频信息与诊断入口显式使用播放器局部菜单表面，补齐菜单语义和稳定
+  item key，同时保留原有 anchor、overlay 门禁、返回值和动作分发。
+- 不修改播放器会话、来源 filtered playback queue、诊断采样、媒体详情/缓存队列、schema、stable identity 或用户数据。
+
 ### 播放器文件动作弹窗 UI 外壳重构
 
 - 新增删除文件与重命名文件 Before/After 视觉目标；两个动作弹窗显式复用播放器局部主题，统一不透明深色浮层、
