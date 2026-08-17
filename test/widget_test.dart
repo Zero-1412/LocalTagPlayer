@@ -3690,6 +3690,58 @@ void main() {
     }
   });
 
+  testWidgets('settings landing exposes desktop rail and policy summary',
+      (tester) async {
+    tester.view.physicalSize = const Size(1248, 714);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          child: Scaffold(
+            body: SettingsLandingList(
+              resumeBehavior: PlaybackResumeBehavior.ask,
+              rendererPreference: PlayerRendererPreference.automatic,
+              confirmBeforeDeletingVideo: true,
+              autoRemoveMissingOrUnreadableVideos: false,
+              onOpenPlayback: () {},
+              onOpenVideoQuality: () {},
+              onOpenPlayerInteraction: () {},
+              onOpenFileDeletion: () {},
+              onOpenDataBackup: () {},
+              onOpenCache: () {},
+              onOpenUpdateProxy: () {},
+              onOpenAbout: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('settings.home.desktopRail')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.home.policySummary')),
+      findsOneWidget,
+    );
+    expect(find.text('设置导航'), findsOneWidget);
+    expect(find.text('当前策略'), findsOneWidget);
+    expect(find.text('3 个入口'), findsNWidgets(2));
+    expect(find.text('2 个入口'), findsOneWidget);
+    expect(find.text('保留无效记录'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings.category.cache')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
       'settings route keeps playback backup and cache refresh reachable',
       (tester) async {

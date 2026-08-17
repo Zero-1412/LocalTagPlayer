@@ -5,6 +5,14 @@
 
 ## Unreleased
 
+### 设置首页可见工作区布局
+
+- 宽桌面设置首页改为左侧“设置导航 / 当前策略”摘要、右侧“播放设置 / 数据与维护 / 应用”分组入口；窄窗口保留
+  原有可滚动单列和入口顺序。
+- 保留 `CacheSettingsPage` 的 section owner、`settings.category.*` key、设置持久化、二级页回调和返回路径；不修改
+  schema、`FilterQuery`、`TagQueryService`、filtered playback queue、`PlayerBackend`、缩略图/媒体详情队列、stable identity
+  或用户数据。
+
 ### 播放器短按快进停顿修复
 
 - 键盘短按快进/快退恢复为单次关键帧预览，KeyUp 不再追加第二次绝对精确 seek，避免长 GOP 视频重新建立解码链造成停顿。
