@@ -5,6 +5,15 @@
 
 ## Unreleased
 
+### 视频画质与增强 UI 外壳重构
+
+- 新增视频画质与增强 Before/After 视觉目标；设置页从通用 `Card` 收敛为带稳定 Semantics 和挂载 key
+  的“视频画质与增强工作区”，保留比例、缩放、色彩、流畅度、增强、HDR 和能力状态行。
+- 保留既有 key、控件顺序、确认/取消、流畅度撤销、Dropdown/Switch focus 与页面返回路径；不改变播放
+  偏好持久化、播放器会话应用、诊断或设备门槛语义。
+- 不修改 `PlayerBackend`、PlaybackSession、filtered playback queue、ThumbnailService、媒体详情/缓存队列、
+  schema、stable identity 或用户数据。
+
 ### 播放与解码 UI 外壳重构
 
 - 新增播放与解码设置 Before/After 视觉目标；页面从通用 `Card` 收敛为带稳定 Semantics 和挂载 key

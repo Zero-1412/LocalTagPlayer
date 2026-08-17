@@ -1,5 +1,24 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 视频画质与增强 UI 外壳重构（已完成）
+
+- 目标：进入第三阶段下一个设置维护叶页面，把视频画质与增强从通用卡片收敛为“视频画质与增强工作区”，
+  先建立 Before/After 视觉目标，再替换展示外壳。
+- 当前修改：新增 `docs/design/PLAYBACK_QUALITY_UI_SHELL_TARGET.md`；设置 panel 使用稳定
+  `settings.playbackQuality.workspaceSurface` key 和 Semantics container 的实色弱描边边界；保留比例、
+  缩放、色彩、流畅度、增强、HDR 确认和能力状态行。
+- 保护：不修改 `PlaybackSettings`、`PlaybackSettingsController`、PlayerBackend 实际应用、HDR/流畅度确认与
+  撤销、FFprobe/诊断边界、PlaybackSession、filtered playback queue、ThumbnailService、媒体详情/缓存队列、
+  schema、stable identity 或用户数据语义。
+- 当前验证：150% 文字缩放 focused 测试、设置首页进入画质页后检查工作区/HDR 开关/返回的页面级测试、HDR
+  确认 focused 测试、流畅度确认/撤销测试和架构迁移预算测试已通过；完整 `flutter test` 通过（625 passed，
+  4 skipped）；`flutter analyze` 无问题；`flutter build windows --debug` 成功。Debug 窗口真实从媒体库
+  进入设置，再进入视频画质与增强，检查比例、缩放、色彩、流畅度、压缩增强、两个增强开关和两个能力状态行；
+  长内容滚动后工作区底部完整、返回设置首页可达，无明显遮挡、裁切或溢出；未触发任何设置动作。
+- 阻塞：无。
+- 下一步：收集视频画质与增强页在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，
+  再决定进入播放器交互设置或下一个页面的 UI 外壳重构；不扩展到播放后端、确认语义或队列业务边界。
+
 # 2026-08-17 · 播放与解码 UI 外壳重构（已完成）
 
 - 目标：进入第三阶段下一个设置维护叶页面，把播放与解码设置从通用卡片收敛为

@@ -3752,6 +3752,28 @@ void main() {
       findsOneWidget,
     );
 
+    final qualityEntry = find.byKey(
+      const ValueKey('settings.category.videoQuality'),
+    );
+    await tester.ensureVisible(qualityEntry);
+    await tester.pump();
+    await tester.tap(qualityEntry);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.playbackQuality.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+          const ValueKey('settings.playbackQuality.hdrMappingExperiment')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey('settings.section.back')),
+    );
+    await tester.pump();
+
     final deleteEntry = find.byKey(
       const ValueKey('settings.category.fileDeletion'),
     );
@@ -4835,6 +4857,44 @@ void main() {
           .value,
       startsWith('advanced:d3d11va:'),
     );
+  });
+
+  testWidgets('视频画质与增强工作区在 150% 文字缩放下保持设置可读', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          textScaler: TextScaler.linear(1.5),
+        ),
+        child: MaterialApp(
+          theme: settingsWorkspaceTheme(ThemeData(useMaterial3: true)),
+          home: Scaffold(
+            body: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                PlaybackQualitySettingsPanel(
+                  settings: PlaybackSettings.defaults,
+                  onChanged: (_) {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('settings.playbackQuality.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.text('视频质量与渲染'), findsOneWidget);
+    expect(
+      find.byKey(
+          const ValueKey('settings.playbackQuality.hdrMappingExperiment')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('HDR mapping confirms enable and rolls back directly',

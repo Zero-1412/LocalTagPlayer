@@ -8,210 +8,215 @@ import 'settings_workspace_theme.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-/**
- * 第一阶段播放质量设置。
- *
- * 控件只保存播放会话参数，不在设置页启动解码、FFprobe 或媒体库重算；新播放器
- * 会话统一把这些值送入 PlayerBackend，避免设置操作阻塞 UI isolate。
- */
+/** 视频画质与增强工作区；只保存播放会话参数，不在设置页启动解码或媒体库重算。 */
 class PlaybackQualitySettingsPanel extends StatelessWidget {
   const PlaybackQualitySettingsPanel({
     super.key,
     required this.settings,
     required this.onChanged,
   });
-
   /** 当前播放设置快照。 */
   final PlaybackSettings settings;
-
   /** 保存完整设置快照，确保连续修改不会丢失其它字段。 */
   final ValueChanged<PlaybackSettings> onChanged;
-
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Semantics(
       key: const ValueKey('settings.playbackQuality.card'),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              '视频质量与渲染',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              '第一阶段能力默认以流畅播放为边界；高开销增强不在 UI 线程处理视频帧。',
-              style: TextStyle(color: libraryTextMuted, height: 1.45),
-            ),
-            const SizedBox(height: 14),
-            DropdownButtonFormField<PlayerVideoAspectMode>(
-              key: const ValueKey('settings.playbackQuality.aspect'),
-              initialValue: settings.videoAspectMode,
-              decoration: const InputDecoration(labelText: '画面比例'),
-              items: [
-                for (final mode in PlayerVideoAspectMode.values)
-                  DropdownMenuItem(
-                    value: mode,
-                    child: Text(PlaybackSettings.videoAspectLabelFor(mode)),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  onChanged(settings.copyWith(videoAspectMode: value));
-                }
-              },
-            ),
-            const SizedBox(height: 14),
-            DropdownButtonFormField<PlayerVideoScaler>(
-              key: const ValueKey('settings.playbackQuality.scaler'),
-              initialValue: settings.videoScaler,
-              decoration: const InputDecoration(labelText: '高质量缩放'),
-              items: [
-                for (final scaler in PlayerVideoScaler.values)
-                  DropdownMenuItem(
-                    value: scaler,
-                    child: Text(PlaybackSettings.videoScalerLabelFor(scaler)),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  onChanged(settings.copyWith(videoScaler: value));
-                }
-              },
-            ),
-            const SizedBox(height: 14),
-            DropdownButtonFormField<PlayerVideoOutputRange>(
-              key: const ValueKey('settings.playbackQuality.outputRange'),
-              initialValue: settings.videoOutputRange,
-              decoration: const InputDecoration(labelText: '输出色彩范围'),
-              items: [
-                for (final range in PlayerVideoOutputRange.values)
-                  DropdownMenuItem(
-                    value: range,
-                    child:
-                        Text(PlaybackSettings.videoOutputRangeLabelFor(range)),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  onChanged(settings.copyWith(videoOutputRange: value));
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            PlaybackSmoothMotionDropdown(
-              settings: settings,
-              onChanged: onChanged,
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<PlayerCompressionEnhancementMode>(
-              key: const ValueKey(
-                'settings.playbackQuality.automaticEnhancement',
+      container: true,
+      label: '视频画质与增强工作区',
+      child: Material(
+        key: const ValueKey('settings.playbackQuality.workspaceSurface'),
+        color: librarySurface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
+          side: BorderSide(color: libraryBorder),
+        ),
+        // 保留 Material 状态层，让下拉、开关和确认反馈继续提供 focus/ink 反馈。
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                '视频质量与渲染',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
               ),
-              initialValue: settings.compressionEnhancementMode,
-              decoration: const InputDecoration(
-                labelText: '压缩画质增强',
-                helperText: '自动按播放余量逐级增强；清晰增强优先请求当前设备的最高安全档',
+              const SizedBox(height: 6),
+              const Text(
+                '第一阶段能力默认以流畅播放为边界；高开销增强不在 UI 线程处理视频帧。',
+                style: TextStyle(color: libraryTextMuted, height: 1.45),
               ),
-              items: [
-                for (final mode in PlayerCompressionEnhancementMode.values)
-                  DropdownMenuItem(
-                    value: mode,
-                    child: Text(
-                      PlaybackSettings.compressionEnhancementLabelFor(mode),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<PlayerVideoAspectMode>(
+                key: const ValueKey('settings.playbackQuality.aspect'),
+                initialValue: settings.videoAspectMode,
+                decoration: const InputDecoration(labelText: '画面比例'),
+                items: [
+                  for (final mode in PlayerVideoAspectMode.values)
+                    DropdownMenuItem(
+                      value: mode,
+                      child: Text(PlaybackSettings.videoAspectLabelFor(mode)),
                     ),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  onChanged(
-                    settings.copyWith(compressionEnhancementMode: value),
-                  );
-                }
-              },
-            ),
-            const Divider(height: 20),
-            SwitchListTile.adaptive(
-              key: const ValueKey(
-                'settings.playbackQuality.darkSceneEnhancement',
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    onChanged(settings.copyWith(videoAspectMode: value));
+                  }
+                },
               ),
-              contentPadding: EdgeInsets.zero,
-              value: settings.darkSceneEnhancementEnabled,
-              title: const Text('暗部细节增强'),
-              subtitle: const Text(
-                '仅对已确认的 SDR、1080p 及以下硬解视频启用保守暗部曲线；出现播放压力时当前会话自动回滚',
-              ),
-              onChanged: (value) => onChanged(
-                settings.copyWith(darkSceneEnhancementEnabled: value),
-              ),
-            ),
-            const Divider(height: 20),
-            SwitchListTile.adaptive(
-              key: const ValueKey(
-                'settings.playbackQuality.hdrMappingExperiment',
-              ),
-              contentPadding: EdgeInsets.zero,
-              value: settings.hdrDynamicToneMappingExperimentEnabled,
-              title: const Text('HDR 转 SDR 色调映射（兼容显示）'),
-              subtitle: const Text(
-                '把 HDR 视频映射到兼容显示输出；不会开启 Windows HDR 或 NVIDIA RTX Video HDR，播放压力出现时自动回滚',
-              ),
-              onChanged: (value) async {
-                if (!value) {
-                  onChanged(
-                    settings.copyWith(
-                      hdrDynamicToneMappingExperimentEnabled: false,
+              const SizedBox(height: 14),
+              DropdownButtonFormField<PlayerVideoScaler>(
+                key: const ValueKey('settings.playbackQuality.scaler'),
+                initialValue: settings.videoScaler,
+                decoration: const InputDecoration(labelText: '高质量缩放'),
+                items: [
+                  for (final scaler in PlayerVideoScaler.values)
+                    DropdownMenuItem(
+                      value: scaler,
+                      child: Text(PlaybackSettings.videoScalerLabelFor(scaler)),
                     ),
-                  );
-                  return;
-                }
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (dialogContext) => AlertDialog(
-                    title: const Text('开启 HDR 转 SDR 色调映射？'),
-                    content: const Text(
-                      '该功能会为通过能力门槛的 HDR 视频启用 Hable 映射与逐帧峰值检测，以适配兼容显示输出。它不会开启 Windows HDR，也不是 NVIDIA RTX Video HDR；若出现掉帧或观感异常，可关闭并恢复 mpv 自动值。',
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    onChanged(settings.copyWith(videoScaler: value));
+                  }
+                },
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<PlayerVideoOutputRange>(
+                key: const ValueKey('settings.playbackQuality.outputRange'),
+                initialValue: settings.videoOutputRange,
+                decoration: const InputDecoration(labelText: '输出色彩范围'),
+                items: [
+                  for (final range in PlayerVideoOutputRange.values)
+                    DropdownMenuItem(
+                      value: range,
+                      child: Text(
+                          PlaybackSettings.videoOutputRangeLabelFor(range)),
                     ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(dialogContext).pop(false),
-                        child: const Text('取消'),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    onChanged(settings.copyWith(videoOutputRange: value));
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              PlaybackSmoothMotionDropdown(
+                settings: settings,
+                onChanged: onChanged,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<PlayerCompressionEnhancementMode>(
+                key: const ValueKey(
+                  'settings.playbackQuality.automaticEnhancement',
+                ),
+                initialValue: settings.compressionEnhancementMode,
+                decoration: const InputDecoration(
+                  labelText: '压缩画质增强',
+                  helperText: '自动按播放余量逐级增强；清晰增强优先请求当前设备的最高安全档',
+                ),
+                items: [
+                  for (final mode in PlayerCompressionEnhancementMode.values)
+                    DropdownMenuItem(
+                      value: mode,
+                      child: Text(
+                        PlaybackSettings.compressionEnhancementLabelFor(mode),
                       ),
-                      FilledButton(
-                        key: const ValueKey(
-                          'settings.playbackQuality.hdrMappingConfirm',
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    onChanged(
+                      settings.copyWith(compressionEnhancementMode: value),
+                    );
+                  }
+                },
+              ),
+              const Divider(height: 20),
+              SwitchListTile.adaptive(
+                key: const ValueKey(
+                  'settings.playbackQuality.darkSceneEnhancement',
+                ),
+                contentPadding: EdgeInsets.zero,
+                value: settings.darkSceneEnhancementEnabled,
+                title: const Text('暗部细节增强'),
+                subtitle: const Text(
+                  '仅对已确认的 SDR、1080p 及以下硬解视频启用保守暗部曲线；出现播放压力时当前会话自动回滚',
+                ),
+                onChanged: (value) => onChanged(
+                  settings.copyWith(darkSceneEnhancementEnabled: value),
+                ),
+              ),
+              const Divider(height: 20),
+              SwitchListTile.adaptive(
+                key: const ValueKey(
+                  'settings.playbackQuality.hdrMappingExperiment',
+                ),
+                contentPadding: EdgeInsets.zero,
+                value: settings.hdrDynamicToneMappingExperimentEnabled,
+                title: const Text('HDR 转 SDR 色调映射（兼容显示）'),
+                subtitle: const Text(
+                  '把 HDR 视频映射到兼容显示输出；不会开启 Windows HDR 或 NVIDIA RTX Video HDR，播放压力出现时自动回滚',
+                ),
+                onChanged: (value) async {
+                  if (!value) {
+                    onChanged(
+                      settings.copyWith(
+                        hdrDynamicToneMappingExperimentEnabled: false,
+                      ),
+                    );
+                    return;
+                  }
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('开启 HDR 转 SDR 色调映射？'),
+                      content: const Text(
+                        '该功能会为通过能力门槛的 HDR 视频启用 Hable 映射与逐帧峰值检测，以适配兼容显示输出。它不会开启 Windows HDR，也不是 NVIDIA RTX Video HDR；若出现掉帧或观感异常，可关闭并恢复 mpv 自动值。',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(false),
+                          child: const Text('取消'),
                         ),
-                        onPressed: () => Navigator.of(dialogContext).pop(true),
-                        child: const Text('确认开启'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed == true) {
-                  onChanged(
-                    settings.copyWith(
-                      hdrDynamicToneMappingExperimentEnabled: true,
+                        FilledButton(
+                          key: const ValueKey(
+                            'settings.playbackQuality.hdrMappingConfirm',
+                          ),
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(true),
+                          child: const Text('确认开启'),
+                        ),
+                      ],
                     ),
                   );
-                }
-              },
-            ),
-            const Divider(height: 20),
-            const _PlaybackCapabilityRow(
-              icon: Icons.analytics_outlined,
-              title: '视频质量信息解析',
-              subtitle: 'FFprobe 缓存解析编码、分辨率、时长；播放诊断读取实时色彩参数',
-              status: '已启用',
-            ),
-            const _PlaybackCapabilityRow(
-              icon: Icons.monitor_heart_outlined,
-              title: '解码与丢帧诊断',
-              subtitle: '播放器诊断可核验实际硬解、缓存、解码/输出/总丢帧及色彩范围',
-              status: '已启用',
-            ),
-          ],
+                  if (confirmed == true) {
+                    onChanged(
+                      settings.copyWith(
+                        hdrDynamicToneMappingExperimentEnabled: true,
+                      ),
+                    );
+                  }
+                },
+              ),
+              const Divider(height: 20),
+              const _PlaybackCapabilityRow(
+                icon: Icons.analytics_outlined,
+                title: '视频质量信息解析',
+                subtitle: 'FFprobe 缓存解析编码、分辨率、时长；播放诊断读取实时色彩参数',
+                status: '已启用',
+              ),
+              const _PlaybackCapabilityRow(
+                icon: Icons.monitor_heart_outlined,
+                title: '解码与丢帧诊断',
+                subtitle: '播放器诊断可核验实际硬解、缓存、解码/输出/总丢帧及色彩范围',
+                status: '已启用',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -230,13 +235,10 @@ class PlaybackSmoothMotionDropdown extends StatefulWidget {
     required this.settings,
     required this.onChanged,
   });
-
   /** 当前应用级播放设置快照。 */
   final PlaybackSettings settings;
-
   /** 把确认后的完整设置交还设置页统一持久化。 */
   final ValueChanged<PlaybackSettings> onChanged;
-
   @override
   State<PlaybackSmoothMotionDropdown> createState() =>
       _PlaybackSmoothMotionDropdownState();
@@ -323,12 +325,10 @@ class _PlaybackCapabilityRow extends StatelessWidget {
     required this.subtitle,
     required this.status,
   });
-
   final IconData icon;
   final String title;
   final String subtitle;
   final String status;
-
   @override
   Widget build(BuildContext context) {
     return ListTile(
