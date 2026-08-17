@@ -3363,6 +3363,7 @@ void main() {
       mode: SortMode.folder,
       direction: SortDirection.ascending,
       denseResultGrid: true,
+      mainSidebarCollapsed: false,
     );
     await saveLibrarySortPreferences(paths, preferences);
     final loaded = await loadLibrarySortPreferences(paths);
@@ -3370,6 +3371,7 @@ void main() {
     expect(loaded.mode, SortMode.folder);
     expect(loaded.direction, SortDirection.ascending);
     expect(loaded.denseResultGrid, isTrue);
+    expect(loaded.mainSidebarCollapsed, isFalse);
     expect(await paths.settingsFile(),
         isNot(await paths.librarySortPreferencesFile()));
   });

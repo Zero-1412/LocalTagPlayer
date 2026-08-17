@@ -171,6 +171,9 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
           runtime.viewPreferences.setDenseResultGrid(
             sortPreferences.denseResultGrid,
           );
+          runtime.viewPreferences.setMainSidebarCollapsed(
+            sortPreferences.mainSidebarCollapsed,
+          );
           runtime.store = store;
           runtime.thumbnailService = thumbnailService;
           runtime.resourceScheduler = startupData.resourceScheduler;

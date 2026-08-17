@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_theme_tokens.dart';
+import '../design_system/app_interaction_surface.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -83,35 +84,28 @@ class LibrarySidebarBrandToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tooltip = collapsed ? '展开功能栏' : '折叠功能栏';
+    final accessibility = AppAccessibilityScope.of(context);
     return Tooltip(
       message: tooltip,
-      child: Semantics(
-        button: onToggleCollapsed != null,
-        label: tooltip,
-        child: Container(
-          key: LibrarySmokeKeys.sidebarCollapseToggle,
+      child: AppInteractionSurface(
+        key: LibrarySmokeKeys.sidebarCollapseToggle,
+        onTap: onToggleCollapsed,
+        semanticLabel: tooltip,
+        padding: EdgeInsets.zero,
+        borderRadius: AppRadius.control,
+        backgroundColor: appAccentViolet,
+        showBorder: false,
+        child: SizedBox(
           width: dimension,
           height: dimension,
-          decoration: BoxDecoration(
-            color: appAccentViolet,
-            borderRadius: BorderRadius.circular(AppRadius.control),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              onTap: onToggleCollapsed,
-              child: AnimatedRotation(
-                turns: collapsed ? 0.25 : 0,
-                duration: appMotionDuration,
-                curve: appMotionCurve,
-                child: Icon(
-                  Icons.play_arrow_rounded,
-                  color: Colors.white,
-                  size: collapsed ? 28 : 29,
-                ),
-              ),
+          child: AnimatedRotation(
+            turns: collapsed ? 0.25 : 0,
+            duration: accessibility.motionDuration(appMotionDuration),
+            curve: appMotionCurve,
+            child: Icon(
+              Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: collapsed ? 28 : 29,
             ),
           ),
         ),

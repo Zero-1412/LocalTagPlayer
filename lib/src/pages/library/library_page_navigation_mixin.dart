@@ -126,11 +126,7 @@ mixin LibraryPageNavigationMixin<T extends StatefulWidget>
       )) {
         return;
       }
-      preferences = LibrarySortPreferences(
-        mode: runtime.sortMode,
-        direction: runtime.sortDirection,
-        denseResultGrid: runtime.denseResultGrid,
-      );
+      preferences = runtime.libraryDisplayPreferences;
       if (runtime.resultMode != LibraryResultMode.library ||
           runtime.queryController.state == null) {
         return;
@@ -166,12 +162,16 @@ mixin LibraryPageNavigationMixin<T extends StatefulWidget>
     }
     setState(() => runtime.viewPreferences.setDenseResultGrid(dense));
     unawaited(applicationService.saveSortPreferences(
-      LibrarySortPreferences(
-        mode: runtime.sortMode,
-        direction: runtime.sortDirection,
-        denseResultGrid: dense,
-      ),
+      runtime.libraryDisplayPreferences,
     ));
+  }
+
+  /** 切换主功能栏并复用展示偏好文件保存，进入媒体库时恢复上次状态。 */
+  void toggleMainSidebar() {
+    setState(runtime.viewPreferences.toggleMainSidebar);
+    unawaited(
+      applicationService.saveSortPreferences(runtime.libraryDisplayPreferences),
+    );
   }
 
   /**

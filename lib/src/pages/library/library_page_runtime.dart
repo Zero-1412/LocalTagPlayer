@@ -135,7 +135,7 @@ class LibraryPageRuntime {
   final LibraryViewPreferencesController viewPreferences =
       LibraryViewPreferencesController(
     denseResultGrid: false,
-    mainSidebarCollapsed: false,
+    mainSidebarCollapsed: true,
     tagDiscoveryPanelOpen: false,
   );
   /** 滚动结果区域是否展示顶部工具栏。 */
@@ -201,6 +201,14 @@ class LibraryPageRuntime {
   bool get denseResultGrid => viewPreferences.denseResultGrid;
   /** 主侧栏是否折叠。 */
   bool get isMainSidebarCollapsed => viewPreferences.mainSidebarCollapsed;
+  /** 当前媒体库展示偏好快照；排序和布局持久化共用这一值对象。 */
+  LibrarySortPreferences get libraryDisplayPreferences =>
+      LibrarySortPreferences(
+        mode: sortMode,
+        direction: sortDirection,
+        denseResultGrid: denseResultGrid,
+        mainSidebarCollapsed: isMainSidebarCollapsed,
+      );
   /** 标签发现面板是否展开。 */
   bool get isTagDiscoveryPanelOpen => viewPreferences.tagDiscoveryPanelOpen;
   /** 当前结果来源模式。 */

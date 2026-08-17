@@ -1,8 +1,11 @@
 // ignore_for_file: slash_for_doc_comments
 
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/widgets/app_theme_tokens.dart';
+import 'package:local_tag_player/src/widgets/design_system/app_navigation_item.dart';
 import 'package:local_tag_player/src/widgets/design_system/app_interaction_surface.dart';
 
 /** 使用指定系统媒体偏好承载共享交互表面。 */
@@ -218,5 +221,48 @@ void main() {
     );
     final decoration = container.decoration! as BoxDecoration;
     expect(decoration.border, isNull);
+  });
+
+  testWidgets('navigation item reuses expanded and collapsed hit standards',
+      (tester) async {
+    await tester.pumpWidget(
+      _surfaceHarness(
+        mediaQuery: const MediaQueryData(),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 220,
+              child: AppNavigationItem(
+                icon: Icons.video_library_outlined,
+                label: '媒体库',
+                selected: true,
+                onTap: () {},
+              ),
+            ),
+            SizedBox(
+              width: 60,
+              child: AppNavigationItem(
+                icon: Icons.sell_outlined,
+                label: '标签中心',
+                tooltip: '标签中心',
+                selected: false,
+                onTap: () {},
+                collapsed: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final surfaces = find.byType(AppInteractionSurface);
+    expect(tester.getSize(surfaces.at(0)).height, 38);
+    expect(tester.getSize(surfaces.at(1)).height, 46);
+    expect(
+      tester.getSemantics(surfaces.at(0)).flagsCollection.isSelected ==
+          Tristate.isTrue,
+      isTrue,
+    );
+    expect(find.byTooltip('标签中心'), findsOneWidget);
   });
 }

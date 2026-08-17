@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../app_theme_tokens.dart';
+import '../design_system/app_navigation_item.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -21,36 +21,13 @@ class CollapsedSidebarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Tooltip(
-        message: tooltip,
-        child: Semantics(
-          button: onTap != null,
-          selected: selected,
-          label: tooltip,
-          child: Material(
-            color: selected ? const Color(0xff2b3650) : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: onTap,
-              child: SizedBox.square(
-                dimension: 46,
-                child: Icon(
-                  icon,
-                  size: 21,
-                  color: selected
-                      ? appAccentViolet
-                      : onTap == null
-                          ? const Color(0xff526077)
-                          : const Color(0xffa7b4c6),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+    return AppNavigationItem(
+      icon: icon,
+      label: tooltip,
+      tooltip: tooltip,
+      selected: selected,
+      onTap: onTap,
+      collapsed: true,
     );
   }
 }

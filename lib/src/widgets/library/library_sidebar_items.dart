@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../app_theme_tokens.dart';
-import 'library_sidebar_selection_decoration.dart';
+import '../design_system/app_navigation_item.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -179,59 +179,12 @@ class LibrarySidebarNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Semantics(
-        button: onTap != null,
-        selected: selected,
-        label: label,
-        child: Material(
-          color: selected
-              ? appAccentViolet.withValues(alpha: 0.14)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            onTap: onTap,
-            child: Container(
-              height: 38,
-              padding: const EdgeInsets.symmetric(horizontal: 11),
-              decoration: librarySidebarSelectionDecoration(selected: selected),
-              child: Row(
-                children: [
-                  Icon(
-                    icon,
-                    size: 18,
-                    color: selected ? appAccentViolet : libraryTextMuted,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: selected ? libraryText : const Color(0xffb8c3d3),
-                        fontSize: 13,
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  if (trailing != null)
-                    Text(
-                      trailing!,
-                      style: const TextStyle(
-                        color: Color(0xff94a3b8),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+    return AppNavigationItem(
+      icon: icon,
+      label: label,
+      selected: selected,
+      onTap: onTap,
+      trailing: trailing,
     );
   }
 }

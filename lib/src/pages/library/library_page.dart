@@ -36,6 +36,7 @@ import 'library_page_commands_mixin.dart';
 
 export 'cache_settings_page.dart'
     show CacheSettingsPage, playerShortcutConflictMessage;
+
 /** 标签筛选默认保持折叠，把媒体结果宽度优先留给高频浏览。 */
 const bool libraryTagDiscoveryPanelInitiallyOpen = false;
 /** 计算筛选动作后的面板状态；只有真实标签选择要求自动收起。 */
@@ -270,8 +271,7 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
         dense: dense,
         collapsed: runtime.isMainSidebarCollapsed,
         width: width,
-        onToggleCollapsed: () =>
-            setState(runtime.viewPreferences.toggleMainSidebar),
+        onToggleCollapsed: toggleMainSidebar,
         onPickFolder: pickFolder,
         onShowAllLibrary: showAllLibraryVideos,
         onRescan: rescan,

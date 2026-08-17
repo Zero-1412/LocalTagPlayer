@@ -28,6 +28,7 @@ class AppInteractionSurface extends StatefulWidget {
     this.material = AppSurfaceMaterial.solid,
     this.autofocus = false,
     this.showBorder = true,
+    this.selected = false,
   });
 
   /** 表面承载的内容。 */
@@ -56,6 +57,9 @@ class AppInteractionSurface extends StatefulWidget {
 
   /** 是否在普通状态绘制结构描边；焦点与高对比度轮廓不受此开关影响。 */
   final bool showBorder;
+
+  /** 是否为当前上下文中的选中项；同时提供给辅助技术。 */
+  final bool selected;
 
   @override
   State<AppInteractionSurface> createState() => _AppInteractionSurfaceState();
@@ -105,6 +109,7 @@ class _AppInteractionSurfaceState extends State<AppInteractionSurface> {
     return Semantics(
       button: true,
       enabled: enabled,
+      selected: widget.selected,
       label: widget.semanticLabel,
       child: AnimatedScale(
         scale: enabled && _pressed && !accessibility.reduceMotion ? 0.985 : 1,
