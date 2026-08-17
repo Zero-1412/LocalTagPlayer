@@ -2768,9 +2768,10 @@ void main() {
 
     await tester.tap(find.text('打开删除确认'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('player.delete.dialog')), findsOneWidget);
     final dialogTheme = Theme.of(tester.element(find.byType(AlertDialog)));
     expect(dialogTheme.colorScheme.brightness, Brightness.dark);
-    expect(dialogTheme.dialogTheme.backgroundColor, librarySurface);
+    expect(dialogTheme.dialogTheme.backgroundColor, playerSurface);
     expect(
         find.byKey(const ValueKey('deleteDialog.moveToTrash')), findsNothing);
     expect(find.text('不再提示'), findsOneWidget);
@@ -2949,12 +2950,31 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(useMaterial3: true),
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () async {
-              result = await showPlayerRenameFileDialog(context, item: item);
-            },
-            child: const Text('打开重命名'),
+        home: AppAccessibilityScope(
+          data: const AppAccessibilityData(
+            disableAnimations: true,
+            accessibleNavigation: true,
+            highContrast: true,
+            textScaler: TextScaler.linear(1.5),
+          ),
+          child: MediaQuery(
+            data: const MediaQueryData(
+              disableAnimations: true,
+              accessibleNavigation: true,
+              highContrast: true,
+              textScaler: TextScaler.linear(1.5),
+            ),
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async {
+                  result = await showPlayerRenameFileDialog(
+                    context,
+                    item: item,
+                  );
+                },
+                child: const Text('打开重命名'),
+              ),
+            ),
           ),
         ),
       ),
@@ -2962,6 +2982,11 @@ void main() {
 
     await tester.tap(find.text('打开重命名'));
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('player.renameFile.dialog')),
+      findsOneWidget,
+    );
     expect(find.text('只修改文件名，标签请在下方“标签”区域维护。'), findsOneWidget);
     expect(find.text('.mp4'), findsOneWidget);
     expect(

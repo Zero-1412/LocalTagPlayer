@@ -1,5 +1,23 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 播放器文件动作弹窗 UI 外壳重构（已完成）
+
+- 目标：继续播放器 Phase 2，在启动决策浮层之后收口删除文件与重命名文件两个可达动作弹窗，先建立
+  `docs/design/PLAYER_FILE_ACTION_DIALOGS_UI_SHELL_TARGET.md` 的 Before/After 目标，再统一播放器局部主题、
+  内容表面和稳定根 key。
+- 当前修改：删除确认与重命名弹窗显式复用 `playerDialogThemeSurface`；增加 `player.delete.dialog`、
+  `player.renameFile.dialog`，保留原有影响说明、回收站动作、偏好、输入校验和确认/取消 key。
+- 保护：不修改 `FileCommandExecutor`、稳定 `videoId`、mutable path、播放状态恢复、`PlaybackSession`、
+  `PlayerBackend`、来源 `filtered playback queue`、ThumbnailService、媒体详情/缓存队列、schema、stable identity 或用户数据。
+- 当前验证：删除确认与重命名 focused/widget tests、重命名播放恢复 smoke test、架构契约 57 项均通过；完整
+  `flutter test` 通过（629 passed，4 skipped）；`flutter analyze` 无问题；`flutter build windows --debug` 成功。
+  真实窗口使用精确构建产物从媒体库进入播放器详情并打开重命名弹窗，检查深色播放器浮层、输入焦点、扩展名只读、
+  取消入口和底部动作空间；随后取消退出，未执行文件写入。删除弹窗危险路径保持 focused/widget 挂载与回收站语义验证，
+  本次实窗未触发删除动作。
+- 阻塞：无。
+- 下一步：收集文件动作弹窗在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的反馈，决定继续收口播放器
+  剩余动作浮层或转入下一页面外壳；本轮不扩展到文件事务、播放状态或队列业务。
+
 # 2026-08-17 · 播放器启动决策与能力警告 UI 外壳重构（已完成）
 
 - 目标：继续播放器 Phase 2，在信息/诊断弹窗之后收口“继续观看”与硬解能力警告两个启动前浮层，先建立

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/playback_settings.dart';
 import '../../models/video_item.dart';
 import '../../widgets/app_theme_tokens.dart';
+import 'player_dialog_content.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -76,11 +77,11 @@ Future<VideoDeleteDecision?> _showVideoDeleteConfirmationDialog(
   var dontAskAgain = false;
   return showDialog<VideoDeleteDecision>(
     context: context,
-    builder: (dialogContext) => Theme(
-      // DialogRoute 位于页面局部 Theme 之外，必须显式继承维护页深色浮层语义。
-      data: maintenanceWorkspaceTheme(Theme.of(dialogContext)),
+    builder: (dialogContext) => playerDialogThemeSurface(
+      context: dialogContext,
       child: StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          key: const ValueKey('player.delete.dialog'),
           title: Text(title),
           content: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),

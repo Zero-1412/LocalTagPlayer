@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../../models/video_item.dart';
 import '../../widgets/app_theme_tokens.dart';
+import 'player_dialog_content.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -52,7 +53,10 @@ Future<String?> showPlayerRenameFileDialog(
 }) =>
     showDialog<String>(
       context: context,
-      builder: (dialogContext) => _PlayerRenameFileDialog(item: item),
+      builder: (dialogContext) => playerDialogThemeSurface(
+        context: dialogContext,
+        child: _PlayerRenameFileDialog(item: item),
+      ),
     );
 
 /** 持有重命名输入生命周期，确保 DialogRoute 退场完成后才释放 controller。 */
@@ -105,59 +109,56 @@ class _PlayerRenameFileDialogState extends State<_PlayerRenameFileDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
-      // DialogRoute 位于播放器局部主题之外，显式继承深色维护浮层语义。
-      data: maintenanceWorkspaceTheme(Theme.of(context)),
-      child: AlertDialog(
-        title: const Text('重命名文件'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                '只修改文件名，标签请在下方“标签”区域维护。',
-                style: TextStyle(color: playerTextMuted),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                key: const ValueKey('player.renameFile.input'),
-                controller: _controller,
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                inputFormatters: <TextInputFormatter>[
-                  LengthLimitingTextInputFormatter(240),
-                ],
-                decoration: InputDecoration(
-                  labelText: '文件名',
-                  suffixText: _extension,
-                  errorText: _errorText,
-                  helperText: _extension.isEmpty ? null : '扩展名保持不变',
-                ),
-                onChanged: (_) => setState(() => _errorText = null),
-                onSubmitted: (_) => _submit(),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            key: const ValueKey('player.renameFile.cancel'),
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            key: const ValueKey('player.renameFile.confirm'),
-            onPressed: _changed ? _submit : null,
-            style: FilledButton.styleFrom(
-              backgroundColor: appAccentViolet,
-              foregroundColor: Colors.white,
+    return AlertDialog(
+      key: const ValueKey('player.renameFile.dialog'),
+      title: const Text('重命名文件'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '只修改文件名，标签请在下方“标签”区域维护。',
+              style: TextStyle(color: playerTextMuted),
             ),
-            child: const Text('重命名'),
-          ),
-        ],
+            const SizedBox(height: 16),
+            TextField(
+              key: const ValueKey('player.renameFile.input'),
+              controller: _controller,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              inputFormatters: <TextInputFormatter>[
+                LengthLimitingTextInputFormatter(240),
+              ],
+              decoration: InputDecoration(
+                labelText: '文件名',
+                suffixText: _extension,
+                errorText: _errorText,
+                helperText: _extension.isEmpty ? null : '扩展名保持不变',
+              ),
+              onChanged: (_) => setState(() => _errorText = null),
+              onSubmitted: (_) => _submit(),
+            ),
+          ],
+        ),
       ),
+      actions: [
+        TextButton(
+          key: const ValueKey('player.renameFile.cancel'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const ValueKey('player.renameFile.confirm'),
+          onPressed: _changed ? _submit : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: appAccentViolet,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('重命名'),
+        ),
+      ],
     );
   }
 }
