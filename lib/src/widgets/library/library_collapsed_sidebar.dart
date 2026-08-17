@@ -120,6 +120,7 @@ class CollapsedLibrarySidebar extends StatelessWidget {
                   onTap: onOpenMissingRelink,
                 ),
                 CollapsedSidebarItem(
+                  key: LibrarySmokeKeys.rescanButton,
                   icon: isScanning
                       ? Icons.hourglass_empty_rounded
                       : Icons.sync_rounded,
