@@ -1,5 +1,19 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 播放器媒体控制 UI 外壳重构（进行中）
+
+- 目标：进入播放器页面下一处 UI 外壳重构，把媒体控制弹窗的音轨、字幕、音画同步、章节四个默认 `Card`
+  分组收敛为播放器嵌套工作区表面，先建立 `docs/design/PLAYER_MEDIA_CONTROLS_UI_SHELL_TARGET.md` 的
+  Before/After 目标，再补真实挂载证据。
+- 当前修改：`PlayerMediaControlSection` 使用播放器实色弱描边 `Material`、圆角和裁切；媒体控制弹窗显式
+  使用 `playerWorkspaceTheme`，四个分组和弹窗增加稳定 key/容器语义。
+- 保护：不修改 `readMediaControls`、选轨/章节/延迟回调、`PlayerService`、`PlayerBackend`、来源
+  `filtered playback queue`、播放会话、ThumbnailService、媒体详情/缓存队列、schema、stable identity 或用户数据。
+- 当前验证：实现与 focused 高对比度/150% widget 验证待执行；尚未完成全量测试、analyze、Windows build 和真实窗口检查。
+- 阻塞：无。
+- 下一步：运行 focused/架构/全量验证，启动 Debug 窗口从播放器控制栏打开媒体控制，检查四个分组表面、滚动、关闭和返回；
+  通过后提交并推送，再决定继续播放器其它残余内容表面或收集本轮视觉反馈。
+
 # 2026-08-17 · 标签中心 UI 外壳重构（已完成）
 
 - 目标：进入第三阶段维护页面，把 Tag Manager 从匿名双栏表面收敛为“标签中心工作区”以及左侧“标签导航

@@ -72,6 +72,18 @@ void main() {
     expect(find.text('媒体控制'), findsOneWidget);
     expect(find.text('中文'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('player.mediaControls.dialog')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('player.mediaControls.audioTracks')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel('媒体控制分组：音轨'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('中文'));
     await tester.pumpAndSettle();
@@ -92,5 +104,64 @@ void main() {
         'subtitle-delay:100',
       ],
     );
+  });
+
+  testWidgets('媒体控制外壳在高对比度和 150% 文字下保持四组可达', (tester) async {
+    const snapshot = PlayerMediaControlsSnapshot(
+      supported: true,
+      audioTracks: <PlayerMediaTrack>[],
+      subtitleTracks: <PlayerMediaTrack>[],
+      chapters: <PlayerMediaChapter>[],
+      subtitleDelay: Duration.zero,
+      audioDelay: Duration.zero,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(1280, 800),
+            highContrast: true,
+            textScaler: TextScaler.linear(1.5),
+          ),
+          child: Scaffold(
+            body: Center(
+              child: PlayerMediaControlsDialog(
+                read: () async => snapshot,
+                selectAudio: (_) async {},
+                selectSubtitle: (_) async {},
+                seekChapter: (_) async {},
+                adjustSubtitleDelay: (_) async {},
+                adjustAudioDelay: (_) async {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('player.mediaControls.audioTracks')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('player.mediaControls.subtitles')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('player.mediaControls.sync')),
+      findsOneWidget,
+    );
+    await tester.drag(
+      find.byKey(const ValueKey('player.mediaControls.content')),
+      const Offset(0, -1200),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('player.mediaControls.chapters')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 }

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../models/player_media_controls.dart';
+import '../../widgets/app_theme_tokens.dart';
 import 'player_diagnostics_dialog.dart';
 import 'player_dialog_content.dart';
 import 'player_media_controls_widgets.dart';
@@ -331,143 +332,161 @@ class _PlayerMediaControlsDialogState extends State<PlayerMediaControlsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.tune_rounded),
-          SizedBox(width: 10),
-          Text('媒体控制'),
-        ],
+    final accessibility = AppAccessibilityScope.of(context);
+    return Theme(
+      data: playerWorkspaceTheme(
+        Theme.of(context),
+        highContrast: accessibility.highContrast,
       ),
-      content: SizedBox(
-        width: 620,
-        height: math.min(560, MediaQuery.sizeOf(context).height * 0.7),
-        child: FutureBuilder<PlayerMediaControlsSnapshot>(
-          future: _snapshot,
-          builder: (context, state) {
-            final snapshot = state.data;
-            if (state.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot == null || !snapshot.supported) {
-              return const Center(child: Text('当前播放后端不支持媒体控制。'));
-            }
-            return ListView(
-              key: const ValueKey('player.mediaControls.content'),
-              children: [
-                PlayerMediaControlSection(
-                  title: '音轨',
-                  icon: Icons.audiotrack_rounded,
-                  emptyLabel: '当前媒体没有可选音轨',
-                  children: snapshot.audioTracks
-                      .map(
+      child: AlertDialog(
+        key: const ValueKey('player.mediaControls.dialog'),
+        title: const Row(
+          children: [
+            Icon(Icons.tune_rounded),
+            SizedBox(width: 10),
+            Text('媒体控制'),
+          ],
+        ),
+        content: SizedBox(
+          width: 620,
+          height: math.min(560, MediaQuery.sizeOf(context).height * 0.7),
+          child: FutureBuilder<PlayerMediaControlsSnapshot>(
+            future: _snapshot,
+            builder: (context, state) {
+              final snapshot = state.data;
+              if (state.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot == null || !snapshot.supported) {
+                return const Center(child: Text('当前播放后端不支持媒体控制。'));
+              }
+              return ListView(
+                key: const ValueKey('player.mediaControls.content'),
+                children: [
+                  PlayerMediaControlSection(
+                    key: const ValueKey('player.mediaControls.audioTracks'),
+                    title: '音轨',
+                    icon: Icons.audiotrack_rounded,
+                    emptyLabel: '当前媒体没有可选音轨',
+                    children: snapshot.audioTracks
+                        .map(
+                          (track) => buildPlayerMediaTrackTile(
+                            track: track,
+                            fallback: '音轨 ${track.id}',
+                            onTap: () =>
+                                _run(() => widget.selectAudio(track.id)),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                  const SizedBox(height: 12),
+                  PlayerMediaControlSection(
+                    key: const ValueKey('player.mediaControls.subtitles'),
+                    title: '字幕',
+                    icon: Icons.subtitles_rounded,
+                    emptyLabel: '当前媒体没有内嵌字幕',
+                    children: [
+                      ListTile(
+                        dense: true,
+                        selected: !snapshot.subtitleTracks
+                            .any((item) => item.selected),
+                        leading: Icon(
+                          snapshot.subtitleTracks.any((item) => item.selected)
+                              ? Icons.radio_button_unchecked_rounded
+                              : Icons.radio_button_checked_rounded,
+                        ),
+                        onTap: () => _run(() => widget.selectSubtitle('no')),
+                        title: const Text('关闭字幕'),
+                      ),
+                      ...snapshot.subtitleTracks.map(
                         (track) => buildPlayerMediaTrackTile(
                           track: track,
-                          fallback: '音轨 ${track.id}',
-                          onTap: () => _run(() => widget.selectAudio(track.id)),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
-                const SizedBox(height: 12),
-                PlayerMediaControlSection(
-                  title: '字幕',
-                  icon: Icons.subtitles_rounded,
-                  emptyLabel: '当前媒体没有内嵌字幕',
-                  children: [
-                    ListTile(
-                      dense: true,
-                      selected:
-                          !snapshot.subtitleTracks.any((item) => item.selected),
-                      leading: Icon(
-                        snapshot.subtitleTracks.any((item) => item.selected)
-                            ? Icons.radio_button_unchecked_rounded
-                            : Icons.radio_button_checked_rounded,
-                      ),
-                      onTap: () => _run(() => widget.selectSubtitle('no')),
-                      title: const Text('关闭字幕'),
-                    ),
-                    ...snapshot.subtitleTracks.map(
-                      (track) => buildPlayerMediaTrackTile(
-                        track: track,
-                        fallback: '字幕 ${track.id}',
-                        onTap: () =>
-                            _run(() => widget.selectSubtitle(track.id)),
-                      ),
-                    ),
-                    PlayerMediaDelayControlRow(
-                      key: const ValueKey('player.mediaControls.subtitleDelay'),
-                      label: '字幕延迟',
-                      value: _formatMediaDelay(snapshot.subtitleDelay),
-                      onDecrease: () => _run(
-                        () => widget.adjustSubtitleDelay(
-                          const Duration(milliseconds: -100),
-                        ),
-                      ),
-                      onIncrease: () => _run(
-                        () => widget.adjustSubtitleDelay(
-                          const Duration(milliseconds: 100),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                PlayerMediaControlSection(
-                  title: '音画同步',
-                  icon: Icons.graphic_eq_rounded,
-                  emptyLabel: '',
-                  children: [
-                    PlayerMediaDelayControlRow(
-                      key: const ValueKey('player.mediaControls.audioDelay'),
-                      label: '音频延迟',
-                      value: _formatMediaDelay(snapshot.audioDelay),
-                      onDecrease: () => _run(
-                        () => widget.adjustAudioDelay(
-                          const Duration(milliseconds: -100),
-                        ),
-                      ),
-                      onIncrease: () => _run(
-                        () => widget.adjustAudioDelay(
-                          const Duration(milliseconds: 100),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                PlayerMediaControlSection(
-                  title: '章节',
-                  icon: Icons.bookmarks_outlined,
-                  emptyLabel: '当前媒体没有章节信息',
-                  children: snapshot.chapters
-                      .map(
-                        (chapter) => ListTile(
-                          dense: true,
-                          leading: Text('${chapter.index + 1}'),
-                          title:
-                              Text(chapter.title ?? '章节 ${chapter.index + 1}'),
-                          subtitle: Text(
-                            formatPlayerMediaChapterPosition(chapter.position),
-                          ),
+                          fallback: '字幕 ${track.id}',
                           onTap: () =>
-                              _run(() => widget.seekChapter(chapter.index)),
+                              _run(() => widget.selectSubtitle(track.id)),
                         ),
-                      )
-                      .toList(growable: false),
-                ),
-              ],
-            );
-          },
+                      ),
+                      PlayerMediaDelayControlRow(
+                        key: const ValueKey(
+                          'player.mediaControls.subtitleDelay',
+                        ),
+                        label: '字幕延迟',
+                        value: _formatMediaDelay(snapshot.subtitleDelay),
+                        onDecrease: () => _run(
+                          () => widget.adjustSubtitleDelay(
+                            const Duration(milliseconds: -100),
+                          ),
+                        ),
+                        onIncrease: () => _run(
+                          () => widget.adjustSubtitleDelay(
+                            const Duration(milliseconds: 100),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  PlayerMediaControlSection(
+                    key: const ValueKey('player.mediaControls.sync'),
+                    title: '音画同步',
+                    icon: Icons.graphic_eq_rounded,
+                    emptyLabel: '',
+                    children: [
+                      PlayerMediaDelayControlRow(
+                        key: const ValueKey('player.mediaControls.audioDelay'),
+                        label: '音频延迟',
+                        value: _formatMediaDelay(snapshot.audioDelay),
+                        onDecrease: () => _run(
+                          () => widget.adjustAudioDelay(
+                            const Duration(milliseconds: -100),
+                          ),
+                        ),
+                        onIncrease: () => _run(
+                          () => widget.adjustAudioDelay(
+                            const Duration(milliseconds: 100),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  PlayerMediaControlSection(
+                    key: const ValueKey('player.mediaControls.chapters'),
+                    title: '章节',
+                    icon: Icons.bookmarks_outlined,
+                    emptyLabel: '当前媒体没有章节信息',
+                    children: snapshot.chapters
+                        .map(
+                          (chapter) => ListTile(
+                            dense: true,
+                            leading: Text('${chapter.index + 1}'),
+                            title: Text(
+                              chapter.title ?? '章节 ${chapter.index + 1}',
+                            ),
+                            subtitle: Text(
+                              formatPlayerMediaChapterPosition(
+                                chapter.position,
+                              ),
+                            ),
+                            onTap: () =>
+                                _run(() => widget.seekChapter(chapter.index)),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
+        actions: [
+          TextButton(onPressed: _refresh, child: const Text('刷新')),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(onPressed: _refresh, child: const Text('刷新')),
-        FilledButton.tonal(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
-        ),
-      ],
     );
   }
 }

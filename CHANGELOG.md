@@ -5,6 +5,15 @@
 
 ## Unreleased
 
+### 播放器媒体控制 UI 外壳重构
+
+- 新增媒体控制弹窗 Before/After 视觉目标；音轨、字幕、音画同步和章节从默认 `Card` 收敛为播放器嵌套
+  工作区表面，使用实色、弱描边、圆角、裁切和稳定 Semantics/key。
+- 弹窗显式复用 `playerWorkspaceTheme` 与已有 high contrast 策略；保留读取快照、选轨、关闭字幕、章节跳转、
+  延迟调整、刷新、关闭和入口覆盖层生命周期。
+- 不修改 `PlayerService`、`PlayerBackend`、filtered playback queue、播放会话、缩略图/媒体详情队列、schema、
+  stable identity 或用户数据。
+
 ### 标签中心 UI 外壳重构
 
 - 新增标签中心 Before/After 视觉目标；Tag Manager 从匿名双栏 `DecoratedBox` 收敛为带稳定 Semantics/key 的

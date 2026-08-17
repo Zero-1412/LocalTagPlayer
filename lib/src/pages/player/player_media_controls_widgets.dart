@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../models/player_media_controls.dart';
+import '../../widgets/app_theme_tokens.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
-/** 媒体控制面板的可复用展示叶子；不持有播放器、路由或队列状态。 */
+/**
+ * 媒体控制面板的可复用展示叶子；不持有播放器、路由或队列状态。
+ *
+ * 分组使用播放器嵌套表面而不是默认 Card，避免弹窗跨 Route 后退回全局卡片材质；
+ * [key] 继续由调用方决定，供真实挂载检查和无障碍树定位，不参与任何业务状态。
+ */
 class PlayerMediaControlSection extends StatelessWidget {
   const PlayerMediaControlSection({
     super.key,
@@ -20,7 +26,22 @@ class PlayerMediaControlSection extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Card(
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      container: true,
+      label: '媒体控制分组：$title',
+      child: Material(
+        type: MaterialType.card,
+        color: colors.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          side: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.82),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Column(
@@ -37,7 +58,9 @@ class PlayerMediaControlSection extends StatelessWidget {
             ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 /** 固定步长的音频或字幕延迟控制行。 */
