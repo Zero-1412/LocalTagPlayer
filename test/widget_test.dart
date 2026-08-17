@@ -7761,6 +7761,7 @@ void main() {
     );
     expect(find.text('2 个受管理目录'), findsOneWidget);
     expect(find.textContaining('不会删除磁盘文件'), findsOneWidget);
+    expect(find.byTooltip(r'X:\test-media'), findsOneWidget);
     expect(find.byKey(const ValueKey('directoryManager.add')), findsOneWidget);
     expect(
         find.byKey(const ValueKey('directoryManager.rescan')), findsOneWidget);

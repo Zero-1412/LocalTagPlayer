@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_feedback.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -218,7 +219,7 @@ class _DirectoryRootCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Tooltip(
+                child: MaintenanceTooltip(
                   message: root,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
