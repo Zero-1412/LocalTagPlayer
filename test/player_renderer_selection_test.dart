@@ -70,6 +70,11 @@ void main() {
       ),
     );
 
+    expect(
+      find.byKey(const ValueKey('settings.playback.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
     expect(find.text('播放后端'), findsOneWidget);
     expect(find.text('MediaKit Texture'), findsOneWidget);
     expect(
@@ -77,5 +82,39 @@ void main() {
       findsNothing,
     );
     expect(find.textContaining('不会自动激活 NVIDIA VSR/HDR'), findsOneWidget);
+  });
+
+  testWidgets('播放与解码工作区在 150% 文字缩放下保持设置可读', (tester) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          textScaler: TextScaler.linear(1.5),
+        ),
+        child: MaterialApp(
+          home: Scaffold(
+            body: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                PlaybackAndDecodingSettingsCard(
+                  settings: PlaybackSettings.defaults,
+                  onChanged: (_) async {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('settings.playback.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.text('正式播放统一使用 MediaKit Texture；高级画质由同一个 libmpv 实例按能力应用。'),
+        findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('settings.resumeBehavior')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

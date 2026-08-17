@@ -5,6 +5,15 @@
 
 ## Unreleased
 
+### 播放与解码 UI 外壳重构
+
+- 新增播放与解码设置 Before/After 视觉目标；页面从通用 `Card` 收敛为带稳定 Semantics 和挂载 key
+  的“播放与解码工作区”及“播放会话缓存工作区”，保留恢复策略、后端说明、解码器选择、流缓存开关。
+- 保留既有 key、控件顺序、回调、键盘/focus/ink 反馈和页面返回路径；不改变 MediaKit Texture、
+  decoder confirmation、demux window、缓存开关或设置持久化语义。
+- 不修改 `PlayerBackend`、`PlaybackSession`、filtered playback queue、ThumbnailService、媒体详情/缓存队列、
+  schema、stable identity 或用户数据。
+
 ### 关于 / 更新 UI 外壳重构
 
 - 新增关于页 Before/After 视觉目标；页面从通用 `Card` 收敛为带稳定 Semantics 和挂载 key 的

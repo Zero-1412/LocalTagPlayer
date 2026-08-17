@@ -1,5 +1,24 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 播放与解码 UI 外壳重构（已完成）
+
+- 目标：进入第三阶段下一个设置维护叶页面，把播放与解码设置从通用卡片收敛为
+  “播放与解码工作区”及“播放会话缓存工作区”，先建立 Before/After 视觉目标，再替换页面外壳。
+- 当前修改：新增 `docs/design/PLAYBACK_SETTINGS_UI_SHELL_TARGET.md`；两个设置 surface 使用稳定
+  Semantics/key 和实色弱描边边界；保留恢复策略、后端说明、解码器选择、流缓存开关及原有 key/回调。
+- 保护：不修改 `PlaybackSettingsController`、`CacheSettingsPage`、MediaKit Texture 统一后端、
+  decoder confirmation、demux window、PlayerBackend、PlaybackSession、filtered playback queue、
+  ThumbnailService、媒体详情/缓存队列、schema、stable identity 或用户数据语义。
+- 当前验证：播放工作区唯一后端 focused 测试、150% 文字缩放 focused 测试、设置首页进入播放页后
+  检查恢复策略/缓存工作区/返回路径的页面级测试和架构预算测试已通过；完整 `flutter test` 通过
+ （624 passed，4 skipped）；`flutter analyze` 无问题；`flutter build windows --debug` 成功。Debug 窗口
+  真实从媒体库进入设置，再进入播放与解码，检查恢复策略、MediaKit Texture、解码策略和播放会话缓存
+  两个工作区，无明显遮挡、裁切或溢出；未切换任何设置。
+- 阻塞：无。
+- 下一步：收集播放与解码页在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，
+  再决定细化播放器交互/画质设置页，或进入下一个页面的 UI 外壳重构；不扩展到播放器队列、解码器
+  后端或缓存业务边界。
+
 # 2026-08-17 · 关于 / 更新 UI 外壳重构（已完成）
 
 - 目标：进入第三阶段下一个设置维护叶页面，把关于页从通用卡片收敛为

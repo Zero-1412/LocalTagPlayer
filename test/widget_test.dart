@@ -3706,6 +3706,10 @@ void main() {
     );
     await tester.pump();
     expect(
+      find.byKey(const ValueKey('settings.playback.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const ValueKey('settings.resumeBehavior')),
       findsOneWidget,
     );
@@ -3726,6 +3730,18 @@ void main() {
       PlaybackResumeBehavior.restart,
     );
     expect(find.text(restartLabel), findsOneWidget);
+
+    await tester.drag(
+      find.byType(ListView).last,
+      const Offset(0, -500),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(
+          const ValueKey('settings.playback.streamCache.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
 
     await tester.tap(
       find.byKey(const ValueKey('settings.section.back')),
