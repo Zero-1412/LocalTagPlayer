@@ -14,6 +14,8 @@
 
 - 新增播放器上下文菜单 Before/After 视觉目标；视频信息与诊断入口显式使用播放器局部菜单表面，补齐菜单语义和稳定
   item key，同时保留原有 anchor、overlay 门禁、返回值和动作分发。
+- 根据隔离 Windows 实窗反馈，菜单项的 `ListTile`、`Text` 和 `Icon` 显式使用播放器文字 token，修复菜单进入动画完成后
+  的深色表面低对比度问题；未改变信息/诊断动作或播放器队列。
 - 不修改播放器会话、来源 filtered playback queue、诊断采样、媒体详情/缓存队列、schema、stable identity 或用户数据。
 
 ### 播放器文件动作弹窗 UI 外壳重构

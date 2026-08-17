@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:local_tag_player/src/pages/player/player_dialog_content.dart';
 import 'package:local_tag_player/src/pages/player/player_context_menu_items.dart';
+import 'package:local_tag_player/src/widgets/app_theme_tokens.dart';
 
 void main() {
   testWidgets('player context menu keeps stable actions and player surface',
@@ -56,6 +57,13 @@ void main() {
       ),
       findsOneWidget,
     );
+    final menuTiles = tester.widgetList<ListTile>(find.byType(ListTile));
+    expect(menuTiles, hasLength(2));
+    for (final tile in menuTiles) {
+      expect(tile.textColor, playerText);
+      expect(tile.iconColor, playerTextMuted);
+      expect(tile.titleTextStyle?.color, playerText);
+    }
     expect(
       Theme.of(tester.element(find.byType(PopupMenuItem<String>).first))
           .colorScheme
