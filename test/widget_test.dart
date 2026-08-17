@@ -162,6 +162,10 @@ class _MissingRelinkTestRepository
   final Map<String, Set<String>> videoTagIdsByPathKey = <String, Set<String>>{};
 
   @override
+  Future<Map<String, TagUsageSummary>> tagUsageSummaries() async =>
+      const <String, TagUsageSummary>{};
+
+  @override
   Set<String> get allTags => const <String>{};
 
   @override
@@ -4682,6 +4686,87 @@ void main() {
     await tester.pump();
     expect(controller.text, isEmpty);
     expect(changeCount, 2);
+  });
+
+  testWidgets('tag manager page exposes navigation and inspector workspaces',
+      (tester) async {
+    final repository = _MissingRelinkTestRepository();
+    final store = LibraryApplicationFacade(
+      queryRepository: repository,
+      commandRepository: repository,
+      tagRepository: repository,
+      cacheRepository: repository,
+      playbackRepository: repository,
+    );
+    await tester.binding.setSurfaceSize(const Size(1248, 714));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TagManagerPage(
+          store: store,
+          currentResults: const <VideoItem>[],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('tagManager.page')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('tagManager.workspace')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('tagManager.navigationSurface')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('tagManager.inspectorSurface')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('tagManager.search')), findsOneWidget);
+    expect(find.text('选择一个标签查看和维护详情'), findsOneWidget);
+    expect(find.byType(Card), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tag manager page remains readable at 150 percent',
+      (tester) async {
+    final repository = _MissingRelinkTestRepository();
+    final store = LibraryApplicationFacade(
+      queryRepository: repository,
+      commandRepository: repository,
+      tagRepository: repository,
+      cacheRepository: repository,
+      playbackRepository: repository,
+    );
+    await tester.binding.setSurfaceSize(const Size(1248, 714));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          child: TagManagerPage(
+            store: store,
+            currentResults: const <VideoItem>[],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('tagManager.navigationSurface')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('tagManager.inspectorSurface')),
+      findsOneWidget,
+    );
+    expect(find.text('选择一个标签查看和维护详情'), findsOneWidget);
+    expect(find.byType(Card), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('tag manager group chips expose selected feedback',

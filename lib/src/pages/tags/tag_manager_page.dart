@@ -367,119 +367,121 @@ class _TagManagerPageState extends State<TagManagerPage> {
     required bool compact,
   }) {
     return Scaffold(
+      key: const ValueKey('tagManager.page'),
       backgroundColor: libraryBackground,
       appBar: TagManagerWorkspaceAppBar(
         compact: compact,
         onRefresh: _refreshUsage,
         onCreate: _createTag,
       ),
-      body: Padding(
-        padding: EdgeInsets.fromLTRB(
-          compact ? 12 : 20,
-          compact ? 10 : 16,
-          compact ? 12 : 20,
-          compact ? 12 : 20,
-        ),
-        child: FutureBuilder<Map<String, TagUsageSummary>>(
-          future: _usageFuture,
-          builder: (context, snapshot) {
-            final usage = snapshot.data ?? const <String, TagUsageSummary>{};
-            final rows = _filteredTagRows(usage);
-            return Flex(
-              direction: compact ? Axis.vertical : Axis.horizontal,
-              children: [
-                SizedBox(
-                  width: compact
-                      ? double.infinity
-                      : (layoutSize == LayoutSize.medium ? 316 : 360),
-                  height: compact ? 304 : null,
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      color: librarySurface,
-                      borderRadius:
-                          BorderRadius.all(Radius.circular(AppRadius.panel)),
-                      border: Border.fromBorderSide(
-                        BorderSide(color: libraryBorder),
+      body: Semantics(
+        key: const ValueKey('tagManager.workspace'),
+        container: true,
+        label: '标签中心工作区',
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            compact ? 12 : 20,
+            compact ? 10 : 16,
+            compact ? 12 : 20,
+            compact ? 12 : 20,
+          ),
+          child: FutureBuilder<Map<String, TagUsageSummary>>(
+            future: _usageFuture,
+            builder: (context, snapshot) {
+              final usage = snapshot.data ?? const <String, TagUsageSummary>{};
+              final rows = _filteredTagRows(usage);
+              return Flex(
+                direction: compact ? Axis.vertical : Axis.horizontal,
+                children: [
+                  SizedBox(
+                    width: compact
+                        ? double.infinity
+                        : (layoutSize == LayoutSize.medium ? 316 : 360),
+                    height: compact ? 304 : null,
+                    child: TagManagerWorkspaceSurface(
+                      surfaceKey: const ValueKey(
+                        'tagManager.navigationSurface',
                       ),
-                    ),
-                    child: Column(
-                      children: [
-                        TagManagerListHeader(visibleCount: rows.length),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-                          child: TagManagerSearchField(
-                            controller: _searchController,
-                            onChanged: () => setState(() {}),
+                      label: '标签导航工作区',
+                      child: Column(
+                        children: [
+                          TagManagerListHeader(visibleCount: rows.length),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                            child: TagManagerSearchField(
+                              controller: _searchController,
+                              onChanged: () => setState(() {}),
+                            ),
                           ),
-                        ),
-                        TagGroupSummary(
-                          groups: widget.store.tagGroups,
-                          selectedGroupId: _selectedGroupId,
-                          onSelected: (groupId) {
-                            setState(() {
-                              _selectedGroupId = groupId;
-                              // 当前详情可能已不在左侧结果中，清空可避免“筛选 A、编辑 B”的错觉。
-                              if (groupId != null &&
-                                  _selectedTag?.groupId != groupId) {
-                                _selectedTagId = null;
-                              }
-                            });
-                          },
-                        ),
-                        const Divider(height: 1),
-                        Expanded(
-                          child: ListView.builder(
-                            padding: const EdgeInsets.only(top: 6, bottom: 8),
-                            itemCount: rows.length,
-                            itemBuilder: (context, index) {
-                              final row = rows[index];
-                              final tag = row.tag;
-                              return TagManagerListItem(
-                                row: row,
-                                groupLabel: _groupLabel(tag.groupId),
-                                selected: tag.id == _selectedTagId,
-                                onTap: () => _selectTag(tag),
-                              );
+                          TagGroupSummary(
+                            groups: widget.store.tagGroups,
+                            selectedGroupId: _selectedGroupId,
+                            onSelected: (groupId) {
+                              setState(() {
+                                _selectedGroupId = groupId;
+                                // 当前详情可能已不在左侧结果中，清空可避免“筛选 A、编辑 B”的错觉。
+                                if (groupId != null &&
+                                    _selectedTag?.groupId != groupId) {
+                                  _selectedTagId = null;
+                                }
+                              });
                             },
                           ),
-                        ),
-                      ],
+                          const Divider(height: 1),
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.only(top: 6, bottom: 8),
+                              itemCount: rows.length,
+                              itemBuilder: (context, index) {
+                                final row = rows[index];
+                                final tag = row.tag;
+                                return TagManagerListItem(
+                                  row: row,
+                                  groupLabel: _groupLabel(tag.groupId),
+                                  selected: tag.id == _selectedTagId,
+                                  onTap: () => _selectTag(tag),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(width: compact ? 0 : 16, height: compact ? 16 : 0),
-                Expanded(
-                  child: _selectedTag == null
-                      ? const TagManagerEmptyDetail()
-                      : TagManagerInspectorSurface(
-                          child: TagManagerDetail(
-                            tag: _selectedTag!,
-                            usage: _rowFor(_selectedTag!, usage).usage,
-                            groups: widget.store.tagGroups,
-                            currentResultCount: widget.currentResults.length,
-                            displayNameController: _displayNameController,
-                            aliasesController: _aliasesController,
-                            sortOrderController: _sortOrderController,
-                            groupId: _editingGroupId,
-                            isHidden: _editingHidden,
-                            isFavorite: _editingFavorite,
-                            onGroupChanged: (value) =>
-                                setState(() => _editingGroupId = value),
-                            onHiddenChanged: (value) =>
-                                setState(() => _editingHidden = value),
-                            onFavoriteChanged: (value) =>
-                                setState(() => _editingFavorite = value),
-                            onSave: _saveSelectedTag,
-                            onBatchAdd: () => _batchAdd(_selectedTag!),
-                            onBatchRemove: () => _batchRemove(_selectedTag!),
-                            onDelete: () => _showDeleteBlocked(_selectedTag!),
-                            onMerge: () => _showMergeBlocked(_selectedTag!),
-                          ),
-                        ),
-                ),
-              ],
-            );
-          },
+                  SizedBox(width: compact ? 0 : 16, height: compact ? 16 : 0),
+                  Expanded(
+                    child: TagManagerInspectorSurface(
+                      child: _selectedTag == null
+                          ? const TagManagerEmptyDetail()
+                          : TagManagerDetail(
+                              tag: _selectedTag!,
+                              usage: _rowFor(_selectedTag!, usage).usage,
+                              groups: widget.store.tagGroups,
+                              currentResultCount: widget.currentResults.length,
+                              displayNameController: _displayNameController,
+                              aliasesController: _aliasesController,
+                              sortOrderController: _sortOrderController,
+                              groupId: _editingGroupId,
+                              isHidden: _editingHidden,
+                              isFavorite: _editingFavorite,
+                              onGroupChanged: (value) =>
+                                  setState(() => _editingGroupId = value),
+                              onHiddenChanged: (value) =>
+                                  setState(() => _editingHidden = value),
+                              onFavoriteChanged: (value) =>
+                                  setState(() => _editingFavorite = value),
+                              onSave: _saveSelectedTag,
+                              onBatchAdd: () => _batchAdd(_selectedTag!),
+                              onBatchRemove: () => _batchRemove(_selectedTag!),
+                              onDelete: () => _showDeleteBlocked(_selectedTag!),
+                              onMerge: () => _showMergeBlocked(_selectedTag!),
+                            ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

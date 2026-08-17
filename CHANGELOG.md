@@ -5,6 +5,15 @@
 
 ## Unreleased
 
+### 标签中心 UI 外壳重构
+
+- 新增标签中心 Before/After 视觉目标；Tag Manager 从匿名双栏 `DecoratedBox` 收敛为带稳定 Semantics/key 的
+  “标签中心工作区”、 “标签导航工作区”和“标签 inspector 工作区”，使用实色 Material、弱描边和统一圆角。
+- 空详情与选中标签详情共用 inspector 边界；保留搜索、分组、选中态、属性编辑、别名、隐藏/收藏/排序、批量
+  manual 标签、folder 来源门禁、合并/删除影响检查、焦点顺序和返回媒体库路径。
+- 不修改 `LibraryApplicationFacade`、标签模型、`FilterQuery`、`TagQueryService`、filtered playback queue、
+  ThumbnailService、schema、stable identity 或用户数据。
+
 ### 播放器交互 UI 外壳重构
 
 - 新增播放器交互 Before/After 视觉目标；页面从通用 `Card` 收敛为“全屏播放列表工作区”和“播放器快捷键

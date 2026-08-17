@@ -34,3 +34,32 @@ manual 打标、风险检查、返回路径和持久化回调保持原样。
 - `FilterQuery`、`TagQueryService`、媒体库当前筛选、来源 `filtered queue`、播放器、缩略图
   与媒体详情队列不变。
 - 所有既有 `ValueKey`、输入 controller、focus order、route、返回快捷键和 callback 保持可达。
+
+## 本轮增量：共享工作区表面与挂载证据
+
+本轮在既有标签发现 rail / inspector 视觉目标上继续收敛外壳，不改变上述信息架构：
+
+| Before | After | 目的 |
+| --- | --- | --- |
+| 页面主体依靠匿名 `DecoratedBox` 区分左侧列表和右侧详情 | 页面拥有“标签中心工作区”语义容器，左右分别是“标签导航工作区”和“标签 inspector 工作区” | 让用户立即理解当前在浏览标签集合，还是在维护一个标签 |
+| 结构表面只有颜色/描边，页面级 identity 不明显 | 使用实色 `Material`、弱描边、统一圆角和稳定 surface key | 形成与设置、诊断页一致的 Calm Desktop Media Workspace 层级，并便于截图/可达性检查 |
+| 空详情和已选详情共享视觉边界，但外壳契约不显式 | 空详情与已选详情共用 inspector surface；搜索、分组、编辑字段和动作 key 全部保留 | 避免“筛选 A、编辑 B”的错觉，不改变选中、清空和返回语义 |
+| 外壳调整容易把标签维护动作误认为普通列表点击 | 外壳只负责分区、语义和裁切；保存、批量 manual、影响检查仍由原页面回调执行 | 保持来源边界、引用检查和用户数据安全路径 |
+
+### 本轮保护清单
+
+- `_filteredTagRows` 仍只在 Tag Manager 内进行展示层搜索/分组筛选，不改变 `FilterQuery`、
+  `TagQueryService` 或媒体库当前筛选。
+- 搜索继续使用唯一的 `TextField`、`TextEditingController` 和清除入口；分组选择仍只影响左侧列表。
+- `TagManagerDetail` 的显示名称、别名、分组、排序、收藏、隐藏、保存、批量 manual 增删、
+  合并/删除影响检查和焦点顺序全部保留。
+- folder 标签不可作为普通 manual 批量对象；删除/合并仍只检查引用并显示只读影响说明。
+- 不修改 `LibraryApplicationFacade`、标签模型、SQLite schema、播放器/缩略图队列、filtered playback queue、
+  stable identity 或用户数据。
+
+### 本轮验证目标
+
+- 页面级可达性能够找到 `tagManager.page`、`tagManager.workspace`、导航 surface 和 inspector surface。
+- 默认与 150% 文字缩放下，搜索、空详情、左右工作区和返回入口均无溢出或裁切。
+- 既有搜索、分组、详情焦点、危险操作只读反馈 focused 测试继续通过。
+- 真实 Debug 窗口从媒体库进入标签中心，检查导航/inspector、空详情、选中标签和返回媒体库路径。

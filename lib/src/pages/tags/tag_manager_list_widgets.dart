@@ -59,6 +59,43 @@ class TagManagerEmptyDetail extends StatelessWidget {
   }
 }
 
+/** 标签中心的实色结构表面；只负责层级、语义和裁切，不拥有标签状态。 */
+class TagManagerWorkspaceSurface extends StatelessWidget {
+  const TagManagerWorkspaceSurface({
+    super.key,
+    required this.surfaceKey,
+    required this.label,
+    required this.child,
+  });
+
+  /** 供页面级挂载和截图检查使用的稳定表面 key。 */
+  final Key surfaceKey;
+
+  /** 辅助技术读取的结构区域名称。 */
+  final String label;
+
+  /** 左侧导航或右侧 inspector 的内容。 */
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: label,
+      child: Material(
+        key: surfaceKey,
+        color: librarySurface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
+          side: BorderSide(color: libraryBorder),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: child,
+      ),
+    );
+  }
+}
+
 /** 标签中心右侧 inspector 的统一外壳，保持选中态和空状态共享同一边界。 */
 class TagManagerInspectorSurface extends StatelessWidget {
   const TagManagerInspectorSurface({
@@ -70,16 +107,10 @@ class TagManagerInspectorSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: librarySurface,
-        borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
-        border: Border.fromBorderSide(BorderSide(color: libraryBorder)),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.panel),
-        child: child,
-      ),
+    return TagManagerWorkspaceSurface(
+      surfaceKey: const ValueKey('tagManager.inspectorSurface'),
+      label: '标签 inspector 工作区',
+      child: child,
     );
   }
 }

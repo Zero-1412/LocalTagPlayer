@@ -12,9 +12,7 @@ class FullscreenQueueSettingsCard extends StatelessWidget {
     required this.enabled,
     required this.onChanged,
   });
-  /** 当前是否允许鼠标触碰右侧边缘展开播放列表。 */
   final bool enabled;
-  /** 开关意图回调。 */
   final ValueChanged<bool> onChanged;
   @override
   Widget build(BuildContext context) {

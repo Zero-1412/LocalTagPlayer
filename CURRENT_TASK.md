@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 标签中心 UI 外壳重构（已完成）
+
+- 目标：进入第三阶段维护页面，把 Tag Manager 从匿名双栏表面收敛为“标签中心工作区”以及左侧“标签导航
+  工作区”、右侧“标签 inspector 工作区”，先建立 Before/After 视觉目标，再替换页面外壳。
+- 当前修改：新增 `docs/design/TAG_MANAGER_UI_SHELL_TARGET.md`；页面与两个结构表面增加稳定 Semantics/key，
+  实色 `Material` 统一圆角、弱描边和裁切；空详情与选中标签详情共用 inspector 边界。
+- 保护：不修改 `_filteredTagRows` 展示筛选、搜索 `TextField` 链路、分组选择、详情焦点顺序、别名/隐藏/收藏/
+  排序保存、批量 manual 增删、folder 来源门禁、合并/删除影响检查、`LibraryApplicationFacade`、schema、
+  filtered playback queue、ThumbnailService、stable identity 或用户数据语义。
+- 当前验证：Tag Manager 搜索、分组、页面挂载、150% 文字缩放、详情焦点/下拉锚点和高风险只读反馈 focused
+  测试已通过；完整 `flutter test` 通过（628 passed，4 skipped）；架构迁移预算、`flutter analyze` 和
+  `flutter build windows --debug` 成功。Debug 窗口真实从媒体库进入标签中心，检查空 inspector、真实 folder
+  标签 inspector、属性/批量/高风险区域、滚动和返回媒体库；未触发任何写入动作，无明显遮挡、裁切或溢出。
+- 阻塞：无。
+- 下一步：收集标签中心在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，再审查
+  共享 Dialog/Menu/Sheet/Tooltip/Snackbar 和播放器残余内容表面；继续保护标签维护、播放队列与用户数据边界。
+
 # 2026-08-17 · 播放器交互 UI 外壳重构（已完成）
 
 - 目标：进入第三阶段下一个设置维护叶页面，把播放器交互从通用卡片收敛为“全屏播放列表工作区”和
