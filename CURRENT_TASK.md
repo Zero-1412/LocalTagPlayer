@@ -1,5 +1,21 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 播放器交互 UI 外壳重构（已完成）
+
+- 目标：进入第三阶段下一个设置维护叶页面，把播放器交互从通用卡片收敛为“全屏播放列表工作区”和
+  “播放器快捷键工作区”，先建立 Before/After 视觉目标，再替换页面外壳。
+- 当前修改：新增 `docs/design/PLAYER_INTERACTION_UI_SHELL_TARGET.md`；两个 panel 使用稳定 Semantics/key
+  和实色弱描边边界；保留全屏边缘开关、快捷键录制、冲突提示、恢复默认和 Esc 安全出口。
+- 保护：不修改 `CacheSettingsPage` 的状态 owner、`PlaybackSettings`、PlayerBackend、PlaybackSession、
+  filtered playback queue、ThumbnailService、媒体详情/缓存队列、schema、stable identity 或用户数据语义。
+- 当前验证：交互意图 focused 测试、150% 文字缩放 focused 测试、设置首页页面级可达性测试和架构迁移预算
+  测试已通过；完整 `flutter test` 通过（626 passed，4 skipped）；`flutter analyze` 无问题；
+  `flutter build windows --debug` 成功。Debug 窗口真实从媒体库进入设置，再进入播放器交互，检查两个工作区、
+  快捷键网格、底部 Esc 安全出口说明、滚动条和返回设置首页；未触发设置动作，无明显遮挡、裁切或溢出。
+- 阻塞：无。
+- 下一步：收集播放器交互页在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，
+  再决定继续细化维护页外壳，或转入播放器页面外壳；不扩展到快捷键语义、播放后端或队列业务边界。
+
 # 2026-08-17 · 视频画质与增强 UI 外壳重构（已完成）
 
 - 目标：进入第三阶段下一个设置维护叶页面，把视频画质与增强从通用卡片收敛为“视频画质与增强工作区”，

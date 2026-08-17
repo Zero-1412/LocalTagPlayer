@@ -5,6 +5,15 @@
 
 ## Unreleased
 
+### 播放器交互 UI 外壳重构
+
+- 新增播放器交互 Before/After 视觉目标；页面从通用 `Card` 收敛为“全屏播放列表工作区”和“播放器快捷键
+  工作区”，使用实色表面、弱描边和稳定 Semantics/key，保留原有控件顺序和页面返回路径。
+- 保留全屏边缘播放列表意图转发、快捷键录制、冲突就地提示、恢复默认、错误反馈和 Esc 全屏安全出口；不改变
+  `CacheSettingsPage` 状态 owner、设置持久化或播放器命令边界。
+- 不修改 `PlayerBackend`、`PlaybackSession`、filtered playback queue、ThumbnailService、媒体详情/缓存队列、
+  `FilterQuery`、`TagQueryService`、schema、stable identity 或用户数据。
+
 ### 视频画质与增强 UI 外壳重构
 
 - 新增视频画质与增强 Before/After 视觉目标；设置页从通用 `Card` 收敛为带稳定 Semantics 和挂载 key

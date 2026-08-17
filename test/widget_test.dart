@@ -3774,6 +3774,35 @@ void main() {
     );
     await tester.pump();
 
+    final interactionEntry = find.byKey(
+      const ValueKey('settings.category.playerInteraction'),
+    );
+    await tester.ensureVisible(interactionEntry);
+    await tester.pump();
+    await tester.tap(interactionEntry);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings.fullscreenQueue.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.shortcuts.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.fullscreenQueue.edgeHoverEnabled')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.shortcuts.reset')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey('settings.section.back')),
+    );
+    await tester.pump();
+
     final deleteEntry = find.byKey(
       const ValueKey('settings.category.fileDeletion'),
     );
@@ -4029,6 +4058,57 @@ void main() {
     expect(resetCount, 1);
     expect(capturedAction, PlayerShortcutAction.playPause);
     expect(capturedShortcut, 'Control+P');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('player interaction workspaces remain readable at 150 percent',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: settingsWorkspaceTheme(ThemeData(useMaterial3: true)),
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(720, 900),
+            textScaler: TextScaler.linear(1.5),
+          ),
+          child: Scaffold(
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  FullscreenQueueSettingsCard(
+                    enabled: true,
+                    onChanged: (_) {},
+                  ),
+                  const SizedBox(height: 16),
+                  PlayerShortcutsSettingsCard(
+                    shortcuts: PlaybackSettings.defaultShortcuts,
+                    errors: const <PlayerShortcutAction, String?>{},
+                    onReset: () {},
+                    onCaptured: (_, __) => true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('settings.fullscreenQueue.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings.shortcuts.workspaceSurface')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
+    expect(
+      find.textContaining('Esc 在全屏时始终优先退出全屏'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
