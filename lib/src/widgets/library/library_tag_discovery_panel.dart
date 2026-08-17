@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../core/tag_rules.dart';
 import '../../models/platform_models.dart';
 import '../app_theme_tokens.dart';
 import 'library_desktop_scroll_behavior.dart';
 import 'library_smoke_keys.dart';
 import 'library_folder_tag_discovery.dart';
+import 'library_reference_icon_button.dart';
 
 // ignore_for_file: use_key_in_widget_constructors
 import 'library_tag_discovery_context.dart';
@@ -142,9 +142,6 @@ class TagDiscoveryZone extends StatefulWidget {
 }
 
 class TagDiscoveryZoneState extends State<TagDiscoveryZone> {
-  late final TextEditingController _tagSearchController =
-      TextEditingController();
-
   final _panelScrollController = ScrollController();
 
   var _mode = TagDiscoveryMode.primary;
@@ -157,49 +154,20 @@ class TagDiscoveryZoneState extends State<TagDiscoveryZone> {
 
   @override
   void dispose() {
-    _tagSearchController.dispose();
     _panelScrollController.dispose();
     super.dispose();
   }
 
-  bool _matchesSearch(String value) {
-    final keyword = _tagSearchController.text.trim().toLowerCase();
-    if (keyword.isEmpty) {
-      return true;
-    }
-    return value.toLowerCase().contains(keyword);
-  }
-
-  TagGroup _filteredGroup(TagGroup group) {
-    return TagGroup(
-      id: group.id,
-      name: group.name,
-      displayName: group.displayName,
-      sortOrder: group.sortOrder,
-      allowMultiSelect: group.allowMultiSelect,
-      defaultLogic: group.defaultLogic,
-      items: [
-        for (final tag in group.items)
-          if (!TagRules.sameTag(tag.name, TagRules.defaultAlbumTag) &&
-              _matchesSearch(tag.displayName ?? tag.name))
-            tag,
-      ],
-      excludedItems: group.excludedItems,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final primaryGroups =
-        primaryTagGroupsForDiscovery(widget.tagGroups).map(_filteredGroup);
+    final primaryGroups = primaryTagGroupsForDiscovery(widget.tagGroups);
     final allSecondaryTags = secondaryTagsForDiscovery(
       widget.tagGroups,
       widget.resultCounts,
-    ).where((tag) => _matchesSearch(tag.displayName ?? tag.name)).toList();
+    );
     final outerPanelWidth = widget.panelWidth ?? 482.0;
     final innerPanelWidth =
         (outerPanelWidth - 28).clamp(276.0, 592.0).toDouble();
-    final hasSearchKeyword = _tagSearchController.text.trim().isNotEmpty;
     final panel = Container(
       width: widget.dense ? double.infinity : innerPanelWidth,
       margin: EdgeInsets.fromLTRB(widget.dense ? 12 : 12, 12, 16, 16),
@@ -215,7 +183,7 @@ class TagDiscoveryZoneState extends State<TagDiscoveryZone> {
           _TagDiscoveryPanelHeader(onCollapse: widget.onCollapse),
           const SizedBox(height: 12),
           Container(
-            height: 44,
+            height: libraryTopBarControlHeight,
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               color: librarySurfaceAlt,
@@ -246,79 +214,8 @@ class TagDiscoveryZoneState extends State<TagDiscoveryZone> {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          // 这个输入只筛选右侧可见标签，不创建新的过滤条件，也不触发媒体库查询。
-          // 使用稳定 TextField 保持键盘、文字缩放和辅助技术路径可用。
-          TextField(
-            key: LibrarySmokeKeys.tagSearchField,
-            controller: _tagSearchController,
-            onChanged: (_) => setState(() {}),
-            cursorColor: appAccentViolet,
-            style: const TextStyle(
-              color: libraryText,
-              fontSize: AppTypography.body,
-              fontWeight: AppTypography.medium,
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              filled: true,
-              fillColor: libraryBackground,
-              hintText: '在标签中查找',
-              hintStyle: const TextStyle(
-                color: libraryTextMuted,
-                fontSize: AppTypography.body,
-              ),
-              prefixIcon: const Icon(
-                Icons.search_rounded,
-                size: 19,
-                color: libraryTextMuted,
-              ),
-              suffixIcon: hasSearchKeyword
-                  ? IconButton(
-                      tooltip: '清除标签搜索',
-                      onPressed: () {
-                        _tagSearchController.clear();
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.close_rounded, size: 17),
-                    )
-                  : null,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppRadius.control),
-                borderSide: BorderSide(
-                  color: libraryBorder.withValues(alpha: 0.86),
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppRadius.control),
-                borderSide: BorderSide(
-                  color: libraryBorder.withValues(alpha: 0.86),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppRadius.control),
-                borderSide: const BorderSide(
-                  color: appAccentViolet,
-                  width: 1.5,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: 12,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            '\u9009\u62e9\u4e00\u7ea7\u6807\u7b7e\u4ee5\u67e5\u770b\u5bf9\u5e94\u7684\u4e8c\u7ea7\u6807\u7b7e\uff08\u4e0e\u5176\u4ed6\u6761\u4ef6\u4e3a AND \u5173\u7cfb\uff09',
-            style: TextStyle(
-              color: libraryTextMuted,
-              fontSize: 13,
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 18),
+          // 切换器直接连接标签内容，避免重复搜索和说明占用面板高度。
+          const SizedBox(height: 16),
           Expanded(
             child: ScrollConfiguration(
               behavior: const DesktopDragScrollBehavior(),

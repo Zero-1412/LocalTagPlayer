@@ -3235,29 +3235,23 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets(
-      'tag inspector search narrows visible tags without changing query',
+  testWidgets('tag discovery keeps the level switch focused on content',
       (tester) async {
     await tester.pumpWidget(const TagDiscoverySmokeHarness(childCount: 12));
     await tester.pump(const Duration(milliseconds: 100));
 
+    expect(find.byType(TextField), findsNothing);
+    expect(find.text('在标签中查找'), findsNothing);
+    expect(
+      find.textContaining('选择一级标签以查看对应的二级标签'),
+      findsNothing,
+    );
+    expect(find.text('Alpha'), findsOneWidget);
+
     await tester.tap(find.byKey(LibrarySmokeKeys.secondaryTab));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Child02'), findsWidgets);
-
-    await tester.enterText(
-      find.byKey(LibrarySmokeKeys.tagSearchField),
-      'Child01',
-    );
-    await tester.pump(const Duration(milliseconds: 100));
-
-    expect(find.text('Child01'), findsWidgets);
-    expect(find.text('Child02'), findsNothing);
-    expect(find.byTooltip('清除标签搜索'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('清除标签搜索'));
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('Child02'), findsWidgets);
+    expect(find.text('Child12'), findsWidgets);
   });
 
   test('library sort comparator applies default order immediately', () {

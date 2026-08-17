@@ -22,8 +22,6 @@ class LibrarySmokeKeys {
   static const localBackButton = ValueKey<String>('smoke.local.back-button');
   static const primaryTab = ValueKey<String>('smoke.tag.primary-tab');
   static const secondaryTab = ValueKey<String>('smoke.tag.secondary-tab');
-  /** 标签 inspector 内部只过滤可见标签的稳定输入入口。 */
-  static const tagSearchField = ValueKey<String>('smoke.tag.search-field');
   static const moreSecondaryTags =
       ValueKey<String>('smoke.tag.more-secondary-tags');
   static const listActionState = ValueKey<String>('smoke.list.action-state');

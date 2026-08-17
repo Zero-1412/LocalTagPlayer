@@ -23,35 +23,46 @@ class TagPanelTabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accessibility = AppAccessibilityScope.of(context);
     return Semantics(
       button: true,
       selected: selected,
       label: label,
       excludeSemantics: true,
       child: Material(
-        color: selected ? librarySurface : Colors.transparent,
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(9),
         child: InkWell(
           borderRadius: BorderRadius.circular(9),
           onTap: onTap,
-          child: Container(
+          child: AnimatedContainer(
+            duration: accessibility.fadeDuration(AppMotion.press),
+            curve: AppMotion.standardCurve,
             decoration: BoxDecoration(
+              color: selected ? librarySurface : Colors.transparent,
               borderRadius: BorderRadius.circular(9),
-              // 选中态用底部定位线补足 tab 语义，不扩大紫色背景面积。
-              border: Border(
-                bottom: BorderSide(
-                  color: selected ? appAccentViolet : Colors.transparent,
-                  width: 2,
-                ),
+              border: Border.all(
+                color: selected
+                    ? appAccentViolet.withValues(alpha: 0.42)
+                    : Colors.transparent,
               ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.14),
+                        blurRadius: 7,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : const [],
             ),
             alignment: Alignment.center,
             child: Text(
               label,
               style: TextStyle(
                 color: selected ? appAccentViolet : libraryTextMuted,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
               ),
             ),
           ),
