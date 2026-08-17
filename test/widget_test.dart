@@ -7852,6 +7852,7 @@ void main() {
     );
     await tester.tap(find.text('打开恢复选择'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('player.resume.dialog')), findsOneWidget);
     expect(find.text('从上次位置继续'), findsOneWidget);
     expect(find.text('从头播放'), findsOneWidget);
     expect(find.textContaining('00:37 / 02:00'), findsOneWidget);
@@ -9575,6 +9576,10 @@ void main() {
 
     await tester.tap(find.text('打开'));
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('player.hwdecWarning.dialog')),
+      findsOneWidget,
+    );
     expect(find.text('该视频无法可靠硬件解码'), findsOneWidget);
     expect(find.textContaining('3840×2160 H.264 代理'), findsOneWidget);
     expect(find.byKey(const ValueKey('player.hwdecWarning.proxyCommand')),

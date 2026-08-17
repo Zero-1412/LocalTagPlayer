@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/video_item.dart';
+import 'player_dialog_content.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -27,26 +28,30 @@ Future<PlayerResumeChoice> showPlayerResumeDialog(
   final choice = await showDialog<PlayerResumeChoice>(
     context: context,
     barrierDismissible: false,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('继续观看？'),
-      content: Text(
-        '${item.title}\n上次看到 ${_resumeTimeLabel(position)} / ${_resumeTimeLabel(duration)}',
+    builder: (dialogContext) => playerDialogThemeSurface(
+      context: dialogContext,
+      child: AlertDialog(
+        key: const ValueKey('player.resume.dialog'),
+        title: const Text('继续观看？'),
+        content: Text(
+          '${item.title}\n上次看到 ${_resumeTimeLabel(position)} / ${_resumeTimeLabel(duration)}',
+        ),
+        actions: [
+          OutlinedButton(
+            key: const ValueKey('player.resume.restart'),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(PlayerResumeChoice.restart),
+            child: const Text('从头播放'),
+          ),
+          FilledButton(
+            key: const ValueKey('player.resume.continue'),
+            autofocus: true,
+            onPressed: () => Navigator.of(dialogContext)
+                .pop(PlayerResumeChoice.continueWatching),
+            child: const Text('从上次位置继续'),
+          ),
+        ],
       ),
-      actions: [
-        OutlinedButton(
-          key: const ValueKey('player.resume.restart'),
-          onPressed: () =>
-              Navigator.of(dialogContext).pop(PlayerResumeChoice.restart),
-          child: const Text('从头播放'),
-        ),
-        FilledButton(
-          key: const ValueKey('player.resume.continue'),
-          autofocus: true,
-          onPressed: () => Navigator.of(dialogContext)
-              .pop(PlayerResumeChoice.continueWatching),
-          child: const Text('从上次位置继续'),
-        ),
-      ],
     ),
   );
   return choice ?? PlayerResumeChoice.continueWatching;

@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 播放器启动决策与能力警告 UI 外壳重构（已完成）
+
+- 目标：继续播放器 Phase 2，在信息/诊断弹窗之后收口“继续观看”与硬解能力警告两个启动前浮层，先建立
+  `docs/design/PLAYER_STARTUP_DIALOGS_UI_SHELL_TARGET.md` 的 Before/After 目标，再统一播放器局部主题、内容表面和稳定根 key。
+- 当前修改：继续观看弹窗与硬解警告弹窗显式复用 `playerDialogThemeSurface`；硬解规格正文复用播放器局部文字主题；
+  增加 `player.resume.dialog`，保留硬解警告根 key、代理命令和现有动作 key。
+- 保护：不修改继续/重播返回值、关闭默认策略、硬解兼容性评估、直接播放门禁、复制代理命令和取消路径；不修改
+  `PlaybackSession`、`PlayerBackend`、来源 `filtered playback queue`、播放器启动顺序、ThumbnailService、媒体详情/缓存队列、
+  schema、stable identity 或用户数据。
+- 当前验证：继续观看与硬解警告 focused tests 通过，均确认新根 key 与原有动作入口；完整 `flutter test` 通过（629 passed，4 skipped）；
+  `flutter analyze` 无问题；`flutter build windows --debug` 成功。真实窗口从构建产物进入“继续观看”，检查 476 条来源队列、
+  播放画面和右侧列表外壳；该样本直接恢复播放，未触发二次确认弹窗，因此弹窗视觉细节以 focused/widget 挂载证据为准，未冒充为
+  运行时已打开。
+- 阻塞：无。
+- 下一步：收集启动弹窗在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，决定继续细化播放器残余浮层
+  或转入下一页面外壳；本轮不扩展到播放启动语义、后端能力或队列业务。
+
 # 2026-08-17 · 播放器信息与诊断 UI 外壳重构（已完成）
 
 - 目标：继续播放器 Phase 2，在媒体控制之后收口视频信息与播放诊断弹窗，先建立

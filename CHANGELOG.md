@@ -5,6 +5,13 @@
 
 ## Unreleased
 
+### 播放器启动决策与能力警告 UI 外壳重构
+
+- 新增继续观看与硬解能力警告 Before/After 视觉目标；两个启动前弹窗显式复用播放器局部主题，保留起播选择、
+  硬解门禁、代理命令、复制和取消动作。
+- 增加继续观看弹窗根 key，硬解规格正文改用播放器局部文字主题；不修改 `PlaybackSession`、`PlayerBackend`、
+  filtered playback queue、缩略图/媒体详情队列、schema、stable identity 或用户数据。
+
 ### 播放器信息与诊断 UI 外壳重构
 
 - 新增视频信息与播放诊断 Before/After 视觉目标；两类内容弹窗显式复用播放器局部主题，分组从匿名
