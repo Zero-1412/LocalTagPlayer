@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_tag_player/src/core/layout_size.dart';
 import 'package:local_tag_player/src/widgets/app_theme_tokens.dart';
 import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart';
 import 'package:local_tag_player/src/widgets/library/reference_top_bar_smoke_harness.dart';
@@ -91,6 +92,40 @@ void main() {
     expect(tester.getSize(clearAll), const Size.square(40));
     await tester.tap(clearAll);
     expect(clearCount, 1);
+  });
+
+  testWidgets(
+      'compact toolbar keeps search, filter status and filter action aligned',
+      (tester) async {
+    tester.view.physicalSize = const Size(720, 180);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      referenceTopBarSearchSmokeHarness(
+        controller: controller,
+        layoutSize: LayoutSize.compact,
+        showFavoritesOnly: true,
+        onSearchChanged: (_) {},
+      ),
+    );
+
+    const controlHeight = 48.0;
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.searchSurface)).height,
+      controlHeight,
+    );
+    expect(
+      tester.getSize(find.byKey(LibrarySmokeKeys.filterStatusArea)).height,
+      controlHeight,
+    );
+    expect(
+      tester.getSize(find.byTooltip('打开智能筛选')),
+      const Size.square(controlHeight),
+    );
   });
 
   testWidgets('Phase 1 status exposes all-library context and reduced motion',

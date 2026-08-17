@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../app_theme_tokens.dart';
+import 'library_reference_icon_button.dart';
 import 'library_smoke_keys.dart';
 import 'library_top_bar_search_surface.dart';
 
@@ -98,7 +99,8 @@ class LibraryFilterStatusArea extends StatelessWidget {
       liveRegion: refreshing || progressLabel != null,
       label: '\u5f53\u524d\u7b5b\u9009\u72b6\u6001\uff0c$resultLabel',
       child: Container(
-        height: compact ? 44 : 50,
+        // 筛选状态与搜索、排序和图标动作共用同一命中高度，避免同一工具栏上下错位。
+        height: libraryTopBarControlHeight,
         padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 10),
         decoration: BoxDecoration(
           color: accessibility.highContrast

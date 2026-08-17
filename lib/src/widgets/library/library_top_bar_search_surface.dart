@@ -109,7 +109,8 @@ class _LibrarySearchSurfaceState extends State<LibrarySearchSurface> {
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         key: LibrarySmokeKeys.searchSurface,
-        height: compact ? 44 : libraryTopBarControlHeight,
+        // 紧凑布局也保留统一的 48px 命中区，与筛选和右侧动作保持同一基线。
+        height: libraryTopBarControlHeight,
         duration: accessibility.fadeDuration(AppMotion.hover),
         curve: AppMotion.standardCurve,
         decoration: BoxDecoration(
