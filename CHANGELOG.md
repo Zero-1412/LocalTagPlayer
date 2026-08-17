@@ -24,6 +24,11 @@
   添加/重新扫描/解除管理回调和确认路径。
 - 不新增目录读取、扫描重算、查询、blur 或持续动画，也不修改 schema、标签、filtered playback queue、稳定身份或用户数据。
 
+### Missing / Relink 共享 Tooltip 外壳收口
+
+- 单条缺失路径和批量预览路径映射改用 `MaintenanceTooltip`，统一维护页深色实色浮层与完整路径消息。
+- 保留单条 relink、批量预览/执行、fingerprint 校验、确认、审计摘要和返回路径；不修改 stable identity、mutable path、缓存或用户数据。
+
 ### 播放器文件动作弹窗 UI 外壳重构
 
 - 新增删除文件与重命名文件 Before/After 视觉目标；两个动作弹窗显式复用播放器局部主题，统一不透明深色浮层、

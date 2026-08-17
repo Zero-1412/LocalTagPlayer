@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/video_item.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_feedback.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -239,7 +240,7 @@ class _MissingVideoRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 5),
-                    Tooltip(
+                    MaintenanceTooltip(
                       message: item.path,
                       child: Text(
                         item.path,

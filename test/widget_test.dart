@@ -47,6 +47,7 @@ import 'package:local_tag_player/src/pages/library/directory_manager_page.dart';
 import 'package:local_tag_player/src/pages/library/library_page.dart';
 import 'package:local_tag_player/src/pages/library/library_page_helpers.dart';
 import 'package:local_tag_player/src/pages/library/missing_relink_page.dart';
+import 'package:local_tag_player/src/pages/library/missing_bulk_relink_preview.dart';
 import 'package:local_tag_player/src/pages/player/player_context_panel.dart';
 import 'package:local_tag_player/src/pages/player/player_control_slider.dart';
 import 'package:local_tag_player/src/pages/player/player_delete_dialog.dart';
@@ -7836,6 +7837,10 @@ void main() {
     expect(find.text('2 个视频路径失效'), findsOneWidget);
     expect(find.text('标签与播放记录已保留'), findsOneWidget);
     expect(find.byKey(const ValueKey('missingRelink.list')), findsOneWidget);
+    expect(
+      find.byTooltip(r'D:\missing\alpha-long-name.mp4'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const ValueKey('missingRelink.bulkPreview')));
@@ -7852,6 +7857,33 @@ void main() {
     expect(
         find.byKey(const ValueKey('missingRelink.newPrefix')), findsOneWidget);
     expect(find.textContaining('不会移动或删除文件'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('missing relink preview path uses maintenance tooltip',
+      (tester) async {
+    final preview = BulkPathRelinkPreview(
+      item: _testVideo(
+        path: r'C:\private\alpha.mp4',
+        title: 'Private Alpha',
+      ),
+      newPath: r'E:\moved\alpha.mp4',
+      status: BulkRelinkStatus.ready,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BulkRelinkPreviewRow(preview: preview),
+      ),
+    );
+
+    expect(find.byType(MaintenanceTooltip), findsOneWidget);
+    expect(
+      find.byTooltip(
+        r'C:\private\alpha.mp4' '\n→ ' r'E:\moved\alpha.mp4',
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 

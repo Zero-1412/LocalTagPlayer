@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/relink/bulk_path_relink_service.dart';
 import '../../widgets/app_theme_tokens.dart';
+import '../../widgets/maintenance_feedback.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -125,7 +126,7 @@ class BulkRelinkPreviewRow extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Tooltip(
+            child: MaintenanceTooltip(
               message: '${preview.item.path}\n→ ${preview.newPath}',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
