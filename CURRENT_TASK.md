@@ -1,5 +1,23 @@
 # CURRENT_TASK.md
 
+# 2026-08-17 · 播放器信息与诊断 UI 外壳重构（已完成）
+
+- 目标：继续播放器 Phase 2，在媒体控制之后收口视频信息与播放诊断弹窗，先建立
+  `docs/design/PLAYER_INFO_DIAGNOSTICS_UI_SHELL_TARGET.md` 的 Before/After 目标，再统一弹窗局部主题、
+  分组表面、容器语义和稳定 key。
+- 当前修改：新增播放器内容弹窗局部主题 helper；视频信息与诊断弹窗显式复用 `playerWorkspaceTheme`，
+  `PlayerDialogSectionCard` 改为实色 `Material`、弱描边、统一圆角与裁切，并补齐信息/诊断分组的稳定 key。
+- 保护：不修改视频信息字段来源、媒体详情读取、诊断采样/timer/播放流订阅/复制摘要、关闭与滚动路径；不修改
+  `PlayerService`、`PlayerBackend`、`PlaybackSession`、来源 `filtered playback queue`、`FilterQuery`、
+  `TagQueryService`、ThumbnailService、媒体详情/缓存队列、schema、stable identity 或用户数据。
+- 当前验证：`test/player_diagnostics_dialog_test.dart` focused 通过，已验证诊断分组挂载、容器语义、采样流和卸载后停止响应；
+  完整 `flutter test` 通过（629 passed，4 skipped）；`flutter analyze` 无问题；`flutter build windows --debug` 成功。
+  Debug 窗口真实从媒体库进入播放器，打开上下文菜单中的视频信息与诊断检查，检查信息分组、诊断实时/分析/详细指标表面、
+  详细指标滚动、复制/关闭入口和 Esc 返回；正文对比度修正后可读，无明显遮挡或溢出，未触发收藏、标签、设置或文件写入。
+- 阻塞：无。
+- 下一步：收集本轮播放器信息/诊断弹窗在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，
+  再决定继续细化播放器其它残余内容表面，或转入下一个页面外壳重构；继续保护来源队列、播放器会话和用户数据边界。
+
 # 2026-08-17 · 播放器媒体控制 UI 外壳重构（已完成）
 
 - 目标：进入播放器页面下一处 UI 外壳重构，把媒体控制弹窗的音轨、字幕、音画同步、章节四个默认 `Card`

@@ -1,15 +1,41 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/app_theme_tokens.dart';
+
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
+
+/**
+ * 播放器内容弹窗统一使用的局部主题。
+ *
+ * 信息、诊断等弹窗可能由全局 Route 主题直接挂载；这里显式复用播放器工作区
+ * 的深色表面和高对比度规则，避免同一播放器内出现不一致的内容层级。
+ */
+ThemeData playerDialogTheme(BuildContext context) {
+  final accessibility = AppAccessibilityScope.of(context);
+  return playerWorkspaceTheme(
+    Theme.of(context),
+    highContrast: accessibility.highContrast,
+  );
+}
+
+/** 将播放器局部主题包在弹窗内容根部，保持 AlertDialog 与分组表面一致。 */
+Widget playerDialogThemeSurface({
+  required BuildContext context,
+  required Widget child,
+}) {
+  return Theme(data: playerDialogTheme(context), child: child);
+}
 
 /**
  * 播放器弹窗内部统一使用的信息卡片。
  *
  * 该组件只约束标题、边框、内边距和内容节奏，不承载业务状态，避免标签、
- * 视频信息与诊断弹窗各自维护一套视觉规则。
+ * 视频信息与诊断弹窗各自维护一套视觉规则。组件同时提供容器语义，便于键盘、
+ * 读屏和 UI 回归测试识别信息分组的边界。
  */
 class PlayerDialogSectionCard extends StatelessWidget {
   const PlayerDialogSectionCard({
+    super.key,
     required this.title,
     required this.icon,
     required this.child,
@@ -38,36 +64,49 @@ class PlayerDialogSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.outlineVariant.withValues(alpha: 0.7)),
-      ),
-      child: Padding(
-        padding: padding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    final theme = playerDialogTheme(context);
+    final colors = theme.colorScheme;
+    return Theme(
+      data: theme,
+      child: Semantics(
+        container: true,
+        label: '播放器信息分组：$title',
+        child: Material(
+          type: MaterialType.card,
+          color: colors.surfaceContainerLow,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            side: BorderSide(
+              color: colors.outlineVariant.withValues(alpha: 0.82),
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: padding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, size: 18, color: colors.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                Row(
+                  children: [
+                    Icon(icon, size: 18, color: colors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
-                  ),
+                      ),
+                    ),
+                    if (trailing != null) trailing!,
+                  ],
                 ),
-                if (trailing != null) trailing!,
+                const SizedBox(height: 12),
+                if (expandChild) Expanded(child: child) else child,
               ],
             ),
-            const SizedBox(height: 12),
-            if (expandChild) Expanded(child: child) else child,
-          ],
+          ),
         ),
       ),
     );

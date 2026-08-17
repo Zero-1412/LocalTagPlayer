@@ -5,6 +5,15 @@
 
 ## Unreleased
 
+### 播放器信息与诊断 UI 外壳重构
+
+- 新增视频信息与播放诊断 Before/After 视觉目标；两类内容弹窗显式复用播放器局部主题，分组从匿名
+  `DecoratedBox` 收敛为带实色、弱描边、统一圆角、裁切和容器语义的 `Material` 表面。
+- 补充视频信息/诊断弹窗与主要分组的稳定 key；保留字段读取、诊断采样与 timer 生命周期、滚动、复制摘要、关闭和
+  播放器上下文菜单入口。
+- 不修改 `PlayerService`、`PlayerBackend`、`PlaybackSession`、filtered playback queue、`FilterQuery`、
+  `TagQueryService`、缩略图/媒体详情队列、schema、stable identity 或用户数据。
+
 ### 播放器媒体控制 UI 外壳重构
 
 - 新增媒体控制弹窗 Before/After 视觉目标；音轨、字幕、音画同步和章节从默认 `Card` 收敛为播放器嵌套

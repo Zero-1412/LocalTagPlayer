@@ -41,7 +41,6 @@ extension PlayerStateDialogs on PlayerPageState {
       ),
     );
   }
-
   Future<void> cycleAudioTrack() async {
     final snapshot = await playerService.readMediaControls();
     if (!snapshot.supported || snapshot.audioTracks.isEmpty) {
@@ -54,7 +53,6 @@ extension PlayerStateDialogs on PlayerPageState {
     await playerService.selectAudioTrack(target.id);
     showShortcutFeedback('音轨：${target.label('音轨')}', Icons.audiotrack_rounded);
   }
-
   Future<void> cycleSubtitleTrack({required bool reverse}) async {
     final snapshot = await playerService.readMediaControls();
     if (!snapshot.supported || snapshot.subtitleTracks.isEmpty) {
@@ -71,7 +69,6 @@ extension PlayerStateDialogs on PlayerPageState {
     await playerService.selectSubtitleTrack(target.id);
     showShortcutFeedback('字幕：${target.label('字幕')}', Icons.subtitles_rounded);
   }
-
   Future<void> toggleSubtitleWithFeedback() async {
     await playerService.toggleSubtitle();
     final snapshot = await playerService.readMediaControls();
@@ -160,102 +157,112 @@ extension PlayerStateDialogs on PlayerPageState {
     await withPlayerOverlaySurfaceOccluded(
       () => showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.info_outline_rounded),
-              SizedBox(width: 10),
-              Text('视频信息'),
-            ],
-          ),
-          content: SizedBox(
-            width: 700,
-            height: math.min(590, MediaQuery.sizeOf(context).height * 0.72),
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  PlayerDialogSectionCard(
-                    title: '文件',
-                    icon: Icons.insert_drive_file_outlined,
-                    child: Column(
-                      children: [
-                        PlayerDialogInfoRow(
-                            label: '文件名', value: item.title, emphasize: true),
-                        PlayerDialogInfoRow(label: '路径', value: item.path),
-                        PlayerDialogInfoRow(label: '目录', value: item.folder),
-                        PlayerDialogInfoRow(
-                          label: '大小',
-                          value: formatBytes(stat?.size ?? item.fileSize ?? 0),
-                        ),
-                        PlayerDialogInfoRow(
-                          label: '修改时间',
-                          value: stat?.modifiedAt?.toString() ?? '未知',
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  PlayerDialogSectionCard(
-                    title: '媒体',
-                    icon: Icons.movie_outlined,
-                    child: Column(
-                      children: [
-                        PlayerDialogInfoRow(
-                            label: '视频', value: details.videoLabel),
-                        PlayerDialogInfoRow(
-                            label: '音频', value: details.audioLabel),
-                        PlayerDialogInfoRow(
-                            label: '媒体指纹',
-                            value: item.mediaFingerprint ?? '未读取'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  PlayerDialogSectionCard(
-                    title: '整理状态',
-                    icon: Icons.sell_outlined,
-                    child: Column(
-                      children: [
-                        PlayerDialogInfoRow(
-                            label: '标签',
-                            value: item.tags.isEmpty
-                                ? '未添加'
-                                : (item.tags.toList()..sort()).join('、')),
-                        PlayerDialogInfoRow(
-                            label: '二级标签', value: childTagSummary(item)),
-                        PlayerDialogInfoRow(
-                            label: '收藏', value: item.isFavorite ? '是' : '否'),
-                      ],
-                    ),
-                  ),
-                  if (item.mediaDetailsError != null ||
-                      item.thumbnailError != null) ...[
-                    const SizedBox(height: 12),
+        builder: (context) => playerDialogThemeSurface(
+          context: context,
+          child: AlertDialog(
+            key: const ValueKey('player.info.dialog'),
+            title: const Row(
+              children: [
+                Icon(Icons.info_outline_rounded),
+                SizedBox(width: 10),
+                Text('视频信息'),
+              ],
+            ),
+            content: SizedBox(
+              width: 700,
+              height: math.min(590, MediaQuery.sizeOf(context).height * 0.72),
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
                     PlayerDialogSectionCard(
-                      title: '异常',
-                      icon: Icons.warning_amber_rounded,
+                      key: const ValueKey('player.info.fileSection'),
+                      title: '文件',
+                      icon: Icons.insert_drive_file_outlined,
                       child: Column(
                         children: [
-                          if (item.mediaDetailsError != null)
-                            PlayerDialogInfoRow(
-                                label: '媒体信息', value: item.mediaDetailsError!),
-                          if (item.thumbnailError != null)
-                            PlayerDialogInfoRow(
-                                label: '缩略图', value: item.thumbnailError!),
+                          PlayerDialogInfoRow(
+                              label: '文件名', value: item.title, emphasize: true),
+                          PlayerDialogInfoRow(label: '路径', value: item.path),
+                          PlayerDialogInfoRow(label: '目录', value: item.folder),
+                          PlayerDialogInfoRow(
+                            label: '大小',
+                            value:
+                                formatBytes(stat?.size ?? item.fileSize ?? 0),
+                          ),
+                          PlayerDialogInfoRow(
+                            label: '修改时间',
+                            value: stat?.modifiedAt?.toString() ?? '未知',
+                          ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    PlayerDialogSectionCard(
+                      key: const ValueKey('player.info.mediaSection'),
+                      title: '媒体',
+                      icon: Icons.movie_outlined,
+                      child: Column(
+                        children: [
+                          PlayerDialogInfoRow(
+                              label: '视频', value: details.videoLabel),
+                          PlayerDialogInfoRow(
+                              label: '音频', value: details.audioLabel),
+                          PlayerDialogInfoRow(
+                              label: '媒体指纹',
+                              value: item.mediaFingerprint ?? '未读取'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    PlayerDialogSectionCard(
+                      key: const ValueKey('player.info.organizationSection'),
+                      title: '整理状态',
+                      icon: Icons.sell_outlined,
+                      child: Column(
+                        children: [
+                          PlayerDialogInfoRow(
+                              label: '标签',
+                              value: item.tags.isEmpty
+                                  ? '未添加'
+                                  : (item.tags.toList()..sort()).join('、')),
+                          PlayerDialogInfoRow(
+                              label: '二级标签', value: childTagSummary(item)),
+                          PlayerDialogInfoRow(
+                              label: '收藏', value: item.isFavorite ? '是' : '否'),
+                        ],
+                      ),
+                    ),
+                    if (item.mediaDetailsError != null ||
+                        item.thumbnailError != null) ...[
+                      const SizedBox(height: 12),
+                      PlayerDialogSectionCard(
+                        key: const ValueKey('player.info.errorSection'),
+                        title: '异常',
+                        icon: Icons.warning_amber_rounded,
+                        child: Column(
+                          children: [
+                            if (item.mediaDetailsError != null)
+                              PlayerDialogInfoRow(
+                                  label: '媒体信息',
+                                  value: item.mediaDetailsError!),
+                            if (item.thumbnailError != null)
+                              PlayerDialogInfoRow(
+                                  label: '缩略图', value: item.thumbnailError!),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
+            actions: [
+              FilledButton.tonal(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('关闭'),
+              ),
+            ],
           ),
-          actions: [
-            FilledButton.tonal(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
         ),
       ),
     );

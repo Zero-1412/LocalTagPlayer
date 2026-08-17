@@ -310,131 +310,139 @@ class PlaybackDiagnosticsDialogState extends State<PlaybackDiagnosticsDialog> {
     ];
     final copyLines = <String>[...analysisLines, ...detailLines];
     final snapshot = _snapshot;
-    return AlertDialog(
-      key: const ValueKey('player.diagnostics.dialog'),
-      title: Row(
-        children: [
-          const Icon(Icons.monitor_heart_outlined),
-          const SizedBox(width: 10),
-          Expanded(child: Text(widget.title)),
-          if (_isSampling)
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-        ],
-      ),
-      content: SizedBox(
-        width: 760,
-        height: math.min(600, MediaQuery.sizeOf(context).height * 0.72),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              PlayerDialogSectionCard(
-                title: '实时状态',
-                icon: Icons.speed_rounded,
-                trailing: _DiagnosticsStatusBadge(
-                  label: snapshot == null
-                      ? '采集中'
-                      : snapshot.wasPlaying
-                          ? _needsAttention(snapshot)
-                              ? '需要关注'
-                              : '播放流畅'
-                          : '已暂停',
-                  healthy: snapshot != null && !_needsAttention(snapshot),
-                ),
-                child: Column(
-                  children: [
-                    PlayerDialogInfoRow(
-                      label: '连续采样',
-                      value: '$_sampleCount 次',
-                    ),
-                    PlayerDialogInfoRow(
-                      label: '播放推进',
-                      value: snapshot == null
-                          ? '等待首个样本'
-                          : '${snapshot.progressMs} ms / 期望 ${snapshot.expectedMs} ms',
-                    ),
-                    PlayerDialogInfoRow(
-                      label: '缓冲状态',
-                      value: snapshot == null
-                          ? '读取中'
-                          : snapshot.wasBuffering
-                              ? '正在缓冲'
-                              : '正常',
-                    ),
-                    PlayerDialogInfoRow(
-                      label: '最近采样',
-                      value: snapshot == null
-                          ? '—'
-                          : _formatSampleTime(snapshot.sampledAt),
-                    ),
-                  ],
-                ),
+    final dialogTheme = playerDialogTheme(context);
+    return Theme(
+      data: dialogTheme,
+      child: AlertDialog(
+        key: const ValueKey('player.diagnostics.dialog'),
+        title: Row(
+          children: [
+            const Icon(Icons.monitor_heart_outlined),
+            const SizedBox(width: 10),
+            Expanded(child: Text(widget.title)),
+            if (_isSampling)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              const SizedBox(height: 12),
-              PlayerDialogSectionCard(
-                title: '分析结论',
-                icon: Icons.fact_check_outlined,
-                child: SelectionArea(
-                  child: Text(
-                    analysisLines.where((line) => line.isNotEmpty).join('\n'),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          height: 1.55,
-                        ),
+          ],
+        ),
+        content: SizedBox(
+          width: 760,
+          height: math.min(600, MediaQuery.sizeOf(context).height * 0.72),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PlayerDialogSectionCard(
+                  key: const ValueKey('player.diagnostics.statusSection'),
+                  title: '实时状态',
+                  icon: Icons.speed_rounded,
+                  trailing: _DiagnosticsStatusBadge(
+                    label: snapshot == null
+                        ? '采集中'
+                        : snapshot.wasPlaying
+                            ? _needsAttention(snapshot)
+                                ? '需要关注'
+                                : '播放流畅'
+                            : '已暂停',
+                    healthy: snapshot != null && !_needsAttention(snapshot),
+                  ),
+                  child: Column(
+                    children: [
+                      PlayerDialogInfoRow(
+                        label: '连续采样',
+                        value: '$_sampleCount 次',
+                      ),
+                      PlayerDialogInfoRow(
+                        label: '播放推进',
+                        value: snapshot == null
+                            ? '等待首个样本'
+                            : '${snapshot.progressMs} ms / 期望 ${snapshot.expectedMs} ms',
+                      ),
+                      PlayerDialogInfoRow(
+                        label: '缓冲状态',
+                        value: snapshot == null
+                            ? '读取中'
+                            : snapshot.wasBuffering
+                                ? '正在缓冲'
+                                : '正常',
+                      ),
+                      PlayerDialogInfoRow(
+                        label: '最近采样',
+                        value: snapshot == null
+                            ? '—'
+                            : _formatSampleTime(snapshot.sampledAt),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              if (_error != null) ...[
                 const SizedBox(height: 12),
                 PlayerDialogSectionCard(
-                  title: '采样错误',
-                  icon: Icons.warning_amber_rounded,
-                  child: SelectableText(_error!),
-                ),
-              ],
-              if (_snapshot != null) ...[
-                const SizedBox(height: 12),
-                PlayerDialogSectionCard(
-                  title: '详细指标',
-                  icon: Icons.data_object_rounded,
+                  key: const ValueKey('player.diagnostics.analysisSection'),
+                  title: '分析结论',
+                  icon: Icons.fact_check_outlined,
                   child: SelectionArea(
                     child: Text(
-                      _snapshot!.lines.join('\n'),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            height: 1.5,
-                            fontFamily: 'Consolas',
-                          ),
+                      analysisLines.where((line) => line.isNotEmpty).join('\n'),
+                      style: dialogTheme.textTheme.bodyMedium?.copyWith(
+                        height: 1.55,
+                      ),
                     ),
                   ),
                 ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  PlayerDialogSectionCard(
+                    key: const ValueKey('player.diagnostics.errorSection'),
+                    title: '采样错误',
+                    icon: Icons.warning_amber_rounded,
+                    child: SelectableText(_error!),
+                  ),
+                ],
+                if (_snapshot != null) ...[
+                  const SizedBox(height: 12),
+                  PlayerDialogSectionCard(
+                    key: const ValueKey('player.diagnostics.metricsSection'),
+                    title: '详细指标',
+                    icon: Icons.data_object_rounded,
+                    child: SelectionArea(
+                      child: Text(
+                        _snapshot!.lines.join('\n'),
+                        style: dialogTheme.textTheme.bodySmall?.copyWith(
+                          height: 1.5,
+                          fontFamily: 'Consolas',
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
+        actions: [
+          TextButton.icon(
+            onPressed: _snapshot == null
+                ? null
+                : () {
+                    unawaited(_copySummary(copyLines));
+                  },
+            icon: Icon(
+              _copied ? Icons.check_rounded : Icons.copy_all_outlined,
+            ),
+            label: Text(
+              _copied ? '已复制（不含路径）' : '复制诊断摘要（不含路径）',
+            ),
+          ),
+          FilledButton.tonal(
+            key: const ValueKey('player.diagnostics.close'),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton.icon(
-          onPressed: _snapshot == null
-              ? null
-              : () {
-                  unawaited(_copySummary(copyLines));
-                },
-          icon: Icon(
-            _copied ? Icons.check_rounded : Icons.copy_all_outlined,
-          ),
-          label: Text(
-            _copied ? '已复制（不含路径）' : '复制诊断摘要（不含路径）',
-          ),
-        ),
-        FilledButton.tonal(
-          key: const ValueKey('player.diagnostics.close'),
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
-        ),
-      ],
     );
   }
 }

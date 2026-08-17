@@ -33,6 +33,7 @@ PlaybackDiagnosticsSnapshot _snapshot() => PlaybackDiagnosticsSnapshot(
 
 void main() {
   testWidgets('诊断弹窗只消费状态流和采样回调并在卸载后停止响应', (tester) async {
+    final semantics = tester.ensureSemantics();
     final playing = StreamController<bool>.broadcast();
     var samples = 0;
 
@@ -54,6 +55,14 @@ void main() {
     expect(samples, 1);
     expect(find.byKey(const ValueKey('player.diagnostics.dialog')),
         findsOneWidget);
+    expect(find.byKey(const ValueKey('player.diagnostics.statusSection')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('player.diagnostics.analysisSection')),
+        findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'^播放器信息分组：实时状态')),
+      findsOneWidget,
+    );
     expect(find.text('匿名诊断行'), findsOneWidget);
 
     playing.add(true);
@@ -68,5 +77,6 @@ void main() {
     expect(samples, 2);
 
     await playing.close();
+    semantics.dispose();
   });
 }
