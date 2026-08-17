@@ -1,6 +1,6 @@
 # CURRENT_TASK.md
 
-# 2026-08-17 · 播放器媒体控制 UI 外壳重构（进行中）
+# 2026-08-17 · 播放器媒体控制 UI 外壳重构（已完成）
 
 - 目标：进入播放器页面下一处 UI 外壳重构，把媒体控制弹窗的音轨、字幕、音画同步、章节四个默认 `Card`
   分组收敛为播放器嵌套工作区表面，先建立 `docs/design/PLAYER_MEDIA_CONTROLS_UI_SHELL_TARGET.md` 的
@@ -9,10 +9,13 @@
   使用 `playerWorkspaceTheme`，四个分组和弹窗增加稳定 key/容器语义。
 - 保护：不修改 `readMediaControls`、选轨/章节/延迟回调、`PlayerService`、`PlayerBackend`、来源
   `filtered playback queue`、播放会话、ThumbnailService、媒体详情/缓存队列、schema、stable identity 或用户数据。
-- 当前验证：实现与 focused 高对比度/150% widget 验证待执行；尚未完成全量测试、analyze、Windows build 和真实窗口检查。
+- 当前验证：媒体控制交互、播放器架构挂载、主题 token、high contrast/150% 文字与滚动可达性 focused 测试通过；
+  完整 `flutter test` 通过（629 passed，4 skipped）；`flutter analyze` 无问题；`flutter build windows --debug`
+  成功。Debug 窗口真实从媒体库进入播放器，打开并滚动媒体控制弹窗检查音轨、字幕、音画同步、章节四组表面、
+  空态、关闭与返回；未触发选轨、延迟、章节跳转或其它写入动作。
 - 阻塞：无。
-- 下一步：运行 focused/架构/全量验证，启动 Debug 窗口从播放器控制栏打开媒体控制，检查四个分组表面、滚动、关闭和返回；
-  通过后提交并推送，再决定继续播放器其它残余内容表面或收集本轮视觉反馈。
+- 下一步：收集媒体控制在 100/125/150% 文字缩放、high contrast 和 reduced motion 下的视觉反馈，再决定继续细化
+  播放器其它残余内容表面，或转入下一个页面的 UI 外壳重构；继续保护来源队列、播放器会话和用户数据边界。
 
 # 2026-08-17 · 标签中心 UI 外壳重构（已完成）
 
