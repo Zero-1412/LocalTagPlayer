@@ -3,6 +3,9 @@ param(
   [string]$Manifest,
   [string]$Flutter = 'flutter',
   [string]$FFprobe = '',
+  # 默认只门禁正式 MediaKit Texture；HWND 只能用于同机呈现链路对照，绝不改变默认后端。
+  [ValidateSet('mediaKit', 'hwnd')]
+  [string]$Backend = 'mediaKit',
   [string]$Output = ''
 )
 
@@ -98,6 +101,7 @@ foreach ($case in $cases | Sort-Object id) {
   $env:LOCAL_TAG_PLAYER_SEEK_SAMPLE = $case.path
   $env:LOCAL_TAG_PLAYER_SEEK_CASE = $case.id
   $env:LOCAL_TAG_PLAYER_SEEK_P95_BUDGET_MS = "$($case.p95BudgetMs)"
+  $env:LOCAL_TAG_PLAYER_SEEK_BACKEND = $Backend
   try {
     & $Flutter test integration_test/player_seek_latency_gate_test.dart -d windows --timeout 4m *>&1 |
       Tee-Object -FilePath $logPath
@@ -106,12 +110,14 @@ foreach ($case in $cases | Sort-Object id) {
     Remove-Item Env:LOCAL_TAG_PLAYER_SEEK_SAMPLE -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_SEEK_CASE -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_SEEK_P95_BUDGET_MS -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_SEEK_BACKEND -ErrorAction SilentlyContinue
   }
   $line = Select-String -LiteralPath $logPath -Pattern 'PLAYER_SEEK_LATENCY ' |
     Select-Object -Last 1
   if ($null -eq $line) { throw "No latency result for case $($case.id)" }
   $metric = ($line.Line -replace '.*PLAYER_SEEK_LATENCY ', '') | ConvertFrom-Json
   $results += [pscustomobject]@{
+    backend = $metric.backend
     case = $case.id
     codec = $probe.codec_name
     width = [int]$probe.width
@@ -127,35 +133,39 @@ foreach ($case in $cases | Sort-Object id) {
 
 $results | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Output 'summary.json') -Encoding utf8
 
-# 以六个真实长 GOP 的最差 p95 决定页面默认的预览节流与最终新帧等待档位；不根据
-# manifest 声明或请求的硬解参数猜测结果。运行时仍以本会话实际关键帧 seek 成本自适应。
-$longGopResults = @($results | Where-Object { $_.case -like '*-long-gop' })
-if ($longGopResults.Count -ne 6) {
-  throw 'Expected six long-GOP measurements before choosing the seek preview policy'
-}
-$longGopP95Ms = [int](($longGopResults | Measure-Object -Property p95Ms -Maximum).Maximum)
-if ($longGopP95Ms -le 750) {
-  $policy = [pscustomobject]@{
-    longGopP95Ms = $longGopP95Ms
-    previewIntervalMs = 64
-    previewFps = 15.6
-    finalFrameTimeoutMs = 750
+# 只有正式 MediaKit Texture 的六个真实长 GOP p95 才能校准页面默认的预览节流与
+# 最终新帧等待档位。HWND 是独立呈现链路实验，不能反向改变正式路径的用户体验参数。
+if ($Backend -eq 'mediaKit') {
+  $longGopResults = @($results | Where-Object { $_.case -like '*-long-gop' })
+  if ($longGopResults.Count -ne 6) {
+    throw 'Expected six long-GOP measurements before choosing the seek preview policy'
   }
-} elseif ($longGopP95Ms -le 1200) {
-  $policy = [pscustomobject]@{
-    longGopP95Ms = $longGopP95Ms
-    previewIntervalMs = 96
-    previewFps = 10.4
-    finalFrameTimeoutMs = 1200
+  $longGopP95Ms = [int](($longGopResults | Measure-Object -Property p95Ms -Maximum).Maximum)
+  if ($longGopP95Ms -le 750) {
+    $policy = [pscustomobject]@{
+      longGopP95Ms = $longGopP95Ms
+      previewIntervalMs = 64
+      previewFps = 15.6
+      finalFrameTimeoutMs = 750
+    }
+  } elseif ($longGopP95Ms -le 1200) {
+    $policy = [pscustomobject]@{
+      longGopP95Ms = $longGopP95Ms
+      previewIntervalMs = 96
+      previewFps = 10.4
+      finalFrameTimeoutMs = 1200
+    }
+  } else {
+    $policy = [pscustomobject]@{
+      longGopP95Ms = $longGopP95Ms
+      previewIntervalMs = 125
+      previewFps = 8.0
+      finalFrameTimeoutMs = 1800
+    }
   }
+  $policy | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Output 'long_gop_policy.json') -Encoding utf8
+  Write-Output "PLAYER_SEEK_LONG_GOP_POLICY $($policy | ConvertTo-Json -Compress)"
 } else {
-  $policy = [pscustomobject]@{
-    longGopP95Ms = $longGopP95Ms
-    previewIntervalMs = 125
-    previewFps = 8.0
-    finalFrameTimeoutMs = 1800
-  }
+  Write-Output 'PLAYER_SEEK_LONG_GOP_POLICY skipped=hwnd-qa-only'
 }
-$policy | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Output 'long_gop_policy.json') -Encoding utf8
-Write-Output "PLAYER_SEEK_LONG_GOP_POLICY $($policy | ConvertTo-Json -Compress)"
-$results | Format-Table case, p50Ms, p95Ms, maxMs, budgetMs, hwdec
+$results | Format-Table backend, case, p50Ms, p95Ms, maxMs, budgetMs, hwdec

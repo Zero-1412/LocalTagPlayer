@@ -130,12 +130,17 @@ CPU/GPU 绝对数值随解码器和媒体规格变化，除“空闲/浏览持�
   由 runner 参数和当次报告声明，不能只看“测试退出码为 0”。跨 DPI 分为两种证据：
   `simulated-single-monitor` 运行 100%/125%/150%/200%/100% 的 Flutter metrics、Surface
   重算和状态机验证，发布状态标记为 `passed-simulated-cross-dpi`；只有实际不同缩放屏幕移窗
-  才能标记 `passed`，不能把模拟证据写成物理跨屏通过。
+  才能标记 `passed`，不能把模拟证据写成物理跨屏通过。默认对照为 MediaKit Texture 与
+  原生 MPV Texture；需要定位呈现链路时，才显式传入 `-Backends mediaKit,hwnd` 比较
+  正式 Texture 与 QA-only child HWND。后者不得作为 Release 排名、默认后端或产品能力声明。
 - 真实媒体库播放器随机压力默认 1,800 秒、固定 seed；覆盖随机打开、队列滚动、两次 seek、全屏
   往返、诊断和返回媒体库。至少有 1 个 cycle，且无崩溃、无卡死、无错误播放器页面残留。
 - 隔离 profile 的增删目录压力默认 10 cycles，覆盖 add/scan/scroll/play/seek/diagnostics/release/remove；
   结束后视频数、root 数和关键数据库计数回到基线，release tail 默认 60 秒。
 - 播放诊断必须记录真实首帧、停滞、AV offset、掉帧和后端；不能按请求的 `hwdec` 或设置值推断实际硬解。
+  双后端报告还必须写出 `qaSeekFrameObservation`：它汇总页面开始观察新帧后的 p50/p95 与超时数，
+  但不是按键/拖动到桌面像素变化的完整时延；正式 Texture 回退帧号和 HWND 的 visible+帧号代理必须
+  显式保留 evidence，不能冒充屏幕级首帧。
 
 ## 6. 一次 L3 全测的固定执行顺序
 

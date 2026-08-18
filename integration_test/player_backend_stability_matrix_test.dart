@@ -24,7 +24,7 @@ import 'package:media_kit/media_kit.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
- * 使用同一组匿名真实片源验证 MediaKit 与 Windows MPV 的稳定性矩阵。
+ * 使用同一组匿名真实片源验证 MediaKit、Windows MPV Texture 与 child HWND 的稳定性矩阵。
  *
  * 本测试覆盖正式 PlayerPage 的全屏状态机、latest-request 快速切换链、DPI metrics
  * 重算和长播诊断；真实跨显示器移动由外层矩阵脚本单独标记，单显示器环境不能冒充通过。
@@ -61,8 +61,10 @@ void main() {
             .environment['LOCAL_TAG_PLAYER_STABILITY_PHYSICAL_DPI_STATUS'] ??
         'not-run';
 
-    if (backendName != 'mediaKit' && backendName != 'mpv') {
-      throw StateError('稳定性矩阵后端必须是 mediaKit 或 mpv');
+    if (backendName != 'mediaKit' &&
+        backendName != 'mpv' &&
+        backendName != 'hwnd') {
+      throw StateError('稳定性矩阵后端必须是 mediaKit、mpv 或 hwnd');
     }
     if (outputPath == null || outputPath.isEmpty) {
       throw StateError('稳定性矩阵缺少输出目录');
@@ -75,8 +77,9 @@ void main() {
       throw StateError('稳定性矩阵的长播至少 10 秒，快速切换至少 6 次');
     }
 
-    final usesMpv = backendName == 'mpv';
-    if (!usesMpv) {
+    final usesNativeMpv = backendName == 'mpv' || backendName == 'hwnd';
+    final usesChildHwnd = backendName == 'hwnd';
+    if (!usesNativeMpv) {
       MediaKit.ensureInitialized();
     }
     final outputDirectory = Directory(outputPath)..createSync(recursive: true);
@@ -99,29 +102,31 @@ void main() {
         ),
     ];
     final settings = PlaybackSettings.defaults.copyWith(
-      rendererPreference: usesMpv
+      rendererPreference: usesNativeMpv
           ? PlayerRendererPreference.windowsLibmpv
           : PlayerRendererPreference.mediaKit,
-      hwdec: usesMpv ? 'd3d11va' : PlaybackSettings.defaults.hwdec,
+      hwdec: usesNativeMpv ? 'd3d11va' : PlaybackSettings.defaults.hwdec,
       compressionEnhancementMode: PlayerCompressionEnhancementMode.off,
       darkSceneEnhancementEnabled: false,
       hdrDynamicToneMappingExperimentEnabled: false,
     );
-    final backend = usesMpv
-        ? WindowsNativePlayerBackend(mode: 'mpv')
+    final backend = usesNativeMpv
+        ? WindowsNativePlayerBackend(mode: usesChildHwnd ? 'hwnd' : 'mpv')
         : MediaKitPlayerBackend(
             hwdec: PlayerHardwareAcceleration.resolve(settings.hwdec),
             enableHardwareAcceleration: settings.hardwareDecodingEnabled,
           );
-    final nativeLifecycle = usesMpv
+    final nativeLifecycle = usesNativeMpv
         ? await backend.getProperty('native-lifecycle')
         : 'media-kit-in-process';
-    final nativeVideoOutput =
-        usesMpv ? await backend.getProperty('current-vo') : 'media-kit-texture';
-    if (usesMpv &&
-        nativeLifecycle != 'mpv_ready' &&
-        nativeLifecycle != 'mpv_texture_ready') {
-      // MPV 是本机可选后端；创建成功但没有进入真实 libmpv/ANGLE ready 状态时，
+    final nativeVideoOutput = usesNativeMpv
+        ? await backend.getProperty('current-vo')
+        : 'media-kit-texture';
+    final expectedNativeLifecycles = usesChildHwnd
+        ? const <String>{'mpv_hwnd_ready'}
+        : const <String>{'mpv_ready', 'mpv_texture_ready'};
+    if (usesNativeMpv && !expectedNativeLifecycles.contains(nativeLifecycle)) {
+      // MPV 是本机可选后端；创建成功但没有进入该表面模式的真实 ready 状态时，
       // 必须立即给出平台能力结论，不能继续把后续 PlayerPage 失败写成解码问题。
       throw StateError(
         '当前 Windows MPV 后端不可测：native-lifecycle=$nativeLifecycle '
@@ -181,12 +186,12 @@ void main() {
     );
     await backend.setProperty('loop-file', 'inf');
     await _pumpContinuously(tester, const Duration(seconds: 2));
-    if (usesMpv) {
+    if (usesNativeMpv) {
       await _waitForBackendProperty(
         tester,
         backend,
         'hwdec-current',
-        'd3d11va-copy',
+        usesChildHwnd ? 'd3d11va' : 'd3d11va-copy',
         const Duration(seconds: 15),
       );
     }
@@ -211,6 +216,7 @@ void main() {
       tester,
       playerKey,
       backend,
+      usesChildHwnd: usesChildHwnd,
     );
     final interactionPerformance = await _runInteractionPerformanceScenario(
       tester,
@@ -222,6 +228,7 @@ void main() {
       playerKey,
       backend,
       physicalStatus: physicalDpiStatus,
+      usesChildHwnd: usesChildHwnd,
     );
     final rapidSwitch = await _runRapidSwitchScenario(
       tester,
@@ -264,6 +271,11 @@ void main() {
       'backendAvailability': 'available',
       'nativeLifecycle': nativeLifecycle,
       'nativeVideoOutput': nativeVideoOutput,
+      'surfaceMode': usesChildHwnd
+          ? 'child-hwnd-qa-only'
+          : usesNativeMpv
+              ? 'flutter-texture-native-mpv'
+              : 'flutter-texture-media-kit',
       'rendererPreference': settings.rendererPreference.name,
       'actualHwdec': await backend.getProperty('hwdec-current'),
       'initialColorPipeline': initialColorPipeline,
@@ -321,6 +333,7 @@ Future<Map<String, Object?>> _runFullscreenScenario(
 ) async {
   final state = playerKey.currentState!;
   final before = backend.state.position.inMilliseconds;
+  final textureGenerationsBefore = _textureGenerationCount(backend);
   const cycles = 6;
   for (var index = 0; index < cycles; index++) {
     await _toggleFullscreenWithFrame(tester, state);
@@ -352,6 +365,7 @@ Future<Map<String, Object?>> _runFullscreenScenario(
   await _toggleFullscreenWithFrame(tester, state);
   await _pumpContinuously(tester, const Duration(milliseconds: 350));
   final after = backend.state.position.inMilliseconds;
+  final textureGenerationsAfter = _textureGenerationCount(backend);
   final snapshot = state.buildStabilitySnapshotForTest();
   final pass = !snapshot.windowFullscreen &&
       !snapshot.hasOpenFailure &&
@@ -364,6 +378,11 @@ Future<Map<String, Object?>> _runFullscreenScenario(
     'finalFullscreen': snapshot.windowFullscreen,
     'positionBeforeMs': before,
     'positionAfterMs': after,
+    // 只读取正式后端已公开的匿名诊断快照；全屏往返不应隐式创建新 Texture。
+    'textureGenerationDelta':
+        textureGenerationsBefore == null || textureGenerationsAfter == null
+            ? null
+            : textureGenerationsAfter - textureGenerationsBefore,
     'sessionPreserved': snapshot.openedVideoId == snapshot.currentVideoId,
     'fullscreenQueueVisible': fullscreenQueueVisible,
     'fullscreenQueueHitTestable': fullscreenQueueHitTestable,
@@ -376,10 +395,14 @@ Future<void> _toggleFullscreenWithFrame(
   PlayerPageState state,
 ) async {
   final toggle = state.toggleWindowFullscreenForStressTest();
-  await tester.pump();
-  await toggle.timeout(
+  // child HWND 切换时，窗口状态机不仅等待 Flutter 的 endOfFrame，还会等待下一帧
+  // 布局把新的占位矩形同步到原生子窗口。直接 await 会停止测试帧时钟，造成只在
+  // QA 环境可复现的相互等待；通过同一受限 pump 直到 Future 结束，不改变生产路径。
+  await _pumpFutureUntilComplete(
+    tester,
+    toggle,
     const Duration(seconds: 10),
-    onTimeout: () => throw StateError('稳定性矩阵全屏状态机等待窗口命令超时'),
+    operation: '稳定性矩阵全屏状态机',
   );
 }
 
@@ -392,8 +415,9 @@ Future<void> _toggleFullscreenWithFrame(
 Future<Map<String, Object?>> _runQueueCompositionScenario(
   WidgetTester tester,
   GlobalKey<PlayerPageState> playerKey,
-  PlayerBackend backend,
-) async {
+  PlayerBackend backend, {
+  required bool usesChildHwnd,
+}) async {
   final state = playerKey.currentState!;
   final surface = find.byKey(const ValueKey<String>('player.video.surface'));
   final initialWidth = tester.getSize(surface).width;
@@ -404,6 +428,7 @@ Future<Map<String, Object?>> _runQueueCompositionScenario(
   WidgetsBinding.instance.addTimingsCallback(collectFrames);
   final resizeBefore =
       int.tryParse(await backend.getProperty('native-surface-resizes'));
+  final textureGenerationsBefore = _textureGenerationCount(backend);
   state.toggleQueueVisibilityForStressTest();
   await _pumpContinuously(tester, const Duration(milliseconds: 450));
   final collapsedWidth = tester.getSize(surface).width;
@@ -423,12 +448,17 @@ Future<Map<String, Object?>> _runQueueCompositionScenario(
   final resizeDelta = resizeBefore == null || resizeAfter == null
       ? null
       : resizeAfter - resizeBefore;
+  final textureGenerationsAfter = _textureGenerationCount(backend);
   final positionAfter = backend.state.position.inMilliseconds;
   final snapshot = state.buildStabilitySnapshotForTest();
+  final surfaceEvidence = await _readSurfaceEvidence(
+    backend,
+    usesChildHwnd: usesChildHwnd,
+  );
   final pass = collapsedWidth > initialWidth &&
       (restoredWidth - initialWidth).abs() <= 1 &&
       positionAfter > positionBefore &&
-      backend.textureId.value != null &&
+      surfaceEvidence.ready &&
       !snapshot.hasOpenFailure &&
       snapshot.openedVideoId == snapshot.currentVideoId;
   return <String, Object?>{
@@ -439,9 +469,14 @@ Future<Map<String, Object?>> _runQueueCompositionScenario(
     'cycles': cycles,
     'frameTiming': _summarizeFrameTimings(frameTimings),
     'nativeSurfaceResizeDelta': resizeDelta,
+    'textureGenerationDelta':
+        textureGenerationsBefore == null || textureGenerationsAfter == null
+            ? null
+            : textureGenerationsAfter - textureGenerationsBefore,
     'positionBeforeMs': positionBefore,
     'positionAfterMs': positionAfter,
     'textureReady': backend.textureId.value != null,
+    'surfaceEvidence': surfaceEvidence.toJson(),
     'queuePreserved': snapshot.openedVideoId == snapshot.currentVideoId,
   };
 }
@@ -593,6 +628,76 @@ Map<String, Object?> _summarizeFrameTimings(List<ui.FrameTiming> frames) {
 }
 
 /**
+ * 读取正式 Texture 路径的重建代次。HWND 不拥有 Flutter Texture，返回 null 而不是
+ * 伪造零；这样 A/B 报告能把“无 Texture”与“Texture 未重建”区分开。
+ */
+int? _textureGenerationCount(PlayerBackend backend) {
+  if (backend is! PlayerVideoSurfaceDiagnosticsBoundary) return null;
+  final diagnostics = (backend as PlayerVideoSurfaceDiagnosticsBoundary)
+      .videoSurfaceDiagnostics;
+  return diagnostics.supported ? diagnostics.textureGenerationCount : null;
+}
+
+/**
+ * 按表面类型读取“视频已可见”的最小证据。
+ *
+ * Texture 后端必须拥有 Flutter Texture ID；child HWND 正确时没有 Texture ID，
+ * 因而改由 runner 已确认的原生窗口可见性和非零表面尺寸判定。两类证据保留在
+ * 同一报告字段中，不能把 HWND 的零 Texture ID 写成失败，也不能把窗口挂载当成
+ * 实际视频表面已经同步。
+ */
+Future<_PlayerSurfaceEvidence> _readSurfaceEvidence(
+  PlayerBackend backend, {
+  required bool usesChildHwnd,
+}) async {
+  if (!usesChildHwnd) {
+    return _PlayerSurfaceEvidence(
+      kind: 'flutter-texture',
+      ready: backend.textureId.value != null,
+      width: null,
+      height: null,
+      visible: null,
+    );
+  }
+  final visible = await backend.getProperty('native-surface-visible');
+  final width = int.tryParse(await backend.getProperty('native-surface-width'));
+  final height =
+      int.tryParse(await backend.getProperty('native-surface-height'));
+  return _PlayerSurfaceEvidence(
+    kind: 'child-hwnd',
+    ready: visible == 'true' && (width ?? 0) >= 64 && (height ?? 0) >= 64,
+    width: width,
+    height: height,
+    visible: visible,
+  );
+}
+
+/** 只保存匿名表面状态，供同机 A/B 报告解释呈现证据类型。 */
+class _PlayerSurfaceEvidence {
+  const _PlayerSurfaceEvidence({
+    required this.kind,
+    required this.ready,
+    required this.width,
+    required this.height,
+    required this.visible,
+  });
+
+  final String kind;
+  final bool ready;
+  final int? width;
+  final int? height;
+  final String? visible;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'kind': kind,
+        'ready': ready,
+        'width': width,
+        'height': height,
+        'visible': visible,
+      };
+}
+
+/**
  * 模拟 Flutter metrics 的常见缩放变化，验证两种视频表面都保持有效。
  *
  * 该结果只属于自动布局门禁；真实跨显示器状态由 [physicalStatus] 单独记录。
@@ -602,6 +707,7 @@ Future<Map<String, Object?>> _runDpiScenario(
   GlobalKey<PlayerPageState> playerKey,
   PlayerBackend backend, {
   required String physicalStatus,
+  required bool usesChildHwnd,
 }) async {
   const scales = <double>[1, 1.25, 1.5, 2, 1];
   final observations = <Map<String, Object?>>[];
@@ -610,6 +716,10 @@ Future<Map<String, Object?>> _runDpiScenario(
     await _pumpContinuously(tester, const Duration(milliseconds: 350));
     final videoSurface =
         find.byKey(const ValueKey<String>('player.video.surface'));
+    final surfaceEvidence = await _readSurfaceEvidence(
+      backend,
+      usesChildHwnd: usesChildHwnd,
+    );
     final observation = <String, Object?>{
       'requestedScale': scale,
       'surfaceMounted': videoSurface.evaluate().isNotEmpty,
@@ -620,6 +730,7 @@ Future<Map<String, Object?>> _runDpiScenario(
           ? 0
           : tester.getSize(videoSurface).height.round(),
       'textureReady': backend.textureId.value != null,
+      'surfaceEvidence': surfaceEvidence.toJson(),
     };
     observations.add(observation);
   }
@@ -632,7 +743,8 @@ Future<Map<String, Object?>> _runDpiScenario(
         (observation['surfaceHeight'] as int) < 64) {
       return false;
     }
-    return observation['textureReady'] == true;
+    final evidence = observation['surfaceEvidence'] as Map<String, Object?>?;
+    return evidence?['ready'] == true;
   }
 
   final snapshot = playerKey.currentState!.buildStabilitySnapshotForTest();

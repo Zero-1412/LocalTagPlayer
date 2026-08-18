@@ -9,6 +9,9 @@
   [int]$MaxDroppedFrames = 5,
   [ValidateSet('auto', 'simulated', 'passed', 'failed')]
   [string]$PhysicalCrossDpiStatus = 'auto',
+  # 默认保留历史的两条 Texture 对照；传入 mediaKit,hwnd 时才运行 child HWND QA。
+  [ValidateSet('mediaKit', 'mpv', 'hwnd')]
+  [string[]]$Backends = @('mediaKit', 'mpv'),
   # 用 Flutter Profile 构建执行集成测试；默认 Debug 保留本地快速诊断路径。
   [switch]$Profile,
   [string]$Output = ''
@@ -16,6 +19,42 @@
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+
+# 把页面 trace 中“开始观察新帧后等待了多久”单独汇总。它不是按键/拖动到屏幕像素的
+# 端到端延迟，因此字段名明确标为 observation；超时必须进入结果，不能只留在长日志。
+function Get-SeekTraceSummary {
+  param([string]$LogPath)
+  if (-not (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
+    return [pscustomobject]@{
+      observedFrames = 0
+      observationP50Ms = $null
+      observationP95Ms = $null
+      framePresentationTimeouts = 0
+      evidence = @()
+    }
+  }
+  $waits = @()
+  $timeouts = 0
+  $evidence = @()
+  foreach ($line in Get-Content -LiteralPath $LogPath) {
+    if ($line -notmatch 'PLAYER_SEEK_TRACE') { continue }
+    if ($line -match 'stage=new_video_frame_timeout') { $timeouts++ }
+    if ($line -match 'stage=new_video_frame(?:\s|$)' -and $line -match 'wait_ms=(\d+)') {
+      $waits += [int]$Matches[1]
+    }
+    if ($line -match 'frame_evidence=([^\s]+)') { $evidence += $Matches[1] }
+  }
+  $sorted = @($waits | Sort-Object)
+  $p50 = if ($sorted.Count -eq 0) { $null } else { $sorted[[int][Math]::Floor(($sorted.Count - 1) * 0.5)] }
+  $p95 = if ($sorted.Count -eq 0) { $null } else { $sorted[[int][Math]::Ceiling(($sorted.Count - 1) * 0.95)] }
+  return [pscustomobject]@{
+    observedFrames = $sorted.Count
+    observationP50Ms = $p50
+    observationP95Ms = $p95
+    framePresentationTimeouts = $timeouts
+    evidence = @($evidence | Sort-Object -Unique)
+  }
+}
 
 if ($SamplePaths.Count -eq 0) {
   # 本机自然片源只作为便捷默认值；仓库不分发这些文件，CI 或其它开发机必须显式传入。
@@ -27,6 +66,9 @@ if ($SamplePaths.Count -eq 0) {
 }
 if ($SamplePaths.Count -lt 3) {
   throw '双后端稳定性矩阵至少需要三段真实片源。'
+}
+if ($Backends.Count -lt 2 -or @($Backends | Sort-Object -Unique).Count -ne $Backends.Count) {
+  throw '后端对照至少需要两个且互不重复的 backend；可选值为 mediaKit、mpv、hwnd。'
 }
 $resolvedSamples = @()
 foreach ($sample in $SamplePaths) {
@@ -72,7 +114,7 @@ $env:LOCAL_TAG_PLAYER_STABILITY_PHYSICAL_DPI_STATUS = $effectivePhysicalDpiStatu
 
 $runResults = @()
 try {
-  foreach ($backend in @('mediaKit', 'mpv')) {
+  foreach ($backend in $Backends) {
     $backendOutput = Join-Path $Output $backend
     New-Item -ItemType Directory -Force -Path $backendOutput | Out-Null
     $env:LOCAL_TAG_PLAYER_STABILITY_BACKEND = $backend
@@ -103,11 +145,17 @@ try {
     } else {
       $null
     }
+    $traceSummary = Get-SeekTraceSummary -LogPath $logPath
+    if ($null -ne $report) {
+      $report | Add-Member -NotePropertyName 'qaSeekFrameObservation' `
+        -NotePropertyValue $traceSummary -Force
+    }
     $runResults += [PSCustomObject]@{
       backend = $backend
       exitCode = $exitCode
       reportPath = $reportPath
       report = $report
+      seekFrameObservation = $traceSummary
     }
   }
 } finally {
@@ -153,6 +201,7 @@ $matrix = [ordered]@{
     windows = [ordered]@{
       mediaKit = 'available'
       mpv = 'available-libmpv-flutter-texture'
+      hwnd = 'available-qa-only-child-hwnd'
     }
     macos = [ordered]@{
       mediaKit = 'available'

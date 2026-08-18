@@ -4,7 +4,7 @@
 
 ## 覆盖与口径
 
-矩阵必须完整覆盖 12 例：`1080p/4k × h264/hevc/av1 × short-gop/long-gop`。每例先由 `ffprobe` 验证视频流编码和像素尺寸；短 GOP 最大关键帧间隔不得超过 1.1 秒，长 GOP 不得少于 4 秒。脚本随后运行正式 `MediaKitPlayerBackend` 的 Texture 输出，在两次预热后采集 7 次精确随机 seek，从后端调用到位置实际接近目标（750 ms 容差）的端到端耗时计算 p50/p95/max。
+矩阵必须完整覆盖 12 例：`1080p/4k × h264/hevc/av1 × short-gop/long-gop`。每例先由 `ffprobe` 验证视频流编码和像素尺寸；短 GOP 最大关键帧间隔不得超过 1.1 秒，长 GOP 不得少于 4 秒。默认脚本运行正式 `MediaKitPlayerBackend` 的 Texture 输出，在两次预热后采集 7 次精确随机 seek，从后端调用到位置实际接近目标（750 ms 容差）并观察帧号变化的端到端耗时计算 p50/p95/max。
 
 解码器路径记录为证据而非先验。硬件不支持时允许软件回退参加门禁，但必须为该机器设置独立、明确的预算；不得根据请求的 `hwdec` 参数推测实际硬解。
 
@@ -45,7 +45,21 @@
 .\tool\run_player_seek_latency_matrix.ps1 -Manifest .\.local\qa\player_seek-latency-matrix.json
 ```
 
-输出位于未跟踪的 `artifacts/player_seek_latency_<timestamp>/`：每个 case 的日志和不含路径的 `summary.json`。矩阵通过正式精确恢复入口测量：临时静音但不暂停视频时钟；精确 seek 返回后才采样基线，Windows 正式 Texture 还必须观察到 `native-rendered-frames` 递增才计入完成。非原生路径可回退 `estimated-frame-number`，但结果必须标记为估算证据，不能与 Texture 已渲染结果混算。任一样本缺失、probe 与 manifest 不符、GOP 分类不符、后端未确认位置/新帧或 p95 超预算都会使门禁失败。
+需要定位正式 Texture 与原生 child HWND 的呈现差异时，才显式运行：
+
+```powershell
+.\tool\run_player_seek_latency_matrix.ps1 `
+  -Manifest .\.local\qa\player_seek-latency-matrix.json `
+  -Backend hwnd
+```
+
+输出位于未跟踪的 `artifacts/player_seek_latency_<timestamp>/`：每个 case 的日志和不含路径的 `summary.json`。矩阵通过正式精确恢复入口测量：临时静音但不暂停视频时钟；精确 seek 返回后才采样基线。`native-rendered-frames` 大于零时才是原生共享 Texture 已完成复制的直接代理。当前正式 MediaKit Texture 若未暴露该计数，会回退 `estimated-frame-number`；child HWND 则要求原生子窗口可见且该帧号变化，写为 `child-hwnd-visible+estimated-frame-number-proxy`。这两种回退均不是桌面像素捕获，不能当作“首个实际屏幕呈现帧”或与专业播放器的屏幕级数据混算；一旦需要发布级结论，必须补固定帧率录屏或桌面捕获的独立证据。HWND 结果仅用于根因定位，不得作为 Release 排名、默认后端或产品能力声明。任一样本缺失、probe 与 manifest 不符、GOP 分类不符、后端未确认位置/新帧或 p95 超预算都会使门禁失败。
+
+每个 case 还输出 `keyboardExperience` 与 `dragExperience`。前者以页面同配置的
+`PlayerKeyboardSeekController` 重放短按、长按前进和长按后退，后者重放一次 latest-only
+进度条拖动；两者都从输入模型动作到帧号代理变化采样 p50/p95/max。它们验证正式控制器，
+但不替代真实 `PlayerPage` 焦点、实体按键重复率或桌面像素捕获；需要把结果作为用户级体验
+结论前，仍要进行实窗录屏对齐。
 
 ## 录屏与 `PLAYER_SEEK_TRACE` 对齐
 
