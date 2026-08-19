@@ -53,6 +53,11 @@ short/long；因此 GOP 落在 `1.1s` 与 `4.0s` 之间时保持 case 缺失，�
 1080p AV1 的另一个候选 packet 可读但关键帧间隔约 `2.00s`，落在目标 GOP 区间之外，
 因此两个缺口仍保持 unknown。
 
+补充的只读 root 文件树审计又检查了 `177` 个未索引媒体：其中只有 `1` 个 1080p AV1，
+ffprobe 关键帧最大间隔为 `6.25s`，仍属于 long GOP；没有发现 4K AV1 未索引候选。
+该审计不把未进入应用资料库的文件强行加入正式 manifest，但它排除了“本轮缺口只是
+library.db 漏扫”的解释；两个缺口继续保持 `unknown`，不因额外扫描而伪造完整覆盖。
+
 ### 统一判定
 
 [tool/validate_player_p0_evidence.ps1](/E:/LocalTagPlayer/tool/validate_player_p0_evidence.ps1)
@@ -103,6 +108,24 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | 稳态 total drop | unknown | 既有动作样本缺少独立 10 秒分母 |
 | 首个真实 DWM 帧 | pass/fail 按已有 action 分列 | 只采用桌面合成像素报告 |
 | P0 总体 | unknown | 统一 12-case、首播和完整稳态证据尚未闭环 |
+
+### 已有独立矩阵的补充评估
+
+以下结果来自已有正式 PlayerPage/Texture 的独立矩阵，并通过
+[tool/evaluate_player_smoothness_standard.ps1](/E:/LocalTagPlayer/tool/evaluate_player_smoothness_standard.ps1)
+重新计算；它们是支撑证据，不会自动填入统一 manifest，也不能替代每个 case/action 的
+三会话关联。
+
+- 1080p 三编码的 shortForward、shortBackward、drag 矩阵各有 `3/3` 有效会话；首个
+  DWM p95 分别为：H.264 `81/92/343 ms`、HEVC `86/94/307 ms`、AV1 `86/93/362 ms`。
+  页面语义、decoder drop 和最终硬解在这些矩阵中为 `pass`；VO drop、独立稳态分母和
+  稳态 Texture 重建仍为 `unknown`，所以矩阵整体不能写成通过。
+- 1080p longForward 的首个 DWM p95 为 H.264 `75 ms`、HEVC `99 ms`、AV1 `1105 ms`；
+  H.264/HEVC 的连续呈现节奏门禁为 `fail`，AV1 同时首帧与最长无变化间隔失败。
+  longBackward 三编码首个 DWM p95 为 `271/281/263 ms`，连续扫描门禁均为 `fail`；
+  这些结果继续区分“前进连续扫描”与“后退 latest-only 关键帧预览”，不宣称双向连续。
+- 4K drag 的 H.264/HEVC/AV1 矩阵各有 `7/7` 有效会话，首个 DWM p95 为 `351/293/287 ms`，
+  页面语义为 `pass`；部分运行态 decoder/hwdec 字段缺失，因此仍按 `unknown` 处理。
 
 阶段 A 在统一 manifest 的每个有效 case/action 达到 3 个独立会话、报告字段齐全、
 失败和 unknown 均被保留后结束；不因实体键盘、另一后端或外部 GPU 无限重跑。

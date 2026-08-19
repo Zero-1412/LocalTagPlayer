@@ -33,6 +33,10 @@
   `probeOutcomeCounts` 进一步确认 1080p AV1 的另一候选是约 `2.00s` 的目标区间外 GOP，
   4K AV1 没有第二个 long 候选。不把这两个 case 补成通过，也不把类别缺失写成探测失败。
 
+- 2026-08-20 对 root 文件树做补充只读审计：177 个未索引媒体中只有 1 个 1080p AV1，
+  ffprobe 最大关键帧间隔 `6.25s`（long GOP），没有 4K AV1 未索引候选；因此两个 manifest
+  缺口不是 library.db 漏扫造成，仍保持 `unknown`，不把未进入应用资料库的文件强行加入正式报告。
+
 - 2026-08-20 用当前 manifest 的 1080p H.264 short case 试跑正式 PlayerPage forward
   `3` 个独立 Debug Texture 会话：均完成打开、最终 `d3d11va-copy` 和释放，但
   `player_keyboard_event` 缺失、桌面像素 `0/1` 成功且每轮超时，矩阵拒绝生成 p95；
@@ -56,6 +60,14 @@
   AV1 `27.4 fps`，仍低于 30fps 最低门禁，不能把命令结果或后端帧号写成真实可见性通过。
   H.264/HEVC 的 A/B DWM 变化为 `pass`，AV1 仍为 `unknown`；最新匿名证据目录为
   `.local/qa/precision-dwm-buffered-{h264,hevc,av1}-20260820_*`。
+
+- 2026-08-20 重新评估已有正式 PlayerPage/Texture 矩阵：1080p 三编码的 shortForward、
+  shortBackward、drag 各为 `3/3` 有效，首个 DWM p95 分别为 H.264 `81/92/343 ms`、
+  HEVC `86/94/307 ms`、AV1 `86/93/362 ms`；页面语义、decoder drop、最终硬解为 pass，
+  VO/稳态分母/稳态 Texture 重建为 unknown。longForward 的连续呈现门禁在 H.264/HEVC
+  失败，AV1 首帧 `1105 ms` 且最长无变化 `950 ms`；longBackward 三编码连续门禁失败，
+  仍明确是 forward continuous 与 backward latest-only 的分离证据。4K drag 三编码各 `7/7`
+  有效，首个 DWM p95 `351/293/287 ms`，但部分运行态字段缺失，整体保留 unknown。
 
 - 2026-08-20 建立“流畅性”规范语义与有限工程门禁：依据 W3C Media Capabilities 的
   `smooth=目标帧率下无掉帧`、W3C VideoPlaybackQuality 的总帧/掉帧/展示延迟分层、mpv
