@@ -13,6 +13,14 @@
   `docs/qa/player_p0_p1_evidence_package_20260820.md` 分离；真人长按、发布 GPU/驱动、
   稳定 HWND A/B、跨显示器/DPI 和真实控制可见性保留为外部清单。
 
+- 2026-08-20 继续补齐本机 manifest 链：新增 `tool/generate_player_p0_manifest.dart`，
+  只读 library.db，使用 ffprobe 实际关键帧间隔分类 short/long GOP，并对单候选和全局
+  probe 数量设硬上限；SQLite FFI 需显式加入 `windows/tools/sqlite` 到 PATH。首次有限
+  探测生成 `.local/qa/player_p0_manifest.json` 为 `partial`，已选 `2/12`、缺少 `10`、
+  实际探测 `6`；确认 1080p H.264 long GOP `5.27s`、4K H.264 short GOP `1.00s`。
+  这不是其它 case 不存在的结论，仍保持 P0 覆盖 `unknown`，不把探测预算内的缺失冒充
+  外部硬件阻塞或通过。
+
 - 2026-08-20 建立“流畅性”规范语义与有限工程门禁：依据 W3C Media Capabilities 的
   `smooth=目标帧率下无掉帧`、W3C VideoPlaybackQuality 的总帧/掉帧/展示延迟分层、mpv
   的 VO/显示同步说明、ITU-T P.1203 的首播加载与 stalling 指标，以及 Android CDD

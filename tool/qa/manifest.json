@@ -53,6 +53,15 @@
       "replacement": null
     },
     {
+      "id": "player-p0-manifest-generator",
+      "path": "tool/generate_player_p0_manifest.dart",
+      "status": "active",
+      "kind": "performance-manifest-generator",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_p0_p1_evidence_package_20260820.md",
+      "replacement": null
+    },
+    {
       "id": "thumbnail-gpu-benchmark",
       "path": "tool/benchmark_thumbnail_gpu_paths.ps1",
       "status": "active",

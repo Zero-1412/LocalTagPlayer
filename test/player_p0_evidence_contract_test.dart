@@ -69,4 +69,22 @@ void main() {
     expect(document, contains('可见性 unknown'));
     expect(document, contains('真人实体 WM_KEYDOWN/UP'));
   });
+
+  test('本机 manifest 生成器使用只读数据库、ffprobe 和有界探测', () {
+    final generator =
+        File('tool/generate_player_p0_manifest.dart').readAsStringSync();
+
+    // 生成器只能产生本机 QA 产物；候选不足或 ffprobe 超时必须保留 partial/unknown。
+    expect(generator, contains('OpenDatabaseOptions(readOnly: true'));
+    expect(generator, contains('ffprobe'));
+    expect(generator, contains('skip_frame'));
+    expect(generator, contains('shortGopMaxSeconds'));
+    expect(generator, contains('longGopMinSeconds'));
+    expect(generator, contains('probeTimeoutSeconds'));
+    expect(generator, contains('maxProbes'));
+    expect(generator, contains('executableSha256'));
+    expect(generator, contains('sha256.bind'));
+    expect(generator, contains('if (missing > 0) exitCode = 3'));
+    expect(generator, contains('database=readonly'));
+  });
 }

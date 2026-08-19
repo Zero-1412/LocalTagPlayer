@@ -23,6 +23,21 @@ ffprobe 实际结果一致；12-case seek 运行器仍由
 [tool/run_player_seek_latency_matrix.ps1](/E:/LocalTagPlayer/tool/run_player_seek_latency_matrix.ps1)
 执行素材和 GOP 校验。
 
+也可以用只读资料库生成器建立候选 manifest。Windows CLI 需要把仓库内的 SQLite
+运行库放入当前进程 PATH；生成器对每个候选和整个探测批次都有上限，超时/缺失只记
+partial/unknown，不会等待无限长的媒体扫描：
+
+~~~powershell
+$env:Path = (Join-Path (Get-Location) 'windows\tools\sqlite') + ';' + $env:Path
+dart run tool/generate_player_p0_manifest.dart -Output .local\qa\player_p0_manifest.json -MaxCandidates 6 -MaxProbes 24 -ProbeTimeoutSeconds 20
+~~~
+
+生成器若发现默认 Debug 可执行文件，会把其 SHA-256 写入 manifest；找不到时保留空值，
+由验证器判为 `unknown`。本机首次有限探测结果为 `partial`，已选 `2/12`、缺少 `10`、实际探测 `6` 个候选；
+已确认的两个样本是 1080p H.264 长 GOP `5.27s` 和 4K H.264 短 GOP `1.00s`。
+由于本轮设置了全局 probe 上限，这个结果只证明 manifest 生成链可用，不能证明其它
+编码/分辨率没有样本；未补齐前 12-case 覆盖继续记 `unknown`。
+
 ### 统一判定
 
 [tool/validate_player_p0_evidence.ps1](/E:/LocalTagPlayer/tool/validate_player_p0_evidence.ps1)
