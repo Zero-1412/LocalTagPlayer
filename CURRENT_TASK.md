@@ -97,6 +97,14 @@
   成功。独立校验器四项 `commandResource=pass`，但无 DWM 摘要所以四项 visible/overall
   均为 `unknown`；这只推进了命令/资源 QA，不宣称 P1 控制真实可见性完成。
 
+- 2026-08-20 继续收紧 P1 真实可见性证据：倍速 Debug-only QA 改为播放中设置 `1.5x`、
+  观察 1 秒、恢复并再次读回 `1.0x` 后暂停；DWM 观测器改用桌面 DC 的不缩放 `BitBlt` 和
+  16×10 匿名中心网格，新增 `run_player_precision_controls_dwm_matrix.ps1` 负责独立会话
+  隔离和严格聚合。真实矩阵 `.local/qa/precision-dwm-matrix-grid16-rate1s-20260820b`
+  为 `3/3` 有效、采样 `32.0–32.2 fps`，四项 command/resource 与资源释放均 `3/3 pass`，
+  A/B DWM 可见性 `3/3 pass`；逐帧、倍速、外挂字幕均 `3/3 unknown`，validator exit `3`，
+  聚合 P1 总体保持 unknown。ready 前退出会话被排除，未以重跑覆盖 unknown。
+
 - 2026-08-20 重新评估已有正式 PlayerPage/Texture 矩阵：1080p 三编码的 shortForward、
   shortBackward、drag 各为 `3/3` 有效，首个 DWM p95 分别为 H.264 `81/92/343 ms`、
   HEVC `86/94/307 ms`、AV1 `86/93/362 ms`；页面语义、decoder drop、最终硬解为 pass，

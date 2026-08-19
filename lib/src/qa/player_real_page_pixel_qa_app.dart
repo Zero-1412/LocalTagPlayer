@@ -703,6 +703,7 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
     var frameStepPresented = false;
     var playbackRateApplied = false;
     var playbackRateRestored = false;
+    var playbackRateWasPlaying = false;
     var abLoopASet = false;
     var abLoopBSet = false;
     var loopCompleted = false;
@@ -743,13 +744,23 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       // 原倍速，避免 Debug QA 污染用户偏好或下一次播放器会话。
       const qaPlaybackRate = 1.5;
       final restorePlaybackRate = player.playbackRate;
-      _appendPrecisionEvidence(<String, Object?>{
-        'stage': 'playback_rate_before',
-        'success': true,
-        'requestedRate': restorePlaybackRate,
-        'readbackRate': await player.playerService.getProperty('speed'),
-      });
       try {
+        // 倍速可见性必须发生在真实播放时钟上；暂停画面只能证明命令读回，不能证明
+        // 画面呈现节奏。该播放/暂停只属于隔离 Debug QA，不改变正式页面行为。
+        await player.playerService.play();
+        playbackRateWasPlaying = player.playerService.state.playing;
+        if (!playbackRateWasPlaying) {
+          throw StateError('倍速可见性 QA 未能进入播放状态');
+        }
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'playback_rate_before',
+          'success': true,
+          'playing': playbackRateWasPlaying,
+          'requestedRate': restorePlaybackRate,
+          'readbackRate': await player.playerService.getProperty('speed'),
+          'positionMs': player.playerService.state.position.inMilliseconds,
+        });
+        await _precisionObservationDwell();
         await player.playerService.setRate(qaPlaybackRate);
         final readbackRate = await player.playerService.getProperty('speed');
         playbackRateApplied =
@@ -759,8 +770,12 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
           'success': playbackRateApplied,
           'requestedRate': qaPlaybackRate,
           'readbackRate': readbackRate,
+          'playing': player.playerService.state.playing,
+          'positionMs': player.playerService.state.position.inMilliseconds,
         });
-        await _precisionObservationDwell();
+        // 倍速可见性需要观察一段真实播放节奏；450ms 可能只覆盖一个合成变化，
+        // 因此该 Debug-only 窗口单独延长到 1 秒，不改变正式倍速命令时序。
+        await Future<void>.delayed(const Duration(seconds: 1));
       } catch (error) {
         _appendPrecisionEvidence(<String, Object?>{
           'stage': 'playback_rate_error',
@@ -769,18 +784,33 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       } finally {
         try {
           await player.playerService.setRate(restorePlaybackRate);
-          playbackRateRestored = true;
+          final restoreReadback =
+              await player.playerService.getProperty('speed');
+          playbackRateRestored =
+              _isPlaybackRateReadback(restoreReadback, restorePlaybackRate);
+          _appendPrecisionEvidence(<String, Object?>{
+            'stage': 'playback_rate_restored',
+            'success': playbackRateRestored,
+            'requestedRate': restorePlaybackRate,
+            'readbackRate': restoreReadback,
+          });
         } catch (error) {
           _appendPrecisionEvidence(<String, Object?>{
             'stage': 'playback_rate_restore_error',
             'errorType': error.runtimeType.toString(),
           });
+        } finally {
+          if (playbackRateWasPlaying) {
+            try {
+              await player.playerService.pause();
+            } catch (error) {
+              _appendPrecisionEvidence(<String, Object?>{
+                'stage': 'playback_rate_pause_error',
+                'errorType': error.runtimeType.toString(),
+              });
+            }
+          }
         }
-        _appendPrecisionEvidence(<String, Object?>{
-          'stage': 'playback_rate_restored',
-          'success': playbackRateRestored,
-          'requestedRate': restorePlaybackRate,
-        });
       }
 
       final start = player.playerService.state.position;

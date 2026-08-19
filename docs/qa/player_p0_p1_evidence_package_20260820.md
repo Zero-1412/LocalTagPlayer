@@ -248,9 +248,9 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | 短按 | 页面语义与 DWM 动作合同 | 首个真实 DWM 帧 | 已有 Texture action 证据，实体长按仍未闭环 |
 | 拖动 | Slider onChangeEnd、latest-only 合并、释放 | 预览连续变化与松手准确收敛 | 命令合同已有；统一 P0 manifest 后再汇总 |
 | 长按 | 前进临时扫描、后退 latest-only、KeyDown/Up 生命周期 | 按住期间 DWM 首帧和后续节奏 | 自动化已有；实体 WM_KEYDOWN/UP QPC 为 unknown |
-| 可调倍速 | setRate、状态读回、资源释放 | 真实窗口播放节奏预算 | 命令可用；可见性为 unknown |
+| 可调倍速 | setRate、播放中状态/速度读回、恢复读回、资源释放 | 真实窗口播放节奏预算 | 命令/资源 `3/3 pass`；DWM 聚合可见性为 `unknown` |
 | 逐帧 | frame-step/frame-back-step、错误和释放 | 逐帧真实 DWM 画面 | 命令可用；可见性为 unknown |
-| A-B loop | A/B/实际 A→B→A 循环、清除命令、状态和释放 | A→B 重复播放画面 | 命令与循环资源 QA 可用；可见性为 unknown |
+| A-B loop | A/B/实际 A→B→A 循环、清除命令、状态和释放 | A→B 重复播放画面 | 命令/资源与 DWM 可见性 `3/3 pass` |
 | 外挂字幕 | 加载/轨道/关闭命令和释放 | 字幕在真实 Texture 上可见、同步 | 命令可用；可见性为 unknown |
 
 “命令可用”不升级为“功能完成”。在可见性证据出现前，P1 只能报告命令合同通过和
@@ -264,13 +264,15 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 中心视频网格和字幕下方网格，分别把命令 JSONL 与匿名桌面指纹 JSONL 落盘。它要求：
 
 - `frame_step_complete` 的命令结果与前后 DWM 时间窗分开；逐帧不接受估算帧号代理；
-- `playback_rate_complete` 必须读回 `speed=1.5` 并恢复原倍速；该阶段只触碰当前
-  PlayerService，不写持久化播放设置；
+- `playback_rate_complete` 必须在真实播放状态读回 `speed=1.5`，并恢复原倍速且再次读回；
+  该阶段只触碰当前 PlayerService，不写持久化播放设置；
 - command/resource 门禁同时要求 `playback_rate_restored.success=true`，设置成功但未恢复
   原倍速不得记为通过；匿名摘要保留 requested/readback rate 供复核；
 - A/B 先实际从 A 播放到 B 并观察回到 A，再由 DWM 窗口判断是否有可见变化；
 - 外挂字幕先在同一位置建立无字幕静止基线，再把 `sub-add` 后的下方区域作为独立窗口；
 - 命令失败为 `fail`，桌面样本不足或指纹变化低于 `1.5%` 只为 `unknown`，不补成通过；
+- DWM 观测器使用桌面 DC 的不缩放 `BitBlt` 和匿名分布式网格；采样率必须达到 `30 fps`，
+  可见性以命令后至少一个不低于 `1.5%` 的真实桌面合成变化为 `pass`，不以命令或帧号代理；
 - 资源释放仍必须出现 `player_resources_released`。
 
 P1 校验器对每个控制分别输出 `commandResource`、`visible` 和合并 `overall`，因此命令
@@ -280,6 +282,15 @@ P1 校验器对每个控制分别输出 `commandResource`、`visible` 和合并 
 pwsh -NoProfile -File .\tool\validate_player_p1_precision_evidence.ps1 `
   -EvidenceRoot .\.local\qa\precision-dwm-rate-h264-20260820 `
   -Output .\.local\qa\p1-precision-evidence.json
+~~~
+
+三轮独立会话可用下面的矩阵入口顺序运行；它会排除 ready 前失败，并把 validator 的
+`unknown` 以 exit code `3` 保留：
+
+~~~powershell
+pwsh -NoProfile -File .\tool\run_player_precision_controls_dwm_matrix.ps1 `
+  -Sample 'D:\video\<anonymous-local-sample>.mp4' -Runs 3 `
+  -Output .\.local\qa\precision-dwm-matrix-current
 ~~~
 
 最新本机 Debug 三编码各一轮的匿名结果为：H.264 采样 `26.7 fps`、A/B DWM
@@ -303,6 +314,14 @@ pwsh -NoProfile -File .\tool\validate_player_p1_precision_evidence.ps1 `
 `player_resources_released`。独立 P1 校验器将四项 `commandResource` 判为 `pass`；由于
 该 command-only 目录没有 DWM 摘要，四项 `visible` 和合并 `overall` 均为 `unknown`，
 没有把命令/资源结果升级为真实 Texture 可见性完成。
+
+随后修正 DWM 观测器的缩放瓶颈，并让倍速 QA 在播放中设置 `1.5x`、观察 1 秒、恢复到
+`1.0x` 后读回，再暂停进入下一项。新增矩阵入口并真实运行
+`.local/qa/precision-dwm-matrix-grid16-rate1s-20260820b`：3/3 独立会话有效，采样为
+`32.0–32.2 fps`，资源释放和四项 command/resource 均 `3/3 pass`，A/B loop 的 DWM
+可见性 `3/3 pass`；逐帧、倍速和外挂字幕均 `3/3 unknown`，所以聚合校验为 A/B
+`overall=pass`，其它三个控制和矩阵总体 `overall=unknown`，validator exit `3`。前一轮
+ready 前退出的会话和本矩阵之外的探索轮次均未混入该聚合结果。
 
 ## 阶段 D：外部验收清单
 

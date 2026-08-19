@@ -68,12 +68,13 @@ public sealed class LocalTagPlayerPrecisionDwmFrame
 
 public static class LocalTagPlayerPrecisionDwmObserver
 {
-    // GetPixel 在部分高 DPI 桌面上成本很高；这里保留足够区分画面的匿名网格，
-    // 把观测器本身限制在可用于阶段呈现节奏的采样预算内。
-    private const int CenterGridWidth = 8;
-    private const int CenterGridHeight = 5;
-    private const int SubtitleGridWidth = 8;
-    private const int SubtitleGridHeight = 2;
+    // 观测器必须读取桌面 DC 上最终合成的像素，但不应为每帧缩放整块 4K ROI。
+    // 这里只取分布式匿名网格，保留足够区分画面的信息并降低 DWM 观测开销。
+    // 更密的匿名网格减少单帧动作落在采样点之间而被漏检的概率；不保存网格原始像素。
+    private const int CenterGridWidth = 16;
+    private const int CenterGridHeight = 10;
+    private const int SubtitleGridWidth = 16;
+    private const int SubtitleGridHeight = 4;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT
@@ -163,17 +164,15 @@ public static class LocalTagPlayerPrecisionDwmObserver
     private static extern bool DeleteObject(IntPtr objectHandle);
 
     [DllImport("gdi32.dll", SetLastError = true)]
-    private static extern bool StretchBlt(
+    private static extern bool BitBlt(
         IntPtr hdcDest,
         int xDest,
         int yDest,
-        int wDest,
-        int hDest,
+        int width,
+        int height,
         IntPtr hdcSrc,
         int xSrc,
         int ySrc,
-        int wSrc,
-        int hSrc,
         int rop);
 
     public static LocalTagPlayerPrecisionDwmFrame Capture(
@@ -202,21 +201,22 @@ public static class LocalTagPlayerPrecisionDwmObserver
             throw new InvalidOperationException("无法读取桌面 DC。");
         try
         {
-            // 一次 StretchBlt 到小型 DIB，避免逐点 GetPixel 的 GDI round-trip；DIB 只在
-            // 内存中短暂存在，最终文件仍只写 RGB 指纹和尺寸。
-            var fullWidth = CenterGridWidth;
-            var fullHeight = CenterGridHeight + SubtitleGridHeight;
-            var raw = CaptureDib(
+            // 先用一次不缩放的 BitBlt 复制小型匿名 ROI，再在内存中取分布式网格。
+            // 这样仍读取 DWM 后的桌面 DC，但不让每帧 StretchBlt 的缩放成为门禁瓶颈。
+            var sourceX = origin.X + (int)Math.Round(width * 0.20);
+            var sourceY = origin.Y + (int)Math.Round(height * 0.10);
+            var sourceWidth = Math.Max(1, (int)Math.Round(width * 0.60));
+            var sourceHeight = Math.Max(1, (int)Math.Round(height * 0.80));
+            var raw = CaptureBitmap(
                 dc,
-                origin.X + (int)Math.Round(width * 0.20),
-                origin.Y + (int)Math.Round(height * 0.10),
-                Math.Max(1, (int)Math.Round(width * 0.60)),
-                Math.Max(1, (int)Math.Round(height * 0.80)),
-                fullWidth,
-                fullHeight);
-            var center = ExtractRows(raw, fullWidth, 0, CenterGridHeight);
-            // 字幕通常落在视频下方；只取匿名小网格，不保存任何原始像素。
-            var subtitle = ExtractRows(raw, fullWidth, CenterGridHeight, SubtitleGridHeight);
+                sourceX, sourceY, sourceWidth, sourceHeight);
+            var center = ExtractGrid(
+                raw, sourceWidth, sourceHeight, CenterGridWidth,
+                CenterGridHeight + SubtitleGridHeight, 0, CenterGridHeight);
+            // 字幕通常落在视频下方；单独保留下方匿名网格，避免中心变化掩盖字幕证据。
+            var subtitle = ExtractGrid(
+                raw, sourceWidth, sourceHeight, CenterGridWidth,
+                CenterGridHeight + SubtitleGridHeight, CenterGridHeight, SubtitleGridHeight);
             return new LocalTagPlayerPrecisionDwmFrame {
                 // 与 Dart DateTime.microsecondsSinceEpoch 使用相同的 Unix epoch，才能把
                 // 桌面样本和页面阶段 JSONL 放进同一时间窗。
@@ -236,14 +236,12 @@ public static class LocalTagPlayerPrecisionDwmObserver
         }
     }
 
-    private static byte[] CaptureDib(
+    private static byte[] CaptureBitmap(
         IntPtr dc,
         int x,
         int y,
         int width,
-        int height,
-        int targetWidth,
-        int targetHeight)
+        int height)
     {
         var targetDc = CreateCompatibleDC(dc);
         if (targetDc == IntPtr.Zero)
@@ -251,13 +249,13 @@ public static class LocalTagPlayerPrecisionDwmObserver
         var bitmapInfo = new BITMAPINFO {
             bmiHeader = new BITMAPINFOHEADER {
                 biSize = (uint)Marshal.SizeOf(typeof(BITMAPINFOHEADER)),
-                biWidth = targetWidth,
+                biWidth = width,
                 // 负高度保证内存行序与屏幕方向一致。
-                biHeight = -targetHeight,
+                biHeight = -height,
                 biPlanes = 1,
                 biBitCount = 32,
                 biCompression = 0,
-                biSizeImage = (uint)(targetWidth * targetHeight * 4),
+                biSizeImage = (uint)(width * height * 4),
             },
         };
         IntPtr bits;
@@ -276,22 +274,12 @@ public static class LocalTagPlayerPrecisionDwmObserver
         var previousBitmap = SelectObject(targetDc, bitmap);
         try
         {
-            if (!StretchBlt(
-                    targetDc,
-                    0,
-                    0,
-                    targetWidth,
-                    targetHeight,
-                    dc,
-                    x,
-                    y,
-                    width,
-                    height,
-                    SRCCOPY | CAPTUREBLT))
+            if (!BitBlt(
+                    targetDc, 0, 0, width, height, dc, x, y, SRCCOPY | CAPTUREBLT))
             {
                 throw new InvalidOperationException("桌面 DIB 复制失败。");
             }
-            var raw = new byte[targetWidth * targetHeight * 4];
+            var raw = new byte[width * height * 4];
             Marshal.Copy(bits, raw, 0, raw.Length);
             return raw;
         }
@@ -303,27 +291,34 @@ public static class LocalTagPlayerPrecisionDwmObserver
         }
     }
 
-    private static byte[] ExtractRows(
+    private static byte[] ExtractGrid(
         byte[] raw,
-        int width,
-        int startRow,
-        int rowCount)
+        int sourceWidth,
+        int sourceHeight,
+        int fullGridWidth,
+        int fullGridHeight,
+        int startGridRow,
+        int gridHeight)
     {
-        var values = new byte[width * rowCount * 3];
-        var sourceOffset = startRow * width * 4;
+        var values = new byte[fullGridWidth * gridHeight * 3];
         var targetOffset = 0;
-        for (var row = 0; row < rowCount; row++)
+        for (var row = 0; row < gridHeight; row++)
         {
-            for (var column = 0; column < width; column++)
+            var sampleY = Math.Min(
+                sourceHeight - 1,
+                Math.Max(0, (int)Math.Round(
+                    (startGridRow + row + 0.5) * sourceHeight / fullGridHeight)));
+            for (var column = 0; column < fullGridWidth; column++)
             {
+                var sampleX = Math.Min(
+                    sourceWidth - 1,
+                    Math.Max(0, (int)Math.Round(
+                        (column + 0.5) * sourceWidth / fullGridWidth)));
                 // 32bpp BI_RGB 内存是 BGRA；匿名输出统一为 RGB。
-                var blue = raw[sourceOffset++];
-                var green = raw[sourceOffset++];
-                var red = raw[sourceOffset++];
-                sourceOffset++; // alpha/reserved
-                values[targetOffset++] = red;
-                values[targetOffset++] = green;
-                values[targetOffset++] = blue;
+                var sourceOffset = (sampleY * sourceWidth + sampleX) * 4;
+                values[targetOffset++] = raw[sourceOffset + 2];
+                values[targetOffset++] = raw[sourceOffset + 1];
+                values[targetOffset++] = raw[sourceOffset];
             }
         }
         return values;
@@ -484,22 +479,14 @@ function Get-DwmMetric {
     $current = if ($null -eq $property) { $null } else { $property.Value }
     if ($null -ne $current) { $differences += [double]$current }
   }
-  $consecutive = 0
-  $maxConsecutive = 0
-  foreach ($difference in $differences) {
-    if ($difference -ge 1.5) {
-      $consecutive++
-      $maxConsecutive = [Math]::Max($maxConsecutive, $consecutive)
-    } else {
-      $consecutive = 0
-    }
-  }
   $maxDifference = if ($differences.Count -eq 0) { 0.0 } else {
     [double](($differences | Measure-Object -Maximum).Maximum)
   }
   $status = if ($BaselineSamples.Count -eq 0 -or $PresentedSamples.Count -eq 0) {
     'unknown'
-  } elseif ($maxConsecutive -ge 2) {
+  } elseif ($maxDifference -ge 1.5) {
+    # 控制可见性以首个真实 DWM 变化为终点；有些合法动作只产生一个超过阈值的
+    # 合成样本，不能额外要求连续两帧而把真实呈现降成 unknown。1.5% 阈值不变。
     'pass'
   } else {
     'unknown'

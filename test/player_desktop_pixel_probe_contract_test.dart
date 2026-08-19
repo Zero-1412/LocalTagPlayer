@@ -175,6 +175,8 @@ void main() {
     expect(source, contains('desktop-composited-pixel-change'));
     expect(source, contains('precision-dwm-samples.jsonl'));
     expect(source, contains('precision-controls.jsonl'));
+    expect(source, contains('BitBlt'));
+    expect(source, contains('CaptureBitmap'));
     expect(source, contains("status = 'unknown'"));
     expect(source, contains('ab_loop_cycle_complete'));
     expect(source, contains('external_subtitle_load_started'));
@@ -186,6 +188,18 @@ void main() {
     // 可见性 QA 不能靠 SendInput 把命令路径伪造成屏幕证据。
     expect(source, isNot(contains('SendInput')));
     expect(source, contains('resourceReleaseConfirmed'));
+  });
+
+  test('P1 precision DWM 矩阵排除无效会话并保留 unknown 聚合', () {
+    final source = File('tool/run_player_precision_controls_dwm_matrix.ps1')
+        .readAsStringSync();
+    expect(source, contains('run_player_precision_controls_dwm_qa.ps1'));
+    expect(source, contains('validate_player_p1_precision_evidence.ps1'));
+    expect(source, contains('validRoots'));
+    expect(source, contains('successfulRuns'));
+    expect(source, contains('failedRuns'));
+    expect(source, contains("else { 'unknown' }"));
+    expect(source, contains(r'pathOrMediaContentRetained = $false'));
   });
 
   test('P1 precision validator 对每个控制分别输出命令资源与可见性状态', () {
