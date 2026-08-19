@@ -8,6 +8,12 @@ const _codecs = <String>['h264', 'hevc', 'av1'];
 const _resolutions = <String>['1080p', '4k'];
 const _gops = <String>['short-gop', 'long-gop'];
 const _keyframeWindowSeconds = 30.0;
+const _probeOutcomes = <String>[
+  'probe-failed',
+  'gop-outside-target',
+  'short-gop',
+  'long-gop',
+];
 const _actions = <String>[
   'startup',
   'shortForward',
@@ -106,6 +112,10 @@ Future<void> main(List<String> arguments) async {
       for (final key in bucketKeys)
         key: <String, int>{for (final gop in _gops) gop: 0},
     };
+    final probeOutcomeCounts = <String, Map<String, int>>{
+      for (final key in bucketKeys)
+        key: <String, int>{for (final outcome in _probeOutcomes) outcome: 0},
+    };
     final probeIndicesByBucket = <String, List<int>>{
       for (final key in bucketKeys)
         key: _spreadIndices(candidates[key]?.length ?? 0, maxCandidates),
@@ -122,13 +132,16 @@ Future<void> main(List<String> arguments) async {
         if (round >= probeIndices.length || bestByGop.length == _gops.length) {
           continue;
         }
-        final probed = await _probeCandidate(
+        final attempt = await _probeCandidate(
           bucket[probeIndices[round]],
           ffprobe,
           timeout: Duration(seconds: probeTimeoutSeconds),
         );
         probeCount++;
         progressed = true;
+        final outcomeCounts = probeOutcomeCounts[bucketKey]!;
+        outcomeCounts[attempt.outcome] = outcomeCounts[attempt.outcome]! + 1;
+        final probed = attempt.candidate;
         if (probed != null) {
           final counts = probedGopCounts[bucketKey]!;
           counts[probed.gop] = counts[probed.gop]! + 1;
@@ -205,6 +218,9 @@ Future<void> main(List<String> arguments) async {
         'probedGopCounts': <String, Map<String, int>>{
           for (final key in bucketKeys) key: probedGopCounts[key]!,
         },
+        'probeOutcomeCounts': <String, Map<String, int>>{
+          for (final key in bucketKeys) key: probeOutcomeCounts[key]!,
+        },
         'selectedCases': cases
             .where((item) =>
                 item['selectionStatus'] == 'selected-and-ffprobe-verified')
@@ -267,7 +283,7 @@ ORDER BY last_played_at DESC, added_at DESC
   return buckets;
 }
 
-Future<_ProbedCandidate?> _probeCandidate(
+Future<_ProbeAttempt> _probeCandidate(
   _Candidate candidate,
   String ffprobe, {
   required Duration timeout,
@@ -291,22 +307,30 @@ Future<_ProbedCandidate?> _probeCandidate(
     ],
     timeout: timeout,
   );
-  if (probeResult == null || probeResult.exitCode != 0) return null;
+  if (probeResult == null || probeResult.exitCode != 0) {
+    return const _ProbeAttempt(outcome: 'probe-failed');
+  }
 
   try {
     final streamJson = jsonDecode(probeResult.stdout);
     final streams = streamJson['streams'];
-    if (streams is! List<dynamic> || streams.isEmpty) return null;
+    if (streams is! List<dynamic> || streams.isEmpty) {
+      return const _ProbeAttempt(outcome: 'probe-failed');
+    }
     final stream = streams.first;
-    if (stream is! Map<String, dynamic>) return null;
+    if (stream is! Map<String, dynamic>) {
+      return const _ProbeAttempt(outcome: 'probe-failed');
+    }
     final codec = _normalizeCodec(stream['codec_name']?.toString());
     if (codec != candidate.codec ||
         stream['width'] != candidate.width ||
         stream['height'] != candidate.height) {
-      return null;
+      return const _ProbeAttempt(outcome: 'probe-failed');
     }
     final packets = streamJson['packets'];
-    if (packets is! List<dynamic>) return null;
+    if (packets is! List<dynamic>) {
+      return const _ProbeAttempt(outcome: 'probe-failed');
+    }
     final keyframes = <double>[];
     for (final packet in packets) {
       if (packet is! Map<String, dynamic>) continue;
@@ -316,7 +340,9 @@ Future<_ProbedCandidate?> _probeCandidate(
       if (time != null) keyframes.add(time);
     }
     keyframes.sort();
-    if (keyframes.length < 2) return null;
+    if (keyframes.length < 2) {
+      return const _ProbeAttempt(outcome: 'probe-failed');
+    }
     var maxGopSeconds = 0.0;
     for (var index = 1; index < keyframes.length; index++) {
       final interval = keyframes[index] - keyframes[index - 1];
@@ -325,28 +351,35 @@ Future<_ProbedCandidate?> _probeCandidate(
         maxGopSeconds = interval;
       }
     }
-    if (maxGopSeconds == 0) return null;
+    if (maxGopSeconds == 0) {
+      return const _ProbeAttempt(outcome: 'probe-failed');
+    }
     final gop = maxGopSeconds <= 1.1
         ? 'short-gop'
         : maxGopSeconds >= 4.0
             ? 'long-gop'
             : null;
-    if (gop == null) return null;
+    if (gop == null) {
+      return const _ProbeAttempt(outcome: 'gop-outside-target');
+    }
     final format = streamJson['format'];
     final formatMap = format is Map<String, dynamic> ? format : null;
     final bitrate =
         _number(stream['bit_rate']) ?? _number(formatMap?['bit_rate']) ?? 0;
     final duration =
         _number(stream['duration']) ?? _number(formatMap?['duration']) ?? 0;
-    return _ProbedCandidate(
-      candidate: candidate,
-      gop: gop,
-      maxGopSeconds: double.parse(maxGopSeconds.toStringAsFixed(3)),
-      bitrateKbps: double.parse((bitrate / 1000).toStringAsFixed(1)),
-      durationSeconds: double.parse(duration.toStringAsFixed(3)),
+    return _ProbeAttempt(
+      outcome: gop,
+      candidate: _ProbedCandidate(
+        candidate: candidate,
+        gop: gop,
+        maxGopSeconds: double.parse(maxGopSeconds.toStringAsFixed(3)),
+        bitrateKbps: double.parse((bitrate / 1000).toStringAsFixed(1)),
+        durationSeconds: double.parse(duration.toStringAsFixed(3)),
+      ),
     );
   } on Object {
-    return null;
+    return const _ProbeAttempt(outcome: 'probe-failed');
   }
 }
 
@@ -531,6 +564,14 @@ class _ProbedCandidate {
   final double maxGopSeconds;
   final double bitrateKbps;
   final double durationSeconds;
+}
+
+/// 保留探测失败、GOP 落在目标区间之外和已分类候选的匿名原因。
+class _ProbeAttempt {
+  const _ProbeAttempt({required this.outcome, this.candidate});
+
+  final String outcome;
+  final _ProbedCandidate? candidate;
 }
 
 class _ProbeProcessOutput {

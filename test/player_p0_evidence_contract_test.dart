@@ -89,6 +89,8 @@ void main() {
     expect(generator, contains('if (limit == 1) return <int>[0]'));
     expect(generator, contains('candidateCounts'));
     expect(generator, contains('probedGopCounts'));
+    expect(generator, contains('probeOutcomeCounts'));
+    expect(generator, contains('gop-outside-target'));
     expect(generator, contains('executableSha256'));
     expect(generator, contains('sha256.bind'));
     expect(generator, contains('if (missing > 0) exitCode = 3'));

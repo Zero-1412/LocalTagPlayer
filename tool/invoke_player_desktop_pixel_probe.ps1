@@ -140,6 +140,8 @@ public sealed class DesktopPixelProbeAction
     // GetDC/客户区句柄在窗口尺寸协调或 Texture 释放瞬间可能短暂不可读；只记录
     // 重试次数，不把重试期间的空样本伪装成帧或放宽首帧门禁。
     public int captureReadFailures { get; set; }
+    // 只记录目标窗口线程的原生焦点类别，不写 HWND、标题或媒体信息。
+    public string nativeFocusEvidence { get; set; }
     public bool inputUsesNativeQpcAnchor { get; set; }
     public bool inputSemanticConfirmed { get; set; }
     public string inputSemanticEvidence { get; set; }
@@ -244,6 +246,27 @@ public static class DesktopPixelProbe
     private static extern bool AttachThreadInput(uint attachThreadId, uint attachToThreadId, bool attach);
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GUITHREADINFO
+    {
+        public int cbSize;
+        public uint flags;
+        public IntPtr hwndActive;
+        public IntPtr hwndFocus;
+        public IntPtr hwndCapture;
+        public IntPtr hwndMenuOwner;
+        public IntPtr hwndMoveSize;
+        public IntPtr hwndCaret;
+    }
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetGUIThreadInfo(uint threadId, ref GUITHREADINFO info);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int GetClassName(
+        IntPtr hWnd,
+        System.Text.StringBuilder className,
+        int maxCount);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr GetFocus();
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint MapVirtualKey(uint code, uint mapType);
     [StructLayout(LayoutKind.Sequential)]
@@ -437,7 +460,7 @@ public static class DesktopPixelProbe
             var inputEvidenceMarkerUtc = DateTime.MinValue;
             var inputEvidenceMarkerLength = 0L;
             var nativeKeyboardEvidenceMarkerLength = 0L;
-            if (mouseProgressDrag || manualKeyboard || keyboardSemanticRequired)
+            if (mouseProgressDrag)
             {
                 // 先把真实指针移动到轨道起点并等待控制条显示稳定，再采集静态基线。
                 // 起终点逐样本互换，避免多次拖动都停在同一端导致“没有新画面”。
@@ -449,6 +472,11 @@ public static class DesktopPixelProbe
                     progressDragEndFraction,
                     progressDragBottomInsetPixels);
                 excludedIdleUs += Math.Max(0L, NowUs() - prepareStartedUs);
+            }
+            if (mouseProgressDrag || manualKeyboard || keyboardSemanticRequired)
+            {
+                // 键盘动作只需要记录语义文件的基线长度；不移动到 Slider，避免控制条
+                // hover/重建在发送快捷键前重新竞争 PlayerPage FocusNode。
                 previous = null;
                 inputEvidenceMarkerUtc = LastWriteUtc(expectedInputEvidencePath);
                 inputEvidenceMarkerLength = InputEvidenceLength(expectedInputEvidencePath);
@@ -520,6 +548,7 @@ public static class DesktopPixelProbe
             }
             else
             {
+                action.nativeFocusEvidence = DescribeTargetFocus(window);
                 action.keyDownQpcUs = NowUs();
                 if (mouseClick)
                 {
@@ -1126,6 +1155,46 @@ public static class DesktopPixelProbe
         SendMouseInput(0x0002); // MOUSEEVENTF_LEFTDOWN
         Thread.Sleep(35);
         SendMouseInput(0x0004); // MOUSEEVENTF_LEFTUP
+    }
+
+    /** 诊断目标窗口线程实际持有的原生焦点类别，避免把 FocusNode 握手当成 Win32 焦点。 */
+    private static string DescribeTargetFocus(IntPtr window)
+    {
+        uint ignoredProcessId;
+        var threadId = GetWindowThreadProcessId(window, out ignoredProcessId);
+        if (threadId == 0)
+            return "unavailable";
+        var info = new GUITHREADINFO {
+            cbSize = Marshal.SizeOf(typeof(GUITHREADINFO))
+        };
+        if (!GetGUIThreadInfo(threadId, ref info))
+        {
+            // 某些 Flutter runner 生命周期中跨线程查询可能暂时失败；短暂挂接
+            // 目标消息队列只读取 GetFocus，仍不向目标线程投递任何消息。
+            var currentThreadId = GetCurrentThreadId();
+            var attached = threadId != currentThreadId &&
+                AttachThreadInput(currentThreadId, threadId, true);
+            try
+            {
+                return DescribeFocusHandle(window, GetFocus());
+            }
+            finally
+            {
+                if (attached) AttachThreadInput(currentThreadId, threadId, false);
+            }
+        }
+        return DescribeFocusHandle(window, info.hwndFocus);
+    }
+
+    private static string DescribeFocusHandle(IntPtr window, IntPtr focus)
+    {
+        if (focus == IntPtr.Zero)
+            return "no-focus";
+        if (focus == window)
+            return "top-level-window";
+        var className = new System.Text.StringBuilder(128);
+        var length = GetClassName(focus, className, className.Capacity);
+        return length > 0 ? "child-class:" + className.ToString() : "child-window";
     }
 
     /**

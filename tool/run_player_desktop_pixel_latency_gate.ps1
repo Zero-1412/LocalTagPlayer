@@ -55,6 +55,8 @@ param(
   # 仅 QA 输入兼容性对照；正式默认保持真实 scan-code 语义，实体输入不使用此开关。
   [ValidateSet('scanCode', 'virtualKey')]
   [string]$KeyboardInjectionMode = 'scanCode',
+  # 仅诊断自动化 SendInput 是否到达 FLUTTERVIEW；写出的 native QPC 不得进入实体输入统计。
+  [switch]$RecordAutomatedNativeInput,
   [string]$Output = '',
   # 仅 Debug QA：隔离自适应 Texture 尺寸回落/重建是否触发桌面引擎崩溃；默认保持正式策略。
   [switch]$DisableAdaptiveTextureSizing,
@@ -74,6 +76,9 @@ if (-not (Test-Path -LiteralPath $Sample -PathType Leaf)) {
 if ($HoldMilliseconds -gt 0 -and $Action -notin @('forward', 'backward')) {
   throw 'HoldMilliseconds 仅允许用于自动化 forward/backward 对照，不得用于实体或全屏动作。'
 }
+if ($RecordAutomatedNativeInput -and $Action -notin @('forward', 'backward')) {
+  throw 'RecordAutomatedNativeInput 仅允许用于 forward/backward 的自动化输入链诊断。'
+}
 if (-not $Output) {
   $Output = Join-Path $PSScriptRoot ("..\.local\qa\player-desktop-pixel-gate\" + (Get-Date -Format 'yyyyMMdd_HHmmss'))
 }
@@ -82,6 +87,22 @@ if (Test-Path -LiteralPath $Output) {
   throw "输出目录已存在，拒绝覆盖既有证据：$Output"
 }
 New-Item -ItemType Directory -Path $Output -Force | Out-Null
+if ($RecordAutomatedNativeInput) {
+  # 让诊断产物自带“不可用于真人统计”的标签，避免只看 native JSONL 时误读证据等级。
+  $automatedNativeMetadata = [ordered]@{
+    schemaVersion = 1
+    status = 'diagnostic-only'
+    inputKind = 'automated-sendinput'
+    keyboardInjectionMode = $KeyboardInjectionMode
+    physicalKeyboardEvidence = 'invalid'
+    purpose = 'sendinput-down-route-diagnosis'
+  }
+  [System.IO.File]::WriteAllText(
+    (Join-Path $Output 'automated-native-input-diagnostic.json'),
+    ($automatedNativeMetadata | ConvertTo-Json -Depth 5),
+    [System.Text.UTF8Encoding]::new($false)
+  )
+}
 
 $readyPath = Join-Path $Output 'ready.json'
 $failurePath = Join-Path $Output 'desktop-pixel-probe-failure.txt'
@@ -759,6 +780,16 @@ try {
       } else {
         'short'
       }
+    } elseif ($RecordAutomatedNativeInput) {
+      # 该侧车只用于拆分 SendInput→原生窗口与原生窗口→Flutter KeyEvent，报告仍标为
+      # automated，不能被调用方当作真人 WM_KEYDOWN/UP 证据。
+      $env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_QA = '1'
+      $env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_ACTION = if ($Action -eq 'backward') {
+        'backward'
+      } else {
+        'forward'
+      }
+      $env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_HOLD_MODE = 'short'
     } else {
       Remove-Item Env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_QA -ErrorAction SilentlyContinue
       Remove-Item Env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_ACTION -ErrorAction SilentlyContinue

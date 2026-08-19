@@ -29,8 +29,9 @@
 - 2026-08-20 将 GOP 探测改为首段 30 秒 packet 关键帧窗口，并均匀抽样每个 bucket；
   `maxCandidates=24/maxProbes=144/timeout=20s` 已选 `10/12`、缺少
   `1080p-av1-short-gop` 与 `4k-av1-long-gop`，实际探测 `49`。`probedGopCounts` 确认
-  4K AV1 只有 `1 short/0 long`，1080p AV1 为 `0 short/1 long` 且另一候选未通过 packet
-  校验；不把这两个 case 补成通过。
+  4K AV1 只有 `1 short/0 long`，1080p AV1 为 `0 short/1 long`；匿名
+  `probeOutcomeCounts` 进一步确认 1080p AV1 的另一候选是约 `2.00s` 的目标区间外 GOP，
+  4K AV1 没有第二个 long 候选。不把这两个 case 补成通过，也不把类别缺失写成探测失败。
 
 - 2026-08-20 用当前 manifest 的 1080p H.264 short case 试跑正式 PlayerPage forward
   `3` 个独立 Debug Texture 会话：均完成打开、最终 `d3d11va-copy` 和释放，但
@@ -38,6 +39,13 @@
   随后用同一页面、同一素材和同一动作切换 QA-only `virtualKey` 注入，结果仍为
   `player_keyboard_event` 缺失、桌面像素 `0/1` 成功；该负证据只记输入/可见性
   `unknown`，不归因于 H.264 解码性能，也不据此修改播放器业务输入路径。
+
+- 2026-08-20 对上述输入缺口做了相邻真实 PlayerPage Slider 对照：同一 Texture 输出链能写出
+  `progress_slider_start/committed`，单样本桌面像素通过；因此 QA 输出文件和页面挂载链可达。
+  新增默认关闭的自动化 native-route 诊断后，scan-code 与 virtual-key 均只观察到
+  `native_keyboard_message(up)`，没有 `down`，目标原生焦点类别为 `FLUTTERVIEW`，页面仍无
+  `player_keyboard_event` 或 DWM 变化。该结果把根因边界收窄到当前桌面 SendInput Down/Flutter
+  消息投递链；诊断文件明确不具备真人 WM_KEYDOWN/UP 资格，不进入实体输入或 p50/p95。
 
 - 2026-08-20 建立“流畅性”规范语义与有限工程门禁：依据 W3C Media Capabilities 的
   `smooth=目标帧率下无掉帧`、W3C VideoPlaybackQuality 的总帧/掉帧/展示延迟分层、mpv

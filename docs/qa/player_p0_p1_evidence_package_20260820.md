@@ -38,6 +38,8 @@ dart run tool/generate_player_p0_manifest.dart -Output .local\qa\player_p0_manif
 中的 `selection.candidateCounts` 只记录每个 bucket 的数量，不写路径或媒体标识。
 `selection.probedGopCounts` 进一步记录 packet 校验成功的 short/long 数量，区分“候选存在但
 GOP 不符合”与“没有机会探测”。
+`selection.probeOutcomeCounts` 再区分 `probe-failed`、`gop-outside-target` 和已分类的
+short/long；因此 GOP 落在 `1.1s` 与 `4.0s` 之间时保持 case 缺失，不会被误写成短 GOP。
 因此 `maxProbes=144` 至少会给每个有候选的 bucket 24 个均匀抽样机会，同时仍然是有限门禁。
 
 生成器若发现默认 Debug 可执行文件，会把其 SHA-256 写入 manifest；找不到时保留空值，
@@ -47,8 +49,9 @@ GOP 不符合”与“没有机会探测”。
 编码/分辨率没有样本；未补齐前 12-case 覆盖继续记 `unknown`。
 
 最新 `24/144` 有界扫描已选 `10/12`；缺口为 `1080p-av1-short-gop` 和
-`4k-av1-long-gop`。`probedGopCounts` 显示 4K AV1 资料库只有一个 short 候选，
-1080p AV1 另一个候选未通过 packet 校验，因此两个缺口仍保持 unknown。
+`4k-av1-long-gop`。`probedGopCounts` 显示 4K AV1 资料库只有一个 short 候选；
+1080p AV1 的另一个候选 packet 可读但关键帧间隔约 `2.00s`，落在目标 GOP 区间之外，
+因此两个缺口仍保持 unknown。
 
 ### 统一判定
 
@@ -82,6 +85,13 @@ desktop-pixel-matrix-summary.json 的矩阵根，或单个 run 目录。报告�
 Debug Texture 会话；打开、最终硬解和释放均有运行态证据，但没有页面键盘语义事件，
 scan-code 与诊断用 virtual-key 两种输入注入都没有产生真实 DWM 像素变化。因此该轮
 只保留为输入/可见性 `unknown`，不产生 p95，也不把后端打开成功误报为首个 DWM 呈现帧。
+
+相邻 Slider 对照在同一正式 PlayerPage/Texture/QA 输出链上成功写出
+`progress_slider_start/committed` 并形成单样本 DWM 变化。进一步开启默认关闭的自动化
+native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、没有 `down`；原生
+焦点类别为 `FLUTTERVIEW`，但页面仍没有 `player_keyboard_event`。这说明当前失败位于
+桌面 SendInput Down 或 Flutter Windows 消息投递链，不能归因于解码/Texture；诊断结果不具备
+真人 WM_KEYDOWN/UP 资格，不进入实体输入或性能统计。
 
 | 指标 | 当前判定 | 依据 |
 | --- | --- | --- |

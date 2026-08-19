@@ -63,6 +63,10 @@ void main() {
     expect(source, contains('SendProgressDrag'));
     expect(source, contains('PreparePlayerKeyboardFocus'));
     expect(source, contains('FocusPlayerKeyboard'));
+    expect(source, contains('hover/重建在发送快捷键前重新竞争 PlayerPage FocusNode'));
+    expect(source, contains('GetGUIThreadInfo'));
+    expect(source, contains('GetFocus'));
+    expect(source, contains('nativeFocusEvidence'));
     expect(source, contains("'virtualKey'"));
     expect(source, contains('SendKeyboardVirtualKey'));
     // 长按自动化对照只通过显式 HoldMilliseconds 注入；实体 manualLong* 仍不注入。
@@ -204,6 +208,10 @@ void main() {
     expect(gate, contains('HoldMilliseconds'));
     expect(gate, contains('KeyboardInjectionMode'));
     expect(gate, contains("[string]\$KeyboardInjectionMode = 'scanCode'"));
+    expect(gate, contains('RecordAutomatedNativeInput'));
+    expect(gate, contains('automated-native-input-diagnostic.json'));
+    expect(gate, contains("physicalKeyboardEvidence = 'invalid'"));
+    expect(gate, contains('automated'));
     expect(gate, contains('LOCAL_TAG_PLAYER_REAL_PAGE_PIXEL_QA'));
     expect(gate, contains("ready.surface -ne 'product-player-page'"));
     expect(gate, contains('ExpectedInputEvidencePath'));
