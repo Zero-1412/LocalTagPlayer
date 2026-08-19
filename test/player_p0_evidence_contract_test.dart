@@ -96,4 +96,23 @@ void main() {
     expect(generator, contains('if (missing > 0) exitCode = 3'));
     expect(generator, contains('database=readonly'));
   });
+
+  test('P0 证据装配器只绑定明确命名且可复核的矩阵', () {
+    final assembler =
+        File('tool/assemble_player_p0_evidence.ps1').readAsStringSync();
+
+    // 装配器不能按相邻目录猜素材；目录摘要和真实 DWM report 都要过 3-run 门槛。
+    expect(assembler, contains('evidenceAssembly'));
+    expect(assembler, contains('current-semantic-matrix-1080p-'));
+    expect(assembler, contains('current-4k-{0}-realpage-'));
+    expect(assembler, contains('product-player-page'));
+    expect(assembler, contains('desktop-composited-pixel-change'));
+    expect(assembler, contains('p95Eligible'));
+    expect(assembler, contains('validRecords.Count -ge 3'));
+    expect(assembler, contains('selectionRule'));
+    expect(assembler, contains('shortForward'));
+    expect(assembler, contains('longBackward'));
+    expect(assembler, contains('postdwell'));
+    expect(assembler, contains('no-exact-directory-binding'));
+  });
 }

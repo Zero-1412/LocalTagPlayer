@@ -73,6 +73,30 @@ library.db 漏扫”的解释；两个缺口继续保持 `unknown`，不因额�
 .\tool\validate_player_p0_evidence.ps1 -Manifest .\.local\qa\player_p0_manifest.json -Output .\.local\qa\p0-evidence-gate.json
 ~~~
 
+已有矩阵需要先通过
+[tool/assemble_player_p0_evidence.ps1](/E:/LocalTagPlayer/tool/assemble_player_p0_evidence.ps1)
+显式装配到一个新的本机 manifest；装配器不修改原始 manifest，也不按相邻目录或媒体路径猜测
+case。它只接受目录名同时声明分辨率、编码、GOP 和动作，且摘要满足
+`product-player-page`、`desktop-composited-pixel-change`、`p95Eligible=true`、至少三个
+`valid` run 并且每个 report 文件存在的矩阵：
+
+~~~powershell
+pwsh -NoProfile -File .\tool\assemble_player_p0_evidence.ps1 `
+  -SourceManifest .\.local\qa\player_p0_manifest.json `
+  -OutputManifest .\.local\qa\player_p0_manifest-with-evidence.json `
+  -EvidenceRoot .\.local\qa
+
+pwsh -NoProfile -File .\tool\validate_player_p0_evidence.ps1 `
+  -Manifest .\.local\qa\player_p0_manifest-with-evidence.json `
+  -Output .\.local\qa\p0-evidence-gate-assembled.json
+~~~
+
+本机当前装配结果为 `17` 个明确 case/action 映射、`67` 个保留未装配 action；其中包括
+1080p 三编码 short/long 的明确 forward/backward 矩阵，以及已有的 4K longhold 矩阵。
+没有精确 GOP 绑定的拖动、startup、fullscreen 不会因为目录“看起来相近”而被装配；缺失
+素材的 1080p AV1 short 与 4K AV1 long 也继续由原始 manifest 保持缺口。装配输出中的
+`evidenceAssembly` 保存选择规则、已映射目录名和省略原因，便于同机复跑和审计。
+
 每个 action 的 evidence 是独立会话目录数组；目录可为包含
 desktop-pixel-matrix-summary.json 的矩阵根，或单个 run 目录。报告至少应能追溯：
 
@@ -85,6 +109,11 @@ desktop-pixel-matrix-summary.json 的矩阵根，或单个 run 目录。报告�
   unknown，不能代替稳态掉帧率。
 
 因此，当前仓库的本机阶段结论是：
+
+装配后的统一门禁报告为 `overall=fail`：12 个 case 中 `5` 个为 `fail`、`7` 个为
+`unknown`、没有 case 为 `pass`。这表示证据链已经能够对已装配动作给出可复核的
+`pass/fail/unknown`，但 P0 本机基线尚未完成；VO drop、独立稳态 total drop、未装配
+动作和两个 manifest 缺口不能被这次装配覆盖。
 
 本轮对统一 manifest 的正式 PlayerPage 1080p H.264 short forward 做了 3 个独立
 Debug Texture 会话；打开、最终硬解和释放均有运行态证据，但没有页面键盘语义事件，
@@ -102,19 +131,19 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | --- | --- | --- |
 | 正式 Texture 三编码动作探针 | pass（证据管线） | 已有真实 PlayerPage、页面语义、DWM 匿名变化和运行态聚合 |
 | 12-case 固定 manifest 完整性 | fail（10/12） | 当前本机有统一 ignored manifest，但两个 AV1 case 没有可验证样本 |
-| 三编码/两分辨率/短长 GOP 的统一 P0 报告 | unknown | 10 个 case 已有匿名素材关联，真实 action/DWM 证据尚未按同一 manifest 完成 |
+| 三编码/两分辨率/短长 GOP 的统一 P0 报告 | fail（5 fail/7 unknown） | 已装配 17 个明确 case/action；仍有未装配动作、稳态字段和 2 个素材缺口 |
 | decoder drop | pass 或 fail 按 action 分列 | 运行态有值时非零失败；没有值不补零 |
 | VO drop | unknown（已有矩阵多数不可用） | 运行态没有可靠 VO drop 字段时不能判通过 |
 | 稳态 total drop | unknown | 既有动作样本缺少独立 10 秒分母 |
 | 首个真实 DWM 帧 | pass/fail 按已有 action 分列 | 只采用桌面合成像素报告 |
-| P0 总体 | unknown | 统一 12-case、首播和完整稳态证据尚未闭环 |
+| P0 总体 | fail（阶段未完成） | 当前门禁没有 case 通过，且仍有 unknown；报告完整性尚未闭环 |
 
 ### 已有独立矩阵的补充评估
 
 以下结果来自已有正式 PlayerPage/Texture 的独立矩阵，并通过
 [tool/evaluate_player_smoothness_standard.ps1](/E:/LocalTagPlayer/tool/evaluate_player_smoothness_standard.ps1)
-重新计算；它们是支撑证据，不会自动填入统一 manifest，也不能替代每个 case/action 的
-三会话关联。
+重新计算；其中只有目录名能精确绑定素材和 GOP 的结果才由装配器填入统一 manifest，
+其它结果仍是支撑证据，不能替代每个 case/action 的三会话关联。
 
 - 1080p 三编码的 shortForward、shortBackward、drag 矩阵各有 `3/3` 有效会话；首个
   DWM p95 分别为：H.264 `81/92/343 ms`、HEVC `86/94/307 ms`、AV1 `86/93/362 ms`。

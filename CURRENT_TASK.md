@@ -7,8 +7,8 @@
   短按前/后、拖动、长按前/后和全屏七类 action；新增
   `tool/validate_player_p0_evidence.ps1`，只接受实际 DWM 终点并把每项严格分为
   `pass/fail/unknown`，缺少 10 秒稳态分母、VO/逐帧时间戳或实体 QPC 不补成通过。
-  当前统一 manifest 尚未填入本机媒体路径，P0 总体仍为 `unknown`；阶段 B 已按现有
-  同机报告作出决策：QA-only HWND 精确 seek/首帧不稳定，记录为“HWND QA 路径不可发布”，
+  当前原始本机 manifest 为 `partial`，装配后的统一门禁为 `fail`（unknown 仍单独保留）；
+  阶段 B 已按现有同机报告作出决策：QA-only HWND 精确 seek/首帧不稳定，记录为“HWND QA 路径不可发布”，
   不继续用 HWND 校准正式 Texture。P1 命令/资源 QA 与真实可见性 QA 已在
   `docs/qa/player_p0_p1_evidence_package_20260820.md` 分离；真人长按、发布 GPU/驱动、
   稳定 HWND A/B、跨显示器/DPI 和真实控制可见性保留为外部清单。
@@ -36,6 +36,12 @@
 - 2026-08-20 对 root 文件树做补充只读审计：177 个未索引媒体中只有 1 个 1080p AV1，
   ffprobe 最大关键帧间隔 `6.25s`（long GOP），没有 4K AV1 未索引候选；因此两个 manifest
   缺口不是 library.db 漏扫造成，仍保持 `unknown`，不把未进入应用资料库的文件强行加入正式报告。
+
+- 2026-08-20 新增 `tool/assemble_player_p0_evidence.ps1`，按目录名和矩阵摘要的显式
+  合同把已有真实 PlayerPage/Texture 证据装配到新的本机 manifest；当前装配 `17` 个
+  case/action、保留 `67` 个未装配 action。统一门禁当前为 `5 fail/7 unknown/0 pass`；
+  这完成了报告可复核链，但不把缺失素材、未绑定拖动/首播/全屏、VO drop 或稳态
+  total drop 写成通过。
 
 - 2026-08-20 用当前 manifest 的 1080p H.264 short case 试跑正式 PlayerPage forward
   `3` 个独立 Debug Texture 会话：均完成打开、最终 `d3d11va-copy` 和释放，但
