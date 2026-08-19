@@ -349,5 +349,5 @@ prompt impact: satisfies first principles; added finite evidence contract withou
 protected behaviors: preserved
 unauthorized feature removal: none
 mount and reachability: not changed; existing PlayerPage evidence retained
-validation: focused contract tests 20/20 passed; PowerShell parsers passed; flutter analyze no issues; flutter build windows --debug passed; steady runtime 10 cases × 3 sessions passed the bounded matrix; P0 validator exit 2 with overall=fail as required by remaining DWM/action/VO/manifest unknowns
+validation: focused contract tests 21/21 passed; PowerShell parsers passed; flutter analyze no issues; flutter build windows --debug passed; steady runtime 10 cases × 3 sessions passed the bounded matrix; P1 precision matrix 3/3 sessions valid with validator exit 3 and overall=unknown; P0 validator exit 2 with overall=fail as required by remaining DWM/action/VO/manifest unknowns
 ~~~
