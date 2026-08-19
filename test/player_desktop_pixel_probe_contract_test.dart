@@ -165,6 +165,9 @@ void main() {
     expect(source, contains("status = 'unknown'"));
     expect(source, contains('ab_loop_cycle_complete'));
     expect(source, contains('external_subtitle_load_started'));
+    expect(source, contains('dwmSampleRows'));
+    expect(source, contains('一次性写盘'));
+    expect(source, isNot(contains('AppendAllText')));
     // 可见性 QA 不能靠 SendInput 把命令路径伪造成屏幕证据。
     expect(source, isNot(contains('SendInput')));
     expect(source, contains('resourceReleaseConfirmed'));

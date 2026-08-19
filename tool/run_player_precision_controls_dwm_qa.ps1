@@ -596,6 +596,8 @@ try {
   }
 
   $sampleObjects = @()
+  # 采样循环只保留匿名行，结束后一次性写盘，避免同步 I/O 反过来扰动 DWM 采样率。
+  $dwmSampleRows = New-Object 'System.Collections.Generic.List[object]'
   $previousFrame = $null
   $lastSampleUs = 0L
   $completionUs = 0L
@@ -611,20 +613,16 @@ try {
         $subtitleDifference = if ($null -eq $previousFrame) { $null } else {
           Get-RegionDifferencePercent -Baseline $previousFrame.subtitleValues -Current $frame.subtitleValues
         }
-        [System.IO.File]::AppendAllText(
-          $dwmSamplesPath,
-          (([ordered]@{
-              utcUs = [long]$frame.utcUs
-              clientWidth = [int]$frame.clientWidth
-              clientHeight = [int]$frame.clientHeight
-              dpi = [int]$frame.dpi
-              centerFingerprint = [string]$frame.centerFingerprint
-              subtitleFingerprint = [string]$frame.subtitleFingerprint
-              centerDifferenceFromPreviousPercent = if ($null -eq $centerDifference) { $null } else { [Math]::Round([double]$centerDifference, 3) }
-              subtitleDifferenceFromPreviousPercent = if ($null -eq $subtitleDifference) { $null } else { [Math]::Round([double]$subtitleDifference, 3) }
-            } | ConvertTo-Json -Compress) + [Environment]::NewLine),
-          [System.Text.UTF8Encoding]::new($false)
-        )
+        $dwmSampleRows.Add([ordered]@{
+            utcUs = [long]$frame.utcUs
+            clientWidth = [int]$frame.clientWidth
+            clientHeight = [int]$frame.clientHeight
+            dpi = [int]$frame.dpi
+            centerFingerprint = [string]$frame.centerFingerprint
+            subtitleFingerprint = [string]$frame.subtitleFingerprint
+            centerDifferenceFromPreviousPercent = if ($null -eq $centerDifference) { $null } else { [Math]::Round([double]$centerDifference, 3) }
+            subtitleDifferenceFromPreviousPercent = if ($null -eq $subtitleDifference) { $null } else { [Math]::Round([double]$subtitleDifference, 3) }
+          })
         $lastSampleUs = [long]$frame.utcUs
         $previousFrame = $frame
       } catch {
@@ -644,6 +642,17 @@ try {
 
   $events = @(Get-JsonLines $precisionPath | Sort-Object {[long]$_.utcUs})
   $sampleObjects = @($sampleObjects | Sort-Object {[long]$_.utcUs})
+  $dwmSampleJsonLines = @($dwmSampleRows | ForEach-Object { $_ | ConvertTo-Json -Compress })
+  $dwmSampleJson = if ($dwmSampleJsonLines.Count -eq 0) {
+    ''
+  } else {
+    ($dwmSampleJsonLines -join [Environment]::NewLine) + [Environment]::NewLine
+  }
+  [System.IO.File]::WriteAllText(
+    $dwmSamplesPath,
+    $dwmSampleJson,
+    [System.Text.UTF8Encoding]::new($false)
+  )
   $sampleRows = @(Get-JsonLines $dwmSamplesPath | Sort-Object {[long]$_.utcUs})
   [System.IO.File]::WriteAllText(
     $shutdownPath,

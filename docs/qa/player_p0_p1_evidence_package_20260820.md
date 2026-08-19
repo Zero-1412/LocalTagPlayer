@@ -163,12 +163,14 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 - 命令失败为 `fail`，桌面样本不足或指纹变化低于 `1.5%` 只为 `unknown`，不补成通过；
 - 资源释放仍必须出现 `player_resources_released`。
 
-当前本机 Debug 三编码各一轮的匿名结果为：A/B 命令循环与资源释放均为 `pass`，但
-逐帧、A/B 的 DWM 可见性和外挂字幕下方区域均为 `unknown`；有效桌面采样约
-`25.1–28.0 fps`，低于该观察器的 `30 fps` 最低采样门禁，因此不生成“真实可见性通过”。
-证据目录为 `.local/qa/current-precision-dwm-{h264,hevc,av1}-20260820_*`，其中只保留
-匿名阶段、尺寸、时间和指纹差异，不保留截图或媒体内容。该结果把 P1 的命令/资源 QA
-与真实可见性 QA 明确拆开，不能写成逐帧、A-B 或外挂字幕功能完成。
+最新本机 Debug 三编码各一轮的匿名结果为：H.264 采样 `26.7 fps`、A/B DWM
+可见性 `pass`；HEVC 采样 `26.9 fps`、A/B DWM 可见性 `pass`；AV1 采样
+`27.4 fps`、A/B DWM 可见性 `unknown`。三轮的逐帧和外挂字幕 DWM 可见性均为
+`unknown`，整体均为 `unknown`；采样率仍低于该观察器的 `30 fps` 最低采样门禁，
+因此不生成“真实可见性通过”。最新证据目录为
+`.local/qa/precision-dwm-buffered-{h264,hevc,av1}-20260820_*`，其中只保留匿名阶段、
+尺寸、时间和指纹差异，不保留截图或媒体内容。该结果把 P1 的命令/资源 QA 与真实
+可见性 QA 明确拆开，不能写成逐帧、A-B 或外挂字幕功能完成。
 
 ## 阶段 D：外部验收清单
 
