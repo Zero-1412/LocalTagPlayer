@@ -2,6 +2,17 @@
 
 # 2026-08-19 · 播放器真实性能基线与 Texture/HWND 对照（P0：真实 PlayerPage 拖动矩阵已闭环，实体键盘待验收）
 
+- 2026-08-20 建立“流畅性”规范语义与有限工程门禁：依据 W3C Media Capabilities 的
+  `smooth=目标帧率下无掉帧`、W3C VideoPlaybackQuality 的总帧/掉帧/展示延迟分层、mpv
+  的 VO/显示同步说明、ITU-T P.1203 的首播加载与 stalling 指标，以及 Android CDD
+  的每 10 秒掉帧参考上限；项目门禁明确为首个实际 DWM 帧、稳态掉帧、最长无变化和
+  长按后续呈现节奏。规范映射与工程阈值见 `docs/qa/player_smoothness_standard_20260820.md`，
+  可执行评估器为 `tool/evaluate_player_smoothness_standard.ps1`。对已有证据的首次执行：
+  1080p AV1 长按前进首帧 p95 `1055 ms`、最长无变化 `1155 ms`，连续扫描门禁失败；
+  4K AV1 反向单轮首帧 `273 ms`、后续 DWM 变化间隔 p95 `141.901 ms`，首帧预算通过但
+  连续扫描失败，仍只能称 latest-only 关键帧预览。数值门禁是本项目工程目标，不冒充
+  国际规范；缺少 10 秒稳态分母、VO 掉帧或实体 QPC 的项目统一记 `unknown`。
+
 - 2026-08-19 继续按修正后的语义门禁补齐三编码动作矩阵：HEVC 4K/144 DPI 拖动
   `3/3`（fastPreviewThenExact）Down→DWM p50/p95 `391/401 ms`、Up→DWM
   `157/171 ms`、最长静帧 `393 ms`；短按前进/后退 `3/3` 分别为 `93/100`、
