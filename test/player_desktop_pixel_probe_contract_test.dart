@@ -201,11 +201,14 @@ void main() {
     expect(source, contains('failedRuns'));
     expect(source, contains('不得生成 p95 结论'));
     expect(source, contains("'progressDrag'"));
+    expect(source, contains("'playerFullscreen'"));
     expect(source, contains("'manualForward'"));
     expect(source, contains("'manualLongBackward'"));
     expect(source, contains('manualLongKeyboardAction'));
     expect(source, contains('product-player-page'));
     expect(source, contains('win32-mouse-drag-progress-track'));
+    expect(source, contains('win32-keyboard-player-fullscreen'));
+    expect(source, contains('inputDownToGeometryMs'));
     expect(source, contains('manual-keyboard-native-qpc'));
     expect(source, contains('waiting_for_physical_key=true'));
     expect(source, contains('松键并非 seek 提交边界'));

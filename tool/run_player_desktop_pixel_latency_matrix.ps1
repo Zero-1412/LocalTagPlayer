@@ -11,7 +11,7 @@
 param(
   [Parameter(Mandatory = $true)]
   [string]$Sample,
-  [ValidateSet('click', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')]
+  [ValidateSet('click', 'playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')]
   [string]$Action = 'click',
   [ValidateRange(3, 15)]
   [int]$Runs = 7,
@@ -75,12 +75,13 @@ function Get-Percentile {
 }
 
 $gate = Join-Path $PSScriptRoot 'run_player_desktop_pixel_latency_gate.ps1'
-$realPlayerPageAction = $Action -in @('progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
+$realPlayerPageAction = $Action -in @('playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
 $manualKeyboardAction = $Action -in @('manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
 $manualLongKeyboardAction = $Action -in @('manualLongForward', 'manualLongBackward')
 $inputMode = switch ($Action) {
   'click' { 'win32-mouse-click' }
   'progressDrag' { 'win32-mouse-drag-progress-track' }
+  'playerFullscreen' { 'win32-keyboard-player-fullscreen' }
   'manualForward' { 'manual-keyboard-native-qpc' }
   'manualBackward' { 'manual-keyboard-native-qpc' }
   'manualLongForward' { 'manual-keyboard-native-qpc-long-hold' }
@@ -306,7 +307,7 @@ for ($index = 1; $index -le $Runs; $index++) {
     [int]$summary.timedOutSamples -eq 0 -and
     $manualHoldSatisfied -and
     $null -eq $gateFailure
-  if ($valid -and $realPlayerPageAction -and -not $manualKeyboardAction -and
+  if ($valid -and $realPlayerPageAction -and $Action -ne 'playerFullscreen' -and -not $manualKeyboardAction -and
       $null -ne $desktopReport -and
       @($desktopReport.actions).Count -eq 1 -and
       -not [bool]$desktopReport.actions[0].inputSemanticConfirmed) {
@@ -319,7 +320,8 @@ for ($index = 1; $index -le $Runs; $index++) {
     $records += [pscustomobject]@{
       run = $index
       status = 'valid'
-      inputDownToPixelMs = [int]$summary.p50InputDownToPixelMs
+      inputDownToPixelMs = if ($Action -eq 'playerFullscreen') { $null } else { [int]$summary.p50InputDownToPixelMs }
+      inputDownToGeometryMs = if ($Action -eq 'playerFullscreen') { [int]$summary.p50InputDownToGeometryMs } else { $null }
       # 实体 QPC 合同只锚定 WM_KEYDOWN。松键并非 seek 提交边界，因此不能把默认零值
       # 混入 KeyUp p50/p95；自动长按若在按住期间已出现首帧，Up -> 首帧没有定义值，
       # 也必须保留 null，而不是把 PowerShell 的空值强转为 0。
@@ -357,7 +359,8 @@ for ($index = 1; $index -le $Runs; $index++) {
 
 $validRecords = @($records | Where-Object status -eq 'valid')
 $invalidRecords = @($records | Where-Object status -eq 'invalid')
-$down = @($validRecords | ForEach-Object inputDownToPixelMs)
+$down = @($validRecords | ForEach-Object inputDownToPixelMs | Where-Object { $null -ne $_ })
+$geometry = @($validRecords | ForEach-Object inputDownToGeometryMs | Where-Object { $null -ne $_ })
 $up = @($validRecords | ForEach-Object inputUpToPixelMs | Where-Object { $null -ne $_ })
 $matrix = [ordered]@{
   evidence = 'desktop-composited-pixel-change'
@@ -379,10 +382,15 @@ $matrix = [ordered]@{
   successfulRuns = $validRecords.Count
   failedRuns = $invalidRecords.Count
   p95Eligible = $invalidRecords.Count -eq 0 -and $validRecords.Count -eq $Runs
-  inputDownToPixel = if ($validRecords.Count -gt 0) { [ordered]@{
+  inputDownToPixel = if ($down.Count -gt 0) { [ordered]@{
     p50Ms = Get-Percentile $down 0.50
     p95Ms = Get-Percentile $down 0.95
     maxMs = ($down | Measure-Object -Maximum).Maximum
+  } } else { $null }
+  inputDownToGeometry = if ($geometry.Count -gt 0) { [ordered]@{
+    p50Ms = Get-Percentile $geometry 0.50
+    p95Ms = Get-Percentile $geometry 0.95
+    maxMs = ($geometry | Measure-Object -Maximum).Maximum
   } } else { $null }
   inputUpToPixel = if ($up.Count -gt 0) { [ordered]@{
     p50Ms = Get-Percentile $up 0.50

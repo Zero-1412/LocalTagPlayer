@@ -38,8 +38,8 @@
   缺口不是 library.db 漏扫造成，仍保持 `unknown`，不把未进入应用资料库的文件强行加入正式报告。
 
 - 2026-08-20 新增 `tool/assemble_player_p0_evidence.ps1`，按目录名和矩阵摘要的显式
-  合同把已有真实 PlayerPage/Texture 证据装配到新的本机 manifest；当前装配目标为 `22` 个
-  case/action、保留 `62` 个未装配 action，须由重装配结果确认。不能把新拖动证据外推到其它
+  合同把已有真实 PlayerPage/Texture 证据装配到新的本机 manifest；当前装配目标为 `32` 个
+  case/action、保留 `52` 个未装配 action，须由重装配结果确认。不能把新拖动证据外推到其它
   GOP、startup 或 fullscreen，也不把缺失素材、VO drop 或稳态 total drop 写成通过。
   这完成了报告可复核链，但仍有未绑定拖动、首播/全屏、VO drop 或稳态 total drop；
   这些都不能写成通过。
@@ -100,6 +100,15 @@
   最长无变化段为 `387/500/358 ms`。三组有效捕获约 `111–118 fps`，最终硬解均为
   `d3d11va-copy`，decoder/total drop 为 `0`，Texture generation 均为 `0/1/2` 且重建
   `2` 次，资源释放均有回执；已加入精确装配，VO drop 和稳态分母继续保持 `unknown`。
+
+- 2026-08-20 将正式 PlayerPage `playerFullscreen` 纳入独立 3-session 矩阵，并修正 P0
+  validator 的全屏结构指标：fullscreen 的 `p95InputDownToGeometryMs` 只进入独立的
+  `fullscreen-window-geometry-settled`，不能读取像素字段的 0 ms，更不能冒充视频首个真实
+  DWM 帧。10 个已有素材 case 均 `3/3` 有效；几何 p95 为 H.264 short/long `45/47 ms`、
+  HEVC short/long `44/44 ms`、AV1 long `64 ms`，4K H.264 short/long `44/50 ms`、HEVC
+  short/long `52/50 ms`、AV1 short `50 ms`。全部保留 `fullscreen_settled`、Texture 代次
+  和资源释放证据；视频首帧保持 `unknown`，缺少 manifest 素材的 1080p AV1 short 与 4K AV1
+  long 仍为 `unknown`。
 
 - 2026-08-20 建立“流畅性”规范语义与有限工程门禁：依据 W3C Media Capabilities 的
   `smooth=目标帧率下无掉帧`、W3C VideoPlaybackQuality 的总帧/掉帧/展示延迟分层、mpv

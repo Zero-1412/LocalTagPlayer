@@ -118,7 +118,10 @@ function Get-SessionRoots {
 }
 
 function Get-RunEvidence {
-  param([Parameter(Mandatory = $true)][string]$Root)
+  param(
+    [Parameter(Mandatory = $true)][string]$Root,
+    [Parameter(Mandatory = $true)][string]$ActionName
+  )
 
   $summaryPath = Join-Path $Root 'desktop-pixel-matrix-summary.json'
   $summary = Read-JsonFile $summaryPath
@@ -177,7 +180,11 @@ function Get-RunEvidence {
       dwmEvidence = $presentedEvidence -eq 'desktop-composited-pixel-change'
       evidenceKind = $presentedEvidence
       firstDwmMs = if ($null -ne $report) {
-        Get-NumberOrNull (Get-ObjectProperty $report 'p95InputDownToPixelMs')
+        if ($ActionName -eq 'fullscreen') { $null }
+        else { Get-NumberOrNull (Get-ObjectProperty $report 'p95InputDownToPixelMs') }
+      } else { $null }
+      fullscreenGeometryMs = if ($null -ne $report -and $ActionName -eq 'fullscreen') {
+        Get-NumberOrNull (Get-ObjectProperty $report 'p95InputDownToGeometryMs')
       } else { $null }
       effectiveCaptureFps = if ($null -ne $report) {
         Get-NumberOrNull (Get-ObjectProperty $report 'effectiveCaptureFps')
@@ -226,7 +233,7 @@ function Get-ActionMetrics {
 
   $roots = @(Get-SessionRoots $EvidenceValue)
   $sessions = @()
-  foreach ($root in $roots) { $sessions += @(Get-RunEvidence $root) }
+  foreach ($root in $roots) { $sessions += @(Get-RunEvidence $root $Action) }
   $valid = @($sessions | Where-Object { $_.hasReport -and $_.passed })
   $invalid = @($sessions | Where-Object { -not $_.passed })
   $threshold = Get-ActionThreshold $Action
@@ -239,6 +246,17 @@ function Get-ActionMetrics {
   $dwmStatus = if ($invalid.Count -gt 0) { 'fail' }
     elseif ($firstValues.Count -lt 3) { 'unknown' }
     elseif ($firstMax -le $threshold) { 'pass' }
+    else { 'fail' }
+
+  $geometryValues = @($valid | ForEach-Object { $_.fullscreenGeometryMs } |
+    Where-Object { $null -ne $_ })
+  $geometryMax = if ($geometryValues.Count -gt 0) {
+    ($geometryValues | Measure-Object -Maximum).Maximum
+  } else { $null }
+  $geometryStatus = if ($Action -ne 'fullscreen') { 'unknown' }
+    elseif ($invalid.Count -gt 0) { 'fail' }
+    elseif ($geometryValues.Count -lt 3) { 'unknown' }
+    elseif ($geometryMax -le $threshold) { 'pass' }
     else { 'fail' }
 
   $semanticRequired = $Action -in @('shortForward', 'shortBackward', 'drag', 'longForward', 'longBackward')
@@ -337,6 +355,7 @@ function Get-ActionMetrics {
   $metrics = @(
     (New-Metric 'independent-sessions' $sessionStatus $valid.Count '每个有效 action 至少需要 3 个独立会话。'),
     (New-Metric 'first-real-dwm-frame' $dwmStatus $firstMax '首个实际 DWM/桌面合成变化；后端帧代理不能替代。'),
+    (New-Metric 'fullscreen-window-geometry-settled' $geometryStatus $geometryMax '全屏几何完成是结构辅助证据，不能替代视频首个真实 DWM 呈现帧。'),
     (New-Metric 'page-semantic-evidence' $semanticStatus $semanticValues '页面回执与 DWM 证据分开验收；缺失时保持 unknown。'),
     (New-Metric 'resource-release' $releaseStatus $releaseValues '释放事件必须可见；失败不能被成功帧覆盖。'),
     (New-Metric 'hardware-decode' $hwdecStatus $hwdecValues '只接受运行态最终硬解属性，不按请求参数推测。'),

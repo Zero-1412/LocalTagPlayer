@@ -85,6 +85,16 @@ function Get-ValidatedMatrixCandidate {
 function Get-BindingPrefix {
   param([Parameter(Mandatory = $true)][object]$Binding)
 
+  if ([string]$Binding.action -eq 'fullscreen') {
+    $directoryGop = ([string]$Binding.gop) -replace '-gop$', ''
+    if ([int]$Binding.width -eq 1920) {
+      return 'current-semantic-matrix-1080p-{0}-{1}-fullscreen-' -f
+        [string]$Binding.codec, $directoryGop
+    }
+    return 'current-semantic-matrix-4k-{0}-{1}-fullscreen-' -f
+      [string]$Binding.codec, $directoryGop
+  }
+
   if ([int]$Binding.width -eq 1920) {
     $directoryGop = ([string]$Binding.gop) -replace '-gop$', ''
     return 'current-semantic-matrix-1080p-{0}-{1}-{2}-' -f
@@ -132,12 +142,23 @@ $bindings = @(
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'av1'; direction = 'forward'; action = 'longForward' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'av1'; direction = 'backward'; action = 'longBackward' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'av1'; direction = 'drag'; action = 'drag' },
+  [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'h264'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'h264'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'hevc'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'hevc'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'av1'; direction = 'fullscreen'; action = 'fullscreen' },
   [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'h264'; direction = 'forward'; action = 'longForward' },
   [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'h264'; direction = 'backward'; action = 'longBackward' },
   [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'hevc'; direction = 'forward'; action = 'longForward' },
   [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'hevc'; direction = 'backward'; action = 'longBackward' },
   [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'av1'; direction = 'forward'; action = 'longForward' },
-  [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'av1'; direction = 'backward'; action = 'longBackward' }
+  [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'av1'; direction = 'backward'; action = 'longBackward' },
+  [ordered]@{ width = 3840; gop = 'short-gop'; codec = 'h264'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'h264'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 3840; gop = 'short-gop'; codec = 'hevc'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'hevc'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 3840; gop = 'short-gop'; codec = 'av1'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'av1'; direction = 'fullscreen'; action = 'fullscreen' }
 )
 $actions = @('startup', 'shortForward', 'shortBackward', 'drag', 'longForward', 'longBackward', 'fullscreen')
 $mapped = @()

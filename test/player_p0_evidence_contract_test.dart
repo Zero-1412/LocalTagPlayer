@@ -60,6 +60,10 @@ void main() {
     expect(script, contains('texture-generation-recorded'));
     expect(script, contains('longest-presented-unchanged-gap'));
     expect(script, contains('continuous-presented-change-pacing'));
+    expect(script,
+        contains(r"Get-ObjectProperty $report 'p95InputDownToGeometryMs'"));
+    expect(script, contains('fullscreen-window-geometry-settled'));
+    expect(script, contains('fullscreenGeometryMs'));
     expect(script, contains('presentedChangeQpcUs'));
     expect(script, contains(r'$presentedIntervalP95 -le 50'));
     expect(script, contains('每轮至少 5 个 DWM 变化'));
@@ -110,6 +114,7 @@ void main() {
     expect(assembler, contains('evidenceAssembly'));
     expect(assembler, contains('current-semantic-matrix-1080p-'));
     expect(assembler, contains('current-4k-{0}-realpage-'));
+    expect(assembler, contains('current-semantic-matrix-4k-'));
     expect(assembler, contains('product-player-page'));
     expect(assembler, contains('desktop-composited-pixel-change'));
     expect(assembler, contains('p95Eligible'));
@@ -137,6 +142,14 @@ void main() {
         assembler,
         contains(
             "gop = 'long-gop'; codec = 'av1'; direction = 'drag'; action = 'drag'"));
+    expect(
+        assembler,
+        contains(
+            "gop = 'short-gop'; codec = 'h264'; direction = 'fullscreen'; action = 'fullscreen'"));
+    expect(
+        assembler,
+        contains(
+            "gop = 'long-gop'; codec = 'av1'; direction = 'fullscreen'; action = 'fullscreen'"));
     expect(assembler, contains('postdwell'));
     expect(assembler, contains('no-exact-directory-binding'));
   });
