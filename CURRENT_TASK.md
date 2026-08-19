@@ -38,8 +38,8 @@
   缺口不是 library.db 漏扫造成，仍保持 `unknown`，不把未进入应用资料库的文件强行加入正式报告。
 
 - 2026-08-20 新增 `tool/assemble_player_p0_evidence.ps1`，按目录名和矩阵摘要的显式
-  合同把已有真实 PlayerPage/Texture 证据装配到新的本机 manifest；当前装配目标为 `33` 个
-  case/action、保留 `51` 个未装配 action，须由重装配结果确认。不能把新拖动证据外推到其它
+  合同把已有真实 PlayerPage/Texture 证据装配到新的本机 manifest；当前重装配为 `41` 个
+  case/action、保留 `43` 个未装配 action。不能把新拖动证据外推到其它
   GOP、未绑定 startup 或 fullscreen，也不把缺失素材、VO drop 或稳态 total drop 写成通过。
   这完成了报告可复核链，但仍有未绑定拖动、其它 case 的首播/全屏、VO drop 或稳态 total drop；
   这些都不能写成通过。
@@ -113,12 +113,13 @@
 - 2026-08-20 为正式 PlayerPage startup 建立 Debug-only 的 `startup-marker.json` 与探针
   附着握手：窗口显示后、`runApp` 前固定 UTC 标记，探针以同机 QPC/UTC 映射作为起点，
   随后以第一个持续中心 DWM 变化为终点，再独立等待 `ready.json` 证明产品页面可达。
-  1080p H.264 short startup 已完成 `3/3` 独立会话，显式使用启动动作最低 `40 fps` 采样
-  门槛（启动初绘竞争下实测 `66.8–102.3 fps`），并在 Texture id + duration readiness
-  之后才接受中心像素变化；首个真实 DWM p95 为 `1257 ms`，三轮为 `1257/795/805 ms`，
-  因启动预算 `1000 ms` 判 `fail`，资源释放和最终 `d3d11va-copy` 均有回执。默认 `80 fps`
-  的单次试跑因实测约 `55 fps` 严格失败，不能被改写为通过；其余 startup case 仍为 `unknown`，
-  后端 `first_frame_ms` 继续不作为 DWM 证据。
+  现在 9 个有可验证素材的 startup case 均完成 `3/3` 独立会话，显式使用启动动作最低
+  `40 fps` 采样门槛（实测 `66.8–118.3 fps`），并在 Texture id + duration readiness
+  之后才接受中心像素变化。1080p H.264 short/long、HEVC short/long、AV1 long 的首个
+  真实 DWM p95 为 `1257/2448`、`1074/1035`、`1106 ms`；4K H.264 short/long、HEVC
+  short/long 为 `1134/1150`、`1136/1102 ms`。9 项均因启动预算 `1000 ms` 判 `fail`，
+  资源释放和最终 `d3d11va-copy` 均有回执。4K AV1 short 只有 `2/3` 有效会话，两个缺失
+  manifest 素材 case 继续为 `unknown`；后端 `first_frame_ms` 继续不作为 DWM 证据。
 
 - 2026-08-20 建立“流畅性”规范语义与有限工程门禁：依据 W3C Media Capabilities 的
   `smooth=目标帧率下无掉帧`、W3C VideoPlaybackQuality 的总帧/掉帧/展示延迟分层、mpv

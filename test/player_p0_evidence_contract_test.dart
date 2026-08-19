@@ -117,6 +117,7 @@ void main() {
     expect(assembler, contains('current-semantic-matrix-1080p-'));
     expect(assembler, contains('current-4k-{0}-realpage-'));
     expect(assembler, contains('current-semantic-matrix-4k-'));
+    expect(assembler, contains('current-semantic-matrix-4k-{0}-{1}-startup-'));
     expect(assembler, contains('product-player-page'));
     expect(assembler, contains('desktop-composited-pixel-change'));
     expect(assembler, contains('p95Eligible'));
@@ -152,6 +153,10 @@ void main() {
         assembler,
         contains(
             "gop = 'short-gop'; codec = 'h264'; direction = 'startup'; action = 'startup'"));
+    expect(
+        assembler,
+        contains(
+            "gop = 'short-gop'; codec = 'hevc'; direction = 'startup'; action = 'startup'"));
     expect(
         assembler,
         contains(
