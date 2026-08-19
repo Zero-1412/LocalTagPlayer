@@ -2,6 +2,17 @@
 
 # 2026-08-19 · 播放器真实性能基线与 Texture/HWND 对照（P0：真实 PlayerPage 拖动矩阵已闭环，实体键盘待验收）
 
+- 2026-08-20 建立 P0/P1 证据包合同：`tool/qa/player_p0_manifest.template.json` 固定
+  `1080p/4K × H.264/HEVC/AV1 × short/long GOP` 的 12 个内容 case，并预留首次播放、
+  短按前/后、拖动、长按前/后和全屏七类 action；新增
+  `tool/validate_player_p0_evidence.ps1`，只接受实际 DWM 终点并把每项严格分为
+  `pass/fail/unknown`，缺少 10 秒稳态分母、VO/逐帧时间戳或实体 QPC 不补成通过。
+  当前统一 manifest 尚未填入本机媒体路径，P0 总体仍为 `unknown`；阶段 B 已按现有
+  同机报告作出决策：QA-only HWND 精确 seek/首帧不稳定，记录为“HWND QA 路径不可发布”，
+  不继续用 HWND 校准正式 Texture。P1 命令/资源 QA 与真实可见性 QA 已在
+  `docs/qa/player_p0_p1_evidence_package_20260820.md` 分离；真人长按、发布 GPU/驱动、
+  稳定 HWND A/B、跨显示器/DPI 和真实控制可见性保留为外部清单。
+
 - 2026-08-20 建立“流畅性”规范语义与有限工程门禁：依据 W3C Media Capabilities 的
   `smooth=目标帧率下无掉帧`、W3C VideoPlaybackQuality 的总帧/掉帧/展示延迟分层、mpv
   的 VO/显示同步说明、ITU-T P.1203 的首播加载与 stalling 指标，以及 Android CDD

@@ -44,6 +44,15 @@
       "replacement": null
     },
     {
+      "id": "player-p0-evidence",
+      "path": "tool/validate_player_p0_evidence.ps1",
+      "status": "active",
+      "kind": "performance-evidence-gate",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_p0_p1_evidence_package_20260820.md",
+      "replacement": null
+    },
+    {
       "id": "thumbnail-gpu-benchmark",
       "path": "tool/benchmark_thumbnail_gpu_paths.ps1",
       "status": "active",

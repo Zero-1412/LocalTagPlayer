@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "build": {
+    "configuration": "Debug",
+    "surface": "mediaKit-texture",
+    "executableSha256": "",
+    "evidenceKind": "desktop-composited-pixel-change"
+  },
+  "actions": [
+    "startup",
+    "shortForward",
+    "shortBackward",
+    "drag",
+    "longForward",
+    "longBackward",
+    "fullscreen"
+  ],
+  "cases": [
+    {
+      "id": "1080p-h264-short-gop",
+      "path": "",
+      "codec": "h264",
+      "width": 1920,
+      "height": 1080,
+      "gop": "short-gop",
+      "p95BudgetMs": 500
+    },
+    {
+      "id": "1080p-h264-long-gop",
+      "path": "",
+      "codec": "h264",
+      "width": 1920,
+      "height": 1080,
+      "gop": "long-gop",
+      "p95BudgetMs": 1200
+    },
+    {
+      "id": "1080p-hevc-short-gop",
+      "path": "",
+      "codec": "hevc",
+      "width": 1920,
+      "height": 1080,
+      "gop": "short-gop",
+      "p95BudgetMs": 500
+    },
+    {
+      "id": "1080p-hevc-long-gop",
+      "path": "",
+      "codec": "hevc",
+      "width": 1920,
+      "height": 1080,
+      "gop": "long-gop",
+      "p95BudgetMs": 1200
+    },
+    {
+      "id": "1080p-av1-short-gop",
+      "path": "",
+      "codec": "av1",
+      "width": 1920,
+      "height": 1080,
+      "gop": "short-gop",
+      "p95BudgetMs": 500
+    },
+    {
+      "id": "1080p-av1-long-gop",
+      "path": "",
+      "codec": "av1",
+      "width": 1920,
+      "height": 1080,
+      "gop": "long-gop",
+      "p95BudgetMs": 1200
+    },
+    {
+      "id": "4k-h264-short-gop",
+      "path": "",
+      "codec": "h264",
+      "width": 3840,
+      "height": 2160,
+      "gop": "short-gop",
+      "p95BudgetMs": 800
+    },
+    {
+      "id": "4k-h264-long-gop",
+      "path": "",
+      "codec": "h264",
+      "width": 3840,
+      "height": 2160,
+      "gop": "long-gop",
+      "p95BudgetMs": 1800
+    },
+    {
+      "id": "4k-hevc-short-gop",
+      "path": "",
+      "codec": "hevc",
+      "width": 3840,
+      "height": 2160,
+      "gop": "short-gop",
+      "p95BudgetMs": 800
+    },
+    {
+      "id": "4k-hevc-long-gop",
+      "path": "",
+      "codec": "hevc",
+      "width": 3840,
+      "height": 2160,
+      "gop": "long-gop",
+      "p95BudgetMs": 1800
+    },
+    {
+      "id": "4k-av1-short-gop",
+      "path": "",
+      "codec": "av1",
+      "width": 3840,
+      "height": 2160,
+      "gop": "short-gop",
+      "p95BudgetMs": 800
+    },
+    {
+      "id": "4k-av1-long-gop",
+      "path": "",
+      "codec": "av1",
+      "width": 3840,
+      "height": 2160,
+      "gop": "long-gop",
+      "p95BudgetMs": 1800
+    }
+  ]
+}
