@@ -38,8 +38,8 @@
   缺口不是 library.db 漏扫造成，仍保持 `unknown`，不把未进入应用资料库的文件强行加入正式报告。
 
 - 2026-08-20 新增 `tool/assemble_player_p0_evidence.ps1`，按目录名和矩阵摘要的显式
-  合同把已有真实 PlayerPage/Texture 证据装配到新的本机 manifest；当前装配目标为 `19` 个
-  case/action、保留 `65` 个未装配 action，须由重装配结果确认。不能把新拖动证据外推到其它
+  合同把已有真实 PlayerPage/Texture 证据装配到新的本机 manifest；当前装配目标为 `22` 个
+  case/action、保留 `62` 个未装配 action，须由重装配结果确认。不能把新拖动证据外推到其它
   GOP、startup 或 fullscreen，也不把缺失素材、VO drop 或稳态 total drop 写成通过。
   这完成了报告可复核链，但仍有未绑定拖动、首播/全屏、VO drop 或稳态 total drop；
   这些都不能写成通过。
@@ -94,6 +94,12 @@
   约 `115–119 fps`，最终硬解均为 `d3d11va-copy`，decoder/total drop 为 `0`，Texture
   generation 均为 `0/1/2` 且重建 `2` 次，资源释放均有回执。目录已加入显式装配，VO drop、
   稳态分母与其它未覆盖动作继续保持 `unknown`。
+
+- 2026-08-20 用 manifest 已选的 1080p H.264/HEVC/AV1 long GOP 素材各完成一轮正式
+  PlayerPage/Texture 精确拖动 `3/3` 独立 Debug 会话；首个 DWM p95 为 `408/517/364 ms`，
+  最长无变化段为 `387/500/358 ms`。三组有效捕获约 `111–118 fps`，最终硬解均为
+  `d3d11va-copy`，decoder/total drop 为 `0`，Texture generation 均为 `0/1/2` 且重建
+  `2` 次，资源释放均有回执；已加入精确装配，VO drop 和稳态分母继续保持 `unknown`。
 
 - 2026-08-20 建立“流畅性”规范语义与有限工程门禁：依据 W3C Media Capabilities 的
   `smooth=目标帧率下无掉帧`、W3C VideoPlaybackQuality 的总帧/掉帧/展示延迟分层、mpv

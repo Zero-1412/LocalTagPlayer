@@ -91,9 +91,9 @@ pwsh -NoProfile -File .\tool\validate_player_p0_evidence.ps1 `
   -Output .\.local\qa\p0-evidence-gate-assembled.json
 ~~~
 
-本机当前装配结果为 `19` 个明确 case/action 映射、`65` 个保留未装配 action；其中包括
-1080p H.264/HEVC short GOP 的正式 PlayerPage 精确拖动矩阵、三编码 short/long 的明确
-forward/backward 矩阵，以及已有的 4K longhold 矩阵。没有精确 GOP 绑定的其它拖动、startup、fullscreen 不会因为目录“看起来相近”而被装配；缺失
+本机当前装配结果为 `22` 个明确 case/action 映射、`62` 个保留未装配 action；其中包括
+1080p H.264/HEVC short GOP 和三编码 long GOP 的正式 PlayerPage 精确拖动矩阵、三编码
+short/long 的明确 forward/backward 矩阵，以及已有的 4K longhold 矩阵。没有精确 GOP 绑定的其它拖动、startup、fullscreen 不会因为目录“看起来相近”而被装配；缺失
 素材的 1080p AV1 short 与 4K AV1 long 也继续由原始 manifest 保持缺口。装配输出中的
 `evidenceAssembly` 保存选择规则、已映射目录名和省略原因，便于同机复跑和审计。
 
@@ -137,7 +137,7 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | --- | --- | --- |
 | 正式 Texture 三编码动作探针 | pass（证据管线） | 已有真实 PlayerPage、页面语义、DWM 匿名变化和运行态聚合 |
 | 12-case 固定 manifest 完整性 | fail（10/12） | 当前本机有统一 ignored manifest，但两个 AV1 case 没有可验证样本 |
-| 三编码/两分辨率/短长 GOP 的统一 P0 报告 | fail（7 fail/5 unknown） | 已装配 17 个明确 case/action；连续呈现、未装配动作、稳态字段和 2 个素材缺口仍未闭环 |
+| 三编码/两分辨率/短长 GOP 的统一 P0 报告 | fail（7 fail/5 unknown） | 已装配 22 个明确 case/action；连续呈现、未装配动作、稳态字段和 2 个素材缺口仍未闭环 |
 | decoder drop | pass 或 fail 按 action 分列 | 运行态有值时非零失败；没有值不补零 |
 | VO drop | unknown（已有矩阵多数不可用） | 运行态没有可靠 VO drop 字段时不能判通过 |
 | 稳态 total drop | unknown | 既有动作样本缺少独立 10 秒分母 |
@@ -163,6 +163,10 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
   这些结果继续区分“前进连续扫描”与“后退 latest-only 关键帧预览”，不宣称双向连续。
 - 4K drag 的 H.264/HEVC/AV1 矩阵各有 `7/7` 有效会话，首个 DWM p95 为 `351/293/287 ms`，
   页面语义为 `pass`；部分运行态 decoder/hwdec 字段缺失，因此仍按 `unknown` 处理。
+- 1080p 三编码的 long-GOP drag 也已用 manifest 素材精确完成 `3/3` 独立会话；首个
+  DWM p95 为 H.264 `408 ms`、HEVC `517 ms`、AV1 `364 ms`，最长无变化段分别为
+  `387/500/358 ms`。这些结果进入统一装配，但 HEVC 的 `500 ms` 仍处于最长静止阈值边界，
+  VO drop 与稳态分母缺失时不改变 unknown 约束。
 
 阶段 A 在统一 manifest 的每个有效 case/action 达到 3 个独立会话、报告字段齐全、
 失败和 unknown 均被保留后结束；不因实体键盘、另一后端或外部 GPU 无限重跑。

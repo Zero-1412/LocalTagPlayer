@@ -125,6 +125,18 @@ void main() {
         assembler,
         contains(
             "gop = 'short-gop'; codec = 'hevc'; direction = 'drag'; action = 'drag'"));
+    expect(
+        assembler,
+        contains(
+            "gop = 'long-gop'; codec = 'h264'; direction = 'drag'; action = 'drag'"));
+    expect(
+        assembler,
+        contains(
+            "gop = 'long-gop'; codec = 'hevc'; direction = 'drag'; action = 'drag'"));
+    expect(
+        assembler,
+        contains(
+            "gop = 'long-gop'; codec = 'av1'; direction = 'drag'; action = 'drag'"));
     expect(assembler, contains('postdwell'));
     expect(assembler, contains('no-exact-directory-binding'));
   });
