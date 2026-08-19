@@ -94,6 +94,9 @@ void main() {
     expect(source, contains('TryCapture'));
     expect(source, contains('captureReadFailures'));
     expect(source, contains('pixel_capture_unavailable'));
+    expect(source, contains('automatedKeyboardHoldMode'));
+    expect(source, contains('首个稳定画面后保留 250ms 观察窗'));
+    expect(source, contains('current.Fingerprint != previous.Fingerprint'));
     expect(source, contains('keyboardSemanticRequired'));
     expect(source, contains('player_keyboard_event'));
     expect(source, contains('pixel_change_timeout'));

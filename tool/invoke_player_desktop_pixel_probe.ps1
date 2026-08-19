@@ -499,6 +499,7 @@ public static class DesktopPixelProbe
             }
 
             var automatedKeyboardHoldActive = false;
+            var automatedKeyboardHoldMode = false;
             long automatedKeyboardHoldReleaseUs = 0;
             long automatedKeyboardRepeatUs = 0;
             if (manualKeyboard)
@@ -549,6 +550,7 @@ public static class DesktopPixelProbe
                         // 长按的桌面像素必须从 Down 开始采样；重复消息和 KeyUp 在下面
                         // 的同一采样循环中推进，不能先阻塞 holdMilliseconds 再把中间帧丢掉。
                         automatedKeyboardHoldActive = true;
+                        automatedKeyboardHoldMode = true;
                         automatedKeyboardRepeatUs = action.keyDownQpcUs + 220000L;
                         automatedKeyboardHoldReleaseUs =
                             action.keyDownQpcUs + holdMilliseconds * 1000L;
@@ -634,11 +636,13 @@ public static class DesktopPixelProbe
                     fingerprint = current.Fingerprint
                 };
                 action.samples.Add(sample);
-                // 第一张稳定新画面在 changedConsecutively==0 时记录；之后相邻采样
-                // 的明显变化按 20ms 最小间隔记录，避免把每个采样点冒充独立解码帧。
+                // 第一张稳定新画面在 changedConsecutively==0 时记录；之后只要匿名
+                // 指纹确实变化且仍远离静态基线，就按 20ms 最小间隔记录。连续播放时
+                // 相邻视频帧可能只改变少量采样像素，不能用过高的差异阈值把它们误判
+                // 成静止；这些条目仍只是 DWM 呈现变化，不冒充独立解码帧。
                 var presentedChange = baselineDelta >= thresholdPercent &&
                     (changedConsecutively == 0 ||
-                     previousDelta >= thresholdPercent * 0.30);
+                     (previous != null && current.Fingerprint != previous.Fingerprint));
                 if (presentedChange &&
                     (lastPresentedChangeUs <= 0 || nowUs - lastPresentedChangeUs >= 20000L))
                 {
@@ -711,14 +715,25 @@ public static class DesktopPixelProbe
                             action.inputUpToFirstChangedPixelMs = null;
                         firstChangedObserved = true;
                     }
+                    if (automatedKeyboardHoldMode &&
+                        postFirstChangedDeadlineUs <= 0)
+                    {
+                        postFirstChangedDeadlineUs = nowUs + 250000L;
+                    }
                     if (!manualLongKeyboard)
                     {
                         // 自动长按必须继续采样到真实 KeyUp，才能同时验证按住期间的
-                        // 连续扫描与持续掉帧；短按仍在首个稳定画面后立即结束。
+                        // 连续扫描与持续掉帧；首个稳定画面后保留 250ms 观察窗，
+                        // 避免把单个 DWM 像素变化误称为持续呈现。
                         if (!automatedKeyboardHoldActive)
                         {
-                            action.passed = true;
-                            break;
+                            if (!automatedKeyboardHoldMode ||
+                                postFirstChangedDeadlineUs <= 0 ||
+                                nowUs >= postFirstChangedDeadlineUs)
+                            {
+                                action.passed = true;
+                                break;
+                            }
                         }
                     }
                     if (physicalKeyUpQpcUs > 0 && postFirstChangedDeadlineUs <= 0)
@@ -730,8 +745,13 @@ public static class DesktopPixelProbe
                     // 长按在按住期间已出现首帧时，KeyUp 后只需结束当前动作；若
                     // 首帧恰好在 KeyUp 后才出现，上面的 changedConsecutively 分支
                     // 已记录 Up -> 首帧。两种情况都不能继续空转到超时。
-                    action.passed = true;
-                    break;
+                    if (!automatedKeyboardHoldMode ||
+                        postFirstChangedDeadlineUs <= 0 ||
+                        nowUs >= postFirstChangedDeadlineUs)
+                    {
+                        action.passed = true;
+                        break;
+                    }
                 }
                 if (manualLongKeyboard && firstChangedObserved &&
                     physicalKeyUpQpcUs > 0 && postFirstChangedDeadlineUs > 0 &&

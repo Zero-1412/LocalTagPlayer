@@ -27,6 +27,32 @@
   “视频打开失败 / unplayable media”，因此没有形成有效的 `player_keyboard_event` 或
   首个 DWM 帧样本。该结果记录为安装版/样本可达性阻塞，不归因于快进性能，也不写入任何
   p50/p95；实体 WM_KEYDOWN/QPC 门禁仍需在唯一可播放 Debug 实例中完成。
+- 2026-08-19 已用可播放的独立 Debug PlayerPage 自助完成 H.264 4K 原生输入短按矩阵：
+  前进、后退各 7/7，Windows 原生观察器均写出 `native_keyboard_message` 的 Down/Up
+  QPC，页面均写出 `player_keyboard_event`，桌面采样约 108–118fps；Down→首个 DWM
+  变化前进 p50/p95 `111/118 ms`，后退 `104/121 ms`。这是完整的
+  `WM_KEYDOWN/UP QPC → PlayerPage → DWM` 管线自证，但按键由 Windows 自助控制发送，
+  不代表人体按压间隔；长按仍需可保持按下的实体 Down/Up 证据。原始目录为
+  `.local/qa/current-self-manual-{forward,backward}-*`。
+- 2026-08-19 补齐 1080p/144 DPI 正式 Texture PlayerPage 自动化合同：H.264 短按前/后
+  `81/81`、`81/92 ms`，拖动 `325/343 ms`（松手 `89/91 ms`），长按前/后
+  `69/75`、`268/271 ms`；HEVC 短按 `86/86`、`91/94 ms`，拖动 `294/307 ms`
+  （松手 `71/81 ms`），长按 `85/99`、`266/281 ms`；AV1 短按 `82/86`、`80/93 ms`，
+  拖动 `334/362 ms`（松手 `92/122 ms`），长按前/后 `1094/1105`、`262/263 ms`。
+  三编码每项均 3/3、页面语义/Slider 回执、约 110–120fps、最终 `d3d11va-copy`；
+  AV1 长按前进首帧 p95 `1105 ms`、最长静帧 `950 ms`，运行态 total drop `6–7`，
+  是新的高优先级呈现长尾。1080p 全屏几何切换 H.264/HEVC/AV1 分别为 `47/46/47 ms`，
+  各 1 次切换；这些是自动化桌面证据，不是实体人体时序。原始目录按
+  `.local/qa/current-semantic-matrix-1080p-*` 与 `.local/qa/current-semantic-gate-1080p-*-fullscreen-*` 保存。
+- 2026-08-19 对 AV1 1080p 长按前进的呈现尾延迟继续做分段复核：在不改变播放器业务的
+  前提下，桌面探针现在对自动长按首个稳定画面额外保留 250ms 观察窗，并按匿名 DWM
+  指纹变化记录后续呈现（仍不冒充解码帧数）。新样本首个 DWM 变化为 Down→`1055 ms`、
+  Up→`149 ms`，最长静帧 `1155 ms`；首帧后 245ms 内观察到 8 个匿名呈现变化，说明
+  首帧之后确实有小幅连续合成，但并没有消除首帧前约 1.05s 的空窗。对应 trace 仍显示
+  `smooth_scan_command_complete` 约 11ms 内完成，运行态 `d3d11va-copy`、Texture
+  generation `2`、cache 约 400s，停止阶段 total drop `6`；根因继续落在解码/VO 到
+  Texture/DWM 的首帧长尾，不能用“命令已完成”或单个像素变化宣称丝滑。探针契约新增
+  观察窗与指纹连续变化门禁；原始目录为 `.local/qa/current-semantic-matrix-1080p-av1-long-forward-postdwell-20260819_200000002`。
 
 - 2026-08-20 对抗式门禁复核发现并修正自动键盘语义回执丢失：PowerShell 探针调用中
   的续行注释曾使 `ExpectedInputEvidencePath` 未传入，旧自动化样本只有 DWM 像素变化，
