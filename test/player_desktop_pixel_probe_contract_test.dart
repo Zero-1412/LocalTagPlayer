@@ -72,6 +72,12 @@ void main() {
     expect(source, contains('GetGUIThreadInfo'));
     expect(source, contains('GetFocus'));
     expect(source, contains('nativeFocusEvidence'));
+    expect(source, contains('nativeForegroundEvidence'));
+    expect(source, contains('DescribeTargetForeground'));
+    expect(source, contains('发送自动化键盘前目标窗口未保持系统前台'));
+    expect(source, contains('injectedKeyStateEvidence'));
+    expect(source, contains('DescribeInjectedKeyState'));
+    expect(source, contains('GetAsyncKeyState'));
     expect(source, contains("'virtualKey'"));
     expect(source, contains('SendKeyboardVirtualKey'));
     // 长按自动化对照只通过显式 HoldMilliseconds 注入；实体 manualLong* 仍不注入。

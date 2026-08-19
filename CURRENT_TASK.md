@@ -1,5 +1,25 @@
 # CURRENT_TASK.md
 
+# 2026-08-21 · 最终 Debug targeted 复测与自动化键盘输入链边界
+
+- 最终验证构建为 `build/windows/x64/runner/Debug/local_tag_player.exe`，SHA-256
+  `FD138110593A8CAF6381EB38EE6E58A324A1988E7FB8F79DCAD24C8B30944467`。受控
+  1080p AV1 short fixture 的 targeted 证据目录为 `.local/qa/` 下对应的
+  `final-debug-*20260821{n,o,q,r,s}` 目录；这些结果没有覆盖或重写此前的 v2 12-case 装配。
+- 最终 Debug 的 startup 为 `3/3` 有效，首个真实 DWM 呈现 p50/p95=`787/1079ms`，
+  按 `1000ms` 门禁为 `fail`；progress drag 为 `3/3`，Down→DWM p95=`293ms`、
+  Up→DWM p95=`60ms`，Slider 语义和资源释放均有证据；PlayerPage fullscreen 为
+  `3/3`，几何变化 p95=`46ms`，视频首个真实 DWM 帧仍为 `unknown`。
+- 最终 Debug steady 为 `3/3`、实际 `10001–10002ms`、每轮 `21/21` 播放采样且
+  buffering=`0`；decoder/total drop 为 `pass (0→0)`，VO drop 为 `unknown`，最终
+  硬解为 `d3d11va-copy`、Texture generation delta=`0`、资源释放=`3/3`。
+- 自动化 forward 仍为 `0/3` DWM/PlayerPage 语义样本；分层诊断显示发送 Down 后
+  `GetAsyncKeyState=down`、前台=`target-window`、原生焦点=`child-class:FLUTTERVIEW`，
+  但 native observer 只有 `up`，Flutter 没有 `player_keyboard_event`。新增的前台关系与
+  注入状态字段只用于 QA 诊断，不进入真人 WM_KEYDOWN/UP 或 p95；不修改播放器业务输入路径。
+- 当前本机停止条件保持：v2 validator `overall=fail (11 fail / 1 unknown / 0 pass)`，
+  不因 Stage D 实体键盘、发布构建/GPU/驱动、稳定 HWND 或跨显示器外部验收无限等待。
+
 # 2026-08-21 · P0 受控 AV1 fixture、素材范围隔离与本机停止条件
 
 - 新增 `tool/prepare_player_p0_av1_fixture_manifest.ps1`，在新的 `.local/qa/` 目录生成并用

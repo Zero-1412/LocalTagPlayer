@@ -156,6 +156,10 @@ public sealed class DesktopPixelProbeAction
     public int captureReadFailures { get; set; }
     // 只记录目标窗口线程的原生焦点类别，不写 HWND、标题或媒体信息。
     public string nativeFocusEvidence { get; set; }
+    // 只记录发送自动化按键前目标顶层窗口是否仍是系统前台，不写 HWND 或标题。
+    public string nativeForegroundEvidence { get; set; }
+    // 只记录 SendInput Down 后的系统按键状态，不写实际按键值或用户输入内容。
+    public string injectedKeyStateEvidence { get; set; }
     public bool inputUsesNativeQpcAnchor { get; set; }
     public bool inputSemanticConfirmed { get; set; }
     public string inputSemanticEvidence { get; set; }
@@ -285,6 +289,8 @@ public static class DesktopPixelProbe
     private static extern IntPtr GetFocus();
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint MapVirtualKey(uint code, uint mapType);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern short GetAsyncKeyState(int virtualKey);
     [StructLayout(LayoutKind.Sequential)]
     private struct KEYBDINPUT
     {
@@ -595,6 +601,15 @@ public static class DesktopPixelProbe
             }
             else
             {
+                if (!mouseClick && !mouseProgressDrag)
+                {
+                    // 点击视频后其它窗口/启动器可能重新夺取系统前台；目标线程仍可能保留
+                    // FLUTTERVIEW 焦点句柄，不能仅凭 GetGUIThreadInfo 放行 SendInput。
+                    // 在动作 QPC 锚点前重新激活并核验顶层窗口，前台恢复耗时不进入延迟。
+                    if (!BringToForeground(window))
+                        throw new InvalidOperationException("发送自动化键盘前目标窗口未保持系统前台，拒绝采样。");
+                    action.nativeForegroundEvidence = DescribeTargetForeground(window);
+                }
                 action.nativeFocusEvidence = DescribeTargetFocus(window);
                 action.keyDownQpcUs = NowUs();
                 if (mouseClick)
@@ -615,6 +630,7 @@ public static class DesktopPixelProbe
                 {
                     var scanCode = (byte)(MapVirtualKey((uint)virtualKey, 0) & 0xFF);
                     SendKeyboardInput(virtualKey, scanCode, false, useVirtualKeyInjection);
+                    action.injectedKeyStateEvidence = DescribeInjectedKeyState(virtualKey);
                     if (holdMilliseconds <= 0)
                     {
                         Thread.Sleep(35);
@@ -1172,6 +1188,15 @@ public static class DesktopPixelProbe
         }
     }
 
+    /** 只把系统键状态归类为 down/up，验证 SendInput 是否至少进入 Windows 输入状态。 */
+    private static string DescribeInjectedKeyState(int virtualKey)
+    {
+        var state = GetAsyncKeyState(virtualKey);
+        return state == 0
+            ? "up"
+            : ((state & 0x8000) != 0 ? "down" : "pressed-since-last-query");
+    }
+
     /**
      * 点击客户区底部中央的 QA 交互入口。该位置由专用测试页固定提供，中心 60% 的
      * 视频采样区不含此按钮。仍通过 SendInput 进入前台窗口的真实鼠标输入链。
@@ -1245,6 +1270,15 @@ public static class DesktopPixelProbe
             }
         }
         return DescribeFocusHandle(window, info.hwndFocus);
+    }
+
+    /** 仅输出匿名前台关系，区分目标窗口与仍在前台的其它窗口。 */
+    private static string DescribeTargetForeground(IntPtr window)
+    {
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero)
+            return "unavailable";
+        return foreground == window ? "target-window" : "other-window";
     }
 
     private static string DescribeFocusHandle(IntPtr window, IntPtr focus)

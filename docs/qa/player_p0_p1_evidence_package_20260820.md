@@ -137,6 +137,34 @@ short/long 的明确 forward/backward 矩阵、10 个有素材 case 的正式 Pl
 受控 AV1 fixture v2 装配为 `43/41`；对于标记为 `qa-generated-fixture-and-ffprobe-verified`
 的 case，只有目录名含 `-fixture-` 的证据才可进入该 case。
 
+### 2026-08-21 · 最终 Debug targeted 复测与输入链分层证据
+
+在上述 v2 装配之后，使用单一最终 Debug 构建重新采集受控 `1080p AV1 short GOP` 的
+关键本机窗口。构建文件为
+`build/windows/x64/runner/Debug/local_tag_player.exe`，SHA-256 为
+`FD138110593A8CAF6381EB38EE6E58A324A1988E7FB8F79DCAD24C8B30944467`。证据目录使用
+`.local/qa/final-debug-*20260821{n,o,q,r,s}` 命名；它们是针对最终构建的 targeted 复测，
+没有覆盖此前 v2 manifest，也没有把旧构建和新构建混合宣称为一个通过矩阵。
+
+最终构建的受控结果如下：
+
+- startup `3/3` 有效，首个真实 DWM 帧 p50/p95=`787/1079ms`，按 `1000ms` 门禁为
+  `fail`；首帧终点仍是桌面合成像素，不用 Texture/后端首帧替代。
+- progress drag `3/3` 有效，Down→DWM p95=`293ms`、Up→DWM p95=`60ms`；Slider
+  语义回执、正式 Texture 运行态和资源释放均可追溯。
+- PlayerPage fullscreen `3/3` 有效，窗口几何变化 p95=`46ms`；这是窗口几何证据，
+  视频首个真实 DWM 帧为 `unknown`，不能写成全屏视频呈现通过。
+- steady runtime `3/3`，实际窗口 `10001–10002ms`、每轮 `21/21` 播放采样、buffering
+  `0`；decoder/total drop=`pass (0→0)`，VO drop=`unknown`，硬解=`d3d11va-copy`，
+  Texture generation delta=`0`，资源释放=`3/3`。
+
+自动化 forward 的最终 Debug 3 会话仍为 `0/3`。探针分层记录为：发送 Down 后
+`GetAsyncKeyState=down`，发送前台关系=`target-window`，原生焦点=`FLUTTERVIEW`，但
+native observer 只收到 `up`，Flutter 没有 `player_keyboard_event`，因此没有 DWM 首帧，
+不生成 p50/p95。scan-code 与 virtual-key、点击准备焦点与 ready 握手的对照都没有改变
+结果；这把当前边界收窄到桌面 `SendInput` Down/Flutter Windows 消息投递链。该诊断不具备
+真人 WM_KEYDOWN/UP 资格，不进入 Stage D 或实体长按统计，也不授权修改播放器业务输入路径。
+
 每个 action 的 evidence 是独立会话目录数组；目录可为包含
 desktop-pixel-matrix-summary.json 的矩阵根，或单个 run 目录。报告至少应能追溯：
 
