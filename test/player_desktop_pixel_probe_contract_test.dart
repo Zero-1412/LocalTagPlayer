@@ -144,6 +144,7 @@ void main() {
     expect(source, contains('LOCAL_TAG_PLAYER_PRECISION_CONTROLS_QA'));
     expect(source, contains('precision-controls.jsonl'));
     expect(source, contains('frame_step_complete'));
+    expect(source, contains('frame_step_backward_complete'));
     expect(source, contains('playback_rate_complete'));
     expect(source, contains('playback_rate_restored'));
     expect(source, contains('_isPlaybackRateReadback'));
@@ -160,6 +161,7 @@ void main() {
     expect(
         source, contains('real-player-page-native-player-precision-controls'));
     expect(source, contains('frame_step_complete'));
+    expect(source, contains('frame_step_backward_complete'));
     expect(source, contains('playback_rate_complete'));
     expect(source, contains('playback_rate_restored'));
     expect(source, contains('ab_loop_a'));
@@ -177,6 +179,7 @@ void main() {
     expect(source, contains('desktop-composited-pixel-change'));
     expect(source, contains('precision-dwm-samples.jsonl'));
     expect(source, contains('precision-controls.jsonl'));
+    expect(source, contains('Merge-DirectionalMetric'));
     expect(source, contains('BitBlt'));
     expect(source, contains('CaptureBitmap'));
     expect(source, contains('ExtractGridRegion'));

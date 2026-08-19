@@ -124,6 +124,16 @@
   AV1 为 `3/3`、31.2–31.5 fps，逐帧两轮 pass、一轮无足够 DWM 变化，聚合 unknown，
   其它三项 pass。旧 `grid16` 结果保留为历史基线，不删除该 unknown。
 
+- 2026-08-20 收紧逐帧合同为前进/后退两个独立方向：正式 PlayerPage Debug QA 分别记录
+  `frame_step_complete` 与 `frame_step_backward_complete`，DWM 观测器分别建立时间窗，
+  聚合按 fail > unknown > pass，任一方向没有足够真实桌面变化就保持 unknown。新矩阵
+  `.local/qa/precision-dwm-matrix-long-{h264,hevc,av1}-grid32-bidirectional-20260820a`
+  均为 `3/3` 有效、采样 `31.1–31.7 fps`、资源释放 `3/3 pass`；H.264 前进和后退逐帧
+  均 `3/3 pass`，倍速/A-B/外挂字幕均 `3/3 pass`，矩阵 `overall=pass`；HEVC 前进和
+  后退逐帧均因中心最大差异不超过 `0.12%` 保持 `3/3 unknown`，其它三项 `3/3 pass`；
+  AV1 三轮中一轮双向 pass、两轮各缺一方向的 DWM 变化，故逐帧聚合 `unknown`，其它三项
+  `3/3 pass`。旧单向逐帧矩阵不再作为当前双向合同的完成证据。
+
 - 2026-08-20 重新评估已有正式 PlayerPage/Texture 矩阵：1080p 三编码的 shortForward、
   shortBackward、drag 各为 `3/3` 有效，首个 DWM p95 分别为 H.264 `81/92/343 ms`、
   HEVC `86/94/307 ms`、AV1 `86/93/362 ms`；页面语义、decoder drop、最终硬解为 pass，

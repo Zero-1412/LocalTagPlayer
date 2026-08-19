@@ -700,7 +700,8 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       _precisionControlsCompleted = true;
       return;
     }
-    var frameStepPresented = false;
+    var frameStepForwardPresented = false;
+    var frameStepBackwardPresented = false;
     var playbackRateApplied = false;
     var playbackRateRestored = false;
     var playbackRateWasPlaying = false;
@@ -716,13 +717,14 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
         'stage': 'frame_step_before',
         'frame': beforeFrame,
         'frameEvidence': player.lastPresentedVideoFrameEvidence,
+        'positionMs': player.playerService.state.position.inMilliseconds,
       });
       // 给外部桌面合成观察器留出静止基线；该等待只存在于隔离 Debug QA，不能改变
       // 正式页面逐帧命令的用户可感知时序。
       await _precisionObservationDwell();
       try {
         await player.playerService.stepFrame(backward: false);
-        frameStepPresented = await player.waitForPresentedVideoFrame(
+        frameStepForwardPresented = await player.waitForPresentedVideoFrame(
           beforeFrame,
           const Duration(seconds: 2),
         );
@@ -734,9 +736,41 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       }
       _appendPrecisionEvidence(<String, Object?>{
         'stage': 'frame_step_complete',
-        'success': frameStepPresented,
+        'success': frameStepForwardPresented,
         'frame': await player.readPresentedVideoFrame(),
         'frameEvidence': player.lastPresentedVideoFrameEvidence,
+        'positionMs': player.playerService.state.position.inMilliseconds,
+      });
+      await _precisionObservationDwell();
+
+      // 前进与后退逐帧必须分别有命令、帧号回执和独立 DWM 时间窗；不能用前进
+      // 一帧的结果替代后退一帧，也不能把普通 seek 近似成任一方向的逐帧。
+      final backwardBeforeFrame = await player.readPresentedVideoFrame();
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'frame_step_backward_before',
+        'frame': backwardBeforeFrame,
+        'frameEvidence': player.lastPresentedVideoFrameEvidence,
+        'positionMs': player.playerService.state.position.inMilliseconds,
+      });
+      await _precisionObservationDwell();
+      try {
+        await player.playerService.stepFrame(backward: true);
+        frameStepBackwardPresented = await player.waitForPresentedVideoFrame(
+          backwardBeforeFrame,
+          const Duration(seconds: 2),
+        );
+      } catch (error) {
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'frame_step_backward_error',
+          'errorType': error.runtimeType.toString(),
+        });
+      }
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'frame_step_backward_complete',
+        'success': frameStepBackwardPresented,
+        'frame': await player.readPresentedVideoFrame(),
+        'frameEvidence': player.lastPresentedVideoFrameEvidence,
+        'positionMs': player.playerService.state.position.inMilliseconds,
       });
       await _precisionObservationDwell();
 
@@ -960,7 +994,8 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       }
       _appendLifecycle(
         widget.outputDirectory,
-        frameStepPresented &&
+        frameStepForwardPresented &&
+                frameStepBackwardPresented &&
                 playbackRateApplied &&
                 playbackRateRestored &&
                 abLoopASet &&

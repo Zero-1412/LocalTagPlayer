@@ -560,6 +560,70 @@ function Get-StageMetric {
   return $metric
 }
 
+<## 前进/后退逐帧必须各自有 DWM 变化；任一方向 unknown 时聚合仍为 unknown。 #>
+function Merge-DirectionalMetric {
+  param(
+    [Parameter(Mandatory = $true)][object]$Forward,
+    [Parameter(Mandatory = $true)][object]$Backward
+  )
+  $metrics = @($Forward, $Backward)
+  $statuses = @($metrics | ForEach-Object { [string]$_.status })
+  $status = if ($statuses -contains 'fail') { 'fail' }
+    elseif ($statuses.Count -eq 0 -or $statuses -contains 'unknown') { 'unknown' }
+    else { 'pass' }
+  $commandStatuses = @($metrics | ForEach-Object {
+      $property = $_.PSObject.Properties['commandStatus']
+      if ($null -eq $property -or $null -eq $property.Value) {
+        'unknown'
+      } elseif ([bool]$property.Value) {
+        'pass'
+      } else {
+        'fail'
+      }
+    })
+  $commandStatus = if ($commandStatuses -contains 'fail') { $false }
+    elseif ($commandStatuses.Count -eq 0 -or $commandStatuses -contains 'unknown') { $null }
+    else { $true }
+  $baselineSampleCount = @($metrics | ForEach-Object {
+      $property = $_.PSObject.Properties['baselineSampleCount']
+      if ($null -eq $property) { 0 } else { [int]$property.Value }
+    } | Measure-Object -Sum).Sum
+  $presentedSampleCount = @($metrics | ForEach-Object {
+      $property = $_.PSObject.Properties['presentedSampleCount']
+      if ($null -eq $property) { 0 } else { [int]$property.Value }
+    } | Measure-Object -Sum).Sum
+  $presentedChangeCount = @($metrics | ForEach-Object {
+      $property = $_.PSObject.Properties['presentedChangeCount']
+      if ($null -eq $property) { 0 } else { [int]$property.Value }
+    } | Measure-Object -Sum).Sum
+  $maxDifferenceValues = @($metrics | ForEach-Object {
+      $property = $_.PSObject.Properties['maxDifferencePercent']
+      if ($null -ne $property -and $null -ne $property.Value) {
+        [double]$property.Value
+      }
+    })
+  $maxDifferencePercent = if ($maxDifferenceValues.Count -eq 0) {
+    0.0
+  } else {
+    [Math]::Round([double](($maxDifferenceValues | Measure-Object -Maximum).Maximum), 3)
+  }
+  return [ordered]@{
+    status = $status
+    commandStatus = $commandStatus
+    commandStage = 'frame_step_bidirectional'
+    baselineSampleCount = $baselineSampleCount
+    presentedSampleCount = $presentedSampleCount
+    presentedChangeCount = $presentedChangeCount
+    maxDifferencePercent = $maxDifferencePercent
+    thresholdPercent = 1.5
+    evidenceKind = if ($status -eq 'pass') { 'desktop-composited-pixel-change' } else { 'insufficient-dwm-change' }
+    directions = [ordered]@{
+      forward = $Forward
+      backward = $Backward
+    }
+  }
+}
+
 try {
   $env:LOCAL_TAG_PLAYER_PIXEL_SAMPLE = $Sample
   $env:LOCAL_TAG_PLAYER_PIXEL_OUTPUT = $Output
@@ -658,10 +722,16 @@ try {
   }
   $lifecycle = @(Get-JsonLines $lifecyclePath | ForEach-Object { [string]$_.event })
 
-  $frameMetric = Get-StageMetric -Events $events -Samples $sampleRows `
+  $frameStepForwardMetric = Get-StageMetric -Events $events -Samples $sampleRows `
     -CommandStage 'frame_step_complete' -BeforeStage 'frame_step_before' `
     -AfterStage 'frame_step_complete' `
     -DifferencePropertyName 'centerDifferenceFromPreviousPercent'
+  $frameStepBackwardMetric = Get-StageMetric -Events $events -Samples $sampleRows `
+    -CommandStage 'frame_step_backward_complete' -BeforeStage 'frame_step_backward_before' `
+    -AfterStage 'frame_step_backward_complete' `
+    -DifferencePropertyName 'centerDifferenceFromPreviousPercent'
+  $frameMetric = Merge-DirectionalMetric `
+    -Forward $frameStepForwardMetric -Backward $frameStepBackwardMetric
   $playbackRateMetric = Get-StageMetric -Events $events -Samples $sampleRows `
     -CommandStage 'playback_rate_complete' -BeforeStage 'playback_rate_before' `
     -AfterStage 'playback_rate_complete' `

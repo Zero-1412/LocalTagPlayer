@@ -249,7 +249,7 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | 拖动 | Slider onChangeEnd、latest-only 合并、释放 | 预览连续变化与松手准确收敛 | 命令合同已有；统一 P0 manifest 后再汇总 |
 | 长按 | 前进临时扫描、后退 latest-only、KeyDown/Up 生命周期 | 按住期间 DWM 首帧和后续节奏 | 自动化已有；实体 WM_KEYDOWN/UP QPC 为 unknown |
 | 可调倍速 | setRate、播放中状态/速度读回、恢复读回、资源释放 | 真实窗口播放节奏预算 | H.264/HEVC/AV1 各 3/3 pass（同一修复后 Debug 构建） |
-| 逐帧 | frame-step/frame-back-step、错误和释放 | 逐帧真实 DWM 画面 | H.264 3/3 pass；HEVC 3/3 unknown；AV1 1/3 unknown，均不覆盖 command/resource pass |
+| 逐帧 | frame-step/frame-back-step、错误和释放 | 前进、后退各自的真实 DWM 画面 | H.264 前进/后退各 3/3 pass；HEVC 两方向各 3/3 unknown；AV1 双向严格聚合 unknown；三组 command/resource 均 3/3 pass |
 | A-B loop | A/B/实际 A→B→A 循环、清除命令、状态和释放 | A→B 重复播放画面 | H.264/HEVC/AV1 各 3/3 pass（同一修复后 Debug 构建） |
 | 外挂字幕 | 加载/轨道/关闭命令和释放 | 字幕在真实 Texture 上可见并落入测试时间窗 | H.264/HEVC/AV1 各 3/3 pass（同一修复后 Debug 构建） |
 
@@ -263,7 +263,8 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 它在同一正式 PlayerPage/MediaKit Texture Debug 会话中不发送输入，只读取 DWM 合成后的
 中心视频网格和字幕下方网格，分别把命令 JSONL 与匿名桌面指纹 JSONL 落盘。它要求：
 
-- `frame_step_complete` 的命令结果与前后 DWM 时间窗分开；逐帧不接受估算帧号代理；
+- `frame_step_complete` 与 `frame_step_backward_complete` 分别记录命令结果和前后 DWM 时间窗；
+  前进、后退两个方向均必须有真实桌面变化，逐帧不接受估算帧号代理；
 - `playback_rate_complete` 必须在真实播放状态读回 `speed=1.5`，并恢复原倍速且再次读回；
   该阶段只触碰当前 PlayerService，不写持久化播放设置；
 - command/resource 门禁同时要求 `playback_rate_restored.success=true`，设置成功但未恢复
@@ -356,8 +357,19 @@ command/resource 与 DWM 观察边界。修复后的三编码代表性矩阵均�
   `3/3` 有效，采样 `31.2–31.5 fps`，倍速、A-B、外挂字幕均 `3/3 pass`；逐帧两轮
   pass、一轮没有足够 DWM 变化，聚合为 unknown，exit `3`。
 
-旧的 `grid16` 结果保留为历史基线；当前报告以后以 `grid32-region-sub` 观察器结果为
-最新可复核口径，不把观察器升级后的单轮 unknown 删除或重写为通过。
+以上 `grid32-region-sub` 是单向逐帧阶段的历史基线；旧的 `grid16` 结果也保留。当前
+双向逐帧合同以后以 `grid32-bidirectional` 观察器结果为最新可复核口径，不把任一方向
+或任一会话的 unknown 删除、合并或重写为通过：
+
+- H.264：`.local/qa/precision-dwm-matrix-long-h264-grid32-bidirectional-20260820a`，
+  `3/3` 有效，采样 `31.4–31.7 fps`，前进/后退逐帧、倍速、A-B、外挂字幕的
+  command/resource 与 visible 均 `3/3 pass`，exit `0`；
+- HEVC：`.local/qa/precision-dwm-matrix-long-hevc-grid32-bidirectional-20260820a`，
+  `3/3` 有效，采样 `31.1–31.5 fps`，两方向逐帧 visible 均 `3/3 unknown`（最大中心差异
+  `0.12%`），倍速、A-B、外挂字幕均 `3/3 pass`，exit `3`；
+- AV1：`.local/qa/precision-dwm-matrix-long-av1-grid32-bidirectional-20260820a`，
+  `3/3` 有效，采样 `31.2–31.6 fps`，逐帧严格按双向/三会话聚合为 `unknown`，倍速、
+  A-B、外挂字幕均 `3/3 pass`，exit `3`。
 
 ## 阶段 D：外部验收清单
 
@@ -385,5 +397,5 @@ prompt impact: satisfies first principles; minimal subtitle-rendering fix plus f
 protected behaviors: preserved
 unauthorized feature removal: none
 mount and reachability: not changed; existing PlayerPage evidence retained
-validation: focused contract tests 21/21 passed; subtitle/backend architecture contract passed; PowerShell parsers passed; flutter analyze no issues; flutter build windows --debug passed; steady runtime 10 cases × 3 sessions passed the bounded matrix; final grid32-region-sub P1 H.264 matrix 3/3 valid with validator exit 0 and overall=pass; final HEVC and AV1 matrices 3/3 valid with validator exit 3 and overall=unknown because frame-step DWM remained unknown; P0 validator exit 2 with overall=fail as required by remaining DWM/action/VO/manifest unknowns
+validation: focused contract tests 21/21 passed; subtitle/backend architecture contract passed; PowerShell parsers passed; flutter analyze no issues; flutter build windows --debug passed; steady runtime 10 cases × 3 sessions passed the bounded matrix; bidirectional grid32 H.264 P1 matrix 3/3 valid with validator exit 0 and overall=pass; bidirectional grid32 HEVC and AV1 matrices 3/3 valid with validator exit 3 and overall=unknown because at least one frame-step direction/session lacked DWM change; P0 validator exit 2 with overall=fail as required by remaining DWM/action/VO/manifest unknowns
 ~~~

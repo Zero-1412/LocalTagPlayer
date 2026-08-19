@@ -20,7 +20,7 @@ $ErrorActionPreference = 'Stop'
 
 $controls = [ordered]@{
   frameStep = [ordered]@{
-    commandStages = @('frame_step_complete')
+    commandStages = @('frame_step_complete', 'frame_step_backward_complete')
     dwmName = 'frameStep'
   }
   playbackRate = [ordered]@{

@@ -123,6 +123,7 @@ try {
   $events = @(Get-PrecisionEvents $precisionPath)
   $requiredStages = @(
     'frame_step_complete',
+    'frame_step_backward_complete',
     'playback_rate_complete',
     # 倍速是临时 QA 状态；设置成功但未恢复原值不能算 command/resource 通过。
     'playback_rate_restored',
