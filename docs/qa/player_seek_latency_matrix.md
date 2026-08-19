@@ -384,7 +384,7 @@ decoder/total drop 为 0；Down→DWM p95 分别为 H.264 `98 ms`、HEVC `201 ms
 在同一正式页面上补做了“命令/资源”和“桌面可见性”的独立对照：A/B 先回到 A 再播放，
 三编码各一轮均写出 `ab_loop_cycle_complete.success=true` 与
 `player_resources_released`；逐帧、A-B 和外挂字幕的 DWM 匿名指纹门禁均为
-`unknown`，有效采样约 `22.4–26.2 fps`，低于该观察器 `30 fps` 最低采样要求。该脚本
+`unknown`，有效采样约 `25.1–28.0 fps`，低于该观察器 `30 fps` 最低采样要求。该脚本
 不发送输入、不保存截图，故没有把命令成功、估算帧号或 `track-list` 读回升级成真实
 Texture 可见性通过。
 

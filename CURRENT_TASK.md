@@ -52,7 +52,7 @@
   不发送输入、不保存截图；precision QA 现在实际从 A 播放到 B 再回到 A，并在外挂字幕
   `sub-add` 前后建立独立静止/呈现窗口。H.264/HEVC/AV1 各一轮均观察到
   `ab_loop_cycle_complete=true`、`player_resources_released=true`，但逐帧、A-B 和外挂
-  字幕的 DWM 可见性均为 `unknown`；观察器有效采样约 `22.4–26.2 fps`，低于 30fps
+  字幕的 DWM 可见性均为 `unknown`；当前三轮观察器有效采样约 `25.1–28.0 fps`，低于 30fps
   最低门禁，不能把命令结果或后端帧号写成真实可见性通过。匿名证据目录为
   `.local/qa/current-precision-dwm-{h264,hevc,av1}-20260820_*`。
 
