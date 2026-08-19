@@ -53,6 +53,26 @@ const char* ActionForVirtualKey(WPARAM virtual_key) {
   }
 }
 
+const char* ActionForKeyboardMessage(WPARAM virtual_key, LPARAM lparam) {
+  const char* action = ActionForVirtualKey(virtual_key);
+  if (action != nullptr) {
+    return action;
+  }
+  // SendInput 的 scan-code 路径在不同 Windows/Flutter runner 组合下可能让
+  // wParam 不保持为 J/L；只用固定物理 scan-code 归类动作，不输出原始键值。
+  const unsigned int scan_code =
+      (static_cast<unsigned long long>(lparam) >> 16U) & 0xFFU;
+  switch (scan_code) {
+    case 0x24U:
+      return "backward";
+    case 0x26U:
+      return "forward";
+    default:
+      // 保留匿名消息路由证据，但不输出无法安全归类的原始键值。
+      return "other";
+  }
+}
+
 long long QueryPerformanceMicroseconds() {
   LARGE_INTEGER counter = {};
   LARGE_INTEGER frequency = {};
@@ -150,10 +170,7 @@ void PlayerQaKeyboardQpcEvidence::RecordKeyboardMessage(UINT message,
       message != WM_SYSKEYDOWN && message != WM_SYSKEYUP) {
     return;
   }
-  const char* action = ActionForVirtualKey(wparam);
-  if (action == nullptr) {
-    return;
-  }
+  const char* action = ActionForKeyboardMessage(wparam, lparam);
   const bool is_down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
   const long long qpc_us = QueryPerformanceMicroseconds();
   const long long utc_us = WallClockMicroseconds();

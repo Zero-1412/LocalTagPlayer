@@ -271,6 +271,7 @@ function Write-DesktopPixelTraceCorrelation {
           $eventName = [string]$event.event
           if ($eventName -notin @(
               'player_keyboard_event',
+              'player_global_keyboard_event',
               'progress_slider_start',
               'progress_slider_committed',
               'progress_preview_seek_submitted',
@@ -291,6 +292,10 @@ function Write-DesktopPixelTraceCorrelation {
           if ($eventName -eq 'player_keyboard_event' -and
               ($action -notin @('forward', 'backward', 'other') -or
                $phase -notin @('down', 'repeat', 'up', 'unknown'))) {
+            continue
+          }
+          if ($eventName -eq 'player_global_keyboard_event' -and
+              $phase -notin @('down', 'repeat', 'up', 'unknown')) {
             continue
           }
           $playerInputEvents += [ordered]@{

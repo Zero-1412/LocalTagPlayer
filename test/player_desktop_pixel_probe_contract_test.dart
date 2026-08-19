@@ -349,6 +349,7 @@ void main() {
     expect(gate, contains('renderer-events.jsonl'));
     expect(gate, contains('candidateActionCount'));
     expect(gate, contains('causalOrder'));
+    expect(gate, contains('player_global_keyboard_event'));
     expect(gate, contains('PlayerPageInitialWindowWidth = 960'));
     expect(gate, contains('避免右侧常驻队列压缩视频表面'));
   });
@@ -381,6 +382,11 @@ void main() {
         .readAsStringSync();
     final helperSource = File('lib/src/pages/player/player_state_helpers.dart')
         .readAsStringSync();
+    final pageSource =
+        File('lib/src/pages/player/player_page.dart').readAsStringSync();
+    final qaKeyboardSource = File(
+      'lib/src/pages/player/player_state_qa_keyboard.dart',
+    ).readAsStringSync();
     final window = File('windows/runner/flutter_window.cpp').readAsStringSync();
     final cmake = File('windows/runner/CMakeLists.txt').readAsStringSync();
 
@@ -395,10 +401,20 @@ void main() {
     expect(evidence, contains('utcUs'));
     expect(evidence, contains('native_keyboard_message'));
     expect(evidence, contains('native_keyboard_observer_ready'));
+    expect(evidence, contains('ActionForKeyboardMessage'));
+    expect(evidence, contains('scan_code'));
+    expect(evidence, contains('只用固定物理 scan-code 归类动作'));
+    expect(evidence, contains('无法安全归类的原始键值'));
     expect(qaSource, contains("'phase': safePhase"));
     expect(qaSource, contains("'action': safeAction"));
     expect(helperSource, contains('phase: qaPhase'));
     expect(helperSource, contains('qaAction'));
+    expect(qaSource, contains('playerFocusStateChanged'));
+    expect(qaSource, contains('playerGlobalKeyboardEventObserved'));
+    expect(qaKeyboardSource, contains('HardwareKeyboard.instance.addHandler'));
+    expect(qaKeyboardSource, contains('removeHandler'));
+    expect(pageSource, contains('attachPlayerQaGlobalKeyboardHandler'));
+    expect(pageSource, contains('detachPlayerQaGlobalKeyboardHandler'));
     expect(evidence, contains('installed'));
     expect(evidence, contains('topLevelActive'));
     expect(evidence, contains('ObserveTopLevelWindowMessage'));

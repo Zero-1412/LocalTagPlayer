@@ -40,6 +40,9 @@ class PlayerInputQaEvidence {
         '${root.path}${Platform.pathSeparator}player-input-events.jsonl');
   }
 
+  /** 显式 QA 回执是否可写；仅供诊断观测点决定是否挂载，不改变正式输入路由。 */
+  static bool get qaEnabled => _output != null;
+
   /** 完整 Slider 接到真实 PointerDown 后记录；不保存指针坐标或时间目标。 */
   static void progressSliderDragStarted() => _append('progress_slider_start');
 
@@ -54,6 +57,34 @@ class PlayerInputQaEvidence {
   /** 两阶段 QA 的精确落点与最终帧门禁均已完成。 */
   static void progressExactSeekConfirmed() =>
       _append('progress_exact_seek_confirmed');
+
+  /** Debug-only 记录 PlayerPage FocusNode 的焦点状态，不记录控件、窗口或媒体信息。 */
+  static void playerFocusStateChanged(bool hasFocus) {
+    _append(
+      'player_focus_state',
+      fields: <String, Object?>{
+        'hasFocus': hasFocus,
+      },
+    );
+  }
+
+  /** Debug-only 记录 Flutter HardwareKeyboard 全局路由是否收到键事件。 */
+  static void playerGlobalKeyboardEventObserved({String phase = 'unknown'}) {
+    final safePhase = const <String>{
+      'down',
+      'repeat',
+      'up',
+      'unknown',
+    }.contains(phase)
+        ? phase
+        : 'unknown';
+    _append(
+      'player_global_keyboard_event',
+      fields: <String, Object?>{
+        'phase': safePhase,
+      },
+    );
+  }
 
   /**
    * PlayerPage Focus 链实际收到可参与快捷键处理的物理键盘事件。

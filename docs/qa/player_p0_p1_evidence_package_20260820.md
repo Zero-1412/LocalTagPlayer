@@ -165,6 +165,17 @@ native observer 只收到 `up`，Flutter 没有 `player_keyboard_event`，因此
 结果；这把当前边界收窄到桌面 `SendInput` Down/Flutter Windows 消息投递链。该诊断不具备
 真人 WM_KEYDOWN/UP 资格，不进入 Stage D 或实体长按统计，也不授权修改播放器业务输入路径。
 
+随后使用仅用于诊断的 Debug 构建
+`35D32898ABA97B0F38AF8D63757D4E8840882735283D21375FAA804E7828D9C6`，增加了不消费事件的
+`HardwareKeyboard` 全局观测和 PlayerPage Focus 状态回执，并让 native 侧车对未归类消息只写
+固定动作枚举 `other`。scan-code 单会话目录
+`.local/qa/diagnostic-global-keyboard-final-1080p-av1-forward-20260821z` 已记录
+native Down/Up、`target-window` 前台和 `FLUTTERVIEW` 焦点，但 Flutter 全局/PlayerPage 回执
+仍为空，DWM `0/1` 超时；virtual-key 对照目录
+`.local/qa/diagnostic-global-keyboard-virtualkey-1080p-av1-forward-20260821x` 也没有
+Flutter 全局回执。该结果把“原生消息观察”与“Flutter KeyEvent 到达”明确分层，不能把自动化
+SendInput 缺证写成播放器快捷键 fail，也不进入真人 WM_KEYDOWN/UP 或任何 p50/p95。
+
 每个 action 的 evidence 是独立会话目录数组；目录可为包含
 desktop-pixel-matrix-summary.json 的矩阵根，或单个 run 目录。报告至少应能追溯：
 

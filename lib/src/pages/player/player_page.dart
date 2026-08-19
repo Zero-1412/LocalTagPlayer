@@ -34,6 +34,7 @@ export 'player_chrome_widgets.dart';
 export 'player_stability_snapshot.dart';
 import 'player_state_initialization.dart';
 export 'player_state_initialization.dart';
+import 'player_state_qa_keyboard.dart';
 export 'player_state_events.dart';
 import 'player_state_nvidia.dart';
 export 'player_state_nvidia.dart';
@@ -417,11 +418,13 @@ class PlayerPageState extends State<PlayerPage> {
   @override
   void initState() {
     super.initState();
+    attachPlayerQaGlobalKeyboardHandler();
     initializePlayerPage();
   }
 
   @override
   void dispose() {
+    detachPlayerQaGlobalKeyboardHandler();
     disposePlayerPage();
     super.dispose();
   }

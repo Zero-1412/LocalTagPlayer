@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../widgets/app_theme_tokens.dart';
 import 'player_compact_queue_overlay.dart';
 import 'player_hardware_decode_fallback_banner.dart';
+import 'player_input_qa_evidence.dart';
 import 'player_open_failure_panel.dart';
 import 'player_video_aspect_mode.dart';
 import 'player_page.dart';
@@ -42,6 +43,9 @@ extension PlayerStateView on PlayerPageState {
         focusNode: focusNode,
         autofocus: true,
         onFocusChange: (hasFocus) {
+          // 只在显式 Debug QA 环境写匿名状态，帮助区分原生 FLUTTERVIEW 焦点与
+          // Flutter FocusNode/KeyEvent 路由；正式运行不产生文件或额外播放行为。
+          PlayerInputQaEvidence.playerFocusStateChanged(hasFocus);
           if (!hasFocus) {
             // 窗口/弹窗夺焦时系统不保证随后把原 KeyUp 送回本页面；先结束预览和
             // 临时静音，避免下一次进入播放器继承一轮悬挂输入会话。

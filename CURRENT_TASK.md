@@ -1,5 +1,22 @@
 # CURRENT_TASK.md
 
+# 2026-08-21 · Debug 全局键盘路由诊断与本机停止条件收敛
+
+- 在不改播放器业务快捷键路径的前提下，新增显式 QA-only `HardwareKeyboard` 全局回执、
+  PlayerPage Focus 状态回执，并让 native 侧车对无法安全归类的键消息只写固定枚举
+  `other`，不写原始虚拟键/scan-code。页面挂载和销毁分别 add/remove handler，正式运行
+  不挂载该观测点。
+- 诊断构建 `build/windows/x64/runner/Debug/local_tag_player.exe` SHA-256 为
+  `35D32898ABA97B0F38AF8D63757D4E8840882735283D21375FAA804E7828D9C6`。最终 scan-code
+  诊断目录 `.local/qa/diagnostic-global-keyboard-final-1080p-av1-forward-20260821z`
+  记录 `native_keyboard_message` Down/Up、前台=`target-window`、焦点=`FLUTTERVIEW`，
+  但没有 Flutter 全局或 PlayerPage 键盘回执，DWM action 为 `0/1` 超时；virtual-key
+  对照 `.local/qa/diagnostic-global-keyboard-virtualkey-1080p-av1-forward-20260821x`
+  同样没有 Flutter 全局回执。两者都不是实体键盘证据，也不进入 p50/p95。
+- 因此当前边界判定为“自动化 SendInput 消息已到 native，但未形成 Flutter KeyEvent”；
+  不能把自动化缺证写成播放器快捷键 fail，也不能用它校准正式 Texture。Stage D 的真人
+  `WM_KEYDOWN/UP` QPC、发布/GPU/驱动、稳定 HWND 和跨显示器/DPI 仍按外部清单保留。
+
 # 2026-08-21 · 最终 Debug targeted 复测与自动化键盘输入链边界
 
 - 最终验证构建为 `build/windows/x64/runner/Debug/local_tag_player.exe`，SHA-256
@@ -13,10 +30,11 @@
 - 最终 Debug steady 为 `3/3`、实际 `10001–10002ms`、每轮 `21/21` 播放采样且
   buffering=`0`；decoder/total drop 为 `pass (0→0)`，VO drop 为 `unknown`，最终
   硬解为 `d3d11va-copy`、Texture generation delta=`0`、资源释放=`3/3`。
-- 自动化 forward 仍为 `0/3` DWM/PlayerPage 语义样本；分层诊断显示发送 Down 后
+- 早期 targeted forward 仍为 `0/3` DWM/PlayerPage 语义样本；分层诊断显示发送 Down 后
   `GetAsyncKeyState=down`、前台=`target-window`、原生焦点=`child-class:FLUTTERVIEW`，
-  但 native observer 只有 `up`，Flutter 没有 `player_keyboard_event`。新增的前台关系与
-  注入状态字段只用于 QA 诊断，不进入真人 WM_KEYDOWN/UP 或 p95；不修改播放器业务输入路径。
+  Flutter 没有 `player_keyboard_event`。后续诊断构建已补充全局路由观测并确认 scan-code
+  消息本身有 Down/Up，但 Flutter 仍无回执。所有前台关系、注入状态和路由字段只用于
+  QA 诊断，不进入真人 WM_KEYDOWN/UP 或 p95；不修改播放器业务输入路径。
 - 当前本机停止条件保持：v2 validator `overall=fail (11 fail / 1 unknown / 0 pass)`，
   不因 Stage D 实体键盘、发布构建/GPU/驱动、稳定 HWND 或跨显示器外部验收无限等待。
 
