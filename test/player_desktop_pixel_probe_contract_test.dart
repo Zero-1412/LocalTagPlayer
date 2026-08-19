@@ -179,6 +179,10 @@ void main() {
     expect(source, contains('precision-controls.jsonl'));
     expect(source, contains('BitBlt'));
     expect(source, contains('CaptureBitmap'));
+    expect(source, contains('ExtractGridRegion'));
+    expect(source, contains('CenterGridWidth = 32'));
+    expect(source, contains('SubtitleGridHeight = 4'));
+    expect(source, contains('topFraction'));
     expect(source, contains("status = 'unknown'"));
     expect(source, contains('ab_loop_cycle_complete'));
     expect(source, contains('external_subtitle_load_started'));

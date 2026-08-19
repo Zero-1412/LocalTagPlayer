@@ -71,8 +71,12 @@ public static class LocalTagPlayerPrecisionDwmObserver
     // 观测器必须读取桌面 DC 上最终合成的像素，但不应为每帧缩放整块 4K ROI。
     // 这里只取分布式匿名网格，保留足够区分画面的信息并降低 DWM 观测开销。
     // 更密的匿名网格减少单帧动作落在采样点之间而被漏检的概率；不保存网格原始像素。
-    private const int CenterGridWidth = 16;
-    private const int CenterGridHeight = 10;
+    // 加密匿名网格，降低局部逐帧/字幕变化落在采样点之间而被漏检的概率；
+    // 仍只保留指纹和差异百分比，不保存原始桌面像素。
+    private const int CenterGridWidth = 32;
+    private const int CenterGridHeight = 20;
+    // 字幕区域保留既有 16×4 垂直分布；字幕通常是窄的水平笔画，过度增加垂直
+    // 分层会改变采样带位置，反而可能漏掉文字而降低可见性证据灵敏度。
     private const int SubtitleGridWidth = 16;
     private const int SubtitleGridHeight = 4;
 
@@ -210,13 +214,14 @@ public static class LocalTagPlayerPrecisionDwmObserver
             var raw = CaptureBitmap(
                 dc,
                 sourceX, sourceY, sourceWidth, sourceHeight);
-            var center = ExtractGrid(
+            var center = ExtractGridRegion(
                 raw, sourceWidth, sourceHeight, CenterGridWidth,
-                CenterGridHeight + SubtitleGridHeight, 0, CenterGridHeight);
-            // 字幕通常落在视频下方；单独保留下方匿名网格，避免中心变化掩盖字幕证据。
-            var subtitle = ExtractGrid(
-                raw, sourceWidth, sourceHeight, CenterGridWidth,
-                CenterGridHeight + SubtitleGridHeight, CenterGridHeight, SubtitleGridHeight);
+                CenterGridHeight, 0.0, 1.0);
+            // 字幕通常落在视频下方；使用独立归一化区域，避免中心网格加密后改变
+            // 字幕采样带位置，也避免中心变化掩盖字幕证据。
+            var subtitle = ExtractGridRegion(
+                raw, sourceWidth, sourceHeight, SubtitleGridWidth,
+                SubtitleGridHeight, 0.70, 1.0);
             return new LocalTagPlayerPrecisionDwmFrame {
                 // 与 Dart DateTime.microsecondsSinceEpoch 使用相同的 Unix epoch，才能把
                 // 桌面样本和页面阶段 JSONL 放进同一时间窗。
@@ -291,29 +296,30 @@ public static class LocalTagPlayerPrecisionDwmObserver
         }
     }
 
-    private static byte[] ExtractGrid(
+    private static byte[] ExtractGridRegion(
         byte[] raw,
         int sourceWidth,
         int sourceHeight,
-        int fullGridWidth,
-        int fullGridHeight,
-        int startGridRow,
-        int gridHeight)
+        int gridWidth,
+        int gridHeight,
+        double topFraction,
+        double bottomFraction)
     {
-        var values = new byte[fullGridWidth * gridHeight * 3];
+        var values = new byte[gridWidth * gridHeight * 3];
         var targetOffset = 0;
         for (var row = 0; row < gridHeight; row++)
         {
+            var normalizedY = topFraction +
+                ((row + 0.5) / gridHeight) * (bottomFraction - topFraction);
             var sampleY = Math.Min(
                 sourceHeight - 1,
-                Math.Max(0, (int)Math.Round(
-                    (startGridRow + row + 0.5) * sourceHeight / fullGridHeight)));
-            for (var column = 0; column < fullGridWidth; column++)
+                Math.Max(0, (int)Math.Round(normalizedY * sourceHeight)));
+            for (var column = 0; column < gridWidth; column++)
             {
                 var sampleX = Math.Min(
                     sourceWidth - 1,
                     Math.Max(0, (int)Math.Round(
-                        (column + 0.5) * sourceWidth / fullGridWidth)));
+                        (column + 0.5) * sourceWidth / gridWidth)));
                 // 32bpp BI_RGB 内存是 BGRA；匿名输出统一为 RGB。
                 var sourceOffset = (sampleY * sourceWidth + sampleX) * 4;
                 values[targetOffset++] = raw[sourceOffset + 2];

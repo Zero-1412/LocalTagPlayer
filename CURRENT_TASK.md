@@ -115,6 +115,15 @@
   `.local/qa/precision-dwm-matrix-long-{h264,hevc,av1}-libass-20260820a`，旧的
   `libass=false` 矩阵保留为根因前基线，不与修复后结果混合。
 
+- 2026-08-20 为避免局部逐帧变化落在采样点之间，最终 precision DWM 观察器将中心
+  匿名网格加密为 `32×20`，字幕单独保持 `16×4` 并固定在采集 ROI 的 `70%–100%`
+  底部归一化区域；阈值仍为 `1.5%`，不保存桌面像素。最终 H.264 矩阵
+  `.local/qa/precision-dwm-matrix-long-h264-grid32-region-sub-libass-20260820a`
+  为 `3/3`、采样 `31.4–31.5 fps`、四项 visible 均 `3/3 pass`；HEVC 为 `3/3`、
+  31.0–31.7 fps，逐帧 DWM `3/3 unknown`（最大差异 `0.12%`），其它三项 pass；
+  AV1 为 `3/3`、31.2–31.5 fps，逐帧两轮 pass、一轮无足够 DWM 变化，聚合 unknown，
+  其它三项 pass。旧 `grid16` 结果保留为历史基线，不删除该 unknown。
+
 - 2026-08-20 重新评估已有正式 PlayerPage/Texture 矩阵：1080p 三编码的 shortForward、
   shortBackward、drag 各为 `3/3` 有效，首个 DWM p95 分别为 H.264 `81/92/343 ms`、
   HEVC `86/94/307 ms`、AV1 `86/93/362 ms`；页面语义、decoder drop、最终硬解为 pass，

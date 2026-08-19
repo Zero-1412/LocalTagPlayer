@@ -249,7 +249,7 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | 拖动 | Slider onChangeEnd、latest-only 合并、释放 | 预览连续变化与松手准确收敛 | 命令合同已有；统一 P0 manifest 后再汇总 |
 | 长按 | 前进临时扫描、后退 latest-only、KeyDown/Up 生命周期 | 按住期间 DWM 首帧和后续节奏 | 自动化已有；实体 WM_KEYDOWN/UP QPC 为 unknown |
 | 可调倍速 | setRate、播放中状态/速度读回、恢复读回、资源释放 | 真实窗口播放节奏预算 | H.264/HEVC/AV1 各 3/3 pass（同一修复后 Debug 构建） |
-| 逐帧 | frame-step/frame-back-step、错误和释放 | 逐帧真实 DWM 画面 | H.264/AV1 各 3/3 pass；HEVC command/resource pass、DWM visible unknown |
+| 逐帧 | frame-step/frame-back-step、错误和释放 | 逐帧真实 DWM 画面 | H.264 3/3 pass；HEVC 3/3 unknown；AV1 1/3 unknown，均不覆盖 command/resource pass |
 | A-B loop | A/B/实际 A→B→A 循环、清除命令、状态和释放 | A→B 重复播放画面 | H.264/HEVC/AV1 各 3/3 pass（同一修复后 Debug 构建） |
 | 外挂字幕 | 加载/轨道/关闭命令和释放 | 字幕在真实 Texture 上可见并落入测试时间窗 | H.264/HEVC/AV1 各 3/3 pass（同一修复后 Debug 构建） |
 
@@ -342,6 +342,23 @@ command/resource 与 DWM 观察边界。修复后的三编码代表性矩阵均�
 因此外挂字幕在这组三编码代表性素材上已拥有真实可见证据；HEVC 逐帧仍单独保持
 `unknown`，不能被其它控制或编码的通过结果覆盖。
 
+为降低局部逐帧变化落在采样点之间的漏检，最终 DWM 观察器将中心匿名网格加密为
+`32×20`，同时把字幕保留为独立的 `16×4` 网格并固定在采集 ROI 的 `70%–100%` 底部
+归一化区域；阈值仍为 `1.5%`，不保存原始桌面像素。最终观察器矩阵为：
+
+- H.264：`.local/qa/precision-dwm-matrix-long-h264-grid32-region-sub-libass-20260820a`，
+  `3/3` 有效，采样 `31.4–31.5 fps`，四项 command/resource 与 DWM visible 均 `3/3 pass`，
+  exit `0`；
+- HEVC：`.local/qa/precision-dwm-matrix-long-hevc-grid32-region-sub-libass-20260820a`，
+  `3/3` 有效，采样 `31.0–31.7 fps`，逐帧 command/resource `3/3 pass` 但 DWM visible
+  `3/3 unknown`（最大中心差异 `0.12%`），倍速、A-B、外挂字幕均 `3/3 pass`，exit `3`；
+- AV1：`.local/qa/precision-dwm-matrix-long-av1-grid32-region-sub-libass-20260820a`，
+  `3/3` 有效，采样 `31.2–31.5 fps`，倍速、A-B、外挂字幕均 `3/3 pass`；逐帧两轮
+  pass、一轮没有足够 DWM 变化，聚合为 unknown，exit `3`。
+
+旧的 `grid16` 结果保留为历史基线；当前报告以后以 `grid32-region-sub` 观察器结果为
+最新可复核口径，不把观察器升级后的单轮 unknown 删除或重写为通过。
+
 ## 阶段 D：外部验收清单
 
 下列项目不阻塞本机阶段报告，但不能由自动化 SendInput 伪造：
@@ -368,5 +385,5 @@ prompt impact: satisfies first principles; minimal subtitle-rendering fix plus f
 protected behaviors: preserved
 unauthorized feature removal: none
 mount and reachability: not changed; existing PlayerPage evidence retained
-validation: focused contract tests 21/21 passed; subtitle/backend architecture contract passed; PowerShell parsers passed; flutter analyze no issues; flutter build windows --debug passed; steady runtime 10 cases × 3 sessions passed the bounded matrix; repaired P1 H.264 and AV1 matrices 3/3 valid with validator exit 0 and overall=pass; repaired HEVC matrix 3/3 valid with validator exit 3 and overall=unknown because frame-step DWM remained unknown; P0 validator exit 2 with overall=fail as required by remaining DWM/action/VO/manifest unknowns
+validation: focused contract tests 21/21 passed; subtitle/backend architecture contract passed; PowerShell parsers passed; flutter analyze no issues; flutter build windows --debug passed; steady runtime 10 cases × 3 sessions passed the bounded matrix; final grid32-region-sub P1 H.264 matrix 3/3 valid with validator exit 0 and overall=pass; final HEVC and AV1 matrices 3/3 valid with validator exit 3 and overall=unknown because frame-step DWM remained unknown; P0 validator exit 2 with overall=fail as required by remaining DWM/action/VO/manifest unknowns
 ~~~
