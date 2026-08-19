@@ -24,7 +24,8 @@ $controls = [ordered]@{
     dwmName = 'frameStep'
   }
   playbackRate = [ordered]@{
-    commandStages = @('playback_rate_complete')
+    # 临时倍速必须同时有设置读回和恢复原值的成功阶段。
+    commandStages = @('playback_rate_complete', 'playback_rate_restored')
     dwmName = 'playbackRate'
   }
   abLoop = [ordered]@{

@@ -266,6 +266,8 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 - `frame_step_complete` 的命令结果与前后 DWM 时间窗分开；逐帧不接受估算帧号代理；
 - `playback_rate_complete` 必须读回 `speed=1.5` 并恢复原倍速；该阶段只触碰当前
   PlayerService，不写持久化播放设置；
+- command/resource 门禁同时要求 `playback_rate_restored.success=true`，设置成功但未恢复
+  原倍速不得记为通过；匿名摘要保留 requested/readback rate 供复核；
 - A/B 先实际从 A 播放到 B 并观察回到 A，再由 DWM 窗口判断是否有可见变化；
 - 外挂字幕先在同一位置建立无字幕静止基线，再把 `sub-add` 后的下方区域作为独立窗口；
 - 命令失败为 `fail`，桌面样本不足或指纹变化低于 `1.5%` 只为 `unknown`，不补成通过；
@@ -293,6 +295,14 @@ pwsh -NoProfile -File .\tool\validate_player_p1_precision_evidence.ps1 `
 控制的 `commandResource` 记为 `pass`；同一会话 DWM 采样为 `27.3 fps`，低于 `30 fps`
 门禁，因此四个控制的 `visible` 和合并 `overall` 仍为 `unknown`。这只证明倍速命令
 合同可用，不证明倍速在真实 Texture 上的呈现节奏已经通过。
+
+本轮重新执行正式 Texture command/resource QA，匿名目录为
+`.local/qa/precision-command-current-20260820l`：`frame_step_complete`、
+`playback_rate_complete`（`1.5→1.500000`）、`playback_rate_restored`、A/B 四阶段和
+`external_subtitle_complete(trackListObserved=true)` 均为 `success=true`，并有
+`player_resources_released`。独立 P1 校验器将四项 `commandResource` 判为 `pass`；由于
+该 command-only 目录没有 DWM 摘要，四项 `visible` 和合并 `overall` 均为 `unknown`，
+没有把命令/资源结果升级为真实 Texture 可见性完成。
 
 ## 阶段 D：外部验收清单
 

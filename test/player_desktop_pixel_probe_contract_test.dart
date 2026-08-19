@@ -145,6 +145,7 @@ void main() {
     expect(source, contains('precision-controls.jsonl'));
     expect(source, contains('frame_step_complete'));
     expect(source, contains('playback_rate_complete'));
+    expect(source, contains('playback_rate_restored'));
     expect(source, contains('_isPlaybackRateReadback'));
     expect(source, contains('ab_loop_clear'));
     expect(source, contains('external_subtitle_complete'));
@@ -158,6 +159,7 @@ void main() {
         source, contains('real-player-page-native-player-precision-controls'));
     expect(source, contains('frame_step_complete'));
     expect(source, contains('playback_rate_complete'));
+    expect(source, contains('playback_rate_restored'));
     expect(source, contains('ab_loop_a'));
     expect(source, contains('ab_loop_b'));
     expect(source, contains('ab_loop_cycle_complete'));
@@ -192,6 +194,7 @@ void main() {
     expect(source, contains('commandResource'));
     expect(source, contains('visible'));
     expect(source, contains('playbackRate'));
+    expect(source, contains("'playback_rate_restored'"));
     expect(source, contains('frameStep'));
     expect(source, contains('abLoop'));
     expect(source, contains('externalSubtitle'));

@@ -90,6 +90,13 @@
   `27.3 fps < 30 fps`，四项 visible/overall 均保持 `unknown`，不把倍速命令可用写成
   真实可见性完成。
 
+- 2026-08-20 强化 P1 command/resource 合同：`run_player_precision_controls_qa.ps1` 现在
+  必须等待 `playback_rate_restored.success=true`，并在匿名摘要保留 requested/readback rate；
+  当前正式 Texture command-only 会话 `.local/qa/precision-command-current-20260820l`
+  中，逐帧、倍速设置与恢复、A/B loop、外挂字幕 `trackListObserved=true` 和资源释放均
+  成功。独立校验器四项 `commandResource=pass`，但无 DWM 摘要所以四项 visible/overall
+  均为 `unknown`；这只推进了命令/资源 QA，不宣称 P1 控制真实可见性完成。
+
 - 2026-08-20 重新评估已有正式 PlayerPage/Texture 矩阵：1080p 三编码的 shortForward、
   shortBackward、drag 各为 `3/3` 有效，首个 DWM p95 分别为 H.264 `81/92/343 ms`、
   HEVC `86/94/307 ms`、AV1 `86/93/362 ms`；页面语义、decoder drop、最终硬解为 pass，

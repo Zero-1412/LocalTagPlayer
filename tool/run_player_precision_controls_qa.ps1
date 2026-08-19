@@ -124,6 +124,8 @@ try {
   $requiredStages = @(
     'frame_step_complete',
     'playback_rate_complete',
+    # 倍速是临时 QA 状态；设置成功但未恢复原值不能算 command/resource 通过。
+    'playback_rate_restored',
     'ab_loop_a',
     'ab_loop_b',
     'ab_loop_cycle_complete',
@@ -190,12 +192,16 @@ try {
       $frameEvidenceProperty = $_.PSObject.Properties['frameEvidence']
       $positionProperty = $_.PSObject.Properties['positionMs']
       $trackListProperty = $_.PSObject.Properties['trackListObserved']
+      $requestedRateProperty = $_.PSObject.Properties['requestedRate']
+      $readbackRateProperty = $_.PSObject.Properties['readbackRate']
       [ordered]@{
         stage = [string]$_.stage
         success = if ($null -eq $successProperty) { $null } else { [bool]$successProperty.Value }
         frameEvidence = if ($null -eq $frameEvidenceProperty) { $null } else { [string]$frameEvidenceProperty.Value }
         positionMs = if ($null -eq $positionProperty) { $null } else { [int]$positionProperty.Value }
         trackListObserved = if ($null -eq $trackListProperty) { $null } else { [bool]$trackListProperty.Value }
+        requestedRate = if ($null -eq $requestedRateProperty) { $null } else { [string]$requestedRateProperty.Value }
+        readbackRate = if ($null -eq $readbackRateProperty) { $null } else { [string]$readbackRateProperty.Value }
       }
     })
     resourceReleaseConfirmed = $lifecycle -contains 'player_resources_released'
