@@ -108,9 +108,15 @@ desktop-pixel-matrix-summary.json 的矩阵根，或单个 run 目录。报告�
 - 稳态：独立至少 10 秒窗口及其分母。动作窗口里的 totalDropFramesMax=0 仍只能记
   unknown，不能代替稳态掉帧率。
 
+统一校验器现在同时从每个 report 的 `presentedChanges[].qpcUs` 计算 DWM 后续呈现变化：
+对 `longForward`/`longBackward` 输出连续变化间隔 p95、最大间隔和每轮变化数，并沿用
+平滑度标准的 `p95≤50 ms`、`max≤100 ms`、每轮至少 `5` 个变化；对长按/拖动另输出
+最长无变化段（`≤500 ms`）。字段不足只记 `unknown`，反向 latest-only 关键帧预览不因
+存在若干变化而被写成连续反向扫描。
+
 因此，当前仓库的本机阶段结论是：
 
-装配后的统一门禁报告为 `overall=fail`：12 个 case 中 `5` 个为 `fail`、`7` 个为
+装配后的统一门禁报告为 `overall=fail`：12 个 case 中 `7` 个为 `fail`、`5` 个为
 `unknown`、没有 case 为 `pass`。这表示证据链已经能够对已装配动作给出可复核的
 `pass/fail/unknown`，但 P0 本机基线尚未完成；VO drop、独立稳态 total drop、未装配
 动作和两个 manifest 缺口不能被这次装配覆盖。
@@ -131,10 +137,11 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | --- | --- | --- |
 | 正式 Texture 三编码动作探针 | pass（证据管线） | 已有真实 PlayerPage、页面语义、DWM 匿名变化和运行态聚合 |
 | 12-case 固定 manifest 完整性 | fail（10/12） | 当前本机有统一 ignored manifest，但两个 AV1 case 没有可验证样本 |
-| 三编码/两分辨率/短长 GOP 的统一 P0 报告 | fail（5 fail/7 unknown） | 已装配 17 个明确 case/action；仍有未装配动作、稳态字段和 2 个素材缺口 |
+| 三编码/两分辨率/短长 GOP 的统一 P0 报告 | fail（7 fail/5 unknown） | 已装配 17 个明确 case/action；连续呈现、未装配动作、稳态字段和 2 个素材缺口仍未闭环 |
 | decoder drop | pass 或 fail 按 action 分列 | 运行态有值时非零失败；没有值不补零 |
 | VO drop | unknown（已有矩阵多数不可用） | 运行态没有可靠 VO drop 字段时不能判通过 |
 | 稳态 total drop | unknown | 既有动作样本缺少独立 10 秒分母 |
+| DWM 后续呈现节奏 | pass/fail/unknown 按长按 action 分列 | 由 `presentedChanges[].qpcUs` 计算；缺少连续变化序列不补成通过 |
 | 首个真实 DWM 帧 | pass/fail 按已有 action 分列 | 只采用桌面合成像素报告 |
 | P0 总体 | fail（阶段未完成） | 当前门禁没有 case 通过，且仍有 unknown；报告完整性尚未闭环 |
 
@@ -205,15 +212,27 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 
 ### Precision controls 的 DWM 可见性复核
 
-新增 [tool/run_player_precision_controls_dwm_qa.ps1](/E:/LocalTagPlayer/tool/run_player_precision_controls_dwm_qa.ps1)，
+新增 [tool/run_player_precision_controls_dwm_qa.ps1](/E:/LocalTagPlayer/tool/run_player_precision_controls_dwm_qa.ps1)
+和 [tool/validate_player_p1_precision_evidence.ps1](/E:/LocalTagPlayer/tool/validate_player_p1_precision_evidence.ps1)，
 它在同一正式 PlayerPage/MediaKit Texture Debug 会话中不发送输入，只读取 DWM 合成后的
 中心视频网格和字幕下方网格，分别把命令 JSONL 与匿名桌面指纹 JSONL 落盘。它要求：
 
 - `frame_step_complete` 的命令结果与前后 DWM 时间窗分开；逐帧不接受估算帧号代理；
+- `playback_rate_complete` 必须读回 `speed=1.5` 并恢复原倍速；该阶段只触碰当前
+  PlayerService，不写持久化播放设置；
 - A/B 先实际从 A 播放到 B 并观察回到 A，再由 DWM 窗口判断是否有可见变化；
 - 外挂字幕先在同一位置建立无字幕静止基线，再把 `sub-add` 后的下方区域作为独立窗口；
 - 命令失败为 `fail`，桌面样本不足或指纹变化低于 `1.5%` 只为 `unknown`，不补成通过；
 - 资源释放仍必须出现 `player_resources_released`。
+
+P1 校验器对每个控制分别输出 `commandResource`、`visible` 和合并 `overall`，因此命令
+可用但 DWM 采样不足时不会被合并为完成：
+
+~~~powershell
+pwsh -NoProfile -File .\tool\validate_player_p1_precision_evidence.ps1 `
+  -EvidenceRoot .\.local\qa\precision-dwm-rate-h264-20260820 `
+  -Output .\.local\qa\p1-precision-evidence.json
+~~~
 
 最新本机 Debug 三编码各一轮的匿名结果为：H.264 采样 `26.7 fps`、A/B DWM
 可见性 `pass`；HEVC 采样 `26.9 fps`、A/B DWM 可见性 `pass`；AV1 采样
@@ -223,6 +242,11 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 `.local/qa/precision-dwm-buffered-{h264,hevc,av1}-20260820_*`，其中只保留匿名阶段、
 尺寸、时间和指纹差异，不保留截图或媒体内容。该结果把 P1 的命令/资源 QA 与真实
 可见性 QA 明确拆开，不能写成逐帧、A-B 或外挂字幕功能完成。
+
+最新 H.264 precision 会话新增的倍速命令阶段已真实读回并恢复原值，P1 校验器将四个
+控制的 `commandResource` 记为 `pass`；同一会话 DWM 采样为 `27.3 fps`，低于 `30 fps`
+门禁，因此四个控制的 `visible` 和合并 `overall` 仍为 `unknown`。这只证明倍速命令
+合同可用，不证明倍速在真实 Texture 上的呈现节奏已经通过。
 
 ## 阶段 D：外部验收清单
 

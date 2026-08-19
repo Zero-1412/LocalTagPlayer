@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  在真实 PlayerPage/MediaKit Texture Debug 会话中验收逐帧、A/B loop 与外挂字幕。
+  在真实 PlayerPage/MediaKit Texture Debug 会话中验收倍速、逐帧、A/B loop 与外挂字幕。
 
 .DESCRIPTION
   该脚本不发送桌面输入，也不把 Flutter 测试泵当作呈现证据。它启动隔离 Debug QA
@@ -123,6 +123,7 @@ try {
   $events = @(Get-PrecisionEvents $precisionPath)
   $requiredStages = @(
     'frame_step_complete',
+    'playback_rate_complete',
     'ab_loop_a',
     'ab_loop_b',
     'ab_loop_cycle_complete',

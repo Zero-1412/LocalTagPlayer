@@ -58,6 +58,11 @@ void main() {
     expect(script, contains('vo-drop'));
     expect(script, contains('steady-total-drop'));
     expect(script, contains('texture-generation-recorded'));
+    expect(script, contains('longest-presented-unchanged-gap'));
+    expect(script, contains('continuous-presented-change-pacing'));
+    expect(script, contains('presentedChangeQpcUs'));
+    expect(script, contains(r'$presentedIntervalP95 -le 50'));
+    expect(script, contains('每轮至少 5 个 DWM 变化'));
     expect(script, contains('player_resources_released'));
     expect(script, contains("'pass', 'fail', 'unknown'"));
     expect(script, contains(r"$totalStatus = 'unknown'"));

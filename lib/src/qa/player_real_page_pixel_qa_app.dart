@@ -184,7 +184,7 @@ class _PlayerRealPagePixelQaApp extends StatefulWidget {
   final bool manualKeyboardQa;
   /** 自动化 virtual-key 长按只用于桌面像素诊断，正式页面永不读取该环境变量。 */
   final bool automatedLongHoldQa;
-  /** 仅 Debug QA：在真实 PlayerPage/NativePlayer 会话中验收逐帧、A/B 与外挂字幕。 */
+  /** 仅 Debug QA：在真实 PlayerPage/NativePlayer 会话中验收倍速、逐帧、A/B 与外挂字幕。 */
   final bool precisionControlsQa;
   /** 仅用于 Debug 门禁提示；正式页面永远不读取该环境变量。 */
   final String manualKeyboardAction;
@@ -476,6 +476,14 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       _precisionControlsCompleted = true;
       return;
     }
+    var frameStepPresented = false;
+    var playbackRateApplied = false;
+    var playbackRateRestored = false;
+    var abLoopASet = false;
+    var abLoopBSet = false;
+    var loopCompleted = false;
+    var abLoopCleared = false;
+    var subtitleLoaded = false;
     try {
       await Future<void>.delayed(const Duration(milliseconds: 300));
       final beforeFrame = await player.readPresentedVideoFrame();
@@ -487,7 +495,6 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       // 给外部桌面合成观察器留出静止基线；该等待只存在于隔离 Debug QA，不能改变
       // 正式页面逐帧命令的用户可感知时序。
       await _precisionObservationDwell();
-      var frameStepPresented = false;
       try {
         await player.playerService.stepFrame(backward: false);
         frameStepPresented = await player.waitForPresentedVideoFrame(
@@ -508,12 +515,58 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       });
       await _precisionObservationDwell();
 
+      // 倍速 QA 只触碰当前 PlayerService，不调用页面的持久化设置入口；完成后恢复
+      // 原倍速，避免 Debug QA 污染用户偏好或下一次播放器会话。
+      const qaPlaybackRate = 1.5;
+      final restorePlaybackRate = player.playbackRate;
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'playback_rate_before',
+        'success': true,
+        'requestedRate': restorePlaybackRate,
+        'readbackRate': await player.playerService.getProperty('speed'),
+      });
+      try {
+        await player.playerService.setRate(qaPlaybackRate);
+        final readbackRate = await player.playerService.getProperty('speed');
+        playbackRateApplied =
+            _isPlaybackRateReadback(readbackRate, qaPlaybackRate);
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'playback_rate_complete',
+          'success': playbackRateApplied,
+          'requestedRate': qaPlaybackRate,
+          'readbackRate': readbackRate,
+        });
+        await _precisionObservationDwell();
+      } catch (error) {
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'playback_rate_error',
+          'errorType': error.runtimeType.toString(),
+        });
+      } finally {
+        try {
+          await player.playerService.setRate(restorePlaybackRate);
+          playbackRateRestored = true;
+        } catch (error) {
+          _appendPrecisionEvidence(<String, Object?>{
+            'stage': 'playback_rate_restore_error',
+            'errorType': error.runtimeType.toString(),
+          });
+        }
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'playback_rate_restored',
+          'success': playbackRateRestored,
+          'requestedRate': restorePlaybackRate,
+        });
+      }
+
       final start = player.playerService.state.position;
       await player.setAbLoopStartWithFeedback();
+      abLoopASet = _isMpvAbLoopPoint(
+        await player.playerService.getProperty('ab-loop-a'),
+      );
       _appendPrecisionEvidence(<String, Object?>{
         'stage': 'ab_loop_a',
-        'success': _isMpvAbLoopPoint(
-            await player.playerService.getProperty('ab-loop-a')),
+        'success': abLoopASet,
         'positionMs': start.inMilliseconds,
       });
       await _precisionObservationDwell();
@@ -522,10 +575,12 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       await player.playerService.seek(end);
       await _waitForPlayerPosition(player, end);
       await player.setAbLoopEndWithFeedback();
+      abLoopBSet = _isMpvAbLoopPoint(
+        await player.playerService.getProperty('ab-loop-b'),
+      );
       _appendPrecisionEvidence(<String, Object?>{
         'stage': 'ab_loop_b',
-        'success': _isMpvAbLoopPoint(
-            await player.playerService.getProperty('ab-loop-b')),
+        'success': abLoopBSet,
         'positionMs': player.playerService.state.position.inMilliseconds,
       });
       await _precisionObservationDwell();
@@ -534,7 +589,6 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       // B 回到 A，再暂停并记录匿名循环证据；外部桌面观察器负责独立判断 Texture/DWM
       // 是否随该循环出现可见呈现变化。
       var loopReachedEnd = false;
-      var loopCompleted = false;
       try {
         // 设置 B 点后当前播放头停在 B；回到 A 再播放，才能证明是 A→B→A
         // 的实际循环，而不是从 B 立即触发一次边界回退。
@@ -576,9 +630,10 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       await player.clearAbLoopWithFeedback();
       final clearedA = await player.playerService.getProperty('ab-loop-a');
       final clearedB = await player.playerService.getProperty('ab-loop-b');
+      abLoopCleared = clearedA == 'no' && clearedB == 'no';
       _appendPrecisionEvidence(<String, Object?>{
         'stage': 'ab_loop_clear',
-        'success': clearedA == 'no' && clearedB == 'no',
+        'success': abLoopCleared,
       });
       await _precisionObservationDwell();
 
@@ -603,7 +658,6 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
         'frameEvidence': player.lastPresentedVideoFrameEvidence,
       });
       await _precisionObservationDwell();
-      var subtitleLoaded = false;
       try {
         _appendPrecisionEvidence(<String, Object?>{
           'stage': 'external_subtitle_load_started',
@@ -633,7 +687,14 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       }
       _appendLifecycle(
         widget.outputDirectory,
-        subtitleLoaded
+        frameStepPresented &&
+                playbackRateApplied &&
+                playbackRateRestored &&
+                abLoopASet &&
+                abLoopBSet &&
+                loopCompleted &&
+                abLoopCleared &&
+                subtitleLoaded
             ? 'precision_controls_qa_complete'
             : 'precision_controls_qa_incomplete',
       );
@@ -669,6 +730,12 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
 
   bool _isMpvAbLoopPoint(String value) =>
       value != 'no' && value != 'unavailable' && value.isNotEmpty;
+
+  /** 只接受当前 PlayerService 的倍速属性读回，不以命令 Future 完成冒充生效。 */
+  bool _isPlaybackRateReadback(String value, double expected) {
+    final readback = double.tryParse(value.trim());
+    return readback != null && (readback - expected).abs() <= 0.01;
+  }
 
   void _appendPrecisionEvidence(Map<String, Object?> values) {
     File(

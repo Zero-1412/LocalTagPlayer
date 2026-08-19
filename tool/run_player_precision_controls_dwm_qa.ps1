@@ -669,6 +669,10 @@ try {
     -CommandStage 'frame_step_complete' -BeforeStage 'frame_step_before' `
     -AfterStage 'frame_step_complete' `
     -DifferencePropertyName 'centerDifferenceFromPreviousPercent'
+  $playbackRateMetric = Get-StageMetric -Events $events -Samples $sampleRows `
+    -CommandStage 'playback_rate_complete' -BeforeStage 'playback_rate_before' `
+    -AfterStage 'playback_rate_complete' `
+    -DifferencePropertyName 'centerDifferenceFromPreviousPercent'
   $loopMetric = Get-StageMetric -Events $events -Samples $sampleRows `
     -CommandStage 'ab_loop_cycle_complete' -BeforeStage 'ab_loop_b' `
     -AfterStage 'ab_loop_cycle_complete' `
@@ -683,6 +687,7 @@ try {
     -PresentedStartStage 'external_subtitle_load_started'
   $stageMetrics = [ordered]@{
     frameStep = $frameMetric
+    playbackRate = $playbackRateMetric
     abLoop = $loopMetric
     externalSubtitle = $subtitleMetric
   }

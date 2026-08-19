@@ -136,6 +136,8 @@ void main() {
     expect(source, contains('LOCAL_TAG_PLAYER_PRECISION_CONTROLS_QA'));
     expect(source, contains('precision-controls.jsonl'));
     expect(source, contains('frame_step_complete'));
+    expect(source, contains('playback_rate_complete'));
+    expect(source, contains('_isPlaybackRateReadback'));
     expect(source, contains('ab_loop_clear'));
     expect(source, contains('external_subtitle_complete'));
     expect(source, contains('precision_controls_qa_complete'));
@@ -147,6 +149,7 @@ void main() {
     expect(
         source, contains('real-player-page-native-player-precision-controls'));
     expect(source, contains('frame_step_complete'));
+    expect(source, contains('playback_rate_complete'));
     expect(source, contains('ab_loop_a'));
     expect(source, contains('ab_loop_b'));
     expect(source, contains('ab_loop_cycle_complete'));
@@ -165,12 +168,28 @@ void main() {
     expect(source, contains("status = 'unknown'"));
     expect(source, contains('ab_loop_cycle_complete'));
     expect(source, contains('external_subtitle_load_started'));
+    expect(source, contains('playbackRate'));
+    expect(source, contains('playback_rate_complete'));
     expect(source, contains('dwmSampleRows'));
     expect(source, contains('一次性写盘'));
     expect(source, isNot(contains('AppendAllText')));
     // 可见性 QA 不能靠 SendInput 把命令路径伪造成屏幕证据。
     expect(source, isNot(contains('SendInput')));
     expect(source, contains('resourceReleaseConfirmed'));
+  });
+
+  test('P1 precision validator 对每个控制分别输出命令资源与可见性状态', () {
+    final source = File('tool/validate_player_p1_precision_evidence.ps1')
+        .readAsStringSync();
+    expect(source, contains('commandResource'));
+    expect(source, contains('visible'));
+    expect(source, contains('playbackRate'));
+    expect(source, contains('frameStep'));
+    expect(source, contains('abLoop'));
+    expect(source, contains('externalSubtitle'));
+    expect(source, contains('desktop-composited-pixel-change'));
+    expect(source, contains('不把命令完成或帧号'));
+    expect(source, contains(r"if ($overall -eq 'unknown')"));
   });
 
   test('独立矩阵在任一 4K 会话失效时拒绝生成混杂 p95', () {

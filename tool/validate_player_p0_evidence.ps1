@@ -47,6 +47,21 @@ function Get-NumberOrNull {
   try { return [double]$Value } catch { return $null }
 }
 
+function Get-Percentile {
+  param(
+    [object[]]$Values,
+    [double]$Percentile
+  )
+  $numbers = @($Values | ForEach-Object { Get-NumberOrNull $_ } | Where-Object { $null -ne $_ })
+  if ($numbers.Count -eq 0) { return $null }
+  $sorted = @($numbers | Sort-Object)
+  $index = [Math]::Min(
+    $sorted.Count - 1,
+    [Math]::Max(0, [Math]::Round(($sorted.Count - 1) * $Percentile))
+  )
+  return [double]$sorted[$index]
+}
+
 function Get-ObjectProperty {
   param(
     [object]$Object,
@@ -145,6 +160,15 @@ function Get-RunEvidence {
       @($reportActions)[0]
     } else { $null }
     $reportPassed = Get-ObjectProperty $report 'passed'
+    $presentedChangeQpcUs = @()
+    foreach ($reportAction in @($reportActions)) {
+      foreach ($presentedChange in @(
+        Get-ObjectProperty $reportAction 'presentedChanges'
+      )) {
+        $qpcUs = Get-NumberOrNull (Get-ObjectProperty $presentedChange 'qpcUs')
+        if ($null -ne $qpcUs) { $presentedChangeQpcUs += $qpcUs }
+      }
+    }
     $sessions += [ordered]@{
       hasReport = $null -ne $report
       passed = $null -ne $report -and
@@ -155,6 +179,13 @@ function Get-RunEvidence {
       firstDwmMs = if ($null -ne $report) {
         Get-NumberOrNull (Get-ObjectProperty $report 'p95InputDownToPixelMs')
       } else { $null }
+      effectiveCaptureFps = if ($null -ne $report) {
+        Get-NumberOrNull (Get-ObjectProperty $report 'effectiveCaptureFps')
+      } else { $null }
+      longestUnchangedRunMs = if ($null -ne $report) {
+        Get-NumberOrNull (Get-ObjectProperty $report 'longestUnchangedRunMs')
+      } else { $null }
+      presentedChangeQpcUs = @($presentedChangeQpcUs)
       semanticConfirmed = if ($null -ne $action -and
         $null -ne (Get-ObjectProperty $action 'inputSemanticConfirmed')) {
         [bool](Get-ObjectProperty $action 'inputSemanticConfirmed')
@@ -252,6 +283,57 @@ function Get-ActionMetrics {
   $textureValues = @($valid | Where-Object { $_.textureGenerationRecorded })
   $textureStatus = if ($textureValues.Count -ge 3) { 'pass' } else { 'unknown' }
 
+  $unchangedValues = @($valid | ForEach-Object {
+    Get-NumberOrNull $_.longestUnchangedRunMs
+  } | Where-Object { $null -ne $_ })
+  $unchangedMax = if ($unchangedValues.Count -gt 0) {
+    ($unchangedValues | Measure-Object -Maximum).Maximum
+  } else { $null }
+  $unchangedStatus = if ($Action -notin @('drag', 'longForward', 'longBackward')) {
+    'unknown'
+  } elseif ($invalid.Count -gt 0) {
+    'fail'
+  } elseif ($unchangedValues.Count -lt 3 -or $null -eq $unchangedMax) {
+    'unknown'
+  } elseif ($unchangedMax -le 500) {
+    'pass'
+  } else {
+    'fail'
+  }
+
+  $presentedIntervalsMs = @()
+  $changesPerRun = @()
+  foreach ($session in $valid) {
+    $qpcValues = @($session.presentedChangeQpcUs | ForEach-Object {
+      Get-NumberOrNull $_
+    } | Where-Object { $null -ne $_ } | Sort-Object)
+    $changesPerRun += $qpcValues.Count
+    for ($index = 1; $index -lt $qpcValues.Count; $index++) {
+      $previous = [double]$qpcValues[$index - 1]
+      $current = [double]$qpcValues[$index]
+      if ($current -gt $previous) {
+        $presentedIntervalsMs += ($current - $previous) / 1000.0
+      }
+    }
+  }
+  $presentedIntervalP95 = Get-Percentile $presentedIntervalsMs 0.95
+  $presentedIntervalMax = if ($presentedIntervalsMs.Count -gt 0) {
+    ($presentedIntervalsMs | Measure-Object -Maximum).Maximum
+  } else { $null }
+  $continuityStatus = if ($Action -notin @('longForward', 'longBackward')) {
+    'unknown'
+  } elseif ($invalid.Count -gt 0) {
+    'fail'
+  } elseif ($valid.Count -lt 3 -or $presentedIntervalsMs.Count -eq 0) {
+    'unknown'
+  } elseif ($presentedIntervalP95 -le 50 -and
+    $presentedIntervalMax -le 100 -and
+    @($changesPerRun | Where-Object { $_ -lt 5 }).Count -eq 0) {
+    'pass'
+  } else {
+    'fail'
+  }
+
   $metrics = @(
     (New-Metric 'independent-sessions' $sessionStatus $valid.Count '每个有效 action 至少需要 3 个独立会话。'),
     (New-Metric 'first-real-dwm-frame' $dwmStatus $firstMax '首个实际 DWM/桌面合成变化；后端帧代理不能替代。'),
@@ -261,7 +343,13 @@ function Get-ActionMetrics {
     (New-Metric 'decoder-drop' $decoderStatus $decoderValues '动作窗口只能判掉帧非零失败；缺字段为 unknown。'),
     (New-Metric 'vo-drop' $voStatus $voValues 'VO drop 不可用时不能按零处理。'),
     (New-Metric 'steady-total-drop' $totalStatus $totalValues '必须有独立至少 10 秒稳态分母；动作窗口数值不作通过。'),
-    (New-Metric 'texture-generation-recorded' $textureStatus $textureValues.Count '记录 Texture 代次/重建；稳态不重建仍需独立 10 秒窗口。')
+    (New-Metric 'texture-generation-recorded' $textureStatus $textureValues.Count '记录 Texture 代次/重建；稳态不重建仍需独立 10 秒窗口。'),
+    (New-Metric 'longest-presented-unchanged-gap' $unchangedStatus $unchangedMax '长按/拖动的 DWM 指纹最长静止段；短按不把静止基线当连续扫描。'),
+    (New-Metric 'continuous-presented-change-pacing' $continuityStatus ([ordered]@{
+        p95Ms = $presentedIntervalP95
+        maxMs = $presentedIntervalMax
+        changesPerRun = $changesPerRun
+      }) '长按连续呈现门禁：间隔 p95≤50ms、最大≤100ms、每轮至少 5 个 DWM 变化；反向不满足时只能记失败/unknown，不能宣称连续反向扫描。')
   )
   $overall = if (@($metrics | Where-Object status -eq 'fail').Count -gt 0) { 'fail' }
     elseif (@($metrics | Where-Object status -eq 'unknown').Count -gt 0) { 'unknown' }

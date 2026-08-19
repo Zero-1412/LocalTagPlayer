@@ -39,9 +39,14 @@
 
 - 2026-08-20 新增 `tool/assemble_player_p0_evidence.ps1`，按目录名和矩阵摘要的显式
   合同把已有真实 PlayerPage/Texture 证据装配到新的本机 manifest；当前装配 `17` 个
-  case/action、保留 `67` 个未装配 action。统一门禁当前为 `5 fail/7 unknown/0 pass`；
+  case/action、保留 `67` 个未装配 action。统一门禁当前为 `7 fail/5 unknown/0 pass`；
   这完成了报告可复核链，但不把缺失素材、未绑定拖动/首播/全屏、VO drop 或稳态
   total drop 写成通过。
+
+- 2026-08-20 将 `presentedChanges[].qpcUs` 的后续 DWM 呈现节奏纳入统一 P0 校验器：
+  长按输出连续变化间隔 p95/最大值/每轮变化数，长按与拖动输出最长无变化段；复用
+  `p95≤50ms`、`max≤100ms`、每轮至少 5 个变化和最长静止 `≤500ms` 的既有标准。
+  反向仍按 latest-only 关键帧预览审计，字段不足继续为 `unknown`，不宣称连续反向扫描。
 
 - 2026-08-20 用当前 manifest 的 1080p H.264 short case 试跑正式 PlayerPage forward
   `3` 个独立 Debug Texture 会话：均完成打开、最终 `d3d11va-copy` 和释放，但
@@ -66,6 +71,13 @@
   AV1 `27.4 fps`，仍低于 30fps 最低门禁，不能把命令结果或后端帧号写成真实可见性通过。
   H.264/HEVC 的 A/B DWM 变化为 `pass`，AV1 仍为 `unknown`；最新匿名证据目录为
   `.local/qa/precision-dwm-buffered-{h264,hevc,av1}-20260820_*`。
+
+- 2026-08-20 为 P1 新增 `playback_rate_complete`：正式 PlayerPage Debug 会话真实读回
+  `speed=1.5` 并恢复原倍速，未写持久化设置；新增
+  `tool/validate_player_p1_precision_evidence.ps1`，按控制分别输出 command/resource、
+  visible 和 overall。最新 H.264 rate 会话的四项命令/资源均为 `pass`，但 DWM 采样
+  `27.3 fps < 30 fps`，四项 visible/overall 均保持 `unknown`，不把倍速命令可用写成
+  真实可见性完成。
 
 - 2026-08-20 重新评估已有正式 PlayerPage/Texture 矩阵：1080p 三编码的 shortForward、
   shortBackward、drag 各为 `3/3` 有效，首个 DWM p95 分别为 H.264 `81/92/343 ms`、
