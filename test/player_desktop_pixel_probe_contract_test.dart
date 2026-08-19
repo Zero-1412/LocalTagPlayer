@@ -1,8 +1,40 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_tag_player/src/qa/player_real_page_pixel_qa_app.dart';
 
 void main() {
+  test('反向像素 QA 基线远离首帧且不改短素材起点', () {
+    expect(
+      playerQaReverseBaselineTarget(
+        duration: const Duration(seconds: 50),
+        position: const Duration(seconds: 8),
+      ),
+      const Duration(seconds: 30),
+    );
+    expect(
+      playerQaReverseBaselineTarget(
+        duration: const Duration(seconds: 25),
+        position: const Duration(seconds: 8),
+      ),
+      const Duration(seconds: 20),
+    );
+    expect(
+      playerQaReverseBaselineTarget(
+        duration: const Duration(seconds: 20),
+        position: const Duration(seconds: 8),
+      ),
+      isNull,
+    );
+    expect(
+      playerQaReverseBaselineTarget(
+        duration: const Duration(seconds: 50),
+        position: const Duration(seconds: 20),
+      ),
+      isNull,
+    );
+  });
+
   test('桌面像素探针保留实际合成、输入与匿名证据合同', () {
     final source =
         File('tool/invoke_player_desktop_pixel_probe.ps1').readAsStringSync();

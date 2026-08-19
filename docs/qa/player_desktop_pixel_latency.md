@@ -522,3 +522,27 @@ AV1 `113.9 fps`、`50 ms`。正式自适应路径反而收敛到 `1600×900`、g
 `captureReadFailures=0`。`.local/qa/current-agent-forward-semantic-20260819k` 的第 3 轮只到
 `bootstrap_started`，按独立会话启动失败排除，未生成 p95；这类失败不能被像素重试或统计脚本
 吞掉。
+
+### 反向基线修正与正式三编码复核（2026-08-19）
+
+此前 AV1 反向失败样本的静止基线约在 10 秒，首次 10 秒回退只剩 66ms，桌面像素不变时
+无法区分“正确停在首帧”和“新帧未送达”。Debug-only PlayerPage QA 现在对长素材把基线移到
+18–30 秒区间；该逻辑不进入正式页面，不改播放起点、播放进度或 Texture 档位。
+
+同一新 Debug 构建、同一真实 4K 长 GOP 素材、144 DPI、900ms virtual-key `backward`，每种编码
+独立 3 次均通过桌面合成像素门禁，且页面 `player_keyboard_event` 语义回执成立：
+
+| 编码 | 有效轮次 | Down→DWM p50/p95 | 最长静帧 | 有效采样 | 最终硬解 | Texture 代次/重建 |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| H.264 | 3/3 | 904/905 ms | 0–8 ms | 100.4–118.4 fps | d3d11va-copy | 0/1/2/3，2–3 次 |
+| HEVC | 3/3 | 903/907 ms | 0–6 ms | 115.7–117.6 fps | d3d11va-copy | 0/1/3，2 次 |
+| AV1 | 3/3 | 909/914 ms | 2–4 ms | 115.8–118.5 fps | d3d11va-copy | 0/1/2/3，2–3 次 |
+
+三组 `captureReadFailures=0`、decoder/total drop 最大值为 `0`；这些是自动 virtual-key 对照，
+不是实体 WM_KEYDOWN/QPC p50/p95。约 0.9 秒的首个屏幕变化仍远离专业播放器体验，不能把“门禁通过”
+误写成“反向丝滑”。原始匿名矩阵：
+`.local/qa/current-reverse-formal-baseline30-20260819/{h264,hevc,av1}/matrix`。
+
+同一 AV1 基线下的 Debug-only `frame-step -1 seek` 触发实验为 3/3、Down→DWM p50/p95
+`1236/1249 ms`；关闭实验的同基线对照为 `910/915 ms`。逐帧触发不但没有改善，反而增加长尾，
+因此已从 `MediaKitPlayerBackend` 撤掉，正式路径仍只使用既有 `absolute+keyframes` 交互语义。
