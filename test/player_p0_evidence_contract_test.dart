@@ -111,6 +111,19 @@ void main() {
     expect(generator, contains('database=readonly'));
   });
 
+  test('受控 AV1 fixture 工具必须重新用 ffprobe 验证素材合同', () {
+    final fixture = File('tool/prepare_player_p0_av1_fixture_manifest.ps1')
+        .readAsStringSync();
+
+    expect(fixture, contains('qa-generated-fixture-and-ffprobe-verified'));
+    expect(fixture, contains('controlled-local-qa-fixture'));
+    expect(fixture, contains('av1_nvenc'));
+    expect(fixture, contains('packet=pts_time,flags'));
+    expect(fixture, contains("ExpectedGop 'short-gop'"));
+    expect(fixture, contains("ExpectedGop 'long-gop'"));
+    expect(fixture, contains('拒绝覆盖既有 QA fixture 目录'));
+  });
+
   test('P0 证据装配器只绑定明确命名且可复核的矩阵', () {
     final assembler =
         File('tool/assemble_player_p0_evidence.ps1').readAsStringSync();
@@ -125,6 +138,8 @@ void main() {
     expect(assembler, contains('case-level-steady-runtime-matrix'));
     expect(assembler, contains('current-semantic-matrix-4k-{0}-{1}-startup-'));
     expect(assembler, contains('product-player-page'));
+    expect(assembler, contains('RequireFixtureDirectory'));
+    expect(assembler, contains('qa-generated-fixture-and-ffprobe-verified'));
     expect(assembler, contains('desktop-composited-pixel-change'));
     expect(assembler, contains('p95Eligible'));
     expect(assembler, contains('validRecords.Count -ge 3'));
@@ -167,6 +182,10 @@ void main() {
         assembler,
         contains(
             "gop = 'long-gop'; codec = 'av1'; direction = 'fullscreen'; action = 'fullscreen'"));
+    expect(
+        assembler,
+        contains(
+            "gop = 'short-gop'; codec = 'av1'; direction = 'drag'; action = 'drag'"));
     expect(assembler, contains('postdwell'));
     expect(assembler, contains('no-exact-directory-binding'));
   });

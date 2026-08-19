@@ -61,6 +61,38 @@ ffprobe 关键帧最大间隔为 `6.25s`，仍属于 long GOP；没有发现 4K 
 该审计不把未进入应用资料库的文件强行加入正式 manifest，但它排除了“本轮缺口只是
 library.db 漏扫”的解释；两个缺口继续保持 `unknown`，不因额外扫描而伪造完整覆盖。
 
+### 2026-08-21 · 受控 AV1 fixture 与素材范围隔离
+
+为补齐本机报告的两个素材缺口，新增
+[tool/prepare_player_p0_av1_fixture_manifest.ps1](/E:/LocalTagPlayer/tool/prepare_player_p0_av1_fixture_manifest.ps1)。
+它只在新的隔离 `.local/qa/` 目录生成 30 秒 AV1 QA fixture，不修改源媒体；生成后重新用
+ffprobe 校验 codec、分辨率、码率、时长和 packet 关键帧间隔。当前固定 Debug/Texture manifest
+为 `player-p0-av1-fixtures-20260821f`：1080p AV1 short GOP 的关键帧间隔为 `1.001s`、
+码率约 `6326.2kbps`；4K AV1 long GOP 的关键帧间隔为 `5.0s`、码率约 `23483.5kbps`。
+两个 case 的 `selectionStatus` 为 `qa-generated-fixture-and-ffprobe-verified`，
+`selectionEvidence.sourceKind=controlled-local-qa-fixture`；fixture 路径不进入报告摘要。
+这两个受控 fixture 只作为本机可复现的素材合同，不能外推为用户任意 AV1 文件的发布结论。
+
+装配器现在对这两个 case 只接受目录名含 `-fixture-` 的完整三会话矩阵，拒绝把同 codec/
+分辨率/GOP 的旧素材 action 证据冒充 fixture 证据。v2 装配结果为 `43` 个明确映射、
+`41` 个 action omitted，12 个 case 的稳态目录均已绑定。两个 fixture 的正式 Texture 稳态均
+为 `3/3` 有效、每轮约 `10s`、decoder/total drop 为 `pass`、最终硬解为 `d3d11va-copy`、
+Texture 代次 delta 为 `0`、资源释放 `3/3`；VO drop 均为 `unknown`。
+
+新增 fixture 的 startup 各为 `3/3` 有效，但 1080p short 的 DWM 首帧 p95 为约 `1265ms`、
+4K long 为约 `2025ms`，按 `1000ms` 预算均为 `fail`。fullscreen 各为 `3/3` 有效，
+几何完成 p95 为约 `46/45ms`；这只是窗口几何结构证据，视频首个真实 DWM 帧仍为 `unknown`。
+1080p short drag 为 `3/3` 有效，Down→DWM p95 `307ms`、页面 Slider 语义和资源释放通过，
+VO 缺失仍使 action overall 保持 `unknown`。当前 Debug 自动化 forward 的新复测（fixture 与
+原始 1080p AV1 各 `3/3`）均没有 `player_keyboard_event` 或 DWM 变化，严格不生成 p95；
+该输入链负证据只记 `unknown`，不修改业务快捷键路径，也不替代阶段 D 的实体 WM_KEYDOWN/UP。
+
+统一 v2 门禁报告为
+`.local/qa/player-p0-av1-fixtures-20260821f/p0-evidence-gate-v2.json`，validator exit `2`，
+`overall=fail`（`11` 个 case fail、`1` 个 case unknown、`0` 个 case pass）。报告完整记录了
+受控素材、三会话分母、真实 DWM 终点、Texture/资源释放和 unknown 边界；本机阶段不再因外部
+GPU/驱动、实体键盘或另一渲染架构无限等待。
+
 ### 统一判定
 
 [tool/validate_player_p0_evidence.ps1](/E:/LocalTagPlayer/tool/validate_player_p0_evidence.ps1)
@@ -94,14 +126,16 @@ pwsh -NoProfile -File .\tool\validate_player_p0_evidence.ps1 `
   -Output .\.local\qa\p0-evidence-gate-assembled.json
 ~~~
 
-本机当前装配结果为 `41` 个明确 case/action 映射、`43` 个保留未装配 action；其中包括
+此前的装配结果为 `41` 个明确 case/action 映射、`43` 个保留未装配 action；其中包括
 1080p H.264/HEVC short GOP 和三编码 long GOP 的正式 PlayerPage 精确拖动矩阵、三编码
 short/long 的明确 forward/backward 矩阵、10 个有素材 case 的正式 PlayerPage fullscreen
 矩阵、9 个有完整会话的正式 PlayerPage startup 矩阵，以及已有的 4K longhold 矩阵。没有精确 GOP
 绑定的其它拖动、startup、fullscreen 不会因为目录“看起来相近”而被装配；4K AV1 short
 的 startup 只有 `2/3` 有效会话，因此没有装配；缺失素材的 1080p AV1 short 与 4K AV1 long
 也继续由原始 manifest 保持缺口。装配输出中的
-`evidenceAssembly` 保存选择规则、已映射目录名和省略原因，便于同机复跑和审计。
+`evidenceAssembly` 保存选择规则、已映射目录名和省略原因，便于同机复跑和审计。2026-08-21
+受控 AV1 fixture v2 装配为 `43/41`；对于标记为 `qa-generated-fixture-and-ffprobe-verified`
+的 case，只有目录名含 `-fixture-` 的证据才可进入该 case。
 
 每个 action 的 evidence 是独立会话目录数组；目录可为包含
 desktop-pixel-matrix-summary.json 的矩阵根，或单个 run 目录。报告至少应能追溯：

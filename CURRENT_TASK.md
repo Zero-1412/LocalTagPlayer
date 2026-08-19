@@ -1,5 +1,23 @@
 # CURRENT_TASK.md
 
+# 2026-08-21 · P0 受控 AV1 fixture、素材范围隔离与本机停止条件
+
+- 新增 `tool/prepare_player_p0_av1_fixture_manifest.ps1`，在新的 `.local/qa/` 目录生成并用
+  ffprobe packet flags 复核 1080p AV1 short GOP（`1.001s`）和 4K AV1 long GOP（`5.0s`）
+  的 30 秒受控素材；manifest 标记 `qa-generated-fixture-and-ffprobe-verified`，不把
+  fixture 结论外推到用户任意 AV1 文件。
+- `tool/assemble_player_p0_evidence.ps1` 已增加 fixture 素材范围门禁：受控 case 只接受目录名
+  含 `-fixture-` 的有效三会话矩阵，拒绝沿用旧素材的同 codec/分辨率/GOP action 证据。
+  v2 装配为 `43` mapped、`41` omitted，12 个 case 的稳态目录均已绑定。
+- 两个受控 case 的正式 Texture 稳态均 `3/3`、decoder/total drop `pass`、硬解
+  `d3d11va-copy`、Texture generation delta `0`、资源释放 `3/3`，VO drop `unknown`。
+  1080p short drag `3/3` 有效（Down→DWM p95 `307ms`）；startup 两个 fixture 均因
+  DWM 首帧 p95 超过 `1000ms` 判 `fail`；fullscreen 只形成几何完成证据，视频 DWM 首帧为
+  `unknown`。自动化 forward 当前 Debug 复测未形成 PlayerPage 键盘语义或 DWM 样本，未生成 p95。
+- 当前 v2 门禁：`.local/qa/player-p0-av1-fixtures-20260821f/p0-evidence-gate-v2.json`，
+  validator exit `2`，`overall=fail`，`11 fail / 1 unknown / 0 pass`。本机阶段报告已达到
+  可复现停止条件，不因 Stage D 外部硬件/实体键盘无限等待。
+
 # 2026-08-19 · 播放器真实性能基线与 Texture/HWND 对照（P0：真实 PlayerPage 拖动矩阵已闭环，实体键盘待验收）
 
 - 2026-08-20 建立 P0/P1 证据包合同：`tool/qa/player_p0_manifest.template.json` 固定

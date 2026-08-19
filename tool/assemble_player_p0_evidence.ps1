@@ -27,7 +27,8 @@ function Read-JsonFile {
 function Get-ValidatedMatrixCandidate {
   param(
     [Parameter(Mandatory = $true)][string]$Prefix,
-    [Parameter(Mandatory = $true)][string]$Root
+    [Parameter(Mandatory = $true)][string]$Root,
+    [bool]$RequireFixtureDirectory = $false
   )
 
   # 只接受目录名已明确声明素材/动作的矩阵，不从媒体路径或文件内容反推 case。
@@ -35,6 +36,11 @@ function Get-ValidatedMatrixCandidate {
     Get-ChildItem -LiteralPath $Root -Directory -Filter "$Prefix*" -ErrorAction SilentlyContinue |
       Where-Object { $_.Name -notmatch '(?i)postdwell' }
   )
+  if ($RequireFixtureDirectory) {
+    # 受控 fixture 与原始库素材即使 codec/分辨率/GOP 相同也不能混用；目录名是
+    # 本地匿名 QA 产物唯一可审计的素材范围标记，缺失时保留 unknown/omitted。
+    $directories = @($directories | Where-Object { $_.Name -match '(?i)-fixture-' })
+  }
   $validated = @()
   foreach ($directory in $directories) {
     $summaryPath = Join-Path $directory.FullName 'desktop-pixel-matrix-summary.json'
@@ -85,7 +91,8 @@ function Get-ValidatedMatrixCandidate {
 function Get-ValidatedSteadyRuntimeCandidate {
   param(
     [Parameter(Mandatory = $true)][string]$Prefix,
-    [Parameter(Mandatory = $true)][string]$Root
+    [Parameter(Mandatory = $true)][string]$Root,
+    [bool]$RequireFixtureDirectory = $false
   )
 
   # 稳态窗口是 case 级分母，不绑定到短按/拖动/长按 action；只接受完整的 3-session
@@ -93,6 +100,9 @@ function Get-ValidatedSteadyRuntimeCandidate {
   $directories = @(
     Get-ChildItem -LiteralPath $Root -Directory -Filter "$Prefix*" -ErrorAction SilentlyContinue
   )
+  if ($RequireFixtureDirectory) {
+    $directories = @($directories | Where-Object { $_.Name -match '(?i)-fixture-' })
+  }
   $validated = @()
   foreach ($directory in $directories) {
     $summaryPath = Join-Path $directory.FullName 'steady-runtime-matrix-summary.json'
@@ -214,9 +224,12 @@ $bindings = @(
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'hevc'; direction = 'drag'; action = 'drag' },
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'av1'; direction = 'forward'; action = 'shortForward' },
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'av1'; direction = 'backward'; action = 'shortBackward' },
+  [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'av1'; direction = 'drag'; action = 'drag' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'av1'; direction = 'forward'; action = 'longForward' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'av1'; direction = 'backward'; action = 'longBackward' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'av1'; direction = 'drag'; action = 'drag' },
+  [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'av1'; direction = 'startup'; action = 'startup' },
+  [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'av1'; direction = 'fullscreen'; action = 'fullscreen' },
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'h264'; direction = 'fullscreen'; action = 'fullscreen' },
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'h264'; direction = 'startup'; action = 'startup' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'h264'; direction = 'startup'; action = 'startup' },
@@ -242,6 +255,7 @@ $bindings = @(
   [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'hevc'; direction = 'startup'; action = 'startup' },
   [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'hevc'; direction = 'fullscreen'; action = 'fullscreen' },
   [ordered]@{ width = 3840; gop = 'short-gop'; codec = 'av1'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'av1'; direction = 'startup'; action = 'startup' },
   [ordered]@{ width = 3840; gop = 'long-gop'; codec = 'av1'; direction = 'fullscreen'; action = 'fullscreen' }
 )
 $actions = @('startup', 'shortForward', 'shortBackward', 'drag', 'longForward', 'longBackward', 'fullscreen')
@@ -270,7 +284,10 @@ foreach ($case in $cases) {
 
     $binding = $matchingBindings[0]
     $prefix = Get-BindingPrefix $binding
-    $candidate = Get-ValidatedMatrixCandidate -Prefix $prefix -Root $evidenceRootFullPath
+    $requiresFixtureEvidence = [string]$case.selectionStatus -eq
+      'qa-generated-fixture-and-ffprobe-verified'
+    $candidate = Get-ValidatedMatrixCandidate -Prefix $prefix -Root $evidenceRootFullPath `
+      -RequireFixtureDirectory:$requiresFixtureEvidence
     if ($null -eq $candidate) {
       $omitted += [ordered]@{
         caseId = [string]$case.id
@@ -292,7 +309,10 @@ foreach ($case in $cases) {
   }
 
   $steadyPrefix = Get-SteadyRuntimeBindingPrefix $case
-  $steadyCandidate = Get-ValidatedSteadyRuntimeCandidate -Prefix $steadyPrefix -Root $evidenceRootFullPath
+  $requiresFixtureEvidence = [string]$case.selectionStatus -eq
+    'qa-generated-fixture-and-ffprobe-verified'
+  $steadyCandidate = Get-ValidatedSteadyRuntimeCandidate -Prefix $steadyPrefix -Root $evidenceRootFullPath `
+    -RequireFixtureDirectory:$requiresFixtureEvidence
   if ($null -ne $steadyCandidate) {
     $caseEvidence['steadyRuntime'] = @($steadyCandidate.directory.FullName)
     $steadyRuntimeMapped += [ordered]@{
