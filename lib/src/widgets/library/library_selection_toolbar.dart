@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_theme_tokens.dart';
 import 'library_reference_icon_button.dart';
+import 'library_selection_summary.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -44,46 +45,10 @@ class LibrarySelectionToolbar extends StatelessWidget {
       height: libraryTopBarControlHeight,
       child: Row(
         children: [
-          InkWell(
-            key: LibrarySmokeKeys.librarySelectAll,
-            borderRadius: BorderRadius.circular(8),
-            onTap: onToggleSelectAll,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: allSelected,
-                    onChanged: onToggleSelectAll == null
-                        ? null
-                        : (_) => onToggleSelectAll!(),
-                    shape: const CircleBorder(),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  const SizedBox(width: 6),
-                  Text.rich(
-                    TextSpan(
-                      style: const TextStyle(
-                        color: libraryText,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                      ),
-                      children: [
-                        const TextSpan(text: '\u5df2\u9009\u62e9 '),
-                        TextSpan(
-                          text: '$selectedCount',
-                          style: const TextStyle(
-                            color: appAccentViolet,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const TextSpan(text: ' \u9879'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          LibrarySelectionSummary(
+            selectedCount: selectedCount,
+            allSelected: allSelected,
+            onToggleSelectAll: onToggleSelectAll,
           ),
           const Spacer(),
           TextButton.icon(

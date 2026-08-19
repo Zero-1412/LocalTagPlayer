@@ -6,6 +6,7 @@ import '../../core/layout_size.dart';
 import '../../models/library_sort.dart';
 import '../app_theme_tokens.dart';
 import 'library_compact_top_sort_control.dart';
+import 'library_filter_result_line.dart';
 import 'library_reference_icon_button.dart';
 import 'library_result_view_toggle.dart';
 import 'library_selection_toolbar.dart';

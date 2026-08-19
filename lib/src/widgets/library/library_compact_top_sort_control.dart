@@ -5,6 +5,7 @@ import '../app_theme_tokens.dart';
 import 'library_reference_icon_button.dart';
 import 'library_smoke_keys.dart';
 import 'library_sort_control.dart';
+import 'library_sort_field_preview.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -105,45 +106,9 @@ class LibraryCompactTopSortControl extends StatelessWidget {
             ),
       icon: showCurrentField ? null : const Icon(Icons.sort_rounded, size: 20),
       child: showCurrentField
-          ? SizedBox(
+          ? SortFieldPreview(
               width: _expandedSortFieldWidth,
-              child: Container(
-                height: libraryTopBarControlHeight,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: librarySurfaceAlt,
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  border: Border.all(color: libraryBorder),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.sort_rounded,
-                      size: 19,
-                      color: appAccentViolet,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        sortModeLabel(sortMode),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: libraryText,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.expand_more_rounded,
-                      size: 18,
-                      color: libraryTextMuted,
-                    ),
-                  ],
-                ),
-              ),
+              sortMode: sortMode,
             )
           : null,
     );

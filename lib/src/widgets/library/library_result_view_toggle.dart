@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app_theme_tokens.dart';
 import 'library_reference_icon_button.dart';
+import 'library_result_view_toggle_icon.dart';
 import 'library_smoke_keys.dart';
 
 // ignore_for_file: slash_for_doc_comments, use_key_in_widget_constructors
@@ -43,7 +44,6 @@ class _ResultViewToggleState extends State<ResultViewToggle>
   late final AnimationController _controller;
   late bool _visualDense;
   var _transitionVersion = 0;
-
   @override
   void initState() {
     super.initState();
@@ -65,11 +65,13 @@ class _ResultViewToggleState extends State<ResultViewToggle>
     setState(() => _visualDense = widget.dense);
     _animateTo(widget.dense);
   }
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
+
   /** 根据剩余距离计算时长，让快速反向保持与正向一致的移动速度。 */
   Duration _remainingDuration(double target) {
     final distance = (_controller.value - target).abs();
@@ -161,7 +163,7 @@ class _ResultViewToggleState extends State<ResultViewToggle>
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              _TopViewIcon(
+                              ResultViewToggleIcon(
                                 icon: Icons.grid_view_rounded,
                                 color: Color.lerp(
                                   appAccentViolet,
@@ -169,7 +171,7 @@ class _ResultViewToggleState extends State<ResultViewToggle>
                                   progress,
                                 )!,
                               ),
-                              _TopViewIcon(
+                              ResultViewToggleIcon(
                                 icon: Icons.view_list_rounded,
                                 color: Color.lerp(
                                   libraryTextMuted,
@@ -187,35 +189,6 @@ class _ResultViewToggleState extends State<ResultViewToggle>
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/** 滑块内只负责绘制状态的图标，不单独承担点击命中。 */
-class _TopViewIcon extends StatelessWidget {
-  const _TopViewIcon({
-    required this.icon,
-    required this.color,
-  });
-
-  /** 当前布局类型对应的图标。 */
-  final IconData icon;
-
-  /** 颜色直接跟随滑块控制器插值，避免额外隐式动画相互抢帧。 */
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 30,
-      height: 32,
-      child: Center(
-        child: Icon(
-          icon,
-          size: 18,
-          color: color,
         ),
       ),
     );
