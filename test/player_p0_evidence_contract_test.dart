@@ -117,6 +117,14 @@ void main() {
     expect(assembler, contains('selectionRule'));
     expect(assembler, contains('shortForward'));
     expect(assembler, contains('longBackward'));
+    expect(
+        assembler,
+        contains(
+            "gop = 'short-gop'; codec = 'h264'; direction = 'drag'; action = 'drag'"));
+    expect(
+        assembler,
+        contains(
+            "gop = 'short-gop'; codec = 'hevc'; direction = 'drag'; action = 'drag'"));
     expect(assembler, contains('postdwell'));
     expect(assembler, contains('no-exact-directory-binding'));
   });

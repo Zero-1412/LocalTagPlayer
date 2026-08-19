@@ -117,10 +117,12 @@ if ($cases.Count -ne 12) {
 $bindings = @(
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'h264'; direction = 'forward'; action = 'shortForward' },
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'h264'; direction = 'backward'; action = 'shortBackward' },
+  [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'h264'; direction = 'drag'; action = 'drag' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'h264'; direction = 'forward'; action = 'longForward' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'h264'; direction = 'backward'; action = 'longBackward' },
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'hevc'; direction = 'forward'; action = 'shortForward' },
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'hevc'; direction = 'backward'; action = 'shortBackward' },
+  [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'hevc'; direction = 'drag'; action = 'drag' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'hevc'; direction = 'forward'; action = 'longForward' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'hevc'; direction = 'backward'; action = 'longBackward' },
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'av1'; direction = 'forward'; action = 'shortForward' },

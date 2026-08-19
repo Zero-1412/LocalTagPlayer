@@ -91,9 +91,9 @@ pwsh -NoProfile -File .\tool\validate_player_p0_evidence.ps1 `
   -Output .\.local\qa\p0-evidence-gate-assembled.json
 ~~~
 
-本机当前装配结果为 `17` 个明确 case/action 映射、`67` 个保留未装配 action；其中包括
-1080p 三编码 short/long 的明确 forward/backward 矩阵，以及已有的 4K longhold 矩阵。
-没有精确 GOP 绑定的拖动、startup、fullscreen 不会因为目录“看起来相近”而被装配；缺失
+本机当前装配结果为 `19` 个明确 case/action 映射、`65` 个保留未装配 action；其中包括
+1080p H.264/HEVC short GOP 的正式 PlayerPage 精确拖动矩阵、三编码 short/long 的明确
+forward/backward 矩阵，以及已有的 4K longhold 矩阵。没有精确 GOP 绑定的其它拖动、startup、fullscreen 不会因为目录“看起来相近”而被装配；缺失
 素材的 1080p AV1 short 与 4K AV1 long 也继续由原始 manifest 保持缺口。装配输出中的
 `evidenceAssembly` 保存选择规则、已映射目录名和省略原因，便于同机复跑和审计。
 
@@ -152,8 +152,9 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 重新计算；其中只有目录名能精确绑定素材和 GOP 的结果才由装配器填入统一 manifest，
 其它结果仍是支撑证据，不能替代每个 case/action 的三会话关联。
 
-- 1080p 三编码的 shortForward、shortBackward、drag 矩阵各有 `3/3` 有效会话；首个
-  DWM p95 分别为：H.264 `81/92/343 ms`、HEVC `86/94/307 ms`、AV1 `86/93/362 ms`。
+- 1080p 三编码的 shortForward、shortBackward、drag 矩阵各有 `3/3` 有效会话；其中
+  H.264/HEVC short GOP drag 已用新目录精确绑定到对应素材；首个 DWM p95 分别为：
+  H.264 `81/92/343 ms`、HEVC `86/94/307 ms`、AV1 `86/93/362 ms`。
   页面语义、decoder drop 和最终硬解在这些矩阵中为 `pass`；VO drop、独立稳态分母和
   稳态 Texture 重建仍为 `unknown`，所以矩阵整体不能写成通过。
 - 1080p longForward 的首个 DWM p95 为 H.264 `75 ms`、HEVC `99 ms`、AV1 `1105 ms`；
