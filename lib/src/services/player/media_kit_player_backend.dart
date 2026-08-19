@@ -82,8 +82,12 @@ class MediaKitPlayerBackend
   })  : _player = Player(
           // 4K 长视频需要稳定输入窗口；该预算只属于当前播放会话，
           // 不扩大缩略图或媒体详情后台任务的内存占用。
-          configuration:
-              const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
+          configuration: const PlayerConfiguration(
+            bufferSize: 64 * 1024 * 1024,
+            // 外挂字幕必须进入正式 Texture；media_kit 默认 libass=false 会同时
+            // 把 sub-visibility 设为 no，导致轨道已选中但桌面画面永远不可见。
+            libass: true,
+          ),
         ),
         _controllerConfiguration = VideoControllerConfiguration(
           width: 1920,

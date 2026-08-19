@@ -105,6 +105,16 @@
   A/B DWM 可见性 `3/3 pass`；逐帧、倍速、外挂字幕均 `3/3 unknown`，validator exit `3`，
   聚合 P1 总体保持 unknown。ready 前退出会话被排除，未以重跑覆盖 unknown。
 
+- 2026-08-20 由真实 subtitle DWM unknown 反查到 `media_kit` 默认
+  `PlayerConfiguration.libass=false` 会把 `sub-visibility` 固定为 `no`；正式
+  `MediaKitPlayerBackend` 已以 `libass: true` 初始化，未改变队列、标签或持久化数据。
+  修复后 H.264、HEVC、AV1 各跑 3/3 独立正式 Texture 会话，采样 `31.8–32.3 fps`，
+  三组均 `subtitleSelected=true`、`subtitleVisibilityEnabled=true`，字幕下方 DWM
+  可见性均 `3/3 pass`。H.264 与 AV1 四项控制均 `3/3 pass`；HEVC 的倍速、A-B、
+  外挂字幕均 `3/3 pass`，逐帧 DWM 仍 `3/3 unknown`。匿名证据目录为
+  `.local/qa/precision-dwm-matrix-long-{h264,hevc,av1}-libass-20260820a`，旧的
+  `libass=false` 矩阵保留为根因前基线，不与修复后结果混合。
+
 - 2026-08-20 重新评估已有正式 PlayerPage/Texture 矩阵：1080p 三编码的 shortForward、
   shortBackward、drag 各为 `3/3` 有效，首个 DWM p95 分别为 H.264 `81/92/343 ms`、
   HEVC `86/94/307 ms`、AV1 `86/93/362 ms`；页面语义、decoder drop、最终硬解为 pass，

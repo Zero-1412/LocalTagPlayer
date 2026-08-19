@@ -2006,6 +2006,11 @@ void main() {
     expect(coordinator, contains('confirmationTimeout'));
     expect(coordinator, contains('recordActualTextureSize'));
     expect(backend, contains('adaptiveTextureSizingEnabled = true'));
+    expect(
+      backend,
+      contains('libass: true'),
+      reason: '正式 Texture 必须保留可见外挂字幕渲染配置',
+    );
     expect(backend, contains('_textureSizeCoordinator'));
     expect(backend, contains('_requestTextureOutputSize'));
     expect(backend, contains('_controller.setSize('));

@@ -248,10 +248,10 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | 短按 | 页面语义与 DWM 动作合同 | 首个真实 DWM 帧 | 已有 Texture action 证据，实体长按仍未闭环 |
 | 拖动 | Slider onChangeEnd、latest-only 合并、释放 | 预览连续变化与松手准确收敛 | 命令合同已有；统一 P0 manifest 后再汇总 |
 | 长按 | 前进临时扫描、后退 latest-only、KeyDown/Up 生命周期 | 按住期间 DWM 首帧和后续节奏 | 自动化已有；实体 WM_KEYDOWN/UP QPC 为 unknown |
-| 可调倍速 | setRate、播放中状态/速度读回、恢复读回、资源释放 | 真实窗口播放节奏预算 | 命令/资源 `3/3 pass`；DWM 聚合可见性为 `unknown` |
-| 逐帧 | frame-step/frame-back-step、错误和释放 | 逐帧真实 DWM 画面 | 命令可用；可见性为 unknown |
-| A-B loop | A/B/实际 A→B→A 循环、清除命令、状态和释放 | A→B 重复播放画面 | 命令/资源与 DWM 可见性 `3/3 pass` |
-| 外挂字幕 | 加载/轨道/关闭命令和释放 | 字幕在真实 Texture 上可见、同步 | 命令可用；可见性为 unknown |
+| 可调倍速 | setRate、播放中状态/速度读回、恢复读回、资源释放 | 真实窗口播放节奏预算 | H.264/HEVC/AV1 各 3/3 pass（同一修复后 Debug 构建） |
+| 逐帧 | frame-step/frame-back-step、错误和释放 | 逐帧真实 DWM 画面 | H.264/AV1 各 3/3 pass；HEVC command/resource pass、DWM visible unknown |
+| A-B loop | A/B/实际 A→B→A 循环、清除命令、状态和释放 | A→B 重复播放画面 | H.264/HEVC/AV1 各 3/3 pass（同一修复后 Debug 构建） |
+| 外挂字幕 | 加载/轨道/关闭命令和释放 | 字幕在真实 Texture 上可见并落入测试时间窗 | H.264/HEVC/AV1 各 3/3 pass（同一修复后 Debug 构建） |
 
 “命令可用”不升级为“功能完成”。在可见性证据出现前，P1 只能报告命令合同通过和
 可见性 unknown。
@@ -320,8 +320,27 @@ pwsh -NoProfile -File .\tool\run_player_precision_controls_dwm_matrix.ps1 `
 `.local/qa/precision-dwm-matrix-grid16-rate1s-20260820b`：3/3 独立会话有效，采样为
 `32.0–32.2 fps`，资源释放和四项 command/resource 均 `3/3 pass`，A/B loop 的 DWM
 可见性 `3/3 pass`；逐帧、倍速和外挂字幕均 `3/3 unknown`，所以聚合校验为 A/B
-`overall=pass`，其它三个控制和矩阵总体 `overall=unknown`，validator exit `3`。前一轮
+`overall=pass`，其它三个控制和矩阵总体 `overall=unknown`，validator exit `3`。这是
+`libass=false` 旧 Debug 构建的基线，前一轮
 ready 前退出的会话和本矩阵之外的探索轮次均未混入该聚合结果。
+
+随后根据真实属性读回定位到 `media_kit` 默认 `PlayerConfiguration.libass=false` 会把
+`sub-visibility` 初始化为 `no`；外挂字幕轨道虽已选中，但不可能进入正式 Texture。正式
+`MediaKitPlayerBackend` 现在以 `libass: true` 初始化同一 NativePlayer，并保留独立
+command/resource 与 DWM 观察边界。修复后的三编码代表性矩阵均为 3/3 有效、采样约
+`31.8–32.3 fps`、资源释放 `3/3 pass`，外挂字幕均 `subtitleSelected=true`、
+`subtitleVisibilityEnabled=true`，字幕下方 DWM 网格均 `3/3 pass`：
+
+- H.264：`.local/qa/precision-dwm-matrix-long-h264-libass-20260820a`，逐帧、倍速、
+  A-B、外挂字幕的 command/resource 与 visible 均 `3/3 pass`，矩阵 exit `0`；
+- HEVC：`.local/qa/precision-dwm-matrix-long-hevc-libass-20260820a`，倍速、A-B、外挂
+  字幕均 `3/3 pass`；逐帧 command/resource `3/3 pass` 但 DWM visible `3/3 unknown`，
+  因而该矩阵总体 `unknown`；
+- AV1：`.local/qa/precision-dwm-matrix-long-av1-libass-20260820a`，四项 command/resource
+  与 visible 均 `3/3 pass`，矩阵 exit `0`。
+
+因此外挂字幕在这组三编码代表性素材上已拥有真实可见证据；HEVC 逐帧仍单独保持
+`unknown`，不能被其它控制或编码的通过结果覆盖。
 
 ## 阶段 D：外部验收清单
 
@@ -345,9 +364,9 @@ FilterQuery / TagQueryService: unchanged
 filtered queue: unchanged
 thumbnail/media queue: unchanged
 user data: preserved
-prompt impact: satisfies first principles; added finite evidence contract without changing playback
+prompt impact: satisfies first principles; minimal subtitle-rendering fix plus finite evidence contract, no queue/data semantic change
 protected behaviors: preserved
 unauthorized feature removal: none
 mount and reachability: not changed; existing PlayerPage evidence retained
-validation: focused contract tests 21/21 passed; PowerShell parsers passed; flutter analyze no issues; flutter build windows --debug passed; steady runtime 10 cases × 3 sessions passed the bounded matrix; P1 precision matrix 3/3 sessions valid with validator exit 3 and overall=unknown; P0 validator exit 2 with overall=fail as required by remaining DWM/action/VO/manifest unknowns
+validation: focused contract tests 21/21 passed; subtitle/backend architecture contract passed; PowerShell parsers passed; flutter analyze no issues; flutter build windows --debug passed; steady runtime 10 cases × 3 sessions passed the bounded matrix; repaired P1 H.264 and AV1 matrices 3/3 valid with validator exit 0 and overall=pass; repaired HEVC matrix 3/3 valid with validator exit 3 and overall=unknown because frame-step DWM remained unknown; P0 validator exit 2 with overall=fail as required by remaining DWM/action/VO/manifest unknowns
 ~~~

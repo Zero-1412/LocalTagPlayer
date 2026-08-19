@@ -922,13 +922,32 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
         final trackList = await player.playerService.getProperty('track-list');
         subtitleLoaded = trackList.contains('Local Tag Player QA') ||
             trackList.contains('subtitle');
-        // sub-add 后给同一 Texture 一个短暂的合成窗口；桌面观察器只记录匿名下方区域
-        // 指纹差异，不能把 track-list 读回当作字幕可见性。
-        await Future<void>.delayed(const Duration(milliseconds: 450));
+        // 暂停状态可能没有新的视频合成帧；加载后短暂播放再暂停，才能给字幕层一个
+        // 真实 Texture/DWM 重绘窗口。该播放只存在于隔离 Debug QA，不改变正式页面时序。
+        await player.playerService.play();
+        await Future<void>.delayed(const Duration(milliseconds: 650));
+        await player.playerService.pause();
+        final subtitleId = (await player.playerService.getProperty('sid'))
+            .trim()
+            .toLowerCase();
+        final subtitleVisibility =
+            (await player.playerService.getProperty('sub-visibility'))
+                .trim()
+                .toLowerCase();
+        final subtitleSelected = subtitleId.isNotEmpty &&
+            subtitleId != 'no' &&
+            subtitleId != 'unavailable';
+        final subtitleVisibilityEnabled = subtitleVisibility == 'yes' ||
+            subtitleVisibility == 'true' ||
+            subtitleVisibility == '1';
+        // track-list/属性回执只说明资源状态；桌面观察器仍必须独立观察字幕区域变化。
         _appendPrecisionEvidence(<String, Object?>{
           'stage': 'external_subtitle_complete',
           'success': subtitleLoaded,
           'trackListObserved': trackList.isNotEmpty,
+          'subtitleSelected': subtitleSelected,
+          'subtitleVisibilityEnabled': subtitleVisibilityEnabled,
+          'subtitlePlaybackWindow': true,
           'positionMs': player.playerService.state.position.inMilliseconds,
           'frame': await player.readPresentedVideoFrame(),
           'frameEvidence': player.lastPresentedVideoFrameEvidence,

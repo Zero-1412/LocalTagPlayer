@@ -149,6 +149,8 @@ void main() {
     expect(source, contains('_isPlaybackRateReadback'));
     expect(source, contains('ab_loop_clear'));
     expect(source, contains('external_subtitle_complete'));
+    expect(source, contains('subtitlePlaybackWindow'));
+    expect(source, contains('sub-visibility'));
     expect(source, contains('precision_controls_qa_complete'));
   });
 
