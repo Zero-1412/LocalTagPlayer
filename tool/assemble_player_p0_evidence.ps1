@@ -143,6 +143,7 @@ $bindings = @(
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'av1'; direction = 'backward'; action = 'longBackward' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'av1'; direction = 'drag'; action = 'drag' },
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'h264'; direction = 'fullscreen'; action = 'fullscreen' },
+  [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'h264'; direction = 'startup'; action = 'startup' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'h264'; direction = 'fullscreen'; action = 'fullscreen' },
   [ordered]@{ width = 1920; gop = 'short-gop'; codec = 'hevc'; direction = 'fullscreen'; action = 'fullscreen' },
   [ordered]@{ width = 1920; gop = 'long-gop'; codec = 'hevc'; direction = 'fullscreen'; action = 'fullscreen' },

@@ -102,6 +102,10 @@ Future<void> runPlayerRealPagePixelQa() async {
     },
   );
   _appendLifecycle(outputDirectory, 'window_ready_before_run_app');
+  if (environment['LOCAL_TAG_PLAYER_PIXEL_STARTUP_QA'] == '1') {
+    _writeStartupMarker(outputDirectory);
+    await _waitForStartupProbe(outputDirectory);
+  }
   runApp(
     _PlayerRealPagePixelQaApp(
       samplePath: samplePath,
@@ -114,6 +118,47 @@ Future<void> runPlayerRealPagePixelQa() async {
       manualKeyboardHoldMode: manualKeyboardHoldMode,
     ),
   );
+}
+
+/**
+ * 在正式 PlayerPage 挂载前固定启动测量的墙钟锚点。
+ *
+ * Dart 与 Win32 探针没有共享的 Stopwatch 实例，因此这里只写 UTC 微秒；探针在同一
+ * 台机器上用当前 QPC/UTC 对照把它换算为 QPC 起点，并在报告中保留该换算证据。该文件
+ * 只存在于隔离 Debug QA 输出，不进入正式应用或用户数据。
+ */
+void _writeStartupMarker(Directory outputDirectory) {
+  final marker = File(
+    '${outputDirectory.path}${Platform.pathSeparator}startup-marker.json',
+  );
+  marker.writeAsStringSync(
+    jsonEncode(<String, Object?>{
+      'schemaVersion': 1,
+      'testProcessId': pid,
+      'windowTitle': 'LocalTagPlayer Real PlayerPage QA',
+      'backend': 'media-kit-flutter-texture',
+      'surface': 'product-player-page',
+      'state': 'window-shown-before-run-app',
+      'utcUs': DateTime.now().toUtc().microsecondsSinceEpoch,
+    }),
+    flush: true,
+  );
+  _appendLifecycle(outputDirectory, 'startup_marker_before_run_app');
+}
+
+/** 启动探针附着前不挂载页面，避免测量起点落在首帧之后。 */
+Future<void> _waitForStartupProbe(Directory outputDirectory) async {
+  final probeReady = File(
+    '${outputDirectory.path}${Platform.pathSeparator}startup-probe-ready.json',
+  );
+  final deadline = DateTime.now().add(const Duration(seconds: 20));
+  while (!probeReady.existsSync() && DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  if (!probeReady.existsSync()) {
+    throw StateError('启动 DWM 探针未在挂载 PlayerPage 前附着');
+  }
+  _appendLifecycle(outputDirectory, 'startup_probe_attached_before_run_app');
 }
 
 int _readQaWindowDimension(String name, {required int fallback}) {
@@ -234,6 +279,7 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
   var _precisionControlsStarted = false;
   var _precisionControlsCompleted = false;
   var _rendererProbeBusy = false;
+  var _startupSurfaceReadyPublished = false;
   bool? _lastFullscreen;
   int? _lastTextureGeneration;
   double? _lastTextureWidth;
@@ -292,6 +338,28 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       final generation = surface.textureGenerationCount;
       final width = surface.textureWidthPx;
       final height = surface.textureHeightPx;
+      // 这只是筛掉 runApp/布局背景变化的 backend readiness 辅助标记，不是 DWM 首帧；
+      // 探针仍必须从 startup UTC 起点等待中心桌面像素连续变化。
+      if (!_startupSurfaceReadyPublished &&
+          File(
+            '${widget.outputDirectory.path}${Platform.pathSeparator}startup-marker.json',
+          ).existsSync() &&
+          player.playerService.textureId.value != null &&
+          player.playerService.state.duration > Duration.zero) {
+        _startupSurfaceReadyPublished = true;
+        File(
+          '${widget.outputDirectory.path}${Platform.pathSeparator}startup-surface-ready.json',
+        ).writeAsStringSync(
+          '${jsonEncode(<String, Object?>{
+                'schemaVersion': 1,
+                'event': 'texture-id-and-duration-ready',
+                'evidence': 'backend-readiness-only',
+                'utcUs': DateTime.now().toUtc().microsecondsSinceEpoch,
+                'textureGenerationCount': generation,
+              })}\n',
+          flush: true,
+        );
+      }
       final changed = _lastFullscreen != fullscreen ||
           _lastTextureGeneration != generation ||
           _lastTextureWidth != width ||

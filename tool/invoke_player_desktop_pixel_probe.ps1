@@ -21,7 +21,7 @@ param(
   [string]$WindowTitle = 'local_tag_player',
   # 可选 PID 与窗口标题双重核验，推荐由专用 QA 启动器传入。
   [int]$ProcessId = 0,
-  [ValidateSet('forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward', 'playPause', 'fullscreen', 'playerFullscreen', 'click', 'progressDrag', 'custom')]
+  [ValidateSet('startup', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward', 'playPause', 'fullscreen', 'playerFullscreen', 'click', 'progressDrag', 'custom')]
   [string]$Action = 'forward',
   # custom 动作的 Win32 virtual-key；普通模式不接受隐式覆盖，保留可复现默认快捷键。
   [ValidateRange(0, 255)]
@@ -78,6 +78,10 @@ param(
   [ValidateSet('centerCrop', 'distributed', 'scaled')]
   [string]$PixelSamplingMode = 'centerCrop',
   [bool]$RequireStaticBaseline = $true,
+  # startup 由 Debug QA 在 runApp 前写出 UTC 标记；探针用同机 QPC/UTC 估算启动锚点。
+  [long]$StartupMarkerUtcUs = 0,
+  [string]$StartupProbeReadyPath = '',
+  [string]$StartupSurfaceReadyPath = '',
   [string]$Output = '',
   [switch]$ValidateOnly
 )
@@ -87,6 +91,15 @@ $ErrorActionPreference = 'Stop'
 
 if ($env:OS -ne 'Windows_NT') {
   throw '桌面像素探针只支持 Windows。'
+}
+if ($Action -eq 'startup' -and $StartupMarkerUtcUs -le 0) {
+  throw 'startup 动作必须提供 StartupMarkerUtcUs。'
+}
+if ($Action -eq 'startup' -and [string]::IsNullOrWhiteSpace($StartupProbeReadyPath)) {
+  throw 'startup 动作必须提供 StartupProbeReadyPath。'
+}
+if ($Action -eq 'startup' -and [string]::IsNullOrWhiteSpace($StartupSurfaceReadyPath)) {
+  throw 'startup 动作必须提供 StartupSurfaceReadyPath。'
 }
 
 $nativeSource = @'
@@ -132,6 +145,7 @@ public sealed class DesktopPixelProbeAction
     public bool manualHoldSatisfied { get; set; }
     public long firstChangedPixelQpcUs { get; set; }
     public long firstGeometryChangeQpcUs { get; set; }
+    public int startupToFirstChangedPixelMs { get; set; }
     public int inputDownToFirstChangedPixelMs { get; set; }
     public int? inputUpToFirstChangedPixelMs { get; set; }
     public int inputDownToGeometryChangeMs { get; set; }
@@ -175,6 +189,8 @@ public sealed class DesktopPixelProbeReport
     public int timedOutSamples { get; set; }
     public int p50InputDownToPixelMs { get; set; }
     public int p95InputDownToPixelMs { get; set; }
+    public int p50StartupToPixelMs { get; set; }
+    public int p95StartupToPixelMs { get; set; }
     public int? p50InputUpToPixelMs { get; set; }
     public int? p95InputUpToPixelMs { get; set; }
     public int p50InputDownToGeometryMs { get; set; }
@@ -362,11 +378,21 @@ public static class DesktopPixelProbe
         int minimumCaptureFps,
         bool requireStaticBaseline,
         bool geometryAction,
+        bool startupAction,
+        long startupMarkerUtcUs,
+        string startupProbeReadyPath,
+        string startupSurfaceReadyPath,
         string samplingMode)
     {
         if (String.IsNullOrWhiteSpace(windowTitle)) throw new ArgumentException("windowTitle");
-        if (!mouseClick && !mouseProgressDrag && (virtualKey <= 0 || virtualKey > 255))
+        if (!startupAction && !mouseClick && !mouseProgressDrag && (virtualKey <= 0 || virtualKey > 255))
             throw new ArgumentOutOfRangeException("virtualKey");
+        if (startupAction && startupMarkerUtcUs <= 0)
+            throw new ArgumentException("启动 DWM QA 必须传入 startupMarkerUtcUs。");
+        if (startupAction && String.IsNullOrWhiteSpace(startupProbeReadyPath))
+            throw new ArgumentException("启动 DWM QA 必须传入 startupProbeReadyPath。");
+        if (startupAction && String.IsNullOrWhiteSpace(startupSurfaceReadyPath))
+            throw new ArgumentException("启动 DWM QA 必须传入 startupSurfaceReadyPath。");
         if (manualLongKeyboard && !manualKeyboard)
             throw new ArgumentException("长按实体键盘模式必须同时启用 manualKeyboard。");
         if (manualKeyboard && String.IsNullOrWhiteSpace(nativeKeyboardEvidencePath))
@@ -411,6 +437,16 @@ public static class DesktopPixelProbe
             Thread.Sleep(240);
         }
 
+        if (startupAction)
+        {
+            // 让 Debug QA 应用在 runApp 前继续等待；从此处开始，下一次 Flutter/D3D11
+            // 合成变化才有可能是正式 PlayerPage 的首个真实桌面呈现帧。
+            File.WriteAllText(
+                startupProbeReadyPath,
+                "{\"schemaVersion\":1,\"state\":\"probe-attached-before-run-app\"}",
+                new System.Text.UTF8Encoding(false));
+        }
+
         var report = new DesktopPixelProbeReport {
             evidence = "desktop-composited-pixel-change",
             captureMethod = samplingMode == "distributed"
@@ -425,7 +461,9 @@ public static class DesktopPixelProbe
             initialClientHeight = initialHeight,
             windowDpi = windowDpi,
             virtualKey = virtualKey,
-            inputMode = manualKeyboard
+            inputMode = startupAction
+                ? "startup-dwm-qpc-utc"
+                : manualKeyboard
                 ? "manual-keyboard-native-qpc"
                 : mouseClick
                 ? "win32-mouse-click"
@@ -437,11 +475,15 @@ public static class DesktopPixelProbe
             holdMilliseconds = holdMilliseconds,
             manualLongHoldMinimumMilliseconds = manualLongHoldMinimumMilliseconds,
             pixelChangeThresholdPercent = thresholdPercent,
-            actions = new List<DesktopPixelProbeAction>()
+            actions = new List<DesktopPixelProbeAction>(),
+            p50StartupToPixelMs = 0,
+            p95StartupToPixelMs = 0
         };
 
         var allCaptured = 0;
-        var captureStartUs = NowUs();
+        var captureStartUs = startupAction
+            ? EstimateQpcUsFromUnixUtcUs(startupMarkerUtcUs)
+            : NowUs();
         var excludedIdleUs = 0L;
         var lastCaptureUs = captureStartUs;
         var captureIntervalUs = Math.Max(1L, 1000000L / frameRate);
@@ -455,6 +497,7 @@ public static class DesktopPixelProbe
                     : "desktop-composited-pixel-change",
                 samples = new List<DesktopPixelProbeSample>(),
                 presentedChanges = new List<DesktopPixelProbePresentedChange>(),
+                keyDownQpcUs = startupAction ? captureStartUs : 0,
                 failure = ""
             };
             var inputEvidenceMarkerUtc = DateTime.MinValue;
@@ -486,7 +529,7 @@ public static class DesktopPixelProbe
             }
             var baselineFrames = new List<PixelFrame>();
             var baselineDeltas = new List<double>();
-            var baselineCount = Math.Max(5, frameRate / 4);
+            var baselineCount = startupAction ? 1 : Math.Max(5, frameRate / 4);
             PixelFrame baselinePrevious = previous;
             // 窗口重建/释放期间 GetClientRect 或桌面 DC 可能短暂失败。保留静态基线
             // 的帧数和阈值合同，只在一个有界窗口内重试；若仍无法取得足够帧，输出
@@ -518,7 +561,7 @@ public static class DesktopPixelProbe
             }
             var baseline = baselineFrames[baselineFrames.Count - 1];
             action.baselineMotionP95Percent = Percentile(baselineDeltas, 0.95);
-            action.baselineStatic = action.baselineMotionP95Percent < thresholdPercent;
+            action.baselineStatic = startupAction || action.baselineMotionP95Percent < thresholdPercent;
             if (requireStaticBaseline && !action.baselineStatic)
             {
                 action.failure = "baseline_not_static";
@@ -530,7 +573,11 @@ public static class DesktopPixelProbe
             var automatedKeyboardHoldMode = false;
             long automatedKeyboardHoldReleaseUs = 0;
             long automatedKeyboardRepeatUs = 0;
-            if (manualKeyboard)
+            if (startupAction)
+            {
+                action.keyUpQpcUs = captureStartUs;
+            }
+            else if (manualKeyboard)
             {
                 action.inputUsesNativeQpcAnchor = true;
                 // 等待操作者实体按键期间没有进行像素采样；必须从 capture-rate 分母剔除，
@@ -595,17 +642,22 @@ public static class DesktopPixelProbe
             if (!manualLongKeyboard && !automatedKeyboardHoldActive)
                 excludedIdleUs += Math.Max(0L, action.keyUpQpcUs - action.keyDownQpcUs);
 
-            var deadlineUs = (manualLongKeyboard || automatedKeyboardHoldActive
+            var deadlineUs = startupAction
+                ? captureStartUs + timeoutMilliseconds * 1000L
+                : (manualLongKeyboard || automatedKeyboardHoldActive
                 ? action.keyDownQpcUs + holdMilliseconds * 1000L
                 : action.keyUpQpcUs) +
                 timeoutMilliseconds * 1000L;
             long firstChangedUs = 0;
             long lastPresentedChangeUs = 0;
             var changedConsecutively = 0;
+            var startupSurfaceReady = !startupAction || File.Exists(startupSurfaceReadyPath);
             var unchangedRunStartUs = action.keyDownQpcUs;
             while (NowUs() < deadlineUs)
             {
                 var nowUs = NowUs();
+                if (startupAction && !startupSurfaceReady)
+                    startupSurfaceReady = File.Exists(startupSurfaceReadyPath);
                 if (automatedKeyboardHoldActive)
                 {
                     if (nowUs >= automatedKeyboardRepeatUs)
@@ -670,6 +722,7 @@ public static class DesktopPixelProbe
                 // 相邻视频帧可能只改变少量采样像素，不能用过高的差异阈值把它们误判
                 // 成静止；这些条目仍只是 DWM 呈现变化，不冒充独立解码帧。
                 var presentedChange = baselineDelta >= thresholdPercent &&
+                    startupSurfaceReady &&
                     (changedConsecutively == 0 ||
                      (previous != null && current.Fingerprint != previous.Fingerprint));
                 if (presentedChange &&
@@ -711,7 +764,7 @@ public static class DesktopPixelProbe
                     action.passed = true;
                     break;
                 }
-                if (baselineDelta >= thresholdPercent)
+                if (baselineDelta >= thresholdPercent && startupSurfaceReady)
                 {
                     changedConsecutively++;
                     if (changedConsecutively == 1) firstChangedUs = nowUs;
@@ -736,8 +789,11 @@ public static class DesktopPixelProbe
                     if (!firstChangedObserved)
                     {
                         action.firstChangedPixelQpcUs = firstChangedUs;
-                        action.inputDownToFirstChangedPixelMs = (int)((firstChangedUs - action.keyDownQpcUs) / 1000L);
-                        if (!manualKeyboard && action.keyUpQpcUs > 0)
+                        if (startupAction)
+                            action.startupToFirstChangedPixelMs = (int)((firstChangedUs - captureStartUs) / 1000L);
+                        else
+                            action.inputDownToFirstChangedPixelMs = (int)((firstChangedUs - action.keyDownQpcUs) / 1000L);
+                        if (!startupAction && !manualKeyboard && action.keyUpQpcUs > 0)
                             action.inputUpToFirstChangedPixelMs =
                                 (int)((firstChangedUs - action.keyUpQpcUs) / 1000L);
                         else
@@ -842,10 +898,13 @@ public static class DesktopPixelProbe
             report.longestUnchangedRunMs = Math.Max(report.longestUnchangedRunMs, action.maxUnchangedRunMs);
         }
         var downLatencies = new List<double>();
+        var startupLatencies = new List<double>();
         var upLatencies = new List<double>();
         var geometryDownLatencies = new List<double>();
         foreach (var action in report.actions) if (action.passed) {
-            if (action.resultEvidence == "desktop-composited-pixel-change") {
+            if (startupAction) {
+                startupLatencies.Add(action.startupToFirstChangedPixelMs);
+            } else if (action.resultEvidence == "desktop-composited-pixel-change") {
                 downLatencies.Add(action.inputDownToFirstChangedPixelMs);
                 // 长按首帧可能在按住期间已经出现，此时没有可定义的
                 // Up -> 首帧延迟；nullable 结果必须从 Up 分位数中排除，不能
@@ -859,6 +918,8 @@ public static class DesktopPixelProbe
         }
         report.p50InputDownToPixelMs = (int)Percentile(downLatencies, 0.50);
         report.p95InputDownToPixelMs = (int)Percentile(downLatencies, 0.95);
+        report.p50StartupToPixelMs = (int)Percentile(startupLatencies, 0.50);
+        report.p95StartupToPixelMs = (int)Percentile(startupLatencies, 0.95);
         report.p50InputUpToPixelMs = upLatencies.Count == 0
             ? (int?)null
             : (int)Percentile(upLatencies, 0.50);
@@ -1446,6 +1507,16 @@ public static class DesktopPixelProbe
         return (long)(Stopwatch.GetTimestamp() * 1000000.0 / Stopwatch.Frequency);
     }
 
+    /** 把启动标记的 UTC 微秒映射到同机 QPC，避免把探针进程启动间隔丢掉。 */
+    private static long EstimateQpcUsFromUnixUtcUs(long markerUtcUs)
+    {
+        const long unixEpochTicks = 621355968000000000L;
+        var nowQpcUs = NowUs();
+        var nowUtcUs = (DateTime.UtcNow.Ticks - unixEpochTicks) / 10L;
+        var elapsedSinceMarkerUs = Math.Max(0L, nowUtcUs - markerUtcUs);
+        return nowQpcUs - elapsedSinceMarkerUs;
+    }
+
     private static void WaitUntil(ref long lastCaptureUs, long captureIntervalUs)
     {
         lastCaptureUs += captureIntervalUs;
@@ -1509,6 +1580,7 @@ $resolvedVirtualKey = if ($VirtualKey -gt 0 -and $Action -in @(
   'playerFullscreen' { 0x0D } # Enter：正式 PlayerPage 的全屏快捷键
   'click' { 0 }
   'progressDrag' { 0 }
+  'startup' { 0 }
   'custom' {
     if ($VirtualKey -le 0) { throw 'custom 动作必须显式给出 -VirtualKey。' }
     $VirtualKey
@@ -1540,8 +1612,12 @@ $report = [DesktopPixelProbe]::Run(
   $SettleMilliseconds,
   $PixelChangeThresholdPercent,
   $MinimumEffectiveCaptureFps,
-  $RequireStaticBaseline,
+  ($RequireStaticBaseline -and $Action -ne 'startup'),
   ($Action -in @('fullscreen', 'playerFullscreen')),
+  ($Action -eq 'startup'),
+  $StartupMarkerUtcUs,
+  $StartupProbeReadyPath,
+  $StartupSurfaceReadyPath,
   $PixelSamplingMode
 )
 
@@ -1562,6 +1638,8 @@ $summary = [ordered]@{
   timedOutSamples = $report.timedOutSamples
   p50InputDownToPixelMs = $report.p50InputDownToPixelMs
   p95InputDownToPixelMs = $report.p95InputDownToPixelMs
+  p50StartupToPixelMs = $report.p50StartupToPixelMs
+  p95StartupToPixelMs = $report.p95StartupToPixelMs
   p50InputUpToPixelMs = $report.p50InputUpToPixelMs
   p95InputUpToPixelMs = $report.p95InputUpToPixelMs
   p50InputDownToGeometryMs = $report.p50InputDownToGeometryMs

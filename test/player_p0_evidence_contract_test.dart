@@ -62,6 +62,8 @@ void main() {
     expect(script, contains('continuous-presented-change-pacing'));
     expect(script,
         contains(r"Get-ObjectProperty $report 'p95InputDownToGeometryMs'"));
+    expect(
+        script, contains(r"Get-ObjectProperty $report 'p95StartupToPixelMs'"));
     expect(script, contains('fullscreen-window-geometry-settled'));
     expect(script, contains('fullscreenGeometryMs'));
     expect(script, contains('presentedChangeQpcUs'));
@@ -146,6 +148,10 @@ void main() {
         assembler,
         contains(
             "gop = 'short-gop'; codec = 'h264'; direction = 'fullscreen'; action = 'fullscreen'"));
+    expect(
+        assembler,
+        contains(
+            "gop = 'short-gop'; codec = 'h264'; direction = 'startup'; action = 'startup'"));
     expect(
         assembler,
         contains(

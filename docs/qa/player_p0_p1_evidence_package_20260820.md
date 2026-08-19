@@ -91,10 +91,11 @@ pwsh -NoProfile -File .\tool\validate_player_p0_evidence.ps1 `
   -Output .\.local\qa\p0-evidence-gate-assembled.json
 ~~~
 
-本机当前装配结果为 `32` 个明确 case/action 映射、`52` 个保留未装配 action；其中包括
+本机当前装配结果为 `33` 个明确 case/action 映射、`51` 个保留未装配 action；其中包括
 1080p H.264/HEVC short GOP 和三编码 long GOP 的正式 PlayerPage 精确拖动矩阵、三编码
 short/long 的明确 forward/backward 矩阵、10 个有素材 case 的正式 PlayerPage fullscreen
-矩阵，以及已有的 4K longhold 矩阵。没有精确 GOP 绑定的其它拖动、startup、fullscreen 不会因为目录“看起来相近”而被装配；缺失
+矩阵、1080p H.264 short 的 startup 矩阵，以及已有的 4K longhold 矩阵。没有精确 GOP
+绑定的其它拖动、startup、fullscreen 不会因为目录“看起来相近”而被装配；缺失
 素材的 1080p AV1 short 与 4K AV1 long 也继续由原始 manifest 保持缺口。装配输出中的
 `evidenceAssembly` 保存选择规则、已映射目录名和省略原因，便于同机复跑和审计。
 
@@ -138,7 +139,7 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | --- | --- | --- |
 | 正式 Texture 三编码动作探针 | pass（证据管线） | 已有真实 PlayerPage、页面语义、DWM 匿名变化和运行态聚合 |
 | 12-case 固定 manifest 完整性 | fail（10/12） | 当前本机有统一 ignored manifest，但两个 AV1 case 没有可验证样本 |
-| 三编码/两分辨率/短长 GOP 的统一 P0 报告 | fail（7 fail/5 unknown） | 已装配 32 个明确 case/action；连续呈现、未装配动作、稳态字段和 2 个素材缺口仍未闭环 |
+| 三编码/两分辨率/短长 GOP 的统一 P0 报告 | fail（7 fail/5 unknown） | 已装配 33 个明确 case/action；连续呈现、未装配动作、稳态字段和 2 个素材缺口仍未闭环 |
 | decoder drop | pass 或 fail 按 action 分列 | 运行态有值时非零失败；没有值不补零 |
 | VO drop | unknown（已有矩阵多数不可用） | 运行态没有可靠 VO drop 字段时不能判通过 |
 | 稳态 total drop | unknown | 既有动作样本缺少独立 10 秒分母 |
@@ -175,6 +176,14 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
   读取 `p95InputDownToGeometryMs` 作为独立的 `fullscreen-window-geometry-settled` 指标，
   不把像素字段的 0 ms 当成通过；fullscreen 的页面语义不是 seek 语义，视频首帧、Texture、
   资源和可见性字段仍单独保留 unknown。
+- 1080p H.264 short 的正式 PlayerPage startup 已完成 `3/3` 独立会话。窗口显示后、
+  `runApp` 前写入 `startup-marker.json`，探针附着后才允许挂载页面；首个持续中心 DWM
+  变化使用同机 UTC→QPC 映射计时，随后再用 `ready.json` 验证产品页面可达。该 startup
+  动作显式采用最低 `40 fps` 采样门槛（初绘竞争下实测 `66.8–102.3 fps`），并在 Texture
+  id + duration readiness 之后才接受中心像素变化；首个真实 DWM p95 `1257 ms`，三轮
+  `1257/795/805 ms`，因 startup `1000 ms` 预算判 `fail`，资源释放和最终硬解均有回执。
+  默认 `80 fps` 的单次试跑只有约 `55 fps`，因此严格记失败，不能混入通过；其余 startup
+  case 仍为 unknown，后端 `first_frame_ms` 不进入该指标。
 
 阶段 A 在统一 manifest 的每个有效 case/action 达到 3 个独立会话、报告字段齐全、
 失败和 unknown 均被保留后结束；不因实体键盘、另一后端或外部 GPU 无限重跑。

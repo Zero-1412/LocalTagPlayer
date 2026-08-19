@@ -13,7 +13,7 @@
 param(
   [Parameter(Mandatory = $true)]
   [string]$Sample,
-  [ValidateSet('click', 'fullscreen', 'playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')]
+  [ValidateSet('startup', 'click', 'fullscreen', 'playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')]
   [string]$Action = 'click',
   [ValidateRange(1, 7)]
   [int]$Samples = 1,
@@ -105,11 +105,15 @@ if ($RecordAutomatedNativeInput) {
 }
 
 $readyPath = Join-Path $Output 'ready.json'
+$startupMarkerPath = Join-Path $Output 'startup-marker.json'
+$startupProbeReadyPath = Join-Path $Output 'startup-probe-ready.json'
+$startupSurfaceReadyPath = Join-Path $Output 'startup-surface-ready.json'
 $failurePath = Join-Path $Output 'desktop-pixel-probe-failure.txt'
 $qaFailurePath = Join-Path $Output 'desktop-pixel-qa-failure.txt'
 $shutdownRequestPath = Join-Path $Output 'shutdown.request'
 $probeOutput = Join-Path $Output 'desktop-pixels'
-$realPlayerPageAction = $Action -in @('playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
+$realPlayerPageAction = $Action -in @('startup', 'playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
+$startupAction = $Action -eq 'startup'
 $manualKeyboardAction = $Action -in @('manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
 $manualLongKeyboardAction = $Action -in @('manualLongForward', 'manualLongBackward')
 if ($AutoRetrySoftwareDecode -and -not $ForceSoftwareDecode) {
@@ -725,6 +729,7 @@ foreach ($name in @(
   'LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_QA',
   'LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_ACTION',
   'LOCAL_TAG_PLAYER_QA_PROGRESS_DRAG_SEEK_MODE',
+  'LOCAL_TAG_PLAYER_PIXEL_STARTUP_QA',
   'LOCAL_TAG_PLAYER_QA_DISABLE_ADAPTIVE_TEXTURE',
   'LOCAL_TAG_PLAYER_QA_FORCE_SOFTWARE_DECODE',
   'LOCAL_TAG_PLAYER_QA_AUTO_RETRY_SOFTWARE_DECODE'
@@ -767,6 +772,11 @@ try {
     $env:LOCAL_TAG_PLAYER_REAL_PAGE_PIXEL_QA = '1'
     $env:LOCAL_TAG_PLAYER_PLAYERPAGE_INPUT_QA = '1'
     $env:LOCAL_TAG_PLAYER_SEEK_SEGMENT_TRACE_QA = '1'
+    if ($startupAction) {
+      $env:LOCAL_TAG_PLAYER_PIXEL_STARTUP_QA = '1'
+    } else {
+      Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_STARTUP_QA -ErrorAction SilentlyContinue
+    }
     if ($manualKeyboardAction) {
       # 原生 runner 仅在 Debug QA 内记录匿名动作/QPC；真实按键由操作者在窗口前台按下。
       $env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_QA = '1'
@@ -835,6 +845,7 @@ try {
     Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_QA -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_ACTION -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QA_PROGRESS_DRAG_SEEK_MODE -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_STARTUP_QA -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QA_DISABLE_ADAPTIVE_TEXTURE -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QA_FORCE_SOFTWARE_DECODE -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QA_AUTO_RETRY_SOFTWARE_DECODE -ErrorAction SilentlyContinue
@@ -843,7 +854,8 @@ try {
   $testProcess = Start-Process -FilePath $DebugExecutable -PassThru `
     -RedirectStandardOutput $logPath -RedirectStandardError $errorPath
   $readyDeadline = [DateTime]::UtcNow.AddSeconds(90)
-  while (-not (Test-Path -LiteralPath $readyPath) -and
+  $handshakePath = if ($startupAction) { $startupMarkerPath } else { $readyPath }
+  while (-not (Test-Path -LiteralPath $handshakePath) -and
          -not (Test-Path -LiteralPath $qaFailurePath) -and
          -not $testProcess.HasExited -and
          [DateTime]::UtcNow -lt $readyDeadline) {
@@ -855,23 +867,41 @@ try {
   if ($testProcess.HasExited) {
     throw "实际 Debug Texture QA 在写出握手文件前退出，exit code=$($testProcess.ExitCode)。"
   }
-  if (-not (Test-Path -LiteralPath $readyPath)) {
+  if (-not (Test-Path -LiteralPath $handshakePath)) {
     throw '实际 Debug Texture QA 未在 90 秒内写出桌面探针握手文件。'
   }
-  $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
-  if ($ready.backend -ne 'media-kit-flutter-texture' -or
-      $ready.state -ne 'paused-static-baseline-ready') {
-    throw '桌面探针握手未确认正式 MediaKit Texture 的静止基线。'
-  }
-  if ($realPlayerPageAction -and $ready.surface -ne 'product-player-page') {
-    throw '真实 PlayerPage 动作缺少产品页面表面握手，拒绝退化到专用 Texture 页。'
-  }
-  if ($Action -eq 'progressDrag' -and
-      $ready.progressDragSeekMode -ne $ProgressDragSeekMode) {
-    throw '真实 PlayerPage 拖动 QA 的定位策略握手不匹配，拒绝将默认精确结果与两阶段实验混算。'
-  }
-  if ($Action -in @('playerFullscreen', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward') -and -not $ready.focusReady) {
-    throw '真实 PlayerPage 键盘动作缺少 FocusNode 就绪握手，拒绝把未送达的 scan-code 当作 seek 性能。'
+  $ready = $null
+  $probeWindowTitle = ''
+  $probeProcessId = 0
+  $startupMarker = $null
+  if ($startupAction) {
+    $startupMarker = Get-Content -LiteralPath $startupMarkerPath -Raw | ConvertFrom-Json
+    if ($startupMarker.backend -ne 'media-kit-flutter-texture' -or
+        $startupMarker.surface -ne 'product-player-page' -or
+        $startupMarker.state -ne 'window-shown-before-run-app' -or
+        [long]$startupMarker.utcUs -le 0) {
+      throw '启动握手未确认正式 PlayerPage 的挂载前窗口与有效 UTC 锚点。'
+    }
+    $probeWindowTitle = [string]$startupMarker.windowTitle
+    $probeProcessId = [int]$startupMarker.testProcessId
+  } else {
+    $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
+    if ($ready.backend -ne 'media-kit-flutter-texture' -or
+        $ready.state -ne 'paused-static-baseline-ready') {
+      throw '桌面探针握手未确认正式 MediaKit Texture 的静止基线。'
+    }
+    if ($realPlayerPageAction -and $ready.surface -ne 'product-player-page') {
+      throw '真实 PlayerPage 动作缺少产品页面表面握手，拒绝退化到专用 Texture 页。'
+    }
+    if ($Action -eq 'progressDrag' -and
+        $ready.progressDragSeekMode -ne $ProgressDragSeekMode) {
+      throw '真实 PlayerPage 拖动 QA 的定位策略握手不匹配，拒绝将默认精确结果与两阶段实验混算。'
+    }
+    if ($Action -in @('playerFullscreen', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward') -and -not $ready.focusReady) {
+      throw '真实 PlayerPage 键盘动作缺少 FocusNode 就绪握手，拒绝把未送达的 scan-code 当作 seek 性能。'
+    }
+    $probeWindowTitle = [string]$ready.windowTitle
+    $probeProcessId = [int]$ready.testProcessId
   }
   $configuredKeyboardVirtualKey = 0
   if ($realPlayerPageAction -and $Action -in @('forward', 'backward')) {
@@ -893,7 +923,20 @@ try {
   # Win32 探针以 GetForegroundWindow 再次核验，不能用这个 Flutter 内部瞬时状态拒绝
   # 已经就绪的正式 Texture 会话。
   try {
-    if ($Action -eq 'progressDrag') {
+    if ($startupAction) {
+      # startup 不发送输入，也不先等待 ready.json；Debug QA 正在 runApp 前等待这个
+      # 文件。探针附着后写 ready 文件，随后只测标记 UTC -> 首个持续 DWM 变化。
+      & (Join-Path $PSScriptRoot 'invoke_player_desktop_pixel_probe.ps1') `
+        -WindowTitle $probeWindowTitle -ProcessId $probeProcessId `
+        -Action startup -Samples $Samples -FrameRate $FrameRate `
+        -MinimumEffectiveCaptureFps $MinimumEffectiveCaptureFps `
+        -PixelChangeThresholdPercent $PixelChangeThresholdPercent `
+        -SettleMilliseconds $SettleMilliseconds -Output $probeOutput `
+        -RequireStaticBaseline:$false `
+        -StartupMarkerUtcUs ([long]$startupMarker.utcUs) `
+        -StartupProbeReadyPath $startupProbeReadyPath `
+        -StartupSurfaceReadyPath $startupSurfaceReadyPath
+    } elseif ($Action -eq 'progressDrag') {
       # Slider 的 PointerUp 匿名回执只用于证明命中正式完整 Slider；它不进入媒体/画面
       # 证据，缺失时由探针以语义超时失败，绝不能仅凭底部像素变化放行。
       & (Join-Path $PSScriptRoot 'invoke_player_desktop_pixel_probe.ps1') `
@@ -987,6 +1030,29 @@ try {
     throw '桌面像素探针未生成摘要，且没有可读的失败分类。'
   }
   $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+  if ($startupAction) {
+    if (-not (Test-Path -LiteralPath $startupSurfaceReadyPath)) {
+      throw '启动首帧报告缺少 Texture/backend readiness 辅助标记，不能把 UI 变化当成视频 DWM 帧。'
+    }
+    # 启动首帧测量结束后再等待静态握手，证明窗口随后确实挂载了产品 PlayerPage；
+    # 这条可达性证据不改变已完成的 UTC/QPC -> DWM 首帧时钟。
+    $playerPageDeadline = [DateTime]::UtcNow.AddSeconds(90)
+    while (-not (Test-Path -LiteralPath $readyPath) -and
+           -not (Test-Path -LiteralPath $qaFailurePath) -and
+           -not $testProcess.HasExited -and
+           [DateTime]::UtcNow -lt $playerPageDeadline) {
+      Start-Sleep -Milliseconds 100
+    }
+    if (-not (Test-Path -LiteralPath $readyPath)) {
+      throw '启动首帧之后未在 90 秒内写出正式 PlayerPage 可达握手。'
+    }
+    $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
+    if ($ready.backend -ne 'media-kit-flutter-texture' -or
+        $ready.surface -ne 'product-player-page' -or
+        $ready.state -ne 'paused-static-baseline-ready') {
+      throw '启动首帧之后的握手未确认正式 MediaKit Texture PlayerPage。'
+    }
+  }
   Write-DesktopPixelTraceCorrelation `
     -LogPath $logPath `
     -PixelReportPath (Join-Path $probeOutput 'desktop-pixel-report.json') `

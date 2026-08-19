@@ -181,6 +181,9 @@ function Get-RunEvidence {
       evidenceKind = $presentedEvidence
       firstDwmMs = if ($null -ne $report) {
         if ($ActionName -eq 'fullscreen') { $null }
+        elseif ($ActionName -eq 'startup') {
+          Get-NumberOrNull (Get-ObjectProperty $report 'p95StartupToPixelMs')
+        }
         else { Get-NumberOrNull (Get-ObjectProperty $report 'p95InputDownToPixelMs') }
       } else { $null }
       fullscreenGeometryMs = if ($null -ne $report -and $ActionName -eq 'fullscreen') {

@@ -48,6 +48,10 @@ void main() {
     expect(source, contains('SendInput'));
     expect(source, contains('SendKeyboardScan'));
     expect(source, contains('inputDownToFirstChangedPixelMs'));
+    expect(source, contains('startupToFirstChangedPixelMs'));
+    expect(source, contains('p95StartupToPixelMs'));
+    expect(source, contains('EstimateQpcUsFromUnixUtcUs'));
+    expect(source, contains('StartupSurfaceReadyPath'));
     expect(source, contains('DesktopPixelProbePresentedChange'));
     expect(source, contains('presentedChanges'));
     expect(source, contains('lastPresentedChangeUs'));
@@ -59,6 +63,7 @@ void main() {
     expect(source, contains('(int?)null'));
     // 真实 PlayerPage 拖动必须经 Win32 Down/Move/Up，且在控制条 hover 稳定后才记时。
     expect(source, contains("'progressDrag'"));
+    expect(source, contains("'startup'"));
     expect(source, contains('PrepareProgressDrag'));
     expect(source, contains('SendProgressDrag'));
     expect(source, contains('PreparePlayerKeyboardFocus'));
@@ -125,6 +130,9 @@ void main() {
   test('反向长按 QA 不用恢复正向播放伪造 seek 首帧', () {
     final source = File('lib/src/qa/player_real_page_pixel_qa_app.dart')
         .readAsStringSync();
+    expect(source, contains('startup-marker.json'));
+    expect(source, contains('startup-surface-ready.json'));
+    expect(source, contains('startup_probe_attached_before_run_app'));
     expect(source, contains('kept_paused_for_reverse_seek'));
     expect(source, contains("if (expectedAction == 'backward')"));
     expect(source, contains('automated_long_backward_play_started'));
@@ -232,6 +240,7 @@ void main() {
             .readAsStringSync();
 
     expect(gate, contains("'progressDrag'"));
+    expect(gate, contains("'startup'"));
     expect(gate, contains("'playerFullscreen'"));
     expect(gate, contains("'forward'"));
     expect(gate, contains("'backward'"));
@@ -268,6 +277,9 @@ void main() {
     expect(gate, contains('PixelChangeThresholdPercent'));
     expect(gate, contains('player-input-events.jsonl'));
     expect(gate, contains('Write-DesktopPixelTraceCorrelation'));
+    expect(gate, contains('startup-marker.json'));
+    expect(gate, contains('startup-probe-ready.json'));
+    expect(gate, contains('StartupMarkerUtcUs'));
     expect(gate, contains('desktop-pixel-trace-correlation.json'));
     expect(gate, contains('PlayerInputEvidencePath'));
     expect(gate, contains('playerInputEvents'));
