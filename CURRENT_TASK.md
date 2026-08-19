@@ -53,6 +53,14 @@
   generation `2`、cache 约 400s，停止阶段 total drop `6`；根因继续落在解码/VO 到
   Texture/DWM 的首帧长尾，不能用“命令已完成”或单个像素变化宣称丝滑。探针契约新增
   观察窗与指纹连续变化门禁；原始目录为 `.local/qa/current-semantic-matrix-1080p-av1-long-forward-postdwell-20260819_200000002`。
+- 当前仍未完成的验收项：①实体 `WM_KEYDOWN/UP QPC` 长按前/后各自的 Down→首帧及
+  尾部 p50/p95（Windows 自助 `press_key` 只能证明短按，不能保持按下）；②反向落点的
+  每次真实 DWM 帧及连续帧节奏，当前仍是 latest-only 关键帧预览；③正式 Texture 与
+  QA-only child HWND 的同机同素材对照，现有 HWND 精确 seek/首帧确认失败；④首播首个
+  实际呈现帧、短/长 GOP 与 1080p/4K 三编码的统一 12-case manifest；⑤非强制软件回退在
+  发布构建、不同 GPU/三编码上的矩阵。逐帧/A-B/外挂字幕已完成命令与资源释放 QA，
+  但还没有逐帧 DWM、A-B 重复播放和字幕可见性验收；可调倍速也只有接线，没有真实窗口
+  节奏预算。以上任一项未闭环前，不宣称专业播放器级“丝滑”或任务完成。
 
 - 2026-08-20 对抗式门禁复核发现并修正自动键盘语义回执丢失：PowerShell 探针调用中
   的续行注释曾使 `ExpectedInputEvidencePath` 未传入，旧自动化样本只有 DWM 像素变化，
