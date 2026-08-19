@@ -2,6 +2,70 @@
 
 # 2026-08-19 · 播放器真实性能基线与 Texture/HWND 对照（P0：真实 PlayerPage 拖动矩阵已闭环，实体键盘待验收）
 
+- 2026-08-20 对抗式门禁复核发现并修正自动键盘语义回执丢失：PowerShell 探针调用中
+  的续行注释曾使 `ExpectedInputEvidencePath` 未传入，旧自动化样本只有 DWM 像素变化，
+  不能证明快捷键命中 PlayerPage，已全部降级为不可作语义验收的历史证据。修正后缺少
+  `player_keyboard_event` 的样本会拒绝进入 p95；同一真实 4K H.264、144 DPI 的新
+  PlayerPage scan-code 矩阵已验证短按前进/后退、900ms 长按前进/后退各 `3/3`，其
+  Down→DWM p50/p95 分别为 `100/112`、`100/112`、`81/93`、`293/316 ms`，语义回执
+  三轮均为真。该修正只提高证据真实性，不改变用户播放逻辑；HEVC/AV1 及拖动需按同一
+  门禁重跑，实体 WM_KEYDOWN/QPC、反向真实首帧和 HWND 对照仍未完成。
+- 2026-08-20 修正门禁后 HEVC 4K/144 DPI 先完成短按前进 `3/3`，Down→DWM p50/p95
+  `93/100 ms`、Up→DWM `47/50 ms`，三轮均有 `player_keyboard_event`、最终
+  `d3d11va-copy` 和资源释放。短按后退两次复跑均出现独立会话启动失败（各有 2/3 有效），
+  因 p95 门禁要求 `3/3` 已明确判无效，不把 `93/179 ms` 混入结论；需继续在冷却/启动
+  稳定后补齐 HEVC 后退及长按，AV1 也尚未按修正门禁重跑。
+- 2026-08-20 长按测量合同校正与三编码复测：自动化桌面像素探针已从按下时刻开始采样，
+  在同一循环发送 Repeat/Up，按住期间首帧出现时 `Up→首帧` 保持 null，避免旧版“先松键
+  再采样”伪造约 900ms p95。真实 PlayerPage Debug QA 现走 SendInput scan-code；H.264/
+  HEVC/AV1 4K、144 DPI、900ms 自动长按后退各 3/3 有效，Down→DWM p50/p95 分别
+  `81/98 ms`、`186/201 ms`、`83/99 ms`，最长按住静帧 `95–107/136–205/120–125 ms`，
+  有效采样约 `118–120 fps`，最终硬解均 `d3d11va-copy`，decoder/total drop 均为 0，
+  Texture generation 仍观察到 2–3 次启动/尺寸重建。这些是自动化“按住期间桌面确实推进”
+  基线，不是实体 WM_KEYDOWN/QPC p50/p95，也不是反向 seek 落点已达专业级丝滑的结论；
+  单次 H.264 trace 还显示首个 DWM 变化早于第一次 reverse keyframe 命令，必须继续拆分
+  QA 恢复播放首帧与反向预览段。原始证据位于
+  `.local/qa/current-reverse-hold-scancode-20260820/{h264-matrix,hevc-matrix,av1-matrix}`。
+- 2026-08-20 正式反向路径新增按帧让渡/最短 dwell（`reverse_preview_frame_wait_start/complete`），
+  focused `player_seek_coordinator_test.dart` 与桌面探针契约均通过；该改进只合并
+  latest-only 目标、避免反向命令洪水，尚未证明原生反向连续解码或 DWM 连续帧节奏。旧的
+  900ms virtual-key 后采样数字不再作为当前首帧结论，但保留原始目录供审计。
+- 2026-08-20 补齐目标中明确的专业控制入口：正式 MediaKit 后端通过同一 NativePlayer
+  提供 `frame-step`/`frame-back-step`、`ab-loop-a`/`ab-loop-b` 清除，以及 `sub-add`
+  外挂字幕；PlayerService 用可选边界串行转发，播放器上下文菜单和逗号/句号快捷键已挂载。
+  A/B 点只存当前页面会话，外挂字幕只经 `FileSystemAdapter` 选择，不写设置、队列或媒体库。
+  这完成的是控制能力接线与 focused service contract，不等于逐帧呈现、A-B 反复播放或外挂
+  字幕在真实三编码矩阵中的运行验收；P0 实体输入、反向连续呈现和发布级硬解回退矩阵仍未完成。
+- 2026-08-20 硬解降级 Debug E2E 已补证：QA 强制软件解码的真实 4K HEVC PlayerPage
+  运行态出现 `hwdec_current=no`，健康采样写出 `software_decode_confirmed`，并自动执行
+  与降级条相同的安全重新打开回调；匿名日志从 `open_generation=1` 收敛到 `2`，两代均
+  保持 `hwdec_current=no`、Texture 首帧证据和资源释放。该自动重开只由 Debug QA 环境变量
+  触发，正式用户仍必须点击“重新打开”；尚未完成非强制软件回退在不同 GPU/三编码上的发布矩阵。
+- 2026-08-20 补跑 H.264 4K/144 DPI 正式 PlayerPage 桌面像素矩阵：拖动 `3/3`（fastPreviewThenExact）
+  Down→DWM p50/p95 `443/456 ms`、短按前进 `3/3` 为 `116/123 ms`、短按后退在提高独立会话
+  冷却后 `3/3` 为 `111/122 ms`；900ms 自动长按前进 `3/3` 为 `87/101 ms`、后退 `3/3`
+  为 `95/106 ms`。长按首帧均在松键前出现，因此 `Up→首帧=null` 是有效合同，不是零值；运行态
+  同时记录到硬解 `d3d11va-copy`、Texture 代次/重建和 decoder/total drop。该矩阵是 SendInput
+  scan-code 自动化桌面证据，不是实体 WM_KEYDOWN/QPC；HEVC/AV1 同口径完整复跑以及首次播放/全屏
+  汇总仍未形成统一 12-case manifest。
+- 2026-08-20 完成三编码真实 PlayerPage precision controls QA：独立脚本在 H.264/HEVC/AV1
+  各自的正式 MediaKit Texture 会话中均通过 `frame_step_complete`（估算帧号分别 `900→901`
+  或同等单帧推进）、A/B `30.016–30.033s→32.016–32.033s`、清除后 `ab-loop-a/b=no`，以及
+  `sub-add` 后 `track-list` 可见；三轮均写出 `precision_controls_qa_complete` 和
+  `player_resources_released`。这证明原生命令、页面串行边界和会话资源生命周期已可运行，
+  但逐帧首个 DWM 帧仍不是实体 QPC 证据。
+- 2026-08-20 扩展 Debug 软件解码安全恢复 E2E 到 H.264/AV1：两种编码均确认
+  `software_decode_confirmed requested=d3d11va-copy actual=no`，触发一次安全重新打开，
+  `open_generation=1→2`，两代 Texture 首帧和最终 `player_disposed/released` 均落盘；H.264
+  长按运行态 total drop 最高 `9`，AV1 最高 `22`，仍明确属于强制软件解码 QA，不代表正式
+  用户在不同 GPU 上的回退概率或发布级性能预算。
+- 2026-08-20 反向长按 QA 口径修正：自动化后退不再在 Down 后恢复正向播放，改为保持静态基线并
+  直接等待 reverse-preview，避免自然播放帧伪装成 seek 呈现。真实 4K H.264、144 DPI、900ms
+  长按后退 `3/3` 有效，Down→DWM p50/p95 `296/317 ms`、最长静帧 `277–299 ms`；trace 明确
+  写出 `reverse_preview_frame_wait_*`、目标 `23s→5s` 和 `frame_presented=true`，Texture 代次
+  未在动作中变化，硬解 `d3d11va-copy`、decoder/total drop 0。证据仍是自动化桌面合成 + 后端
+  帧代理，尚未有实体 QPC，也未证明反向连续帧节奏达到专业播放器。
+
 - 2026-08-19 反向基线复核：此前 AV1 反向失败样本的静止基线约在 10 秒，首个 10 秒回退只到 66ms，不能用来判断新帧是否送达。Debug-only QA 页现将长素材静态基线移到 18–30 秒区间；正式 PlayerPage、播放语义和 Texture 上限不变。修正后刚构建 Debug 在同一真实 4K H.264/HEVC/AV1、144 DPI、900ms virtual-key 后退矩阵各 3/3 通过：H.264 Down→DWM p50/p95 `904/905 ms`、HEVC `903/907 ms`、AV1 `909/914 ms`，有效采样 `100.4–118.5 fps`、`captureReadFailures=0`、页面 `player-keyboard-event` 语义成立、硬解最终均 `d3d11va-copy`、decoder/total drop `0`。每轮运行态均见 Texture generation `0/1/2|3` 与 `2–3` 次重建；这些是自动 virtual-key 对照，不是实体 WM_KEYDOWN/QPC p50/p95，且约 0.9 秒首帧已证明仍不专业级丝滑。原始证据位于 `.local/qa/current-reverse-formal-baseline30-20260819/{h264,hevc,av1}/matrix`。
 - 2026-08-19 反向逐帧触发实验结论：在同一 AV1 基线下 Debug-only `frame-step -1 seek` 3/3 虽通过，但 Down→DWM p50/p95 `1236/1249 ms`，关闭该实验的同基线对照反而为 `910/915 ms`；因此已撤掉后端实验代码，未把逐帧命令带入正式路径。该结果排除了“暂停 keyframe seek 必须额外 frame-step”这一假设，剩余 P0 根因仍在真实反向预览/Texture/解码呈现长尾，不能继续靠 seek 节流承诺专业体验。
 - 2026-08-19 QA 证据合同修正：新增纯函数 `playerQaReverseBaselineTarget` 及 focused contract，避免反向动作落在首帧附近产生假阴性；该函数只存在 Debug QA 页，不写播放进度、不修改用户数据。验证：focused player/seek/desktop-pixel tests 全部通过，`flutter analyze` 通过，`flutter build windows --debug` 成功；完整 `flutter test` 仍受既有非播放器架构迁移预算、设置页行数和 `smoke.sidebar.rescan` 三项失败阻塞，未将其归因于本改动。
@@ -21,6 +85,7 @@
 - 2026-08-20 QA-only mpv 反向播放复核已在同一 Debug MediaKit 会话对真实 4K H.264/HEVC/AV1 各采样 20 次位置：三组均未形成持续反向推进（目标→最小位置 `336607→336616`、`291769→291766`、`258601→258601 ms`），运行态临时方向均为 `backward`，最终均恢复 `forward`；硬解均为 `d3d11va-copy`、Texture 代次均为 `2`。该结果只证明当前反向连续播放试验不可作为可靠产品方案，正式长按后退仍是 latest-only keyframe preview；原始日志分别为 `.local/qa/reverse-direction-4k-h264-20260820.log`、`.local/qa/reverse-direction-4k-hevc-20260820.log` 和 `.local/qa/reverse-direction-4k-av1-20260820-rerun.log`。
 - 本轮再次启动正式 PlayerPage 的 `manualLongForward` 实体门禁（4K H.264、144 DPI、自适应 Texture、静态基线已就绪），但 30 秒等待窗口内没有收到 `FLUTTERVIEW` 原生 `WM_KEYDOWN/UP`；输出 `.local/qa/manual-physical-long-forward-20260820c` 仅含 `native_keyboard_observer_ready` 与 `manual_keyboard_input_waiting`，没有 `native_keyboard_message`、`player_keyboard_event` 或像素摘要。该结果只记录为“本轮无实体输入”，不进入任何 p50/p95，也不把超时误归因于播放器长按卡顿。
 - 最新一次 4K H.264 `manualForward` 单样本（`.local/qa/current-manual-forward-live-20260819d`）完成正式 PlayerPage/Texture 静态基线：`focusReady=true`、Texture generation `3`，原生观察器 `installed=true/childInstalled=true/runnerInstalled=true/topLevelActive=true`；但 30 秒内仍只有 `native_keyboard_observer_ready`，没有 `native_keyboard_message` 或 `player_keyboard_event`，门禁以“未收到实体键盘匿名 FLUTTERVIEW QPC 锚点”退出。该证据排除了观察器未安装和页面 Focus 未就绪，但没有操作者按键，仍不得生成短按 p50/p95。
+- 2026-08-20 自主 Computer Use 反向短按复核（`.local/qa/current-computeruse-manual-backward-20260820`）确实向前台 Debug PlayerPage 发送了 `J`，但只产生 `player_keyboard_event(action=other)`，没有 `native_keyboard_message`/FLUTTERVIEW QPC 锚点；实体门禁按证据合同失败，未生成任何物理输入 p50/p95。该结果说明桌面控制 API 的原子 `press_key` 不能冒充实体 WM_KEYDOWN，也没有把本轮超时数字归因于播放器。
 - 为拆分自动化连续扫描的呈现段，新增 Debug-only `HoldMilliseconds`：隔离 QA 页在首个 virtual-key 前进 Down 后才恢复播放，实体 `manualLong*` 和正式页面不读取该开关。4K H.264、144 DPI、900ms virtual-key 长按各 7/7：前进 Down→DWM 首画面 p50/p95 `908/912 ms`、最长静帧 `2–9 ms`、有效采样 `110.5–120.4 fps`；后退（latest-only 关键帧预览）为 `907/916 ms`、`1–7 ms`、`114.4–120.9 fps`。前进运行态快照仍为 `d3d11va-copy`、decoder 掉帧 `0`、VO 计数不可用、累计掉帧 `8–9`；两组均不是实体 WM_KEYDOWN/QPC p50/p95，且约 900ms 首帧等待仍不符合专业播放器体感。首次未恢复播放的同合同矩阵 7/7 `pixel_change_timeout` 已保留在 `.local/qa/current-4k-h264-realpage-forward-longhold-7run-20260820`，不与修复后结果混算。
 - 同一 900ms virtual-key 长按合同已补齐 HEVC/AV1：HEVC 前进/后退均 7/7，Down→DWM p95 `1029/916 ms`、最长静帧 `108/4 ms`，前进运行态硬解 `d3d11va-copy`、decoder 掉帧 `0`、累计掉帧最高 `15`；AV1 前进 7/7 为 `1040 ms`、最长静帧 `1025 ms`、Up→画面 p95 `131 ms`，硬解 `d3d11va-copy`、decoder 掉帧 `0`、累计掉帧 `14–15`。AV1 后退 7/7 全部 `pixel_change_timeout`，但页面仍收到 Down/10 次 repeat/Up，trace 写出首次关键帧回退后连续 `seek_command_complete`，随后 `new_video_frame_timeout`/`native_rendered_frame_timeout`；这不是输入缺失，而是当前 latest-only 反向预览在该 4K AV1 长 GOP 上没有形成实际 DWM 画面。所有结果均为 virtual-key 自动化，不进入实体 p50/p95。
 - 反向 trace 修正：旧键盘/拖动 `2.7 s` 数值包含 seek coordinator 的位置确认，已重新标为“协调器完成后到帧号代理”，不得作为首个呈现帧。现在在非零确认窗口中额外写出 `position_confirmation_start` 与 `position_confirmation_complete|superseded|timeout`，将逻辑位置等待和真实首帧拆开；键盘预览的 `confirmationTimeout=0` 不产生该段。暂停源帧真正送达后，七次反向 keyframe trace 的命令 p95 为 `2 ms`、后端帧号代理 p95 为 `15 ms`、Texture 代次差为零；但 `absolute+keyframes` 会落在目标前 `0.675–8.167 s`，这是长 GOP 关键帧预览跳跃的真实语义问题，不等价于 Texture 合成卡顿。当前 Debug 4K H.264 复测（`current-4k-h264`）进一步得到短按后退 p95 `99 ms`、长按后退帧代理 p95 `238 ms`、反向 trace 命令 p95 `0 ms`、命令到帧代理 p95 `3 ms`，7 次 Texture 代次差均为 `0`，硬解为 `d3d11va-copy`；该样本没有重现 2.7 秒后端长尾，但仍不是实体键盘到 DWM 的最终证据。随后按正式页面合同把 integration 键盘协调器的位置确认设为 `Duration.zero`，同一真实 4K H.264 七次复测得到短按后退 `80 ms`、长按后退 `139 ms`、反向命令 `0 ms`、命令到帧代理 `39 ms`、Texture 代次差 `0`；摘要见 `.local/qa/current-reverse-trace-zero-confirmation-20260819-summary.json`，仍明确标记为后端帧代理而非桌面像素。`reverseKeyframeTrace.segmentTrace` 现在明确分出命令完成、命令后 cache/decoder/VO 快照、后端帧代理、Texture 代次差与 DWM unavailable 边界；不可用属性保留 unavailable/null，不伪造零掉帧。

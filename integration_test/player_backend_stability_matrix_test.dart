@@ -455,9 +455,13 @@ Future<Map<String, Object?>> _runQueueCompositionScenario(
     backend,
     usesChildHwnd: usesChildHwnd,
   );
+  // 稳定性矩阵会把 loop-file 设为 inf；短于场景总时长的真实样本可能在
+  // 队列动画期间跨过文件尾部回到 0。此时 positionAfter 小于 positionBefore
+  // 不是停播，必须只拒绝完全没有推进的样本，不能把合法回绕误报为队列故障。
+  final positionAdvancedOrLooped = positionAfter != positionBefore;
   final pass = collapsedWidth > initialWidth &&
       (restoredWidth - initialWidth).abs() <= 1 &&
-      positionAfter > positionBefore &&
+      positionAdvancedOrLooped &&
       surfaceEvidence.ready &&
       !snapshot.hasOpenFailure &&
       snapshot.openedVideoId == snapshot.currentVideoId;
@@ -516,26 +520,36 @@ Future<Map<String, Object?>> _runInteractionPerformanceScenario(
       int.tryParse(await backend.getProperty('frame-drop-count')) ?? 0;
   WidgetsBinding.instance.addTimingsCallback(collectSeekFrames);
   final duration = backend.state.duration;
-  final safeDuration = duration > const Duration(seconds: 20)
+  // 不能把短片的真实时长静默替换成两分钟；那会生成媒体根本不存在的目标，
+  // 把 duration 边界错误报成 seek/VO/Texture 长尾。只有后端没有可靠时长时才回退。
+  final safeDuration = duration > const Duration(seconds: 2)
       ? duration
       : const Duration(minutes: 2);
-  Future<void>? activeSeek;
+  final pendingSeeks = <Future<void>>[];
+  var seekFailureCount = 0;
   const seekRequests = 18;
   for (var index = 0; index < seekRequests; index++) {
     final fraction = 0.12 + (index % 8) * 0.09;
     final target = Duration(
       milliseconds: (safeDuration.inMilliseconds * fraction).round(),
     );
-    activeSeek ??= state.seekForStressTest(target);
-    if (index > 0) {
-      unawaited(state.seekForStressTest(target));
-    }
+    // 立即挂接错误处理，避免 latest-only seek 在下一次 pump 前以未处理 Future
+    // 中止测试；失败仍计入 automatedPass，不被吞成成功。
+    final seekFuture = state.seekForStressTest(target);
+    pendingSeeks.add(
+      seekFuture.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace __) {
+          seekFailureCount++;
+        },
+      ),
+    );
     await tester.pump(const Duration(milliseconds: 40));
   }
   await _pumpFutureUntilComplete(
     tester,
-    activeSeek!,
-    const Duration(seconds: 10),
+    Future.wait<void>(pendingSeeks, eagerError: false),
+    const Duration(seconds: 20),
     operation: '连续 seek',
   );
   await _pumpContinuously(tester, const Duration(seconds: 2));
@@ -544,7 +558,8 @@ Future<Map<String, Object?>> _runInteractionPerformanceScenario(
       int.tryParse(await backend.getProperty('frame-drop-count')) ??
           droppedBefore;
   final snapshot = state.buildStabilitySnapshotForTest();
-  final pass = find
+  final pass = seekFailureCount == 0 &&
+      find
           .byKey(const ValueKey<String>('player.settings.dialog'))
           .evaluate()
           .isEmpty &&
@@ -555,6 +570,7 @@ Future<Map<String, Object?>> _runInteractionPerformanceScenario(
     'settingsCycles': settingsCycles,
     'settingsFrameTiming': _summarizeFrameTimings(settingsFrames),
     'seekRequests': seekRequests,
+    'seekFailureCount': seekFailureCount,
     'seekFrameTiming': _summarizeFrameTimings(seekFrames),
     'droppedFramesDelta': droppedAfter - droppedBefore,
     'queuePreserved': snapshot.openedVideoId == snapshot.currentVideoId,

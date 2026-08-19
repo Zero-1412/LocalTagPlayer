@@ -76,7 +76,7 @@ void main() {
     expect(page, isNot(contains('shortcutFeedbackIsSeekWatermark')));
   });
 
-  test('长按 seek 由 KeyUp 精确收敛且反馈持续显示累计目标', () {
+  test('长按 seek 由 KeyUp 收敛到预览且反馈持续显示累计目标', () {
     final helpers = File('lib/src/pages/player/player_state_helpers.dart')
         .readAsStringSync();
     final transport = File('lib/src/pages/player/player_state_transport.dart')
@@ -93,11 +93,17 @@ void main() {
     expect(helpers, contains(r'${formatDuration(target)}'));
     expect(helpers, contains('playerKeyboardSeekRepeatStepSeconds'));
     expect(helpers, contains('连续快进'));
+    expect(helpers, contains('关键帧预览'));
     expect(transport, contains('keyboardSeek.requestRelative('));
     expect(transport, contains('submitPreview: true'));
     expect(helpers, contains('mutePreview: isRepeat'));
     expect(transport, contains('keyboardSeek.settlePreview()'));
     expect(transport, contains('waitForPresentedVideoFrame'));
+    expect(transport, contains('seekExactlyWithDiagnostics'));
+    expect(
+        transport,
+        contains(
+            'seekAudioGate.run(() => seekExactlyWithDiagnostics(target))'));
     expect(mediaKit, isNot(contains('_interactiveSeekConvergenceDelay')));
     expect(native, isNot(contains('_interactiveSeekConvergenceDelay')));
   });

@@ -70,7 +70,9 @@ class PlayerService
         PlayerGpuRenderBoundary,
         PlayerOverlaySurfaceBoundary,
         PlayerMotionInterpolationBoundary,
-        PlayerMediaControlsBoundary {
+        PlayerMediaControlsBoundary,
+        PlayerPrecisionControlsBoundary,
+        PlayerExternalSubtitleBoundary {
   /** 创建一个独占单个播放 Route 生命周期的服务。 */
   PlayerService({
     PlayerBackend? backend,
@@ -340,6 +342,17 @@ class PlayerService
         const PlayerVideoSurfaceDiagnostics.unsupported();
   }
 
+  /**
+   * 当前后端的首帧代理输出类型；页面只用它标注诊断证据，不据此改变表面挂载。
+   * 未声明该可选边界的兼容后端必须保留 unknown，不能猜成 Texture 或 HWND。
+   */
+  String get framePresentationEvidenceKind {
+    final boundary = _backend is PlayerFramePresentationEvidenceBoundary
+        ? _backend as PlayerFramePresentationEvidenceBoundary
+        : null;
+    return boundary?.framePresentationEvidenceKind ?? 'unknown';
+  }
+
   @override
   ValueListenable<int?> get textureId => _backend.textureId;
 
@@ -410,6 +423,115 @@ class PlayerService
         () => _backend.setRate(rate),
         commandName: 'set-rate',
       );
+
+  /**
+   * 开启物理长按快进的临时扫描档位，并保持与 seek、open 和 stop 的严格顺序。
+   *
+   * 具备专用边界的后端会在同一个原生播放器锁内暂时放松高速呈现限制；兼容后端仅
+   * 提交临时倍速。两条路径都不修改用户的全局播放速度偏好。
+   */
+  Future<void> beginFastForwardScan(double rate) {
+    final boundary = _backend is PlayerFastForwardScanBoundary
+        ? _backend as PlayerFastForwardScanBoundary
+        : null;
+    return _runMediaCommand(
+      () => boundary?.beginFastForwardScan(rate) ?? _backend.setRate(rate),
+      commandName: 'begin-fast-forward-scan',
+    );
+  }
+
+  /**
+   * 结束临时扫描档位。
+   *
+   * 专用后端恢复其开始时的真实运行时快照；兼容后端只能按页面提供的常规倍速回退。
+   */
+  Future<void> endFastForwardScan({required double fallbackRate}) {
+    final boundary = _backend is PlayerFastForwardScanBoundary
+        ? _backend as PlayerFastForwardScanBoundary
+        : null;
+    return _runMediaCommand(
+      () => boundary?.endFastForwardScan() ?? _backend.setRate(fallbackRate),
+      commandName: 'end-fast-forward-scan',
+    );
+  }
+
+  /**
+   * 逐帧控制只转发给明确支持的后端；禁止用普通 seek 的近似结果冒充逐帧。
+   */
+  @override
+  Future<void> stepFrame({required bool backward}) {
+    final boundary = _backend is PlayerPrecisionControlsBoundary
+        ? _backend as PlayerPrecisionControlsBoundary
+        : null;
+    if (boundary == null) {
+      return Future<void>.error(
+        UnsupportedError('precision_frame_step_unsupported'),
+      );
+    }
+    return _runMediaCommand(
+      () => boundary.stepFrame(backward: backward),
+      commandName: backward ? 'frame-back-step' : 'frame-step',
+    );
+  }
+
+  /** 当前后端是否提供原生逐帧与 A-B loop 命令。 */
+  bool get supportsPrecisionControls =>
+      _backend is PlayerPrecisionControlsBoundary;
+
+  @override
+  Future<void> setAbLoopPoint({
+    required PlayerAbLoopPoint point,
+    required Duration position,
+  }) {
+    final boundary = _backend is PlayerPrecisionControlsBoundary
+        ? _backend as PlayerPrecisionControlsBoundary
+        : null;
+    if (boundary == null) {
+      return Future<void>.error(
+        UnsupportedError('precision_ab_loop_unsupported'),
+      );
+    }
+    return _runMediaCommand(
+      () => boundary.setAbLoopPoint(point: point, position: position),
+      commandName: point == PlayerAbLoopPoint.start ? 'ab-loop-a' : 'ab-loop-b',
+    );
+  }
+
+  @override
+  Future<void> clearAbLoop() {
+    final boundary = _backend is PlayerPrecisionControlsBoundary
+        ? _backend as PlayerPrecisionControlsBoundary
+        : null;
+    if (boundary == null) {
+      return Future<void>.error(
+        UnsupportedError('precision_ab_loop_unsupported'),
+      );
+    }
+    return _runMediaCommand(
+      boundary.clearAbLoop,
+      commandName: 'ab-loop-clear',
+    );
+  }
+
+  /** 当前后端是否允许从用户选择器加载外挂字幕。 */
+  bool get supportsExternalSubtitle =>
+      _backend is PlayerExternalSubtitleBoundary;
+
+  @override
+  Future<void> addExternalSubtitle(String path) {
+    final boundary = _backend is PlayerExternalSubtitleBoundary
+        ? _backend as PlayerExternalSubtitleBoundary
+        : null;
+    if (boundary == null) {
+      return Future<void>.error(
+        UnsupportedError('external_subtitle_unsupported'),
+      );
+    }
+    return _runMediaCommand(
+      () => boundary.addExternalSubtitle(path),
+      commandName: 'subtitle-add-external',
+    );
+  }
 
   /** 设置当前会话音量，避免取消 seek 的音频恢复越过 open。 */
   Future<void> setVolume(double volume) => _runMediaCommand(

@@ -54,7 +54,11 @@ param(
   [string]$DebugExecutable = '',
   [string]$Output = '',
   # 仅 Debug QA：隔离自适应 Texture 尺寸回落/重建是否触发桌面引擎崩溃；默认保持正式策略。
-  [switch]$DisableAdaptiveTextureSizing
+  [switch]$DisableAdaptiveTextureSizing,
+  # 仅 Debug QA：强制当前会话走软件解码，以验证降级提示与安全重新打开闭环。
+  [switch]$ForceSoftwareDecode,
+  # 仅 Debug QA：软件降级确认后自动执行一次与 banner 相同的安全重新打开动作。
+  [switch]$AutoRetrySoftwareDecode
 )
 
 Set-StrictMode -Version Latest
@@ -84,6 +88,12 @@ $probeOutput = Join-Path $Output 'desktop-pixels'
 $realPlayerPageAction = $Action -in @('playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
 $manualKeyboardAction = $Action -in @('manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
 $manualLongKeyboardAction = $Action -in @('manualLongForward', 'manualLongBackward')
+if ($AutoRetrySoftwareDecode -and -not $ForceSoftwareDecode) {
+  throw 'AutoRetrySoftwareDecode 必须与 ForceSoftwareDecode 一起使用。'
+}
+if ($AutoRetrySoftwareDecode -and -not $realPlayerPageAction) {
+  throw 'AutoRetrySoftwareDecode 只允许用于正式 PlayerPage QA。'
+}
 $windowTitle = if ($realPlayerPageAction) {
   'LocalTagPlayer Real PlayerPage QA'
 } else {
@@ -615,6 +625,23 @@ function Write-DesktopPixelTraceCorrelation {
   )
 }
 
+function Convert-QaShortcutToVirtualKey {
+  param([string]$Shortcut)
+  if ($Shortcut -match '\+') {
+    throw "真实 PlayerPage QA 暂不注入带修饰键的快捷键：$Shortcut"
+  }
+  $base = ($Shortcut -split '\+')[-1].Trim().ToUpperInvariant()
+  switch ($base) {
+    'ARROWLEFT' { return 0x25 }
+    'ARROWRIGHT' { return 0x27 }
+    'ARROWUP' { return 0x26 }
+    'ARROWDOWN' { return 0x28 }
+    'J' { return 0x4A }
+    'L' { return 0x4C }
+    default { throw "真实 PlayerPage QA 不支持当前快捷键的无修饰 VK 注入：$base" }
+  }
+}
+
 $previousEnvironment = @{}
 foreach ($name in @(
   'LOCAL_TAG_PLAYER_PIXEL_SAMPLE',
@@ -632,8 +659,11 @@ foreach ($name in @(
   'LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_ACTION',
   'LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_HOLD_MODE',
   'LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_QA',
+  'LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_ACTION',
   'LOCAL_TAG_PLAYER_QA_PROGRESS_DRAG_SEEK_MODE',
-  'LOCAL_TAG_PLAYER_QA_DISABLE_ADAPTIVE_TEXTURE'
+  'LOCAL_TAG_PLAYER_QA_DISABLE_ADAPTIVE_TEXTURE',
+  'LOCAL_TAG_PLAYER_QA_FORCE_SOFTWARE_DECODE',
+  'LOCAL_TAG_PLAYER_QA_AUTO_RETRY_SOFTWARE_DECODE'
 )) {
   $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
@@ -691,17 +721,33 @@ try {
       Remove-Item Env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_ACTION -ErrorAction SilentlyContinue
       Remove-Item Env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_HOLD_MODE -ErrorAction SilentlyContinue
     }
-    if ($HoldMilliseconds -gt 0 -and $Action -eq 'forward') {
-      # 仅让隔离 QA 页在首个自动化 forward Down 后恢复播放；正式页面和实体模式不读取。
+    if ($HoldMilliseconds -gt 0 -and $Action -in @('forward', 'backward')) {
+      # 仅让隔离 QA 页在首个自动化方向 Down 后恢复播放；正式页面和实体模式不读取。
       $env:LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_QA = '1'
+      $env:LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_ACTION = if ($Action -eq 'backward') {
+        'backward'
+      } else {
+        'forward'
+      }
     } else {
       Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_QA -ErrorAction SilentlyContinue
+      Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_ACTION -ErrorAction SilentlyContinue
     }
     $env:LOCAL_TAG_PLAYER_QA_PROGRESS_DRAG_SEEK_MODE = $ProgressDragSeekMode
     if ($DisableAdaptiveTextureSizing) {
       $env:LOCAL_TAG_PLAYER_QA_DISABLE_ADAPTIVE_TEXTURE = '1'
     } else {
       Remove-Item Env:LOCAL_TAG_PLAYER_QA_DISABLE_ADAPTIVE_TEXTURE -ErrorAction SilentlyContinue
+    }
+    if ($ForceSoftwareDecode) {
+      $env:LOCAL_TAG_PLAYER_QA_FORCE_SOFTWARE_DECODE = '1'
+    } else {
+      Remove-Item Env:LOCAL_TAG_PLAYER_QA_FORCE_SOFTWARE_DECODE -ErrorAction SilentlyContinue
+    }
+    if ($AutoRetrySoftwareDecode) {
+      $env:LOCAL_TAG_PLAYER_QA_AUTO_RETRY_SOFTWARE_DECODE = '1'
+    } else {
+      Remove-Item Env:LOCAL_TAG_PLAYER_QA_AUTO_RETRY_SOFTWARE_DECODE -ErrorAction SilentlyContinue
     }
     Remove-Item Env:LOCAL_TAG_PLAYER_DESKTOP_PIXEL_QA -ErrorAction SilentlyContinue
   } else {
@@ -713,8 +759,11 @@ try {
     Remove-Item Env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_ACTION -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_HOLD_MODE -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_QA -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_ACTION -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QA_PROGRESS_DRAG_SEEK_MODE -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QA_DISABLE_ADAPTIVE_TEXTURE -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_QA_FORCE_SOFTWARE_DECODE -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_QA_AUTO_RETRY_SOFTWARE_DECODE -ErrorAction SilentlyContinue
   }
   # 必须保留可见窗口；这是实际 Debug 程序的 DWM 合成与真实 Win32 输入，不是测试绑定。
   $testProcess = Start-Process -FilePath $DebugExecutable -PassThru `
@@ -749,6 +798,18 @@ try {
   }
   if ($Action -in @('playerFullscreen', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward') -and -not $ready.focusReady) {
     throw '真实 PlayerPage 键盘动作缺少 FocusNode 就绪握手，拒绝把未送达的 scan-code 当作 seek 性能。'
+  }
+  $configuredKeyboardVirtualKey = 0
+  if ($realPlayerPageAction -and $Action -in @('forward', 'backward')) {
+    $configuredShortcut = if ($Action -eq 'backward') {
+      [string]$ready.seekBackwardShortcut
+    } else {
+      [string]$ready.seekForwardShortcut
+    }
+    if ([string]::IsNullOrWhiteSpace($configuredShortcut)) {
+      throw '真实 PlayerPage QA 握手缺少当前快捷键，拒绝用默认 J/L 冒充用户输入。'
+    }
+    $configuredKeyboardVirtualKey = Convert-QaShortcutToVirtualKey $configuredShortcut
   }
   if ($manualKeyboardAction -and
       $ready.manualKeyboardHoldMode -ne $(if ($manualLongKeyboardAction) { 'long' } else { 'short' })) {
@@ -787,6 +848,14 @@ try {
       } else {
         $false
       }
+      # 先解析为独立变量再传给 C# 探针。内嵌 if 表达式夹在反引号续行和注释
+      # 之间时，PowerShell 可能把参数丢出调用；一旦丢失，真实 PlayerPage 的
+      # 像素变化会被错误地当成已命中快捷键。语义回执路径必须显式存在。
+      $playerInputEvidencePath = if ($realPlayerPageAction) {
+        Join-Path $Output 'player-input-events.jsonl'
+      } else {
+        ''
+      }
       & (Join-Path $PSScriptRoot 'invoke_player_desktop_pixel_probe.ps1') `
         -WindowTitle $ready.windowTitle -ProcessId ([int]$ready.testProcessId) `
         -Action $Action -Samples $Samples -FrameRate $FrameRate `
@@ -794,9 +863,10 @@ try {
         -PixelChangeThresholdPercent $PixelChangeThresholdPercent `
         -SettleMilliseconds $SettleMilliseconds -Output $probeOutput `
         -HoldMilliseconds $HoldMilliseconds `
-        -KeyboardInjectionMode $(if ($realPlayerPageAction) { 'virtualKey' } else { 'scanCode' }) `
+        -VirtualKey $configuredKeyboardVirtualKey `
+        -KeyboardInjectionMode 'scanCode' `
         -PreparePlayerKeyboardFocus:$preparePlayerKeyboardFocus `
-        -ExpectedInputEvidencePath $(if ($realPlayerPageAction) { Join-Path $Output 'player-input-events.jsonl' } else { '' })
+        -ExpectedInputEvidencePath $playerInputEvidencePath
     }
     # 被调用的是 PowerShell 脚本而非 native exe；严格模式下 $LASTEXITCODE 可能根本
     # 不存在。必须使用调用状态，不能把已生成的成功摘要误写成 probe failure。

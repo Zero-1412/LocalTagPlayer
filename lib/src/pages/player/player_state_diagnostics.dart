@@ -150,6 +150,9 @@ extension PlayerStateDiagnostics on PlayerPageState {
       '\u8bbe\u7f6e\u786c\u89e3: ${pageWidget.playbackSettings.hwdec}',
       'mpv 请求硬解: $requestedHwdec',
       'mpv \u5b9e\u9645\u786c\u89e3: ${mpv['hwdec-current']}',
+      '\u5448\u73b0\u8f93\u51fa\u8def\u5f84: ${playerService.framePresentationEvidenceKind}',
+      '\u8f6f\u4ef6\u89e3\u7801\u56de\u9000\u786e\u8ba4: ${softwareDecodeConfirmed ? '\u5df2\u786e\u8ba4' : '\u672a\u786e\u8ba4'} · '
+          '\u8fde\u7eed\u6837\u672c $consecutiveSoftwareDecodeSamples/3',
       'mpv \u8f93\u51fa\u9a71\u52a8: ${mpv['current-vo']}',
       'mpv \u89c6\u9891\u7f16\u7801: ${mpv['video-codec']}',
       'mpv \u97f3\u9891\u7f16\u7801: ${mpv['audio-codec']}',

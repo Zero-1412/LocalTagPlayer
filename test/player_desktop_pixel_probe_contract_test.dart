@@ -49,6 +49,11 @@ void main() {
     expect(source, contains('SendKeyboardScan'));
     expect(source, contains('inputDownToFirstChangedPixelMs'));
     expect(source, contains('inputUpToFirstChangedPixelMs'));
+    expect(source, contains('automatedKeyboardHoldActive'));
+    expect(source, contains('automatedKeyboardHoldReleaseUs'));
+    expect(source, contains('automatedKeyboardRepeatUs'));
+    expect(source, contains('action.inputUpToFirstChangedPixelMs.HasValue'));
+    expect(source, contains('(int?)null'));
     // 真实 PlayerPage 拖动必须经 Win32 Down/Move/Up，且在控制条 hover 稳定后才记时。
     expect(source, contains("'progressDrag'"));
     expect(source, contains('PrepareProgressDrag'));
@@ -107,6 +112,38 @@ void main() {
     expect(source, contains('shutdown_requested'));
   });
 
+  test('反向长按 QA 不用恢复正向播放伪造 seek 首帧', () {
+    final source = File('lib/src/qa/player_real_page_pixel_qa_app.dart')
+        .readAsStringSync();
+    expect(source, contains('kept_paused_for_reverse_seek'));
+    expect(source, contains("if (expectedAction == 'backward')"));
+    expect(source, contains('automated_long_backward_play_started'));
+  });
+
+  test('真实 PlayerPage precision QA 只写匿名运行证据', () {
+    final source = File('lib/src/qa/player_real_page_pixel_qa_app.dart')
+        .readAsStringSync();
+    expect(source, contains('LOCAL_TAG_PLAYER_PRECISION_CONTROLS_QA'));
+    expect(source, contains('precision-controls.jsonl'));
+    expect(source, contains('frame_step_complete'));
+    expect(source, contains('ab_loop_clear'));
+    expect(source, contains('external_subtitle_complete'));
+    expect(source, contains('precision_controls_qa_complete'));
+  });
+
+  test('precision controls 独立脚本要求三类原生控制和资源释放', () {
+    final source =
+        File('tool/run_player_precision_controls_qa.ps1').readAsStringSync();
+    expect(
+        source, contains('real-player-page-native-player-precision-controls'));
+    expect(source, contains('frame_step_complete'));
+    expect(source, contains('ab_loop_a'));
+    expect(source, contains('ab_loop_b'));
+    expect(source, contains('external_subtitle_complete'));
+    expect(source, contains('player_resources_released'));
+    expect(source, contains(r'pathOrMediaContentRetained = $false'));
+  });
+
   test('独立矩阵在任一 4K 会话失效时拒绝生成混杂 p95', () {
     final source = File('tool/run_player_desktop_pixel_latency_matrix.ps1')
         .readAsStringSync();
@@ -162,6 +199,14 @@ void main() {
     expect(gate, contains('LOCAL_TAG_PLAYER_REAL_PAGE_PIXEL_QA'));
     expect(gate, contains("ready.surface -ne 'product-player-page'"));
     expect(gate, contains('ExpectedInputEvidencePath'));
+    expect(gate,
+        contains('\$playerInputEvidencePath = if (\$realPlayerPageAction)'));
+    expect(
+        gate, contains('-ExpectedInputEvidencePath \$playerInputEvidencePath'));
+    expect(gate, contains('Convert-QaShortcutToVirtualKey'));
+    expect(gate, contains('seekBackwardShortcut'));
+    expect(gate, contains('拒绝用默认 J/L 冒充用户输入'));
+    expect(gate, contains('暂不注入带修饰键的快捷键'));
     expect(gate, contains("Join-Path \$Output 'player-input-events.jsonl'"));
     expect(gate, contains('PixelChangeThresholdPercent'));
     expect(gate, contains('player-input-events.jsonl'));

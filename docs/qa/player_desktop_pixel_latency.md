@@ -146,6 +146,12 @@ Texture generation `3`，且原生观察器 `installed/childInstalled/runnerInst
 等待 30 秒仍没有 `native_keyboard_message`、`player_keyboard_event` 或 QPC 锚点，门禁以“缺少实体输入”退出。
 这排除了观察器握手和页面焦点未就绪，但不能替代操作者实际按下 `L`，不进入短按 p50/p95。
 
+2026-08-20 的自主 Computer Use 反向复核目录
+`.local/qa/current-computeruse-manual-backward-20260820` 也不构成实体样本：前台窗口确实收到一次
+`J` 并写出 `player_keyboard_event(action=other)`，但没有 `native_keyboard_message` 或 FLUTTERVIEW
+QPC 锚点，门禁按合同失败。原子 `press_key` 只能证明页面可接收合成输入，不能冒充物理 WM_KEYDOWN；
+该次等待超时不计入播放器时延。
+
 ```powershell
 .\tool\run_player_desktop_pixel_latency_gate.ps1 `
   -Sample <匿名本地样本路径> -Action manualLongForward `
@@ -546,3 +552,40 @@ AV1 `113.9 fps`、`50 ms`。正式自适应路径反而收敛到 `1600×900`、g
 同一 AV1 基线下的 Debug-only `frame-step -1 seek` 触发实验为 3/3、Down→DWM p50/p95
 `1236/1249 ms`；关闭实验的同基线对照为 `910/915 ms`。逐帧触发不但没有改善，反而增加长尾，
 因此已从 `MediaKitPlayerBackend` 撤掉，正式路径仍只使用既有 `absolute+keyframes` 交互语义。
+
+### 2026-08-20：自动长按首帧测量合同校正
+
+旧版自动化长按先阻塞 `HoldMilliseconds`、发送 KeyUp，再开始桌面采样，因此约
+`900 ms` 的结果只能说明“采样启动晚于输入”，不能作为 Down→首帧延迟。本轮已将
+探针改为：
+
+- 在 Down 后立即采样，并在同一循环中发送 Repeat 与真实 Up；按住窗口的样本计入有效
+  capture fps，动作结束前不提前释放按键。
+- 首个持续桌面变化在按住期间出现时，`inputDownToFirstChangedPixelMs` 正常记录，
+  `inputUpToFirstChangedPixelMs`/p50/p95 保持 `null`；不得把 nullable 空值强转成 0。
+- 真实 PlayerPage QA 读取隔离页 ready 握手的当前快捷键，并用 SendInput scan-code
+  进入产品 Focus 链；virtual-key 在该页面可能被 Flutter 解析为 `other`，不能作为
+  正式语义门禁的唯一输入路径。
+
+校正后的同机 4K、144 DPI、正式 MediaKit Texture、900ms 自动长按后退矩阵各 3/3
+有效（证据是自动化，不是实体 WM_KEYDOWN/QPC）：
+
+| 编码 | Down→DWM p50/p95 | Up→首帧 | 按住期间最长静帧 | 有效采样 | 硬解/Texture |
+| --- | ---: | ---: | ---: | ---: | --- |
+| H.264 | 81/98 ms | null | 95–107 ms | 118.6–119.8 fps | `d3d11va-copy` / generation 0–3 |
+| HEVC | 186/201 ms | null | 136–205 ms | 117.5–119.6 fps | `d3d11va-copy` / generation 0–3 |
+| AV1 | 83/99 ms | null | 120–125 ms | 118.2–118.8 fps | `d3d11va-copy` / generation 0–3 |
+
+运行态快照三种编码 decoder drop/total drop 均为 0，Texture 在启动/尺寸协调期间仍
+出现 2–3 次重建；这是“按住期间桌面确实在动”的基线，不等价于反向 seek 落点已达
+专业播放器水平。H.264 单次 trace 还显示首个 DWM 变化早于第一次 reverse keyframe
+seek 命令，说明该数字包含 QA 页按下后恢复播放的首帧；真正的反向预览段必须继续以
+`reverse_preview_frame_wait_start/complete`、命令后 cache/decoder/VO/Texture 快照和
+DWM 像素变化联合审查。原始匿名证据：
+
+- `.local/qa/current-reverse-hold-scancode-20260820/h264-matrix`
+- `.local/qa/current-reverse-hold-scancode-20260820/hevc-matrix`
+- `.local/qa/current-reverse-hold-scancode-20260820/av1-matrix`
+
+因此不能把本轮 p95 改写成“反向扫描已经丝滑”；实体短按/长按仍缺少操作者真实
+WM_KEYDOWN/QPC 的独立 p50/p95，反向连续解码也仍未形成可交付的双向合同。

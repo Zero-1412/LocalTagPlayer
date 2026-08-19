@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../widgets/app_theme_tokens.dart';
 import 'player_control_slider_metrics.dart';
 import 'player_control_slider_surface.dart';
+import 'player_input_qa_evidence.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -186,6 +187,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
 
   /** 开始拖动时锁定本地显示值，避免后端尚未确认的位置把滑块拉回。 */
   void _handleChangeStart(double value) {
+    PlayerInputQaEvidence.progressSliderDragStarted();
     _clearPendingCommit();
     widget.onSeekTargetChanged?.call(null);
     setState(() {
@@ -201,6 +203,7 @@ class _PlayerProgressSliderState extends State<PlayerProgressSlider> {
 
   /** 松手后只提交最终目标，后续位置显示继续以播放器确认状态为准。 */
   void _handleChangeEnd(double value) {
+    PlayerInputQaEvidence.progressSliderDragCommitted();
     final committedValue = value.clamp(0.0, widget.max).toDouble();
     final generation = ++_commitGeneration;
     _previousCommitValue = _lastCommitValue;

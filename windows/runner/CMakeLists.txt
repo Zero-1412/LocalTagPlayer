@@ -16,6 +16,7 @@ add_executable(${BINARY_NAME} WIN32
   "nvidia_optical_flow_driver_probe.cpp"
   "vapoursynth_motion_runtime.cpp"
   "native_media_probe_bridge.cpp"
+  "player_qa_keyboard_qpc_evidence.cpp"
   "utils.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
@@ -43,6 +44,7 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app flutter_wrapper_plugin)
 target_link_libraries(${BINARY_NAME} PRIVATE ltp_native_runtime)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "comctl32.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE
   "d3d11.lib" "dxgi.lib" "d3dcompiler.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

@@ -256,3 +256,121 @@ cache/decoder/VO/Texture 的可审计分段线索，不是“首个实际呈现�
 反向桌面像素矩阵此前可能在约 10 秒基线执行首个 10 秒回退，导致目标落在 66ms 附近；该静止画面不能证明反向呈现失败。Debug-only QA 现把长素材基线移到 18–30 秒，正式 PlayerPage 和 seek 合同不变。新构建在真实 4K H.264/HEVC/AV1 各 3 次 `backward` virtual-key 矩阵均形成页面语义回执和 DWM 像素变化，Down→DWM p95 分别为 `905/907/914 ms`，最终硬解均为 `d3d11va-copy`，decoder/total drop 为 `0`；Texture generation 仍出现 `0/1/2|3` 和 2–3 次重建。这些不是实体 QPC→DWM 延迟，且首帧约 0.9 秒仍不符合专业级体验。
 
 为验证暂停 keyframe seek 是否需要显式 `frame-step -1 seek`，同一 AV1 基线做了 Debug-only 对照：启用逐帧触发 p95 `1249 ms`，关闭为 `915 ms`。实验已撤掉；当前证据不支持把逐帧触发作为反向呈现修复，下一步应继续沿 cache/decoder/VO/Texture/DWM 分段寻找真正长尾。
+
+### 2026-08-20 反向预览按帧让渡与桌面证据边界
+
+正式 `PlayerKeyboardSeekController` 的连续快退现为 latest-only 目标合并：每个目标
+提交后可等待一个新帧代理，并保留最短 Texture dwell，再读取下一个 Repeat 的最新目标；
+新增 trace 阶段 `reverse_preview_frame_wait_start/complete`。这只是避免命令洪水覆盖
+所有中间预览的节奏控制，不是原生反向解码，也不改变短按一次关键帧预览的语义。
+
+2026-08-20 在真实 4K H.264/HEVC/AV1、144 DPI、正式 Texture 上完成了 900ms 自动长按
+后退各 3/3 桌面矩阵。校正后的探针从 Down 开始采样并在 Up 前持续取样，三编码均为
+`successfulRuns=3/3`、有效采样约 118–120fps、最终 `hwdec-current=d3d11va-copy`、
+decoder/total drop 为 0；Down→DWM p95 分别为 H.264 `98 ms`、HEVC `201 ms`、AV1
+`99 ms`。这些数据包含 QA 页按下后恢复播放的首个画面，且 `Up→首帧=null`（首帧在
+松键前出现），不是反向 seek 落点的专业级承诺。原始目录见
+`docs/qa/player_desktop_pixel_latency.md` 的同日校正节。
+
+仍需单独补齐：真实实体键盘 QPC p50/p95、反向落点的首个 DWM 帧与连续帧节奏关联、
+非强制软件回退在不同 GPU/三编码上的发布矩阵，以及逐帧、A-B loop、外部字幕在真实窗口
+中的呈现/边界验收和真正双向连续扫描；不得用 integration 的帧号代理或当前自动化 Down
+数字替代这些合同。
+
+### 2026-08-20 专业控制入口接线边界
+
+正式 MediaKit 后端现在通过可选 `PlayerPrecisionControlsBoundary` 转发 mpv 原生
+`frame-step`、`frame-back-step`、`ab-loop-a`、`ab-loop-b` 与清除命令；外挂字幕通过
+`PlayerExternalSubtitleBoundary` 使用同一 NativePlayer 的 `sub-add`。播放器上下文菜单
+提供逐帧、A/B 点和外挂字幕入口，逗号/句号提供逐帧快捷键。A/B 状态不持久化，字幕路径
+不写诊断、设置、filtered queue 或媒体库。
+
+当前证据只证明接口、命令串行化和能力缺失时的显式降级（focused service contract）；
+三编码真实 PlayerPage QA 已验证逐帧命令推进、A/B 点读回与清除、以及外挂字幕加载后的
+`track-list` 可见，三轮均正常释放 Texture/NativePlayer。逐帧阶段的帧证据仍是后端估算帧号
+代理，不能替代实体 QPC→DWM 首帧；它们也不能替代仍缺失的反向连续呈现和发布级硬解回退矩阵。
+
+### 2026-08-20 三编码 precision controls 真实窗口验收
+
+独立脚本 [`run_player_precision_controls_qa.ps1`](../../tool/run_player_precision_controls_qa.ps1)
+在正式 `PlayerPage + MediaKit Texture` 会话中分别运行 H.264、HEVC、AV1。每个会话均满足：
+
+- `frame_step_complete.success=true`，估算帧号前进一帧；
+- A 点约 `30.016–30.033s`，B 点约 `32.016–32.033s`，清除后 `ab-loop-a=no`、`ab-loop-b=no`；
+- `external_subtitle_complete.success=true` 且 `trackListObserved=true`；
+- 生命周期包含 `precision_controls_qa_complete`、`player_resources_released`。
+
+该证据证明控制命令确实经过正式页面的 `PlayerService/NativePlayer` 并完成资源释放；逐帧
+画面的证据来源仍标为 `estimated-frame-number-fallback`，因此不把它冒充桌面 DWM 帧测量。
+
+### 2026-08-20 硬解降级安全恢复 Debug E2E
+
+Debug QA 通过显式 `ForceSoftwareDecode` 强制当前 MediaKit 会话写入 `hwdec=no`，但保留
+页面的硬解请求档位，因此健康采样可以验证真实降级而不是设置值。4K HEVC PlayerPage
+自动化长按样本 `.local/qa/current-force-software-auto-retry-20260820` 观察到：
+
+- `PLAYER_HEALTH software_decode_confirmed requested=d3d11va-copy actual=no`；
+- 自动恢复日志 `PLAYER_QA software_decode_auto_retry`；
+- `PLAYER_MEMORY_STAGE media_opened open_generation=1` 后安全重新打开为 `open_generation=2`；
+- 两代均为 `hwdec_current=no`、`first_frame_evidence=media-kit-texture+position-update`，
+  最终资源正常释放。
+
+自动重开只属于 Debug QA 环境变量，正式页面仍由用户点击降级条动作；该证据证明恢复
+顺序和 Texture 资源生命周期，不代表所有显卡或三种编码的硬解回退概率矩阵已完成。
+
+同日补齐 H.264、AV1 的强制软件解码 Debug E2E：两者都观察到 `hwdec_current=no`、
+`PLAYER_HEALTH software_decode_confirmed`、`PLAYER_QA software_decode_auto_retry`，并由
+安全 open worker 从 `open_generation=1` 推进到 `2`，最终正常释放 Texture/NativePlayer。
+H.264 该长按运行态 total drop 最高 `9`，AV1 最高 `22`；这些是软件解码压力事实，仍不等于
+非强制回退在不同 GPU/三编码上的发布矩阵。
+
+### 2026-08-20 H.264 自动化桌面像素补充矩阵
+
+在同一真实 4K H.264、144 DPI、正式 PlayerPage Texture 会话上使用 5 秒独立会话冷却，
+形成以下 `3/3` 有效样本。探针从 scan-code Down 开始采样；长按首帧在 Up 前出现，故
+`Up→首帧` 按合同为 `null`，不以零值填充。
+
+| 动作 | Down→DWM p50/p95 | Up→DWM p50/p95 | 最长静帧 | 运行态补充 |
+| --- | ---: | ---: | ---: | --- |
+| 拖动（fastPreviewThenExact） | 443/456 ms | 221/232 ms | 451 ms | 硬解 d3d11va-copy；decoder/total drop 0；Texture generation delta 2–3 |
+| 短按前进 | 116/123 ms | 78/78 ms | 102 ms | 硬解 d3d11va-copy；decoder/total drop 0；Texture generation delta 2–3 |
+| 短按后退 | 111/122 ms | 65/77 ms | 104 ms | 硬解 d3d11va-copy；decoder/total drop 0；Texture generation delta 2–3 |
+| 长按前进（900ms） | 87/101 ms | null | 140 ms | 硬解 d3d11va-copy；decoder drop 0；total drop 8–9；Texture generation delta 2–3 |
+| 长按后退（900ms） | 95/106 ms | null | 93 ms | 硬解 d3d11va-copy；decoder/total drop 0；Texture generation delta 2–3 |
+
+这些数字是自动化 SendInput scan-code 的桌面合成证据，不能替代实体 WM_KEYDOWN/QPC p50/p95，
+也不能证明反向落点已达到专业播放器的连续反向解码体验。一次短按后退矩阵的第 3 个独立进程
+只到 `bootstrap_started`，已单独判为无效并在提高会话冷却后重跑；无效样本未进入 p95。
+
+同日反向长按复测另修正了 QA 口径：后退不再在 Down 后恢复正向播放，避免自然播放帧成为假
+首帧。H.264 `3/3` 的 Down→DWM p50/p95 为 `296/317 ms`，最长静帧 `277–299 ms`，三轮
+生命周期均写出 `automated_long_backward_kept_paused_for_reverse_seek`；同一 trace 可见
+`reverse_preview_frame_wait_*` 和目标由约 `23s` 合并到 `5s`，`frame_presented=true`，但帧证据
+仍是后端代理、不是 DWM 帧关联。该结果比先恢复播放的 `95/106 ms` 更接近真实 reverse seek，
+也说明不能把原先较低数字作为专业级反向体验结论。
+
+### 2026-08-20 自动键盘语义门禁修正后的 H.264 矩阵
+
+对抗式审查发现，真实 PlayerPage 自动键盘探针的 `ExpectedInputEvidencePath` 曾因
+PowerShell 续行注释被丢弃；旧报告的像素变化并没有 `player_keyboard_event`，因此不再
+作为快捷键命中证据。修正后探针和独立矩阵都要求匿名页面回执，缺失即判无效。使用同一
+真实 4K H.264、144 DPI、正式 Texture、960×720 PlayerPage、120fps 采样和 5 秒独立
+会话冷却，新矩阵三轮均有语义回执且 `p95Eligible=true`：
+
+| 动作 | Down→DWM p50/p95 | Up→DWM p50/p95 | 最长静帧 |
+| --- | ---: | ---: | ---: |
+| 短按前进 | 100/112 ms | 63/64 ms | 105 ms |
+| 短按后退 | 100/112 ms | 62/67 ms | 106 ms |
+| 长按前进（900ms） | 81/93 ms | null | 197 ms |
+| 长按后退（900ms） | 293/316 ms | null | 299 ms |
+
+长按 `Up→首帧=null` 表示首帧已在按住期间实际出现，并非零值。四组均记录
+`player_keyboard_event`、`d3d11va-copy` 和资源释放；后退长按仍是暂停态反向关键帧预览，
+不是专业播放器意义上的连续反向解码。该 H.264 修正矩阵不能替代尚未按同一门禁重跑的
+HEVC/AV1，亦不能替代实体 WM_KEYDOWN/QPC 和正式 Texture/HWND 同机对照。
+
+同一门禁随后在真实 4K HEVC 上完成短按前进 `3/3`：Down→DWM p50/p95 `93/100 ms`、
+Up→DWM `47/50 ms`，三轮语义回执均成立，硬解最终为 `d3d11va-copy`。短按后退两轮
+均只形成 `2/3` 有效会话，另一个会话在 `bootstrap_started` 阶段退出；矩阵按合同标记
+`p95Eligible=false`，不得把 `93/179 ms` 作为 HEVC 后退结论。HEVC 后退及前后长按、
+以及 AV1 全部仍需在修正后的语义门禁下补齐。

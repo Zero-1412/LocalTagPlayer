@@ -12,6 +12,12 @@ String _source(String relativePath) =>
         .readAsStringSync()
         .replaceAll('\r\n', '\n');
 
+/** 打开流程已拆成协调器与恢复叶文件；合同仍按同一源码顺序联合审查。 */
+String _openingSource() => <String>[
+      _source('lib/src/pages/player/player_state_opening.dart'),
+      _source('lib/src/pages/player/player_state_opening_recovery.dart'),
+    ].join('\n');
+
 void main() {
   test('新媒体打开前有界等待旧 GPU 属性任务且允许稳定身份失效', () {
     final source = _source('lib/src/pages/player/player_state_opening.dart');
@@ -49,7 +55,7 @@ void main() {
   });
 
   test('媒体打开只应用一次引擎快照和一次媒体呈现快照', () {
-    final source = _source('lib/src/pages/player/player_state_opening.dart');
+    final source = _openingSource();
 
     expect(
       RegExp(r'await applyPlaybackEngineProfile\(\);').allMatches(source),
@@ -72,7 +78,7 @@ void main() {
   test('正式 MediaKit 打开保持暂停并在打开门禁后显式播放', () {
     final backend =
         _source('lib/src/services/player/media_kit_player_backend.dart');
-    final opening = _source('lib/src/pages/player/player_state_opening.dart');
+    final opening = _openingSource();
 
     expect(backend, contains('await _player.open(Media(path), play: false);'));
     expect(
@@ -81,6 +87,28 @@ void main() {
         'if (mounted && openedVideoId == item.videoId) {\n'
         '        await playerService.play();',
       ),
+    );
+  });
+
+  test('普通新媒体先交付播放再收敛画质属性', () {
+    final opening = _openingSource();
+
+    expect(opening, contains('openRequests.markPlaybackReady();'));
+    expect(
+      opening,
+      contains(
+        'await playerService.play();\n'
+        '              if (openRequests.hasSuperseded(request)) {',
+      ),
+    );
+    expect(
+      opening,
+      contains('播放命令已完成后即可撤掉打开占位；损坏媒体检测和属性收敛继续在'),
+    );
+    expect(opening, contains('await settleMediaOpeningProperties(request);'));
+    expect(
+      opening,
+      contains('if (needsPreciseResume) {'),
     );
   });
 

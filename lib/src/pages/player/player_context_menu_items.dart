@@ -9,6 +9,8 @@ import '../../widgets/app_theme_tokens.dart';
 List<PopupMenuEntry<String>> buildPlayerContextMenuItems({
   required GlobalKey infoItemKey,
   required GlobalKey diagnosticsItemKey,
+  bool includePrecisionControls = false,
+  bool includeExternalSubtitle = false,
 }) {
   return [
     PopupMenuItem(
@@ -73,5 +75,93 @@ List<PopupMenuEntry<String>> buildPlayerContextMenuItems({
         ),
       ),
     ),
+    if (includePrecisionControls) ...[
+      const PopupMenuDivider(),
+      const PopupMenuItem<String>(
+        value: 'frame-backward',
+        child: ListTile(
+          dense: true,
+          iconColor: playerTextMuted,
+          textColor: playerText,
+          titleTextStyle: TextStyle(
+            color: playerText,
+            fontSize: AppTypography.body,
+          ),
+          leading: Icon(Icons.keyboard_double_arrow_left),
+          title: Text('后退一帧'),
+        ),
+      ),
+      const PopupMenuItem<String>(
+        value: 'frame-forward',
+        child: ListTile(
+          dense: true,
+          iconColor: playerTextMuted,
+          textColor: playerText,
+          titleTextStyle: TextStyle(
+            color: playerText,
+            fontSize: AppTypography.body,
+          ),
+          leading: Icon(Icons.keyboard_double_arrow_right),
+          title: Text('前进一帧'),
+        ),
+      ),
+      const PopupMenuItem<String>(
+        value: 'ab-loop-start',
+        child: ListTile(
+          dense: true,
+          iconColor: playerTextMuted,
+          textColor: playerText,
+          titleTextStyle: TextStyle(
+            color: playerText,
+            fontSize: AppTypography.body,
+          ),
+          leading: Icon(Icons.looks_one_rounded),
+          title: Text('设置 A 点'),
+        ),
+      ),
+      const PopupMenuItem<String>(
+        value: 'ab-loop-end',
+        child: ListTile(
+          dense: true,
+          iconColor: playerTextMuted,
+          textColor: playerText,
+          titleTextStyle: TextStyle(
+            color: playerText,
+            fontSize: AppTypography.body,
+          ),
+          leading: Icon(Icons.looks_two_rounded),
+          title: Text('设置 B 点'),
+        ),
+      ),
+      const PopupMenuItem<String>(
+        value: 'ab-loop-clear',
+        child: ListTile(
+          dense: true,
+          iconColor: playerTextMuted,
+          textColor: playerText,
+          titleTextStyle: TextStyle(
+            color: playerText,
+            fontSize: AppTypography.body,
+          ),
+          leading: Icon(Icons.clear_rounded),
+          title: Text('清除 A-B loop'),
+        ),
+      ),
+    ],
+    if (includeExternalSubtitle)
+      const PopupMenuItem<String>(
+        value: 'external-subtitle',
+        child: ListTile(
+          dense: true,
+          iconColor: playerTextMuted,
+          textColor: playerText,
+          titleTextStyle: TextStyle(
+            color: playerText,
+            fontSize: AppTypography.body,
+          ),
+          leading: Icon(Icons.subtitles_rounded),
+          title: Text('加载外挂字幕'),
+        ),
+      ),
   ];
 }

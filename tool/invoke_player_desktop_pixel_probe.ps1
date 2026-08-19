@@ -11,7 +11,9 @@
 
   为避免播放中的自然运动被误判为 seek 结果，默认要求每次输入前画面静止。使用者应先
   暂停视频，再运行短按/快退基线；长按扫描可显式设定 HoldMilliseconds，并从静止画面
-  开始，报告持续扫描中的最长桌面静止段。这个约束是性能证据，不是播放器功能。
+  开始。自动化长按从 Down 开始持续采样到真实 Up，报告首个持续桌面变化、按住期间
+  的最长静止段与有效采样率；若首帧在 Up 前已出现，Up -> 首帧字段保持 null。这个
+  约束是性能证据，不是播放器功能。
 #>
 [CmdletBinding()]
 param(
@@ -120,7 +122,7 @@ public sealed class DesktopPixelProbeAction
     public long firstChangedPixelQpcUs { get; set; }
     public long firstGeometryChangeQpcUs { get; set; }
     public int inputDownToFirstChangedPixelMs { get; set; }
-    public int inputUpToFirstChangedPixelMs { get; set; }
+    public int? inputUpToFirstChangedPixelMs { get; set; }
     public int inputDownToGeometryChangeMs { get; set; }
     public int inputUpToGeometryChangeMs { get; set; }
     public int maxUnchangedRunMs { get; set; }
@@ -158,8 +160,8 @@ public sealed class DesktopPixelProbeReport
     public int timedOutSamples { get; set; }
     public int p50InputDownToPixelMs { get; set; }
     public int p95InputDownToPixelMs { get; set; }
-    public int p50InputUpToPixelMs { get; set; }
-    public int p95InputUpToPixelMs { get; set; }
+    public int? p50InputUpToPixelMs { get; set; }
+    public int? p95InputUpToPixelMs { get; set; }
     public int p50InputDownToGeometryMs { get; set; }
     public int p95InputDownToGeometryMs { get; set; }
     public int longestUnchangedRunMs { get; set; }
@@ -482,6 +484,9 @@ public static class DesktopPixelProbe
                 continue;
             }
 
+            var automatedKeyboardHoldActive = false;
+            long automatedKeyboardHoldReleaseUs = 0;
+            long automatedKeyboardRepeatUs = 0;
             if (manualKeyboard)
             {
                 action.inputUsesNativeQpcAnchor = true;
@@ -522,24 +527,18 @@ public static class DesktopPixelProbe
                     if (holdMilliseconds <= 0)
                     {
                         Thread.Sleep(35);
+                        action.keyUpQpcUs = NowUs();
+                        SendKeyboardInput(virtualKey, scanCode, true, useVirtualKeyInjection);
                     }
                     else
                     {
-                        var repeatAtUs = action.keyDownQpcUs + 220000L;
-                        var releaseAtUs = action.keyDownQpcUs + holdMilliseconds * 1000L;
-                        while (NowUs() < releaseAtUs)
-                        {
-                            if (NowUs() >= repeatAtUs)
-                            {
-                                // 重复 scan-code 让 Flutter 收到真实 KeyRepeat；不要用测试框架伪造。
-                                SendKeyboardInput(virtualKey, scanCode, false, useVirtualKeyInjection);
-                                repeatAtUs += 70000L;
-                            }
-                            Thread.Sleep(1);
-                        }
+                        // 长按的桌面像素必须从 Down 开始采样；重复消息和 KeyUp 在下面
+                        // 的同一采样循环中推进，不能先阻塞 holdMilliseconds 再把中间帧丢掉。
+                        automatedKeyboardHoldActive = true;
+                        automatedKeyboardRepeatUs = action.keyDownQpcUs + 220000L;
+                        automatedKeyboardHoldReleaseUs =
+                            action.keyDownQpcUs + holdMilliseconds * 1000L;
                     }
-                    action.keyUpQpcUs = NowUs();
-                    SendKeyboardInput(virtualKey, scanCode, true, useVirtualKeyInjection);
                 }
                 if (mouseClick || mouseProgressDrag) action.keyUpQpcUs = NowUs();
             }
@@ -548,10 +547,12 @@ public static class DesktopPixelProbe
             long postFirstChangedDeadlineUs = 0;
             // 保持按键、鼠标 Down/Up 和样本间 settle 都没有进行桌面采样，不能把它们
             // 计入有效 capture fps，否则慢 seek 的等待会伪造“采样器自身掉帧”。
-            if (!manualLongKeyboard)
+            if (!manualLongKeyboard && !automatedKeyboardHoldActive)
                 excludedIdleUs += Math.Max(0L, action.keyUpQpcUs - action.keyDownQpcUs);
 
-            var deadlineUs = (manualLongKeyboard ? action.keyDownQpcUs : action.keyUpQpcUs) +
+            var deadlineUs = (manualLongKeyboard || automatedKeyboardHoldActive
+                ? action.keyDownQpcUs + holdMilliseconds * 1000L
+                : action.keyUpQpcUs) +
                 timeoutMilliseconds * 1000L;
             long firstChangedUs = 0;
             var changedConsecutively = 0;
@@ -559,6 +560,23 @@ public static class DesktopPixelProbe
             while (NowUs() < deadlineUs)
             {
                 var nowUs = NowUs();
+                if (automatedKeyboardHoldActive)
+                {
+                    if (nowUs >= automatedKeyboardRepeatUs)
+                    {
+                        // 重复消息让 Flutter 收到真实 KeyRepeat；不要用测试框架伪造。
+                        var scanCode = (byte)(MapVirtualKey((uint)virtualKey, 0) & 0xFF);
+                        SendKeyboardInput(virtualKey, scanCode, false, useVirtualKeyInjection);
+                        automatedKeyboardRepeatUs += 70000L;
+                    }
+                    if (nowUs >= automatedKeyboardHoldReleaseUs)
+                    {
+                        action.keyUpQpcUs = NowUs();
+                        var scanCode = (byte)(MapVirtualKey((uint)virtualKey, 0) & 0xFF);
+                        SendKeyboardInput(virtualKey, scanCode, true, useVirtualKeyInjection);
+                        automatedKeyboardHoldActive = false;
+                    }
+                }
                 if (manualLongKeyboard && physicalKeyUpQpcUs <= 0)
                 {
                     physicalKeyUpQpcUs = TryReadNativeKeyboardUpQpc(
@@ -648,18 +666,38 @@ public static class DesktopPixelProbe
                 previous = current;
                 if (changedConsecutively >= 2)
                 {
-                    action.firstChangedPixelQpcUs = firstChangedUs;
-                    action.inputDownToFirstChangedPixelMs = (int)((firstChangedUs - action.keyDownQpcUs) / 1000L);
-                    if (!manualKeyboard)
-                        action.inputUpToFirstChangedPixelMs = (int)((firstChangedUs - action.keyUpQpcUs) / 1000L);
-                    firstChangedObserved = true;
+                    if (!firstChangedObserved)
+                    {
+                        action.firstChangedPixelQpcUs = firstChangedUs;
+                        action.inputDownToFirstChangedPixelMs = (int)((firstChangedUs - action.keyDownQpcUs) / 1000L);
+                        if (!manualKeyboard && action.keyUpQpcUs > 0)
+                            action.inputUpToFirstChangedPixelMs =
+                                (int)((firstChangedUs - action.keyUpQpcUs) / 1000L);
+                        else
+                            action.inputUpToFirstChangedPixelMs = null;
+                        firstChangedObserved = true;
+                    }
                     if (!manualLongKeyboard)
                     {
-                        action.passed = true;
-                        break;
+                        // 自动长按必须继续采样到真实 KeyUp，才能同时验证按住期间的
+                        // 连续扫描与持续掉帧；短按仍在首个稳定画面后立即结束。
+                        if (!automatedKeyboardHoldActive)
+                        {
+                            action.passed = true;
+                            break;
+                        }
                     }
                     if (physicalKeyUpQpcUs > 0 && postFirstChangedDeadlineUs <= 0)
                         postFirstChangedDeadlineUs = physicalKeyUpQpcUs + 250000L;
+                }
+                if (!manualLongKeyboard && !automatedKeyboardHoldActive &&
+                    firstChangedObserved)
+                {
+                    // 长按在按住期间已出现首帧时，KeyUp 后只需结束当前动作；若
+                    // 首帧恰好在 KeyUp 后才出现，上面的 changedConsecutively 分支
+                    // 已记录 Up -> 首帧。两种情况都不能继续空转到超时。
+                    action.passed = true;
+                    break;
                 }
                 if (manualLongKeyboard && firstChangedObserved &&
                     physicalKeyUpQpcUs > 0 && postFirstChangedDeadlineUs > 0 &&
@@ -669,6 +707,15 @@ public static class DesktopPixelProbe
                     break;
                 }
                 WaitUntil(ref lastCaptureUs, captureIntervalUs);
+            }
+            if (automatedKeyboardHoldActive)
+            {
+                // 采样 deadline 可能先于 hold 结束；始终释放本轮刚注入的按键，避免
+                // QA 进程异常时把按键状态泄漏到下一个独立会话。
+                action.keyUpQpcUs = NowUs();
+                var scanCode = (byte)(MapVirtualKey((uint)virtualKey, 0) & 0xFF);
+                SendKeyboardInput(virtualKey, scanCode, true, useVirtualKeyInjection);
+                automatedKeyboardHoldActive = false;
             }
             if (!action.passed) action.failure = geometryAction
                 ? "geometry_change_timeout"
@@ -717,16 +764,24 @@ public static class DesktopPixelProbe
         foreach (var action in report.actions) if (action.passed) {
             if (action.resultEvidence == "desktop-composited-pixel-change") {
                 downLatencies.Add(action.inputDownToFirstChangedPixelMs);
-                if (!action.inputUsesNativeQpcAnchor)
-                    upLatencies.Add(action.inputUpToFirstChangedPixelMs);
+                // 长按首帧可能在按住期间已经出现，此时没有可定义的
+                // Up -> 首帧延迟；nullable 结果必须从 Up 分位数中排除，不能
+                // 由 PowerShell/C# 的默认值伪造成 0ms。
+                if (!action.inputUsesNativeQpcAnchor &&
+                    action.inputUpToFirstChangedPixelMs.HasValue)
+                    upLatencies.Add(action.inputUpToFirstChangedPixelMs.Value);
             } else {
                 geometryDownLatencies.Add(action.inputDownToGeometryChangeMs);
             }
         }
         report.p50InputDownToPixelMs = (int)Percentile(downLatencies, 0.50);
         report.p95InputDownToPixelMs = (int)Percentile(downLatencies, 0.95);
-        report.p50InputUpToPixelMs = (int)Percentile(upLatencies, 0.50);
-        report.p95InputUpToPixelMs = (int)Percentile(upLatencies, 0.95);
+        report.p50InputUpToPixelMs = upLatencies.Count == 0
+            ? (int?)null
+            : (int)Percentile(upLatencies, 0.50);
+        report.p95InputUpToPixelMs = upLatencies.Count == 0
+            ? (int?)null
+            : (int)Percentile(upLatencies, 0.95);
         report.p50InputDownToGeometryMs = (int)Percentile(geometryDownLatencies, 0.50);
         report.p95InputDownToGeometryMs = (int)Percentile(geometryDownLatencies, 0.95);
         return report;
@@ -995,7 +1050,11 @@ public static class DesktopPixelProbe
         SendMouseInput(0x0004); // MOUSEEVENTF_LEFTUP
     }
 
-    /** 在不改变播放状态的前提下，让真实 PlayerPage 视频表面接收键盘焦点。 */
+    /**
+     * 激活真实 PlayerPage 窗口并点击视频上方区域，让页面 FocusNode 接收键盘。
+     * 点击点刻意避开底部控制条/Slider；不能用窗口底部的通用点击来准备焦点，
+     * 否则后续 J/L 可能被 Slider 或其它控件夺走并记录为输入语义失败。
+     */
     private static void FocusPlayerKeyboard(IntPtr window)
     {
         RECT client;
@@ -1003,9 +1062,11 @@ public static class DesktopPixelProbe
             throw new InvalidOperationException("无法读取真实 PlayerPage 焦点客户区。");
         var point = new POINT {
             X = Math.Max(1, (client.Right - client.Left) / 2),
-            Y = Math.Max(1, (client.Bottom - client.Top) / 2)
+            Y = Math.Max(1, (client.Bottom - client.Top) / 3)
         };
-        if (!ClientToScreen(window, ref point) || !SetCursorPos(point.X, point.Y))
+        if (!BringToForeground(window) ||
+            !ClientToScreen(window, ref point) ||
+            !SetCursorPos(point.X, point.Y))
             throw new InvalidOperationException("无法将焦点准备鼠标移动到真实 PlayerPage 视频表面。");
         Thread.Sleep(30);
         SendMouseInput(0x0002); // MOUSEEVENTF_LEFTDOWN
@@ -1307,7 +1368,13 @@ if (Test-Path -LiteralPath $Output) {
 }
 New-Item -ItemType Directory -Path $Output -Force | Out-Null
 
-$resolvedVirtualKey = switch ($Action) {
+$resolvedVirtualKey = if ($VirtualKey -gt 0 -and $Action -in @(
+    'forward', 'backward', 'manualForward', 'manualBackward',
+    'manualLongForward', 'manualLongBackward')) {
+  # 真实 PlayerPage QA 可从 ready.json 传入用户当前配置的 J/L/箭头等 VK；
+  # 未提供时保留专用默认 J/L，避免改变旧的 Texture 对照合同。
+  $VirtualKey
+} else { switch ($Action) {
   'forward' { 0x4C } # L：默认播放器短按/长按前进
   'backward' { 0x4A } # J：默认播放器短按/长按后退
   'manualForward' { 0x4C } # L：只等待真实实体按键，不由工具注入。
@@ -1323,7 +1390,7 @@ $resolvedVirtualKey = switch ($Action) {
     if ($VirtualKey -le 0) { throw 'custom 动作必须显式给出 -VirtualKey。' }
     $VirtualKey
   }
-}
+} }
 
 $report = [DesktopPixelProbe]::Run(
   $WindowTitle,

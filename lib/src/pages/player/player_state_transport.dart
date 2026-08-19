@@ -4,7 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/playback_settings.dart';
-import '../../features/player/application/player_seek_coordinator.dart';
+import 'player_input_qa_evidence.dart';
 import 'player_video_aspect_mode.dart';
 import 'player_page.dart';
 
@@ -57,15 +57,21 @@ extension PlayerStateTransport on PlayerPageState {
   }
 
   /**
-   * Windows 原生桥在 mpv render 回调完成共享纹理复制并通知 Flutter Texture 后递增
-   * `native-rendered-frames`，这是最终精确落点已进入 Texture 的直接证据。非原生桥
-   * 才退回 mpv 的估算帧号，并把来源写入 trace，不能把回退值与屏幕呈现混为一谈。
+   * 原生后端在 render 回调完成后递增 `native-rendered-frames`；Texture 与 child HWND
+   * 都可能拥有这个计数，故必须沿用后端声明的输出类型标注证据。未声明类型时保持
+   * unknown，不能把兼容后端的计数猜成正式 Texture。
    */
   Future<int?> readPresentedVideoFrame() async {
     final nativeRendered =
         parseMpvInt(await getMpvProperty('native-rendered-frames'));
     if (nativeRendered != null) {
-      lastPresentedVideoFrameEvidence = 'native-rendered-texture';
+      lastPresentedVideoFrameEvidence = switch (
+        playerService.framePresentationEvidenceKind
+      ) {
+        'texture' => 'native-rendered-texture',
+        'child-hwnd' => 'native-rendered-child-hwnd',
+        _ => 'native-rendered-output-unknown',
+      };
       return nativeRendered;
     }
     lastPresentedVideoFrameEvidence = 'estimated-frame-number-fallback';
@@ -159,7 +165,7 @@ extension PlayerStateTransport on PlayerPageState {
     if (isExiting) {
       return;
     }
-    // 进度条只在手势结束后提交一次精确落点，不能先预览再精确 seek；
+    // 进度条只在手势结束后提交一次精确落点，不能先 keyframe 预览再精确 seek；
     // 否则同一次拖动会在后端形成双跳转，并放大长 GOP 的可感知卡顿。
     cancelKeyboardSeek();
     // 精确 seek 从前一关键帧解码时不允许旧声音先恢复；位置确认且新帧交付后才解除静音。
@@ -167,11 +173,12 @@ extension PlayerStateTransport on PlayerPageState {
   }
 
   /**
-   * 处理鼠标进度条的交互式跳转。
+   * 处理鼠标进度条的最终精确跳转。
    *
-   * 进度条点击必须复用页面级 latest-only 协调器：第一次点击立即下发，后续快速点击
-   * 只替换尚未下发的目标，不能让每个点击都排队等待新帧和音量恢复。进度条组件自身
-   * 保留鼠标目标，避免位置流尚未追上时滑块回弹；继续观看恢复仍走精确 seek 与音频门禁。
+   * 拖动过程由 Slider 本地视觉值和缩略图预览承担，解码器只在松手后收到一次普通 seek。
+   * 精确协调器是 latest-only，连续点击只替换尚未下发目标；音频门禁等待目标新帧后再
+   * 恢复，避免准确落点前先听到旧位置声音。进度条组件自身保留鼠标目标，避免位置流
+   * 尚未追上时滑块回弹。
    */
   Future<void> seekFromProgressBarWithDiagnostics(Duration target) async {
     if (isExiting) {
@@ -180,7 +187,12 @@ extension PlayerStateTransport on PlayerPageState {
     cancelKeyboardSeek();
     final generation = ++progressSeekGeneration;
     try {
-      await seekCoordinator.request(target);
+      if (pageWidget.progressDragSeekMode ==
+          PlayerProgressDragSeekMode.fastPreviewThenExact) {
+        await _seekProgressWithFastPreviewThenExact(target);
+      } else {
+        await seekWithDiagnostics(target);
+      }
     } finally {
       // 长 GOP 关键帧可能永远不会落在目标容差内；超时或后端回到其它有效位置时，
       // 页面必须退回真实 position，不能让乐观目标永久遮住播放器状态。
@@ -191,49 +203,85 @@ extension PlayerStateTransport on PlayerPageState {
   }
 
   /**
-   * 执行继续观看所需的精确 seek，并保留既有位置确认与延迟诊断语义。
-   *
-   * 该协调器只服务单次精确落点，不与长按的关键帧预览工作器共享待提交目标，
-   * 避免短按或进度条提交被随后到达的交互式请求改写。
+   * 两阶段拖动合同：先请求目标附近关键帧以缩短可见反馈，再提交既有精确 seek 收敛
+   * 真实目标。预览不解除静音；任何一个阶段异常都会沿用原有失败处理与
+   * 乐观位置回退，不能把关键帧位置伪装成准确落点。
    */
-  Future<void> seekExactlyWithDiagnostics(Duration target) async {
-    final exactCoordinator = PlayerSeekCoordinator(
-      submit: playerService.seek,
-      readPosition: () => playerService.state.position,
-      readDuration: () => playerService.state.duration,
-      isExiting: () => isExiting,
-      onLatency: (milliseconds) {
-        lastSeekLatencyMs = milliseconds;
-        lastSeekAt = DateTime.now();
-      },
-      onFailure: (error) {
-        if (mounted) {
-          setOptimisticProgressPosition(null);
-        }
-        debugPrint(
-          'PLAYER_SEEK_FAILED type=${error.runtimeType}',
-        );
-      },
-    );
-    await exactCoordinator.request(target);
+  Future<void> _seekProgressWithFastPreviewThenExact(Duration target) async {
+    await seekAudioGate.run(() async {
+      final frameBeforePreview = await seekAudioGate.captureFinalFrame();
+      final traceId = seekAudioGate.activeTraceId;
+      seekTrace.mark(traceId, 'progress_preview_submit', target: target);
+      PlayerInputQaEvidence.progressPreviewSeekSubmitted();
+      await playerService.seekInteractive(target);
+      final previewPresented = await waitForPresentedVideoFrame(
+        frameBeforePreview,
+        const Duration(milliseconds: 600),
+      );
+      seekTrace.mark(
+        traceId,
+        previewPresented
+            ? 'progress_preview_frame'
+            : 'progress_preview_frame_timeout',
+        target: target,
+        framePresented: previewPresented,
+        frameEvidence: lastPresentedVideoFrameEvidence,
+      );
+      // 即使预览超时也继续既有精确定位，不能让 Debug 实验改变用户的准确落点合同。
+      await seekExactlyWithDiagnostics(target);
+    });
+    PlayerInputQaEvidence.progressExactSeekConfirmed();
   }
 
-  /** 键盘先提交关键帧预览；短按 KeyUp 精确收敛，长按保持 latest-only 预览。 */
+  /**
+   * 执行继续观看所需的精确 seek，并保留既有位置确认与延迟诊断语义。
+   *
+   * 该协调器只服务进度条和继续观看等明确的精确落点，不与键盘关键帧预览工作器
+   * 共享待提交目标，避免不同入口互相改写。
+   */
+  Future<void> seekExactlyWithDiagnostics(Duration target) async {
+    await exactSeekCoordinator.request(target);
+    // PlayerSeekCoordinator 的确认窗口耗尽时会安全结束 worker，以免把 native 状态
+    // 卡死；进度条精确合同不能把这种“命令已返回但实际位置未收敛”当成功。这里在
+    // AudioGate 允许恢复声音前做最后一次同步后置条件检查。
+    final actual = playerService.state.position;
+    if ((actual - target).abs() > const Duration(milliseconds: 100)) {
+      if (mounted) {
+        setOptimisticProgressPosition(null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('未能准确定位到拖动位置，请重试')),
+        );
+      }
+      debugPrint(
+        'PLAYER_EXACT_SEEK_UNCONFIRMED target_ms=${target.inMilliseconds} '
+        'actual_ms=${actual.inMilliseconds}',
+      );
+      throw TimeoutException(
+        '精确定位未在确认窗口内收敛',
+        const Duration(seconds: 2),
+      );
+    }
+  }
+
+  /**
+   * 短按在 KeyUp 提交唯一关键帧跳转；长按前进转为连续高速播放，快退保持关键帧预览。
+   */
   Duration seekRelative(
     Duration delta, {
     required bool mutePreview,
-    bool isRepeat = false,
+    required bool isRepeat,
   }) {
     return keyboardSeek.requestRelative(
       delta,
-      isRepeat: isRepeat,
-      // 首次短按先走关键帧路径，KeyUp 再用独立精确命令确认完整步长；长按不重复精确 seek。
+      // 只有长按快退仍以 latest-only 关键帧预览推进；前进的首个 KeyRepeat 会由
+      // controller 切到临时倍速，不能继续把更多随机 seek 压进解码链。
       submitPreview: true,
       mutePreview: mutePreview,
+      isRepeat: isRepeat,
     );
   }
 
-  /** KeyUp 收敛键盘会话；短按精确到完整步长，长按不重复绝对 seek。 */
+  /** KeyUp 收敛短按关键帧预览，或恢复长按快进前的原速度与音量。 */
   void settleKeyboardSeek() {
     unawaited(keyboardSeek.settlePreview());
   }
@@ -244,6 +292,7 @@ extension PlayerStateTransport on PlayerPageState {
     keyboardSeekLogicalKey = null;
     progressSeekGeneration++;
     seekCoordinator.cancelPending();
+    exactSeekCoordinator.cancelPending();
     keyboardSeek.cancel();
   }
 

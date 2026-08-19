@@ -44,6 +44,7 @@ export 'player_state_chrome.dart';
 export 'player_state_performance.dart';
 export 'player_state_gpu_capabilities.dart';
 export 'player_state_opening.dart';
+export 'player_state_opening_recovery.dart';
 export 'player_state_queue.dart';
 export 'player_state_dialogs.dart';
 export 'player_state_item_actions.dart';
@@ -55,6 +56,17 @@ import 'player_state_view.dart';
 export 'player_state_view.dart';
 export 'player_top_bar.dart';
 export 'player_state_derived.dart';
+
+/**
+ * 进度条松手后的定位策略。
+ *
+ * [fastPreviewThenExact] 是正式默认：先快速请求目标附近关键帧，随即以既有精确 seek
+ * 收敛目标；[exactOnly] 仅保留给隔离 QA 作为基线对照，二者都不属于用户设置。
+ */
+enum PlayerProgressDragSeekMode {
+  exactOnly,
+  fastPreviewThenExact,
+}
 
 class PlayerPage extends StatefulWidget {
   const PlayerPage({
@@ -80,6 +92,7 @@ class PlayerPage extends StatefulWidget {
     required this.playerServiceFactory,
     required this.mediaProbeBackendFactory,
     required this.fullscreenSessionController,
+    this.progressDragSeekMode = PlayerProgressDragSeekMode.fastPreviewThenExact,
   });
 
   final VideoItem initialItem;
@@ -121,6 +134,8 @@ class PlayerPage extends StatefulWidget {
   final MediaProbeBackendFactory mediaProbeBackendFactory;
   /** 媒体库 Route 持有的播放器全屏会话状态，不参与持久化。 */
   final PlayerFullscreenSessionController fullscreenSessionController;
+  /** 正式两阶段拖动合同；QA 可显式退回单次精确定位建立同机对照。 */
+  final PlayerProgressDragSeekMode progressDragSeekMode;
   @override
   State<PlayerPage> createState() => PlayerPageState();
 }
@@ -280,6 +295,8 @@ class PlayerPageState extends State<PlayerPage> {
   String? lastHwdecCurrent;
   var consecutiveSoftwareDecodeSamples = 0;
   var softwareDecodeConfirmed = false;
+  /** Debug-only 强制软件解码复核只自动点击一次恢复动作，防止 QA 无限重开。 */
+  var softwareDecodeAutoRetryTriggered = false;
   var videoProgressState = '等待首个视频样本';
   var audioProgressState = '等待首个音频样本';
   var videoStallEvents = 0;
@@ -289,6 +306,8 @@ class PlayerPageState extends State<PlayerPage> {
   DateTime? routePopRequestedAt;
   /** 首次立即提交、连续输入节流追踪最新目标的页面级 seek 协调器。 */
   late final PlayerSeekCoordinator seekCoordinator;
+  /** 进度条松手与继续观看共用的精确 latest-only 协调器，不与键盘 keyframe 预览混用。 */
+  late final PlayerSeekCoordinator exactSeekCoordinator;
   late final PlayerSeekGopAdaptiveThrottle seekPreviewThrottle;
   /** 页面生命周期内共享的单调 seek trace，供 KeyUp、帧交付和音频恢复关联。 */
   late final PlayerSeekTraceLogger seekTrace;
@@ -373,6 +392,9 @@ class PlayerPageState extends State<PlayerPage> {
   late PlayerCompressionEnhancementMode compressionEnhancementMode;
   /** 快进与快退快捷键共用的离散跳转秒数。 */
   late int seekStepSeconds;
+  /** 当前媒体会话的 A-B loop 端点；不写入全局设置或播放记录。 */
+  Duration? abLoopStart;
+  Duration? abLoopEnd;
   /** 当前播放器会话使用的全局配置快照。 */
   late PlaybackSettings effectivePlaybackSettings;
   /** 页面即时音量；避免异步后端快照让滑条、图标和键盘反馈不同步。 */

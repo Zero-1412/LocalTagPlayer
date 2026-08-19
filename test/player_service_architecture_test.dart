@@ -167,6 +167,44 @@ class _InteractiveSeekRecordingBackend extends _RecordingPlayerBackend
       commands.add('seek-interactive');
 }
 
+/** 记录专用快进扫描边界，确保服务不会把恢复操作拆成普通 setRate。 */
+class _FastForwardScanRecordingBackend extends _RecordingPlayerBackend
+    implements PlayerFastForwardScanBoundary {
+  @override
+  Future<void> beginFastForwardScan(double rate) async =>
+      commands.add('scan-begin:$rate');
+
+  @override
+  Future<void> endFastForwardScan() async => commands.add('scan-end');
+}
+
+/** 记录逐帧、A-B loop 与外挂字幕边界，验证服务不把高级控制降级为普通 seek。 */
+class _PrecisionControlsRecordingBackend extends _RecordingPlayerBackend
+    implements PlayerPrecisionControlsBoundary, PlayerExternalSubtitleBoundary {
+  final List<String> precisionCommands = <String>[];
+
+  @override
+  Future<void> stepFrame({required bool backward}) async =>
+      precisionCommands.add(backward ? 'frame-backward' : 'frame-forward');
+
+  @override
+  Future<void> setAbLoopPoint({
+    required PlayerAbLoopPoint point,
+    required Duration position,
+  }) async {
+    precisionCommands.add(
+      '${point == PlayerAbLoopPoint.start ? 'a' : 'b'}:${position.inMilliseconds}',
+    );
+  }
+
+  @override
+  Future<void> clearAbLoop() async => precisionCommands.add('ab-clear');
+
+  @override
+  Future<void> addExternalSubtitle(String path) async =>
+      precisionCommands.add('subtitle-add');
+}
+
 /** 用门闩制造跨命令竞争，验证 PlayerService 不会让 open 越过 in-flight seek。 */
 class _SerializedCommandBackend extends _RecordingPlayerBackend {
   _SerializedCommandBackend(this.seekEntered, this.releaseSeek);
@@ -269,6 +307,9 @@ String _readPlayerPageCluster() {
 void main() {
   test('PlayerPage 只依赖 PlayerService 工厂，不导入具体播放器后端', () {
     final source = _readPlayerPageCluster();
+    final seekGate = File(
+      'integration_test/player_seek_latency_gate_test.dart',
+    ).readAsStringSync();
 
     expect(
         source, contains('final PlayerServiceFactory playerServiceFactory;'));
@@ -283,18 +324,39 @@ void main() {
       ),
     );
     expect(source, contains('submit: playerService.seekInteractive'));
-    expect(source, contains('await seekCoordinator.request(target);'));
-    // 鼠标连续点击不得进入等待新帧/恢复音量的串行门禁；精确恢复路径仍单独保留。
+    expect(source, contains('exactSeekCoordinator = PlayerSeekCoordinator('));
+    expect(source, contains('await seekWithDiagnostics(target);'));
+    expect(source, contains('await exactSeekCoordinator.request(target);'));
+    // 拖动过程不派发 seek；唯一的松手精确提交在新视频帧交付后才恢复音频。
     expect(
-      source,
-      isNot(contains('seekAudioGate.run(() => playerService.seekInteractive')),
-    );
+        source,
+        contains(
+            'seekAudioGate.run(() => seekExactlyWithDiagnostics(target))'));
     expect(source, contains('PlayerKeyboardSeekController('));
-    expect(source, contains('exactSubmit: seekExactlyWithDiagnostics'));
+    expect(source, isNot(contains('exactSubmit: seekExactlyWithDiagnostics')));
+    // 页面延后首个短按随机 seek；首个 KeyRepeat 的前进改为临时倍速，避免持续
+    // 关键帧跳转反复中断解码。它不得写回全局播放设置。
+    expect(source, contains('deferInitialPreviewUntilRelease: true'));
+    expect(source, contains('setTemporaryPlaybackRate: playerService.setRate'));
+    expect(source,
+        contains('beginFastForwardScan: playerService.beginFastForwardScan'));
+    expect(
+        source,
+        contains(
+            'endFastForwardScan: () => playerService.endFastForwardScan('));
     expect(source, contains('isRepeat: isRepeat'));
-    // 进度条走交互式 latest-only；键盘只有短按 KeyUp 才补一次绝对 seek，长按不重复。
+    // 短按只提交一次关键帧；进度条松手与继续观看单独走准确落点。
     expect(source, isNot(contains('settle: seekExactlyWithDiagnostics')));
     expect(source, contains('confirmationTimeout: Duration.zero'));
+    expect(source,
+        contains('confirmationTolerance: const Duration(milliseconds: 100)'));
+    // 基线门禁必须与正式短按/关键帧预览合同一致；否则长 GOP 后退会把
+    // 逻辑位置等待误报成首个呈现帧延迟。
+    expect(seekGate, contains('confirmationTimeout: Duration.zero'));
+    expect(seekGate,
+        isNot(contains('confirmationTimeout: const Duration(seconds: 3)')));
+    expect(source, contains('PLAYER_EXACT_SEEK_UNCONFIRMED'));
+    expect(source, contains('精确定位未在确认窗口内收敛'));
     expect(source, contains('await seekExactlyWithDiagnostics(start);'));
     expect(source, contains('submit: playerService.seek'));
   });
@@ -364,6 +426,78 @@ void main() {
 
     expect(interactiveBackend.commands, <String>['seek-interactive']);
     expect(fallbackBackend.commands, <String>['seek']);
+  });
+
+  test('PlayerService 优先使用可恢复快进扫描边界并保留倍速回退', () async {
+    final scanBackend = _FastForwardScanRecordingBackend();
+    final scanService = PlayerService(backend: scanBackend);
+    final fallbackBackend = _RecordingPlayerBackend();
+    final fallbackService = PlayerService(backend: fallbackBackend);
+
+    await scanService.beginFastForwardScan(2);
+    await scanService.endFastForwardScan(fallbackRate: 1);
+    await fallbackService.beginFastForwardScan(2);
+    await fallbackService.endFastForwardScan(fallbackRate: 1);
+
+    expect(scanBackend.commands, <String>['scan-begin:2.0', 'scan-end']);
+    expect(fallbackBackend.commands, <String>['rate', 'rate']);
+    expect(fallbackBackend.appliedRate, 1);
+  });
+
+  test('PlayerService 转发逐帧、A-B loop 与外挂字幕并明确能力缺失', () async {
+    final backend = _PrecisionControlsRecordingBackend();
+    final service = PlayerService(backend: backend);
+    expect(service.supportsPrecisionControls, isTrue);
+    expect(service.supportsExternalSubtitle, isTrue);
+
+    await service.stepFrame(backward: true);
+    await service.stepFrame(backward: false);
+    await service.setAbLoopPoint(
+      point: PlayerAbLoopPoint.start,
+      position: const Duration(seconds: 3),
+    );
+    await service.setAbLoopPoint(
+      point: PlayerAbLoopPoint.end,
+      position: const Duration(seconds: 8),
+    );
+    await service.clearAbLoop();
+    await service.addExternalSubtitle('subtitle.srt');
+    expect(
+      backend.precisionCommands,
+      <String>[
+        'frame-backward',
+        'frame-forward',
+        'a:3000',
+        'b:8000',
+        'ab-clear',
+        'subtitle-add',
+      ],
+    );
+
+    final unsupported = PlayerService(backend: _RecordingPlayerBackend());
+    expect(unsupported.supportsPrecisionControls, isFalse);
+    expect(unsupported.supportsExternalSubtitle, isFalse);
+    await expectLater(
+      unsupported.stepFrame(backward: false),
+      throwsUnsupportedError,
+    );
+    await expectLater(
+      unsupported.addExternalSubtitle('subtitle.srt'),
+      throwsUnsupportedError,
+    );
+  });
+
+  test('MediaKit 快进扫描只使用可读回的输出端丢帧档位并在换片前恢复', () {
+    final source = File(
+      'lib/src/services/player/media_kit_player_backend.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('PlayerFastForwardScanBoundary,'));
+    expect(source, contains("'video-sync',\n            'audio'"));
+    expect(source, contains("'interpolation',\n            'no'"));
+    expect(source, contains("'framedrop',\n            'vo'"));
+    expect(source, contains('_verifyFastForwardScanProfile(nativePlayer)'));
+    expect(source, contains('_restoreFastForwardScanBeforeMediaTransition()'));
   });
 
   test('PlayerService 将 in-flight seek 与 open 串行化', () async {

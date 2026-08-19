@@ -10,6 +10,7 @@ import 'player_diagnostics_dialog.dart';
 import 'player_dialog_content.dart';
 import 'player_media_controls_widgets.dart';
 import 'player_page.dart';
+import 'player_state_precision_controls.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -38,6 +39,24 @@ extension PlayerStateDialogs on PlayerPageState {
           seekChapter: playerService.seekChapter,
           adjustSubtitleDelay: playerService.adjustSubtitleDelay,
           adjustAudioDelay: playerService.adjustAudioDelay,
+          loadExternalSubtitle: playerService.supportsExternalSubtitle
+              ? loadExternalSubtitleWithFeedback
+              : null,
+          stepFrameBackward: playerService.supportsPrecisionControls
+              ? () => stepFrameWithFeedback(backward: true)
+              : null,
+          stepFrameForward: playerService.supportsPrecisionControls
+              ? () => stepFrameWithFeedback(backward: false)
+              : null,
+          setAbLoopStart: playerService.supportsPrecisionControls
+              ? setAbLoopStartWithFeedback
+              : null,
+          setAbLoopEnd: playerService.supportsPrecisionControls
+              ? setAbLoopEndWithFeedback
+              : null,
+          clearAbLoop: playerService.supportsPrecisionControls
+              ? clearAbLoopWithFeedback
+              : null,
         ),
       ),
     );
@@ -122,6 +141,8 @@ extension PlayerStateDialogs on PlayerPageState {
         items: buildPlayerContextMenuItems(
           infoItemKey: infoItemKey,
           diagnosticsItemKey: diagnosticsItemKey,
+          includePrecisionControls: playerService.supportsPrecisionControls,
+          includeExternalSubtitle: playerService.supportsExternalSubtitle,
         ),
       );
       scheduleContextMenuBoundsUpdate(
@@ -136,6 +157,18 @@ extension PlayerStateDialogs on PlayerPageState {
           await showVideoInfoDialog();
         case 'diagnostics':
           await showDiagnosticsDialog();
+        case 'frame-backward':
+          await stepFrameWithFeedback(backward: true);
+        case 'frame-forward':
+          await stepFrameWithFeedback(backward: false);
+        case 'ab-loop-start':
+          await setAbLoopStartWithFeedback();
+        case 'ab-loop-end':
+          await setAbLoopEndWithFeedback();
+        case 'ab-loop-clear':
+          await clearAbLoopWithFeedback();
+        case 'external-subtitle':
+          await loadExternalSubtitleWithFeedback();
       }
     }, overlayRect: estimatedContextMenuOverlayRect(details.globalPosition));
   }
@@ -296,6 +329,12 @@ class PlayerMediaControlsDialog extends StatefulWidget {
     required this.seekChapter,
     required this.adjustSubtitleDelay,
     required this.adjustAudioDelay,
+    this.loadExternalSubtitle,
+    this.stepFrameBackward,
+    this.stepFrameForward,
+    this.setAbLoopStart,
+    this.setAbLoopEnd,
+    this.clearAbLoop,
   });
 
   final Future<PlayerMediaControlsSnapshot> Function() read;
@@ -304,6 +343,12 @@ class PlayerMediaControlsDialog extends StatefulWidget {
   final Future<void> Function(int chapterIndex) seekChapter;
   final Future<void> Function(Duration delta) adjustSubtitleDelay;
   final Future<void> Function(Duration delta) adjustAudioDelay;
+  final Future<void> Function()? loadExternalSubtitle;
+  final Future<void> Function()? stepFrameBackward;
+  final Future<void> Function()? stepFrameForward;
+  final Future<void> Function()? setAbLoopStart;
+  final Future<void> Function()? setAbLoopEnd;
+  final Future<void> Function()? clearAbLoop;
 
   @override
   State<PlayerMediaControlsDialog> createState() =>
@@ -423,6 +468,17 @@ class _PlayerMediaControlsDialogState extends State<PlayerMediaControlsDialog> {
                           ),
                         ),
                       ),
+                      if (widget.loadExternalSubtitle != null)
+                        ListTile(
+                          key: const ValueKey(
+                            'player.mediaControls.externalSubtitle',
+                          ),
+                          dense: true,
+                          leading: const Icon(Icons.subtitles_rounded),
+                          title: const Text('加载外挂字幕'),
+                          subtitle: const Text('仅加入当前播放会话，不写入媒体库'),
+                          onTap: () => _run(widget.loadExternalSubtitle!),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -449,6 +505,60 @@ class _PlayerMediaControlsDialogState extends State<PlayerMediaControlsDialog> {
                       ),
                     ],
                   ),
+                  if (widget.stepFrameBackward != null ||
+                      widget.stepFrameForward != null ||
+                      widget.setAbLoopStart != null ||
+                      widget.setAbLoopEnd != null ||
+                      widget.clearAbLoop != null) ...[
+                    const SizedBox(height: 12),
+                    PlayerMediaControlSection(
+                      key: const ValueKey('player.mediaControls.precision'),
+                      title: '逐帧与 A-B loop',
+                      icon: Icons.center_focus_strong_rounded,
+                      emptyLabel: '',
+                      children: [
+                        if (widget.stepFrameBackward != null)
+                          ListTile(
+                            dense: true,
+                            leading: const Icon(
+                              Icons.keyboard_double_arrow_left,
+                            ),
+                            title: const Text('后退一帧'),
+                            onTap: () => _run(widget.stepFrameBackward!),
+                          ),
+                        if (widget.stepFrameForward != null)
+                          ListTile(
+                            dense: true,
+                            leading: const Icon(
+                              Icons.keyboard_double_arrow_right,
+                            ),
+                            title: const Text('前进一帧'),
+                            onTap: () => _run(widget.stepFrameForward!),
+                          ),
+                        if (widget.setAbLoopStart != null)
+                          ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.looks_one_rounded),
+                            title: const Text('设置 A 点'),
+                            onTap: () => _run(widget.setAbLoopStart!),
+                          ),
+                        if (widget.setAbLoopEnd != null)
+                          ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.looks_two_rounded),
+                            title: const Text('设置 B 点'),
+                            onTap: () => _run(widget.setAbLoopEnd!),
+                          ),
+                        if (widget.clearAbLoop != null)
+                          ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.clear_rounded),
+                            title: const Text('清除 A-B loop'),
+                            onTap: () => _run(widget.clearAbLoop!),
+                          ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   PlayerMediaControlSection(
                     key: const ValueKey('player.mediaControls.chapters'),

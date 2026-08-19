@@ -77,6 +77,9 @@ extension PlayerStateEvents on PlayerPageState {
     openedMediaGeneration = null;
     handledCompletedVideoId = null;
     handledCompletedGeneration = null;
+    // A/B loop 只绑定当前媒体；切换或失效时不能把旧区间带到新视频。
+    abLoopStart = null;
+    abLoopEnd = null;
     progressSeekGeneration++;
     cancelKeyboardSeek();
   }

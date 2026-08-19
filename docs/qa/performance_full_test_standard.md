@@ -133,6 +133,11 @@ CPU/GPU 绝对数值随解码器和媒体规格变化，除“空闲/浏览持�
   才能标记 `passed`，不能把模拟证据写成物理跨屏通过。默认对照为 MediaKit Texture 与
   原生 MPV Texture；需要定位呈现链路时，才显式传入 `-Backends mediaKit,hwnd` 比较
   正式 Texture 与 QA-only child HWND。后者不得作为 Release 排名、默认后端或产品能力声明。
+- runner 同时写入 `displayInventory`：每块屏的边界、原生分辨率、Windows 当前刷新率和逻辑
+  DPI。该字段的 `physicalCrossDpiEvidence.evidenceKind` 固定为
+  `display-inventory-only`，只用于确认测试环境确实是 4K/高刷新率和记录 DPI；
+  `physicalWindowMoveConfirmed` 在自动矩阵中保持 `false`，不能由显示器 inventory 推导出
+  “窗口已经跨屏”或“全屏合成压力已通过”。
 - 真实媒体库播放器随机压力默认 1,800 秒、固定 seed；覆盖随机打开、队列滚动、两次 seek、全屏
   往返、诊断和返回媒体库。至少有 1 个 cycle，且无崩溃、无卡死、无错误播放器页面残留。
 - 隔离 profile 的增删目录压力默认 10 cycles，覆盖 add/scan/scroll/play/seek/diagnostics/release/remove；
@@ -200,7 +205,7 @@ Remove-Item Env:LOCAL_TAG_PLAYER_DATA_DIR -ErrorAction SilentlyContinue
 
 ```text
 run_id / generated_at / commit / build_mode / seed
-machine / windows / display_dpi / gpu / renderer / backend
+machine / windows / display_inventory / display_dpi / refresh_rate / gpu / renderer / backend
 library_counts / cache_state / sample_manifest
 scenario / samples / p50_ms / p95_ms / p99_ms / max_ms
 frame_build_p95 / frame_raster_p95 / frame_total_p95 / over16 / over33

@@ -247,7 +247,7 @@ void main() {
     }
   });
 
-  test('键盘长按只预览累计目标并在 KeyUp 后精确收敛一次', () async {
+  test('键盘长按只预览累计目标并在 KeyUp 后保持最终预览', () async {
     final previews = <Duration>[];
     var position = Duration.zero;
     final coordinator = PlayerSeekCoordinator(
@@ -292,7 +292,7 @@ void main() {
     expect(keyboard.isActive, isFalse);
   });
 
-  test('键盘短按不发送预览并只在 KeyUp 精确 seek 一次', () async {
+  test('键盘短按立即提交一次关键帧预览并在 KeyUp 只收敛预览', () async {
     final previews = <Duration>[];
     var position = const Duration(seconds: 20);
     final coordinator = PlayerSeekCoordinator(
@@ -325,9 +325,343 @@ void main() {
     expect(position, const Duration(seconds: 20));
   });
 
-  test('短按关键帧预览落回原关键帧后由 KeyUp 精确收敛', () async {
+  test('页面键盘短按在 KeyUp 只提交一次关键帧预览', () async {
     final previews = <Duration>[];
-    final exactTargets = <Duration>[];
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async => previews.add(target),
+      readPosition: () => const Duration(seconds: 20),
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      readPosition: () => const Duration(seconds: 20),
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      deferInitialPreviewUntilRelease: true,
+    );
+
+    keyboard.requestRelative(
+      const Duration(seconds: 5),
+      mutePreview: false,
+    );
+    expect(previews, isEmpty);
+
+    await keyboard.settlePreview();
+
+    expect(previews, const <Duration>[Duration(seconds: 25)]);
+    expect(keyboard.isSmoothForwardScan, isFalse);
+  });
+
+  test('页面长按快进改走连续倍速且松键恢复原速，不重复随机 seek', () async {
+    final previews = <Duration>[];
+    final rates = <double>[];
+    var position = const Duration(seconds: 20);
+    var rate = 1.0;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async => previews.add(target),
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      deferInitialPreviewUntilRelease: true,
+      readPlaybackRate: () => rate,
+      setTemporaryPlaybackRate: (value) async {
+        rates.add(value);
+        rate = value;
+      },
+    );
+
+    keyboard.requestRelative(
+      const Duration(seconds: 5),
+      mutePreview: false,
+    );
+    keyboard.requestRelative(
+      const Duration(seconds: 2),
+      mutePreview: true,
+      isRepeat: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(previews, isEmpty);
+    expect(keyboard.isSmoothForwardScan, isTrue);
+    expect(keyboard.activeSmoothForwardScanRate, 2);
+    expect(rates, <double>[2]);
+
+    position = const Duration(seconds: 25);
+    await keyboard.settlePreview();
+
+    expect(previews, isEmpty);
+    expect(keyboard.isSmoothForwardScan, isFalse);
+    expect(rate, 1);
+    expect(rates, <double>[2, 1]);
+  });
+
+  test('连续快退按帧让渡并合并最新目标，松键不重复最后一次 seek', () async {
+    final previews = <Duration>[];
+    var presentedFrame = 10;
+    var waitCalls = 0;
+    final firstFrameWait = Completer<bool>();
+    final gate = PlayerSeekAudioGate(
+      readDesiredVolume: () => 1,
+      setVolume: (_) async {},
+      readPresentedFrame: () async => presentedFrame,
+      waitForNewFrame: (previous, _) {
+        waitCalls++;
+        if (waitCalls == 1) return firstFrameWait.future;
+        presentedFrame++;
+        return Future<bool>.value(true);
+      },
+      framePresentationTimeout: () => const Duration(milliseconds: 100),
+      isExiting: () => false,
+    );
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async => previews.add(target),
+      readPosition: () => const Duration(seconds: 30),
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      readPosition: () => const Duration(seconds: 30),
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      previewAudioGate: gate,
+      reversePreviewFrameTimeout: const Duration(seconds: 1),
+      reversePreviewMinimumDwell: Duration.zero,
+    );
+
+    keyboard.requestRelative(
+      const Duration(seconds: -2),
+      mutePreview: true,
+      isRepeat: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+    keyboard.requestRelative(
+      const Duration(seconds: -2),
+      mutePreview: true,
+      isRepeat: true,
+    );
+    keyboard.requestRelative(
+      const Duration(seconds: -2),
+      mutePreview: true,
+      isRepeat: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    // 第一目标尚未出现新帧时，后续 repeat 只能替换待发目标，不能继续洪泛 native seek。
+    expect(previews, const <Duration>[Duration(seconds: 28)]);
+    firstFrameWait.complete(true);
+    await keyboard.settlePreview();
+
+    expect(previews, const <Duration>[
+      Duration(seconds: 28),
+      Duration(seconds: 24),
+    ]);
+    expect(waitCalls, greaterThanOrEqualTo(2));
+    expect(keyboard.isActive, isFalse);
+  });
+
+  test('长按快进优先使用可恢复扫描档位，不向普通倍速路径重复发命令', () async {
+    final previews = <Duration>[];
+    final profileCommands = <String>[];
+    final rateCommands = <double>[];
+    var position = const Duration(seconds: 20);
+    var rate = 1.0;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async => previews.add(target),
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      deferInitialPreviewUntilRelease: true,
+      readPlaybackRate: () => rate,
+      setTemporaryPlaybackRate: (value) async => rateCommands.add(value),
+      beginFastForwardScan: (value) async {
+        profileCommands.add('begin:$value');
+      },
+      endFastForwardScan: () async => profileCommands.add('end'),
+    );
+
+    keyboard.requestRelative(
+      const Duration(seconds: 5),
+      mutePreview: false,
+    );
+    keyboard.requestRelative(
+      const Duration(seconds: 2),
+      mutePreview: true,
+      isRepeat: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+    position = const Duration(seconds: 24);
+    await keyboard.settlePreview();
+
+    expect(previews, isEmpty);
+    expect(profileCommands, <String>['begin:2.0', 'end']);
+    expect(rateCommands, isEmpty);
+  });
+
+  test('连续扫描写出可与桌面首帧侧车关联的分段 trace', () async {
+    final lines = <String>[];
+    final trace = PlayerSeekTraceLogger(
+      output: lines.add,
+      wallClock: () => DateTime.utc(2026, 8, 19),
+    );
+    final coordinator = PlayerSeekCoordinator(
+      submit: (_) async {},
+      readPosition: () => const Duration(seconds: 20),
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      readPosition: () => const Duration(seconds: 20),
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      trace: trace,
+      readPlaybackRate: () => 1,
+      beginFastForwardScan: (_) async {},
+      endFastForwardScan: () async {},
+    );
+
+    keyboard.requestRelative(const Duration(seconds: 5));
+    keyboard.requestRelative(
+      const Duration(seconds: 2),
+      isRepeat: true,
+      mutePreview: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+    await keyboard.settlePreview();
+
+    expect(
+      lines.map((line) => RegExp(r'stage=([^ ]+)').firstMatch(line)!.group(1)),
+      <String>[
+        'smooth_scan_start',
+        'smooth_scan_command_start',
+        'smooth_scan_command_complete',
+        'smooth_scan_stop_start',
+        'smooth_scan_stop_complete',
+      ],
+    );
+  });
+
+  test('连续扫描分段 trace 可绑定匿名 cache 与 Texture 快照', () async {
+    final lines = <String>[];
+    final trace = PlayerSeekTraceLogger(
+      output: lines.add,
+      wallClock: () => DateTime.utc(2026, 8, 19),
+    );
+    final coordinator = PlayerSeekCoordinator(
+      submit: (_) async {},
+      readPosition: () => const Duration(seconds: 20),
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      readPosition: () => const Duration(seconds: 20),
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      trace: trace,
+      readPlaybackRate: () => 1,
+      beginFastForwardScan: (_) async {},
+      endFastForwardScan: () async {},
+      readScanTraceSnapshot: () async => const <String, String>{
+        'cache_duration_s': '4.5',
+        'decoder_drop_frames': '0',
+        'vo_drop_frames': '1',
+        'texture_generation': '3',
+      },
+    );
+
+    keyboard.requestRelative(const Duration(seconds: 5));
+    keyboard.requestRelative(
+      const Duration(seconds: 2),
+      isRepeat: true,
+      mutePreview: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+    await keyboard.settlePreview();
+
+    expect(
+      lines.any(
+        (line) =>
+            line.contains('stage=smooth_scan_command_complete_runtime') &&
+            line.contains('snapshot_cache_duration_s=4.5') &&
+            line.contains('snapshot_texture_generation=3'),
+      ),
+      isTrue,
+    );
+  });
+
+  test('关键帧预览的零确认窗口不重新引入位置确认长尾', () async {
+    final lines = <String>[];
+    final trace = PlayerSeekTraceLogger(output: lines.add);
+    var position = const Duration(seconds: 20);
+    final coordinator = PlayerSeekCoordinator(
+      submit: (target) async => position = target,
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+      trace: trace,
+    );
+    final keyboard = PlayerKeyboardSeekController(
+      coordinator: coordinator,
+      readPosition: () => position,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      trace: trace,
+    );
+
+    keyboard.requestRelative(const Duration(seconds: 5));
+    await keyboard.settlePreview();
+
+    expect(lines.any((line) => line.contains('stage=seek_command_complete')),
+        isTrue);
+    expect(
+        lines.any((line) => line.contains('position_confirmation_')), isFalse);
+  });
+
+  test('短按关键帧预览落回原关键帧时不追加精确 seek', () async {
+    final previews = <Duration>[];
     var position = const Duration(seconds: 20);
     final coordinator = PlayerSeekCoordinator(
       submit: (target) async {
@@ -348,16 +682,11 @@ void main() {
       readDuration: () => const Duration(minutes: 2),
       isExiting: () => false,
       onLatency: (_) {},
-      exactSubmit: (target) async {
-        exactTargets.add(target);
-        position = target;
-      },
     );
 
     expect(
       keyboard.requestRelative(
         const Duration(seconds: 5),
-        isRepeat: false,
         mutePreview: false,
       ),
       const Duration(seconds: 25),
@@ -365,13 +694,11 @@ void main() {
     await keyboard.settlePreview();
 
     expect(previews, const <Duration>[Duration(seconds: 25)]);
-    expect(exactTargets, const <Duration>[Duration(seconds: 25)]);
-    expect(position, const Duration(seconds: 25));
+    expect(position, const Duration(seconds: 20));
   });
 
   test('键盘长按从短按累积目标开始提交关键帧预览', () async {
     final previews = <Duration>[];
-    final exactTargets = <Duration>[];
     var position = Duration.zero;
     final coordinator = PlayerSeekCoordinator(
       submit: (target) async => previews.add(target),
@@ -388,24 +715,20 @@ void main() {
       readDuration: () => const Duration(minutes: 2),
       isExiting: () => false,
       onLatency: (_) {},
-      exactSubmit: (target) async => exactTargets.add(target),
     );
 
     keyboard.requestRelative(
       const Duration(seconds: 5),
-      isRepeat: false,
       mutePreview: false,
     );
     keyboard.requestRelative(
       const Duration(seconds: 2),
-      isRepeat: true,
       mutePreview: true,
     );
     await keyboard.settlePreview();
 
     expect(
         previews, const <Duration>[Duration(seconds: 5), Duration(seconds: 7)]);
-    expect(exactTargets, isEmpty);
   });
 
   test('新会话取消会阻止上一轮迟到 KeyUp 覆盖位置', () async {
@@ -617,6 +940,7 @@ void main() {
     );
     for (final line in lines) {
       expect(line, contains('PLAYER_SEEK_TRACE trace=1 mono_us='));
+      expect(line, contains('wall_utc_us='));
       expect(line, contains('wall_utc_ms=1785801600000'));
       if (line.contains('stage=new_video_frame')) {
         expect(line, contains('frame_evidence=native-rendered-texture'));
@@ -664,5 +988,86 @@ void main() {
     expect(frameLine, contains('frame_number=21'));
     expect(frameLine, contains('frame_evidence=native-rendered-texture'));
     expect(frameLine, contains('seek_to_frame_us='));
+  });
+
+  test('Debug 分段 trace 在命令完成和实际帧节点写出运行态快照', () async {
+    final lines = <String>[];
+    final trace = PlayerSeekTraceLogger(output: lines.add);
+    var frameReadCount = 0;
+    final coordinator = PlayerSeekCoordinator(
+      submit: (_) async {},
+      readPosition: () => Duration.zero,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationTimeout: Duration.zero,
+      trace: trace,
+      readTraceRuntimeSnapshot: () => <String, String>{
+        'cache_duration_s': '12.5',
+        'decoder_drop_frames': '0',
+        'vo_drop_frames': '2',
+        'texture_generation': '3',
+      },
+      readPresentedFrame: () async {
+        frameReadCount++;
+        return frameReadCount == 1 ? 30 : 31;
+      },
+      readFrameEvidence: () => 'native-rendered-texture',
+    );
+
+    await coordinator.request(const Duration(seconds: 18));
+    // 快照是旁路尾链，等待它完成但不把等待计入 seek 命令延迟。
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+
+    expect(
+      lines.any(
+        (line) =>
+            line.contains('stage=seek_command_complete_runtime') &&
+            line.contains('snapshot_cache_duration_s=12.5') &&
+            line.contains('snapshot_texture_generation=3'),
+      ),
+      isTrue,
+    );
+    expect(
+      lines.any(
+        (line) =>
+            line.contains('stage=native_rendered_frame_runtime') &&
+            line.contains('snapshot_decoder_drop_frames=0') &&
+            line.contains('snapshot_vo_drop_frames=2'),
+      ),
+      isTrue,
+    );
+  });
+
+  test('位置确认长尾写出独立的开始与超时阶段', () async {
+    final lines = <String>[];
+    final trace = PlayerSeekTraceLogger(
+      output: lines.add,
+      wallClock: () => DateTime.utc(2026, 8, 19),
+    );
+    final coordinator = PlayerSeekCoordinator(
+      submit: (_) async {},
+      readPosition: () => Duration.zero,
+      readDuration: () => const Duration(minutes: 2),
+      isExiting: () => false,
+      onLatency: (_) {},
+      minimumDispatchInterval: Duration.zero,
+      confirmationPollInterval: const Duration(milliseconds: 5),
+      confirmationTimeout: const Duration(milliseconds: 20),
+      trace: trace,
+    );
+
+    await coordinator.request(const Duration(seconds: 12));
+
+    expect(
+      lines.map((line) => RegExp(r'stage=([^ ]+)').firstMatch(line)!.group(1)),
+      <String>[
+        'seek_submit_start',
+        'seek_command_complete',
+        'position_confirmation_start',
+        'position_confirmation_timeout',
+      ],
+    );
   });
 }

@@ -33,6 +33,27 @@ void main() {
     expect(controller.markSuccess(latestRequest), isTrue);
   });
 
+  test('播放就绪只解除打开遮罩且保留串行 worker', () {
+    final controller = PlayerOpenRequestController();
+
+    controller.request((videoId: 'video-1', path: 'one.mp4'));
+    controller.beginDrain();
+    controller.takePending();
+
+    expect(controller.isOpening, isTrue);
+    controller.markPlaybackReady();
+
+    expect(controller.isOpening, isFalse);
+    expect(
+      controller.request((videoId: 'video-2', path: 'two.mp4')),
+      isFalse,
+    );
+    expect(controller.hasPending, isTrue);
+
+    controller.finishDrain(keepOpening: true);
+    expect(controller.isOpening, isTrue);
+  });
+
   test('即时 missing 失败使运行中的旧请求失效并可按稳定身份重试', () {
     final controller = PlayerOpenRequestController();
 

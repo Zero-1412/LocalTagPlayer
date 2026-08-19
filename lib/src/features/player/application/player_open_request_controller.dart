@@ -157,6 +157,16 @@ class PlayerOpenRequestController {
     return true;
   }
 
+  /**
+   * 标记当前媒体已经可以交给用户播放，但不结束串行 drain worker。
+   *
+   * 普通新视频可以先显示首帧并播放，画质属性收敛和损坏媒体检测仍在同一打开
+   * worker 的尾部继续完成；保留 worker 运行可避免这些平台写入与下一次 open 并发。
+   */
+  void markPlaybackReady() {
+    isOpening = false;
+  }
+
   /** 清理当前打开错误，但不改变请求代次。 */
   void clearFailure() {
     _failure = null;

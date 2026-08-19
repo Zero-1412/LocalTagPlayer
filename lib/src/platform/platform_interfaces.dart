@@ -112,6 +112,17 @@ abstract interface class PlayerVideoSurfaceDiagnosticsBoundary {
 }
 
 /**
+ * 后端首帧代理的输出表面证据边界。
+ *
+ * `native-rendered-frames` 在 Texture 与 child HWND 两条路径都可能递增；调用方必须
+ * 先读取这个稳定的输出类型，才能把原生计数标成对应的呈现代理，禁止跨表面复用名称。
+ */
+abstract interface class PlayerFramePresentationEvidenceBoundary {
+  /** `texture`、`child-hwnd` 或其它明确的原生输出类型。 */
+  String get framePresentationEvidenceKind;
+}
+
+/**
  * 为进度条点击和连续快进提供关键帧优先随机跳转的可选后端边界。
  *
  * 交互式跳转只负责尽快显示目标附近关键帧；页面根据交互类型决定是否再通过普通
@@ -122,6 +133,54 @@ abstract interface class PlayerVideoSurfaceDiagnosticsBoundary {
 abstract interface class PlayerInteractiveSeekBoundary {
   /** 显示 [position] 附近关键帧，并保持后端原有播放/暂停意图。 */
   Future<void> seekInteractive(Duration position);
+}
+
+/**
+ * 为物理长按快进提供临时的连续扫描档位。
+ *
+ * 常规播放可能启用显示同步或时间插帧；它们在高速扫描时会额外占用解码与呈现预算。
+ * 后端必须在同一个播放器实例内保存并恢复原属性与倍速，不能改写持久化偏好、来源队列
+ * 或为此创建第二条解码链。不支持该边界时 [PlayerService] 安全退回普通临时倍速。
+ */
+abstract interface class PlayerFastForwardScanBoundary {
+  /** 开启临时扫描档位，并以 [rate] 连续播放当前媒体。 */
+  Future<void> beginFastForwardScan(double rate);
+
+  /** 结束临时扫描档位，恢复开启前的倍速和呈现属性。 */
+  Future<void> endFastForwardScan();
+}
+
+/**
+ * 可选的逐帧与 A-B loop 控制边界。
+ *
+ * 逐帧命令必须复用当前播放器实例与当前输出表面；不支持该边界的后端不得用
+ * 反复 seek 冒充逐帧。A/B 点只属于当前媒体会话，页面切换媒体时必须清空本地状态。
+ */
+abstract interface class PlayerPrecisionControlsBoundary {
+  /** 前进或后退一帧；底层应保持 mpv 的暂停/呈现语义。 */
+  Future<void> stepFrame({required bool backward});
+
+  /** 在当前媒体上写入一个 A 或 B 点。 */
+  Future<void> setAbLoopPoint({
+    required PlayerAbLoopPoint point,
+    required Duration position,
+  });
+
+  /** 清除当前媒体的 A/B 点。 */
+  Future<void> clearAbLoop();
+}
+
+/** A-B loop 的两个端点，避免页面把 mpv 属性名散落到 UI。 */
+enum PlayerAbLoopPoint { start, end }
+
+/**
+ * 可选的外挂字幕加载边界。
+ *
+ * 文件选择仍由 [FileSystemAdapter] 完成；路径只在当前播放器实例内交给后端，
+ * 不写入设置、媒体库、播放队列或诊断日志。
+ */
+abstract interface class PlayerExternalSubtitleBoundary {
+  Future<void> addExternalSubtitle(String path);
 }
 
 /**

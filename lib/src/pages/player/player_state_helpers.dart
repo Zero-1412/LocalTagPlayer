@@ -8,7 +8,9 @@ import '../../core/playback_settings.dart';
 import '../../features/player/application/player_seek_coordinator.dart';
 import '../../models/video_item.dart';
 import '../../widgets/player_shortcut_input.dart';
+import 'player_input_qa_evidence.dart';
 import 'player_page.dart';
+import 'player_state_precision_controls.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -68,10 +70,27 @@ extension PlayerStateHelpers on PlayerPageState {
     }
     final pressedKey = playerShortcutIdFromEvent(event);
     final shortcuts = effectivePlaybackSettings.shortcuts;
+    // 仅在显式 Debug QA 环境写匿名到达回执，便于区分 native WM_KEYDOWN、Flutter
+    // KeyRepeat 与 PlayerPage 语义处理；action 只写 forward/backward/other，不记录
+    // 实际按键、修饰键、媒体路径或用户身份。
+    final qaAction = pressedKey == shortcuts[PlayerShortcutAction.seekForward]
+        ? 'forward'
+        : pressedKey == shortcuts[PlayerShortcutAction.seekBackward]
+            ? 'backward'
+            : 'other';
+    final qaPhase = event is KeyRepeatEvent
+        ? 'repeat'
+        : event is KeyUpEvent
+            ? 'up'
+            : 'down';
+    PlayerInputQaEvidence.playerKeyboardEventReceived(
+      action: qaAction,
+      phase: qaPhase,
+    );
     bool matches(PlayerShortcutAction action) =>
         pressedKey != null && shortcuts[action] == pressedKey;
 
-    // 即使按住期间弹窗或焦点状态改变，对应 KeyUp 仍必须结束预览并精确落到最终目标。
+    // 即使按住期间弹窗或焦点状态改变，对应 KeyUp 仍必须结束当前预览会话。
     if (event is KeyUpEvent) {
       final activeAction = keyboardSeekAction;
       // KeyUp 可能发生在 Alt/修饰键先释放或用户修改快捷键之后；必须按实际物理
@@ -149,14 +168,14 @@ extension PlayerStateHelpers on PlayerPageState {
           : seekStepSeconds;
       final target = seekRelative(
         Duration(seconds: -stepSeconds),
-        isRepeat: isRepeat,
-        // 每次按下立即预览关键帧；只有 KeyRepeat 才静音，避免短按人为打断声音。
+        // 短按在松键提交唯一关键帧；长按快退仍保持 latest-only 预览并临时静音。
         mutePreview: isRepeat,
+        isRepeat: isRepeat,
       );
       showShortcutFeedback(
         isRepeat
-            ? '连续快退 · ${formatDuration(target)}'
-            : '后退 $seekStepSeconds 秒 · ${formatDuration(target)}',
+            ? '连续快退（关键帧预览） · ${formatDuration(target)}'
+            : '后退 $seekStepSeconds 秒 · 关键帧预览 · ${formatDuration(target)}',
         Icons.fast_rewind_rounded,
         minimumPublishInterval: isRepeat
             ? PlayerSeekCoordinator.defaultMinimumDispatchInterval
@@ -178,14 +197,16 @@ extension PlayerStateHelpers on PlayerPageState {
           : seekStepSeconds;
       final target = seekRelative(
         Duration(seconds: stepSeconds),
-        isRepeat: isRepeat,
-        // 与后退保持相同会话语义，避免方向不同导致延迟门禁不可比较。
+        // 物理长按前进由 controller 切到连续高速播放，短按仍保留唯一关键帧跳转。
         mutePreview: isRepeat,
+        isRepeat: isRepeat,
       );
       showShortcutFeedback(
-        isRepeat
-            ? '连续快进 · ${formatDuration(target)}'
-            : '前进 $seekStepSeconds 秒 · ${formatDuration(target)}',
+        keyboardSeek.isSmoothForwardScan
+            ? '连续快进 · ${keyboardSeek.activeSmoothForwardScanRate}×'
+            : isRepeat
+                ? '连续快进（关键帧预览） · ${formatDuration(target)}'
+                : '前进 $seekStepSeconds 秒 · 关键帧预览 · ${formatDuration(target)}',
         Icons.fast_forward_rounded,
         minimumPublishInterval: isRepeat
             ? PlayerSeekCoordinator.defaultMinimumDispatchInterval
@@ -234,6 +255,17 @@ extension PlayerStateHelpers on PlayerPageState {
     if (matches(PlayerShortcutAction.speedUp)) {
       stepPlaybackRate(1);
       showShortcutFeedback('倍速 $playbackRate×', Icons.speed_rounded);
+      return KeyEventResult.handled;
+    }
+    // 保留 mpv 常见的逗号/句号逐帧入口；只消费 KeyDown，避免系统重复键把
+    // 一次明确的逐帧动作放大成不可预测的连续命令。
+    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.comma) {
+      unawaited(stepFrameWithFeedback(backward: true));
+      return KeyEventResult.handled;
+    }
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.period) {
+      unawaited(stepFrameWithFeedback(backward: false));
       return KeyEventResult.handled;
     }
     if (handleMpvMediaControlMenuShortcut(event)) {

@@ -5,6 +5,85 @@
 
 ## Unreleased
 
+### 播放器稳定性矩阵反向 seek trace
+
+- 自动长按桌面像素探针改为 Down 后立即采样至 Up，按住期间出现首帧时 Up→首帧保持 null；正式 PlayerPage QA 走 scan-code 输入语义，并在同机 4K H.264/HEVC/AV1 各 3/3 复核 `81/98`、`186/201`、`83/99 ms` 的 Down→DWM p50/p95。该数字仅是自动化按住期间推进基线，不代表实体 QPC 或反向落点已达专业播放器水平。
+- 反向 latest-only 预览新增按帧让渡与最短 Texture dwell，写出 `reverse_preview_frame_wait_start/complete` trace；仅抑制命令洪水，不宣称原生反向连续解码。
+- 正式 MediaKit 通过可选边界接入原生逐帧、A-B loop 和外挂字幕：上下文菜单提供逐帧/A-B/字幕入口，逗号与句号提供逐帧快捷键；A/B 不持久化，字幕不写入媒体库或播放队列。当前只完成命令边界与 focused contract，尚未完成三编码实窗运行验收。
+- 独立 precision controls Debug QA 已在真实 PlayerPage/MediaKit Texture 的 H.264、HEVC、AV1 会话中验证逐帧推进、A/B 设置与清除、外挂字幕加载和资源释放；逐帧证据仍是后端估算帧号代理，不冒充 DWM/QPC 首帧。
+- Debug QA 新增强制软件解码与一次性自动恢复开关；真实 4K HEVC PlayerPage 已观察 `hwdec_current=no`、`software_decode_confirmed`，并由同一安全 open worker 将 `open_generation` 从 1 推进到 2。该开关不进入正式组合根，正式用户仍需明确点击降级条的“重新打开”。
+- 强制软件解码安全恢复 Debug E2E 已补齐 H.264/HEVC/AV1；三种编码均确认实际 `hwdec_current=no`、一次性安全重开 `open_generation=1→2` 和资源释放。该证据仍只覆盖 QA 强制软件路径，不代表跨 GPU 的发布级回退矩阵。
+- 稳定性矩阵同时识别当前 `native_rendered_frame` / `presented_frame_fallback` 首帧阶段与历史音频门禁阶段，不再把有效帧观察误统计为零。
+- 从匿名 `PLAYER_SEEK_LATENCY` 输出提取 `reverseKeyframeTrace`，挂载到 `qaReverseKeyframeTrace`，保留 cache、decoder/VO、硬解、Texture 代次差和失败样本；不改变播放命令或默认渲染后端。
+- 反向 trace 新增 `segmentTrace`，显式分出命令完成、命令后 cache/decoder/VO 快照、后端帧代理、Texture 代次和 DWM unavailable；integration 证据不再被误写成屏幕呈现。
+- Debug-only seek trace 进一步在命令完成、首个后端帧和实际帧 timeout 三个节点写出同一组 cache/decoder/VO/Texture 快照，并以串行旁路读取避免诊断争用播放命令；生产路径不增加属性采样。
+- 持久硬解降级条增加请求档位、实际 `hwdec-current` 和确认样本数，用户无需打开诊断弹窗即可判断当前是否已回退；重新打开仍沿用原有安全 open worker。
+- 最新真实 1080p H.264 Debug smoke 已验证 7/7 `segmentTrace` 落盘（`d3d11va-copy`、反向命令 p95 `0 ms`、后端帧代理 p95 `15 ms`、Texture 代次差 `0`）；DWM 仍明确为 integration 不可观测，不生成桌面 p50/p95。
+- 最新 Debug 4K AV1/144 DPI/900ms virtual-key 长按快退矩阵 7/7 `pixel_change_timeout`，门禁保持失败且不生成 p50/p95；5 个完整会话仍保留 Texture generation `0/1/3`、2 次重建、decoder/total drop `0`，`hwdec-current` 短暂回退 `no` 后恢复 `d3d11va-copy`，并在 `native_rendered_frame_timeout_runtime` 中保留 2016ms 等待证据。动作没有实体 QPC 输入窗口，不写入实体键盘结论。
+- 同机真实 4K 长 GOP H.264/HEVC/AV1 Debug smoke 新增 `keyboardExperience.smoothScanTrace.summary` 聚合：三组首帧分别为 `314/284/292 ms`，seek p95 为 `241/199/259 ms`，扫描命令到音频恢复最长为 `133.417/153.990/127.842 ms`，停止 cache 最长为 `13.317/11.483/57.365 s`，Texture 代次均为 `2`、实际硬解均为 `d3d11va-copy`。证据仍是 `backend-runtime-snapshot-not-desktop-pixels`，只用于 cache/decoder/VO/恢复分段定位，不生成实体输入到 DWM 的 p50/p95。
+- 新增 QA-only 的 mpv `play-direction=backward` 可行性实验：同一 Debug MediaKit 会话对 H.264/HEVC/AV1 各采样 20 次位置，均未观察到持续反向推进（最大反向距离 `-9/3/0 ms`），运行态临时方向为 `backward`，最终均恢复 `forward`；硬解均为 `d3d11va-copy`、Texture 代次均为 `2`。该实验不改变正式长按后退的 latest-only keyframe preview；反向播放的可行性仍受 mpv 官方“脆弱且通常更慢”限制。
+- 稳定性矩阵报告新增 `qaReverseDirectionExperiment`，独立保留反向实验的方向、位置样本、cache/解码/VO/硬解和恢复结果；未启用时保留 `enabled=false/status=not-run`，不把缺少 QA 开关误报成产品失败。
+- seek 协调器启用位置确认窗口时额外写出 `position_confirmation_start/complete|superseded|timeout`；该逻辑等待与桌面首帧分离，键盘预览的 `confirmationTimeout=0` 不产生这些阶段。
+- 增强后的首帧观察和反向 trace 同步写回每个 backend 的 `reportPath`，独立审查单份报告时不会丢失分段证据。
+- Debug 像素门禁的 `desktop-pixel-trace-correlation.json` 改为动作窗口关联：原生实体消息同时写入 QPC/UTC，按 Down 前 500ms 至首像素/松键后 1s 筛选 `PLAYER_SEEK_TRACE`，只有唯一动作窗口才匹配，重叠窗口标记 `ambiguous-overlapping-pixel-action-windows`，不再把窗口外或重叠窗口最近邻误归因；UTC 仍不参与 QPC→DWM 延迟或 p50/p95。
+- `PLAYER_SEEK_TRACE` 现在优先写入 `wall_utc_us`，兼容旧 `wall_utc_ms` 并输出精度标记；新增保守的 `actionTraceSummaries`，仅在唯一动作窗口和唯一 trace id 时计算阶段到首像素的差值。修复 PowerShell 有序字典初始化/展开导致的关联 parse-failed，并用 standalone Debug PlayerPage 拖动 smoke 复核 `unique-trace` 输出；该自动化 Slider 样本仍不进入实体键盘 p50/p95。
+- 修正桌面探针对原生 `qpcUs`/`utcUs` JSONL 的字段边界解析；`qpcUs` 不再被后续 `utcUs` 拼入整数，避免真实 WM_KEYDOWN 被误报为未收到 QPC。门禁在缺少桌面摘要时现在优先回传原始探针失败分类，不再以“缺少摘要”覆盖根因。
+- 桌面 correlation 现在同时保留原生 QPC/UTC、PlayerPage `player_keyboard_event` 或 `progress_slider_*` 语义事件及唯一 `PLAYER_SEEK_TRACE`，并写出 `traceLinkEvidence`；缺失可选字段和单事件数组在 PowerShell StrictMode 下不会再触发 parse-failed。最新真实 PlayerPage Slider smoke 已验证 `playerInputEventCount=2` 与 `unique-trace` 落盘，仍不替代实体键盘/DWM 统计。
+- correlation 语义筛选覆盖自动化 `win32-keyboard-*` 与实体 `manual-keyboard-*` 两类输入；自动化键盘若有页面回执会保留为估算 UTC 关联，但只有原生 QPC/UTC 侧车才能升级为实体输入证据。
+- 修复桌面 correlation 在 StrictMode 下把无 trace 的空数组展开成 `$null` 后访问 `.Count` 的问题；自动化 PlayerPage 现在会保留页面键盘事件和 `ambiguous-multiple-traces-in-input-window`，不再生成 `trace-correlation-parse-failed`。同一 4K H.264 窄窗口自动化门禁在重置外部 UIA 观察器后通过，污染会话的 `flutter_windows.dll` 崩溃被单列为无效环境证据。
+- 新增正式 PlayerPage 的 Debug-only `playerFullscreen` 桌面门禁：干净 4K H.264/144 DPI 单样本有效捕获 `115.5 fps`，Enter→窗口几何变化 `50 ms`；`renderer-events.jsonl` 证明全屏稳定后 Texture generation 未继续增加，但启动阶段仍发生 `1920×1080 → 3840×2160 → 1600×900` 尺寸重建。该证据仅用于全屏/Texture 结构审查，不改变正式渲染策略，也不进入 seek p50/p95。
+- 同一 `playerFullscreen` 合同补齐 HEVC/AV1：HEVC `113.0 fps`、Enter→几何 `44 ms`，AV1 `115.7 fps`、`50 ms`，两者启动均为 `1920×1080 → 1600×900`、稳定后 generation `3`；与 H.264 的 `1920×1080 → 3840×2160 → 1600×900` 不同，保留为编码相关 Texture 生命周期证据，未提高正式 Texture 上限。
+- QA-only 固定尺寸对照确认 HEVC/AV1 在关闭自适应时都会创建 `3840×2160` Texture（generation `2`；有效采样 `121.5/113.9 fps`），而正式自适应路径收敛到 `1600×900`、generation `3`。该结果用于评估合成压力，不把 4K 原生表面直接晋级为正式默认。
+- 干净 Debug 会话补齐真实 PlayerPage 7 轮 virtual-key 对照：前进 Down→DWM p50/p95 `94/107 ms`、后退 `93/96 ms`，两组均 `7/7`、有效采样约 `112–117 fps`；证据固定为 `win32-keyboard-virtual-key`，只证明 Focus/页面输入链可达，不进入实体 WM_KEYDOWN/QPC p50/p95。
+- 桌面像素 QA 新增显式 `HoldMilliseconds` 自动化长按对照，并在首个 virtual-key forward Down 后恢复隔离页面播放，避免暂停状态下 `setRate` 不推进时钟造成假性全程静帧。4K H.264/144 DPI/900ms 长按 7/7 的前进/后退 Down→DWM p95 为 `912/916 ms`，最长静帧 `9/7 ms`；证据固定为 `win32-keyboard-virtual-key-long-hold`，不改变正式 PlayerPage、实体键盘门禁或用户 seek 语义，且首帧约 900ms 仍不代表专业级体验。
+- 同一自动化长按合同补齐 HEVC/AV1：HEVC 前进/后退 p95 `1029/916 ms`、最长静帧 `108/4 ms`；AV1 前进 p95 `1040 ms`、最长静帧 `1025 ms`，后退 7/7 全部 `pixel_change_timeout` 且 trace 明确进入 `new_video_frame_timeout`/`native_rendered_frame_timeout`。三编码硬解均为 `d3d11va-copy`；这些是 Debug virtual-key 证据，不是实体输入 p50/p95，也不改变正式 seek 语义。
+- 独立桌面像素矩阵新增匿名 `runtimeEvidence` 聚合，保留最终硬解、首帧证据、Texture generation/重建事件/尺寸、resize 状态和 decoder/VO 掉帧最大值；空属性保持 `null`。三轮 4K H.264 PlayerPage 自动化前进以 `112.5–115.2 fps` 通过，Down→DWM p50/p95 `98/105 ms`，最终硬解 `d3d11va-copy`，Texture 重建事件 `2–3` 次；该结果仍不进入实体键盘 p50/p95。
+- Debug PlayerPage 键盘 QA 回执现在记录固定枚举的 `action`/`phase`/`utcUs`，用于证明真实 KeyDown/KeyRepeat/KeyUp 是否进入 Flutter Focus 链；旧长按样本没有这些新字段或 `smooth_scan_*` 阶段，不能被回填成连续扫描分段结论。
+- 实体键盘 Debug 门禁把前进/后退动作传入隔离 QA 页面，提示与 ready 握手分别显示 `L`/`J`，避免人工验收按错方向；正式页面不读取该环境变量。
+- Debug-only 实体长按门禁新增 `manualLongForward/manualLongBackward`，以真实 Down/Up QPC 和最小时长校验长按合同，并在首个像素后保留短尾采样；不注入按键、不修改正式播放器语义。
+- 修正实体键盘 QA 观察器只收到 ready 而收不到按键的消息路由缺口：Debug-only `FlutterWindow::MessageHandler` 现在在交给 Flutter 前旁路记录 J/L 的匿名 QPC，并对 runner subclass 的重复消息去重；合成冒烟仅证明输入证据链接通，不作为桌面性能样本。
+- 同一真实 4K H.264 的 MediaKit Texture/QA-only child HWND 后端 trace 已分别落盘；两者均明确标为后端帧代理而非桌面像素，稳定性矩阵的精确位置失败也不会被其余样本补成有效 p95。
+- 稳定性矩阵在集成测试提前失败时会写出匿名 `failed-no-report` backend 报告和固定失败分类，保留可审查的失败证据而不生成伪 p95。
+- 稳定性矩阵修正短循环样本跨文件尾部回绕的队列判定；最终真实 H.264/HEVC/AV1 矩阵中 MediaKit Texture 全场景通过（18 次交互 seek 无失败，`d3d11va-copy`），QA-only child HWND 保留 `2/18` 精确 seek 未确认和 `15` 次首帧观察超时（`d3d11va`），双后端门禁继续保持 failed。
+- 修正 QA trace 将 child HWND 的 `native-rendered-frames` 误标为 `native-rendered-texture` 的证据混淆；现在分别记录 `native-rendered-child-hwnd` 与正式 Texture 复制代理，避免把原生窗口计数当成 Flutter Texture 呈现。
+- 将输出证据类型下沉到可选后端边界；未声明表面的兼容后端现在写 `native-rendered-output-unknown`，不再猜测 Texture/HWND。
+- 实体键盘像素门禁补齐首批真实 PlayerPage 单样本：短按前/后 Down→DWM 首帧分别为 `159/10 ms`，长按前进按住 `2478 ms` 后首个稳定像素为 `2380 ms`；全部具备原生 QPC、PlayerPage 语义回执和有效桌面采样率。长按前进的 Debug QA 会在首次真实按下后恢复暂停基线的播放时钟，避免把“暂停无时钟”误判为播放器掉帧；该秒级长尾仍只作 P0 调查证据，不生成 p50/p95，也不改变正式页面语义。
+- 连续扫描新增 `smooth_scan_start/command_start/command_complete/stop_*` 匿名 trace 节点，供下一轮按 cache、decoder、VO、Texture/DWM 分段定位长尾；不改变扫描速度、恢复顺序或默认后端。
+- 在显式 Debug QA 环境下，连续扫描节点追加 `_runtime` 匿名快照（cache、decoder/VO 掉帧、硬解/同步、Texture 尺寸/代次和输出证据）；真实 1080p H.264 smoke 7/7 次落盘，`d3d11va-copy`、Texture `1920×1080`、代次 `1`，长按前进帧代理 p95 `108 ms`。VO 计数变化仍不是 DWM 像素掉帧结论，integration 报告继续标记 DWM unavailable。
+- 稳定性矩阵 runner 现在把 Windows 显示器 inventory（边界、原生分辨率、当前刷新率、逻辑 DPI）写入报告，并明确标记为 `display-inventory-only`；显示器模式观测不能替代真实跨屏移动、全屏合成或跨 DPI 实机证据。
+- 新短时同机对照已保留 `.local/qa/current-display-inventory-matrix-20260819`：MediaKit Texture 自动场景通过且实际硬解为 `d3d11va-copy`，QA-only child HWND 的精确 seek/首帧代理仍失败；该运行明确是 10 秒/6 次切换环境刷新，不作为完整发布门禁。
+
+### 播放器进度条快速预览与准确收敛
+
+- 进度条松手后先发起一次目标附近关键帧请求，再以既有 100ms 容差的精确 seek 收敛最终落点；拖动期间仍只更新本地滑块和缩略图，不连续向解码器派发命令。
+- 预览阶段保持临时静音，最终位置确认后仍经既有新视频帧门禁才恢复用户音量；快速关键帧落点绝不作为准确定位结果保存或显示。
+- 同机 4K/150% DPI 的独立 DWM 矩阵中，H.264 首画面 p95 从 367ms 降至 351ms，AV1 从 454ms 降至 287ms；HEVC 为 293ms，对比 286ms 未出现实质回退。默认后端、Texture 上限、播放队列、用户设置与数据不变。
+- 修正 seek 延迟基线口径：integration 键盘回归不再等待长 GOP 关键帧预览的逻辑位置精确确认（`confirmationTimeout=0`），避免把约 2.7 秒的协调器等待误报为首帧呈现延迟；仍单独保留后端帧代理与桌面像素两种证据。
+
+### 播放器长按快进连续播放
+
+- 键盘短按前进/后退在松键时只提交一次关键帧跳转；收到首个长按前进重复事件后，播放器以至少 2× 进入临时连续扫描，松键即恢复用户原播放速度和音量。
+- MediaKit/libmpv 扫描期临时切换为音频同步、关闭时间插帧并采用 `framedrop=vo` 输出端丢帧；扫描与恢复都在同一原生锁内读回确认。结束或换片时恢复原有倍速及呈现属性；属性快照不完整或读回不匹配时安全回退仅临时倍速，不覆盖用户设置。
+- 长按快进不再连续提交随机 seek，避免长 GOP 或高码率媒体反复中断解码；临时状态不会写入播放设置。进度条精确定位、继续观看恢复、长按快退、播放会话、来源 filtered playback queue 和用户数据保持不变。
+
+### 播放器硬解运行时恢复
+
+- 用户已启用硬解而播放器连续三次确认实际回退软件解码时，会显示“当前视频已回退为软件解码”的运行时提示，并在视频表面保留持久降级条；降级条提供“重新打开”和只读“诊断详情”动作，避免一次性提示消失后用户失去上下文。
+- 重新打开只按当前硬解偏好重新建立该媒体会话；不在正在播放的 NativePlayer 上热切换硬解，不修改持久化设置、队列或用户数据。
+- 诊断详情同步显示实际呈现输出路径与软件解码回退确认/连续样本数，区分正式 Texture、QA child HWND 和未知兼容输出，避免把硬解请求或原生计数当成已呈现证据。
+
+### 播放器进度条精确收敛
+
+- 进度条拖动期间继续只更新本地滑块和缩略图预览；松手后只提交一次精确 seek，并在目标新视频帧交付后恢复音频。
+- 精确拖动使用独立 latest-only 协调器和 100ms 位置容差，不再将 keyframe 预览的前置落点当作准确定位；拖动过程不连续派发解码命令。
+
+### 全局 UI 标准盘点与主功能栏状态持久化
+
+- 新增共享 `AppNavigationItem`，统一媒体库主功能栏展开/折叠入口的交互表面、选中语义、命中高度和 tooltip；品牌折叠入口复用 `AppInteractionSurface`。
+- 主界面功能栏首次默认折叠，并通过既有 `library_sort.json` 保存展开/折叠状态；旧偏好缺少字段时安全回退为折叠。
+- 保留主功能栏入口、稳定 key、回调、过滤、来源 filtered playback queue、缩略图/媒体详情队列、schema、stable identity 和用户数据。
+- 全局 UI 盘点与后续组件族迁移边界见 `docs/design/UI_STANDARD_AUDIT_2026-08-17.md`。
+
 ### 媒体库筛选工具栏高度统一
 
 - 媒体库搜索表面、筛选状态区和筛选动作统一使用 48px 顶栏控件高度，修复紧凑与普通布局相邻控件上下边界不齐。
@@ -18,6 +97,12 @@
 - 保留 `CacheSettingsPage` 的 section owner、`settings.category.*` key、设置持久化、二级页回调和返回路径；不修改
   schema、`FilterQuery`、`TagQueryService`、filtered playback queue、`PlayerBackend`、缩略图/媒体详情队列、stable identity
   或用户数据。
+
+### 播放器启动首帧与精确恢复解耦
+
+- 普通新视频在事件重绑后立即显式播放，首帧交付不再等待继续观看所需的精确恢复和画质属性收敛。
+- 损坏媒体仍保留有界时长/codec 检测；继续观看与“每次询问”候选仍先完成精确恢复门禁。
+- 不修改 `PlayerBackend`、`PlaybackSession`、来源 filtered playback queue、缩略图/媒体详情队列、schema、stable identity 或用户数据。
 
 ### 播放器短按快进停顿修复
 

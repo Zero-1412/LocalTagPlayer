@@ -11,6 +11,7 @@
 
 class NativePlayerBridge;
 class NativeMediaProbeBridge;
+class PlayerQaKeyboardQpcEvidence;
 
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
@@ -39,6 +40,8 @@ class FlutterWindow : public Win32Window {
   /** 原生 FFmpeg 批处理通道与工作线程所有者。 */
   std::unique_ptr<flutter::PluginRegistrarWindows> native_probe_registrar_;
   std::unique_ptr<NativeMediaProbeBridge> native_probe_bridge_;
+  /** 仅 Debug QA：在实际 FLUTTERVIEW 键盘消息处写入匿名共用 QPC 锚点。 */
+  std::unique_ptr<PlayerQaKeyboardQpcEvidence> player_qa_keyboard_evidence_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

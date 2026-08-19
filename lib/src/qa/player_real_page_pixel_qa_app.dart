@@ -11,6 +11,7 @@ import '../core/playback_settings.dart';
 import '../features/player/application/player_fullscreen_lifecycle_controller.dart';
 import '../models/video_item.dart';
 import '../pages/player/player_page.dart';
+import '../pages/player/player_state_precision_controls.dart';
 import '../platform/desktop_file_system_adapter.dart';
 import '../services/media/external_media_tools.dart';
 import '../services/media/media_probe_backend.dart';
@@ -31,6 +32,12 @@ bool shouldRunPlayerRealPagePixelQa({Map<String, String>? environment}) {
   return kDebugMode &&
       Platform.isWindows &&
       values['LOCAL_TAG_PLAYER_REAL_PAGE_PIXEL_QA'] == '1';
+}
+
+/** Debug-only 软件解码复核开关；不进入正式启动路径或用户设置。 */
+bool playerQaForceSoftwareDecode({Map<String, String>? environment}) {
+  final values = environment ?? Platform.environment;
+  return values['LOCAL_TAG_PLAYER_QA_FORCE_SOFTWARE_DECODE'] == '1';
 }
 
 /** 启动只读单项、正式 MediaKit Texture PlayerPage 的独立 QA 进程。 */
@@ -61,12 +68,19 @@ Future<void> runPlayerRealPagePixelQa() async {
   final progressDragSeekMode = _readProgressDragSeekMode(environment);
   final manualKeyboardQa =
       environment['LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_QA'] == '1';
+  final precisionControlsQa =
+      environment['LOCAL_TAG_PLAYER_PRECISION_CONTROLS_QA'] == '1';
   final automatedLongHoldQa =
       environment['LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_QA'] == '1';
+  final automatedLongHoldAction =
+      environment['LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_ACTION'] ==
+              'backward'
+          ? 'backward'
+          : 'forward';
   final manualKeyboardAction =
       environment['LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_ACTION'] == 'backward'
           ? 'backward'
-          : 'forward';
+          : automatedLongHoldAction;
   final manualKeyboardHoldMode =
       environment['LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_HOLD_MODE'] == 'long'
           ? 'long'
@@ -95,6 +109,7 @@ Future<void> runPlayerRealPagePixelQa() async {
       progressDragSeekMode: progressDragSeekMode,
       manualKeyboardQa: manualKeyboardQa,
       automatedLongHoldQa: automatedLongHoldQa,
+      precisionControlsQa: precisionControlsQa,
       manualKeyboardAction: manualKeyboardAction,
       manualKeyboardHoldMode: manualKeyboardHoldMode,
     ),
@@ -157,6 +172,7 @@ class _PlayerRealPagePixelQaApp extends StatefulWidget {
     required this.progressDragSeekMode,
     required this.manualKeyboardQa,
     required this.automatedLongHoldQa,
+    required this.precisionControlsQa,
     required this.manualKeyboardAction,
     required this.manualKeyboardHoldMode,
   });
@@ -168,6 +184,8 @@ class _PlayerRealPagePixelQaApp extends StatefulWidget {
   final bool manualKeyboardQa;
   /** 自动化 virtual-key 长按只用于桌面像素诊断，正式页面永不读取该环境变量。 */
   final bool automatedLongHoldQa;
+  /** 仅 Debug QA：在真实 PlayerPage/NativePlayer 会话中验收逐帧、A/B 与外挂字幕。 */
+  final bool precisionControlsQa;
   /** 仅用于 Debug 门禁提示；正式页面永远不读取该环境变量。 */
   final String manualKeyboardAction;
   /** 实体键盘 QA 的短按/长按合同；正式页面永远不读取该环境变量。 */
@@ -207,11 +225,14 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
   Timer? _readyTimer;
   Timer? _shutdownTimer;
   Timer? _manualForwardResumeTimer;
+  Timer? _precisionControlsTimer;
   Timer? _rendererTimer;
   var _ready = false;
   var _preparingReady = false;
   var _shuttingDown = false;
   var _manualForwardResumeStarted = false;
+  var _precisionControlsStarted = false;
+  var _precisionControlsCompleted = false;
   var _rendererProbeBusy = false;
   bool? _lastFullscreen;
   int? _lastTextureGeneration;
@@ -236,16 +257,15 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       const Duration(milliseconds: 100),
       (_) => unawaited(_recordRendererState()),
     );
-    // 长按前进的正式语义是连续播放。QA 先冻结画面建立静态基线，再只在实体或
-    // 显式 virtual-key 长按的首个 forward Down 后恢复播放；这样不会把等待输入或
-    // 自然播放帧算进首帧延迟，也不改变正式页面的暂停/播放行为。
+    // 长按前进/后退的正式语义都发生在播放时钟上。QA 先冻结画面建立静态基线，
+    // 再只在实体或显式 virtual-key 长按的首个方向 Down 后恢复播放；这样不会把
+    // 等待输入或自然播放帧算进首帧延迟，也不改变正式页面的暂停/播放行为。
     if ((widget.manualKeyboardQa || widget.automatedLongHoldQa) &&
         (!widget.manualKeyboardQa ||
-            (widget.manualKeyboardHoldMode == 'long' &&
-                widget.manualKeyboardAction == 'forward'))) {
+            (widget.manualKeyboardHoldMode == 'long'))) {
       _manualForwardResumeTimer = Timer.periodic(
         const Duration(milliseconds: 20),
-        (_) => unawaited(_resumeAfterForwardScanDown()),
+        (_) => unawaited(_resumeAfterKeyboardScanDown()),
       );
     }
   }
@@ -255,6 +275,7 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
     _readyTimer?.cancel();
     _shutdownTimer?.cancel();
     _manualForwardResumeTimer?.cancel();
+    _precisionControlsTimer?.cancel();
     _rendererTimer?.cancel();
     super.dispose();
   }
@@ -300,7 +321,7 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
     }
   }
 
-  Future<void> _resumeAfterForwardScanDown() async {
+  Future<void> _resumeAfterKeyboardScanDown() async {
     if (!_ready ||
         _manualForwardResumeStarted ||
         _shuttingDown ||
@@ -314,30 +335,48 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       '${widget.outputDirectory.path}${Platform.pathSeparator}$evidenceName',
     );
     if (!evidence.existsSync()) return;
-    bool hasForwardDown;
+    final expectedAction = widget.manualKeyboardAction;
+    bool hasExpectedDown;
     try {
-      hasForwardDown = evidence.readAsLinesSync().any((line) =>
+      hasExpectedDown = evidence.readAsLinesSync().any((line) =>
           line.contains(widget.manualKeyboardQa
               ? '"event":"native_keyboard_message"'
               : '"event":"player_keyboard_event"') &&
-          line.contains('"action":"forward"') &&
+          line.contains('"action":"$expectedAction"') &&
           line.contains('"phase":"down"'));
     } on FileSystemException {
       // 原生观察器可能正在 flush 当前 JSONL 行；下一次 20ms tick 再重试。
       return;
     }
-    if (!hasForwardDown) return;
+    if (!hasExpectedDown) return;
     _manualForwardResumeStarted = true;
     _manualForwardResumeTimer?.cancel();
+    // 反向长按必须从静态基线直接进入 PlayerPage 的 reverse-preview 命令；如果先
+    // 恢复正向播放，探针会把自然播放的首帧误当成反向 seek 的呈现证据。前进长按
+    // 才需要在首个 Down 后恢复播放时钟来测量连续扫描。
+    if (expectedAction == 'backward') {
+      _appendLifecycle(
+        widget.outputDirectory,
+        widget.manualKeyboardQa
+            ? 'manual_long_backward_kept_paused_for_reverse_seek'
+            : 'automated_long_backward_kept_paused_for_reverse_seek',
+      );
+      return;
+    }
     final player = _playerKey.currentState;
     if (player == null || player.playerService.state.playing) return;
     try {
       await player.playerService.play();
+      final playbackStage = expectedAction == 'backward'
+          ? (widget.manualKeyboardQa
+              ? 'manual_long_backward_play_started'
+              : 'automated_long_backward_play_started')
+          : (widget.manualKeyboardQa
+              ? 'manual_long_forward_play_started'
+              : 'automated_long_forward_play_started');
       _appendLifecycle(
         widget.outputDirectory,
-        widget.manualKeyboardQa
-            ? 'manual_long_forward_play_started'
-            : 'automated_long_forward_play_started',
+        playbackStage,
       );
     } catch (_) {
       // 只读 QA 的恢复失败留给像素门禁报告；不向正式页面泄漏异常。
@@ -384,6 +423,9 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
             widget.outputDirectory, 'manual_keyboard_input_waiting');
       }
       setState(() {});
+      if (widget.precisionControlsQa) {
+        unawaited(_runPrecisionControlsQa());
+      }
     } finally {
       if (!_ready) _preparingReady = false;
     }
@@ -401,10 +443,18 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
         'focusReady': player.focusNode.hasFocus,
         'manualKeyboardAction': widget.manualKeyboardAction,
         'manualKeyboardHoldMode': widget.manualKeyboardHoldMode,
+        // QA 探针必须尊重当前播放器快捷键设置；只写固定动作对应的键名，
+        // 不写路径、媒体身份或其它用户配置。
+        'seekBackwardShortcut': player.effectivePlaybackSettings
+            .shortcuts[PlayerShortcutAction.seekBackward],
+        'seekForwardShortcut': player.effectivePlaybackSettings
+            .shortcuts[PlayerShortcutAction.seekForward],
         'automatedLongHoldQa': widget.automatedLongHoldQa,
+        'precisionControlsQa': widget.precisionControlsQa,
         'progressDragSeekMode': widget.progressDragSeekMode.name,
         'adaptiveTextureSizingEnabled': player
             .playerService.videoSurfaceDiagnostics.adaptiveTextureSizingEnabled,
+        'forcedSoftwareDecodeQa': playerQaForceSoftwareDecode(),
         'textureGenerationCount':
             player.playerService.videoSurfaceDiagnostics.textureGenerationCount,
       }),
@@ -412,8 +462,150 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
     );
   }
 
+  /**
+   * 在真实产品页面上串行验收专业控制命令；只保存阶段、结果和匿名属性读回。
+   *
+   * 该路径故意不走普通 seek 近似逐帧，也不使用文件选择器绕过外挂字幕边界。A/B
+   * 状态与字幕文件只存在于隔离 Debug QA 目录，关闭进程后不进入设置、队列或媒体库。
+   */
+  Future<void> _runPrecisionControlsQa() async {
+    if (_precisionControlsStarted || _shuttingDown || !_ready) return;
+    _precisionControlsStarted = true;
+    final player = _playerKey.currentState;
+    if (player == null) {
+      _precisionControlsCompleted = true;
+      return;
+    }
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      final beforeFrame = await player.readPresentedVideoFrame();
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'frame_step_before',
+        'frame': beforeFrame,
+        'frameEvidence': player.lastPresentedVideoFrameEvidence,
+      });
+      var frameStepPresented = false;
+      try {
+        await player.playerService.stepFrame(backward: false);
+        frameStepPresented = await player.waitForPresentedVideoFrame(
+          beforeFrame,
+          const Duration(seconds: 2),
+        );
+      } catch (error) {
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'frame_step_error',
+          'errorType': error.runtimeType.toString(),
+        });
+      }
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'frame_step_complete',
+        'success': frameStepPresented,
+        'frame': await player.readPresentedVideoFrame(),
+        'frameEvidence': player.lastPresentedVideoFrameEvidence,
+      });
+
+      final start = player.playerService.state.position;
+      await player.setAbLoopStartWithFeedback();
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'ab_loop_a',
+        'success': _isMpvAbLoopPoint(
+            await player.playerService.getProperty('ab-loop-a')),
+        'positionMs': start.inMilliseconds,
+      });
+
+      final end = start + const Duration(seconds: 2);
+      await player.playerService.seek(end);
+      await _waitForPlayerPosition(player, end);
+      await player.setAbLoopEndWithFeedback();
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'ab_loop_b',
+        'success': _isMpvAbLoopPoint(
+            await player.playerService.getProperty('ab-loop-b')),
+        'positionMs': player.playerService.state.position.inMilliseconds,
+      });
+
+      await player.clearAbLoopWithFeedback();
+      final clearedA = await player.playerService.getProperty('ab-loop-a');
+      final clearedB = await player.playerService.getProperty('ab-loop-b');
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'ab_loop_clear',
+        'success': clearedA == 'no' && clearedB == 'no',
+      });
+
+      final subtitle = File(
+        '${widget.outputDirectory.path}${Platform.pathSeparator}qa-subtitle.srt',
+      );
+      subtitle.writeAsStringSync(
+        '1\n00:00:00,000 --> 00:00:02,000\nLocal Tag Player QA\n',
+        flush: true,
+      );
+      var subtitleLoaded = false;
+      try {
+        await player.playerService.addExternalSubtitle(subtitle.path);
+        final trackList = await player.playerService.getProperty('track-list');
+        subtitleLoaded = trackList.contains('Local Tag Player QA') ||
+            trackList.contains('subtitle');
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'external_subtitle_complete',
+          'success': subtitleLoaded,
+          'trackListObserved': trackList.isNotEmpty,
+        });
+      } catch (error) {
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'external_subtitle_error',
+          'errorType': error.runtimeType.toString(),
+        });
+      }
+      _appendLifecycle(
+        widget.outputDirectory,
+        subtitleLoaded
+            ? 'precision_controls_qa_complete'
+            : 'precision_controls_qa_incomplete',
+      );
+    } catch (error) {
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'precision_controls_qa_error',
+        'errorType': error.runtimeType.toString(),
+      });
+      _appendLifecycle(widget.outputDirectory, 'precision_controls_qa_error');
+    } finally {
+      _precisionControlsCompleted = true;
+    }
+  }
+
+  Future<void> _waitForPlayerPosition(
+    PlayerPageState player,
+    Duration target,
+  ) async {
+    final watch = Stopwatch()..start();
+    while (!_shuttingDown && watch.elapsed < const Duration(seconds: 2)) {
+      if ((player.playerService.state.position - target).abs() <=
+          const Duration(milliseconds: 500)) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    }
+  }
+
+  bool _isMpvAbLoopPoint(String value) =>
+      value != 'no' && value != 'unavailable' && value.isNotEmpty;
+
+  void _appendPrecisionEvidence(Map<String, Object?> values) {
+    File(
+      '${widget.outputDirectory.path}${Platform.pathSeparator}precision-controls.jsonl',
+    ).writeAsStringSync(
+      '${jsonEncode(<String, Object?>{
+            'utcUs': DateTime.now().toUtc().microsecondsSinceEpoch,
+            ...values,
+          })}\n',
+      mode: FileMode.append,
+      flush: true,
+    );
+  }
+
   Future<void> _shutdownWhenRequested() async {
     if (_shuttingDown || !_shutdownRequest.existsSync()) return;
+    if (widget.precisionControlsQa && !_precisionControlsCompleted) return;
     _shuttingDown = true;
     _readyTimer?.cancel();
     _shutdownTimer?.cancel();
@@ -443,9 +635,12 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
     final disableAdaptiveTextureSizing =
         Platform.environment['LOCAL_TAG_PLAYER_QA_DISABLE_ADAPTIVE_TEXTURE'] ==
             '1';
+    final forceSoftware = playerQaForceSoftwareDecode();
     final backend = MediaKitPlayerBackend(
-      hwdec: hwdec,
-      enableHardwareAcceleration: enableHardwareAcceleration,
+      hwdec: forceSoftware ? 'no' : hwdec,
+      enableHardwareAcceleration:
+          forceSoftware ? false : enableHardwareAcceleration,
+      forceSoftwareDecodeForQa: forceSoftware,
       adaptiveTextureSizingEnabled: !disableAdaptiveTextureSizing,
     );
     return PlayerService(runtimeBackend: backend, surfaceRenderer: backend);

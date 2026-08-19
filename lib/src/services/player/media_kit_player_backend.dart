@@ -20,6 +20,24 @@ import 'windows_gpu_capability_channel.dart';
 // ignore_for_file: slash_for_doc_comments
 
 /**
+ * 一次临时高速扫描的原生属性快照。
+ *
+ * 快照只存活于当前 MediaKit 后端实例，不进入设置、诊断或用户数据；[openGeneration]
+ * 防止迟到的松键把上一条媒体的呈现配置恢复到新媒体上。
+ */
+class _MediaKitFastForwardScanSnapshot {
+  const _MediaKitFastForwardScanSnapshot({
+    required this.rate,
+    required this.openGeneration,
+    required this.properties,
+  });
+
+  final double rate;
+  final int openGeneration;
+  final Map<String, String> properties;
+}
+
+/**
  * 使用现有 media_kit/libmpv 实现 PlayerBackend 的兼容适配器。
  *
  * Player 与 VideoController 的所有权完全留在此类内部；页面只能通过稳定命令、
@@ -29,11 +47,18 @@ class MediaKitPlayerBackend
     implements
         PlayerBackend,
         PlayerBackendTelemetryBoundary,
+        PlayerFramePresentationEvidenceBoundary,
         PlayerVideoSurfaceDiagnosticsBoundary,
         PlayerPropertyBatchBoundary,
         PlayerInteractiveSeekBoundary,
+        PlayerFastForwardScanBoundary,
         PlayerMediaControlsBoundary,
+        PlayerPrecisionControlsBoundary,
+        PlayerExternalSubtitleBoundary,
         PlayerGpuRenderBoundary {
+  @override
+  String get framePresentationEvidenceKind => 'texture';
+
   /**
    * media_kit 1.2.6 的 Windows NativePlayer 会在 dispose 返回 5 秒后才调用
    * `mpv_terminate_destroy`；多留 200 ms，确保 released 不早于真实原生销毁。
@@ -53,6 +78,7 @@ class MediaKitPlayerBackend
     required bool enableHardwareAcceleration,
     FilterQuality textureFilterQuality = FilterQuality.low,
     bool adaptiveTextureSizingEnabled = true,
+    bool forceSoftwareDecodeForQa = false,
   })  : _player = Player(
           // 4K 长视频需要稳定输入窗口；该预算只属于当前播放会话，
           // 不扩大缩略图或媒体详情后台任务的内存占用。
@@ -66,6 +92,7 @@ class MediaKitPlayerBackend
           enableHardwareAcceleration: enableHardwareAcceleration,
         ),
         _textureFilterQuality = textureFilterQuality,
+        _forceSoftwareDecodeForQa = forceSoftwareDecodeForQa,
         _surfaceMetrics = PlayerVideoSurfaceMetricsTracker(
           filterQuality: textureFilterQuality,
         ) {
@@ -102,6 +129,9 @@ class MediaKitPlayerBackend
    * 生产默认保持 media_kit_video 的 `low`（双线性）；只有隔离 QA 会话显式注入其它值。
    */
   final FilterQuality _textureFilterQuality;
+
+  /** Debug-only E2E 注入点；正式组合根始终保持 false，不改变用户硬解偏好。 */
+  final bool _forceSoftwareDecodeForQa;
 
   /** Texture 与 Flutter 布局尺寸的纯诊断汇总器。 */
   final PlayerVideoSurfaceMetricsTracker _surfaceMetrics;
@@ -163,6 +193,9 @@ class MediaKitPlayerBackend
   /** 后端是否已经进入释放流程。 */
   var _disposed = false;
 
+  /** 当前物理长按快进的可恢复原生呈现快照；同一播放器实例最多持有一份。 */
+  _MediaKitFastForwardScanSnapshot? _fastForwardScanSnapshot;
+
   /** 串行化重复 dispose 调用，禁止两个释放流程并发进入 media_kit/libmpv。 */
   Future<void>? _disposeFuture;
 
@@ -216,6 +249,15 @@ class MediaKitPlayerBackend
 
   @override
   Future<void> openPath(String path) async {
+    // 快进松键可能晚于换片事件；先在旧代次恢复，避免临时的高速呈现属性穿透新媒体。
+    await _restoreFastForwardScanBeforeMediaTransition();
+    // mpv 的 A/B 属性属于同一 NativePlayer，换片前必须显式清除，不能让旧区间
+    // 静默作用到新媒体；页面状态也会在同一打开代次失效时清空。
+    try {
+      await clearAbLoop();
+    } catch (_) {
+      // 首次创建或兼容后端尚未拥有 NativePlayer 时没有可清理的旧区间。
+    }
     final generation = _telemetry.beginOpen();
     _activeOpenGeneration = generation;
     _videoParametersGeneration = 0;
@@ -232,8 +274,8 @@ class MediaKitPlayerBackend
       throw StateError('missing_file');
     }
     try {
-      // 页面会在媒体可播放、首帧和恢复位置门禁完成后显式 play；禁止 open 的默认
-      // 自动播放先启动又被打开流程中的属性/精确 seek 暂停。
+      // 页面统一在 open 返回后显式 play：普通新媒体先交付首帧，继续观看再按需
+      // 完成精确恢复；禁止 open 的默认自动播放先启动又被属性/精确 seek 打断。
       await _player.open(Media(path), play: false);
       if (_activeOpenGeneration == generation) {
         unawaited(_captureDecoder(generation));
@@ -278,7 +320,260 @@ class MediaKitPlayerBackend
   }
 
   @override
+  Future<void> beginFastForwardScan(double rate) async {
+    if (!rate.isFinite || rate <= 0) {
+      throw ArgumentError.value(rate, 'rate', '必须是有限的正播放速度');
+    }
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null || _disposed) {
+      final previous = _fastForwardScanSnapshot;
+      if (previous == null) {
+        _fastForwardScanSnapshot = _MediaKitFastForwardScanSnapshot(
+          rate: _player.state.rate,
+          openGeneration: _activeOpenGeneration,
+          properties: const <String, String>{},
+        );
+      }
+      await _player.setRate(rate);
+      return;
+    }
+
+    await NativePlayer.lock.synchronized(() async {
+      final existing = _fastForwardScanSnapshot;
+      if (existing != null) {
+        // 重复的 KeyRepeat 不应重置解码/呈现链；只在调用方调整扫描速度时改 speed。
+        await nativePlayer.setRate(rate, synchronized: false);
+        return;
+      }
+      final snapshot = await _captureFastForwardScanSnapshot(nativePlayer);
+      try {
+        if (snapshot.properties.isNotEmpty) {
+          // 高速期不应让 display-resample/时间插帧继续等待参考帧或显示节拍；mpv
+          // 官方建议用 vo 端丢迟到帧，不能使用不稳定的 decoder framedrop。
+          await nativePlayer.setProperty(
+            'interpolation',
+            'no',
+            waitForInitialization: false,
+          );
+          await nativePlayer.setProperty(
+            'video-sync',
+            'audio',
+            waitForInitialization: false,
+          );
+          await nativePlayer.setProperty(
+            'framedrop',
+            'vo',
+            waitForInitialization: false,
+          );
+          // 快进时音频已由页面临时静音，关闭保音调滤镜可避免无意义的额外音频处理。
+          await nativePlayer.setProperty(
+            'audio-pitch-correction',
+            'no',
+            waitForInitialization: false,
+          );
+        }
+        await nativePlayer.setRate(rate, synchronized: false);
+        if (snapshot.properties.isNotEmpty) {
+          await _verifyFastForwardScanProfile(nativePlayer);
+        }
+        _fastForwardScanSnapshot = snapshot;
+      } catch (_) {
+        try {
+          await _restoreFastForwardScanSnapshot(nativePlayer, snapshot);
+        } catch (_) {
+          // 原始扫描档位失败才是调用方应见的结果；恢复已尽最大努力在同一原生锁内执行。
+        }
+        rethrow;
+      }
+    });
+  }
+
+  @override
+  Future<void> endFastForwardScan() async {
+    final snapshot = _fastForwardScanSnapshot;
+    if (snapshot == null) return;
+    _fastForwardScanSnapshot = null;
+    // 已经切换到新媒体时，旧快照无权覆盖新媒体刚应用的常规播放档位。
+    if (snapshot.openGeneration != _activeOpenGeneration || _disposed) return;
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null) {
+      await _player.setRate(snapshot.rate);
+      return;
+    }
+    await NativePlayer.lock.synchronized(
+      () => _restoreFastForwardScanSnapshot(nativePlayer, snapshot),
+    );
+  }
+
+  /**
+   * 读取高速扫描会覆盖的全部属性；缺少任一可恢复值时只保留倍速快进。
+   *
+   * 不能在不知道旧值的情况下临时改写渲染属性，否则一次快进就可能静默改变用户本来
+   * 选择的显示同步或其它画质配置。
+   */
+  Future<_MediaKitFastForwardScanSnapshot> _captureFastForwardScanSnapshot(
+    NativePlayer nativePlayer,
+  ) async {
+    const properties = <String>[
+      'video-sync',
+      'interpolation',
+      'framedrop',
+      'audio-pitch-correction',
+    ];
+    final previous = <String, String>{};
+    for (final property in properties) {
+      final value = (await nativePlayer.getProperty(property)).trim();
+      if (value.isEmpty) {
+        return _MediaKitFastForwardScanSnapshot(
+          rate: _player.state.rate,
+          openGeneration: _activeOpenGeneration,
+          properties: const <String, String>{},
+        );
+      }
+      previous[property] = value;
+    }
+    return _MediaKitFastForwardScanSnapshot(
+      rate: _player.state.rate,
+      openGeneration: _activeOpenGeneration,
+      properties: Map<String, String>.unmodifiable(previous),
+    );
+  }
+
+  /** 在同一 NativePlayer 锁内先降回常规倍速，再按安全顺序恢复渲染与音频属性。 */
+  Future<void> _restoreFastForwardScanSnapshot(
+    NativePlayer nativePlayer,
+    _MediaKitFastForwardScanSnapshot snapshot,
+  ) async {
+    await nativePlayer.setRate(snapshot.rate, synchronized: false);
+    final properties = snapshot.properties;
+    if (properties.isEmpty) return;
+    // 先恢复音频与丢帧策略，再回到原显示同步，最后打开原本的时间插帧。
+    for (final property in <String>[
+      'audio-pitch-correction',
+      'framedrop',
+      'video-sync',
+      'interpolation',
+    ]) {
+      final value = properties[property];
+      if (value == null) continue;
+      await nativePlayer.setProperty(
+        property,
+        value,
+        waitForInitialization: false,
+      );
+    }
+    await _verifyFastForwardScanRestore(nativePlayer, properties);
+  }
+
+  /** 写入完成并不代表 libmpv 已接受属性；必须读回确认，避免半套扫描档位被当作成功。 */
+  Future<void> _verifyFastForwardScanProfile(NativePlayer nativePlayer) async {
+    const expected = <String, String>{
+      'video-sync': 'audio',
+      'interpolation': 'no',
+      'framedrop': 'vo',
+      'audio-pitch-correction': 'no',
+    };
+    await _verifyFastForwardScanRestore(nativePlayer, expected);
+  }
+
+  /** 验证临时档位或恢复快照的每项属性；调用方会把不匹配视为不可用而非成功。 */
+  Future<void> _verifyFastForwardScanRestore(
+    NativePlayer nativePlayer,
+    Map<String, String> expected,
+  ) async {
+    for (final entry in expected.entries) {
+      final actual = (await nativePlayer.getProperty(entry.key)).trim();
+      if (actual.toLowerCase() != entry.value.trim().toLowerCase()) {
+        throw StateError('fast_forward_scan_property_mismatch');
+      }
+    }
+  }
+
+  /** 媒体切换可抢在 KeyUp 前发生，因此在开始下一代前无条件清理旧扫描档位。 */
+  Future<void> _restoreFastForwardScanBeforeMediaTransition() async {
+    final snapshot = _fastForwardScanSnapshot;
+    if (snapshot == null) return;
+    _fastForwardScanSnapshot = null;
+    if (_disposed) return;
+    try {
+      final nativePlayer = _nativePlayer;
+      if (nativePlayer == null) {
+        await _player.setRate(snapshot.rate);
+      } else {
+        await NativePlayer.lock.synchronized(
+          () => _restoreFastForwardScanSnapshot(nativePlayer, snapshot),
+        );
+      }
+    } catch (_) {
+      // 切换媒体优先级高于临时档位恢复；后续打开流程会重放当前用户的播放配置。
+    }
+  }
+
+  @override
   Future<void> setRate(double rate) => _player.setRate(rate);
+
+  /**
+   * 使用同一个 NativePlayer 的 mpv 逐帧命令；不以 seek 近似，避免长 GOP 下逐帧
+   * 退化为关键帧跳跃。命令不支持时把错误交给 PlayerService 的能力边界。
+   */
+  @override
+  Future<void> stepFrame({required bool backward}) async {
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null || _disposed) {
+      throw UnsupportedError('precision_frame_step_unsupported');
+    }
+    await nativePlayer.command(<String>[
+      backward ? 'frame-back-step' : 'frame-step',
+    ]);
+  }
+
+  @override
+  Future<void> setAbLoopPoint({
+    required PlayerAbLoopPoint point,
+    required Duration position,
+  }) async {
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null || _disposed) {
+      throw UnsupportedError('precision_ab_loop_unsupported');
+    }
+    final property =
+        point == PlayerAbLoopPoint.start ? 'ab-loop-a' : 'ab-loop-b';
+    final seconds = position.inMicroseconds / Duration.microsecondsPerSecond;
+    await nativePlayer.setProperty(
+      property,
+      seconds.toStringAsFixed(6),
+    );
+  }
+
+  @override
+  Future<void> clearAbLoop() async {
+    final nativePlayer = _nativePlayer;
+    if (nativePlayer == null || _disposed) {
+      throw UnsupportedError('precision_ab_loop_unsupported');
+    }
+    await nativePlayer.setProperty('ab-loop-a', 'no');
+    await nativePlayer.setProperty('ab-loop-b', 'no');
+  }
+
+  /**
+   * 通过 mpv `sub-add` 将用户选择的字幕挂到当前会话；不复制、持久化或写入媒体库。
+   */
+  @override
+  Future<void> addExternalSubtitle(String path) async {
+    final nativePlayer = _nativePlayer;
+    final normalized = path.trim();
+    if (nativePlayer == null || _disposed) {
+      throw UnsupportedError('external_subtitle_unsupported');
+    }
+    if (normalized.isEmpty) {
+      throw ArgumentError.value(path, 'path');
+    }
+    await nativePlayer.command(<String>[
+      'sub-add',
+      Uri.file(normalized).toString(),
+      'select',
+    ]);
+  }
 
   @override
   Future<void> setVolume(double volume) => _player.setVolume(volume);
@@ -686,7 +981,10 @@ class MediaKitPlayerBackend
       throw StateError('player_not_initialized');
     }
     // 错误必须返回给事务或功能协调器，不能让上层把失败请求标记为已启用。
-    await nativePlayer.setProperty(property, value);
+    await nativePlayer.setProperty(
+      property,
+      _effectiveQaPropertyValue(property, value),
+    );
   }
 
   /**
@@ -709,7 +1007,7 @@ class MediaKitPlayerBackend
       try {
         await nativePlayer.setProperty(
           entry.key,
-          entry.value,
+          _effectiveQaPropertyValue(entry.key, entry.value),
           waitForInitialization: waitForInitialization,
         );
       } catch (error, stackTrace) {
@@ -723,6 +1021,14 @@ class MediaKitPlayerBackend
     if (firstError != null) {
       Error.throwWithStackTrace(firstError, firstStackTrace!);
     }
+  }
+
+  /** QA 强制软件解码只覆盖 hwdec 属性，其余打开/画质属性保持原值。 */
+  String _effectiveQaPropertyValue(String property, String value) {
+    if (_forceSoftwareDecodeForQa && property == 'hwdec') {
+      return 'no';
+    }
+    return value;
   }
 
   @override

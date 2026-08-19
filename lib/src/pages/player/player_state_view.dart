@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../widgets/app_theme_tokens.dart';
 import 'player_compact_queue_overlay.dart';
+import 'player_hardware_decode_fallback_banner.dart';
 import 'player_open_failure_panel.dart';
 import 'player_video_aspect_mode.dart';
 import 'player_page.dart';
@@ -439,6 +440,23 @@ extension PlayerStateView on PlayerPageState {
                         opaque: true,
                         onEnter: (_) => showFullscreenQueueSidebar(),
                         child: const SizedBox.expand(),
+                      ),
+                    ),
+                  if (softwareDecodeConfirmed && !openRequests.isOpening)
+                    Positioned(
+                      key: const ValueKey(
+                        'player.hardwareDecodeFallback.position',
+                      ),
+                      top: windowTopBarVisible ? playerTopBarHeight + 12 : 16,
+                      left: 16,
+                      child: PlayerHardwareDecodeFallbackBanner(
+                        onRetry: retryAfterSoftwareDecodeFallback,
+                        requestedHwdec: requestedHwdec,
+                        actualHwdec: lastHwdecCurrent,
+                        confirmedSamples: consecutiveSoftwareDecodeSamples,
+                        onDiagnostics: () {
+                          unawaited(showDiagnosticsDialog());
+                        },
                       ),
                     ),
                 ],

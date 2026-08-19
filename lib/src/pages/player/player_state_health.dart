@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -143,6 +145,11 @@ extension PlayerStateHealth on PlayerPageState {
         debugPrint(
           'PLAYER_HEALTH software_decode_confirmed requested=$requestedHwdec actual=$hwdecCurrent',
         );
+        // 持久提示需要一次页面重建；否则健康 Timer 只更新状态变量，用户只能看到短暂 Snackbar。
+        if (mounted) {
+          rebuild(() {});
+        }
+        _showSoftwareDecodeRecoveryNotice();
       }
       if (canJudge &&
           frame != null &&
@@ -185,6 +192,57 @@ extension PlayerStateHealth on PlayerPageState {
       }
     } finally {
       playbackHealthSampling = false;
+    }
+  }
+
+  /**
+   * 将“请求硬解但实际软件解码”从仅日志状态变为用户可见、可恢复的运行时闭环。
+   *
+   * 不在正在播放的 NativePlayer 上热改 `hwdec`：该路径可能使当前超规格媒体直接失败。
+   * 用户明确点击后才按原有硬解设置重新打开当前媒体；不改持久化设置、队列或进度写入
+   * 语义，新的 open generation 仍由既有 latest-only worker 隔离。
+   */
+  void _showSoftwareDecodeRecoveryNotice() {
+    if (!mounted || isExiting) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('当前视频已回退为软件解码，播放可能不够流畅'),
+        duration: const Duration(seconds: 12),
+        action: SnackBarAction(
+          label: '重新打开',
+          onPressed: retryAfterSoftwareDecodeFallback,
+        ),
+      ),
+    );
+    // 仅供 Debug QA 自主完成一次“重新打开”实窗验证；正式环境没有该变量，
+    // 用户仍必须明确点击 banner 动作，不能被健康采样静默重开媒体。
+    if (kDebugMode &&
+        Platform.environment[
+                'LOCAL_TAG_PLAYER_QA_AUTO_RETRY_SOFTWARE_DECODE'] ==
+            '1' &&
+        !softwareDecodeAutoRetryTriggered) {
+      softwareDecodeAutoRetryTriggered = true;
+      Timer(const Duration(milliseconds: 500), () {
+        if (mounted && softwareDecodeConfirmed && !isExiting) {
+          debugPrint('PLAYER_QA software_decode_auto_retry');
+          retryAfterSoftwareDecodeFallback();
+        }
+      });
+    }
+  }
+
+  /** 用户确认后重新打开当前媒体，按现有硬解偏好重新尝试，不做危险的热切换。 */
+  void retryAfterSoftwareDecodeFallback() {
+    if (isExiting || !pageWidget.playbackSettings.hardwareDecodingEnabled) {
+      return;
+    }
+    // requestOpenCurrent 会清除本代健康状态、递增打开请求代次并使用同一队列项；不需要
+    // 也不能在此直接触碰 PlayerBackend，避免绕过 service 串行边界。
+    requestOpenCurrent();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('正在按当前硬解设置重新打开视频')),
+      );
     }
   }
 

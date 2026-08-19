@@ -63,6 +63,7 @@ String _readPlayerPageCluster() {
     'lib/src/pages/player/player_state_chrome.dart',
     'lib/src/pages/player/player_state_performance.dart',
     'lib/src/pages/player/player_state_opening.dart',
+    'lib/src/pages/player/player_state_opening_recovery.dart',
     'lib/src/pages/player/player_state_queue.dart',
     'lib/src/pages/player/player_state_dialogs.dart',
     'lib/src/pages/player/player_state_item_actions.dart',
