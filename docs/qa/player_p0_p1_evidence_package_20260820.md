@@ -16,6 +16,9 @@ PlaybackSession、来源 filtered queue、标签筛选、缩略图/媒体详情�
 - 独立性：每个有效 action 至少 3 个独立会话；失败会话保留但不得进入 p50/p95。
 - 延迟终点：第一个真实 DWM/桌面合成变化。time-pos、命令完成、后端帧号、
   estimated-frame-number 或 Texture 复制回执都只能作为分段诊断，不能替代该终点。
+- 稳态分母：每个已有素材 case 另跑至少 3 个独立 Debug PlayerPage/Texture 会话，
+  每次正式播放窗口至少 10 秒；稳态 decoder/VO/total drop、硬解、Texture 代次/重建和
+  释放证据不能挂到某个动作窗口，也不能替代首个真实 DWM 帧。
 
 本机 manifest 可从 [tool/qa/player_p0_manifest.template.json](/E:/LocalTagPlayer/tool/qa/player_p0_manifest.template.json)
 复制到 .local/qa/ 后填写。每个 case 的 path、编码、尺寸、GOP 分类和预算必须与
@@ -117,11 +120,25 @@ desktop-pixel-matrix-summary.json 的矩阵根，或单个 run 目录。报告�
 最长无变化段（`≤500 ms`）。字段不足只记 `unknown`，反向 latest-only 关键帧预览不因
 存在若干变化而被写成连续反向扫描。
 
+本轮新增 [tool/run_player_steady_runtime_matrix.ps1](/E:/LocalTagPlayer/tool/run_player_steady_runtime_matrix.ps1)
+和正式 PlayerPage 的 `LOCAL_TAG_PLAYER_STEADY_RUNTIME_QA=1` Debug 入口。它只采样已有的
+运行态快照，不启动 DWM 像素探针；矩阵摘要以 `backend-runtime-steady-window` 标记，
+并将 `pass/fail/unknown` 保留在 decoder、VO、total 三个独立指标中。装配器把它放在
+case 级 `evidence.steadyRuntime`，不复制到 startup、短按、拖动或长按 action。
+
+当前 10 个已有素材 case 均完成 `3/3` 有效会话：实际窗口 `10001–10007 ms`，每轮
+`21/21` 采样处于播放态、buffering `0`；decoder drop 与 total drop 均为 `pass`（每轮
+`0→0`），VO drop 属性在本机为 `empty`，因此 10/10 case 均严格记为 `unknown`；最终
+硬解均为 `d3d11va-copy`，Texture 代次 delta 均为 `0`，每轮均有资源释放回执。两个
+manifest 缺口 `1080p-av1-short-gop` 与 `4k-av1-long-gop` 的 case 级稳态指标继续为
+`unknown`。这组稳态证据只说明运行态分母在当前 Debug 机器上可复现，不把后端 total drop
+提升为 DWM 无掉帧，也不改变启动首帧的 fail/unknown 结论。
+
 因此，当前仓库的本机阶段结论是：
 
 装配后的统一门禁报告为 `overall=fail`：12 个 case 中 `11` 个为 `fail`、`1` 个为
-`unknown`、没有 case 为 `pass`。这表示证据链已经能够对已装配动作给出可复核的
-`pass/fail/unknown`，但 P0 本机基线尚未完成；VO drop、独立稳态 total drop、未装配
+`unknown`、没有 case 为 `pass`。这表示证据链已经能够对已装配动作和 case 级稳态窗口
+给出可复核的 `pass/fail/unknown`，但 P0 本机首帧/动作基线仍未通过；VO drop、未装配
 动作和两个 manifest 缺口不能被这次装配覆盖。
 
 本轮对统一 manifest 的正式 PlayerPage 1080p H.264 short forward 做了 3 个独立
@@ -143,7 +160,10 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | 三编码/两分辨率/短长 GOP 的统一 P0 报告 | fail（11 fail/1 unknown） | 已装配 41 个明确 case/action；startup 目标全部失败或缺证据，连续呈现、未装配动作、稳态字段和 2 个素材缺口仍未闭环 |
 | decoder drop | pass 或 fail 按 action 分列 | 运行态有值时非零失败；没有值不补零 |
 | VO drop | unknown（已有矩阵多数不可用） | 运行态没有可靠 VO drop 字段时不能判通过 |
-| 稳态 total drop | unknown | 既有动作样本缺少独立 10 秒分母 |
+| case 级稳态 decoder drop | pass（10/12） | 10 个已有素材 case 各 3/3、独立至少 10 秒窗口；两个缺口 unknown |
+| case 级稳态 VO drop | unknown（12/12） | 本机 `vo-drop-frame-count=empty`，不能按零处理 |
+| case 级稳态 total drop | pass（10/12） | 10 个已有素材 case 的独立分母为 0→0；两个缺口 unknown |
+| action 窗口 steady-total-drop | unknown | 动作窗口仍不具备 10 秒稳态分母，不能由 case 结果外推 |
 | DWM 后续呈现节奏 | pass/fail/unknown 按长按 action 分列 | 由 `presentedChanges[].qpcUs` 计算；缺少连续变化序列不补成通过 |
 | 首个真实 DWM 帧 | pass/fail 按已有 action 分列 | 只采用桌面合成像素报告 |
 | P0 总体 | fail（阶段未完成） | 当前门禁没有 case 通过，且仍有 unknown；报告完整性尚未闭环 |
@@ -188,8 +208,9 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
   `d3d11va-copy` 均有回执。4K AV1 short 仅 `2/3` 会话有效而保持 unknown，缺失素材的
   1080p AV1 short 与 4K AV1 long 也保持 unknown；后端 `first_frame_ms` 不进入该指标。
 
-阶段 A 在统一 manifest 的每个有效 case/action 达到 3 个独立会话、报告字段齐全、
-失败和 unknown 均被保留后结束；不因实体键盘、另一后端或外部 GPU 无限重跑。
+阶段 A 在统一 manifest 的每个可运行 case/action 保留 3-session 结果、case 级稳态分母、
+失败和 unknown 均可复核后达到本机停止条件；12-case 缺料、动作失败、VO unknown 和
+首个 DWM 预算失败仍如实留在报告中，不因实体键盘、另一后端或外部 GPU 无限重跑。
 
 ## 阶段 B：P0 根因决策
 
@@ -299,5 +320,5 @@ prompt impact: satisfies first principles; added finite evidence contract withou
 protected behaviors: preserved
 unauthorized feature removal: none
 mount and reachability: not changed; existing PlayerPage evidence retained
-validation: see tool/validate_player_p0_evidence.ps1, focused contract test, analyzer/build result
+validation: focused contract tests 20/20 passed; PowerShell parsers passed; flutter analyze no issues; flutter build windows --debug passed; steady runtime 10 cases × 3 sessions passed the bounded matrix; P0 validator exit 2 with overall=fail as required by remaining DWM/action/VO/manifest unknowns
 ~~~

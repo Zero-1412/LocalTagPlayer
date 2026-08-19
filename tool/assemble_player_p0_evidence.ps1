@@ -82,6 +82,62 @@ function Get-ValidatedMatrixCandidate {
   return $validated | Sort-Object { $_.directory.Name } -Descending | Select-Object -First 1
 }
 
+function Get-ValidatedSteadyRuntimeCandidate {
+  param(
+    [Parameter(Mandatory = $true)][string]$Prefix,
+    [Parameter(Mandatory = $true)][string]$Root
+  )
+
+  # 稳态窗口是 case 级分母，不绑定到短按/拖动/长按 action；只接受完整的 3-session
+  # PlayerPage/Texture 矩阵，并要求每轮都有释放回执，避免用单次后端快照冒充稳态证据。
+  $directories = @(
+    Get-ChildItem -LiteralPath $Root -Directory -Filter "$Prefix*" -ErrorAction SilentlyContinue
+  )
+  $validated = @()
+  foreach ($directory in $directories) {
+    $summaryPath = Join-Path $directory.FullName 'steady-runtime-matrix-summary.json'
+    if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) { continue }
+    try {
+      $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+    } catch {
+      continue
+    }
+
+    $records = @($summary.records)
+    $validRecords = @($records | Where-Object { [string]$_.status -eq 'valid' })
+    $complete = [bool]$summary.p95Eligible -and
+      $validRecords.Count -ge 3 -and
+      $validRecords.Count -eq [int]$summary.runs
+    if ($complete) {
+      foreach ($record in $validRecords) {
+        $runtime = $record.runtimeEvidence
+        if ([string]$runtime.evidenceKind -ne 'backend-runtime-steady-window' -or
+            -not [bool]$runtime.windowComplete -or
+            [int]$runtime.sampleCount -lt 8 -or
+            $runtime.resourceReleased -ne $true) {
+          $complete = $false
+          break
+        }
+      }
+    }
+    if ($complete) {
+      $validated += [pscustomobject]@{
+        directory = $directory
+        validSessions = $validRecords.Count
+        metrics = [ordered]@{
+          decoderDrop = @($validRecords | ForEach-Object { $_.runtimeEvidence.decoderDrop.status } | Select-Object -Unique)
+          voDrop = @($validRecords | ForEach-Object { $_.runtimeEvidence.voDrop.status } | Select-Object -Unique)
+          totalDrop = @($validRecords | ForEach-Object { $_.runtimeEvidence.totalDrop.status } | Select-Object -Unique)
+          hwdecCurrentFinal = @($validRecords | ForEach-Object { $_.runtimeEvidence.hwdecCurrentFinal } | Select-Object -Unique)
+          textureGenerationDelta = @($validRecords | ForEach-Object { $_.runtimeEvidence.textureGenerationDelta } | Select-Object -Unique)
+        }
+      }
+    }
+  }
+
+  return $validated | Sort-Object { $_.directory.Name } -Descending | Select-Object -First 1
+}
+
 function Get-BindingPrefix {
   param([Parameter(Mandatory = $true)][object]$Binding)
 
@@ -112,6 +168,15 @@ function Get-BindingPrefix {
   }
   return 'current-4k-{0}-realpage-{1}-longhold-7run-' -f
     [string]$Binding.codec, [string]$Binding.direction
+}
+
+function Get-SteadyRuntimeBindingPrefix {
+  param([Parameter(Mandatory = $true)][object]$Case)
+
+  $resolution = if ([int]$Case.width -eq 1920) { '1080p' } else { '4k' }
+  $gop = ([string]$Case.gop) -replace '-gop$', ''
+  return 'current-steady-runtime-{0}-{1}-{2}-' -f
+    $resolution, [string]$Case.codec, $gop
 }
 
 $sourceFullPath = [System.IO.Path]::GetFullPath($SourceManifest)
@@ -182,6 +247,8 @@ $bindings = @(
 $actions = @('startup', 'shortForward', 'shortBackward', 'drag', 'longForward', 'longBackward', 'fullscreen')
 $mapped = @()
 $omitted = @()
+$steadyRuntimeMapped = @()
+$steadyRuntimeOmitted = @()
 
 foreach ($case in $cases) {
   $caseEvidence = [ordered]@{}
@@ -224,6 +291,25 @@ foreach ($case in $cases) {
     }
   }
 
+  $steadyPrefix = Get-SteadyRuntimeBindingPrefix $case
+  $steadyCandidate = Get-ValidatedSteadyRuntimeCandidate -Prefix $steadyPrefix -Root $evidenceRootFullPath
+  if ($null -ne $steadyCandidate) {
+    $caseEvidence['steadyRuntime'] = @($steadyCandidate.directory.FullName)
+    $steadyRuntimeMapped += [ordered]@{
+      caseId = [string]$case.id
+      directoryName = $steadyCandidate.directory.Name
+      validSessions = $steadyCandidate.validSessions
+      metrics = $steadyCandidate.metrics
+      selectionRule = 'validated steady-runtime summary; product-player-page; p95Eligible; every valid session released resources'
+    }
+  } else {
+    $steadyRuntimeOmitted += [ordered]@{
+      caseId = [string]$case.id
+      reason = 'no-validated-case-level-steady-runtime-matrix'
+      expectedPrefix = $steadyPrefix
+    }
+  }
+
   if ($caseEvidence.Count -gt 0) {
     $case | Add-Member -MemberType NoteProperty -Name evidence -Value $caseEvidence -Force
   } elseif ($null -ne $case.PSObject.Properties['evidence']) {
@@ -240,6 +326,10 @@ $assembly = [ordered]@{
   omittedCount = $omitted.Count
   mapped = @($mapped)
   omitted = @($omitted)
+  steadyRuntimeMappedCount = $steadyRuntimeMapped.Count
+  steadyRuntimeOmittedCount = $steadyRuntimeOmitted.Count
+  steadyRuntimeMapped = @($steadyRuntimeMapped)
+  steadyRuntimeOmitted = @($steadyRuntimeOmitted)
 }
 $manifest | Add-Member -MemberType NoteProperty -Name evidenceAssembly -Value $assembly -Force
 

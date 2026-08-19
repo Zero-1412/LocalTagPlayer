@@ -117,6 +117,104 @@ function Get-SessionRoots {
   return @($roots | Sort-Object -Unique)
 }
 
+function Get-SteadyRuntimeCaseResult {
+  param(
+    [object]$EvidenceValue,
+    [switch]$ValidateOnly
+  )
+
+  if ($ValidateOnly) {
+    return [ordered]@{
+      overall = 'unknown'
+      evidenceDirectories = 0
+      validSessions = 0
+      metrics = @(
+        (New-Metric 'steady-runtime-window' 'unknown' $null 'ValidateOnly 未读取 case 级稳态 QA 产物。')
+      )
+    }
+  }
+
+  $roots = @(Get-SessionRoots $EvidenceValue)
+  if ($roots.Count -eq 0) {
+    return [ordered]@{
+      overall = 'unknown'
+      evidenceDirectories = 0
+      validSessions = 0
+      metrics = @(
+        (New-Metric 'steady-runtime-window' 'unknown' $null '缺少 case 级独立至少 10 秒稳态矩阵。')
+        (New-Metric 'steady-decoder-drop' 'unknown' $null '缺少稳态 decoder drop 分母。')
+        (New-Metric 'steady-vo-drop' 'unknown' $null '缺少稳态 VO drop 分母；不可按零处理。')
+        (New-Metric 'steady-total-drop' 'unknown' $null '缺少稳态 total drop 分母。')
+        (New-Metric 'steady-hardware-decode' 'unknown' $null '缺少稳态硬解状态。')
+        (New-Metric 'steady-texture-generation-recorded' 'unknown' $null '缺少稳态 Texture 代次/重建记录。')
+        (New-Metric 'steady-resource-release' 'unknown' $null '缺少稳态会话释放回执。')
+      )
+    }
+  }
+
+  $summary = Read-JsonFile (Join-Path $roots[0] 'steady-runtime-matrix-summary.json')
+  if ($null -eq $summary) {
+    return [ordered]@{
+      overall = 'unknown'
+      evidenceDirectories = $roots.Count
+      validSessions = 0
+      metrics = @((New-Metric 'steady-runtime-window' 'unknown' $null '稳态矩阵摘要不存在或无效。'))
+    }
+  }
+
+  $records = @($summary.records)
+  $valid = @($records | Where-Object { [string]$_.status -eq 'valid' })
+  $windowComplete = [bool]$summary.p95Eligible -and
+    $valid.Count -ge 3 -and
+    $valid.Count -eq (Get-NumberOrNull (Get-ObjectProperty $summary 'runs'))
+  $windowStatus = if ($windowComplete) { 'pass' } elseif ($records.Count -eq 0) { 'unknown' } else { 'fail' }
+  $summaryMetrics = Get-ObjectProperty $summary 'metrics'
+  $readSummaryStatus = {
+    param([string]$Name)
+    $value = [string](Get-ObjectProperty $summaryMetrics $Name)
+    if ($value -in @('pass', 'fail', 'unknown')) { return $value }
+    return 'unknown'
+  }
+  $releaseValues = @($valid | ForEach-Object { $_.runtimeEvidence.resourceReleased })
+  $releaseStatus = if ($releaseValues.Count -lt 3) { 'unknown' }
+    elseif ($releaseValues -contains $false) { 'fail' }
+    elseif (@($releaseValues | Where-Object { $_ -ne $true }).Count -gt 0) { 'unknown' }
+    else { 'pass' }
+  $hwdecValues = @($valid | ForEach-Object {
+      [string]$_.runtimeEvidence.hwdecCurrentFinal
+    } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -notin @('empty', 'unavailable') } | Select-Object -Unique)
+  $hwdecStatus = if ($valid.Count -lt 3 -or $hwdecValues.Count -eq 0) { 'unknown' } else { 'pass' }
+  $textureValues = @($valid | ForEach-Object {
+      @($_.runtimeEvidence.textureGenerationValues)
+    } | Where-Object { $null -ne $_ })
+  $textureStatus = if ($valid.Count -lt 3 -or $textureValues.Count -lt 3) { 'unknown' } else { 'pass' }
+  $metrics = @(
+    (New-Metric 'steady-runtime-window' $windowStatus ([ordered]@{
+        requestedDurationMs = $summary.requestedDurationMs
+        actualDurationMs = @($valid | ForEach-Object { $_.runtimeEvidence.actualDurationMs })
+        sampleCount = @($valid | ForEach-Object { $_.runtimeEvidence.sampleCount })
+      }) 'case 级正式 PlayerPage/Texture 独立稳态窗口；每个有效 case 至少 3 个会话。')
+    (New-Metric 'steady-decoder-drop' (& $readSummaryStatus 'decoderDrop') $summaryMetrics.decoderDrop '稳态 decoder drop 按独立时间分母判定。')
+    (New-Metric 'steady-vo-drop' (& $readSummaryStatus 'voDrop') $summaryMetrics.voDrop '稳态 VO drop 缺失时保持 unknown，不按零处理。')
+    (New-Metric 'steady-total-drop' (& $readSummaryStatus 'totalDrop') $summaryMetrics.totalDrop '稳态 total drop 按独立时间分母判定。')
+    (New-Metric 'steady-hardware-decode' $hwdecStatus $hwdecValues '记录稳态最终硬解状态，不按请求参数推断。')
+    (New-Metric 'steady-texture-generation-recorded' $textureStatus ([ordered]@{
+        values = @($valid | ForEach-Object { $_.runtimeEvidence.textureGenerationValues })
+        deltas = @($valid | ForEach-Object { $_.runtimeEvidence.textureGenerationDelta })
+      }) '记录稳态 Texture 代次/重建；代次稳定不等于 DWM 首帧通过。')
+    (New-Metric 'steady-resource-release' $releaseStatus $releaseValues '每个稳态会话必须有资源释放回执。')
+  )
+  $overall = if (@($metrics | Where-Object status -eq 'fail').Count -gt 0) { 'fail' }
+    elseif (@($metrics | Where-Object status -eq 'unknown').Count -gt 0) { 'unknown' }
+    else { 'pass' }
+  return [ordered]@{
+    overall = $overall
+    evidenceDirectories = $roots.Count
+    validSessions = $valid.Count
+    metrics = @($metrics)
+  }
+}
+
 function Get-RunEvidence {
   param(
     [Parameter(Mandatory = $true)][string]$Root,
@@ -420,6 +518,8 @@ foreach ($case in $cases) {
       $null -ne $caseWidth -and $caseWidth -gt 0 -and
       $null -ne $caseHeight -and $caseHeight -gt 0 -and
       $null -ne $caseBudget -and $caseBudget -gt 0) { 'pass' } else { 'fail' }) $caseId 'manifest 必须包含本机样本、编码、尺寸、GOP 分类和预算。'
+  $steadyRuntimeValue = Get-ObjectProperty (Get-ObjectProperty $case 'evidence') 'steadyRuntime'
+  $steadyRuntimeResult = Get-SteadyRuntimeCaseResult $steadyRuntimeValue -ValidateOnly:$ValidateOnly
   $actionResults = [ordered]@{}
   foreach ($action in $actions) {
     $evidenceObject = if ($null -ne $case.PSObject.Properties['evidence']) {
@@ -443,7 +543,7 @@ foreach ($case in $cases) {
       $actionResults[$action] = Get-ActionMetrics $action $evidenceValue
     }
   }
-  $allMetrics = @($caseChecks)
+  $allMetrics = @($caseChecks + $steadyRuntimeResult.metrics)
   foreach ($actionResult in $actionResults.Values) {
     $allMetrics += @($actionResult.metrics)
   }
@@ -454,6 +554,7 @@ foreach ($case in $cases) {
     id = $caseId
     overall = $caseOverall
     metrics = @($caseChecks)
+    steadyRuntime = $steadyRuntimeResult
     actions = $actionResults
   }
 }
@@ -466,7 +567,7 @@ $buildMetrics = @(
   (New-Metric 'dwm-evidence-kind' $(if ($null -ne $build -and [string]$build.evidenceKind -eq 'desktop-composited-pixel-change') { 'pass' } else { 'unknown' }) $(if ($null -ne $build) { [string]$build.evidenceKind } else { $null }) '首个实际 DWM 呈现帧是延迟终点。')
 )
 
-$allResults = @($manifestShape + $buildMetrics + ($caseRecords | ForEach-Object { $_.metrics }) + ($caseRecords | ForEach-Object { $_.actions.Values | ForEach-Object { $_.metrics } }))
+$allResults = @($manifestShape + $buildMetrics + ($caseRecords | ForEach-Object { $_.metrics }) + ($caseRecords | ForEach-Object { $_.steadyRuntime.metrics }) + ($caseRecords | ForEach-Object { $_.actions.Values | ForEach-Object { $_.metrics } }))
 $overall = if (@($allResults | Where-Object status -eq 'fail').Count -gt 0) { 'fail' }
   elseif (@($allResults | Where-Object status -eq 'unknown').Count -gt 0) { 'unknown' }
   else { 'pass' }

@@ -70,6 +70,10 @@ Future<void> runPlayerRealPagePixelQa() async {
       environment['LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_QA'] == '1';
   final precisionControlsQa =
       environment['LOCAL_TAG_PLAYER_PRECISION_CONTROLS_QA'] == '1';
+  final steadyRuntimeQa =
+      environment['LOCAL_TAG_PLAYER_STEADY_RUNTIME_QA'] == '1';
+  final steadyRuntimeDurationMilliseconds =
+      _readQaSteadyRuntimeDurationMilliseconds(environment);
   final automatedLongHoldQa =
       environment['LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_QA'] == '1';
   final automatedLongHoldAction =
@@ -114,6 +118,8 @@ Future<void> runPlayerRealPagePixelQa() async {
       manualKeyboardQa: manualKeyboardQa,
       automatedLongHoldQa: automatedLongHoldQa,
       precisionControlsQa: precisionControlsQa,
+      steadyRuntimeQa: steadyRuntimeQa,
+      steadyRuntimeDurationMilliseconds: steadyRuntimeDurationMilliseconds,
       manualKeyboardAction: manualKeyboardAction,
       manualKeyboardHoldMode: manualKeyboardHoldMode,
     ),
@@ -164,6 +170,14 @@ Future<void> _waitForStartupProbe(Directory outputDirectory) async {
 int _readQaWindowDimension(String name, {required int fallback}) {
   final parsed = int.tryParse(Platform.environment[name] ?? '');
   return parsed != null && parsed > 0 ? parsed : fallback;
+}
+
+/** Debug-only 稳态窗口时长；正式进程不读取该 QA 环境变量。 */
+int _readQaSteadyRuntimeDurationMilliseconds(Map<String, String> environment) {
+  final parsed = int.tryParse(
+    environment['LOCAL_TAG_PLAYER_STEADY_RUNTIME_DURATION_MS'] ?? '',
+  );
+  return parsed != null && parsed >= 10000 ? parsed : 10000;
 }
 
 /** 两阶段策略仅由独立 Debug QA 显式传入；未知值安全回退为正式单次精确定位。 */
@@ -218,6 +232,8 @@ class _PlayerRealPagePixelQaApp extends StatefulWidget {
     required this.manualKeyboardQa,
     required this.automatedLongHoldQa,
     required this.precisionControlsQa,
+    required this.steadyRuntimeQa,
+    required this.steadyRuntimeDurationMilliseconds,
     required this.manualKeyboardAction,
     required this.manualKeyboardHoldMode,
   });
@@ -231,6 +247,10 @@ class _PlayerRealPagePixelQaApp extends StatefulWidget {
   final bool automatedLongHoldQa;
   /** 仅 Debug QA：在真实 PlayerPage/NativePlayer 会话中验收倍速、逐帧、A/B 与外挂字幕。 */
   final bool precisionControlsQa;
+  /** 仅 Debug QA：在正式 Texture 会话中记录独立稳态运行态分母。 */
+  final bool steadyRuntimeQa;
+  /** 稳态窗口目标时长，不进入正式播放语义或用户设置。 */
+  final int steadyRuntimeDurationMilliseconds;
   /** 仅用于 Debug 门禁提示；正式页面永远不读取该环境变量。 */
   final String manualKeyboardAction;
   /** 实体键盘 QA 的短按/长按合同；正式页面永远不读取该环境变量。 */
@@ -267,10 +287,20 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
   late final File _rendererEvents = File(
     '${widget.outputDirectory.path}${Platform.pathSeparator}renderer-events.jsonl',
   );
+  late final File _steadyRuntimeSamples = File(
+    '${widget.outputDirectory.path}${Platform.pathSeparator}steady-runtime-samples.jsonl',
+  );
+  late final File _steadyRuntimeSummary = File(
+    '${widget.outputDirectory.path}${Platform.pathSeparator}steady-runtime-summary.json',
+  );
+  late final File _steadyRuntimeComplete = File(
+    '${widget.outputDirectory.path}${Platform.pathSeparator}steady-runtime-complete.json',
+  );
   Timer? _readyTimer;
   Timer? _shutdownTimer;
   Timer? _manualForwardResumeTimer;
   Timer? _precisionControlsTimer;
+  Timer? _steadyRuntimeTimer;
   Timer? _rendererTimer;
   var _ready = false;
   var _preparingReady = false;
@@ -278,6 +308,13 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
   var _manualForwardResumeStarted = false;
   var _precisionControlsStarted = false;
   var _precisionControlsCompleted = false;
+  var _steadyRuntimeStarted = false;
+  var _steadyRuntimeSampleBusy = false;
+  var _steadyRuntimeSampleCount = 0;
+  var _steadyRuntimePlayingSampleCount = 0;
+  var _steadyRuntimeBufferingSampleCount = 0;
+  final Stopwatch _steadyRuntimeWatch = Stopwatch();
+  DateTime? _steadyRuntimeStartedAt;
   var _rendererProbeBusy = false;
   var _startupSurfaceReadyPublished = false;
   bool? _lastFullscreen;
@@ -322,6 +359,7 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
     _shutdownTimer?.cancel();
     _manualForwardResumeTimer?.cancel();
     _precisionControlsTimer?.cancel();
+    _steadyRuntimeTimer?.cancel();
     _rendererTimer?.cancel();
     super.dispose();
   }
@@ -463,6 +501,28 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
     }
     _preparingReady = true;
     try {
+      if (widget.steadyRuntimeQa) {
+        if (!state.playing) {
+          await player.playerService.play();
+        }
+        if (!mounted || _shuttingDown || !player.playerService.state.playing) {
+          return;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        if (!mounted || _shuttingDown) return;
+        player.focusNode.requestFocus();
+        await WidgetsBinding.instance.endOfFrame;
+        _ready = true;
+        _readyTimer?.cancel();
+        _writeReady(player, state: 'steady-runtime-ready');
+        _appendLifecycle(
+          widget.outputDirectory,
+          'steady_runtime_window_started',
+        );
+        setState(() {});
+        _startSteadyRuntimeSampling(player);
+        return;
+      }
       final reverseBaselineTarget = playerQaReverseBaselineTarget(
         duration: state.duration,
         position: state.position,
@@ -499,7 +559,10 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
     }
   }
 
-  void _writeReady(PlayerPageState player) {
+  void _writeReady(
+    PlayerPageState player, {
+    String state = 'paused-static-baseline-ready',
+  }) {
     File('${widget.outputDirectory.path}${Platform.pathSeparator}ready.json')
         .writeAsStringSync(
       jsonEncode(<String, Object?>{
@@ -507,7 +570,7 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
         'windowTitle': 'LocalTagPlayer Real PlayerPage QA',
         'backend': 'media-kit-flutter-texture',
         'surface': 'product-player-page',
-        'state': 'paused-static-baseline-ready',
+        'state': state,
         'focusReady': player.focusNode.hasFocus,
         'manualKeyboardAction': widget.manualKeyboardAction,
         'manualKeyboardHoldMode': widget.manualKeyboardHoldMode,
@@ -519,6 +582,8 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
             .shortcuts[PlayerShortcutAction.seekForward],
         'automatedLongHoldQa': widget.automatedLongHoldQa,
         'precisionControlsQa': widget.precisionControlsQa,
+        'steadyRuntimeQa': widget.steadyRuntimeQa,
+        'steadyRuntimeDurationMs': widget.steadyRuntimeDurationMilliseconds,
         'progressDragSeekMode': widget.progressDragSeekMode.name,
         'adaptiveTextureSizingEnabled': player
             .playerService.videoSurfaceDiagnostics.adaptiveTextureSizingEnabled,
@@ -528,6 +593,97 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
       }),
       flush: true,
     );
+  }
+
+  /**
+   * 记录独立稳态播放窗口的匿名运行态快照。
+   *
+   * 该窗口不启动桌面像素探针，也不把后端属性升级为 DWM 呈现证据；它只为 decoder、
+   * VO、total drop 和硬解状态提供有明确时间分母的辅助基线。窗口完成后才允许外部
+   * 门禁请求释放当前 PlayerPage。
+   */
+  void _startSteadyRuntimeSampling(PlayerPageState player) {
+    if (_steadyRuntimeStarted || _shuttingDown) return;
+    _steadyRuntimeStarted = true;
+    _steadyRuntimeStartedAt = DateTime.now().toUtc();
+    _steadyRuntimeWatch
+      ..reset()
+      ..start();
+    unawaited(_recordSteadyRuntimeSample(player));
+    _steadyRuntimeTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => unawaited(_recordSteadyRuntimeSample(player)),
+    );
+  }
+
+  Future<void> _recordSteadyRuntimeSample(PlayerPageState player) async {
+    if (_steadyRuntimeSampleBusy ||
+        !_steadyRuntimeStarted ||
+        _shuttingDown ||
+        (!_steadyRuntimeWatch.isRunning &&
+            _steadyRuntimeWatch.elapsedMilliseconds >=
+                widget.steadyRuntimeDurationMilliseconds)) {
+      return;
+    }
+    _steadyRuntimeSampleBusy = true;
+    try {
+      final snapshot = await player.readSeekTraceRuntimeSnapshot();
+      final state = player.playerService.state;
+      final elapsedMilliseconds = _steadyRuntimeWatch.elapsedMilliseconds;
+      final now = DateTime.now().toUtc();
+      _steadyRuntimeSampleCount++;
+      if (state.playing) _steadyRuntimePlayingSampleCount++;
+      if (state.buffering) _steadyRuntimeBufferingSampleCount++;
+      _steadyRuntimeSamples.writeAsStringSync(
+        '${jsonEncode(<String, Object?>{
+              'schemaVersion': 1,
+              'event': 'steady-runtime-sample',
+              'utcUs': now.microsecondsSinceEpoch,
+              'elapsedMs': elapsedMilliseconds,
+              'playing': state.playing,
+              'buffering': state.buffering,
+              'positionMs': state.position.inMilliseconds,
+              ...snapshot,
+            })}\n',
+        mode: FileMode.append,
+        flush: true,
+      );
+      if (elapsedMilliseconds >= widget.steadyRuntimeDurationMilliseconds) {
+        _steadyRuntimeWatch.stop();
+        _steadyRuntimeTimer?.cancel();
+        final startedAt = _steadyRuntimeStartedAt;
+        _steadyRuntimeSummary.writeAsStringSync(
+          '${jsonEncode(<String, Object?>{
+                'schemaVersion': 1,
+                'evidence': 'backend-runtime-steady-window',
+                'status': 'complete',
+                'requestedDurationMs': widget.steadyRuntimeDurationMilliseconds,
+                'actualDurationMs': elapsedMilliseconds,
+                'sampleCount': _steadyRuntimeSampleCount,
+                'playingSampleCount': _steadyRuntimePlayingSampleCount,
+                'bufferingSampleCount': _steadyRuntimeBufferingSampleCount,
+                'windowStartUtcUs': startedAt?.microsecondsSinceEpoch,
+                'windowEndUtcUs': now.microsecondsSinceEpoch,
+                'samplesFile': 'steady-runtime-samples.jsonl',
+              })}\n',
+          flush: true,
+        );
+        _steadyRuntimeComplete.writeAsStringSync(
+          '${jsonEncode(<String, Object?>{
+                'schemaVersion': 1,
+                'event': 'steady-runtime-window-complete',
+                'utcUs': now.microsecondsSinceEpoch,
+              })}\n',
+          flush: true,
+        );
+        _appendLifecycle(
+          widget.outputDirectory,
+          'steady_runtime_window_complete',
+        );
+      }
+    } finally {
+      _steadyRuntimeSampleBusy = false;
+    }
   }
 
   /**

@@ -321,6 +321,27 @@ void main() {
     expect(gate, contains('避免右侧常驻队列压缩视频表面'));
   });
 
+  test('正式 Texture 稳态窗口保留独立分母并将缺失计数留为 unknown', () {
+    final gate = File('tool/run_player_desktop_pixel_latency_gate.ps1')
+        .readAsStringSync();
+    final qaSource = File('lib/src/qa/player_real_page_pixel_qa_app.dart')
+        .readAsStringSync();
+    final matrix =
+        File('tool/run_player_steady_runtime_matrix.ps1').readAsStringSync();
+
+    expect(gate, contains("'steady'"));
+    expect(gate, contains('SteadyRuntimeDurationMilliseconds'));
+    expect(gate, contains('backend-runtime-steady-window'));
+    expect(gate, contains('steady-runtime-complete.json'));
+    expect(qaSource, contains('LOCAL_TAG_PLAYER_STEADY_RUNTIME_QA'));
+    expect(qaSource, contains('steady-runtime-samples.jsonl'));
+    expect(qaSource, contains('steady-runtime-window-complete'));
+    expect(qaSource, contains('readSeekTraceRuntimeSnapshot'));
+    expect(matrix, contains('unknown'));
+    expect(matrix, contains('p95Eligible'));
+    expect(matrix, contains('successfulRuns'));
+  });
+
   test('Windows runner 的实体键盘 QPC 锚点只在 Debug QA 子窗口记录匿名动作', () {
     final evidence = File('windows/runner/player_qa_keyboard_qpc_evidence.cpp')
         .readAsStringSync();

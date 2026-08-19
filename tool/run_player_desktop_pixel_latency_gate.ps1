@@ -13,7 +13,7 @@
 param(
   [Parameter(Mandatory = $true)]
   [string]$Sample,
-  [ValidateSet('startup', 'click', 'fullscreen', 'playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')]
+  [ValidateSet('startup', 'steady', 'click', 'fullscreen', 'playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')]
   [string]$Action = 'click',
   [ValidateRange(1, 7)]
   [int]$Samples = 1,
@@ -39,6 +39,9 @@ param(
   [string]$ProgressDragSeekMode = 'exactOnly',
   [ValidateRange(0, 3000)]
   [int]$SettleMilliseconds = 350,
+  # 仅 Debug QA：稳态运行态窗口必须至少 10 秒，不能与 DWM 输入延迟混算。
+  [ValidateRange(10000, 60000)]
+  [int]$SteadyRuntimeDurationMilliseconds = 10000,
   [ValidateRange(0, 15000)]
   [int]$P95BudgetMs = 0,
   [ValidateRange(960, 7680)]
@@ -112,8 +115,9 @@ $failurePath = Join-Path $Output 'desktop-pixel-probe-failure.txt'
 $qaFailurePath = Join-Path $Output 'desktop-pixel-qa-failure.txt'
 $shutdownRequestPath = Join-Path $Output 'shutdown.request'
 $probeOutput = Join-Path $Output 'desktop-pixels'
-$realPlayerPageAction = $Action -in @('startup', 'playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
+$realPlayerPageAction = $Action -in @('startup', 'steady', 'playerFullscreen', 'progressDrag', 'forward', 'backward', 'manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
 $startupAction = $Action -eq 'startup'
+$steadyRuntimeAction = $Action -eq 'steady'
 $manualKeyboardAction = $Action -in @('manualForward', 'manualBackward', 'manualLongForward', 'manualLongBackward')
 $manualLongKeyboardAction = $Action -in @('manualLongForward', 'manualLongBackward')
 if ($AutoRetrySoftwareDecode -and -not $ForceSoftwareDecode) {
@@ -777,6 +781,14 @@ try {
     } else {
       Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_STARTUP_QA -ErrorAction SilentlyContinue
     }
+    if ($steadyRuntimeAction) {
+      $env:LOCAL_TAG_PLAYER_STEADY_RUNTIME_QA = '1'
+      $env:LOCAL_TAG_PLAYER_STEADY_RUNTIME_DURATION_MS =
+        "$SteadyRuntimeDurationMilliseconds"
+    } else {
+      Remove-Item Env:LOCAL_TAG_PLAYER_STEADY_RUNTIME_QA -ErrorAction SilentlyContinue
+      Remove-Item Env:LOCAL_TAG_PLAYER_STEADY_RUNTIME_DURATION_MS -ErrorAction SilentlyContinue
+    }
     if ($manualKeyboardAction) {
       # 原生 runner 仅在 Debug QA 内记录匿名动作/QPC；真实按键由操作者在窗口前台按下。
       $env:LOCAL_TAG_PLAYER_NATIVE_QPC_INPUT_QA = '1'
@@ -846,6 +858,8 @@ try {
     Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_AUTOMATED_LONG_HOLD_ACTION -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QA_PROGRESS_DRAG_SEEK_MODE -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_PIXEL_STARTUP_QA -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_STEADY_RUNTIME_QA -ErrorAction SilentlyContinue
+    Remove-Item Env:LOCAL_TAG_PLAYER_STEADY_RUNTIME_DURATION_MS -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QA_DISABLE_ADAPTIVE_TEXTURE -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QA_FORCE_SOFTWARE_DECODE -ErrorAction SilentlyContinue
     Remove-Item Env:LOCAL_TAG_PLAYER_QA_AUTO_RETRY_SOFTWARE_DECODE -ErrorAction SilentlyContinue
@@ -886,8 +900,13 @@ try {
     $probeProcessId = [int]$startupMarker.testProcessId
   } else {
     $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
+    $expectedReadyState = if ($steadyRuntimeAction) {
+      'steady-runtime-ready'
+    } else {
+      'paused-static-baseline-ready'
+    }
     if ($ready.backend -ne 'media-kit-flutter-texture' -or
-        $ready.state -ne 'paused-static-baseline-ready') {
+        $ready.state -ne $expectedReadyState) {
       throw '桌面探针握手未确认正式 MediaKit Texture 的静止基线。'
     }
     if ($realPlayerPageAction -and $ready.surface -ne 'product-player-page') {
@@ -923,7 +942,22 @@ try {
   # Win32 探针以 GetForegroundWindow 再次核验，不能用这个 Flutter 内部瞬时状态拒绝
   # 已经就绪的正式 Texture 会话。
   try {
-    if ($startupAction) {
+    if ($steadyRuntimeAction) {
+      # 稳态窗口不启动像素探针；只等待 Debug PlayerPage 写出完整的运行态分母。
+      $steadyCompletePath = Join-Path $Output 'steady-runtime-complete.json'
+      $steadyDeadline = [DateTime]::UtcNow.AddMilliseconds(
+        $SteadyRuntimeDurationMilliseconds + 30000
+      )
+      while (-not (Test-Path -LiteralPath $steadyCompletePath) -and
+             -not (Test-Path -LiteralPath $qaFailurePath) -and
+             -not $testProcess.HasExited -and
+             [DateTime]::UtcNow -lt $steadyDeadline) {
+        Start-Sleep -Milliseconds 100
+      }
+      if (-not (Test-Path -LiteralPath $steadyCompletePath)) {
+        throw '正式 PlayerPage 稳态运行态窗口未在有界时限内完成。'
+      }
+    } elseif ($startupAction) {
       # startup 不发送输入，也不先等待 ready.json；Debug QA 正在 runApp 前等待这个
       # 文件。探针附着后写 ready 文件，随后只测标记 UTC -> 首个持续 DWM 变化。
       & (Join-Path $PSScriptRoot 'invoke_player_desktop_pixel_probe.ps1') `
@@ -1019,18 +1053,35 @@ try {
       throw '两阶段拖动缺少快速请求或最终精确确认回执，拒绝生成首帧 p95。'
     }
   }
-  $summaryPath = Join-Path $probeOutput 'desktop-pixel-summary.json'
+  $summaryPath = if ($steadyRuntimeAction) {
+    Join-Path $Output 'steady-runtime-summary.json'
+  } else {
+    Join-Path $probeOutput 'desktop-pixel-summary.json'
+  }
   if (-not (Test-Path -LiteralPath $summaryPath)) {
-    if (Test-Path -LiteralPath $failurePath -PathType Leaf) {
+    if (-not $steadyRuntimeAction -and
+        (Test-Path -LiteralPath $failurePath -PathType Leaf)) {
       $probeFailure = (Get-Content -LiteralPath $failurePath -Raw).Trim()
       if (-not [String]::IsNullOrWhiteSpace($probeFailure)) {
         throw "桌面像素探针失败：$probeFailure"
       }
     }
-    throw '桌面像素探针未生成摘要，且没有可读的失败分类。'
+    throw $(if ($steadyRuntimeAction) {
+        '稳态运行态窗口未生成匿名摘要。'
+      } else {
+        '桌面像素探针未生成摘要，且没有可读的失败分类。'
+      })
   }
   $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
-  if ($startupAction) {
+  if ($steadyRuntimeAction) {
+    if ([string]$summary.evidence -ne 'backend-runtime-steady-window' -or
+        [string]$summary.status -ne 'complete' -or
+        [int]$summary.actualDurationMs -lt $SteadyRuntimeDurationMilliseconds -or
+        [int]$summary.sampleCount -lt 8) {
+      throw '稳态运行态窗口摘要未满足最小时长或采样合同。'
+    }
+  } else {
+    if ($startupAction) {
     if (-not (Test-Path -LiteralPath $startupSurfaceReadyPath)) {
       throw '启动首帧报告缺少 Texture/backend readiness 辅助标记，不能把 UI 变化当成视频 DWM 帧。'
     }
@@ -1052,41 +1103,47 @@ try {
         $ready.state -ne 'paused-static-baseline-ready') {
       throw '启动首帧之后的握手未确认正式 MediaKit Texture PlayerPage。'
     }
-  }
-  Write-DesktopPixelTraceCorrelation `
-    -LogPath $logPath `
-    -PixelReportPath (Join-Path $probeOutput 'desktop-pixel-report.json') `
-    -NativeKeyboardEvidencePath (Join-Path $Output 'native-keyboard-qpc-events.jsonl') `
-    -PlayerInputEvidencePath (Join-Path $Output 'player-input-events.jsonl') `
-    -OutputPath (Join-Path $Output 'desktop-pixel-trace-correlation.json')
-  if (-not $summary.captureRatePassed -or
-      [int]$summary.successfulSamples -ne $Samples -or
-      [int]$summary.timedOutSamples -ne 0) {
-    throw "桌面像素门禁未满足采样合同：成功 $($summary.successfulSamples)/$Samples，超时 $($summary.timedOutSamples)，有效采样=$($summary.captureRatePassed)。"
-  }
-  if ($Action -notin @('fullscreen', 'playerFullscreen') -and
-      -not (@($summary.actionEvidence) -contains 'desktop-composited-pixel-change')) {
-    throw '输入门禁没有生成桌面合成像素证据。'
-  }
-  if ($Action -in @('fullscreen', 'playerFullscreen')) {
-    if (-not (@($summary.actionEvidence) -contains 'window-geometry-change')) {
-      throw '全屏门禁没有生成窗口几何变化证据。'
     }
-    $rendererEventsPath = Join-Path $Output 'renderer-events.jsonl'
-    $rendererDeadline = [DateTime]::UtcNow.AddSeconds(4)
-    do {
-      if ((Test-Path -LiteralPath $rendererEventsPath) -and
-          (Get-Content -LiteralPath $rendererEventsPath -Raw) -match 'fullscreen_settled') {
-        break
+    Write-DesktopPixelTraceCorrelation `
+      -LogPath $logPath `
+      -PixelReportPath (Join-Path $probeOutput 'desktop-pixel-report.json') `
+      -NativeKeyboardEvidencePath (Join-Path $Output 'native-keyboard-qpc-events.jsonl') `
+      -PlayerInputEvidencePath (Join-Path $Output 'player-input-events.jsonl') `
+      -OutputPath (Join-Path $Output 'desktop-pixel-trace-correlation.json')
+    if (-not $summary.captureRatePassed -or
+        [int]$summary.successfulSamples -ne $Samples -or
+        [int]$summary.timedOutSamples -ne 0) {
+      throw "桌面像素门禁未满足采样合同：成功 $($summary.successfulSamples)/$Samples，超时 $($summary.timedOutSamples)，有效采样=$($summary.captureRatePassed)。"
+    }
+    if ($Action -notin @('fullscreen', 'playerFullscreen') -and
+        -not (@($summary.actionEvidence) -contains 'desktop-composited-pixel-change')) {
+      throw '输入门禁没有生成桌面合成像素证据。'
+    }
+    if ($Action -in @('fullscreen', 'playerFullscreen')) {
+      if (-not (@($summary.actionEvidence) -contains 'window-geometry-change')) {
+        throw '全屏门禁没有生成窗口几何变化证据。'
       }
-      Start-Sleep -Milliseconds 100
-    } while ([DateTime]::UtcNow -lt $rendererDeadline)
-    if (-not (Test-Path -LiteralPath $rendererEventsPath) -or
-        -not ((Get-Content -LiteralPath $rendererEventsPath -Raw) -match 'fullscreen_settled')) {
-      throw '全屏窗口已变化，但 QA 未写出稳定后的 Texture 诊断事件。'
+      $rendererEventsPath = Join-Path $Output 'renderer-events.jsonl'
+      $rendererDeadline = [DateTime]::UtcNow.AddSeconds(4)
+      do {
+        if ((Test-Path -LiteralPath $rendererEventsPath) -and
+            (Get-Content -LiteralPath $rendererEventsPath -Raw) -match 'fullscreen_settled') {
+          break
+        }
+        Start-Sleep -Milliseconds 100
+      } while ([DateTime]::UtcNow -lt $rendererDeadline)
+      if (-not (Test-Path -LiteralPath $rendererEventsPath) -or
+          -not ((Get-Content -LiteralPath $rendererEventsPath -Raw) -match 'fullscreen_settled')) {
+        throw '全屏窗口已变化，但 QA 未写出稳定后的 Texture 诊断事件。'
+      }
     }
   }
-  Write-Output "PLAYER_DESKTOP_PIXEL_GATE $($summary | ConvertTo-Json -Compress)"
+  $outputPrefix = if ($steadyRuntimeAction) {
+    'PLAYER_STEADY_RUNTIME'
+  } else {
+    'PLAYER_DESKTOP_PIXEL_GATE'
+  }
+  Write-Output "$outputPrefix $($summary | ConvertTo-Json -Compress)"
 } finally {
   if ($null -ne $testProcess -and -not $testProcess.HasExited) {
     # 先让 Debug QA await MediaKit/ANGLE/D3D11 dispose；强杀会遗留 GPU 表面，下一独立

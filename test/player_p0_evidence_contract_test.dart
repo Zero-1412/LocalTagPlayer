@@ -57,6 +57,9 @@ void main() {
     expect(script, contains('decoder-drop'));
     expect(script, contains('vo-drop'));
     expect(script, contains('steady-total-drop'));
+    expect(script, contains('steady-runtime-window'));
+    expect(script, contains('steady-decoder-drop'));
+    expect(script, contains('steady-resource-release'));
     expect(script, contains('texture-generation-recorded'));
     expect(script, contains('longest-presented-unchanged-gap'));
     expect(script, contains('continuous-presented-change-pacing'));
@@ -117,6 +120,9 @@ void main() {
     expect(assembler, contains('current-semantic-matrix-1080p-'));
     expect(assembler, contains('current-4k-{0}-realpage-'));
     expect(assembler, contains('current-semantic-matrix-4k-'));
+    expect(assembler, contains('Get-ValidatedSteadyRuntimeCandidate'));
+    expect(assembler, contains('steadyRuntimeMappedCount'));
+    expect(assembler, contains('case-level-steady-runtime-matrix'));
     expect(assembler, contains('current-semantic-matrix-4k-{0}-{1}-startup-'));
     expect(assembler, contains('product-player-page'));
     expect(assembler, contains('desktop-composited-pixel-change'));
