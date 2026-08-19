@@ -173,6 +173,9 @@ function Write-DesktopPixelTraceCorrelation {
       $traceEvents += [ordered]@{
         trace = [string]$fields['trace']
         stage = [string]$fields['stage']
+        targetMs = if ($fields.ContainsKey('target_ms')) {
+          [int]$fields['target_ms']
+        } else { $null }
         wallUtcMs = $wallUtcMs
         wallUtcUs = $wallUtcUs
         wallUtcPrecision = if ($hasMicrosecondAnchor) { 'microsecond' } else { 'millisecond-fallback' }
@@ -405,6 +408,18 @@ function Write-DesktopPixelTraceCorrelation {
         } else { 'unavailable' }
         inputDownToFirstChangedPixelMs = [int]$action.inputDownToFirstChangedPixelMs
         maxUnchangedRunMs = [int]$action.maxUnchangedRunMs
+        presentedChanges = @(
+          @($action.presentedChanges) | ForEach-Object {
+            [ordered]@{
+              qpcUs = [long]$_.qpcUs
+              utcTicks = [long]$_.utcTicks
+              utcUs = [long](([long]$_.utcTicks - $epochTicks) / 10L)
+              differenceFromPreviousPercent = [double]$_.differenceFromPreviousPercent
+              differenceFromBaselinePercent = [double]$_.differenceFromBaselinePercent
+              fingerprint = [uint64]$_.fingerprint
+            }
+          }
+        )
       }
     }
 
@@ -451,6 +466,7 @@ function Write-DesktopPixelTraceCorrelation {
       $correlations += [ordered]@{
          trace = $trace.trace
          stage = $trace.stage
+         targetMs = $trace.targetMs
          traceWallUtcMs = $trace.wallUtcMs
          traceWallUtcUs = $trace.wallUtcUs
          traceWallUtcPrecision = $trace.wallUtcPrecision
@@ -461,12 +477,29 @@ function Write-DesktopPixelTraceCorrelation {
         causalOrder = $causalOrder
         withinInputWindow = $null -ne $matched
         candidateActionCount = $candidates.Count
+        nextPresentedChangeUtcUs = $null
+        traceToNextPresentedChangeMs = $null
         unmatchedReason = if ($null -ne $matched) {
           $null
         } elseif ($candidates.Count -gt 1) {
           'ambiguous-overlapping-pixel-action-windows'
         } else {
           'outside-pixel-action-input-window'
+        }
+      }
+      if ($null -ne $matched) {
+        $nextChange = @(
+          @($matched.presentedChanges) |
+            Where-Object { [long]$_.utcUs -ge $traceUtcUs } |
+            Sort-Object utcUs |
+            Select-Object -First 1
+        )
+        if ($nextChange.Count -gt 0) {
+          $correlations[-1].nextPresentedChangeUtcUs = [long]$nextChange[0].utcUs
+          $correlations[-1].traceToNextPresentedChangeMs = [Math]::Round(
+            ([double]$nextChange[0].utcUs - [double]$traceUtcUs) / 1000.0,
+            3
+          )
         }
       }
     }
@@ -570,6 +603,13 @@ function Write-DesktopPixelTraceCorrelation {
         playerInputEvidence = $pixelAction.playerInputEvidence
         playerInputEventCount = $pixelAction.playerInputEventCount
         playerInputEvents = $pixelAction.playerInputEvents
+        presentedChangeCount = @($pixelAction.presentedChanges).Count
+        firstPresentedChangeUtcUs = if (@($pixelAction.presentedChanges).Count -gt 0) {
+          [long]$pixelAction.presentedChanges[0].utcUs
+        } else { $null }
+        lastPresentedChangeUtcUs = if (@($pixelAction.presentedChanges).Count -gt 0) {
+          [long]$pixelAction.presentedChanges[-1].utcUs
+        } else { $null }
         traceStageTimes = $stageTimes
         inputDownToTraceStartMs = if ($null -ne $traceStart -and
                                       $null -ne $pixelAction.inputDownUtcUs) {

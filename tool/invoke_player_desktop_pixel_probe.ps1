@@ -108,6 +108,17 @@ public sealed class DesktopPixelProbeSample
     public ulong fingerprint { get; set; }
 }
 
+public sealed class DesktopPixelProbePresentedChange
+{
+    public long qpcUs { get; set; }
+    public long utcTicks { get; set; }
+    public int clientWidth { get; set; }
+    public int clientHeight { get; set; }
+    public double differenceFromPreviousPercent { get; set; }
+    public double differenceFromBaselinePercent { get; set; }
+    public ulong fingerprint { get; set; }
+}
+
 public sealed class DesktopPixelProbeAction
 {
     public int index { get; set; }
@@ -135,6 +146,8 @@ public sealed class DesktopPixelProbeAction
     public bool passed { get; set; }
     public string failure { get; set; }
     public List<DesktopPixelProbeSample> samples { get; set; }
+    // 长按/连续扫描保留后续 DWM 合成变化，供 trace 关联下一张实际画面；不保存原始像素。
+    public List<DesktopPixelProbePresentedChange> presentedChanges { get; set; }
 }
 
 public sealed class DesktopPixelProbeReport
@@ -418,6 +431,7 @@ public static class DesktopPixelProbe
                     ? "window-geometry-change"
                     : "desktop-composited-pixel-change",
                 samples = new List<DesktopPixelProbeSample>(),
+                presentedChanges = new List<DesktopPixelProbePresentedChange>(),
                 failure = ""
             };
             var inputEvidenceMarkerUtc = DateTime.MinValue;
@@ -555,6 +569,7 @@ public static class DesktopPixelProbe
                 : action.keyUpQpcUs) +
                 timeoutMilliseconds * 1000L;
             long firstChangedUs = 0;
+            long lastPresentedChangeUs = 0;
             var changedConsecutively = 0;
             var unchangedRunStartUs = action.keyDownQpcUs;
             while (NowUs() < deadlineUs)
@@ -619,6 +634,25 @@ public static class DesktopPixelProbe
                     fingerprint = current.Fingerprint
                 };
                 action.samples.Add(sample);
+                // 第一张稳定新画面在 changedConsecutively==0 时记录；之后相邻采样
+                // 的明显变化按 20ms 最小间隔记录，避免把每个采样点冒充独立解码帧。
+                var presentedChange = baselineDelta >= thresholdPercent &&
+                    (changedConsecutively == 0 ||
+                     previousDelta >= thresholdPercent * 0.30);
+                if (presentedChange &&
+                    (lastPresentedChangeUs <= 0 || nowUs - lastPresentedChangeUs >= 20000L))
+                {
+                    action.presentedChanges.Add(new DesktopPixelProbePresentedChange {
+                        qpcUs = nowUs,
+                        utcTicks = sample.utcTicks,
+                        clientWidth = current.Width,
+                        clientHeight = current.Height,
+                        differenceFromPreviousPercent = previousDelta,
+                        differenceFromBaselinePercent = baselineDelta,
+                        fingerprint = current.Fingerprint
+                    });
+                    lastPresentedChangeUs = nowUs;
+                }
                 if ((mouseProgressDrag || manualKeyboard || keyboardSemanticRequired) &&
                     !action.inputSemanticConfirmed)
                 {

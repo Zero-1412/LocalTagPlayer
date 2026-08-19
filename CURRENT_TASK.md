@@ -2,6 +2,27 @@
 
 # 2026-08-19 · 播放器真实性能基线与 Texture/HWND 对照（P0：真实 PlayerPage 拖动矩阵已闭环，实体键盘待验收）
 
+- 2026-08-19 继续按修正后的语义门禁补齐三编码动作矩阵：HEVC 4K/144 DPI 拖动
+  `3/3`（fastPreviewThenExact）Down→DWM p50/p95 `391/401 ms`、Up→DWM
+  `157/171 ms`、最长静帧 `393 ms`；短按前进/后退 `3/3` 分别为 `93/100`、
+  `94/105 ms`；900ms 长按前进/后退 `3/3` 分别为 `832/850`、`274/281 ms`。
+  AV1 拖动 `3/3` 为 `368/388`、`138/182 ms`、最长静帧 `381 ms`；短按前进/后退
+  `3/3` 为 `75/94`、`94/100 ms`；900ms 长按前进/后退 `3/3` 为 `106/106`、
+  `272/285 ms`。所有有效轮次均含 `player_keyboard_event`（键盘动作）、Slider
+  回执（拖动）、约 118–121fps 桌面采样、最终 `d3d11va-copy` 与资源释放；这些仍是
+  SendInput scan-code/Win32 鼠标自动化，不是实体 WM_KEYDOWN/QPC 证据。HEVC 长按前进
+  p95 `850 ms` 与 AV1 拖动 p95 `388 ms` 是当前真实可感知长尾，不能用平均值掩盖。
+  原始证据位于 `.local/qa/current-semantic-matrix-hevc-drag-20260819_190209424`、
+  `.local/qa/current-semantic-matrix-av1-drag-20260819_190050174` 及同前缀的
+  HEVC/AV1 短按、长按目录。
+- 2026-08-19 补充桌面探针的持续呈现变化证据：每个动作除首个像素变化外，匿名保留
+  后续 DWM 指纹变化的 QPC/UTC、相对/基线差异和尺寸；trace 关联器新增
+  `targetMs`、`nextPresentedChangeUtcUs`、`traceToNextPresentedChangeMs` 及动作首/末
+  呈现计数。H.264 反向单次复核已观察到 `presentedChangeCount=5` 和约 `15–50 ms`
+  的后续变化，说明“首帧之后是否持续变化”已有可审计字段；但自动化动作的输入锚点仍
+  是估算 UTC 窗口，尚未成为实体 WM_KEYDOWN/QPC→首个/后续 DWM 帧验收，也没有把像素
+  指纹误称为解码帧数。focused 探针契约 14/14、PowerShell 语法检查通过。
+
 - 2026-08-20 对抗式门禁复核发现并修正自动键盘语义回执丢失：PowerShell 探针调用中
   的续行注释曾使 `ExpectedInputEvidencePath` 未传入，旧自动化样本只有 DWM 像素变化，
   不能证明快捷键命中 PlayerPage，已全部降级为不可作语义验收的历史证据。修正后缺少

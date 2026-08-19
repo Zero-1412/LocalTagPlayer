@@ -48,6 +48,9 @@ void main() {
     expect(source, contains('SendInput'));
     expect(source, contains('SendKeyboardScan'));
     expect(source, contains('inputDownToFirstChangedPixelMs'));
+    expect(source, contains('DesktopPixelProbePresentedChange'));
+    expect(source, contains('presentedChanges'));
+    expect(source, contains('lastPresentedChangeUs'));
     expect(source, contains('inputUpToFirstChangedPixelMs'));
     expect(source, contains('automatedKeyboardHoldActive'));
     expect(source, contains('automatedKeyboardHoldReleaseUs'));
@@ -218,6 +221,8 @@ void main() {
     expect(gate, contains('player-page-input-events-in-action-window'));
     expect(gate, contains('traceLinkEvidence'));
     expect(gate, contains('nativeDownQpcUs'));
+    expect(gate, contains('traceToNextPresentedChangeMs'));
+    expect(gate, contains('targetMs = if (\$fields.ContainsKey'));
     expect(gate, contains('native-qpc+player-semantic+unique-trace'));
     expect(gate, contains('trace-correlation-parse-failed'));
     expect(gate, contains('failureLine'));
