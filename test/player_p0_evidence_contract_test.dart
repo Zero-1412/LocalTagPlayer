@@ -8,8 +8,8 @@ void main() {
     final template = jsonDecode(
       File('tool/qa/player_p0_manifest.template.json').readAsStringSync(),
     ) as Map<String, dynamic>;
-    final cases = (template['cases'] as List<dynamic>)
-        .cast<Map<String, dynamic>>();
+    final cases =
+        (template['cases'] as List<dynamic>).cast<Map<String, dynamic>>();
     final actions = (template['actions'] as List<dynamic>).cast<String>();
 
     expect(cases, hasLength(12));
@@ -77,11 +77,18 @@ void main() {
     // 生成器只能产生本机 QA 产物；候选不足或 ffprobe 超时必须保留 partial/unknown。
     expect(generator, contains('OpenDatabaseOptions(readOnly: true'));
     expect(generator, contains('ffprobe'));
-    expect(generator, contains('skip_frame'));
+    expect(generator, contains('read_intervals'));
+    expect(generator, contains('packet=pts_time,flags'));
+    expect(generator, contains('_keyframeWindowSeconds'));
     expect(generator, contains('shortGopMaxSeconds'));
     expect(generator, contains('longGopMinSeconds'));
     expect(generator, contains('probeTimeoutSeconds'));
     expect(generator, contains('maxProbes'));
+    expect(generator, contains('for (var round = 0; probeCount < maxProbes'));
+    expect(generator, contains('_spreadIndices'));
+    expect(generator, contains('if (limit == 1) return <int>[0]'));
+    expect(generator, contains('candidateCounts'));
+    expect(generator, contains('probedGopCounts'));
     expect(generator, contains('executableSha256'));
     expect(generator, contains('sha256.bind'));
     expect(generator, contains('if (missing > 0) exitCode = 3'));

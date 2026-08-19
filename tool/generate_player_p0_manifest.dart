@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 const _codecs = <String>['h264', 'hevc', 'av1'];
 const _resolutions = <String>['1080p', '4k'];
 const _gops = <String>['short-gop', 'long-gop'];
+const _keyframeWindowSeconds = 30.0;
 const _actions = <String>[
   'startup',
   'shortForward',
@@ -94,32 +95,57 @@ Future<void> main(List<String> arguments) async {
   try {
     final candidates = await _readCandidates(database);
     final selected = <String, _ProbedCandidate>{};
+    final bucketKeys = <String>[
+      for (final resolution in _resolutions)
+        for (final codec in _codecs) '$resolution-$codec',
+    ];
+    final bestByBucket = <String, Map<String, _ProbedCandidate>>{
+      for (final key in bucketKeys) key: <String, _ProbedCandidate>{},
+    };
+    final probedGopCounts = <String, Map<String, int>>{
+      for (final key in bucketKeys)
+        key: <String, int>{for (final gop in _gops) gop: 0},
+    };
+    final probeIndicesByBucket = <String, List<int>>{
+      for (final key in bucketKeys)
+        key: _spreadIndices(candidates[key]?.length ?? 0, maxCandidates),
+    };
     var probeCount = 0;
-    for (final resolution in _resolutions) {
-      if (probeCount >= maxProbes) break;
-      for (final codec in _codecs) {
+    // 全局预算按 bucket 轮询，避免前面的热门编码耗尽预算而让 AV1/4K 永远没有机会。
+    for (var round = 0; probeCount < maxProbes; round++) {
+      var progressed = false;
+      for (final bucketKey in bucketKeys) {
         if (probeCount >= maxProbes) break;
-        final bucket = candidates['$resolution-$codec'] ?? <_Candidate>[];
-        final bestByGop = <String, _ProbedCandidate>{};
-        for (final candidate in bucket.take(maxCandidates)) {
-          if (probeCount >= maxProbes) break;
-          final probed = await _probeCandidate(
-            candidate,
-            ffprobe,
-            timeout: Duration(seconds: probeTimeoutSeconds),
-          );
-          probeCount++;
-          if (probed == null || !bestByGop.containsKey(probed.gop)) {
-            if (probed != null) bestByGop[probed.gop] = probed;
-          } else if (_bitrateOf(probed) > _bitrateOf(bestByGop[probed.gop]!)) {
-            bestByGop[probed.gop] = probed;
-          }
-          if (bestByGop.length == _gops.length) break;
+        final bucket = candidates[bucketKey] ?? <_Candidate>[];
+        final bestByGop = bestByBucket[bucketKey]!;
+        final probeIndices = probeIndicesByBucket[bucketKey]!;
+        if (round >= probeIndices.length || bestByGop.length == _gops.length) {
+          continue;
         }
-        for (final gop in _gops) {
-          final probed = bestByGop[gop];
-          if (probed != null) selected['$resolution-$codec-$gop'] = probed;
+        final probed = await _probeCandidate(
+          bucket[probeIndices[round]],
+          ffprobe,
+          timeout: Duration(seconds: probeTimeoutSeconds),
+        );
+        probeCount++;
+        progressed = true;
+        if (probed != null) {
+          final counts = probedGopCounts[bucketKey]!;
+          counts[probed.gop] = counts[probed.gop]! + 1;
         }
+        if (probed == null || !bestByGop.containsKey(probed.gop)) {
+          if (probed != null) bestByGop[probed.gop] = probed;
+        } else if (_bitrateOf(probed) > _bitrateOf(bestByGop[probed.gop]!)) {
+          bestByGop[probed.gop] = probed;
+        }
+      }
+      if (!progressed) break;
+    }
+    for (final bucketKey in bucketKeys) {
+      final bestByGop = bestByBucket[bucketKey]!;
+      for (final gop in _gops) {
+        final probed = bestByGop[gop];
+        if (probed != null) selected['$bucketKey-$gop'] = probed;
       }
     }
 
@@ -173,6 +199,12 @@ Future<void> main(List<String> arguments) async {
         'probeTimeoutSeconds': probeTimeoutSeconds,
         'maxProbes': maxProbes,
         'probedCandidates': probeCount,
+        'candidateCounts': <String, int>{
+          for (final key in bucketKeys) key: candidates[key]?.length ?? 0,
+        },
+        'probedGopCounts': <String, Map<String, int>>{
+          for (final key in bucketKeys) key: probedGopCounts[key]!,
+        },
         'selectedCases': cases
             .where((item) =>
                 item['selectionStatus'] == 'selected-and-ffprobe-verified')
@@ -247,10 +279,11 @@ Future<_ProbedCandidate?> _probeCandidate(
       'error',
       '-select_streams',
       'v:0',
-      '-skip_frame',
-      'nokey',
+      // 只读 packet 的关键帧标志，避免 AV1 为枚举 frame 触发整段解码。
+      '-read_intervals',
+      '0%+30',
       '-show_entries',
-      'stream=codec_name,width,height,bit_rate,duration:format=bit_rate,duration:frame=best_effort_timestamp_time',
+      'stream=codec_name,width,height,bit_rate,duration:format=bit_rate,duration:packet=pts_time,flags',
       '-of',
       'json',
       '--',
@@ -272,28 +305,39 @@ Future<_ProbedCandidate?> _probeCandidate(
         stream['height'] != candidate.height) {
       return null;
     }
-    final frames = streamJson['frames'];
-    if (frames is! List<dynamic>) return null;
+    final packets = streamJson['packets'];
+    if (packets is! List<dynamic>) return null;
     final keyframes = <double>[];
-    for (final frame in frames) {
-      if (frame is! Map<String, dynamic>) continue;
-      final time = _number(frame['best_effort_timestamp_time']);
+    for (final packet in packets) {
+      if (packet is! Map<String, dynamic>) continue;
+      final flags = packet['flags']?.toString() ?? '';
+      if (!flags.contains('K')) continue;
+      final time = _number(packet['pts_time']);
       if (time != null) keyframes.add(time);
     }
+    keyframes.sort();
     if (keyframes.length < 2) return null;
     var maxGopSeconds = 0.0;
     for (var index = 1; index < keyframes.length; index++) {
       final interval = keyframes[index] - keyframes[index - 1];
-      if (interval > maxGopSeconds) maxGopSeconds = interval;
+      // 只在首段窗口内接受间隔，超过窗口上限的值保持 unknown 而不是猜测。
+      if (interval <= _keyframeWindowSeconds && interval > maxGopSeconds) {
+        maxGopSeconds = interval;
+      }
     }
+    if (maxGopSeconds == 0) return null;
     final gop = maxGopSeconds <= 1.1
         ? 'short-gop'
         : maxGopSeconds >= 4.0
             ? 'long-gop'
             : null;
     if (gop == null) return null;
-    final bitrate = _number(stream['bit_rate']) ?? 0;
-    final duration = _number(stream['duration']) ?? 0;
+    final format = streamJson['format'];
+    final formatMap = format is Map<String, dynamic> ? format : null;
+    final bitrate =
+        _number(stream['bit_rate']) ?? _number(formatMap?['bit_rate']) ?? 0;
+    final duration =
+        _number(stream['duration']) ?? _number(formatMap?['duration']) ?? 0;
     return _ProbedCandidate(
       candidate: candidate,
       gop: gop,
@@ -338,6 +382,21 @@ Future<_ProbeProcessOutput?> _runFfprobe(
   );
   if (timedOut) return null;
   return _ProbeProcessOutput(exitCode: exitCode, stdout: stdout);
+}
+
+/// 在每个 bucket 内保留首尾和均匀分位，避免资料库的时间排序掩盖另一类 GOP。
+List<int> _spreadIndices(int length, int limit) {
+  if (length <= 0 || limit <= 0) return <int>[];
+  if (limit == 1) return <int>[0];
+  if (length <= limit) {
+    return <int>[for (var index = 0; index < length; index++) index];
+  }
+  final indices = <int>[];
+  for (var offset = 0; offset < limit; offset++) {
+    final index = (offset * (length - 1) / (limit - 1)).round();
+    if (!indices.contains(index)) indices.add(index);
+  }
+  return indices;
 }
 
 /// 只把 Debug 可执行文件摘要写入 manifest；路径本身不进入报告或 stdout。

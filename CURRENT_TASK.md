@@ -21,6 +21,24 @@
   这不是其它 case 不存在的结论，仍保持 P0 覆盖 `unknown`，不把探测预算内的缺失冒充
   外部硬件阻塞或通过。
 
+- 2026-08-20 将 manifest 探测预算改为六个 resolution×codec bucket 轮询；在
+  `maxCandidates=6/maxProbes=24/timeout=20s` 下已选 `5/12`、缺少 `7`、实际探测 `23`，
+  新增匿名 `candidateCounts` 便于解释预算覆盖。当前已确证 1080p H.264 short/long、
+  1080p HEVC short、4K H.264 short、4K HEVC short；仍未把缺失 case 写成通过。
+
+- 2026-08-20 将 GOP 探测改为首段 30 秒 packet 关键帧窗口，并均匀抽样每个 bucket；
+  `maxCandidates=24/maxProbes=144/timeout=20s` 已选 `10/12`、缺少
+  `1080p-av1-short-gop` 与 `4k-av1-long-gop`，实际探测 `49`。`probedGopCounts` 确认
+  4K AV1 只有 `1 short/0 long`，1080p AV1 为 `0 short/1 long` 且另一候选未通过 packet
+  校验；不把这两个 case 补成通过。
+
+- 2026-08-20 用当前 manifest 的 1080p H.264 short case 试跑正式 PlayerPage forward
+  `3` 个独立 Debug Texture 会话：均完成打开、最终 `d3d11va-copy` 和释放，但
+  `player_keyboard_event` 缺失、桌面像素 `0/1` 成功且每轮超时，矩阵拒绝生成 p95；
+  随后用同一页面、同一素材和同一动作切换 QA-only `virtualKey` 注入，结果仍为
+  `player_keyboard_event` 缺失、桌面像素 `0/1` 成功；该负证据只记输入/可见性
+  `unknown`，不归因于 H.264 解码性能，也不据此修改播放器业务输入路径。
+
 - 2026-08-20 建立“流畅性”规范语义与有限工程门禁：依据 W3C Media Capabilities 的
   `smooth=目标帧率下无掉帧`、W3C VideoPlaybackQuality 的总帧/掉帧/展示延迟分层、mpv
   的 VO/显示同步说明、ITU-T P.1203 的首播加载与 stalling 指标，以及 Android CDD

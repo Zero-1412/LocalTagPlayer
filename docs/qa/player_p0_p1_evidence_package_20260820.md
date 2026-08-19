@@ -29,14 +29,26 @@ partial/unknown，不会等待无限长的媒体扫描：
 
 ~~~powershell
 $env:Path = (Join-Path (Get-Location) 'windows\tools\sqlite') + ';' + $env:Path
-dart run tool/generate_player_p0_manifest.dart -Output .local\qa\player_p0_manifest.json -MaxCandidates 6 -MaxProbes 24 -ProbeTimeoutSeconds 20
+dart run tool/generate_player_p0_manifest.dart -Output .local\qa\player_p0_manifest.json -MaxCandidates 24 -MaxProbes 144 -ProbeTimeoutSeconds 20
 ~~~
+
+探测预算按六个 `resolution-codec` bucket 轮询，并在每个 bucket 内均匀抽取首尾/中间候选，
+避免热门编码或资料库时间排序先耗尽全局预算；ffprobe
+在单个有界的首段 30 秒窗口内读取 packet 关键帧标志，不为素材枚举完整解码帧，manifest
+中的 `selection.candidateCounts` 只记录每个 bucket 的数量，不写路径或媒体标识。
+`selection.probedGopCounts` 进一步记录 packet 校验成功的 short/long 数量，区分“候选存在但
+GOP 不符合”与“没有机会探测”。
+因此 `maxProbes=144` 至少会给每个有候选的 bucket 24 个均匀抽样机会，同时仍然是有限门禁。
 
 生成器若发现默认 Debug 可执行文件，会把其 SHA-256 写入 manifest；找不到时保留空值，
 由验证器判为 `unknown`。本机首次有限探测结果为 `partial`，已选 `2/12`、缺少 `10`、实际探测 `6` 个候选；
 已确认的两个样本是 1080p H.264 长 GOP `5.27s` 和 4K H.264 短 GOP `1.00s`。
 由于本轮设置了全局 probe 上限，这个结果只证明 manifest 生成链可用，不能证明其它
 编码/分辨率没有样本；未补齐前 12-case 覆盖继续记 `unknown`。
+
+最新 `24/144` 有界扫描已选 `10/12`；缺口为 `1080p-av1-short-gop` 和
+`4k-av1-long-gop`。`probedGopCounts` 显示 4K AV1 资料库只有一个 short 候选，
+1080p AV1 另一个候选未通过 packet 校验，因此两个缺口仍保持 unknown。
 
 ### 统一判定
 
@@ -66,11 +78,16 @@ desktop-pixel-matrix-summary.json 的矩阵根，或单个 run 目录。报告�
 
 因此，当前仓库的本机阶段结论是：
 
+本轮对统一 manifest 的正式 PlayerPage 1080p H.264 short forward 做了 3 个独立
+Debug Texture 会话；打开、最终硬解和释放均有运行态证据，但没有页面键盘语义事件，
+scan-code 与诊断用 virtual-key 两种输入注入都没有产生真实 DWM 像素变化。因此该轮
+只保留为输入/可见性 `unknown`，不产生 p95，也不把后端打开成功误报为首个 DWM 呈现帧。
+
 | 指标 | 当前判定 | 依据 |
 | --- | --- | --- |
 | 正式 Texture 三编码动作探针 | pass（证据管线） | 已有真实 PlayerPage、页面语义、DWM 匿名变化和运行态聚合 |
-| 12-case 固定 manifest 完整性 | unknown | 当前工作树没有提交本机媒体路径，尚未有一份统一匿名 manifest |
-| 三编码/两分辨率/短长 GOP 的统一 P0 报告 | unknown | 既有矩阵分散在多个日期目录，尚未由同一 manifest 关联 |
+| 12-case 固定 manifest 完整性 | fail（10/12） | 当前本机有统一 ignored manifest，但两个 AV1 case 没有可验证样本 |
+| 三编码/两分辨率/短长 GOP 的统一 P0 报告 | unknown | 10 个 case 已有匿名素材关联，真实 action/DWM 证据尚未按同一 manifest 完成 |
 | decoder drop | pass 或 fail 按 action 分列 | 运行态有值时非零失败；没有值不补零 |
 | VO drop | unknown（已有矩阵多数不可用） | 运行态没有可靠 VO drop 字段时不能判通过 |
 | 稳态 total drop | unknown | 既有动作样本缺少独立 10 秒分母 |

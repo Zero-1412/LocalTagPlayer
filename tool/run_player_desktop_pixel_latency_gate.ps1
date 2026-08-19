@@ -52,6 +52,9 @@ param(
   [ValidateRange(540, 4320)]
   [int]$PlayerPageInitialWindowHeight = 720,
   [string]$DebugExecutable = '',
+  # 仅 QA 输入兼容性对照；正式默认保持真实 scan-code 语义，实体输入不使用此开关。
+  [ValidateSet('scanCode', 'virtualKey')]
+  [string]$KeyboardInjectionMode = 'scanCode',
   [string]$Output = '',
   # 仅 Debug QA：隔离自适应 Texture 尺寸回落/重建是否触发桌面引擎崩溃；默认保持正式策略。
   [switch]$DisableAdaptiveTextureSizing,
@@ -868,6 +871,7 @@ try {
         -MinimumEffectiveCaptureFps $MinimumEffectiveCaptureFps `
         -PixelChangeThresholdPercent $PixelChangeThresholdPercent `
         -SettleMilliseconds $SettleMilliseconds -Output $probeOutput `
+        -KeyboardInjectionMode $KeyboardInjectionMode `
         -ExpectedInputEvidencePath (Join-Path $Output 'player-input-events.jsonl')
     } elseif ($manualKeyboardAction) {
       # 此分支不执行 SendInput：探针已完成静态基线后会等待一次实体 J/L。原生 FLUTTERVIEW
@@ -878,6 +882,7 @@ try {
         -MinimumEffectiveCaptureFps $MinimumEffectiveCaptureFps `
         -PixelChangeThresholdPercent $PixelChangeThresholdPercent `
         -SettleMilliseconds $SettleMilliseconds -Output $probeOutput `
+        -KeyboardInjectionMode $KeyboardInjectionMode `
         -ExpectedInputEvidencePath (Join-Path $Output 'player-input-events.jsonl') `
         -NativeKeyboardEvidencePath (Join-Path $Output 'native-keyboard-qpc-events.jsonl') `
         -ManualInputTimeoutMilliseconds $ManualInputTimeoutMilliseconds `
@@ -904,7 +909,7 @@ try {
         -SettleMilliseconds $SettleMilliseconds -Output $probeOutput `
         -HoldMilliseconds $HoldMilliseconds `
         -VirtualKey $configuredKeyboardVirtualKey `
-        -KeyboardInjectionMode 'scanCode' `
+        -KeyboardInjectionMode $KeyboardInjectionMode `
         -PreparePlayerKeyboardFocus:$preparePlayerKeyboardFocus `
         -ExpectedInputEvidencePath $playerInputEvidencePath
     }

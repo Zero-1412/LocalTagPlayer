@@ -202,6 +202,8 @@ void main() {
     expect(gate, contains('NativeKeyboardEvidencePath'));
     expect(gate, contains('ManualInputTimeoutMilliseconds'));
     expect(gate, contains('HoldMilliseconds'));
+    expect(gate, contains('KeyboardInjectionMode'));
+    expect(gate, contains("[string]\$KeyboardInjectionMode = 'scanCode'"));
     expect(gate, contains('LOCAL_TAG_PLAYER_REAL_PAGE_PIXEL_QA'));
     expect(gate, contains("ready.surface -ne 'product-player-page'"));
     expect(gate, contains('ExpectedInputEvidencePath'));
