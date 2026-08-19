@@ -380,6 +380,14 @@ decoder/total drop 为 0；Down→DWM p95 分别为 H.264 `98 ms`、HEVC `201 ms
 该证据证明控制命令确实经过正式页面的 `PlayerService/NativePlayer` 并完成资源释放；逐帧
 画面的证据来源仍标为 `estimated-frame-number-fallback`，因此不把它冒充桌面 DWM 帧测量。
 
+随后新增的 [`run_player_precision_controls_dwm_qa.ps1`](../../tool/run_player_precision_controls_dwm_qa.ps1)
+在同一正式页面上补做了“命令/资源”和“桌面可见性”的独立对照：A/B 先回到 A 再播放，
+三编码各一轮均写出 `ab_loop_cycle_complete.success=true` 与
+`player_resources_released`；逐帧、A-B 和外挂字幕的 DWM 匿名指纹门禁均为
+`unknown`，有效采样约 `22.4–26.2 fps`，低于该观察器 `30 fps` 最低采样要求。该脚本
+不发送输入、不保存截图，故没有把命令成功、估算帧号或 `track-list` 读回升级成真实
+Texture 可见性通过。
+
 ### 2026-08-20 硬解降级安全恢复 Debug E2E
 
 Debug QA 通过显式 `ForceSoftwareDecode` 强制当前 MediaKit 会话写入 `hwdec=no`，但保留

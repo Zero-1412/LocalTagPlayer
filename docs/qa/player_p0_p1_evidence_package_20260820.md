@@ -145,11 +145,30 @@ native-route 诊断后，scan-code 与 virtual-key 都只得到 native `up`、�
 | 长按 | 前进临时扫描、后退 latest-only、KeyDown/Up 生命周期 | 按住期间 DWM 首帧和后续节奏 | 自动化已有；实体 WM_KEYDOWN/UP QPC 为 unknown |
 | 可调倍速 | setRate、状态读回、资源释放 | 真实窗口播放节奏预算 | 命令可用；可见性为 unknown |
 | 逐帧 | frame-step/frame-back-step、错误和释放 | 逐帧真实 DWM 画面 | 命令可用；可见性为 unknown |
-| A-B loop | A/B/清除命令、状态和释放 | A→B 重复播放画面 | 命令可用；可见性为 unknown |
+| A-B loop | A/B/实际 A→B→A 循环、清除命令、状态和释放 | A→B 重复播放画面 | 命令与循环资源 QA 可用；可见性为 unknown |
 | 外挂字幕 | 加载/轨道/关闭命令和释放 | 字幕在真实 Texture 上可见、同步 | 命令可用；可见性为 unknown |
 
 “命令可用”不升级为“功能完成”。在可见性证据出现前，P1 只能报告命令合同通过和
 可见性 unknown。
+
+### Precision controls 的 DWM 可见性复核
+
+新增 [tool/run_player_precision_controls_dwm_qa.ps1](/E:/LocalTagPlayer/tool/run_player_precision_controls_dwm_qa.ps1)，
+它在同一正式 PlayerPage/MediaKit Texture Debug 会话中不发送输入，只读取 DWM 合成后的
+中心视频网格和字幕下方网格，分别把命令 JSONL 与匿名桌面指纹 JSONL 落盘。它要求：
+
+- `frame_step_complete` 的命令结果与前后 DWM 时间窗分开；逐帧不接受估算帧号代理；
+- A/B 先实际从 A 播放到 B 并观察回到 A，再由 DWM 窗口判断是否有可见变化；
+- 外挂字幕先在同一位置建立无字幕静止基线，再把 `sub-add` 后的下方区域作为独立窗口；
+- 命令失败为 `fail`，桌面样本不足或指纹变化低于 `1.5%` 只为 `unknown`，不补成通过；
+- 资源释放仍必须出现 `player_resources_released`。
+
+当前本机 Debug 三编码各一轮的匿名结果为：A/B 命令循环与资源释放均为 `pass`，但
+逐帧、A/B 的 DWM 可见性和外挂字幕下方区域均为 `unknown`；有效桌面采样约
+`22.4–26.2 fps`，低于该观察器的 `30 fps` 最低采样门禁，因此不生成“真实可见性通过”。
+证据目录为 `.local/qa/current-precision-dwm-{h264,hevc,av1}-20260820_*`，其中只保留
+匿名阶段、尺寸、时间和指纹差异，不保留截图或媒体内容。该结果把 P1 的命令/资源 QA
+与真实可见性 QA 明确拆开，不能写成逐帧、A-B 或外挂字幕功能完成。
 
 ## 阶段 D：外部验收清单
 

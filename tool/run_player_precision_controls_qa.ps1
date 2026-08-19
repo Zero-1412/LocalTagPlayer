@@ -125,18 +125,28 @@ try {
     'frame_step_complete',
     'ab_loop_a',
     'ab_loop_b',
+    'ab_loop_cycle_complete',
     'ab_loop_clear',
     'external_subtitle_complete'
   )
   $precisionCompleteDeadline = [DateTime]::UtcNow.AddSeconds(30)
+  $requiredStagesComplete = $false
   do {
-    $successfulStageCount = @(
-      Get-Content -LiteralPath $precisionPath |
-        Where-Object { $_ -like '*"success":true*' }
-    ).Count
-    if ($successfulStageCount -ge $requiredStages.Count) { break }
+    $precisionLines = @(Get-Content -LiteralPath $precisionPath)
+    $missingRequiredStage = @($requiredStages | Where-Object {
+        $stage = $_
+        @($precisionLines | Where-Object {
+            ($_ -like ('*"stage":"' + $stage + '"*')) -and
+            ($_ -like '*"success":true*')
+          }).Count -eq 0
+      })
+    $requiredStagesComplete = $missingRequiredStage.Count -eq 0
+    if ($requiredStagesComplete) { break }
     Start-Sleep -Milliseconds 100
   } while ([DateTime]::UtcNow -lt $precisionCompleteDeadline)
+  if (-not $requiredStagesComplete) {
+    throw 'precision controls QA 未在时限内完成所有必需阶段。'
+  }
   $events = @(Get-PrecisionEvents $precisionPath)
   foreach ($stage in $requiredStages) {
     $successfulLine = @(

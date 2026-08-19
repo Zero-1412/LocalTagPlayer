@@ -484,6 +484,9 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
         'frame': beforeFrame,
         'frameEvidence': player.lastPresentedVideoFrameEvidence,
       });
+      // 给外部桌面合成观察器留出静止基线；该等待只存在于隔离 Debug QA，不能改变
+      // 正式页面逐帧命令的用户可感知时序。
+      await _precisionObservationDwell();
       var frameStepPresented = false;
       try {
         await player.playerService.stepFrame(backward: false);
@@ -503,6 +506,7 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
         'frame': await player.readPresentedVideoFrame(),
         'frameEvidence': player.lastPresentedVideoFrameEvidence,
       });
+      await _precisionObservationDwell();
 
       final start = player.playerService.state.position;
       await player.setAbLoopStartWithFeedback();
@@ -512,6 +516,7 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
             await player.playerService.getProperty('ab-loop-a')),
         'positionMs': start.inMilliseconds,
       });
+      await _precisionObservationDwell();
 
       final end = start + const Duration(seconds: 2);
       await player.playerService.seek(end);
@@ -523,6 +528,50 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
             await player.playerService.getProperty('ab-loop-b')),
         'positionMs': player.playerService.state.position.inMilliseconds,
       });
+      await _precisionObservationDwell();
+
+      // A/B 的命令读回不是循环播放验收。这里在隔离会话中实际播放，等待位置从
+      // B 回到 A，再暂停并记录匿名循环证据；外部桌面观察器负责独立判断 Texture/DWM
+      // 是否随该循环出现可见呈现变化。
+      var loopReachedEnd = false;
+      var loopCompleted = false;
+      try {
+        // 设置 B 点后当前播放头停在 B；回到 A 再播放，才能证明是 A→B→A
+        // 的实际循环，而不是从 B 立即触发一次边界回退。
+        await player.playerService.seek(start);
+        await _waitForPlayerPosition(player, start);
+        await player.playerService.play();
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'ab_loop_playback_started',
+          'success': true,
+          'positionMs': player.playerService.state.position.inMilliseconds,
+        });
+        final loopWatch = Stopwatch()..start();
+        while (loopWatch.elapsed < const Duration(seconds: 5)) {
+          final position = player.playerService.state.position;
+          if (!loopReachedEnd &&
+              position >= end - const Duration(milliseconds: 350)) {
+            loopReachedEnd = true;
+          } else if (loopReachedEnd &&
+              position <= start + const Duration(milliseconds: 550)) {
+            loopCompleted = true;
+            break;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 25));
+        }
+        await player.playerService.pause();
+      } catch (error) {
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'ab_loop_playback_error',
+          'errorType': error.runtimeType.toString(),
+        });
+      }
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'ab_loop_cycle_complete',
+        'success': loopCompleted,
+        'positionMs': player.playerService.state.position.inMilliseconds,
+      });
+      await _precisionObservationDwell();
 
       await player.clearAbLoopWithFeedback();
       final clearedA = await player.playerService.getProperty('ab-loop-a');
@@ -531,24 +580,50 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
         'stage': 'ab_loop_clear',
         'success': clearedA == 'no' && clearedB == 'no',
       });
+      await _precisionObservationDwell();
 
       final subtitle = File(
         '${widget.outputDirectory.path}${Platform.pathSeparator}qa-subtitle.srt',
       );
       subtitle.writeAsStringSync(
-        '1\n00:00:00,000 --> 00:00:02,000\nLocal Tag Player QA\n',
+        '1\n00:00:00,000 --> 00:00:10,000\nLocal Tag Player QA\n',
         flush: true,
       );
+      // 把暂停位置移到外挂字幕的可见时间段，先记录无字幕基线，再加载字幕。
+      // 该文件只存在于隔离 QA 输出目录，字幕内容不会进入产品数据或报告。
+      const subtitleTarget = Duration(seconds: 1);
+      await player.playerService.seek(subtitleTarget);
+      await _waitForPlayerPosition(player, subtitleTarget);
+      await player.playerService.pause();
+      _appendPrecisionEvidence(<String, Object?>{
+        'stage': 'external_subtitle_before',
+        'success': true,
+        'positionMs': player.playerService.state.position.inMilliseconds,
+        'frame': await player.readPresentedVideoFrame(),
+        'frameEvidence': player.lastPresentedVideoFrameEvidence,
+      });
+      await _precisionObservationDwell();
       var subtitleLoaded = false;
       try {
+        _appendPrecisionEvidence(<String, Object?>{
+          'stage': 'external_subtitle_load_started',
+          'success': true,
+          'positionMs': player.playerService.state.position.inMilliseconds,
+        });
         await player.playerService.addExternalSubtitle(subtitle.path);
         final trackList = await player.playerService.getProperty('track-list');
         subtitleLoaded = trackList.contains('Local Tag Player QA') ||
             trackList.contains('subtitle');
+        // sub-add 后给同一 Texture 一个短暂的合成窗口；桌面观察器只记录匿名下方区域
+        // 指纹差异，不能把 track-list 读回当作字幕可见性。
+        await Future<void>.delayed(const Duration(milliseconds: 450));
         _appendPrecisionEvidence(<String, Object?>{
           'stage': 'external_subtitle_complete',
           'success': subtitleLoaded,
           'trackListObserved': trackList.isNotEmpty,
+          'positionMs': player.playerService.state.position.inMilliseconds,
+          'frame': await player.readPresentedVideoFrame(),
+          'frameEvidence': player.lastPresentedVideoFrameEvidence,
         });
       } catch (error) {
         _appendPrecisionEvidence(<String, Object?>{
@@ -571,6 +646,11 @@ class _PlayerRealPagePixelQaAppState extends State<_PlayerRealPagePixelQaApp> {
     } finally {
       _precisionControlsCompleted = true;
     }
+  }
+
+  /** 隔离 precision QA 的外部 DWM 观测窗口，不进入正式 PlayerPage 时序。 */
+  Future<void> _precisionObservationDwell() async {
+    await Future<void>.delayed(const Duration(milliseconds: 450));
   }
 
   Future<void> _waitForPlayerPosition(

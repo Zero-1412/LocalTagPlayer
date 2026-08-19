@@ -149,9 +149,25 @@ void main() {
     expect(source, contains('frame_step_complete'));
     expect(source, contains('ab_loop_a'));
     expect(source, contains('ab_loop_b'));
+    expect(source, contains('ab_loop_cycle_complete'));
     expect(source, contains('external_subtitle_complete'));
     expect(source, contains('player_resources_released'));
     expect(source, contains(r'pathOrMediaContentRetained = $false'));
+  });
+
+  test('precision controls DWM QA 将命令/资源与真实桌面呈现分开验收', () {
+    final source = File('tool/run_player_precision_controls_dwm_qa.ps1')
+        .readAsStringSync();
+    expect(source, contains('real-player-page-dwm-precision-controls'));
+    expect(source, contains('desktop-composited-pixel-change'));
+    expect(source, contains('precision-dwm-samples.jsonl'));
+    expect(source, contains('precision-controls.jsonl'));
+    expect(source, contains("status = 'unknown'"));
+    expect(source, contains('ab_loop_cycle_complete'));
+    expect(source, contains('external_subtitle_load_started'));
+    // 可见性 QA 不能靠 SendInput 把命令路径伪造成屏幕证据。
+    expect(source, isNot(contains('SendInput')));
+    expect(source, contains('resourceReleaseConfirmed'));
   });
 
   test('独立矩阵在任一 4K 会话失效时拒绝生成混杂 p95', () {
