@@ -488,9 +488,10 @@ void main() {
   });
 
   test('MediaKit 快进扫描只使用可读回的输出端丢帧档位并在换片前恢复', () {
+    // Windows checkout 可能保留 CRLF；源码契约只比较语义格式，先统一换行符。
     final source = File(
       'lib/src/services/player/media_kit_player_backend.dart',
-    ).readAsStringSync();
+    ).readAsStringSync().replaceAll('\r\n', '\n');
 
     expect(source, contains('PlayerFastForwardScanBoundary,'));
     expect(source, contains("'video-sync',\n            'audio'"));
