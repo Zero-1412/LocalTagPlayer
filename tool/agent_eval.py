@@ -201,6 +201,8 @@ def _validate_qa_manifest(repo_root: Path) -> dict[str, Any]:
         path.relative_to(repo_root).as_posix()
         for path in [
             *sorted((repo_root / "tool").rglob("*.ps1")),
+            # Dart QA 生成器同样属于 tool 生命周期清单，不能因扩展名遗漏登记。
+            *sorted((repo_root / "tool").rglob("*.dart")),
             *sorted((repo_root / "tool").rglob("*.vpy")),
             *sorted((repo_root / "scripts" / "qa").glob("*.mjs")),
         ]

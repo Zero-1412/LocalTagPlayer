@@ -196,6 +196,7 @@ Scorer 会确定性检查 `done_when.id` 唯一、完成项与验证记录一一
 
 - `tool/qa/manifest.json` 是 QA、发布和 Agent 治理脚本的唯一生命周期清单，状态只允许 `active`、`experimental`、`archived`、`retired`。
 - `validate` 会检查脚本是否全部登记、非退役脚本是否存在、PowerShell 是否携带开发机盘符、证据路径是否存在，以及退役条目是否给出替代命令。
+- `validate` 自动发现 `tool/` 下的 PowerShell、Dart、VapourSynth 脚本和 `scripts/qa` 下的模块；新增 QA 入口必须先登记再进入门禁。
 - 历史视觉/质量脚本放在 `tool/archive/quality/`，默认任务不得自动运行；一次性证据放在 `docs/history/qa/`。
 - 当前零模型成本基线为 67 个 Agent 用例和 25 项评分器单元测试。
 - 第三方 GitHub Action 必须固定到 40 位提交 SHA；浮动 major 标签或分支会被同一门禁拒绝。

@@ -8,6 +8,96 @@
   ],
   "entries": [
     {
+      "id": "player-p0-evidence-assembler",
+      "path": "tool/assemble_player_p0_evidence.ps1",
+      "status": "active",
+      "kind": "performance-evidence-assembler",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_p0_p1_evidence_package_20260820.md",
+      "replacement": null
+    },
+    {
+      "id": "player-smoothness-standard",
+      "path": "tool/evaluate_player_smoothness_standard.ps1",
+      "status": "active",
+      "kind": "performance-evidence-gate",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_smoothness_standard_20260820.md",
+      "replacement": null
+    },
+    {
+      "id": "player-desktop-pixel-probe",
+      "path": "tool/invoke_player_desktop_pixel_probe.ps1",
+      "status": "active",
+      "kind": "desktop-evidence-probe",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_desktop_pixel_latency.md",
+      "replacement": null
+    },
+    {
+      "id": "player-p0-av1-fixture-manifest",
+      "path": "tool/prepare_player_p0_av1_fixture_manifest.ps1",
+      "status": "active",
+      "kind": "performance-fixture-generator",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_p0_p1_evidence_package_20260820.md",
+      "replacement": null
+    },
+    {
+      "id": "player-desktop-pixel-gate",
+      "path": "tool/run_player_desktop_pixel_latency_gate.ps1",
+      "status": "active",
+      "kind": "performance-evidence-gate",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_desktop_pixel_latency.md",
+      "replacement": null
+    },
+    {
+      "id": "player-desktop-pixel-matrix",
+      "path": "tool/run_player_desktop_pixel_latency_matrix.ps1",
+      "status": "active",
+      "kind": "performance-matrix",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_desktop_pixel_latency.md",
+      "replacement": null
+    },
+    {
+      "id": "player-precision-controls-dwm-matrix",
+      "path": "tool/run_player_precision_controls_dwm_matrix.ps1",
+      "status": "active",
+      "kind": "performance-matrix",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_p0_p1_evidence_package_20260820.md",
+      "replacement": null
+    },
+    {
+      "id": "player-precision-controls-dwm-qa",
+      "path": "tool/run_player_precision_controls_dwm_qa.ps1",
+      "status": "active",
+      "kind": "performance-evidence",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_p0_p1_evidence_package_20260820.md",
+      "replacement": null
+    },
+    {
+      "id": "player-precision-controls-qa",
+      "path": "tool/run_player_precision_controls_qa.ps1",
+      "status": "active",
+      "kind": "performance-evidence",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_p0_p1_evidence_package_20260820.md",
+      "replacement": null
+    },
+    {
+      "id": "player-steady-runtime-matrix",
+      "path": "tool/run_player_steady_runtime_matrix.ps1",
+      "status": "active",
+      "kind": "performance-matrix",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_p0_p1_evidence_package_20260820.md",
+      "replacement": null
+    },
+    {
       "id": "main-window-semantic-stress",
       "path": "scripts/qa/main_window_stress_semantic.mjs",
       "status": "active",
@@ -57,6 +147,15 @@
       "path": "tool/generate_player_p0_manifest.dart",
       "status": "active",
       "kind": "performance-manifest-generator",
+      "last_verified": "2026-08-20",
+      "evidence": "docs/qa/player_p0_p1_evidence_package_20260820.md",
+      "replacement": null
+    },
+    {
+      "id": "player-qa-sample-selector",
+      "path": "tool/select_player_qa_sample.dart",
+      "status": "active",
+      "kind": "performance-sample-selector",
       "last_verified": "2026-08-20",
       "evidence": "docs/qa/player_p0_p1_evidence_package_20260820.md",
       "replacement": null
