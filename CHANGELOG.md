@@ -5,7 +5,9 @@
 
 ## Unreleased
 
-暂无。
+- 新增 Flutter 3.47 Windows 隔离兼容门禁：在排除用户未跟踪文件的短路径副本中，固定 SDK revision，验证全量测试、analyze、Debug/Release 构建和启动，并以正式 MediaKit Texture 运行真实 seek 矩阵。
+- 新增 12 样本 seek 可重放基线：运行前复核 codec、分辨率、GOP 与文件身份，摘要不输出本机媒体路径；矩阵支持 preflight、断点续跑、冷却及有限瞬态重试。
+- 本轮只增强 QA/构建证据，不改变播放器默认后端、来源 filtered playback queue、seek 运行时策略、schema 或用户数据。
 
 ## 0.2.10
 

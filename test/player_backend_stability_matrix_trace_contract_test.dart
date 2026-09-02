@@ -3,6 +3,53 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('Flutter Windows 隔离门禁排除用户文件并消费完整 seek baseline', () {
+    final compatibility = File(
+      'tool/run_flutter_windows_compatibility_gate.ps1',
+    ).readAsStringSync();
+    final baseline = File(
+      'tool/prepare_player_seek_latency_baseline.ps1',
+    ).readAsStringSync();
+    final seekMatrix = File(
+      'tool/run_player_seek_latency_matrix.ps1',
+    ).readAsStringSync();
+
+    // 隔离门禁不得在当前工作树运行 pub/build；除本任务的两个门禁脚本外，
+    // 用户未跟踪文件不能进入副本。
+    expect(compatibility, contains('git -C \$repositoryRoot ls-files'));
+    expect(compatibility, contains('untrackedUserFilesExcluded = \$true'));
+    expect(compatibility, contains('includedUntrackedGateFiles = \$gateFiles'));
+    expect(compatibility, contains('workspace.Length -gt 55'));
+    expect(compatibility, contains('ExpectedFrameworkRevision'));
+    expect(compatibility, contains("'build', 'windows', '--debug'"));
+    expect(compatibility, contains("'build', 'windows', '--release'"));
+    expect(compatibility, contains('-Backend mediaKit'));
+    expect(
+        compatibility, contains("releaseTexturePerformance = 'not-measured'"));
+    expect(compatibility, contains('VerifiedDependencyCache'));
+    expect(compatibility, contains('Get-FileHash -LiteralPath \$source'));
+    expect(compatibility, contains("'mpv.7z' = '72b1b348"));
+
+    // 本机路径只留在 ignored manifest；可提交脚本和摘要必须保留路径脱敏与身份复核。
+    expect(baseline, contains("status = 'complete'"));
+    expect(baseline, contains('stdoutOmitsMediaPaths = \$true'));
+    expect(baseline, contains('lastWriteUnixMilliseconds'));
+    expect(baseline, contains('explicit-local-calibration'));
+    expect(baseline, contains('calibratedBudgetOverrides'));
+    expect(seekMatrix, contains('sampleIdentity'));
+    expect(seekMatrix, contains('manifestSha256'));
+    expect(seekMatrix, contains('samplePathsOmitted = \$true'));
+    expect(seekMatrix, contains('PreflightOnly'));
+    expect(seekMatrix, contains('MaxAttemptsPerCase'));
+    expect(seekMatrix, contains('CaseCooldownSeconds'));
+    expect(seekMatrix, contains('existingMetric.budgetMs'));
+    expect(seekMatrix,
+        contains('if (\$Resume -and (Test-Path -LiteralPath \$logPath'));
+    expect(seekMatrix, contains('\$case.id).attempt-\$attempt.log'));
+    expect(seekMatrix, contains('Copy-Item -LiteralPath \$attemptLogPath'));
+    expect(seekMatrix, contains('attempts = \$attemptCount'));
+  });
+
   test('稳定性矩阵消费当前首帧阶段并保留反向运行态 trace', () {
     final script =
         File('tool/run_player_backend_stability_matrix.ps1').readAsStringSync();

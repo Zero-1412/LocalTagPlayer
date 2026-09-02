@@ -1,5 +1,13 @@
 # Chat 4：播放器与筛选结果队列
 
+## 2026-09-02 · Flutter 3.47 隔离门禁与 12 样本可重放基线
+
+- 新增短路径隔离兼容门禁，固定 Flutter `3.47.0` / framework revision `4cf24164269a5ebf0c16a028a00727d0e77bbb05`；隔离副本排除用户未跟踪文件，并以 SHA-256 校验的本地依赖种子通过全量测试、analyze、Debug/Release 构建与启动。
+- 正式 MediaKit Texture Debug seek 矩阵 12/12 通过，覆盖 `1080p/4K × H.264/HEVC/AV1 × short/long GOP`；p95 为 `57–1881 ms`，实际解码均为 `d3d11va-copy`。Release Texture 性能未测，不能由 Release 启动 smoke 或 Debug 数据外推。
+- ignored baseline manifest 现在记录 codec、分辨率、GOP、文件大小和 Unix 修改时间；runner 在创建输出前完成全量 preflight，摘要省略媒体路径，并支持预算一致的断点续跑、case 冷却和最多两次瞬态重试。
+- 4K H.264 长 GOP 的旧 `1800 ms` 建议预算在 Flutter 3.47 两次为 `1861 ms`，独立 Flutter 3.44 对照为 `1880 ms`；据此只把本机回归预算显式校准为 `2000 ms`，没有修改播放器最终帧等待或预览节流策略。
+- 干净 CMake 的固定 mpv GitHub 资产已返回 404；本轮不以本地缓存冒充 CI 可恢复性，也未修改 CI Flutter pin。正式默认后端、来源 filtered playback queue、schema、用户数据和媒体文件均不变。
+
 ## 2026-08-19 · 桌面像素证据链收口
 
 - 稳定性矩阵现在识别 `native_rendered_frame`、`presented_frame_fallback` 和超时阶段，并把 `reverseKeyframeTrace`、缓存/解码/VO/Texture 分段差异同时写回总矩阵和每个 backend 的 `reportPath`，避免独立审查报告丢失证据。

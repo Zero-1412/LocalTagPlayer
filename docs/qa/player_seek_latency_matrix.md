@@ -7,6 +7,67 @@
 以下新增结果沿用本节的“首个实际桌面合成变化”口径；后文如标注自动化，则不把
 SendInput/Win32 事件当作实体 WM_KEYDOWN/QPC。
 
+## 2026-09-02：可重放 baseline 与 Flutter 3.47 隔离门禁
+
+本机 baseline 由既有候选 manifest 正规化生成，路径只保存在 ignored 的
+`.local/qa/player_seek-latency-matrix.json`。生成器会重新验证固定 12 个 case 的 codec、
+分辨率和 GOP，并记录文件大小与 Unix 修改时间；runner 每次运行前复核这些身份，先为
+全部 case 写出不含媒体路径的 `preflight-summary.json`，任一 case 失败时不开始矩阵。
+
+```powershell
+$budgetOverrides = @{'4k-h264-long-gop' = 2000}
+.\tool\prepare_player_seek_latency_baseline.ps1 `
+  -SourceManifest .\.local\qa\player-p0-av1-fixtures-20260821f\player_p0_manifest-with-av1-fixtures.json `
+  -OutputManifest .\.local\qa\player_seek-latency-matrix.json `
+  -BudgetOverrides $budgetOverrides
+
+.\tool\run_player_seek_latency_matrix.ps1 `
+  -Manifest .\.local\qa\player_seek-latency-matrix.json `
+  -PreflightOnly `
+  -Output .\.local\qa\player-seek-preflight
+```
+
+生成器拒绝覆盖既有 baseline；需要重建时应先保留旧文件作为校准证据，再指定新的输出名。
+矩阵运行默认在 case 间冷却 5 秒，并允许最多两次瞬态重试；每次尝试保留独立日志，只有
+成功结果会成为可复用主日志，摘要记录实际尝试次数。`-Resume` 只复用 case、backend 和预算
+都与当前 manifest 一致的既有结果；manifest 变化或预算变化时对应 case 会重跑。
+
+Flutter 3.47 的兼容门禁必须使用短输出路径，以避开 MSBuild 260 字符限制。门禁复制 Git
+跟踪文件的当前内容和两个门禁脚本，排除其余用户未跟踪文件；随后核验 SDK version/revision，
+依次运行全量测试、analyze、Debug/Release Windows 构建与隐藏启动 smoke，最后运行正式
+MediaKit Texture 的 Debug 12-case 矩阵。若提供本地依赖种子，七个归档/许可证必须全部匹配
+脚本固定的 SHA-256 才会复制进隔离工作区。
+
+```powershell
+.\tool\run_flutter_windows_compatibility_gate.ps1 `
+  -Flutter .\.local\qa\flutter-3.47.0-sdk\bin\flutter.bat `
+  -Manifest .\.local\qa\player_seek-latency-matrix.json `
+  -OutputDirectory .\.local\q\f347 `
+  -VerifiedDependencyCache .\build\windows\x64\ltp_native_deps
+```
+
+最终隔离结果为 Flutter `3.47.0`、framework revision
+`4cf24164269a5ebf0c16a028a00727d0e77bbb05`：全量测试 `676 pass / 5 skip`、analyze
+0 问题、Debug/Release 构建与启动通过、Debug Texture seek 12/12 通过。各 case p95：
+
+| case | p95 / budget (ms) | hwdec |
+| --- | ---: | --- |
+| 1080p AV1 long / short | 201/1200 · 99/500 | d3d11va-copy |
+| 1080p H.264 long / short | 337/1200 · 107/500 | d3d11va-copy |
+| 1080p HEVC long / short | 254/1200 · 57/500 | d3d11va-copy |
+| 4K AV1 long / short | 935/1200 · 246/800 | d3d11va-copy |
+| 4K H.264 long / short | 1881/2000 · 313/800 | d3d11va-copy |
+| 4K HEVC long / short | 608/1800 · 171/800 | d3d11va-copy |
+
+4K H.264 长 GOP 在旧 `1800 ms` 建议预算下，Flutter 3.47 两次实测为 `1861 ms`，
+独立干净 Flutter 3.44 对照为 `1880 ms`；因此将本机回归预算显式校准为 `2000 ms`，约比
+对照高 6.4%，而不修改运行时最终帧等待或预览节流策略。Release Texture 性能没有测量，
+门禁摘要固定写为 `not-measured`，不得用 Debug 数据外推。
+
+当前干净 Windows CMake 仍不能从固定 URL 恢复 mpv 归档；GitHub release 资产返回 404，
+本轮只用摘要匹配的本地种子验证 SDK 兼容性。因此在建立可长期恢复的固定依赖源之前，不修改
+CI 的 Flutter pin，也不把本地 seeded pass 描述为干净 CI 可重放。
+
 ## 2026-08-19 修正语义门禁后的三编码真实 PlayerPage 矩阵
 
 本节只统计修正 `ExpectedInputEvidencePath` 传递后的独立 Debug 会话；缺少
