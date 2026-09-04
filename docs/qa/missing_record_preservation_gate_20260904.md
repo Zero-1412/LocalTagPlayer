@@ -25,6 +25,10 @@
 原生窗口自动化不可用时，必须保留 focused widget/code guard、全量测试、analyze 和 Windows
 Debug 构建结果，并把上述真实窗口路径标记为未执行，不能写成通过。
 
+同日已补 Windows Flutter surface 门禁与四张 PNG，详见
+`docs/qa/library_recovery_visual_gate_20260904.md`；它不替代仍不可用的 SendInput/UIA 与系统
+文件选择器证据。
+
 ## 同轮恢复性与性能门禁
 
 - 首屏加载必须能从受控失败进入错误页，并由“重新加载”恢复到 ready。

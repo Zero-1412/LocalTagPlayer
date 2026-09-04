@@ -18,6 +18,8 @@
 - 收藏切换写入失败恢复原值并反馈，不能保留未持久化的乐观状态；
 - 空库优先从 root 目录建立 folder 标签；零筛选结果保留清空与查看条件入口；
 - 全库侧栏统计按数据 revision 复用，普通 rebuild 不重复扫描全部视频；
+- 恢复状态在 Windows runner 上保留可重复 surface 截图门禁；Finder 点击不得冒充
+  SendInput/UIA，系统目录选择器仍需单独原生证据；
 - 扫描器只产出候选，Repository 拥有数据库写入。
 
 ## 非目标

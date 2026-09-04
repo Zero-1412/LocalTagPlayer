@@ -2211,6 +2211,32 @@ void main() {
     expect(metrics, isNot(contains("import 'package:flutter/")));
   });
 
+  test('dependency upgrade gate changes exactly one allowlisted package', () {
+    final gate = File(
+      'tool/run_flutter_dependency_upgrade_gate.ps1',
+    ).readAsStringSync();
+
+    expect(
+      gate,
+      contains(r'''ValidateSet('desktop_drop', 'package_info_plus')'''),
+    );
+    expect(gate, contains('desktop_drop = [ordered]@{'));
+    expect(gate, contains('package_info_plus = [ordered]@{'));
+    expect(gate, contains(r'isolatedSinglePackageChange = $true'));
+    expect(gate, contains(r'dependencyOverrides = $false'));
+    expect(gate, contains(r'''@('pub', 'get')'''));
+    expect(gate, contains(r'''@('test') + $candidate.focusedTests'''));
+    expect(gate, contains(r'''@('build', 'windows', '--debug')'''));
+    expect(gate, contains('VerifiedDependencyCache'));
+    expect(gate, contains('Get-FileHash'));
+    expect(
+      gate,
+      contains(r'verifiedArchives = $expectedDependencies.Count'),
+    );
+    expect(gate, isNot(contains('dependency_overrides:')));
+    expect(gate, isNot(contains('pub upgrade --major-versions')));
+  });
+
   test('manual tag replacement is an explicit compensating command', () {
     final page = _readLibraryPageCluster();
     final executor = File(

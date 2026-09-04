@@ -7,6 +7,7 @@ import '../../features/settings/application/cache_diagnostics_controller.dart';
 import '../../features/settings/application/cache_diagnostics_maintenance_controller.dart';
 import '../../features/settings/application/playback_settings_controller.dart';
 import '../../features/settings/presentation/cache_diagnostics_snapshot_view.dart';
+import '../../features/settings/presentation/missing_cleanup_confirmation_dialog.dart';
 import '../../features/settings/presentation/settings_workspace_theme.dart';
 import '../../models/data_backup_models.dart';
 import '../../models/video_item.dart';
@@ -328,30 +329,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
 
   /** 明确说明不可逆的数据影响，只有用户确认后才执行数据库清理。 */
   Future<void> _confirmRemoveMissingOrUnreadableVideos() async {
-    final confirmed = await showMaintenanceDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('清理缺失或不可读记录？'),
-        content: const Text(
-          '将重新检查全部媒体。确认缺失或不可读的项目会从数据库永久移除，'
-          '同时移除其标签关联、收藏、播放记录、进度和备份快照；磁盘文件不会删除。\n\n'
-          '如果移动硬盘暂时断开或目录权限异常，请先取消并恢复连接。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            key: const ValueKey('settings.fileDeletion.confirmCleanup'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('确认清理'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && mounted) {
+    final confirmed = await showMissingCleanupConfirmationDialog(context);
+    if (confirmed && mounted) {
       await _removeMissingOrUnreadableVideos();
     }
   }

@@ -3,7 +3,7 @@ import 'package:local_tag_player/src/features/library/application/library_sideba
 import 'package:local_tag_player/src/models/video_item.dart';
 
 void main() {
-  test('11000 项侧栏统计按 revision 单次遍历并复用快照', () {
+  test('11000 项侧栏统计在普通 rebuild 与 resize 风暴中只遍历一次', () {
     final videos = List<VideoItem>.generate(
       11000,
       (index) => VideoItem(
@@ -18,15 +18,27 @@ void main() {
       ),
       growable: false,
     );
+    var visitedItems = 0;
+    Iterable<VideoItem> countedVideos() sync* {
+      for (final item in videos) {
+        visitedItems += 1;
+        yield item;
+      }
+    }
+
     final cache = LibrarySidebarMetricsCache();
     final watch = Stopwatch()..start();
-    final first = cache.resolve(revision: 7, videos: videos);
-    final second = cache.resolve(revision: 7, videos: videos);
+    final first = cache.resolve(revision: 7, videos: countedVideos());
+    // 模拟窗口尺寸变化、侧栏折叠和普通父级重建；revision 未前进时不能再次扫描全库。
+    for (var rebuild = 0; rebuild < 120; rebuild += 1) {
+      final cached = cache.resolve(revision: 7, videos: countedVideos());
+      expect(identical(first, cached), isTrue);
+    }
     watch.stop();
 
     expect(first.favoriteCount, 5500);
     expect(first.missingCount, 1000);
-    expect(identical(first, second), isTrue);
+    expect(visitedItems, 11000);
     expect(cache.rebuildCount, 1);
     expect(watch.elapsedMilliseconds, lessThan(250));
     // 保留一行可检索基准，不输出媒体路径或用户数据。

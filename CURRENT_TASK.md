@@ -1,28 +1,29 @@
 # CURRENT_TASK.md
 
-# 2026-09-04 · 对抗式产品补强与使用感优化
+# 2026-09-04 · 恢复状态视觉门禁与独立依赖试升
 
 ## 当前
 
 - 目标：从第一性原理出发，后续修改进行对抗式审查，任务结束后自己给出下一步计划。
-- P0 已完成：启动、扫描和播放预检只保留/标记 missing；清理只在说明影响后显式确认。
-- P1 已完成：首屏具备 loading/ready/failed 与安全重试；收藏持久化失败精确回滚并反馈。
-- P2 已完成：目录优先首次引导、零结果恢复动作，以及 revision 侧栏统计缓存；11k 定向基准最终约 994 µs。
-- P3 已完成：只定向更新 `file_picker` 11.0.3 与 `sqflite_common_ffi` 2.4.2+1，未批量升级或跨主版本。
+- Windows surface 四状态门禁已通过；Computer Use 原生 App 接口不可用的边界已如实记录。
+- `desktop_drop` 0.8.4 独立 Flutter 3.47 门禁全绿并带回主分支。
+- `package_info_plus` 10.2.1 独立门禁在解析阶段因 `win32` 冲突阻断，主约束保持 9.0.1。
+- 11k 统计门禁扩展为 120 次 rebuild/resize 模拟，同 revision 仍只遍历一次。
 
 ## 最近三项
 
-- 总验证：Flutter 全量 686 项通过、4 项既有跳过，analyze 0 问题，Windows Debug 构建成功。
-- 11k 侧栏统计同 revision 只重建一次；最终全量运行约 `994 µs`，不输出媒体路径。
-- Agent eval 目录 68 例有效、配套 Python 单测 29 项通过；隔离 profile 启动 smoke 成功。
+- 主工作树 687 项通过、4 项既有跳过，analyze 0 问题，3.44 clean Debug build 与 5 秒启动通过。
+- Flutter 3.47 `desktop_drop` 门禁：解析、focused/full tests、analyze、Debug build、启动全通过。
+- Windows integration 四项与四张 PNG 通过；11k 在 120 次同 revision resolve 中只访问 11,000 项。
 
 ## 阻塞
 
-- 当前桌面自动化只暴露浏览器控制，无法驱动原生 Windows 窗口；运行时设置弹窗与首次引导需记录精确人工路径和截图阻塞，不能冒充完成。
-- 干净 Windows CMake 的固定 mpv 资产恢复源仍未建立；依赖升级继续受 Flutter 3.47 隔离门禁约束。
+- Computer Use 返回 `apps: []` 且运行时无 `getApp`；现有截图是 Windows Flutter surface，
+  不是 SendInput/UIA 或系统文件选择器证据。
+- `package_info_plus` 10.2.1 与 `file_picker` 11.0.3 的稳定 `win32` 约束不可同时解析。
 
 ## 下一步
 
-- 在原生窗口可控环境补做设置清理确认、启动失败页、首次空库和零结果恢复的真实点击与截图。
-- 为 `desktop_drop` 0.8 和 `package_info_plus` 10 分别建立 Flutter 3.47 隔离迁移门禁，不合并试升。
-- 继续以 11k revision 基准监控侧栏与标签发现，不让普通窗口 resize 重新触发全库遍历。
+- 先为 `file_picker` 12.2.0 建立独立静态 API、Windows 文件选择器和三平台构建门禁；通过后再复核 `package_info_plus` 10。
+- Computer Use 恢复原生 App 接口后，补系统级点击、目录选择器取消和完整 Settings Route 截图。
+- 把 11k 同 revision 单遍历门禁保留在常规回归，后续若进入 profile CI 再增加真实 resize 帧时序。
