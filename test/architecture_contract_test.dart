@@ -374,16 +374,39 @@ void main() {
     expect(dependencies.updateService, isA<GitHubReleaseUpdateService>());
   });
 
-  test('desktop file picker adapter follows the stable static API contract',
+  test('desktop file picker adapter follows the file_picker 12 static contract',
       () {
     final adapter = File(
       'lib/src/platform/desktop_file_system_adapter.dart',
     ).readAsStringSync();
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final lock = File('pubspec.lock').readAsStringSync();
+    final macosRegistrant = File(
+      'macos/Flutter/GeneratedPluginRegistrant.swift',
+    ).readAsStringSync();
 
+    expect(pubspec, contains('file_picker: ^12.2.0'));
+    expect(lock, contains('name: file_picker'));
+    expect(lock, contains('version: "12.2.0"'));
     expect(adapter, contains('FilePicker.getDirectoryPath('));
     expect(adapter, contains('FilePicker.pickFiles('));
+    expect(adapter, contains('FilePicker.pickFile('));
     expect(adapter, contains('FilePicker.saveFile('));
+    expect(adapter, contains('Future<String?> saveBytes('));
+    expect(adapter, contains('bytes: bytes'));
+    expect(adapter, contains('await writeBytes(path, bytes, flush: true)'));
+    expect(adapter, isNot(contains('Uint8List(0)')));
+    expect(adapter, contains('uri.toFilePath(windows: Platform.isWindows)'));
+    expect(
+      adapter,
+      contains('WindowsOptions(lockParentWindow: true)'),
+    );
+    expect(adapter, isNot(contains('result?.files')));
+    expect(adapter, isNot(contains('allowMultiple:')));
+    expect(adapter, isNot(contains('pickSavePath(')));
     expect(adapter, isNot(contains('FilePicker.platform')));
+    expect(macosRegistrant, contains('import file_picker_darwin'));
+    expect(macosRegistrant, isNot(contains('import file_picker\n')));
   });
 
   test(
@@ -1099,10 +1122,10 @@ void main() {
       library,
       contains('await store.setDataBackupEnabled(previous.enabled);'),
     );
-    expect(library, contains('await fileSystem.pickSavePath('));
+    expect(library, contains('await fileSystem.saveBytes('));
     expect(
       library,
-      contains('await fileSystem.writeBytes(path, bytes, flush: true);'),
+      contains('final bytes = await store.createDataBackupExport();'),
     );
   });
 
@@ -2222,6 +2245,8 @@ void main() {
     );
     expect(gate, contains('desktop_drop = [ordered]@{'));
     expect(gate, contains('package_info_plus = [ordered]@{'));
+    expect(gate, contains("file_picker = '^12.2.0'"));
+    expect(gate, contains('前置基线约束不符'));
     expect(gate, contains(r'isolatedSinglePackageChange = $true'));
     expect(gate, contains(r'dependencyOverrides = $false'));
     expect(gate, contains(r'''@('pub', 'get')'''));
@@ -2235,6 +2260,38 @@ void main() {
     );
     expect(gate, isNot(contains('dependency_overrides:')));
     expect(gate, isNot(contains('pub upgrade --major-versions')));
+  });
+
+  test('file_picker 12 gate pins Flutter and builds all desktop platforms', () {
+    final probe = File(
+      'tool/run_file_picker_12_probe.ps1',
+    ).readAsStringSync();
+    final workflow = File(
+      '.github/workflows/file-picker-12-gate.yml',
+    ).readAsStringSync();
+
+    expect(
+      probe,
+      contains(r'''[ValidateSet('windows', 'linux', 'macos')]'''),
+    );
+    expect(probe, contains('file_picker: 12.2.0'));
+    expect(probe, contains('FilePicker.getDirectoryPath('));
+    expect(probe, contains('FilePicker.pickFiles('));
+    expect(probe, contains('FilePicker.pickFile('));
+    expect(probe, contains('FilePicker.saveFile('));
+    expect(probe, contains('WindowsOptions(lockParentWindow: true)'));
+    expect(probe, contains(r'''@('build', $BuildTarget, '--debug')'''));
+    expect(workflow, contains('flutter-version: "3.47.0"'));
+    expect(workflow, contains('name: Windows'));
+    expect(workflow, contains('target: windows'));
+    expect(workflow, contains('name: Linux'));
+    expect(workflow, contains('target: linux'));
+    expect(workflow, contains('name: macOS'));
+    expect(workflow, contains('target: macos'));
+    expect(
+      workflow,
+      contains('run_file_picker_12_probe.ps1'),
+    );
   });
 
   test('manual tag replacement is an explicit compensating command', () {

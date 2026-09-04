@@ -468,7 +468,8 @@ extension PlayerStateHealth on PlayerPageState {
           currentItem.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final outputPath = await withPlayerShortcutsSuspended(
-        () => pageWidget.fileSystem.pickSavePath(
+        () => pageWidget.fileSystem.saveBytes(
+          bytes: bytes,
           dialogTitle: '保存当前画面',
           suggestedName:
               '${safeTitle.isEmpty ? 'video' : safeTitle}_$timestamp.jpg',
@@ -476,7 +477,6 @@ extension PlayerStateHealth on PlayerPageState {
         ),
       );
       if (outputPath == null || !mounted) return;
-      await pageWidget.fileSystem.writeBytes(outputPath, bytes, flush: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('截图已保存')),

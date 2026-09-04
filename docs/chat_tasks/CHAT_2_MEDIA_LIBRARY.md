@@ -20,6 +20,8 @@
 - 全库侧栏统计按数据 revision 复用，普通 rebuild 不重复扫描全部视频；
 - 恢复状态在 Windows runner 上保留可重复 surface 截图门禁；Finder 点击不得冒充
   SendInput/UIA，系统目录选择器仍需单独原生证据；
+- `file_picker 12` 取消目录选择时保持媒体库与用户数据不变；保存动作由平台 adapter 接收
+  真实 bytes，不能用 0-byte 文件模拟旧的“只选路径”合同；
 - 扫描器只产出候选，Repository 拥有数据库写入。
 
 ## 非目标

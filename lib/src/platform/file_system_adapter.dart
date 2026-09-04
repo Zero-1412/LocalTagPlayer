@@ -66,8 +66,9 @@ abstract interface class FileSystemAdapter {
     List<String> allowedExtensions = const <String>[],
   });
 
-  /** 选择保存位置；用户取消时返回 null。 */
-  Future<String?> pickSavePath({
+  /** 选择保存位置并写入真实内容；用户取消时不创建文件并返回 null。 */
+  Future<String?> saveBytes({
+    required Uint8List bytes,
     required String suggestedName,
     String? dialogTitle,
     List<String> allowedExtensions = const <String>[],

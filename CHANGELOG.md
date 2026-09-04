@@ -5,7 +5,9 @@
 
 ## Unreleased
 
-- 新增单依赖 Flutter 3.47 隔离门禁：`desktop_drop` 0.8.4 全项通过并升级；`package_info_plus` 10.2.1 因与 `file_picker` 11.0.3 的 `win32` 约束冲突保持阻断，未使用 override。
+- `file_picker` 升至 12.2.0，并将目录、多文件、单文件和保存入口迁移到新的静态/联邦 API；保存合同改为由平台适配器直接接收真实 bytes，取消时不创建 0-byte 文件。
+- `file_picker 12` 新增固定 Flutter 3.47 revision 的独立三平台探针门禁；在该探针先通过后，`package_info_plus` 才从新基线单独升至 10.2.1，全程未使用 dependency override。
+- 新增单依赖 Flutter 3.47 隔离门禁：`desktop_drop` 0.8.4 全项通过并升级；早期 `package_info_plus` 10.2.1 在 `file_picker` 11.0.3 基线上因 `win32` 冲突被正确阻断，未使用 override。
 - 新增四条媒体库恢复状态的 Windows Flutter surface 截图门禁；启动加载/失败页统一为媒体库深色画布，清理确认内容由设置页与门禁复用同一生产组件。
 - 11,000 项侧栏统计回归扩展为 120 次普通 rebuild/resize 模拟，同一 revision 仍只遍历一次。
 - 缺失或暂时不可读的视频不再因启动、扫描或点击播放被自动移除；稳定身份、标签、收藏、播放记录和进度默认保留，可在恢复路径后重新关联。

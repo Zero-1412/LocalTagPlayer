@@ -2,7 +2,60 @@
 
 最近检查：2026-09-04
 
-## 2026-09-04 · Flutter 3.47 单依赖隔离门禁
+## 2026-09-04 · file_picker 12.2.0 与 package_info 10.2.1 串行门禁
+
+### 第一阶段：file_picker 独立探针
+
+完整应用不能存在“`file_picker 12.2.0` + `package_info_plus 9.0.1`”的可解析中间态：
+前者经 `windows_file_picker 1.2.0` 要求 `win32 ^6.3.0`，后者要求
+`win32 ^5.5.3`。因此没有使用 override，也没有把两个直接依赖放进同一次试升；新增
+`tool/run_file_picker_12_probe.ps1`，在不含 package_info 的最小 Flutter 工程中固定：
+
+- Flutter `3.47.0` / framework revision `4cf24164269a5ebf0c16a028a00727d0e77bbb05`；
+- `file_picker 12.2.0` 精确版本；
+- `getDirectoryPath`、`pickFiles`、`pickFile`、`saveFile` 四条静态 API；
+- `WindowsOptions` / `LinuxOptions` 的父窗口锁；
+- Windows、Linux、macOS 三个平台各自的 Debug build。
+
+本机 Windows 探针 `.local/q/fp122c/file-picker-12-probe-summary.json` 已通过工程生成、
+解析、静态分析和 Debug build。`.github/workflows/file-picker-12-gate.yml` 把同一个脚本放到
+三个独立 runner；本机结果不替代 Linux/macOS 的实际状态。
+
+### 第二阶段：从新基线单独迁移 package_info
+
+只有 Windows 独立探针通过后，主源码才进入 `file_picker ^12.2.0` 候选基线。通用依赖
+门禁为 `package_info_plus` 增加了硬前置检查：若 pubspec 不是精确的
+`file_picker ^12.2.0`，脚本在解析前拒绝运行。随后只把
+`package_info_plus ^9.0.1` 改为 `^10.2.1`，结果如下：
+
+| 门禁 | 结果 |
+| --- | --- |
+| pub get | PASS |
+| focused tests | PASS |
+| full tests | PASS |
+| flutter analyze | PASS |
+| Windows Debug build | PASS |
+| 隔离 profile 5 秒启动 | PASS |
+
+机器摘要：`.local/q/pi1021fp12c/dependency-gate-summary.json`。最终主锁文件使用项目当前
+Flutter 3.44 重新求解，只带回 file_picker 联邦实现、package_info 接口、`win32 6.4.0`
+及解析必需依赖，没有带回 Flutter 3.47 自带测试包的无关升级。
+
+### 保存合同与真实窗口证据
+
+`file_picker 12` 的 `saveFile` 不再只返回路径，而是要求真实 bytes 并立即写入。
+`FileSystemAdapter` 因此改为 `saveBytes`：页面提交真实内容，取消返回 null 且不创建
+0-byte 文件，确认后平台适配器再次 flush 复核。focused test 使用平台接口假实现验证
+真实 bytes、父窗口锁、落盘内容和取消不落盘。
+
+Computer Use 本轮仍返回 `apps: []`，所以尚不能补系统级鼠标、Windows 原生目录选择器
+取消、完整 Settings Route 与窗口边框截图；该项保持阻塞，既有 Flutter surface 图片不
+冒充 App/Window2 证据。原生能力恢复后，应从探针的“选择目录”按钮先补选择器取消，
+再用正式应用的隔离 profile 补 Settings Route 与窗口边框。
+
+## 2026-09-04 · 早期 Flutter 3.47 单依赖隔离记录
+
+以下记录保留串行迁移前的阻断证据；当前裁决以上一节为准。
 
 新增 `tool/run_flutter_dependency_upgrade_gate.ps1`，每次只允许
 `desktop_drop` 或 `package_info_plus` 一个候选，并在短路径副本中只改该依赖。

@@ -1,11 +1,55 @@
+// ignore_for_file: slash_for_doc_comments
+
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/platform/desktop_file_system_adapter.dart';
 import 'package:local_tag_player/src/platform/file_system_adapter.dart';
 
 void main() {
+  test('file_picker 12 save contract writes real bytes and preserves cancel',
+      () async {
+    final root = await Directory.systemTemp.createTemp('ltp_save_adapter_');
+    addTearDown(() async {
+      if (await root.exists()) {
+        await root.delete(recursive: true);
+      }
+    });
+    final originalPlatform = FilePickerPlatform.instance;
+    addTearDown(() => FilePickerPlatform.instance = originalPlatform);
+    final targetPath = '${root.path}${Platform.pathSeparator}export.json';
+    final picker = _RecordingFilePickerPlatform(Uri.file(targetPath));
+    FilePickerPlatform.instance = picker;
+    final bytes = Uint8List.fromList(const <int>[1, 2, 3, 4]);
+
+    final savedPath = await const DesktopFileSystemAdapter().saveBytes(
+      bytes: bytes,
+      suggestedName: 'export.json',
+      dialogTitle: '导出',
+      allowedExtensions: const <String>['json'],
+    );
+
+    expect(
+        savedPath, const DesktopFileSystemAdapter().normalizePath(targetPath));
+    expect(picker.receivedBytes, bytes);
+    expect(picker.windowsOptions?.lockParentWindow, isTrue);
+    expect(picker.linuxOptions?.lockParentWindow, isTrue);
+    expect(await File(targetPath).readAsBytes(), bytes);
+
+    final canceledPath = '${root.path}${Platform.pathSeparator}canceled.json';
+    FilePickerPlatform.instance = _RecordingFilePickerPlatform(null);
+    expect(
+      await const DesktopFileSystemAdapter().saveBytes(
+        bytes: bytes,
+        suggestedName: 'canceled.json',
+      ),
+      isNull,
+    );
+    expect(await File(canceledPath).exists(), isFalse);
+  });
+
   test('reveal rejects missing files before launching platform manager',
       () async {
     final missing = '${Directory.systemTemp.path}${Platform.pathSeparator}'
@@ -173,5 +217,33 @@ void main() {
       await entry.$2.deleteFile(sourcePath);
       expect(await entry.$2.fileExists(sourcePath), isFalse);
     });
+  }
+}
+
+/** 只记录 file_picker 12 保存参数，不打开系统窗口或提前写入测试文件。 */
+class _RecordingFilePickerPlatform extends FilePickerPlatform {
+  _RecordingFilePickerPlatform(this.result);
+
+  final Uri? result;
+  Uint8List? receivedBytes;
+  WindowsOptions? windowsOptions;
+  LinuxOptions? linuxOptions;
+
+  @override
+  Future<Uri?> saveFile({
+    required String fileName,
+    required Uint8List bytes,
+    required String mimeType,
+    String? dialogTitle,
+    String? initialDirectory,
+    Function(FilePickerStatus)? onFileSaving,
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
+  }) async {
+    receivedBytes = bytes;
+    this.windowsOptions = windowsOptions;
+    this.linuxOptions = linuxOptions;
+    return result;
   }
 }

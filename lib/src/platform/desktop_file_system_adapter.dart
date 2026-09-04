@@ -30,6 +30,8 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
     final path = await FilePicker.getDirectoryPath(
       dialogTitle: dialogTitle,
       initialDirectory: initialDirectory,
+      windowsOptions: const WindowsOptions(lockParentWindow: true),
+      linuxOptions: const LinuxOptions(lockParentWindow: true),
     );
     return path == null ? const <String>[] : <String>[normalizePath(path)];
   }
@@ -40,15 +42,16 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
     String? initialDirectory,
     List<String> allowedExtensions = const <String>[],
   }) async {
-    final result = await FilePicker.pickFiles(
+    final files = await FilePicker.pickFiles(
       dialogTitle: dialogTitle,
       type: allowedExtensions.isEmpty ? FileType.any : FileType.custom,
       allowedExtensions: allowedExtensions.isEmpty ? null : allowedExtensions,
-      allowMultiple: true,
       initialDirectory: initialDirectory,
+      windowsOptions: const WindowsOptions(lockParentWindow: true),
+      linuxOptions: const LinuxOptions(lockParentWindow: true),
     );
     return <String>[
-      for (final file in result?.files ?? const <PlatformFile>[])
+      for (final file in files)
         if (file.path != null) normalizePath(file.path!),
     ];
   }
@@ -59,30 +62,47 @@ class DesktopFileSystemAdapter implements FileSystemAdapter {
     String? initialDirectory,
     List<String> allowedExtensions = const <String>[],
   }) async {
-    final result = await FilePicker.pickFiles(
+    final file = await FilePicker.pickFile(
       dialogTitle: dialogTitle,
       type: allowedExtensions.isEmpty ? FileType.any : FileType.custom,
       allowedExtensions: allowedExtensions.isEmpty ? null : allowedExtensions,
-      allowMultiple: false,
       initialDirectory: initialDirectory,
+      windowsOptions: const WindowsOptions(lockParentWindow: true),
+      linuxOptions: const LinuxOptions(lockParentWindow: true),
     );
-    final path = result?.files.single.path;
+    final path = file?.path;
     return path == null ? null : normalizePath(path);
   }
 
   @override
-  Future<String?> pickSavePath({
+  Future<String?> saveBytes({
+    required Uint8List bytes,
     required String suggestedName,
     String? dialogTitle,
     List<String> allowedExtensions = const <String>[],
   }) async {
-    final path = await FilePicker.saveFile(
+    // file_picker 12 的保存入口会立即写入 bytes；平台边界直接接收真实内容，避免用户
+    // 确认路径后先留下 0-byte 文件，再以 flush 重写保证备份与截图落盘完成。
+    final uri = await FilePicker.saveFile(
       dialogTitle: dialogTitle,
       fileName: suggestedName,
+      bytes: bytes,
       type: allowedExtensions.isEmpty ? FileType.any : FileType.custom,
       allowedExtensions: allowedExtensions.isEmpty ? null : allowedExtensions,
+      windowsOptions: const WindowsOptions(lockParentWindow: true),
+      linuxOptions: const LinuxOptions(lockParentWindow: true),
     );
-    return path == null ? null : normalizePath(path);
+    if (uri == null) {
+      return null;
+    }
+    if (uri.scheme != 'file') {
+      throw UnsupportedError('桌面保存选择器未返回本地文件路径');
+    }
+    final path = normalizePath(
+      uri.toFilePath(windows: Platform.isWindows),
+    );
+    await writeBytes(path, bytes, flush: true);
+    return path;
   }
 
   @override

@@ -63,7 +63,9 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
             final suggestedName = 'LocalTagPlayer-视频数据备份-'
                 '${now.year}${two(now.month)}${two(now.day)}-'
                 '${two(now.hour)}${two(now.minute)}.json';
-            final path = await fileSystem.pickSavePath(
+            final bytes = await store.createDataBackupExport();
+            final path = await fileSystem.saveBytes(
+              bytes: bytes,
               suggestedName: suggestedName,
               dialogTitle: '导出视频依赖备份',
               allowedExtensions: const <String>['json'],
@@ -71,8 +73,6 @@ mixin LibraryPageRoutesMixin<T extends StatefulWidget>
             if (path == null) {
               return null;
             }
-            final bytes = await store.createDataBackupExport();
-            await fileSystem.writeBytes(path, bytes, flush: true);
             return path;
           },
         ),

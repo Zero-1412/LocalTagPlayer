@@ -485,6 +485,15 @@
       "replacement": null
     },
     {
+      "id": "file-picker-12-probe",
+      "path": "tool/run_file_picker_12_probe.ps1",
+      "status": "active",
+      "kind": "desktop-plugin-compatibility-gate",
+      "last_verified": "2026-09-04",
+      "evidence": "docs/qa/dependency_upgrade_gate.md",
+      "replacement": null
+    },
+    {
       "id": "windows-debug-package",
       "path": "tool/verify_windows_debug_package.ps1",
       "status": "active",

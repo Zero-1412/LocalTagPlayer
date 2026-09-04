@@ -142,6 +142,10 @@ source filtered result
 `LibraryScanBackend`。Dart core 不出现盘符、exe、Explorer/Finder 命令或打包目录假设；原生组件只通过
 显式 ABI/序列化合同进入 Dart；平台不可用时返回可诊断失败或安全回退。
 
+`FileSystemAdapter.saveBytes` 同时拥有保存对话框与真实字节写入：用户取消时不得创建 0-byte
+占位文件，确认后由平台适配器完成写入并以 flush 复核落盘。页面不直接依赖 `file_picker` 的
+`Uri`、Windows/Linux options 或联邦插件实现。
+
 ## 跨模块不变量
 
 1. UI 不复制过滤逻辑。

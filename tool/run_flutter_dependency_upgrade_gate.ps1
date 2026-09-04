@@ -47,6 +47,7 @@ $candidateByPackage = @{
   desktop_drop = [ordered]@{
     expectedConstraint = '^0.7.1'
     targetConstraint = '^0.8.4'
+    prerequisites = [ordered]@{}
     focusedTests = @(
       'test/widget_test.dart',
       'test/architecture_contract_test.dart'
@@ -55,6 +56,9 @@ $candidateByPackage = @{
   package_info_plus = [ordered]@{
     expectedConstraint = '^9.0.1'
     targetConstraint = '^10.2.1'
+    prerequisites = [ordered]@{
+      file_picker = '^12.2.0'
+    }
     focusedTests = @(
       'test/app_update_test.dart',
       'test/architecture_contract_test.dart'
@@ -68,8 +72,12 @@ $trackedFiles = @(& git -C $repositoryRoot ls-files)
 if ($LASTEXITCODE -ne 0 -or $trackedFiles.Count -eq 0) {
   throw '无法枚举 Git 跟踪文件。'
 }
-# 当前脚本可能仍处于交付前未跟踪状态；只额外复制这一个固定门禁文件。
-$gateFiles = @('tool/run_flutter_dependency_upgrade_gate.ps1')
+# 本轮门禁文件可能仍处于交付前未跟踪状态；只复制固定清单，不纳入其它用户文件。
+$gateFiles = @(
+  'tool/run_flutter_dependency_upgrade_gate.ps1',
+  'tool/run_file_picker_12_probe.ps1',
+  '.github/workflows/file-picker-12-gate.yml'
+)
 $isolatedFiles = @($trackedFiles + $gateFiles | Sort-Object -Unique)
 foreach ($relativePath in $isolatedFiles) {
   $source = Join-Path $repositoryRoot $relativePath
@@ -122,6 +130,20 @@ if (-not [string]::IsNullOrWhiteSpace($VerifiedDependencyCache)) {
 
 $pubspecPath = Join-Path $workspace 'pubspec.yaml'
 $pubspec = Get-Content -Raw -LiteralPath $pubspecPath
+$prerequisiteSummary = [ordered]@{}
+foreach ($entry in $candidate.prerequisites.GetEnumerator()) {
+  $escapedPrerequisite = [regex]::Escape($entry.Key)
+  $prerequisitePattern = '(?m)^  {0}: (?<constraint>[^\r\n]+)' -f $escapedPrerequisite
+  $prerequisiteMatches = [regex]::Matches($pubspec, $prerequisitePattern)
+  if ($prerequisiteMatches.Count -ne 1) {
+    throw "前置基线未找到唯一直接依赖：$($entry.Key)"
+  }
+  $actualPrerequisite = $prerequisiteMatches[0].Groups['constraint'].Value.Trim()
+  if ($actualPrerequisite -ne $entry.Value) {
+    throw "前置基线约束不符：package=$Package prerequisite=$($entry.Key) actual=$actualPrerequisite expected=$($entry.Value)"
+  }
+  $prerequisiteSummary[$entry.Key] = $actualPrerequisite
+}
 $escapedPackage = [regex]::Escape($Package)
 $constraintPattern = '(?m)^  {0}: (?<constraint>[^\r\n]+)' -f $escapedPackage
 $matches = [regex]::Matches($pubspec, $constraintPattern)
@@ -171,6 +193,7 @@ function Write-GateSummary {
       targetConstraint = $candidate.targetConstraint
       isolatedSinglePackageChange = $true
       dependencyOverrides = $false
+      prerequisites = $prerequisiteSummary
     }
     flutter = [ordered]@{
       version = [string]$version.frameworkVersion
