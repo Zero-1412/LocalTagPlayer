@@ -21,6 +21,10 @@
 解析、静态分析和 Debug build。`.github/workflows/file-picker-12-gate.yml` 把同一个脚本放到
 三个独立 runner；本机结果不替代 Linux/macOS 的实际状态。
 
+首次远端运行中 Linux 与 macOS 通过；Windows 冷缓存先输出 Flutter tool bootstrap 文本，
+旧解析器误把整段当 machine JSON。门禁现只从首个 `{` 解析 JSON，并以新的三平台运行
+重新确认，不能把这次基础设施失败记录成 Windows 构建失败或通过。
+
 ### 第二阶段：从新基线单独迁移 package_info
 
 只有 Windows 独立探针通过后，主源码才进入 `file_picker ^12.2.0` 候选基线。通用依赖

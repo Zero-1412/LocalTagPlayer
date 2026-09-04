@@ -161,7 +161,12 @@ Set-Content -LiteralPath $pubspecPath -Value $updatedPubspec -Encoding utf8
 
 $versionRaw = (& $flutterPath --version --machine | Out-String)
 if ($LASTEXITCODE -ne 0) { throw 'Flutter 版本读取失败。' }
-$version = $versionRaw | ConvertFrom-Json
+$versionJsonStart = $versionRaw.IndexOf('{')
+if ($versionJsonStart -lt 0) {
+  throw 'Flutter machine 版本输出缺少 JSON。'
+}
+# 冷 Windows runner 可能先构建 flutter tool；只解析随后出现的 machine JSON。
+$version = $versionRaw.Substring($versionJsonStart) | ConvertFrom-Json
 if ([string]$version.frameworkVersion -ne $ExpectedVersion) {
   throw "Flutter 版本不符：actual=$($version.frameworkVersion) expected=$ExpectedVersion"
 }

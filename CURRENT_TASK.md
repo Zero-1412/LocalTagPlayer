@@ -20,7 +20,8 @@
 
 - Computer Use 仍返回 `apps: []`；系统级鼠标、目录选择器取消、完整 Settings Route 与
   窗口边框截图尚无 App/Window2 证据。
-- Linux/macOS 的实际构建结果必须由新 workflow 的对应 runner 产出，本机 Windows 不冒充通过。
+- 首次远端 Linux/macOS 已通过；Windows 冷缓存的 Flutter bootstrap 文本触发版本 JSON
+  解析缺陷，已修复并等待新运行，不把基础设施失败冒充构建结论。
 
 ## 下一步
 

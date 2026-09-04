@@ -2280,6 +2280,7 @@ void main() {
     expect(probe, contains('FilePicker.pickFile('));
     expect(probe, contains('FilePicker.saveFile('));
     expect(probe, contains('WindowsOptions(lockParentWindow: true)'));
+    expect(probe, contains("IndexOf('{')"));
     expect(probe, contains(r'''@('build', $BuildTarget, '--debug')'''));
     expect(workflow, contains('flutter-version: "3.47.0"'));
     expect(workflow, contains('name: Windows'));
