@@ -22,8 +22,10 @@
 三个独立 runner；本机结果不替代 Linux/macOS 的实际状态。
 
 首次远端运行中 Linux 与 macOS 通过；Windows 冷缓存先输出 Flutter tool bootstrap 文本，
-旧解析器误把整段当 machine JSON。门禁现只从首个 `{` 解析 JSON，并以新的三平台运行
-重新确认，不能把这次基础设施失败记录成 Windows 构建失败或通过。
+旧解析器误把整段当 machine JSON。门禁现只从首个 `{` 解析 JSON。修复后的
+[远端运行 33840373991](https://github.com/Zero-1412/LocalTagPlayer/actions/runs/33840373991)
+已全部通过：Linux 1 分 26 秒、macOS 2 分 46 秒、Windows 4 分 05 秒；三者均执行同一
+静态 API、精确版本与 Debug build 探针。
 
 ### 第二阶段：从新基线单独迁移 package_info
 
