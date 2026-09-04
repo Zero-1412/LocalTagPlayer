@@ -15,22 +15,18 @@ class DeleteFileSettingsPanel extends StatelessWidget {
   const DeleteFileSettingsPanel({
     super.key,
     required this.confirmBeforeDeletingVideo,
-    required this.autoRemoveMissingOrUnreadableVideos,
     required this.onConfirmChanged,
-    required this.onAutoRemoveMissingOrUnreadableChanged,
+    required this.onRemoveMissingOrUnreadable,
   });
 
   /** 是否在删除前展示影响范围确认。 */
   final bool confirmBeforeDeletingVideo;
 
-  /** 是否自动清理缺失/不可读视频的数据库记录。 */
-  final bool autoRemoveMissingOrUnreadableVideos;
-
   /** 确认层显示偏好回调。 */
   final ValueChanged<bool> onConfirmChanged;
 
-  /** 清理运行期间为 null，阻止重复触发同一批删除。 */
-  final ValueChanged<bool>? onAutoRemoveMissingOrUnreadableChanged;
+  /** 打开缺失记录清理确认；运行期间为 null，阻止重复命令。 */
+  final VoidCallback? onRemoveMissingOrUnreadable;
 
   @override
   Widget build(BuildContext context) {
@@ -63,17 +59,20 @@ class DeleteFileSettingsPanel extends StatelessWidget {
                   style: TextStyle(color: libraryTextMuted, height: 1.45),
                 ),
                 const SizedBox(height: 16),
-                SwitchListTile.adaptive(
-                  key: const ValueKey(
-                    'settings.fileDeletion.autoRemoveMissingOrUnreadable',
-                  ),
+                ListTile(
                   contentPadding: EdgeInsets.zero,
-                  value: autoRemoveMissingOrUnreadableVideos,
-                  title: const Text('自动移除路径失效或不可读视频'),
-                  subtitle: const Text(
-                    '默认开启；路径不存在时直接清理数据库记录，不删除磁盘文件或文件夹',
+                  leading: const Icon(Icons.link_off_rounded),
+                  title: const Text('检查并清理缺失或不可读记录'),
+                  subtitle: const Text('启动和扫描只标记 missing；清理前会再次说明影响范围'),
+                  trailing: FilledButton.tonal(
+                    key: const ValueKey(
+                      'settings.fileDeletion.removeMissingOrUnreadable',
+                    ),
+                    onPressed: onRemoveMissingOrUnreadable,
+                    child: Text(
+                      onRemoveMissingOrUnreadable == null ? '清理中…' : '检查并清理',
+                    ),
                   ),
-                  onChanged: onAutoRemoveMissingOrUnreadableChanged,
                 ),
                 const Divider(height: 20),
                 SwitchListTile.adaptive(
@@ -89,7 +88,7 @@ class DeleteFileSettingsPanel extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.delete_sweep_outlined),
                   title: Text('视频文件删除规则：始终移入系统回收站'),
-                  subtitle: Text('可从回收站恢复；缺失或不可读记录的自动清理只移除数据库记录，不操作磁盘文件。'),
+                  subtitle: Text('可从回收站恢复；缺失记录默认保留，只有手动确认清理才移除数据库记录。'),
                 ),
                 if (!confirmBeforeDeletingVideo) ...[
                   const SizedBox(height: 14),
@@ -135,10 +134,9 @@ class DeleteFileSettingsPanel extends StatelessWidget {
 @visibleForTesting
 Widget deleteFileSettingsSmokeHarness({
   bool confirmBeforeDeletingVideo = true,
-  bool autoRemoveMissingOrUnreadableVideos = true,
   TextScaler textScaler = TextScaler.noScaling,
   ValueChanged<bool>? onConfirmChanged,
-  ValueChanged<bool>? onAutoRemoveMissingOrUnreadableChanged,
+  VoidCallback? onRemoveMissingOrUnreadable,
 }) {
   return MaterialApp(
     theme: settingsWorkspaceTheme(ThemeData(useMaterial3: true)),
@@ -152,11 +150,8 @@ Widget deleteFileSettingsSmokeHarness({
           padding: const EdgeInsets.all(24),
           child: DeleteFileSettingsPanel(
             confirmBeforeDeletingVideo: confirmBeforeDeletingVideo,
-            autoRemoveMissingOrUnreadableVideos:
-                autoRemoveMissingOrUnreadableVideos,
             onConfirmChanged: onConfirmChanged ?? (_) {},
-            onAutoRemoveMissingOrUnreadableChanged:
-                onAutoRemoveMissingOrUnreadableChanged ?? (_) {},
+            onRemoveMissingOrUnreadable: onRemoveMissingOrUnreadable,
           ),
         ),
       ),

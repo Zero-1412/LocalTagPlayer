@@ -12,6 +12,7 @@ import '../../services/player/playback_snapshot_write_queue.dart';
 import '../../services/library/video_similarity_scan_controller.dart';
 
 import 'library_page_state_host.dart';
+import 'library_page_runtime.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -132,7 +133,41 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
     });
   }
 
+  /** 串行执行首屏加载；失败发布可恢复状态，不让页面永久停在进度环。 */
   Future<void> load() async {
+    if (runtime.startupLoadInFlight) {
+      return;
+    }
+    runtime.startupLoadInFlight = true;
+    if (mounted && runtime.startupStatus != LibraryStartupStatus.loading) {
+      setState(() => runtime.startupStatus = LibraryStartupStatus.loading);
+    }
+    try {
+      await _loadStartupData();
+    } catch (error) {
+      // 错误类型足够定位阶段；不把可能含用户路径的异常正文或堆栈写入日志。
+      debugPrint('LIBRARY_STARTUP_FAILED type=${error.runtimeType}');
+      final failedStore = runtime.store;
+      final failedQueue = runtime.playbackSnapshotQueue;
+      runtime.store = null;
+      runtime.thumbnailService = null;
+      runtime.playbackSnapshotQueue = null;
+      if (mounted) {
+        setState(() => runtime.startupStatus = LibraryStartupStatus.failed);
+      }
+      try {
+        await failedQueue?.dispose();
+        await failedStore?.close();
+      } catch (_) {
+        // 恢复页已经可用；失败资源的二次释放错误不能再次吞掉重试入口。
+      }
+    } finally {
+      runtime.startupLoadInFlight = false;
+    }
+  }
+
+  /** 恢复首屏依赖并在同一次 setState 中发布 ready，避免半就绪页面。 */
+  Future<void> _loadStartupData() async {
     final diagnostics =
         (kDebugMode || kProfileMode) ? LibraryLoadDiagnostics() : null;
     final startupWatch = Stopwatch()..start();
@@ -148,6 +183,9 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
       await store.close();
       return;
     }
+    // 先登记待恢复资源，让后续任一步骤失败时都能由 load 的补偿分支释放。
+    runtime.store = store;
+    runtime.thumbnailService = thumbnailService;
     runtime.playbackSnapshotQueue = PlaybackSnapshotWriteQueue(
       writer: (snapshot) async {
         snapshot.item
@@ -183,6 +221,7 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
           );
           runtime.playbackSettings = playbackSettings;
           runtime.dataBackupSettings = dataBackupSettings;
+          runtime.startupStatus = LibraryStartupStatus.ready;
           runtime.lastObservedSearchText = runtime.searchController.text;
           runtime.queryController.seed(buildImmediateFilterState(store));
           runtime.facetCountController.seedVisible(
@@ -223,16 +262,8 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
       scheduleInitialStableTagCounts(store);
       scheduleStartupThumbnailBackfill(store, thumbnailService);
       scheduleStartupMediaDetailsBackfill(store);
-      unawaited(() async {
-        // 新增发现是用户启动后最直接的反馈，必须先于可能遍历整个媒体库的无效记录
-        // 清理执行；否则大库在默认开启自动清理时，会让新增提示长期不可见。
-        await promptForNewVideos(store);
-        if (playbackSettings.autoRemoveMissingOrUnreadableVideos &&
-            mounted &&
-            identical(runtime.store, store)) {
-          await cleanupMissingOrUnreadableVideos(store);
-        }
-      }());
+      // 启动只报告新增内容；缺失记录保留稳定身份，不能由后台流程静默清理。
+      unawaited(promptForNewVideos(store));
     });
   }
 
@@ -277,35 +308,6 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
         thumbnailService.generateMissing(store.videos.values);
       },
     );
-  }
-
-  /** 串行清理无效数据库记录，完成后统一刷新筛选结果与标签计数。 */
-  @override
-  Future<int> cleanupMissingOrUnreadableVideos(
-    LibraryApplicationFacade store,
-  ) {
-    final active = runtime.unavailableCleanupFuture;
-    if (active != null) {
-      return active;
-    }
-    final videoIdsBeforeCleanup =
-        store.videos.values.map((item) => item.videoId).toSet();
-    final task = store.removeMissingOrUnreadableVideos();
-    runtime.unavailableCleanupFuture = task;
-    return task.whenComplete(() {
-      if (identical(runtime.unavailableCleanupFuture, task)) {
-        runtime.unavailableCleanupFuture = null;
-      }
-      if (mounted && identical(runtime.store, store)) {
-        final removedVideoIds = videoIdsBeforeCleanup.difference(
-          store.videos.values.map((item) => item.videoId).toSet(),
-        );
-        markLibraryDataChanged(
-          tagDefinitionsChanged: true,
-          removedVideoIds: removedVideoIds.isEmpty ? null : removedVideoIds,
-        );
-      }
-    });
   }
 
   /**

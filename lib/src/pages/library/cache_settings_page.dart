@@ -103,7 +103,7 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
   /** 缓存重试/清理与 Repository 写入的互斥 owner。 */
   late final CacheDiagnosticsMaintenanceController<VideoItem>
       _cacheMaintenanceController;
-  /** 自动清理运行期间锁定开关，避免重复删除同一批稳定身份。 */
+  /** 显式清理运行期间锁定入口，避免重复删除同一批稳定身份。 */
   bool _unavailableCleanupRunning = false;
 
   /** 快捷键录制冲突按动作就地展示，成功保存或恢复默认后清除。 */
@@ -305,14 +305,12 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
     await _playbackSettingsController.update(next);
   }
 
-  /** 更新删除确认与回收站偏好，并立即写入现有设置文件。 */
+  /** 更新删除确认偏好，并立即写入现有设置文件。 */
   Future<void> _changeDeletePreferences({
     bool? confirmBeforeDeletingVideo,
-    bool? autoRemoveMissingOrUnreadableVideos,
   }) async {
     final next = _settings.copyWith(
       confirmBeforeDeletingVideo: confirmBeforeDeletingVideo,
-      autoRemoveMissingOrUnreadableVideos: autoRemoveMissingOrUnreadableVideos,
     );
     try {
       await _playbackSettingsController.update(next);
@@ -326,22 +324,47 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
       );
       return;
     }
-    if (autoRemoveMissingOrUnreadableVideos == true) {
-      await _removeMissingOrUnreadableVideos(showFeedback: true);
+  }
+
+  /** 明确说明不可逆的数据影响，只有用户确认后才执行数据库清理。 */
+  Future<void> _confirmRemoveMissingOrUnreadableVideos() async {
+    final confirmed = await showMaintenanceDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('清理缺失或不可读记录？'),
+        content: const Text(
+          '将重新检查全部媒体。确认缺失或不可读的项目会从数据库永久移除，'
+          '同时移除其标签关联、收藏、播放记录、进度和备份快照；磁盘文件不会删除。\n\n'
+          '如果移动硬盘暂时断开或目录权限异常，请先取消并恢复连接。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const ValueKey('settings.fileDeletion.confirmCleanup'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('确认清理'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _removeMissingOrUnreadableVideos();
     }
   }
 
-  /** 即时执行数据库清理；失败时保留已保存的开启状态，供后续扫描继续重试。 */
-  Future<int> _removeMissingOrUnreadableVideos({
-    required bool showFeedback,
-  }) async {
+  /** 执行用户已确认的数据库清理，并阻止同一批命令重复触发。 */
+  Future<int> _removeMissingOrUnreadableVideos() async {
     if (_unavailableCleanupRunning) {
       return 0;
     }
     setState(() => _unavailableCleanupRunning = true);
     try {
       final removed = await widget.store.removeMissingOrUnreadableVideos();
-      if (mounted && showFeedback) {
+      if (mounted) {
         showMaintenanceSnackBar(
           context,
           message:
@@ -429,10 +452,8 @@ class _CacheSettingsPageState extends State<CacheSettingsPage> {
             confirmBeforeDeletingVideo: value,
           ));
         },
-        onAutoCleanupChanged: (value) {
-          unawaited(_changeDeletePreferences(
-            autoRemoveMissingOrUnreadableVideos: value,
-          ));
+        onRemoveMissingOrUnreadable: () {
+          unawaited(_confirmRemoveMissingOrUnreadableVideos());
         },
         onFullscreenQueueChanged: (value) {
           unawaited(_changeFullscreenQueueEdgeHoverEnabled(value));

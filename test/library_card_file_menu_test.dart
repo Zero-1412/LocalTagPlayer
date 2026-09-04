@@ -65,8 +65,8 @@ class _CardFileMenuRepository
   var untrackedVideoCountCalls = 0;
   /** 测试可指定尚未入库的视频数。 */
   var untrackedVideoCount = 0;
-  /** 测试可暂缓启动清理，模拟大媒体库的磁盘检查。 */
-  Completer<int>? pendingUnavailableCleanup;
+  /** 缺失记录清理调用次数；页面启动和扫描都必须保持为零。 */
+  var unavailableCleanupCalls = 0;
   /** 页面暂停/继续按钮发给 Repository 的顺序。 */
   final pausedStates = <bool>[];
   /** 页面取消按钮发给 Repository 的次数。 */
@@ -89,13 +89,11 @@ class _CardFileMenuRepository
     return untrackedVideoCount;
   }
 
-  /**
-   * 页面启动可能执行自动清理；菜单回归测试没有无效记录，因此返回零且不改变视频集合。
-   */
+  /** 记录显式维护命令；页面生命周期不得调用。 */
   @override
   Future<int> removeMissingOrUnreadableVideos() async {
-    final pending = pendingUnavailableCleanup;
-    return pending?.future ?? 0;
+    unavailableCleanupCalls += 1;
+    return 0;
   }
 
   @override
@@ -294,7 +292,84 @@ class _CardFileMenuApplicationService implements LibraryPageApplicationService {
   }) async {}
 }
 
+/** 首次加载失败、第二次成功，用于证明错误页的重试真实回到同一应用边界。 */
+class _RetryingCardFileMenuApplicationService
+    extends _CardFileMenuApplicationService {
+  _RetryingCardFileMenuApplicationService({
+    required super.store,
+    required super.thumbnailService,
+  });
+
+  var loadCalls = 0;
+
+  @override
+  Future<LibraryPageStartupData> load({
+    LibraryLoadDiagnostics? diagnostics,
+  }) async {
+    loadCalls += 1;
+    if (loadCalls == 1) {
+      throw StateError('controlled startup failure');
+    }
+    return super.load(diagnostics: diagnostics);
+  }
+}
+
 void main() {
+  testWidgets('媒体库启动失败显示安全重试并可恢复到就绪态', (tester) async {
+    final repository = _CardFileMenuRepository();
+    final store = LibraryApplicationFacade(
+      queryRepository: repository,
+      commandRepository: repository,
+      tagRepository: repository,
+      cacheRepository: repository,
+      playbackRepository: repository,
+    );
+    final root = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'ltp_startup_retry_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    )..createSync(recursive: true);
+    addTearDown(() {
+      if (root.existsSync()) root.deleteSync(recursive: true);
+    });
+    final service = _RetryingCardFileMenuApplicationService(
+      store: store,
+      thumbnailService: ThumbnailService.forDirectory(
+        Directory(p.join(root.path, 'thumbs')),
+        _CardFileMenuFFmpegBackend(),
+      ),
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: LibraryPage(
+        applicationService: service,
+        fileSystem: _CardFileMenuFileSystem(),
+        playerServiceFactory: ({
+          required String hwdec,
+          required bool enableHardwareAcceleration,
+          required PlayerRendererPreference rendererPreference,
+        }) =>
+            PlayerService(backend: _CardFileMenuPlayerBackend()),
+        mediaProbeBackendFactory: _CardFileMenuProbeBackend.new,
+        updateService: _CardFileMenuUpdateService(),
+      ),
+    ));
+    await tester.pump();
+
+    expect(
+        find.byKey(const ValueKey('library.startup.failed')), findsOneWidget);
+    expect(find.text('媒体库暂时无法加载'), findsOneWidget);
+    expect(find.textContaining('媒体文件不会被修改'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('library.startup.retry')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(service.loadCalls, 2);
+    expect(find.byKey(const ValueKey('library.startup.failed')), findsNothing);
+    expect(find.byKey(const ValueKey('library.startup.loading')), findsNothing);
+  });
+
   testWidgets('媒体库首帧后自动启动缺失缩略图补全', (tester) async {
     final root = Directory(
       p.join(
@@ -363,11 +438,10 @@ void main() {
     expect(applicationService.mediaProbeBatchCalls, greaterThan(0));
   });
 
-  testWidgets('启动新增视频检查不会被自动清理阻塞', (tester) async {
+  testWidgets('启动新增视频检查不会自动清理缺失记录', (tester) async {
     final repository = _CardFileMenuRepository()
       ..roots.add(r'D:\\library')
-      ..untrackedVideoCount = 2
-      ..pendingUnavailableCleanup = Completer<int>();
+      ..untrackedVideoCount = 2;
     final store = LibraryApplicationFacade(
       queryRepository: repository,
       commandRepository: repository,
@@ -384,10 +458,6 @@ void main() {
       ),
     )..createSync(recursive: true);
     addTearDown(() {
-      final cleanup = repository.pendingUnavailableCleanup;
-      if (cleanup != null && !cleanup.isCompleted) {
-        cleanup.complete(0);
-      }
       if (root.existsSync()) {
         root.deleteSync(recursive: true);
       }
@@ -421,17 +491,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(repository.untrackedVideoCountCalls, 1);
+    expect(repository.unavailableCleanupCalls, 0);
     expect(find.text('发现新增视频'), findsOneWidget);
     expect(find.text('当前目录发现 2 个未入库视频，是否现在重新扫描？'), findsOneWidget);
 
-    // 测试不能把启动弹窗 Route 与模拟中的大库清理 Future 永久悬挂在树上；先按用户
-    // 可见路径关闭提示，再释放后台清理，才能验证“发现”先于“清理”而不污染后续测试。
+    // 关闭启动提示，确认页面整个首帧生命周期都没有偷偷进入破坏性维护命令。
     await tester.tap(find.text('稍后'));
     await tester.pumpAndSettle();
-    repository.pendingUnavailableCleanup?.complete(0);
-    // 清理完成会排入一次零延迟筛选刷新；再推进一帧，避免它在测试树 dispose 后
-    // 才成为悬挂 Timer。
-    await tester.pump(const Duration(milliseconds: 1));
+    expect(repository.unavailableCleanupCalls, 0);
   });
 
   testWidgets('媒体卡片菜单可达且查询与排序只发布最新结果', (tester) async {

@@ -222,8 +222,7 @@ void main() {
     );
   });
 
-  test(
-      'automatic cleanup removes missing paths and existing unreadable records',
+  test('explicit cleanup removes confirmed missing and unreadable records',
       () async {
     final stores = <LibraryStore>[];
     final dataDir = await _prepareStoreTestDirectory('unavailable_cleanup');

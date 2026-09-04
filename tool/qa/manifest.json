@@ -458,6 +458,24 @@
       "replacement": null
     },
     {
+      "id": "player-seek-latency-baseline",
+      "path": "tool/prepare_player_seek_latency_baseline.ps1",
+      "status": "active",
+      "kind": "seek-baseline-preparer",
+      "last_verified": "2026-09-02",
+      "evidence": "docs/qa/player_seek_latency_matrix.md",
+      "replacement": null
+    },
+    {
+      "id": "flutter-windows-compatibility-gate",
+      "path": "tool/run_flutter_windows_compatibility_gate.ps1",
+      "status": "active",
+      "kind": "compatibility-gate",
+      "last_verified": "2026-09-02",
+      "evidence": "docs/qa/player_seek_latency_matrix.md",
+      "replacement": null
+    },
+    {
       "id": "windows-debug-package",
       "path": "tool/verify_windows_debug_package.ps1",
       "status": "active",

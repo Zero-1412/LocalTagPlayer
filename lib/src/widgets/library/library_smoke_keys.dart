@@ -96,6 +96,15 @@ class LibrarySmokeKeys {
   /** 空媒体库中央“添加视频”入口。 */
   static const emptyAddFiles =
       ValueKey<String>('smoke.library.empty-add-files');
+  /** 空媒体库目录优先引导入口。 */
+  static const emptyAddFolder =
+      ValueKey<String>('smoke.library.empty-add-folder');
+  /** 零结果空状态的一键清空筛选入口。 */
+  static const emptyClearFilters =
+      ValueKey<String>('smoke.library.empty-clear-filters');
+  /** 零结果空状态的筛选面板入口。 */
+  static const emptyOpenFilters =
+      ValueKey<String>('smoke.library.empty-open-filters');
   /** 媒体库结果区桌面拖放目标。 */
   static const importDropRegion = ValueKey<String>('smoke.library.drop-region');
   /** 文件进入拖放目标后显示的覆盖提示。 */

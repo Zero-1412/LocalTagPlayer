@@ -5,6 +5,7 @@ import '../../core/layout_size.dart';
 import '../../core/tag_rules.dart';
 import '../../features/update/domain/app_update_service.dart';
 import '../../features/library/application/library_source_navigation_controller.dart';
+import '../../features/library/presentation/library_empty_recovery.dart';
 import '../../features/library/presentation/library_queue_title.dart';
 import '../../features/library/presentation/library_scan_progress_labels.dart';
 import '../../models/video_item.dart';
@@ -80,7 +81,6 @@ class LibraryPage extends StatefulWidget {
 
 /**
  * 选择添加目录或文件时使用的媒体上下文起点。
- *
  * 当前正在浏览的本地目录优先，其次使用首个已管理 root；两者都不存在时返回 null，
  * 由平台选择器决定默认位置，避免回到与视频无关的系统“图片”目录。
  */
@@ -109,7 +109,7 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
         LibraryPageCommandsMixin<LibraryPage> {
   @override
   LibraryPageApplicationService get applicationService =>
-      (widget).applicationService;
+      widget.applicationService;
 
   @override
   FileSystemAdapter get fileSystem => (widget).fileSystem;
@@ -127,12 +127,10 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
 
   @override
   Widget build(BuildContext context) {
-    final store = runtime.store;
-    final thumbnailService = runtime.thumbnailService;
-    if (store == null || thumbnailService == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
+    final startupView = buildLibraryStartupView(load);
+    if (startupView != null) return startupView;
+    final store = runtime.store!;
+    final thumbnailService = runtime.thumbnailService!;
     final preserveScrollOnResultDelta =
         runtime.pendingResultDeltaVideoIds.isNotEmpty;
     if (preserveScrollOnResultDelta && !runtime.resultDeltaClearScheduled) {
@@ -145,15 +143,12 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
         }
       });
     }
-
     final filterState =
         runtime.queryController.state ?? buildImmediateFilterState(store);
     final filteredVideos = filterState.filteredVideos;
-    final recentVideos = sortedRecentVideos(store);
-    final favoriteVideos = sortedFavoriteVideos(store);
     final videos = switch (runtime.resultMode) {
-      LibraryResultMode.recent => recentVideos,
-      LibraryResultMode.favorites => favoriteVideos,
+      LibraryResultMode.recent => sortedRecentVideos(store),
+      LibraryResultMode.favorites => sortedFavoriteVideos(store),
       LibraryResultMode.local => const <VideoItem>[],
       LibraryResultMode.library => filteredVideos,
     };
@@ -243,10 +238,10 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
       tagGroups.expand((group) => group.items),
       store.tagQueryContext,
     );
-    final favoriteCount =
-        store.videos.values.where((item) => item.isFavorite).length;
-    final missingCount =
-        store.videos.values.where((item) => item.isMissing).length;
+    final sidebarMetrics = runtime.sidebarMetricsCache.resolve(
+      revision: queryDataRevision(store),
+      videos: store.videos.values,
+    );
     Widget buildSidebar({required bool dense, double? width}) {
       return LibrarySidebar(
         roots: store.roots,
@@ -259,8 +254,8 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
         selectedChildTags: runtime.selectedChildTags,
         selectedGroupTagIds: runtime.selectedGroupTagIds,
         excludedTagIds: runtime.excludedTagIds,
-        favoriteCount: favoriteCount,
-        missingCount: missingCount,
+        favoriteCount: sidebarMetrics.favoriteCount,
+        missingCount: sidebarMetrics.missingCount,
         favoriteVideosSelected:
             runtime.resultMode == LibraryResultMode.favorites ||
                 runtime.showFavoritesOnly,
@@ -311,7 +306,7 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
         childParentTag: childParentTag,
         childTags: childTags,
         childTagItemsByParent: childTagItemsByParent,
-        favoriteCount: favoriteCount,
+        favoriteCount: sidebarMetrics.favoriteCount,
         showFavoritesOnly: runtime.showFavoritesOnly,
         dense: dense,
         panelWidth: panelWidth,
@@ -343,6 +338,22 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
             : () => setState(
                   () => runtime.viewPreferences.setTagDiscoveryPanelOpen(false),
                 ),
+      );
+    }
+
+    /** 紧凑与空状态入口共用同一筛选面板，不复制筛选逻辑。 */
+    void openFilters() {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: librarySurface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+        ),
+        builder: (_) => FractionallySizedBox(
+          heightFactor: 0.92,
+          child: buildFilterPanel(dense: true),
+        ),
       );
     }
 
@@ -411,17 +422,19 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
                                 preserveScrollOnResultDelta,
                           ),
                     _ => videos.isEmpty
-                        ? EmptyState(
+                        ? LibraryEmptyRecovery(
                             hasLibrary: store.videos.isNotEmpty,
+                            hasActiveFilters: runtime.resultMode ==
+                                    LibraryResultMode.library &&
+                                hasActiveFilters,
                             message: runtime.resultMode ==
                                     LibraryResultMode.favorites
                                 ? '\u8fd8\u6ca1\u6709\u6536\u85cf\u89c6\u9891'
                                 : null,
-                            onAddFiles: runtime.resultMode ==
-                                        LibraryResultMode.library &&
-                                    store.videos.isEmpty
-                                ? pickVideoFiles
-                                : null,
+                            onAddFolder: pickFolder,
+                            onAddFiles: pickVideoFiles,
+                            onClearFilters: clearAllFilters,
+                            onOpenFilters: openFilters,
                           )
                         : VideoGrid(
                             videos: videos,
@@ -551,20 +564,7 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
         onCancelSelectionMode: runtime.librarySelectionMode
             ? () => setState(runtime.librarySelection.clear)
             : null,
-        onOpenFilters: () {
-          showModalBottomSheet<void>(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: librarySurface,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
-            ),
-            builder: (_) => FractionallySizedBox(
-              heightFactor: 0.92,
-              child: buildFilterPanel(dense: true),
-            ),
-          );
-        },
+        onOpenFilters: openFilters,
       );
     }
 

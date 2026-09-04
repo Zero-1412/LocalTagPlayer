@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/library/domain/library_query_snapshot.dart';
 import '../../features/library/domain/tag_editor_candidates.dart';
+import '../../features/library/presentation/library_startup_state.dart';
 import '../../features/update/domain/app_update_service.dart';
 import '../../models/library_scan_models.dart';
 import '../../models/library_sort.dart';
@@ -31,6 +32,26 @@ import 'library_page_runtime.dart';
 abstract class LibraryPageStateHost<T extends StatefulWidget> extends State<T> {
   /** 当前媒体库 Route 的运行时状态。 */
   final LibraryPageRuntime runtime = LibraryPageRuntime();
+
+  /** 根据显式首屏状态返回加载/失败页；ready 时交还主页面构建。 */
+  Widget? buildLibraryStartupView(VoidCallback onRetry) {
+    if (runtime.startupStatus == LibraryStartupStatus.failed) {
+      return LibraryStartupFailureView(onRetry: onRetry);
+    }
+    if (runtime.store == null || runtime.thumbnailService == null) {
+      return const LibraryStartupLoadingView();
+    }
+    return null;
+  }
+
+  /** 路径预检失败时标记 missing，不删除稳定身份或用户数据。 */
+  Future<void> markVideoMissing(VideoItem item);
+
+  /** 在媒体库切换收藏并处理持久化反馈。 */
+  Future<void> toggleFavorite(VideoItem item);
+
+  /** 在播放器切换收藏，失败由播放器前台统一反馈。 */
+  Future<void> toggleFavoriteFromPlayer(VideoItem item);
 
   /** facade、设置与媒体服务的页面应用边界。 */
   LibraryPageApplicationService get applicationService;
@@ -176,11 +197,6 @@ abstract class LibraryPageStateHost<T extends StatefulWidget> extends State<T> {
 
   /** 把扫描差量应用到现有 query owner。 */
   void applyLibraryScanDelta(LibraryScanCommitResult result);
-
-  /** 串行清理失效数据库记录，不删除磁盘文件。 */
-  Future<int> cleanupMissingOrUnreadableVideos(
-    LibraryApplicationFacade store,
-  );
 
   /** 构建当前 `FilterQuery`，不复制过滤算法。 */
   FilterQuery currentFilterQuery();

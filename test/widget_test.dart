@@ -3711,7 +3711,6 @@ void main() {
               resumeBehavior: PlaybackResumeBehavior.ask,
               rendererPreference: PlayerRendererPreference.automatic,
               confirmBeforeDeletingVideo: true,
-              autoRemoveMissingOrUnreadableVideos: false,
               onOpenPlayback: () {},
               onOpenVideoQuality: () {},
               onOpenPlayerInteraction: () {},
@@ -3739,7 +3738,7 @@ void main() {
     expect(find.text('当前策略'), findsOneWidget);
     expect(find.text('3 个入口'), findsNWidgets(2));
     expect(find.text('2 个入口'), findsOneWidget);
-    expect(find.text('保留无效记录'), findsOneWidget);
+    expect(find.text('仅手动确认清理'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('settings.category.cache')),
       findsOneWidget,
@@ -3903,7 +3902,7 @@ void main() {
     );
     expect(
       find.byKey(
-        const ValueKey('settings.fileDeletion.autoRemoveMissingOrUnreadable'),
+        const ValueKey('settings.fileDeletion.removeMissingOrUnreadable'),
       ),
       findsOneWidget,
     );
@@ -3911,6 +3910,16 @@ void main() {
       find.byKey(const ValueKey('settings.fileDeletion.confirm')),
       findsOneWidget,
     );
+    await tester.tap(
+      find.byKey(
+        const ValueKey('settings.fileDeletion.removeMissingOrUnreadable'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('清理缺失或不可读记录？'), findsOneWidget);
+    expect(find.textContaining('标签关联、收藏、播放记录、进度和备份快照'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey('settings.section.back')),
     );
@@ -4048,14 +4057,13 @@ void main() {
   testWidgets('delete file settings remain readable at 150 percent',
       (tester) async {
     bool? confirmChanged;
-    bool? autoRemoveChanged;
+    var removeRequested = 0;
     await tester.pumpWidget(
       deleteFileSettingsSmokeHarness(
         confirmBeforeDeletingVideo: false,
         textScaler: TextScaler.linear(1.5),
         onConfirmChanged: (value) => confirmChanged = value,
-        onAutoRemoveMissingOrUnreadableChanged: (value) =>
-            autoRemoveChanged = value,
+        onRemoveMissingOrUnreadable: () => removeRequested += 1,
       ),
     );
     await tester.pump();
@@ -4071,7 +4079,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
       find.byKey(const ValueKey(
-        'settings.fileDeletion.autoRemoveMissingOrUnreadable',
+        'settings.fileDeletion.removeMissingOrUnreadable',
       )),
       findsOneWidget,
     );
@@ -4081,11 +4089,11 @@ void main() {
     );
     await tester.tap(
       find.byKey(const ValueKey(
-        'settings.fileDeletion.autoRemoveMissingOrUnreadable',
+        'settings.fileDeletion.removeMissingOrUnreadable',
       )),
     );
     expect(confirmChanged, isTrue);
-    expect(autoRemoveChanged, isFalse);
+    expect(removeRequested, 1);
   });
 
   testWidgets('player interaction settings cards only forward page intents',
@@ -5293,7 +5301,7 @@ void main() {
     });
     expect(settings.confirmBeforeDeletingVideo, isTrue);
     expect(settings.toJson()['moveDeletedFileToTrash'], isTrue);
-    expect(settings.autoRemoveMissingOrUnreadableVideos, isTrue);
+    expect(settings.autoRemoveMissingOrUnreadableVideos, isFalse);
     expect(settings.shortcuts[PlayerShortcutAction.navigateBack], 'Escape');
     expect(settings.shortcuts[PlayerShortcutAction.playPause], 'Control+K');
     expect(PlaybackSettings.isSupportedShortcut('Alt+K'), isTrue);

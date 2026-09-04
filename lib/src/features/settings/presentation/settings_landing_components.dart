@@ -17,7 +17,6 @@ class SettingsDesktopRail extends StatelessWidget {
     required this.resumeBehavior,
     required this.rendererPreference,
     required this.confirmBeforeDeletingVideo,
-    required this.autoRemoveMissingOrUnreadableVideos,
   });
 
   /** 当前继续观看策略。 */
@@ -29,16 +28,11 @@ class SettingsDesktopRail extends StatelessWidget {
   /** 删除文件前是否显示确认。 */
   final bool confirmBeforeDeletingVideo;
 
-  /** 扫描后是否清理缺失或不可读记录。 */
-  final bool autoRemoveMissingOrUnreadableVideos;
-
   @override
   Widget build(BuildContext context) {
     final rendererLabel = PlaybackSettings.rendererLabelFor(rendererPreference);
     final resumeLabel = PlaybackSettings.resumeLabelFor(resumeBehavior);
     final deletionLabel = confirmBeforeDeletingVideo ? '删除前提示' : '不再提示';
-    final missingLabel =
-        autoRemoveMissingOrUnreadableVideos ? '自动清理无效记录' : '保留无效记录';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -118,7 +112,7 @@ class SettingsDesktopRail extends StatelessWidget {
               const SizedBox(height: 8),
               _SettingsPolicyRow(label: '文件删除', value: deletionLabel),
               const SizedBox(height: 8),
-              _SettingsPolicyRow(label: '无效记录', value: missingLabel),
+              const _SettingsPolicyRow(label: '无效记录', value: '仅手动确认清理'),
             ],
           ),
         ),

@@ -129,9 +129,9 @@ class AgentEvalToolTest(unittest.TestCase):
         """目录必须覆盖触发、能力、回归和动态安全用例。"""
 
         summary = agent_eval.validate_catalog()
-        self.assertEqual(67, summary["case_count"])
+        self.assertEqual(68, summary["case_count"])
         self.assertEqual(44, summary["suite_counts"]["trigger"])
-        self.assertEqual(13, summary["suite_counts"]["regression"])
+        self.assertEqual(14, summary["suite_counts"]["regression"])
         self.assertEqual(4, summary["suite_counts"]["security"])
         self.assertEqual(11, len(summary["skill_trigger_coverage"]))
         self.assertEqual(11, len(summary["governance"]["skills"]))

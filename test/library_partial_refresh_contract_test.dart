@@ -19,6 +19,9 @@ void main() {
     final lifecycle = File(
       'lib/src/pages/library/library_page_lifecycle_mixin.dart',
     ).readAsStringSync();
+    final playback = File(
+      'lib/src/pages/library/library_page_playback_mixin.dart',
+    ).readAsStringSync();
     final recent = File(
       'lib/src/pages/library/library_page_recent_mixin.dart',
     ).readAsStringSync();
@@ -44,7 +47,9 @@ void main() {
     expect(commands, contains('removedVideoIds: <String>[item.videoId]'));
     expect(commands, contains('removedVideoIds: result.deletedVideoIds'));
     expect(routes, contains('videoIdsBeforeSettings'));
-    expect(lifecycle, contains('videoIdsBeforeCleanup'));
+    expect(lifecycle, isNot(contains('removeMissingOrUnreadableVideos')));
+    expect(playback, contains('await markVideoMissing(selectedItem)'));
+    expect(commands, contains('item.isMissing = true'));
     expect(recent, contains('changedVideos: targets'));
     expect(page, contains('preserveScrollOnResultDelta'));
     expect(grid, contains('_preserveResultDelta'));

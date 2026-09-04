@@ -82,7 +82,7 @@ class PlaybackSettings {
     required this.darkSceneEnhancementEnabled,
     required this.hdrDynamicToneMappingExperimentEnabled,
     required this.confirmBeforeDeletingVideo,
-    this.autoRemoveMissingOrUnreadableVideos = true,
+    this.autoRemoveMissingOrUnreadableVideos = false,
   }) : compressionEnhancementMode = compressionEnhancementMode ??
             (automaticQualityEnhancementEnabled == true
                 ? PlayerCompressionEnhancementMode.automatic
@@ -110,7 +110,7 @@ class PlaybackSettings {
     darkSceneEnhancementEnabled: false,
     hdrDynamicToneMappingExperimentEnabled: false,
     confirmBeforeDeletingVideo: true,
-    autoRemoveMissingOrUnreadableVideos: true,
+    autoRemoveMissingOrUnreadableVideos: false,
   );
   /** 播放内核已验证并允许持久化的固定倍速档位。 */
   static const playbackRates = <double>[0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -274,7 +274,11 @@ class PlaybackSettings {
   final bool hdrDynamicToneMappingExperimentEnabled;
   /** 删除视频前是否显示影响范围确认。视频文件动作始终进入系统回收站。 */
   final bool confirmBeforeDeletingVideo;
-  /** 是否只从数据库自动移除安全确认的 missing 或不可读视频；不授权删除磁盘文件。 */
+  /**
+   * 历史自动清理设置键，仅用于兼容旧设置文件。
+   *
+   * 生产入口不再读取该值触发删除；缺失记录默认保留，清理必须由用户显式确认。
+   */
   final bool autoRemoveMissingOrUnreadableVideos;
 
   bool get hardwareDecodingEnabled => hwdec != 'no';

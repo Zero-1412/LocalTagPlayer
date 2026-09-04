@@ -170,12 +170,6 @@ mixin LibraryPageScanMixin<T extends StatefulWidget>
         diagnostics?.markPostApply();
         final applyWatch = Stopwatch()..start();
         applyLibraryScanDelta(result);
-        final store = runtime.store;
-        if (store != null &&
-            runtime.playbackSettings.autoRemoveMissingOrUnreadableVideos) {
-          // 先反馈扫描完成，再异步串行清理；不可读探测不得阻塞 UI。
-          unawaited(cleanupMissingOrUnreadableVideos(store));
-        }
         applyWatch.stop();
         diagnostics?.recordStage(
           'ui.delta_schedule',

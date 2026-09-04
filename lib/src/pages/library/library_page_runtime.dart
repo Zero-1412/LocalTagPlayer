@@ -6,6 +6,7 @@ import '../../core/tag_rules.dart';
 import '../../features/library/application/library_continue_watching_command_executor.dart';
 import '../../features/library/application/library_facet_count_controller.dart';
 import '../../features/library/application/library_file_command_executor.dart';
+import '../../features/library/application/library_favorite_command_executor.dart';
 import '../../features/library/application/library_manual_tag_command_executor.dart';
 import '../../features/library/application/library_playback_queue_controller.dart';
 import '../../features/library/application/library_query_controller.dart';
@@ -13,6 +14,7 @@ import '../../features/library/application/library_revision_tracker.dart';
 import '../../features/library/application/library_scan_lifecycle_controller.dart';
 import '../../features/library/application/library_selection_controller.dart';
 import '../../features/library/application/library_sort_controller.dart';
+import '../../features/library/application/library_sidebar_metrics_cache.dart';
 import '../../features/library/application/library_source_navigation_controller.dart';
 import '../../features/library/application/library_view_preferences_controller.dart';
 import '../../models/library_scan_models.dart';
@@ -31,6 +33,9 @@ import '../../features/player/application/player_fullscreen_lifecycle_controller
 
 // ignore_for_file: slash_for_doc_comments
 
+/** 媒体库首屏加载状态；失败必须保留可见恢复入口。 */
+enum LibraryStartupStatus { loading, ready, failed }
+
 /**
  * 保存媒体库 Route 的可变运行时状态与既有细粒度 controller。
  *
@@ -38,6 +43,10 @@ import '../../features/player/application/player_fullscreen_lifecycle_controller
  * filtered queue owner；对应状态仍由既有 controller 唯一持有。
  */
 class LibraryPageRuntime {
+  /** 首屏加载、就绪或可重试失败状态。 */
+  LibraryStartupStatus startupStatus = LibraryStartupStatus.loading;
+  /** 防止快速重试并发创建多套 Store 与媒体服务。 */
+  bool startupLoadInFlight = false;
   /** 当前 Route 使用的媒体库 facade；加载完成前为 null。 */
   LibraryApplicationFacade? store;
   /** 播放进度的串行持久化队列；随媒体库加载和页面释放。 */
@@ -52,8 +61,6 @@ class LibraryPageRuntime {
   VideoSimilarityScanController? similarityScanController;
   /** 页面与播放器 Route 共享的最新播放设置快照。 */
   PlaybackSettings playbackSettings = PlaybackSettings.defaults;
-  /** 自动清理失效记录的复用 Future，防止重复执行。 */
-  Future<int>? unavailableCleanupFuture;
   /** 数据备份开关的最新页面快照。 */
   DataBackupSettings dataBackupSettings = DataBackupSettings.defaults;
   /** 筛选、搜索、结果缓存与 latest-only 发布的唯一 owner。 */
@@ -67,6 +74,9 @@ class LibraryPageRuntime {
   /** 定位、改名与删除的平台/Repository 编排命令执行器。 */
   final LibraryFileCommandExecutor fileCommandExecutor =
       const LibraryFileCommandExecutor();
+  /** 收藏乐观更新与持久化失败回滚的唯一命令边界。 */
+  final LibraryFavoriteCommandExecutor favoriteCommandExecutor =
+      const LibraryFavoriteCommandExecutor();
   /** 单视频 manual 标签替换与失败回滚命令执行器。 */
   final LibraryManualTagCommandExecutor manualTagCommandExecutor =
       const LibraryManualTagCommandExecutor();
@@ -131,6 +141,9 @@ class LibraryPageRuntime {
   LibraryScanUiDiagnostics? activeScanUiDiagnostics;
   /** 排序字段、方向和稳定指纹的唯一 owner。 */
   final LibrarySortController sortController = LibrarySortController();
+  /** 普通 rebuild 不重复遍历全库的侧栏布尔统计缓存。 */
+  final LibrarySidebarMetricsCache sidebarMetricsCache =
+      LibrarySidebarMetricsCache();
   /** 网格密度与左右面板显隐的唯一 owner。 */
   final LibraryViewPreferencesController viewPreferences =
       LibraryViewPreferencesController(

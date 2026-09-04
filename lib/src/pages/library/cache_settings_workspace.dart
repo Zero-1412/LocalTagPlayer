@@ -62,7 +62,7 @@ class CacheSettingsWorkspace extends StatelessWidget {
     required this.onRefreshCache,
     required this.onPlaybackSettingsChanged,
     required this.onConfirmDeleteChanged,
-    required this.onAutoCleanupChanged,
+    required this.onRemoveMissingOrUnreadable,
     required this.onFullscreenQueueChanged,
     required this.onResetShortcuts,
     required this.onShortcutCaptured,
@@ -112,8 +112,8 @@ class CacheSettingsWorkspace extends StatelessWidget {
       onPlaybackSettingsChanged;
   /** 提交删除前确认开关意图。 */
   final ValueChanged<bool> onConfirmDeleteChanged;
-  /** 提交自动清理失效记录意图；命令繁忙时为 null。 */
-  final ValueChanged<bool>? onAutoCleanupChanged;
+  /** 打开缺失记录显式清理确认。 */
+  final VoidCallback onRemoveMissingOrUnreadable;
   /** 提交全屏队列开关意图。 */
   final ValueChanged<bool> onFullscreenQueueChanged;
   /** 恢复默认快捷键。 */
@@ -154,8 +154,6 @@ class CacheSettingsWorkspace extends StatelessWidget {
               resumeBehavior: settings.resumeBehavior,
               rendererPreference: settings.rendererPreference,
               confirmBeforeDeletingVideo: settings.confirmBeforeDeletingVideo,
-              autoRemoveMissingOrUnreadableVideos:
-                  settings.autoRemoveMissingOrUnreadableVideos,
               onOpenPlayback: () =>
                   onOpenSection(CacheSettingsSection.playback),
               onOpenVideoQuality: () =>
@@ -213,11 +211,10 @@ class CacheSettingsWorkspace extends StatelessWidget {
                   DeleteFileSettingsPanel(
                     confirmBeforeDeletingVideo:
                         settings.confirmBeforeDeletingVideo,
-                    autoRemoveMissingOrUnreadableVideos:
-                        settings.autoRemoveMissingOrUnreadableVideos,
                     onConfirmChanged: onConfirmDeleteChanged,
-                    onAutoRemoveMissingOrUnreadableChanged:
-                        unavailableCleanupRunning ? null : onAutoCleanupChanged,
+                    onRemoveMissingOrUnreadable: unavailableCleanupRunning
+                        ? null
+                        : onRemoveMissingOrUnreadable,
                   ),
                   const SizedBox(height: 16),
                 ],

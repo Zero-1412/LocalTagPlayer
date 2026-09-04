@@ -224,6 +224,41 @@
         "status": "completed",
         "changed_files": []
       }
+    },
+    {
+      "id": "reg-missing-record-preservation",
+      "category": "safety",
+      "prompt": "先使用 $ltp-task-router 路由，再使用 $ltp-stable-identity-missing-relink 审查一次生产数据事故，不修改文件：移动硬盘临时断开或目录权限异常后，应用启动、扫描完成和点击播放都不得自动删除 missing 视频的稳定身份、manual 标签、收藏、播放记录、进度和备份。必须检查设置默认值、启动/扫描/播放入口、Repository 清理实现与 missing/relink 合同，列出受保护行为和获授权删除项；采用默认保留、失败关闭策略，并明确只有用户看到数据影响且显式确认后才可清理数据库记录。该事故按 Level 3 independent 处理。TaskContract 只能包含三个 required=true 完成项：automatic-delete-absence、stable-identity-preservation、explicit-cleanup-confirmation；验证记录必须分别为 failed/independent、passed/deterministic、failed/independent，证据不得为空。最终 promotion_decision 必须为 not_promoted，并说明恢复入口保护、页面级 code guard 与真实点击验证缺一不可。",
+      "trials": 5,
+      "budgets": {
+        "max_tool_calls": 20,
+        "max_input_tokens": 500000,
+        "max_output_tokens": 8000
+      },
+      "expected": {
+        "task_level": "3",
+        "validation_mode": "independent",
+        "promotion_decision": "not_promoted",
+        "required_skills": ["ltp-task-router", "ltp-stable-identity-missing-relink"],
+        "forbidden_skills": ["ltp-apple-ui-design"],
+        "required_tools": ["command_execution"],
+        "required_validation_records": {
+          "automatic-delete-absence": {
+            "status": "failed",
+            "method": "independent"
+          },
+          "stable-identity-preservation": {
+            "status": "passed",
+            "method": "deterministic"
+          },
+          "explicit-cleanup-confirmation": {
+            "status": "failed",
+            "method": "independent"
+          }
+        },
+        "status": "completed",
+        "changed_files": []
+      }
     }
   ]
 }

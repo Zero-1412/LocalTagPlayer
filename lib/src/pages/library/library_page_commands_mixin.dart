@@ -16,6 +16,81 @@ import 'library_page_state_host.dart';
 /** LibraryPageCommandsMixin 按既有一致性边界承载页面协调逻辑，不复制业务状态 owner。 */
 mixin LibraryPageCommandsMixin<T extends StatefulWidget>
     on LibraryPageStateHost<T> {
+  /**
+   * 路径预检失败时只持久化 missing 状态，保留稳定身份及全部用户数据。
+   *
+   * 写入失败会恢复内存快照，避免界面与数据库对同一记录产生不同判断。
+   */
+  @override
+  Future<void> markVideoMissing(VideoItem item) async {
+    final store = runtime.store;
+    if (store == null) {
+      return;
+    }
+    final wasMissing = item.isMissing;
+    item.isMissing = true;
+    try {
+      await store.upsertVideo(item);
+    } catch (error) {
+      item.isMissing = wasMissing;
+      debugPrint('MISSING_STATE_SAVE_FAILED type=${error.runtimeType}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('路径已失效，但缺失状态保存失败；请重新扫描后重试')),
+        );
+      }
+      return;
+    }
+    if (mounted) {
+      markLibraryDataChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('路径已失效；记录和用户数据已保留，可重新关联恢复')),
+      );
+    }
+  }
+
+  /** 播放器内收藏提交失败时回滚，由前台播放器统一显示失败反馈。 */
+  @override
+  Future<void> toggleFavoriteFromPlayer(VideoItem item) async {
+    final store = runtime.store;
+    if (store == null) {
+      throw StateError('媒体库尚未就绪，请稍后重试');
+    }
+    await runtime.favoriteCommandExecutor.toggle(
+      item,
+      commit: store.upsertVideo,
+    );
+    runtime.playerScopedLibraryDataChanged = true;
+  }
+
+  /** 媒体库收藏即时更新；持久化失败时恢复旧值并显示可见反馈。 */
+  @override
+  Future<void> toggleFavorite(VideoItem item) async {
+    final store = runtime.store;
+    if (store == null) {
+      return;
+    }
+    final operation = runtime.favoriteCommandExecutor.toggle(
+      item,
+      commit: store.upsertVideo,
+    );
+    setState(() {});
+    try {
+      await operation;
+    } catch (_) {
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('收藏状态保存失败，已恢复原状态')),
+        );
+      }
+      return;
+    }
+    if (mounted) {
+      markLibraryDataChanged();
+    }
+  }
+
   @override
   Future<void> deleteVideoFromPlayer(VideoItem item) async {
     await deleteConfirmedLibraryVideo(item);

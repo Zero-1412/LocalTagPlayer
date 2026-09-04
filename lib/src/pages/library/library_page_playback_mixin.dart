@@ -87,19 +87,8 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     }
     final preparedQueue = selection.queue;
     final selectedItem = selection.selectedItem;
-    if (runtime.playbackSettings.autoRemoveMissingOrUnreadableVideos &&
-        !await fileSystem.fileExists(selectedItem.path)) {
-      // 点击与后台清理可能竞态；播放前再次确认路径，失效时只删数据库记录并阻止进入错误页。
-      await store.deleteVideo(selectedItem.path);
-      if (mounted) {
-        markLibraryDataChanged(
-          tagDefinitionsChanged: true,
-          removedVideoIds: <String>[selectedItem.videoId],
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('路径已失效，已从媒体库移除记录')),
-        );
-      }
+    if (!await fileSystem.fileExists(selectedItem.path)) {
+      await markVideoMissing(selectedItem);
       return;
     }
     final scanWasActive = runtime.isScanning;
@@ -293,6 +282,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       store.resumeDataBackupAfterPlayback();
     }
   }
+
   /**
    * Route 弹回后立即发布播放器内已提交的数据差量。
    *
@@ -323,6 +313,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     runtime.playerScopedTagDefinitionsChanged = false;
     runtime.playerScopedRemovedVideoIds.clear();
   }
+
   /**
    * 为用户刚点击且详情未知的视频执行一次独立高优先级预检。
    *
@@ -359,6 +350,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       service.dispose();
     }
   }
+
   /** 返回媒体库后分三次采样，观察原生纹理释放与 Flutter ImageCache 的衰减是否同步。 */
   Future<void> sampleMemoryAfterPlayerRelease() async {
     await PlayerMemoryDiagnostics.logStage('library_after_release_0ms');
@@ -367,12 +359,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     await PlayerMemoryDiagnostics.logStage('library_after_release_2000ms');
   }
-  /** 播放器内收藏只写当前视频，返回媒体库后再做一次无计数轻刷新。 */
-  Future<void> toggleFavoriteFromPlayer(VideoItem item) async {
-    item.isFavorite = !item.isFavorite;
-    await runtime.store?.upsertVideo(item);
-    runtime.playerScopedLibraryDataChanged = true;
-  }
+
   /** 将播放位置和最近播放时间写入稳定 videoId 对应的视频记录。 */
   Future<void> updatePlaybackProgress(
     VideoItem item,
@@ -400,6 +387,7 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       markPlaybackTimestampChanged(item);
     }
   }
+
   /** 播放器错误面板复用 missing 管理页的安全 picker 与 fingerprint 校验。 */
   Future<bool> relinkMissingFromPlayer(VideoItem item) async {
     final store = runtime.store;
@@ -455,14 +443,6 @@ mixin LibraryPagePlaybackMixin<T extends StatefulWidget>
       renameFile: fileSystem.renameFile,
       commitRenamedPathById: store.renameVideoPathById,
     );
-  }
-
-  Future<void> toggleFavorite(VideoItem item) async {
-    setState(() => item.isFavorite = !item.isFavorite);
-    await runtime.store?.upsertVideo(item);
-    if (mounted) {
-      markLibraryDataChanged();
-    }
   }
 
   /** 通过共享文件系统平台边界定位视频；页面不拼接 Windows 或其它平台命令。 */

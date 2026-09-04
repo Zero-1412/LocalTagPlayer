@@ -2157,6 +2157,10 @@ void main() {
     expect(page, contains('runtime.fileCommandExecutor.renameById('));
     expect(page, contains('runtime.fileCommandExecutor.deleteById('));
     expect(page, contains('runtime.fileCommandExecutor.deleteAllById('));
+    expect(page, isNot(contains('store.deleteVideo(selectedItem.path)')));
+    expect(page, isNot(contains('cleanupMissingOrUnreadableVideos(')));
+    expect(page, contains('item.isMissing = true'));
+    expect(page, contains('记录和用户数据已保留，可重新关联恢复'));
     expect(page, contains('deleteVideoAndMergeUserDataById('));
     expect(page, contains('showPlayerDeleteConfirmationDialog('));
     expect(page, contains('showBatchVideoDeleteConfirmationDialog('));
@@ -2167,6 +2171,44 @@ void main() {
     expect(deleteDialog, contains("const Text('移入回收站并移除记录')"));
     expect(deleteDialog, isNot(contains('仅移出媒体库')));
     expect(deleteDialog, contains("ValueKey('deleteDialog.dontAskAgain')"));
+  });
+
+  test('startup and favorite failures remain recoverable', () {
+    final lifecycle = File(
+      'lib/src/pages/library/library_page_lifecycle_mixin.dart',
+    ).readAsStringSync();
+    final stateHost = File(
+      'lib/src/pages/library/library_page_state_host.dart',
+    ).readAsStringSync();
+    final favorite = File(
+      'lib/src/features/library/application/'
+      'library_favorite_command_executor.dart',
+    ).readAsStringSync();
+
+    expect(lifecycle, contains('LibraryStartupStatus.failed'));
+    expect(lifecycle, contains('await _loadStartupData()'));
+    expect(stateHost, contains('LibraryStartupFailureView(onRetry: onRetry)'));
+    expect(favorite, contains('item.isFavorite = previous'));
+    expect(favorite, contains('rethrow'));
+    expect(favorite, isNot(contains("import 'package:flutter/")));
+  });
+
+  test('library empty recovery and sidebar metrics stay revision-scoped', () {
+    final page = File(
+      'lib/src/pages/library/library_page.dart',
+    ).readAsStringSync();
+    final metrics = File(
+      'lib/src/features/library/application/'
+      'library_sidebar_metrics_cache.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('LibraryEmptyRecovery('));
+    expect(page, contains('onClearFilters: clearAllFilters'));
+    expect(page, contains('onOpenFilters: openFilters'));
+    expect(page, contains('runtime.sidebarMetricsCache.resolve('));
+    expect(metrics, contains('_revision == revision'));
+    expect(metrics, contains('for (final item in videos)'));
+    expect(metrics, isNot(contains("import 'package:flutter/")));
   });
 
   test('manual tag replacement is an explicit compensating command', () {
