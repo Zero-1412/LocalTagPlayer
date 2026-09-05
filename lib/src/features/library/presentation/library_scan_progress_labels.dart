@@ -1,7 +1,20 @@
 import '../../../models/library_scan_models.dart';
 import '../../../services/media/media_details_service.dart';
+import '../application/library_scan_lifecycle_controller.dart';
 
 // ignore_for_file: slash_for_doc_comments
+
+/** 依据同一生命周期快照选择扫描或后续解析文案，取消状态优先显示。 */
+String? libraryActiveProgressLabel(
+    LibraryScanLifecycleState<MediaDetailsProgress> state) {
+  if (state.isScanning) {
+    return state.isCancelling
+        ? '正在取消扫描…'
+        : libraryScanProgressLabel(state.scanProgress);
+  }
+  final progress = state.mediaImportProgress;
+  return progress == null ? null : libraryMediaImportProgressLabel(progress);
+}
 
 /** 把后台媒体解析快照转换为结果区的稳定短文案。 */
 String libraryMediaImportProgressLabel(MediaDetailsProgress progress) {

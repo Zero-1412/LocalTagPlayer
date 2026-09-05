@@ -1756,6 +1756,9 @@ void main() {
       ),
     );
 
+    final displayedVideos = ValueNotifier<List<VideoItem>>(videos);
+    addTearDown(displayedVideos.dispose);
+    List<VideoItem>? openedQueue;
     await tester.binding.setSurfaceSize(const Size(1300, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
@@ -1765,16 +1768,20 @@ void main() {
             alignment: Alignment.topLeft,
             child: ValueListenableBuilder<double>(
               valueListenable: width,
-              builder: (context, currentWidth, _) => SizedBox(
+              builder: (context, currentWidth, child) => SizedBox(
                 width: currentWidth,
                 height: 700,
-                child: VideoGrid(
-                  videos: videos,
+                child: child,
+              ),
+              child: ValueListenableBuilder<List<VideoItem>>(
+                valueListenable: displayedVideos,
+                builder: (context, currentVideos, child) => VideoGrid(
+                  videos: currentVideos,
                   thumbnailService: thumbnailService,
                   playbackSettings: PlaybackSettings.defaults,
                   dense: false,
                   columnReferenceWidth: 900,
-                  onOpen: (_, __) {},
+                  onOpen: (_, queue) => openedQueue = queue,
                   onToggleFavorite: (_) {},
                   onDelete: (_) {},
                 ),
@@ -1792,6 +1799,8 @@ void main() {
             as SliverGridDelegateWithFixedCrossAxisCount;
     expect(gridDelegate().crossAxisCount, 3);
 
+    final firstCard = tester
+        .widget<InteractiveVideoCard>(find.byType(InteractiveVideoCard).first);
     width.value = 1200;
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
@@ -1803,6 +1812,17 @@ void main() {
     expect(tester.getSize(resultsFinder).width, closeTo(1200, 0.01));
     // 窗口基准宽度没有变化时，侧栏动画结束后也不能跨断点增加列数。
     expect(gridDelegate().crossAxisCount, 3);
+    // 宽度变化复用卡片子树；筛选快照改变必须更新内容和来源队列。
+    expect(tester.widget(find.byType(InteractiveVideoCard).first),
+        same(firstCard));
+    displayedVideos.value = videos.reversed.toList();
+    await tester.pump();
+    await tester.pump();
+    final refreshed = tester
+        .widget<InteractiveVideoCard>(find.byType(InteractiveVideoCard).first);
+    expect(refreshed.item.videoId, videos.last.videoId);
+    refreshed.onOpen();
+    expect(openedQueue, same(displayedVideos.value));
     expect(tester.takeException(), isNull);
   });
 

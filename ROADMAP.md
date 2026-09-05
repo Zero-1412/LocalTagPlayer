@@ -57,9 +57,9 @@ Phase 3–6 不得改变 `FilterQuery` 语义、来源 filtered queue、用户�
 
 ## P2：有证据再推进
 
-当前执行顺序：优先修复扫描 revision 更新期间当前查询未重新发布的正确性阻塞 →
-分析扫描、标签动画和结果替换的 UI 构建成本 → 降低首次查询索引准备成本 →
-在可丢弃 Windows 环境完成升级、恢复与原生交付验收。两轮扫描超时、阶段帧与重复启动证据见
+扫描查询接续已补反例并修复；已实施进度局部刷新、动画子树复用及 FTS 事务内聚合写入。
+后续复测索引准备、提交与发布尾部，再于可丢弃 Windows 环境验收升级、恢复和原生路径。
+修复见 `docs/qa/scan_pending_query_fix_20260905.md`；历史超时与启动证据见
 `docs/qa/phase_frames_and_upgrade_acceptance_20260905.md`；本轮不改变过滤语义或播放队列，
 不通过放宽帧门槛或移除 epoch 校验换取通过。索引同代次请求合并的证据见
 `docs/qa/query_correctness_and_baseline_20260905.md`；增量索引仍须另有收益与一致性证据。

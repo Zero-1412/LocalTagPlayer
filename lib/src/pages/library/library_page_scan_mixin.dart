@@ -147,6 +147,7 @@ mixin LibraryPageScanMixin<T extends StatefulWidget>
     diagnostics?.start();
     runtime.activeScanUiDiagnostics = diagnostics;
     var diagnosticsWillFinish = false;
+    var wasScanning = runtime.isScanning;
     final started = await runtime.scanLifecycleController.run(
       action: (onProgress) async {
         final actionWatch = Stopwatch()..start();
@@ -207,7 +208,13 @@ mixin LibraryPageScanMixin<T extends StatefulWidget>
         if (state.isScanning && progress != null) {
           diagnostics?.recordProgress(progress);
         }
-        setState(() {});
+        // 开始/结束仍更新全页入口可用性；中间进度只通知可见进度区域。
+        if (wasScanning != state.isScanning) {
+          wasScanning = state.isScanning;
+          setState(() {});
+        } else {
+          runtime.scanProgressRevision.value++;
+        }
       },
     );
     if (!started || !diagnosticsWillFinish) {

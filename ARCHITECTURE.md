@@ -84,6 +84,12 @@ FTS 候选短词按 Unicode 码点判断，别名通过 SQLite JSON 解码后写
 跨 revision 请求等待在途事务自然结束后重新核验，失败释放句柄以允许重试。
 `LibraryQueryController` 在候选异步返回后、更新结果缓存和调用诊断前检查请求代次、epoch
 与 dispose 状态，防止旧候选污染新 revision；发布前校验继续保留。
+扫描零差量提交也要比较当前输入的结果 epoch，必要时重新调度最新输入；空差量复用
+相同条件的结果，不额外推进页面标签 revision 或重算计数。索引聚合通过事务内
+`INSERT ... SELECT` 写入派生 FTS，避免全库文本往返 Dart，回滚与完整查询回退保持不变。
+扫描活动中的进度通过页面局部 notifier 更新顶部栏，开始/结束仍刷新全页入口状态；
+标签面板在一次页面构建内复用子树，宽度动画不重复创建标签内容。结果网格也只在同一次
+父级数据构建内缓存可见子树，约束变化重新布局；新筛选/排序/数据快照重建缓存和卡片回调。
 `ResourceScheduler` 除 lease 预算外提供 pending request cancellation；取消只移除尚未启动的工作，
 已经取得 lease 的 FFmpeg/SQLite 工作必须自然收尾。详见 ADR_004 和
 `docs/architecture/ADR_005_EXTERNAL_MODULE_COMPARISON_AND_GAPS.md`。

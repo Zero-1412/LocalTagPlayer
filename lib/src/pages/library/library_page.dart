@@ -473,100 +473,97 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
       );
     }
 
-    Widget buildTopBar(LayoutSize layoutSize) {
-      return ReferenceTopBar(
-        controller: runtime.searchController,
-        videoCount: displayResultCount,
-        resultCountLabel: resultCountLabel,
-        keyword: runtime.searchController.text,
-        searchFocusNode: runtime.searchFocusNode,
-        selectedTags: runtime.selectedTags.toList()..sort(),
-        selectedChildTags: runtime.selectedChildTags.toList()..sort(),
-        selectedGroupTags: selectedGroupTags,
-        excludedTags: excludedTags,
-        defaultChipLabel: defaultResultLabel,
-        showFavoritesOnly: runtime.showFavoritesOnly,
-        refreshing: runtime.isRefreshingVideos || runtime.isRefreshingCounts,
-        progressLabel: runtime.resultMode != LibraryResultMode.library
-            ? null
-            : runtime.isScanning
-                ? runtime.isCancellingScan
-                    ? '正在取消扫描…'
-                    : libraryScanProgressLabel(runtime.scanProgress)
-                : runtime.mediaImportProgress == null
-                    ? null
-                    : libraryMediaImportProgressLabel(
-                        runtime.mediaImportProgress!,
+    Widget buildTopBar(LayoutSize layoutSize) => ValueListenableBuilder<int>(
+          valueListenable: runtime.scanProgressRevision,
+          builder: (context, revision, child) => ReferenceTopBar(
+            controller: runtime.searchController,
+            videoCount: displayResultCount,
+            resultCountLabel: resultCountLabel,
+            keyword: runtime.searchController.text,
+            searchFocusNode: runtime.searchFocusNode,
+            selectedTags: runtime.selectedTags.toList()..sort(),
+            selectedChildTags: runtime.selectedChildTags.toList()..sort(),
+            selectedGroupTags: selectedGroupTags,
+            excludedTags: excludedTags,
+            defaultChipLabel: defaultResultLabel,
+            showFavoritesOnly: runtime.showFavoritesOnly,
+            refreshing:
+                runtime.isRefreshingVideos || runtime.isRefreshingCounts,
+            progressLabel: runtime.resultMode != LibraryResultMode.library
+                ? null
+                : libraryActiveProgressLabel(
+                    runtime.scanLifecycleController.state),
+            progressValue: runtime.resultMode != LibraryResultMode.library
+                ? null
+                : runtime.isScanning
+                    ? runtime.scanProgress?.fraction
+                    : runtime.mediaImportProgress?.fraction,
+            progressPaused: runtime.isScanning
+                ? (runtime.scanProgress?.isPaused ?? false)
+                : (runtime.mediaImportProgress?.isPaused ?? false),
+            onToggleProgressPaused: runtime.resultMode !=
+                    LibraryResultMode.library
+                ? null
+                : runtime.isScanning
+                    ? (runtime.scanProgress == null ? null : toggleScanPaused)
+                    : runtime.mediaImportProgress == null
+                        ? null
+                        : toggleMediaImportPaused,
+            onCancelProgress: runtime.resultMode == LibraryResultMode.library &&
+                    runtime.isScanning &&
+                    !runtime.isCancellingScan
+                ? cancelScan
+                : null,
+            sortMode: runtime.sortMode,
+            sortDirection: runtime.sortDirection,
+            layoutSize: layoutSize,
+            hasActiveFilters: hasActiveFilters,
+            onSearchChanged: (_) => handleSearchControllerChanged(),
+            onSortChanged: (mode) => applySortChange(sortMode: mode),
+            onSortDirectionToggle: toggleSortDirection,
+            denseResultGrid: runtime.denseResultGrid,
+            onResultViewChanged: setResultView,
+            onOpenTagManager: () => openTagManager(videos),
+            tagPanelOpen: runtime.isTagDiscoveryPanelOpen,
+            onToggleTagPanel: layoutSize == LayoutSize.expanded
+                ? () =>
+                    setState(runtime.viewPreferences.toggleTagDiscoveryPanel)
+                : null,
+            onRemovePrimaryTag: (tag) => mutateFilters(() {
+              runtime.selectedTags.remove(tag);
+              runtime.selectedChildTags.clear();
+            }),
+            onRemoveChildTag: (tag) =>
+                mutateFilters(() => runtime.selectedChildTags.remove(tag)),
+            onRemoveGroupTag: removeGroupTag,
+            onRemoveExcludedTag: removeExcludedTag,
+            onClearKeyword: () => mutateFilters(clearSearchSilently),
+            onClearFavoritesOnly: () =>
+                mutateFilters(() => runtime.showFavoritesOnly = false),
+            onClearAll: hasActiveFilters ? clearAllFilters : null,
+            selectionMode: runtime.librarySelectionMode,
+            selectedCount: runtime.selectedLibraryVideoIds.length,
+            allSelected: allLibraryVideosSelected,
+            onEnterSelectionMode: supportsLibrarySelection
+                ? () => setState(runtime.librarySelection.enter)
+                : null,
+            onToggleSelectAll: runtime.librarySelectionMode
+                ? () => setState(
+                      () => runtime.librarySelection.toggleAll(
+                        videos.map((item) => item.videoId),
                       ),
-        progressValue: runtime.resultMode != LibraryResultMode.library
-            ? null
-            : runtime.isScanning
-                ? runtime.scanProgress?.fraction
-                : runtime.mediaImportProgress?.fraction,
-        progressPaused: runtime.isScanning
-            ? (runtime.scanProgress?.isPaused ?? false)
-            : (runtime.mediaImportProgress?.isPaused ?? false),
-        onToggleProgressPaused: runtime.resultMode != LibraryResultMode.library
-            ? null
-            : runtime.isScanning
-                ? (runtime.scanProgress == null ? null : toggleScanPaused)
-                : runtime.mediaImportProgress == null
-                    ? null
-                    : toggleMediaImportPaused,
-        onCancelProgress: runtime.resultMode == LibraryResultMode.library &&
-                runtime.isScanning &&
-                !runtime.isCancellingScan
-            ? cancelScan
-            : null,
-        sortMode: runtime.sortMode,
-        sortDirection: runtime.sortDirection,
-        layoutSize: layoutSize,
-        hasActiveFilters: hasActiveFilters,
-        onSearchChanged: (_) => handleSearchControllerChanged(),
-        onSortChanged: (mode) => applySortChange(sortMode: mode),
-        onSortDirectionToggle: toggleSortDirection,
-        denseResultGrid: runtime.denseResultGrid,
-        onResultViewChanged: setResultView,
-        onOpenTagManager: () => openTagManager(videos),
-        tagPanelOpen: runtime.isTagDiscoveryPanelOpen,
-        onToggleTagPanel: layoutSize == LayoutSize.expanded
-            ? () => setState(runtime.viewPreferences.toggleTagDiscoveryPanel)
-            : null,
-        onRemovePrimaryTag: (tag) => mutateFilters(() {
-          runtime.selectedTags.remove(tag);
-          runtime.selectedChildTags.clear();
-        }),
-        onRemoveChildTag: (tag) =>
-            mutateFilters(() => runtime.selectedChildTags.remove(tag)),
-        onRemoveGroupTag: removeGroupTag,
-        onRemoveExcludedTag: removeExcludedTag,
-        onClearKeyword: () => mutateFilters(clearSearchSilently),
-        onClearFavoritesOnly: () =>
-            mutateFilters(() => runtime.showFavoritesOnly = false),
-        onClearAll: hasActiveFilters ? clearAllFilters : null,
-        selectionMode: runtime.librarySelectionMode,
-        selectedCount: runtime.selectedLibraryVideoIds.length,
-        allSelected: allLibraryVideosSelected,
-        onEnterSelectionMode: supportsLibrarySelection
-            ? () => setState(runtime.librarySelection.enter)
-            : null,
-        onToggleSelectAll: runtime.librarySelectionMode
-            ? () => setState(
-                  () => runtime.librarySelection.toggleAll(
-                    videos.map((item) => item.videoId),
-                  ),
-                )
-            : null,
-        onDeleteSelected: runtime.librarySelectionMode &&
-                runtime.selectedLibraryVideoIds.isNotEmpty
-            ? () => requestDeleteSelectedVideos(videos)
-            : null,
-        onCancelSelectionMode: runtime.librarySelectionMode
-            ? () => setState(runtime.librarySelection.clear)
-            : null,
-        onOpenFilters: openFilters,
-      );
-    }
+                    )
+                : null,
+            onDeleteSelected: runtime.librarySelectionMode &&
+                    runtime.selectedLibraryVideoIds.isNotEmpty
+                ? () => requestDeleteSelectedVideos(videos)
+                : null,
+            onCancelSelectionMode: runtime.librarySelectionMode
+                ? () => setState(runtime.librarySelection.clear)
+                : null,
+            onOpenFilters: openFilters,
+          ),
+        );
 
     Widget buildExpandedContent(
       MainLibraryLayoutSlots layoutSlots, {
@@ -577,6 +574,8 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
       final accessibility = AppAccessibilityScope.of(context);
       final panelDuration =
           accessibility.motionDuration(libraryPanelMotionDuration);
+      // 缓存本次页面构建的面板；宽度动画逐帧布局时复用，状态变化后重新创建。
+      Widget? filterPanel;
       return Column(
         children: [
           LibraryScrollResponsiveHeader(
@@ -650,7 +649,7 @@ class _LibraryPageState extends LibraryPageStateHost<LibraryPage>
                               width: childWidth,
                               height: constraints.maxHeight,
                               child: runtime.isTagDiscoveryPanelOpen
-                                  ? buildFilterPanel(
+                                  ? filterPanel ??= buildFilterPanel(
                                       dense: false,
                                       panelWidth: layoutSlots.filterPanelWidth,
                                     )

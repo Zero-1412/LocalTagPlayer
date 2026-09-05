@@ -13,6 +13,7 @@ import 'package:local_tag_player/src/models/library_sort.dart';
 import 'package:local_tag_player/src/models/platform_models.dart';
 import 'package:local_tag_player/src/models/video_item.dart';
 import 'package:local_tag_player/src/pages/library/library_page.dart';
+import 'package:local_tag_player/src/pages/library/library_page_state_host.dart';
 import 'package:local_tag_player/src/platform/file_system_adapter.dart';
 import 'package:local_tag_player/src/platform/platform_interfaces.dart';
 import 'package:local_tag_player/src/repositories/repository_interfaces.dart';
@@ -37,7 +38,15 @@ class _CardFileMenuRepository
         LibraryRepository,
         TagRepository,
         CacheRepository,
-        PlaybackRepository {
+        PlaybackRepository,
+        LibraryQueryCandidateRepository {
+  @override
+  int dataRevision = 0;
+  /** 可控候选返回用于复现扫描提交跨越 pending 查询；最终过滤仍执行生产 TagQueryService。 */
+  Future<List<VideoItem>?> Function(FilterQuery)? candidateLoader;
+  @override
+  Future<List<VideoItem>?> queryCandidatesFor(FilterQuery query) async =>
+      candidateLoader == null ? null : await candidateLoader!(query);
   /** 页面回归不扫描真实目录，因此保持空 root 集合。 */
   @override
   final List<String> roots = <String>[];
@@ -61,6 +70,7 @@ class _CardFileMenuRepository
   var resultCountsCalls = 0;
   /** 页面级扫描可达性回归记录的启动次数。 */
   var scanCalls = 0;
+  LibraryScanProgressCallback? activeProgress;
   /** 启动后新增视频检查的调用次数，用于保护其不被后台清理阻塞。 */
   var untrackedVideoCountCalls = 0;
   /** 测试可指定尚未入库的视频数。 */
@@ -101,6 +111,7 @@ class _CardFileMenuRepository
     LibraryScanProgressCallback? onProgress,
   }) {
     scanCalls += 1;
+    activeProgress = onProgress;
     final completer = Completer<LibraryScanCommitResult>();
     activeScan = completer;
     onProgress?.call(const LibraryScanProgress(
@@ -315,6 +326,101 @@ class _RetryingCardFileMenuApplicationService
 }
 
 void main() {
+  for (final newestInput in ['alpha', 'beta']) {
+    testWidgets('零差量扫描跨越 pending 查询后重新发布最新输入 $newestInput', (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final root = Directory.systemTemp.createTempSync('ltp_pending_scan_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final repository = _CardFileMenuRepository();
+      repository.roots.add(root.path);
+      for (final name in ['alpha', 'beta']) {
+        final path = p.join(root.path, '$name.mp4');
+        repository.videos[TagRules.pathKey(path)] = VideoItem(
+            videoId: name,
+            path: path,
+            title: name,
+            folder: root.path,
+            tags: const {},
+            addedAt: DateTime.utc(2026, 9, 5));
+      }
+      final store = LibraryApplicationFacade(
+          queryRepository: repository,
+          commandRepository: repository,
+          tagRepository: repository,
+          cacheRepository: repository,
+          playbackRepository: repository);
+      await tester.pumpWidget(MaterialApp(
+          home: LibraryPage(
+        applicationService: _CardFileMenuApplicationService(
+            store: store,
+            thumbnailService: ThumbnailService.forDirectory(
+                Directory(p.join(root.path, 'thumbs')),
+                _CardFileMenuFFmpegBackend())),
+        fileSystem: _CardFileMenuFileSystem(),
+        updateService: _CardFileMenuUpdateService(),
+        playerServiceFactory: (
+                {required String hwdec,
+                required bool enableHardwareAcceleration,
+                required PlayerRendererPreference rendererPreference}) =>
+            PlayerService(backend: _CardFileMenuPlayerBackend()),
+        mediaProbeBackendFactory: _CardFileMenuProbeBackend.new,
+      )));
+      await tester.pump(const Duration(milliseconds: 1400));
+      await tester.pump(const Duration(milliseconds: 1300));
+      final host =
+          tester.state(find.byType(LibraryPage)) as LibraryPageStateHost;
+      final oldCandidates = Completer<List<VideoItem>?>();
+      var oldLoads = 0;
+      repository.candidateLoader = (_) {
+        oldLoads++;
+        return oldCandidates.future;
+      };
+      final countsBefore = repository.resultCountsCalls;
+      await tester.tap(find.byKey(LibrarySmokeKeys.rescanButton));
+      await tester.pump();
+      expect(repository.scanCalls, 1);
+      await tester.enterText(find.byKey(LibrarySmokeKeys.searchField), 'alpha');
+      await tester.pump();
+      if (newestInput != 'alpha') {
+        await tester.enterText(
+            find.byKey(LibrarySmokeKeys.searchField), newestInput);
+        await tester.pump();
+      }
+      expect(oldLoads, greaterThan(0));
+      // Repository 已成功提交；即使没有视频差量，也必须淘汰旧候选并重调当前输入。
+      repository.dataRevision++;
+      repository.candidateLoader = (_) async => null;
+      repository.activeScan!.complete(LibraryScanCommitResult(
+          generationId: 41,
+          addedCount: 0,
+          modifiedCount: 0,
+          missingCount: 0,
+          relinkedCount: 0,
+          changedVideos: const [],
+          probeCandidates: const []));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(host.runtime.queryController.state!.query.keyword, newestInput);
+      expect(
+          host.runtime.queryController.state!.filteredVideos
+              .map((v) => v.videoId),
+          [newestInput]);
+      expect(host.runtime.queryController.state!.epoch,
+          host.resultEpoch(host.currentFilterQuery()));
+      oldCandidates.complete([]);
+      await tester.pump();
+      expect(
+          host.runtime.queryController.state!.filteredVideos
+              .map((v) => v.videoId),
+          [newestInput]);
+      expect(repository.resultCountsCalls, countsBefore);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 3));
+    });
+  }
   testWidgets('媒体库启动失败显示安全重试并可恢复到就绪态', (tester) async {
     final repository = _CardFileMenuRepository();
     final store = LibraryApplicationFacade(
@@ -598,6 +704,20 @@ void main() {
     await tester.pump();
     expect(repository.scanCalls, 1);
     expect(find.byKey(const ValueKey('qa.media_import.pause')), findsOneWidget);
+    final resultsBeforeProgress =
+        tester.widget(find.byKey(LibrarySmokeKeys.incrementalResults));
+    // 真实挂载页面收到进度时应更新文案，同时保持结果子树，避免每次进度全页构建。
+    repository.activeProgress!(const LibraryScanProgress(
+      generationId: 41,
+      phase: LibraryScanPhase.fingerprinting,
+      processed: 3,
+      discovered: 4,
+      total: 4,
+    ));
+    await tester.pump();
+    expect(find.textContaining('校验文件 3/4'), findsOneWidget);
+    expect(tester.widget(find.byKey(LibrarySmokeKeys.incrementalResults)),
+        same(resultsBeforeProgress));
     await tester.tap(find.byKey(const ValueKey('qa.media_import.pause')));
     await tester.pump();
     expect(repository.pausedStates, <bool>[true]);

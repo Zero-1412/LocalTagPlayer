@@ -48,6 +48,7 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
     runtime.searchController.dispose();
     runtime.searchFocusNode.dispose();
     runtime.libraryHeaderVisible.dispose();
+    runtime.scanProgressRevision.dispose();
     runtime.queryController.dispose();
     runtime.facetCountController.dispose();
     runtime.playbackQueueController.clear();

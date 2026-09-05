@@ -183,8 +183,12 @@ mixin LibraryPageRecentMixin<T extends StatefulWidget>
   @override
   void applyLibraryScanDelta(LibraryScanCommitResult result) {
     if (result.changedVideos.isEmpty) {
-      // 零差量不得提升 revision 或失效 folder 侧边栏，否则每次点击重新扫描
-      // 都会无意义地重算整个媒体库。
+      // Repository 的零差量提交也可能推进 epoch；旧异步候选应继续被拒绝，
+      // 但必须接续最新输入。空差量允许同条件结果复用，不刷新计数或侧边栏。
+      if (runtime.queryController.state?.epoch !=
+          resultEpoch(currentFilterQuery())) {
+        scheduleFilterRefresh(changedVideos: const []);
+      }
       return;
     }
     runtime.libraryRevisionTracker.record(

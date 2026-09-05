@@ -18,6 +18,7 @@ import 'library_video_results.dart';
 class LibraryVideoGridResultsView extends StatelessWidget {
   const LibraryVideoGridResultsView({
     super.key,
+    required this.reuseChild,
     required this.dense,
     required this.narrow,
     required this.compact,
@@ -44,6 +45,8 @@ class LibraryVideoGridResultsView extends StatelessWidget {
 
   /** 是否使用单列紧凑结果行。 */
   final bool dense;
+  /** 单次父级数据构建的子树缓存；只跨布局约束变化复用，不跨数据更新保留。 */
+  final Widget Function(int index, Widget Function() create) reuseChild;
   /** 当前宽度是否需要更高的紧凑行。 */
   final bool narrow;
   /** 当前是否处于 compact 响应式断点。 */
@@ -109,7 +112,7 @@ class LibraryVideoGridResultsView extends StatelessWidget {
           }
           return null;
         },
-        itemBuilder: (context, index) {
+        itemBuilder: (context, index) => reuseChild(index, () {
           final item = videos[index];
           return Padding(
             key: ValueKey<String>(item.videoId),
@@ -132,7 +135,7 @@ class LibraryVideoGridResultsView extends StatelessWidget {
                   : () => onToggleSelected!(item),
             ),
           );
-        },
+        }),
       );
     } else {
       results = GridView.builder(
@@ -164,7 +167,7 @@ class LibraryVideoGridResultsView extends StatelessWidget {
           }
           return null;
         },
-        itemBuilder: (context, index) {
+        itemBuilder: (context, index) => reuseChild(index, () {
           final item = videos[index];
           return KeyedSubtree(
             key: ValueKey<String>(item.videoId),
@@ -186,7 +189,7 @@ class LibraryVideoGridResultsView extends StatelessWidget {
                   : () => onToggleSelected!(item),
             ),
           );
-        },
+        }),
       );
     }
 

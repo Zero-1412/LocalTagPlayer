@@ -153,6 +153,9 @@ class LibraryPageRuntime {
   );
   /** 滚动结果区域是否展示顶部工具栏。 */
   final ValueNotifier<bool> libraryHeaderVisible = ValueNotifier<bool>(true);
+
+  /** 扫描中的高频进度只刷新顶部栏，避免连带重建结果网格与标签面板。 */
+  final ValueNotifier<int> scanProgressRevision = ValueNotifier<int>(0);
   /** 结果来源、本地路径和返回栈的唯一 owner。 */
   final LibrarySourceNavigationController sourceNavigation =
       LibrarySourceNavigationController(

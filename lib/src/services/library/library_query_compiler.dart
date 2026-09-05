@@ -160,7 +160,9 @@ class LibrarySearchIndex {
       await transaction.delete(tableName);
       // 别名必须先解码，JSON 转义形式不等于用户可搜索的原始文本。
       // JSON 扩展不可用或源数据损坏时事务回滚，由 ensureFresh 回退完整查询。
-      final rows = await transaction.rawQuery('''
+      // 聚合与写入都留在 SQLite 事务内，避免首次搜索把全库文本搬到 Dart 再逐行传回。
+      await transaction.execute('''
+        INSERT INTO $tableName (video_id, title, path, relative_path, folder, tags)
         SELECT v.video_id, v.title, v.path, v.relative_path, v.folder,
                COALESCE(GROUP_CONCAT(
                  COALESCE(t.id, '') || ' ' || COALESCE(t.name, '') || ' ' ||
@@ -173,18 +175,6 @@ class LibrarySearchIndex {
         LEFT JOIN tags t ON t.id = vt.tag_id
         GROUP BY v.video_id
       ''');
-      final batch = transaction.batch();
-      for (final row in rows) {
-        batch.insert(tableName, <String, Object?>{
-          'video_id': row['video_id'],
-          'title': row['title'],
-          'path': row['path'],
-          'relative_path': row['relative_path'],
-          'folder': row['folder'],
-          'tags': row['tags'],
-        });
-      }
-      await batch.commit(noResult: true);
     });
   }
 }

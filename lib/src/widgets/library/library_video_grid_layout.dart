@@ -71,6 +71,16 @@ class LibraryVideoGridLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 同一数据快照的宽度动画只重新布局；页面/数据状态更新会创建新缓存，避免陈旧回调。
+    final layoutChildren = <int, Widget>{};
+    Widget reuseChild(int index, Widget Function() create) {
+      // 长时间滚动不能累计保留整个大库；超出视口缓冲规模后淘汰最早构建的条目。
+      if (layoutChildren.length >= 200 && !layoutChildren.containsKey(index)) {
+        layoutChildren.remove(layoutChildren.keys.first);
+      }
+      return layoutChildren.putIfAbsent(index, create);
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final measuredWidth = constraints.maxWidth;
@@ -116,6 +126,7 @@ class LibraryVideoGridLayout extends StatelessWidget {
             .toInt();
         onLayoutMetrics(columnCount, rowExtent, visibleItemCount);
         final results = LibraryVideoGridResultsView(
+          reuseChild: reuseChild,
           dense: dense,
           narrow: narrow,
           compact: compact,

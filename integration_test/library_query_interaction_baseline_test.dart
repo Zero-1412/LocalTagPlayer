@@ -194,7 +194,12 @@ void main() {
           await tester.pump(const Duration(milliseconds: 600));
           recorder.enter('idle');
         }
+        // 展开/收起的页面截图单列，截图开销不混入动画或查询分位数。
+        recorder.enter('evidence_capture');
+        await _capture(tester, '${output.path}/tag-panel-closed.png');
         await openTags();
+        await _capture(tester, '${output.path}/tag-panel-open.png');
+        recorder.enter('idle');
         final chips = find
             .byWidgetPredicate((w) =>
                 w.key is ValueKey<String> &&

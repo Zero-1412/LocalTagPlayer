@@ -11,6 +11,8 @@
 
 - 候选索引与完整查询保持 stable-ID 集合一致：短 Unicode 词按码点判断，别名先解码 JSON。
 - 异步候选返回后先验证请求身份，再触碰缓存/诊断；同 revision 索引重建合并，新 revision 等待旧事务收尾。
+- 零差量扫描推进 repository epoch 后接续最新输入，旧 Future 晚到不可污染结果；同条件空差量不刷新标签计数。
+- FTS 聚合通过事务内 INSERT SELECT 写入，JSON 解码、stable-ID 等价、失败回滚与重试不变。
 - 回归证据与分批验收见 `../qa/query_correctness_and_baseline_20260905.md`。
 
 - 同组 OR、跨组 AND、排除 NOT；
