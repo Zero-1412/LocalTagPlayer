@@ -37,9 +37,11 @@ Phase 3–6 不得改变 `FilterQuery` 语义、来源 filtered queue、用户�
 3. 配置 Windows Authenticode 与 macOS Developer ID/公证外部凭据。
 4. 在真实已安装旧版本上验证应用内升级、摘要、中文安装和数据保留。
 5. GitHub Support purge 完成后验证旧 Commit API 缓存清理。
-6. `file_picker` 8 → 11 已在隔离兼容批次完成；`package_info_plus` 9 → 10
-   等待稳定版 `win32` 约束收敛，不得使用 beta 或 `dependency_overrides` 绕过。
+6. 保留 `file_picker 12.2.0` 与 `package_info_plus 10.2.1` 的既有升级证据和三平台门禁；
+   后续依赖升级仍不得使用 beta 或 `dependency_overrides` 绕过兼容约束。
    准入条件与证据见 `docs/qa/dependency_upgrade_gate.md`。
+7. 普通业务 PR 运行查询、来源队列、稳定身份与备份恢复门禁；FTS 以真实 SQLite 的
+   stable-ID 集合等价性为准，不以源码片段存在代替功能验证。
 
 ## P1：核心闭环深化
 
@@ -54,6 +56,11 @@ Phase 3–6 不得改变 `FilterQuery` 语义、来源 filtered queue、用户�
    operation trace；没有稳定收益证据前不引入 Redis/BullMQ、路由框架或外部 telemetry。
 
 ## P2：有证据再推进
+
+当前执行顺序：查询正确性与并发回归 → PR 门禁 → 隔离大库交互 P95/P99 基线 →
+按测量结果优化索引 → 升级、恢复与真实窗口交付验收。索引同代次请求合并的证据见
+`docs/qa/query_correctness_and_baseline_20260905.md`；增量索引仍须另有收益与一致性证据。
+搜索历史、可保存筛选和标签便携导出继续留在 P2，前置验收未完成时不自动晋级。
 
 1. 自动标签规则与标签导入/导出。
 2. 高级搜索语法和可保存筛选。

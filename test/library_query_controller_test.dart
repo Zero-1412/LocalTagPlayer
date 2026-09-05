@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_tag_player/src/features/library/application/library_query_controller.dart';
 import 'package:local_tag_player/src/features/library/domain/library_query_snapshot.dart';
@@ -17,6 +19,91 @@ VideoItem _video(String id, String title) {
 }
 
 void main() {
+  test('旧候选晚到不得污染新 revision 缓存或触发诊断', () async {
+    final video = _video('stable', 'alpha');
+    final controller = LibraryQueryController();
+    addTearDown(controller.dispose);
+    final old = Completer<List<VideoItem>?>();
+    final newer = Completer<List<VideoItem>?>();
+    const query = FilterQuery(keyword: 'alpha');
+    var currentRevision = 1;
+    final accepted = <FilterState>[];
+    final measured = <int>[];
+    void schedule(int revision, Future<List<VideoItem>?> pending) {
+      controller.configure(
+        engine: TagQueryService(
+            videos: [video], tagContext: const TagQueryContext()),
+        totalCount: 1,
+        dataRevision: revision,
+        sortFingerprint: 'title',
+        loadCandidates: (_) => pending,
+      );
+      controller.schedule(
+        query: query,
+        expectedEpoch: LibraryResultEpoch.fromQuery(
+            dataRevision: revision, query: query, presentationSort: 'title'),
+        isStillCurrent: (epoch) => epoch.dataRevision == currentRevision,
+        onAccepted: accepted.add,
+        onMeasured: (_) => measured.add(revision),
+      );
+    }
+
+    schedule(1, old.future);
+    await Future<void>.delayed(Duration.zero);
+    currentRevision = 2;
+    schedule(2, newer.future);
+    await Future<void>.delayed(Duration.zero);
+    old.complete([]);
+    await Future<void>.delayed(Duration.zero);
+    newer.complete([video]);
+    await Future<void>.delayed(Duration.zero);
+    expect(
+        accepted.single.filteredVideos.map((item) => item.videoId), ['stable']);
+    expect(measured, [2]);
+  });
+
+  for (final ending in ['cancel', 'dispose', 'epoch']) {
+    test('等待候选期间 $ending 后不得计算或触发诊断', () async {
+      final pending = Completer<List<VideoItem>?>();
+      final controller = LibraryQueryController();
+      addTearDown(controller.dispose);
+      var sorted = 0;
+      var measured = 0;
+      var accepted = 0;
+      var current = true;
+      const query = FilterQuery(keyword: 'alpha');
+      controller.configure(
+        engine:
+            const TagQueryService(videos: [], tagContext: TagQueryContext()),
+        totalCount: 0,
+        dataRevision: 1,
+        sortFingerprint: 'title',
+        loadCandidates: (_) => pending.future,
+        sortVideos: (videos) {
+          sorted++;
+          return videos.toList();
+        },
+      );
+      controller.schedule(
+        query: query,
+        expectedEpoch: LibraryResultEpoch.fromQuery(
+            dataRevision: 1, query: query, presentationSort: 'title'),
+        isStillCurrent: (_) => current,
+        onAccepted: (_) => accepted++,
+        onMeasured: (_) => measured++,
+      );
+      await Future<void>.delayed(Duration.zero);
+      if (ending == 'cancel') controller.cancelPending();
+      if (ending == 'dispose') controller.dispose();
+      if (ending == 'epoch') current = false;
+      pending.complete([]);
+      await Future<void>.delayed(Duration.zero);
+      expect(sorted, 0);
+      expect(measured, 0);
+      expect(accepted, 0);
+    });
+  }
+
   test('查询 owner 只发布最后一次搜索输入', () async {
     final alpha = _video('video-alpha', 'alpha');
     final bravo = _video('video-bravo', 'bravo');

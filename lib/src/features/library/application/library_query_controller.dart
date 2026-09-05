@@ -180,6 +180,13 @@ class LibraryQueryController {
           queryCandidates = null;
         }
       }
+      // 等待候选期间可能已换库、更新数据或释放页面；旧任务不能触碰新 epoch 的缓存，
+      // 也不能在 dispose 后计算、排序或触发诊断回调。发布前的校验仍保留。
+      if (_disposed ||
+          requestRevision != _revision ||
+          !isStillCurrent(expectedEpoch)) {
+        return;
+      }
       final candidate = queryCandidates == null
           ? compute(
               query,

@@ -8,6 +8,15 @@
   ],
   "entries": [
     {
+      "id": "library-search-index-benchmark",
+      "path": "tool/benchmark_library_search_index.dart",
+      "status": "active",
+      "kind": "isolated-query-benchmark",
+      "last_verified": "2026-09-05",
+      "evidence": "docs/qa/query_correctness_and_baseline_20260905.md",
+      "replacement": null
+    },
+    {
       "id": "player-p0-evidence-assembler",
       "path": "tool/assemble_player_p0_evidence.ps1",
       "status": "active",

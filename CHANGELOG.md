@@ -5,6 +5,10 @@
 
 ## Unreleased
 
+- 修复大库搜索中短 Unicode 词、含双引号或反斜杠的标签别名漏结果；FTS 候选继续由完整过滤语义校验。
+- 修复旧异步候选污染新 revision 缓存，以及取消/释放后仍计算、触发诊断的问题。
+- 同 revision 的并发搜索共享索引重建事务，失败可重试；新增 PR 核心查询、队列、身份和备份门禁。
+
 - `file_picker` 升至 12.2.0，并将目录、多文件、单文件和保存入口迁移到新的静态/联邦 API；保存合同改为由平台适配器直接接收真实 bytes，取消时不创建 0-byte 文件。
 - `file_picker 12` 新增固定 Flutter 3.47 revision 的独立三平台探针门禁；在该探针先通过后，`package_info_plus` 才从新基线单独升至 10.2.1，全程未使用 dependency override。
 - 新增单依赖 Flutter 3.47 隔离门禁：`desktop_drop` 0.8.4 全项通过并升级；早期 `package_info_plus` 10.2.1 在 `file_picker` 11.0.3 基线上因 `win32` 冲突被正确阻断，未使用 override。

@@ -63,9 +63,10 @@ class LibraryQueryCompiler {
     final tokens = keyword
         .toLowerCase()
         .split(RegExp(r'\s+'))
-        .where((token) => token.length >= 3)
+        .where((token) => token.runes.length >= 3)
         .toList(growable: false);
-    // trigram FTS 对少于 3 个字符的片段无法提供不漏项的候选集；回退内存路径。
+    // trigram 按 Unicode 码点计数；UTF-16 长度会把短 emoji 词误判为可索引片段。
+    // 短片段留给最终 Dart 校验，没有可索引片段时回退完整内存路径。
     if (profile.mode != LibraryQueryExecutionMode.sqliteFts5 ||
         tokens.isEmpty) {
       return LibraryQueryPlan(
@@ -92,6 +93,8 @@ class LibrarySearchIndex {
   LibrarySearchIndex();
 
   int? _lastBuiltRevision;
+  int? _pendingRevision;
+  Future<bool>? _pendingBuild;
 
   static const tableName = LibraryQueryCompiler.searchTableName;
 
@@ -115,13 +118,31 @@ class LibrarySearchIndex {
   }
 
   /** 只重建派生候选索引；主库视频、标签和用户数据不在此动作中删除。 */
-  Future<bool> ensureFresh(Database db, {required int revision}) async {
+  Future<bool> ensureFresh(Database db, {required int revision}) {
+    final pending = _pendingBuild;
+    if (pending != null) {
+      // 同代次共享正在执行的事务；新代次等待旧事务自然收尾后重新核验。
+      // 只合并索引维护，不合并用户的查询，也不取消已开始的 SQLite 写入。
+      if (_pendingRevision == revision) {
+        return pending;
+      }
+      return pending.then((_) => ensureFresh(db, revision: revision));
+    }
+    _pendingRevision = revision;
+    return _pendingBuild =
+        _ensureFresh(db, revision: revision).whenComplete(() {
+      // 失败同样释放句柄，下一次请求仍可重试，不能把失败缓存成成功。
+      _pendingRevision = null;
+      _pendingBuild = null;
+    });
+  }
+
+  Future<bool> _ensureFresh(Database db, {required int revision}) async {
     final available = await ensureSchema(db);
     if (!available) {
       return false;
     }
-    // Query service owns one index object per repository session; a new revision means
-    // a successful command changed source rows and the derived table must be rebuilt once.
+    // 每个 repository 会话拥有一个索引；成功写入推进 revision 后才重建派生文本。
     if (_lastBuiltRevision == revision) {
       return true;
     }
@@ -137,12 +158,15 @@ class LibrarySearchIndex {
   Future<void> rebuild(Database db) async {
     await db.transaction((transaction) async {
       await transaction.delete(tableName);
+      // 别名必须先解码，JSON 转义形式不等于用户可搜索的原始文本。
+      // JSON 扩展不可用或源数据损坏时事务回滚，由 ensureFresh 回退完整查询。
       final rows = await transaction.rawQuery('''
         SELECT v.video_id, v.title, v.path, v.relative_path, v.folder,
                COALESCE(GROUP_CONCAT(
                  COALESCE(t.id, '') || ' ' || COALESCE(t.name, '') || ' ' ||
                  COALESCE(t.display_name, '') || ' ' ||
-                 COALESCE(t.aliases_json, ''), ' '
+                 COALESCE((SELECT GROUP_CONCAT(value, ' ')
+                           FROM json_each(t.aliases_json)), ''), ' '
                ), '') AS tags
         FROM videos v
         LEFT JOIN video_tags vt ON vt.video_id = v.video_id

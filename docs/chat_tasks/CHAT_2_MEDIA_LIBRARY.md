@@ -9,6 +9,10 @@
 
 ## 必须保持
 
+- 候选索引与完整查询保持 stable-ID 集合一致：短 Unicode 词按码点判断，别名先解码 JSON。
+- 异步候选返回后先验证请求身份，再触碰缓存/诊断；同 revision 索引重建合并，新 revision 等待旧事务收尾。
+- 回归证据与分批验收见 `../qa/query_correctness_and_baseline_20260905.md`。
+
 - 同组 OR、跨组 AND、排除 NOT；
 - folder 来源可重算，manual/locked 数据保留；
 - 一级/二级 folder 标签服从当前 root 父子层级；

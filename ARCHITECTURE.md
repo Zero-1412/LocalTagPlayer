@@ -79,6 +79,11 @@ tag ID、名称、显示名和 alias，最终结果仍由 `FilterQuery` / `TagQu
 和 FTS5 不可用时走内存路径。缩略图进程内快照按 stable `videoId` 索引，磁盘 key 在该
 `videoId` 范围内优先使用 `mediaFingerprint`，没有 fingerprint 时才回退到 path/size/mtime，
 避免 relink 后丢失可复用缓存，也避免两个数据库记录因内容相同而互相清理缓存。
+FTS 候选短词按 Unicode 码点判断，别名通过 SQLite JSON 解码后写入派生索引；JSON 扩展
+不可用或数据损坏时事务回滚并回退完整查询。同一 revision 的并发索引维护共享一个 Future，
+跨 revision 请求等待在途事务自然结束后重新核验，失败释放句柄以允许重试。
+`LibraryQueryController` 在候选异步返回后、更新结果缓存和调用诊断前检查请求代次、epoch
+与 dispose 状态，防止旧候选污染新 revision；发布前校验继续保留。
 `ResourceScheduler` 除 lease 预算外提供 pending request cancellation；取消只移除尚未启动的工作，
 已经取得 lease 的 FFmpeg/SQLite 工作必须自然收尾。详见 ADR_004 和
 `docs/architecture/ADR_005_EXTERNAL_MODULE_COMPARISON_AND_GAPS.md`。
