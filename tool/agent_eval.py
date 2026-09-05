@@ -6,9 +6,12 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import fnmatch
+import hashlib
 import json
+import math
 import os
 from pathlib import Path
+import platform
 import re
 import signal
 import shutil
@@ -1015,8 +1018,26 @@ def _codex_version() -> str:
         text=True,
         encoding="utf-8",
         errors="replace",
+        timeout=10,
     )
-    return completed.stdout.strip() or completed.stderr.strip() or "unknown"
+    return _safe_codex_version(completed.stdout) if completed.returncode == 0 else "unknown"
+
+
+def _safe_codex_version(value: str) -> str:
+    """只接受 CLI 的版本行；不把包装器错误、路径或任意诊断保存为版本。"""
+
+    matched = re.fullmatch(
+        r"codex-cli (\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?)", value.strip(),
+    )
+    return matched.group(0) if matched else "unknown"
+
+
+def _validate_model_options(model: str | None, effort: str | None) -> None:
+    """拒绝空配置，保证记录的显式选项与实际命令传参一致。"""
+
+    for name, value in (("model", model), ("reasoning_effort", effort)):
+        if value is not None and (not value.strip() or value != value.strip()):
+            raise EvalError(f"{name} 必须非空且不含首尾空白")
 
 
 def _git_changed_files(repo: Path) -> list[str]:
@@ -1035,6 +1056,75 @@ def _git_changed_files(repo: Path) -> list[str]:
         if len(line) >= 4:
             paths.append(line[3:].replace("\\", "/"))
     return sorted(paths)
+
+
+def _experiment_manifest(
+    repo: Path,
+    case: dict[str, Any],
+    *,
+    model: str | None,
+    reasoning_effort: str | None,
+    trial_timeout_seconds: int,
+    codex_version: str,
+    output_schema: Path | None = None,
+    with_judge: bool = False,
+) -> dict[str, Any]:
+    """在 Agent 执行前固化实验身份；只保存白名单环境与摘要，不复制配置秘密。"""
+
+    _validate_model_options(model, reasoning_effort)
+
+    def revision(ref: str) -> str:
+        return subprocess.run(
+            ["git", "rev-parse", ref], cwd=repo, check=True,
+            capture_output=True, text=True, encoding="utf-8",
+        ).stdout.strip()
+
+    def digest(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    # 隔离快照提交时间可能不同，tree 才是相同代码内容的可比较身份。
+    paths = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=repo, check=True, capture_output=True,
+    ).stdout.split(b"\0")
+    rules = {}
+    for raw in paths:
+        if not raw:
+            continue
+        relative = raw.decode("utf-8")
+        if (relative == "AGENTS.md" or relative.startswith(".agents/")
+                or relative.startswith("evals/agent/")):
+            path = repo / relative
+            if path.is_file():
+                rules[relative] = digest(path)
+    case_digest = hashlib.sha256(json.dumps(
+        case, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    rubric_name = case.get("expected", {}).get("rubric") if with_judge else None
+    return {
+        "schema_version": 1,
+        "git_commit": revision("HEAD"),
+        "git_tree": revision("HEAD^{tree}"),
+        "case_sha256": case_digest,
+        "rules_sha256": rules,
+        "runner_sha256": digest(Path(__file__)),
+        # Schema 来自调用方实际传入文件，可能与隔离仓库内版本不同。
+        "output_schema_sha256": digest(output_schema if output_schema is not None else RESULT_SCHEMA),
+        "judge_schema_sha256": digest(JUDGE_SCHEMA) if with_judge else "disabled",
+        "judge_rubric_sha256": digest(EVAL_ROOT / "rubrics" / f"{rubric_name}.json") if rubric_name else "disabled",
+        "requested_model": model,
+        "requested_reasoning_effort": reasoning_effort,
+        # 默认配置没有可验证解析结果；不得把 default-config 冒充实际模型。
+        "model_configuration_explicit": model is not None and reasoning_effort is not None,
+        "resolved_model": None,
+        "codex_version": _safe_codex_version(codex_version),
+        "python_version": platform.python_version(),
+        "os": platform.system(),
+        "os_release": platform.release(),
+        "machine": platform.machine(),
+        "logical_cpu_count": os.cpu_count(),
+        "trial_timeout_seconds": trial_timeout_seconds,
+        "budgets": _effective_budgets(case),
+    }
 
 
 def _overlay_workspace_snapshot(source: Path, target: Path) -> None:
@@ -1242,6 +1332,7 @@ def run_case(
 ) -> list[dict[str, Any]]:
     """在每次独立临时克隆中运行用例，归档 Trace、结果、变化和评分。"""
 
+    _validate_model_options(model, reasoning_effort)
     reports: list[dict[str, Any]] = []
     for trial in range(1, trials + 1):
         artifact_dir = artifact_root / case["id"] / f"trial-{trial}"
@@ -1257,6 +1348,14 @@ def run_case(
             )
             if workspace_snapshot:
                 _overlay_workspace_snapshot(REPO_ROOT, isolated_repo)
+            codex_version = _codex_version()
+            manifest = _experiment_manifest(
+                isolated_repo, case, model=model, reasoning_effort=reasoning_effort,
+                trial_timeout_seconds=trial_timeout_seconds, codex_version=codex_version,
+                output_schema=RESULT_SCHEMA,
+                with_judge=with_judge,
+            )
+            _write_json(artifact_dir / "experiment_manifest.json", manifest)
             raw_trace = artifact_dir / "raw_trace.jsonl"
             result_path = artifact_dir / "result.json"
             return_code, elapsed, stderr = _run_codex(
@@ -1270,6 +1369,7 @@ def run_case(
                 trial_timeout_seconds,
             )
             trace_events = _normalize_raw_trace(raw_trace, artifact_dir / "trace.jsonl")
+            _write_json(artifact_dir / "trace_diagnostics.json", analyze_trace(trace_events))
             observed_changes = _git_changed_files(isolated_repo)
             if return_code != 0 or not result_path.exists():
                 result = {
@@ -1362,7 +1462,9 @@ def run_case(
                     "return_code": return_code,
                     "model": model or "default-config",
                     "reasoning_effort": reasoning_effort or "default-config",
-                    "codex_version": _codex_version(),
+                    "codex_version": codex_version,
+                    "experiment_manifest": "experiment_manifest.json",
+                    "trace_diagnostics": "trace_diagnostics.json",
                     "usage": next(
                         (
                             {
@@ -1470,6 +1572,171 @@ def _collect_reports(root: Path) -> list[dict[str, Any]]:
     return [_read_json(path) for path in sorted(root.glob("**/report.json"))]
 
 
+def compare_experiments(baseline: Path, candidate: Path) -> dict[str, Any]:
+    """按相同用例/试次配对；条件缺失或不一致时拒绝产出改善结论。"""
+
+    def load(root: Path) -> dict[tuple[str, int], tuple[dict, dict]]:
+        entries = {}
+        for path in sorted(root.glob("**/report.json")):
+            report = _read_json(path)
+            if (not isinstance(report, dict) or not isinstance(report.get("case_id"), str)
+                    or not report["case_id"] or type(report.get("trial")) is not int or report["trial"] < 1):
+                raise EvalError("比较报告缺少合法 case_id/trial")
+            key = (report["case_id"], report["trial"])
+            if key in entries:
+                raise EvalError("比较目录包含重复的 case_id/trial")
+            manifest_path = path.parent / "experiment_manifest.json"
+            entries[key] = (report, _read_json(manifest_path) if manifest_path.exists() else {})
+        if not entries:
+            raise EvalError("比较目录没有 trial 报告")
+        return entries
+
+    old, new = load(baseline), load(candidate)
+    # 代码、规则和 runner 允许有意改变；其余条件必须已记录且一致。
+    fixed = (
+        "case_sha256", "output_schema_sha256", "judge_schema_sha256", "judge_rubric_sha256", "requested_model",
+        "requested_reasoning_effort", "codex_version", "python_version",
+        "os", "os_release", "machine", "logical_cpu_count",
+        "trial_timeout_seconds", "budgets",
+    )
+    blockers = []
+    pairs = []
+    for key in sorted(set(old) | set(new)):
+        if key not in old or key not in new:
+            blockers.append({"case_id": key[0], "trial": key[1], "reason": "unpaired_trial"})
+            continue
+        (a, ma), (b, mb) = old[key], new[key]
+        reasons = []
+        for manifest in (ma, mb):
+            if not isinstance(manifest, dict):
+                raise EvalError("实验清单必须为对象")
+            for field in fixed:
+                value = manifest.get(field)
+                if field == "budgets":
+                    if not isinstance(value, dict) or any(
+                        type(value.get(name)) is not int or value[name] <= 0
+                        for name in ("max_tool_calls", "max_input_tokens", "max_output_tokens")
+                    ):
+                        reasons.append("invalid:budgets")
+                elif field in {"logical_cpu_count", "trial_timeout_seconds"}:
+                    if type(value) is not int or value <= 0:
+                        reasons.append("invalid:" + field)
+                elif not isinstance(value, str) or not value.strip():
+                    reasons.append("invalid:" + field)
+        for field in ("git_tree", "rules_sha256", "runner_sha256"):
+            if not ma.get(field) or not mb.get(field):
+                reasons.append("missing:" + field)
+        for field in fixed:
+            if ma.get(field) is None or mb.get(field) is None:
+                reasons.append("missing:" + field)
+            elif ma[field] != mb[field]:
+                reasons.append("mismatch:" + field)
+        if ma.get("codex_version") == "unknown" or mb.get("codex_version") == "unknown":
+            reasons.append("unknown_cli_version")
+        if ma.get("model_configuration_explicit") is not True or mb.get("model_configuration_explicit") is not True:
+            reasons.append("implicit_model_configuration")
+        for report in (a, b):
+            if report.get("evaluated") is not True or report.get("outcome") not in {"passed", "agent_failure"}:
+                reasons.append("invalid_evaluation_state")
+            if not isinstance(report.get("passed"), bool):
+                reasons.append("missing_passed")
+            elif report["passed"] != (report.get("outcome") == "passed"):
+                reasons.append("inconsistent_evaluation_state")
+            usage = report.get("usage")
+            if not isinstance(usage, dict):
+                reasons.append("missing_or_invalid_metrics")
+                usage = {}
+            for value in (report.get("duration_seconds"), usage.get("input_tokens")):
+                if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
+                    reasons.append("missing_or_invalid_metrics")
+            if type(usage.get("input_tokens")) is not int:
+                reasons.append("invalid_input_tokens")
+        if reasons:
+            blockers.append({"case_id": key[0], "trial": key[1], "reasons": sorted(set(reasons))})
+            continue
+        pairs.append({
+            "case_id": key[0], "trial": key[1],
+            "baseline_passed": a["passed"], "candidate_passed": b["passed"],
+            "duration_delta_seconds": round(b["duration_seconds"] - a["duration_seconds"], 3),
+            "input_tokens_delta": b["usage"]["input_tokens"] - a["usage"]["input_tokens"],
+            "baseline_tree": ma.get("git_tree"), "candidate_tree": mb.get("git_tree"),
+            "rules_changed": ma.get("rules_sha256") != mb.get("rules_sha256"),
+            "runner_changed": ma.get("runner_sha256") != mb.get("runner_sha256"),
+        })
+    return {
+        "schema_version": 1,
+        "status": "incomparable" if blockers else "paired_observations",
+        "pairs": pairs,
+        "blockers": blockers,
+        # 配对序号仅对应试次，不代表共同随机种子；仍须遵守原 N=5 门禁。
+        "promotion_decision": "not_assessed",
+        "limitations": ["resolved_model_unverified", "resource_load_not_controlled", "no_statistical_significance_claim"],
+    }
+
+
+def analyze_trace(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """从规范化轨迹提取可核对线索，不把命令重复直接判为无效探索。"""
+
+    commands: dict[str, list[int]] = {}
+    reads: dict[str, list[int]] = {}
+    history: list[int] = []
+    verification: dict[str, list[int]] = {}
+    truncated: list[int] = []
+    failed: list[int] = []
+    seen: set[str] = set()
+    for event in events:
+        sequence = event.get("sequence", 0)
+        if event.get("event") == "tool_call":
+            call_id = event.get("call_id")
+            if call_id and call_id in seen:
+                continue
+            if call_id:
+                seen.add(call_id)
+            args = event.get("arguments")
+            # 只对完整参数做摘要，不把原始命令/工具返回再次复制到诊断。
+            canonical = json.dumps([event.get("tool"), args], sort_keys=True, ensure_ascii=False)
+            fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            commands.setdefault(fingerprint, []).append(sequence)
+            command = args if isinstance(args, str) else (args or {}).get("cmd", "") if isinstance(args, dict) else ""
+            normalized = re.sub(r"/+", "/", command.replace("\\", "/"))
+            for match in re.finditer(
+                r"\bGet-Content\s+(?:(?:-Raw|-Path|-LiteralPath)\s+)*['\"]?"
+                r"((?:(?:\.agents|docs|lib|test|tool)/)[A-Za-z0-9_./-]+|(?:AGENTS|PROJECT|CURRENT_TASK|ARCHITECTURE|ROADMAP|CHANGELOG)\.md)",
+                normalized, re.IGNORECASE,
+            ):
+                path = match.group(1)
+                # 路径穿越或变量不做推测；这里仅列已识别的仓库内路径。
+                if ".." not in path.split("/"):
+                    reads.setdefault(path, []).append(sequence)
+            if re.search(r"docs/(?:task_history|history)/", normalized):
+                history.append(sequence)
+            # 保留整条命令身份，不合并不同测试参数；不能据此证明中间没有文件变化。
+            if re.search(r"\b(?:flutter\s+(?:test|analyze|build)|python\s+-m\s+unittest)\b", command):
+                verification.setdefault(fingerprint, []).append(sequence)
+        elif event.get("event") == "raw_event":
+            payload = event.get("payload", {})
+            item = payload.get("item", {}) if isinstance(payload, dict) else {}
+            if not isinstance(item, dict) or payload.get("type") != "item.completed":
+                continue
+            output = item.get("aggregated_output") or item.get("output") or ""
+            if isinstance(output, str) and re.search(r"truncated output|output.{0,20}truncated|tokens truncated", output, re.IGNORECASE):
+                truncated.append(sequence)
+            if isinstance(item.get("exit_code"), int) and item["exit_code"] != 0:
+                failed.append(sequence)
+    return {
+        "schema_version": 1,
+        "tool_calls": sum(len(items) for items in commands.values()),
+        "repeated_tool_arguments": [{"sha256": key, "sequences": values} for key, values in commands.items() if len(values) > 1],
+        "file_read_references": [{"path": key, "sequences": values} for key, values in sorted(reads.items())],
+        "history_reference_sequences": history,
+        "repeated_verification_candidates": [{"sha256": key, "sequences": values, "no_changes_proven": False} for key, values in verification.items() if len(values) > 1],
+        "truncated_output_sequences": truncated,
+        "failed_tool_sequences": failed,
+        "recovery_failure": "not_determined",
+        "limitations": ["only_recognized_get_content_paths", "history_relevance_requires_task_contract", "repetition_is_not_waste_proof"],
+    }
+
+
 def _select_cases(
     cases: dict[str, dict[str, Any]], case_id: str | None, suite: str | None
 ) -> list[dict[str, Any]]:
@@ -1530,6 +1797,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     summarize_parser = subparsers.add_parser("summarize", help="汇总既有运行报告")
     summarize_parser.add_argument("artifact_root", type=Path)
+    compare_parser = subparsers.add_parser("compare", help="按用例/试次比较条件一致的实验，不自动晋级")
+    compare_parser.add_argument("baseline", type=Path)
+    compare_parser.add_argument("candidate", type=Path)
+    compare_parser.add_argument("--output", type=Path, required=True)
+    trace_parser = subparsers.add_parser("trace-diagnostics", help="提取规范化轨迹中的重复读取/验证及截断线索")
+    trace_parser.add_argument("trace", type=Path)
+    trace_parser.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -1548,6 +1822,17 @@ def main(argv: list[str] | None = None) -> int:
             summary = summarize_reports(reports)
             _write_json(args.artifact_root / "summary.json", summary)
             print(json.dumps(summary, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "compare":
+            comparison = compare_experiments(args.baseline, args.candidate)
+            _write_json(args.output, comparison)
+            print(json.dumps(comparison, ensure_ascii=False, indent=2))
+            return 0 if comparison["status"] == "paired_observations" else 2
+        if args.command == "trace-diagnostics":
+            events = [json.loads(line) for line in args.trace.read_text(encoding="utf-8").splitlines() if line.strip()]
+            diagnostics = analyze_trace(events)
+            _write_json(args.output, diagnostics)
+            print(json.dumps(diagnostics, ensure_ascii=False, indent=2))
             return 0
 
         cases = load_cases()

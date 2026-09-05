@@ -37,9 +37,40 @@ changed_files.json     隔离仓库的实际 Git 变化
 report.json            单次确定性评分
 judge_result.json      可选 Rubric judge 结果
 summary.json           N 次稳定性和 suite 汇总
+experiment_manifest.json 执行前的代码、规则、用例与环境身份
+trace_diagnostics.json 重复读取/验证、历史引用及截断的轨迹线索
 ```
 
 报告同时记录 Codex CLI 版本、显式或默认模型标识、延迟和 token；CLI 未提供可靠价格表时 `estimated_cost_usd` 保持 `null`，不得编造成本。
+
+实验清单在每个 trial 的隔离快照建立后、被测 Agent 启动前写入，记录 Git commit/tree、
+规则与 Skill/用例文件 SHA-256、实际 runner 摘要、用例摘要、请求的模型/推理强度、CLI/Python/OS
+版本、逻辑 CPU 数、超时及预算。相同内容的隔离提交可能有不同 commit，应按 tree 比较代码身份。
+不读取完整环境变量或个人配置；不保存用户目录、主机名或秘密。模型的实际解析结果尚不可验证，
+`resolved_model` 保持 null；默认模型/推理配置不得当作可重复实验的明确配置。
+该清单提高可追溯性，不自动证明环境相同：内存限制、负载和外部工具版本仍需专项记录。
+对照实验应固定任务、环境与预算，明确列出有意改变的代码或规则身份；N=5 的 5/5 仅代表
+五次观测全部通过，不能推断长期失败概率为零。确定性回归由 `ExperimentManifestTests` 覆盖。
+
+实际传入的 result schema 单独取摘要；启用 judge 时也记录其 schema 和实际 Rubric，不能用隔离仓库里的旧文件
+冒充实际文件。空模型/推理参数拒绝执行。CLI 版本仅接受标准版本行，失败诊断不写入版本字段。
+
+```powershell
+python tool/agent_eval.py compare <baseline产物目录> <candidate产物目录> --output <对照报告.json>
+python tool/agent_eval.py trace-diagnostics <trace.jsonl> --output <轨迹诊断.json>
+```
+
+compare 按 case_id/trial 配对，要求任务、实际 schema、请求模型/推理、CLI/Python/OS、CPU 数、
+超时与预算一致；代码 tree、规则和 runner 可有意改变并列入报告。缺清单、缺指标、试次不齐、
+默认配置、预算不完整、评估状态缺失、非有限指标或基础设施失败均返回 incomparable/退出码 2。
+配对成功只给出观测差量，不自动晋级，
+不宣称统计显著性；实际模型解析与资源负载仍是已声明的限制。旧报告缺清单不能事后补猜。
+
+trace-diagnostics 对工具参数取摘要并保留事件序号；已识别 Get-Content 的仓库内路径单列，
+历史引用是否无关须按任务合同复核。变量、复杂脚本、其它读取工具尚不解析；同一文件不同片段
+可能合理，重复验证也没有中间文件未变的证明。因此这些是审查线索，不参与扣分或自动改 prompt。
+失败工具退出码单列，不能直接等同错误恢复失败。读取旧轨迹需显式包含忽略文件：
+`rg --files --hidden --no-ignore artifacts/agent_eval`，不要把 Git 忽略误判成证据不存在。
 
 `validate` 还会严格按 UTF-8 读取所有 repo Skill、验证 `name` / `description`
 frontmatter、可选 `agents/openai.yaml` 的界面字段，并拒绝 `.agents/skills` 根目录下

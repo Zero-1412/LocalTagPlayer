@@ -5,8 +5,10 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "tool" / "agent_eval.py"
@@ -761,6 +763,179 @@ class AgentEvalToolTest(unittest.TestCase):
         self.assertEqual(1, case["infrastructure_errors"])
         self.assertEqual(0, case["evaluated_trials"])
         self.assertIsNone(case["average_score"])
+
+
+class ExperimentManifestTests(unittest.TestCase):
+    """使用真实临时 Git 仓库验证内容身份与默认配置的不确定性。"""
+
+    def test_trace_diagnostics_keep_evidence_without_claiming_waste(self):
+        events = [
+            {'event': 'tool_call', 'sequence': 1, 'call_id': 'a', 'tool': 'command_execution', 'arguments': "Get-Content -Raw 'docs/history/example.md'"},
+            {'event': 'tool_call', 'sequence': 2, 'call_id': 'a', 'tool': 'command_execution', 'arguments': "Get-Content -Raw 'docs/history/example.md'"},
+            {'event': 'tool_call', 'sequence': 3, 'call_id': 'b', 'tool': 'command_execution', 'arguments': "Get-Content -Raw 'docs/history/example.md'"},
+            {'event': 'tool_call', 'sequence': 4, 'tool': 'command_execution', 'arguments': 'flutter test test/example.dart'},
+            {'event': 'tool_call', 'sequence': 5, 'tool': 'command_execution', 'arguments': 'flutter test test/example.dart'},
+            {'event': 'raw_event', 'sequence': 6, 'payload': {'type': 'item.completed', 'item': {'aggregated_output': 'Output truncated secret-marker', 'exit_code': 1}}},
+        ]
+        result = agent_eval.analyze_trace(events)
+        self.assertEqual(4, result['tool_calls'])
+        self.assertEqual([1, 3], result['file_read_references'][0]['sequences'])
+        self.assertEqual([6], result['truncated_output_sequences'])
+        self.assertEqual([6], result['failed_tool_sequences'])
+        self.assertFalse(result['repeated_verification_candidates'][0]['no_changes_proven'])
+        self.assertEqual('not_determined', result['recovery_failure'])
+        self.assertNotIn('secret-marker', json.dumps(result))
+
+    def test_comparison_pairs_trials_and_rejects_confounded_or_missing_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            roots = [Path(directory) / name for name in ('baseline', 'candidate')]
+            manifest = dict(
+                case_sha256='case', output_schema_sha256='schema', judge_schema_sha256='disabled', judge_rubric_sha256='disabled',
+                requested_model='fixture', requested_reasoning_effort='low', codex_version='codex-cli 0.1.2',
+                python_version='3.10', os='Windows', os_release='11', machine='AMD64', logical_cpu_count=8,
+                trial_timeout_seconds=900, budgets={'max_input_tokens': 100, 'max_output_tokens': 50, 'max_tool_calls': 10}, git_tree='tree',
+                rules_sha256={'AGENTS.md': 'rules'}, runner_sha256='runner', model_configuration_explicit=True,
+            )
+            report = dict(case_id='fixture', trial=1, passed=True, evaluated=True,
+                          outcome='passed', duration_seconds=10, usage={'input_tokens': 80})
+            def write(root, data, identity):
+                root.mkdir(parents=True, exist_ok=True)
+                (root / 'report.json').write_text(json.dumps(data), encoding='utf-8')
+                (root / 'experiment_manifest.json').write_text(json.dumps(identity), encoding='utf-8')
+            write(roots[0], report, manifest)
+            write(roots[1], {**report, 'duration_seconds': 8, 'usage': {'input_tokens': 60}}, {**manifest, 'git_tree': 'new-tree'})
+            result = agent_eval.compare_experiments(*roots)
+            self.assertEqual('paired_observations', result['status'])
+            self.assertEqual(-20, result['pairs'][0]['input_tokens_delta'])
+            self.assertEqual('not_assessed', result['promotion_decision'])
+            for broken in ({**manifest, 'budgets': {}}, {**manifest, 'requested_model': ''}):
+                for root in roots:
+                    write(root, report, broken)
+                self.assertEqual('incomparable', agent_eval.compare_experiments(*roots)['status'])
+            for override in ({'duration_seconds': float('nan')}, {'duration_seconds': float('inf')},
+                             {'evaluated': None, 'outcome': None}, {'passed': False}, {'usage': None}):
+                for root in roots:
+                    write(root, {**report, **override}, manifest)
+                self.assertEqual('incomparable', agent_eval.compare_experiments(*roots)['status'])
+            write(roots[0], report, manifest)
+            for override in ({'requested_model': 'other'}, {'budgets': {}}, {'runner_sha256': None},
+                             {'codex_version': 'unknown'}, {'model_configuration_explicit': False}):
+                write(roots[1], report, {**manifest, **override})
+                self.assertEqual('incomparable', agent_eval.compare_experiments(*roots)['status'])
+            for override in ({'trial': 2}, {'outcome': 'infrastructure_error', 'evaluated': False}, {'usage': {}}):
+                write(roots[1], {**report, **override}, manifest)
+                self.assertEqual('incomparable', agent_eval.compare_experiments(*roots)['status'])
+            write(roots[1], report, manifest)
+            (roots[1] / 'experiment_manifest.json').unlink()
+            self.assertEqual('incomparable', agent_eval.compare_experiments(*roots)['status'])
+
+    def test_version_output_does_not_export_wrapper_diagnostics(self):
+        for value in [r'C:\Users\private\config secret-marker',
+                      'codex-cli 0.1.2\nsecret-marker', 'codex-cli 0.1.2-secret', '']:
+            self.assertEqual('unknown', agent_eval._safe_codex_version(value))
+        self.assertEqual('codex-cli 0.144.5', agent_eval._safe_codex_version('codex-cli 0.144.5\n'))
+        with patch.object(agent_eval, '_codex_executable', return_value='fixture'), \
+                patch.object(agent_eval.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    [], 1, 'codex-cli 0.144.5', r'C:\Users\private secret-marker')):
+            self.assertEqual('unknown', agent_eval._codex_version())
+
+    def test_empty_model_options_are_rejected_before_running(self):
+        for model, effort in [('', 'low'), (' ', 'low'), ('model', ''), (' model', 'low')]:
+            with self.assertRaises(agent_eval.EvalError):
+                agent_eval.run_case({}, Path('unused'), 1, model, False, False, effort, 900)
+
+    def test_manifest_tracks_rules_and_content_without_exporting_secrets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+
+            def git(*args):
+                return subprocess.run(
+                    ["git", *args], cwd=repo, check=True, capture_output=True,
+                )
+
+            git("init")
+            (repo / "AGENTS.md").write_text("保留用户数据", encoding="utf-8")
+            (repo / "private-config.txt").write_text("secret-marker", encoding="utf-8")
+            git("add", "AGENTS.md")
+
+            def commit():
+                git("-c", "user.name=Eval", "-c", "user.email=eval@local.invalid",
+                    "commit", "--allow-empty", "-m", "fixture")
+
+            commit()
+            case = {"id": "fixture", "suite": "regression"}
+
+            def manifest(model=None, effort=None):
+                return agent_eval._experiment_manifest(
+                    repo, case, model=model, reasoning_effort=effort,
+                    trial_timeout_seconds=900, codex_version="fixture-cli",
+                )
+
+            initial = manifest()
+            self.assertFalse(initial["model_configuration_explicit"])
+            self.assertIsNone(initial["resolved_model"])
+            self.assertNotIn("secret-marker", json.dumps(initial))
+            # 直接递归检查解码后的字符串，避免 Windows 反斜杠 JSON 转义掩盖泄露。
+            def strings(value):
+                if isinstance(value, str):
+                    yield value
+                elif isinstance(value, dict):
+                    for key, child in value.items():
+                        yield key
+                        yield from strings(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        yield from strings(child)
+            self.assertFalse(any(str(repo) in text for text in strings(initial)))
+            self.assertEqual(["AGENTS.md"], list(initial["rules_sha256"]))
+            commit()
+            self.assertEqual(initial["git_tree"], manifest()["git_tree"])
+            (repo / "AGENTS.md").write_text("保留用户数据与来源队列", encoding="utf-8")
+            git("add", "AGENTS.md")
+            commit()
+            changed = manifest("fixture-model", "low")
+            self.assertTrue(changed["model_configuration_explicit"])
+            self.assertNotEqual(initial["git_tree"], changed["git_tree"])
+            self.assertNotEqual(initial["rules_sha256"], changed["rules_sha256"])
+            self.assertEqual(initial["case_sha256"], changed["case_sha256"])
+            case["prompt"] = "different task"
+            self.assertNotEqual(changed["case_sha256"], manifest()["case_sha256"])
+
+            actual_schema = repo / 'private-schema.json'
+            actual_schema.write_text('{"type":"object"}', encoding='utf-8')
+            with patch.object(agent_eval, 'RESULT_SCHEMA', actual_schema):
+                before_schema = manifest()
+                actual_schema.write_text('{"type":"string"}', encoding='utf-8')
+                after_schema = manifest()
+                self.assertEqual(before_schema['git_tree'], after_schema['git_tree'])
+                self.assertNotEqual(before_schema['output_schema_sha256'], after_schema['output_schema_sha256'])
+
+                artifacts = repo / 'artifacts'
+                def stop_before_agent(*args):
+                    saved = json.loads((artifacts / 'fixture' / 'trial-1' / 'experiment_manifest.json').read_text(encoding='utf-8'))
+                    self.assertEqual(actual_schema, args[2])
+                    self.assertEqual(after_schema['output_schema_sha256'], saved['output_schema_sha256'])
+                    raise RuntimeError('verified-before-agent')
+                with patch.object(agent_eval, 'REPO_ROOT', repo), \
+                        patch.object(agent_eval, '_codex_version', return_value='codex-cli 0.144.5'), \
+                        patch.object(agent_eval, '_build_agent_prompt', return_value='fixture'), \
+                        patch.object(agent_eval, '_run_codex', side_effect=stop_before_agent):
+                    with self.assertRaisesRegex(RuntimeError, 'verified-before-agent'):
+                        agent_eval.run_case(case, artifacts, 1, None, False, False, None, 900)
+            rubrics = repo / 'rubrics'
+            rubrics.mkdir()
+            rubric = rubrics / 'fixture.json'
+            rubric.write_text('{"criteria":[]}', encoding='utf-8')
+            case['expected'] = {'rubric': 'fixture'}
+            with patch.object(agent_eval, 'EVAL_ROOT', repo):
+                def judged_manifest():
+                    return agent_eval._experiment_manifest(repo, case, model='fixture', reasoning_effort='low',
+                        trial_timeout_seconds=900, codex_version='codex-cli 0.1.2', with_judge=True)
+                before_rubric = judged_manifest()
+                rubric.write_text('{"criteria":[1]}', encoding='utf-8')
+                after_rubric = judged_manifest()
+                self.assertEqual(before_rubric['git_tree'], after_rubric['git_tree'])
+                self.assertNotEqual(before_rubric['judge_rubric_sha256'], after_rubric['judge_rubric_sha256'])
 
 
 if __name__ == "__main__":
