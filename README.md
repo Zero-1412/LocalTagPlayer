@@ -8,7 +8,7 @@ Local Tag Player 面向“本地视频很多、仅靠文件夹已经难以整理
 
 [下载最新版本](https://github.com/Zero-1412/LocalTagPlayer/releases/latest) · [安装指南](INSTALL.md) · [查看更新记录](CHANGELOG.md) · [阅读架构说明](ARCHITECTURE.md)
 
-> 当前发布版为 `v0.2.9`。提供 Windows x64 安装器与 macOS DMG；签名/公证状态以 Release 页面说明为准。Linux 暂时支持源码构建。安装前请核对 Release 页面随附的 SHA-256。
+> 当前发布版为 `v0.2.11`。提供 Windows x64 安装器与 macOS DMG；签名/公证状态以 Release 页面说明为准。Linux 暂时支持源码构建。安装前请核对 Release 页面随附的 SHA-256。
 
 ## 产品预览
 
@@ -119,8 +119,8 @@ flowchart LR
 
 | 平台 | 产物 | 当前状态 |
 | --- | --- | --- |
-| Windows x64 | `.exe` 安装器 | `v0.2.9`；签名状态以 Release 页面说明为准 |
-| macOS | `.dmg` | `v0.2.9`；签名/公证状态以 Release 页面说明为准 |
+| Windows x64 | `.exe` 安装器 | `v0.2.11`；签名状态以 Release 页面说明为准 |
+| macOS | `.dmg` | `v0.2.11`；签名/公证状态以 Release 页面说明为准 |
 | Linux | 源码构建 | CI 验证 adapter、构建与启动，暂未提供正式安装包 |
 
 > 当前 Windows 与 macOS 安装包可能触发 Windows SmartScreen 或 macOS Gatekeeper。请核对 Release 页面随附的 `SHA256SUMS` 文件；在平台签名与公证完成前，不应把安装包描述为受信任签名产物。
@@ -160,7 +160,7 @@ flutter build windows --debug
 
 ## 项目状态与边界
 
-- 当前发布版本：`v0.2.4`（应用构建号 `6`）。
+- 当前发布版本：`v0.2.11`（应用构建号 `13`）。
 - 当前优先级：标签发现、稳定身份、标签维护、筛选队列、缓存诊断与跨平台发布。
 - 暂不优先：字幕、音轨、逐帧、A-B loop 等专业播放器能力。
 - 项目源代码采用 [MIT License](LICENSE)；第三方组件与随包工具仍分别受其原始许可证约束。
