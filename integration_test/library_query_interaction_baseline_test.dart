@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -11,6 +12,7 @@ import 'package:local_tag_player/src/pages/library/library_page.dart';
 import 'package:local_tag_player/src/pages/library/library_page_state_host.dart';
 import 'package:local_tag_player/src/pages/player/player_page.dart';
 import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart';
+import 'support/phase_frame_recorder.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -19,7 +21,9 @@ import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart';
  * 必须显式提供带标记的可丢弃 profile；结果只保存数量、时延和帧统计，不输出媒体文本。
  */
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  // 让生产动画自然逐帧运行；默认 fadePointers/onlyPumps 会把测试等待误作长帧。
+  binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
   testWidgets('隔离大库查询、排序、标签和播放返回基线', (tester) async {
     // integration_test 默认不注册模拟输入；显式接入后才可用 enterText 驱动 TextField。
     // 这仍是 Flutter 输入协议注入，不声称覆盖原生 IME 或硬件键盘。
@@ -32,13 +36,22 @@ void main() {
     }
     final output = Directory('$profile/evidence')..createSync();
     final samples = <String, List<double>>{};
-    final frames = <ui.FrameTiming>[];
+    final recorder = PhaseFrameRecorder();
+    final startupOnly =
+        Platform.environment['LOCAL_TAG_PLAYER_BASELINE_STARTUP_ONLY'] == '1';
+    final scanOnly =
+        Platform.environment['LOCAL_TAG_PLAYER_BASELINE_SCAN_ONLY'] == '1';
+    final repeats = int.tryParse(
+            Platform.environment['LOCAL_TAG_PLAYER_BASELINE_REPEATS'] ?? '') ??
+        20;
+    final eventGaps = <double>[];
+    final eventGapsByMode = <String, List<double>>{};
+    Timer? eventTimer;
     final unavailable = <String>[];
     var scanActiveSearches = 0;
     var completed = false;
     final startedAt = DateTime.now().toUtc().toIso8601String();
-    void collect(List<ui.FrameTiming> values) => frames.addAll(values);
-    WidgetsBinding.instance.addTimingsCallback(collect);
+    WidgetsBinding.instance.addTimingsCallback(recorder.collect);
     final startup = Stopwatch()..start();
     try {
       await app.main();
@@ -57,19 +70,35 @@ void main() {
                   .evaluate()
                   .isNotEmpty);
       samples['startup_profile'] = [startup.elapsedMicroseconds / 1000];
+      stdout.writeln('LTP_BASELINE_ACTIONABLE');
       expect(runtime.store!.videos.length, greaterThanOrEqualTo(2000));
+      recorder.enter('idle');
+      await tester.pump(const Duration(milliseconds: 600));
 
       Future<void> measure(String name, Future<void> Function() action,
           bool Function() completed) async {
         await _dismissDiscoveryPrompt(tester);
+        stdout.writeln(
+            'LTP_PHASE action=$name sample=${samples[name]?.length ?? 0}');
+        recorder.enter(name);
+        final dataBefore =
+            host.resultEpoch(host.currentFilterQuery()).dataRevision;
+        final requestBefore = runtime.queryController.revision;
         final watch = Stopwatch()..start();
         await action();
         try {
           await _until(tester, completed);
         } on Object {
+          recorder.failCurrentPhase();
+          recorder.enter('failure_capture');
           await File('${output.path}/failure-state.json')
               .writeAsString(jsonEncode({
             'stage': name,
+            'dataRevisionBefore': dataBefore,
+            'dataRevisionAfter':
+                host.resultEpoch(host.currentFilterQuery()).dataRevision,
+            'requestRevisionBefore': requestBefore,
+            'requestRevisionAfter': runtime.queryController.revision,
             'inputLength': runtime.searchController.text.length,
             'requestedLength':
                 runtime.queryController.requestedQuery?.keyword?.length,
@@ -91,11 +120,19 @@ void main() {
             .putIfAbsent(name, () => [])
             .add(watch.elapsedMicroseconds / 1000);
         // 本次计时结束后等待布局稳定，避免下一次点击命中退场控件。
-        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 600));
+        recorder.enter('idle');
       }
 
       final search = find.byKey(LibrarySmokeKeys.searchField);
-      for (var n = 0; n < 30; n++) {
+      for (var n = 0;
+          n <
+              (startupOnly
+                  ? 1
+                  : scanOnly
+                      ? 2
+                      : 30);
+          n++) {
         final query = n.isEven ? '不存在的基准词xyz' : '';
         await measure(
             n == 0 ? 'search_first' : 'search_warm',
@@ -104,196 +141,281 @@ void main() {
                 runtime.queryController.state?.query.keyword?.trim() == query &&
                 !runtime.isRefreshingVideos);
       }
-      for (var n = 0; n < 20; n++) {
-        final previous = runtime.sortController.fingerprint;
-        await _dismissDiscoveryPrompt(tester);
-        final sortButton = find.descendant(
-            of: find.byKey(LibrarySmokeKeys.topSortDirectionButton),
-            matching: find.byType(IconButton));
-        if (n == 0) {
-          final rect = tester.getRect(sortButton);
-          await File('${output.path}/sort-hit-test.json')
-              .writeAsString(jsonEncode({
-            'center': [rect.center.dx, rect.center.dy],
-            'size': [rect.width, rect.height],
-            'view': [
-              tester.view.physicalSize.width,
-              tester.view.physicalSize.height
-            ],
-            'dpr': tester.view.devicePixelRatio,
-            'hit': sortButton.hitTestable().evaluate().isNotEmpty,
-          }));
-        }
-        await measure(
-            'sort_warm',
-            () => tester.tap(sortButton),
-            () =>
-                runtime.sortController.fingerprint != previous &&
-                !runtime.isRefreshingVideos);
+      if (startupOnly) {
+        completed = true;
+        return;
       }
-      Future<void> openTags() async {
-        if (!runtime.isTagDiscoveryPanelOpen) {
-          final rail =
-              find.byKey(LibrarySmokeKeys.collapsedTagRail).hitTestable();
-          if (rail.evaluate().isNotEmpty) {
-            await tester.tap(rail);
-            await tester.pump(const Duration(milliseconds: 300));
-          }
-        }
-      }
-
-      await openTags();
-      final chips = find
-          .byWidgetPredicate((w) =>
-              w.key is ValueKey<String> &&
-              ((w.key as ValueKey<String>)
-                      .value
-                      .startsWith('smoke.tag.primary-row:') ||
-                  (w.key as ValueKey<String>)
-                      .value
-                      .startsWith('smoke.tag.primary-header:')))
-          .hitTestable();
-      final tagIds = chips
-          .evaluate()
-          .map((element) {
-            final key = element.widget.key! as ValueKey<String>;
-            return key.value.substring(key.value.indexOf(':') + 1);
-          })
-          .toSet()
-          .take(2)
-          .toList();
-      if (tagIds.length < 2) {
-        unavailable.add('tag_click: fewer than two visible primary groups');
-      } else {
+      if (!scanOnly) {
         for (var n = 0; n < 20; n++) {
-          await openTags();
-          final tagId = tagIds[n % tagIds.length];
-          // 一级标题只展开分类；“默认专辑”才执行真实一级筛选，交替两组确保查询变化。
-          final collapsed =
-              find.byKey(LibrarySmokeKeys.primaryRow(tagId)).hitTestable();
-          if (collapsed.evaluate().isNotEmpty) {
-            await tester.tap(collapsed);
-            await tester.pump(const Duration(milliseconds: 300));
+          final previous = runtime.sortController.fingerprint;
+          await _dismissDiscoveryPrompt(tester);
+          final sortButton = find.descendant(
+              of: find.byKey(LibrarySmokeKeys.topSortDirectionButton),
+              matching: find.byType(IconButton));
+          if (n == 0) {
+            final rect = tester.getRect(sortButton);
+            await File('${output.path}/sort-hit-test.json')
+                .writeAsString(jsonEncode({
+              'center': [rect.center.dx, rect.center.dy],
+              'size': [rect.width, rect.height],
+              'view': [
+                tester.view.physicalSize.width,
+                tester.view.physicalSize.height
+              ],
+              'dpr': tester.view.devicePixelRatio,
+              'hit': sortButton.hitTestable().evaluate().isNotEmpty,
+            }));
           }
-          final old = runtime.queryController.state;
-          final tagEntry = find
-              .byKey(LibrarySmokeKeys.tagChip('$tagId::default-album'))
-              .hitTestable();
           await measure(
-              'tag_warm',
-              () => tester.tap(tagEntry.first),
+              'sort_warm',
+              () => tester.tap(sortButton),
               () =>
-                  runtime.queryController.state != old &&
+                  runtime.sortController.fingerprint != previous &&
                   !runtime.isRefreshingVideos);
         }
-      }
+        Future<void> openTags() async {
+          if (!runtime.isTagDiscoveryPanelOpen) {
+            final rail =
+                find.byKey(LibrarySmokeKeys.collapsedTagRail).hitTestable();
+            if (rail.evaluate().isNotEmpty) {
+              await tester.tap(rail);
+              await tester.pump(const Duration(milliseconds: 300));
+            }
+          }
+        }
 
-      if (runtime.isMainSidebarCollapsed) {
-        await tester.tap(find.byKey(LibrarySmokeKeys.sidebarCollapseToggle));
-        await tester.pump(const Duration(milliseconds: 300));
-      }
-      final roots = find
-          .byWidgetPredicate((w) =>
-              w.key is ValueKey<String> &&
-              (w.key as ValueKey<String>).value.startsWith('smoke.local.root:'))
-          .hitTestable();
-      if (roots.evaluate().isEmpty) {
-        unavailable.add('root_navigation: no visible root');
-      } else {
-        await measure('root_enter', () => tester.tap(roots.first),
-            () => runtime.localLibraryPath != null);
-        final rootPath = runtime.localLibraryPath;
-        final folders = find
+        // 展开/收起单列阶段，不能把动画准备工作混入标签查询的可见结果延迟。
+        for (var n = 0; n < repeats; n++) {
+          recorder.enter('tag_panel_animation');
+          await openTags();
+          final collapse =
+              find.byKey(LibrarySmokeKeys.tagPanelCollapseHeader).hitTestable();
+          await tester.tap(collapse);
+          await tester.pump(const Duration(milliseconds: 600));
+          recorder.enter('idle');
+        }
+        await openTags();
+        final chips = find
             .byWidgetPredicate((w) =>
                 w.key is ValueKey<String> &&
-                (w.key as ValueKey<String>)
-                    .value
-                    .startsWith('smoke.local.folder:'))
+                ((w.key as ValueKey<String>)
+                        .value
+                        .startsWith('smoke.tag.primary-row:') ||
+                    (w.key as ValueKey<String>)
+                        .value
+                        .startsWith('smoke.tag.primary-header:')))
             .hitTestable();
-        if (folders.evaluate().isNotEmpty) {
-          await measure('folder_enter', () => tester.tap(folders.first),
-              () => runtime.localLibraryPath != rootPath);
-        }
-        final back = find.byKey(LibrarySmokeKeys.localBackButton).hitTestable();
-        if (back.evaluate().isNotEmpty && runtime.sourceNavigation.canGoBack) {
-          await measure('root_back', () => tester.tap(back),
-              () => runtime.localLibraryPath == rootPath);
+        final tagIds = chips
+            .evaluate()
+            .map((element) {
+              final key = element.widget.key! as ValueKey<String>;
+              return key.value.substring(key.value.indexOf(':') + 1);
+            })
+            .toSet()
+            .take(2)
+            .toList();
+        if (tagIds.length < 2) {
+          unavailable.add('tag_click: fewer than two visible primary groups');
         } else {
-          unavailable.add('root_back: no visible back button');
+          for (var n = 0; n < 20; n++) {
+            await openTags();
+            final tagId = tagIds[n % tagIds.length];
+            // 一级标题只展开分类；“默认专辑”才执行真实一级筛选，交替两组确保查询变化。
+            final collapsed =
+                find.byKey(LibrarySmokeKeys.primaryRow(tagId)).hitTestable();
+            if (collapsed.evaluate().isNotEmpty) {
+              recorder.enter('tag_group_animation');
+              await tester.tap(collapsed);
+              await tester.pump(const Duration(milliseconds: 600));
+              recorder.enter('idle');
+            }
+            final old = runtime.queryController.state;
+            final tagEntry = find
+                .byKey(LibrarySmokeKeys.tagChip('$tagId::default-album'))
+                .hitTestable();
+            await measure(
+                'tag_warm',
+                () => tester.tap(tagEntry.first),
+                () =>
+                    runtime.queryController.state != old &&
+                    !runtime.isRefreshingVideos);
+          }
         }
-        final library = find.byIcon(Icons.grid_view_rounded).first;
-        await tester.ensureVisible(library);
-        await measure('library_return', () => tester.tap(library),
-            () => runtime.localLibraryPath == null);
-      }
 
-      Finder? play;
-      for (final video in runtime.queryController.state!.filteredVideos) {
-        final candidate =
-            find.byKey(LibrarySmokeKeys.cardOpen(video.path)).hitTestable();
-        if (candidate.evaluate().isNotEmpty &&
-            await File(video.path).exists()) {
-          play = candidate;
-          break;
+        if (runtime.isMainSidebarCollapsed) {
+          await tester.tap(find.byKey(LibrarySmokeKeys.sidebarCollapseToggle));
+          await tester.pump(const Duration(milliseconds: 300));
         }
-      }
-      if (play == null || runtime.localLibraryPath != null) {
-        unavailable.add('filtered_playback_return: no library play entry');
-      } else {
-        final before = runtime.queryController.state!;
-        final ids = before.filteredVideos.map((v) => v.videoId).toList();
-        await tester.tap(play.first);
-        await _until(
-            tester, () => find.byType(PlayerPage).evaluate().isNotEmpty);
-        final player = tester.widget<PlayerPage>(find.byType(PlayerPage));
-        expect(player.playlist.map((v) => v.videoId).toList(), ids);
-        await tester.pump(const Duration(seconds: 1));
-        await measure(
-            'player_return',
-            () => tester
-                .tap(find.byKey(const ValueKey('player.back')).hitTestable()),
-            () => find.byType(PlayerPage).evaluate().isEmpty);
-        expect(
-            runtime.queryController.state!.query.keyword, before.query.keyword);
+        for (var navigationRun = 0; navigationRun < repeats; navigationRun++) {
+          final roots = find
+              .byWidgetPredicate((w) =>
+                  w.key is ValueKey<String> &&
+                  (w.key as ValueKey<String>)
+                      .value
+                      .startsWith('smoke.local.root:'))
+              .hitTestable();
+          if (roots.evaluate().isEmpty) {
+            unavailable.add('root_navigation: no visible root');
+          } else {
+            await measure('root_enter', () => tester.tap(roots.first),
+                () => runtime.localLibraryPath != null);
+            final rootPath = runtime.localLibraryPath;
+            final folders = find
+                .byWidgetPredicate((w) =>
+                    w.key is ValueKey<String> &&
+                    (w.key as ValueKey<String>)
+                        .value
+                        .startsWith('smoke.local.folder:'))
+                .hitTestable();
+            if (folders.evaluate().isNotEmpty) {
+              await measure('folder_enter', () => tester.tap(folders.first),
+                  () => runtime.localLibraryPath != rootPath);
+            }
+            final back =
+                find.byKey(LibrarySmokeKeys.localBackButton).hitTestable();
+            if (back.evaluate().isNotEmpty &&
+                runtime.sourceNavigation.canGoBack) {
+              await measure('root_back', () => tester.tap(back),
+                  () => runtime.localLibraryPath == rootPath);
+            } else {
+              unavailable.add('root_back: no visible back button');
+            }
+            final library = find.byIcon(Icons.grid_view_rounded).first;
+            await tester.ensureVisible(library);
+            await measure('library_return', () => tester.tap(library),
+                () => runtime.localLibraryPath == null);
+          }
+        }
+
+        for (var playerRun = 0; playerRun < repeats; playerRun++) {
+          Finder? play;
+          for (final video in runtime.queryController.state!.filteredVideos) {
+            final candidate =
+                find.byKey(LibrarySmokeKeys.cardOpen(video.path)).hitTestable();
+            if (candidate.evaluate().isNotEmpty &&
+                await File(video.path).exists()) {
+              play = candidate;
+              break;
+            }
+          }
+          if (play == null || runtime.localLibraryPath != null) {
+            unavailable.add('filtered_playback_return: no library play entry');
+          } else {
+            final before = runtime.queryController.state!;
+            final ids = before.filteredVideos.map((v) => v.videoId).toList();
+            await measure('player_enter', () => tester.tap(play!.first),
+                () => find.byType(PlayerPage).evaluate().isNotEmpty);
+            final player = tester.widget<PlayerPage>(find.byType(PlayerPage));
+            expect(player.playlist.map((v) => v.videoId).toList(), ids);
+            await tester.pump(const Duration(seconds: 1));
+            await measure(
+                'player_return',
+                () => tester.tap(
+                    find.byKey(const ValueKey('player.back')).hitTestable()),
+                () => find.byType(PlayerPage).evaluate().isEmpty);
+            expect(runtime.queryController.state!.query.keyword,
+                before.query.keyword);
+          }
+        }
       }
       if (Platform.environment['LOCAL_TAG_PLAYER_BASELINE_SCAN'] == '1') {
-        final retainedIds =
-            runtime.store!.videos.values.map((v) => v.videoId).toSet();
-        final scan = find.byKey(LibrarySmokeKeys.rescanButton);
-        await tester.ensureVisible(scan);
-        await tester.tap(scan);
-        await _until(tester, () => runtime.isScanning);
-        for (var n = 0; n < 10 && runtime.isScanning; n++) {
-          final query = n.isEven ? '不存在的并发基准词xyz' : '';
-          await measure(
-              'search_during_scan',
-              () => tester.enterText(search, query),
-              () => runtime.queryController.state?.query.keyword == query);
-          scanActiveSearches++;
+        // 先测纯扫描，再测扫描期间输入；热差量扫描很短，重复独立扫描补足样本。
+        for (var scanRun = 0; scanRun < repeats; scanRun++) {
+          final passive = scanRun.isEven;
+          final scanPhase = passive ? 'scan_passive' : 'scan_with_input';
+          stdout.writeln('LTP_PHASE scan=$scanPhase repeat=$scanRun');
+          final retainedIds =
+              runtime.store!.videos.values.map((v) => v.videoId).toSet();
+          final scan = find.byKey(LibrarySmokeKeys.rescanButton);
+          await tester.ensureVisible(scan);
+          recorder.enter(scanPhase);
+          final scanWatch = Stopwatch()..start();
+          int? scanCompletedUs;
+          var scanObserved = false;
+          var lastTick = DateTime.now().microsecondsSinceEpoch;
+          eventTimer = Timer.periodic(const Duration(milliseconds: 10), (_) {
+            final now = DateTime.now().microsecondsSinceEpoch;
+            // 只采扫描确实活动期间的间隙，不能让输入后的稳定等待稀释扫描长尾。
+            if (runtime.isScanning) {
+              scanObserved = true;
+              eventGaps.add((now - lastTick) / 1000);
+              eventGapsByMode
+                  .putIfAbsent(scanPhase, () => [])
+                  .add((now - lastTick) / 1000);
+            } else if (scanObserved && scanCompletedUs == null) {
+              scanCompletedUs = scanWatch.elapsedMicroseconds;
+              // 包含阻塞到本次回调的尾部间隙，避免漏掉扫描完成时的长任务。
+              eventGaps.add((now - lastTick) / 1000);
+              eventGapsByMode
+                  .putIfAbsent(scanPhase, () => [])
+                  .add((now - lastTick) / 1000);
+            }
+            lastTick = now;
+          });
+          await tester.tap(scan);
+          await _until(tester, () => runtime.isScanning);
+          for (var n = 0; !passive && n < 10 && runtime.isScanning; n++) {
+            final query = n.isEven ? '不存在的并发基准词xyz' : '';
+            await measure(
+                'search_during_scan',
+                () => tester.enterText(search, query),
+                () => runtime.queryController.state?.query.keyword == query);
+            scanActiveSearches++;
+            recorder.enter(scanPhase);
+          }
+          await _until(tester, () => !runtime.isScanning);
+          samples
+              .putIfAbsent('${scanPhase}_observed_total', () => [])
+              .add((scanCompletedUs ?? scanWatch.elapsedMicroseconds) / 1000);
+          eventTimer.cancel();
+          recorder.enter('idle');
+          expect(runtime.store!.videos.values.map((v) => v.videoId).toSet(),
+              containsAll(retainedIds));
+          await tester.enterText(search, '');
+          await _until(
+              tester, () => runtime.queryController.state?.query.keyword == '');
+          await tester.pump(const Duration(milliseconds: 600));
         }
-        await _until(tester, () => !runtime.isScanning);
-        expect(runtime.store!.videos.values.map((v) => v.videoId).toSet(),
-            containsAll(retainedIds));
-        await tester.enterText(search, '');
-        await _until(
-            tester, () => runtime.queryController.state?.query.keyword == '');
       }
       await _capture(tester, '${output.path}/library.png');
       completed = true;
     } finally {
-      WidgetsBinding.instance.removeTimingsCallback(collect);
-      final timings =
-          frames.map((f) => f.totalSpan.inMicroseconds / 1000).toList();
+      eventTimer?.cancel();
+      recorder.enter('drain');
+      // 引擎批量发送 FrameTiming；保留尾部等待，归属使用帧时间而非回调到达时间。
+      await tester.pump(const Duration(seconds: 2));
+      recorder.enter('finished');
+      WidgetsBinding.instance.removeTimingsCallback(recorder.collect);
+      final records = recorder.records();
+      final timings = recorder.frames
+          .map((f) => f.totalSpan.inMicroseconds / 1000)
+          .toList();
       await File('${output.path}/interaction-summary.json')
           .writeAsString(const JsonEncoder.withIndent('  ').convert({
         'evidence': 'Flutter Finder, production page, profile build',
         'startedAt': startedAt,
         'completed': completed,
+        'framePolicy': 'fullyLive',
+        'startupScope':
+            'Dart app.main to actionable LibraryPage; excludes process/engine bootstrap',
+        'startupOnly': startupOnly,
+        'scanOnly': scanOnly,
         'cacheState': Platform.environment['LOCAL_TAG_PLAYER_BASELINE_CACHE'] ??
             'uncontrolled',
-        'actions': samples.map((key, values) => MapEntry(key, _stats(values))),
+        'actions':
+            samples.map((key, values) => MapEntry(key, sampleStats(values))),
         'rawSamplesMs': samples,
-        'framesAllPhases': _stats(timings),
+        'framesAllPhases': sampleStats(timings),
+        'framesByPhase': {
+          for (final phase in records.map((r) => r['phase']).toSet())
+            phase:
+                frameStats(records.where((r) => r['phase'] == phase).toList()),
+        },
+        'phaseWindows': recorder.windows,
+        'rawFrames': records,
+        'scanEventLoopGapMs': sampleStats(eventGaps),
+        'scanEventLoopGapByMode': eventGapsByMode
+            .map((key, value) => MapEntry(key, sampleStats(value))),
         'slowFramesOver33ms': timings.where((ms) => ms > 33.3).length,
         'unavailable': unavailable,
         'nativeMouseVerified': false,
@@ -326,19 +448,6 @@ Future<void> _dismissDiscoveryPrompt(WidgetTester tester) async {
       await tester.pump(const Duration(milliseconds: 300));
     }
   }
-}
-
-Map<String, Object?> _stats(List<double> values) {
-  if (values.isEmpty) return {'n': 0};
-  final sorted = [...values]..sort();
-  double percentile(double p) => sorted[(sorted.length * p).ceil() - 1];
-  return {
-    'n': sorted.length,
-    'p50Ms': percentile(.5),
-    'p95Ms': percentile(.95),
-    'p99Ms': percentile(.99),
-    'maxMs': sorted.last
-  };
 }
 
 /** 截取 Flutter surface；不包含系统窗口边框和原生选择器。 */

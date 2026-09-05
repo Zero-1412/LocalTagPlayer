@@ -20,3 +20,6 @@
 不拥有 SQLite、PlayerBackend、filtered queue 内容或缓存策略。
 
 历史：`docs/history/chat/CHAT_3_MEDIA_LIBRARY_TAG_UI_THROUGH_2026-07-30.md`。
+
+分阶段帧、重复路由与启动测量见 `docs/qa/phase_frames_and_upgrade_acceptance_20260905.md`。
+标签动画及结果替换的优化必须同时复测操作时延和 build/raster/total 帧分位数，失败等待窗口单列。

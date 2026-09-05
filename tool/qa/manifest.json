@@ -8,6 +8,15 @@
   ],
   "entries": [
     {
+      "id": "library-startup-repeat-baseline",
+      "path": "tool/repeat_library_startup_baseline.ps1",
+      "status": "experimental",
+      "kind": "isolated-startup-benchmark",
+      "last_verified": "2026-09-05",
+      "evidence": "docs/qa/phase_frames_and_upgrade_acceptance_20260905.md",
+      "replacement": null
+    },
+    {
       "id": "library-search-index-benchmark",
       "path": "tool/benchmark_library_search_index.dart",
       "status": "active",
