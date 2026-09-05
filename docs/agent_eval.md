@@ -72,6 +72,14 @@ trace-diagnostics 对工具参数取摘要并保留事件序号；已识别 Get-
 失败工具退出码单列，不能直接等同错误恢复失败。读取旧轨迹需显式包含忽略文件：
 `rg --files --hidden --no-ignore artifacts/agent_eval`，不要把 Git 忽略误判成证据不存在。
 
+summary.failure_diagnostics 按确定性用例预期单列 false_completion 与 missing_validation。
+前者仅指报告称 completed 而用例要求 blocked/failed；反方向的不匹配不算误宣告完成。
+后者只检查用例必需的验证记录是否缺失，不证明记录声称的命令真的执行过。
+每类分别报告 assessed/unassessed 与 findings，旧报告缺事实、基础设施错误不作为零失败证据。
+未配置必需验证记录的用例也不计为“已检查且零缺失”。
+错误恢复保留 not_determined，重复探索仍需 trace_review；这些诊断不改变分数、N=5或晋级门槛。
+确定性边界由 FailureDiagnosticTests 覆盖；未以新分类代替真实成对实验。
+
 `validate` 还会严格按 UTF-8 读取所有 repo Skill、验证 `name` / `description`
 frontmatter、可选 `agents/openai.yaml` 的界面字段，并拒绝 `.agents/skills` 根目录下
 绕过渐进披露的松散 Markdown。`governance_budget.json` 对默认加载的规则和状态文件设置

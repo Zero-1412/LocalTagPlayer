@@ -765,6 +765,58 @@ class AgentEvalToolTest(unittest.TestCase):
         self.assertIsNone(case["average_score"])
 
 
+class FailureDiagnosticTests(unittest.TestCase):
+    def test_invalid_or_unconfigured_validation_scope_is_unassessed(self):
+        for count, missing in [(0, []), (None, []), (True, []), (-1, []),
+                               ("1", []), (1, None), (1, [""]), (1, [7]),
+                               (1, ["one", "two"])]:
+            with self.subTest(count=count, missing=missing):
+                report = {"evaluated": True, "outcome": "agent_failure", "observed": {
+                    "required_validation_count": count,
+                    "missing_validation_requirements": missing}}
+                category = agent_eval.summarize_failure_diagnostics([report])["categories"]["missing_validation"]
+                self.assertEqual(category["assessed_trials"], 0)
+                self.assertEqual(category["unassessed_trials"], 1)
+
+    def test_scorer_exports_oracle_evidence_to_summary_without_changing_score(self):
+        case = {"id": "fixture", "suite": "regression", "category": "fixture", "expected": {
+            "status": "blocked", "required_validation_records": {
+                "runtime": {"status": "blocked", "method": "human"}}}}
+        report = agent_eval.score_result(case, _structured_result(), [], [])
+        report["trial"] = 1
+        summary = agent_eval.summarize_reports([report])
+        findings = summary["failure_diagnostics"]["categories"]
+        self.assertEqual(report["score"], 0)
+        self.assertFalse(summary["cases"][0]["stable"])
+        self.assertEqual(findings["false_completion"]["finding_trials"], 1)
+        self.assertEqual(findings["missing_validation"]["findings"][0]["requirement_ids"], ["runtime"])
+
+    def test_direction_missing_records_and_unknown_reports(self):
+        def report(trial, actual, expected, missing):
+            return {"case_id": "fixture", "trial": trial, "evaluated": True,
+                    "outcome": "agent_failure", "observed": {
+                        "result_status": actual, "expected_status": expected,
+                        "required_validation_count": 1,
+                        "missing_validation_requirements": missing}}
+        records = [report(1, "completed", "blocked", ["runtime"]),
+                   report(2, "blocked", "completed", []),
+                   {"case_id": "legacy", "trial": 1},
+                   {**report(3, "completed", "blocked", ["runtime"]),
+                    "outcome": "infrastructure_error"},
+                   report(4, [], "completed", None),
+                   {**report(5, "completed", "completed", []), "observed": {
+                       "required_validation_count": 0, "missing_validation_requirements": []}}]
+        summary = agent_eval.summarize_failure_diagnostics(records)
+        categories = summary["categories"]
+        self.assertEqual(categories["false_completion"]["assessed_trials"], 2)
+        self.assertEqual(categories["false_completion"]["finding_trials"], 1)
+        self.assertEqual(categories["false_completion"]["unassessed_trials"], 4)
+        self.assertEqual(categories["missing_validation"]["unassessed_trials"], 4)
+        self.assertEqual(categories["missing_validation"]["findings"],
+                         [{"case_id": "fixture", "trial": 1, "requirement_ids": ["runtime"]}])
+        self.assertEqual(summary["error_recovery"]["status"], "not_determined")
+
+
 class ExperimentManifestTests(unittest.TestCase):
     """使用真实临时 Git 仓库验证内容身份与默认配置的不确定性。"""
 

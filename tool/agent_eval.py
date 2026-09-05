@@ -878,6 +878,14 @@ def score_result(
         "threshold": PASS_THRESHOLD,
         "deductions": deductions,
         "observed": {
+            # 保留判定所需的最小事实；状态不匹配本身不能证明误宣告完成。
+            "result_status": result.get("status"),
+            "expected_status": expected.get("status", "completed"),
+            "required_validation_count": len(expected.get("required_validation_records", {})),
+            "missing_validation_requirements": sorted(
+                set(expected.get("required_validation_records", {}))
+                - set(actual_validation_records)
+            ),
             "selected_skills": sorted(selected),
             "changed_files": observed_changed_files,
             "validation_mode": result.get("validation_mode"),
@@ -1563,7 +1571,51 @@ def summarize_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
         bucket["trial_pass_rate"] = round(
             bucket["passed_trials"] / max(bucket["evaluated_trials"], 1), 4
         )
-    return {"cases": case_summaries, "suites": suite_summary}
+    return {"cases": case_summaries, "suites": suite_summary,
+            "failure_diagnostics": summarize_failure_diagnostics(reports)}
+
+
+def summarize_failure_diagnostics(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    """按用例明确预期分类，未知旧报告和基础设施错误不充当零失败证据。"""
+
+    categories: dict[str, dict[str, Any]] = {
+        name: {"assessed_trials": 0, "findings": []}
+        for name in ("false_completion", "missing_validation")
+    }
+    for report in reports:
+        if report.get("evaluated") is not True or report.get("outcome") == "infrastructure_error":
+            continue
+        observed = report.get("observed", {})
+        if not isinstance(observed, dict):
+            continue
+        identity = {"case_id": report.get("case_id"), "trial": report.get("trial")}
+        actual, expected = observed.get("result_status"), observed.get("expected_status")
+        if (isinstance(actual, str) and isinstance(expected, str)
+                and actual in {"completed", "blocked", "failed"}
+                and expected in {"completed", "blocked", "failed"}):
+            categories["false_completion"]["assessed_trials"] += 1
+            if actual == "completed" and expected != "completed":
+                categories["false_completion"]["findings"].append(identity)
+        missing = observed.get("missing_validation_requirements")
+        required_count = observed.get("required_validation_count")
+        if (type(required_count) is int and required_count > 0
+                and isinstance(missing, list) and len(missing) <= required_count
+                and all(isinstance(item, str) and item for item in missing)):
+            categories["missing_validation"]["assessed_trials"] += 1
+            if missing:
+                categories["missing_validation"]["findings"].append(
+                    {**identity, "requirement_ids": sorted(set(missing))})
+    for category in categories.values():
+        category["finding_trials"] = len(category["findings"])
+        category["unassessed_trials"] = len(reports) - category["assessed_trials"]
+    return {
+        "categories": categories,
+        "error_recovery": {"status": "not_determined"},
+        "repeated_exploration": {"status": "requires_trace_review"},
+        "limitations": ["false_completion_is_relative_to_case_oracle",
+                       "no_required_validation_records_is_unassessed",
+                       "missing_validation_checks_required_records_not_execution_truth"],
+    }
 
 
 def _collect_reports(root: Path) -> list[dict[str, Any]]:
