@@ -4,6 +4,7 @@ import '../../models/video_item.dart';
 import '../resources/resource_scheduler.dart';
 import 'library_repository_context.dart';
 import 'library_scan_coordinator.dart';
+import 'library_performance_trace.dart';
 import 'library_store_access.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -108,7 +109,8 @@ class LibraryStoreCoordinatorService {
       favoriteTags: _repository.favoriteTags,
     );
     for (final item in removedVideos) {
-      _repository.videoPersistence.markDetachedInBatch(batch, item.videoId, true);
+      _repository.videoPersistence
+          .markDetachedInBatch(batch, item.videoId, true);
     }
     await batch.commit(noResult: true);
 
@@ -135,14 +137,32 @@ class LibraryStoreCoordinatorService {
       _repository.scanBackend.cancelGeneration(previousGeneration);
     }
     final generation = ++_scanGeneration;
-    final result = await LibraryScanCoordinator(
-      _repository,
-      resourceScheduler: _resourceScheduler,
-    ).scan(
-      generationId: generation,
-      onProgress: onProgress,
-    );
-    _context.markDataChanged();
+    final result = await LibraryPerformanceTrace.measure(
+        'scan.request',
+        () => LibraryScanCoordinator(
+              _repository,
+              resourceScheduler: _resourceScheduler,
+            ).scan(
+              generationId: generation,
+              onProgress: onProgress,
+            ),
+        fields: {
+          'generation': generation,
+          'revisionBefore': _context.dataRevision
+        });
+    final revisionTrace =
+        LibraryPerformanceTrace.begin('scan.revision', fields: {
+      'generation': generation,
+      'revisionBefore': _context.dataRevision,
+      'changed': result.changedVideos.length,
+    });
+    // 成功且空差量的扫描只提交 roots/favoriteTags 元数据，未写视频、标签或关系。
+    // 其它命令独立推进索引修订；不能拿扫描前的修订覆盖并发别名/标签写入。
+    // 取消或任何视频差量均保守失效，查询 epoch 无论如何继续推进。
+    _context.markDataChanged(
+        searchContentChanged:
+            result.cancelled || result.changedVideos.isNotEmpty);
+    revisionTrace?.finish('advance');
     return result;
   }
 

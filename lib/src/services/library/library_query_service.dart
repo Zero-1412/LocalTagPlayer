@@ -9,6 +9,7 @@ import '../../repositories/repository_interfaces.dart';
 import '../tags/tag_query_service.dart';
 import 'library_data_backup_service.dart';
 import 'library_query_compiler.dart';
+import 'library_performance_trace.dart';
 import 'library_repository_context.dart';
 import 'library_scan_service.dart';
 
@@ -168,23 +169,35 @@ class LibraryStoreQueryService
     if (!plan.hasSqlCandidate) {
       return null;
     }
-    final ready = await _searchIndex.ensureFresh(
-      _database,
-      revision: dataRevision,
-    );
+    final ready = await LibraryPerformanceTrace.measure(
+        'candidate.index_ready',
+        () => _searchIndex.ensureFresh(
+              _database,
+              revision: _context.searchIndexRevision,
+            ),
+        fields: {
+          'dataRevision': dataRevision,
+          'indexRevision': _context.searchIndexRevision
+        });
     if (!ready) {
       return null;
     }
     try {
-      final rows = await _database.rawQuery(
-        'SELECT video_id FROM videos WHERE ${plan.whereSql}',
-        plan.whereArgs,
-      );
-      return [
+      final rows = await LibraryPerformanceTrace.measure(
+          'candidate.sql',
+          () => _database.rawQuery(
+                'SELECT video_id FROM videos WHERE ${plan.whereSql}',
+                plan.whereArgs,
+              ));
+      final mapping = LibraryPerformanceTrace.begin('candidate.map',
+          fields: {'rows': rows.length});
+      final result = [
         for (final row in rows)
           if (_context.videos.byId(row['video_id'] as String) case final item?)
             item,
       ];
+      mapping?.finish('total');
+      return result;
     } on Object {
       // 派生索引或 SQLite 扩展异常时安全回退完整 Dart 语义，不阻塞媒体库。
       return null;

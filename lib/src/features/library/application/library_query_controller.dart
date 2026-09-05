@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../../models/platform_models.dart';
 import '../../../models/video_item.dart';
 import '../../../services/tags/tag_query_service.dart';
+import '../../../services/library/library_performance_trace.dart';
 import '../domain/library_query_snapshot.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -161,50 +162,64 @@ class LibraryQueryController {
     }
     final requestRevision = ++_revision;
     _requestedQuery = query;
+    final trace = LibraryPerformanceTrace.begin('query', fields: {
+      'request': requestRevision,
+      'dataRevision': expectedEpoch.dataRevision,
+    });
     final changedSnapshot = changedVideos?.toList(growable: false);
     final removedSnapshot = removedVideoIds?.toList(growable: false);
-    Future<void>.delayed(Duration.zero, () async {
-      if (_disposed ||
-          requestRevision != _revision ||
-          !isStillCurrent(expectedEpoch)) {
-        return;
-      }
-      final watch = Stopwatch()..start();
-      List<VideoItem>? queryCandidates;
-      final loadCandidates = _candidateLoader;
-      if (loadCandidates != null) {
-        try {
-          queryCandidates = await loadCandidates(query);
-        } on Object {
-          // 派生索引失败时回退完整 Dart 查询；不让可选加速器改变页面可用性。
-          queryCandidates = null;
-        }
-      }
-      // 等待候选期间可能已换库、更新数据或释放页面；旧任务不能触碰新 epoch 的缓存，
-      // 也不能在 dispose 后计算、排序或触发诊断回调。发布前的校验仍保留。
-      if (_disposed ||
-          requestRevision != _revision ||
-          !isStillCurrent(expectedEpoch)) {
-        return;
-      }
-      final candidate = queryCandidates == null
-          ? compute(
-              query,
-              changedVideos: changedSnapshot,
-              removedVideoIds: removedSnapshot,
-            )
-          : _source.updateWithCandidates(query, queryCandidates);
-      watch.stop();
-      onMeasured?.call(watch.elapsed);
-      if (_disposed ||
-          requestRevision != _revision ||
-          candidate.epoch != expectedEpoch ||
-          !isStillCurrent(expectedEpoch)) {
-        return;
-      }
-      _state = candidate;
-      onAccepted(candidate);
-    });
+    Future<void>.delayed(
+        Duration.zero,
+        () => LibraryPerformanceTrace.within(trace, () async {
+              if (_disposed ||
+                  requestRevision != _revision ||
+                  !isStillCurrent(expectedEpoch)) {
+                trace?.finish('queued', outcome: 'discarded');
+                return;
+              }
+              trace?.step('queued');
+              final watch = Stopwatch()..start();
+              List<VideoItem>? queryCandidates;
+              final loadCandidates = _candidateLoader;
+              if (loadCandidates != null) {
+                try {
+                  queryCandidates = await loadCandidates(query);
+                } on Object {
+                  // 派生索引失败时回退完整 Dart 查询；不让可选加速器改变页面可用性。
+                  queryCandidates = null;
+                }
+              }
+              // 等待候选期间可能已换库、更新数据或释放页面；旧任务不能触碰新 epoch 的缓存，
+              // 也不能在 dispose 后计算、排序或触发诊断回调。发布前的校验仍保留。
+              if (_disposed ||
+                  requestRevision != _revision ||
+                  !isStillCurrent(expectedEpoch)) {
+                // 只封存被浪费的等待，不触碰结果缓存或 onMeasured/onAccepted。
+                trace?.finish('candidates', outcome: 'discarded');
+                return;
+              }
+              trace?.step('candidates');
+              final candidate = queryCandidates == null
+                  ? compute(
+                      query,
+                      changedVideos: changedSnapshot,
+                      removedVideoIds: removedSnapshot,
+                    )
+                  : _source.updateWithCandidates(query, queryCandidates);
+              trace?.step('verify_sort');
+              watch.stop();
+              onMeasured?.call(watch.elapsed);
+              if (_disposed ||
+                  requestRevision != _revision ||
+                  candidate.epoch != expectedEpoch ||
+                  !isStillCurrent(expectedEpoch)) {
+                trace?.finish('publication_guard', outcome: 'discarded');
+                return;
+              }
+              _state = candidate;
+              onAccepted(candidate);
+              trace?.finish('publish_callback');
+            }));
   }
 
   /** 取消尚未发布的请求，但保留最后一个已接受结果。 */

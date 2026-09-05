@@ -6,6 +6,7 @@ import 'package:local_tag_player/src/features/library/domain/library_query_snaps
 import 'package:local_tag_player/src/models/platform_models.dart';
 import 'package:local_tag_player/src/models/video_item.dart';
 import 'package:local_tag_player/src/services/tags/tag_query_service.dart';
+import 'package:local_tag_player/src/services/library/library_performance_trace.dart';
 
 VideoItem _video(String id, String title) {
   return VideoItem(
@@ -19,6 +20,9 @@ VideoItem _video(String id, String title) {
 }
 
 void main() {
+  // 开启被动计时后仍须满足旧候选不触发诊断、不写缓存及卸载后不发布的既有合同。
+  setUp(() => LibraryPerformanceTrace.start());
+  tearDown(LibraryPerformanceTrace.stop);
   test('旧候选晚到不得污染新 revision 缓存或触发诊断', () async {
     final video = _video('stable', 'alpha');
     final controller = LibraryQueryController();

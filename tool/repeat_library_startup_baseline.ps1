@@ -86,6 +86,9 @@ def main():
                 if report.get('cacheState') != cache or 'processToActionableMs' not in observed:
                     raise RuntimeError(f'{label}: 本次证据不完整，保留现场')
                 shutil.copy2(report_path, output / f'{label}.json')
+                if report.get('tailTraceEnabled'):
+                    # 每次启动单独封存，避免复用 profile 覆盖上一轮首次索引时序。
+                    shutil.copy2(profile / 'evidence/query-tail-trace.json', output / f'{label}-trace.json')
                 row = {'pair': pair + 1, 'cache': cache,
                     'completed': report['completed'] and drive.returncode == 0,
                     'processToActionableMs': observed['processToActionableMs'],

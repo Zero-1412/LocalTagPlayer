@@ -84,9 +84,15 @@ FTS 候选短词按 Unicode 码点判断，别名通过 SQLite JSON 解码后写
 跨 revision 请求等待在途事务自然结束后重新核验，失败释放句柄以允许重试。
 `LibraryQueryController` 在候选异步返回后、更新结果缓存和调用诊断前检查请求代次、epoch
 与 dispose 状态，防止旧候选污染新 revision；发布前校验继续保留。
+成功空差量扫描保留进程内 `searchIndexRevision`，查询 `dataRevision` 仍推进；所有其它写入默认同时失效。
+并发标签命令独立推进索引修订，扫描不得覆盖该值。反例与配对证据见 `docs/qa/search_delivery_index_revision_20260905.md`。
 扫描零差量提交也要比较当前输入的结果 epoch，必要时重新调度最新输入；空差量复用
 相同条件的结果，不额外推进页面标签 revision 或重算计数。索引聚合通过事务内
 `INSERT ... SELECT` 写入派生 FTS，避免全库文本往返 Dart，回滚与完整查询回退保持不变。
+`LibraryPerformanceTrace` 只在显式隔离 QA 会话启用，按请求、revision 和扫描代次记录
+有界数值时序，默认关闭、不写业务文件、不持有 UI 回调。索引 SQL、扫描提交返回及查询发布
+使用同一会话时钟；跨 await 关联不会跨会话复用。等待区间是应用边界墙钟，不能解释为
+SQLite 内部锁等待或 CPU 时间，详见 `docs/qa/query_tail_decomposition_20260905.md`。
 扫描活动中的进度通过页面局部 notifier 更新顶部栏，开始/结束仍刷新全页入口状态；
 标签面板在一次页面构建内复用子树，宽度动画不重复创建标签内容。结果网格也只在同一次
 父级数据构建内缓存可见子树，约束变化重新布局；新筛选/排序/数据快照重建缓存和卡片回调。

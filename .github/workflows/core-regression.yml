@@ -48,7 +48,11 @@ jobs:
           test/library_search_index_equivalence_test.dart
           test/library_query_compiler_phase6_test.dart
           test/library_query_controller_test.dart
+          test/library_performance_trace_test.dart
+          test/library_scan_index_revision_test.dart
+          test/library_search_input_coalescing_test.dart
           test/library_card_file_menu_test.dart
+          test/checked_search_input_test.dart
           test/widget_test.dart
           test/library_playback_queue_controller_test.dart
           test/player_filter_transaction_test.dart

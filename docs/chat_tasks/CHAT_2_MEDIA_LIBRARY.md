@@ -14,6 +14,8 @@
 - 零差量扫描推进 repository epoch 后接续最新输入，旧 Future 晚到不可污染结果；同条件空差量不刷新标签计数。
 - FTS 聚合通过事务内 INSERT SELECT 写入，JSON 解码、stable-ID 等价、失败回滚与重试不变。
 - 回归证据与分批验收见 `../qa/query_correctness_and_baseline_20260905.md`。
+- 尾部成本由显式 QA 时序拆分：索引事务进入/清空/聚合写入/提交返回、扫描 batch 返回、查询候选/校验排序/发布及随后一帧；数值追踪不越过 epoch 防污染边界，见 `../qa/query_tail_decomposition_20260905.md`。
+- 连续输入按微任务合并最新文本，静默更新取消旧调度；成功空差量扫描仅复用 FTS，页面 epoch 仍推进，见 `../qa/search_delivery_index_revision_20260905.md`。
 
 - 同组 OR、跨组 AND、排除 NOT；
 - folder 来源可重算，manual/locked 数据保留；

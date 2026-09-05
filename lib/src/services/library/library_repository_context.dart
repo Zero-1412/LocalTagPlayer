@@ -53,8 +53,11 @@ class LibraryRepositoryContext {
   /** stable videoId 主标签关系索引。 */
   final Map<String, Set<String>> videoTagIdsByVideoId;
 
-  /** 查询/派生索引使用的进程内数据修订；不写入用户数据备份。 */
+  /** 查询使用的进程内数据修订；不写入用户数据备份。 */
   var _dataRevision = 0;
+  /** FTS 内容修订与页面 epoch 分离；仅确认未改可搜索数据的扫描可以保留它。 */
+  var _searchIndexRevision = 0;
+  int get searchIndexRevision => _searchIndexRevision;
   /** SQLite 当前会话是否支持可选 trigram FTS5。 */
   final bool _fts5Available;
 
@@ -68,13 +71,14 @@ class LibraryRepositoryContext {
   int get dataRevision => _dataRevision;
 
   /**
-   * 让查询缓存和派生 FTS 索引失效。
+   * 所有提交推进查询 epoch；默认同时让 FTS 失效。
    *
-   * 修订号只在主库提交成功后推进；查询服务发现新修订时重建一次派生索引，
-   * 从而避免每次关键词输入都全量重建，也避免旧候选覆盖新媒体数据。
+   * 成功且没有可搜索写入的扫描可以保留 FTS 修订；其它写入默认保守失效。
+   * 查询缓存继续使用 dataRevision，不能因索引复用而接受旧 epoch 的结果。
    */
-  void markDataChanged() {
+  void markDataChanged({bool searchContentChanged = true}) {
     _dataRevision += 1;
+    if (searchContentChanged) _searchIndexRevision += 1;
   }
 
   /** 视频行写入 owner；连接仍由 [database] 的组合根管理。 */

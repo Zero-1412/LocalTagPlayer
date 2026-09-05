@@ -11,8 +11,10 @@ import 'package:local_tag_player/main.dart' as app;
 import 'package:local_tag_player/src/pages/library/library_page.dart';
 import 'package:local_tag_player/src/pages/library/library_page_state_host.dart';
 import 'package:local_tag_player/src/pages/player/player_page.dart';
+import 'package:local_tag_player/src/services/library/library_performance_trace.dart';
 import 'package:local_tag_player/src/widgets/library/library_smoke_keys.dart';
 import 'support/phase_frame_recorder.dart';
+import 'support/checked_search_input.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -35,7 +37,12 @@ void main() {
       throw StateError('必须提供带 .query-baseline-profile 标记的隔离 profile');
     }
     final output = Directory('$profile/evidence')..createSync();
+    final traceEnabled =
+        Platform.environment['LOCAL_TAG_PLAYER_BASELINE_TRACE'] == '1';
+    if (traceEnabled) LibraryPerformanceTrace.start();
     final samples = <String, List<double>>{};
+    final inputAttempts = <Map<String, Object?>>[];
+    String? activeInputPhase;
     final recorder = PhaseFrameRecorder();
     final startupOnly =
         Platform.environment['LOCAL_TAG_PLAYER_BASELINE_STARTUP_ONLY'] == '1';
@@ -60,6 +67,14 @@ void main() {
       final host =
           tester.state(find.byType(LibraryPage)) as LibraryPageStateHost;
       final runtime = host.runtime;
+      Future<void> enterSearch(Finder field, String text) =>
+          enterCheckedSearchText(tester, field, runtime.searchController, text,
+              onRecord: (record) => inputAttempts.add({
+                    'attempt': inputAttempts.length,
+                    'phase': activeInputPhase,
+                    'requestRevision': runtime.queryController.revision,
+                    ...record,
+                  }));
       await _until(
           tester,
           () =>
@@ -81,19 +96,28 @@ void main() {
         stdout.writeln(
             'LTP_PHASE action=$name sample=${samples[name]?.length ?? 0}');
         recorder.enter(name);
+        activeInputPhase = name;
+        final inputAttemptStart = inputAttempts.length;
         final dataBefore =
             host.resultEpoch(host.currentFilterQuery()).dataRevision;
         final requestBefore = runtime.queryController.revision;
+        final actionTrace = LibraryPerformanceTrace.begin('interaction.$name',
+            fields: {'requestBefore': requestBefore, 'dataBefore': dataBefore});
         final watch = Stopwatch()..start();
-        await action();
         try {
+          await action();
           await _until(tester, completed);
         } on Object {
+          actionTrace?.finish('to_observed', outcome: 'error');
           recorder.failCurrentPhase();
           recorder.enter('failure_capture');
           await File('${output.path}/failure-state.json')
               .writeAsString(jsonEncode({
+            'startedAt': startedAt,
             'stage': name,
+            'lastInputAttempt': inputAttempts.length > inputAttemptStart
+                ? inputAttempts.last
+                : null,
             'dataRevisionBefore': dataBefore,
             'dataRevisionAfter':
                 host.resultEpoch(host.currentFilterQuery()).dataRevision,
@@ -115,7 +139,13 @@ void main() {
           rethrow;
         }
         // 结果发布后再经过一帧，避免把仅 controller 完成误报为可见结果。
+        actionTrace?.step('to_observed');
+        final frameTrace = LibraryPerformanceTrace.begin(
+            'interaction.accepted_frame',
+            fields: {'request': runtime.queryController.revision});
         await tester.pump();
+        frameTrace?.finish('pump_return');
+        actionTrace?.finish('observed_to_frame');
         samples
             .putIfAbsent(name, () => [])
             .add(watch.elapsedMicroseconds / 1000);
@@ -136,7 +166,7 @@ void main() {
         final query = n.isEven ? '不存在的基准词xyz' : '';
         await measure(
             n == 0 ? 'search_first' : 'search_warm',
-            () => tester.enterText(search, query),
+            () => enterSearch(search, query),
             () =>
                 runtime.queryController.state?.query.keyword?.trim() == query &&
                 !runtime.isRefreshingVideos);
@@ -363,7 +393,7 @@ void main() {
             final query = n.isEven ? '不存在的并发基准词xyz' : '';
             await measure(
                 'search_during_scan',
-                () => tester.enterText(search, query),
+                () => enterSearch(search, query),
                 () => runtime.queryController.state?.query.keyword == query);
             scanActiveSearches++;
             recorder.enter(scanPhase);
@@ -376,10 +406,9 @@ void main() {
           recorder.enter('idle');
           expect(runtime.store!.videos.values.map((v) => v.videoId).toSet(),
               containsAll(retainedIds));
-          await tester.enterText(search, '');
-          await _until(
-              tester, () => runtime.queryController.state?.query.keyword == '');
-          await tester.pump(const Duration(milliseconds: 600));
+          // 扫描后的输入复位也独立计时；异常必须留本轮状态，不能误用上轮失败文件。
+          await measure('scan_search_reset', () => enterSearch(search, ''),
+              () => runtime.queryController.state?.query.keyword == '');
         }
       }
       await _capture(tester, '${output.path}/library.png');
@@ -391,6 +420,13 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       recorder.enter('finished');
       WidgetsBinding.instance.removeTimingsCallback(recorder.collect);
+      if (traceEnabled) {
+        // 先停止会话，后续异步任务不得混入本次封存证据。
+        final trace = LibraryPerformanceTrace.snapshot();
+        LibraryPerformanceTrace.stop();
+        await File('${output.path}/query-tail-trace.json')
+            .writeAsString(const JsonEncoder.withIndent('  ').convert(trace));
+      }
       final records = recorder.records();
       final timings = recorder.frames
           .map((f) => f.totalSpan.inMicroseconds / 1000)
@@ -400,6 +436,8 @@ void main() {
         'evidence': 'Flutter Finder, production page, profile build',
         'startedAt': startedAt,
         'completed': completed,
+        'inputAttempts': inputAttempts,
+        'tailTraceEnabled': traceEnabled,
         'framePolicy': 'fullyLive',
         'startupScope':
             'Dart app.main to actionable LibraryPage; excludes process/engine bootstrap',

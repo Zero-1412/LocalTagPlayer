@@ -1,0 +1,1526 @@
+{
+  "rows": 11454,
+  "order": "baseline-optimized / optimized-baseline",
+  "runs": [
+    {
+      "pair": 1,
+      "mode": "baseline",
+      "completed": true,
+      "dropped": 0,
+      "counts": {
+        "indexRebuilds": 21,
+        "scanRevisions": 20,
+        "queriesQueued": 43,
+        "discardedCandidateRequests": 9,
+        "discardedCandidateWaitTotalMs": 31466.321,
+        "batchIndexOverlaps": 1,
+        "batchIndexOverlapTotalMs": 145.863,
+        "searchesStartedDuringScan": 10
+      },
+      "inputOutcomes": {
+        "delivered": 22,
+        "already_matched": 10
+      },
+      "metrics": {
+        "query.verify_sort": {
+          "n": 34,
+          "p50Ms": 0.014,
+          "p95Ms": 100.92,
+          "p99Ms": 107.106,
+          "maxMs": 107.106
+        },
+        "query.publish_callback": {
+          "n": 34,
+          "p50Ms": 0.006,
+          "p95Ms": 0.027,
+          "p99Ms": 0.028,
+          "maxMs": 0.028
+        },
+        "candidate.index_ready.total": {
+          "n": 21,
+          "p50Ms": 999.176,
+          "p95Ms": 4023.568,
+          "p99Ms": 4026.79,
+          "maxMs": 4026.79
+        },
+        "scan.batch_commit.total": {
+          "n": 20,
+          "p50Ms": 11.606,
+          "p95Ms": 37.321,
+          "p99Ms": 147.79,
+          "maxMs": 147.79
+        },
+        "discarded.candidates": {
+          "n": 9,
+          "p50Ms": 3724.043,
+          "p95Ms": 4027.337,
+          "p99Ms": 4027.337,
+          "maxMs": 4027.337
+        },
+        "first_search_per_input_scan": {
+          "n": 10,
+          "p50Ms": 929.108,
+          "p95Ms": 2000.698,
+          "p99Ms": 2000.698,
+          "maxMs": 2000.698
+        }
+      },
+      "actions": {
+        "startup_profile": {
+          "n": 1,
+          "p50Ms": 708.684,
+          "p95Ms": 708.684,
+          "p99Ms": 708.684,
+          "maxMs": 708.684
+        },
+        "search_first": {
+          "n": 1,
+          "p50Ms": 807.031,
+          "p95Ms": 807.031,
+          "p99Ms": 807.031,
+          "maxMs": 807.031
+        },
+        "search_warm": {
+          "n": 1,
+          "p50Ms": 167.271,
+          "p95Ms": 167.271,
+          "p99Ms": 167.271,
+          "maxMs": 167.271
+        },
+        "scan_passive_observed_total": {
+          "n": 10,
+          "p50Ms": 1119.35,
+          "p95Ms": 1326.415,
+          "p99Ms": 1326.415,
+          "maxMs": 1326.415
+        },
+        "scan_search_reset": {
+          "n": 20,
+          "p50Ms": 58.654,
+          "p95Ms": 210.258,
+          "p99Ms": 216.302,
+          "maxMs": 216.302
+        },
+        "search_during_scan": {
+          "n": 10,
+          "p50Ms": 929.108,
+          "p95Ms": 2000.698,
+          "p99Ms": 2000.698,
+          "maxMs": 2000.698
+        },
+        "scan_with_input_observed_total": {
+          "n": 10,
+          "p50Ms": 1184.764,
+          "p95Ms": 1327.344,
+          "p99Ms": 1327.344,
+          "maxMs": 1327.344
+        }
+      },
+      "framesByPhase": {
+        "startup": {
+          "buildMs": {
+            "n": 31,
+            "p50Ms": 0.172,
+            "p95Ms": 3.284,
+            "p99Ms": 89.732,
+            "maxMs": 89.732
+          },
+          "rasterMs": {
+            "n": 31,
+            "p50Ms": 0.368,
+            "p95Ms": 29.589,
+            "p99Ms": 75.247,
+            "maxMs": 75.247
+          },
+          "totalMs": {
+            "n": 31,
+            "p50Ms": 2.359,
+            "p95Ms": 165.363,
+            "p99Ms": 254.105,
+            "maxMs": 254.105
+          },
+          "slowOver33ms": 4,
+          "over100ms": 2,
+          "crossesBoundary": 1
+        },
+        "idle": {
+          "buildMs": {
+            "n": 79,
+            "p50Ms": 1.464,
+            "p95Ms": 1.969,
+            "p99Ms": 21.383,
+            "maxMs": 21.383
+          },
+          "rasterMs": {
+            "n": 79,
+            "p50Ms": 1.672,
+            "p95Ms": 2.139,
+            "p99Ms": 5.412,
+            "maxMs": 5.412
+          },
+          "totalMs": {
+            "n": 79,
+            "p50Ms": 3.841,
+            "p95Ms": 9.894,
+            "p99Ms": 87.871,
+            "maxMs": 87.871
+          },
+          "slowOver33ms": 1,
+          "over100ms": 0,
+          "crossesBoundary": 0
+        },
+        "search_first": {
+          "buildMs": {
+            "n": 168,
+            "p50Ms": 1.194,
+            "p95Ms": 2.245,
+            "p99Ms": 23.204,
+            "maxMs": 36.643
+          },
+          "rasterMs": {
+            "n": 168,
+            "p50Ms": 1.415,
+            "p95Ms": 2.521,
+            "p99Ms": 7.442,
+            "maxMs": 8.736
+          },
+          "totalMs": {
+            "n": 168,
+            "p50Ms": 3.401,
+            "p95Ms": 8.513,
+            "p99Ms": 24.613,
+            "maxMs": 50.763
+          },
+          "slowOver33ms": 1,
+          "over100ms": 0,
+          "crossesBoundary": 1
+        },
+        "search_warm": {
+          "buildMs": {
+            "n": 51,
+            "p50Ms": 1.292,
+            "p95Ms": 1.811,
+            "p99Ms": 44.542,
+            "maxMs": 44.542
+          },
+          "rasterMs": {
+            "n": 51,
+            "p50Ms": 2.13,
+            "p95Ms": 2.532,
+            "p99Ms": 3.362,
+            "maxMs": 3.362
+          },
+          "totalMs": {
+            "n": 51,
+            "p50Ms": 11.364,
+            "p95Ms": 15.864,
+            "p99Ms": 114.64,
+            "maxMs": 114.64
+          },
+          "slowOver33ms": 1,
+          "over100ms": 1,
+          "crossesBoundary": 1
+        },
+        "scan_passive": {
+          "buildMs": {
+            "n": 1313,
+            "p50Ms": 1.51,
+            "p95Ms": 2.585,
+            "p99Ms": 27.978,
+            "maxMs": 39.868
+          },
+          "rasterMs": {
+            "n": 1313,
+            "p50Ms": 1.873,
+            "p95Ms": 2.448,
+            "p99Ms": 2.768,
+            "maxMs": 3.614
+          },
+          "totalMs": {
+            "n": 1313,
+            "p50Ms": 4.146,
+            "p95Ms": 10.145,
+            "p99Ms": 45.337,
+            "maxMs": 141.372
+          },
+          "slowOver33ms": 30,
+          "over100ms": 6,
+          "crossesBoundary": 3
+        },
+        "scan_search_reset": {
+          "buildMs": {
+            "n": 1154,
+            "p50Ms": 0.239,
+            "p95Ms": 0.947,
+            "p99Ms": 23.794,
+            "maxMs": 64.517
+          },
+          "rasterMs": {
+            "n": 1154,
+            "p50Ms": 1.704,
+            "p95Ms": 2.322,
+            "p99Ms": 2.911,
+            "maxMs": 6.299
+          },
+          "totalMs": {
+            "n": 1154,
+            "p50Ms": 9.155,
+            "p95Ms": 17.374,
+            "p99Ms": 29.792,
+            "maxMs": 163.743
+          },
+          "slowOver33ms": 11,
+          "over100ms": 10,
+          "crossesBoundary": 20
+        },
+        "search_during_scan": {
+          "buildMs": {
+            "n": 1659,
+            "p50Ms": 1.461,
+            "p95Ms": 2.446,
+            "p99Ms": 24.863,
+            "maxMs": 45.633
+          },
+          "rasterMs": {
+            "n": 1659,
+            "p50Ms": 1.72,
+            "p95Ms": 2.348,
+            "p99Ms": 2.602,
+            "maxMs": 21.295
+          },
+          "totalMs": {
+            "n": 1659,
+            "p50Ms": 4.293,
+            "p95Ms": 15.063,
+            "p99Ms": 41.78,
+            "maxMs": 146.767
+          },
+          "slowOver33ms": 35,
+          "over100ms": 4,
+          "crossesBoundary": 10
+        },
+        "drain": {
+          "buildMs": {
+            "n": 162,
+            "p50Ms": 0.139,
+            "p95Ms": 0.204,
+            "p99Ms": 0.251,
+            "maxMs": 0.429
+          },
+          "rasterMs": {
+            "n": 162,
+            "p50Ms": 1.587,
+            "p95Ms": 2.13,
+            "p99Ms": 2.273,
+            "maxMs": 2.363
+          },
+          "totalMs": {
+            "n": 162,
+            "p50Ms": 9.991,
+            "p95Ms": 16.337,
+            "p99Ms": 17.198,
+            "maxMs": 17.677
+          },
+          "slowOver33ms": 0,
+          "over100ms": 0,
+          "crossesBoundary": 0
+        }
+      },
+      "scanEventLoopGapByMode": {
+        "scan_passive": {
+          "n": 936,
+          "p50Ms": 10.236,
+          "p95Ms": 20.739,
+          "p99Ms": 127.25,
+          "maxMs": 145.664
+        },
+        "scan_with_input": {
+          "n": 936,
+          "p50Ms": 10.126,
+          "p95Ms": 33.155,
+          "p99Ms": 118.153,
+          "maxMs": 153.999
+        }
+      }
+    },
+    {
+      "pair": 1,
+      "mode": "optimized",
+      "completed": true,
+      "dropped": 0,
+      "counts": {
+        "indexRebuilds": 1,
+        "scanRevisions": 20,
+        "queriesQueued": 43,
+        "discardedCandidateRequests": 0,
+        "discardedCandidateWaitTotalMs": 0,
+        "batchIndexOverlaps": 0,
+        "batchIndexOverlapTotalMs": 0,
+        "searchesStartedDuringScan": 20
+      },
+      "inputOutcomes": {
+        "delivered": 22,
+        "already_matched": 20
+      },
+      "metrics": {
+        "query.verify_sort": {
+          "n": 43,
+          "p50Ms": 0.012,
+          "p95Ms": 76.717,
+          "p99Ms": 78.292,
+          "maxMs": 78.292
+        },
+        "query.publish_callback": {
+          "n": 43,
+          "p50Ms": 0.004,
+          "p95Ms": 0.029,
+          "p99Ms": 0.052,
+          "maxMs": 0.052
+        },
+        "candidate.index_ready.total": {
+          "n": 11,
+          "p50Ms": 0.348,
+          "p95Ms": 716.514,
+          "p99Ms": 716.514,
+          "maxMs": 716.514
+        },
+        "scan.batch_commit.total": {
+          "n": 20,
+          "p50Ms": 2.426,
+          "p95Ms": 5.504,
+          "p99Ms": 8.145,
+          "maxMs": 8.145
+        },
+        "first_search_per_input_scan": {
+          "n": 10,
+          "p50Ms": 146.733,
+          "p95Ms": 162.346,
+          "p99Ms": 162.346,
+          "maxMs": 162.346
+        },
+        "discarded.candidates": {
+          "n": 0
+        }
+      },
+      "actions": {
+        "startup_profile": {
+          "n": 1,
+          "p50Ms": 815.554,
+          "p95Ms": 815.554,
+          "p99Ms": 815.554,
+          "maxMs": 815.554
+        },
+        "search_first": {
+          "n": 1,
+          "p50Ms": 789.502,
+          "p95Ms": 789.502,
+          "p99Ms": 789.502,
+          "maxMs": 789.502
+        },
+        "search_warm": {
+          "n": 1,
+          "p50Ms": 141.454,
+          "p95Ms": 141.454,
+          "p99Ms": 141.454,
+          "maxMs": 141.454
+        },
+        "scan_passive_observed_total": {
+          "n": 10,
+          "p50Ms": 1034.831,
+          "p95Ms": 1305.516,
+          "p99Ms": 1305.516,
+          "maxMs": 1305.516
+        },
+        "scan_search_reset": {
+          "n": 20,
+          "p50Ms": 27.106,
+          "p95Ms": 38.897,
+          "p99Ms": 43.88,
+          "maxMs": 43.88
+        },
+        "search_during_scan": {
+          "n": 20,
+          "p50Ms": 150.618,
+          "p95Ms": 169.793,
+          "p99Ms": 176.515,
+          "maxMs": 176.515
+        },
+        "scan_with_input_observed_total": {
+          "n": 10,
+          "p50Ms": 1220.03,
+          "p95Ms": 1264.873,
+          "p99Ms": 1264.873,
+          "maxMs": 1264.873
+        }
+      },
+      "framesByPhase": {
+        "startup": {
+          "buildMs": {
+            "n": 37,
+            "p50Ms": 0.171,
+            "p95Ms": 0.328,
+            "p99Ms": 112.867,
+            "maxMs": 112.867
+          },
+          "rasterMs": {
+            "n": 37,
+            "p50Ms": 0.388,
+            "p95Ms": 17.935,
+            "p99Ms": 83.27,
+            "maxMs": 83.27
+          },
+          "totalMs": {
+            "n": 37,
+            "p50Ms": 1.916,
+            "p95Ms": 254.946,
+            "p99Ms": 269.51,
+            "maxMs": 269.51
+          },
+          "slowOver33ms": 3,
+          "over100ms": 2,
+          "crossesBoundary": 1
+        },
+        "idle": {
+          "buildMs": {
+            "n": 75,
+            "p50Ms": 1.719,
+            "p95Ms": 2.336,
+            "p99Ms": 21.5,
+            "maxMs": 21.5
+          },
+          "rasterMs": {
+            "n": 75,
+            "p50Ms": 1.826,
+            "p95Ms": 2.735,
+            "p99Ms": 5.958,
+            "maxMs": 5.958
+          },
+          "totalMs": {
+            "n": 75,
+            "p50Ms": 4.224,
+            "p95Ms": 8.194,
+            "p99Ms": 91.391,
+            "maxMs": 91.391
+          },
+          "slowOver33ms": 1,
+          "over100ms": 0,
+          "crossesBoundary": 0
+        },
+        "search_first": {
+          "buildMs": {
+            "n": 160,
+            "p50Ms": 1.239,
+            "p95Ms": 2.446,
+            "p99Ms": 19.073,
+            "maxMs": 32.122
+          },
+          "rasterMs": {
+            "n": 160,
+            "p50Ms": 1.502,
+            "p95Ms": 2.461,
+            "p99Ms": 8.052,
+            "maxMs": 8.811
+          },
+          "totalMs": {
+            "n": 160,
+            "p50Ms": 3.613,
+            "p95Ms": 8.979,
+            "p99Ms": 22.783,
+            "maxMs": 36.661
+          },
+          "slowOver33ms": 1,
+          "over100ms": 0,
+          "crossesBoundary": 1
+        },
+        "search_warm": {
+          "buildMs": {
+            "n": 98,
+            "p50Ms": 1.118,
+            "p95Ms": 1.847,
+            "p99Ms": 37.579,
+            "maxMs": 37.579
+          },
+          "rasterMs": {
+            "n": 98,
+            "p50Ms": 1.635,
+            "p95Ms": 2.15,
+            "p99Ms": 2.447,
+            "maxMs": 2.447
+          },
+          "totalMs": {
+            "n": 98,
+            "p50Ms": 3.383,
+            "p95Ms": 5.672,
+            "p99Ms": 109.52,
+            "maxMs": 109.52
+          },
+          "slowOver33ms": 1,
+          "over100ms": 1,
+          "crossesBoundary": 1
+        },
+        "scan_passive": {
+          "buildMs": {
+            "n": 1249,
+            "p50Ms": 1.436,
+            "p95Ms": 2.582,
+            "p99Ms": 24.35,
+            "maxMs": 34.812
+          },
+          "rasterMs": {
+            "n": 1249,
+            "p50Ms": 1.577,
+            "p95Ms": 2.211,
+            "p99Ms": 2.665,
+            "maxMs": 19.866
+          },
+          "totalMs": {
+            "n": 1249,
+            "p50Ms": 3.682,
+            "p95Ms": 9.596,
+            "p99Ms": 39.016,
+            "maxMs": 142.837
+          },
+          "slowOver33ms": 22,
+          "over100ms": 6,
+          "crossesBoundary": 7
+        },
+        "scan_search_reset": {
+          "buildMs": {
+            "n": 1675,
+            "p50Ms": 0.187,
+            "p95Ms": 0.688,
+            "p99Ms": 1.033,
+            "maxMs": 3.151
+          },
+          "rasterMs": {
+            "n": 1675,
+            "p50Ms": 1.408,
+            "p95Ms": 1.953,
+            "p99Ms": 2.307,
+            "maxMs": 5.955
+          },
+          "totalMs": {
+            "n": 1675,
+            "p50Ms": 2.676,
+            "p95Ms": 13.745,
+            "p99Ms": 16.891,
+            "maxMs": 23.563
+          },
+          "slowOver33ms": 0,
+          "over100ms": 0,
+          "crossesBoundary": 20
+        },
+        "search_during_scan": {
+          "buildMs": {
+            "n": 1575,
+            "p50Ms": 1.35,
+            "p95Ms": 2.452,
+            "p99Ms": 29.964,
+            "maxMs": 48.866
+          },
+          "rasterMs": {
+            "n": 1575,
+            "p50Ms": 0.925,
+            "p95Ms": 1.882,
+            "p99Ms": 2.167,
+            "maxMs": 2.919
+          },
+          "totalMs": {
+            "n": 1575,
+            "p50Ms": 2.925,
+            "p95Ms": 15.731,
+            "p99Ms": 110.046,
+            "maxMs": 130.129
+          },
+          "slowOver33ms": 43,
+          "over100ms": 18,
+          "crossesBoundary": 19
+        },
+        "drain": {
+          "buildMs": {
+            "n": 148,
+            "p50Ms": 0.146,
+            "p95Ms": 0.223,
+            "p99Ms": 0.271,
+            "maxMs": 0.321
+          },
+          "rasterMs": {
+            "n": 148,
+            "p50Ms": 1.641,
+            "p95Ms": 2.104,
+            "p99Ms": 2.632,
+            "maxMs": 2.651
+          },
+          "totalMs": {
+            "n": 148,
+            "p50Ms": 12.29,
+            "p95Ms": 17.008,
+            "p99Ms": 17.702,
+            "maxMs": 17.862
+          },
+          "slowOver33ms": 0,
+          "over100ms": 0,
+          "crossesBoundary": 0
+        }
+      },
+      "scanEventLoopGapByMode": {
+        "scan_passive": {
+          "n": 875,
+          "p50Ms": 10.261,
+          "p95Ms": 16.27,
+          "p99Ms": 121.089,
+          "maxMs": 147.923
+        },
+        "scan_with_input": {
+          "n": 870,
+          "p50Ms": 10.277,
+          "p95Ms": 39.529,
+          "p99Ms": 116.091,
+          "maxMs": 133.558
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "mode": "optimized",
+      "completed": true,
+      "dropped": 0,
+      "counts": {
+        "indexRebuilds": 1,
+        "scanRevisions": 20,
+        "queriesQueued": 43,
+        "discardedCandidateRequests": 0,
+        "discardedCandidateWaitTotalMs": 0,
+        "batchIndexOverlaps": 0,
+        "batchIndexOverlapTotalMs": 0,
+        "searchesStartedDuringScan": 20
+      },
+      "inputOutcomes": {
+        "delivered": 22,
+        "already_matched": 20
+      },
+      "metrics": {
+        "query.verify_sort": {
+          "n": 43,
+          "p50Ms": 0.014,
+          "p95Ms": 77.603,
+          "p99Ms": 89.633,
+          "maxMs": 89.633
+        },
+        "query.publish_callback": {
+          "n": 43,
+          "p50Ms": 0.004,
+          "p95Ms": 0.026,
+          "p99Ms": 0.033,
+          "maxMs": 0.033
+        },
+        "candidate.index_ready.total": {
+          "n": 11,
+          "p50Ms": 0.361,
+          "p95Ms": 756.916,
+          "p99Ms": 756.916,
+          "maxMs": 756.916
+        },
+        "scan.batch_commit.total": {
+          "n": 20,
+          "p50Ms": 2.514,
+          "p95Ms": 4.5,
+          "p99Ms": 23.173,
+          "maxMs": 23.173
+        },
+        "first_search_per_input_scan": {
+          "n": 10,
+          "p50Ms": 155.066,
+          "p95Ms": 186.455,
+          "p99Ms": 186.455,
+          "maxMs": 186.455
+        },
+        "discarded.candidates": {
+          "n": 0
+        }
+      },
+      "actions": {
+        "startup_profile": {
+          "n": 1,
+          "p50Ms": 731.761,
+          "p95Ms": 731.761,
+          "p99Ms": 731.761,
+          "maxMs": 731.761
+        },
+        "search_first": {
+          "n": 1,
+          "p50Ms": 821.818,
+          "p95Ms": 821.818,
+          "p99Ms": 821.818,
+          "maxMs": 821.818
+        },
+        "search_warm": {
+          "n": 1,
+          "p50Ms": 171.276,
+          "p95Ms": 171.276,
+          "p99Ms": 171.276,
+          "maxMs": 171.276
+        },
+        "scan_passive_observed_total": {
+          "n": 10,
+          "p50Ms": 1088.445,
+          "p95Ms": 1309.66,
+          "p99Ms": 1309.66,
+          "maxMs": 1309.66
+        },
+        "scan_search_reset": {
+          "n": 20,
+          "p50Ms": 25.906,
+          "p95Ms": 33.94,
+          "p99Ms": 41.925,
+          "maxMs": 41.925
+        },
+        "search_during_scan": {
+          "n": 20,
+          "p50Ms": 162.438,
+          "p95Ms": 186.455,
+          "p99Ms": 194.824,
+          "maxMs": 194.824
+        },
+        "scan_with_input_observed_total": {
+          "n": 10,
+          "p50Ms": 1254.506,
+          "p95Ms": 1367.643,
+          "p99Ms": 1367.643,
+          "maxMs": 1367.643
+        }
+      },
+      "framesByPhase": {
+        "outside": {
+          "buildMs": {
+            "n": 1,
+            "p50Ms": 0.041,
+            "p95Ms": 0.041,
+            "p99Ms": 0.041,
+            "maxMs": 0.041
+          },
+          "rasterMs": {
+            "n": 1,
+            "p50Ms": 12.848,
+            "p95Ms": 12.848,
+            "p99Ms": 12.848,
+            "maxMs": 12.848
+          },
+          "totalMs": {
+            "n": 1,
+            "p50Ms": 17.676,
+            "p95Ms": 17.676,
+            "p99Ms": 17.676,
+            "maxMs": 17.676
+          },
+          "slowOver33ms": 0,
+          "over100ms": 0,
+          "crossesBoundary": 0
+        },
+        "startup": {
+          "buildMs": {
+            "n": 31,
+            "p50Ms": 0.165,
+            "p95Ms": 2.619,
+            "p99Ms": 93.381,
+            "maxMs": 93.381
+          },
+          "rasterMs": {
+            "n": 31,
+            "p50Ms": 0.383,
+            "p95Ms": 9.073,
+            "p99Ms": 79.441,
+            "maxMs": 79.441
+          },
+          "totalMs": {
+            "n": 31,
+            "p50Ms": 1.795,
+            "p95Ms": 225.961,
+            "p99Ms": 278.796,
+            "maxMs": 278.796
+          },
+          "slowOver33ms": 2,
+          "over100ms": 2,
+          "crossesBoundary": 1
+        },
+        "idle": {
+          "buildMs": {
+            "n": 77,
+            "p50Ms": 1.652,
+            "p95Ms": 2.406,
+            "p99Ms": 22.596,
+            "maxMs": 22.596
+          },
+          "rasterMs": {
+            "n": 77,
+            "p50Ms": 1.814,
+            "p95Ms": 2.701,
+            "p99Ms": 5.606,
+            "maxMs": 5.606
+          },
+          "totalMs": {
+            "n": 77,
+            "p50Ms": 4.245,
+            "p95Ms": 11.053,
+            "p99Ms": 90.897,
+            "maxMs": 90.897
+          },
+          "slowOver33ms": 1,
+          "over100ms": 0,
+          "crossesBoundary": 0
+        },
+        "search_first": {
+          "buildMs": {
+            "n": 175,
+            "p50Ms": 1.197,
+            "p95Ms": 2.231,
+            "p99Ms": 23.3,
+            "maxMs": 34.683
+          },
+          "rasterMs": {
+            "n": 175,
+            "p50Ms": 1.397,
+            "p95Ms": 2.36,
+            "p99Ms": 7.486,
+            "maxMs": 9.419
+          },
+          "totalMs": {
+            "n": 175,
+            "p50Ms": 3.377,
+            "p95Ms": 6.82,
+            "p99Ms": 25.452,
+            "maxMs": 46.394
+          },
+          "slowOver33ms": 1,
+          "over100ms": 0,
+          "crossesBoundary": 1
+        },
+        "search_warm": {
+          "buildMs": {
+            "n": 50,
+            "p50Ms": 1.226,
+            "p95Ms": 1.627,
+            "p99Ms": 47.88,
+            "maxMs": 47.88
+          },
+          "rasterMs": {
+            "n": 50,
+            "p50Ms": 2.163,
+            "p95Ms": 2.781,
+            "p99Ms": 3.158,
+            "maxMs": 3.158
+          },
+          "totalMs": {
+            "n": 50,
+            "p50Ms": 11.67,
+            "p95Ms": 16.248,
+            "p99Ms": 124.349,
+            "maxMs": 124.349
+          },
+          "slowOver33ms": 1,
+          "over100ms": 1,
+          "crossesBoundary": 1
+        },
+        "scan_passive": {
+          "buildMs": {
+            "n": 1238,
+            "p50Ms": 1.451,
+            "p95Ms": 2.692,
+            "p99Ms": 27.549,
+            "maxMs": 38.689
+          },
+          "rasterMs": {
+            "n": 1238,
+            "p50Ms": 1.816,
+            "p95Ms": 2.407,
+            "p99Ms": 2.826,
+            "maxMs": 20.069
+          },
+          "totalMs": {
+            "n": 1238,
+            "p50Ms": 4.019,
+            "p95Ms": 10.102,
+            "p99Ms": 40.504,
+            "maxMs": 149.712
+          },
+          "slowOver33ms": 26,
+          "over100ms": 3,
+          "crossesBoundary": 6
+        },
+        "scan_search_reset": {
+          "buildMs": {
+            "n": 1123,
+            "p50Ms": 0.245,
+            "p95Ms": 0.813,
+            "p99Ms": 1.111,
+            "maxMs": 2.14
+          },
+          "rasterMs": {
+            "n": 1123,
+            "p50Ms": 1.645,
+            "p95Ms": 2.229,
+            "p99Ms": 2.7,
+            "maxMs": 8.436
+          },
+          "totalMs": {
+            "n": 1123,
+            "p50Ms": 9.196,
+            "p95Ms": 16.929,
+            "p99Ms": 18.343,
+            "maxMs": 23.606
+          },
+          "slowOver33ms": 0,
+          "over100ms": 0,
+          "crossesBoundary": 20
+        },
+        "search_during_scan": {
+          "buildMs": {
+            "n": 1400,
+            "p50Ms": 1.399,
+            "p95Ms": 2.781,
+            "p99Ms": 34.983,
+            "maxMs": 54.072
+          },
+          "rasterMs": {
+            "n": 1400,
+            "p50Ms": 0.974,
+            "p95Ms": 2.085,
+            "p99Ms": 2.449,
+            "maxMs": 2.689
+          },
+          "totalMs": {
+            "n": 1400,
+            "p50Ms": 3.416,
+            "p95Ms": 17.231,
+            "p99Ms": 49.007,
+            "maxMs": 147.728
+          },
+          "slowOver33ms": 41,
+          "over100ms": 12,
+          "crossesBoundary": 18
+        },
+        "scan_with_input": {
+          "buildMs": {
+            "n": 1,
+            "p50Ms": 0.11,
+            "p95Ms": 0.11,
+            "p99Ms": 0.11,
+            "maxMs": 0.11
+          },
+          "rasterMs": {
+            "n": 1,
+            "p50Ms": 1.603,
+            "p95Ms": 1.603,
+            "p99Ms": 1.603,
+            "maxMs": 1.603
+          },
+          "totalMs": {
+            "n": 1,
+            "p50Ms": 2.065,
+            "p95Ms": 2.065,
+            "p99Ms": 2.065,
+            "maxMs": 2.065
+          },
+          "slowOver33ms": 0,
+          "over100ms": 0,
+          "crossesBoundary": 1
+        },
+        "drain": {
+          "buildMs": {
+            "n": 114,
+            "p50Ms": 0.159,
+            "p95Ms": 0.228,
+            "p99Ms": 0.243,
+            "maxMs": 0.26
+          },
+          "rasterMs": {
+            "n": 114,
+            "p50Ms": 1.643,
+            "p95Ms": 2.006,
+            "p99Ms": 2.363,
+            "maxMs": 3.217
+          },
+          "totalMs": {
+            "n": 114,
+            "p50Ms": 12.916,
+            "p95Ms": 16.889,
+            "p99Ms": 17.538,
+            "maxMs": 17.886
+          },
+          "slowOver33ms": 0,
+          "over100ms": 0,
+          "crossesBoundary": 0
+        }
+      },
+      "scanEventLoopGapByMode": {
+        "scan_passive": {
+          "n": 897,
+          "p50Ms": 10.208,
+          "p95Ms": 16.642,
+          "p99Ms": 121.292,
+          "maxMs": 155.015
+        },
+        "scan_with_input": {
+          "n": 887,
+          "p50Ms": 10.314,
+          "p95Ms": 42.904,
+          "p99Ms": 119.043,
+          "maxMs": 150.314
+        }
+      }
+    },
+    {
+      "pair": 2,
+      "mode": "baseline",
+      "completed": true,
+      "dropped": 0,
+      "counts": {
+        "indexRebuilds": 21,
+        "scanRevisions": 20,
+        "queriesQueued": 43,
+        "discardedCandidateRequests": 9,
+        "discardedCandidateWaitTotalMs": 30073.727,
+        "batchIndexOverlaps": 2,
+        "batchIndexOverlapTotalMs": 423.578,
+        "searchesStartedDuringScan": 10
+      },
+      "inputOutcomes": {
+        "delivered": 22,
+        "already_matched": 10
+      },
+      "metrics": {
+        "query.verify_sort": {
+          "n": 34,
+          "p50Ms": 0.014,
+          "p95Ms": 91.568,
+          "p99Ms": 116.283,
+          "maxMs": 116.283
+        },
+        "query.publish_callback": {
+          "n": 34,
+          "p50Ms": 0.006,
+          "p95Ms": 0.029,
+          "p99Ms": 0.03,
+          "maxMs": 0.03
+        },
+        "candidate.index_ready.total": {
+          "n": 21,
+          "p50Ms": 1116.83,
+          "p95Ms": 4077.65,
+          "p99Ms": 4214.458,
+          "maxMs": 4214.458
+        },
+        "scan.batch_commit.total": {
+          "n": 20,
+          "p50Ms": 12.617,
+          "p95Ms": 126.392,
+          "p99Ms": 302.231,
+          "maxMs": 302.231
+        },
+        "discarded.candidates": {
+          "n": 9,
+          "p50Ms": 3828.896,
+          "p95Ms": 4214.912,
+          "p99Ms": 4214.912,
+          "maxMs": 4214.912
+        },
+        "first_search_per_input_scan": {
+          "n": 10,
+          "p50Ms": 1051.333,
+          "p95Ms": 2437.242,
+          "p99Ms": 2437.242,
+          "maxMs": 2437.242
+        }
+      },
+      "actions": {
+        "startup_profile": {
+          "n": 1,
+          "p50Ms": 722.312,
+          "p95Ms": 722.312,
+          "p99Ms": 722.312,
+          "maxMs": 722.312
+        },
+        "search_first": {
+          "n": 1,
+          "p50Ms": 797.356,
+          "p95Ms": 797.356,
+          "p99Ms": 797.356,
+          "maxMs": 797.356
+        },
+        "search_warm": {
+          "n": 1,
+          "p50Ms": 151.103,
+          "p95Ms": 151.103,
+          "p99Ms": 151.103,
+          "maxMs": 151.103
+        },
+        "scan_passive_observed_total": {
+          "n": 10,
+          "p50Ms": 1163.285,
+          "p95Ms": 1321.36,
+          "p99Ms": 1321.36,
+          "maxMs": 1321.36
+        },
+        "scan_search_reset": {
+          "n": 20,
+          "p50Ms": 33.758,
+          "p95Ms": 213.561,
+          "p99Ms": 251.935,
+          "maxMs": 251.935
+        },
+        "search_during_scan": {
+          "n": 10,
+          "p50Ms": 1051.334,
+          "p95Ms": 2437.241,
+          "p99Ms": 2437.241,
+          "maxMs": 2437.241
+        },
+        "scan_with_input_observed_total": {
+          "n": 10,
+          "p50Ms": 1298.842,
+          "p95Ms": 1447.146,
+          "p99Ms": 1447.146,
+          "maxMs": 1447.146
+        }
+      },
+      "framesByPhase": {
+        "outside": {
+          "buildMs": {
+            "n": 1,
+            "p50Ms": 0.066,
+            "p95Ms": 0.066,
+            "p99Ms": 0.066,
+            "maxMs": 0.066
+          },
+          "rasterMs": {
+            "n": 1,
+            "p50Ms": 13.57,
+            "p95Ms": 13.57,
+            "p99Ms": 13.57,
+            "maxMs": 13.57
+          },
+          "totalMs": {
+            "n": 1,
+            "p50Ms": 22.171,
+            "p95Ms": 22.171,
+            "p99Ms": 22.171,
+            "maxMs": 22.171
+          },
+          "slowOver33ms": 0,
+          "over100ms": 0,
+          "crossesBoundary": 0
+        },
+        "startup": {
+          "buildMs": {
+            "n": 26,
+            "p50Ms": 0.158,
+            "p95Ms": 3.03,
+            "p99Ms": 88.703,
+            "maxMs": 88.703
+          },
+          "rasterMs": {
+            "n": 26,
+            "p50Ms": 0.401,
+            "p95Ms": 13.039,
+            "p99Ms": 76.725,
+            "maxMs": 76.725
+          },
+          "totalMs": {
+            "n": 26,
+            "p50Ms": 2.335,
+            "p95Ms": 228.614,
+            "p99Ms": 260.848,
+            "maxMs": 260.848
+          },
+          "slowOver33ms": 3,
+          "over100ms": 2,
+          "crossesBoundary": 1
+        },
+        "idle": {
+          "buildMs": {
+            "n": 74,
+            "p50Ms": 1.621,
+            "p95Ms": 2.271,
+            "p99Ms": 20.086,
+            "maxMs": 20.086
+          },
+          "rasterMs": {
+            "n": 74,
+            "p50Ms": 1.798,
+            "p95Ms": 2.355,
+            "p99Ms": 5.371,
+            "maxMs": 5.371
+          },
+          "totalMs": {
+            "n": 74,
+            "p50Ms": 4.085,
+            "p95Ms": 9.854,
+            "p99Ms": 97.818,
+            "maxMs": 97.818
+          },
+          "slowOver33ms": 1,
+          "over100ms": 0,
+          "crossesBoundary": 0
+        },
+        "search_first": {
+          "buildMs": {
+            "n": 164,
+            "p50Ms": 1.23,
+            "p95Ms": 2.395,
+            "p99Ms": 16.322,
+            "maxMs": 24.843
+          },
+          "rasterMs": {
+            "n": 164,
+            "p50Ms": 1.444,
+            "p95Ms": 2.491,
+            "p99Ms": 8.713,
+            "maxMs": 8.907
+          },
+          "totalMs": {
+            "n": 164,
+            "p50Ms": 3.527,
+            "p95Ms": 8.154,
+            "p99Ms": 18.123,
+            "maxMs": 28.357
+          },
+          "slowOver33ms": 0,
+          "over100ms": 0,
+          "crossesBoundary": 1
+        },
+        "search_warm": {
+          "buildMs": {
+            "n": 45,
+            "p50Ms": 1.272,
+            "p95Ms": 1.94,
+            "p99Ms": 44.709,
+            "maxMs": 44.709
+          },
+          "rasterMs": {
+            "n": 45,
+            "p50Ms": 2.167,
+            "p95Ms": 2.85,
+            "p99Ms": 3.136,
+            "maxMs": 3.136
+          },
+          "totalMs": {
+            "n": 45,
+            "p50Ms": 12.85,
+            "p95Ms": 17.777,
+            "p99Ms": 110.655,
+            "maxMs": 110.655
+          },
+          "slowOver33ms": 1,
+          "over100ms": 1,
+          "crossesBoundary": 1
+        },
+        "scan_passive": {
+          "buildMs": {
+            "n": 1347,
+            "p50Ms": 1.576,
+            "p95Ms": 2.796,
+            "p99Ms": 27.251,
+            "maxMs": 43.906
+          },
+          "rasterMs": {
+            "n": 1347,
+            "p50Ms": 1.943,
+            "p95Ms": 2.564,
+            "p99Ms": 3.008,
+            "maxMs": 22.333
+          },
+          "totalMs": {
+            "n": 1347,
+            "p50Ms": 4.12,
+            "p95Ms": 10.185,
+            "p99Ms": 46.027,
+            "maxMs": 144.009
+          },
+          "slowOver33ms": 30,
+          "over100ms": 6,
+          "crossesBoundary": 4
+        },
+        "scan_search_reset": {
+          "buildMs": {
+            "n": 1842,
+            "p50Ms": 0.227,
+            "p95Ms": 0.804,
+            "p99Ms": 1.436,
+            "maxMs": 70.188
+          },
+          "rasterMs": {
+            "n": 1842,
+            "p50Ms": 1.68,
+            "p95Ms": 2.291,
+            "p99Ms": 2.654,
+            "maxMs": 6.526
+          },
+          "totalMs": {
+            "n": 1842,
+            "p50Ms": 3.016,
+            "p95Ms": 9.605,
+            "p99Ms": 19.609,
+            "maxMs": 171.738
+          },
+          "slowOver33ms": 10,
+          "over100ms": 10,
+          "crossesBoundary": 19
+        },
+        "search_during_scan": {
+          "buildMs": {
+            "n": 2185,
+            "p50Ms": 1.381,
+            "p95Ms": 2.474,
+            "p99Ms": 23.241,
+            "maxMs": 41.811
+          },
+          "rasterMs": {
+            "n": 2185,
+            "p50Ms": 1.684,
+            "p95Ms": 2.359,
+            "p99Ms": 2.687,
+            "maxMs": 4.028
+          },
+          "totalMs": {
+            "n": 2185,
+            "p50Ms": 3.737,
+            "p95Ms": 10.935,
+            "p99Ms": 41.276,
+            "maxMs": 156.223
+          },
+          "slowOver33ms": 38,
+          "over100ms": 6,
+          "crossesBoundary": 10
+        },
+        "drain": {
+          "buildMs": {
+            "n": 303,
+            "p50Ms": 0.139,
+            "p95Ms": 0.219,
+            "p99Ms": 0.292,
+            "maxMs": 0.353
+          },
+          "rasterMs": {
+            "n": 303,
+            "p50Ms": 1.61,
+            "p95Ms": 2.214,
+            "p99Ms": 2.379,
+            "maxMs": 2.428
+          },
+          "totalMs": {
+            "n": 303,
+            "p50Ms": 2.854,
+            "p95Ms": 5.718,
+            "p99Ms": 7.66,
+            "maxMs": 13.814
+          },
+          "slowOver33ms": 0,
+          "over100ms": 0,
+          "crossesBoundary": 0
+        }
+      },
+      "scanEventLoopGapByMode": {
+        "scan_passive": {
+          "n": 975,
+          "p50Ms": 10.038,
+          "p95Ms": 17.02,
+          "p99Ms": 118.358,
+          "maxMs": 157.87
+        },
+        "scan_with_input": {
+          "n": 1010,
+          "p50Ms": 10.033,
+          "p95Ms": 33.53,
+          "p99Ms": 71.016,
+          "maxMs": 162.699
+        }
+      }
+    }
+  ],
+  "pooledMetrics": {
+    "baseline": {
+      "query.verify_sort": {
+        "n": 68,
+        "p50Ms": 0.014,
+        "p95Ms": 99.225,
+        "p99Ms": 116.283,
+        "maxMs": 116.283
+      },
+      "query.publish_callback": {
+        "n": 68,
+        "p50Ms": 0.006,
+        "p95Ms": 0.028,
+        "p99Ms": 0.03,
+        "maxMs": 0.03
+      },
+      "candidate.index_ready.total": {
+        "n": 42,
+        "p50Ms": 999.176,
+        "p95Ms": 4026.79,
+        "p99Ms": 4214.458,
+        "maxMs": 4214.458
+      },
+      "scan.batch_commit.total": {
+        "n": 40,
+        "p50Ms": 12.334,
+        "p95Ms": 126.392,
+        "p99Ms": 302.231,
+        "maxMs": 302.231
+      },
+      "discarded.candidates": {
+        "n": 18,
+        "p50Ms": 3766.978,
+        "p95Ms": 4214.912,
+        "p99Ms": 4214.912,
+        "maxMs": 4214.912
+      },
+      "first_search_per_input_scan": {
+        "n": 20,
+        "p50Ms": 1018.911,
+        "p95Ms": 2063.624,
+        "p99Ms": 2437.242,
+        "maxMs": 2437.242
+      }
+    },
+    "optimized": {
+      "query.verify_sort": {
+        "n": 86,
+        "p50Ms": 0.013,
+        "p95Ms": 77.563,
+        "p99Ms": 89.633,
+        "maxMs": 89.633
+      },
+      "query.publish_callback": {
+        "n": 86,
+        "p50Ms": 0.004,
+        "p95Ms": 0.028,
+        "p99Ms": 0.052,
+        "maxMs": 0.052
+      },
+      "candidate.index_ready.total": {
+        "n": 22,
+        "p50Ms": 0.348,
+        "p95Ms": 716.514,
+        "p99Ms": 756.916,
+        "maxMs": 756.916
+      },
+      "scan.batch_commit.total": {
+        "n": 40,
+        "p50Ms": 2.514,
+        "p95Ms": 5.504,
+        "p99Ms": 23.173,
+        "maxMs": 23.173
+      },
+      "first_search_per_input_scan": {
+        "n": 20,
+        "p50Ms": 149.249,
+        "p95Ms": 166.735,
+        "p99Ms": 186.455,
+        "maxMs": 186.455
+      },
+      "discarded.candidates": {
+        "n": 0
+      }
+    }
+  }
+}

@@ -22,7 +22,7 @@
       "status": "active",
       "kind": "isolated-query-benchmark",
       "last_verified": "2026-09-05",
-      "evidence": "docs/qa/query_correctness_and_baseline_20260905.md",
+      "evidence": "docs/qa/query_tail_decomposition_20260905.md",
       "replacement": null
     },
     {

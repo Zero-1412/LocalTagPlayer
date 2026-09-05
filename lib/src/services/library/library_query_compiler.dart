@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../models/platform_models.dart';
+import 'library_performance_trace.dart';
 
 // ignore_for_file: slash_for_doc_comments
 
@@ -138,7 +139,8 @@ class LibrarySearchIndex {
   }
 
   Future<bool> _ensureFresh(Database db, {required int revision}) async {
-    final available = await ensureSchema(db);
+    final available = await LibraryPerformanceTrace.measure(
+        'index.schema', () => ensureSchema(db));
     if (!available) {
       return false;
     }
@@ -155,14 +157,8 @@ class LibrarySearchIndex {
     }
   }
 
-  Future<void> rebuild(Database db) async {
-    await db.transaction((transaction) async {
-      await transaction.delete(tableName);
-      // 别名必须先解码，JSON 转义形式不等于用户可搜索的原始文本。
-      // JSON 扩展不可用或源数据损坏时事务回滚，由 ensureFresh 回退完整查询。
-      // 聚合与写入都留在 SQLite 事务内，避免首次搜索把全库文本搬到 Dart 再逐行传回。
-      await transaction.execute('''
-        INSERT INTO $tableName (video_id, title, path, relative_path, folder, tags)
+  /** 生产聚合文本的唯一 SQL；隔离分步实验复用它，不能另写过滤语义。 */
+  static const sourceSelectSql = '''
         SELECT v.video_id, v.title, v.path, v.relative_path, v.folder,
                COALESCE(GROUP_CONCAT(
                  COALESCE(t.id, '') || ' ' || COALESCE(t.name, '') || ' ' ||
@@ -174,7 +170,29 @@ class LibrarySearchIndex {
         LEFT JOIN video_tags vt ON vt.video_id = v.video_id
         LEFT JOIN tags t ON t.id = vt.tag_id
         GROUP BY v.video_id
+  ''';
+
+  Future<void> rebuild(Database db) async {
+    final trace = LibraryPerformanceTrace.begin('index',
+        fields: {'revision': _pendingRevision ?? -1});
+    try {
+      await db.transaction((transaction) async {
+        trace?.step('transaction_enter');
+        await transaction.delete(tableName);
+        trace?.step('delete');
+        // 别名必须先解码，JSON 转义形式不等于用户可搜索的原始文本。
+        // JSON 扩展不可用或源数据损坏时事务回滚，由 ensureFresh 回退完整查询。
+        // 聚合与写入都留在 SQLite 事务内，避免首次搜索把全库文本搬到 Dart 再逐行传回。
+        await transaction.execute('''
+        INSERT INTO $tableName (video_id, title, path, relative_path, folder, tags)
+        $sourceSelectSql
       ''');
-    });
+        trace?.step('aggregate_and_fts_write');
+      });
+      trace?.finish('commit_return');
+    } catch (_) {
+      trace?.finish('failed', outcome: 'error');
+      rethrow;
+    }
   }
 }

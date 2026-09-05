@@ -12,6 +12,7 @@ import 'library_collection_rules.dart';
 import 'library_scan_service.dart';
 import 'library_store_access.dart';
 import 'library_tag_maintenance.dart';
+import 'library_performance_trace.dart';
 import '../resources/resource_scheduler.dart';
 
 // ignore_for_file: slash_for_doc_comments
@@ -199,6 +200,8 @@ class LibraryScanCoordinator {
     required int generationId,
     LibraryScanProgressCallback? onProgress,
   }) async {
+    final trace = LibraryPerformanceTrace.begin('scan',
+        fields: {'generation': generationId});
     final knownMetadata = <String, LibraryScanKnownMetadata>{
       for (final item in _store.videos.values)
         TagRules.pathKey(item.path): LibraryScanKnownMetadata(
@@ -210,6 +213,7 @@ class LibraryScanCoordinator {
           isMissing: item.isMissing,
         ),
     };
+    trace?.step('known_snapshot');
     final scheduler = _resourceScheduler;
     final scanDelta = scheduler == null
         ? await _store.scanBackend.scan(
@@ -227,7 +231,9 @@ class LibraryScanCoordinator {
               onProgress: onProgress,
             ),
           );
+    trace?.step('backend');
     if (scanDelta.cancelled || generationId != _store.scanGeneration) {
+      trace?.finish('cancelled', outcome: 'discarded');
       return LibraryScanCommitResult.cancelled(generationId);
     }
     final batch = _store.database.batch();
@@ -339,6 +345,7 @@ class LibraryScanCoordinator {
         // 大差量合并不能连续独占 UI isolate；让路由、进度和播放输入获得调度机会。
         await Future<void>.delayed(Duration.zero);
         if (generationId != _store.scanGeneration) {
+          trace?.finish('merge', outcome: 'discarded');
           return LibraryScanCommitResult.cancelled(generationId);
         }
       }
@@ -357,8 +364,13 @@ class LibraryScanCoordinator {
       roots: _store.roots,
       favoriteTags: _store.favoriteTags,
     );
-    await batch.commit(noResult: true);
+    trace?.step('merge_and_prepare');
+    await LibraryPerformanceTrace.measure(
+        'scan.batch_commit', () => batch.commit(noResult: true),
+        fields: {'generation': generationId, 'changed': changedById.length});
+    trace?.step('batch_commit_return');
     await _store.dataBackupService.enqueueVideos(changedById.keys);
+    trace?.step('backup_enqueue');
     onProgress?.call(LibraryScanProgress(
       generationId: generationId,
       phase: LibraryScanPhase.committing,
@@ -366,6 +378,7 @@ class LibraryScanCoordinator {
       discovered: scanDelta.seenPathKeys.length,
       total: changedEntries.length,
     ));
+    trace?.finish('completion_callback');
     return LibraryScanCommitResult(
       generationId: generationId,
       addedCount: added,

@@ -25,6 +25,8 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
   static const _startupMediaDetailsBackfillDelay = Duration(milliseconds: 1600);
   Timer? _startupThumbnailBackfillTimer;
   Timer? _startupMediaDetailsBackfillTimer;
+  /** 静默输入更新取消旧微任务，但不能让旧回调清除后续新输入的排队状态。 */
+  int _searchInputGeneration = 0;
 
   @override
   void initState() {
@@ -78,13 +80,16 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
       return;
     }
     final keyword = runtime.searchController.text;
-    if (keyword == runtime.lastObservedSearchText ||
-        runtime.searchControllerChangeQueued) {
+    if (keyword == runtime.lastObservedSearchText) {
       return;
     }
+    // 已排队时也必须记住最新文本；否则同一微任务前的第二次输入会被永久丢弃。
     runtime.lastObservedSearchText = keyword;
+    if (runtime.searchControllerChangeQueued) return;
     runtime.searchControllerChangeQueued = true;
+    final generation = _searchInputGeneration;
     scheduleMicrotask(() {
+      if (generation != _searchInputGeneration) return;
       runtime.searchControllerChangeQueued = false;
       if (!mounted ||
           runtime.searchController.text != runtime.lastObservedSearchText) {
@@ -95,6 +100,8 @@ mixin LibraryPageLifecycleMixin<T extends StatefulWidget>
   }
 
   void setSearchTextSilently(String value) {
+    _searchInputGeneration++;
+    runtime.searchControllerChangeQueued = false;
     if (runtime.searchController.text == value) {
       runtime.lastObservedSearchText = value;
       return;

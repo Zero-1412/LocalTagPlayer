@@ -1,0 +1,934 @@
+{
+  "baseCommit": "1f11dc5",
+  "localChanges": true,
+  "rows": 11454,
+  "scan": {
+    "dropped": 0,
+    "stages": {
+      "candidate.index_ready.total.ok": {
+        "n": 33,
+        "p50Ms": 809.965,
+        "p95Ms": 3790.887,
+        "p99Ms": 3910.346,
+        "maxMs": 3910.346
+      },
+      "candidate.map.total.ok": {
+        "n": 33,
+        "p50Ms": 0.001,
+        "p95Ms": 0.002,
+        "p99Ms": 0.002,
+        "maxMs": 0.002
+      },
+      "candidate.sql.total.ok": {
+        "n": 33,
+        "p50Ms": 0.418,
+        "p95Ms": 39.358,
+        "p99Ms": 56.01,
+        "maxMs": 56.01
+      },
+      "index.aggregate_and_fts_write.ok": {
+        "n": 33,
+        "p50Ms": 348.723,
+        "p95Ms": 3396.202,
+        "p99Ms": 3433.084,
+        "maxMs": 3433.084
+      },
+      "index.commit_return.ok": {
+        "n": 33,
+        "p50Ms": 125.894,
+        "p95Ms": 2655.887,
+        "p99Ms": 2697.236,
+        "maxMs": 2697.236
+      },
+      "index.delete.ok": {
+        "n": 33,
+        "p50Ms": 242.205,
+        "p95Ms": 318.106,
+        "p99Ms": 350.322,
+        "maxMs": 350.322
+      },
+      "index.schema.total.ok": {
+        "n": 33,
+        "p50Ms": 5.718,
+        "p95Ms": 31.293,
+        "p99Ms": 47.753,
+        "maxMs": 47.753
+      },
+      "index.transaction_enter.ok": {
+        "n": 33,
+        "p50Ms": 0.161,
+        "p95Ms": 43.128,
+        "p99Ms": 50.357,
+        "maxMs": 50.357
+      },
+      "interaction.accepted_frame.pump_return.ok": {
+        "n": 49,
+        "p50Ms": 13.287,
+        "p95Ms": 35.064,
+        "p99Ms": 44.09,
+        "maxMs": 44.09
+      },
+      "interaction.scan_search_reset.observed_to_frame.ok": {
+        "n": 31,
+        "p50Ms": 12.801,
+        "p95Ms": 18.541,
+        "p99Ms": 19.509,
+        "maxMs": 19.509
+      },
+      "interaction.scan_search_reset.to_observed.error": {
+        "n": 1,
+        "p50Ms": 45030.023,
+        "p95Ms": 45030.023,
+        "p99Ms": 45030.023,
+        "maxMs": 45030.023
+      },
+      "interaction.scan_search_reset.to_observed.ok": {
+        "n": 31,
+        "p50Ms": 41.203,
+        "p95Ms": 179.131,
+        "p99Ms": 203.402,
+        "maxMs": 203.402
+      },
+      "interaction.search_during_scan.observed_to_frame.ok": {
+        "n": 16,
+        "p50Ms": 15.478,
+        "p95Ms": 44.094,
+        "p99Ms": 44.094,
+        "maxMs": 44.094
+      },
+      "interaction.search_during_scan.to_observed.ok": {
+        "n": 16,
+        "p50Ms": 1634.819,
+        "p95Ms": 1758.202,
+        "p99Ms": 1758.202,
+        "maxMs": 1758.202
+      },
+      "interaction.search_first.observed_to_frame.ok": {
+        "n": 1,
+        "p50Ms": 5.815,
+        "p95Ms": 5.815,
+        "p99Ms": 5.815,
+        "maxMs": 5.815
+      },
+      "interaction.search_first.to_observed.ok": {
+        "n": 1,
+        "p50Ms": 912.932,
+        "p95Ms": 912.932,
+        "p99Ms": 912.932,
+        "maxMs": 912.932
+      },
+      "interaction.search_warm.observed_to_frame.ok": {
+        "n": 1,
+        "p50Ms": 9.964,
+        "p95Ms": 9.964,
+        "p99Ms": 9.964,
+        "maxMs": 9.964
+      },
+      "interaction.search_warm.to_observed.ok": {
+        "n": 1,
+        "p50Ms": 136.308,
+        "p95Ms": 136.308,
+        "p99Ms": 136.308,
+        "maxMs": 136.308
+      },
+      "query.candidates.discarded": {
+        "n": 12,
+        "p50Ms": 924.2,
+        "p95Ms": 3910.814,
+        "p99Ms": 3910.814,
+        "maxMs": 3910.814
+      },
+      "query.candidates.ok": {
+        "n": 54,
+        "p50Ms": 0.049,
+        "p95Ms": 3241.425,
+        "p99Ms": 3366.143,
+        "maxMs": 3366.143
+      },
+      "query.publish_callback.ok": {
+        "n": 54,
+        "p50Ms": 0.006,
+        "p95Ms": 0.022,
+        "p99Ms": 0.025,
+        "maxMs": 0.025
+      },
+      "query.queued.ok": {
+        "n": 66,
+        "p50Ms": 0.831,
+        "p95Ms": 52.155,
+        "p99Ms": 2747.698,
+        "maxMs": 2747.698
+      },
+      "query.verify_sort.ok": {
+        "n": 54,
+        "p50Ms": 0.012,
+        "p95Ms": 86.903,
+        "p99Ms": 98.241,
+        "maxMs": 98.241
+      },
+      "scan.backend.ok": {
+        "n": 32,
+        "p50Ms": 830.423,
+        "p95Ms": 882.571,
+        "p99Ms": 945.17,
+        "maxMs": 945.17
+      },
+      "scan.backup_enqueue.ok": {
+        "n": 32,
+        "p50Ms": 0.011,
+        "p95Ms": 0.024,
+        "p99Ms": 0.055,
+        "maxMs": 0.055
+      },
+      "scan.batch_commit.total.ok": {
+        "n": 32,
+        "p50Ms": 5.164,
+        "p95Ms": 231.139,
+        "p99Ms": 248.42,
+        "maxMs": 248.42
+      },
+      "scan.batch_commit_return.ok": {
+        "n": 32,
+        "p50Ms": 5.172,
+        "p95Ms": 231.145,
+        "p99Ms": 248.428,
+        "maxMs": 248.428
+      },
+      "scan.completion_callback.ok": {
+        "n": 32,
+        "p50Ms": 0.006,
+        "p95Ms": 0.007,
+        "p99Ms": 0.008,
+        "maxMs": 0.008
+      },
+      "scan.known_snapshot.ok": {
+        "n": 32,
+        "p50Ms": 9.824,
+        "p95Ms": 12.893,
+        "p99Ms": 15.084,
+        "maxMs": 15.084
+      },
+      "scan.merge_and_prepare.ok": {
+        "n": 32,
+        "p50Ms": 35.93,
+        "p95Ms": 45.989,
+        "p99Ms": 48.102,
+        "maxMs": 48.102
+      },
+      "scan.request.total.ok": {
+        "n": 32,
+        "p50Ms": 899.548,
+        "p95Ms": 1112.063,
+        "p99Ms": 1121.26,
+        "maxMs": 1121.26
+      },
+      "scan.revision.advance.ok": {
+        "n": 32,
+        "p50Ms": 0.001,
+        "p95Ms": 0.001,
+        "p99Ms": 0.001,
+        "maxMs": 0.001
+      }
+    },
+    "indexRebuilds": 33,
+    "scanRevisionAdvances": 32,
+    "zeroDeltaAdvances": 32,
+    "scanBatchWithIndexOverlap": [
+      {
+        "generation": 2,
+        "totalMs": 77.837,
+        "indexOverlapMs": 75.529
+      },
+      {
+        "generation": 4,
+        "totalMs": 84.272,
+        "indexOverlapMs": 81.422
+      },
+      {
+        "generation": 6,
+        "totalMs": 91.255,
+        "indexOverlapMs": 89.811
+      },
+      {
+        "generation": 8,
+        "totalMs": 248.42,
+        "indexOverlapMs": 246.298
+      },
+      {
+        "generation": 10,
+        "totalMs": 83.298,
+        "indexOverlapMs": 81.237
+      },
+      {
+        "generation": 12,
+        "totalMs": 86.611,
+        "indexOverlapMs": 84.271
+      },
+      {
+        "generation": 14,
+        "totalMs": 231.139,
+        "indexOverlapMs": 229.623
+      },
+      {
+        "generation": 18,
+        "totalMs": 72.494,
+        "indexOverlapMs": 70.466
+      },
+      {
+        "generation": 22,
+        "totalMs": 85.582,
+        "indexOverlapMs": 83.682
+      },
+      {
+        "generation": 30,
+        "totalMs": 62.636,
+        "indexOverlapMs": 57.434
+      }
+    ],
+    "scanBatchWithoutIndexOverlap": {
+      "n": 22,
+      "p50Ms": 4.696,
+      "p95Ms": 28.058,
+      "p99Ms": 31.84,
+      "maxMs": 31.84
+    },
+    "startedAt": "2026-09-05T05:29:55.917096Z",
+    "completed": false,
+    "actions": {
+      "startup_profile": {
+        "n": 1,
+        "p50Ms": 726.35,
+        "p95Ms": 726.35,
+        "p99Ms": 726.35,
+        "maxMs": 726.35
+      },
+      "search_first": {
+        "n": 1,
+        "p50Ms": 918.755,
+        "p95Ms": 918.755,
+        "p99Ms": 918.755,
+        "maxMs": 918.755
+      },
+      "search_warm": {
+        "n": 1,
+        "p50Ms": 146.272,
+        "p95Ms": 146.272,
+        "p99Ms": 146.272,
+        "maxMs": 146.272
+      },
+      "scan_passive_observed_total": {
+        "n": 16,
+        "p50Ms": 838.293,
+        "p95Ms": 969.814,
+        "p99Ms": 969.814,
+        "maxMs": 969.814
+      },
+      "scan_search_reset": {
+        "n": 31,
+        "p50Ms": 52.997,
+        "p95Ms": 182.105,
+        "p99Ms": 222.912,
+        "maxMs": 222.912
+      },
+      "search_during_scan": {
+        "n": 16,
+        "p50Ms": 1647.779,
+        "p95Ms": 1769.468,
+        "p99Ms": 1769.468,
+        "maxMs": 1769.468
+      },
+      "scan_with_input_observed_total": {
+        "n": 16,
+        "p50Ms": 992.459,
+        "p95Ms": 1133.359,
+        "p99Ms": 1133.359,
+        "maxMs": 1133.359
+      }
+    },
+    "framesByPhase": {
+      "startup": {
+        "buildMs": {
+          "n": 29,
+          "p50Ms": 0.165,
+          "p95Ms": 0.77,
+          "p99Ms": 95.065,
+          "maxMs": 95.065
+        },
+        "rasterMs": {
+          "n": 29,
+          "p50Ms": 0.37,
+          "p95Ms": 11.521,
+          "p99Ms": 74.738,
+          "maxMs": 74.738
+        },
+        "totalMs": {
+          "n": 29,
+          "p50Ms": 1.76,
+          "p95Ms": 227.099,
+          "p99Ms": 275.079,
+          "maxMs": 275.079
+        },
+        "slowOver33ms": 3,
+        "over100ms": 2,
+        "crossesBoundary": 1
+      },
+      "idle": {
+        "buildMs": {
+          "n": 67,
+          "p50Ms": 0.073,
+          "p95Ms": 0.432,
+          "p99Ms": 26.116,
+          "maxMs": 26.116
+        },
+        "rasterMs": {
+          "n": 67,
+          "p50Ms": 1.23,
+          "p95Ms": 1.954,
+          "p99Ms": 8.777,
+          "maxMs": 8.777
+        },
+        "totalMs": {
+          "n": 67,
+          "p50Ms": 2.309,
+          "p95Ms": 13.564,
+          "p99Ms": 97.718,
+          "maxMs": 97.718
+        },
+        "slowOver33ms": 1,
+        "over100ms": 0,
+        "crossesBoundary": 2
+      },
+      "search_first": {
+        "buildMs": {
+          "n": 114,
+          "p50Ms": 0.067,
+          "p95Ms": 0.539,
+          "p99Ms": 16.038,
+          "maxMs": 27.091
+        },
+        "rasterMs": {
+          "n": 114,
+          "p50Ms": 0.579,
+          "p95Ms": 1.902,
+          "p99Ms": 2.187,
+          "maxMs": 7.242
+        },
+        "totalMs": {
+          "n": 114,
+          "p50Ms": 0.828,
+          "p95Ms": 12.81,
+          "p99Ms": 18.681,
+          "maxMs": 43.158
+        },
+        "slowOver33ms": 1,
+        "over100ms": 0,
+        "crossesBoundary": 0
+      },
+      "search_warm": {
+        "buildMs": {
+          "n": 43,
+          "p50Ms": 0.073,
+          "p95Ms": 0.163,
+          "p99Ms": 45.681,
+          "maxMs": 45.681
+        },
+        "rasterMs": {
+          "n": 43,
+          "p50Ms": 1.41,
+          "p95Ms": 1.748,
+          "p99Ms": 1.908,
+          "maxMs": 1.908
+        },
+        "totalMs": {
+          "n": 43,
+          "p50Ms": 1.61,
+          "p95Ms": 2.827,
+          "p99Ms": 113.739,
+          "maxMs": 113.739
+        },
+        "slowOver33ms": 1,
+        "over100ms": 1,
+        "crossesBoundary": 0
+      },
+      "scan_passive": {
+        "buildMs": {
+          "n": 1590,
+          "p50Ms": 1.007,
+          "p95Ms": 1.877,
+          "p99Ms": 25.375,
+          "maxMs": 45.713
+        },
+        "rasterMs": {
+          "n": 1590,
+          "p50Ms": 1.371,
+          "p95Ms": 1.91,
+          "p99Ms": 2.262,
+          "maxMs": 21.677
+        },
+        "totalMs": {
+          "n": 1590,
+          "p50Ms": 2.973,
+          "p95Ms": 7.581,
+          "p99Ms": 35.226,
+          "maxMs": 126.038
+        },
+        "slowOver33ms": 27,
+        "over100ms": 5,
+        "crossesBoundary": 8
+      },
+      "scan_search_reset": {
+        "buildMs": {
+          "n": 1338,
+          "p50Ms": 0.184,
+          "p95Ms": 0.679,
+          "p99Ms": 39.407,
+          "maxMs": 70.142
+        },
+        "rasterMs": {
+          "n": 1338,
+          "p50Ms": 1.292,
+          "p95Ms": 1.859,
+          "p99Ms": 2.201,
+          "maxMs": 5.931
+        },
+        "totalMs": {
+          "n": 1338,
+          "p50Ms": 13.133,
+          "p95Ms": 16.657,
+          "p99Ms": 112.968,
+          "maxMs": 169.168
+        },
+        "slowOver33ms": 15,
+        "over100ms": 15,
+        "crossesBoundary": 31
+      },
+      "search_during_scan": {
+        "buildMs": {
+          "n": 2659,
+          "p50Ms": 0.915,
+          "p95Ms": 1.933,
+          "p99Ms": 22.638,
+          "maxMs": 39.887
+        },
+        "rasterMs": {
+          "n": 2659,
+          "p50Ms": 1.339,
+          "p95Ms": 1.878,
+          "p99Ms": 2.179,
+          "maxMs": 2.701
+        },
+        "totalMs": {
+          "n": 2659,
+          "p50Ms": 3.769,
+          "p95Ms": 16.166,
+          "p99Ms": 38.535,
+          "maxMs": 128.911
+        },
+        "slowOver33ms": 38,
+        "over100ms": 5,
+        "crossesBoundary": 16
+      },
+      "scan_search_reset_failed": {
+        "buildMs": {
+          "n": 997,
+          "p50Ms": 0.099,
+          "p95Ms": 0.142,
+          "p99Ms": 0.426,
+          "maxMs": 11.154
+        },
+        "rasterMs": {
+          "n": 997,
+          "p50Ms": 0.73,
+          "p95Ms": 0.841,
+          "p99Ms": 0.964,
+          "maxMs": 1.127
+        },
+        "totalMs": {
+          "n": 997,
+          "p50Ms": 13.241,
+          "p95Ms": 16.262,
+          "p99Ms": 16.598,
+          "maxMs": 17.269
+        },
+        "slowOver33ms": 0,
+        "over100ms": 0,
+        "crossesBoundary": 1
+      },
+      "failure_capture": {
+        "buildMs": {
+          "n": 1,
+          "p50Ms": 0.068,
+          "p95Ms": 0.068,
+          "p99Ms": 0.068,
+          "maxMs": 0.068
+        },
+        "rasterMs": {
+          "n": 1,
+          "p50Ms": 0.725,
+          "p95Ms": 0.725,
+          "p99Ms": 0.725,
+          "maxMs": 0.725
+        },
+        "totalMs": {
+          "n": 1,
+          "p50Ms": 14.081,
+          "p95Ms": 14.081,
+          "p99Ms": 14.081,
+          "maxMs": 14.081
+        },
+        "slowOver33ms": 0,
+        "over100ms": 0,
+        "crossesBoundary": 0
+      }
+    },
+    "scanEventLoopGapByMode": {
+      "scan_passive": {
+        "n": 1072,
+        "p50Ms": 10.089,
+        "p95Ms": 29.095,
+        "p99Ms": 118.934,
+        "maxMs": 150.626
+      },
+      "scan_with_input": {
+        "n": 1162,
+        "p50Ms": 10.166,
+        "p95Ms": 34.827,
+        "p99Ms": 121.083,
+        "maxMs": 164.203
+      }
+    },
+    "searchesStartedDuringScan": 16
+  },
+  "startup": {
+    "fresh-profile.startup_profile": {
+      "n": 10,
+      "p50Ms": 715.637,
+      "p95Ms": 741.868,
+      "p99Ms": 741.868,
+      "maxMs": 741.868
+    },
+    "fresh-profile.search_first": {
+      "n": 10,
+      "p50Ms": 869.694,
+      "p95Ms": 910.709,
+      "p99Ms": 910.709,
+      "maxMs": 910.709
+    },
+    "reused-profile.startup_profile": {
+      "n": 10,
+      "p50Ms": 724.125,
+      "p95Ms": 761.6,
+      "p99Ms": 761.6,
+      "maxMs": 761.6
+    },
+    "reused-profile.search_first": {
+      "n": 10,
+      "p50Ms": 1009.73,
+      "p95Ms": 1087.74,
+      "p99Ms": 1087.74,
+      "maxMs": 1087.74
+    },
+    "fresh-profile.processToActionable": {
+      "n": 10,
+      "p50Ms": 957.79,
+      "p95Ms": 1000.139,
+      "p99Ms": 1000.139,
+      "maxMs": 1000.139
+    },
+    "reused-profile.processToActionable": {
+      "n": 10,
+      "p50Ms": 988.108,
+      "p95Ms": 1016.567,
+      "p99Ms": 1016.567,
+      "maxMs": 1016.567
+    }
+  },
+  "startupTrace": {
+    "fresh-profile.query.queued.ok": {
+      "n": 20,
+      "p50Ms": 1.859,
+      "p95Ms": 8.931,
+      "p99Ms": 12.702,
+      "maxMs": 12.702
+    },
+    "fresh-profile.query.candidates.ok": {
+      "n": 20,
+      "p50Ms": 0.045,
+      "p95Ms": 816.056,
+      "p99Ms": 858.025,
+      "maxMs": 858.025
+    },
+    "fresh-profile.query.verify_sort.ok": {
+      "n": 20,
+      "p50Ms": 0.016,
+      "p95Ms": 69.773,
+      "p99Ms": 69.79,
+      "maxMs": 69.79
+    },
+    "fresh-profile.query.publish_callback.ok": {
+      "n": 20,
+      "p50Ms": 0.009,
+      "p95Ms": 0.025,
+      "p99Ms": 0.03,
+      "maxMs": 0.03
+    },
+    "fresh-profile.index.schema.total.ok": {
+      "n": 10,
+      "p50Ms": 0.214,
+      "p95Ms": 35.09,
+      "p99Ms": 35.09,
+      "maxMs": 35.09
+    },
+    "fresh-profile.index.transaction_enter.ok": {
+      "n": 10,
+      "p50Ms": 0.186,
+      "p95Ms": 36.227,
+      "p99Ms": 36.227,
+      "maxMs": 36.227
+    },
+    "fresh-profile.index.delete.ok": {
+      "n": 10,
+      "p50Ms": 295.782,
+      "p95Ms": 329.004,
+      "p99Ms": 329.004,
+      "maxMs": 329.004
+    },
+    "fresh-profile.index.aggregate_and_fts_write.ok": {
+      "n": 10,
+      "p50Ms": 348.888,
+      "p95Ms": 369.174,
+      "p99Ms": 369.174,
+      "maxMs": 369.174
+    },
+    "fresh-profile.index.commit_return.ok": {
+      "n": 10,
+      "p50Ms": 125.817,
+      "p95Ms": 137.628,
+      "p99Ms": 137.628,
+      "maxMs": 137.628
+    },
+    "fresh-profile.candidate.index_ready.total.ok": {
+      "n": 10,
+      "p50Ms": 798.986,
+      "p95Ms": 849.898,
+      "p99Ms": 849.898,
+      "maxMs": 849.898
+    },
+    "fresh-profile.candidate.sql.total.ok": {
+      "n": 10,
+      "p50Ms": 0.468,
+      "p95Ms": 8.06,
+      "p99Ms": 8.06,
+      "maxMs": 8.06
+    },
+    "fresh-profile.candidate.map.total.ok": {
+      "n": 10,
+      "p50Ms": 0.001,
+      "p95Ms": 0.002,
+      "p99Ms": 0.002,
+      "maxMs": 0.002
+    },
+    "fresh-profile.interaction.search_first.to_observed.ok": {
+      "n": 10,
+      "p50Ms": 862.751,
+      "p95Ms": 904.225,
+      "p99Ms": 904.225,
+      "maxMs": 904.225
+    },
+    "fresh-profile.interaction.accepted_frame.pump_return.ok": {
+      "n": 10,
+      "p50Ms": 5.439,
+      "p95Ms": 11.5,
+      "p99Ms": 11.5,
+      "maxMs": 11.5
+    },
+    "fresh-profile.interaction.search_first.observed_to_frame.ok": {
+      "n": 10,
+      "p50Ms": 5.446,
+      "p95Ms": 11.504,
+      "p99Ms": 11.504,
+      "maxMs": 11.504
+    },
+    "reused-profile.query.queued.ok": {
+      "n": 20,
+      "p50Ms": 1.314,
+      "p95Ms": 11.074,
+      "p99Ms": 12.212,
+      "maxMs": 12.212
+    },
+    "reused-profile.query.candidates.ok": {
+      "n": 20,
+      "p50Ms": 0.073,
+      "p95Ms": 998.311,
+      "p99Ms": 1025.011,
+      "maxMs": 1025.011
+    },
+    "reused-profile.query.verify_sort.ok": {
+      "n": 20,
+      "p50Ms": 0.02,
+      "p95Ms": 75.878,
+      "p99Ms": 76.901,
+      "maxMs": 76.901
+    },
+    "reused-profile.query.publish_callback.ok": {
+      "n": 20,
+      "p50Ms": 0.021,
+      "p95Ms": 0.032,
+      "p99Ms": 0.033,
+      "maxMs": 0.033
+    },
+    "reused-profile.index.schema.total.ok": {
+      "n": 10,
+      "p50Ms": 0.152,
+      "p95Ms": 25.988,
+      "p99Ms": 25.988,
+      "maxMs": 25.988
+    },
+    "reused-profile.index.transaction_enter.ok": {
+      "n": 10,
+      "p50Ms": 0.121,
+      "p95Ms": 22.571,
+      "p99Ms": 22.571,
+      "maxMs": 22.571
+    },
+    "reused-profile.index.delete.ok": {
+      "n": 10,
+      "p50Ms": 334.54,
+      "p95Ms": 367.082,
+      "p99Ms": 367.082,
+      "maxMs": 367.082
+    },
+    "reused-profile.index.aggregate_and_fts_write.ok": {
+      "n": 10,
+      "p50Ms": 441.037,
+      "p95Ms": 493.083,
+      "p99Ms": 493.083,
+      "maxMs": 493.083
+    },
+    "reused-profile.index.commit_return.ok": {
+      "n": 10,
+      "p50Ms": 153.777,
+      "p95Ms": 178.206,
+      "p99Ms": 178.206,
+      "maxMs": 178.206
+    },
+    "reused-profile.candidate.index_ready.total.ok": {
+      "n": 10,
+      "p50Ms": 952.01,
+      "p95Ms": 1024.307,
+      "p99Ms": 1024.307,
+      "maxMs": 1024.307
+    },
+    "reused-profile.candidate.sql.total.ok": {
+      "n": 10,
+      "p50Ms": 0.565,
+      "p95Ms": 2.012,
+      "p99Ms": 2.012,
+      "maxMs": 2.012
+    },
+    "reused-profile.candidate.map.total.ok": {
+      "n": 10,
+      "p50Ms": 0.001,
+      "p95Ms": 0.002,
+      "p99Ms": 0.002,
+      "maxMs": 0.002
+    },
+    "reused-profile.interaction.search_first.to_observed.ok": {
+      "n": 10,
+      "p50Ms": 1006.843,
+      "p95Ms": 1080.528,
+      "p99Ms": 1080.528,
+      "maxMs": 1080.528
+    },
+    "reused-profile.interaction.accepted_frame.pump_return.ok": {
+      "n": 10,
+      "p50Ms": 5.23,
+      "p95Ms": 7.194,
+      "p99Ms": 7.194,
+      "maxMs": 7.194
+    },
+    "reused-profile.interaction.search_first.observed_to_frame.ok": {
+      "n": 10,
+      "p50Ms": 5.236,
+      "p95Ms": 7.203,
+      "p99Ms": 7.203,
+      "maxMs": 7.203
+    }
+  },
+  "sql": {
+    "pairs": 10,
+    "allIndexFieldsEquivalent": true,
+    "stages": {
+      "experiment.combined.transaction_enter": {
+        "n": 10,
+        "p50Ms": 0.213,
+        "p95Ms": 1.047,
+        "p99Ms": 1.047,
+        "maxMs": 1.047
+      },
+      "experiment.combined.delete": {
+        "n": 10,
+        "p50Ms": 223.138,
+        "p95Ms": 393.046,
+        "p99Ms": 393.046,
+        "maxMs": 393.046
+      },
+      "experiment.combined.aggregate_and_fts_write": {
+        "n": 10,
+        "p50Ms": 336.376,
+        "p95Ms": 406.944,
+        "p99Ms": 406.944,
+        "maxMs": 406.944
+      },
+      "experiment.combined.commit_return": {
+        "n": 10,
+        "p50Ms": 110.151,
+        "p95Ms": 118.052,
+        "p99Ms": 118.052,
+        "maxMs": 118.052
+      },
+      "experiment.staged.transaction_enter": {
+        "n": 10,
+        "p50Ms": 0.193,
+        "p95Ms": 0.372,
+        "p99Ms": 0.372,
+        "maxMs": 0.372
+      },
+      "experiment.staged.delete": {
+        "n": 10,
+        "p50Ms": 232.549,
+        "p95Ms": 463.333,
+        "p99Ms": 463.333,
+        "maxMs": 463.333
+      },
+      "experiment.staged.stage_clear": {
+        "n": 10,
+        "p50Ms": 2.884,
+        "p95Ms": 3.492,
+        "p99Ms": 3.492,
+        "maxMs": 3.492
+      },
+      "experiment.staged.aggregate_to_temp": {
+        "n": 10,
+        "p50Ms": 38.789,
+        "p95Ms": 60.691,
+        "p99Ms": 60.691,
+        "maxMs": 60.691
+      },
+      "experiment.staged.fts_from_temp": {
+        "n": 10,
+        "p50Ms": 324.666,
+        "p95Ms": 661.758,
+        "p99Ms": 661.758,
+        "maxMs": 661.758
+      },
+      "experiment.staged.commit_return": {
+        "n": 10,
+        "p50Ms": 104.275,
+        "p95Ms": 145.718,
+        "p99Ms": 145.718,
+        "maxMs": 145.718
+      }
+    }
+  }
+}
