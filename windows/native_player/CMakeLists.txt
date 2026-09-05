@@ -69,7 +69,7 @@ function(ltp_seed_verified_archive source output sha256)
 endfunction()
 
 ltp_download(
-  "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-07-26-48e6c35c0e/mpv-dev-x86_64-20260726-git-48e6c35c0e.7z"
+  "https://github.com/Zero-1412/LocalTagPlayer/releases/download/build-deps-20260726/mpv.7z"
   "72b1b348458f632063ed92a967617a078dc05129635a1b929c61d121b0e3a802"
   "${LTP_MPV_ARCHIVE}")
 ltp_download(
