@@ -7,7 +7,7 @@
 - 从第一性原理出发，后续修改进行对抗式审查，任务结束后自己给出下一步计划。
 - 已修复 Unicode 短词、JSON 转义别名漏项，以及旧异步候选污染新 revision 缓存。
 - 同 revision 并发索引重建已合并；真实 SQLite 回归覆盖跨 revision、失败回滚和重试。
-- 核心查询、filtered queue、稳定身份、备份恢复已前移到 PR/push 门禁；路线图依赖状态已同步。
+- 核心查询、filtered queue、稳定身份、备份恢复已前移到 PR/push 门禁；a80d6f5 的核心、Agent 治理及 macOS/Linux 远端验证全部通过，路线图依赖状态已同步。
 - 隔离 11,164 条历史 QA 副本执行 Profile 页面基线，原生输入与安装升级另列验收。
 
 ## 最近三项
@@ -24,6 +24,6 @@
 
 ## 下一步
 
-- 复核核心 CI 的远端运行结果；继续保留 file_picker 12 的三平台门禁。
+- 继续保留核心回归与 file_picker 12 的三平台门禁。
 - 按 `docs/qa/query_correctness_and_baseline_20260905.md` 补充分阶段帧时序、冷/热重复采样与安装升级验收。
 - 未完成上述验收前不自动推进搜索历史、可保存筛选、标签便携导出或增量 FTS。

@@ -54,7 +54,11 @@ flutter drive --profile --driver=test_driver/integration_test.dart --target=inte
 
 `.github/workflows/core-regression.yml` 固定 Flutter 3.44.4，在 lib/test/windows/依赖变更的
 PR 与 push 运行真实查询、过滤队列、稳定身份、Store 备份恢复、侧栏统计和架构测试。
-工作流源码可确认触发范围；远端运行结果须另行记录，不推断分支保护已配置。
+工作流源码可确认触发范围；提交 a80d6f5 已实际触发且通过
+[核心回归](https://github.com/Zero-1412/LocalTagPlayer/actions/runs/33940430933)、
+[Agent 治理](https://github.com/Zero-1412/LocalTagPlayer/actions/runs/33940430935) 和
+[macOS/Linux 桌面验证](https://github.com/Zero-1412/LocalTagPlayer/actions/runs/33940430941)。
+这验证工作流执行成功，不推断分支保护已配置。
 
 1. 查询正确性：实现和回归已完成。
 2. CI：门禁已接入，路线图依赖状态已同步。
@@ -67,7 +71,7 @@ PR 与 push 运行真实查询、过滤队列、稳定身份、Store 备份恢�
 ## 验证记录
 
 本机全量 710 项通过、4 项既有跳过；flutter analyze 0 问题，Windows Debug build 通过。
-Agent eval 目录验证和 29 项工具单测通过。最终增量静态检查与恢复正式入口构建另记于交付结果。
+Agent eval 目录验证和 29 项工具单测通过。最终增量静态分析 0 问题，恢复正式入口的 Windows Debug 构建通过。
 所有 Dart 格式化命令成功退出，无格式化超时。
 
 Profile 使用 Ryzen 9 7900X、约 64 GB 内存、RTX 4070 SUPER、Windows 11、3840×2160
